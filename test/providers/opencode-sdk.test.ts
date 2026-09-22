@@ -5696,9 +5696,9 @@ describe('OpenCodeSDKProvider', () => {
     });
 
     it.each([
-      { label: 'final parts with history denied', useHistory: false },
-      { label: 'final and intermediate parts with history enabled', useHistory: true },
-    ])('grades completed skill evidence on a refusal from $label', async ({ useHistory }) => {
+      { label: 'a local refusal with skill history denied', useHistory: false, tag: 'name' },
+      { label: 'a remote refusal with skill history enabled', useHistory: true, tag: '_tag' },
+    ])('withholds all skill evidence from $label', async ({ useHistory, tag }) => {
       const makeSkill = (name: string, status = 'completed') => ({
         type: 'tool',
         tool: 'skill',
@@ -5711,6 +5711,7 @@ describe('OpenCodeSDKProvider', () => {
       });
       const finalParts = [
         makeSkill('final-skill'),
+        makeSkill('synthetic-private-filtered-skill-name'),
         makeSkill('unfinished-skill', 'running'),
         makeSkill('failed-skill', 'error'),
         { type: 'text', text: 'synthetic-private-filtered-response' },
@@ -5724,7 +5725,7 @@ describe('OpenCodeSDKProvider', () => {
           info: {
             ...response.data.info,
             error: {
-              name: 'ContentFilterError',
+              [tag]: 'ContentFilterError',
               data: { message: 'synthetic-private-filtered-upstream-message' },
             },
           },
@@ -5733,12 +5734,18 @@ describe('OpenCodeSDKProvider', () => {
       mockSessionMessages.mockResolvedValue([
         { info: { id: 'previous-assistant' }, parts: [makeSkill('previous-skill')] },
         { info: { id: 'user-msg-123' }, parts: [] },
-        { info: { id: 'intermediate' }, parts: [makeSkill('history-skill')] },
+        {
+          info: { id: 'intermediate' },
+          parts: [makeSkill('history-skill'), makeSkill('synthetic-private-filtered-history-name')],
+        },
         { info: { id: 'msg-123' }, parts: finalParts },
         { info: { id: 'later-assistant' }, parts: [makeSkill('later-skill')] },
       ]);
       const provider = new OpenCodeSDKProvider({
-        config: { tools: { skill: useHistory } },
+        config: {
+          baseUrl: useHistory ? 'http://127.0.0.1:4096' : undefined,
+          tools: { skill: useHistory },
+        },
         env: { ANTHROPIC_API_KEY: 'test-api-key' },
       });
 
@@ -5756,7 +5763,7 @@ describe('OpenCodeSDKProvider', () => {
             { type: 'is-refusal' },
             { type: 'skill-used', value: { name: 'final-skill', min: 1, max: 1 } },
             { type: 'not-skill-used', value: 'final-skill' },
-            { type: useHistory ? 'skill-used' : 'not-skill-used', value: 'history-skill' },
+            { type: 'not-skill-used', value: 'history-skill' },
             { type: 'not-skill-used', value: 'unfinished-skill' },
             { type: 'not-skill-used', value: 'failed-skill' },
             { type: 'not-skill-used', value: 'previous-skill' },
@@ -5767,20 +5774,14 @@ describe('OpenCodeSDKProvider', () => {
         registers: {},
       });
 
-      expect(mockSessionMessages).toHaveBeenCalledTimes(useHistory ? 2 : 0);
+      expect(mockSessionMessages).not.toHaveBeenCalled();
       expect(direct).toMatchObject({ isRefusal: true, guardrails: { flagged: true } });
-      expect(direct.metadata?.skillCalls).toEqual(
-        (useHistory ? ['history-skill', 'final-skill'] : ['final-skill']).map((name) => ({
-          name,
-          input: { name },
-          source: 'tool',
-        })),
-      );
+      expect(direct.metadata?.skillCalls).toBeUndefined();
       expect(graded.success).toBe(false);
       expect(graded.gradingResult?.componentResults?.map(({ pass }) => pass)).toEqual([
         true,
-        true,
         false,
+        true,
         true,
         true,
         true,
@@ -5790,33 +5791,6 @@ describe('OpenCodeSDKProvider', () => {
       expect(direct).not.toHaveProperty('error');
       expect(direct).not.toHaveProperty('raw');
       expect(JSON.stringify({ direct, graded })).not.toContain('synthetic-private-filtered');
-    });
-
-    it('retains final refusal skill evidence when the allowed history fetch fails', async () => {
-      const response = createMockPromptResponse([
-        { type: 'tool', tool: 'skill', state: { status: 'completed', input: { name: 'review' } } },
-        { type: 'text', text: 'synthetic-private-filtered-response' },
-      ]);
-      mockSessionPrompt.mockResolvedValueOnce({
-        data: {
-          ...response.data,
-          info: { ...response.data.info, error: { _tag: 'ContentFilterError' } },
-        },
-      });
-      mockSessionMessages.mockRejectedValueOnce(new Error('History unavailable'));
-      const provider = new OpenCodeSDKProvider({
-        config: { tools: { skill: true } },
-        env: { ANTHROPIC_API_KEY: 'test-api-key' },
-      });
-
-      const result = await provider.callApi('refusal with unavailable history');
-
-      expect(mockSessionMessages).toHaveBeenCalledTimes(1);
-      expect(result.metadata?.skillCalls).toEqual([
-        { name: 'review', input: { name: 'review' }, source: 'tool' },
-      ]);
-      expect(result).toMatchObject({ isRefusal: true, guardrails: { flagged: true } });
-      expect(JSON.stringify(result)).not.toContain('synthetic-private-filtered-response');
     });
 
     it.each([

@@ -2583,7 +2583,6 @@ export class OpenCodeSDKProvider implements ApiProvider {
     response: OpenCodeSdkResult<OpenCodePromptResponse>,
     formatError: (error: unknown) => string,
     abortSignal?: AbortSignal,
-    includeFinalMessage = true,
   ): Promise<OpenCodePromptPart[]> {
     const assistantMessage = unwrapOpenCodeResult(response)?.info;
     const parentId = assistantMessage?.parentID;
@@ -2627,10 +2626,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
       );
       return [];
     }
-    const relevantMessages = messages.slice(
-      startIndex,
-      includeFinalMessage ? endIndex + 1 : endIndex,
-    );
+    const relevantMessages = messages.slice(startIndex, endIndex + 1);
     logger.debug(
       `[OpenCode SDK] Fetched ${messages.length} messages, using ${relevantMessages.length} (start=${startIndex} end=${endIndex}) for skill tracking`,
     );
@@ -2751,16 +2747,9 @@ export class OpenCodeSDKProvider implements ApiProvider {
     };
   }
 
-  private deriveSkillCalls(
-    parts: OpenCodePromptPart[],
-    completedNamesOnly = false,
-  ): SkillCallEntry[] {
+  private deriveSkillCalls(parts: OpenCodePromptPart[]): SkillCallEntry[] {
     return parts.flatMap((part) => {
-      if (
-        part.type !== 'tool' ||
-        part.tool !== 'skill' ||
-        (completedNamesOnly && part.state?.status !== 'completed')
-      ) {
+      if (part.type !== 'tool' || part.tool !== 'skill') {
         return [];
       }
 
@@ -2769,10 +2758,6 @@ export class OpenCodeSDKProvider implements ApiProvider {
       if (!skillName) {
         return [];
       }
-      if (completedNamesOnly) {
-        return [{ name: skillName, input: { name: skillName }, source: 'tool' }];
-      }
-
       const skillDir =
         typeof part.state?.metadata?.dir === 'string' ? part.state.metadata.dir.trim() : '';
 
@@ -2965,7 +2950,6 @@ export class OpenCodeSDKProvider implements ApiProvider {
     response: OpenCodeSdkResult<OpenCodePromptResponse>,
     promptError: OpenCodePromptError,
     sessionId: string,
-    intermediateParts: OpenCodePromptPart[] = [],
   ): ProviderResponse {
     const { error, status, headers, assistant } = promptError;
     const responseData = unwrapOpenCodeResult(response);
@@ -2973,18 +2957,11 @@ export class OpenCodeSDKProvider implements ApiProvider {
       ? { ...this.getAssistantErrorAccounting(responseData?.info), sessionId }
       : {};
     if (isOpenCodeContentFilterRefusal(promptError)) {
-      // Retain only the names of skills that completed before filtering. Full
-      // tool inputs, metadata, text and structured output may contain filtered content.
-      const skillCalls = this.deriveSkillCalls(
-        [...intermediateParts, ...(responseData?.parts ?? [])],
-        true,
-      );
       return {
         ...assistantDetails,
         output: 'I cannot assist with this request because it was blocked by a content filter.',
         isRefusal: true,
         guardrails: { flagged: true, flaggedOutput: true },
-        ...(skillCalls.length === 0 ? {} : { metadata: { skillCalls } }),
       };
     }
     return {
@@ -3184,8 +3161,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
             return { error: 'OpenCode SDK call aborted' };
           }
           const promptError = getOpenCodePromptError(response);
-          const isContentFilterRefusal = isOpenCodeContentFilterRefusal(promptError);
-          if (promptError && !isContentFilterRefusal) {
+          if (promptError) {
             return this.buildPromptErrorResponse(config, response, promptError, session.sessionId);
           }
           logger.debug('OpenCode SDK response received');
@@ -3204,7 +3180,6 @@ export class OpenCodeSDKProvider implements ApiProvider {
                 response,
                 formatError,
                 abortSignal,
-                !isContentFilterRefusal,
               );
             } catch (error) {
               logger.debug('[OpenCode SDK] Could not fetch session history for skill tracking', {
@@ -3216,15 +3191,6 @@ export class OpenCodeSDKProvider implements ApiProvider {
             }
           }
 
-          if (promptError) {
-            return this.buildPromptErrorResponse(
-              config,
-              response,
-              promptError,
-              session.sessionId,
-              allSessionParts,
-            );
-          }
           const providerResponse = this.buildProviderResponse(
             config,
             response,
