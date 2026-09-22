@@ -7,6 +7,7 @@ import { SageMakerRuntimeClient } from '@aws-sdk/client-sagemaker-runtime';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
+import type { Cache } from 'cache-manager';
 
 // Use vi.hoisted to create mock functions that can be used in vi.mock factories
 const { mockSend, mockCacheGet, mockCacheSet, mockCacheDel, mockIsCacheEnabled } = vi.hoisted(
@@ -56,6 +57,53 @@ import {
   SageMakerCompletionProvider,
   SageMakerEmbeddingProvider,
 } from '../../src/providers/sagemaker';
+
+describe('SageMaker runtime cache bounds', () => {
+  it('evicts idle entries after more than 256 distinct publications drain together', async () => {
+    class CacheProbe extends SageMakerCompletionProvider {
+      write(cache: Cache, key: string) {
+        return this.writeRuntimeCache(cache, key, `response:${key}`, new AbortController().signal);
+      }
+    }
+    const provider = new CacheProbe('cache-probe', {});
+    let release!: () => void;
+    let allEntered!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const entered = new Promise<void>((resolve) => {
+      allEntered = resolve;
+    });
+    const get = vi.fn(async () => undefined);
+    let writes = 0;
+    const set = vi.fn(async () => {
+      if (++writes === 300) {
+        allEntered();
+      }
+      await gate;
+    });
+    const cache = { get, set, del: vi.fn() } as unknown as Cache;
+    const keys = Array.from({ length: 300 }, (_, index) => `key-${index}`);
+    const pending = keys.map((key) => provider.write(cache, key));
+    try {
+      await entered;
+      expect(get).toHaveBeenCalledTimes(300);
+      release();
+      await Promise.all(pending);
+      await Promise.resolve();
+
+      get.mockClear();
+      await provider.write(cache, 'key-299');
+      expect(get).not.toHaveBeenCalled();
+      await Promise.all(keys.map((key) => provider.write(cache, key)));
+      expect(get.mock.calls.length).toBeGreaterThanOrEqual(44);
+    } finally {
+      release();
+      await Promise.allSettled(pending);
+      provider.cleanup();
+    }
+  });
+});
 
 describe('SageMakerCompletionProvider', () => {
   beforeEach(() => {

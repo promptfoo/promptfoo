@@ -255,6 +255,7 @@ type CredentialScope = Pick<
   processEnvironment?: string;
   files?: SharedFileInputs;
   filesFingerprint?: string;
+  credentialFileFingerprint?: string;
 };
 
 interface SharedFileInputs {
@@ -307,6 +308,75 @@ function captureSharedFileState(files: SharedFileInputs) {
   return { fingerprint: fingerprints.join(':'), hasCredentialProcess };
 }
 
+const PROFILE_CREDENTIAL_KEYS = new Set([
+  'aws_access_key_id',
+  'aws_secret_access_key',
+  'aws_session_token',
+  'aws_account_id',
+  'aws_credential_expiration',
+  'credential_process',
+  'credential_source',
+  'source_profile',
+  'role_arn',
+  'role_session_name',
+  'external_id',
+  'mfa_serial',
+  'web_identity_token_file',
+  'sso_start_url',
+  'sso_account_id',
+  'sso_session',
+  'sso_region',
+  'sso_role_name',
+  'sso_registration_scopes',
+  'login_session',
+  'region',
+  'endpoint_url',
+  'services',
+  'ignore_configured_endpoint_urls',
+  'use_fips_endpoint',
+  'use_dualstack_endpoint',
+]);
+
+function fingerprintCredentialProfile(
+  profiles: Record<string, Record<string, string | undefined>>,
+  name: string,
+  separator: string,
+): string {
+  const selected = new Map<string, [string, string | undefined][]>();
+  const entries = (data: Record<string, string | undefined>) =>
+    Object.entries(data).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
+  const visit = (profile: string) => {
+    const profileKey = `profile:${profile}`;
+    if (selected.has(profileKey)) {
+      return;
+    }
+    const data = profiles[profile] ?? {};
+    selected.set(
+      profileKey,
+      entries(data).filter(([key]) => PROFILE_CREDENTIAL_KEYS.has(key)),
+    );
+    if (data.source_profile) {
+      visit(data.source_profile);
+    }
+    if (data.sso_session) {
+      const session = `sso-session${separator}${data.sso_session}`;
+      selected.set(`session:${data.sso_session}`, entries(profiles[session] ?? {}));
+    }
+    if (data.services) {
+      const services = `services${separator}${data.services}`;
+      const helperEndpointKeys = new Set(
+        ['sts', 'sso', 'sso_oidc', 'signin'].map((helper) => `${helper}${separator}endpoint_url`),
+      );
+      selected.set(
+        `services:${data.services}`,
+        entries(profiles[services] ?? {}).filter(([key]) => helperEndpointKeys.has(key)),
+      );
+    }
+  };
+  visit(name);
+  return crypto.hash('sha256', JSON.stringify([...selected]), 'hex');
+}
+
 function sameCredentialScope(left: CredentialScope, right: CredentialScope): boolean {
   return (
     left.region === right.region &&
@@ -318,7 +388,7 @@ function sameCredentialScope(left: CredentialScope, right: CredentialScope): boo
     left.processEnvironment === right.processEnvironment &&
     left.files?.filepath === right.files?.filepath &&
     left.files?.configFilepath === right.files?.configFilepath &&
-    left.filesFingerprint === right.filesFingerprint &&
+    left.credentialFileFingerprint === right.credentialFileFingerprint &&
     Object.keys(left.environment).length === Object.keys(right.environment).length &&
     Object.entries(left.environment).every(([name, value]) => right.environment[name] === value)
   );
@@ -401,8 +471,8 @@ abstract class SageMakerGenericProvider {
   #retainedCredentials?: RuntimeCredentials;
   private runtimeGeneration = 0;
   private readonly activeRequests = new Set<AbortController>();
-  private cacheScope?: { identity: (string | undefined)[]; namespace: string };
-  private readonly runtimeCacheEntries = new Map<string, RuntimeCacheEntry>();
+  #cacheScope?: { identity: (string | undefined)[]; namespace: string };
+  readonly #runtimeCacheEntries = new Map<string, RuntimeCacheEntry>();
   config: SageMakerConfig;
   endpointName: string;
   delay?: number; // Delay between API calls in milliseconds
@@ -536,13 +606,25 @@ abstract class SageMakerGenericProvider {
     );
     let helperEndpointPolicy: string | undefined;
     let processEnvironment: string | undefined;
+    let credentialFileFingerprint: string | undefined;
     const selectedProfile = profile || environment.AWS_PROFILE;
     const usesSharedFiles = Boolean(
       selectedProfile || !(environment.AWS_ACCESS_KEY_ID && environment.AWS_SECRET_ACCESS_KEY),
     );
     if (usesSharedFiles) {
-      const { booleanSelector, loadConfig, parseKnownFiles, SelectorType } = smithyConfig;
+      const {
+        booleanSelector,
+        CONFIG_PREFIX_SEPARATOR,
+        loadConfig,
+        parseKnownFiles,
+        SelectorType,
+      } = smithyConfig;
       const profiles = await parseKnownFiles({ ...files, ignoreCache: true });
+      credentialFileFingerprint = fingerprintCredentialProfile(
+        profiles,
+        selectedProfile || 'default',
+        CONFIG_PREFIX_SEPARATOR,
+      );
       const inputs = profileCredentialInputs(
         profiles,
         selectedProfile || 'default',
@@ -634,6 +716,7 @@ abstract class SageMakerGenericProvider {
       processEnvironment,
       files,
       filesFingerprint: usesSharedFiles ? capturedFilesFingerprint : undefined,
+      credentialFileFingerprint,
     };
   }
 
@@ -726,13 +809,28 @@ abstract class SageMakerGenericProvider {
 
   private selectCacheNamespace(identity: (string | undefined)[]): string {
     if (
-      !this.cacheScope ||
-      this.cacheScope.identity.some((value, index) => value !== identity[index])
+      !this.#cacheScope ||
+      this.#cacheScope.identity.some((value, index) => value !== identity[index])
     ) {
       // Only this random namespace is written to cache. Credential inputs stay in memory.
-      this.cacheScope = { identity, namespace: crypto.randomUUID() };
+      this.#cacheScope = { identity, namespace: crypto.randomUUID() };
     }
-    return this.cacheScope.namespace;
+    return this.#cacheScope.namespace;
+  }
+
+  #trimRuntimeCacheEntries() {
+    if (this.#runtimeCacheEntries.size <= 256) {
+      return;
+    }
+    for (const [key, entry] of this.#runtimeCacheEntries) {
+      // A failed rollback must continue hiding the backend's potentially cancelled value.
+      if (entry.active === 0 && !entry.untrusted) {
+        this.#runtimeCacheEntries.delete(key);
+        if (this.#runtimeCacheEntries.size <= 256) {
+          break;
+        }
+      }
+    }
   }
 
   private withRuntimeCacheEntry<T>(
@@ -740,21 +838,14 @@ abstract class SageMakerGenericProvider {
     signal: AbortSignal,
     operation: (state: RuntimeCacheEntry) => Promise<T>,
   ): Promise<T> {
-    let state = this.runtimeCacheEntries.get(key);
+    let state = this.#runtimeCacheEntries.get(key);
     if (!state) {
       state = { tail: Promise.resolve(), active: 0, initialized: false, untrusted: false };
-      this.runtimeCacheEntries.set(key, state);
-      if (this.runtimeCacheEntries.size > 256) {
-        for (const [otherKey, other] of this.runtimeCacheEntries) {
-          if (otherKey !== key && other.active === 0 && !other.untrusted) {
-            this.runtimeCacheEntries.delete(otherKey);
-            break;
-          }
-        }
-      }
+      this.#runtimeCacheEntries.set(key, state);
     }
     const entry = state;
     entry.active++;
+    this.#trimRuntimeCacheEntries();
     // A later read or write must wait for any cancelled publication to be rolled back.
     const result = entry.tail.then(async () => {
       signal.throwIfAborted();
@@ -767,6 +858,7 @@ abstract class SageMakerGenericProvider {
       )
       .then(() => {
         entry.active--;
+        this.#trimRuntimeCacheEntries();
       });
     return result;
   }
@@ -1022,6 +1114,7 @@ abstract class SageMakerGenericProvider {
         candidate.endpoint.useDualstackEndpoint === endpoint.useDualstackEndpoint &&
         candidate.retry === retryState &&
         candidate.defaults === defaultsState &&
+        candidate.scope.filesFingerprint === scope.filesFingerprint &&
         sameCredentialScope(candidate.scope, scope),
     );
     if (!entry) {
@@ -1263,8 +1356,8 @@ abstract class SageMakerGenericProvider {
     }
     this.runtimeGeneration++;
     if (!context) {
-      this.cacheScope = undefined;
-      this.runtimeCacheEntries.clear();
+      this.#cacheScope = undefined;
+      this.#runtimeCacheEntries.clear();
       this.#retainedCredentials = undefined;
       this.runtimeDefaultsStates.clear();
       this.runtimeRetryStates.clear();
