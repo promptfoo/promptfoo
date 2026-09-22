@@ -484,43 +484,15 @@ export function authCommand(program: Command) {
           return;
         }
 
-        const teams = await getUserTeams();
-        const currentTeam = teams.find(
-          (team) =>
-            team.id === currentTeamId &&
-            (!currentOrganizationId || team.organizationId === currentOrganizationId),
-        );
-        if (currentTeam) {
-          logger.info(`Current team: ${chalk.green(currentTeam.name)}`);
-          return;
+        try {
+          const team = await resolveTeamId();
+          logger.info(`Current team: ${chalk.green(team.name)}`);
+        } catch (_error) {
+          logger.warn('Stored team is no longer accessible, falling back to default');
+          cloudConfig.clearCurrentTeamId(currentOrganizationId);
+          const team = await resolveTeamId();
+          logger.info(`Current team: ${chalk.green(team.name)} ${chalk.dim('(default)')}`);
         }
-
-        logger.warn('Stored team is no longer accessible, looking for another team');
-        cloudConfig.clearCurrentTeamId(currentOrganizationId);
-        if (teams.length === 0) {
-          throw new Error('No teams found for user');
-        }
-
-        const { organizationId: fallbackOrganizationId, teams: organizationTeams } =
-          getOrganizationTeams(
-            teams,
-            undefined,
-            currentOrganizationId ?? getOldestTeam(teams).organizationId,
-          );
-        const savedFallbackTeamId =
-          fallbackOrganizationId === currentOrganizationId
-            ? undefined
-            : cloudConfig.getCurrentTeamId(fallbackOrganizationId);
-        const savedFallbackTeam = organizationTeams.find((team) => team.id === savedFallbackTeamId);
-        const fallbackTeam = savedFallbackTeam ?? getOldestTeam(organizationTeams);
-        if (fallbackOrganizationId !== currentOrganizationId) {
-          cloudConfig.setCurrentOrganization(fallbackOrganizationId);
-        }
-        if (!savedFallbackTeam) {
-          cloudConfig.setCurrentTeamId(fallbackTeam.id, fallbackOrganizationId);
-        }
-        const teamLabelSuffix = savedFallbackTeam ? '' : ` ${chalk.dim('(default)')}`;
-        logger.info(`Current team: ${chalk.green(fallbackTeam.name)}${teamLabelSuffix}`);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error(`Failed to get current team: ${errorMessage}`);
