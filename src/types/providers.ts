@@ -124,6 +124,8 @@ export interface ApiProvider extends MinimalApiProvider {
   callApi: CallApiFunction;
   callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
   callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
+  /** Opt in to receiving evaluation cancellation through CancellableEmbeddingProvider. */
+  supportsEmbeddingCancellation?: boolean;
   config?: any;
   delay?: number;
   /** True when callApi applies delay itself and the evaluator should not wait again. */
@@ -145,6 +147,16 @@ export interface ApiProvider extends MinimalApiProvider {
 
 export interface ApiEmbeddingProvider extends ApiProvider {
   callEmbeddingApi: (input: string) => Promise<ProviderEmbeddingResponse>;
+}
+
+/** Embedding calls that explicitly reserve the third argument for evaluation cancellation. */
+export interface CancellableEmbeddingProvider extends ApiEmbeddingProvider {
+  supportsEmbeddingCancellation: true;
+  callEmbeddingApi: (
+    input: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderEmbeddingResponse>;
 }
 
 export interface ApiSimilarityProvider extends ApiProvider {

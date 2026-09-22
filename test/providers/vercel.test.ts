@@ -1398,6 +1398,7 @@ describe('VercelAiEmbeddingProvider', () => {
         });
       });
       const provider = new VercelAiEmbeddingProvider('openai/text-embedding-3-small');
+      expect(provider.supportsEmbeddingCancellation).toBe(true);
       const controller = new AbortController();
       const request = provider.callEmbeddingApi('prompt', undefined, {
         abortSignal: controller.signal,

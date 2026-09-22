@@ -240,6 +240,8 @@ export class CohereChatCompletionProvider implements ApiProvider {
 }
 
 export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
+  readonly supportsEmbeddingCancellation = true;
+
   modelName: string;
   config: any;
   env?: any;

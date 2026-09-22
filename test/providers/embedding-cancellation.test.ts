@@ -82,6 +82,7 @@ describe('embedding transport cancellation', () => {
     });
 
     const provider = createProvider();
+    expect(provider.supportsEmbeddingCancellation).toBe(true);
     const callEmbedding = provider.callEmbeddingApi as OpenAiEmbeddingProvider['callEmbeddingApi'];
     const result = callEmbedding.call(provider, 'text', undefined, {
       abortSignal: controller.signal,
@@ -117,6 +118,7 @@ describe('embedding transport cancellation', () => {
         name === 'Bedrock'
           ? new AwsBedrockEmbeddingProvider('amazon.titan-embed-text-v1')
           : new VertexEmbeddingProvider('gemini-embedding-001');
+      expect(provider.supportsEmbeddingCancellation).toBe(true);
 
       if (provider instanceof AwsBedrockEmbeddingProvider) {
         vi.spyOn(provider, 'getBedrockInstance').mockResolvedValue({
