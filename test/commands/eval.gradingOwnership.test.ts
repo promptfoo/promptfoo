@@ -129,7 +129,7 @@ const positions: {
   },
 ];
 
-describe('evaluation ownership of supplied grading providers', () => {
+describe('provider cleanup across overlapping evaluations', () => {
   const priorCliState = {
     config: cliState.config,
     basePath: cliState.basePath,

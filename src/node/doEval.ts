@@ -542,7 +542,7 @@ async function doEvalWithEnv(
       } = await resolveConfigs(cmdObj, defaultConfig));
     }
 
-    // This run loaded these providers, including any filtered out below.
+    // Clean up the providers this run loaded once no evaluation is using them.
     providerRegistry.cleanupWhenIdle(testSuite.providers);
     // Fill the active scope in place; replacing runEnv would leave it empty.
     Object.assign(runEnv, testSuite.env);
