@@ -1,13 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { matchesAnswerRelevance } from '../../src/matchers/rag';
 import { matchesSimilarity } from '../../src/matchers/similarity';
 import { getDefaultProviders } from '../../src/providers/defaults';
+import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import { withProviderCallExecutionContext } from '../../src/scheduler/providerCallExecutionContext';
 
 import type { ApiEmbeddingProvider, ApiProvider } from '../../src/types/providers';
 
 vi.mock('../../src/providers/defaults', () => ({ getDefaultProviders: vi.fn() }));
+vi.mock('../../src/cache', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/cache')>()),
+  fetchWithCache: vi.fn(),
+}));
 
 describe('embedding graders receive evaluation cancellation', () => {
   const priorConfig = cliState.config;
@@ -22,6 +28,7 @@ describe('embedding graders receive evaluation cancellation', () => {
   beforeEach(() => {
     embed.mockReset().mockResolvedValue(response());
     vi.mocked(getDefaultProviders).mockReset();
+    vi.mocked(fetchWithCache).mockReset();
     cliState.config = {};
     provider = {
       id: () => 'test-embedding',
@@ -78,6 +85,73 @@ describe('embedding graders receive evaluation cancellation', () => {
       expect(embed.mock.contexts.every((receiver) => receiver === provider)).toBe(true);
     },
   );
+
+  it('does not call an embedding provider when grading is already cancelled', async () => {
+    const reason = new Error('evaluation cancelled');
+    await expect(
+      withProviderCallExecutionContext({ abortSignal: AbortSignal.abort(reason) }, () =>
+        run('similarity'),
+      ),
+    ).rejects.toBe(reason);
+    expect(embed).not.toHaveBeenCalled();
+  });
+
+  it('aborts both default OpenAI embedding requests during similarity grading', async () => {
+    const defaults = await getDefaultProviders();
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      ...defaults,
+      embeddingProvider: new OpenAiEmbeddingProvider('text-embedding-3-small', {
+        config: { apiKey: 'test-key' },
+      }),
+    });
+    const controller = new AbortController();
+    const reason = new Error('evaluation cancelled');
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const requests: AbortSignal[] = [];
+    const aborted: AbortSignal[] = [];
+    vi.mocked(fetchWithCache).mockImplementation((_url, options) => {
+      const signal = options?.signal;
+      if (!signal) {
+        throw new Error('OpenAI transport received no cancellation signal');
+      }
+      requests.push(signal);
+      if (requests.length === 2) {
+        markStarted();
+      }
+      return new Promise<never>((_resolve, reject) => {
+        signal.addEventListener(
+          'abort',
+          () => {
+            aborted.push(signal);
+            reject(signal.reason);
+          },
+          { once: true },
+        );
+      });
+    });
+    const grading = withProviderCallExecutionContext({ abortSignal: controller.signal }, () =>
+      matchesSimilarity('input', 'output', 0.5),
+    );
+    void grading.catch(() => {});
+    try {
+      await Promise.race([
+        started,
+        grading.then(() => {
+          throw new Error('Grading unexpectedly finished');
+        }),
+      ]);
+      expect(requests).toEqual([controller.signal, controller.signal]);
+      controller.abort(reason);
+      await expect(grading).rejects.toBe(reason);
+      expect(aborted).toEqual(requests);
+    } finally {
+      controller.abort(reason);
+      await Promise.allSettled([grading]);
+    }
+  });
 
   it.each(['similarity', 'answer input', 'answer question'] as const)(
     'cancels a pending %s embedding',
