@@ -492,6 +492,34 @@ describe('xAI Chat Provider', () => {
       ).toBe('xhigh');
     });
 
+    it('uses Grok 4.7 US chat fallback prices and still prefers the billed cost', async () => {
+      const provider = createXAIProvider('xai:grok-4.7', {
+        config: { config: { apiKey: 'test-key', region: 'us' } },
+      });
+      const usage = {
+        prompt_tokens: 1_000,
+        completion_tokens: 500,
+        total_tokens: 1_520,
+        prompt_tokens_details: { cached_tokens: 800 },
+        completion_tokens_details: { reasoning_tokens: 20 },
+      };
+      const response = {
+        data: { choices: [{ message: { content: 'result' } }], usage },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(response);
+      expect((await provider.callApi('estimate')).cost).toBeCloseTo(0.004312, 10);
+      expect(mockFetchWithCache.mock.calls[0][0]).toBe('https://us.api.x.ai/v1/chat/completions');
+
+      mockFetchWithCache.mockResolvedValue({
+        ...response,
+        data: { ...response.data, usage: { ...usage, cost_in_usd_ticks: 123_000 } },
+      });
+      expect((await provider.callApi('billed')).cost).toBeCloseTo(0.0000123, 10);
+    });
+
     it('recognizes Grok 4.6 as a reasoning model', () => {
       const provider = createXAIProvider('xai:grok-4.6') as any;
       expect(provider.isReasoningModel()).toBe(true);
