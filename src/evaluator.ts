@@ -1104,11 +1104,7 @@ async function callActiveProvider({
       : invoke();
   };
   const response = rateLimitRegistry
-    ? await rateLimitRegistry.execute(
-        activeProvider,
-        callApi,
-        createProviderRateLimitOptions(abortSignal),
-      )
+    ? await rateLimitRegistry.execute(activeProvider, callApi, createProviderRateLimitOptions())
     : await callApi();
 
   logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
@@ -3937,9 +3933,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     processedIndices: Set<number>;
     prompts: CompletedPrompt[];
   }): Promise<void> {
-    // Only caller cancellation drops queued graders. After the max evaluation duration, graders
-    // for completed targets still start, but receive the expired signal like other provider calls.
-    const providerCallQueue = new ProviderGroupedCallQueue(this.options.abortSignal);
+    const providerCallQueue = new ProviderGroupedCallQueue();
     const groupedRows: GroupedRows[] = [];
     let lastPromptsFlush = 0;
     const flushPromptMetrics = async () => {

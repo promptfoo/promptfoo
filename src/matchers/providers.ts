@@ -48,7 +48,6 @@ export function getGradingProviderCallOptions(): CallApiOptionsParams | undefine
 
 export async function callEmbeddingProvider(provider: ApiProvider, input: string) {
   const options = getGradingProviderCallOptions();
-  options?.abortSignal?.throwIfAborted();
   const result =
     options && provider.supportsEmbeddingCancellation
       ? await (provider as CancellableEmbeddingProvider).callEmbeddingApi(input, undefined, options)
@@ -83,7 +82,9 @@ export function callGradingProvider<T extends ProviderResponse>(
         ) as Promise<T>)
       : invoke(callContext);
 
-  const executeCall = () => {
+  const executeCall = async () => {
+    // Never start a grader after cancellation; queued graders check once they reach the front.
+    executionContext?.abortSignal?.throwIfAborted();
     if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
       return executionContext.rateLimitRegistry.execute(
         provider,

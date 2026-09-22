@@ -12,6 +12,7 @@ import { LocalAiEmbeddingProvider } from '../../src/providers/localai';
 import { MistralEmbeddingProvider } from '../../src/providers/mistral';
 import { OllamaEmbeddingProvider } from '../../src/providers/ollama';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
+import { SageMakerEmbeddingProvider } from '../../src/providers/sagemaker';
 import { TrueFoundryEmbeddingProvider } from '../../src/providers/truefoundry';
 import { VoyageEmbeddingProvider } from '../../src/providers/voyage';
 
@@ -91,6 +92,19 @@ describe('embedding transport cancellation', () => {
         return provider;
       },
     ],
+    [
+      'SageMaker',
+      () => {
+        const provider = new SageMakerEmbeddingProvider('endpoint', {
+          config: { modelType: 'custom' },
+        });
+        vi.spyOn(provider, 'getSageMakerRuntimeInstance').mockResolvedValue({
+          send: (_command: unknown, options?: { abortSignal?: AbortSignal }) =>
+            rejectAborted(options?.abortSignal),
+        } as never);
+        return provider;
+      },
+    ],
   ])('passes cancellation to the %s request and rejects with its reason', async (_name, create) => {
     const provider = create() as CancellableEmbeddingProvider;
     const reason = new Error('evaluation cancelled');
@@ -101,6 +115,19 @@ describe('embedding transport cancellation', () => {
       reason,
     );
     expect(new Set(signals)).toEqual(new Set([abortSignal]));
+  });
+
+  it('cancels the SageMaker request delay before calling the endpoint', async () => {
+    const provider = new SageMakerEmbeddingProvider('endpoint', {
+      config: { modelType: 'custom', delay: 60_000 },
+    });
+    const runtime = vi.spyOn(provider, 'getSageMakerRuntimeInstance');
+    const reason = new Error('evaluation cancelled');
+
+    await expect(
+      provider.callEmbeddingApi('text', undefined, { abortSignal: AbortSignal.abort(reason) }),
+    ).rejects.toBe(reason);
+    expect(runtime).not.toHaveBeenCalled();
   });
 
   it('shares identical Mistral requests only between callers with the same signal', async () => {

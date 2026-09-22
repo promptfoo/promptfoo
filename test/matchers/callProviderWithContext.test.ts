@@ -216,12 +216,13 @@ describe('callProviderWithContext', () => {
     },
   );
 
-  it('does not start queued grading calls after the queue is cancelled', async () => {
+  it('does not start a queued grading call after cancellation', async () => {
     const provider = createProvider();
     const controller = new AbortController();
-    const providerCallQueue = new ProviderGroupedCallQueue(controller.signal);
-    const promise = withProviderCallExecutionContext({ providerCallQueue }, () =>
-      callProviderWithContext(provider, 'grade this', 'rubric', vars),
+    const providerCallQueue = new ProviderGroupedCallQueue();
+    const promise = withProviderCallExecutionContext(
+      { abortSignal: controller.signal, providerCallQueue },
+      () => callProviderWithContext(provider, 'grade this', 'rubric', vars),
     );
     const reason = new Error('eval paused');
     controller.abort(reason);

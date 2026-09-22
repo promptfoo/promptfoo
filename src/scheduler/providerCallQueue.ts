@@ -15,17 +15,11 @@ export class ProviderGroupedCallQueue implements ProviderCallQueue {
   private jobs: QueuedProviderCall<unknown>[] = [];
   private waiters: (() => void)[] = [];
 
-  /** Queued calls that have not started when `abortSignal` aborts are rejected instead of run. */
-  constructor(private readonly abortSignal?: AbortSignal) {}
-
   enqueue<T>(providerId: string, call: () => Promise<T>): Promise<T> {
     const boundCall = AsyncResource.bind(call);
     return new Promise<T>((resolve, reject) => {
       this.jobs.push({
-        call: () => {
-          this.abortSignal?.throwIfAborted();
-          return boundCall();
-        },
+        call: boundCall as () => Promise<unknown>,
         providerId,
         reject,
         resolve: resolve as (result: unknown) => void,

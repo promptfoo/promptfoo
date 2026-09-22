@@ -1044,6 +1044,40 @@ describeEvaluator('evaluator execution control', () => {
     ]);
   });
 
+  it('keeps a grade that completes after the eval is paused', async () => {
+    const controller = new AbortController();
+    const provider: ApiProvider = {
+      id: () => 'target-provider',
+      callApi: vi.fn(async () => ({
+        output: 'target output',
+        tokenUsage: createEmptyTokenUsage(),
+      })),
+    };
+    // Like a local judge that ignores the signal, this grader finishes its in-flight call.
+    const judge: ApiProvider = {
+      id: () => 'signal-ignoring-judge',
+      callApi: vi.fn(async () => {
+        controller.abort();
+        return {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'judge passed' }),
+          tokenUsage: createEmptyTokenUsage(),
+        };
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ assert: [{ type: 'llm-rubric', value: 'Judge output', provider: judge }] }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1, abortSignal: controller.signal });
+
+    const { results } = await evalRecord.toEvaluateSummary();
+    expect(judge.callApi).toHaveBeenCalledTimes(1);
+    expect(results).toEqual([expect.objectContaining({ success: true, score: 1 })]);
+  });
+
   it('should abort when exceeding maxEvalTimeMs', async () => {
     vi.useFakeTimers();
 
@@ -1123,7 +1157,7 @@ describeEvaluator('evaluator execution control', () => {
     }
   });
 
-  it('flushes queued grouped grading before writing max-duration timeout rows', async () => {
+  it('retains completed target output and cancels queued grading at the max duration', async () => {
     vi.useFakeTimers();
 
     const results: any[] = [];
@@ -1202,16 +1236,17 @@ describeEvaluator('evaluator execution control', () => {
 
     const resultByTopic = new Map(results.map((result) => [result.vars.topic, result]));
 
-    expect(judge.callApi).toHaveBeenCalledTimes(1);
+    expect(judge.callApi).not.toHaveBeenCalled();
     expect(resultByTopic.get('alpha')).toEqual(
       expect.objectContaining({
-        success: true,
+        success: false,
+        failureReason: ResultFailureReason.ERROR,
         response: expect.objectContaining({
           output: 'Target output for Test prompt alpha',
         }),
       }),
     );
-    expect(resultByTopic.get('alpha')?.error).toBeUndefined();
+    expect(resultByTopic.get('alpha')?.error).toMatch(/^Aborted: /);
     expect(resultByTopic.get('gamma')?.error).toContain('Evaluation exceeded max duration');
   });
 
