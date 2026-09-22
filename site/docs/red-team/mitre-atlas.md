@@ -419,6 +419,6 @@ To learn more about setting up comprehensive AI red teaming, see [Introduction t
 ## Additional Resources
 
 - [MITRE ATLAS Official Website](https://atlas.mitre.org/)
-- [ATLAS Matrix Navigator](https://atlas.mitre.org/matrices/ATLAS)
-- [ATLAS Case Studies](https://atlas.mitre.org/studies)
-- [ATLAS Tactics Overview](https://atlas.mitre.org/tactics)
+- [ATLAS Matrix Navigator](https://atlas.mitre.org/)
+- [ATLAS Case Studies](https://atlas.mitre.org/)
+- [ATLAS Tactics Overview](https://atlas.mitre.org/)

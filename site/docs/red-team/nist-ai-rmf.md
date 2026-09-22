@@ -425,5 +425,5 @@ To learn more about setting up comprehensive AI red teaming, see [Introduction t
 ## Additional Resources
 
 - [NIST AI RMF Official Website](https://www.nist.gov/itl/ai-risk-management-framework)
-- [NIST AI RMF Playbook](https://pages.nist.gov/AIRMF/)
+- [NIST AI RMF Playbook](https://www.nist.gov/itl/ai-risk-management-framework)
 - [NIST AI RMF Crosswalk](https://airc.nist.gov/AI_RMF_Knowledge_Base/Crosswalks)

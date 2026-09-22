@@ -22,7 +22,7 @@ Testing autonomous coding agents? Start with the [coding-agent red-team guide](/
 
 LLM agents often have varying levels of access to tools, APIs, and data sources. A primary concern is whether an agent can be manipulated to escalate privileges or access unauthorized resources.
 
-A good reference for these sorts of vulnerabilities is the [OWASP API Security Top 10](https://owasp.org/www-project-api-security/). Although it isn't written for LLMs specifically, think of the agent as a user of an API.
+A good reference for these sorts of vulnerabilities is the [OWASP API Security Top 10](https://owasp.github.io/API-Security/). Although it isn't written for LLMs specifically, think of the agent as a user of an API.
 
 #### Example
 
