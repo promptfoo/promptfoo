@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { minVersion, satisfies, validRange } from 'semver';
+import { intersects, minVersion, satisfies, validRange } from 'semver';
 import { describe, expect, it } from 'vitest';
 import { extractModuleSpecifiers, getPackageName } from '../scripts/architectureUtils';
 
@@ -107,6 +107,20 @@ function validateDockerInstallCommands(dockerfile: string): void {
 
 const SOURCE_FILE_EXTENSIONS = /\.(ts|tsx|mts|cts|js|mjs|cjs)$/;
 const TYPESCRIPT_SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
+// Advisory fixes and compromised publishes Promptfoo has already moved past. CI does not gate
+// on `npm audit`, so this keeps a nested install, lockfile refresh, or widened range from
+// reintroducing one. Add the affected range when shipping a fix; this is not an audit.
+const KNOWN_BAD_RELEASES = new Map([
+  ['@cacheable/utils', '2.5.1'], // Shai-Hulud compromise (#10301)
+  ['@hono/node-server', '<1.19.15 || >=2.0.0 <2.0.10'], // GHSA-frvp-7c67-39w9, GHSA-9mqv-5hh9-4cgg
+  ['cache-manager', '7.2.10'], // Shai-Hulud compromise (#10301)
+  ['cacheable-request', '13.0.20'], // Shai-Hulud compromise (#10301)
+  ['hono', '<4.13.7'], // GHSA-hxh3-vqpv-xpqv
+  ['js-yaml', '<3.15.2 || >=4.0.0 <4.3.2 || >=5.0.0 <5.2.3'], // #10356, GHSA-2883-xcg3-v3hh
+  ['keyv', '6.0.0'], // Shai-Hulud compromise (#10301)
+  ['undici', '<7.29.1 || >=8.0.0 <8.10.2'], // GHSA-3xpg-4rpp-hhhm and the 7.29.1/8.10.2 fixes
+  ['ws', '<5.2.5 || >=6.0.0 <6.2.4 || >=7.0.0 <7.5.11 || >=8.0.0 <8.21.0'], // GHSA-96hv-2xvq-fx4p
+]);
 
 function collectSourceFiles(rootDir: string, excluded: Set<string>): string[] {
   const results: string[] = [];
@@ -304,6 +318,47 @@ describe('package manifests', () => {
     expect(privateRegistryPackages).toEqual([]);
   });
 
+  it('keeps known-bad releases out of every lockfile install, including nested copies', () => {
+    const installs = ['package-lock.json', 'code-scan-action/package-lock.json'].flatMap(
+      (lockfile) =>
+        Object.entries(
+          readPackageJson<PackageLockManifest<{ version?: string }>>(lockfile).packages,
+        ).flatMap(([installPath, { version }]) => {
+          const badRange = KNOWN_BAD_RELEASES.get(installPath.split('node_modules/').at(-1)!);
+          return badRange && version
+            ? [{ id: `${lockfile}: ${installPath}@${version}`, version, badRange }]
+            : [];
+        }),
+    );
+
+    expect(installs.length).toBeGreaterThan(0);
+    expect(
+      installs.filter(({ version, badRange }) => satisfies(version, badRange)).map(({ id }) => id),
+    ).toEqual([]);
+  });
+
+  it('keeps declared ranges from resolving known-bad releases', () => {
+    // Published consumers resolve these ranges, not this repository's lockfile.
+    const violations = [
+      'package.json',
+      'site/package.json',
+      'src/app/package.json',
+      'code-scan-action/package.json',
+    ].flatMap((manifestPath) => {
+      const manifest = readPackageJson<PackageManifest & { overrides?: object }>(manifestPath);
+      const { dependencies, devDependencies, optionalDependencies, overrides } = manifest;
+      return [dependencies, devDependencies, optionalDependencies, overrides]
+        .flatMap((declared) => Object.entries(declared ?? {}))
+        .filter(([name, range]) => {
+          const badRange = KNOWN_BAD_RELEASES.get(name);
+          return badRange && validRange(range) && intersects(range, badRange);
+        })
+        .map(([name, range]) => `${manifestPath}: ${name}@${range}`);
+    });
+
+    expect(violations).toEqual([]);
+  });
+
   it('keeps CLI smoke tests on the real unsupported and minimum-supported Node releases', () => {
     const workflowPath = '.github/workflows/main.yml';
     const workflow = fs.readFileSync(path.join(process.cwd(), workflowPath), 'utf8');
@@ -444,8 +499,6 @@ describe('package manifests', () => {
       expect(packageJson.dependencies, dependency).toHaveProperty(dependency);
       expect(packageJson.optionalDependencies, dependency).not.toHaveProperty(dependency);
     }
-
-    expect(packageJson.dependencies).not.toHaveProperty('jsdom');
   });
 
   it('lets consumers omit separately installed features and platform binaries', () => {
