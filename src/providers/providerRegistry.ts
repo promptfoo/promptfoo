@@ -35,19 +35,33 @@ interface ResourceState {
   users: Set<EvaluationScope>;
   providers: Set<ProviderState>;
   registered: boolean;
+  registration: number;
   release?: { promise: Promise<void>; start: (force?: boolean) => Promise<void> };
 }
 
-class ProviderRegistry {
+export class ProviderRegistry {
   private readonly evaluation = new AsyncLocalStorage<EvaluationScope>();
   private readonly currentProvider = new AsyncLocalStorage<ProviderState>();
+  private readonly releasingResource = new AsyncLocalStorage<{
+    state: ResourceState;
+    registration: number;
+  }>();
   private readonly providers = new WeakMap<IdleCleanupProvider, ProviderState>();
   private readonly resources = new Map<CleanupProvider, ResourceState>();
   private readonly selfRegisteredProviders = new WeakSet<IdleCleanupProvider>();
+  private readonly activeCalls = new Set<Promise<void>>();
+  private readonly processReleases = new Set<Promise<void>>();
+  private readonly processAbortController = new AbortController();
   private shutdownRegistered = false;
+  private processShuttingDown = false;
+
+  constructor(private readonly installProcessHandlers = true) {}
 
   /** Nested entry points share a scope; independent evaluations own their own providers. */
   async withEvaluation<T>(run: () => Promise<T>): Promise<T> {
+    if (this.processShuttingDown) {
+      throw this.processShutdownError();
+    }
     if (this.evaluation.getStore()?.active) {
       return run();
     }
@@ -79,6 +93,9 @@ class ProviderRegistry {
     if (signal?.aborted) {
       return Promise.reject(signal.reason);
     }
+    if (this.processShuttingDown) {
+      return Promise.reject(this.processShutdownError());
+    }
     if (!scope) {
       return undefined;
     }
@@ -97,6 +114,9 @@ class ProviderRegistry {
   ): Promise<T> {
     const scope = this.evaluation.getStore();
     signal?.throwIfAborted();
+    if (this.processShuttingDown) {
+      throw this.processShutdownError();
+    }
     if (!scope) {
       return run();
     }
@@ -106,6 +126,11 @@ class ProviderRegistry {
     const state = this.getProvider(provider);
     const ready = this.claimProvider(scope, state);
     state.activeCalls++;
+    let finish!: () => void;
+    const finished = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    this.activeCalls.add(finished);
     return this.currentProvider.run(state, async () => {
       try {
         if (ready) {
@@ -115,6 +140,9 @@ class ProviderRegistry {
         if (!scope.active) {
           throw this.closedScopeError();
         }
+        if (this.processShuttingDown) {
+          throw this.processShutdownError();
+        }
         let release = this.restoreProviderRegistration(provider);
         while (release) {
           await this.waitForScope(scope, release, signal);
@@ -122,11 +150,16 @@ class ProviderRegistry {
           if (!scope.active) {
             throw this.closedScopeError();
           }
+          if (this.processShuttingDown) {
+            throw this.processShutdownError();
+          }
           release = this.restoreProviderRegistration(provider);
         }
         return await run();
       } finally {
         state.activeCalls--;
+        this.activeCalls.delete(finished);
+        finish();
         const cleanup = this.maybeCleanupProvider(state);
         for (const resource of state.resources) {
           void this.maybeReleaseResource(
@@ -157,6 +190,9 @@ class ProviderRegistry {
 
   /** Reserve a shared resource before using it, waiting if its preceding shutdown has started. */
   useResource(resource: CleanupProvider): Promise<void> | undefined {
+    if (this.processShuttingDown) {
+      return Promise.reject(this.processShutdownError());
+    }
     const state = this.resources.get(resource);
     if (!state) {
       return undefined;
@@ -176,8 +212,17 @@ class ProviderRegistry {
   register(resource: CleanupProvider): void {
     let state = this.resources.get(resource);
     if (!state) {
-      state = { resource, users: new Set(), providers: new Set(), registered: false };
+      state = {
+        resource,
+        users: new Set(),
+        providers: new Set(),
+        registered: false,
+        registration: 0,
+      };
       this.resources.set(resource, state);
+    }
+    if (!state.registered) {
+      state.registration++;
     }
     state.registered = true;
     if ('id' in resource && typeof resource.id === 'function') {
@@ -188,8 +233,12 @@ class ProviderRegistry {
         this.linkResource(provider, state);
       }
     }
+    if (this.processShuttingDown) {
+      void this.forceResource(state);
+      return;
+    }
     void this.useResource(resource);
-    if (!this.shutdownRegistered) {
+    if (this.installProcessHandlers && !this.shutdownRegistered) {
       this.registerShutdownHandlers();
       this.shutdownRegistered = true;
     }
@@ -198,41 +247,70 @@ class ProviderRegistry {
   unregister(resource: CleanupProvider): void {
     const state = this.resources.get(resource);
     if (state) {
+      const releasing = this.releasingResource.getStore();
+      if (releasing?.state === state && releasing.registration !== state.registration) {
+        return;
+      }
       state.registered = false;
       this.forgetResource(state);
     }
   }
 
-  /** Process shutdown closes all known resources immediately, including pending idle releases. */
+  /** Close the currently known resources; embedded callers can continue using the registry. */
   async shutdownAll(): Promise<void> {
-    const releases = [...this.resources.values()].map((state) => {
-      void this.maybeReleaseResource(state, undefined, true);
-      return state.release?.start(true);
-    });
+    const releases = [...this.resources.values()].map((state) => this.forceResource(state));
     await Promise.all(releases);
+  }
+
+  /** Process exit also closes later registrations and waits for active calls and releases to drain. */
+  async shutdownForProcess(): Promise<void> {
+    this.processShuttingDown = true;
+    this.processAbortController.abort(this.processShutdownError());
+    for (const state of this.resources.values()) {
+      void this.forceResource(state);
+    }
+    while (this.activeCalls.size || this.processReleases.size) {
+      await Promise.all([...this.activeCalls, ...this.processReleases]);
+    }
   }
 
   private closedScopeError(): DOMException {
     return new DOMException('Evaluation ended before the provider call started', 'AbortError');
   }
 
+  private processShutdownError(): DOMException {
+    return new DOMException('Provider registry is shutting down', 'AbortError');
+  }
+
+  private forceResource(state: ResourceState): Promise<void> | undefined {
+    const release = this.maybeReleaseResource(state, undefined, true);
+    if (release) {
+      void state.release?.start(true);
+      if (this.processShuttingDown && !this.processReleases.has(release)) {
+        this.processReleases.add(release);
+        void release.then(() => this.processReleases.delete(release));
+      }
+    }
+    return release;
+  }
+
   private waitForScope(
     scope: EvaluationScope,
     ready: Promise<void>,
-    signal?: AbortSignal,
+    callerSignal?: AbortSignal,
   ): Promise<void> {
-    if (signal?.aborted) {
+    const signal = callerSignal
+      ? AbortSignal.any([callerSignal, this.processAbortController.signal])
+      : this.processAbortController.signal;
+    if (signal.aborted) {
       void ready.catch(() => {});
       return Promise.reject(signal.reason);
     }
     const closed = scope.closed.then(() => {
-      signal?.throwIfAborted();
+      signal.throwIfAborted();
       throw this.closedScopeError();
     });
     const pending = Promise.race([ready, closed]);
-    if (!signal) {
-      return pending;
-    }
     return new Promise<void>((resolve, reject) => {
       const onAbort = () => reject(signal.reason);
       signal.addEventListener('abort', onAbort, { once: true });
@@ -411,6 +489,9 @@ class ProviderRegistry {
         state.release = undefined;
       }
       this.forgetResource(state);
+      if (this.processShuttingDown && state.registered) {
+        void this.forceResource(state);
+      }
       finish();
     };
     let actual: Promise<void> | undefined;
@@ -420,9 +501,12 @@ class ProviderRegistry {
           actual = Promise.resolve();
           complete();
         } else {
+          const registration = state.registration;
           state.registered = false;
           actual = Promise.resolve()
-            .then(() => state.resource.shutdown())
+            .then(() =>
+              this.releasingResource.run({ state, registration }, () => state.resource.shutdown()),
+            )
             .catch((error) => {
               logger.warn('Error shutting down provider: ' + String(error));
             })
@@ -466,7 +550,7 @@ class ProviderRegistry {
       logger.debug(
         'Received ' + signal + ', shutting down ' + this.resources.size + ' provider resources...',
       );
-      await this.shutdownAll();
+      await this.shutdownForProcess();
       logger.debug('Provider resource shutdown complete');
     };
     process.once('SIGINT', () => void shutdown('SIGINT'));
