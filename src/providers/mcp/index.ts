@@ -74,11 +74,14 @@ export class MCPProvider implements ApiProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _options?: CallApiOptionsParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const signal = options?.abortSignal;
     try {
+      signal?.throwIfAborted();
       // Ensure initialization is complete
       await this.initializationPromise;
+      signal?.throwIfAborted();
 
       // Parse the prompt as JSON to extract tool call information
       let toolCallData: any;
@@ -132,7 +135,10 @@ export class MCPProvider implements ApiProvider {
       });
 
       // Call the MCP tool
-      const result = await this.mcpClient.callTool(toolName, finalArgs);
+      const result = signal
+        ? await this.mcpClient.callTool(toolName, finalArgs, signal)
+        : await this.mcpClient.callTool(toolName, finalArgs);
+      signal?.throwIfAborted();
 
       if (result.error) {
         return {
@@ -147,6 +153,7 @@ export class MCPProvider implements ApiProvider {
         originalPayload: toolCallData,
       });
     } catch (error) {
+      signal?.throwIfAborted();
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('MCP Provider error', { error: errorMessage });
       return {
@@ -166,12 +173,21 @@ export class MCPProvider implements ApiProvider {
   }
 
   // Method to call specific MCP tools directly
-  async callTool(toolName: string, args: Record<string, unknown>): Promise<ProviderResponse> {
+  async callTool(
+    toolName: string,
+    args: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<ProviderResponse> {
     try {
+      signal?.throwIfAborted();
       await this.initializationPromise;
+      signal?.throwIfAborted();
 
       const toolArgs = { ...this.defaultArgs, ...args };
-      const result = await this.mcpClient.callTool(toolName, toolArgs);
+      const result = signal
+        ? await this.mcpClient.callTool(toolName, toolArgs, signal)
+        : await this.mcpClient.callTool(toolName, toolArgs);
+      signal?.throwIfAborted();
 
       if (result.error) {
         return {
@@ -184,6 +200,7 @@ export class MCPProvider implements ApiProvider {
         toolArgs,
       });
     } catch (error) {
+      signal?.throwIfAborted();
       const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         error: `MCP tool call error: ${errorMessage}`,
