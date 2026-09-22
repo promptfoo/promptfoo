@@ -602,7 +602,6 @@ describeEvaluator('evaluator grading concurrency', () => {
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {
       maxConcurrency: 1,
-      maxEvalTimeMs: 60_000,
       abortSignal: abortController.signal,
     });
 

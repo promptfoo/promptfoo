@@ -7,7 +7,6 @@ import { matchesSimilarity } from '../../src/matchers/similarity';
 import { getDefaultProviders } from '../../src/providers/defaults';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import { withProviderCallExecutionContext } from '../../src/scheduler/providerCallExecutionContext';
-import { ProviderGroupedCallQueue } from '../../src/scheduler/providerCallQueue';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 
 import type {
@@ -208,29 +207,6 @@ describe('embedding graders receive evaluation cancellation', () => {
     } finally {
       controller.abort(reason);
       registry.dispose();
-      await Promise.allSettled([grading]);
-    }
-  });
-
-  it('removes grouped embedding grading before its provider runs on cancellation', async () => {
-    const queue = new ProviderGroupedCallQueue();
-    const controller = new AbortController();
-    const reason = new Error('cancel grouped grading');
-    const grading = withProviderCallExecutionContext(
-      { abortSignal: controller.signal, providerCallQueue: queue },
-      () => run('similarity'),
-    );
-    void grading.catch(() => {});
-    try {
-      await vi.waitFor(() => expect(queue.hasJobs()).toBe(true));
-      const group = queue.takeNextGroup();
-      controller.abort(reason);
-      await expect(grading).rejects.toBe(reason);
-      await Promise.all(group.map((job) => queue.run(job)));
-      expect(queue.hasJobs()).toBe(false);
-      expect(embed).not.toHaveBeenCalled();
-    } finally {
-      controller.abort(reason);
       await Promise.allSettled([grading]);
     }
   });

@@ -93,11 +93,7 @@ export function callGradingProvider<T extends ProviderResponse>(
   };
 
   if (executionContext?.providerCallQueue) {
-    return executionContext.providerCallQueue.enqueue(
-      provider.id(),
-      executeCall,
-      executionContext.abortSignal,
-    );
+    return executionContext.providerCallQueue.enqueue(provider.id(), executeCall);
   }
 
   return executeCall();

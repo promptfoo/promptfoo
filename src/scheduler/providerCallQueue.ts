@@ -8,47 +8,28 @@ export interface QueuedProviderCall<T> {
 }
 
 export interface ProviderCallQueue {
-  readonly abortSignal?: AbortSignal;
-  enqueue<T>(providerId: string, call: () => Promise<T>, signal?: AbortSignal): Promise<T>;
+  enqueue<T>(providerId: string, call: () => Promise<T>): Promise<T>;
 }
 
 export class ProviderGroupedCallQueue implements ProviderCallQueue {
   private jobs: QueuedProviderCall<unknown>[] = [];
   private waiters: (() => void)[] = [];
 
-  constructor(readonly abortSignal?: AbortSignal) {}
+  /** Queued calls that have not started when `abortSignal` aborts are rejected instead of run. */
+  constructor(private readonly abortSignal?: AbortSignal) {}
 
-  async enqueue<T>(providerId: string, call: () => Promise<T>, signal?: AbortSignal): Promise<T> {
-    signal?.throwIfAborted();
+  enqueue<T>(providerId: string, call: () => Promise<T>): Promise<T> {
     const boundCall = AsyncResource.bind(call);
     return new Promise<T>((resolve, reject) => {
-      const cleanup = () => signal?.removeEventListener('abort', onAbort);
-      const job: QueuedProviderCall<unknown> = {
+      this.jobs.push({
         call: () => {
-          signal?.throwIfAborted();
-          // Once running, let the provider report cancellation or its own failure.
-          cleanup();
+          this.abortSignal?.throwIfAborted();
           return boundCall();
         },
         providerId,
-        reject: (error) => {
-          cleanup();
-          reject(error);
-        },
-        resolve: (result) => {
-          cleanup();
-          resolve(result as T);
-        },
-      };
-      const onAbort = () => {
-        const index = this.jobs.indexOf(job);
-        if (index !== -1) {
-          this.jobs.splice(index, 1);
-        }
-        job.reject(signal?.reason);
-      };
-      this.jobs.push(job);
-      signal?.addEventListener('abort', onAbort, { once: true });
+        reject,
+        resolve: resolve as (result: unknown) => void,
+      });
       this.notifyWaiters();
     });
   }

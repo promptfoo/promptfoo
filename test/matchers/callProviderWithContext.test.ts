@@ -215,6 +215,21 @@ describe('callProviderWithContext', () => {
       ]);
     },
   );
+
+  it('does not start queued grading calls after the queue is cancelled', async () => {
+    const provider = createProvider();
+    const controller = new AbortController();
+    const providerCallQueue = new ProviderGroupedCallQueue(controller.signal);
+    const promise = withProviderCallExecutionContext({ providerCallQueue }, () =>
+      callProviderWithContext(provider, 'grade this', 'rubric', vars),
+    );
+    const reason = new Error('eval paused');
+    controller.abort(reason);
+
+    await providerCallQueue.run(providerCallQueue.takeNextGroup()[0]);
+    await expect(promise).rejects.toBe(reason);
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
 });
 
 describe('callGradingProvider', () => {

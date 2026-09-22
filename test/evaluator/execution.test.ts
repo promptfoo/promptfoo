@@ -1215,4 +1215,67 @@ describeEvaluator('evaluator execution control', () => {
     expect(resultByTopic.get('gamma')?.error).toContain('Evaluation exceeded max duration');
   });
 
+  it('cancels in-flight grouped grading when the max duration expires', async () => {
+    vi.useFakeTimers();
+
+    const results: any[] = [];
+    const provider: ApiProvider = {
+      id: () => 'target-provider',
+      callApi: vi.fn(async () => ({ output: 'Target output', tokenUsage: createEmptyTokenUsage() })),
+    };
+    // This grader only settles when its request is cancelled.
+    const judge: ApiProvider = {
+      id: () => 'hanging-judge',
+      callApi: vi.fn(
+        (_prompt, _context, options) =>
+          new Promise<ProviderResponse>((_resolve, reject) => {
+            options?.abortSignal?.addEventListener('abort', () => reject(new Error('aborted')), {
+              once: true,
+            });
+          }),
+      ),
+    };
+    const evalRecord = {
+      id: 'grouped-deadline-eval',
+      results,
+      prompts: [],
+      persisted: false,
+      config: {},
+      addPrompts: vi.fn().mockResolvedValue(undefined),
+      addResult: vi.fn(async (result) => {
+        results.push(result);
+      }),
+      fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+      getResults: vi.fn().mockResolvedValue(results),
+      save: vi.fn().mockResolvedValue(undefined),
+      setDurationMs: vi.fn(),
+      setVars: vi.fn(),
+      toEvaluateSummary: vi.fn(),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ assert: [{ type: 'llm-rubric', value: 'Judge output', provider: judge }] }],
+    };
+
+    let settled = false;
+    const evalPromise = evaluate(testSuite, evalRecord as unknown as Eval, {
+      maxConcurrency: 1,
+      maxEvalTimeMs: 50,
+    }).finally(() => {
+      settled = true;
+    });
+    await vi.advanceTimersByTimeAsync(50);
+    await vi.waitFor(() => expect(settled).toBe(true));
+    await evalPromise;
+
+    expect(judge.callApi).toHaveBeenCalledTimes(1);
+    expect(results).toEqual([
+      expect.objectContaining({
+        success: false,
+        error: expect.stringContaining('aborted'),
+        response: expect.objectContaining({ output: 'Target output' }),
+      }),
+    ]);
+  });
 });
