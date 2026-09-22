@@ -112,6 +112,89 @@ it('closes registrations after an empty process shutdown and preserves a later r
   }
 });
 
+it('forces CLI-owned cleanup-only providers while their calls are active without cleaning borrowed providers', async () => {
+  const registry = new ProviderRegistry(false);
+  const idle = { id: () => 'already-cleaned-cli-provider', cleanup: vi.fn() };
+  await registry.withEvaluation(() => registry.cleanupWhenIdle([idle]));
+  expect(idle.cleanup).toHaveBeenCalledOnce();
+
+  const callsStarted = deferred();
+  const finishCalls = deferred();
+  const cleanupStarted = deferred();
+  const finishCleanup = deferred();
+  const owned = {
+    id: () => 'cleanup-only-cli-provider',
+    cleanup: vi.fn(async () => {
+      cleanupStarted.resolve();
+      await finishCleanup.promise;
+    }),
+  };
+  const borrowed = { id: () => 'borrowed-provider', cleanup: vi.fn() };
+  let started = 0;
+  const run = async () => {
+    if (++started === 2) {
+      callsStarted.resolve();
+    }
+    await finishCalls.promise;
+  };
+  const physical: Promise<void>[] = [];
+  const evaluation = registry.withEvaluation(async () => {
+    await registry.cleanupWhenIdle([owned]);
+    physical.push(registry.withProvider(owned, run), registry.withProvider(borrowed, run));
+    await callsStarted.promise;
+  });
+  let shuttingDown: Promise<void> | undefined;
+  const shutdownFinished = vi.fn();
+  try {
+    await evaluation;
+    expect(owned.cleanup).not.toHaveBeenCalled();
+    shuttingDown = registry.shutdownForProcess().then(shutdownFinished);
+    await cleanupStarted.promise;
+    expect(owned.cleanup).toHaveBeenCalledExactlyOnceWith();
+    expect(borrowed.cleanup).not.toHaveBeenCalled();
+    expect(idle.cleanup).toHaveBeenCalledOnce();
+    expect(shutdownFinished).not.toHaveBeenCalled();
+
+    finishCleanup.resolve();
+    finishCalls.resolve();
+    await Promise.all([...physical, shuttingDown]);
+    expect(owned.cleanup).toHaveBeenCalledOnce();
+    expect(borrowed.cleanup).not.toHaveBeenCalled();
+    expect(idle.cleanup).toHaveBeenCalledOnce();
+  } finally {
+    finishCleanup.resolve();
+    finishCalls.resolve();
+    await Promise.allSettled([evaluation, ...physical, ...(shuttingDown ? [shuttingDown] : [])]);
+  }
+});
+
+it('starts an owned provider’s explicit process cleanup even when its separate idle hook is blocked', async () => {
+  const registry = new ProviderRegistry(false);
+  const idleStarted = deferred();
+  const finishIdle = deferred();
+  const provider = {
+    id: () => 'distinct-owned-cleanups',
+    cleanupAfterEvaluation: vi.fn(async () => {
+      idleStarted.resolve();
+      await finishIdle.promise;
+    }),
+    cleanup: vi.fn(async () => {}),
+  };
+  const evaluation = registry.withEvaluation(() => registry.cleanupWhenIdle([provider]));
+  try {
+    await idleStarted.promise;
+    await registry.shutdownForProcess();
+    expect(provider.cleanup).toHaveBeenCalledExactlyOnceWith();
+    expect(provider.cleanupAfterEvaluation).toHaveBeenCalledOnce();
+    finishIdle.resolve();
+    await evaluation;
+    expect(provider.cleanup).toHaveBeenCalledOnce();
+  } finally {
+    finishIdle.resolve();
+    await Promise.allSettled([evaluation]);
+  }
+});
+
 describeEvaluator('registered resources across overlapping evaluations', () => {
   it('waits for a shared resource release without delaying an unrelated evaluation', async () => {
     const shutdownStarted = deferred();
