@@ -1,6 +1,7 @@
 import cliState from '../cliState';
 import logger from '../logger';
 import { loadApiProvider } from '../providers/index';
+import { providerRegistry } from '../providers/providerRegistry';
 import { shouldGenerateRemote } from '../redteam/remoteGeneration';
 import { getCloudTargetIdFromProviders } from '../redteam/remoteGenerationContextFromProviders';
 import {
@@ -61,12 +62,14 @@ export function callGradingProvider<T extends ProviderResponse>(
   const executionContext = getProviderCallExecutionContext();
   const tracingContext = getProviderCallTracingContext();
   const callProvider = (): Promise<T> =>
-    tracingContext
-      ? (tracingContext.withProviderSpan(
-          { provider, callContext, operationName, role: 'grader', promptLabel: label },
-          invoke,
-        ) as Promise<T>)
-      : invoke(callContext);
+    providerRegistry.withProvider(provider, () =>
+      tracingContext
+        ? (tracingContext.withProviderSpan(
+            { provider, callContext, operationName, role: 'grader', promptLabel: label },
+            invoke,
+          ) as Promise<T>)
+        : invoke(callContext),
+    );
 
   const executeCall = () => {
     if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {

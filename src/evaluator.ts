@@ -1084,25 +1084,26 @@ async function callActiveProvider({
   });
   const callApiOptions = abortSignal ? { abortSignal } : undefined;
 
-  const callApi = () => {
-    onProviderInvoked();
-    const invoke = () =>
-      traceContext?.traceparent
-        ? withTracedProviderCall(
-            {
-              provider: activeProvider,
-              callContext: callApiContext,
-              promptLabel: promptForRender.label,
-              evalId: callApiContext.evaluationId,
-              testIndex,
-            },
-            async (context) => activeProvider.callApi(renderedPrompt, context, callApiOptions),
-          )
-        : activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
-    return testSuite?.tracing
-      ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
-      : invoke();
-  };
+  const callApi = () =>
+    providerRegistry.withProvider(activeProvider, async () => {
+      onProviderInvoked();
+      const invoke = () =>
+        traceContext?.traceparent
+          ? withTracedProviderCall(
+              {
+                provider: activeProvider,
+                callContext: callApiContext,
+                promptLabel: promptForRender.label,
+                evalId: callApiContext.evaluationId,
+                testIndex,
+              },
+              async (context) => activeProvider.callApi(renderedPrompt, context, callApiOptions),
+            )
+          : activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
+      return testSuite?.tracing
+        ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
+        : invoke();
+    });
   const response = rateLimitRegistry
     ? await rateLimitRegistry.execute(activeProvider, callApi, createProviderRateLimitOptions())
     : await callApi();
@@ -5023,8 +5024,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   async evaluate(): Promise<TEvaluation> {
-    // Registered provider resources are released once the last active evaluation finishes.
-    return providerRegistry.withEvaluation(() => this.evaluateWithResources());
+    return providerRegistry.withEvaluation(async () => {
+      await Promise.all(
+        this.testSuite.providers.map((provider) => providerRegistry.useProvider(provider)),
+      );
+      return this.evaluateWithResources();
+    });
   }
 
   private async evaluateWithResources(): Promise<TEvaluation> {

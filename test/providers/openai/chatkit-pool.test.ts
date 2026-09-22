@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatKitBrowserPool } from '../../../src/providers/openai/chatkit-pool';
+import { providerRegistry } from '../../../src/providers/providerRegistry';
 
 // Create hoisted mocks to access them in tests
 const mockPage = vi.hoisted(() => ({
@@ -101,6 +102,44 @@ describe('ChatKitBrowserPool', () => {
 
       // Should still be 4, not 10
       expect((instance2 as any).config.maxConcurrency).toBe(4);
+    });
+
+    it('waits for an older evaluation to close the shared pool before returning a new one', async () => {
+      const old = ChatKitBrowserPool.getInstance();
+      let markStarted!: () => void;
+      let release!: () => void;
+      const started = new Promise<void>((resolve) => {
+        markStarted = resolve;
+      });
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const shutdown = vi.spyOn(old, 'shutdown').mockImplementation(async () => {
+        markStarted();
+        await held;
+      });
+      const earlier = providerRegistry.withEvaluation(async () => {
+        expect(await ChatKitBrowserPool.getInstanceForEvaluation()).toBe(old);
+      });
+      let later: Promise<ChatKitBrowserPool> | undefined;
+      try {
+        await started;
+        let received: ChatKitBrowserPool | undefined;
+        later = providerRegistry.withEvaluation(async () => {
+          received = await ChatKitBrowserPool.getInstanceForEvaluation();
+          return received;
+        });
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(received).toBeUndefined();
+        release();
+        await earlier;
+        expect(await later).not.toBe(old);
+        expect(shutdown).toHaveBeenCalledOnce();
+      } finally {
+        release();
+        await Promise.allSettled([earlier, ...(later ? [later] : [])]);
+        shutdown.mockRestore();
+      }
     });
   });
 

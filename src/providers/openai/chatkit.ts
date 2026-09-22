@@ -1124,7 +1124,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     }
 
     // Get or create the pool
-    const pool = ChatKitBrowserPool.getInstance({
+    const pool = await ChatKitBrowserPool.getInstanceForEvaluation({
       maxConcurrency: this.chatKitConfig.poolSize,
       headless: this.chatKitConfig.headless,
     });

@@ -13,13 +13,13 @@ Each provider:
 
 ## Provider Lifecycle & Cleanup
 
-Evaluations run inside `providerRegistry.withEvaluation()` (`src/providers/providerRegistry.ts`). Registered resources, and the providers a CLI eval loaded, are released only after the last active evaluation finishes, so overlapping evals never close each other's providers.
+Evaluations run inside `providerRegistry.withEvaluation()` (`src/providers/providerRegistry.ts`). A provider or registered resource is released after its own last evaluation finishes. Independent evaluations keep running; a new caller of the same provider waits for its preceding cleanup to settle. Nested evaluation entry points share one ownership scope.
 
 **If your provider allocates resources** (Python workers, connections, child processes):
 
 - Implement a `cleanup()` method; it is called without arguments. Providers that distinguish idle evaluation cleanup from explicit shutdown can also implement `cleanupAfterEvaluation({ reason: 'evaluation-complete' })`, which is used instead for automatic cleanup.
-- Register with `providerRegistry` for automatic cleanup
-- Resources are released once no evaluation is active, and on process exit
+- Register with `providerRegistry` for automatic cleanup. Shared singleton transports must call and await `useResource()` on every access.
+- A resource is released after its last using evaluation, or immediately on process shutdown.
 
 **Reference implementations:**
 
