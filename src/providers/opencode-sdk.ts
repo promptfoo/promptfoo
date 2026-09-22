@@ -1198,7 +1198,12 @@ export class OpenCodeSDKProvider implements ApiProvider {
     await this.shutdown();
   }
 
-  /** Stop the local server (on evaluation completion or process exit) and keep the sessions. */
+  /** Evaluation completion stops the local server but keeps persistent sessions resumable. */
+  cleanupAfterEvaluation(): Promise<void> {
+    return this.shutdown();
+  }
+
+  /** Stop the local server (after evaluations or on process exit) and keep the sessions. */
   async shutdown(): Promise<void> {
     await this.clientInitialization?.catch(() => undefined);
     if (this.server) {

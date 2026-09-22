@@ -2461,6 +2461,18 @@ describe('OpenCodeSDKProvider', () => {
       ]);
     });
 
+    it('keeps persistent sessions when the last evaluation releases the provider', async () => {
+      const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
+
+      await providerRegistry.withEvaluation(async () => {
+        providerRegistry.cleanupWhenIdle([provider]);
+        await provider.callApi('Test prompt', persistent('a'));
+      });
+
+      expect(mockServerClose).toHaveBeenCalledOnce();
+      expect(mockSessionDelete).not.toHaveBeenCalled();
+    });
+
     it('forgets only the least recently used lookup and never deletes evicted sessions', async () => {
       const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
       for (let index = 0; index < 100; index++) {
