@@ -556,12 +556,12 @@ interface OpenCodePromptError {
 function getOpenCodePromptError(
   response: OpenCodeSdkResult<OpenCodePromptResponse>,
 ): OpenCodePromptError | undefined {
-  if (response && typeof response === 'object' && 'error' in response && response.error != null) {
-    return {
-      error: response.error,
-      status: response.response?.status,
-      headers: response.response?.headers,
-    };
+  if (response && typeof response === 'object' && ('error' in response || 'response' in response)) {
+    const { error, response: transport } = response;
+    const status = transport?.status;
+    if (error != null || (typeof status === 'number' && (status < 200 || status >= 300))) {
+      return { error, status, headers: transport?.headers };
+    }
   }
   const error = unwrapOpenCodeResult(response)?.info?.error;
   return error == null ? undefined : { error, assistant: true };
@@ -758,9 +758,9 @@ function redactOpenCodeError(
       new RegExp(unbounded ? pattern : '(?<![\\w.~+-])' + pattern + '(?![\\w.~+=-])', 'g'),
     );
   }
-  const credentialField = String.raw`(?<!\w)["']?(?:api[_ -]?key|(?:(?:access|refresh|session|id|auth|csrf)[_ -]?)?token|(?:client[_ -]?)?secret|credentials?|pass(?:word|wd|phrase)|pwd|sign(?:ature|ing[_ -]?key)|authorization|(?:set[_ -]?)?cookie)["']?\s*[:=]\s*`;
+  const credentialField = String.raw`(?<![\w.-])["']?(?!(?:[\w.-]+[_.-])?(?:total|input|output|cached|reasoning|prompt|completion|remaining|limit|usage|count|num)[_.-]tokens?["']?\s*[:=])(?:[\w.-]+[_.-])?(?:(?:api|access|private|client)[_ -]?key|(?:(?:access|refresh|session|id|auth|csrf|bearer)[_ -]?)?token|(?:client[_ -]?)?secret|credentials?|pass(?:word|wd|phrase)|pwd|sign(?:ature|ing[_ -]?key)|authorization|(?:set[_ -]?)?cookie)["']?\s*[:=]\s*`;
   for (const pattern of [
-    /(?<!\w)(["']?(?:set[_ -]?)?cookie["']?\s*[:=]\s*["']?)[^\s,"';}]+(?:\s*;\s*[^\s=;,"'}]+=[^\s,"';}]+)*/gi,
+    /(?<![\w.-])(["']?(?:[\w.-]+[_.-])?(?:set[_ -]?)?cookie["']?\s*[:=]\s*["']?)[^\s,"';}]+(?:\s*;\s*[^\s=;,"'}]+=[^\s,"';}]+)*/gi,
     new RegExp(String.raw`(${credentialField}(["']))(?:\\[^\r\n]|(?!\2)[^\\\r\n])*(?=\2)`, 'gi'),
     new RegExp(String.raw`(${credentialField}["']?)(?:(?:Bearer|Basic)\s+)?[^\s,"';&}]+`, 'gi'),
   ]) {
@@ -3490,12 +3490,14 @@ export class OpenCodeSDKProvider implements ApiProvider {
         if (!isSafeTimingHeader(key, value)) {
           continue;
         }
-        classificationHeaders[key] = value;
+        const normalized =
+          key === 'retry-after' && isInteger(value) ? String(Number(value)) : value;
+        classificationHeaders[key] = normalized;
         const redacted = (formatHeader ??= this.getErrorFormatter(config, true))(value);
         // A short numeric credential can coincide with milliseconds or another date component.
         // Exact credentials and non-date timing values still go through the normal redaction.
         if (redacted === value || onlyRedactsTimestampDigits(value, redacted)) {
-          publicHeaders[key] = value;
+          publicHeaders[key] = normalized;
         } else {
           delete publicHeaders[key];
         }

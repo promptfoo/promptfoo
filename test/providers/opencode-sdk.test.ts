@@ -1360,7 +1360,9 @@ describe('OpenCodeSDKProvider', () => {
         const message =
           'token=issued-token-991; secret="issued secret with spaces"; ' +
           'Cookie: sid=issued-cookie-991; csrf=issued-second-cookie-991, ' +
-          'total_tokens=17; useful context';
+          'total_tokens=17; billing-total-token=18; usage.input_tokens=19; ' +
+          'AWS_SECRET_ACCESS_KEY=issued-aws; OPENAI_API_KEY=issued-openai; ' +
+          'X_AUTH_TOKEN=issued-header; database_password=issued-database; GITHUB_TOKEN=issued-github; useful context';
         const error = { name: 'APIError', data: { statusCode: 502, message } };
         const response = createMockPromptResponse([]);
         mockSessionPrompt.mockResolvedValueOnce({ error }).mockResolvedValueOnce({
@@ -1376,7 +1378,19 @@ describe('OpenCodeSDKProvider', () => {
             expect(diagnostic).toContain('token=[REDACTED]');
             expect(diagnostic).toContain('secret="[REDACTED]"');
             expect(diagnostic).toContain('Cookie: [REDACTED]');
-            expect(diagnostic).toContain('total_tokens=17; useful context');
+            for (const field of [
+              'AWS_SECRET_ACCESS_KEY',
+              'OPENAI_API_KEY',
+              'X_AUTH_TOKEN',
+              'database_password',
+              'GITHUB_TOKEN',
+            ]) {
+              expect(diagnostic).toContain(field + '=[REDACTED]');
+            }
+            expect(diagnostic).toContain(
+              'total_tokens=17; billing-total-token=18; usage.input_tokens=19',
+            );
+            expect(diagnostic).toContain('useful context');
             expect(diagnostic).not.toContain('issued');
           }
         }
@@ -2958,6 +2972,35 @@ describe('OpenCodeSDKProvider', () => {
         expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
       });
 
+      it.each([302, 429, 503])('does not cache a bodyless HTTP %i as a success', async (status) => {
+        enableCache();
+        mockSessionPrompt
+          .mockResolvedValueOnce({
+            response: new Response(null, { status, headers: { 'Retry-After': '2' } }),
+          })
+          .mockResolvedValueOnce(createMockPromptResponse([{ type: 'text', text: 'recovered' }]));
+        const provider = new OpenCodeSDKProvider({
+          config: { baseUrl: 'http://127.0.0.1:4099' },
+        });
+        const prompt = 'bodyless gateway ' + status;
+
+        const failure = await provider.callApi(prompt);
+        const recovery = await provider.callApi(prompt);
+        const cached = await provider.callApi(prompt);
+
+        expect(failure.error).toContain('HTTP ' + status);
+        expect(failure.output).toBeUndefined();
+        expect(failure.cached).not.toBe(true);
+        expect(failure.metadata).toEqual(
+          status === 429
+            ? { rateLimitKind: 'rate_limit', headers: { 'retry-after': '2' } }
+            : undefined,
+        );
+        expect(recovery.output).toBe('recovered');
+        expect(cached).toMatchObject({ output: 'recovered', cached: true });
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
+      });
+
       it.each([
         ['false', false],
         ['zero', 0],
@@ -2985,6 +3028,7 @@ describe('OpenCodeSDKProvider', () => {
         mockSessionPrompt.mockResolvedValueOnce({
           ...createMockPromptResponse([{ type: 'text', text: 'successful' }]),
           error: null,
+          response: new Response(null, { status: 200 }),
         });
         const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
         expect((await provider.callApi('valid SDK response')).output).toBe('successful');
@@ -7916,6 +7960,14 @@ describe('OpenCodeSDKProvider', () => {
         expected: 'rate_limit',
       },
       {
+        label: 'ambiguous body code with a zero-padded gateway recovery hint',
+        delivery: 'transport',
+        isRetryable: false,
+        body: { code: 'insufficient_quota', message: 'Too many requests' },
+        headers: { 'Retry-After': '02' },
+        expected: 'rate_limit',
+      },
+      {
         label: 'ambiguous body code with a short reset hint',
         delivery: 'assistant',
         isRetryable: false,
@@ -7984,6 +8036,7 @@ describe('OpenCodeSDKProvider', () => {
         expect(scheduler.getRetryAfter?.(result, undefined)).toBeUndefined();
       } else if ('Retry-After' in entry.headers) {
         expect(scheduler.getRetryAfter?.(result, undefined)).toBe(2000);
+        expect(scheduler.getHeaders?.(result)?.['retry-after']).toBe('2');
       } else if ('X-RateLimit-Reset-Requests' in entry.headers) {
         expect(scheduler.getHeaders?.(result)).toEqual({ 'x-ratelimit-reset-requests': '30s' });
       }
@@ -8147,6 +8200,7 @@ describe('OpenCodeSDKProvider', () => {
           '../../src/scheduler/providerWrapper'
         );
         const { getProviderResponseHeaders } = await import('../../src/scheduler/types');
+        vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-01-01T00:00:00.000Z'));
         const retryDate = new Date(Date.now() + 60_000).toUTCString();
         const resetTimestamp = new Date(Date.now() + 120_000).toISOString();
         const trusted = {
@@ -8224,32 +8278,35 @@ describe('OpenCodeSDKProvider', () => {
       },
     );
 
-    it('uses private timing to classify a throttle without exposing the header', async () => {
-      const { createProviderRateLimitOptions } = await import(
-        '../../src/scheduler/providerWrapper'
-      );
-      mockSessionPrompt.mockResolvedValueOnce({
-        error: {
-          name: 'APIError',
-          data: {
-            statusCode: 429,
-            code: 'insufficient_quota',
-            responseHeaders: { 'Retry-After': '30' },
+    it.each(['30', '030'])(
+      'uses private timing %s to classify a throttle without exposing the header',
+      async (credential) => {
+        const { createProviderRateLimitOptions } = await import(
+          '../../src/scheduler/providerWrapper'
+        );
+        mockSessionPrompt.mockResolvedValueOnce({
+          error: {
+            name: 'APIError',
+            data: {
+              statusCode: 429,
+              code: 'insufficient_quota',
+              responseHeaders: { 'Retry-After': credential },
+            },
           },
-        },
-        response: new Response(null, { status: 429, headers: { 'Retry-After': '2' } }),
-      });
-      const provider = new OpenCodeSDKProvider({ config: { apiKey: '30' } });
+          response: new Response(null, { status: 429, headers: { 'Retry-After': '2' } }),
+        });
+        const provider = new OpenCodeSDKProvider({ config: { apiKey: credential } });
 
-      const result = await provider.callApi('private scheduler timing');
+        const result = await provider.callApi('private scheduler timing');
 
-      expect(result.metadata).toEqual({ rateLimitKind: 'rate_limit' });
-      const scheduler = createProviderRateLimitOptions();
-      expect(scheduler.isRateLimited?.(result, undefined)).toBe(true);
-      expect(scheduler.getHeaders?.(result)).toBeUndefined();
-      expect(scheduler.getRetryAfter?.(result, undefined)).toBeUndefined();
-      expect(JSON.stringify(result)).not.toContain('30');
-    });
+        expect(result.metadata).toEqual({ rateLimitKind: 'rate_limit' });
+        const scheduler = createProviderRateLimitOptions();
+        expect(scheduler.isRateLimited?.(result, undefined)).toBe(true);
+        expect(scheduler.getHeaders?.(result)).toBeUndefined();
+        expect(scheduler.getRetryAfter?.(result, undefined)).toBeUndefined();
+        expect(JSON.stringify(result)).not.toContain(credential);
+      },
+    );
 
     it('keeps scheduler timestamps that contain a short configured credential', async () => {
       vi.useFakeTimers({ toFake: ['Date'] });
