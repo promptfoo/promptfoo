@@ -413,6 +413,34 @@ describe('SageMaker runtime lifecycle', () => {
         : provider.callApi('A garden', undefined, { abortSignal });
     }
 
+    it.each(['caller abort', 'cleanup'] as const)(
+      'does not start a user transform when %s happens while the cache module is loading',
+      async (cancellation) => {
+        const provider = createProvider();
+        const transformation = vi.fn((input: unknown) => String(input));
+        provider.transform = transformation;
+        const controller = new AbortController();
+        const reason = new Error('Cancelled before the transform');
+        const result = call(provider, controller.signal);
+        const rejection =
+          cancellation === 'caller abort'
+            ? expect(result).rejects.toBe(reason)
+            : expect(result).rejects.toThrow('shut down');
+
+        if (cancellation === 'caller abort') {
+          controller.abort(reason);
+        } else {
+          provider.cleanup();
+        }
+        await rejection;
+        await new Promise<void>((resolve) => setImmediate(resolve));
+
+        expect(transformation).not.toHaveBeenCalled();
+        expect(mockSend).not.toHaveBeenCalled();
+        expect(SageMakerRuntimeClient).not.toHaveBeenCalled();
+      },
+    );
+
     it('keeps an active send alive during evaluation-complete cleanup and releases it once idle', async () => {
       const provider = createProvider();
       const started = deferred<AbortSignal>();

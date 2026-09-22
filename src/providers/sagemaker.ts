@@ -1016,9 +1016,14 @@ abstract class SageMakerGenericProvider {
     cache: Cache,
     key: string,
     signal: AbortSignal,
-    operation: (state: RuntimeCacheEntry, refresh: () => boolean) => Promise<T>,
+    operation: (
+      state: RuntimeCacheEntry,
+      refresh: () => boolean,
+      clearedWhileQueued: boolean,
+    ) => Promise<T>,
   ): Promise<T> {
     const scope = getCacheOperationScope(cache, key);
+    const submittedGeneration = scope.getGeneration();
     let entries = runtimeCacheEntries.get(scope.cache);
     if (!entries) {
       entries = new Map();
@@ -1054,7 +1059,7 @@ abstract class SageMakerGenericProvider {
     const result = entry.tail.then(async () => {
       signal.throwIfAborted();
       refresh();
-      return operation(entry, refresh);
+      return operation(entry, refresh, scope.getGeneration() !== submittedGeneration);
     });
     entry.tail = result
       .then(
@@ -1095,13 +1100,18 @@ abstract class SageMakerGenericProvider {
     value: string,
     signal: AbortSignal,
   ): Promise<void> {
-    return this.withRuntimeCacheEntry(cache, key, signal, async (state, refresh) => {
+    return this.withRuntimeCacheEntry(cache, key, signal, async (state, refresh, queuedClear) => {
+      if (queuedClear) {
+        return;
+      }
       if (!state.initialized) {
         const previous = (await cache.get<string>(key)) ?? undefined;
-        if (!refresh()) {
-          state.value = previous;
-          state.initialized = true;
+        signal.throwIfAborted();
+        if (refresh()) {
+          return;
         }
+        state.value = previous;
+        state.initialized = true;
       }
       signal.throwIfAborted();
       let writeFailed = false;
@@ -2099,11 +2109,13 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     // Import cache functions dynamically to avoid circular dependencies
     const { isCacheEnabled, getCache } = await import('../cache');
 
+    abortSignal.throwIfAborted();
     const transformResult = await this.runTransformSafely(
       prompt,
       context,
       'SageMaker transform error',
     );
+    abortSignal.throwIfAborted();
     if (!transformResult.ok) {
       return { error: transformResult.error };
     }
@@ -2360,11 +2372,13 @@ export class SageMakerEmbeddingProvider
     // Import cache functions dynamically to avoid circular dependencies
     const { isCacheEnabled, getCache } = await import('../cache');
 
+    abortSignal.throwIfAborted();
     const transformResult = await this.runTransformSafely(
       text,
       context,
       'SageMaker embedding transform error',
     );
+    abortSignal.throwIfAborted();
     if (!transformResult.ok) {
       return { error: transformResult.error };
     }

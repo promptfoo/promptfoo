@@ -41,6 +41,23 @@ function pausePublication(backing: Cache, expectedKey: string) {
   return { entered: entered.promise, release: release.resolve };
 }
 
+function pausePreload(backing: Cache, expectedKey: string) {
+  const entered = deferred();
+  const release = deferred();
+  const original = backing.get.bind(backing);
+  let paused = false;
+  vi.spyOn(backing, 'get').mockImplementation(async <T>(key: string): Promise<T | undefined> => {
+    const value = await original<T>(key);
+    if (key === expectedKey && !paused) {
+      paused = true;
+      entered.resolve();
+      await release.promise;
+    }
+    return value;
+  });
+  return { entered: entered.promise, release: release.resolve };
+}
+
 const scopedCache = (namespace: string) => withCacheNamespace(namespace, async () => getCache());
 
 afterEach(() => {
@@ -48,6 +65,97 @@ afterEach(() => {
 });
 
 describe('SageMaker cache coordination across clears', () => {
+  it('discards a preloading write before a parent namespace clear finishes scanning storage', async () => {
+    const parent = 'sagemaker-clear-in-progress';
+    const namespace = `${parent}:child`;
+    const expectedKey = `${namespace}:entry`;
+    const cache = await scopedCache(namespace);
+    const backing = getCache();
+    const paused = pausePreload(backing, expectedKey);
+    const publication = vi.spyOn(backing, 'set');
+    const store = backing.stores[0];
+    const iterate = store.iterator?.bind(store);
+    if (!iterate) {
+      throw new Error('Expected the cache test store to support namespace iteration');
+    }
+    const scanned = deferred();
+    const releaseScan = deferred();
+    vi.spyOn(store, 'iterator').mockImplementation(async function* (storeNamespace) {
+      for await (const entry of iterate(storeNamespace)) {
+        yield entry;
+      }
+      scanned.resolve();
+      await releaseScan.promise;
+    });
+    const write = new CacheProbe().write(cache, 'entry', 'stale');
+    let clearing: Promise<boolean> | undefined;
+
+    try {
+      await paused.entered;
+      clearing = (await scopedCache(parent)).clear();
+      await scanned.promise;
+      paused.release();
+      await write;
+      expect(publication.mock.calls.filter(([key]) => key === expectedKey)).toEqual([]);
+
+      releaseScan.resolve();
+      await clearing;
+      expect(await cache.get('entry')).toBeUndefined();
+    } finally {
+      paused.release();
+      releaseScan.resolve();
+      await Promise.allSettled([write, ...(clearing ? [clearing] : [])]);
+    }
+  });
+
+  it.each(['global', 'parent namespace', 'unrelated namespace'] as const)(
+    'handles a %s clear while a write preloads and another is queued',
+    async (scope) => {
+      const parent = `sagemaker-clear-preload-${scope}`;
+      const namespace = `${parent}:child`;
+      const expectedKey = `${namespace}:entry`;
+      const oldCache = await scopedCache(namespace);
+      await oldCache.set('entry', 'before clear');
+      const backing = getCache();
+      const paused = pausePreload(backing, expectedKey);
+      const publication = vi.spyOn(backing, 'set');
+      const first = new CacheProbe().write(oldCache, 'entry', 'stale');
+      let queued: Promise<void> | undefined;
+
+      try {
+        await paused.entered;
+        queued = new CacheProbe().write(oldCache, 'entry', 'queued');
+        if (scope === 'global') {
+          await clearCache();
+        } else {
+          await (
+            await scopedCache(scope === 'parent namespace' ? parent : `${parent}-other`)
+          ).clear();
+        }
+        paused.release();
+        await Promise.all([first, queued]);
+
+        const newCache = await scopedCache(namespace);
+        const publishedValues = publication.mock.calls
+          .filter(([key]) => key === expectedKey)
+          .map(([, value]) => value);
+        if (scope === 'unrelated namespace') {
+          expect(publishedValues).toEqual(['stale', 'queued']);
+          expect(await newCache.get('entry')).toBe('queued');
+        } else {
+          expect(publishedValues).toEqual([]);
+          expect(await newCache.get('entry')).toBeUndefined();
+        }
+
+        await new CacheProbe().write(newCache, 'entry', 'fresh');
+        expect(await oldCache.get('entry')).toBe('fresh');
+      } finally {
+        paused.release();
+        await Promise.allSettled([first, ...(queued ? [queued] : [])]);
+      }
+    },
+  );
+
   it('keeps a new wrapper from publishing until the old cancelled write has drained', async () => {
     const namespace = 'sagemaker-clear-fresh';
     const oldCache = await scopedCache(namespace);

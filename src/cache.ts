@@ -33,6 +33,7 @@ let cacheInstance: Cache | undefined;
 const namespacedCacheInstances = new Map<string, Cache>();
 const namespacedCacheClearGenerations = new Map<string, number>();
 let cacheClearGeneration = 0;
+let cacheOperationClearGeneration = 0;
 let globalCacheClearGeneration = 0;
 
 const cacheNamespaceStorage = new AsyncLocalStorage<{ namespace: string }>();
@@ -119,11 +120,14 @@ function getCacheInstance() {
     });
     const clear = cacheInstance.clear.bind(cacheInstance);
     cacheInstance.clear = async () => {
-      const result = await clear();
-      cacheClearGeneration += 1;
-      globalCacheClearGeneration = cacheClearGeneration;
-      namespacedCacheClearGenerations.clear();
-      return result;
+      markCacheOperationClear();
+      try {
+        const result = await clear();
+        cacheClearGeneration += 1;
+        return result;
+      } finally {
+        markCacheOperationClear();
+      }
     };
     registerCacheOperationScope(
       cacheInstance,
@@ -185,6 +189,17 @@ function getNamespacedCache(namespace: string) {
   return namespacedCache;
 }
 
+// In-flight operations are invalidated both when storage starts clearing and when it settles.
+function markCacheOperationClear(namespace?: string) {
+  cacheOperationClearGeneration += 1;
+  if (namespace === undefined) {
+    globalCacheClearGeneration = cacheOperationClearGeneration;
+    namespacedCacheClearGenerations.clear();
+  } else {
+    namespacedCacheClearGenerations.set(namespace, cacheOperationClearGeneration);
+  }
+}
+
 function getCacheKeyClearGeneration(key: string) {
   let generation = globalCacheClearGeneration;
   for (
@@ -233,40 +248,44 @@ function getUnscopedCacheKey(cacheKey: string, namespace: string) {
 async function clearNamespacedCache(cache: Cache, namespace: string) {
   const namespacePrefix = `${namespace}:`;
 
-  for (const store of cache.stores) {
-    if (!store.iterator) {
-      throw new Error(
-        `[Cache] Cannot clear namespace ${namespace} because a cache store does not support key iteration.`,
-      );
-    }
+  markCacheOperationClear(namespace);
+  try {
+    for (const store of cache.stores) {
+      if (!store.iterator) {
+        throw new Error(
+          `[Cache] Cannot clear namespace ${namespace} because a cache store does not support key iteration.`,
+        );
+      }
 
-    const keysToDelete: string[] = [];
-    for await (const [key] of store.iterator(undefined)) {
-      if (typeof key === 'string' && key.startsWith(namespacePrefix)) {
-        keysToDelete.push(key);
+      const keysToDelete: string[] = [];
+      for await (const [key] of store.iterator(undefined)) {
+        if (typeof key === 'string' && key.startsWith(namespacePrefix)) {
+          keysToDelete.push(key);
+        }
+      }
+
+      if (keysToDelete.length === 0) {
+        continue;
+      }
+
+      try {
+        if (store.deleteMany) {
+          await store.deleteMany(keysToDelete);
+        } else {
+          await Promise.all(keysToDelete.map((key) => store.delete(key)));
+        }
+      } catch (err) {
+        throw new Error(
+          `[Cache] Failed to clear ${keysToDelete.length} keys for namespace "${namespace}": ${(err as Error).message}`,
+        );
       }
     }
 
-    if (keysToDelete.length === 0) {
-      continue;
-    }
-
-    try {
-      if (store.deleteMany) {
-        await store.deleteMany(keysToDelete);
-      } else {
-        await Promise.all(keysToDelete.map((key) => store.delete(key)));
-      }
-    } catch (err) {
-      throw new Error(
-        `[Cache] Failed to clear ${keysToDelete.length} keys for namespace "${namespace}": ${(err as Error).message}`,
-      );
-    }
+    cacheClearGeneration += 1;
+    return true;
+  } finally {
+    markCacheOperationClear(namespace);
   }
-
-  cacheClearGeneration += 1;
-  namespacedCacheClearGenerations.set(namespace, cacheClearGeneration);
-  return true;
 }
 
 /**
