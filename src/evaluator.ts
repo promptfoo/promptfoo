@@ -38,6 +38,8 @@ import {
   type RateLimitRegistry,
 } from './scheduler';
 import {
+  retainEvaluationProvider,
+  withEvaluationProviderRetainer,
   withProviderCallExecutionContext,
   withProviderCallTracingContext,
 } from './scheduler/providerCallExecutionContext';
@@ -65,12 +67,14 @@ import {
   type CompletedPrompt,
   type EvaluateResult,
   type EvaluateStats,
+  type EvaluateTestSuite,
   type GradingResult,
   MAX_SUGGESTIONS_COUNT,
   type Prompt,
   type ProviderResponse,
   ResultFailureReason,
   type RunEvalOptions,
+  type TestCase,
   type TestSuite,
   TestSuiteConfigSchema,
 } from './types/index';
@@ -81,6 +85,8 @@ import { warnEmptyFilterRange } from './util/filterRangeWarn';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import {
   buildConfiguredProviderMap,
+  GRADING_PROVIDER_TYPE_KEYS,
+  isProviderTypeMap,
   resolveConfiguredProviderReference,
 } from './util/gradingProvider';
 import invariant from './util/invariant';
@@ -2217,6 +2223,7 @@ async function maybeAddGeneratedPrompts(testSuite: TestSuite, options: InternalE
   const { prompts: newPrompts, error } = await generatePrompts(
     testSuite.prompts[0].raw,
     requestedCount,
+    retainEvaluationProvider,
   );
   if (error || !newPrompts) {
     throw new Error(`Failed to generate prompts: ${error}`);
@@ -3332,6 +3339,172 @@ function usesExampleProvider(testSuite: TestSuite) {
     const label = provider.label || '';
     return url.includes('promptfoo.app') || label.toLowerCase().includes('example');
   });
+}
+
+const activeProviderUses = new WeakMap<ApiProvider, number>();
+const requestedProviderCleanups = new WeakSet<ApiProvider>();
+const pendingProviderCleanups = new WeakMap<ApiProvider, Promise<void>>();
+
+function collectRunProviders(testSuite: TestSuite | EvaluateTestSuite): Set<ApiProvider> {
+  const providers = new Set<ApiProvider>();
+  const addProvider = (candidate: unknown) => {
+    if (isApiProvider(candidate)) {
+      providers.add(candidate);
+    } else if (isProviderTypeMap(candidate)) {
+      for (const type of GRADING_PROVIDER_TYPE_KEYS) {
+        const provider = candidate[type];
+        if (isApiProvider(provider)) {
+          providers.add(provider);
+        }
+      }
+    }
+  };
+  const addAssertions = (assertions: TestCase['assert']) => {
+    for (const assertion of assertions ?? []) {
+      if (assertion.type === 'assert-set') {
+        addAssertions(assertion.assert);
+      } else {
+        addProvider(assertion.provider);
+      }
+    }
+  };
+  const addTest = (test: Partial<TestCase> | { path: string } | string | undefined) => {
+    if (!test || typeof test === 'string' || 'path' in test) {
+      return;
+    }
+    // A supplied test provider can override the target or serve as the default
+    // grader. Only retain existing instances; unused configurations stay lazy.
+    addProvider(test.provider);
+    addProvider(test.options?.provider);
+    addAssertions(test.assert);
+  };
+
+  for (const provider of Array.isArray(testSuite.providers)
+    ? testSuite.providers
+    : [testSuite.providers]) {
+    addProvider(provider);
+  }
+  addTest(testSuite.defaultTest);
+  for (const test of Array.isArray(testSuite.tests) ? testSuite.tests : []) {
+    addTest(test);
+  }
+  for (const scenario of testSuite.scenarios ?? []) {
+    if (typeof scenario === 'string') {
+      continue;
+    }
+    for (const config of scenario.config ?? []) {
+      addTest(config);
+    }
+    for (const test of scenario.tests ?? []) {
+      addTest(test);
+    }
+  }
+  return providers;
+}
+
+type EvaluationResourceContext = {
+  testSuite?: TestSuite | EvaluateTestSuite;
+  ownedProviders?: readonly ApiProvider[];
+  borrowedProviders?: readonly ApiProvider[];
+};
+
+export type EvaluationResourceRetainer = (context: EvaluationResourceContext) => Promise<void>;
+
+/** Keep setup and borrowed providers alive without taking ownership of supplied graders. */
+export async function withEvaluationResources<T>(
+  run: (retainProviders: EvaluationResourceRetainer) => Promise<T>,
+  context: EvaluationResourceContext = {},
+): Promise<T> {
+  const ownedProviders = new Set<ApiProvider>();
+  const providers = new Set<ApiProvider>();
+  let released = false;
+  const retainProviders: EvaluationResourceRetainer = async ({
+    testSuite,
+    ownedProviders: owned,
+    borrowedProviders,
+  }) => {
+    if (released) {
+      return;
+    }
+    const candidates = testSuite ? collectRunProviders(testSuite) : new Set<ApiProvider>();
+    for (const provider of owned ?? []) {
+      ownedProviders.add(provider);
+      candidates.add(provider);
+    }
+    for (const provider of borrowedProviders ?? []) {
+      candidates.add(provider);
+    }
+    const added = [...candidates].filter((provider) => !providers.has(provider));
+    // Reserve before waiting for an earlier cleanup, including nested evaluation entry points.
+    for (const provider of added) {
+      providers.add(provider);
+      activeProviderUses.set(provider, (activeProviderUses.get(provider) ?? 0) + 1);
+    }
+    await Promise.all(added.map((provider) => pendingProviderCleanups.get(provider)));
+  };
+  const initialProviders = retainProviders(context);
+
+  const release = async () => {
+    if (released) {
+      return;
+    }
+    released = true;
+    for (const provider of ownedProviders) {
+      requestedProviderCleanups.add(provider);
+    }
+    // Release every use before awaiting cleanup: P's cleanup can overlap a new use of Q.
+    for (const provider of providers) {
+      const remaining = (activeProviderUses.get(provider) ?? 1) - 1;
+      if (remaining > 0) {
+        activeProviderUses.set(provider, remaining);
+      } else {
+        activeProviderUses.delete(provider);
+      }
+    }
+    for (const provider of providers) {
+      if (activeProviderUses.has(provider)) {
+        continue;
+      }
+      let cleanup = pendingProviderCleanups.get(provider);
+      if (!cleanup && requestedProviderCleanups.delete(provider)) {
+        cleanup = Promise.resolve()
+          .then(() => provider.cleanup?.({ reason: 'evaluation-complete' }))
+          .catch((error) => {
+            logger.warn('Provider cleanup failed after evaluation.', { error });
+          });
+        pendingProviderCleanups.set(provider, cleanup);
+      }
+      if (cleanup) {
+        try {
+          await cleanup;
+        } finally {
+          if (pendingProviderCleanups.get(provider) === cleanup) {
+            pendingProviderCleanups.delete(provider);
+          }
+        }
+      }
+    }
+  };
+
+  try {
+    return await providerRegistry.withEvaluation(() =>
+      withEvaluationProviderRetainer(
+        (provider) => retainProviders({ borrowedProviders: [provider] }),
+        async () => {
+          try {
+            await initialProviders;
+            return await run(retainProviders);
+          } finally {
+            // The last borrower awaits queued cleanup; an owner with other users can return.
+            await release();
+          }
+        },
+      ),
+    );
+  } finally {
+    // Balance uses even if the registry's pending shutdown fails before invoking the callback.
+    await release();
+  }
 }
 
 class Evaluator<TEvaluation extends EvaluationRecord, TResult extends EvaluationStoreResult> {
@@ -5023,6 +5196,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   async evaluate(): Promise<TEvaluation> {
+    return withEvaluationResources(() => this.evaluateWithResources(), {
+      testSuite: this.testSuite,
+    });
+  }
+
+  private async evaluateWithResources(): Promise<TEvaluation> {
     // Initialize OTEL SDK if tracing is enabled
     // Check env flag, test suite level, and default test metadata
     const tracingEnabled =
@@ -5075,9 +5254,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           await sleep(3000);
         }
         await stopOtlpReceiverIfNeeded(otlpReceiverAcquired, this.store.id);
-
-        // Clean up Python worker pools to prevent resource leaks
-        await providerRegistry.shutdownAll();
 
         // Log rate limit metrics for debugging before cleanup
         if (this.rateLimitRegistry) {

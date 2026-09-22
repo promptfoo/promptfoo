@@ -75,6 +75,52 @@ describe('generatePrompts', () => {
     });
   });
 
+  it('waits for the selected provider before starting suggestion calls', async () => {
+    const provider = createMockProvider({
+      id: 'selected-suggestions',
+      response: { output: 'Variant prompt' },
+    });
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: provider,
+      gradingJsonProvider: provider,
+      gradingProvider: provider,
+      moderationProvider: provider,
+      suggestionsProvider: provider,
+      synthesizeProvider: provider,
+    } satisfies DefaultProviders);
+    let started!: () => void;
+    let release!: () => void;
+    const retained = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const ready = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const retain = vi.fn(async () => {
+      started();
+      await ready;
+    });
+    const result = generatePrompts('Original prompt', 2, retain);
+    try {
+      await Promise.race([
+        retained,
+        result.then(() => {
+          throw new Error('Suggestions ran without retaining the selected provider');
+        }),
+      ]);
+      expect(retain).toHaveBeenCalledExactlyOnceWith(provider);
+      expect(provider.callApi).not.toHaveBeenCalled();
+      release();
+      await expect(result).resolves.toMatchObject({
+        prompts: ['Variant prompt', 'Variant prompt'],
+      });
+      expect(provider.callApi).toHaveBeenCalledTimes(2);
+    } finally {
+      release();
+      await result;
+    }
+  });
+
   it('returns partial prompts and warns when later iterations fail', async () => {
     const provider = createMockProvider({ id: 'openai:codex-sdk' });
     vi.mocked(provider.callApi)

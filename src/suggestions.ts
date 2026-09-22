@@ -9,7 +9,7 @@ import {
   normalizeTokenUsage,
 } from './util/tokenUsageUtils';
 
-import type { TokenUsage } from './types/index';
+import type { ApiProvider, TokenUsage } from './types/index';
 
 interface GeneratePromptsOutput {
   prompts?: string[];
@@ -19,7 +19,11 @@ interface GeneratePromptsOutput {
 
 const SUGGESTIONS_CONCURRENCY = 4;
 
-export async function generatePrompts(prompt: string, num: number): Promise<GeneratePromptsOutput> {
+export async function generatePrompts(
+  prompt: string,
+  num: number,
+  retainProvider?: (provider: ApiProvider) => Promise<void> | undefined,
+): Promise<GeneratePromptsOutput> {
   if (!Number.isInteger(num) || num < 1 || num > MAX_SUGGESTIONS_COUNT) {
     return {
       error: `generatePrompts: num must be an integer between 1 and ${MAX_SUGGESTIONS_COUNT} (got ${num})`,
@@ -27,6 +31,7 @@ export async function generatePrompts(prompt: string, num: number): Promise<Gene
     };
   }
   const provider = (await getDefaultProviders()).suggestionsProvider;
+  await retainProvider?.(provider);
   const payload = JSON.stringify([
     SUGGEST_PROMPTS_SYSTEM_MESSAGE,
     { role: 'user', content: 'Generate a variant for the following prompt:' },
