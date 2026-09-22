@@ -16,7 +16,7 @@ import {
   initializeAgenticCache,
   resolveAgenticWorkingDir,
 } from './agentic-utils';
-import { classifyProviderSdkRateLimit } from './fetch';
+import { classifyProviderSdkRateLimit, isProviderRateLimitTimingWithinRetryWindow } from './fetch';
 import {
   escapeProviderRegexLiteral,
   isShortNumericProviderRedaction,
@@ -574,10 +574,22 @@ function describeOpenCodeError(
     typeof status === 'number' && Number.isInteger(status) && status >= 100 && status <= 599
       ? 'HTTP ' + status
       : undefined;
-  if (typeof error === 'string' && error.trim()) {
-    return [formatStatus(fallbackStatus), withholdUntrustedMessage ? withheld : error]
-      .filter(Boolean)
-      .join(': ');
+  const formatMessage = (message: unknown): string | undefined => {
+    if (typeof message !== 'string') {
+      return undefined;
+    }
+    if (message.length > 4_096) {
+      return withholdUntrustedMessage
+        ? withheld
+        : 'Upstream diagnostic omitted because it is too large';
+    }
+    return message.trim() ? (withholdUntrustedMessage ? withheld : message) : undefined;
+  };
+  if (typeof error === 'string') {
+    return (
+      [formatStatus(fallbackStatus), formatMessage(error)].filter(Boolean).join(': ') ||
+      'Unknown OpenCode error'
+    );
   }
   if (!error || typeof error !== 'object') {
     return formatStatus(fallbackStatus) || 'Unknown OpenCode error';
@@ -613,17 +625,8 @@ function describeOpenCodeError(
     formatStatus(data?.statusCode) ||
     formatStatus(fallbackStatus);
   return (
-    [
-      name,
-      safeStatus,
-      typeof message === 'string' && message.trim()
-        ? withholdUntrustedMessage
-          ? withheld
-          : message
-        : undefined,
-    ]
-      .filter(Boolean)
-      .join(': ') || 'Unknown OpenCode error'
+    [name, safeStatus, formatMessage(message)].filter(Boolean).join(': ') ||
+    'Unknown OpenCode error'
   );
 }
 
@@ -746,7 +749,18 @@ function redactOpenCodeError(
       new RegExp(unbounded ? pattern : '(?<![\\w.~+-])' + pattern + '(?![\\w.~+=-])', 'g'),
     );
   }
-  const credentialField = String.raw`(?<![\w.-])["']?(?!(?:[\w.-]+[_.-])?(?:total|input|output|cached|reasoning|prompt|completion|remaining|limit|usage|count|num)[_.-]tokens?["']?\s*[:=])(?:[\w.-]+[_.-])?(?:[a-z0-9]*(?:(?:api|access|private|client)[_ -]?key|(?:access|refresh|session|id|auth|csrf|bearer|api|account)[_ -]?token|(?:client[_ -]?)?secret|credentials?|pass(?:word|wd|phrase)|pwd|sign(?:ature|ing[_ -]?key)|authorization|(?:set[_ -]?)?cookie)|token)["']?\s*[:=]\s*`;
+  const credentialField = String.raw`(?<![\w.-])["']?(?!(?:[\w.-]+[_.-])?(?:total|input|output|cached|reasoning|prompt|completion|remaining|limit|usage|count|num)[_.-]tokens?["']?\s*[:=])(?:[\w.-]+[_.-])?(?:[a-z0-9]*(?:(?:api|access|private|client|fal|ablit)[_ -]?key|(?:access|refresh|session|id|auth|csrf|bearer|api|account)[_ -]?token|(?:client[_ -]?)?secret|credentials?|pass(?:word|wd|phrase)|pwd|sign(?:ature|ing[_ -]?key)|authorization|(?:set[_ -]?)?cookie)|token)["']?\s*[:=]\s*`;
+  const isCredentialField = new RegExp(credentialField, 'i');
+  for (const field of result.matchAll(
+    /\\+["']([\w.-]+)\\+["']\s*[:=]|(?<![\w.-])([\w.-]+)\s*[:=]\s*\\+["']/g,
+  )) {
+    if (isCredentialField.test((field[1] ?? field[2]) + '=')) {
+      // Nested or truncated escaped values have no reliable end; keep only their safe prefix.
+      result =
+        result.slice(0, field.index) + redactProviderText(result.slice(field.index), /[\s\S]+/);
+      break;
+    }
+  }
   const authorizationParameter = String.raw`[\w.-]+\s*=\s*(?:"(?:\\[^\r\n]|[^"\\\r\n])*(?:"|(?=[\r\n]|$))|'(?:\\[^\r\n]|[^'\\\r\n])*(?:'|(?=[\r\n]|$))|[^\s,}"']+)`;
   for (const pattern of [
     new RegExp(
@@ -883,7 +897,7 @@ function addOpenCodeHeaderCredentials(value: unknown, remember: (value: unknown)
 }
 
 const OPEN_CODE_CREDENTIAL_NAME =
-  /api.?key|access.?key|private.?key|client.?key|token|secret|pass(?:word|wd|phrase)|(?:^|[_-])pwd(?:$|[_-])|sign(?:ature|ing.?key)|(?:^|[_-])sig(?:$|[_-])|authorization|credential|cookie/i;
+  /(?:api|access|private|client|fal|ablit).?key|token|secret|pass(?:word|wd|phrase)|(?:^|[_-])pwd(?:$|[_-])|sign(?:ature|ing.?key)|(?:^|[_-])sig(?:$|[_-])|authorization|credential|cookie/i;
 
 function addOpenCodeEnvironmentValue(
   key: string,
@@ -2921,11 +2935,15 @@ export class OpenCodeSDKProvider implements ApiProvider {
         }
         const normalized =
           key === 'retry-after' && isInteger(value) ? String(Number(value)) : value;
+        // Keep long windows for quota classification, even when the scheduler cannot use them.
         classificationHeaders[key] = normalized;
         const redacted = (formatHeader ??= this.getErrorFormatter(config, true))(value);
         // A short numeric credential can coincide with milliseconds or another date component.
         // Exact credentials and non-date timing values still go through the normal redaction.
-        if (redacted === value || onlyRedactsTimestampDigits(value, redacted)) {
+        if (
+          isProviderRateLimitTimingWithinRetryWindow(key, normalized) &&
+          (redacted === value || onlyRedactsTimestampDigits(value, redacted))
+        ) {
           publicHeaders[key] = normalized;
         } else {
           delete publicHeaders[key];

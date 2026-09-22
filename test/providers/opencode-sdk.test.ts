@@ -1366,6 +1366,7 @@ describe('OpenCodeSDKProvider', () => {
             'Cookie: sid=issued-cookie-991; csrf=issued-second-cookie-991, ' +
             'total_tokens=17; billing-total-token=18; usage.input_tokens=19; inputToken=20; ' +
             'AWS_SECRET_ACCESS_KEY=issued-aws; OPENAI_API_KEY=issued-openai; ' +
+            'FAL_KEY=issued-fal; ABLIT_KEY=issued-ablit; ' +
             'X_AUTH_TOKEN=issued-header; database_password=issued-database; GITHUB_TOKEN=issued-github; ' +
             'secretAccessKey=issued-access; databasePassword=issued-password; webhookSecret=issued-webhook; useful context';
           const error = { name: 'APIError', data: { statusCode: 502, message } };
@@ -1386,6 +1387,8 @@ describe('OpenCodeSDKProvider', () => {
               for (const field of [
                 'AWS_SECRET_ACCESS_KEY',
                 'OPENAI_API_KEY',
+                'FAL_KEY',
+                'ABLIT_KEY',
                 'X_AUTH_TOKEN',
                 'database_password',
                 'GITHUB_TOKEN',
@@ -1404,6 +1407,118 @@ describe('OpenCodeSDKProvider', () => {
           }
         } finally {
           restoreEnv();
+        }
+      });
+
+      it('redacts inherited FAL and ABLIT credentials from unlabelled error messages and logs', async () => {
+        const secrets = ['inherited-fal-private-value', 'inherited-ablit-private-value'];
+        const restoreEnv = mockProcessEnv({ FAL_KEY: secrets[0], ABLIT_KEY: secrets[1] });
+        try {
+          const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+          const error = {
+            name: 'APIError',
+            data: { statusCode: 502, message: 'echo prefix-' + secrets.join('-and-') + '-suffix' },
+          };
+          const response = createMockPromptResponse([]);
+          mockSessionPrompt.mockResolvedValueOnce({ error }).mockResolvedValueOnce({
+            data: { ...response.data, info: { ...response.data.info, error } },
+          });
+          const provider = new OpenCodeSDKProvider();
+          for (const prompt of ['SDK', 'assistant']) {
+            const result = await provider.callApi(prompt);
+            const logged = (errorSpy.mock.lastCall?.[1] as { error?: string } | undefined)?.error;
+            for (const diagnostic of [result.error, logged]) {
+              expect(diagnostic).toContain(
+                'HTTP 502: echo prefix-[REDACTED]-and-[REDACTED]-suffix',
+              );
+              for (const secret of secrets) {
+                expect(diagnostic).not.toContain(secret);
+              }
+            }
+          }
+        } finally {
+          restoreEnv();
+        }
+      });
+
+      it('withholds escaped credential fields and their tails while preserving escaped token counts', async () => {
+        const escape = (value: string) => JSON.stringify(value).slice(1, -1);
+        const secret = 'upstream-issued-value';
+        const messages = [
+          'body=' + escape(JSON.stringify({ api_key: secret })),
+          'body=' + escape(escape(JSON.stringify({ FAL_KEY: secret }))),
+          'body=' + escape(JSON.stringify({ password: secret + ' "tail" part' })),
+          'password=' + escape('"' + secret + ' not closed'),
+        ];
+        const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+        const response = createMockPromptResponse([]);
+        const provider = new OpenCodeSDKProvider();
+        for (const message of messages) {
+          const error = {
+            name: 'APIError',
+            data: { statusCode: 502, message: 'safe prefix ' + message + '; secret tail' },
+          };
+          mockSessionPrompt.mockResolvedValueOnce({ error }).mockResolvedValueOnce({
+            data: { ...response.data, info: { ...response.data.info, error } },
+          });
+          for (const prompt of ['SDK', 'assistant']) {
+            const result = await provider.callApi(prompt);
+            const logged = (errorSpy.mock.lastCall?.[1] as { error?: string } | undefined)?.error;
+            for (const diagnostic of [result.error, logged]) {
+              expect(diagnostic).toContain('APIError: HTTP 502: safe prefix');
+              expect(diagnostic).toContain('[REDACTED]');
+              expect(diagnostic).not.toContain(secret);
+              expect(diagnostic).not.toContain('secret tail');
+            }
+          }
+        }
+        const telemetry =
+          'body=' + escape(JSON.stringify({ total_tokens: 7777 })) + '; public suffix';
+        mockSessionPrompt.mockResolvedValueOnce({
+          error: { name: 'APIError', data: { statusCode: 502, message: telemetry } },
+        });
+        const result = await provider.callApi('escaped telemetry');
+        expect(result.error).toContain('total_tokens');
+        expect(result.error).toContain('public suffix');
+      });
+
+      it('omits oversized upstream messages before redaction while retaining error type and status', async () => {
+        const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+        const credential = 'cross-boundary-private-credential';
+        const message =
+          'safe-but-withheld-' +
+          'x'.repeat(465) +
+          credential +
+          '-private-tail-' +
+          'y'.repeat(100_000);
+        const error = { name: 'APIError', data: { statusCode: 502, message } };
+        const response = createMockPromptResponse([]);
+        mockSessionPrompt
+          .mockResolvedValueOnce({ error })
+          .mockResolvedValueOnce({
+            data: { ...response.data, info: { ...response.data.info, error } },
+          })
+          .mockResolvedValueOnce({ error: message, response: new Response(null, { status: 502 }) });
+        const provider = new OpenCodeSDKProvider({ config: { apiKey: credential } });
+        for (const prompt of ['SDK', 'assistant', 'plain gateway']) {
+          const result = await provider.callApi(prompt);
+          const logged = (errorSpy.mock.lastCall?.[1] as { error?: string } | undefined)?.error;
+          for (const diagnostic of [result.error, logged]) {
+            expect(diagnostic).toContain(
+              'HTTP 502: Upstream diagnostic omitted because it is too large',
+            );
+            if (prompt !== 'plain gateway') {
+              expect(diagnostic).toContain('APIError');
+            }
+            for (const fragment of [
+              'safe-but-withheld',
+              'cross-boundary',
+              'private-tail',
+              'yyyy',
+            ]) {
+              expect(diagnostic).not.toContain(fragment);
+            }
+          }
         }
       });
 
@@ -6089,16 +6204,16 @@ describe('OpenCodeSDKProvider', () => {
         const { getProviderResponseHeaders } = await import('../../src/scheduler/types');
         vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-01-01T00:00:00.000Z'));
         const retryDate = new Date(Date.now() + 60_000).toUTCString();
-        const resetTimestamp = new Date(Date.now() + 120_000).toISOString();
+        const resetTimestamp = new Date(Date.now() + 45_000).toISOString();
         const trusted = {
           'Retry-After': retryDate,
           'Retry-After-Ms': '1200',
           'X-RateLimit-Remaining-Requests': '0',
           'X-RateLimit-Limit-Requests': '100',
-          'X-RateLimit-Reset-Requests': '1m30s',
+          'X-RateLimit-Reset-Requests': '30s',
           'X-RateLimit-Remaining-Tokens': '15',
           'X-RateLimit-Limit-Tokens': '2000',
-          'X-RateLimit-Reset-Tokens': '2m',
+          'X-RateLimit-Reset-Tokens': '1m',
           'Anthropic-RateLimit-Requests-Remaining': '20',
           'Anthropic-RateLimit-Requests-Limit': '300',
           'Anthropic-RateLimit-Requests-Reset': resetTimestamp,
@@ -6110,7 +6225,7 @@ describe('OpenCodeSDKProvider', () => {
           'RateLimit-Reset': '60',
           'X-RateLimit-Remaining': '3',
           'X-RateLimit-Limit': '11',
-          'X-RateLimit-Reset': '60.5',
+          'X-RateLimit-Reset': '59.5',
         };
         const unsafe = {
           Authorization: 'Bearer synthetic-private-rate-authorization',
@@ -6165,6 +6280,47 @@ describe('OpenCodeSDKProvider', () => {
       },
     );
 
+    it('keeps long retry hints for quota classification but drops them before scheduling retries', async () => {
+      const { createProviderRateLimitOptions } = await import(
+        '../../src/scheduler/providerWrapper'
+      );
+      vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-01-01T00:00:00.000Z'));
+      const longDate = new Date(Date.now() + 86_400_000).toISOString();
+      const shortDate = new Date(Date.now() + 30_000).toISOString();
+      const error = (code: string, headers: Record<string, string>) => ({
+        error: { name: 'APIError', data: { statusCode: 429, code, responseHeaders: headers } },
+      });
+      const excessive = {
+        'Retry-After': '86400',
+        'Retry-After-Ms': '86400000',
+        'Anthropic-Ratelimit-Requests-Reset': longDate,
+      };
+      mockSessionPrompt
+        .mockResolvedValueOnce(
+          error('rate_limit_exceeded', {
+            ...excessive,
+            'X-RateLimit-Reset-Tokens': shortDate,
+            'RateLimit-Remaining': '0',
+          }),
+        )
+        .mockResolvedValueOnce(error('rate_limit_exceeded', excessive))
+        .mockResolvedValueOnce(error('insufficient_quota', excessive));
+      const provider = new OpenCodeSDKProvider();
+      const scheduler = createProviderRateLimitOptions();
+      const mixed = await provider.callApi('mixed timing hints');
+      expect(scheduler.getHeaders?.(mixed)).toEqual({
+        'x-ratelimit-reset-tokens': shortDate,
+        'ratelimit-remaining': '0',
+      });
+      const transient = await provider.callApi('all timing hints excessive');
+      expect(scheduler.isRateLimited?.(transient, undefined)).toBe(true);
+      expect(scheduler.getHeaders?.(transient)).toBeUndefined();
+      expect(scheduler.getRetryAfter?.(transient, undefined)).toBeUndefined();
+      const quota = await provider.callApi('ambiguous code with an excessive window');
+      expect(quota.metadata).toEqual({ rateLimitKind: 'quota' });
+      expect(scheduler.isRateLimited?.(quota, undefined)).toBe(false);
+    });
+
     it.each(['30', '030'])(
       'uses private timing %s to classify a throttle without exposing the header',
       async (credential) => {
@@ -6200,7 +6356,7 @@ describe('OpenCodeSDKProvider', () => {
       vi.setSystemTime(new Date('2026-01-01T00:00:00.098Z'));
       vi.stubEnv('OPENCODE_TEST_PASSWORD', '098');
       try {
-        const timestamp = new Date(Date.now() + 120_000).toISOString();
+        const timestamp = new Date(Date.now() + 45_000).toISOString();
         mockSessionPrompt.mockResolvedValue({
           error: { name: 'APIError', data: { statusCode: 429, isRetryable: true } },
           response: new Response(null, {
