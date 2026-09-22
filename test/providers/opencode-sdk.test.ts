@@ -3287,6 +3287,38 @@ describe('OpenCodeSDKProvider', () => {
         },
       );
 
+      it.each([401, 403, 404, 501])(
+        'exposes trusted HTTP %i to the evaluator without raw headers',
+        async (status) => {
+          vi.spyOn(logger, 'error').mockImplementation(() => {});
+          mockSessionPrompt
+            .mockResolvedValueOnce({
+              error: apiError('transport failure', { statusCode: 500 }),
+              response: new Response(null, {
+                status,
+                headers: { authorization: 'private-transport-header' },
+              }),
+            })
+            .mockResolvedValueOnce(
+              assistantFailure(
+                apiError('assistant failure', {
+                  statusCode: status,
+                  responseHeaders: { authorization: 'private-assistant-header' },
+                }),
+              ),
+            );
+          const provider = new OpenCodeSDKProvider();
+
+          for (const result of [
+            await provider.callApi('transport'),
+            await provider.callApi('assistant'),
+          ]) {
+            expect(result.metadata?.http).toEqual({ status });
+            expect(JSON.stringify(result)).not.toContain('private-');
+          }
+        },
+      );
+
       it('keeps a successful response that carries an explicitly empty SDK error', async () => {
         mockSessionPrompt.mockResolvedValueOnce({
           ...createMockPromptResponse([{ type: 'text', text: 'Fine' }]),
@@ -3624,6 +3656,7 @@ describe('OpenCodeSDKProvider', () => {
 
           const scheduler = await schedulerFor();
           expect(result.metadata?.rateLimitKind).toBe(kind);
+          expect(result.metadata?.http?.status).toBe(data.statusCode);
           expect(scheduler.isRateLimited?.(result, undefined)).toBe(kind === 'rate_limit');
           expect(scheduler.getRetryAfter?.(result, undefined)).toBe(retryAfterMs);
           expect(JSON.stringify(result.metadata ?? {})).not.toMatch(
@@ -3945,6 +3978,14 @@ describe('OpenCodeSDKProvider', () => {
             `body={\\"api_key\\":\\"upstream-2\\"} ${'x'.repeat(1000)}`,
           secrets: ['upstream-', 'x'.repeat(500)],
           keep: ['useful context'],
+        });
+      });
+
+      it('redacts upstream-only fields with long whitespace around their separators', async () => {
+        await expectRedacted({
+          message: `gateway api_key${' '.repeat(24)}=${'\t'.repeat(24)}upstream-private-value; useful context`,
+          secrets: ['upstream-private-value'],
+          keep: ['gateway', 'useful context'],
         });
       });
 

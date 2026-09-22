@@ -139,7 +139,7 @@ export function getHeadersCredentialForms(headers: unknown): string[] {
 const DIAGNOSTIC_URL = /\b[a-z][a-z\d+.-]{0,31}:\/\/[^\s"'<>]+/gi;
 // `name: value`, `name=value`, and quoted or (repeatedly) JSON-escaped `"name": "value"` fields.
 const CREDENTIAL_FIELD =
-  /(?<![\w.\\-])(\\{0,8}["']?)([A-Za-z_][\w.-]{0,63})\1\s{0,8}[:=]\s{0,8}(\\{0,8}["'])?/g;
+  /(?<![\w.\\-])(\\{0,8}["']?)([A-Za-z_][\w.-]{0,63})\1\s*[:=]\s*(\\{0,8}["'])?/g;
 const CREDENTIAL_FIELD_END: Record<string, RegExp> = {
   '"': /(?<!\\)"|[\r\n]/g,
   "'": /(?<!\\)'|[\r\n]/g,
