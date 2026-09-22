@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
+import { getCacheOperationScope } from '../util/cacheOperationScope';
 import { getTransformErrorMessage, TransformInputType, transform } from '../util/transform';
 import { StringOrFunctionSchema } from '../validators/shared';
 import type { SageMakerRuntimeClient } from '@aws-sdk/client-sagemaker-runtime';
@@ -293,7 +294,7 @@ function captureSharedFiles(environment: Record<string, string | undefined>): Sh
   };
 }
 
-const STATIC_CREDENTIAL_FILE_RUNTIME_KEYS = new Set([
+const STATIC_SHARED_FILE_RUNTIME_KEYS = new Set([
   'defaults_mode',
   'endpoint_url',
   'services',
@@ -302,53 +303,72 @@ const STATIC_CREDENTIAL_FILE_RUNTIME_KEYS = new Set([
   'use_dualstack_endpoint',
 ]);
 
-// Smithy falls back to these flat fields in the credentials file when its preferred config
-// profile does not define them. Static authentication never uses the credential fields.
-function credentialFileRuntimeFingerprint(contents: string, selectedProfile: string): string {
-  const values = new Map<string, string>();
-  let profile: string | undefined;
+// Match Smithy's synchronous file snapshot without loading an optional AWS package during import.
+function sharedFileRuntimeSettings(contents: string): Map<string, Map<string, string>> {
+  const sections = new Map<string, Map<string, string>>();
+  let section: string | undefined;
   let subsection: string | undefined;
   for (const original of contents.split(/\r?\n/)) {
     const line = original.split(/(^|\s)[;#]/, 1)[0].trim();
     if (line.startsWith('[') && line.endsWith(']')) {
-      const section = line.slice(1, -1);
-      if (section === '__proto__' || section === 'profile __proto__') {
-        values.clear();
-        break;
+      const name = line.slice(1, -1);
+      if (name === '__proto__' || name === 'profile __proto__') {
+        return new Map();
       }
-      const prefixed = /^([\w-]+)\s(["'])?([\w@+.%:/-]+)\2$/.exec(section);
-      profile = prefixed
+      const prefixed = /^([\w-]+)\s(["'])?([\w@+.%:/-]+)\2$/.exec(name);
+      section = prefixed
         ? ['profile', 'sso-session', 'services'].includes(prefixed[1])
           ? `${prefixed[1]}.${prefixed[3]}`
           : undefined
-        : section;
+        : name;
       subsection = undefined;
       continue;
     }
-    if (profile !== selectedProfile) {
-      continue;
-    }
     const separator = line.indexOf('=');
-    if (separator <= 0) {
+    if (!section || separator <= 0) {
       continue;
     }
-    const key = line.slice(0, separator).trim();
+    const name = line.slice(0, separator).trim();
     const value = line.slice(separator + 1).trim();
     if (!value) {
-      subsection = key;
+      subsection = name;
       continue;
     }
     if (subsection && original.trimStart() === original) {
       subsection = undefined;
     }
-    if (!subsection && STATIC_CREDENTIAL_FILE_RUNTIME_KEYS.has(key)) {
+    const values = sections.get(section) ?? new Map<string, string>();
+    sections.set(section, values);
+    const key = subsection ? `${subsection}.${name}` : name;
+    if (STATIC_SHARED_FILE_RUNTIME_KEYS.has(key) || key === 'sagemaker_runtime.endpoint_url') {
       values.set(key, value);
     }
   }
-  const selected = [...values].sort(([left], [right]) =>
-    left < right ? -1 : left > right ? 1 : 0,
-  );
-  return crypto.hash('sha256', JSON.stringify(selected), 'hex');
+  return sections;
+}
+
+function staticRuntimeFilesFingerprint(
+  credentialsContents: string,
+  configContents: string,
+  selectedProfile: string,
+): string {
+  const credentials = sharedFileRuntimeSettings(credentialsContents);
+  const config = sharedFileRuntimeSettings(configContents);
+  const credentialsProfile = credentials.get(selectedProfile);
+  const configProfile =
+    config.get(`profile.${selectedProfile}`) ??
+    (selectedProfile === 'default' ? config.get('default') : undefined);
+  // Smithy merges the selected profiles, with config fields overriding credentials-file fields.
+  const effective = new Map([...(credentialsProfile ?? []), ...(configProfile ?? [])]);
+  const values = [...effective]
+    .filter(([key]) => STATIC_SHARED_FILE_RUNTIME_KEYS.has(key))
+    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
+  const serviceName = effective.get('services');
+  const service = serviceName ? config.get(`services.${serviceName}`) : undefined;
+  const endpoint = serviceName
+    ? [service !== undefined, service?.get('sagemaker_runtime.endpoint_url')]
+    : undefined;
+  return crypto.hash('sha256', JSON.stringify([values, endpoint]), 'hex');
 }
 
 function captureSharedFileState(
@@ -356,25 +376,34 @@ function captureSharedFileState(
   runtimeProfileForStaticCredentials?: string,
 ) {
   let hasCredentialProcess = false;
-  const fingerprint = (filename: string, runtimeProfile?: string) => {
+  const read = (filename: string) => {
     try {
       const contents = readFileSync(filename);
-      hasCredentialProcess ||= /^\s*credential_process\s*=/im.test(contents.toString('utf8'));
-      return runtimeProfile === undefined
-        ? crypto.hash('sha256', contents, 'hex')
-        : credentialFileRuntimeFingerprint(contents.toString('utf8'), runtimeProfile);
+      const text = contents.toString('utf8');
+      hasCredentialProcess ||= /^\s*credential_process\s*=/im.test(text);
+      return { contents, text };
     } catch (error) {
-      if (runtimeProfile !== undefined) {
-        return credentialFileRuntimeFingerprint('', runtimeProfile);
-      }
-      return (error as NodeJS.ErrnoException).code ?? 'unreadable';
+      return { error: (error as NodeJS.ErrnoException).code ?? 'unreadable', text: '' };
     }
   };
-  const fingerprints = [
-    fingerprint(files.filepath, runtimeProfileForStaticCredentials),
-    fingerprint(files.configFilepath),
-  ];
-  return { fingerprint: fingerprints.join(':'), hasCredentialProcess };
+  const credentials = read(files.filepath);
+  const config = read(files.configFilepath);
+  if (runtimeProfileForStaticCredentials !== undefined) {
+    return {
+      fingerprint: staticRuntimeFilesFingerprint(
+        credentials.text,
+        config.text,
+        runtimeProfileForStaticCredentials,
+      ),
+      hasCredentialProcess,
+    };
+  }
+  const fingerprint = (file: ReturnType<typeof read>) =>
+    file.contents ? crypto.hash('sha256', file.contents, 'hex') : file.error;
+  return {
+    fingerprint: [fingerprint(credentials), fingerprint(config)].join(':'),
+    hasCredentialProcess,
+  };
 }
 
 const PROFILE_CREDENTIAL_KEYS = new Set([
@@ -517,6 +546,7 @@ interface RuntimeInitialization {
 interface RuntimeCacheEntry {
   tail: Promise<unknown>;
   active: number;
+  generation: number;
   initialized: boolean;
   untrusted: boolean;
   value?: string;
@@ -981,26 +1011,45 @@ abstract class SageMakerGenericProvider {
     cache: Cache,
     key: string,
     signal: AbortSignal,
-    operation: (state: RuntimeCacheEntry) => Promise<T>,
+    operation: (state: RuntimeCacheEntry, refresh: () => boolean) => Promise<T>,
   ): Promise<T> {
-    let entries = runtimeCacheEntries.get(cache);
+    const scope = getCacheOperationScope(cache, key);
+    let entries = runtimeCacheEntries.get(scope.cache);
     if (!entries) {
       entries = new Map();
-      runtimeCacheEntries.set(cache, entries);
+      runtimeCacheEntries.set(scope.cache, entries);
     }
     const cacheEntries = entries;
-    let state = cacheEntries.get(key);
+    let state = cacheEntries.get(scope.key);
     if (!state) {
-      state = { tail: Promise.resolve(), active: 0, initialized: false, untrusted: false };
-      cacheEntries.set(key, state);
+      state = {
+        tail: Promise.resolve(),
+        active: 0,
+        generation: scope.getGeneration(),
+        initialized: false,
+        untrusted: false,
+      };
+      cacheEntries.set(scope.key, state);
     }
     const entry = state;
+    const refresh = () => {
+      const generation = scope.getGeneration();
+      if (entry.generation === generation) {
+        return false;
+      }
+      entry.generation = generation;
+      entry.initialized = false;
+      entry.untrusted = false;
+      entry.value = undefined;
+      return true;
+    };
     entry.active++;
     this.#trimRuntimeCacheEntries(cacheEntries);
     // A later read or write must wait for any cancelled publication to be rolled back.
     const result = entry.tail.then(async () => {
       signal.throwIfAborted();
-      return operation(entry);
+      refresh();
+      return operation(entry, refresh);
     });
     entry.tail = result
       .then(
@@ -1019,13 +1068,16 @@ abstract class SageMakerGenericProvider {
     key: string,
     signal: AbortSignal,
   ): Promise<string | undefined> {
-    return this.withRuntimeCacheEntry(cache, key, signal, async (state) => {
+    return this.withRuntimeCacheEntry(cache, key, signal, async (state, refresh) => {
       if (state.untrusted) {
         // The backend may still contain a cancelled result if its rollback failed.
         return state.value;
       }
       const value = (await cache.get<string>(key)) ?? undefined;
       signal.throwIfAborted();
+      if (refresh()) {
+        return undefined;
+      }
       state.initialized = true;
       state.value = value;
       return value;
@@ -1038,10 +1090,13 @@ abstract class SageMakerGenericProvider {
     value: string,
     signal: AbortSignal,
   ): Promise<void> {
-    return this.withRuntimeCacheEntry(cache, key, signal, async (state) => {
+    return this.withRuntimeCacheEntry(cache, key, signal, async (state, refresh) => {
       if (!state.initialized) {
-        state.value = (await cache.get<string>(key)) ?? undefined;
-        state.initialized = true;
+        const previous = (await cache.get<string>(key)) ?? undefined;
+        if (!refresh()) {
+          state.value = previous;
+          state.initialized = true;
+        }
       }
       signal.throwIfAborted();
       let writeFailed = false;
@@ -1052,23 +1107,35 @@ abstract class SageMakerGenericProvider {
         writeFailed = true;
         writeError = error;
       }
-      if (signal.aborted) {
+      const cleared = refresh();
+      if (signal.aborted || cleared) {
         state.untrusted = true;
         try {
           if (state.value === undefined) {
             await cache.del(key);
           } else {
             await cache.set(key, state.value);
+            if (refresh()) {
+              state.untrusted = true;
+              await cache.del(key);
+            }
           }
           state.untrusted = false;
         } catch (error) {
-          logger.warn('Failed to roll back a cancelled SageMaker cache write', { error });
+          logger.warn('Failed to roll back a cancelled or cleared SageMaker cache write', {
+            error,
+          });
         }
         signal.throwIfAborted();
+        if (writeFailed) {
+          throw writeError;
+        }
+        return;
       }
       if (writeFailed) {
         throw writeError;
       }
+      state.initialized = true;
       state.value = value;
       state.untrusted = false;
     });

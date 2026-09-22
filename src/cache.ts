@@ -9,6 +9,7 @@ import { KeyvFile } from 'keyv-file';
 import { getEnvBool, getEnvInt, getEnvString } from './envars';
 import logger from './logger';
 import { getRequestTimeoutMs } from './providers/shared';
+import { registerCacheOperationScope } from './util/cacheOperationScope';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { sha256 } from './util/createHash';
 import { isAbortError, isTransientConnectionError } from './util/fetch/errors';
@@ -30,7 +31,9 @@ import type { FetchOptions } from './util/fetch/types';
 
 let cacheInstance: Cache | undefined;
 const namespacedCacheInstances = new Map<string, Cache>();
+const namespacedCacheClearGenerations = new Map<string, number>();
 let cacheClearGeneration = 0;
+let globalCacheClearGeneration = 0;
 
 const cacheNamespaceStorage = new AsyncLocalStorage<{ namespace: string }>();
 const cacheEnabledStorage = new AsyncLocalStorage<{ enabled: boolean }>();
@@ -118,8 +121,16 @@ function getCacheInstance() {
     cacheInstance.clear = async () => {
       const result = await clear();
       cacheClearGeneration += 1;
+      globalCacheClearGeneration = cacheClearGeneration;
+      namespacedCacheClearGenerations.clear();
       return result;
     };
+    registerCacheOperationScope(
+      cacheInstance,
+      cacheInstance,
+      (key) => key,
+      getCacheKeyClearGeneration,
+    );
   }
   return cacheInstance;
 }
@@ -164,8 +175,29 @@ function getNamespacedCache(namespace: string) {
       ),
   } as Cache;
 
+  registerCacheOperationScope(
+    namespacedCache,
+    cache,
+    (key) => getScopedCacheKey(key, namespace),
+    (key) => getCacheKeyClearGeneration(getScopedCacheKey(key, namespace)),
+  );
   namespacedCacheInstances.set(namespace, namespacedCache);
   return namespacedCache;
+}
+
+function getCacheKeyClearGeneration(key: string) {
+  let generation = globalCacheClearGeneration;
+  for (
+    let separator = key.indexOf(':');
+    separator !== -1;
+    separator = key.indexOf(':', separator + 1)
+  ) {
+    generation = Math.max(
+      generation,
+      namespacedCacheClearGenerations.get(key.slice(0, separator)) ?? 0,
+    );
+  }
+  return generation;
 }
 
 function getCurrentCacheNamespace() {
@@ -233,6 +265,7 @@ async function clearNamespacedCache(cache: Cache, namespace: string) {
   }
 
   cacheClearGeneration += 1;
+  namespacedCacheClearGenerations.set(namespace, cacheClearGeneration);
   return true;
 }
 

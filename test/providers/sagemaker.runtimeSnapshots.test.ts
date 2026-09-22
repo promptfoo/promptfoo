@@ -309,6 +309,113 @@ endpoint_url = https://static-${endpoint}.invalid
       },
     );
 
+    function staticRuntimeConfig(
+      section: string,
+      change:
+        | 'comment'
+        | 'unrelated profile'
+        | 'unrelated service'
+        | 'selected service'
+        | 'service from credentials',
+      updated: boolean,
+    ) {
+      const selectedChanged =
+        change === 'selected service' || change === 'service from credentials';
+      const stage = (changed: boolean) => (updated && changed ? 'after' : 'before');
+      return `[${section}]
+defaults_mode = legacy
+${change === 'service from credentials' ? '' : 'services = chosen'}
+[services chosen]
+sagemaker_runtime =
+  endpoint_url = https://selected-${stage(selectedChanged)}.invalid
+sts =
+  endpoint_url = https://sts-${stage(change === 'unrelated service')}.invalid
+[services ignored]
+sagemaker_runtime =
+  endpoint_url = https://ignored-${stage(change === 'unrelated service')}.invalid
+[profile unrelated]
+endpoint_url = https://unrelated-${stage(change === 'unrelated profile')}.invalid
+${updated && change === 'comment' ? '# unrelated comment\n' : ''}`;
+    }
+
+    it.each([
+      ['configured', 'default', 'comment'],
+      ['configured', 'named', 'unrelated profile'],
+      ['configured', 'named', 'unrelated service'],
+      ['environment', 'default', 'comment'],
+      ['environment', 'default', 'selected service'],
+      ['configured', 'named', 'selected service'],
+      ['configured', 'named', 'service from credentials'],
+    ] as const)(
+      'compares the selected %s %s runtime config during a %s edit',
+      async (source, profile, change) => {
+        const selected = profile === 'named' ? 'selected-runtime' : 'default';
+        const section = profile === 'named' ? `profile ${selected}` : 'default';
+        vi.stubEnv('AWS_PROFILE', profile === 'named' ? selected : undefined);
+        vi.stubEnv('AWS_ACCESS_KEY_ID', source === 'environment' ? 'ENV_STATIC' : undefined);
+        vi.stubEnv(
+          'AWS_SECRET_ACCESS_KEY',
+          source === 'environment' ? 'env-static-secret' : undefined,
+        );
+        vi.stubEnv('AWS_SESSION_TOKEN', undefined);
+        const inCredentials = change === 'service from credentials';
+        await writeFile(
+          path.join(directory, 'credentials'),
+          `[${selected}]\n${inCredentials ? 'services = chosen\n' : ''}`,
+        );
+        const configFile = path.join(directory, 'config');
+        const relevant = change === 'selected service' || inCredentials;
+        const writeConfig = (updated: boolean) =>
+          writeFile(configFile, staticRuntimeConfig(section, change, updated));
+        await writeConfig(false);
+        const entered = deferred();
+        const release = deferred();
+        const Provider =
+          kind === 'completion' ? SageMakerCompletionProvider : SageMakerEmbeddingProvider;
+        const provider = new Provider('deployment', {
+          config: {
+            modelType: 'custom',
+            ...(source === 'configured'
+              ? { accessKeyId: 'CONFIG_STATIC', secretAccessKey: 'config-static-secret' }
+              : {}),
+          },
+          transform: async (input) => {
+            if (input === 'first') {
+              entered.resolve();
+              await release.promise;
+            }
+            return input;
+          },
+        });
+        providers.add(provider);
+        const requests = interceptSageMaker(provider);
+        const pending = invoke(provider, 'first');
+        void pending.catch(() => {});
+        try {
+          await entered.promise;
+          await writeConfig(true);
+          release.resolve();
+          if (relevant) {
+            await expect(pending).rejects.toThrow(drift);
+            expect(requests).toHaveLength(0);
+          } else {
+            expect(await pending).toMatchObject(expected);
+            expect(requests.map(({ hostname }) => hostname)).toEqual(['selected-before.invalid']);
+          }
+          expect(await invoke(provider, 'later')).toMatchObject(expected);
+          expect(requests.at(-1)?.hostname).toBe(
+            `selected-${relevant ? 'after' : 'before'}.invalid`,
+          );
+          expect(requests.at(-1)?.headers.authorization).toContain(
+            `Credential=${source === 'configured' ? 'CONFIG_STATIC' : 'ENV_STATIC'}/`,
+          );
+        } finally {
+          release.resolve();
+          await Promise.allSettled([pending]);
+        }
+      },
+    );
+
     it('rejects an edit while the SDK is resolving signing credentials before any send', async () => {
       const files = selectFileCredentials('named');
       await Promise.all([files.config('before'), files.credentials('before')]);
