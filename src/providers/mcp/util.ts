@@ -204,7 +204,8 @@ export async function getOAuthTokenWithExpiry(
   if (!pending) {
     pending = fetchOAuthToken({
       tokenUrl,
-      ...(auth.tokenUrl ? {} : { redirect: 'error' as const }),
+      // Credentials must not follow a redirect away from a discovered endpoint
+      redirect: auth.tokenUrl ? undefined : 'error',
       grantType: auth.grantType,
       clientId: auth.clientId,
       clientSecret: auth.clientSecret,
