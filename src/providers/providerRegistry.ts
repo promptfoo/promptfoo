@@ -22,7 +22,11 @@ class ProviderRegistry {
     // resources while this evaluation constructs or lazily registers providers.
     this.activeEvaluations++;
     try {
-      await this.pendingShutdown;
+      // Without a pending shutdown, start immediately so the run can reserve its providers
+      // before another evaluation's finalizer gets a turn.
+      if (this.pendingShutdown) {
+        await this.pendingShutdown;
+      }
       return await run();
     } finally {
       this.activeEvaluations--;

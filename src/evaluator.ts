@@ -3442,7 +3442,6 @@ export async function withEvaluationResources<T>(
     }
     await Promise.all(added.map((provider) => pendingProviderCleanups.get(provider)));
   };
-  const initialProviders = retainProviders(context);
 
   const release = async () => {
     if (released) {
@@ -3486,25 +3485,21 @@ export async function withEvaluationResources<T>(
     }
   };
 
-  try {
-    return await providerRegistry.withEvaluation(() =>
-      withEvaluationProviderRetainer(
-        (provider) => retainProviders({ borrowedProviders: [provider] }),
-        async () => {
-          try {
-            await initialProviders;
-            return await run(retainProviders);
-          } finally {
-            // The last borrower awaits queued cleanup; an owner with other users can return.
-            await release();
-          }
-        },
-      ),
+  return providerRegistry.withEvaluation(() => {
+    const initialProviders = retainProviders(context);
+    return withEvaluationProviderRetainer(
+      (provider) => retainProviders({ borrowedProviders: [provider] }),
+      async () => {
+        try {
+          await initialProviders;
+          return await run(retainProviders);
+        } finally {
+          // The last borrower awaits queued cleanup; an owner with other users can return.
+          await release();
+        }
+      },
     );
-  } finally {
-    // Balance uses even if the registry's pending shutdown fails before invoking the callback.
-    await release();
-  }
+  });
 }
 
 class Evaluator<TEvaluation extends EvaluationRecord, TResult extends EvaluationStoreResult> {
