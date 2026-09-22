@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare Grok 4.7 chat and Responses reasoning
+
+prompts:
+  - 'Answer this question with only the final answer: {{question}}'
+
+providers:
+  - id: xai:grok-4.7
+    label: Grok 4.7 Chat Completions
+    config:
+      reasoning_effort: xhigh
+      max_completion_tokens: 2048
+
+  - id: xai:responses:grok-4.7
+    label: Grok 4.7 Responses
+    config:
+      reasoning:
+        effort: xhigh
+      max_output_tokens: 2048
+
+tests:
+  - vars:
+      question: What is the smallest prime number greater than 20?
+    assert:
+      - type: contains
+        value: '23'
