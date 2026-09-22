@@ -267,6 +267,7 @@ it.each(['discard stale', 'preserve newer'] as const)(
       },
     });
     const first = provider.callApi('discover auto');
+    void first.catch(() => {});
     let newer: ReturnType<typeof provider.callApi> | undefined;
     try {
       await metadataStarted.promise;
@@ -277,7 +278,10 @@ it.each(['discard stale', 'preserve newer'] as const)(
         await newerStarted.promise;
       }
       releaseMetadata.resolve();
-      expect(await first).toMatchObject({ output: 'selected' });
+      await expect(first).rejects.toThrow(
+        'SageMaker defaults inputs changed during initialization; retry with stable inputs',
+      );
+      expect(requests).toHaveLength(mode === 'preserve newer' ? 1 : 0);
       if (mode === 'discard stale') {
         expect(provider.sagemakerRuntime).toBeUndefined();
         vi.stubEnv('AWS_EXECUTION_ENV', undefined);
@@ -285,12 +289,11 @@ it.each(['discard stale', 'preserve newer'] as const)(
       }
       expect(await provider.callApi('next selection')).toMatchObject({ output: 'selected' });
       if (mode === 'preserve newer') {
-        expect(requests).toHaveLength(3);
-        expect(requests[2].handler).toBe(requests[0].handler);
-        expect(requests[1].handler).not.toBe(requests[0].handler);
+        expect(requests).toHaveLength(2);
+        expect(requests[1].handler).toBe(requests[0].handler);
         expect(metadataRequests).toHaveLength(2);
       } else {
-        expect(requests).toHaveLength(2);
+        expect(requests).toHaveLength(1);
         expect(metadataRequests).toHaveLength(4);
       }
     } finally {
