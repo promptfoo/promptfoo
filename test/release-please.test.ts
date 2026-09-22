@@ -109,6 +109,6 @@ describe('release-please automation', () => {
     const usesLine = workflowYaml
       .split('\n')
       .find((line) => line.includes(`uses: ${releaseStep.uses}`));
-    expect(usesLine).toMatch(/#\s+[\w./-]+\s*$/);
+    expect(usesLine).toMatch(/#\s+v\d+(?:\.\d+){0,2}(?:[-+][\w.-]+)?\s*$/);
   });
 });

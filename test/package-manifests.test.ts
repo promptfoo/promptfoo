@@ -164,6 +164,15 @@ describe('package manifests', () => {
     }
   });
 
+  it.each([
+    ['examples/redteam-mcp-agent/package.json', '@modelcontextprotocol/sdk'],
+    ['examples/config-websockets/basic/test-server/package.json', 'ws'],
+    ['examples/config-websockets/streaming/server/package.json', 'ws'],
+  ])('declares the standalone runtime dependency for %s', (manifest, dependency) => {
+    const example = readPackageJson<PackageManifest>(manifest);
+    expect(example.dependencies, manifest).toHaveProperty(dependency);
+  });
+
   it('publishes the lightweight contracts subpath', () => {
     const packageJson = readPackageJson<{
       exports?: Record<string, unknown>;
@@ -251,6 +260,28 @@ describe('package manifests', () => {
 
     expect(npmReleaseAgeRule?.minimumReleaseAge).toBe('10 days');
     expect(renovateConfig.npmrc).toMatch(/^min-release-age=10$/m);
+  });
+
+  it('keeps Renovate from automatically changing the code-scan runtime', () => {
+    const workflowPath = '.github/workflows/promptfoo-code-scan.yml';
+    const renovateConfig = readPackageJson<{
+      packageRules?: Array<{
+        enabled?: boolean;
+        matchFileNames?: string[];
+        matchManagers?: string[];
+        matchPackageNames?: string[];
+      }>;
+    }>('renovate.json');
+
+    expect(
+      renovateConfig.packageRules?.some(
+        (rule) =>
+          rule.enabled === false &&
+          rule.matchManagers?.includes('github-actions') &&
+          rule.matchFileNames?.includes(workflowPath) &&
+          ['node', 'actions/node-versions'].every((name) => rule.matchPackageNames?.includes(name)),
+      ),
+    ).toBe(true);
   });
 
   it('keeps private npm registry endpoints out of the published lockfile', () => {
