@@ -1458,9 +1458,10 @@ async function gradeRunEvalResponse({
 
   if (deferGrading) {
     invariant(providerCallQueue, 'providerCallQueue is required when deferGrading is enabled');
+    const gradingAbortSignal = providerCallQueue.abortSignal ?? abortSignal;
     ret.response = processedResponse;
     const gradingPromise = withProviderCallExecutionContext(
-      { abortSignal, providerCallQueue, rateLimitRegistry },
+      { abortSignal: gradingAbortSignal, providerCallQueue, rateLimitRegistry },
       () =>
         runAssertions({
           prompt: renderedPrompt,
@@ -1473,7 +1474,7 @@ async function gradeRunEvalResponse({
           traceId,
         }).then((checkResult) => applyGradingResult(ret, checkResult)),
     ).catch((error) => {
-      applyGradingError(ret, error, abortSignal);
+      applyGradingError(ret, error, gradingAbortSignal);
     });
     deferredGradingPromises.set(ret, gradingPromise);
     return;
@@ -4105,7 +4106,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     processedIndices: Set<number>;
     prompts: CompletedPrompt[];
   }): Promise<void> {
-    const providerCallQueue = new ProviderGroupedCallQueue();
+    // The max evaluation duration stops target work; completed targets still get graded.
+    // An explicit caller cancellation also cancels those queued graders.
+    const providerCallQueue = new ProviderGroupedCallQueue(
+      this.options.abortSignal ?? new AbortController().signal,
+    );
     const groupedRows: GroupedRows[] = [];
     let lastPromptsFlush = 0;
     const flushPromptMetrics = async () => {
