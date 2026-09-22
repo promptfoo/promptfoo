@@ -6,7 +6,11 @@ import { calculateOpenAIUsageCost } from './billing';
 import { appendOpenAiApiPath, assertOpenAiApiModel, getTokenUsage } from './util';
 
 import type { EnvOverrides } from '../../types/env';
-import type { ProviderEmbeddingResponse } from '../../types/index';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderEmbeddingResponse,
+} from '../../types/index';
 import type { OpenAiSharedOptions } from './types';
 
 type OpenAiEmbeddingOptions = OpenAiSharedOptions & {
@@ -27,7 +31,12 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
     return this.modelName;
   }
 
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    text: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
+    options?.abortSignal?.throwIfAborted();
     // Validate API key first (like chat provider)
     if (this.requiresApiKey() && !this.getApiKey()) {
       return {
@@ -67,6 +76,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
             ...this.getOpenAiRequestHeaders(),
           },
           body: JSON.stringify(body),
+          ...(options?.abortSignal && { signal: options.abortSignal }),
         },
         getRequestTimeoutMs(),
         'json',
@@ -82,6 +92,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
         };
       }
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       logger.error(`API call error: ${String(err)}`);
       await deleteFromCache?.();
       return {
