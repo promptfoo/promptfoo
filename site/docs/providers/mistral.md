@@ -17,24 +17,7 @@ keywords:
 
 # Mistral AI
 
-The [Mistral AI API](https://docs.mistral.ai/api/) provides access to cutting-edge language models that deliver exceptional performance at competitive pricing. Mistral offers a compelling alternative to OpenAI and other providers, with specialized models for reasoning, code generation, and multimodal tasks.
-
-Mistral is particularly valuable for:
-
-- **Cost-effective AI integration** with pricing up to 8x lower than competitors
-- **Advanced reasoning** with Magistral models that show step-by-step thinking
-- **Code generation excellence** with Codestral models supporting 80+ programming languages
-- **Multimodal capabilities** for text and image processing
-- **Enterprise deployments** with on-premises options requiring just 4 GPUs
-- **Multilingual applications** with native support for 12+ languages
-
-:::tip Why Choose Mistral?
-
-Mistral's current catalog spans low-cost small models, native reasoning models, and
-frontier multimodal models such as Mistral Large 3 at $0.50/$1.50 per million tokens
-(input/output).
-
-:::
+Use the [Mistral AI API](https://docs.mistral.ai/api/) for chat, reasoning, code generation, and image understanding. Check [Mistral's model catalog](https://docs.mistral.ai/getting-started/models/) for capabilities and availability.
 
 ## API Key
 
@@ -232,13 +215,11 @@ The `magistral-small-latest` alias now resolves to Mistral Small 4 (a hybrid mod
 standalone Magistral Small reasoning snapshot. Enable Small 4's reasoning with
 `reasoning_effort: high`.
 
+<span id="legacy-models-deprecated-or-retired" />
+
 #### Legacy models
 
-promptfoo retains pricing for a number of retired and deprecated Mistral snapshot IDs so it can
-cost-score cached results from older evals. Those IDs are not listed here because the set changes;
-retired IDs return an error if you call them today. Use a current model from the table above, and
-check [Mistral's model deprecations](https://docs.mistral.ai/getting-started/models/) for the
-status of any snapshot you still reference.
+Promptfoo retains some older prices for estimating costs from past evals. Retired models reject new requests. Check [Mistral's model catalog](https://docs.mistral.ai/getting-started/models/) before using an older snapshot.
 
 ### Embedding Models
 

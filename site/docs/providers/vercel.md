@@ -100,7 +100,7 @@ providers:
 | `stopSequences`    | string[] | Sequences where generation stops             |
 | `timeout`          | number   | Request timeout in milliseconds              |
 | `headers`          | object   | Additional HTTP headers                      |
-| `streaming`        | boolean  | Enable streaming responses                   |
+| `streaming`        | boolean  | Use the streaming API for text generation    |
 | `responseSchema`   | object   | JSON schema for structured output            |
 | `baseUrl`          | string   | Override the AI Gateway base URL             |
 
@@ -141,7 +141,7 @@ tests:
 
 ## Streaming
 
-Enable streaming for real-time responses:
+Use Vercel's streaming API for text generation. Promptfoo collects the chunks and runs assertions on the completed response:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -172,8 +172,7 @@ For a complete list, see the [Vercel AI Gateway documentation](https://vercel.co
 
 Generate embeddings for text similarity, search, and RAG applications:
 
-Embedding providers are not eval providers — they back the `similar` assertion rather than
-producing outputs of their own. Set one on `defaultTest.options.provider.embedding`:
+Set the embedding provider for the `similar` assertion under `defaultTest.options.provider.embedding`:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -267,11 +266,11 @@ tests:
 
 ## Environment Variables
 
-| Variable                     | Description                                                      |
-| ---------------------------- | ---------------------------------------------------------------- |
-| `VERCEL_AI_GATEWAY_API_KEY`  | API key for AI Gateway                                           |
-| `AI_GATEWAY_API_KEY`         | Fallback API key, used when `VERCEL_AI_GATEWAY_API_KEY` is unset |
-| `VERCEL_AI_GATEWAY_BASE_URL` | Override the AI Gateway URL                                      |
+| Variable                     | Description                                                                   |
+| ---------------------------- | ----------------------------------------------------------------------------- |
+| `VERCEL_AI_GATEWAY_API_KEY`  | API key for AI Gateway                                                        |
+| `AI_GATEWAY_API_KEY`         | Fallback from the shell environment when `VERCEL_AI_GATEWAY_API_KEY` is unset |
+| `VERCEL_AI_GATEWAY_BASE_URL` | Override the AI Gateway URL                                                   |
 
 ## Troubleshooting
 
