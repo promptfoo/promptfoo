@@ -21,74 +21,20 @@ function readPackageJson<T>(relativePath: string): T {
   return JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as T;
 }
 
-function splitShellSegments(input: string): string[] {
-  const segments: string[] = [];
-  let current = '';
-  let inSingle = false;
-  let inDouble = false;
-
-  for (let i = 0; i < input.length; i++) {
-    const ch = input[i];
-    if (ch === "'" && !inDouble) {
-      inSingle = !inSingle;
-    } else if (ch === '"' && !inSingle) {
-      inDouble = !inDouble;
-    }
-    if (
-      !inSingle &&
-      !inDouble &&
-      (ch === ';' || ((ch === '&' || ch === '|') && input[i + 1] === ch))
-    ) {
-      if (current.trim()) {
-        segments.push(current.trim());
-      }
-      current = '';
-      if (ch !== ';') {
-        i++;
-      }
-      continue;
-    }
-    current += ch;
-  }
-  if (current.trim()) {
-    segments.push(current.trim());
-  }
-  return segments;
-}
-
-function extractRunBodies(dockerfile: string): string[] {
-  const normalized = dockerfile.replace(/\\\r?\n/g, ' ');
-  return normalized
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0 && !line.startsWith('#'))
-    .filter((line) => /^RUN\b/i.test(line))
-    .map((line) => line.replace(/^RUN\s+(?:--[^\s]+\s+)*/i, '').trim());
-}
-
-function isNpmLikeToken(token: string): boolean {
-  const normalized = token.replace(/\\(.)/g, '$1').replace(/["']/g, '');
-  return normalized === 'npm' || /(?:^|[^A-Za-z0-9_])npm$/.test(normalized);
-}
-
-// Match npm subcommands only when npm is the unquoted executable in a RUN segment.
+// Scan the whole Dockerfile, not just RUN lines, so heredoc bodies and exec-form RUNs count.
 function validateDockerInstallCommands(dockerfile: string): void {
-  const commands = extractRunBodies(dockerfile).flatMap((runBody) =>
-    splitShellSegments(runBody).flatMap((segment) => {
-      const tokens = segment.split(/\s+/).filter(Boolean);
-      const npmIndex = tokens.findIndex(isNpmLikeToken);
-      if (npmIndex === -1) {
-        return [];
-      }
-      const environmentAssignments = tokens.findIndex(
-        (token) => !/^[A-Za-z_][A-Za-z0-9_]*=[^\s]+$/.test(token),
-      );
-      // Reject quoted, escaped, or path-qualified executables, and reject textual npm
-      // mentions that are not the command being run.
-      expect(npmIndex).toBe(environmentAssignments);
-      expect(tokens[npmIndex]).toBe('npm');
-      return [tokens.slice(npmIndex + 1)];
-    }),
+  const instructions = dockerfile
+    .split('\n')
+    .filter((line) => !line.trimStart().startsWith('#'))
+    .join('\n')
+    .replace(/\\\r?\n/g, ' ')
+    // Normalize literal shell spelling so n\\pm and n'p'm cannot hide npm.
+    // This intentionally errs toward rejecting quoted command-like text.
+    .replace(/\\(.)/g, '$1')
+    .replace(/["']/g, '');
+  // Stop at every shell separator and substitution so each nested npm is checked separately.
+  const commands = [...instructions.matchAll(/(?<![\w.-])npm\b([^;&|()`\n]*)/g)].map(([, text]) =>
+    text.trim().split(/\s+/),
   );
   expect(commands.some(([command]) => command === 'ci')).toBe(true);
   expect(commands.some(([command]) => command === 'rebuild')).toBe(true);
@@ -618,6 +564,15 @@ describe('package manifests', () => {
     'RUN npm ci --ignore-scripts=false',
     'RUN npm rebuild esbuild',
     'RUN npm rebuild ./node_modules/*',
+    // Every shell and Dockerfile form that still executes npm.
+    'RUN npm ci --ignore-scripts & npm rebuild ./node_modules/evil',
+    'RUN npm run build | npm ci',
+    'RUN npm run build $(npm ci)',
+    'RUN npm run build `npm ci`',
+    'RUN npm${IFS}ci',
+    'RUN ["npm", "ci"]',
+    'RUN node /usr/local/lib/node_modules/npm/bin/npm-cli.js ci',
+    'RUN <<EOF\nnpm ci\nEOF',
   ])('rejects an additional unsafe Docker command: %s', (unsafeCommand) => {
     const safeCommands =
       'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
