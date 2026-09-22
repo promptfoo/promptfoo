@@ -50,18 +50,12 @@ export function getGradingProviderCallOptions(): CallApiOptionsParams | undefine
 export async function callEmbeddingProvider(provider: ApiProvider, input: string) {
   const options = getGradingProviderCallOptions();
   options?.abortSignal?.throwIfAborted();
-  try {
-    if (options && provider.supportsEmbeddingCancellation) {
-      return await (provider as CancellableEmbeddingProvider).callEmbeddingApi(
-        input,
-        undefined,
-        options,
-      );
-    }
-    return await provider.callEmbeddingApi!(input);
-  } finally {
-    options?.abortSignal?.throwIfAborted();
-  }
+  const result =
+    options && provider.supportsEmbeddingCancellation
+      ? await (provider as CancellableEmbeddingProvider).callEmbeddingApi(input, undefined, options)
+      : await provider.callEmbeddingApi!(input);
+  options?.abortSignal?.throwIfAborted();
+  return result;
 }
 
 /**
@@ -94,7 +88,7 @@ export function callGradingProvider<T extends ProviderResponse>(
       return executionContext.rateLimitRegistry.execute(
         provider,
         callProvider,
-        createProviderRateLimitOptions(),
+        createProviderRateLimitOptions(executionContext.abortSignal),
       );
     }
 
@@ -102,7 +96,11 @@ export function callGradingProvider<T extends ProviderResponse>(
   };
 
   if (executionContext?.providerCallQueue) {
-    return executionContext.providerCallQueue.enqueue(provider.id(), executeCall);
+    return executionContext.providerCallQueue.enqueue(
+      provider.id(),
+      executeCall,
+      executionContext.abortSignal,
+    );
   }
 
   return executeCall();

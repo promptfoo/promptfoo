@@ -52,6 +52,42 @@ describe('ProviderRateLimitState', () => {
     });
   });
 
+  it.each(['response', 'thrown error'] as const)(
+    'cancels retry sleep after a rate-limited %s without releasing another slot',
+    async (kind) => {
+      const controller = new AbortController();
+      const reason = new Error('cancel scheduled retry');
+      let markRetry!: () => void;
+      const retryStarted = new Promise<void>((resolve) => {
+        markRetry = resolve;
+      });
+      state.once('request:retrying', markRetry);
+      const call = vi.fn(async () => {
+        if (kind === 'thrown error') {
+          throw new Error('429 rate limit');
+        }
+        return 'rate limited';
+      });
+      const request = state.executeWithRetry('cancel-retry', call, {
+        abortSignal: controller.signal,
+        isRateLimited: (result, error) =>
+          result === 'rate limited' || !!error?.message.includes('429'),
+        getRetryAfter: () => 60_000,
+      });
+      void request.catch(() => {});
+      await retryStarted;
+      controller.abort(reason);
+      await expect(request).rejects.toBe(reason);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(call).toHaveBeenCalledTimes(1);
+      expect(state.getMetrics()).toMatchObject({
+        activeRequests: 0,
+        queueDepth: 0,
+        failedRequests: 1,
+      });
+    },
+  );
+
   describe('executeWithRetry - success path', () => {
     it('should execute function and return result', async () => {
       const result = await state.executeWithRetry('req-1', async () => 'success', {});
