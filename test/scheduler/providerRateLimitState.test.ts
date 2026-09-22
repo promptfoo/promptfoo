@@ -52,6 +52,21 @@ describe('ProviderRateLimitState', () => {
     });
   });
 
+  it('returns a call that completes after cancellation instead of discarding it', async () => {
+    const controller = new AbortController();
+    const result = state.executeWithRetry(
+      'completes-after-abort',
+      async () => {
+        controller.abort(new Error('eval paused'));
+        return 'completed';
+      },
+      { abortSignal: controller.signal },
+    );
+
+    await expect(result).resolves.toBe('completed');
+    expect(state.getMetrics()).toMatchObject({ activeRequests: 0, failedRequests: 0 });
+  });
+
   it.each(['response', 'thrown error'] as const)(
     'cancels retry sleep after a rate-limited %s without releasing another slot',
     async (kind) => {

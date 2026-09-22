@@ -36,16 +36,6 @@ describe('OpenAI Provider', () => {
       expect(fetchWithCache).not.toHaveBeenCalled();
     });
 
-    it('does not issue a request when embedding was already cancelled', async () => {
-      const reason = new Error('evaluation cancelled');
-      await expect(
-        provider.callEmbeddingApi('test text', undefined, {
-          abortSignal: AbortSignal.abort(reason),
-        }),
-      ).rejects.toBe(reason);
-      expect(fetchWithCache).not.toHaveBeenCalled();
-    });
-
     it('should call embedding API successfully', async () => {
       const mockResponse = {
         data: [

@@ -143,13 +143,13 @@ export interface ApiProvider extends MinimalApiProvider {
   toJSON?: () => any;
   /**
    * Provider-wide cleanup hook for releasing long-lived resources such as worker
-   * processes, browser sessions, or pooled connections at eval shutdown.
-   * Automatic evaluation completion supplies a context so a shared provider can
-   * defer idle cleanup while other calls remain active. A call without context
-   * requests explicit provider shutdown.
+   * processes, browser sessions, or pooled connections. Automatic evaluation cleanup
+   * calls it without arguments unless `cleanupAfterEvaluation` is implemented.
    * Request-scoped cancellation should be implemented with `abortSignal`.
    */
-  cleanup?: (context?: ProviderCleanupContext) => void | Promise<void>;
+  cleanup?: () => void | Promise<void>;
+  /** Release idle evaluation resources separately from an explicit `cleanup()` call. */
+  cleanupAfterEvaluation?: (context: ProviderCleanupContext) => void | Promise<void>;
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {
