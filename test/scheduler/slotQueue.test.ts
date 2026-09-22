@@ -680,6 +680,16 @@ describe('SlotQueue', () => {
       expect(queue.getActiveCount()).toBe(1);
     });
 
+    it('lets a cancelled request take a free slot but not wait for one', async () => {
+      queue = new SlotQueue({ maxConcurrency: 1, minConcurrency: 1 });
+      const signal = AbortSignal.abort(new Error('eval paused'));
+
+      await expect(queue.acquire('free', signal)).resolves.toBeUndefined();
+      await expect(queue.acquire('waiting', signal)).rejects.toThrow('eval paused');
+      expect(queue.getActiveCount()).toBe(1);
+      expect(queue.getQueueDepth()).toBe(0);
+    });
+
     it('should handle timeout value of 0 as disabled', async () => {
       queue = new SlotQueue({
         maxConcurrency: 1,

@@ -888,7 +888,6 @@ export class SageMakerEmbeddingProvider
     options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
     const signal = options?.abortSignal;
-    signal?.throwIfAborted();
     // Import cache functions dynamically to avoid circular dependencies
     const { isCacheEnabled, getCache } = await import('../cache');
 
@@ -900,7 +899,6 @@ export class SageMakerEmbeddingProvider
       context,
       'SageMaker embedding transform error',
     );
-    signal?.throwIfAborted();
     if (!transformResult.ok) {
       return { error: transformResult.error };
     }
@@ -925,7 +923,6 @@ export class SageMakerEmbeddingProvider
 
       // Try to get from cache
       const cachedResult = await cache.get<string>(cacheKey);
-      signal?.throwIfAborted();
       if (cachedResult) {
         logger.debug(`Using cached SageMaker embedding response for ${this.getEndpointName()}`);
 
@@ -951,21 +948,16 @@ export class SageMakerEmbeddingProvider
       logger.debug(
         `Applying delay of ${delayMs}ms before calling SageMaker embedding endpoint ${this.getEndpointName()}`,
       );
-      if (signal) {
-        try {
-          await delayWithSignal(delayMs, undefined, { signal });
-        } catch (error) {
-          signal.throwIfAborted();
-          throw error;
-        }
-      } else {
-        await sleep(delayMs);
-      }
+      await (signal
+        ? delayWithSignal(delayMs, undefined, { signal }).catch((error) => {
+            signal.throwIfAborted();
+            throw error;
+          })
+        : sleep(delayMs));
     }
 
     // Not in cache or cache disabled, make the actual API call
     const runtime = await this.getSageMakerRuntimeInstance();
-    signal?.throwIfAborted();
 
     let payload;
     const modelType = this.config.modelType || 'custom';
@@ -1011,11 +1003,9 @@ export class SageMakerEmbeddingProvider
       });
 
       const startTime = Date.now();
-      signal?.throwIfAborted();
       const response = signal
         ? await runtime.send(command, { abortSignal: signal })
         : await runtime.send(command);
-      signal?.throwIfAborted();
       const endTime = Date.now();
       const _latency = endTime - startTime;
 
@@ -1052,7 +1042,6 @@ export class SageMakerEmbeddingProvider
 
           // Extract data using the expression
           const extracted = await this.extractFromPath(responseJson, pathExpression);
-          signal?.throwIfAborted();
 
           // Validate that the extracted data is an array of numbers (embedding)
           if (Array.isArray(extracted) && extracted.every((val) => typeof val === 'number')) {
@@ -1076,10 +1065,8 @@ export class SageMakerEmbeddingProvider
               context,
               isTransformed,
               isTransformed ? text : undefined,
-              signal,
             );
 
-            signal?.throwIfAborted();
             return result;
           } else {
             logger.warn(
@@ -1087,7 +1074,6 @@ export class SageMakerEmbeddingProvider
             );
           }
         } catch (error) {
-          signal?.throwIfAborted();
           logger.warn(
             `Failed to extract embedding from path expression: ${this.config.responseFormat.path}, Error: ${error}`,
           );
@@ -1124,10 +1110,8 @@ export class SageMakerEmbeddingProvider
         context,
         isTransformed,
         isTransformed ? text : undefined,
-        signal,
       );
 
-      signal?.throwIfAborted();
       return result;
     } catch (error: any) {
       signal?.throwIfAborted();
@@ -1147,10 +1131,8 @@ export class SageMakerEmbeddingProvider
     context?: CallApiContextParams,
     isTransformed: boolean = false,
     originalText?: string,
-    signal?: AbortSignal,
   ): Promise<void> {
     const { isCacheEnabled, getCache } = await import('../cache');
-    signal?.throwIfAborted();
     const bustCache = context?.debug === true;
 
     // Save result to cache if successful and caching enabled
@@ -1174,14 +1156,11 @@ export class SageMakerEmbeddingProvider
       const resultToCache = JSON.stringify(result);
 
       try {
-        signal?.throwIfAborted();
         await cache.set(cacheKey, resultToCache);
-        signal?.throwIfAborted();
         logger.debug(
           `Stored SageMaker embedding response in cache with key: ${cacheKey.substring(0, 100)}...`,
         );
       } catch (_) {
-        signal?.throwIfAborted();
         logger.warn(`Failed to store SageMaker embedding response in cache: ${_}`);
       }
     }

@@ -1016,6 +1016,69 @@ describeEvaluator('evaluator execution control', () => {
     }
   });
 
+  it('keeps a target response that completes after the eval is paused', async () => {
+    const controller = new AbortController();
+    // Like the echo provider, this target ignores the signal and finishes its in-flight call.
+    const provider: ApiProvider = {
+      id: () => 'signal-ignoring-target',
+      callApi: vi.fn(async () => {
+        controller.abort();
+        return { output: 'completed output', tokenUsage: createEmptyTokenUsage() };
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt {{topic}}')],
+      tests: [{ vars: { topic: 'alpha' } }, { vars: { topic: 'beta' } }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1, abortSignal: controller.signal });
+
+    const { results } = await evalRecord.toEvaluateSummary();
+    expect(provider.callApi).toHaveBeenCalledTimes(1);
+    expect(results).toEqual([
+      expect.objectContaining({
+        success: true,
+        response: expect.objectContaining({ output: 'completed output' }),
+      }),
+    ]);
+  });
+
+  it('keeps a grade that completes after the eval is paused', async () => {
+    const controller = new AbortController();
+    const provider: ApiProvider = {
+      id: () => 'target-provider',
+      callApi: vi.fn(async () => ({
+        output: 'target output',
+        tokenUsage: createEmptyTokenUsage(),
+      })),
+    };
+    // Like a local judge that ignores the signal, this grader finishes its in-flight call.
+    const judge: ApiProvider = {
+      id: () => 'signal-ignoring-judge',
+      callApi: vi.fn(async () => {
+        controller.abort();
+        return {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'judge passed' }),
+          tokenUsage: createEmptyTokenUsage(),
+        };
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ assert: [{ type: 'llm-rubric', value: 'Judge output', provider: judge }] }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1, abortSignal: controller.signal });
+
+    const { results } = await evalRecord.toEvaluateSummary();
+    expect(judge.callApi).toHaveBeenCalledTimes(1);
+    expect(results).toEqual([expect.objectContaining({ success: true, score: 1 })]);
+  });
+
   it('should abort when exceeding maxEvalTimeMs', async () => {
     vi.useFakeTimers();
 
@@ -1186,6 +1249,73 @@ describeEvaluator('evaluator execution control', () => {
     );
     expect(resultByTopic.get('alpha')?.error).toMatch(/^Aborted: /);
     expect(resultByTopic.get('gamma')?.error).toContain('Evaluation exceeded max duration');
+  });
+
+  it('cancels in-flight grouped grading when the max duration expires', async () => {
+    vi.useFakeTimers();
+
+    const results: any[] = [];
+    const provider: ApiProvider = {
+      id: () => 'target-provider',
+      callApi: vi.fn(async () => ({
+        output: 'Target output',
+        tokenUsage: createEmptyTokenUsage(),
+      })),
+    };
+    // This grader only settles when its request is cancelled.
+    const judge: ApiProvider = {
+      id: () => 'hanging-judge',
+      callApi: vi.fn(
+        (_prompt, _context, options) =>
+          new Promise<ProviderResponse>((_resolve, reject) => {
+            options?.abortSignal?.addEventListener('abort', () => reject(new Error('aborted')), {
+              once: true,
+            });
+          }),
+      ),
+    };
+    const evalRecord = {
+      id: 'grouped-deadline-eval',
+      results,
+      prompts: [],
+      persisted: false,
+      config: {},
+      addPrompts: vi.fn().mockResolvedValue(undefined),
+      addResult: vi.fn(async (result) => {
+        results.push(result);
+      }),
+      fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+      getResults: vi.fn().mockResolvedValue(results),
+      save: vi.fn().mockResolvedValue(undefined),
+      setDurationMs: vi.fn(),
+      setVars: vi.fn(),
+      toEvaluateSummary: vi.fn(),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ assert: [{ type: 'llm-rubric', value: 'Judge output', provider: judge }] }],
+    };
+
+    let settled = false;
+    const evalPromise = evaluate(testSuite, evalRecord as unknown as Eval, {
+      maxConcurrency: 1,
+      maxEvalTimeMs: 50,
+    }).finally(() => {
+      settled = true;
+    });
+    await vi.advanceTimersByTimeAsync(50);
+    await vi.waitFor(() => expect(settled).toBe(true));
+    await evalPromise;
+
+    expect(judge.callApi).toHaveBeenCalledTimes(1);
+    expect(results).toEqual([
+      expect.objectContaining({
+        success: false,
+        error: expect.stringContaining('aborted'),
+        response: expect.objectContaining({ output: 'Target output' }),
+      }),
+    ]);
   });
 
   it.each([true, false])(

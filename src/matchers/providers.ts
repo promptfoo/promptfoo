@@ -6,6 +6,7 @@ import { getCloudTargetIdFromProviders } from '../redteam/remoteGenerationContex
 import {
   getProviderCallExecutionContext,
   getProviderCallTracingContext,
+  runProviderCallWithAbort,
 } from '../scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
 import invariant from '../util/invariant';
@@ -48,12 +49,14 @@ export function getGradingProviderCallOptions(): CallApiOptionsParams | undefine
 
 export async function callEmbeddingProvider(provider: ApiProvider, input: string) {
   const options = getGradingProviderCallOptions();
-  options?.abortSignal?.throwIfAborted();
   const result =
     options && provider.supportsEmbeddingCancellation
       ? await (provider as CancellableEmbeddingProvider).callEmbeddingApi(input, undefined, options)
       : await provider.callEmbeddingApi!(input);
-  options?.abortSignal?.throwIfAborted();
+  // A provider that cannot observe cancellation may report it as an error response.
+  if (result.error) {
+    options?.abortSignal?.throwIfAborted();
+  }
   return result;
 }
 
@@ -72,15 +75,22 @@ export function callGradingProvider<T extends ProviderResponse>(
   const { callContext, operationName } = options;
   const executionContext = getProviderCallExecutionContext();
   const tracingContext = getProviderCallTracingContext();
-  const callProvider = (): Promise<T> =>
-    tracingContext
+  const callProvider = async (): Promise<T> => {
+    const result = await (tracingContext
       ? (tracingContext.withProviderSpan(
           { provider, callContext, operationName, role: 'grader', promptLabel: label },
           invoke,
         ) as Promise<T>)
-      : invoke(callContext);
+      : invoke(callContext));
+    if (result.error) {
+      executionContext?.abortSignal?.throwIfAborted();
+    }
+    return result;
+  };
 
-  const executeCall = () => {
+  const executeCall = async () => {
+    // Never start a grader after cancellation; queued graders check once they reach the front.
+    executionContext?.abortSignal?.throwIfAborted();
     if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
       return executionContext.rateLimitRegistry.execute(
         provider,
@@ -92,15 +102,13 @@ export function callGradingProvider<T extends ProviderResponse>(
     return callProvider();
   };
 
-  if (executionContext?.providerCallQueue) {
-    return executionContext.providerCallQueue.enqueue(
-      provider.id(),
-      executeCall,
-      executionContext.abortSignal,
-    );
-  }
-
-  return executeCall();
+  return runProviderCallWithAbort(
+    () =>
+      executionContext?.providerCallQueue
+        ? executionContext.providerCallQueue.enqueue(provider.id(), executeCall)
+        : executeCall(),
+    executionContext?.abortSignal,
+  );
 }
 
 /** Preserve evaluator context while adding this grading call's prompt metadata and cancellation. */

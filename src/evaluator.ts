@@ -625,6 +625,8 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
 
 const ABORTED_GRADING_PREFIX = 'Aborted: ';
 
+// Require both: an AbortError during a run that was not cancelled is a real bug, and so is an
+// unrelated error that surfaces just after cancellation.
 function isGradingAbort(error: unknown, abortSignal?: AbortSignal): boolean {
   return Boolean(abortSignal?.aborted && (isAbortError(error) || error === abortSignal.reason));
 }
