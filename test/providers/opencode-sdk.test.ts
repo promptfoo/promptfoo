@@ -2732,12 +2732,13 @@ describe('OpenCodeSDKProvider', () => {
     });
 
     it.each([
+      ['ephemeral', {}, false],
       ['persistent', { persist_sessions: true }, false],
       ['explicit', { session_id: 'external-session' }, false],
       ['previously cancelled explicit', { session_id: 'external-session' }, true],
     ] as const)(
       'waits for server acknowledgement before process shutdown for a %s remote session',
-      async (_mode, session, cancelFirst) => {
+      async (mode, session, cancelFirst) => {
         const registry = isolateProcessRegistry();
         const started = createDeferred<void>();
         const prompt = createDeferred<ReturnType<typeof createMockPromptResponse>>();
@@ -2768,12 +2769,17 @@ describe('OpenCodeSDKProvider', () => {
         expect(mockSessionAbort).toHaveBeenCalledOnce();
         expect(mockSessionAbort.mock.calls[0][1].signal.aborted).toBe(false);
         expect(completed).not.toHaveBeenCalled();
-        expect(mockSessionDelete).not.toHaveBeenCalled();
+        expect(mockSessionDelete).toHaveBeenCalledTimes(mode === 'ephemeral' ? 1 : 0);
+        if (mode === 'ephemeral') {
+          const deletionSignal = mockSessionDelete.mock.calls[0][1].signal;
+          expect(deletionSignal).not.toBe(mockSessionPrompt.mock.calls[0][1].signal);
+          expect(deletionSignal.aborted).toBe(false);
+        }
 
         acknowledgement.resolve({ data: true });
         await shutdown;
         expect(completed).toHaveBeenCalledOnce();
-        expect(mockSessionDelete).not.toHaveBeenCalled();
+        expect(mockSessionDelete).toHaveBeenCalledTimes(mode === 'ephemeral' ? 1 : 0);
       },
     );
 
@@ -2825,14 +2831,34 @@ describe('OpenCodeSDKProvider', () => {
       },
     );
 
+    it('settles an ephemeral remote call when the prompt transport ignores process cancellation', async () => {
+      const registry = isolateProcessRegistry();
+      const started = createDeferred<void>();
+      mockSessionPrompt.mockImplementation(() => {
+        started.resolve();
+        return new Promise(() => {});
+      });
+      mockSessionAbort.mockResolvedValue({ data: true });
+      const provider = new OpenCodeSDKProvider({ config: { baseUrl: 'http://remote.test' } });
+      const call = provider.callApi('ignore transport cancellation');
+      await started.promise;
+
+      await registry.shutdownForProcess();
+      await expect(call).resolves.toEqual({ error: 'OpenCode SDK call aborted' });
+      expect(mockSessionAbort).toHaveBeenCalledOnce();
+      expect(mockSessionDelete).toHaveBeenCalledOnce();
+    });
+
     it.each([
-      ['v1', true],
-      ['v1', false],
-      ['v2', true],
-      ['v2', false],
+      ['v1', true, true],
+      ['v1', false, true],
+      ['v2', true, true],
+      ['v2', false, true],
+      ['v1', true, false],
+      ['v2', false, false],
     ] as const)(
-      'does not start a remote prompt if process shutdown arrives while creating its session (%s, SDK honors abort: %s)',
-      async (apiVersion, honorsAbort) => {
+      'does not start a remote prompt if process shutdown arrives while creating its session (%s, SDK honors abort: %s, persistent: %s)',
+      async (apiVersion, honorsAbort, persistSessions) => {
         const registry = isolateProcessRegistry();
         await useApiVersion(apiVersion);
         const started = createDeferred<AbortSignal>();
@@ -2846,7 +2872,7 @@ describe('OpenCodeSDKProvider', () => {
           return created.promise;
         });
         const provider = new OpenCodeSDKProvider({
-          config: { baseUrl: 'http://remote.test', persist_sessions: true },
+          config: { baseUrl: 'http://remote.test', persist_sessions: persistSessions },
         });
         const call = provider.callApi('pending');
         const signal = await started.promise;

@@ -1369,13 +1369,29 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
   private getHistorySignal(
     caller: AbortSignal | undefined,
-    remoteStateful: boolean,
+    remote: boolean,
   ): AbortSignal | undefined {
-    if (!remoteStateful) {
+    if (!remote) {
       return caller;
     }
     const processSignal = this.processTermination.signal;
     return caller ? AbortSignal.any([caller, processSignal]) : processSignal;
+  }
+
+  private promptSession(
+    client: OpenCodeClient,
+    parameters: Record<string, unknown>,
+    remote: boolean,
+  ): Promise<OpenCodeSdkResult<OpenCodePromptResponse>> {
+    if (!remote) {
+      return client.session.prompt(parameters);
+    }
+    const signal = this.processTermination.signal;
+    const request =
+      this.opencodeModule?.apiVersion === 'v2'
+        ? client.session.prompt(parameters, { signal })
+        : client.session.prompt({ ...parameters, signal });
+    return this.waitForRequest(request, signal);
   }
 
   private async abortRemoteSession(
@@ -1831,13 +1847,36 @@ export class OpenCodeSDKProvider implements ApiProvider {
     }
   }
 
-  private discardCancelledSession(session: OpenCodeSessionHandle, client: OpenCodeClient): void {
+  private deleteCancelledSession(
+    session: OpenCodeSessionHandle,
+    client: OpenCodeClient | undefined,
+  ): Promise<void> {
     const signal = AbortSignal.timeout(SESSION_ABORT_TIMEOUT_MS);
-    void this.waitForRequest(this.deleteSession(session, client, signal), signal).catch((error) => {
-      logger.debug(`Failed to delete cancelled OpenCode session ${session.id}`, {
-        error: this.formatCallError(error, this.config),
+    return this.waitForRequest(this.deleteSession(session, client, signal), signal).catch(
+      (error) => {
+        logger.debug(`Failed to delete cancelled OpenCode session ${session.id}`, {
+          error: this.formatCallError(error, this.config),
+        });
+      },
+    );
+  }
+
+  private async cleanupEphemeralSession(
+    session: OpenCodeSessionHandle,
+    client: OpenCodeClient | undefined,
+    config: OpenCodeSDKConfig,
+  ): Promise<void> {
+    try {
+      if (this.processTermination.signal.aborted) {
+        await this.deleteCancelledSession(session, client);
+      } else {
+        await this.deleteSession(session, client);
+      }
+    } catch (error) {
+      logger.debug(`Failed to delete non-persistent session ${session.id}`, {
+        error: this.formatCallError(error, config),
       });
-    });
+    }
   }
 
   private buildAbortSessionParameters(
@@ -2042,8 +2081,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     if (!this.client || !this.opencodeModule) {
       throw new Error('OpenCode SDK client is not initialized');
     }
-    const processSignal =
-      config.baseUrl && config.persist_sessions ? this.processTermination.signal : undefined;
+    const processSignal = config.baseUrl ? this.processTermination.signal : undefined;
     processSignal?.throwIfAborted();
     const client = this.client;
 
@@ -2078,7 +2116,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
       }
       const session = { id: sessionId, query: sessionQuery };
       if (processSignal?.aborted) {
-        this.discardCancelledSession(session, client);
+        void this.deleteCancelledSession(session, client);
         processSignal.throwIfAborted();
       }
       if (config.persist_sessions) {
@@ -2549,10 +2587,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
     const { config, isTempDir, workingDir } = this.prepareCall(context);
     // A server started by this call keeps its configuration after later calls replace it.
     this.rememberCredentials(config);
-    const remoteStateful = Boolean(
-      config.baseUrl && (config.session_id || config.persist_sessions),
-    );
-    if (remoteStateful) {
+    const remote = Boolean(config.baseUrl);
+    if (remote) {
       this.activeRemoteCalls++;
       providerRegistry.register(this);
     }
@@ -2642,16 +2678,12 @@ export class OpenCodeSDKProvider implements ApiProvider {
             session,
             config,
             abortSignal,
-            remoteStateful,
+            remote,
           );
           abortListener = cancellation.listener;
           releaseRemoteSession = cancellation.releaseRemote;
 
-          const response = remoteStateful
-            ? await (this.opencodeModule?.apiVersion === 'v2'
-                ? client.session.prompt(promptOptions, { signal: processSignal })
-                : client.session.prompt({ ...promptOptions, signal: processSignal }))
-            : await client.session.prompt(promptOptions);
+          const response = await this.promptSession(client, promptOptions, remote);
           // The prompt has returned, so an abort from here on must not ask the
           // server to kill the session it already answered.
           if (abortListener && abortSignal) {
@@ -2678,7 +2710,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
           // skipped whenever the skill tool is denied and no skill parts can exist.
           let allSessionParts: OpenCodePromptPart[] = [];
           if (this.isSkillToolEnabled(config)) {
-            const historySignal = this.getHistorySignal(abortSignal, remoteStateful);
+            const historySignal = this.getHistorySignal(abortSignal, remote);
             try {
               allSessionParts = await this.fetchCurrentPromptParts(
                 client,
@@ -2715,20 +2747,14 @@ export class OpenCodeSDKProvider implements ApiProvider {
       }
       releaseRemoteSession?.();
       if (ephemeralSession) {
-        try {
-          await this.deleteSession(ephemeralSession, sessionClient);
-        } catch (err) {
-          logger.debug(`Failed to delete non-persistent session ${ephemeralSession.id}`, {
-            error: this.formatCallError(err, config),
-          });
-        }
+        await this.cleanupEphemeralSession(ephemeralSession, sessionClient, config);
       }
 
       // Clean up temp directory without masking the call result on cleanup failure.
       if (isTempDir && workingDir) {
         await this.removeTempDir(workingDir);
       }
-      if (remoteStateful && --this.activeRemoteCalls === 0) {
+      if (remote && --this.activeRemoteCalls === 0) {
         this.updateRegistry();
       }
     }
