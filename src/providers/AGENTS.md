@@ -13,7 +13,7 @@ Each provider:
 
 ## Provider Lifecycle & Cleanup
 
-Evaluations run inside `providerRegistry.withEvaluation()` (`src/providers/providerRegistry.ts`). A provider or registered resource is released after its own last evaluation finishes. Independent evaluations keep running; a new caller of the same provider waits for its preceding cleanup to settle. Nested evaluation entry points share one ownership scope.
+Evaluations run inside `providerRegistry.withEvaluation()` (`src/providers/providerRegistry.ts`). A provider or registered resource stays open until its last evaluation and any standalone calls using it finish. Independent evaluations keep running; a new caller of the same provider waits for its preceding cleanup to settle. Nested evaluation entry points share one ownership scope.
 
 **If your provider allocates resources** (Python workers, connections, child processes):
 

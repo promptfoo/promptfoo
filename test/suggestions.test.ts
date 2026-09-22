@@ -48,6 +48,38 @@ describe('generatePrompts', () => {
     expect(getDefaultProviders).not.toHaveBeenCalled();
   });
 
+  it('keeps a standalone suggestions provider open when a concurrent evaluation finishes', async () => {
+    const started = deferred();
+    const finish = deferred();
+    const provider = Object.assign(createMockProvider({ id: 'standalone-suggestions' }), {
+      shutdown: vi.fn(async () => {}),
+    });
+    vi.mocked(provider.callApi).mockImplementation(async () => {
+      started.resolve();
+      await finish.promise;
+      return { output: 'variant' };
+    });
+    useSuggestionProvider(provider);
+    providerRegistry.register(provider);
+    const generating = generatePrompts('original', 1);
+    try {
+      await started.promise;
+      await providerRegistry.withEvaluation(() =>
+        providerRegistry.withProvider(provider, async () => {}),
+      );
+      expect(provider.shutdown).not.toHaveBeenCalled();
+
+      finish.resolve();
+      await expect(generating).resolves.toMatchObject({ prompts: ['variant'] });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(provider.shutdown).toHaveBeenCalledOnce();
+    } finally {
+      finish.resolve();
+      await Promise.allSettled([generating]);
+      providerRegistry.unregister(provider);
+    }
+  });
+
   it('stops waiting for a reused provider without dispatching after its cleanup finally settles', async () => {
     const cleanupStarted = deferred();
     const releaseCleanup = deferred();
