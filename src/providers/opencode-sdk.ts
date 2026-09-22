@@ -629,13 +629,9 @@ function describeOpenCodeError(
     ].includes(candidateName)
       ? candidateName
       : undefined;
-  // Untagged gateway bodies can contain arbitrary status fields; the SDK's
-  // sibling Response carries the authoritative transport status for those.
+  // A gateway body can imitate an SDK tag; its sibling Response is authoritative.
   const safeStatus =
-    (candidateName !== 'APIError' && formatStatus(fallbackStatus)) ||
-    formatStatus(item.statusCode) ||
-    formatStatus(data?.statusCode) ||
-    formatStatus(fallbackStatus);
+    formatStatus(fallbackStatus) || formatStatus(item.statusCode) || formatStatus(data?.statusCode);
   return (
     [name, safeStatus, formatMessage(message)].filter(Boolean).join(': ') ||
     'Unknown OpenCode error'
@@ -1193,6 +1189,12 @@ function openCodeConfigHasCompoundMcpCommand(config: OpenCodeSDKConfig): boolean
       if (/^(?:pwsh|powershell)$/.test(executable)) {
         return options.some((option) =>
           /^-(?:c|command|e|enc|encodedcommand)(?:$|[=:])/i.test(option),
+        );
+      }
+      if (/^(?:jq|gojq|jaq|yq)$/.test(executable)) {
+        return (
+          !options.length ||
+          options.some((option) => !/^(?:--(?:help|version)|-[hV])$/.test(option))
         );
       }
       if (/^(?:npx|npm|pnpm|yarn)$/.test(executable)) {
@@ -3435,8 +3437,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     }
     const item = error as Record<string, unknown>;
     const isSdkApiError = (typeof item.name === 'string' ? item.name : item._tag) === 'APIError';
-    // The generated SDK leaves a gateway's non-2xx JSON untagged. Inspect its
-    // recognized error fields only when the sibling Response confirms HTTP 429.
+    // Inspect a gateway error only when its actual response confirms HTTP 429.
     if (!isSdkApiError && fallbackStatus !== 429) {
       return undefined;
     }
@@ -3444,12 +3445,13 @@ export class OpenCodeSDKProvider implements ApiProvider {
       item.data && typeof item.data === 'object'
         ? (item.data as Record<string, unknown>)
         : undefined;
-    const status = isSdkApiError
-      ? [item.statusCode, data?.statusCode, fallbackStatus].find(
-          (value) =>
-            typeof value === 'number' && Number.isInteger(value) && value >= 100 && value <= 599,
-        )
-      : fallbackStatus;
+    const status = [
+      fallbackStatus,
+      ...(isSdkApiError ? [item.statusCode, data?.statusCode] : []),
+    ].find(
+      (value) =>
+        typeof value === 'number' && Number.isInteger(value) && value >= 100 && value <= 599,
+    );
     if (status !== 429) {
       return undefined;
     }

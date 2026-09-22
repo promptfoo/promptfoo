@@ -2201,10 +2201,48 @@ describe('OpenCodeSDKProvider', () => {
         }
       });
 
+      it.each(['jq', 'gojq', 'jaq', 'yq'])(
+        'withholds a credential transformed by a configured %s filter',
+        async (executable) => {
+          const secret = 'custom-gateway-private-value';
+          const transformed = Buffer.from(secret).toString('base64');
+          const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+          const provider = new OpenCodeSDKProvider({
+            config: {
+              mcp: {
+                gateway: {
+                  type: 'local',
+                  command: [executable, '-n', '$ENV.CUSTOM_GATEWAY | @base64'],
+                  environment: { CUSTOM_GATEWAY: secret },
+                },
+              },
+            },
+          });
+          const original = createMockPromptResponse([]);
+          const error = {
+            name: 'APIError',
+            data: { statusCode: 502, message: 'Filter emitted ' + transformed },
+          };
+          mockSessionPrompt.mockResolvedValueOnce({ error }).mockResolvedValueOnce({
+            data: { ...original.data, info: { ...original.data.info, error } },
+          });
+          for (const prompt of ['SDK', 'assistant']) {
+            const result = await provider.callApi(prompt);
+            const logged = (errorSpy.mock.lastCall?.[1] as { error?: string } | undefined)?.error;
+            for (const diagnostic of [result.error, logged]) {
+              expect(diagnostic).toContain('HTTP 502: Upstream diagnostic withheld');
+              expect(diagnostic).not.toContain(transformed);
+              expect(diagnostic).not.toContain(secret);
+            }
+          }
+        },
+      );
+
       it.each([
         ['short npx package', ['npx', '-p', '@example/mcp', 'server']],
         ['long npx package', ['npx', '--package', '@example/mcp', 'server']],
         ['joined npx package', ['npx', '-p@example/mcp', 'server']],
+        ['jq version query', ['jq', '--version']],
         [
           'repeated npx packages named like interpreters',
           ['npx', '-p', 'node', '-p', 'python', 'server'],
@@ -8182,6 +8220,17 @@ describe('OpenCodeSDKProvider', () => {
         details: { code: 'ERR_API', message: 'insufficient_quota' },
         diagnostic: 'insufficient_quota',
       },
+      {
+        label: 'assistant malformed response body with a definitive billing code',
+        delivery: 'assistant',
+        details: {
+          statusCode: 429,
+          isRetryable: true,
+          message: 'Upstream rejected the request',
+          responseBody: '{"error":{"code":"credit_balance_exhausted"',
+        },
+        diagnostic: 'Upstream rejected the request',
+      },
     ])('stops scheduler retries for $label without exposing the raw SDK error', async (entry) => {
       const { isProviderResponseRateLimited } = await import('../../src/scheduler/types');
       const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
@@ -8476,6 +8525,26 @@ describe('OpenCodeSDKProvider', () => {
         body: 'credit_balance_exhausted',
         status: 429,
         retryAfter: '2',
+        expected: 'quota',
+      },
+      {
+        label: 'truncated raw JSON with a definitive billing code',
+        body: '{"error":{"code":"credit_balance_exhausted"',
+        status: 429,
+        retryAfter: '2',
+        expected: 'quota',
+      },
+      {
+        label: 'an APIError tag cannot replace a non-429 transport status',
+        body: { name: 'APIError', data: { statusCode: 429, code: 'credit_balance_exhausted' } },
+        status: 400,
+        retryAfter: '2',
+        expected: undefined,
+      },
+      {
+        label: 'a misleading APIError status cannot suppress a trusted 429',
+        body: { name: 'APIError', data: { statusCode: 400, code: 'credit_balance_exhausted' } },
+        status: 429,
         expected: 'quota',
       },
       {

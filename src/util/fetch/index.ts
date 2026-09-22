@@ -629,8 +629,10 @@ export function classifySdkRateLimit({
     if (body.length > 32_768) {
       body = undefined;
     } else if (body.trimStart().startsWith('{')) {
+      textBody = body;
       try {
-        body = JSON.parse(body);
+        body = JSON.parse(textBody);
+        textBody = undefined;
       } catch {
         body = undefined;
       }

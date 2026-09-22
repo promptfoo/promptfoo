@@ -1319,6 +1319,17 @@ describe('classifySdkRateLimit', () => {
       'quota',
     ],
     [{ status: 429, body: '{"error":{"code":"insufficient_quota"}}' }, 'quota'],
+    [{ status: 429, body: '{"error":{"code":"credit_balance_exhausted"' }, 'quota'],
+    [
+      {
+        status: 429,
+        body: '{"error":{"type":"billing_hard_limit_reached"',
+        headers: { 'retry-after': '1' },
+      },
+      'quota',
+    ],
+    [{ status: 429, body: '{"error":{"message":"truncated ordinary throttle"' }, 'rate_limit'],
+    [{ status: 400, body: '{"error":{"code":"credit_balance_exhausted"' }, undefined],
     [
       {
         status: 429,
