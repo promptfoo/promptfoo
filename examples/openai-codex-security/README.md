@@ -21,8 +21,8 @@ npx promptfoo eval --no-cache
 The example compares:
 
 - `security-scan` using `gpt-5.6-terra` with medium reasoning.
-- `security-scan` using `gpt-5.6-sol` with high reasoning.
-- `deep-security-scan` using `gpt-5.6-sol` with high reasoning and two workers.
+- `security-scan` using `gpt-6-sol` with high reasoning.
+- `deep-security-scan` using `gpt-6-sol` with high reasoning and two workers.
 
 Each provider returns structured findings, repository coverage, token usage, and SDK-estimated cost when available. The fixture intentionally trusts a client-controlled administrator header, creating an authorization bypass; do not deploy or expose it.
 

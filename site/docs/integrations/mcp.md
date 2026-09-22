@@ -63,8 +63,9 @@ MCP servers can be run locally or accessed remotely. For development and testing
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-5.6-luna
+  - id: openai:chat:gpt-6-luna
     config:
+      reasoning_effort: none
       apiKey: <your-api-key>
       mcp:
         enabled: true
@@ -76,8 +77,9 @@ providers:
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-5.6-luna
+  - id: openai:chat:gpt-6-luna
     config:
+      reasoning_effort: none
       apiKey: <your-api-key>
       mcp:
         enabled: true
@@ -103,8 +105,9 @@ Promptfoo allows a single provider to connect to multiple MCP servers by using t
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:chat:gpt-5.6-luna
+  - id: openai:chat:gpt-6-luna
     config:
+      reasoning_effort: none
       mcp:
         enabled: true
         servers:
@@ -159,8 +162,9 @@ providers:
           args: ['-y', '@modelcontextprotocol/server-memory']
           name: gemini-memory
 
-  - id: openai:chat:gpt-5.6-luna
+  - id: openai:chat:gpt-6-luna
     config:
+      reasoning_effort: none
       apiKey: <your-api-key>
       mcp:
         enabled: true
@@ -219,8 +223,9 @@ MCP tool calls have a default timeout of 60 seconds. For long-running tools, inc
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-5.6-luna
+  - id: openai:chat:gpt-6-luna
     config:
+      reasoning_effort: none
       mcp:
         enabled: true
         timeout: 900000 # 15 minutes in milliseconds
