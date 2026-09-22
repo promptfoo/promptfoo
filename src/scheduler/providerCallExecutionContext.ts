@@ -63,6 +63,44 @@ export function withProviderCallExecutionContext<T>(
   return providerCallExecutionContext.run(context, fn);
 }
 
+export function runProviderCallWithAbort<T>(
+  call: () => Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  if (!signal) {
+    return call();
+  }
+  signal.throwIfAborted();
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    let pendingAbort: NodeJS.Immediate | undefined;
+    const finish = (complete: () => void) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      signal.removeEventListener('abort', onAbort);
+      if (pendingAbort) {
+        clearImmediate(pendingAbort);
+      }
+      complete();
+    };
+    const onAbort = () => {
+      // Preserve a provider failure already unwinding this turn, then stop waiting.
+      pendingAbort = setImmediate(() => finish(() => reject(signal.reason)));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    try {
+      void call().then(
+        (value) => finish(() => (signal.aborted ? reject(signal.reason) : resolve(value))),
+        (error) => finish(() => reject(error)),
+      );
+    } catch (error) {
+      finish(() => reject(error));
+    }
+  });
+}
+
 export function getProviderCallTracingContext(): ProviderCallTracingContext | undefined {
   return providerCallTracingContext.getStore();
 }

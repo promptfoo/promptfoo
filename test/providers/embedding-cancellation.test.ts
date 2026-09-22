@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
+import logger from '../../src/logger';
 import { AzureEmbeddingProvider } from '../../src/providers/azure/embedding';
 import { AwsBedrockEmbeddingProvider } from '../../src/providers/bedrock';
 import { CohereEmbeddingProvider } from '../../src/providers/cohere';
@@ -12,6 +13,7 @@ import { LocalAiEmbeddingProvider } from '../../src/providers/localai';
 import { MistralEmbeddingProvider } from '../../src/providers/mistral';
 import { OllamaEmbeddingProvider } from '../../src/providers/ollama';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
+import { SageMakerEmbeddingProvider } from '../../src/providers/sagemaker';
 import { TrueFoundryEmbeddingProvider } from '../../src/providers/truefoundry';
 import { VoyageEmbeddingProvider } from '../../src/providers/voyage';
 
@@ -108,7 +110,7 @@ describe('embedding transport cancellation', () => {
     }
   });
 
-  it.each(['Bedrock', 'Vertex'] as const)(
+  it.each(['Bedrock', 'Vertex', 'SageMaker'] as const)(
     'forwards cancellation to the %s SDK request',
     async (name) => {
       const controller = new AbortController();
@@ -117,17 +119,23 @@ describe('embedding transport cancellation', () => {
       const provider =
         name === 'Bedrock'
           ? new AwsBedrockEmbeddingProvider('amazon.titan-embed-text-v1')
-          : new VertexEmbeddingProvider('gemini-embedding-001');
+          : name === 'Vertex'
+            ? new VertexEmbeddingProvider('gemini-embedding-001')
+            : new SageMakerEmbeddingProvider('endpoint', { config: { modelType: 'custom' } });
       expect(provider.supportsEmbeddingCancellation).toBe(true);
 
       if (provider instanceof AwsBedrockEmbeddingProvider) {
         vi.spyOn(provider, 'getBedrockInstance').mockResolvedValue({
           invokeModel: vi.fn((_command, options) => hold(options?.abortSignal)),
         } as never);
-      } else {
+      } else if (provider instanceof VertexEmbeddingProvider) {
         vi.spyOn(provider, 'getProjectId').mockResolvedValue('fixture-project');
         vi.spyOn(provider, 'getClientWithCredentials').mockResolvedValue({
           request: vi.fn((options) => hold(options?.signal)),
+        } as never);
+      } else {
+        vi.spyOn(provider, 'getSageMakerRuntimeInstance').mockResolvedValue({
+          send: vi.fn((_command, options) => hold(options?.abortSignal)),
         } as never);
       }
 
@@ -145,7 +153,10 @@ describe('embedding transport cancellation', () => {
             throw new Error('Embedding unexpectedly finished');
           }),
         ]);
-        expect(actual).toBe(controller.signal);
+        if (name !== 'SageMaker') {
+          expect(actual).toBe(controller.signal);
+        }
+        expect(actual.aborted).toBe(false);
         controller.abort(reason);
         expect(actual.reason).toBe(reason);
         await expect(result).rejects.toBe(reason);
@@ -155,6 +166,26 @@ describe('embedding transport cancellation', () => {
       }
     },
   );
+
+  it('cancels the SageMaker embedding delay before starting an SDK request', async () => {
+    const controller = new AbortController();
+    const reason = new Error('cancel SageMaker delay');
+    const provider = new SageMakerEmbeddingProvider('endpoint', {
+      config: { modelType: 'custom', delay: 60_000 },
+    });
+    const runtime = vi.spyOn(provider, 'getSageMakerRuntimeInstance');
+    const debug = vi.spyOn(logger, 'debug');
+    const embedding = provider.callEmbeddingApi('text', undefined, {
+      abortSignal: controller.signal,
+    });
+    void embedding.catch(() => {});
+    await vi.waitFor(() =>
+      expect(debug).toHaveBeenCalledWith(expect.stringContaining('Applying delay')),
+    );
+    controller.abort(reason);
+    await expect(embedding).rejects.toBe(reason);
+    expect(runtime).not.toHaveBeenCalled();
+  });
 
   it.each(['success', 'cancellation'] as const)(
     'shares identical Mistral requests with the same signal through %s',

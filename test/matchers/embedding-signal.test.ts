@@ -212,6 +212,46 @@ describe('embedding graders receive evaluation cancellation', () => {
     }
   });
 
+  it.each([false, true])(
+    'stops waiting for ungrouped embedding grading when the adaptive scheduler is disabled: %s',
+    async (disabled) => {
+      vi.stubEnv('PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER', String(disabled));
+      const registry = new RateLimitRegistry({ maxConcurrency: 2 });
+      const controller = new AbortController();
+      const reason = new Error('cancel ungrouped embeddings');
+      let markStarted!: () => void;
+      let release!: () => void;
+      const started = new Promise<void>((resolve) => {
+        markStarted = resolve;
+      });
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      embed.mockImplementation(async () => {
+        if (embed.mock.calls.length === 2) {
+          markStarted();
+        }
+        await held;
+        return { error: 'transport swallowed cancellation' };
+      });
+      const grading = withProviderCallExecutionContext(
+        { abortSignal: controller.signal, rateLimitRegistry: registry },
+        () => run('similarity'),
+      );
+      void grading.catch(() => {});
+      try {
+        await started;
+        controller.abort(reason);
+        await expect(grading).rejects.toBe(reason);
+      } finally {
+        release();
+        await Promise.allSettled([grading]);
+        registry.dispose();
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
   it('removes grouped embedding grading before its provider runs on cancellation', async () => {
     const queue = new ProviderGroupedCallQueue();
     const controller = new AbortController();
