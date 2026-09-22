@@ -357,7 +357,7 @@ describe('provider cleanup across overlapping evaluations', () => {
           expect(target.callApi.mock.calls.map(([prompt]) => prompt)).toEqual(['A']);
         }
         expect(target.cleanup).toHaveBeenCalledTimes(1);
-        expect(target.cleanup).toHaveBeenCalledWith({ reason: 'evaluation-complete' });
+        expect(target.cleanup).toHaveBeenCalledWith();
         expect(grader.cleanup).not.toHaveBeenCalled();
       } finally {
         finishFirst.resolve();
@@ -604,7 +604,7 @@ describe('provider cleanup across overlapping evaluations', () => {
         await runB;
         expect(aborted).toEqual([]);
         expect(active.size).toBe(0);
-        expect(shared.cleanup).toHaveBeenCalledExactlyOnceWith({ reason: 'evaluation-complete' });
+        expect(shared.cleanup).toHaveBeenCalledExactlyOnceWith();
         expect(writeMultipleOutputs).toHaveBeenCalledTimes(entry ? 1 : 2);
         const resultA = vi.mocked(writeMultipleOutputs).mock.calls[0][1];
         const resultB = returnedB ?? vi.mocked(writeMultipleOutputs).mock.calls[1][1];

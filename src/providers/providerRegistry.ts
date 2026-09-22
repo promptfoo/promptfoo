@@ -7,6 +7,11 @@ interface CleanupProvider {
   shutdown(): Promise<void>;
 }
 
+interface RegisteredCleanup {
+  provider: CleanupProvider;
+  generation: number;
+}
+
 /**
  * How long a new evaluation waits for an earlier evaluation's cleanup. A cleanup that never
  * settles must not stall every later evaluation in a long-lived process (web or MCP server).
@@ -16,7 +21,8 @@ const IDLE_RELEASE_WAIT_MS = 30_000;
 /** The part of an ApiProvider that idle cleanup uses. */
 interface IdleCleanupProvider {
   id(): string;
-  cleanup?: (context: { reason: 'evaluation-complete' }) => void | Promise<void>;
+  cleanup?: () => void | Promise<void>;
+  cleanupAfterEvaluation?: (context: { reason: 'evaluation-complete' }) => void | Promise<void>;
 }
 
 /**
@@ -25,10 +31,13 @@ interface IdleCleanupProvider {
  */
 class ProviderRegistry {
   private providers: Set<CleanupProvider> = new Set();
+  private registrationGenerations = new WeakMap<CleanupProvider, number>();
+  private nextRegistrationGeneration = 0;
   private shutdownRegistered: boolean = false;
   private activeEvaluations = 0;
   private idleCleanups = new Set<IdleCleanupProvider>();
   private idleShutdown?: Promise<void>;
+  private idleReleaseGeneration = 0;
 
   /**
    * Run `run` as an active evaluation. Registered resources, and providers passed to
@@ -44,10 +53,11 @@ class ProviderRegistry {
       return await run();
     } finally {
       if (--this.activeEvaluations === 0) {
+        const generation = ++this.idleReleaseGeneration;
         const shutdown = this.releaseIdleResources();
         this.idleShutdown = shutdown;
         await shutdown;
-        if (this.idleShutdown === shutdown) {
+        if (this.idleReleaseGeneration === generation) {
           this.idleShutdown = undefined;
         }
       }
@@ -81,9 +91,14 @@ class ProviderRegistry {
   private async releaseIdleResources(): Promise<void> {
     const providers = [...this.idleCleanups];
     this.idleCleanups.clear();
+    const registered = this.takeRegisteredResources();
     const results = await Promise.allSettled(
       providers.map((provider) =>
-        Promise.resolve().then(() => provider.cleanup?.({ reason: 'evaluation-complete' })),
+        Promise.resolve().then(() =>
+          provider.cleanupAfterEvaluation
+            ? provider.cleanupAfterEvaluation({ reason: 'evaluation-complete' })
+            : provider.cleanup?.(),
+        ),
       ),
     );
     for (const result of results) {
@@ -91,10 +106,12 @@ class ProviderRegistry {
         logger.warn('Provider cleanup failed after evaluation.', { error: result.reason });
       }
     }
-    await this.shutdownAll();
+    // An evaluation admitted after the timeout can re-register a resource for its own use.
+    await this.shutdownResources(registered, true);
   }
 
   register(provider: CleanupProvider): void {
+    this.registrationGenerations.set(provider, ++this.nextRegistrationGeneration);
     this.providers.add(provider);
 
     if (!this.shutdownRegistered) {
@@ -130,15 +147,31 @@ class ProviderRegistry {
     process.once('beforeExit', () => void shutdown('beforeExit'));
   }
 
-  async shutdownAll(): Promise<void> {
-    const providers = Array.from(this.providers);
+  private takeRegisteredResources(): RegisteredCleanup[] {
+    const providers = Array.from(this.providers, (provider) => ({
+      provider,
+      generation: this.registrationGenerations.get(provider)!,
+    }));
     // Remove only this snapshot before invoking user code, preserving registrations
     // made during asynchronous shutdown and preventing duplicate cleanup on reentry.
-    for (const provider of providers) {
+    for (const { provider } of providers) {
       this.providers.delete(provider);
     }
+    return providers;
+  }
+
+  private async shutdownResources(
+    providers: RegisteredCleanup[],
+    skipReregistered = false,
+  ): Promise<void> {
     const results = await Promise.allSettled(
-      providers.map((provider) => Promise.resolve().then(() => provider.shutdown())),
+      providers.map(({ provider, generation }) =>
+        Promise.resolve().then(() => {
+          if (!skipReregistered || this.registrationGenerations.get(provider) === generation) {
+            return provider.shutdown();
+          }
+        }),
+      ),
     );
 
     // Log any failures but don't throw - cleanup should be defensive
@@ -147,6 +180,10 @@ class ProviderRegistry {
         logger.warn(`Error shutting down provider: ${result.reason}`);
       }
     }
+  }
+
+  async shutdownAll(): Promise<void> {
+    await this.shutdownResources(this.takeRegisteredResources());
   }
 }
 

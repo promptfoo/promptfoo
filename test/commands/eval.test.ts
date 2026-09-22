@@ -2256,9 +2256,7 @@ describe('evalCommand', () => {
           const result = await evaluation;
           expect(writeMultipleOutputs).toHaveBeenCalledWith(['cleanup-results.json'], result, null);
         }
-        expect(failingProvider.cleanup).toHaveBeenCalledExactlyOnceWith({
-          reason: 'evaluation-complete',
-        });
+        expect(failingProvider.cleanup).toHaveBeenCalledExactlyOnceWith();
         expect(slowProvider.cleanup).toHaveBeenCalledOnce();
         expect(logger.warn).toHaveBeenCalledWith('Provider cleanup failed after evaluation.', {
           error: cleanupError,
