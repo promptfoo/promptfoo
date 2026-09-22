@@ -2940,22 +2940,29 @@ describe('OpenCodeSDKProvider', () => {
         },
       );
 
-      it('preserves an SDK failure when unused MCP header or environment config has malformed values', async () => {
-        mockSessionPrompt.mockRejectedValueOnce(new Error('original provider failure'));
-        const provider = new OpenCodeSDKProvider({
-          config: {
-            mcp: {
-              remote: { type: 'remote', url: 'https://example.test/mcp', headers: { sample: 123 } },
-              local: { type: 'local', command: ['example-server', null], environment: 'malformed' },
-            },
-          } as unknown as OpenCodeSDKConfig,
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+      it.each([
+        ['string', 'malformed'],
+        ['array', ['m', 'a']],
+        ['non-string entries', { sample: 123 }],
+      ])(
+        'preserves an SDK failure with malformed MCP headers or environment (%s)',
+        async (_label, malformed) => {
+          mockSessionPrompt.mockRejectedValueOnce(new Error('original provider failure'));
+          const provider = new OpenCodeSDKProvider({
+            config: {
+              mcp: {
+                remote: { type: 'remote', url: 'https://example.test/mcp', headers: malformed },
+                local: { type: 'local', command: ['example-server', null], environment: malformed },
+              },
+            } as unknown as OpenCodeSDKConfig,
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
 
-        await expect(provider.callApi('malformed credential metadata')).resolves.toMatchObject({
-          error: 'Error calling OpenCode SDK: original provider failure',
-        });
-      });
+          await expect(provider.callApi('malformed credential metadata')).resolves.toMatchObject({
+            error: 'Error calling OpenCode SDK: original provider failure',
+          });
+        },
+      );
 
       it('surfaces assistant-message errors and does not cache them as successful empty answers', async () => {
         enableCache();

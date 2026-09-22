@@ -1046,19 +1046,27 @@ function addStrongOpenCodeServerCredentials(
   if (server?.type === 'remote') {
     addStrongOpenCodeUrlCredentials(server.url, remember);
     remember(server.oauth?.clientSecret);
-    for (const [key, value] of Object.entries(server.headers ?? {})) {
-      if (
-        !/^(?:accept(?:-.+)?|content-(?:type|length|encoding)|user-agent|host|connection|cache-control|pragma|origin|referer|referrer|x-request-id|traceparent|tracestate)$/i.test(
-          key,
-        )
-      ) {
-        addOpenCodeHeaderCredentials(value, remember);
+    if (server.headers && typeof server.headers === 'object' && !Array.isArray(server.headers)) {
+      for (const [key, value] of Object.entries(server.headers)) {
+        if (
+          !/^(?:accept(?:-.+)?|content-(?:type|length|encoding)|user-agent|host|connection|cache-control|pragma|origin|referer|referrer|x-request-id|traceparent|tracestate)$/i.test(
+            key,
+          )
+        ) {
+          addOpenCodeHeaderCredentials(value, remember);
+        }
       }
     }
   } else if (server?.type === 'local') {
-    for (const [key, value] of Object.entries(server.environment ?? {})) {
-      remember(value);
-      addStrongOpenCodeEnvironmentCredentials(key, value, remember, true);
+    if (
+      server.environment &&
+      typeof server.environment === 'object' &&
+      !Array.isArray(server.environment)
+    ) {
+      for (const [key, value] of Object.entries(server.environment)) {
+        remember(value);
+        addStrongOpenCodeEnvironmentCredentials(key, value, remember, true);
+      }
     }
     addStrongOpenCodeCommandCredentials(server.command, remember);
   }
