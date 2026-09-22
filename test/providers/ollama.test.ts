@@ -1878,9 +1878,8 @@ describe.each([
       expect(fetchWithCache).toHaveBeenCalledTimes(1);
       const [url, options] = vi.mocked(fetchWithCache).mock.calls[0];
       expect(url).toContain(endpoint);
-      const body = JSON.parse(String(options?.body));
-      expect(body.think).toBe(think);
-      expect(Object.hasOwn(body, 'think')).toBe(think !== undefined);
+      // JSON has no undefined, so this also proves an unset think is omitted.
+      expect(JSON.parse(String(options?.body)).think).toBe(think);
     },
   );
 });
