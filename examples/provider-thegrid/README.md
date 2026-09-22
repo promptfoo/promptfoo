@@ -9,7 +9,7 @@ cd provider-thegrid
 
 ## Usage
 
-[The Grid AI](https://thegrid.ai) is an OpenAI-compatible inference marketplace, so this example uses the generic `openai:chat:` provider with `apiBaseUrl` — there is no separate `thegrid:` provider.
+[The Grid AI](https://thegrid.ai) is an OpenAI-compatible inference marketplace, so this example uses the generic `openai:chat:` provider with `apiBaseUrl`. There is no separate `thegrid:` provider.
 
 Model names are capability tiers (`text-standard`, `code-prime`, `agent-max`) rather than a lab's model name.
 
