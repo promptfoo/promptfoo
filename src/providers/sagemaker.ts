@@ -568,10 +568,8 @@ abstract class SageMakerGenericProvider {
   private readonly runtimeClients = new Set<SageMakerRuntimeClient>();
   private readonly runtimeClockOffsets = new Map<string, number>();
   readonly #runtimeInitializations: RuntimeInitialization[] = [];
-  private readonly runtimeRetryStates = new Map<
-    string,
-    { scope: CredentialScope; retry: RuntimeRetryState }[]
-  >();
+  readonly #retryScopeHashKey = crypto.randomBytes(32);
+  private readonly runtimeRetryStates = new Map<string, RuntimeRetryState>();
   private readonly runtimeDefaultsStates = new Map<string, RuntimeDefaultsState>();
   #retainedCredentials?: RuntimeCredentials;
   private runtimeGeneration = 0;
@@ -1216,6 +1214,31 @@ abstract class SageMakerGenericProvider {
     }
   }
 
+  private retryCredentialScopeId(scope: CredentialScope): string {
+    // This instance-local digest is used only for retry state; it never reaches response caches or logs.
+    const environment = Object.entries(scope.environment).sort(([left], [right]) =>
+      left < right ? -1 : left > right ? 1 : 0,
+    );
+    return crypto
+      .createHmac('sha256', this.#retryScopeHashKey)
+      .update(
+        JSON.stringify([
+          scope.region,
+          scope.profile,
+          scope.accessKeyId,
+          scope.secretAccessKey,
+          scope.sessionToken,
+          scope.helperEndpointPolicy,
+          scope.processEnvironment,
+          scope.files?.filepath,
+          scope.files?.configFilepath,
+          scope.credentialFileFingerprint,
+          environment,
+        ]),
+      )
+      .digest('hex');
+  }
+
   /**
    * Initialize and return the SageMaker runtime client
    */
@@ -1286,20 +1309,17 @@ abstract class SageMakerGenericProvider {
       endpoint.useDualstackEndpoint,
     ]);
     // Adaptive throttling belongs to the deployment and signer, unlike the serving host's clock.
-    const retryKey = JSON.stringify([runtimeEndpointKey, captured.deploymentEndpoint]);
-    let retries = this.runtimeRetryStates.get(retryKey);
-    if (!retries) {
-      retries = [];
-      this.runtimeRetryStates.set(retryKey, retries);
+    const retryKey = JSON.stringify([
+      runtimeEndpointKey,
+      captured.deploymentEndpoint,
+      this.retryCredentialScopeId(scope),
+    ]);
+    let retry = this.runtimeRetryStates.get(retryKey);
+    if (!retry || retry.maxAttempts !== maxAttempts) {
+      retry = { maxAttempts };
+      this.runtimeRetryStates.set(retryKey, retry);
     }
-    let retry = retries.find((candidate) => sameCredentialScope(candidate.scope, scope));
-    if (!retry) {
-      retry = { scope, retry: { maxAttempts } };
-      retries.push(retry);
-    } else if (retry.retry.maxAttempts !== maxAttempts) {
-      retry.retry = { maxAttempts };
-    }
-    const retryState = retry.retry;
+    const retryState = retry;
     const defaultsInputs = [
       ...DEFAULTS_ENV_VARS.map((name) => environment[name]),
       files.filepath,

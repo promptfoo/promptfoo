@@ -186,6 +186,39 @@ describe('SageMaker effective runtime endpoint reuse', () => {
     },
   );
 
+  it.each(['configured', 'environment'] as const)(
+    'does not retain rotated %s credentials in the retry state after idle cleanup',
+    async (source) => {
+      const provider = new SageMakerCompletionProvider('same-deployment', {
+        config: { region: 'us-east-1', modelType: 'custom' },
+      });
+      providers.add(provider);
+      const values: string[] = [];
+      for (const variant of ['first', 'second']) {
+        const accessKeyId = `RETRY_ACCESS_${variant}`;
+        const secretAccessKey = `synthetic-retry-secret-${variant}`;
+        const sessionToken = `synthetic-retry-session-${variant}`;
+        values.push(accessKeyId, secretAccessKey, sessionToken);
+        if (source === 'configured') {
+          Object.assign(provider.config, { accessKeyId, secretAccessKey, sessionToken });
+        } else {
+          vi.stubEnv('AWS_ACCESS_KEY_ID', accessKeyId);
+          vi.stubEnv('AWS_SECRET_ACCESS_KEY', secretAccessKey);
+          vi.stubEnv('AWS_SESSION_TOKEN', sessionToken);
+        }
+        await provider.getSageMakerRuntimeInstance();
+        provider.cleanup({ reason: 'evaluation-complete' });
+      }
+
+      const retryStates = Reflect.get(provider, 'runtimeRetryStates') as Map<string, unknown>;
+      expect(retryStates.size).toBe(2);
+      const retained = JSON.stringify([...retryStates]);
+      for (const value of values) {
+        expect(retained).not.toContain(value);
+      }
+    },
+  );
+
   it.each([
     'service',
     'unchanged',
