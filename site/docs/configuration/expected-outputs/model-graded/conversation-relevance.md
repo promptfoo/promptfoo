@@ -187,4 +187,4 @@ defaultTest:
 
 ## Citation
 
-This implementation is adapted from [DeepEval's Turn Relevancy metric](https://deepeval.com/docs/metrics-turn-relevancy) (formerly Conversation Relevancy).
+This implementation is adapted from DeepEval's [Turn Relevancy metric](https://deepeval.com/docs/metrics-turn-relevancy), previously called Conversation Relevancy.

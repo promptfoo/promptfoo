@@ -69,7 +69,7 @@ tests: huggingface://datasets/rajpurkar/squad
 | `subset`  | Dataset subset (for multi-subset datasets)    | `none`      |
 | `limit`   | Maximum number of test cases to load          | `unlimited` |
 
-The loader accepts any parameter supported by the [Hugging Face dataset viewer rows API](https://huggingface.co/docs/dataset-viewer/rows). Additional parameters beyond these common ones are passed directly to the API.
+The loader passes any other parameter directly to the HuggingFace [dataset viewer `/rows` API](https://huggingface.co/docs/dataset-viewer/rows).
 
 To limit the number of test cases:
 
