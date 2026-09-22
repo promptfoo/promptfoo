@@ -1,4 +1,12 @@
-import { REDACTED, sanitizeObject, sanitizeUrl } from '../util/sanitizer';
+import {
+  isNonCredentialHeader,
+  isSecretEnvVarName,
+  isSecretField,
+  REDACTED,
+  sanitizeObject,
+  sanitizeUrl,
+  sanitizeUrlForLogging,
+} from '../util/sanitizer';
 
 /**
  * Returns a provider identifier that preserves ordinary URLs while ensuring
@@ -62,7 +70,7 @@ const TOKEN_CHARACTER = /[A-Za-z0-9._~+/=-]/;
  * anywhere. Shorter values are replaced only as whole tokens, so `api-key abc`,
  * `"api-key":"abc"`, and `user:abc@` lose the secret while longer words containing it stay intact.
  */
-export function redactCredential(text: string, credential: string): string {
+function redactCredential(text: string, credential: string): string {
   if (credential.length >= 8) {
     return text.split(credential).join(REDACTED);
   }
@@ -102,6 +110,69 @@ export function redactCredentials(text: string, credentials: Iterable<string>): 
   return redacted
     .replace(/\b(Bearer|Basic)\s+(?!\[REDACTED\])[\w.~+/=-]{8,}/gi, `$1 ${REDACTED}`)
     .replace(/\bsk-[\w-]{16,}/g, REDACTED);
+}
+
+/** Credential names per the shared sanitizer: config keys, env vars, headers, and text fields. */
+export function isCredentialName(name: string): boolean {
+  return (
+    /authorization|cookie/i.test(name) ||
+    isSecretField(name) ||
+    isSecretEnvVarName(name.replace(/\W/g, '_'))
+  );
+}
+
+/** Credential forms of every header value except headers with a standard non-credential meaning. */
+export function getHeadersCredentialForms(headers: unknown): string[] {
+  return Object.entries(headers && typeof headers === 'object' ? headers : {}).flatMap(
+    ([name, value]) =>
+      typeof value === 'string' && !isNonCredentialHeader(name)
+        ? getHeaderCredentialForms(value)
+        : [],
+  );
+}
+
+const DIAGNOSTIC_URL = /\b[a-z][a-z\d+.-]{0,31}:\/\/[^\s"'<>]+/gi;
+// `name: value`, `name=value`, and quoted or JSON-escaped `"name": "value"` fields.
+const CREDENTIAL_FIELD =
+  /(?<![\w.-])(\\?["']?)([A-Za-z_][\w.-]{0,63})\1\s{0,8}[:=]\s{0,8}(\\?["'])?/g;
+const CREDENTIAL_FIELD_END: Record<string, RegExp> = {
+  '"': /(?<!\\)"|[\r\n]/g,
+  "'": /(?<!\\)'|[\r\n]/g,
+  '\\"': /\\"|[\r\n]/g,
+  "\\'": /\\'|[\r\n]/g,
+  // Authorization values can span several tokens and comma-separated parameters; cookie values
+  // span `;`-separated pairs but cannot contain a comma.
+  authorization: /[;\r\n]/g,
+  cookie: /[,\r\n]/g,
+  bare: /[\s,;&})\]"'\\]/g,
+};
+
+/**
+ * Redact diagnostic text from an upstream service: known credentials (see `redactCredentials`),
+ * then URLs with userinfo, secret parameters, or opaque path tokens, and the values of
+ * credential-named fields that only the upstream knows. Every pattern is linear in the text length.
+ */
+export function redactDiagnosticText(text: string, credentials: Iterable<string>): string {
+  const source = redactCredentials(text, credentials).replace(DIAGNOSTIC_URL, (url) =>
+    sanitizeUrlForLogging(url),
+  );
+  let redacted = '';
+  let copied = 0;
+  for (const match of source.matchAll(CREDENTIAL_FIELD)) {
+    const [field, , name, quote] = match;
+    const start = match.index + field.length;
+    if (match.index < copied || source.startsWith(REDACTED, start) || !isCredentialName(name)) {
+      continue;
+    }
+    const end =
+      CREDENTIAL_FIELD_END[
+        quote ?? name.match(/authorization|cookie/i)?.[0].toLowerCase() ?? 'bare'
+      ];
+    end.lastIndex = start;
+    redacted += source.slice(copied, start) + REDACTED;
+    copied = end.exec(source)?.index ?? source.length;
+  }
+  return redacted + source.slice(copied);
 }
 
 /** Escape a literal before inserting it into a provider redaction expression. */
