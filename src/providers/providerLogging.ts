@@ -174,34 +174,3 @@ export function redactDiagnosticText(text: string, credentials: Iterable<string>
   }
   return redacted + source.slice(copied);
 }
-
-/** Escape a literal before inserting it into a provider redaction expression. */
-export function escapeProviderRegexLiteral(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/** Replace known provider secrets with the same marker used by structured logging. */
-export function redactProviderText(
-  value: string,
-  pattern: string | RegExp,
-  prefix?: (match: string, group: string) => string,
-): string {
-  if (typeof pattern === 'string') {
-    return value.split(pattern).join(REDACTED);
-  }
-  return value.replace(
-    pattern,
-    (match: string, group: string | number | undefined) =>
-      (prefix?.(match, typeof group === 'string' ? group : '') ?? '') + REDACTED,
-  );
-}
-
-/** Whether redaction changed only one-to-three-digit fragments of a structured value. */
-export function isShortNumericProviderRedaction(value: string, redacted: string): boolean {
-  return (
-    redacted.includes(REDACTED) &&
-    new RegExp(
-      `^${redacted.split(REDACTED).map(escapeProviderRegexLiteral).join('\\d{1,3}')}$`,
-    ).test(value)
-  );
-}

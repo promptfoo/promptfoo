@@ -18,7 +18,6 @@ import {
   extractRateLimitErrorCode,
   extractRateLimitErrorType,
   HttpRateLimitError,
-  isDefinitiveBillingCode,
   isHardQuotaCode,
   isTransientRateLimitCode,
   type SystemError,
@@ -600,99 +599,30 @@ export function rateLimitTimingFromHeaders(headers: Record<string, string>): {
   return { retryAfterMs: parsed.retryAfterMs, resetAt: parsed.resetAt };
 }
 
-/** Classify a trusted SDK HTTP status using its upstream error body and retry hints. */
+/**
+ * Classify an HTTP 429 that an SDK reported as data rather than a `Response`. Codes come from the
+ * parsed body records and from code-shaped words in free-text diagnostics; a recognized code wins
+ * over an SDK wrapper's generic one. Timing comes from the response headers.
+ */
 export function classifySdkRateLimit({
-  status,
-  body,
-  details = [],
-  isRetryable,
-  headers,
+  records,
+  texts = [],
+  headers = {},
 }: {
-  status: number;
-  body?: unknown;
-  details?: readonly Record<string, unknown>[];
-  isRetryable?: boolean;
+  records: unknown[];
+  texts?: Array<string | undefined>;
   headers?: Record<string, string>;
-}): 'quota' | 'rate_limit' | undefined {
-  if (status !== 429) {
-    return undefined;
-  }
-  const asRecord = (value: unknown): Record<string, unknown> | undefined =>
-    value && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
-  const normalized = (value: unknown): string | undefined =>
-    typeof value === 'string' && value.length <= 256 && value.trim()
-      ? value.trim().toLowerCase()
-      : undefined;
-
-  let textBody: string | undefined;
-  if (typeof body === 'string') {
-    if (body.length > 32_768) {
-      body = undefined;
-    } else if (body.trimStart().startsWith('{')) {
-      try {
-        body = JSON.parse(body);
-      } catch {
-        body = undefined;
-      }
-    } else {
-      textBody = body;
-      body = undefined;
-    }
-  }
-  const records = [asRecord(body), ...details].filter((record): record is Record<string, unknown> =>
-    Boolean(record),
-  );
-  const valuesFor = (field: 'code' | 'type') =>
-    records
-      .flatMap((record) => [asRecord(record.error)?.[field], record[field]])
-      .map(normalized)
-      .filter((value): value is string => value !== undefined);
-  const codes = valuesFor('code');
-  const types = valuesFor('type');
-  const messages = [
-    ...records.flatMap((record) => [asRecord(record.error)?.message, record.message]),
-    textBody,
-  ].filter((message): message is string => typeof message === 'string');
-  const known = (code: string) => isHardQuotaCode(code) || isTransientRateLimitCode(code);
-  const messageCodes = messages.flatMap((message) =>
-    (
-      message
-        .slice(0, 32_768)
-        .toLowerCase()
-        .match(/\b[a-z]+(?:_[a-z]+)+\b/g) ?? []
-    ).filter(known),
-  );
-  const definiteCode = [...codes, ...types, ...messageCodes].find(isDefinitiveBillingCode);
-  let inferredType: string | undefined;
-  if (isRetryable === false && ![...codes, ...types, ...messageCodes].some(known)) {
-    const patterns = [
-      [
-        'credit_balance_exhausted',
-        /\bcredit balance (?:is (?:(?:too )?low|exhausted|depleted|insufficient)|(?:has been )?(?:exhausted|depleted))\b/,
-      ],
-      [
-        'billing_hard_limit_reached',
-        /\bbilling (?:hard )?limit (?:has been |was |is )?(?:exceeded|exhausted|reached)\b/,
-      ],
-      ['billing_not_active', /\bbilling (?:is )?(?:not active|inactive)\b/],
-      ['access_terminated', /\baccess (?:has been |was |is )?terminated\b/],
-      [
-        'quota_exceeded',
-        /\b(?:(?:current |account |daily )?quota (?:has been |was |is )?(?:exceeded|exhausted|reached)|exceeded (?:your |the )?(?:current |account |daily )?quota)\b/,
-      ],
-    ] as const;
-    inferredType = patterns.find(([, pattern]) =>
-      messages.some((message) => pattern.test(message.slice(0, 32_768).toLowerCase())),
-    )?.[0];
-  }
-  const timing = headers ? rateLimitTimingFromHeaders(headers) : undefined;
+}): HttpRateLimitError {
+  const codes = [
+    ...records.map(extractRateLimitErrorCode),
+    ...texts.flatMap((text) => text?.toLowerCase().match(/\b[a-z]+(?:_[a-z]+)+\b/g) ?? []),
+  ].filter((code): code is string => Boolean(code));
   return new HttpRateLimitError({
-    status,
-    code: codes.find(known) ?? messageCodes[0] ?? codes[0],
-    type: definiteCode ?? types.find(known) ?? inferredType ?? types[0],
-    retryAfterMs: timing?.retryAfterMs,
-    resetAt: timing?.resetAt,
-  }).kind;
+    status: 429,
+    code: codes.find((code) => isHardQuotaCode(code) || isTransientRateLimitCode(code)) ?? codes[0],
+    type: records.map(extractRateLimitErrorType).find(Boolean),
+    ...rateLimitTimingFromHeaders(headers),
+  });
 }
 
 function buildHttpRateLimitError(
