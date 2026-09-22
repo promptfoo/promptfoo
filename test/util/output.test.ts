@@ -1208,13 +1208,27 @@ describe('writeOutput', () => {
     ['hello\u000bworld', 'hello world'],
     ['hello\u000cworld', 'hello world'],
     ['a' + '🚀'.repeat(300), 'a' + '🚀'.repeat(254) + '...'],
-    ['x'.repeat(520) + '\u0000', 'x'.repeat(509) + '...'],
-    ['x'.repeat(512) + '\u0001', 'x'.repeat(509) + '...'],
-    ['y'.repeat(509) + 'ABC' + '\u0000'.repeat(20), 'y'.repeat(509) + '...'],
   ])('preserves already-valid JUnit identities for %j', async (raw, expected) => {
     const suite = await junitSuiteWithNames(raw);
     expect(suite['@_name']).toBe('[' + expected + '] prompt 1');
     expect(suite.testcase['@_name']).toBe('test 1: ' + expected);
+  });
+
+  it('keeps identities distinct when an invalid character falls after the display limit', async () => {
+    const label = 'abcdefgh'.repeat(64);
+    const eval_ = new Eval({});
+    for (const providerLabel of [label, `${label}\u0000`]) {
+      await eval_.addResult(
+        createEvaluateResult({ provider: { id: 'echo', label: providerLabel } }),
+      );
+    }
+
+    const suites = new XMLParser({ ignoreAttributes: false }).parse(await createJunitXml(eval_))
+      .testsuites.testsuite;
+    expect(suites.map((suite: { '@_name': string }) => suite['@_name'])).toEqual([
+      `[${label}] prompt 1`,
+      expect.stringMatching(/^\[(?:abcdefgh){61}ab\.\.\.\] prompt 1 \([a-f0-9]{16}\)$/),
+    ]);
   });
 
   it.each([

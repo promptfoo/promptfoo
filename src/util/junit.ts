@@ -197,10 +197,10 @@ async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
     let suite = suites.get(key);
     if (!suite) {
       const rawName = provider.label || provider.id || '';
-      const inlineName = truncateText(rawName.replace(/\s+/g, ' ').trim(), MAX_JUNIT_NAME_LENGTH);
+      const normalizedRawName = rawName.replace(/\s+/g, ' ').trim();
       // Keep names that lose XML characters distinct from each other and unchanged names.
       const suffix =
-        inlineName.search(INVALID_XML_CHARACTERS) === -1
+        normalizedRawName.search(INVALID_XML_CHARACTERS) === -1
           ? ''
           : ` (${sha256(providerKey).slice(0, 16)})`;
       const providerName = normalizeInlineText(
