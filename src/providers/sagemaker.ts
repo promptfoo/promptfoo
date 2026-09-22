@@ -880,38 +880,86 @@ abstract class SageMakerGenericProvider {
   protected async getRuntimeCacheNamespace(
     inputs: ReturnType<SageMakerGenericProvider['captureRuntimeInputs']>,
   ): Promise<string | undefined> {
-    const { cacheIdentity, credentialConfig, environment, files } = inputs;
-    let secret = credentialConfig.accessKeyId && credentialConfig.secretAccessKey;
-    if (!secret && !credentialConfig.profile && !environment.AWS_PROFILE) {
-      secret = environment.AWS_ACCESS_KEY_ID && environment.AWS_SECRET_ACCESS_KEY;
+    if (this.#sagemakerRuntime && this.#sagemakerRuntime !== this.#initializedRuntime) {
+      return undefined;
     }
-    if (!secret) {
-      let profiles: Record<string, Record<string, string | undefined>>;
+    const { credentialConfig, environment, files } = inputs;
+    let accessKeyId =
+      credentialConfig.accessKeyId && credentialConfig.secretAccessKey
+        ? credentialConfig.accessKeyId
+        : undefined;
+    if (
+      !accessKeyId &&
+      !credentialConfig.profile &&
+      !environment.AWS_PROFILE &&
+      environment.AWS_ACCESS_KEY_ID &&
+      environment.AWS_SECRET_ACCESS_KEY
+    ) {
+      accessKeyId = environment.AWS_ACCESS_KEY_ID;
+    }
+    let smithyConfig: typeof import('@smithy/core/config');
+    let endpoint: RuntimeEndpoint;
+    try {
+      smithyConfig = await import('@smithy/core/config');
+      if (!accessKeyId) {
+        const profiles = await smithyConfig.parseKnownFiles({ ...files, ignoreCache: true });
+        const profile = profiles[credentialConfig.profile || environment.AWS_PROFILE || 'default'];
+        // Roles, credential processes and metadata may change identity without changing these inputs.
+        if (
+          !profile ||
+          profile.role_arn ||
+          !profile.aws_access_key_id ||
+          !profile.aws_secret_access_key
+        ) {
+          this.assertSharedFiles(inputs);
+          return undefined;
+        }
+        accessKeyId = profile.aws_access_key_id;
+      }
+      endpoint = await this.getEndpointPolicy(
+        smithyConfig,
+        'SAGEMAKER_RUNTIME',
+        environment,
+        files,
+      );
+    } catch {
+      this.assertSharedFiles(inputs);
+      return undefined;
+    }
+    this.assertSharedFiles(inputs);
+
+    let origin: string | undefined;
+    if (endpoint.url) {
       try {
-        const { parseKnownFiles } = await import('@smithy/core/config');
-        profiles = await parseKnownFiles({ ...files, ignoreCache: true });
+        const url = new URL(endpoint.url);
+        // Proxy credentials and signed or custom paths are not safe persistent cache identities.
+        if (
+          !['http:', 'https:'].includes(url.protocol) ||
+          url.username ||
+          url.password ||
+          url.search ||
+          url.hash ||
+          url.pathname !== '/'
+        ) {
+          return undefined;
+        }
+        origin = url.origin;
       } catch {
         return undefined;
       }
-      this.assertSharedFiles(inputs);
-      const profile = profiles[credentialConfig.profile || environment.AWS_PROFILE || 'default'];
-      // Roles, credential processes and metadata may change identity without changing these inputs.
-      if (
-        !profile ||
-        profile.role_arn ||
-        !profile.aws_access_key_id ||
-        !profile.aws_secret_access_key
-      ) {
-        return undefined;
-      }
-      secret = profile.aws_secret_access_key;
     }
-    // Stable across instances, without storing raw credentials or making low-entropy routing inputs guessable.
-    return crypto
-      .createHmac('sha256', secret)
-      .update('promptfoo:sagemaker-cache-namespace:v1\0')
-      .update(JSON.stringify(cacheIdentity))
-      .digest('hex');
+    // An AWS access-key ID identifies the signer; its secret and session token never enter the cache key.
+    return crypto.hash(
+      'sha256',
+      JSON.stringify([
+        'promptfoo:sagemaker-cache-namespace:v1',
+        accessKeyId,
+        origin,
+        endpoint.useFipsEndpoint,
+        endpoint.useDualstackEndpoint,
+      ]),
+      'hex',
+    );
   }
 
   #trimRuntimeCacheEntries(entries: Map<string, RuntimeCacheEntry>) {
@@ -1053,17 +1101,7 @@ abstract class SageMakerGenericProvider {
     const processEnvironment = hasStaticCredentials
       ? undefined
       : hashCredentialProcessEnvironment();
-    const cacheIdentity = [
-      credentialConfig.profile,
-      credentialConfig.accessKeyId,
-      credentialConfig.secretAccessKey,
-      credentialConfig.sessionToken,
-      ...CREDENTIAL_ENV_VARS.map((name) => environment[name]),
-      environment.AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME,
-      sharedFiles.fingerprint,
-    ];
     return {
-      cacheIdentity,
       credentialConfig,
       environment,
       files,
@@ -1457,6 +1495,10 @@ abstract class SageMakerGenericProvider {
     if (generation !== this.runtimeGeneration) {
       throw new Error('SageMaker provider was shut down during the request');
     }
+  }
+
+  cleanupAfterEvaluation(context: ProviderCleanupContext): void {
+    this.cleanup(context);
   }
 
   cleanup(context?: ProviderCleanupContext): void {

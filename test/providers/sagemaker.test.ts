@@ -588,6 +588,8 @@ module.exports = transform;
         expect(await provider.callApi('A quiet garden')).toMatchObject({ output: 'injected' });
       }
       expect(send).toHaveBeenCalledTimes(2);
+      expect(mockCacheGet).not.toHaveBeenCalled();
+      expect(mockCacheSet).not.toHaveBeenCalled();
       expect(SageMakerRuntimeClient).not.toHaveBeenCalled();
       expect(credentials).not.toHaveBeenCalled();
     });
@@ -1351,6 +1353,7 @@ describe.each(['completion', 'embedding'] as const)(
         vi.stubEnv('AWS_ACCESS_KEY_ID', undefined);
         vi.stubEnv('AWS_SECRET_ACCESS_KEY', undefined);
         vi.stubEnv('AWS_SESSION_TOKEN', undefined);
+        const hash = vi.spyOn(crypto, 'hash');
         const entries = new Map<string, string>();
         mockCacheGet.mockImplementation(async (key: string) => entries.get(key));
         mockCacheSet.mockImplementation(async (key: string, value: string) =>
@@ -1413,6 +1416,14 @@ describe.each(['completion', 'embedding'] as const)(
           for (const key of keys) {
             expect(key).not.toMatch(/SYNTHETIC|private-key|session-token|cache-proof/);
           }
+          const namespaceInputs = hash.mock.calls
+            .map(([, input]) => String(input))
+            .filter((input) => input.includes('promptfoo:sagemaker-cache-namespace:v1'));
+          expect(namespaceInputs.length).toBeGreaterThan(0);
+          for (const input of namespaceInputs) {
+            expect(input).toMatch(/SYNTHETIC_(FIRST|SECOND)/);
+            expect(input).not.toMatch(/private-key|session-token/);
+          }
         } finally {
           for (const provider of providers) {
             provider.cleanup();
@@ -1421,6 +1432,37 @@ describe.each(['completion', 'embedding'] as const)(
         }
       },
     );
+
+    it.each([
+      'https://user:password@example.invalid/',
+      'https://example.invalid/?token=secret',
+      'https://example.invalid/private-routing-token',
+    ])('skips persistent caching for a sensitive custom runtime endpoint %s', async (endpoint) => {
+      vi.stubEnv('AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME', endpoint);
+      vi.stubEnv('AWS_IGNORE_CONFIGURED_ENDPOINT_URLS', 'false');
+      const provider = createProvider({
+        region: 'us-east-1',
+        accessKeyId: 'SYNTHETIC_ROUTE',
+        secretAccessKey: 'synthetic-route-secret',
+      });
+      mockCacheGet.mockResolvedValue(
+        JSON.stringify({ output: 'should not be reused', embedding: [0] }),
+      );
+      mockSend.mockResolvedValue({
+        Body: new TextEncoder().encode('{"output":"fresh","embedding":[1]}'),
+      });
+      try {
+        const result = await call(provider);
+        expect(result).toMatchObject(
+          kind === 'completion' ? { output: 'fresh' } : { embedding: [1] },
+        );
+        expect(result.cached).not.toBe(true);
+        expect(mockCacheGet).not.toHaveBeenCalled();
+        expect(mockCacheSet).not.toHaveBeenCalled();
+      } finally {
+        provider.cleanup();
+      }
+    });
 
     it.each(['unknown default', 'role'] as const)(
       'does not read or write shared cache entries when the %s credentials cannot be pinned',
