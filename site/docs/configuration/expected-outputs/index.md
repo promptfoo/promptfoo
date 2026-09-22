@@ -21,6 +21,10 @@ Assertions are used to compare the LLM output against expected values or conditi
 
 Different types of assertions can be used to validate the output in various ways, such as checking for equality, JSON structure, similarity, or custom functions.
 
+Red team strategies can grade responses during an attack. The final assertion check reuses a strategy grade only when the configured strategy, plugin, assertion, and recorded input/output match the returned result. Stale grades and older results without this binding receive fresh grading. When a new grade is needed, red team assertions use the final transformed attack input, then the provider-reported prompt (a nonempty string or the last user message in a chat array), then the last saved user message, falling back to the original test prompt when none is available. Prior user/assistant conversation is included as grading context, except for Hydra and Goblin, which grade the current turn without adding history. System and tool messages are not treated as user input.
+
+When no final strategy prompt is available, a provider-reported chat array without a usable user message uses the original prompt fallback instead of unrelated saved messages. Historical strategy grading usage is counted once across matching assertions, including assertion sets. Replayed grading responses count their full token usage as cached.
+
 In machine learning, "Accuracy" is a metric that measures the proportion of correct predictions made by a model out of the total number of predictions. With `promptfoo`, accuracy is defined as the proportion of prompts that produce the expected or desired output.
 
 ## Using assertions
@@ -136,7 +140,7 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [javascript](/docs/configuration/expected-outputs/javascript)                                                      | provided Javascript function validates the output                  |
 | [python](/docs/configuration/expected-outputs/python)                                                              | provided Python function validates the output                      |
 | [ruby](/docs/configuration/expected-outputs/ruby)                                                                  | provided Ruby function validates the output                        |
-| [webhook](/docs/configuration/expected-outputs/deterministic/#webhook)                                             | provided webhook returns \{pass: true\}                            |
+| [webhook](/docs/configuration/expected-outputs/deterministic/#webhook)                                             | webhook returns a boolean `pass` and an optional score from 0 to 1 |
 | [rouge-n](/docs/configuration/expected-outputs/deterministic/#rouge-n)                                             | Rouge-N score is above a given threshold (default 0.75)            |
 | [bleu](/docs/configuration/expected-outputs/deterministic/#bleu)                                                   | BLEU score is above a given threshold (default 0.5)                |
 | [gleu](/docs/configuration/expected-outputs/deterministic/#gleu)                                                   | GLEU >= threshold (default 0.5); empty output scores 0             |

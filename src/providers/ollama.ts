@@ -58,7 +58,15 @@ interface OllamaCompletionOptions {
 
   // Top-level API parameters (siblings of `options`, not members of it).
   tools?: any[]; // Support for function calling/tools
-  think?: boolean; // Top-level parameter for thinking/reasoning
+  // Ollama 0.34+ accepts a boolean or a thinking level.
+  think?: boolean | 'low' | 'medium' | 'high' | 'max';
+  // Structured outputs: 'json' or a JSON schema object.
+  format?: 'json' | Record<string, any>;
+  // /api/generate only.
+  suffix?: string;
+  system?: string;
+  template?: string;
+  raw?: boolean;
   keep_alive?: string | number;
   truncate?: boolean; // /api/embed only
   dimensions?: number; // /api/embed only
@@ -109,6 +117,11 @@ const OllamaCompletionOptionKeys = new Set<keyof OllamaCompletionOptions>([
   'keep_alive',
   'truncate',
   'dimensions',
+  'format',
+  'suffix',
+  'system',
+  'template',
+  'raw',
   'passthrough',
 ]);
 
@@ -123,7 +136,37 @@ const OllamaNonNestedOptionKeys = new Set<string>([
   'keep_alive',
   'truncate',
   'dimensions',
+  'format',
+  'suffix',
+  'system',
+  'template',
+  'raw',
 ]);
+
+/**
+ * Which top-level (non-`options`) keys each endpoint actually accepts. Anything outside
+ * its endpoint's set is reported as dropped rather than vanishing silently: `suffix` on
+ * a chat provider, or `tools` on a completion provider, is a config mistake worth
+ * surfacing.
+ */
+const OllamaEndpointTopLevelKeys: Record<'completion' | 'chat' | 'embedding', Set<string>> = {
+  completion: new Set([
+    'think',
+    'keep_alive',
+    'format',
+    'truncate',
+    'suffix',
+    'system',
+    'template',
+    'raw',
+  ]),
+  chat: new Set(['think', 'keep_alive', 'format', 'truncate', 'tools']),
+  // NOTE: every key listed here must actually be forwarded by that provider, otherwise
+  // it is silently dropped instead of warned about. `format` is deliberately absent from
+  // embedding: /api/embed returns vectors, so structured output is meaningless there and
+  // callEmbeddingApi does not send it.
+  embedding: new Set(['keep_alive', 'truncate', 'dimensions']),
+};
 
 /**
  * Keys that are never user-supplied Ollama options, so reporting them as "dropped" would
@@ -161,13 +204,24 @@ const OllamaDeprecatedOptionKeys = new Set<string>([
  * previously excluded only `tools`, so `think` and the whole `passthrough` object were
  * also sent as junk `options` members.
  */
-function buildOllamaOptions(config: OllamaCompletionOptions): Record<string, any> {
+function buildOllamaOptions(
+  config: OllamaCompletionOptions,
+  endpoint: 'completion' | 'chat' | 'embedding',
+): Record<string, any> {
   const dropped: string[] = [];
+  const wrongEndpoint: string[] = [];
   const deprecated: string[] = [];
+  const supportedTopLevel = OllamaEndpointTopLevelKeys[endpoint];
   const options = Object.keys(config).reduce<Record<string, any>>((acc, key) => {
     const optionName = key as keyof OllamaCompletionOptions;
     if (OllamaCompletionOptionKeys.has(optionName)) {
-      if (!OllamaNonNestedOptionKeys.has(key)) {
+      if (OllamaNonNestedOptionKeys.has(key)) {
+        // A valid Ollama key, but not one this endpoint accepts -- it would otherwise be
+        // neither forwarded nor reported.
+        if (key !== 'passthrough' && !supportedTopLevel.has(key)) {
+          wrongEndpoint.push(key);
+        }
+      } else {
         acc[optionName] = config[optionName];
         if (OllamaDeprecatedOptionKeys.has(key)) {
           deprecated.push(key);
@@ -178,6 +232,12 @@ function buildOllamaOptions(config: OllamaCompletionOptions): Record<string, any
     }
     return acc;
   }, {});
+
+  if (wrongEndpoint.length > 0) {
+    logger.warn(
+      `[Ollama] Ignoring config keys that the ${endpoint} endpoint does not accept: ${wrongEndpoint.join(', ')}`,
+    );
+  }
 
   if (dropped.length > 0) {
     // Unrecognized keys are silently discarded, which is how `max_tokens` (an OpenAI
@@ -305,6 +365,7 @@ interface OllamaCompletionJsonL {
   sample_count?: number;
   sample_duration?: number;
   prompt_eval_count?: number;
+  prompt_eval_cached_count?: number;
   prompt_eval_duration?: number;
   eval_count?: number;
   eval_duration?: number;
@@ -333,9 +394,53 @@ interface OllamaChatJsonL {
   sample_count?: number;
   sample_duration?: number;
   prompt_eval_count?: number;
+  prompt_eval_cached_count?: number;
   prompt_eval_duration?: number;
   eval_count?: number;
   eval_duration?: number;
+}
+
+/**
+ * Converts `function.arguments` back to an object on outgoing messages.
+ *
+ * Responses are normalized to the OpenAI shape, where `arguments` is a JSON *string*
+ * (so `is-valid-openai-tools-call` works). Ollama's own /api/chat rejects that shape on
+ * the way back in with HTTP 400, so feeding a previous turn's tool call into a multi-turn
+ * conversation fails unless it is converted back.
+ */
+function normalizeOllamaRequestMessages(messages: unknown): unknown {
+  // parseChatPrompt returns whatever the prompt parsed to, not necessarily an array. A
+  // non-array is passed through untouched so Ollama's own validation reports it, rather
+  // than this helper throwing an opaque TypeError first.
+  if (!Array.isArray(messages)) {
+    return messages;
+  }
+  return messages.map((message) => {
+    const toolCalls = message?.tool_calls;
+    if (!Array.isArray(toolCalls)) {
+      return message;
+    }
+    return {
+      ...message,
+      tool_calls: toolCalls.map((call: any) => {
+        const args = call?.function?.arguments;
+        if (typeof args !== 'string') {
+          return call;
+        }
+        try {
+          const parsed = JSON.parse(args);
+          // Only objects are valid here; leave anything else alone so Ollama can
+          // report a meaningful error rather than us silently reshaping it.
+          if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            return call;
+          }
+          return { ...call, function: { ...call.function, arguments: parsed } };
+        } catch {
+          return call;
+        }
+      }),
+    };
+  });
 }
 
 /**
@@ -345,14 +450,20 @@ interface OllamaChatJsonL {
  */
 function collectOllamaToolCalls(lines: OllamaChatJsonL[]) {
   return lines
-    .flatMap((chunk: OllamaChatJsonL) => chunk.message?.tool_calls ?? [])
+    .flatMap((chunk: OllamaChatJsonL) => {
+      const calls = chunk.message?.tool_calls;
+      // A malformed or proxied response can put anything here. Skip what we cannot
+      // read rather than throwing a TypeError that surfaces as an opaque parse error.
+      return Array.isArray(calls) ? calls : [];
+    })
+    .filter((call: any) => typeof call?.function?.name === 'string')
     .map((call: { function: { name: string; arguments: any } }) => ({
       function: {
         name: call.function.name,
         arguments:
           typeof call.function.arguments === 'string'
             ? call.function.arguments
-            : JSON.stringify(call.function.arguments),
+            : JSON.stringify(call.function.arguments ?? {}),
       },
     }));
 }
@@ -363,7 +474,11 @@ function collectOllamaToolCalls(lines: OllamaChatJsonL[]) {
  * (see getTokenUsage in src/providers/openai/util.ts).
  */
 function extractOllamaTokenUsage(
-  finalChunk: { prompt_eval_count?: number; eval_count?: number },
+  finalChunk: {
+    prompt_eval_count?: number;
+    prompt_eval_cached_count?: number;
+    eval_count?: number;
+  },
   cached: boolean,
 ): Partial<TokenUsage> | undefined {
   if (finalChunk.prompt_eval_count === undefined && finalChunk.eval_count === undefined) {
@@ -375,9 +490,24 @@ function extractOllamaTokenUsage(
   if (cached) {
     return { cached: total, total };
   }
-  // numRequests is intentionally omitted: tokenUsageUtils increments it by 1 when an
-  // update does not specify it, so setting it here would be a no-op.
-  return { prompt, completion, total };
+  // Ollama 0.34+ reports prompt tokens served from its own KV cache. This is a server-side
+  // prefix cache hit, not a promptfoo cache hit, so it belongs in completionDetails rather
+  // than tokenUsage.cached (which would make the row look like a promptfoo cache hit).
+  const cacheRead = finalChunk.prompt_eval_cached_count;
+  if (cacheRead !== undefined) {
+    return {
+      prompt,
+      completion,
+      total,
+      completionDetails: { cacheReadInputTokens: cacheRead },
+      numRequests: 1,
+    };
+  }
+  // Explicit: accumulateTokenUsage defaults incrementRequests to false, and matcher
+  // paths (src/matchers/rag.ts, similarity.ts) call the two-arg form, so an omitted
+  // count reports 0 grader requests. Verified this does not double-count on the
+  // evaluator path, which infers 1 when absent.
+  return { prompt, completion, total, numRequests: 1 };
 }
 
 /**
@@ -444,18 +574,27 @@ export class OllamaCompletionProvider implements ApiProvider {
       return result;
     };
 
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt), resultExtractor);
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
   }
 
-  private async callApiInternal(prompt: string): Promise<ProviderResponse> {
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     const { passthroughOptions, passthroughRest } = splitOllamaPassthrough(this.config);
     const params = {
       model: this.modelName,
       prompt,
       stream: false,
-      options: { ...buildOllamaOptions(this.config), ...passthroughOptions },
+      options: { ...buildOllamaOptions(this.config, 'completion'), ...passthroughOptions },
       ...(this.config.think === undefined ? {} : { think: this.config.think }),
       ...(this.config.keep_alive === undefined ? {} : { keep_alive: this.config.keep_alive }),
+      ...(this.config.format === undefined ? {} : { format: this.config.format }),
+      ...(this.config.truncate === undefined ? {} : { truncate: this.config.truncate }),
+      ...(this.config.suffix === undefined ? {} : { suffix: this.config.suffix }),
+      ...(this.config.system === undefined ? {} : { system: this.config.system }),
+      ...(this.config.template === undefined ? {} : { template: this.config.template }),
+      ...(this.config.raw === undefined ? {} : { raw: this.config.raw }),
       ...passthroughRest,
     };
 
@@ -477,6 +616,7 @@ export class OllamaCompletionProvider implements ApiProvider {
         },
         getRequestTimeoutMs(),
         'text',
+        context?.bustCache ?? context?.debug,
       );
     } catch (err) {
       return {
@@ -500,10 +640,10 @@ export class OllamaCompletionProvider implements ApiProvider {
 
       let output = lines
         .map((parsed: OllamaCompletionJsonL) => {
-          if (parsed.response) {
-            return parsed.response;
-          }
-          return null;
+          // Only strings concatenate meaningfully; anything else would render as
+          // "[object Object]" in the eval output.
+          const response = parsed.response;
+          return typeof response === 'string' && response ? response : null;
         })
         .filter((s: string | null) => s !== null)
         .join('');
@@ -512,7 +652,10 @@ export class OllamaCompletionProvider implements ApiProvider {
       // Without this it is dropped, and a `num_predict` budget spent inside the thinking
       // block yields an empty output with no explanation.
       const thinking = lines
-        .map((parsed: OllamaCompletionJsonL) => parsed.thinking ?? null)
+        .map((parsed: OllamaCompletionJsonL) => {
+          const trace = parsed.thinking;
+          return typeof trace === 'string' ? trace : null;
+        })
         .filter((s: string | null) => s !== null)
         .join('');
 
@@ -598,15 +741,19 @@ export class OllamaChatProvider implements ApiProvider {
     prompt: string,
     context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
-    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+    const messages = normalizeOllamaRequestMessages(
+      parseChatPrompt<unknown>(prompt, [{ role: 'user', content: prompt }]),
+    );
 
     const { passthroughOptions, passthroughRest } = splitOllamaPassthrough(this.config);
     const params: any = {
       model: this.modelName,
       messages,
-      options: { ...buildOllamaOptions(this.config), ...passthroughOptions },
+      options: { ...buildOllamaOptions(this.config, 'chat'), ...passthroughOptions },
       ...(this.config.think === undefined ? {} : { think: this.config.think }),
       ...(this.config.keep_alive === undefined ? {} : { keep_alive: this.config.keep_alive }),
+      ...(this.config.format === undefined ? {} : { format: this.config.format }),
+      ...(this.config.truncate === undefined ? {} : { truncate: this.config.truncate }),
       ...passthroughRest,
     };
 
@@ -670,10 +817,10 @@ export class OllamaChatProvider implements ApiProvider {
       // Collect all content chunks
       const contentParts = lines
         .map((parsed: OllamaChatJsonL) => {
-          if (parsed.message?.content) {
-            return parsed.message.content;
-          }
-          return null;
+          // Only strings concatenate meaningfully; anything else would render as
+          // "[object Object]" in the eval output.
+          const content = parsed.message?.content;
+          return typeof content === 'string' && content ? content : null;
         })
         .filter((s: string | null) => s !== null);
 
@@ -684,7 +831,10 @@ export class OllamaChatProvider implements ApiProvider {
       // with no `think` flag sent, so dropping it silently loses the entire answer
       // whenever a `num_predict` budget is spent inside the thinking block.
       const thinking = lines
-        .map((parsed: OllamaChatJsonL) => parsed.message?.thinking ?? null)
+        .map((parsed: OllamaChatJsonL) => {
+          const trace = parsed.message?.thinking;
+          return typeof trace === 'string' ? trace : null;
+        })
         .filter((s: string | null) => s !== null)
         .join('');
 
@@ -741,7 +891,7 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
       truncate: this.config.truncate ?? false,
       ...(this.config.dimensions === undefined ? {} : { dimensions: this.config.dimensions }),
       ...(this.config.keep_alive === undefined ? {} : { keep_alive: this.config.keep_alive }),
-      options: { ...buildOllamaOptions(this.config), ...passthroughOptions },
+      options: { ...buildOllamaOptions(this.config, 'embedding'), ...passthroughOptions },
       ...passthroughRest,
     };
 

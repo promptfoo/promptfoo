@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { getGradingInputHash } from '../../../src/redteam/grading/storedResult';
 import RedteamIterativeProvider, {
   runRedteamConversation,
 } from '../../../src/redteam/providers/iterative';
@@ -281,6 +282,10 @@ describe('RedteamIterativeProvider', () => {
       expect(result.metadata.finalIteration).toBe(1);
       expect(result.metadata.stopReason).toBe('Grader failed');
       expect(result.metadata.storedGraderResult).toEqual({
+        metadata: {
+          redteamGradingInputHash: expect.any(String),
+          redteamGradingAssertionHash: expect.any(String),
+        },
         pass: false,
         score: 0,
         reason: 'Jailbreak detected by grader',
@@ -831,6 +836,10 @@ describe('RedteamIterativeProvider', () => {
       // Should use 'Grader failed' even though judge score was also high
       expect(result.metadata.stopReason).toBe('Grader failed');
       expect(result.metadata.storedGraderResult).toEqual({
+        metadata: {
+          redteamGradingInputHash: expect.any(String),
+          redteamGradingAssertionHash: expect.any(String),
+        },
         pass: false,
         score: 0,
         reason: 'Grader detected jailbreak',
@@ -929,6 +938,35 @@ describe('RedteamIterativeProvider', () => {
         expect(result.metadata.redteamHistory[0].score).toBeUndefined();
       });
 
+      it.each(['zero ratings', 'judge errors'])(
+        'retains the last prompt when no best turn is selected (%s)',
+        async (scenario) => {
+          grades(
+            { pass: true, score: 1, reason: 'First verdict' },
+            { pass: true, score: 1, reason: 'Second verdict' },
+          );
+          mockGetTargetResponse
+            .mockResolvedValueOnce({ output: 'first response' })
+            .mockResolvedValueOnce({ output: 'second response' });
+          const judge =
+            scenario === 'zero ratings'
+              ? judgeRating(0)
+              : async () => ({ error: 'judge unavailable' });
+          mockRedteamProvider.callApi
+            .mockImplementationOnce(attackerTurn('first attack'))
+            .mockImplementationOnce(judge)
+            .mockImplementationOnce(attackerTurn('second attack'))
+            .mockImplementationOnce(judge);
+          const result = await runConversation(2);
+          expect(result.output).toBe('second response');
+          expect(result.prompt).toBe('second attack');
+          expect(result.metadata.redteamFinalPrompt).toBe('second attack');
+          expect(result.metadata.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
+            getGradingInputHash('second attack', 'second response', undefined, 'test-plugin'),
+          );
+        },
+      );
+
       it('should report the turn that failed even when an earlier turn scored higher', async () => {
         grades(
           { pass: true, score: 1, reason: 'Benign output' },
@@ -950,6 +988,78 @@ describe('RedteamIterativeProvider', () => {
         // Previously the output and prompt came from the higher-rated benign turn.
         expect(result.output).toBe('harmful response');
         expect(result.prompt).toBe('second attack');
+      });
+
+      it.each([false, true])(
+        'keeps the selected earlier grade and fresh usage (cached first: %s)',
+        async (cached) => {
+          grades(
+            {
+              pass: true,
+              score: 1,
+              reason: 'First verdict',
+              ...(cached ? { metadata: { cachedResponse: true } } : {}),
+              tokensUsed: { total: 2, numRequests: cached ? 0 : 1 },
+            },
+            {
+              pass: true,
+              score: 1,
+              reason: 'Second verdict',
+              tokensUsed: { total: 4, numRequests: 1 },
+            },
+          );
+          mockGetTargetResponse
+            .mockResolvedValueOnce({ output: 'first response' })
+            .mockResolvedValueOnce({ output: 'second response' });
+          mockRedteamProvider.callApi
+            .mockImplementationOnce(attackerTurn('first attack'))
+            .mockImplementationOnce(judgeRating(8))
+            .mockImplementationOnce(attackerTurn('second attack'))
+            .mockImplementationOnce(judgeRating(3));
+
+          const result = await runConversation(2);
+
+          expect(result.output).toBe('first response');
+          expect(result.prompt).toBe('first attack');
+          expect(result.metadata.storedGraderResult).toMatchObject({
+            pass: true,
+            reason: 'First verdict',
+            tokensUsed: { total: cached ? 4 : 6, numRequests: cached ? 1 : 2 },
+          });
+          expect(result.metadata.storedGraderResult?.metadata?.cachedResponse).not.toBe(true);
+        },
+      );
+
+      it('grades the transformed target prompt before storing its verdict', async () => {
+        const getResult = grades({ pass: false, score: 0, reason: 'graded transformed input' });
+        const transform = vi
+          .spyOn(
+            await import('../../../src/redteam/shared/runtimeTransform'),
+            'applyRuntimeTransforms',
+          )
+          .mockResolvedValue({ prompt: 'encoded target input', originalPrompt: 'raw attack' });
+        try {
+          mockRedteamProvider.callApi.mockImplementationOnce(attackerTurn('raw attack'));
+          const result = await runRedteamConversation({
+            context: { prompt: { raw: '{{test}}', label: 'test' }, vars: {}, test },
+            filters: undefined,
+            injectVar: 'test',
+            numIterations: 1,
+            options: {},
+            prompt: { raw: '{{test}}', label: 'test' },
+            redteamProvider: mockRedteamProvider,
+            gradingProvider: mockRedteamProvider,
+            targetProvider: mockTargetProvider,
+            test,
+            vars: { test: 'goal' },
+            excludeTargetOutputFromAgenticAttackGeneration: false,
+            perTurnLayers: ['base64'],
+          });
+          expect(getResult.mock.calls[0][0]).toBe('encoded target input');
+          expect(result.metadata.redteamFinalPrompt).toBe('encoded target input');
+        } finally {
+          transform.mockRestore();
+        }
       });
 
       it('should keep attacking after a grader error, which is not a verdict', async () => {

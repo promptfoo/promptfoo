@@ -338,7 +338,7 @@ function runInstalledBinVersion(consumerDir: string, configDir: string, binName:
   return run(binPath, ['--version'], consumerDir, envOverrides);
 }
 
-function assertMcpTypeDocumentation(installedPackageDir: string): void {
+function assertProviderTypeDocumentation(installedPackageDir: string): void {
   const api = new API();
   try {
     for (const declaration of ['contracts.d.ts', 'contracts.d.cts']) {
@@ -353,16 +353,20 @@ function assertMcpTypeDocumentation(installedPackageDir: string): void {
       assert(moduleSymbol, `Missing declaration module: ${declaration}`);
       const exports = checker.getExportsOfModule(moduleSymbol);
 
-      for (const name of ['McpConfigInput', 'McpConfig', 'McpConfigParsed']) {
+      for (const name of [
+        'McpConfigInput',
+        'McpConfig',
+        'McpConfigParsed',
+        'HttpProviderConfigInput',
+      ]) {
         const symbol = exports.find((entry) => entry.name === name);
         assert(symbol, `Missing ${name} in ${declaration}`);
         const configType = checker.getDeclaredTypeOfSymbol(symbol);
-        for (const property of [
-          'timeout',
-          'resetTimeoutOnProgress',
-          'maxTotalTimeout',
-          'pingOnConnect',
-        ]) {
+        const properties =
+          name === 'HttpProviderConfigInput'
+            ? ['tools', 'tool_choice', 'transformToolsFormat', 'session']
+            : ['timeout', 'resetTimeoutOnProgress', 'maxTotalTimeout', 'pingOnConnect'];
+        for (const property of properties) {
           const member = checker.getPropertyOfType(configType, property);
           assert(member, `Missing ${name}.${property} in ${declaration}`);
           const documentation = checker.getDocumentationCommentOfSymbol(member);
@@ -394,6 +398,21 @@ function assertMcpTypeDocumentation(installedPackageDir: string): void {
 
 function writeConsumerScripts(consumerDir: string): void {
   const authAssertions = [
+    "const httpInput = { method: 'GET', auth: { type: 'api_key', value: '{{ KEY }}', placement: 'header', keyName: 'X-Key' }, tls: {} };",
+    "if ('rejectUnauthorized' in HttpProviderConfigInputSchema.parse(httpInput).tls) {",
+    "  throw new Error('HTTP authoring schema inserted runtime defaults');",
+    '}',
+    "for (const invalid of [{method: 'POST'}, {body: {}, signatureAuth: {type: 'pem'}}, {method: 'GET', typo: true}]) {",
+    '  if (HttpProviderConfigInputSchema.safeParse(invalid).success) {',
+    "    throw new Error('HTTP authoring schema accepted invalid input');",
+    '  }',
+    '}',
+    "if (HttpAuthInputSchema.safeParse({ type: 'api_key', value: 'key' }).success) {",
+    "  throw new Error('HTTP auth lost its placement/name requirements');",
+    '}',
+    "if (HttpProviderConfigInputJsonSchema.$schema !== 'http://json-schema.org/draft-07/schema#') {",
+    "  throw new Error('Missing HTTP config JSON Schema export');",
+    '}',
     "const extensionConfig = { server: { command: 'node', extension: true }, extension: true };",
     'if (McpConfigInputSchema.safeParse(extensionConfig).success) {',
     "  throw new Error('MCP authoring config accepted extension fields');",
@@ -439,6 +458,7 @@ function writeConsumerScripts(consumerDir: string): void {
       "import { EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator } from 'promptfoo/contracts';",
       "import { McpAuthInputJsonSchema, McpAuthInputSchema, McpAuthSchema } from 'promptfoo/contracts';",
       "import { McpConfigInputJsonSchema, McpConfigInputSchema, McpConfigSchema } from 'promptfoo/contracts';",
+      "import { HttpAuthInputSchema, HttpProviderConfigInputSchema, HttpProviderConfigInputJsonSchema } from 'promptfoo/contracts';",
       '',
       'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
       "  if (!value || typeof value.safeParse !== 'function') {",
@@ -459,6 +479,7 @@ function writeConsumerScripts(consumerDir: string): void {
       "const { EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator } = require('promptfoo/contracts');",
       "const { McpAuthInputJsonSchema, McpAuthInputSchema, McpAuthSchema } = require('promptfoo/contracts');",
       "const { McpConfigInputJsonSchema, McpConfigInputSchema, McpConfigSchema } = require('promptfoo/contracts');",
+      "const { HttpAuthInputSchema, HttpProviderConfigInputSchema, HttpProviderConfigInputJsonSchema } = require('promptfoo/contracts');",
       '',
       'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
       "  if (!value || typeof value.safeParse !== 'function') {",
@@ -480,6 +501,7 @@ function writeConsumerScripts(consumerDir: string): void {
       "import { McpAuthInputSchema, McpAuthSchema } from 'promptfoo/contracts';",
       "import type { McpAuthInput, McpAuthParsed } from 'promptfoo/contracts';",
       "import { McpConfigSchema, type McpConfigInput, type McpConfigParsed } from 'promptfoo/contracts';",
+      "import { HttpProviderConfigInputSchema, type HttpProviderConfigInput } from 'promptfoo/contracts';",
       '',
       "const prompt: Prompt = { label: 'Greeting', raw: 'Hello, world!' };",
       'const transform: TransformFunction<string, string> = (output) => output;',
@@ -493,6 +515,8 @@ function writeConsumerScripts(consumerDir: string): void {
       'const mcp: McpConfigParsed = McpConfigSchema.parse(mcpInput);',
       'const enabled: boolean = mcp.enabled;',
       'void enabled;',
+      "const httpInput: HttpProviderConfigInput = { body: { prompt: '{{ prompt }}' }, auth: { type: 'bearer', token: 'key' } };",
+      'HttpProviderConfigInputSchema.parse(httpInput);',
       "if (auth?.type === 'oauth') {",
       "  const grant: 'client_credentials' | 'password' = auth.grantType;",
       '  void grant;',
@@ -535,6 +559,8 @@ function writeConsumerScripts(consumerDir: string): void {
       'const mcp: contracts.McpConfigParsed = contracts.McpConfigSchema.parse(mcpInput);',
       'const enabled: boolean = mcp.enabled;',
       'void enabled;',
+      "const httpInput: contracts.HttpProviderConfigInput = { body: { prompt: '{{ prompt }}' }, auth: { type: 'bearer', token: 'key' } };",
+      'contracts.HttpProviderConfigInputSchema.parse(httpInput);',
       "if (auth?.type === 'oauth') {",
       "  const grant: 'client_credentials' | 'password' = auth.grantType;",
       '  void grant;',
@@ -766,7 +792,7 @@ async function main(): Promise<void> {
     assert.equal(installedPackageJson.version, packResult.version);
     assertExportsResolve(installedPackageDir, installedPackageJson);
     assertInstalledRefParserTransport(installedPackageDir);
-    assertMcpTypeDocumentation(installedPackageDir);
+    assertProviderTypeDocumentation(installedPackageDir);
 
     writeConsumerScripts(consumerDir);
     run(process.execPath, ['import-package.mjs'], consumerDir);
