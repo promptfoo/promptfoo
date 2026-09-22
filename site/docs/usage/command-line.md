@@ -746,6 +746,10 @@ promptfoo auth teams set team_12345
 
 Your team selection is remembered across CLI sessions and applies to all promptfoo operations including evals and red team testing.
 
+If the team belongs to another organization, promptfoo switches to that organization as well. When several organizations have a team with the same name or slug, the team in your current organization is used.
+
+If your saved team is no longer accessible, promptfoo falls back to the oldest team in your current organization. It never switches organizations on its own; if the current organization has no teams you can access, run `promptfoo auth login --org <orgId>`.
+
 #### Team Selection Across Organizations
 
 If you have access to multiple organizations, team selections are **isolated per organization**. This means:
