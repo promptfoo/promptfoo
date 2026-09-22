@@ -307,6 +307,7 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
         getRequestTimeoutMs(),
       )) as unknown as any);
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       logger.error(`API call error: ${err}`);
       throw err;
     }

@@ -280,6 +280,10 @@ interface MistralChatCompletionOptions {
 
 const MISTRAL_CACHE_HASH_KEY = 'promptfoo:mistral:cache-key:v1';
 const MISTRAL_INFLIGHT_REQUESTS = new Map<string, Promise<MistralFetchResult>>();
+const MISTRAL_SIGNAL_INFLIGHT_REQUESTS = new WeakMap<
+  AbortSignal,
+  Map<string, Promise<MistralFetchResult>>
+>();
 
 type MistralFetchResult = { data: any; cached: boolean };
 
@@ -299,16 +303,23 @@ function fetchMistralWithDedupe(
   fetcher: () => Promise<MistralFetchResult>,
   abortSignal?: AbortSignal,
 ): Promise<MistralFetchResult> {
+  let requests = MISTRAL_INFLIGHT_REQUESTS;
   if (abortSignal) {
-    return fetcher();
+    const existing = MISTRAL_SIGNAL_INFLIGHT_REQUESTS.get(abortSignal);
+    if (existing) {
+      requests = existing;
+    } else {
+      requests = new Map();
+      MISTRAL_SIGNAL_INFLIGHT_REQUESTS.set(abortSignal, requests);
+    }
   }
   const inflightCacheKey = getScopedCacheKey(cacheKey);
-  let inflightRequest = MISTRAL_INFLIGHT_REQUESTS.get(inflightCacheKey);
+  let inflightRequest = requests.get(inflightCacheKey);
   if (!inflightRequest) {
     inflightRequest = fetcher().finally(() => {
-      MISTRAL_INFLIGHT_REQUESTS.delete(inflightCacheKey);
+      requests.delete(inflightCacheKey);
     });
-    MISTRAL_INFLIGHT_REQUESTS.set(inflightCacheKey, inflightRequest);
+    requests.set(inflightCacheKey, inflightRequest);
   }
   return inflightRequest;
 }
@@ -908,6 +919,7 @@ export class MistralEmbeddingProvider implements ApiProvider {
           options?.abortSignal,
         ));
       } catch (err) {
+        options?.abortSignal?.throwIfAborted();
         logger.error(`API call error: ${err}`);
         throw err;
       }

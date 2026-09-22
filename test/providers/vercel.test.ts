@@ -1408,12 +1408,12 @@ describe('VercelAiEmbeddingProvider', () => {
         expect(combined.aborted).toBe(false);
         const reason = new Error('evaluation cancelled');
         controller.abort(reason);
-        await expect(request).resolves.toEqual({ error: 'Request aborted' });
+        await expect(request).rejects.toBe(reason);
         expect(combined.reason).toBe(reason);
         expect(mockCache.set).not.toHaveBeenCalled();
       } finally {
         controller.abort();
-        await request;
+        await Promise.allSettled([request]);
       }
     });
 
@@ -1421,9 +1421,10 @@ describe('VercelAiEmbeddingProvider', () => {
       const { embed } = await import('ai');
       vi.mocked(isCacheEnabled).mockReturnValue(true);
       const provider = new VercelAiEmbeddingProvider('openai/text-embedding-3-small');
+      const reason = new DOMException('evaluation cancelled', 'AbortError');
       await expect(
-        provider.callEmbeddingApi('prompt', undefined, { abortSignal: AbortSignal.abort() }),
-      ).resolves.toEqual({ error: 'Request aborted' });
+        provider.callEmbeddingApi('prompt', undefined, { abortSignal: AbortSignal.abort(reason) }),
+      ).rejects.toBe(reason);
       expect(mockCache.get).not.toHaveBeenCalled();
       expect(embed).not.toHaveBeenCalled();
     });

@@ -127,11 +127,7 @@ export interface ProviderCleanupContext {
 export interface ApiProvider extends MinimalApiProvider {
   callApi: CallApiFunction;
   callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
-  callEmbeddingApi?: (
-    input: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ) => Promise<ProviderEmbeddingResponse>;
+  callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
   config?: any;
   delay?: number;
   /** True when callApi applies delay itself and the evaluator should not wait again. */
@@ -155,11 +151,7 @@ export interface ApiProvider extends MinimalApiProvider {
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {
-  callEmbeddingApi: (
-    input: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ) => Promise<ProviderEmbeddingResponse>;
+  callEmbeddingApi: (input: string) => Promise<ProviderEmbeddingResponse>;
 }
 
 export interface ApiSimilarityProvider extends ApiProvider {
