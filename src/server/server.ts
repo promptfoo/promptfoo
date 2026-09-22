@@ -26,12 +26,17 @@ import { runDbMigrations } from '../migrate';
 import Eval, { getEvalSummaries } from '../models/eval';
 import { invalidateEvaluationCache, invalidateEvaluationCaches } from '../models/evalMutation';
 import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
-import { createShareableUrl, determineShareDomain, stripAuthFromUrl } from '../share';
+import {
+  createShareableUrl,
+  determineShareDomain,
+  ShareUploadError,
+  stripAuthFromUrl,
+} from '../share';
 import telemetry from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCase/synthesis';
 import { ServerSchemas } from '../types/api/server';
 import { checkRemoteHealth } from '../util/apiHealth';
-import { ConfigPermissionError, makeRequest as makeCloudRequest } from '../util/cloud';
+import { ConfigPermissionError } from '../util/cloud';
 import {
   getPromptsForTestCasesHash,
   getStandaloneEvals,
@@ -298,14 +303,6 @@ export function createApp() {
     }
 
     try {
-      // Fail fast with an actionable message instead of a generic upload failure when the
-      // saved Cloud credentials are no longer valid.
-      if (cloudConfig.isEnabled() && (await makeCloudRequest('users/me', 'GET')).status === 401) {
-        res.status(401).json({
-          error: 'Promptfoo Cloud rejected your credentials. Run `promptfoo auth login` and retry.',
-        });
-        return;
-      }
       const url = await createShareableUrl(eval_, { showAuth: true, throwOnError: true });
       if (!url) {
         res.status(422).json({ error: 'Sharing is disabled or this eval has no results to share' });
@@ -314,16 +311,19 @@ export function createApp() {
       logger.debug('Generated share URL for eval', { id, url: stripAuthFromUrl(url) });
       res.json(ServerSchemas.Share.Response.parse({ url }));
     } catch (error) {
-      if (error instanceof ConfigPermissionError) {
+      const uploadStatus = error instanceof ShareUploadError ? error.status : undefined;
+      if (uploadStatus === 401) {
         sendError(
           res,
-          403,
-          'Your Promptfoo Cloud permissions do not allow sharing this eval',
+          401,
+          'The share server rejected your credentials. Run `promptfoo auth login` and retry.',
           error,
         );
-        return;
+      } else if (uploadStatus === 403 || error instanceof ConfigPermissionError) {
+        sendError(res, 403, 'You do not have permission to share this eval', error);
+      } else {
+        sendError(res, 500, 'Failed to generate share URL', error);
       }
-      sendError(res, 500, 'Failed to generate share URL', error);
     }
   });
 

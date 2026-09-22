@@ -166,6 +166,7 @@ vi.mock('../../../src/redteam/shared', () => ({
 vi.mock('../../../src/share', () => ({
   createShareableUrl: mocks.createShareableUrl,
   determineShareDomain: mocks.determineShareDomain,
+  ShareUploadError: class ShareUploadError extends Error {},
   stripAuthFromUrl: mocks.stripAuthFromUrl,
 }));
 

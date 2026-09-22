@@ -43,6 +43,17 @@ export interface ShareOptions {
   throwOnError?: boolean;
 }
 
+/** The share server rejected an upload request; `status` is its HTTP status code. */
+export class ShareUploadError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = 'ShareUploadError';
+  }
+}
+
 /** Error types that indicate chunk size issues */
 type ChunkSizeError = 'PAYLOAD_TOO_LARGE' | 'NETWORK_TIMEOUT' | 'UNKNOWN';
 
@@ -321,7 +332,7 @@ async function sendEvalRecord(
     logger.error(
       `Sharing your eval data to ${url} failed. Debug info: ${JSON.stringify(debugInfo, null, 2)}`,
     );
-    throw new Error(`${errorMessage}${bodyMessage}`);
+    throw new ShareUploadError(`${errorMessage}${bodyMessage}`, response.status);
   }
 
   const responseJson = await response.json();
@@ -384,8 +395,9 @@ async function sendChunkOfResults(
       return {
         success: false,
         errorType: 'UNKNOWN',
-        originalError: new Error(
+        originalError: new ShareUploadError(
           `${response.status} ${response.statusText}: ${responseBody.slice(0, 200)}`,
+          response.status,
         ),
       };
     }
@@ -825,7 +837,7 @@ export async function createShareableUrl(
   evalRecord: Eval,
   options: ShareOptions = {},
 ): Promise<string | null> {
-  const { silent = false, showAuth = false, throwOnError = false } = options;
+  const { silent = false, showAuth = false } = options;
 
   // If sharing is explicitly disabled, return null
   if (getEnvBool('PROMPTFOO_DISABLE_SHARING')) {
@@ -856,7 +868,7 @@ export async function createShareableUrl(
     `Sharing with ${url} canUseNewResults: ${canUseNewResults} Use old results: ${evalRecord.useOldResults()}`,
   );
 
-  const evalId = await sendChunkedResults(evalRecord, url, { silent, throwOnError });
+  const evalId = await sendChunkedResults(evalRecord, url, options);
 
   if (!evalId) {
     return null;

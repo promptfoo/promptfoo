@@ -43,6 +43,14 @@ vi.mock('../../../src/redteam/remoteGeneration', () => ({
 vi.mock('../../../src/share', () => ({
   createShareableUrl: vi.fn(),
   determineShareDomain: vi.fn(),
+  ShareUploadError: class ShareUploadError extends Error {
+    constructor(
+      message: string,
+      readonly status: number,
+    ) {
+      super(message);
+    }
+  },
   stripAuthFromUrl: vi.fn((url: string) => url),
 }));
 
@@ -64,11 +72,6 @@ vi.mock('../../../src/util/apiHealth', () => ({
   checkRemoteHealth: vi.fn(),
 }));
 
-vi.mock('../../../src/util/cloud', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../src/util/cloud')>()),
-  makeRequest: vi.fn(),
-}));
-
 vi.mock('../../../src/util/database', () => ({
   getPrompts: vi.fn(),
   getPromptsForTestCasesHash: vi.fn(),
@@ -80,11 +83,11 @@ vi.mock('../../../src/util/database', () => ({
 import { cloudConfig } from '../../../src/globalConfig/cloud';
 import Eval, { getEvalSummaries } from '../../../src/models/eval';
 import { getRemoteHealthUrl } from '../../../src/redteam/remoteGeneration';
-import { createShareableUrl, determineShareDomain } from '../../../src/share';
+import { createShareableUrl, determineShareDomain, ShareUploadError } from '../../../src/share';
 import telemetry from '../../../src/telemetry';
 import { synthesizeFromTestSuite } from '../../../src/testCase/synthesis';
 import { checkRemoteHealth } from '../../../src/util/apiHealth';
-import { ConfigPermissionError, makeRequest } from '../../../src/util/cloud';
+import { ConfigPermissionError } from '../../../src/util/cloud';
 import {
   getPrompts,
   getPromptsForTestCasesHash,
@@ -107,7 +110,6 @@ const mockedGetPromptsForTestCasesHash = vi.mocked(getPromptsForTestCasesHash);
 const mockedGetStandaloneEvals = vi.mocked(getStandaloneEvals);
 const mockedGetTestCases = vi.mocked(getTestCases);
 const mockedReadResult = vi.mocked(readResult);
-const mockedMakeRequest = vi.mocked(makeRequest);
 
 describe('inline server API DTO validation', () => {
   let api: ReturnType<typeof request.agent>;
@@ -333,38 +335,33 @@ describe('inline server API DTO validation', () => {
     });
   });
 
-  it('maps share failures to fixed client-safe errors', async () => {
+  it.each([
+    [
+      new ShareUploadError('401 Unauthorized: upstream secret', 401),
+      401,
+      'rejected your credentials',
+    ],
+    [new ShareUploadError('403 Forbidden: upstream secret', 403), 403, 'do not have permission'],
+    [
+      new ConfigPermissionError('Permission denied: provider secret'),
+      403,
+      'do not have permission',
+    ],
+    [new ShareUploadError('500 Internal Server Error: upstream secret', 500), 500, 'Failed'],
+    [new Error('fetch failed: upstream secret'), 500, 'Failed to generate share URL'],
+  ])('maps %s to a fixed client-safe %i', async (error, status, message) => {
     mockedEval.findById.mockResolvedValue({ id: 'eval-1' } as never);
-    mockedCreateShareableUrl
-      .mockRejectedValueOnce(new ConfigPermissionError('Permission denied: provider secret-x'))
-      .mockRejectedValueOnce(new Error('500 Internal Server Error: upstream secret'));
+    mockedCreateShareableUrl.mockRejectedValue(error);
 
-    const forbidden = await api.post('/api/results/share').send({ id: 'eval-1' });
-    const failed = await api.post('/api/results/share').send({ id: 'eval-1' });
+    const response = await api.post('/api/results/share').send({ id: 'eval-1' });
 
-    expect(forbidden.status).toBe(403);
-    expect(forbidden.body).toEqual({
-      error: 'Your Promptfoo Cloud permissions do not allow sharing this eval',
-    });
-    expect(failed.status).toBe(500);
-    expect(failed.body).toEqual({ error: 'Failed to generate share URL' });
+    expect(response.status).toBe(status);
+    expect(response.body.error).toContain(message);
+    expect(JSON.stringify(response.body)).not.toContain('secret');
     expect(mockedCreateShareableUrl).toHaveBeenCalledWith(expect.anything(), {
       showAuth: true,
       throwOnError: true,
     });
-  });
-
-  it('rejects the share before uploading when Cloud credentials are invalid', async () => {
-    mockedEval.findById.mockResolvedValue({ id: 'eval-1' } as never);
-    mockedCloudConfig.isEnabled.mockReturnValue(true);
-    mockedMakeRequest.mockResolvedValue(new Response('{}', { status: 401 }));
-
-    const response = await api.post('/api/results/share').send({ id: 'eval-1' });
-
-    expect(response.status).toBe(401);
-    expect(response.body.error).toContain('promptfoo auth login');
-    expect(mockedMakeRequest).toHaveBeenCalledWith('users/me', 'GET');
-    expect(mockedCreateShareableUrl).not.toHaveBeenCalled();
   });
 
   it('returns a 404 DTO when sharing a result whose eval row is missing', async () => {

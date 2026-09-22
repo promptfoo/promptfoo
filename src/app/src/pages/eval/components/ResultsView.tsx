@@ -383,10 +383,6 @@ export default function ResultsView({
     (recentEval) => recentEval.evalId === currentEvalId,
   )?.datasetId;
 
-  const handleShareButtonClick = () => {
-    setShareModalOpen(true);
-  };
-
   // Keep this stable: ShareModal re-runs its share effect whenever `onShare` changes.
   const handleShare = React.useCallback(async (id: string): Promise<string> => {
     if (!IS_RUNNING_LOCALLY) {
@@ -792,7 +788,7 @@ export default function ResultsView({
         <Copy className="size-4 mr-2" />
         Copy
       </DropdownMenuItem>
-      <DropdownMenuItem onClick={handleShareButtonClick} disabled={shareLoading}>
+      <DropdownMenuItem onClick={() => setShareModalOpen(true)} disabled={shareLoading}>
         {shareLoading ? <Spinner className="size-4 mr-2" /> : <Share className="size-4 mr-2" />}
         Share
       </DropdownMenuItem>
