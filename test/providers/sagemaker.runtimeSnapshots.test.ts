@@ -17,6 +17,7 @@ import type { HttpRequest } from '@smithy/core/transport';
 const parsing = vi.hoisted(() => ({
   pause: undefined as undefined | (() => Promise<void>),
   defaultsPause: undefined as undefined | (() => Promise<void>),
+  credentialsPause: undefined as undefined | (() => Promise<void>),
 }));
 vi.mock('@smithy/core/config', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@smithy/core/config')>();
@@ -35,6 +36,21 @@ vi.mock('@smithy/core/config', async (importOriginal) => {
         const pause = parsing.defaultsPause;
         parsing.defaultsPause = undefined;
         return pause ? pause().then(() => provider(...options)) : provider(...options);
+      };
+    },
+  };
+});
+vi.mock('@aws-sdk/credential-provider-ini', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@aws-sdk/credential-provider-ini')>();
+  return {
+    ...actual,
+    fromIni: (...args: Parameters<typeof actual.fromIni>) => {
+      const provider = actual.fromIni(...args);
+      return async (...options: Parameters<typeof provider>) => {
+        const pause = parsing.credentialsPause;
+        parsing.credentialsPause = undefined;
+        await pause?.();
+        return provider(...options);
       };
     },
   };
@@ -93,11 +109,166 @@ describe('SageMaker initialization policy snapshot', () => {
     providers.clear();
     parsing.pause = undefined;
     parsing.defaultsPause = undefined;
+    parsing.credentialsPause = undefined;
     vi.resetAllMocks();
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
     restoreEnv();
     await rm(directory, { recursive: true, force: true });
+  });
+
+  function interceptSageMaker(provider: SageMakerCompletionProvider | SageMakerEmbeddingProvider) {
+    const requests: HttpRequest[] = [];
+    const clients = new Set<SageMakerRuntimeClient>();
+    const initialize = provider.getSageMakerRuntimeInstance.bind(provider);
+    vi.spyOn(provider, 'getSageMakerRuntimeInstance').mockImplementation(async (...args) => {
+      const client: SageMakerRuntimeClient = await initialize(...args);
+      if (!clients.has(client)) {
+        clients.add(client);
+        vi.spyOn(client.config.requestHandler, 'handle').mockImplementation(async (request) => {
+          requests.push(request);
+          return {
+            response: new HttpResponse({
+              statusCode: 200,
+              headers: { 'content-type': 'application/json' },
+              body: Buffer.from('{"output":"offline response","embedding":[1,0]}'),
+            }),
+          };
+        });
+      }
+      return client;
+    });
+    return requests;
+  }
+
+  function selectFileCredentials(profile: 'named' | 'default') {
+    vi.stubEnv('AWS_PROFILE', profile === 'named' ? 'request-auth' : undefined);
+    vi.stubEnv('AWS_ACCESS_KEY_ID', undefined);
+    vi.stubEnv('AWS_SECRET_ACCESS_KEY', undefined);
+    vi.stubEnv('AWS_SESSION_TOKEN', undefined);
+    const configSection = profile === 'named' ? 'profile request-auth' : 'default';
+    const credentialsSection = profile === 'named' ? 'request-auth' : 'default';
+    return {
+      config: (stage: string) =>
+        writeFile(
+          path.join(directory, 'config'),
+          `[${configSection}]\nendpoint_url = https://file-${stage}.invalid\ndefaults_mode = legacy\n`,
+        ),
+      credentials: (stage: string) =>
+        writeFile(
+          path.join(directory, 'credentials'),
+          `[${credentialsSection}]\naws_access_key_id = ${stage.toUpperCase()}_KEY\naws_secret_access_key = ${stage}-secret\n`,
+        ),
+    };
+  }
+
+  describe.each(['completion', 'embedding'] as const)('%s shared profile files', (kind) => {
+    function createProvider(
+      profile: 'named' | 'default',
+      transform?: (input: unknown) => Promise<unknown>,
+    ) {
+      const Provider =
+        kind === 'completion' ? SageMakerCompletionProvider : SageMakerEmbeddingProvider;
+      const provider = new Provider('deployment', {
+        config: { modelType: 'custom', profile: profile === 'named' ? 'request-auth' : undefined },
+        transform,
+      });
+      providers.add(provider);
+      return provider;
+    }
+
+    function invoke(
+      provider: SageMakerCompletionProvider | SageMakerEmbeddingProvider,
+      input: string,
+    ) {
+      return provider instanceof SageMakerEmbeddingProvider
+        ? provider.callEmbeddingApi(input)
+        : provider.callApi(input);
+    }
+
+    const expected = kind === 'completion' ? { output: 'offline response' } : { embedding: [1, 0] };
+    const drift = 'SageMaker shared AWS profile files changed during initialization';
+
+    it.each([
+      ['named', 'config'],
+      ['named', 'credentials'],
+      ['default', 'config'],
+      ['default', 'credentials'],
+    ] as const)(
+      'rejects a %s %s edit during a user transform before any send',
+      async (profile, file) => {
+        const files = selectFileCredentials(profile);
+        await Promise.all([files.config('before'), files.credentials('before')]);
+        const entered = deferred();
+        const release = deferred();
+        const provider = createProvider(profile, async (input) => {
+          if (input === 'first') {
+            entered.resolve();
+            await release.promise;
+          }
+          return input;
+        });
+        const requests = interceptSageMaker(provider);
+        const pending = invoke(provider, 'first');
+        void pending.catch(() => {});
+        try {
+          await entered.promise;
+          await files[file]('after');
+          release.resolve();
+          await expect(pending).rejects.toThrow(drift);
+          expect(requests).toHaveLength(0);
+
+          expect(await invoke(provider, 'later')).toMatchObject(expected);
+          expect(requests).toHaveLength(1);
+          expect(requests[0].hostname).toBe(
+            `file-${file === 'config' ? 'after' : 'before'}.invalid`,
+          );
+          expect(requests[0].headers.authorization).toContain(
+            `Credential=${file === 'credentials' ? 'AFTER' : 'BEFORE'}_KEY/`,
+          );
+        } finally {
+          release.resolve();
+          await Promise.allSettled([pending]);
+        }
+      },
+    );
+
+    it('rejects an edit while the SDK is resolving signing credentials before any send', async () => {
+      const files = selectFileCredentials('named');
+      await Promise.all([files.config('before'), files.credentials('before')]);
+      const provider = createProvider('named');
+      const requests = interceptSageMaker(provider);
+      const entered = deferred();
+      const release = deferred();
+      parsing.credentialsPause = async () => {
+        entered.resolve();
+        await release.promise;
+      };
+      const pending = invoke(provider, 'first');
+      try {
+        await Promise.race([
+          entered.promise,
+          pending.then(() => {
+            throw new Error('Request completed before signing credentials were resolved');
+          }),
+        ]);
+        await files.credentials('after');
+        release.resolve();
+        expect(await pending).toMatchObject({
+          error: expect.stringContaining(
+            'SageMaker credential inputs changed during initialization',
+          ),
+        });
+        expect(requests).toHaveLength(0);
+
+        expect(await invoke(provider, 'later')).toMatchObject(expected);
+        expect(requests).toHaveLength(1);
+        expect(requests[0].headers.authorization).toContain('Credential=AFTER_KEY/');
+      } finally {
+        release.resolve();
+        await Promise.allSettled([pending]);
+      }
+    });
   });
 
   it.each([false, true])(

@@ -36,7 +36,7 @@ vi.mock('@aws-sdk/client-sagemaker-runtime', () => ({
 
 vi.mock('../../src/cache', () => ({
   isCacheEnabled: mockIsCacheEnabled,
-  getCache: () => ({ get: mockCacheGet, set: vi.fn() }),
+  getCache: () => ({ get: mockCacheGet, set: vi.fn(), del: vi.fn() }),
 }));
 
 vi.mock('../../src/telemetry', () => ({ default: { record: vi.fn() } }));

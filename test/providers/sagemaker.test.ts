@@ -9,17 +9,21 @@ import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
 
 // Use vi.hoisted to create mock functions that can be used in vi.mock factories
-const { mockSend, mockCacheGet, mockCacheSet, mockIsCacheEnabled } = vi.hoisted(() => ({
-  mockSend: vi.fn(),
-  mockCacheGet: vi.fn(),
-  mockCacheSet: vi.fn(),
-  mockIsCacheEnabled: vi.fn(),
-}));
+const { mockSend, mockCacheGet, mockCacheSet, mockCacheDel, mockIsCacheEnabled } = vi.hoisted(
+  () => ({
+    mockSend: vi.fn(),
+    mockCacheGet: vi.fn(),
+    mockCacheSet: vi.fn(),
+    mockCacheDel: vi.fn(),
+    mockIsCacheEnabled: vi.fn(),
+  }),
+);
 
 // Create a mock cache object that uses the hoisted mock functions
 const mockCacheObject = {
   get: mockCacheGet,
   set: mockCacheSet,
+  del: mockCacheDel,
 };
 
 // Mock the cache module - this will be used by the dynamic import
@@ -59,6 +63,7 @@ describe('SageMakerCompletionProvider', () => {
     mockIsCacheEnabled.mockReturnValue(false);
     mockCacheGet.mockReset();
     mockCacheSet.mockReset();
+    mockCacheDel.mockReset();
     mockSend.mockReset();
   });
 
@@ -95,6 +100,7 @@ module.exports = transform;
       mockCacheSet.mockImplementation(async (key: string, value: string) => {
         entries.set(key, value);
       });
+      mockCacheDel.mockImplementation(async (key: string) => entries.delete(key));
       mockSend
         .mockResolvedValueOnce({ Body: new TextEncoder().encode('{"output":"A"}') })
         .mockResolvedValueOnce({ Body: new TextEncoder().encode('{"output":"B"}') });
@@ -217,6 +223,7 @@ module.exports = transform;
       mockCacheSet.mockImplementation(async (key: string, value: string) => {
         entries.set(key, value);
       });
+      mockCacheDel.mockImplementation(async (key: string) => entries.delete(key));
     });
 
     it('keeps outputs separate for different stop sequences and replays matching requests', async () => {
@@ -821,6 +828,7 @@ describe('SageMakerEmbeddingProvider', () => {
     mockIsCacheEnabled.mockReturnValue(false);
     mockCacheGet.mockReset();
     mockCacheSet.mockReset();
+    mockCacheDel.mockReset();
     mockSend.mockReset();
   });
 
@@ -854,6 +862,7 @@ describe('SageMakerEmbeddingProvider', () => {
       mockCacheSet.mockImplementation(async (key: string, value: string) => {
         cache.set(key, value);
       });
+      mockCacheDel.mockImplementation(async (key: string) => cache.delete(key));
       mockSend.mockImplementation(async (command, region) => {
         if (mockSend.mock.calls.length === 1 && stage === 'SDK response') {
           started();
@@ -1023,7 +1032,7 @@ describe('SageMakerEmbeddingProvider', () => {
       .digest('hex')
       .substring(0, 8);
     const key = mockCacheGet.mock.calls[0][0];
-    expect(key).toMatch(/^sagemaker:embedding:v1:first-endpoint:/);
+    expect(key).toMatch(/^sagemaker:embedding:v2:first-endpoint:/);
     expect(key.endsWith(`:${configHash}`)).toBe(true);
     expect(mockCacheSet.mock.calls[0][0]).toBe(key);
     expect(mockSend).toHaveBeenCalledWith(
@@ -1100,6 +1109,7 @@ describe.each(['completion', 'embedding'] as const)(
       mockSend.mockReset();
       mockCacheGet.mockReset();
       mockCacheSet.mockReset();
+      mockCacheDel.mockReset();
       mockIsCacheEnabled.mockReturnValue(true);
     });
 
@@ -1107,6 +1117,7 @@ describe.each(['completion', 'embedding'] as const)(
       mockSend.mockReset();
       mockCacheGet.mockReset();
       mockCacheSet.mockReset();
+      mockCacheDel.mockReset();
       mockIsCacheEnabled.mockReset();
       vi.unstubAllEnvs();
       vi.restoreAllMocks();
@@ -1162,6 +1173,7 @@ describe.each(['completion', 'embedding'] as const)(
         mockCacheSet.mockImplementation(async (key: string, value: string) => {
           entries.set(key, value);
         });
+        mockCacheDel.mockImplementation(async (key: string) => entries.delete(key));
         mockSend.mockResolvedValue({
           Body: new TextEncoder().encode('{"output":"captured A","embedding":[1,2,3]}'),
         });
@@ -1221,17 +1233,36 @@ describe.each(['completion', 'embedding'] as const)(
           expect(credentials).toHaveBeenCalledTimes(1);
           expect(mockCacheSet).toHaveBeenCalledTimes(1);
 
-          // Changing only authentication cannot put secrets into the cache identity.
           provider.config = {
             ...provider.config,
             endpoint: config.endpoint,
             region: config.region,
+            delay: undefined,
           };
+          provider.delay = undefined;
+          const second = await call(provider);
+          expect(second).toMatchObject(expected);
+          expect(second.cached).not.toBe(true);
+          const keys = mockCacheGet.mock.calls.slice(0, 2).map(([key]) => key as string);
+          expect(keys[1]).not.toBe(keys[0]);
+          for (const key of keys) {
+            expect(key).not.toMatch(/CONFIGURED_[AB]|synthetic-(?:secret|token)-[ab]|runtime-[ab]/);
+          }
+          expect(credentials).toHaveBeenCalledTimes(2);
+          expect(SageMakerRuntimeClient).toHaveBeenCalledTimes(2);
+          expect(vi.mocked(SageMakerRuntimeClient).mock.calls[1][0]).toMatchObject({
+            region: 'us-east-1',
+            endpoint: 'https://runtime-b.invalid',
+            credentials: {
+              accessKeyId: 'CONFIGURED_B',
+              secretAccessKey: 'synthetic-secret-b',
+              sessionToken: 'synthetic-token-b',
+            },
+          });
+          expect(mockSend).toHaveBeenCalledTimes(2);
+          expect(mockCacheSet).toHaveBeenCalledTimes(2);
           expect(await call(provider)).toMatchObject({ ...expected, cached: true });
-          expect(mockCacheGet.mock.calls[1][0]).toBe(mockCacheGet.mock.calls[0][0]);
-          expect(credentials).toHaveBeenCalledTimes(1);
-          expect(SageMakerRuntimeClient).toHaveBeenCalledTimes(1);
-          expect(mockSend).toHaveBeenCalledTimes(1);
+          expect(mockSend).toHaveBeenCalledTimes(2);
         } finally {
           release();
           if (boundary === 'delay') {
@@ -1259,5 +1290,90 @@ describe.each(['completion', 'embedding'] as const)(
         provider.cleanup();
       }
     });
+
+    it.each(['no later request', 'newer same-key request'] as const)(
+      'rolls back a cancelled pending cache write with %s',
+      async (scenario) => {
+        const provider = createProvider({
+          modelType: 'custom',
+          region: 'us-east-1',
+          accessKeyId: 'SYNTHETIC_CACHE_KEY',
+          secretAccessKey: 'synthetic-cache-secret',
+        });
+        const entries = new Map<string, string>();
+        let enter!: () => void;
+        let release!: () => void;
+        let rolledBack!: () => void;
+        const entered = new Promise<void>((resolve) => {
+          enter = resolve;
+        });
+        const gate = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        const rollback = new Promise<void>((resolve) => {
+          rolledBack = resolve;
+        });
+        mockCacheGet.mockImplementation(async (key: string) => entries.get(key));
+        mockCacheSet.mockImplementation(async (key: string, value: string) => {
+          entries.set(key, value);
+          if (mockCacheSet.mock.calls.length === 1) {
+            enter();
+            await gate;
+          }
+        });
+        mockCacheDel.mockImplementation(async (key: string) => {
+          const removed = entries.delete(key);
+          rolledBack();
+          return removed;
+        });
+        mockSend
+          .mockResolvedValueOnce({
+            Body: new TextEncoder().encode('{"output":"stale","embedding":[1]}'),
+          })
+          .mockResolvedValueOnce({
+            Body: new TextEncoder().encode('{"output":"fresh","embedding":[2]}'),
+          });
+        const controller = new AbortController();
+        const stale =
+          provider instanceof SageMakerEmbeddingProvider
+            ? provider.callEmbeddingApi('same snapshot input', undefined, {
+                abortSignal: controller.signal,
+              })
+            : provider.callApi('same snapshot input', undefined, {
+                abortSignal: controller.signal,
+              });
+        void stale.catch(() => {});
+        let newer: ReturnType<typeof call> | undefined;
+        try {
+          await entered;
+          expect(entries.size).toBe(1);
+          const reason = new Error('synthetic cancellation during cache publication');
+          controller.abort(reason);
+          await expect(stale).rejects.toBe(reason);
+          if (scenario === 'newer same-key request') {
+            newer = call(provider);
+          }
+          release();
+          await rollback;
+          const expected = kind === 'completion' ? { output: 'fresh' } : { embedding: [2] };
+          if (newer) {
+            const fresh = await newer;
+            expect(fresh).toMatchObject(expected);
+            expect(fresh.cached).not.toBe(true);
+            expect(await call(provider)).toMatchObject({ ...expected, cached: true });
+            expect(mockSend).toHaveBeenCalledTimes(2);
+            expect(entries.size).toBe(1);
+          } else {
+            expect(entries.size).toBe(0);
+            expect(mockSend).toHaveBeenCalledTimes(1);
+          }
+          expect(mockCacheDel).toHaveBeenCalledTimes(1);
+        } finally {
+          release();
+          await Promise.allSettled([stale, ...(newer ? [newer] : [])]);
+          provider.cleanup();
+        }
+      },
+    );
   },
 );

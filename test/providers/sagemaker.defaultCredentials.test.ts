@@ -1561,28 +1561,26 @@ ec2_metadata_v1_disabled = false
     },
   );
 
-  it('retains valid credentials after a profile file edit and refreshes the SDK-cached profile at expiry', async () => {
+  it('invalidates retained credentials when a profile file changes and reloads the new role', async () => {
     await configure(ssoProfile());
     const provider = createProvider();
     await expectSignedRow(provider, 'SSO_1');
     vi.setSystemTime(startTime.getTime() + 120_000);
     await writeFile(configFile, ssoProfile().replace('TestRole', 'ChangedRole'));
 
-    // The SDK caches shared-file text. Editing it does not invalidate still-valid
-    // role credentials or promise an in-place profile reload.
-    await expectSignedRow(provider, 'SSO_1');
-    expect(ssoCalls).toHaveLength(1);
-    vi.setSystemTime(startTime.getTime() + hour + 1_000);
-    expect(await provider.callApi('expired role after file edit')).toMatchObject({
+    expect(await provider.callApi('changed role with expired session')).toMatchObject({
       error: expect.stringContaining('The SSO session associated with this profile has expired'),
     });
-    expect(sageCalls).toHaveLength(2);
+    expect(sageCalls).toHaveLength(1);
     expect(ssoCalls).toHaveLength(1);
 
     renewToken();
     await expectSignedRow(provider, 'SSO_2');
     expect(ssoCalls).toHaveLength(2);
-    expect(ssoCalls[1].request.query?.role_name).toBe('TestRole');
+    expect(ssoCalls[1].request.query?.role_name).toBe('ChangedRole');
+    vi.setSystemTime(startTime.getTime() + 180_000);
+    await expectSignedRow(provider, 'SSO_2');
+    expect(ssoCalls).toHaveLength(2);
   });
 
   it.each(['key', 'token'] as const)(
