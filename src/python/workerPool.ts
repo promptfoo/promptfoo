@@ -12,6 +12,7 @@ export class PythonWorkerPool {
   private workers: PythonWorker[] = [];
   private queue: QueuedRequest[] = [];
   private isInitialized: boolean = false;
+  private shuttingDown = false;
 
   constructor(
     private scriptPath: string,
@@ -22,6 +23,9 @@ export class PythonWorkerPool {
   ) {}
 
   async initialize(): Promise<void> {
+    if (this.shuttingDown) {
+      throw new Error('Python worker pool shut down during initialization');
+    }
     if (this.isInitialized) {
       return;
     }
@@ -58,6 +62,9 @@ export class PythonWorkerPool {
     }
 
     await Promise.all(initPromises);
+    if (this.shuttingDown) {
+      throw new Error('Python worker pool shut down during initialization');
+    }
     this.isInitialized = true;
     logger.debug(`Python worker pool initialized with ${this.workerCount} workers`);
   }
@@ -121,6 +128,7 @@ export class PythonWorkerPool {
   }
 
   async shutdown(): Promise<void> {
+    this.shuttingDown = true;
     logger.debug(`Shutting down Python worker pool (${this.workers.length} workers)`);
 
     // Reject any queued requests

@@ -20,7 +20,7 @@ Evaluations run inside `providerRegistry.withEvaluation()` (`src/providers/provi
 - Implement a `cleanup()` method; it is called without arguments. If the provider also registers itself, the registry calls its `shutdown()` instead; that method can delegate to `cleanup()`. Providers that distinguish idle evaluation cleanup from explicit shutdown can implement `cleanupAfterEvaluation({ reason: 'evaluation-complete' })`, which is used instead for automatic cleanup.
 - Register with `providerRegistry` for automatic cleanup. Registration on the provider instance is restored when another evaluation reuses it. An idle cleanup hook can leave the provider registered for process shutdown. Shared singleton transports must call and await `useResource()` on every access.
 - Pass the request signal to `withProvider()` and use the provider that owns cleanup when calling through a temporary adapter. Cancelled calls waiting for older cleanup never start; calls already in progress retain their resources until they settle.
-- A resource is released after its last using evaluation, or immediately on process shutdown.
+- A resource is released after its last using evaluation, or immediately on process shutdown. Register a resource before asynchronous initialization starts creating child processes or connections so shutdown can close partially initialized resources too.
 
 **Reference implementations:**
 

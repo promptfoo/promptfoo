@@ -44,7 +44,7 @@ vi.mock('../src/telemetry', () => ({
 }));
 
 vi.mock('../src/providers/providerRegistry', () => ({
-  providerRegistry: { shutdownAll: mockProviderShutdown },
+  providerRegistry: { shutdownForProcess: mockProviderShutdown },
 }));
 
 vi.mock('../src/database/index', () => ({

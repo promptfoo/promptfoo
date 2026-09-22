@@ -6,7 +6,7 @@ import { expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { MCPProvider } from '../../src/providers/mcp';
-import { providerRegistry } from '../../src/providers/providerRegistry';
+import { ProviderRegistry, providerRegistry } from '../../src/providers/providerRegistry';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
@@ -19,6 +19,98 @@ function deferred() {
   });
   return { promise, resolve };
 }
+
+it('drains an active call that registers a resource after process shutdown starts', async () => {
+  const registry = new ProviderRegistry(false);
+  const callStarted = deferred();
+  const finishInitialization = deferred();
+  const resourceClosing = deferred();
+  const finishResourceClose = deferred();
+  const finishCall = deferred();
+  const provider = { id: () => 'late-process-registration' };
+  const resource = {
+    shutdown: vi.fn(async () => {
+      resourceClosing.resolve();
+      await finishResourceClose.promise;
+    }),
+  };
+  let physical: Promise<void> | undefined;
+  const evaluation = registry.withEvaluation(async () => {
+    physical = registry.withProvider(provider, async () => {
+      callStarted.resolve();
+      await finishInitialization.promise;
+      registry.register(resource);
+      await finishCall.promise;
+    });
+    await callStarted.promise;
+  });
+  const shutdownFinished = vi.fn();
+  let shuttingDown: Promise<void> | undefined;
+  try {
+    await evaluation;
+    shuttingDown = registry.shutdownForProcess().then(shutdownFinished);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(shutdownFinished).not.toHaveBeenCalled();
+
+    finishInitialization.resolve();
+    await resourceClosing.promise;
+    expect(resource.shutdown).toHaveBeenCalledOnce();
+    expect(shutdownFinished).not.toHaveBeenCalled();
+    finishResourceClose.resolve();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(shutdownFinished).not.toHaveBeenCalled();
+
+    finishCall.resolve();
+    await Promise.all([physical, shuttingDown]);
+    expect(shutdownFinished).toHaveBeenCalledOnce();
+    expect(resource.shutdown).toHaveBeenCalledOnce();
+  } finally {
+    finishInitialization.resolve();
+    finishResourceClose.resolve();
+    finishCall.resolve();
+    await Promise.allSettled([
+      evaluation,
+      ...(physical ? [physical] : []),
+      ...(shuttingDown ? [shuttingDown] : []),
+    ]);
+  }
+});
+
+it('closes registrations after an empty process shutdown and preserves a later re-registration', async () => {
+  const registry = new ProviderRegistry(false);
+  const firstClose = deferred();
+  const finishFirstClose = deferred();
+  let shutdowns = 0;
+  const resource = {
+    shutdown: vi.fn(async () => {
+      if (++shutdowns === 1) {
+        firstClose.resolve();
+        await finishFirstClose.promise;
+      }
+      registry.unregister(resource);
+    }),
+  };
+  const run = vi.fn(async () => {});
+  await registry.shutdownForProcess();
+  try {
+    registry.register(resource);
+    await firstClose.promise;
+    registry.register(resource);
+    const draining = registry.shutdownForProcess();
+    finishFirstClose.resolve();
+    await draining;
+    expect(resource.shutdown).toHaveBeenCalledTimes(2);
+
+    await expect(registry.withEvaluation(run)).rejects.toMatchObject({ name: 'AbortError' });
+    await expect(registry.withProvider({ id: () => 'new-call' }, run)).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+    expect(run).not.toHaveBeenCalled();
+  } finally {
+    finishFirstClose.resolve();
+    await registry.shutdownForProcess();
+  }
+});
 
 describeEvaluator('registered resources across overlapping evaluations', () => {
   it('waits for a shared resource release without delaying an unrelated evaluation', async () => {
