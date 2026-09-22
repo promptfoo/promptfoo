@@ -139,13 +139,12 @@ describeEvaluator('evaluator execution control', () => {
         throw new Error('simulated close failure');
       });
     const registered = { shutdown: vi.fn(async () => {}) };
-    providerRegistry.register(registered);
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
     const provider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test output',
-        tokenUsage: createEmptyTokenUsage(),
+      callApi: vi.fn(async () => {
+        providerRegistry.register(registered);
+        return { output: 'Test output', tokenUsage: createEmptyTokenUsage() };
       }),
     };
     const testSuite: TestSuite = {

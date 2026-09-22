@@ -1,6 +1,7 @@
 import cliState from '../cliState';
 import logger from '../logger';
 import { loadApiProvider } from '../providers/index';
+import { providerRegistry } from '../providers/providerRegistry';
 import { shouldGenerateRemote } from '../redteam/remoteGeneration';
 import { getCloudTargetIdFromProviders } from '../redteam/remoteGenerationContextFromProviders';
 import {
@@ -75,18 +76,19 @@ export function callGradingProvider<T extends ProviderResponse>(
   const { callContext, operationName } = options;
   const executionContext = getProviderCallExecutionContext();
   const tracingContext = getProviderCallTracingContext();
-  const callProvider = async (): Promise<T> => {
-    const result = await (tracingContext
-      ? (tracingContext.withProviderSpan(
-          { provider, callContext, operationName, role: 'grader', promptLabel: label },
-          invoke,
-        ) as Promise<T>)
-      : invoke(callContext));
-    if (result.error) {
-      executionContext?.abortSignal?.throwIfAborted();
-    }
-    return result;
-  };
+  const callProvider = (): Promise<T> =>
+    providerRegistry.withProvider(provider, async () => {
+      const result = await (tracingContext
+        ? (tracingContext.withProviderSpan(
+            { provider, callContext, operationName, role: 'grader', promptLabel: label },
+            invoke,
+          ) as Promise<T>)
+        : invoke(callContext));
+      if (result.error) {
+        executionContext?.abortSignal?.throwIfAborted();
+      }
+      return result;
+    });
 
   const executeCall = async () => {
     // Never start a grader after cancellation; queued graders check once they reach the front.

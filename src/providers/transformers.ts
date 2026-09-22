@@ -145,8 +145,13 @@ type Pipeline = {
 const pipelineCache = new Map<string, Pipeline>();
 const pendingPipelines = new Map<string, Promise<Pipeline>>();
 
-// Track if cleanup has been registered
-let cleanupRegistered = false;
+const pipelineResource = {
+  async shutdown() {
+    logger.debug('[Transformers] Shutting down all pipelines...');
+    await disposePipelines();
+    logger.debug('[Transformers] All pipelines disposed');
+  },
+};
 
 function getPipelineCacheKey(
   task: string,
@@ -163,6 +168,8 @@ async function getOrCreatePipeline(
   model: string,
   options: TransformersBaseOptions,
 ): Promise<Pipeline> {
+  await providerRegistry.useResource(pipelineResource);
+  providerRegistry.register(pipelineResource);
   const cacheKey = getPipelineCacheKey(task, model, options);
 
   // Return cached pipeline
@@ -297,18 +304,7 @@ async function disposePipelines(): Promise<void> {
  * Ensure cleanup handler is registered with the provider registry.
  */
 function ensureCleanupRegistered(): void {
-  if (cleanupRegistered) {
-    return;
-  }
-  cleanupRegistered = true;
-
-  providerRegistry.register({
-    shutdown: async () => {
-      logger.debug('[Transformers] Shutting down all pipelines...');
-      await disposePipelines();
-      logger.debug('[Transformers] All pipelines disposed');
-    },
-  });
+  providerRegistry.register(pipelineResource);
 }
 
 /**
