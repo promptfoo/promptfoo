@@ -28,6 +28,7 @@ interface ProviderState {
   activeCalls: number;
   cleanupRequested: boolean;
   cleanup?: Promise<void>;
+  processCleanup?: Promise<void>;
 }
 
 interface ResourceState {
@@ -47,6 +48,7 @@ export class ProviderRegistry {
     registration: number;
   }>();
   private readonly providers = new WeakMap<IdleCleanupProvider, ProviderState>();
+  private readonly ownedProviders = new Set<ProviderState>();
   private readonly resources = new Map<CleanupProvider, ResourceState>();
   private readonly selfRegisteredProviders = new WeakSet<IdleCleanupProvider>();
   private readonly activeCalls = new Set<Promise<void>>();
@@ -183,7 +185,13 @@ export class ProviderRegistry {
     for (const provider of providers) {
       const state = this.getProvider(provider);
       state.cleanupRequested = true;
-      void this.claimProvider(scope, state);
+      this.ownedProviders.add(state);
+      if (this.processShuttingDown) {
+        void this.forceProviderCleanup(state);
+      } else {
+        this.ensureShutdownHandlers();
+        void this.claimProvider(scope, state);
+      }
     }
     signal?.throwIfAborted();
   }
@@ -238,10 +246,7 @@ export class ProviderRegistry {
       return;
     }
     void this.useResource(resource);
-    if (this.installProcessHandlers && !this.shutdownRegistered) {
-      this.registerShutdownHandlers();
-      this.shutdownRegistered = true;
-    }
+    this.ensureShutdownHandlers();
   }
 
   unregister(resource: CleanupProvider): void {
@@ -266,6 +271,9 @@ export class ProviderRegistry {
   async shutdownForProcess(): Promise<void> {
     this.processShuttingDown = true;
     this.processAbortController.abort(this.processShutdownError());
+    for (const state of this.ownedProviders) {
+      void this.forceProviderCleanup(state);
+    }
     for (const state of this.resources.values()) {
       void this.forceResource(state);
     }
@@ -286,12 +294,50 @@ export class ProviderRegistry {
     const release = this.maybeReleaseResource(state, undefined, true);
     if (release) {
       void state.release?.start(true);
-      if (this.processShuttingDown && !this.processReleases.has(release)) {
-        this.processReleases.add(release);
-        void release.then(() => this.processReleases.delete(release));
+      if (this.processShuttingDown) {
+        this.trackProcessRelease(release);
       }
     }
     return release;
+  }
+
+  private forceProviderCleanup(state: ProviderState): Promise<void> | undefined {
+    state.cleanupRequested = false;
+    if (this.selfRegisteredProviders.has(state.provider)) {
+      this.ownedProviders.delete(state);
+      return undefined;
+    }
+    if (state.processCleanup) {
+      return state.processCleanup;
+    }
+    const { provider } = state;
+    if (!provider.cleanup && !provider.cleanupAfterEvaluation) {
+      this.ownedProviders.delete(state);
+      return undefined;
+    }
+    const hasSeparateProcessCleanup = provider.cleanup && provider.cleanupAfterEvaluation;
+    const cleanup =
+      (!hasSeparateProcessCleanup && state.cleanup) ||
+      Promise.resolve()
+        .then(() =>
+          provider.cleanup
+            ? provider.cleanup()
+            : provider.cleanupAfterEvaluation?.({ reason: 'evaluation-complete' }),
+        )
+        .catch((error) => {
+          logger.warn('Provider cleanup failed during process shutdown.', { error });
+        });
+    state.processCleanup = cleanup;
+    this.trackProcessRelease(cleanup);
+    void cleanup.then(() => this.ownedProviders.delete(state));
+    return cleanup;
+  }
+
+  private trackProcessRelease(release: Promise<void>): void {
+    if (!this.processReleases.has(release)) {
+      this.processReleases.add(release);
+      void release.then(() => this.processReleases.delete(release));
+    }
   }
 
   private waitForScope(
@@ -440,6 +486,7 @@ export class ProviderRegistry {
       !state.provider.cleanupAfterEvaluation &&
       this.selfRegisteredProviders.has(state.provider)
     ) {
+      this.ownedProviders.delete(state);
       return undefined;
     }
     const cleanup = Promise.resolve()
@@ -454,6 +501,9 @@ export class ProviderRegistry {
       .finally(() => {
         if (state.cleanup === cleanup) {
           state.cleanup = undefined;
+        }
+        if (!state.cleanupRequested) {
+          this.ownedProviders.delete(state);
         }
       });
     state.cleanup = cleanup;
@@ -538,6 +588,13 @@ export class ProviderRegistry {
       provider.resources.delete(state);
     }
     state.providers.clear();
+  }
+
+  private ensureShutdownHandlers(): void {
+    if (this.installProcessHandlers && !this.shutdownRegistered) {
+      this.registerShutdownHandlers();
+      this.shutdownRegistered = true;
+    }
   }
 
   private registerShutdownHandlers(): void {
