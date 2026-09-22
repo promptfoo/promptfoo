@@ -89,10 +89,10 @@ Precedence is:
 ## Things to know about this host
 
 - `GET /v1/models` is authenticated and returns, per model, the charged and list price, the context and output limits, and capability flags.
-- The capability flags in that response are not dependable. Probing every route on 2026-09-17 found models that reason although the catalogue says they do not, and models it reports as vision-capable that do not read an image. If a capability matters for your eval, test it rather than trust the flag.
+- Do not trust the capability flags in that response. A probe of every chat route on 2026-09-22 found models that return reasoning although the catalogue sets `reasoning: false` (`claude-opus-4-8-fast`, `glm-4.6`, `gemini-2.5-flash`). The same probe found models that read an image although the catalogue sets `vision: false` (`deepseek-v4-flash`, `qwen-3-8-max`). Test the capability yourself if your eval depends on it.
 - Image input, where it works, requires a `data:` URI. A remote `https://` image URL is rejected on every route.
 - There is no embeddings endpoint: `POST /v1/embeddings` returns 404. Use another provider for embedding-based assertions.
-- Prices move. Four models changed price within one 23-hour window during that same week, so treat any cost figure you cache as a snapshot.
+- Prices move. Four models changed price within one 23-hour window in September 2026, so treat any cost figure you cache as a snapshot.
 
 ## Example
 
