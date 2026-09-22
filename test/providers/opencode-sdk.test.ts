@@ -1355,6 +1355,33 @@ describe('OpenCodeSDKProvider', () => {
         errorSpy.mockRestore();
       });
 
+      it('redacts credentials supplied only by upstream diagnostics', async () => {
+        const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+        const message =
+          'token=issued-token-991; secret="issued secret with spaces"; ' +
+          'Cookie: sid=issued-cookie-991; csrf=issued-second-cookie-991, ' +
+          'total_tokens=17; useful context';
+        const error = { name: 'APIError', data: { statusCode: 502, message } };
+        const response = createMockPromptResponse([]);
+        mockSessionPrompt.mockResolvedValueOnce({ error }).mockResolvedValueOnce({
+          data: { ...response.data, info: { ...response.data.info, error } },
+        });
+        const provider = new OpenCodeSDKProvider();
+
+        for (const prompt of ['SDK diagnostic', 'assistant diagnostic']) {
+          const result = await provider.callApi(prompt);
+          const logged = (errorSpy.mock.lastCall?.[1] as { error?: string } | undefined)?.error;
+          for (const diagnostic of [result.error, logged]) {
+            expect(diagnostic).toContain('HTTP 502');
+            expect(diagnostic).toContain('token=[REDACTED]');
+            expect(diagnostic).toContain('secret="[REDACTED]"');
+            expect(diagnostic).toContain('Cookie: [REDACTED]');
+            expect(diagnostic).toContain('total_tokens=17; useful context');
+            expect(diagnostic).not.toContain('issued');
+          }
+        }
+      });
+
       it('retains public SDK HTTP error tags and sibling status without exposing the response body', async () => {
         const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
         mockSessionPrompt
@@ -2063,6 +2090,45 @@ describe('OpenCodeSDKProvider', () => {
         expect(mockCreateOpencode).toHaveBeenCalledTimes(2);
         expect(fresh.error).toContain(`APIError: HTTP 503: Previously used value ${secret}`);
       });
+
+      it.each(['local', 'remote'])(
+        'releases per-prompt credentials after failed %s client initialization',
+        async (kind) => {
+          const secret = 'synthetic-shell-private-991';
+          const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+          const provider = new OpenCodeSDKProvider({
+            config: kind === 'remote' ? { baseUrl: 'http://127.0.0.1:4099' } : {},
+          });
+          const failure = new Error('Initialization echoed ' + secret);
+          if (kind === 'local') {
+            mockCreateOpencode.mockRejectedValueOnce(failure);
+          } else {
+            mockCreateOpencodeClient.mockImplementationOnce(() => {
+              throw failure;
+            });
+          }
+          const first = await provider.callApi(
+            'failed initialization',
+            createPromptContext({
+              mcp: { gateway: { type: 'local', command: ['sh', '-c', 'echo ' + secret] } },
+            }),
+          );
+          expect(first.error).toContain('Upstream diagnostic withheld');
+          expect(JSON.stringify({ first, logs: errorSpy.mock.calls })).not.toContain(secret);
+
+          const message = 'Previously used value ' + secret;
+          mockSessionPrompt.mockResolvedValueOnce({
+            error: { name: 'APIError', data: { statusCode: 503, message } },
+          });
+          const fresh = await provider.callApi('retry without the failed configuration');
+
+          expect(fresh.error).toContain('APIError: HTTP 503: ' + message);
+          expect(
+            kind === 'local' ? mockCreateOpencode : mockCreateOpencodeClient,
+          ).toHaveBeenCalledTimes(2);
+          await provider.cleanup();
+        },
+      );
 
       it('preserves safe scheduler timing and typed errors even when compound command messages are withheld', async () => {
         const provider = new OpenCodeSDKProvider({
@@ -7988,6 +8054,19 @@ describe('OpenCodeSDKProvider', () => {
         expected: 'rate_limit',
       },
       {
+        label: 'plaintext definitive billing despite a short gateway recovery hint',
+        body: 'credit_balance_exhausted',
+        status: 429,
+        retryAfter: '2',
+        expected: 'quota',
+      },
+      {
+        label: 'plaintext billing cannot replace a non-429 HTTP status',
+        body: 'credit_balance_exhausted',
+        status: 400,
+        expected: undefined,
+      },
+      {
         label: 'an untagged body cannot replace a non-429 HTTP status',
         body: { error: { code: 'credit_balance_exhausted' }, statusCode: 429 },
         status: 400,
@@ -8144,6 +8223,33 @@ describe('OpenCodeSDKProvider', () => {
         expect(result).not.toHaveProperty('raw');
       },
     );
+
+    it('uses private timing to classify a throttle without exposing the header', async () => {
+      const { createProviderRateLimitOptions } = await import(
+        '../../src/scheduler/providerWrapper'
+      );
+      mockSessionPrompt.mockResolvedValueOnce({
+        error: {
+          name: 'APIError',
+          data: {
+            statusCode: 429,
+            code: 'insufficient_quota',
+            responseHeaders: { 'Retry-After': '30' },
+          },
+        },
+        response: new Response(null, { status: 429, headers: { 'Retry-After': '2' } }),
+      });
+      const provider = new OpenCodeSDKProvider({ config: { apiKey: '30' } });
+
+      const result = await provider.callApi('private scheduler timing');
+
+      expect(result.metadata).toEqual({ rateLimitKind: 'rate_limit' });
+      const scheduler = createProviderRateLimitOptions();
+      expect(scheduler.isRateLimited?.(result, undefined)).toBe(true);
+      expect(scheduler.getHeaders?.(result)).toBeUndefined();
+      expect(scheduler.getRetryAfter?.(result, undefined)).toBeUndefined();
+      expect(JSON.stringify(result)).not.toContain('30');
+    });
 
     it('keeps scheduler timestamps that contain a short configured credential', async () => {
       vi.useFakeTimers({ toFake: ['Date'] });
