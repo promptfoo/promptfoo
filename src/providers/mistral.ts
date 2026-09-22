@@ -1,6 +1,12 @@
 import { createHmac } from 'crypto';
 
-import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../cache';
+import {
+  fetchWithCache,
+  getAbortSignalScopedKey,
+  getCache,
+  getScopedCacheKey,
+  isCacheEnabled,
+} from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
@@ -280,10 +286,6 @@ interface MistralChatCompletionOptions {
 
 const MISTRAL_CACHE_HASH_KEY = 'promptfoo:mistral:cache-key:v1';
 const MISTRAL_INFLIGHT_REQUESTS = new Map<string, Promise<MistralFetchResult>>();
-const MISTRAL_SIGNAL_INFLIGHT_REQUESTS = new WeakMap<
-  AbortSignal,
-  Map<string, Promise<MistralFetchResult>>
->();
 
 type MistralFetchResult = { data: any; cached: boolean };
 
@@ -303,23 +305,13 @@ function fetchMistralWithDedupe(
   fetcher: () => Promise<MistralFetchResult>,
   abortSignal?: AbortSignal,
 ): Promise<MistralFetchResult> {
-  let requests = MISTRAL_INFLIGHT_REQUESTS;
-  if (abortSignal) {
-    const existing = MISTRAL_SIGNAL_INFLIGHT_REQUESTS.get(abortSignal);
-    if (existing) {
-      requests = existing;
-    } else {
-      requests = new Map();
-      MISTRAL_SIGNAL_INFLIGHT_REQUESTS.set(abortSignal, requests);
-    }
-  }
-  const inflightCacheKey = getScopedCacheKey(cacheKey);
-  let inflightRequest = requests.get(inflightCacheKey);
+  const inflightCacheKey = getAbortSignalScopedKey(getScopedCacheKey(cacheKey), abortSignal);
+  let inflightRequest = MISTRAL_INFLIGHT_REQUESTS.get(inflightCacheKey);
   if (!inflightRequest) {
     inflightRequest = fetcher().finally(() => {
-      requests.delete(inflightCacheKey);
+      MISTRAL_INFLIGHT_REQUESTS.delete(inflightCacheKey);
     });
-    requests.set(inflightCacheKey, inflightRequest);
+    MISTRAL_INFLIGHT_REQUESTS.set(inflightCacheKey, inflightRequest);
   }
   return inflightRequest;
 }
