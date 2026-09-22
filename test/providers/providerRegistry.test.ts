@@ -181,6 +181,53 @@ describe('provider lifecycle registry', () => {
     }
   });
 
+  it('cleans providers registered by another beforeExit listener while earlier cleanup is pending', async () => {
+    const script = [
+      "import { providerRegistry } from './src/providers/providerRegistry.ts';",
+      'let release;',
+      'const pending = new Promise((resolve) => { release = resolve; });',
+      "const late = { shutdown: async () => { console.log('cleaned-late'); release(); } };",
+      'providerRegistry.register({',
+      "  shutdown: async () => { console.log('cleaned-first'); await pending; },",
+      '});',
+      "process.once('beforeExit', () => {",
+      '  setImmediate(() => providerRegistry.register(late));',
+      '});',
+    ].join('\n');
+    const child = spawn(
+      process.execPath,
+      ['--import', 'tsx', '--input-type=module', '-e', script],
+      {
+        cwd: process.cwd(),
+        env: process.env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => {
+      stdout += String(chunk);
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += String(chunk);
+    });
+    const watchdog = setTimeout(() => child.kill('SIGKILL'), 2_500);
+    try {
+      const exit = await new Promise<number | null>((resolve, reject) => {
+        child.once('error', reject);
+        child.once('close', resolve);
+      });
+      expect(exit, stderr).toBe(0);
+      expect(stdout.match(/cleaned-first/g)).toHaveLength(1);
+      expect(stdout.match(/cleaned-late/g)).toHaveLength(1);
+    } finally {
+      clearTimeout(watchdog);
+      if (child.exitCode === null && child.signalCode === null) {
+        child.kill('SIGKILL');
+      }
+    }
+  });
+
   it('removes its signal handlers after the last provider unregisters', async () => {
     const result = await runSignalChild(`
       const before = process.listenerCount('SIGTERM');

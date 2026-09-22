@@ -34,6 +34,7 @@ class ProviderRegistry {
   private processTerminating = false;
   private nativeSignal?: TerminationSignal;
   private beforeExitAttempted = false;
+  private beforeExitRegistrations = new WeakSet<CleanupProvider>();
   private signalHandlers?: Record<TerminationSignal | 'beforeExit', () => void>;
   private hostSignalObservation?: HostSignalObservation;
   private readonly normalShutdowns = new Map<CleanupProvider, Promise<void>>();
@@ -55,6 +56,20 @@ class ProviderRegistry {
 
     if (!this.signalHandlers && !this.nativeSignal) {
       this.registerShutdownHandlers();
+    }
+    if (
+      this.beforeExitAttempted &&
+      !this.nativeSignal &&
+      !this.beforeExitRegistrations.has(provider)
+    ) {
+      // beforeExit's once-listener is already gone; drain late registrations without waiting
+      // for another event. A provider may register itself only once per pass to avoid a loop.
+      this.beforeExitRegistrations.add(provider);
+      void Promise.resolve(this.processShutdowns.get(provider)).then(() => {
+        if (!this.nativeSignal && this.providers.has(provider)) {
+          void this.waitForProcessCleanup(this.shutdownProviders([provider], 'process'), true);
+        }
+      });
     }
   }
 
@@ -129,6 +144,7 @@ class ProviderRegistry {
 
   private registerShutdownHandlers(): void {
     this.beforeExitAttempted = false;
+    this.beforeExitRegistrations = new WeakSet();
     const handlers = {
       SIGINT: () => this.handleSignal('SIGINT'),
       SIGTERM: () => this.handleSignal('SIGTERM'),
