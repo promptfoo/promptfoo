@@ -636,7 +636,9 @@ function applyGradingError(row: EvaluateResult, error: unknown, abortSignal?: Ab
   // Require both signals: a third-party SDK that throws `AbortError` during a
   // non-aborted run is a real bug, and a real SyntaxError caught microseconds
   // after an unrelated abort is also a real bug.
-  const aborted = Boolean(abortSignal?.aborted) && isAbortError(error);
+  const aborted = Boolean(
+    abortSignal?.aborted && (isAbortError(error) || error === abortSignal.reason),
+  );
 
   if (aborted) {
     // Skip stack serialization on the abort path — debug logs usually go
@@ -1110,7 +1112,11 @@ async function callActiveProvider({
       : invoke();
   };
   const response = rateLimitRegistry
-    ? await rateLimitRegistry.execute(activeProvider, callApi, createProviderRateLimitOptions())
+    ? await rateLimitRegistry.execute(
+        activeProvider,
+        callApi,
+        createProviderRateLimitOptions(abortSignal),
+      )
     : await callApi();
 
   logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);

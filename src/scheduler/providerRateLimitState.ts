@@ -137,6 +137,7 @@ export class ProviderRateLimitState extends EventEmitter {
        * reset them.
        */
       maxRetriesOverride?: number;
+      abortSignal?: AbortSignal;
     },
   ): Promise<T> {
     this.totalRequests++;
@@ -151,22 +152,33 @@ export class ProviderRateLimitState extends EventEmitter {
       // Acquire slot (may wait for rate limit window via queue)
       // Queue timeout failures are counted as failed requests
       try {
-        await this.slotQueue.acquire(`${requestId}-${attempt}`);
+        await this.slotQueue.acquire(`${requestId}-${attempt}`, options.abortSignal);
       } catch (acquireError) {
         // Queue timeout or other acquire failures
         this.failedRequests++;
-        this.emit('queue:timeout', {
-          rateLimitKey: this.rateLimitKey,
-          requestId,
-          error: String(acquireError),
-        });
+        if (!options.abortSignal?.aborted) {
+          this.emit('queue:timeout', {
+            rateLimitKey: this.rateLimitKey,
+            requestId,
+            error: String(acquireError),
+          });
+        }
         throw acquireError;
       }
 
       const startTime = Date.now();
+      let ownsSlot = true;
+      const releaseSlot = () => {
+        if (ownsSlot) {
+          ownsSlot = false;
+          this.slotQueue.release();
+        }
+      };
 
       try {
+        options.abortSignal?.throwIfAborted();
         const result = await callFn();
+        options.abortSignal?.throwIfAborted();
         const latencyMs = Date.now() - startTime;
         this.latencies.push(latencyMs);
 
@@ -181,7 +193,7 @@ export class ProviderRateLimitState extends EventEmitter {
         }
 
         // Release slot
-        this.slotQueue.release();
+        releaseSlot();
 
         if (isRateLimited) {
           this.handleRateLimit(retryAfterMs);
@@ -199,7 +211,7 @@ export class ProviderRateLimitState extends EventEmitter {
               reason: 'ratelimit',
             });
 
-            await this.sleep(delay);
+            await this.sleep(delay, options.abortSignal);
             continue;
           }
 
@@ -227,7 +239,12 @@ export class ProviderRateLimitState extends EventEmitter {
         lastError = error as Error;
 
         // Release slot
-        this.slotQueue.release();
+        releaseSlot();
+
+        if (options.abortSignal?.aborted) {
+          this.failedRequests++;
+          throw error;
+        }
 
         // Check if rate limited (from error, not result)
         const isRateLimited =
@@ -251,7 +268,12 @@ export class ProviderRateLimitState extends EventEmitter {
             reason: isRateLimited ? 'ratelimit' : 'error',
           });
 
-          await this.sleep(delay);
+          try {
+            await this.sleep(delay, options.abortSignal);
+          } catch (sleepError) {
+            this.failedRequests++;
+            throw sleepError;
+          }
           continue;
         }
 
@@ -367,8 +389,20 @@ export class ProviderRateLimitState extends EventEmitter {
     );
   }
 
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  private async sleep(ms: number, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve();
+      }, ms);
+      const onAbort = () => {
+        clearTimeout(timeout);
+        signal?.removeEventListener('abort', onAbort);
+        reject(signal?.reason);
+      };
+      signal?.addEventListener('abort', onAbort, { once: true });
+    });
   }
 
   /**

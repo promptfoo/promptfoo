@@ -3,7 +3,7 @@ import type { ParsedRateLimitHeaders } from './headerParser';
 interface QueuedRequest {
   id: string;
   resolve: () => void;
-  reject: (error: Error) => void;
+  reject: (error: unknown) => void;
   queuedAt: number;
 }
 
@@ -55,50 +55,50 @@ export class SlotQueue {
    * Acquire a slot. All requests go through the queue to prevent race conditions.
    * Returns when a slot is available and quota is not exhausted.
    */
-  async acquire(requestId: string): Promise<void> {
+  async acquire(requestId: string, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
     return new Promise((resolve, reject) => {
       const queuedAt = Date.now();
-
-      // Set up timeout for queued request
-      let timeoutId: NodeJS.Timeout | null = null;
+      let timeoutId: NodeJS.Timeout | undefined;
+      const cleanup = () => {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+        signal?.removeEventListener('abort', onAbort);
+      };
+      const request: QueuedRequest = {
+        id: requestId,
+        queuedAt,
+        resolve: () => {
+          cleanup();
+          this.activeCount++;
+          this.onSlotAcquired?.(this.waiting.length);
+          resolve();
+        },
+        reject: (error) => {
+          cleanup();
+          reject(error);
+        },
+      };
+      const remove = (error: unknown) => {
+        const index = this.waiting.indexOf(request);
+        if (index === -1) {
+          return;
+        }
+        this.waiting.splice(index, 1);
+        request.reject(error);
+        this.processQueue();
+      };
+      const onAbort = () => remove(signal?.reason);
       if (this.queueTimeoutMs > 0) {
         timeoutId = setTimeout(() => {
-          // Remove from queue
-          const idx = this.waiting.findIndex((r) => r.id === requestId);
-          if (idx !== -1) {
-            this.waiting.splice(idx, 1);
-            reject(
-              new Error(`Request ${requestId} timed out after ${this.queueTimeoutMs}ms in queue`),
-            );
-          }
+          remove(
+            new Error(`Request ${requestId} timed out after ${this.queueTimeoutMs}ms in queue`),
+          );
         }, this.queueTimeoutMs);
       }
-
-      const wrappedResolve = () => {
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-        }
-        this.activeCount++;
-        this.onSlotAcquired?.(this.waiting.length);
-        resolve();
-      };
-
-      const wrappedReject = (error: Error) => {
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-        }
-        reject(error);
-      };
-
-      // Always queue the request
-      this.waiting.push({
-        id: requestId,
-        resolve: wrappedResolve,
-        reject: wrappedReject,
-        queuedAt,
-      });
-
-      // Immediately try to process queue (synchronous, no race)
+      this.waiting.push(request);
+      signal?.addEventListener('abort', onAbort, { once: true });
       this.processQueue();
     });
   }
@@ -261,6 +261,9 @@ export class SlotQueue {
     // If queue still has items and we're quota exhausted, ensure reset is scheduled
     if (this.waiting.length > 0 && this.isQuotaExhausted()) {
       this.scheduleResetProcessing();
+    } else if (this.waiting.length === 0 && this.resetTimer) {
+      clearTimeout(this.resetTimer);
+      this.resetTimer = null;
     }
   }
 

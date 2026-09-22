@@ -94,7 +94,7 @@ export function callGradingProvider<T extends ProviderResponse>(
       return executionContext.rateLimitRegistry.execute(
         provider,
         callProvider,
-        createProviderRateLimitOptions(),
+        createProviderRateLimitOptions(executionContext.abortSignal),
       );
     }
 
@@ -102,7 +102,11 @@ export function callGradingProvider<T extends ProviderResponse>(
   };
 
   if (executionContext?.providerCallQueue) {
-    return executionContext.providerCallQueue.enqueue(provider.id(), executeCall);
+    return executionContext.providerCallQueue.enqueue(
+      provider.id(),
+      executeCall,
+      executionContext.abortSignal,
+    );
   }
 
   return executeCall();

@@ -61,6 +61,7 @@ export interface RateLimitRegistryRef {
       getHeaders?: (result: T) => Record<string, string> | undefined;
       isRateLimited?: (result: T | undefined, error?: Error) => boolean;
       getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
+      abortSignal?: AbortSignal;
     },
   ) => Promise<T>;
   dispose: () => void;
@@ -70,7 +71,7 @@ export interface RateLimitRegistryRef {
  * Minimal interface for deferred provider-call queues used by serial grading orchestration.
  */
 export interface ProviderCallQueueRef {
-  enqueue: <T>(providerId: string, call: () => Promise<T>) => Promise<T>;
+  enqueue: <T>(providerId: string, call: () => Promise<T>, signal?: AbortSignal) => Promise<T>;
 }
 
 export * from '../redteam/types';
