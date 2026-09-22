@@ -453,6 +453,7 @@ interface OpenCodeSDKModule {
     hostname?: string;
     port?: number;
     timeout?: number;
+    signal?: AbortSignal;
     config?: Record<string, unknown>;
     env?: Record<string, string>;
   }) => Promise<{ client: OpenCodeClient; server: OpenCodeServer }>;
@@ -1307,16 +1308,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
   /** Stop the local server (after evaluations or on process exit) and keep the sessions. */
   async shutdown(): Promise<void> {
     await this.clientInitialization?.catch(() => undefined);
-    if (this.server) {
-      try {
-        this.server.close();
-        this.server = undefined;
-      } catch (err) {
-        logger.debug('Failed to close OpenCode server', {
-          error: this.formatCallError(err, this.config),
-        });
-      }
-    }
+    this.closeLocalServer();
     if (!this.server) {
       this.client = undefined;
     }
@@ -1329,6 +1321,20 @@ export class OpenCodeSDKProvider implements ApiProvider {
       providerRegistry.register(this);
     } else {
       providerRegistry.unregister(this);
+    }
+  }
+
+  private closeLocalServer(): void {
+    if (this.server) {
+      try {
+        this.server.close();
+        this.server = undefined;
+        this.client = undefined;
+      } catch (err) {
+        logger.debug('Failed to close OpenCode server', {
+          error: this.formatCallError(err, this.config),
+        });
+      }
     }
   }
 
@@ -1893,12 +1899,14 @@ export class OpenCodeSDKProvider implements ApiProvider {
         hostname: string;
         port: number;
         timeout: number;
+        signal: AbortSignal;
         config?: Record<string, unknown>;
         env?: Record<string, string>;
       } = {
         hostname: config.hostname ?? '127.0.0.1',
         port: config.port ?? 0,
         timeout: config.timeout ?? 30000,
+        signal: this.processTermination.signal,
         env: this.buildServerEnv(config),
       };
 
@@ -1907,13 +1915,37 @@ export class OpenCodeSDKProvider implements ApiProvider {
         serverOptions.config = serverConfig;
       }
 
-      const opencode = await createOpencode(serverOptions);
-      this.client = opencode.client;
-      this.clientConfig = config;
-      this.server = opencode.server;
-      // Stop the server when evaluations finish or the process exits.
-      providerRegistry.register(this);
-      logger.debug(`OpenCode server started at ${opencode.server.url}`);
+      const { signal } = serverOptions;
+      signal.throwIfAborted();
+      let onAbort!: () => void;
+      const aborted = new Promise<never>((_, reject) => {
+        onAbort = () => reject(signal.reason);
+        signal.addEventListener('abort', onAbort, { once: true });
+      });
+      try {
+        providerRegistry.register(this);
+        const started = createOpencode(serverOptions).then((opencode) => {
+          this.client = opencode.client;
+          this.clientConfig = config;
+          this.server = opencode.server;
+          if (signal.aborted) {
+            this.closeLocalServer();
+            if (this.server) {
+              providerRegistry.register(this);
+            }
+            signal.throwIfAborted();
+          }
+          logger.debug(`OpenCode server started at ${opencode.server.url}`);
+        });
+        await Promise.race([started, aborted]);
+      } catch (error) {
+        if (!this.server && !this.pendingTempDirs.size) {
+          providerRegistry.unregister(this);
+        }
+        throw error;
+      } finally {
+        signal.removeEventListener('abort', onAbort);
+      }
     })();
     this.clientInitialization = initialization;
     try {

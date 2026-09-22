@@ -2572,6 +2572,62 @@ describe('OpenCodeSDKProvider', () => {
       expect(mockSessionDelete).not.toHaveBeenCalled();
     });
 
+    it('cancels a pending local server startup through the SDK on process shutdown', async () => {
+      const started = createDeferred<AbortSignal>();
+      mockCreateOpencode.mockImplementationOnce(({ signal }) => {
+        started.resolve(signal);
+        return new Promise((_, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+        });
+      });
+      const provider = new OpenCodeSDKProvider({ config: { timeout: 120_000 } });
+      const call = provider.callApi('pending');
+      const signal = await started.promise;
+      expect(signal.aborted).toBe(false);
+
+      await providerRegistry.shutdownForProcess();
+
+      expect(signal.aborted).toBe(true);
+      await expect(call).resolves.toEqual({ error: 'OpenCode SDK call aborted' });
+      expect(mockSessionCreate).not.toHaveBeenCalled();
+      expect(mockServerClose).not.toHaveBeenCalled();
+    });
+
+    it('finishes process shutdown promptly and closes a local server that resolves after cancellation', async () => {
+      const lateClose = vi.fn();
+      const lateServer = {
+        client: {
+          session: {
+            create: mockSessionCreate,
+            prompt: mockSessionPrompt,
+            messages: mockSessionMessages,
+            delete: mockSessionDelete,
+          },
+        },
+        server: { url: 'http://late.test', close: lateClose },
+      };
+      const started = createDeferred<AbortSignal>();
+      const startup = createDeferred<typeof lateServer>();
+      mockCreateOpencode.mockImplementationOnce(({ signal }) => {
+        started.resolve(signal);
+        return startup.promise;
+      });
+      const provider = new OpenCodeSDKProvider();
+      const call = provider.callApi('pending');
+      const signal = await started.promise;
+
+      await providerRegistry.shutdownForProcess();
+      await expect(call).resolves.toEqual({ error: 'OpenCode SDK call aborted' });
+      expect(signal.aborted).toBe(true);
+      expect(lateClose).not.toHaveBeenCalled();
+
+      startup.resolve(lateServer);
+      await vi.waitFor(() => expect(lateClose).toHaveBeenCalledOnce());
+      await providerRegistry.shutdownForProcess();
+      expect(lateClose).toHaveBeenCalledOnce();
+      expect(mockSessionCreate).not.toHaveBeenCalled();
+    });
+
     it('forgets only the least recently used lookup and never deletes evicted sessions', async () => {
       const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
       for (let index = 0; index < 100; index++) {
