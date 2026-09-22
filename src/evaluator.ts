@@ -5083,7 +5083,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     if (
       !(await this.processComparisonAssertions({
         ciProgressReporter,
-        isEvalTimedOut: () => evalTimedOut,
+        isEvalTimedOut: isTimedOut,
         isWebUI,
         progressBarManager,
         prompts,
