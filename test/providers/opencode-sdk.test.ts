@@ -3486,7 +3486,7 @@ describe('OpenCodeSDKProvider', () => {
         const result = await new OpenCodeSDKProvider().callApi('imitated status');
 
         expect(result.error).toContain('APIError: HTTP 500: Upstream rejected');
-        expect(result.metadata).toBeUndefined();
+        expect(result.metadata).toEqual({ http: { status: 500 } });
       });
 
       it('does not treat a transport-level content filter as an assistant refusal', async () => {
