@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
+import { MCPProvider } from '../../src/providers/mcp';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
@@ -99,6 +100,153 @@ describeEvaluator('registered resources across overlapping evaluations', () => {
       await Promise.allSettled([earlier, ...(next ? [next] : [])]);
       providerRegistry.unregister(unrelated);
       vi.useRealTimers();
+    }
+  });
+
+  it.each(['signal', 'scope'] as const)(
+    'does not start a queued provider call after its %s ends',
+    async (mode) => {
+      const cleanupStarted = deferred();
+      const releaseCleanup = deferred();
+      const stopEvaluation = deferred();
+      const queuedStarted = deferred();
+      const provider = {
+        id: () => 'cancelled-queued-provider',
+        cleanup: vi.fn(async () => {
+          cleanupStarted.resolve();
+          await releaseCleanup.promise;
+        }),
+      };
+      const run = vi.fn(async () => {});
+      const abort = new AbortController();
+      const reason = new Error('grading was cancelled');
+      const preceding = providerRegistry.withEvaluation(async () => {
+        await providerRegistry.cleanupWhenIdle([provider]);
+      });
+      let evaluation: Promise<void> | undefined;
+      let queued: Promise<void> | undefined;
+      try {
+        await cleanupStarted.promise;
+        evaluation = providerRegistry.withEvaluation(async () => {
+          queued = providerRegistry.withProvider(
+            provider,
+            run,
+            mode === 'signal' ? abort.signal : undefined,
+          );
+          void queued.catch(() => {});
+          queuedStarted.resolve();
+          await stopEvaluation.promise;
+        });
+        await queuedStarted.promise;
+        if (mode === 'signal') {
+          abort.abort(reason);
+          await expect(queued).rejects.toBe(reason);
+        } else {
+          stopEvaluation.resolve();
+          await expect(queued).rejects.toMatchObject({ name: 'AbortError' });
+        }
+        stopEvaluation.resolve();
+        await evaluation;
+        expect(run).not.toHaveBeenCalled();
+        releaseCleanup.resolve();
+        await preceding;
+        expect(run).not.toHaveBeenCalled();
+      } finally {
+        abort.abort(reason);
+        stopEvaluation.resolve();
+        releaseCleanup.resolve();
+        await Promise.allSettled([
+          preceding,
+          ...(evaluation ? [evaluation] : []),
+          ...(queued ? [queued] : []),
+        ]);
+      }
+    },
+  );
+
+  it('stops provider setup on caller cancellation without waiting for an earlier cleanup', async () => {
+    const cleanupStarted = deferred();
+    const releaseCleanup = deferred();
+    const setupStarted = deferred();
+    const provider = {
+      id: () => 'cancelled-provider-setup',
+      cleanup: vi.fn(async () => {
+        cleanupStarted.resolve();
+        await releaseCleanup.promise;
+      }),
+    };
+    const run = vi.fn();
+    const abort = new AbortController();
+    const reason = new Error('setup was cancelled');
+    const preceding = providerRegistry.withEvaluation(async () => {
+      await providerRegistry.cleanupWhenIdle([provider]);
+    });
+    let current: Promise<void> | undefined;
+    try {
+      await cleanupStarted.promise;
+      current = providerRegistry.withEvaluation(async () => {
+        setupStarted.resolve();
+        await providerRegistry.useProvider(provider, abort.signal);
+        run();
+      });
+      void current.catch(() => {});
+      await setupStarted.promise;
+      abort.abort(reason);
+      await expect(current).rejects.toBe(reason);
+      expect(run).not.toHaveBeenCalled();
+      releaseCleanup.resolve();
+      await preceding;
+      expect(run).not.toHaveBeenCalled();
+    } finally {
+      releaseCleanup.resolve();
+      await Promise.allSettled([preceding, ...(current ? [current] : [])]);
+    }
+  });
+
+  it('keeps cleanup with the target behind an evaluation wrapper until its cancelled call drains', async () => {
+    const entered = deferred();
+    const finish = deferred();
+    const settled = deferred();
+    let signal: AbortSignal | undefined;
+    const cleanup = vi.fn(async () => {});
+    const target: MCPProvider = Object.assign(Object.create(MCPProvider.prototype), {
+      config: { enabled: false },
+      getAvailableTools: vi.fn(async () => []),
+      callApi: vi.fn(async (_prompt: string, _context: unknown, options?: CallApiOptionsParams) => {
+        signal = options?.abortSignal;
+        entered.resolve();
+        try {
+          await finish.promise;
+          signal?.throwIfAborted();
+          return { output: 'finished' };
+        } finally {
+          settled.resolve();
+        }
+      }),
+      cleanup,
+    });
+    const suite: TestSuite = {
+      providers: [target],
+      prompts: [toPrompt('ping')],
+      tests: [{ metadata: { pluginId: 'custom' } }],
+    };
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    const evaluation = providerRegistry.withEvaluation(async () => {
+      await providerRegistry.cleanupWhenIdle([target]);
+      return evaluate(suite, record, { timeoutMs: 50 });
+    });
+    try {
+      await entered.promise;
+      await evaluation;
+      expect(signal?.aborted).toBe(true);
+      expect(cleanup).not.toHaveBeenCalled();
+      finish.resolve();
+      await settled.promise;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(cleanup).toHaveBeenCalledOnce();
+    } finally {
+      finish.resolve();
+      await Promise.allSettled([evaluation]);
     }
   });
 

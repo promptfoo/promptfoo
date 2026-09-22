@@ -62,13 +62,16 @@ export function callGradingProvider<T extends ProviderResponse>(
   const executionContext = getProviderCallExecutionContext();
   const tracingContext = getProviderCallTracingContext();
   const callProvider = (): Promise<T> =>
-    providerRegistry.withProvider(provider, () =>
-      tracingContext
-        ? (tracingContext.withProviderSpan(
-            { provider, callContext, operationName, role: 'grader', promptLabel: label },
-            invoke,
-          ) as Promise<T>)
-        : invoke(callContext),
+    providerRegistry.withProvider(
+      provider,
+      () =>
+        tracingContext
+          ? (tracingContext.withProviderSpan(
+              { provider, callContext, operationName, role: 'grader', promptLabel: label },
+              invoke,
+            ) as Promise<T>)
+          : invoke(callContext),
+      executionContext?.abortSignal,
     );
 
   const executeCall = () => {
