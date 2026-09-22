@@ -232,6 +232,85 @@ describeEvaluator('registered resources across overlapping evaluations', () => {
     }
   });
 
+  it.each(['provider call', 'resource reservation'] as const)(
+    'abandons a pending shared resource on %s cancellation without interrupting a sibling',
+    async (signalSource) => {
+      const registry = new ProviderRegistry(false);
+      const shutdownStarted = deferred();
+      const finishShutdown = deferred();
+      const waiting = deferred();
+      const siblingWaiting = deferred();
+      const finishEvaluation = deferred();
+      const resource = {
+        shutdown: vi.fn(async () => {
+          shutdownStarted.resolve();
+          await finishShutdown.promise;
+        }),
+      };
+      const controller = new AbortController();
+      const reason = new Error('evaluation step expired');
+      const abandoned = vi.fn();
+      const sibling = vi.fn();
+      const first = registry.withEvaluation(async () => registry.register(resource));
+      let physical: Promise<void> | undefined;
+      let unaffected: Promise<void> | undefined;
+      let later: Promise<void> | undefined;
+      try {
+        await shutdownStarted.promise;
+        later = registry.withEvaluation(async () => {
+          physical = registry.withProvider(
+            { id: () => 'cancelled-shared-resource-user' },
+            async () => {
+              const ready = registry.useResource(
+                resource,
+                signalSource === 'resource reservation' ? controller.signal : undefined,
+              );
+              waiting.resolve();
+              await ready;
+              registry.throwIfResourceUseAborted();
+              abandoned();
+            },
+            signalSource === 'provider call' ? controller.signal : undefined,
+          );
+          void physical.catch(() => {});
+          unaffected = registry.withProvider(
+            { id: () => 'other-shared-resource-user' },
+            async () => {
+              const ready = registry.useResource(resource);
+              siblingWaiting.resolve();
+              await ready;
+              sibling();
+            },
+          );
+          void unaffected.catch(() => {});
+          await finishEvaluation.promise;
+        });
+        await Promise.all([waiting.promise, siblingWaiting.promise]);
+        controller.abort(reason);
+        await expect(physical).rejects.toBe(reason);
+        expect(abandoned).not.toHaveBeenCalled();
+        expect(sibling).not.toHaveBeenCalled();
+
+        finishShutdown.resolve();
+        await Promise.all([first, unaffected]);
+        expect(abandoned).not.toHaveBeenCalled();
+        expect(sibling).toHaveBeenCalledOnce();
+        finishEvaluation.resolve();
+        await later;
+        expect(resource.shutdown).toHaveBeenCalledOnce();
+      } finally {
+        finishShutdown.resolve();
+        finishEvaluation.resolve();
+        await Promise.allSettled([
+          first,
+          ...(later ? [later] : []),
+          ...(physical ? [physical] : []),
+          ...(unaffected ? [unaffected] : []),
+        ]);
+      }
+    },
+  );
+
   it('blocks only the reused provider while its cleanup is still running, even after a minute', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     const cleanupStarted = deferred();
@@ -837,12 +916,11 @@ describeEvaluator('registered resources across overlapping evaluations', () => {
     },
   );
 
-  it('waits for an earlier resource shutdown when the physical caller outlives its evaluation', async () => {
+  it('does not start using an earlier shared resource after the physical caller’s evaluation ends', async () => {
     const shutdownStarted = deferred();
     const releaseShutdown = deferred();
     const startUse = deferred();
     const using = deferred();
-    const finish = deferred();
     const resource = {
       shutdown: vi.fn(async () => {
         shutdownStarted.resolve();
@@ -862,7 +940,6 @@ describeEvaluator('registered resources across overlapping evaluations', () => {
         await providerRegistry.useResource(resource);
         touched();
         providerRegistry.register(resource);
-        await finish.promise;
       });
       void physical.catch(() => {});
     });
@@ -870,23 +947,16 @@ describeEvaluator('registered resources across overlapping evaluations', () => {
       await Promise.all([shutdownStarted.promise, evaluation]);
       startUse.resolve();
       await using.promise;
-      await new Promise<void>((resolve) => setImmediate(resolve));
+      await expect(physical).rejects.toMatchObject({ name: 'AbortError' });
       expect(touched).not.toHaveBeenCalled();
 
       releaseShutdown.resolve();
       await earlier;
-      await new Promise<void>((resolve) => setImmediate(resolve));
-      expect(touched).toHaveBeenCalledOnce();
+      expect(touched).not.toHaveBeenCalled();
       expect(resource.shutdown).toHaveBeenCalledOnce();
-
-      finish.resolve();
-      await physical;
-      await new Promise<void>((resolve) => setImmediate(resolve));
-      expect(resource.shutdown).toHaveBeenCalledTimes(2);
     } finally {
       startUse.resolve();
       releaseShutdown.resolve();
-      finish.resolve();
       await Promise.allSettled([earlier, evaluation, ...(physical ? [physical] : [])]);
       providerRegistry.unregister(resource);
     }

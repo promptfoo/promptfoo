@@ -42,7 +42,10 @@ interface ResourceState {
 
 export class ProviderRegistry {
   private readonly evaluation = new AsyncLocalStorage<EvaluationScope>();
-  private readonly currentProvider = new AsyncLocalStorage<ProviderState>();
+  private readonly currentProvider = new AsyncLocalStorage<{
+    state: ProviderState;
+    signal?: AbortSignal;
+  }>();
   private readonly releasingResource = new AsyncLocalStorage<{
     state: ResourceState;
     registration: number;
@@ -120,7 +123,7 @@ export class ProviderRegistry {
       throw this.processShutdownError();
     }
     if (!scope) {
-      return run();
+      return this.currentProvider.run({ state: this.getProvider(provider), signal }, run);
     }
     if (!scope.active) {
       throw this.closedScopeError();
@@ -133,7 +136,7 @@ export class ProviderRegistry {
       finish = resolve;
     });
     this.activeCalls.add(finished);
-    return this.currentProvider.run(state, async () => {
+    return this.currentProvider.run({ state, signal }, async () => {
       try {
         if (ready) {
           await this.waitForScope(scope, ready, signal);
@@ -196,25 +199,43 @@ export class ProviderRegistry {
     signal?.throwIfAborted();
   }
 
-  /** Reserve a shared resource before using it, waiting if its preceding shutdown has started. */
-  useResource(resource: CleanupProvider): Promise<void> | undefined {
+  /** Recheck after an awaited reservation, before starting more work with a shared resource. */
+  throwIfResourceUseAborted(signal?: AbortSignal): void {
+    signal?.throwIfAborted();
+    this.currentProvider.getStore()?.signal?.throwIfAborted();
     if (this.processShuttingDown) {
-      return Promise.reject(this.processShutdownError());
+      throw this.processShutdownError();
+    }
+    const scope = this.evaluation.getStore();
+    if (scope && !scope.active) {
+      throw this.closedScopeError();
+    }
+  }
+
+  /** Reserve a shared resource without resuming work after cancellation or evaluation closure. */
+  useResource(resource: CleanupProvider, signal?: AbortSignal): Promise<void> | undefined {
+    try {
+      this.throwIfResourceUseAborted(signal);
+    } catch (error) {
+      return Promise.reject(error);
     }
     const state = this.resources.get(resource);
     if (!state) {
       return undefined;
     }
-    const provider = this.currentProvider.getStore();
-    if (provider?.activeCalls) {
-      this.linkResource(provider, state);
+    const current = this.currentProvider.getStore();
+    if (current?.state.activeCalls) {
+      this.linkResource(current.state, state);
     }
     const scope = this.evaluation.getStore();
-    if (!scope?.active) {
-      return provider?.activeCalls ? state.release?.promise : undefined;
+    if (scope) {
+      this.claimResource(scope, state);
     }
-    this.claimResource(scope, state);
-    return state.release?.promise;
+    const callerSignal =
+      signal && current?.signal && signal !== current.signal
+        ? AbortSignal.any([signal, current.signal])
+        : (signal ?? current?.signal);
+    return state.release && this.waitForScope(scope, state.release.promise, callerSignal);
   }
 
   register(resource: CleanupProvider): void {
@@ -245,7 +266,16 @@ export class ProviderRegistry {
       void this.forceResource(state);
       return;
     }
-    void this.useResource(resource);
+    // Registration may finish after an evaluation closes; retain already-opened resources until
+    // their physical provider call settles, even though that call may no longer start new work.
+    const current = this.currentProvider.getStore();
+    if (current?.state.activeCalls) {
+      this.linkResource(current.state, state);
+    }
+    const scope = this.evaluation.getStore();
+    if (scope?.active) {
+      this.claimResource(scope, state);
+    }
     this.ensureShutdownHandlers();
   }
 
@@ -341,29 +371,39 @@ export class ProviderRegistry {
   }
 
   private waitForScope(
-    scope: EvaluationScope,
+    scope: EvaluationScope | undefined,
     ready: Promise<void>,
     callerSignal?: AbortSignal,
   ): Promise<void> {
     const signal = callerSignal
       ? AbortSignal.any([callerSignal, this.processAbortController.signal])
       : this.processAbortController.signal;
-    if (signal.aborted) {
+    if (signal.aborted || (scope && !scope.active)) {
       void ready.catch(() => {});
-      return Promise.reject(signal.reason);
+      return Promise.reject(signal.aborted ? signal.reason : this.closedScopeError());
     }
-    const closed = scope.closed.then(() => {
-      signal.throwIfAborted();
-      throw this.closedScopeError();
-    });
-    const pending = Promise.race([ready, closed]);
+    const pending = scope
+      ? Promise.race([
+          ready,
+          scope.closed.then(() => {
+            signal.throwIfAborted();
+            throw this.closedScopeError();
+          }),
+        ])
+      : ready;
     return new Promise<void>((resolve, reject) => {
       const onAbort = () => reject(signal.reason);
       signal.addEventListener('abort', onAbort, { once: true });
       pending.then(
         () => {
           signal.removeEventListener('abort', onAbort);
-          resolve();
+          if (signal.aborted) {
+            reject(signal.reason);
+          } else if (scope && !scope.active) {
+            reject(this.closedScopeError());
+          } else {
+            resolve();
+          }
         },
         (error) => {
           signal.removeEventListener('abort', onAbort);
