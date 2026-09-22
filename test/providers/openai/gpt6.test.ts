@@ -626,4 +626,53 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
       }).getOpenAiBody('Say ready.'),
     ).rejects.toThrow('instead of passthrough.reasoning_effort');
   });
+
+  it('applies the same model rules to named Azure OpenAI deployments', async () => {
+    const config = {
+      apiKey: 'test-key',
+      reasoning_effort: 'none' as const,
+      temperature: 0.3,
+      top_p: 0.8,
+      tools: [statusTool],
+      tool_choice: 'required' as const,
+    };
+    const { body: chat } = await new AzureChatCompletionProvider('production', {
+      config: { ...config, modelName: model },
+    }).getOpenAiBody('Get the status.');
+    const responses = await new AzureResponsesProvider(`prod-${model}`, {
+      config,
+    }).getAzureResponsesBody('Get the status.');
+
+    expect(chat).toMatchObject({
+      model: 'production',
+      reasoning_effort: 'none',
+      temperature: 0.3,
+      top_p: 0.8,
+      tools: [statusTool],
+    });
+    expect(responses).toMatchObject({
+      model: `prod-${model}`,
+      reasoning: { effort: 'none' },
+      temperature: 0.3,
+      top_p: 0.8,
+      tools: [{ type: 'function', name: 'get_status' }],
+    });
+
+    await expect(
+      new AzureChatCompletionProvider('production', {
+        config: { ...config, modelName: model, reasoning_effort: 'low' },
+      }).getOpenAiBody('Get the status.'),
+    ).rejects.toThrow('Chat Completions function calling requires reasoning_effort: none');
+
+    const reasoningResponses = await new AzureResponsesProvider(`prod-${model}`, {
+      config: { ...config, reasoning_effort: 'low' },
+    }).getAzureResponsesBody('Get the status.');
+    expect(reasoningResponses).toMatchObject({
+      reasoning: { effort: 'low' },
+      tools: [{ type: 'function', name: 'get_status' }],
+    });
+    expect(reasoningResponses).not.toHaveProperty('temperature');
+    expect(reasoningResponses).not.toHaveProperty('top_p');
+    expect(calculateAzureCost(model, config, 1000, 100)).toBeUndefined();
+  });
 });
