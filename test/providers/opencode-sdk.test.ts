@@ -2226,6 +2226,16 @@ describe('OpenCodeSDKProvider', () => {
 
       it.each([
         ['provider API key', { apiKey: 'q7x9' }],
+        ['provider URL username', { baseUrl: 'https://q7x9@example.test' }],
+        ['malformed provider URL username', { baseUrl: 'https://q7x9@[bad]' }],
+        [
+          'remote MCP URL username',
+          { mcp: { gateway: { type: 'remote', url: 'https://q7x9@example.test/mcp' } } },
+        ],
+        [
+          'malformed remote MCP URL username',
+          { mcp: { gateway: { type: 'remote', url: 'https://q7x9@[bad]/mcp' } } },
+        ],
         [
           'arbitrarily named local MCP environment value',
           {
@@ -7882,6 +7892,12 @@ describe('OpenCodeSDKProvider', () => {
           }),
         },
         diagnostic: 'Upstream rejected the request',
+      },
+      {
+        label: 'transport generic wrapper code with a quota message',
+        delivery: 'transport',
+        details: { code: 'ERR_API', message: 'insufficient_quota' },
+        diagnostic: 'insufficient_quota',
       },
     ])('stops scheduler retries for $label without exposing the raw SDK error', async (entry) => {
       const { isProviderResponseRateLimited } = await import('../../src/scheduler/types');

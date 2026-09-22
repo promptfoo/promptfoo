@@ -1327,6 +1327,30 @@ describe('classifySdkRateLimit', () => {
       },
       'rate_limit',
     ],
+    [{ status: 429, details: [{ code: 'ERR_API', message: 'insufficient_quota' }] }, 'quota'],
+    [
+      {
+        status: 429,
+        details: [{ code: 'ERR_API', message: 'insufficient_quota' }],
+        headers: { 'retry-after': '1' },
+      },
+      'rate_limit',
+    ],
+    [{ status: 429, body: { error: { code: 'ERR_API' }, code: 'insufficient_quota' } }, 'quota'],
+    [
+      {
+        status: 429,
+        details: [{ code: 'ERR_API', type: 'APIError' }, { type: 'insufficient_quota' }],
+      },
+      'quota',
+    ],
+    [
+      {
+        status: 429,
+        details: [{ code: 'ERR_API' }, { code: 'rate_limit_exceeded', type: 'insufficient_quota' }],
+      },
+      'rate_limit',
+    ],
     [
       { status: 429, details: [{ message: 'Your credit balance is too low' }], isRetryable: false },
       'quota',
