@@ -23,6 +23,7 @@ const usage = {
   input_tokens_details: { cached_tokens: 40 },
   output_tokens_details: { reasoning_tokens: 5 },
 };
+const tokenCountFields = ['input_tokens', 'output_tokens', 'total_tokens'] as const;
 const session = { id: 'sess_test', status: 'idle', agent: { model: 'gpt-6-astra' }, usage };
 const turn = { id: 'turn_test', status: 'completed', subagent_id: null, usage };
 const message = {
@@ -2282,6 +2283,84 @@ describe('OpenAiAgentsApiProvider', () => {
     expect(result.metadata).not.toHaveProperty('usageUnavailable');
   });
 
+  it.each(
+    tokenCountFields.flatMap((field) =>
+      [-1, 0.5, Number.MAX_SAFE_INTEGER + 1].map((count) => ({ field, count })),
+    ),
+  )('rejects $count in the session and root $field', async ({ field, count }) => {
+    const invalid = { ...usage, [field]: count };
+    let rootHasValidUsage = true;
+    mockApi((pathname, method) => {
+      if (
+        method !== 'DELETE' &&
+        (pathname.endsWith('/sessions') || pathname.endsWith('/sess_test'))
+      ) {
+        return json({ ...session, usage: invalid });
+      }
+      if (!rootHasValidUsage && pathname.endsWith('/turns/turn_test')) {
+        return json({ ...turn, usage: invalid });
+      }
+      if (!rootHasValidUsage && pathname.endsWith('/turns')) {
+        return json(page([{ ...turn, usage: invalid }]));
+      }
+      return undefined;
+    });
+
+    const fallback = await provider({ usageTimeoutMs: 0 }).callApi('hi');
+    expect(fallback.tokenUsage).toMatchObject({ prompt: 100, completion: 20, total: 120 });
+    expect(fallback.cost).toBeGreaterThan(0);
+
+    rootHasValidUsage = false;
+    const withoutUsage = await provider({ usageTimeoutMs: 0 }).callApi('hi');
+    expect(withoutUsage).toMatchObject({ output: '42', metadata: { usageUnavailable: true } });
+    expect(withoutUsage.tokenUsage).toBeUndefined();
+    expect(withoutUsage.cost).toBeUndefined();
+  });
+
+  it.each([0, Number.MAX_SAFE_INTEGER])(
+    'accepts the safe token-count boundary %s',
+    async (count) => {
+      mockApi((pathname, method) =>
+        method !== 'DELETE' && (pathname.endsWith('/sessions') || pathname.endsWith('/sess_test'))
+          ? json({
+              ...session,
+              usage: { input_tokens: count, output_tokens: 0, total_tokens: count },
+            })
+          : undefined,
+      );
+      const result = await provider({ usageTimeoutMs: 0 }).callApi('hi');
+      expect(result.tokenUsage).toMatchObject({ prompt: count, completion: 0, total: count });
+      expect(result.metadata?.usageUnavailable).toBeUndefined();
+    },
+  );
+
+  it.each([
+    ['input_tokens_details', 'cached_tokens'],
+    ['output_tokens_details', 'reasoning_tokens'],
+  ] as const)('rejects malformed optional usage in %s.%s', async (details, field) => {
+    for (const count of [-1, 0.5, Number.MAX_SAFE_INTEGER + 1, '20']) {
+      mockApi((pathname, method) =>
+        method !== 'DELETE' && (pathname.endsWith('/sessions') || pathname.endsWith('/sess_test'))
+          ? json({ ...session, usage: { ...usage, [details]: { [field]: count } } })
+          : undefined,
+      );
+      const result = await provider({ usageTimeoutMs: 0 }).callApi('hi');
+      expect(result.tokenUsage).toMatchObject({ cached: 40, completionDetails: { reasoning: 5 } });
+    }
+
+    mockApi((pathname, method) =>
+      method !== 'DELETE' && (pathname.endsWith('/sessions') || pathname.endsWith('/sess_test'))
+        ? json({ ...session, usage: { ...usage, [details]: { [field]: null } } })
+        : undefined,
+    );
+    const result = await provider({ usageTimeoutMs: 0 }).callApi('hi');
+    expect(
+      field === 'cached_tokens'
+        ? result.tokenUsage?.cached
+        : result.tokenUsage?.completionDetails?.reasoning,
+    ).toBeUndefined();
+  });
+
   it.each([false, true])(
     'uses valid root usage when session usage is malformed (subagents=%s)',
     async (hasSubagents) => {
@@ -2457,6 +2536,41 @@ describe('OpenAiAgentsApiProvider', () => {
       });
       expect(result.metadata).not.toHaveProperty('usageFromRootTurn');
     });
+
+    it.each([...tokenCountFields, 'cached_tokens', 'reasoning_tokens'] as const)(
+      'omits subagent usage when the sum of %s overflows',
+      async (field) => {
+        vi.useFakeTimers();
+        const withCount = (id: string, count: number) => ({
+          ...subagentTurn(id, 0, 0),
+          usage: {
+            input_tokens: 0,
+            output_tokens: 0,
+            total_tokens: 0,
+            ...(field === 'cached_tokens'
+              ? { input_tokens_details: { cached_tokens: count } }
+              : field === 'reasoning_tokens'
+                ? { output_tokens_details: { reasoning_tokens: count } }
+                : { [field]: count }),
+          },
+        });
+        mockSubagentTurns((id) =>
+          json(
+            page(
+              id === 'subagent_a'
+                ? [withCount('turn_a1', Number.MAX_SAFE_INTEGER), withCount('turn_a2', 1)]
+                : [withCount('turn_b1', 1)],
+            ),
+          ),
+        );
+        const pending = provider().callApi('hi');
+        await vi.advanceTimersByTimeAsync(1_000);
+        const result = await pending;
+        expect(result.tokenUsage).toMatchObject({ prompt: 100, completion: 20, total: 120 });
+        expect(result.metadata).toMatchObject({ usageMayExcludeSubagents: true });
+        expect(result.metadata).not.toHaveProperty('subagentUsage');
+      },
+    );
 
     it.each([
       { reason: 'a failed turns read', respond: () => apiError(403, 'missing api.agents.read') },

@@ -339,18 +339,20 @@ function redactCredentials(text: string, credentials: readonly string[]): string
     .replace(/\b(Bearer|Basic)\s+[\w.~+/=-]{8,}/gi, `$1 ${REDACTED}`);
 }
 
-function isFiniteNonNegativeInteger(value: unknown): value is number {
-  return (
-    typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 0
-  );
+function isNonNegativeSafeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
 function isUsage(value: unknown): value is Usage {
   const usage = value as Usage | null | undefined;
+  const cached = usage?.input_tokens_details?.cached_tokens;
+  const reasoning = usage?.output_tokens_details?.reasoning_tokens;
   return (
-    isFiniteNonNegativeInteger(usage?.input_tokens) &&
-    isFiniteNonNegativeInteger(usage.output_tokens) &&
-    isFiniteNonNegativeInteger(usage.total_tokens)
+    isNonNegativeSafeInteger(usage?.input_tokens) &&
+    isNonNegativeSafeInteger(usage.output_tokens) &&
+    isNonNegativeSafeInteger(usage.total_tokens) &&
+    (cached == null || isNonNegativeSafeInteger(cached)) &&
+    (reasoning == null || isNonNegativeSafeInteger(reasoning))
   );
 }
 
@@ -359,13 +361,13 @@ function toTokenUsage(usage: Usage) {
     prompt: usage.input_tokens,
     completion: usage.output_tokens,
     total: usage.total_tokens,
-    cached: usage.input_tokens_details?.cached_tokens,
-    completionDetails: { reasoning: usage.output_tokens_details?.reasoning_tokens },
+    cached: usage.input_tokens_details?.cached_tokens ?? undefined,
+    completionDetails: { reasoning: usage.output_tokens_details?.reasoning_tokens ?? undefined },
   };
 }
 
-function addUsage(left: Usage, right: Usage): Usage {
-  return {
+function addUsage(left: Usage, right: Usage): Usage | undefined {
+  const sum = {
     input_tokens: left.input_tokens + right.input_tokens,
     output_tokens: left.output_tokens + right.output_tokens,
     total_tokens: left.total_tokens + right.total_tokens,
@@ -380,6 +382,7 @@ function addUsage(left: Usage, right: Usage): Usage {
         (right.output_tokens_details?.reasoning_tokens ?? 0),
     },
   };
+  return isUsage(sum) ? sum : undefined;
 }
 
 function referencesVariable(template: string, names: string[]): boolean {
@@ -632,7 +635,6 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         return {};
       }
       let sum: Usage | undefined;
-      let complete = true;
       for (const id of subagentIds) {
         const turns = await this.list<Turn>(
           `${endpoint}/subagents/${encodeURIComponent(id)}/turns`,
@@ -640,17 +642,19 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
           signal,
         );
         for (const turn of turns) {
-          if (isUsage(turn.usage)) {
-            sum = sum ? addUsage(sum, turn.usage) : turn.usage;
-          } else {
-            complete = false;
+          if (!isUsage(turn.usage)) {
+            return { usageMayExcludeSubagents: true };
+          }
+          sum = sum ? addUsage(sum, turn.usage) : turn.usage;
+          if (!sum) {
+            return { usageMayExcludeSubagents: true };
           }
         }
       }
       return {
         usageMayExcludeSubagents: true,
         // A partial sum would understate subagent work, so it is reported only when complete.
-        ...(complete && sum ? { subagentUsage: toTokenUsage(sum) } : {}),
+        ...(sum ? { subagentUsage: toTokenUsage(sum) } : {}),
       };
     } catch (error) {
       evalSignal?.throwIfAborted();
