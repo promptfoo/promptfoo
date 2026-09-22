@@ -48,6 +48,8 @@ Or set them in the provider `config` (see [full example below](#using-client-cre
 - `azureClientSecret`
 - `azureTenantId`
 
+If no API key is configured and only some service principal values are set, the Azure OpenAI providers warn and fall back to Azure CLI credentials. Foundry Agent uses the Azure SDK's default credential chain instead.
+
 Optionally, you can also set:
 
 - `AZURE_AUTHORITY_HOST` / `azureAuthorityHost` (defaults to `https://login.microsoftonline.com`)
