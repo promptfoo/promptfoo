@@ -115,7 +115,6 @@ export async function discoverTokenEndpoint(serverUrl: string): Promise<string> 
   // Check cache first
   const cached = tokenEndpointCache.get(serverUrl);
   if (cached) {
-    logger.debug(`[MCP Auth] Using cached token endpoint for ${serverUrl}`);
     return cached;
   }
 
@@ -196,7 +195,6 @@ export async function getOAuthTokenWithExpiry(
     cached.accessToken !== rejectedToken &&
     Date.now() + TOKEN_REFRESH_BUFFER_MS < cached.expiresAt
   ) {
-    logger.debug('[MCP Auth] Using cached OAuth token');
     return { accessToken: cached.accessToken, expiresAt: cached.expiresAt };
   }
 
