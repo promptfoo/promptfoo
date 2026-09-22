@@ -397,11 +397,30 @@ describe('xAI Chat Provider', () => {
       expect(body).not.toHaveProperty('presence_penalty');
       expect(body).not.toHaveProperty('frequency_penalty');
       expect(body).not.toHaveProperty('stop');
-      const overridden = await provider.getOpenAiBody('hello', {
-        prompt: { config: { max_completion_tokens: 64, passthrough: { model: 'grok-4.7' } } },
+      for (const config of [
+        { max_tokens: 64 },
+        { max_completion_tokens: 64, passthrough: { model: 'grok-4.7' } },
+        { passthrough: { model: 'grok-4.7', max_tokens: 64 } },
+      ]) {
+        const overridden = await provider.getOpenAiBody('hello', { prompt: { config } });
+        expect(overridden.body.max_completion_tokens).toBe(64);
+        expect(overridden.body).not.toHaveProperty('max_tokens');
+      }
+      await expect(
+        provider.getOpenAiBody('hello', {
+          prompt: { config: { max_completion_tokens: 64, max_tokens: 32 } },
+        }),
+      ).rejects.toThrow('conflicting max_tokens and max_completion_tokens');
+      const restore = mockProcessEnv({
+        OPENAI_MAX_COMPLETION_TOKENS: undefined,
+        OPENAI_MAX_TOKENS: '37',
       });
-      expect(overridden.body.max_completion_tokens).toBe(64);
-      expect(overridden.body).not.toHaveProperty('max_tokens');
+      try {
+        const fromEnv = createXAIProvider('xai:grok-4.7') as any;
+        expect((await fromEnv.getOpenAiBody('hello')).body.max_completion_tokens).toBe(37);
+      } finally {
+        restore();
+      }
     });
 
     it('accepts a simple eval variable and rejects other reasoning expressions before a request', async () => {
@@ -444,6 +463,11 @@ describe('xAI Chat Provider', () => {
       };
       await provider.callApi('hello', context);
       expect(JSON.parse(mockFetchWithCache.mock.calls[0][1].body).reasoning_effort).toBe('low');
+      await provider.callApi('hello', {
+        ...context,
+        test: { options: { reasoning_effort: 'low', passthrough: { reasoning_effort: 'xhigh' } } },
+      });
+      expect(JSON.parse(mockFetchWithCache.mock.calls[1][1].body).reasoning_effort).toBe('xhigh');
       mockFetchWithCache.mockClear();
       const restore = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
       try {

@@ -262,6 +262,13 @@ describe('XAIResponsesProvider', () => {
     expect((await provider.getRequestBody('hello', context)).body.reasoning).toEqual({
       effort: 'low',
     });
+    const sameScope = await provider.getRequestBody('hello', {
+      ...context,
+      test: {
+        options: { reasoning: { effort: 'low' }, passthrough: { reasoning: { effort: 'xhigh' } } },
+      },
+    });
+    expect(sameScope.body.reasoning).toEqual({ effort: 'xhigh' });
     const restore = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
     try {
       await expect(

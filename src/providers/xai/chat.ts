@@ -745,18 +745,32 @@ export function getXAIRequestModel(modelName: string, config?: { passthrough?: o
   return typeof model === 'string' ? model : modelName;
 }
 
+type XAIRequestOption = 'reasoning' | 'reasoning_effort' | 'max_completion_tokens' | 'max_tokens';
+
 export function getXAIRequestOption(
-  key: 'reasoning' | 'reasoning_effort',
+  key: XAIRequestOption | readonly XAIRequestOption[],
   ...scopes: (object | undefined)[]
 ): unknown {
+  const keys = typeof key === 'string' ? [key] : key;
   for (const scope of scopes) {
     const config = scope as Record<string, unknown> | undefined;
-    if (config && Object.hasOwn(config, key)) {
-      return config[key];
-    }
     const raw = config?.passthrough as Record<string, unknown> | undefined;
-    if (raw && Object.hasOwn(raw, key)) {
-      return raw[key];
+    for (const source of [raw, config]) {
+      if (
+        source &&
+        keys.length === 2 &&
+        keys.every((name) => Object.hasOwn(source, name) && source[name] != null) &&
+        source[keys[0]] !== source[keys[1]]
+      ) {
+        throw new XAIRequestConfigError(
+          'xAI Grok 4.7 received conflicting max_tokens and max_completion_tokens; use one spelling',
+        );
+      }
+      for (const name of keys) {
+        if (source && Object.hasOwn(source, name)) {
+          return source[name];
+        }
+      }
     }
   }
   return undefined;
@@ -830,9 +844,14 @@ class XAIProvider extends OpenAiChatCompletionProvider {
     }
     if (model === 'grok-4.7') {
       const tokenLimit =
-        config.passthrough?.max_completion_tokens ??
-        config.max_completion_tokens ??
-        getEnvInt('OPENAI_MAX_COMPLETION_TOKENS');
+        getXAIRequestOption(
+          ['max_completion_tokens', 'max_tokens'],
+          context?.test?.options,
+          context?.prompt?.config,
+          this.config,
+        ) ??
+        getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ??
+        getEnvInt('OPENAI_MAX_TOKENS');
       delete result.body.max_tokens;
       if (tokenLimit !== undefined) {
         Object.assign(result.body, { max_completion_tokens: tokenLimit });
