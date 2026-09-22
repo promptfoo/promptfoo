@@ -881,6 +881,8 @@ export class OllamaChatProvider implements ApiProvider {
 }
 
 export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
+  readonly supportsEmbeddingCancellation = true;
+
   async callEmbeddingApi(
     text: string,
     _context?: CallApiContextParams,

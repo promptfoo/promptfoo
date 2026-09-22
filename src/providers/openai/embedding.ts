@@ -18,6 +18,8 @@ type OpenAiEmbeddingOptions = OpenAiSharedOptions & {
 };
 
 export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
+  readonly supportsEmbeddingCancellation = true;
+
   declare config: OpenAiEmbeddingOptions;
 
   constructor(

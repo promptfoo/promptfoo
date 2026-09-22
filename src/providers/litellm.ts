@@ -137,6 +137,8 @@ class LiteLLMCompletionProvider extends LiteLLMProviderWrapper {
  * LiteLLM Embedding Provider
  */
 class LiteLLMEmbeddingProvider extends LiteLLMProviderWrapper implements ApiEmbeddingProvider {
+  readonly supportsEmbeddingCancellation = true;
+
   private embeddingProvider: OpenAiEmbeddingProvider;
 
   constructor(modelName: string, options: ProviderOptions) {

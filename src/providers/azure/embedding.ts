@@ -11,6 +11,8 @@ import type {
 } from '../../types/index';
 
 export class AzureEmbeddingProvider extends AzureGenericProvider {
+  readonly supportsEmbeddingCancellation = true;
+
   async callEmbeddingApi(
     text: string,
     _context?: CallApiContextParams,

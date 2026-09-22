@@ -15,8 +15,8 @@ import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  CancellableEmbeddingProvider,
   GradingConfig,
-  ProviderEmbeddingResponse,
   ProviderOptions,
   ProviderResponse,
   ProviderType,
@@ -47,20 +47,18 @@ export function getGradingProviderCallOptions(): CallApiOptionsParams | undefine
   return abortSignal ? { abortSignal } : undefined;
 }
 
-type CancellableEmbeddingCall = (
-  input: string,
-  context?: CallApiContextParams,
-  options?: CallApiOptionsParams,
-) => Promise<ProviderEmbeddingResponse>;
-
 export async function callEmbeddingProvider(provider: ApiProvider, input: string) {
   const options = getGradingProviderCallOptions();
   options?.abortSignal?.throwIfAborted();
-  const callEmbedding = provider.callEmbeddingApi as CancellableEmbeddingCall;
   try {
-    return await (options
-      ? callEmbedding.call(provider, input, undefined, options)
-      : callEmbedding.call(provider, input));
+    if (options && provider.supportsEmbeddingCancellation) {
+      return await (provider as CancellableEmbeddingProvider).callEmbeddingApi(
+        input,
+        undefined,
+        options,
+      );
+    }
+    return await provider.callEmbeddingApi!(input);
   } finally {
     options?.abortSignal?.throwIfAborted();
   }

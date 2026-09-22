@@ -7,7 +7,11 @@ import { getDefaultProviders } from '../../src/providers/defaults';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import { withProviderCallExecutionContext } from '../../src/scheduler/providerCallExecutionContext';
 
-import type { ApiEmbeddingProvider, ApiProvider } from '../../src/types/providers';
+import type {
+  ApiEmbeddingProvider,
+  ApiProvider,
+  CancellableEmbeddingProvider,
+} from '../../src/types/providers';
 
 vi.mock('../../src/providers/defaults', () => ({ getDefaultProviders: vi.fn() }));
 vi.mock('../../src/cache', async (importOriginal) => ({
@@ -17,7 +21,7 @@ vi.mock('../../src/cache', async (importOriginal) => ({
 
 describe('embedding graders receive evaluation cancellation', () => {
   const priorConfig = cliState.config;
-  const embed = vi.fn<OpenAiEmbeddingProvider['callEmbeddingApi']>();
+  const embed = vi.fn<CancellableEmbeddingProvider['callEmbeddingApi']>();
   const response = () => ({
     embedding: [1, 0],
     tokenUsage: { prompt: 1, completion: 0, total: 1, numRequests: 1 },
@@ -34,7 +38,8 @@ describe('embedding graders receive evaluation cancellation', () => {
       id: () => 'test-embedding',
       callApi: vi.fn<ApiProvider['callApi']>().mockRejectedValue(new Error('Unexpected text call')),
       callEmbeddingApi: embed,
-    };
+      supportsEmbeddingCancellation: true,
+    } satisfies CancellableEmbeddingProvider;
     text = {
       id: () => 'test-question-generator',
       callApi: vi.fn(async () => ({
@@ -86,30 +91,48 @@ describe('embedding graders receive evaluation cancellation', () => {
     },
   );
 
-  it('accepts existing providers with their own optional embedding arguments', async () => {
-    const legacy = {
-      id: () => 'custom-embedding',
-      callApi: text.callApi,
-      callEmbeddingApi: vi.fn(async (_input: string, settings?: { dimensions: number }) => {
+  it.each(['similarity', 'answer relevance'] as const)(
+    'keeps custom embedding arguments untouched through the %s matcher',
+    async (kind) => {
+      const withSettings = vi.fn(async (_input: string, settings?: { dimensions: number }) => {
         expect(settings).toBeUndefined();
         return response();
-      }),
-    } satisfies ApiEmbeddingProvider;
-    provider = legacy;
-    const controller = new AbortController();
-    await expect(
-      withProviderCallExecutionContext({ abortSignal: controller.signal }, () => run('similarity')),
-    ).resolves.toMatchObject({ pass: true });
-    expect(legacy.callEmbeddingApi).toHaveBeenCalledTimes(2);
-
-    const legacyWithThird: ApiProvider = {
-      ...legacy,
-      callEmbeddingApi: async (_input: string, _settings?: number, _timeout?: number) => response(),
-    };
-    await expect(legacyWithThird.callEmbeddingApi!('input')).resolves.toEqual(response());
-  });
+      });
+      const withTimeout = vi.fn(async (_input: string, _settings?: number, timeout?: number) => {
+        expect(timeout).toBeUndefined();
+        return response();
+      });
+      const legacyWithThird = {
+        id: () => 'custom-timeout-embedding',
+        callApi: text.callApi,
+        callEmbeddingApi: withTimeout,
+      } satisfies ApiEmbeddingProvider;
+      const implementations: ApiEmbeddingProvider[] = [
+        {
+          id: () => 'custom-settings-embedding',
+          callApi: text.callApi,
+          callEmbeddingApi: withSettings,
+        },
+        legacyWithThird,
+      ];
+      const controller = new AbortController();
+      for (const implementation of implementations) {
+        provider = implementation;
+        await expect(
+          withProviderCallExecutionContext({ abortSignal: controller.signal }, () => run(kind)),
+        ).resolves.toMatchObject({ pass: true });
+      }
+      for (const calls of [withSettings.mock.calls, withTimeout.mock.calls]) {
+        expect(calls).toHaveLength(kind === 'similarity' ? 2 : 4);
+        expect(calls.every((args) => args.length === 1)).toBe(true);
+      }
+      const publicProvider: ApiProvider = legacyWithThird;
+      await expect(publicProvider.callEmbeddingApi!('input')).resolves.toEqual(response());
+    },
+  );
 
   it('preserves the evaluation abort when a legacy provider returns an error response', async () => {
+    provider.supportsEmbeddingCancellation = false;
     const controller = new AbortController();
     const reason = new DOMException('evaluation cancelled', 'AbortError');
     let markStarted!: () => void;
