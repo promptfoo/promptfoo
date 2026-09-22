@@ -3757,6 +3757,7 @@ describe('OpenCodeSDKProvider', () => {
       ])(
         'classifies $label',
         async ({ data, message = 'Upstream rejected', kind, retryAfterMs }) => {
+          vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
           vi.spyOn(logger, 'error').mockImplementation(() => {});
           mockSessionPrompt.mockResolvedValueOnce(assistantFailure(apiError(message, data)));
 
