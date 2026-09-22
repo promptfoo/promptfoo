@@ -48,6 +48,7 @@ export function getGradingProviderCallOptions(): CallApiOptionsParams | undefine
 
 export function callEmbeddingProvider(provider: ApiProvider, input: string) {
   const options = getGradingProviderCallOptions();
+  options?.abortSignal?.throwIfAborted();
   return options
     ? provider.callEmbeddingApi!(input, undefined, options)
     : provider.callEmbeddingApi!(input);

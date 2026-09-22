@@ -26,11 +26,11 @@ type ModelsReply = {
   data?: Model[];
 };
 
-export async function fetchLocalModels(apiBaseUrl: string): Promise<Model[]> {
+export async function fetchLocalModels(apiBaseUrl: string, signal?: AbortSignal): Promise<Model[]> {
   try {
     const { data } = await fetchWithCache<ModelsReply>(
       `${apiBaseUrl}/models`,
-      undefined,
+      signal ? { signal } : undefined,
       undefined,
       'json',
       true,
@@ -44,8 +44,12 @@ export async function fetchLocalModels(apiBaseUrl: string): Promise<Model[]> {
   }
 }
 
-export async function hasLocalModel(modelId: string, apiBaseUrl: string): Promise<boolean> {
-  const localModels = await fetchLocalModels(apiBaseUrl);
+export async function hasLocalModel(
+  modelId: string,
+  apiBaseUrl: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  const localModels = await fetchLocalModels(apiBaseUrl, signal);
   return localModels.some(
     (model) => model && model.id?.toLocaleLowerCase() === modelId?.toLocaleLowerCase(),
   );
@@ -157,12 +161,18 @@ export class DMRCompletionProvider extends OpenAiCompletionProvider {
 }
 
 export class DMREmbeddingProvider extends OpenAiEmbeddingProvider {
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
-    if (!(await hasLocalModel(this.modelName, this.getApiUrl()))) {
+  async callEmbeddingApi(
+    text: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
+    if (!(await hasLocalModel(this.modelName, this.getApiUrl(), options?.abortSignal))) {
       logger.warn(
         `Model '${this.modelName}' not found. Run 'docker model pull ${this.modelName}'.`,
       );
     }
-    return super.callEmbeddingApi(text);
+    return context || options
+      ? super.callEmbeddingApi(text, context, options)
+      : super.callEmbeddingApi(text);
   }
 }

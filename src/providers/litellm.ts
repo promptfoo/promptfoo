@@ -148,8 +148,16 @@ class LiteLLMEmbeddingProvider extends LiteLLMProviderWrapper implements ApiEmbe
     }
   }
 
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
-    return this.withAuthHint(await this.embeddingProvider.callEmbeddingApi(text));
+  async callEmbeddingApi(
+    text: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
+    const result =
+      context || options
+        ? await this.embeddingProvider.callEmbeddingApi(text, context, options)
+        : await this.embeddingProvider.callEmbeddingApi(text);
+    return this.withAuthHint(result);
   }
 }
 
