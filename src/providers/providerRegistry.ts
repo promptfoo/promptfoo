@@ -7,6 +7,12 @@ interface CleanupProvider {
   shutdown(): Promise<void>;
 }
 
+/**
+ * How long a new evaluation waits for an earlier evaluation's cleanup. A cleanup that never
+ * settles must not stall every later evaluation in a long-lived process (web or MCP server).
+ */
+const IDLE_RELEASE_WAIT_MS = 30_000;
+
 /** The part of an ApiProvider that idle cleanup uses. */
 interface IdleCleanupProvider {
   id(): string;
@@ -28,13 +34,13 @@ class ProviderRegistry {
    * Run `run` as an active evaluation. Registered resources, and providers passed to
    * `cleanupWhenIdle`, are released only after the last active evaluation finishes, so one
    * evaluation finishing never closes a provider another is still using. A new evaluation
-   * waits for an in-progress release before it starts.
+   * waits (for at most IDLE_RELEASE_WAIT_MS) for an in-progress release before it starts.
    */
   async withEvaluation<T>(run: () => Promise<T>): Promise<T> {
     // Count synchronously: setup that loads or registers providers is covered too.
     this.activeEvaluations++;
     try {
-      await this.idleShutdown;
+      await this.waitForIdleRelease();
       return await run();
     } finally {
       if (--this.activeEvaluations === 0) {
@@ -46,6 +52,23 @@ class ProviderRegistry {
         }
       }
     }
+  }
+
+  private async waitForIdleRelease(): Promise<void> {
+    if (!this.idleShutdown) {
+      return;
+    }
+    let timer: NodeJS.Timeout | undefined;
+    const timedOut = new Promise<true>((resolve) => {
+      timer = setTimeout(() => resolve(true), IDLE_RELEASE_WAIT_MS);
+    });
+    // Each release works on a snapshot, so starting late cannot close this run's providers.
+    if (await Promise.race([this.idleShutdown, timedOut])) {
+      logger.warn(
+        `Provider cleanup from an earlier evaluation is still running after ${IDLE_RELEASE_WAIT_MS / 1000}s; starting anyway.`,
+      );
+    }
+    clearTimeout(timer);
   }
 
   /** Call `cleanup()` once, after the last active evaluation finishes. */

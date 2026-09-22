@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 
 import { expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
+import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { toPrompt } from './helpers';
@@ -47,6 +48,35 @@ describeEvaluator('registered resources across overlapping evaluations', () => {
       releaseShutdown.resolve();
       await Promise.allSettled([earlier, ...(next ? [next] : [])]);
       providerRegistry.unregister(registered);
+    }
+  });
+
+  it('stops waiting for an earlier release that never settles', async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    const shutdownStarted = deferred();
+    const hung = {
+      shutdown: vi.fn(() => {
+        shutdownStarted.resolve();
+        return new Promise<void>(() => {});
+      }),
+    };
+    providerRegistry.register(hung);
+    // The first evaluation's release never settles, so its own promise never does either.
+    void providerRegistry.withEvaluation(async () => {});
+    const run = vi.fn(async () => 'ran');
+    try {
+      await shutdownStarted.promise;
+      const next = providerRegistry.withEvaluation(run);
+      await vi.advanceTimersByTimeAsync(29_999);
+      expect(run).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(next).resolves.toBe('ran');
+      expect(hung.shutdown).toHaveBeenCalledOnce();
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('starting anyway'));
+    } finally {
+      warn.mockRestore();
     }
   });
 
