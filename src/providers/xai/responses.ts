@@ -18,7 +18,7 @@ import {
   getXAICostInUsd,
   getXAIRequestModel,
   hasXAICostOverrides,
-  validateGrok47RemoteOptions,
+  resolveGrok47ReasoningEffort,
   validateXAIReasoningEffort,
   type XAICostConfig,
   XAIRequestConfigError,
@@ -280,13 +280,12 @@ export class XAIResponsesProvider implements ApiProvider {
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ) {
-    if (this.modelName === 'grok-4.7') {
-      validateGrok47RemoteOptions(context?.test);
-    }
     const config = {
       ...this.config,
       ...context?.prompt?.config,
     };
+    const model = getXAIRequestModel(this.modelName, config);
+    const usesGrok47 = this.modelName === 'grok-4.7' || model === 'grok-4.7';
 
     // Parse input - can be string or array of messages. Chat-format content parts are
     // translated to their Responses equivalents so multimodal prompts authored for the chat
@@ -347,26 +346,32 @@ export class XAIResponsesProvider implements ApiProvider {
     };
 
     if (body.reasoning !== undefined) {
-      try {
-        body.reasoning = renderVarsInObject(body.reasoning, context?.vars);
-      } catch (error) {
-        if (this.modelName === 'grok-4.7') {
-          throw new XAIRequestConfigError(
-            'xAI Grok 4.7 could not prepare the Responses reasoning options',
-          );
+      if (usesGrok47) {
+        if (
+          body.reasoning != null &&
+          (typeof body.reasoning !== 'object' || Array.isArray(body.reasoning))
+        ) {
+          throw new XAIRequestConfigError('xAI Grok 4.7 reasoning must be an object');
         }
-        throw error;
+        if (body.reasoning && Object.hasOwn(body.reasoning, 'effort')) {
+          body.reasoning = {
+            ...body.reasoning,
+            effort: resolveGrok47ReasoningEffort(body.reasoning.effort, context?.vars),
+          };
+        }
+      } else {
+        body.reasoning = renderVarsInObject(body.reasoning, context?.vars);
       }
     }
 
     // Filter unsupported parameters for Grok 4-family models
-    if (GROK_4_MODELS.includes(this.modelName)) {
+    if (GROK_4_MODELS.includes(model)) {
       delete body.presence_penalty;
       delete body.frequency_penalty;
       delete body.stop;
     }
 
-    validateXAIReasoningEffort(this.modelName, body.reasoning?.effort, 'reasoning.effort');
+    validateXAIReasoningEffort(model, body.reasoning?.effort, 'reasoning.effort');
 
     return {
       body,
@@ -383,21 +388,6 @@ export class XAIResponsesProvider implements ApiProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    try {
-      return await this.callResponsesApi(prompt, context, callApiOptions);
-    } catch (error) {
-      if (error instanceof XAIRequestConfigError) {
-        return { error: `xAI request error: ${error.message}` };
-      }
-      throw error;
-    }
-  }
-
-  private async callResponsesApi(
-    prompt: string,
-    context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       return {
@@ -406,7 +396,16 @@ export class XAIResponsesProvider implements ApiProvider {
       };
     }
 
-    const { body, config } = await this.getRequestBody(prompt, context, callApiOptions);
+    let request;
+    try {
+      request = await this.getRequestBody(prompt, context, callApiOptions);
+    } catch (error) {
+      if (error instanceof XAIRequestConfigError) {
+        return { error: `xAI request error: ${error.message}` };
+      }
+      throw error;
+    }
+    const { body, config } = request;
 
     logger.debug(`[xAI Responses] Calling ${this.getApiUrl()}/responses`, {
       model: this.modelName,

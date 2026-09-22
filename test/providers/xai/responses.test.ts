@@ -219,45 +219,31 @@ describe('XAIResponsesProvider', () => {
     expect((await previous.getRequestBody('hello')).body.reasoning).toEqual({ effort: 'xhigh' });
   });
 
-  it('rejects invalid Grok 4.7 reasoning without exposing evaluated input or contacting xAI', async () => {
-    const privateMarker = 'private-rendered-value-for-this-test';
-    for (const effort of ['none', '', false, 0, privateMarker]) {
+  it('accepts a simple reasoning variable and never evaluates other reasoning fields or expressions', async () => {
+    const provider = new XAIResponsesProvider('grok-4.7', { config: { apiKey: 'test-key' } });
+    const options = {
+      passthrough: {
+        model: 'grok-4.7',
+        reasoning: { effort: '{{ effort }}', summary: '{{ note }}' },
+      },
+    };
+    const { body } = await provider.getRequestBody('hello', {
+      prompt: { raw: 'hello', label: 'hello', config: options },
+      vars: { effort: 'xhigh', note: 'private-marker' },
+      test: { options, metadata: { __promptfoo: { remote: true } } },
+    });
+    expect(body.reasoning).toEqual({ effort: 'xhigh', summary: '{{ note }}' });
+
+    for (const effort of ['none', '{{ candidate | upper }}', '{{ missing }}', 'private-marker']) {
       const provider = new XAIResponsesProvider('grok-4.7', {
         config: { apiKey: 'test-key', passthrough: { reasoning: { effort } } },
       });
-      const { error } = await provider.callApi('hello');
-      expect(error).toContain('does not support reasoning.effort with the supplied value');
-      expect(error).not.toContain(privateMarker);
-      expect(error).not.toContain('API key');
-    }
-    const provider = new XAIResponsesProvider('grok-4.7', {
-      config: {
-        apiKey: 'test-key',
-        passthrough: { reasoning: { effort: '{{ candidate | load }}' } },
-      },
-    });
-    const { error } = await provider.callApi('hello', {
-      prompt: { raw: 'hello', label: 'hello' },
-      vars: { candidate: privateMarker },
-    });
-    expect(error).toContain('could not prepare the Responses reasoning options');
-    expect(error).not.toContain(privateMarker);
-    expect(error).not.toContain('API key');
-    expect(mockFetchWithCache).not.toHaveBeenCalled();
-  });
-
-  it('does not render externally sourced Grok 4.7 reasoning settings', async () => {
-    const provider = new XAIResponsesProvider('grok-4.7', { config: { apiKey: 'test-key' } });
-    for (const options of [
-      { reasoning: { effort: '{{ effort }}' } },
-      { passthrough: { reasoning: { summary: '{{ note }}' } } },
-    ]) {
       const { error } = await provider.callApi('hello', {
-        prompt: { raw: 'hello', label: 'hello', config: options },
-        vars: { effort: 'high', note: 'safe marker' },
-        test: { options, metadata: { __promptfoo: { remote: true } } },
+        prompt: { raw: 'hello', label: 'hello' },
+        vars: { candidate: 'private-marker' },
       });
-      expect(error).toContain('request options from remote tests must be literal values');
+      expect(error).toContain('reasoning');
+      expect(error).not.toContain('private-marker');
       expect(error).not.toContain('API key');
     }
     expect(mockFetchWithCache).not.toHaveBeenCalled();

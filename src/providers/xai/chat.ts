@@ -1,9 +1,9 @@
+import { getEnvInt } from '../../envars';
 import logger from '../../logger';
 import { renderVarsInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { type OpenAiChatCompletionCostData, OpenAiChatCompletionProvider } from '../openai/chat';
 import { clampCachedTokens } from '../shared';
-import { hasGrok47RemoteTemplateOptions } from './remoteTestOptions';
 
 import type { ApiProvider, ProviderOptions } from '../../types/index';
 import type { OpenAiCompletionOptions } from '../openai/types';
@@ -478,15 +478,26 @@ export function validateXAIReasoningEffort(
   }
 }
 
-export function validateGrok47RemoteOptions(test?: {
-  metadata?: Record<string, unknown>;
-  options?: Record<string, unknown>;
-}): void {
-  if (hasGrok47RemoteTemplateOptions(test)) {
-    throw new XAIRequestConfigError(
-      'xAI Grok 4.7 request options from remote tests must be literal values',
-    );
+export function resolveGrok47ReasoningEffort(
+  value: unknown,
+  vars?: Record<string, unknown>,
+): string | undefined {
+  if (value == null) {
+    return undefined;
   }
+  if (typeof value === 'string') {
+    // Read an eval variable as data; do not execute test-provided template expressions.
+    const variable = /^\{\{\s*([A-Za-z_]\w*)\s*\}\}$/.exec(value)?.[1];
+    if (variable) {
+      value = vars && Object.hasOwn(vars, variable) ? vars[variable] : null;
+    }
+  }
+  if (typeof value === 'string' && ['none', 'low', 'medium', 'high', 'xhigh'].includes(value)) {
+    return value;
+  }
+  throw new XAIRequestConfigError(
+    'xAI Grok 4.7 reasoning effort must be a supported value or a simple test variable',
+  );
 }
 
 // All reasoning models, including older families that reason without a tunable effort knob.
@@ -664,30 +675,30 @@ export function calculateXAICost(
     : XAI_CHAT_MODELS.find(
         (m) => m.id === modelName || (m.aliases && m.aliases.includes(modelName)),
       );
-  if (!model || !model.cost) {
-    return undefined;
-  }
-
   const inputCostOverride = config.inputCost ?? config.cost;
   // xAI's language-model REST schema defines long_context_threshold as the token
   // count "at or above" which long-context prices apply.
-  const modelCost: XAIModelCost =
-    model.cost.longContext && promptTokens >= model.cost.longContext.threshold
+  const modelCost =
+    model?.cost?.longContext && promptTokens >= model.cost.longContext.threshold
       ? model.cost.longContext
-      : model.cost;
+      : model?.cost;
   const catalogMultiplier =
-    model.id === 'grok-4.7' &&
+    model?.id === 'grok-4.7' &&
     options?.apiUrl &&
     URL.canParse(options.apiUrl) &&
     new URL(options.apiUrl).origin === 'https://us.api.x.ai'
       ? 1.1
       : 1;
-  const inputCost = inputCostOverride ?? modelCost.input * catalogMultiplier;
-  const outputCost = config.outputCost ?? config.cost ?? modelCost.output * catalogMultiplier;
+  const inputCost = inputCostOverride ?? (modelCost && modelCost.input * catalogMultiplier);
+  const outputCost =
+    config.outputCost ?? config.cost ?? (modelCost && modelCost.output * catalogMultiplier);
+  if (inputCost === undefined || outputCost === undefined) {
+    return undefined;
+  }
   const cacheReadCost =
     config.cacheReadCost ??
     inputCostOverride ??
-    (modelCost.cache_read === undefined ? inputCost : modelCost.cache_read * catalogMultiplier);
+    (modelCost?.cache_read === undefined ? inputCost : modelCost.cache_read * catalogMultiplier);
 
   const billableCachedTokens = clampCachedTokens(cachedTokens, promptTokens);
   const uncachedPromptTokens = promptTokens - billableCachedTokens;
@@ -734,18 +745,6 @@ export function getXAIRequestModel(modelName: string, config?: { passthrough?: o
   return typeof model === 'string' ? model : modelName;
 }
 
-function getGrok47TokenLimit(config?: OpenAiCompletionOptions): unknown {
-  const passthrough = config?.passthrough as
-    | { max_completion_tokens?: unknown; max_tokens?: unknown }
-    | undefined;
-  return (
-    passthrough?.max_completion_tokens ??
-    passthrough?.max_tokens ??
-    config?.max_completion_tokens ??
-    config?.max_tokens
-  );
-}
-
 class XAIProvider extends OpenAiChatCompletionProvider {
   private originalConfig?: XAIConfig;
 
@@ -768,44 +767,33 @@ class XAIProvider extends OpenAiChatCompletionProvider {
     return true;
   }
 
-  private prepareReasoningContext(context?: any) {
-    let parentContext = context;
-    if (this.modelName === 'grok-4.7') {
-      validateGrok47RemoteOptions(context?.test);
-    }
-    if (this.modelName === 'grok-4.7' || this.modelName === 'grok-4.6') {
-      const directConfig = [context?.test?.options, context?.prompt?.config, this.config].find(
-        (config) => config && Object.hasOwn(config, 'reasoning_effort'),
-      );
-      const effort = directConfig?.reasoning_effort;
-      if (this.modelName === 'grok-4.7' && directConfig) {
-        let rendered = effort;
-        if (effort != null) {
-          try {
-            rendered = renderVarsInObject(effort, context?.vars);
-          } catch {
-            throw new XAIRequestConfigError(
-              'xAI Grok 4.7 could not prepare the Chat Completions reasoning options',
-            );
-          }
-          validateXAIReasoningEffort(this.modelName, rendered, 'reasoning_effort');
-        }
-        parentContext = {
-          ...context,
-          prompt: {
-            ...context?.prompt,
-            config: { ...context?.prompt?.config, reasoning_effort: rendered },
-          },
-        };
-      } else if (effort != null && (typeof effort !== 'string' || effort.length === 0)) {
-        validateXAIReasoningEffort(this.modelName, effort, 'reasoning_effort');
-      }
-    }
-    return parentContext;
-  }
-
   async getOpenAiBody(prompt: string, context?: any, callApiOptions?: any) {
-    const parentContext = this.prepareReasoningContext(context);
+    const config = { ...this.config, ...context?.prompt?.config };
+    const model = getXAIRequestModel(this.modelName, config);
+    const usesGrok47 = this.modelName === 'grok-4.7' || model === 'grok-4.7';
+    let effort: string | undefined;
+    let parentContext = context;
+    if (usesGrok47) {
+      const raw = config.passthrough;
+      effort = resolveGrok47ReasoningEffort(
+        raw && Object.hasOwn(raw, 'reasoning_effort')
+          ? raw.reasoning_effort
+          : config.reasoning_effort,
+        context?.vars,
+      );
+      validateXAIReasoningEffort(model, effort, 'reasoning_effort');
+      parentContext = {
+        ...context,
+        prompt: {
+          ...context?.prompt,
+          config: {
+            ...context?.prompt?.config,
+            reasoning_effort: effort,
+            ...(raw && { passthrough: { ...raw, reasoning_effort: effort } }),
+          },
+        },
+      };
+    }
     const result = await super.getOpenAiBody(prompt, parentContext, callApiOptions);
 
     // Ensure we have a valid result
@@ -813,34 +801,35 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       return result;
     }
 
-    if (this.modelName === 'grok-4.7') {
-      // The shared reasoning path drops max_tokens; xAI accepts the same limit under this name.
+    if (usesGrok47) {
+      if (effort === undefined) {
+        delete result.body.reasoning_effort;
+      } else {
+        Object.assign(result.body, { reasoning_effort: effort });
+      }
+    }
+    if (model === 'grok-4.7') {
       const tokenLimit =
-        getGrok47TokenLimit(context?.test?.options) ??
-        getGrok47TokenLimit(context?.prompt?.config) ??
-        getGrok47TokenLimit(this.config);
+        config.passthrough?.max_completion_tokens ??
+        config.max_completion_tokens ??
+        getEnvInt('OPENAI_MAX_COMPLETION_TOKENS');
+      delete result.body.max_tokens;
       if (tokenLimit !== undefined) {
-        if (typeof tokenLimit !== 'number' || !Number.isSafeInteger(tokenLimit) || tokenLimit < 0) {
-          throw new XAIRequestConfigError(
-            'xAI Grok 4.7 chat token limit must be a non-negative integer',
-          );
-        }
         Object.assign(result.body, { max_completion_tokens: tokenLimit });
       }
-      delete result.body.max_tokens;
     }
 
     // Filter out unsupported sampling controls for Grok-4-family models.
-    if (this.modelName && GROK_4_MODELS.includes(this.modelName)) {
+    if (GROK_4_MODELS.includes(model)) {
       delete result.body.presence_penalty;
       delete result.body.frequency_penalty;
       delete result.body.stop;
     }
 
-    validateXAIReasoningEffort(this.modelName, result.body.reasoning_effort, 'reasoning_effort');
+    validateXAIReasoningEffort(model, result.body.reasoning_effort, 'reasoning_effort');
 
     // Filter reasoning_effort for models that don't support it
-    if (!this.supportsReasoningEffort() && result.body.reasoning_effort) {
+    if (!GROK_REASONING_EFFORT_MODELS.includes(model) && result.body.reasoning_effort) {
       delete result.body.reasoning_effort;
     }
 

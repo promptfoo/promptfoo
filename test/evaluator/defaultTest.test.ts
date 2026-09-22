@@ -9,9 +9,7 @@ import { evaluate } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
-import { createXAIProvider } from '../../src/providers/xai/chat';
-import { XAIResponsesProvider } from '../../src/providers/xai/responses';
-import { type ApiProvider, type CallApiContextParams, type TestSuite } from '../../src/types/index';
+import { type ApiProvider, type TestSuite } from '../../src/types/index';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 import { mockApiProvider, resetMockProviders, toPrompt } from './helpers';
 
@@ -43,92 +41,6 @@ describe('evaluator defaultTest merging', () => {
     vi.mocked(runExtensionHook).mockImplementation(
       async (_extensions, _hookName, context) => context,
     );
-  });
-
-  it('renders trusted Grok defaults for remote rows and rejects settings authored in the remote rows', async () => {
-    type BuildBody = (prompt: string, context?: CallApiContextParams) => Promise<{ body: object }>;
-    const chat = createXAIProvider('xai:grok-4.7') as ApiProvider & { getOpenAiBody: BuildBody };
-    const responses = new XAIResponsesProvider('grok-4.7');
-    const requests = new Map<string, Record<string, unknown>>();
-    const capture = (provider: ApiProvider, build: BuildBody): ApiProvider => ({
-      id: () => provider.id(),
-      callApi: async (prompt, context) => {
-        try {
-          const { body } = await build(prompt, context);
-          requests.set(
-            `${provider.id()}:${String(context?.vars.name)}`,
-            body as Record<string, unknown>,
-          );
-          return { output: 'ok' };
-        } catch (error) {
-          return { error: error instanceof Error ? error.message : String(error) };
-        }
-      },
-    });
-    const remote = { __promptfoo: { remote: true } };
-    const both = (effort: string) => ({ reasoning_effort: effort, reasoning: { effort } });
-    const suite: TestSuite = {
-      providers: [
-        capture(chat, chat.getOpenAiBody.bind(chat)),
-        capture(responses, responses.getRequestBody.bind(responses)),
-      ],
-      prompts: [toPrompt('{{ name }}')],
-      defaultTest: { options: both('{{ effort }}') },
-      tests: [
-        { vars: { name: 'remote-default', effort: 'low' }, metadata: remote },
-        {
-          vars: { name: 'remote-literal', effort: 'high' },
-          options: both('medium'),
-          metadata: remote,
-        },
-        {
-          vars: { name: 'remote-template', effort: 'high' },
-          options: both('{{ effort }}'),
-          metadata: remote,
-        },
-        { vars: { name: 'local-template', effort: 'xhigh' }, options: both('{{ effort }}') },
-      ],
-      scenarios: [
-        {
-          config: [{ options: both('{{ scenarioEffort }}') }],
-          tests: [
-            {
-              vars: { name: 'scenario-default', effort: 'low', scenarioEffort: 'high' },
-              metadata: remote,
-            },
-            {
-              vars: { name: 'scenario-remote-template', effort: 'low', scenarioEffort: 'high' },
-              options: both('{{ effort }}'),
-              metadata: remote,
-            },
-          ],
-        },
-      ],
-    };
-    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
-    await evaluate(suite, record, {});
-
-    const expected = {
-      'remote-default': 'low',
-      'remote-literal': 'medium',
-      'local-template': 'xhigh',
-      'scenario-default': 'high',
-    };
-    for (const [name, effort] of Object.entries(expected)) {
-      expect(requests.get(`xai:grok-4.7:${name}`)).toMatchObject({ reasoning_effort: effort });
-      expect(requests.get(`xai:responses:grok-4.7:${name}`)).toMatchObject({
-        reasoning: { effort },
-      });
-    }
-    expect(requests.size).toBe(8);
-    const { results } = await record.toEvaluateSummary();
-    const errors = results.filter((row) => row.error);
-    expect(errors).toHaveLength(4);
-    expect(
-      errors.every((row) =>
-        row.error?.includes('request options from remote tests must be literal values'),
-      ),
-    ).toBe(true);
   });
 
   it('should merge defaultTest.options.provider with test case options', async () => {

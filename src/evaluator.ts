@@ -28,7 +28,6 @@ import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
-import { inheritGrok47RemoteTemplateOptions } from './providers/xai/remoteTestOptions';
 import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
 import { redteamProviderManager } from './redteam/providers/shared';
 import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
@@ -2439,27 +2438,23 @@ function mergeScenarioTest(
   };
   mergedMetadata.conversationId ??= `__scenario_${scenarioIndex}__`;
 
-  return inheritGrok47RemoteTemplateOptions(
-    {
-      ...(defaultTest || {}),
-      ...data,
-      ...test,
-      vars: {
-        ...(defaultTest?.vars || {}),
-        ...data.vars,
-        ...test.vars,
-      },
-      options: {
-        ...(defaultTest?.options || {}),
-        ...data.options,
-        ...test.options,
-      },
-      assert: [...(data.assert || []), ...(test.assert || [])],
-      metadata: mergedMetadata,
-    } as AtomicTestCase,
-    data,
-    test,
-  );
+  return {
+    ...(defaultTest || {}),
+    ...data,
+    ...test,
+    vars: {
+      ...(defaultTest?.vars || {}),
+      ...data.vars,
+      ...test.vars,
+    },
+    options: {
+      ...(defaultTest?.options || {}),
+      ...data.options,
+      ...test.options,
+    },
+    assert: [...(data.assert || []), ...(test.assert || [])],
+    metadata: mergedMetadata,
+  } as AtomicTestCase;
 }
 
 async function prepareTestVariables(
@@ -2579,7 +2574,6 @@ async function prepareTestCaseForEval(
   );
 
   const disableDefaultAsserts = testCase.options?.disableDefaultAsserts === true;
-  inheritGrok47RemoteTemplateOptions(testCase, testCase);
   testCase.assert = [
     ...(disableDefaultAsserts ? [] : defaultTest?.assert || []),
     ...(testCase.assert || []),
@@ -2897,29 +2891,23 @@ function createRunEvalTest(
   const testOptions = globalGraderExamples
     ? { ...testCase.options, redteamGraderExamples: globalGraderExamples }
     : testCase.options;
-  const baseTest = inheritGrok47RemoteTemplateOptions(
-    {
-      ...testCase,
-      vars,
-      options: testOptions,
-    },
-    testCase,
-  );
+  const baseTest = {
+    ...testCase,
+    vars,
+    options: testOptions,
+  };
 
   if (!isTracingEnabledForTest(testSuite, testCase)) {
     return baseTest;
   }
-  return inheritGrok47RemoteTemplateOptions(
-    {
-      ...baseTest,
-      metadata: {
-        ...testCase.metadata,
-        tracingEnabled: true,
-        evaluationId: evalId,
-      },
+  return {
+    ...baseTest,
+    metadata: {
+      ...testCase.metadata,
+      tracingEnabled: true,
+      evaluationId: evalId,
     },
-    baseTest,
-  );
+  };
 }
 
 function isTracingEnabledForTest(testSuite: TestSuite, testCase: AtomicTestCase) {
@@ -3593,7 +3581,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const beforeEachOut = await runExtensionHook(testSuite.extensions, 'beforeEach', {
       test: evalStep.test,
     });
-    evalStep.test = inheritGrok47RemoteTemplateOptions(beforeEachOut.test, evalStep.test);
+    evalStep.test = beforeEachOut.test;
 
     const rows = await runEvalInternal({
       ...evalStep,
