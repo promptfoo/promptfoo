@@ -17,7 +17,7 @@ vi.mock('../../src/cache', async (importOriginal) => ({
 
 describe('embedding graders receive evaluation cancellation', () => {
   const priorConfig = cliState.config;
-  const embed = vi.fn<ApiEmbeddingProvider['callEmbeddingApi']>();
+  const embed = vi.fn<OpenAiEmbeddingProvider['callEmbeddingApi']>();
   const response = () => ({
     embedding: [1, 0],
     tokenUsage: { prompt: 1, completion: 0, total: 1, numRequests: 1 },
@@ -85,6 +85,63 @@ describe('embedding graders receive evaluation cancellation', () => {
       expect(embed.mock.contexts.every((receiver) => receiver === provider)).toBe(true);
     },
   );
+
+  it('accepts existing providers with their own optional embedding arguments', async () => {
+    const legacy = {
+      id: () => 'custom-embedding',
+      callApi: text.callApi,
+      callEmbeddingApi: vi.fn(async (_input: string, settings?: { dimensions: number }) => {
+        expect(settings).toBeUndefined();
+        return response();
+      }),
+    } satisfies ApiEmbeddingProvider;
+    provider = legacy;
+    const controller = new AbortController();
+    await expect(
+      withProviderCallExecutionContext({ abortSignal: controller.signal }, () => run('similarity')),
+    ).resolves.toMatchObject({ pass: true });
+    expect(legacy.callEmbeddingApi).toHaveBeenCalledTimes(2);
+
+    const legacyWithThird: ApiProvider = {
+      ...legacy,
+      callEmbeddingApi: async (_input: string, _settings?: number, _timeout?: number) => response(),
+    };
+    await expect(legacyWithThird.callEmbeddingApi!('input')).resolves.toEqual(response());
+  });
+
+  it('preserves the evaluation abort when a legacy provider returns an error response', async () => {
+    const controller = new AbortController();
+    const reason = new DOMException('evaluation cancelled', 'AbortError');
+    let markStarted!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    embed.mockImplementation(async () => {
+      if (embed.mock.calls.length === 2) {
+        markStarted();
+      }
+      await held;
+      return { error: 'Provider returned an ordinary error' };
+    });
+    const grading = withProviderCallExecutionContext({ abortSignal: controller.signal }, () =>
+      run('similarity'),
+    );
+    void grading.catch(() => {});
+    try {
+      await started;
+      controller.abort(reason);
+      release();
+      await expect(grading).rejects.toBe(reason);
+    } finally {
+      release();
+      controller.abort(reason);
+      await Promise.allSettled([grading]);
+    }
+  });
 
   it('does not call an embedding provider when grading is already cancelled', async () => {
     const reason = new Error('evaluation cancelled');

@@ -928,6 +928,7 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
         'json',
       );
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       return {
         error: `API call error: ${String(err)}`,
       };

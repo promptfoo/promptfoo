@@ -577,9 +577,7 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
-    if (options?.abortSignal?.aborted) {
-      return { error: 'Request aborted' };
-    }
+    options?.abortSignal?.throwIfAborted();
     const config = { ...this.config, apiKey: resolveApiKey(this.config, this.env) };
     const cacheEnabled = isCacheEnabled() && Boolean(config.apiKey);
     const cache = await getCache();
@@ -593,6 +591,7 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
     // Check cache first
     if (cacheEnabled && !(context?.bustCache ?? context?.debug)) {
       const cachedResponse = await cache.get<string>(cacheKey);
+      options?.abortSignal?.throwIfAborted();
       if (cachedResponse) {
         logger.debug(`Returning cached embedding for Vercel AI Gateway: ${this.modelName}`);
         try {
@@ -621,6 +620,7 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
           abortSignal: signal,
         }),
       );
+      options?.abortSignal?.throwIfAborted();
 
       logger.debug('Vercel AI Gateway embedding response received', {
         model: this.modelName,
@@ -642,7 +642,8 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
 
       return response;
     } catch (error) {
-      return handleApiError(error, timeout, 'embedding', options?.abortSignal);
+      options?.abortSignal?.throwIfAborted();
+      return handleApiError(error, timeout, 'embedding');
     } finally {
       cleanup();
     }

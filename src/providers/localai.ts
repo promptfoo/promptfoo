@@ -129,6 +129,7 @@ export class LocalAiEmbeddingProvider extends LocalAiGenericProvider {
         getRequestTimeoutMs(),
       )) as unknown as any);
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       return {
         error: `API call error: ${String(err)}`,
       };

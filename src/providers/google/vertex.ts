@@ -1324,6 +1324,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
       });
       data = res.data as VertexEmbeddingPredictResponse;
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       logger.error(`Vertex API call error: ${err}`);
       throw err;
     }
