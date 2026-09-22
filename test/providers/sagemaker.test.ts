@@ -65,7 +65,7 @@ describe('SageMaker runtime cache bounds', () => {
         return this.writeRuntimeCache(cache, key, `response:${key}`, new AbortController().signal);
       }
     }
-    const provider = new CacheProbe('cache-probe', {});
+    const provider = new CacheProbe('cache-probe', { config: { modelType: 'custom' } });
     let release!: () => void;
     let allEntered!: () => void;
     const gate = new Promise<void>((resolve) => {

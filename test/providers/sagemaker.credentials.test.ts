@@ -155,7 +155,10 @@ describe('SageMaker profile credentials across idle cleanup', () => {
       expect(fromIni).toHaveBeenCalledOnce();
       expect(resolveSSO).toHaveBeenCalledOnce();
       const [first, second] = [...clients];
-      expect(second.config.credentials).toBe(first.config.credentials);
+      const resolved = await Promise.all([first.config.credentials(), second.config.credentials()]);
+      expect(resolved[0]).toMatchObject(roleCredentials);
+      expect(resolved[1]).toEqual(resolved[0]);
+      expect(resolveSSO).toHaveBeenCalledOnce();
     },
   );
 
