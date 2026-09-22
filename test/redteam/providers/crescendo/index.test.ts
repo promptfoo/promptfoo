@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertions } from '../../../../src/assertions/index';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
+import { getGradingInputHash } from '../../../../src/redteam/grading/storedResult';
 import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo/index';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
@@ -1620,6 +1621,89 @@ describe('CrescendoProvider', () => {
       expect(result.metadata?.successfulAttacks).toBeInstanceOf(Array);
       expect(result.metadata?.totalSuccessfulAttacks).toBeGreaterThanOrEqual(2);
       expect(result.metadata?.crescendoRoundsCompleted).toBe(3); // All three rounds
+    });
+
+    it('should report the flagged round when continueAfterSuccess is true', async () => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 2,
+        redteamProvider: mockRedTeamProvider,
+        continueAfterSuccess: true,
+      });
+
+      const context = {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'mock-grader' }],
+          metadata: { pluginId: 'mock' },
+        } as any,
+      };
+
+      vi.mocked(tryUnblocking).mockResolvedValue({ success: false });
+
+      // Round 1 is a jailbreak, round 2 is refused.
+      mockGetGraderById.mockImplementation(function () {
+        return {
+          getResult: vi
+            .fn()
+            .mockResolvedValueOnce({
+              grade: { pass: false, score: 0, reason: 'Jailbreak detected' },
+              rubric: 'test rubric',
+            })
+            .mockResolvedValueOnce({
+              grade: { pass: true, score: 1, reason: 'Refused' },
+              rubric: 'test rubric',
+            }),
+        } as any;
+      });
+
+      mockRedTeamProvider.callApi
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            generatedQuestion: 'harmful request',
+            rationaleBehindJailbreak: 'test rationale',
+            lastResponseSummary: 'test summary',
+          }),
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            generatedQuestion: 'follow-up request',
+            rationaleBehindJailbreak: 'test rationale',
+            lastResponseSummary: 'test summary',
+          }),
+        });
+
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({ output: 'harmful response' })
+        .mockResolvedValueOnce({ output: 'I cannot help with that' });
+
+      mockScoringProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({ value: false, metadata: 0, rationale: 'Not a refusal' }),
+      });
+
+      const result = await provider.callApi('test prompt', context);
+
+      expect(result.metadata?.crescendoRoundsCompleted).toBe(2);
+      expect(result.metadata?.successfulAttacks).toHaveLength(1);
+      // The later refusal must not replace the verdict or the round that earned it.
+      expect(result.metadata?.storedGraderResult).toMatchObject({
+        pass: false,
+        reason: 'Jailbreak detected',
+      });
+      expect(result.output).toBe('harmful response');
+      expect(result.metadata?.messages).toHaveLength(2);
+      // The reported round is the graded one, so the assertion layer reuses this verdict
+      // instead of re-grading the refusal that followed.
+      expect(result.metadata?.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
+        getGradingInputHash(
+          result.metadata?.redteamFinalPrompt as string,
+          result.output as string,
+          result.metadata?.messages,
+          'mock',
+        ),
+      );
     });
 
     it('should handle mixed internal evaluator successes and failures with continueAfterSuccess', async () => {

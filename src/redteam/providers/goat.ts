@@ -19,7 +19,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
-import { getTargetConversation } from '../grading/storedResult';
+import { getTargetConversation, withGradingUsage } from '../grading/storedResult';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import {
   getRemoteGenerationHeaders,
@@ -255,7 +255,14 @@ export default class GoatProvider implements ApiProvider {
 
     let assertToUse: Assertion | AssertionSet | undefined;
     let graderPassed: boolean | undefined;
+    let gradedPrompt = '';
     let storedGraderResult: GradingResult | undefined;
+    // The first turn the plugin grader called a vulnerability. `continueAfterSuccess` keeps
+    // attacking past that turn, and a later refusal must not replace the verdict or the
+    // turn that earned it.
+    let vulnerableTurn:
+      | { graderResult: GradingResult; output: string; prompt: string; messages: Message[] }
+      | undefined;
     const { getGraderById } = await import('../graders');
     let test: AtomicTestCase | undefined;
 
@@ -820,6 +827,10 @@ export default class GoatProvider implements ApiProvider {
             gradingContext,
           );
           graderPassed = grade.pass;
+          gradedPrompt =
+            lastFinalAttackPrompt ||
+            getLastMessageContent(messages, 'user') ||
+            attackerMessage.content;
           storedGraderResult = accumulateGraderResult(
             storedGraderResult,
             {
@@ -827,10 +838,7 @@ export default class GoatProvider implements ApiProvider {
               assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
             },
             {
-              prompt:
-                lastFinalAttackPrompt ||
-                getLastMessageContent(messages, 'user') ||
-                attackerMessage.content,
+              prompt: gradedPrompt,
               output: finalOutput,
               messages: messages,
               pluginId: test.metadata?.pluginId,
@@ -847,6 +855,22 @@ export default class GoatProvider implements ApiProvider {
             response: finalOutput,
             traceSummary: attackTraceSummary,
           });
+
+          // A grader error is not a verdict, so it does not pin the reported turn.
+          if (
+            !vulnerableTurn &&
+            storedGraderResult &&
+            storedGraderResult.metadata?.graderError !== true
+          ) {
+            vulnerableTurn = {
+              graderResult: storedGraderResult,
+              output: finalOutput,
+              // Must stay the value the grading hash was built from, or the assertion
+              // layer re-grades the turn instead of reusing this verdict.
+              prompt: gradedPrompt,
+              messages: [...messages],
+            };
+          }
 
           // Only break early if continueAfterSuccess is false
           if (this.config.continueAfterSuccess) {
@@ -875,18 +899,28 @@ export default class GoatProvider implements ApiProvider {
     }
 
     const finalPrompt = getLastMessageContent(messages, 'user') || '';
+    // Report the turn the grader flagged. Without this the eval grades the last turn, so a
+    // refusal after a successful attack hides the vulnerability behind a passing row.
+    const reportedPrompt = vulnerableTurn
+      ? vulnerableTurn.prompt
+      : lastFinalAttackPrompt || finalPrompt;
+    const reportedOutput = vulnerableTurn
+      ? vulnerableTurn.output
+      : getLastMessageContent(messages, 'assistant') || '';
     return {
-      output: getLastMessageContent(messages, 'assistant') || '',
-      prompt: finalPrompt,
+      output: reportedOutput,
+      prompt: vulnerableTurn ? vulnerableTurn.prompt : finalPrompt,
       metadata: {
         // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
-        redteamFinalPrompt: lastFinalAttackPrompt || finalPrompt,
-        messages: messages as Record<string, any>[],
+        redteamFinalPrompt: reportedPrompt,
+        messages: (vulnerableTurn ? vulnerableTurn.messages : messages) as Record<string, any>[],
         stopReason,
         redteamHistory,
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,
-        storedGraderResult,
+        storedGraderResult: vulnerableTurn
+          ? withGradingUsage(vulnerableTurn.graderResult, storedGraderResult?.tokensUsed)
+          : storedGraderResult,
         traceSnapshots:
           traceSnapshots.length > 0
             ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))

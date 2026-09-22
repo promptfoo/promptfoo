@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { getGradingInputHash } from '../../../src/redteam/grading/storedResult';
 import RedteamGoatProvider from '../../../src/redteam/providers/goat';
 import * as redteamProviderShared from '../../../src/redteam/providers/shared';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
@@ -804,10 +805,14 @@ describe('RedteamGoatProvider', () => {
         prompt: 'test response',
         response: 'second harmful response',
       });
+      // The verdict stays with the first flagged turn while usage still covers every
+      // grading call, so continuing the search cannot turn a vulnerability into a pass.
       expect(result.metadata?.storedGraderResult).toMatchObject({
-        pass: true,
+        pass: false,
         tokensUsed: { total: 15, prompt: 7, completion: 8, numRequests: 3 },
       });
+      expect(result.output).toBe('first harmful response');
+      expect(result.metadata?.messages).toHaveLength(2);
       expect(mockFetch).toHaveBeenCalledTimes(3); // All three turns
     });
 
@@ -1323,8 +1328,8 @@ describe('RedteamGoatProvider', () => {
 
     const result = await provider.callApi('test prompt', context);
 
-    // Should continue to max turns and store the LAST grader result
-    expect(result.metadata?.storedGraderResult).toMatchObject(secondGraderResult);
+    // Should continue to max turns and report the turn the grader flagged
+    expect(result.metadata?.storedGraderResult).toMatchObject(firstGraderResult);
     expect(result.metadata?.storedGraderResult?.assertion).toBeDefined();
     expect(result.metadata?.stopReason).toBe('Max turns reached');
     expect(result.metadata?.successfulAttacks).toHaveLength(1);
@@ -1334,6 +1339,17 @@ describe('RedteamGoatProvider', () => {
       prompt: expect.any(String),
       response: expect.any(String),
     });
+    // The reported conversation ends at the flagged turn, so the grade matches the output
+    // the eval scores. Without that the assertion layer re-grades the refusal that followed.
+    expect(result.metadata?.messages).toHaveLength(2);
+    expect(result.metadata?.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
+      getGradingInputHash(
+        result.metadata?.redteamFinalPrompt as string,
+        result.output as string,
+        result.metadata?.messages,
+        'contains',
+      ),
+    );
   });
 
   it('should grade image-only target responses', async () => {

@@ -132,6 +132,8 @@ When `continueAfterSuccess: true`:
 - The strategy will continue generating attacks even after finding successful ones
 - All successful attacks are recorded in the metadata
 - The strategy only stops when `maxTurns` is reached
+- The test result still reports the first turn the grader flagged, so a refusal on a later turn
+  does not turn a discovered vulnerability into a passing test
 - This can help discover multiple attack vectors or progressively stronger attacks, but it will take longer to complete and cost more.
 
 ### Unblocking Feature

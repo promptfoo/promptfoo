@@ -14,7 +14,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
-import { getTargetConversation } from '../../grading/storedResult';
+import { getTargetConversation, withGradingUsage } from '../../grading/storedResult';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import {
@@ -363,6 +363,17 @@ export class CustomProvider implements ApiProvider {
     const { getGraderById } = await import('../../graders');
     let graderPassed: boolean | undefined;
     let storedGraderResult: GradingResult | undefined;
+    // The first round the plugin grader called a vulnerability. `continueAfterSuccess` keeps
+    // attacking past that round, and a later refusal must not replace the verdict or the
+    // round that earned it.
+    let vulnerableRound:
+      | {
+          graderResult: GradingResult;
+          output: string;
+          prompt: string | undefined;
+          messages: Message[];
+        }
+      | undefined;
 
     // Generate goal-specific evaluation rubric
     const additionalRubric = getGoalRubric(this.userGoal);
@@ -655,6 +666,16 @@ export class CustomProvider implements ApiProvider {
           // recordSuccessfulAttack ignores a turn it has already recorded, so with
           // continueAfterSuccess the check after the evaluator doesn't record this turn twice.
           this.recordSuccessfulAttack(roundNum, attackPrompt, lastResponse.output);
+          if (!vulnerableRound && storedGraderResult) {
+            vulnerableRound = {
+              graderResult: storedGraderResult,
+              output: lastResponse.output,
+              // Must stay the value the grading hash was built from, or the assertion
+              // layer re-grades the turn instead of reusing this verdict.
+              prompt: lastFinalAttackPrompt,
+              messages: [...lastResponseMessages],
+            };
+          }
           if (!this.config.continueAfterSuccess) {
             exitReason = 'Grader failed';
             logger.debug(
@@ -734,10 +755,14 @@ export class CustomProvider implements ApiProvider {
       // exitReason is already properly set - either from early break or 'Max rounds reached'
     }
 
-    const messages = lastResponseMessages;
-    const finalPrompt = lastFinalAttackPrompt || getLastMessageContent(messages, 'user');
+    // Report the round the grader flagged. Without this the eval grades the last round, so a
+    // refusal after a successful attack hides the vulnerability behind a passing row.
+    const messages = vulnerableRound ? vulnerableRound.messages : lastResponseMessages;
+    const finalPrompt = vulnerableRound
+      ? vulnerableRound.prompt
+      : lastFinalAttackPrompt || getLastMessageContent(messages, 'user');
     return {
-      output: lastResponse.output,
+      output: vulnerableRound ? vulnerableRound.output : lastResponse.output,
       prompt: finalPrompt,
       metadata: {
         redteamFinalPrompt: finalPrompt,
@@ -750,16 +775,22 @@ export class CustomProvider implements ApiProvider {
         redteamHistory,
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,
-        storedGraderResult: storedGraderResult,
+        storedGraderResult: vulnerableRound
+          ? withGradingUsage(vulnerableRound.graderResult, storedGraderResult?.tokensUsed)
+          : storedGraderResult,
         sessionId: getSessionId(lastResponse, context),
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastResponse?.guardrails,
-      ...(lastTargetError
-        ? { error: lastTargetError }
-        : hasTargetResponse
-          ? {}
-          : { error: lastAttemptError || 'No target request was completed.' }),
+      // A target failure in a later round does not describe the round being reported, and an
+      // error row would hide the vulnerability the grader already confirmed.
+      ...(vulnerableRound
+        ? {}
+        : lastTargetError
+          ? { error: lastTargetError }
+          : hasTargetResponse
+            ? {}
+            : { error: lastAttemptError || 'No target request was completed.' }),
     };
   }
 
