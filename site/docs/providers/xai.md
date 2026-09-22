@@ -142,7 +142,7 @@ Multiple Grok models support reasoning capabilities:
 
 **Grok 4.7 and 4.6**: Chat requests can set `reasoning_effort` to `low`, `medium`, `high` (the default), or `xhigh`. Responses API requests use `reasoning.effort`. Reasoning cannot be disabled; Promptfoo rejects `none` locally.
 
-For Grok 4.7, cap output with `max_completion_tokens` for Chat Completions or `max_output_tokens` for Responses. Reasoning effort also accepts a direct eval variable such as `{{ effort }}`.
+For Grok 4.7, cap output with `max_completion_tokens` (also accepted as `max_tokens`; use one spelling) for Chat Completions or `max_output_tokens` for Responses. Reasoning effort also accepts a direct eval variable such as `{{ effort }}`.
 
 **Grok 4.5**: Chat requests can set `reasoning_effort` to `low`, `medium`, or `high` (the default); Promptfoo rejects other values locally. Responses API requests use `reasoning.effort` with the same values.
 
