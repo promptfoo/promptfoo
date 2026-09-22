@@ -695,16 +695,14 @@ function getOpenCodeRateLimitMetadata(rateLimit: OpenCodeRateLimit): Record<stri
       : undefined;
   return {
     rateLimitKind: rateLimit.kind,
-    // Longer hints still decide the classification above but would stall every queued call.
-    ...(retryAfterMs === undefined || retryAfterMs > OPEN_CODE_MAX_RETRY_AFTER_MS
-      ? {}
-      : {
-          http: {
-            status: rateLimit.status,
-            statusText: rateLimit.statusText,
-            headers: { 'retry-after-ms': String(Math.ceil(retryAfterMs)) },
-          },
-        }),
+    http: {
+      status: rateLimit.status,
+      statusText: rateLimit.statusText,
+      // Longer hints still decide the classification above but would stall every queued call.
+      ...(retryAfterMs === undefined || retryAfterMs > OPEN_CODE_MAX_RETRY_AFTER_MS
+        ? {}
+        : { headers: { 'retry-after-ms': String(Math.ceil(retryAfterMs)) } }),
+    },
   };
 }
 
@@ -2274,7 +2272,11 @@ export class OpenCodeSDKProvider implements ApiProvider {
     logger.error('Error calling OpenCode SDK', { error: errorMessage });
     return {
       error: `Error calling OpenCode SDK: ${errorMessage}`,
-      ...(rateLimit ? { metadata: getOpenCodeRateLimitMetadata(rateLimit) } : {}),
+      ...(rateLimit
+        ? { metadata: getOpenCodeRateLimitMetadata(rateLimit) }
+        : details.status === undefined
+          ? {}
+          : { metadata: { http: { status: details.status } } }),
     };
   }
 
