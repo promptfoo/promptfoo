@@ -9,9 +9,11 @@ vi.mock('@huggingface/transformers', () => ({
 vi.mock('../../src/providers/providerRegistry', () => ({
   providerRegistry: {
     register: vi.fn(),
+    useResource: vi.fn(),
   },
 }));
 
+import { providerRegistry } from '../../src/providers/providerRegistry';
 import {
   disposePipelines,
   pipelineCache,
@@ -91,6 +93,26 @@ describe('TransformersEmbeddingProvider', () => {
   });
 
   describe('callEmbeddingApi', () => {
+    it('waits for a preceding shared pipeline shutdown before using the extractor', async () => {
+      let release!: () => void;
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      vi.mocked(providerRegistry.useResource).mockReturnValue(pending);
+      const provider = new TransformersEmbeddingProvider('model');
+      const result = provider.callEmbeddingApi('test text');
+      try {
+        await Promise.resolve();
+        expect(mockPipeline).not.toHaveBeenCalled();
+        release();
+        await expect(result).resolves.toMatchObject({ embedding: expect.any(Array) });
+        expect(providerRegistry.useResource).toHaveBeenCalledOnce();
+      } finally {
+        release();
+        await Promise.allSettled([result]);
+      }
+    });
+
     it('should call embedding API and return normalized embedding', async () => {
       const provider = new TransformersEmbeddingProvider('Xenova/all-MiniLM-L6-v2');
       const result = await provider.callEmbeddingApi('test text');

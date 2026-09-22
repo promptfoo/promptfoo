@@ -1,0 +1,356 @@
+import './setup';
+
+import { randomUUID } from 'node:crypto';
+
+import { expect, it, vi } from 'vitest';
+import { evaluate } from '../../src/evaluator';
+import Eval from '../../src/models/eval';
+import { providerRegistry } from '../../src/providers/providerRegistry';
+import { toPrompt } from './helpers';
+import { describeEvaluator } from './lifecycle';
+
+import type { ApiProvider, CallApiOptionsParams, TestSuite } from '../../src/types/index';
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+describeEvaluator('registered resources across overlapping evaluations', () => {
+  it('waits for a shared resource release without delaying an unrelated evaluation', async () => {
+    const shutdownStarted = deferred();
+    const releaseShutdown = deferred();
+    const registered = {
+      shutdown: vi.fn(async () => {
+        shutdownStarted.resolve();
+        await releaseShutdown.promise;
+      }),
+    };
+    const earlier = providerRegistry.withEvaluation(async () =>
+      providerRegistry.register(registered),
+    );
+    const run = vi.fn(async () => {});
+    let next: Promise<void> | undefined;
+    try {
+      await shutdownStarted.promise;
+      await expect(providerRegistry.withEvaluation(async () => 'unrelated')).resolves.toBe(
+        'unrelated',
+      );
+      next = providerRegistry.withEvaluation(async () => {
+        await providerRegistry.useResource(registered);
+        await run();
+      });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(run).not.toHaveBeenCalled();
+      releaseShutdown.resolve();
+      await Promise.all([earlier, next]);
+      expect(run).toHaveBeenCalledOnce();
+      expect(registered.shutdown).toHaveBeenCalledOnce();
+    } finally {
+      releaseShutdown.resolve();
+      await Promise.allSettled([earlier, ...(next ? [next] : [])]);
+      providerRegistry.unregister(registered);
+    }
+  });
+
+  it('blocks only the reused provider while its cleanup is still running, even after a minute', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const cleanupStarted = deferred();
+    const releaseCleanup = deferred();
+    const provider = {
+      id: () => 'held-provider',
+      cleanupAfterEvaluation: vi.fn(async () => {
+        cleanupStarted.resolve();
+        await releaseCleanup.promise;
+      }),
+    };
+    const unrelated = { shutdown: vi.fn(async () => {}) };
+    const run = vi.fn(async () => {});
+    const earlier = providerRegistry.withEvaluation(async () => {
+      await providerRegistry.cleanupWhenIdle([provider]);
+    });
+    let next: Promise<void> | undefined;
+    try {
+      await cleanupStarted.promise;
+      next = providerRegistry.withEvaluation(async () => {
+        await providerRegistry.useProvider(provider);
+        await providerRegistry.withProvider(provider, run);
+      });
+      await expect(
+        providerRegistry.withEvaluation(() =>
+          providerRegistry.withEvaluation(async () => {
+            providerRegistry.register(unrelated);
+            return 'ran';
+          }),
+        ),
+      ).resolves.toBe('ran');
+      expect(unrelated.shutdown).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(run).not.toHaveBeenCalled();
+      releaseCleanup.resolve();
+      await Promise.all([earlier, next]);
+      expect(run).toHaveBeenCalledOnce();
+      expect(provider.cleanupAfterEvaluation).toHaveBeenCalledOnce();
+    } finally {
+      releaseCleanup.resolve();
+      await Promise.allSettled([earlier, ...(next ? [next] : [])]);
+      providerRegistry.unregister(unrelated);
+      vi.useRealTimers();
+    }
+  });
+
+  it('releases each short evaluation while a different evaluation is still active', async () => {
+    const started = deferred();
+    const finish = deferred();
+    const longResource = { shutdown: vi.fn(async () => {}) };
+    const long = providerRegistry.withEvaluation(async () => {
+      providerRegistry.register(longResource);
+      started.resolve();
+      await finish.promise;
+    });
+    try {
+      await started.promise;
+      for (let i = 0; i < 4; i++) {
+        const shortResource = { shutdown: vi.fn(async () => {}) };
+        const shortProvider = { id: () => 'short-' + i, cleanup: vi.fn(async () => {}) };
+        await providerRegistry.withEvaluation(async () => {
+          await providerRegistry.cleanupWhenIdle([shortProvider]);
+          await providerRegistry.withProvider(shortProvider, async () => {
+            providerRegistry.register(shortResource);
+          });
+        });
+        expect(shortResource.shutdown).toHaveBeenCalledOnce();
+        expect(shortProvider.cleanup).toHaveBeenCalledOnce();
+        expect(longResource.shutdown).not.toHaveBeenCalled();
+      }
+      finish.resolve();
+      await long;
+      expect(longResource.shutdown).toHaveBeenCalledOnce();
+    } finally {
+      finish.resolve();
+      await Promise.allSettled([long]);
+      providerRegistry.unregister(longResource);
+    }
+  });
+
+  it('reuses a nested evaluation scope and only closes its resources after the outer scope ends', async () => {
+    const resource = { shutdown: vi.fn(async () => {}) };
+    await providerRegistry.withEvaluation(async () => {
+      providerRegistry.register(resource);
+      await providerRegistry.withEvaluation(async () => {
+        await providerRegistry.useResource(resource);
+      });
+      expect(resource.shutdown).not.toHaveBeenCalled();
+    });
+    expect(resource.shutdown).toHaveBeenCalledOnce();
+  });
+
+  it('directly closes a pending registered resource on process shutdown while its provider cleanup is held', async () => {
+    const cleanupStarted = deferred();
+    const releaseCleanup = deferred();
+    const provider = {
+      id: () => 'shutdown-during-cleanup',
+      cleanup: vi.fn(async () => {
+        cleanupStarted.resolve();
+        await releaseCleanup.promise;
+      }),
+      shutdown: vi.fn(async () => {}),
+    };
+    const evaluation = providerRegistry.withEvaluation(async () => {
+      await providerRegistry.cleanupWhenIdle([provider]);
+      await providerRegistry.withProvider(provider, async () =>
+        providerRegistry.register(provider),
+      );
+    });
+    try {
+      await cleanupStarted.promise;
+      expect(provider.shutdown).not.toHaveBeenCalled();
+      await providerRegistry.shutdownAll();
+      expect(provider.shutdown).toHaveBeenCalledOnce();
+      releaseCleanup.resolve();
+      await evaluation;
+      expect(provider.shutdown).toHaveBeenCalledOnce();
+    } finally {
+      releaseCleanup.resolve();
+      await Promise.allSettled([evaluation]);
+      providerRegistry.unregister(provider);
+    }
+  });
+
+  it('keeps cleanup and transport release pending until an unawaited underlying provider call settles', async () => {
+    const started = deferred();
+    const finish = deferred();
+    const resource = { shutdown: vi.fn(async () => {}) };
+    const provider = { id: () => 'unawaited-provider', cleanup: vi.fn(async () => {}) };
+    let physical: Promise<void> | undefined;
+    const evaluation = providerRegistry.withEvaluation(async () => {
+      await providerRegistry.cleanupWhenIdle([provider]);
+      physical = providerRegistry.withProvider(provider, async () => {
+        providerRegistry.register(resource);
+        started.resolve();
+        await finish.promise;
+      });
+      await started.promise;
+    });
+    try {
+      await evaluation;
+      expect(provider.cleanup).not.toHaveBeenCalled();
+      expect(resource.shutdown).not.toHaveBeenCalled();
+      finish.resolve();
+      await physical;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(provider.cleanup).toHaveBeenCalledOnce();
+      expect(resource.shutdown).toHaveBeenCalledOnce();
+    } finally {
+      finish.resolve();
+      await Promise.allSettled([evaluation, ...(physical ? [physical] : [])]);
+      providerRegistry.unregister(resource);
+    }
+  });
+
+  it('shares a lazily registered transport with evaluations already using the same provider', async () => {
+    const bothStarted = deferred();
+    const finishFirst = deferred();
+    const finishSecond = deferred();
+    const resource = { shutdown: vi.fn(async () => {}) };
+    const provider = { id: () => 'late-registration' };
+    let calls = 0;
+    const use = (first: boolean) =>
+      providerRegistry.withEvaluation(async () => {
+        await providerRegistry.useProvider(provider);
+        await providerRegistry.withProvider(provider, async () => {
+          if (++calls === 2) {
+            bothStarted.resolve();
+          }
+          await bothStarted.promise;
+          if (first) {
+            providerRegistry.register(resource);
+          }
+          await (first ? finishFirst : finishSecond).promise;
+        });
+      });
+    const first = use(true);
+    const second = use(false);
+    try {
+      await bothStarted.promise;
+      finishFirst.resolve();
+      await first;
+      expect(resource.shutdown).not.toHaveBeenCalled();
+      finishSecond.resolve();
+      await second;
+      expect(resource.shutdown).toHaveBeenCalledOnce();
+    } finally {
+      finishFirst.resolve();
+      finishSecond.resolve();
+      await Promise.allSettled([first, second]);
+      providerRegistry.unregister(resource);
+    }
+  });
+
+  it('calls legacy cleanup without arguments and uses the separate evaluation hook when present', async () => {
+    const legacy = {
+      id: () => 'legacy-optional-force',
+      callApi: async () => ({ output: 'ok' }),
+      cleanup: vi.fn((force?: boolean) => {
+        if (force) {
+          throw new Error('Unexpected forced cleanup');
+        }
+      }),
+    } satisfies ApiProvider;
+    const aware = {
+      id: () => 'evaluation-aware-cleanup',
+      callApi: async () => ({ output: 'ok' }),
+      cleanup: vi.fn(),
+      cleanupAfterEvaluation: vi.fn(),
+    } satisfies ApiProvider;
+
+    await providerRegistry.withEvaluation(async () => {
+      await providerRegistry.cleanupWhenIdle([legacy, aware]);
+    });
+
+    expect(legacy.cleanup).toHaveBeenCalledExactlyOnceWith();
+    expect(aware.cleanupAfterEvaluation).toHaveBeenCalledExactlyOnceWith({
+      reason: 'evaluation-complete',
+    });
+    expect(aware.cleanup).not.toHaveBeenCalled();
+  });
+
+  it.each(['distinct', 'shared', 'abort', 'error'] as const)(
+    'keeps the active registered request alive when the other %s run finishes',
+    async (mode) => {
+      const enteredA = deferred();
+      const enteredB = deferred();
+      const releaseA = deferred();
+      const releaseB = deferred();
+      const abortA = new AbortController();
+      const createProvider = (name: string) => {
+        let closed = false;
+        const id = `${name}-${randomUUID()}`;
+        const provider = {
+          id: () => id,
+          shutdown: vi.fn(async () => {
+            closed = true;
+          }),
+          async callApi(prompt: string, _context: unknown, options?: CallApiOptionsParams) {
+            // Registration is deliberately lazy, as with Python pools and MCP clients.
+            providerRegistry.register(provider);
+            const isA = prompt === 'A';
+            (isA ? enteredA : enteredB).resolve();
+            await (isA ? releaseA : releaseB).promise;
+            options?.abortSignal?.throwIfAborted();
+            if (isA && mode === 'error') {
+              throw new Error('fail only evaluation A');
+            }
+            if (closed) {
+              throw new Error('Registered transport closed during its request');
+            }
+            return { output: `completed ${prompt}` };
+          },
+        } satisfies ApiProvider & { shutdown(): Promise<void> };
+        return provider;
+      };
+      const providerA = createProvider('A');
+      const providerB = mode === 'shared' ? providerA : createProvider('B');
+      const suite = (provider: ApiProvider, prompt: string): TestSuite => ({
+        providers: [provider],
+        prompts: [toPrompt(prompt)],
+        tests: [{}],
+      });
+      const suiteA = suite(providerA, 'A');
+      const suiteB = suite(providerB, 'B');
+      const recordA = await Eval.create({}, suiteA.prompts, { id: randomUUID() });
+      const recordB = await Eval.create({}, suiteB.prompts, { id: randomUUID() });
+      const pendingB = evaluate(suiteB, recordB, {});
+      let pendingA: ReturnType<typeof evaluate> | undefined;
+      try {
+        await enteredB.promise;
+        pendingA = evaluate(suiteA, recordA, { abortSignal: abortA.signal });
+        await enteredA.promise;
+        if (mode === 'abort') {
+          abortA.abort(new Error('cancel only evaluation A'));
+        }
+        releaseA.resolve();
+        await pendingA;
+        expect(providerB.shutdown).not.toHaveBeenCalled();
+        releaseB.resolve();
+        const completed = await pendingB;
+        expect(await completed.getResults()).toEqual([
+          expect.objectContaining({
+            success: true,
+            response: expect.objectContaining({ output: 'completed B' }),
+          }),
+        ]);
+        expect(providerB.shutdown).toHaveBeenCalledOnce();
+        expect(providerA.shutdown).toHaveBeenCalledOnce();
+      } finally {
+        releaseA.resolve();
+        releaseB.resolve();
+        await Promise.allSettled([pendingB, ...(pendingA ? [pendingA] : [])]);
+        await providerRegistry.shutdownAll();
+      }
+    },
+  );
+});
