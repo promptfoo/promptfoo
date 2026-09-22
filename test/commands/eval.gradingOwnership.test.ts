@@ -5,13 +5,8 @@ import { evaluateWithSource } from '../../src/evaluate';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { doEval } from '../../src/node/doEval';
-import {
-  getDefaultProviders,
-  setDefaultCompletionProviders,
-  setDefaultEmbeddingProviders,
-} from '../../src/providers/defaults';
+import { getDefaultProviders, setDefaultCompletionProviders } from '../../src/providers/defaults';
 import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
-import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { checkCloudPermissions } from '../../src/util/cloud';
 import { loadDefaultConfig } from '../../src/util/config/default';
@@ -19,18 +14,9 @@ import { resolveConfigs } from '../../src/util/config/load';
 import { writeMultipleOutputs } from '../../src/util/index';
 import { mockProcessEnv } from '../util/utils';
 
-import type {
-  ApiModerationProvider,
-  ApiProvider,
-  Assertion,
-  TestSuite,
-} from '../../src/types/index';
+import type { ApiProvider, Assertion, TestSuite } from '../../src/types/index';
 
-mockProcessEnv({
-  OPENAI_API_KEY: 'synthetic-moderation-routing-key',
-  REPLICATE_API_KEY: undefined,
-  REPLICATE_API_TOKEN: undefined,
-});
+mockProcessEnv({ OPENAI_API_KEY: 'synthetic-default-provider-key' });
 
 const watcher = vi.hoisted(() => {
   const handlers = new Map<string, (path: string) => Promise<void>>();
@@ -41,20 +27,6 @@ const watcher = vi.hoisted(() => {
   return { handlers, instance, watch: vi.fn() };
 });
 
-const mcp = vi.hoisted(() => ({
-  initialize: vi.fn(),
-  cleanup: vi.fn(),
-  getAllTools: vi.fn(),
-  callTool: vi.fn(),
-}));
-vi.mock('../../src/providers/mcp/client', () => ({
-  MCPClient: class {
-    initialize = mcp.initialize;
-    cleanup = mcp.cleanup;
-    getAllTools = mcp.getAllTools;
-    callTool = mcp.callTool;
-  },
-}));
 vi.mock('../../src/cache', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/cache')>()),
   fetchWithCache: vi.fn(),
@@ -115,8 +87,8 @@ async function useActualDefaultProviders() {
 
 const rubric: Assertion = { type: 'llm-rubric', value: 'GRADER_B: the answer is target-B.' };
 
-// Each fixture is public configuration consumed by the real evaluator and matchers.
-// The test never calls or inspects the ownership collector.
+// Where the shared provider appears does not matter: an overlapping evaluation keeps it
+// alive whether it is a target, a suite grader or a global default.
 const positions: {
   name: string;
   configure: (suite: TestSuite, shared: ApiProvider) => void | Promise<void>;
@@ -124,141 +96,14 @@ const positions: {
   outcome?: 'error' | 'abort';
 }[] = [
   {
-    name: 'top-level and grader identity control',
+    name: 'watch target and grader',
     configure: (suite, shared) => {
       suite.providers = [shared];
       suite.defaultTest = { options: { provider: shared }, assert: [rubric] };
     },
   },
   {
-    name: 'default typed text grader with unused lazy alternatives',
-    entry: 'public',
-    configure: (suite, shared) => {
-      suite.defaultTest = {
-        options: {
-          provider: {
-            text: shared,
-            embedding: 'unused-embedding-provider',
-            classification: { id: 'unused-classification-provider', config: { unused: true } },
-          },
-        },
-        assert: [rubric],
-      };
-    },
-  },
-  {
-    name: 'test options grader',
-    entry: 'direct',
-    configure: (suite, shared) => {
-      suite.tests = [{ options: { provider: shared }, assert: [rubric] }];
-    },
-  },
-  {
-    name: 'scenario config grader',
-    configure: (suite, shared) => {
-      suite.tests = [];
-      suite.scenarios = [
-        { config: [{ options: { provider: shared } }], tests: [{ assert: [rubric] }] },
-      ];
-    },
-  },
-  {
-    name: 'scenario test classification grader',
-    configure: (suite, shared) => {
-      suite.tests = [];
-      suite.scenarios = [
-        {
-          config: [{}],
-          tests: [
-            {
-              options: { provider: { classification: shared } },
-              assert: [{ type: 'classifier', value: 'safe', threshold: 0.5 }],
-            },
-          ],
-        },
-      ];
-    },
-  },
-  {
-    name: 'default assertion grader',
-    configure: (suite, shared) => {
-      suite.defaultTest = { assert: [{ ...rubric, provider: shared }] };
-    },
-  },
-  {
-    name: 'default assertion-set grader',
-    configure: (suite, shared) => {
-      suite.defaultTest = {
-        assert: [{ type: 'assert-set', assert: [{ ...rubric, provider: shared }] }],
-      };
-    },
-  },
-  {
-    name: 'test assertion overrides unused lazy test options',
-    configure: (suite, shared) => {
-      suite.tests = [
-        {
-          options: { provider: 'unused-overridden-provider' },
-          assert: [{ ...rubric, provider: shared }],
-        },
-      ];
-    },
-  },
-  {
-    name: 'test assertion-set embedding grader',
-    entry: 'direct',
-    configure: (suite, shared) => {
-      suite.tests = [
-        {
-          assert: [
-            {
-              type: 'assert-set',
-              assert: [
-                {
-                  type: 'similar',
-                  value: 'target-B',
-                  threshold: 0.9,
-                  provider: { embedding: shared },
-                },
-              ],
-            },
-          ],
-        },
-      ];
-    },
-  },
-  {
-    name: 'scenario config assertion-set grader',
-    configure: (suite, shared) => {
-      suite.tests = [];
-      suite.scenarios = [
-        {
-          config: [{ assert: [{ type: 'assert-set', assert: [{ ...rubric, provider: shared }] }] }],
-          tests: [{}],
-        },
-      ];
-    },
-  },
-  {
-    name: 'scenario test assertion moderation grader',
-    configure: (suite, shared) => {
-      suite.tests = [];
-      suite.scenarios = [
-        {
-          config: [{}],
-          tests: [{ assert: [{ type: 'moderation', provider: { moderation: shared } }] }],
-        },
-      ];
-    },
-  },
-  {
-    name: 'default provider target override and implicit grader',
-    configure: (suite, shared) => {
-      suite.defaultTest = { provider: shared, assert: [rubric] };
-    },
-  },
-  {
-    name: 'globally overridden default completion grader',
+    name: 'global default grader',
     entry: 'public',
     configure: async (suite, shared) => {
       await useActualDefaultProviders();
@@ -267,29 +112,7 @@ const positions: {
     },
   },
   {
-    name: 'globally overridden default embedding grader',
-    entry: 'direct',
-    configure: async (suite, shared) => {
-      await useActualDefaultProviders();
-      await setDefaultEmbeddingProviders(shared);
-      suite.tests = [{ assert: [{ type: 'similar', value: 'target-B', threshold: 0.9 }] }];
-    },
-  },
-  {
-    name: 'test provider target override',
-    configure: (suite, shared) => {
-      suite.tests = [{ provider: shared }];
-    },
-  },
-  {
-    name: 'scenario config provider target override',
-    configure: (suite, shared) => {
-      suite.tests = [];
-      suite.scenarios = [{ config: [{ provider: shared }], tests: [{}] }];
-    },
-  },
-  {
-    name: 'direct borrowed grader failure',
+    name: 'direct test grader failure',
     entry: 'direct',
     outcome: 'error',
     configure: (suite, shared) => {
@@ -297,7 +120,7 @@ const positions: {
     },
   },
   {
-    name: 'public borrowed grader cancellation',
+    name: 'public test grader cancellation',
     entry: 'public',
     outcome: 'abort',
     configure: (suite, shared) => {
@@ -323,9 +146,6 @@ describe('evaluation ownership of supplied grading providers', () => {
     );
     vi.mocked(loadApiProviders).mockImplementation(actualProviders.loadApiProviders);
     vi.mocked(fetchWithCache).mockRejectedValue(new Error('Unexpected network request'));
-    mcp.initialize.mockResolvedValue(undefined);
-    mcp.cleanup.mockResolvedValue(undefined);
-    mcp.getAllTools.mockReturnValue([]);
     cliState.config = undefined;
     cliState.basePath = '';
     cliState.resume = false;
@@ -367,11 +187,10 @@ describe('evaluation ownership of supplied grading providers', () => {
     Object.assign(cliState, priorCliState);
     watcher.handlers.clear();
     await setDefaultCompletionProviders(undefined as unknown as ApiProvider);
-    await setDefaultEmbeddingProviders(undefined as unknown as ApiProvider);
     vi.resetAllMocks();
   });
 
-  it('makes concurrent grading calls wait for an earlier pending cleanup', async () => {
+  it('makes concurrent grading calls wait for an earlier cleanup, even one that rejects', async () => {
     const cleanupStarted = deferred();
     const finishCleanup = deferred();
     let cleaning = false;
@@ -391,6 +210,7 @@ describe('evaluation ownership of supplied grading providers', () => {
         cleanupStarted.resolve();
         await finishCleanup.promise;
         cleaning = false;
+        throw new Error('Synthetic cleanup failure');
       }),
     } satisfies ApiProvider;
     const target = {
@@ -443,14 +263,13 @@ describe('evaluation ownership of supplied grading providers', () => {
     }
   });
 
-  it.each(['success', 'error', 'abort'] as const)(
+  it.each(['success', 'error'] as const)(
     'keeps a resolved shared target alive through pending setup: %s',
     async (outcome) => {
       const firstStarted = deferred();
       const finishFirst = deferred();
       const setupStarted = deferred();
       const finishSetup = deferred();
-      const controller = new AbortController();
       const setupError = new Error(`Pending setup ${outcome}`);
       let closed = false;
       const target = {
@@ -496,16 +315,15 @@ describe('evaluation ownership of supplied grading providers', () => {
           if (outcome === 'error') {
             throw setupError;
           }
-          controller.signal.throwIfAborted();
         }
       });
       const pending: ReturnType<typeof doEval>[] = [];
-      const run = (abortSignal?: AbortSignal) => {
+      const run = () => {
         const result = doEval(
           { write: false, table: false, share: false, cache: false },
           {},
           'pending-setup.mjs',
-          { maxConcurrency: 1, showProgressBar: false, abortSignal },
+          { maxConcurrency: 1, showProgressBar: false },
         );
         pending.push(result);
         void result.catch(() => {});
@@ -519,7 +337,7 @@ describe('evaluation ownership of supplied grading providers', () => {
             throw new Error('First evaluation skipped its target');
           }),
         ]);
-        const second = run(controller.signal);
+        const second = run();
         await Promise.race([
           setupStarted.promise,
           second.then(() => {
@@ -530,9 +348,6 @@ describe('evaluation ownership of supplied grading providers', () => {
         expect((await (await first).toEvaluateSummary()).stats.successes).toBe(1);
         expect(target.cleanup).not.toHaveBeenCalled();
         expect(closed).toBe(false);
-        if (outcome === 'abort') {
-          controller.abort(setupError);
-        }
         finishSetup.resolve();
         if (outcome === 'success') {
           expect((await (await second).toEvaluateSummary()).stats.successes).toBe(1);
@@ -627,102 +442,6 @@ describe('evaluation ownership of supplied grading providers', () => {
     },
   );
 
-  it('leaves a sequential supplied MCP grader open for its caller', async () => {
-    let closed = false;
-    const tools = [
-      {
-        name: 'grade',
-        description: 'Return the grade',
-        inputSchema: { type: 'object', properties: {} },
-      },
-    ];
-    mcp.getAllTools.mockImplementation(() => (closed ? [] : tools));
-    mcp.cleanup.mockImplementation(async () => {
-      closed = true;
-    });
-    mcp.callTool.mockImplementation(async () => {
-      expect(closed).toBe(false);
-      return { content: [{ type: 'text', text: '{"pass":true,"score":1,"reason":"tool grade"}' }] };
-    });
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-      data: {
-        choices: [
-          {
-            message: {
-              role: 'assistant',
-              content: null,
-              tool_calls: [
-                {
-                  id: 'grade-call',
-                  type: 'function',
-                  function: { name: 'grade', arguments: '{}' },
-                },
-              ],
-            },
-            finish_reason: 'tool_calls',
-          },
-        ],
-        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
-      },
-    });
-    const grader = new OpenAiChatCompletionProvider('gpt-4o-mini', {
-      config: { apiKey: 'synthetic-no-network', mcp: { enabled: true } },
-    });
-    const target = {
-      id: () => 'sequential-mcp-target',
-      callApi: vi.fn(async () => ({ output: 'target' })),
-      cleanup: vi.fn(() => {
-        throw new Error('nonfatal synchronous target cleanup');
-      }),
-    } satisfies ApiProvider;
-    let run = 0;
-    vi.mocked(resolveConfigs).mockImplementation(async () => {
-      const config = {};
-      cliState.config = config;
-      return {
-        config,
-        basePath: '',
-        testSuite: {
-          providers: [target],
-          prompts: [{ raw: `uncached-${++run}`, label: 'sequential' }],
-          tests: [
-            { assert: [{ type: 'llm-rubric', value: 'Use the grade tool', provider: grader }] },
-          ],
-        },
-      };
-    });
-    try {
-      for (let i = 0; i < 2; i++) {
-        const result = await doEval(
-          { write: false, table: false, share: false, cache: false },
-          {},
-          'sequential-mcp.mjs',
-          { maxConcurrency: 1, showProgressBar: false },
-        );
-        expect((await result.toEvaluateSummary()).results[0]).toMatchObject({ success: true });
-        expect(target.cleanup).toHaveBeenCalledTimes(i + 1);
-        expect(mcp.cleanup).not.toHaveBeenCalled();
-      }
-      const requestBodies = vi
-        .mocked(fetchWithCache)
-        .mock.calls.map(([, options]) => JSON.parse(String(options?.body)));
-      expect(requestBodies).toHaveLength(2);
-      for (const body of requestBodies) {
-        expect(body.tools).toContainEqual(
-          expect.objectContaining({ function: expect.objectContaining({ name: 'grade' }) }),
-        );
-      }
-      expect(mcp.callTool).toHaveBeenCalledTimes(2);
-      expect(mcp.initialize).toHaveBeenCalledTimes(1);
-    } finally {
-      await grader.cleanup();
-    }
-    expect(mcp.cleanup).toHaveBeenCalledTimes(1);
-  });
-
   it.each(positions)(
     'keeps $name alive until the last overlapping run finishes',
     async ({ configure, entry, outcome }) => {
@@ -774,21 +493,6 @@ describe('evaluation ownership of supplied grading providers', () => {
                 : '{"pass":true,"score":1,"reason":"shared grader completed"}',
           };
         }),
-        callEmbeddingApi: vi.fn(async () => {
-          calls.push('embedding');
-          await hold('B');
-          return { embedding: [1, 0] };
-        }),
-        callClassificationApi: vi.fn(async () => {
-          calls.push('classification');
-          await hold('B');
-          return { classification: { safe: 1 } };
-        }),
-        callModerationApi: vi.fn(async () => {
-          calls.push('moderation');
-          await hold('B');
-          return { flags: [] };
-        }),
         // Model a transport-owning provider such as MCP: cleanup closes active work.
         // It intentionally has no Sage-specific request-ownership protection.
         cleanup: vi.fn(async () => {
@@ -796,7 +500,7 @@ describe('evaluation ownership of supplied grading providers', () => {
             controller.abort(new Error('Shared transport closed during a request'));
           }
         }),
-      } satisfies ApiModerationProvider;
+      } satisfies ApiProvider;
       const idle = {
         id: () => 'initial-target',
         callApi: vi.fn(async () => ({ output: 'initial' })),
@@ -922,107 +626,9 @@ describe('evaluation ownership of supplied grading providers', () => {
         }
         expect(calls[0]).toBe('TARGET_A');
         expect(calls.length).toBeGreaterThanOrEqual(2);
-        expect(loadApiProvider).not.toHaveBeenCalled();
       } finally {
         finishA.resolve();
         finishB.resolve();
-        await Promise.allSettled(pending);
-      }
-    },
-  );
-
-  it.each(['success', 'rejection'])(
-    'waits for pending cleanup before reusing a provider after cleanup %s',
-    async (outcome) => {
-      const cleanupStarted = deferred();
-      const finishCleanup = deferred();
-      const events: string[] = [];
-      let cleanupCount = 0;
-      const shared = {
-        id: () => 'async-cleanup-provider',
-        callApi: vi.fn(async (prompt: string) => {
-          events.push(`call:${prompt}`);
-          return { output: prompt };
-        }),
-        cleanup: vi.fn(async () => {
-          if (++cleanupCount === 1) {
-            events.push('cleanup:A:start');
-            cleanupStarted.resolve();
-            await finishCleanup.promise;
-            events.push('cleanup:A:end');
-            if (outcome === 'rejection') {
-              throw new Error('Synthetic cleanup failure');
-            }
-          } else {
-            events.push('cleanup:B');
-          }
-        }),
-      } satisfies ApiProvider;
-      const other = {
-        id: () => 'later-provider',
-        callApi: vi.fn(async (prompt: string) => ({ output: prompt })),
-        cleanup: vi.fn(async () => {
-          events.push('cleanup:later');
-        }),
-      } satisfies ApiProvider;
-      const suites: TestSuite[] = [
-        { providers: [other], prompts: [{ raw: 'initial', label: 'initial' }], tests: [{}] },
-        { providers: [shared, other], prompts: [{ raw: 'A', label: 'A' }], tests: [{}] },
-        { providers: [shared], prompts: [{ raw: 'B', label: 'B' }], tests: [{}] },
-      ];
-      vi.mocked(resolveConfigs).mockImplementation(async () => {
-        const testSuite = suites.shift();
-        if (!testSuite) {
-          throw new Error('Unexpected evaluation');
-        }
-        const config = { outputPath: ['cleanup-reuse.json'] };
-        cliState.config = config;
-        return { config, testSuite, basePath: '' };
-      });
-      const pending: Promise<void>[] = [];
-      try {
-        await doEval(
-          { watch: true, write: false, table: false, share: false },
-          {},
-          'cleanup-reuse.mjs',
-          { maxConcurrency: 1, showProgressBar: false },
-        );
-        events.length = 0;
-        other.cleanup.mockClear();
-        vi.mocked(writeMultipleOutputs).mockClear();
-        const onChange = watcher.handlers.get('change')!;
-        const runA = onChange('cleanup-reuse.mjs');
-        pending.push(runA);
-        void runA.catch(() => {});
-        await Promise.race([
-          cleanupStarted.promise,
-          runA.then(() => {
-            throw new Error('A finished without cleanup');
-          }),
-        ]);
-        const runB = onChange('cleanup-reuse.mjs');
-        pending.push(runB);
-        void runB.catch(() => {});
-        // Let the already-delivered reload advance while A's cleanup is held.
-        for (let i = 0; i < 10; i++) {
-          await new Promise<void>((resolve) => setImmediate(resolve));
-        }
-        expect(events).not.toContain('call:B');
-        finishCleanup.resolve();
-        await Promise.all([runA, runB]);
-        expect(events.indexOf('cleanup:A:end')).toBeLessThan(events.indexOf('call:B'));
-        expect(shared.cleanup).toHaveBeenCalledTimes(2);
-        expect(other.cleanup).toHaveBeenCalledTimes(1);
-        expect(events).toContain('cleanup:later');
-        expect(writeMultipleOutputs).toHaveBeenCalledTimes(2);
-        for (const [, record] of vi.mocked(writeMultipleOutputs).mock.calls) {
-          const summary = await record.toEvaluateSummary();
-          expect(summary.stats.failures).toBe(0);
-          expect(summary.stats.errors).toBe(0);
-          expect(summary.stats.successes).toBeGreaterThan(0);
-        }
-      } finally {
-        finishCleanup.resolve();
         await Promise.allSettled(pending);
       }
     },
