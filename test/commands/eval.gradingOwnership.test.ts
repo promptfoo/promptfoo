@@ -2,8 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { evaluateWithSource } from '../../src/evaluate';
-import { evaluate, withEvaluationResources } from '../../src/evaluator';
-import { matchesLlmRubric } from '../../src/matchers/llmGrading';
+import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { doEval } from '../../src/node/doEval';
 import {
@@ -372,72 +371,20 @@ describe('evaluation ownership of supplied grading providers', () => {
     vi.resetAllMocks();
   });
 
-  it('does not hold an unused global default while an explicit grader is active', async () => {
-    const ownerStarted = deferred();
-    const releaseOwner = deferred();
-    const graderStarted = deferred();
-    const releaseGrader = deferred();
-    const unused = {
-      id: () => 'unused-global-grader',
-      callApi: vi.fn(async () => ({ output: 'unused' })),
-      cleanup: vi.fn(),
-    } satisfies ApiProvider;
-    const explicit = {
-      id: () => 'explicit-grader',
-      callApi: vi.fn(async () => {
-        graderStarted.resolve();
-        await releaseGrader.promise;
-        return { output: '{"pass":true,"score":1,"reason":"explicit grader completed"}' };
-      }),
-      cleanup: vi.fn(),
-    } satisfies ApiProvider;
-    await useActualDefaultProviders();
-    await setDefaultCompletionProviders(unused);
-    const owner = withEvaluationResources(
-      async () => {
-        ownerStarted.resolve();
-        await releaseOwner.promise;
-      },
-      { ownedProviders: [unused] },
-    );
-    await ownerStarted.promise;
-    const borrower = withEvaluationResources(() =>
-      matchesLlmRubric('The output is correct.', 'answer', { provider: explicit }),
-    );
-
-    try {
-      await Promise.race([
-        graderStarted.promise,
-        borrower.then(() => {
-          throw new Error('Evaluation completed without invoking the explicit grader');
-        }),
-      ]);
-      releaseOwner.resolve();
-      await owner;
-      expect(unused.cleanup).toHaveBeenCalledExactlyOnceWith({ reason: 'evaluation-complete' });
-      expect(unused.callApi).not.toHaveBeenCalled();
-      expect(explicit.cleanup).not.toHaveBeenCalled();
-      releaseGrader.resolve();
-      await expect(borrower).resolves.toMatchObject({ pass: true });
-    } finally {
-      releaseOwner.resolve();
-      releaseGrader.resolve();
-      await Promise.allSettled([owner, borrower]);
-    }
-  });
-
   it('makes concurrent grading calls wait for an earlier pending cleanup', async () => {
     const cleanupStarted = deferred();
     const finishCleanup = deferred();
     let cleaning = false;
     const callsDuringCleanup: string[] = [];
-    const grader = {
-      id: () => 'concurrently-borrowed-grader',
+    const shared = {
+      id: () => 'released-shared-provider',
       callApi: vi.fn(async (prompt: string) => {
         if (cleaning) {
           callsDuringCleanup.push(prompt);
         }
-        return { output: '{"pass":true,"score":1,"reason":"ok"}' };
+        return {
+          output: prompt.includes('GRADER_B') ? '{"pass":true,"score":1,"reason":"ok"}' : prompt,
+        };
       }),
       cleanup: vi.fn(async () => {
         cleaning = true;
@@ -446,25 +393,53 @@ describe('evaluation ownership of supplied grading providers', () => {
         cleaning = false;
       }),
     } satisfies ApiProvider;
-    const owner = withEvaluationResources(async () => {}, { ownedProviders: [grader] });
-    await cleanupStarted.promise;
-    const borrower = withEvaluationResources(() =>
-      Promise.all(
-        ['first', 'second'].map((rubric) => matchesLlmRubric(rubric, 'output', { provider: grader })),
-      ),
+    const target = {
+      id: () => 'borrower-target',
+      callApi: vi.fn(async () => ({ output: 'target-B' })),
+    } satisfies ApiProvider;
+    vi.mocked(resolveConfigs).mockImplementationOnce(async () => {
+      const config = {};
+      cliState.config = config;
+      return {
+        config,
+        basePath: '',
+        testSuite: { providers: [shared], prompts: [{ raw: 'A', label: 'A' }], tests: [{}] },
+      };
+    });
+    const owner = doEval(
+      { write: false, table: false, share: false, cache: false },
+      {},
+      'owner.mjs',
+      { showProgressBar: false },
     );
+    void owner.catch(() => {});
+    let borrower: Promise<Eval> | undefined;
     try {
+      await cleanupStarted.promise;
+      await useActualDefaultProviders();
+      await setDefaultCompletionProviders(shared);
+      // Two tests grade concurrently with the default grader whose cleanup is still running.
+      borrower = evaluate(
+        {
+          providers: [target],
+          prompts: [{ raw: 'TARGET_B', label: 'B' }],
+          tests: [{ assert: [rubric] }, { assert: [rubric] }],
+        },
+        new Eval({}),
+        { maxConcurrency: 2, showProgressBar: false },
+      );
       for (let i = 0; i < 10; i++) {
         await new Promise<void>((resolve) => setImmediate(resolve));
       }
-      expect(grader.callApi).not.toHaveBeenCalled();
+      expect(shared.callApi).toHaveBeenCalledOnce();
       finishCleanup.resolve();
-      await expect(borrower).resolves.toHaveLength(2);
-      expect(grader.callApi).toHaveBeenCalledTimes(2);
+      await owner;
+      expect((await (await borrower).toEvaluateSummary()).stats.successes).toBe(2);
+      expect(shared.callApi).toHaveBeenCalledTimes(3);
       expect(callsDuringCleanup).toEqual([]);
     } finally {
       finishCleanup.resolve();
-      await Promise.allSettled([owner, borrower]);
+      await Promise.allSettled([owner, ...(borrower ? [borrower] : [])]);
     }
   });
 
@@ -957,127 +932,10 @@ describe('evaluation ownership of supplied grading providers', () => {
   );
 
   it.each(['success', 'rejection'])(
-    'reuses Q cleanup registered while P cleanup awaits its %s',
-    async (outcome) => {
-      const pStarted = deferred();
-      const finishP = deferred();
-      const qStarted = deferred();
-      const finishQ = deferred();
-      const configuredC = deferred();
-      const events: string[] = [];
-      const p = {
-        id: () => 'sequential-cleanup-P',
-        callApi: vi.fn(async () => ({ output: 'target-A' })),
-        cleanup: vi.fn(async () => {
-          pStarted.resolve();
-          await finishP.promise;
-          events.push('P:cleanup:end');
-        }),
-      } satisfies ApiProvider;
-      let qCleanups = 0;
-      const q = {
-        id: () => 'sequential-cleanup-Q',
-        callApi: vi.fn(async function (this: ApiProvider, prompt: string) {
-          expect(this).toBe(q);
-          events.push(`Q:call:${prompt}`);
-          return {
-            output: prompt.includes('GRADE_A')
-              ? '{"pass":true,"score":1,"reason":"Q graded A"}'
-              : prompt,
-          };
-        }),
-        cleanup: vi.fn(async () => {
-          if (++qCleanups === 1) {
-            events.push('Q:cleanup:start');
-            qStarted.resolve();
-            await finishQ.promise;
-            events.push('Q:cleanup:settled');
-            if (outcome === 'rejection') {
-              throw new Error('Synthetic Q cleanup rejection');
-            }
-          }
-        }),
-      } satisfies ApiProvider;
-      const suites: TestSuite[] = [
-        {
-          providers: [p],
-          prompts: [{ raw: 'A', label: 'A' }],
-          tests: [{ assert: [{ type: 'llm-rubric', value: 'GRADE_A', provider: q }] }],
-        },
-        { providers: [q], prompts: [{ raw: 'B', label: 'B' }], tests: [{}] },
-        { providers: [q], prompts: [{ raw: 'C', label: 'C' }], tests: [{}] },
-      ];
-      vi.mocked(resolveConfigs).mockImplementation(async () => {
-        const testSuite = suites.shift();
-        if (!testSuite) {
-          throw new Error('Unexpected evaluation');
-        }
-        if (testSuite.prompts[0].raw === 'C') {
-          configuredC.resolve();
-        }
-        const config = { outputPath: ['sequential-cleanup.json'] };
-        cliState.config = config;
-        return { config, testSuite, basePath: '' };
-      });
-      const pending: ReturnType<typeof doEval>[] = [];
-      const run = () => {
-        const result = doEval(
-          { write: false, table: false, share: false, cache: false },
-          {},
-          'sequential-cleanup.mjs',
-          { maxConcurrency: 1, showProgressBar: false },
-        );
-        pending.push(result);
-        void result.catch(() => {});
-        return result;
-      };
-      try {
-        const runA = run();
-        await Promise.race([
-          pStarted.promise,
-          runA.then(() => {
-            throw new Error('A completed without entering P cleanup');
-          }),
-        ]);
-        const runB = run();
-        await Promise.race([
-          qStarted.promise,
-          runB.then(() => {
-            throw new Error('B completed without entering Q cleanup');
-          }),
-        ]);
-        finishP.resolve();
-        // Drain the already-released P continuation while the first Q cleanup is held.
-        await new Promise<void>((resolve) => setImmediate(resolve));
-        expect(q.cleanup).toHaveBeenCalledTimes(1);
-        run();
-        await configuredC.promise;
-        await new Promise<void>((resolve) => setImmediate(resolve));
-        expect(events).not.toContain('Q:call:C');
-        finishQ.resolve();
-        const results = await Promise.all(pending);
-        expect(events.indexOf('Q:cleanup:settled')).toBeLessThan(events.indexOf('Q:call:C'));
-        expect(p.cleanup).toHaveBeenCalledTimes(1);
-        expect(q.cleanup).toHaveBeenCalledTimes(2);
-        expect(writeMultipleOutputs).toHaveBeenCalledTimes(3);
-        for (const result of results) {
-          const summary = await result.toEvaluateSummary();
-          expect(summary.stats).toMatchObject({ successes: 1, failures: 0, errors: 0 });
-        }
-      } finally {
-        finishP.resolve();
-        finishQ.resolve();
-        await Promise.allSettled(pending);
-      }
-    },
-  );
-
-  it.each(['success', 'rejection'])(
     'waits for pending cleanup before reusing a provider after cleanup %s',
     async (outcome) => {
       const cleanupStarted = deferred();
       const finishCleanup = deferred();
-      const configuredB = deferred();
       const events: string[] = [];
       let cleanupCount = 0;
       const shared = {
@@ -1119,9 +977,6 @@ describe('evaluation ownership of supplied grading providers', () => {
         }
         const config = { outputPath: ['cleanup-reuse.json'] };
         cliState.config = config;
-        if (testSuite.prompts[0].raw === 'B') {
-          configuredB.resolve();
-        }
         return { config, testSuite, basePath: '' };
       });
       const pending: Promise<void>[] = [];
@@ -1148,14 +1003,10 @@ describe('evaluation ownership of supplied grading providers', () => {
         const runB = onChange('cleanup-reuse.mjs');
         pending.push(runB);
         void runB.catch(() => {});
-        await Promise.race([
-          configuredB.promise,
-          runB.then(() => {
-            throw new Error('B finished without loading its configuration');
-          }),
-        ]);
         // Let the already-delivered reload advance while A's cleanup is held.
-        await new Promise<void>((resolve) => setImmediate(resolve));
+        for (let i = 0; i < 10; i++) {
+          await new Promise<void>((resolve) => setImmediate(resolve));
+        }
         expect(events).not.toContain('call:B');
         finishCleanup.resolve();
         await Promise.all([runA, runB]);

@@ -10,12 +10,7 @@ import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
-import {
-  type EvaluationResourceRetainer,
-  evaluate,
-  PromptSuggestionsRejectedError,
-  withEvaluationResources,
-} from '../evaluator';
+import { evaluate, PromptSuggestionsRejectedError } from '../evaluator';
 import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,
@@ -26,6 +21,7 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
+import { providerRegistry } from '../providers/providerRegistry';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
@@ -342,7 +338,6 @@ async function doEvalWithEnv(
   const runEvaluationWithEnv = async (
     runEnv: EnvOverrides,
     envFileOverrides: EnvOverrides | undefined,
-    retainProviders: EvaluationResourceRetainer,
     cmdObj: Partial<CommandLineOptions & Command>,
     defaultConfig: Partial<UnifiedConfig>,
     evaluateOptions: InternalEvaluateOptions,
@@ -547,7 +542,8 @@ async function doEvalWithEnv(
       } = await resolveConfigs(cmdObj, defaultConfig));
     }
 
-    await retainProviders({ testSuite, ownedProviders: testSuite.providers });
+    // This run loaded these providers, including any filtered out below.
+    providerRegistry.cleanupWhenIdle(testSuite.providers);
     // Fill the active scope in place; replacing runEnv would leave it empty.
     Object.assign(runEnv, testSuite.env);
     cliState.basePath = _basePath;
@@ -1322,11 +1318,10 @@ async function doEvalWithEnv(
       cliState.withBasePath(undefined, () =>
         cliState.withEnvFileOverrides(runEnvFileOverrides, () =>
           cliState.withEnv(runEnv, () =>
-            withEvaluationResources((retainProviders) =>
+            providerRegistry.withEvaluation(() =>
               runEvaluationWithEnv(
                 runEnv,
                 runEnvFileOverrides,
-                retainProviders,
                 runCommand,
                 runDefaults,
                 runOptions,

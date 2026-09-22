@@ -2,7 +2,7 @@ import * as path from 'path';
 
 import * as cache from './cache';
 import cliState from './cliState';
-import { evaluate as doEvaluate, withEvaluationResources } from './evaluator';
+import { evaluate as doEvaluate } from './evaluator';
 import { getAuthor } from './globalConfig/accounts';
 import logger from './logger';
 import { runDbMigrations } from './migrate';
@@ -10,6 +10,7 @@ import Eval from './models/eval';
 import { sanitizeProvider } from './models/evalResult';
 import { processPrompts, readProviderPromptMap } from './prompts/index';
 import { loadApiProviders, resolveProvider } from './providers/index';
+import { providerRegistry } from './providers/providerRegistry';
 import { createShareableUrl, isSharingEnabled } from './share';
 import { isApiProvider } from './types/providers';
 import { isTransformFunction } from './types/transform';
@@ -328,7 +329,7 @@ export async function evaluateWithSource(
   return cliState.withConfig(config, () =>
     cliState.withBasePath(path.resolve(testSuite.basePath ?? ''), () =>
       cliState.withEnv(testSuite.env ?? {}, () =>
-        withEvaluationResources(() => evaluateWithEnv(testSuite, options), { testSuite }),
+        providerRegistry.withEvaluation(() => evaluateWithEnv(testSuite, options)),
       ),
     ),
   );

@@ -13,13 +13,13 @@ Each provider:
 
 ## Provider Lifecycle & Cleanup
 
-The evaluator (`src/evaluator.ts`) manages provider lifecycle. After evaluation completes, it calls `providerRegistry.shutdownAll()` to clean up resources.
+Evaluations run inside `providerRegistry.withEvaluation()` (`src/providers/providerRegistry.ts`). Registered resources, and the providers a CLI eval loaded, are released only after the last active evaluation finishes, so overlapping evals never close each other's providers.
 
 **If your provider allocates resources** (Python workers, connections, child processes):
 
-- Implement a `cleanup()` method on your provider
+- Implement a `cleanup()` method on your provider; automatic calls pass `{ reason: 'evaluation-complete' }`
 - Register with `providerRegistry` for automatic cleanup
-- Resources are released in the evaluator's `finally` block
+- Resources are released once no evaluation is active, and on process exit
 
 **Reference implementations:**
 

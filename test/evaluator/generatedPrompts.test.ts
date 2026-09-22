@@ -103,7 +103,7 @@ describe('generated prompt selection', () => {
       suggestionsCount: 3,
     });
 
-    expect(generatePrompts).toHaveBeenCalledWith('Original prompt', 3, expect.any(Function));
+    expect(generatePrompts).toHaveBeenCalledWith('Original prompt', 3);
   });
 
   it('defaults suggestionsCount to 1 when omitted', async () => {
@@ -114,7 +114,7 @@ describe('generated prompt selection', () => {
       generateSuggestions: true,
     });
 
-    expect(generatePrompts).toHaveBeenCalledWith('Original prompt', 1, expect.any(Function));
+    expect(generatePrompts).toHaveBeenCalledWith('Original prompt', 1);
   });
 
   it('clamps over-cap suggestionsCount to MAX_SUGGESTIONS_COUNT', async () => {
@@ -126,7 +126,7 @@ describe('generated prompt selection', () => {
       suggestionsCount: 1_000,
     });
 
-    expect(generatePrompts).toHaveBeenCalledWith('Original prompt', 50, expect.any(Function));
+    expect(generatePrompts).toHaveBeenCalledWith('Original prompt', 50);
   });
 
   it('coerces invalid suggestionsCount values to 1', async () => {
@@ -138,6 +138,6 @@ describe('generated prompt selection', () => {
       suggestionsCount: 0,
     });
 
-    expect(generatePrompts).toHaveBeenCalledWith('Original prompt', 1, expect.any(Function));
+    expect(generatePrompts).toHaveBeenCalledWith('Original prompt', 1);
   });
 });

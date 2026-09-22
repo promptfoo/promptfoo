@@ -1,5 +1,7 @@
 import logger from '../logger';
 
+import type { ApiProvider } from '../types/providers';
+
 /**
  * Interface for providers that need cleanup on process exit.
  */
@@ -8,40 +10,61 @@ interface CleanupProvider {
 }
 
 /**
- * Global registry of Python providers for cleanup on process exit.
- * Ensures no zombie Python processes are left running.
+ * Global registry of provider resources, released once no evaluation is active and on
+ * process exit. Ensures no zombie Python processes are left running.
  */
 class ProviderRegistry {
   private providers: Set<CleanupProvider> = new Set();
   private shutdownRegistered: boolean = false;
   private activeEvaluations = 0;
-  private pendingShutdown?: Promise<void>;
+  private idleCleanups = new Set<ApiProvider>();
+  private idleShutdown?: Promise<void>;
 
+  /**
+   * Run `run` as an active evaluation. Registered resources, and providers passed to
+   * `cleanupWhenIdle`, are released only after the last active evaluation finishes, so one
+   * evaluation finishing never closes a provider another is still using. A new evaluation
+   * waits for an in-progress release before it starts.
+   */
   async withEvaluation<T>(run: () => Promise<T>): Promise<T> {
-    // Reserve before waiting: another evaluator's finalizer must not close
-    // resources while this evaluation constructs or lazily registers providers.
+    // Count synchronously: setup that loads or registers providers is covered too.
     this.activeEvaluations++;
     try {
-      // Without a pending shutdown, start immediately so the run can reserve its providers
-      // before another evaluation's finalizer gets a turn.
-      if (this.pendingShutdown) {
-        await this.pendingShutdown;
-      }
+      await this.idleShutdown;
       return await run();
     } finally {
-      this.activeEvaluations--;
-      if (this.activeEvaluations === 0) {
-        const shutdown = this.pendingShutdown ?? Promise.resolve().then(() => this.shutdownAll());
-        this.pendingShutdown = shutdown;
-        try {
-          await shutdown;
-        } finally {
-          if (this.pendingShutdown === shutdown) {
-            this.pendingShutdown = undefined;
-          }
+      if (--this.activeEvaluations === 0) {
+        const shutdown = this.releaseIdleResources();
+        this.idleShutdown = shutdown;
+        await shutdown;
+        if (this.idleShutdown === shutdown) {
+          this.idleShutdown = undefined;
         }
       }
     }
+  }
+
+  /** Call `cleanup()` once, after the last active evaluation finishes. */
+  cleanupWhenIdle(providers: Iterable<ApiProvider>): void {
+    for (const provider of providers) {
+      this.idleCleanups.add(provider);
+    }
+  }
+
+  private async releaseIdleResources(): Promise<void> {
+    const providers = [...this.idleCleanups];
+    this.idleCleanups.clear();
+    const results = await Promise.allSettled(
+      providers.map((provider) =>
+        Promise.resolve().then(() => provider.cleanup?.({ reason: 'evaluation-complete' })),
+      ),
+    );
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        logger.warn('Provider cleanup failed after evaluation.', { error: result.reason });
+      }
+    }
+    await this.shutdownAll();
   }
 
   register(provider: CleanupProvider): void {

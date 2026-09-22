@@ -3,7 +3,7 @@ import './setup';
 import { randomUUID } from 'node:crypto';
 
 import { expect, it, vi } from 'vitest';
-import { evaluate, withEvaluationResources } from '../../src/evaluator';
+import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { toPrompt } from './helpers';
@@ -20,42 +20,7 @@ function deferred() {
 }
 
 describeEvaluator('registered resources across overlapping evaluations', () => {
-  it('enters the registry before inspecting initial providers and does not yield between them', async () => {
-    const events: string[] = [];
-    const enterRegistry = providerRegistry.withEvaluation.bind(providerRegistry);
-    const registry = vi
-      .spyOn(providerRegistry, 'withEvaluation')
-      .mockImplementation(<T>(run: () => Promise<T>): Promise<T> => {
-        events.push('registry');
-        return enterRegistry(run);
-      });
-    const provider: ApiProvider = { id: () => 'initial', callApi: async () => ({}) };
-    const suite: TestSuite = {
-      get providers() {
-        events.push('providers');
-        return [provider];
-      },
-      prompts: [],
-    };
-    const evaluation = withEvaluationResources(
-      async () => {
-        events.push('run');
-      },
-      { testSuite: suite },
-    );
-    try {
-      expect(events[0]).toBe('registry');
-      expect(events).toContain('providers');
-      expect(events).not.toContain('run');
-      await evaluation;
-      expect(events.at(-1)).toBe('run');
-    } finally {
-      await Promise.allSettled([evaluation]);
-      registry.mockRestore();
-    }
-  });
-
-  it('waits for registry shutdown before inspecting or running the next evaluation', async () => {
+  it('waits for an in-progress release before the next evaluation starts', async () => {
     const shutdownStarted = deferred();
     const releaseShutdown = deferred();
     const registered = {
@@ -66,25 +31,16 @@ describeEvaluator('registered resources across overlapping evaluations', () => {
     };
     providerRegistry.register(registered);
     const earlier = providerRegistry.withEvaluation(async () => {});
-    const provider: ApiProvider = { id: () => 'next', callApi: async () => ({}) };
-    const readProviders = vi.fn(() => [provider]);
-    const suite: TestSuite = {
-      get providers() {
-        return readProviders();
-      },
-      prompts: [],
-    };
     const run = vi.fn(async () => {});
     let next: Promise<void> | undefined;
     try {
       await shutdownStarted.promise;
-      next = withEvaluationResources(run, { testSuite: suite });
-      expect(readProviders).not.toHaveBeenCalled();
+      next = providerRegistry.withEvaluation(run);
+      await new Promise<void>((resolve) => setImmediate(resolve));
       expect(run).not.toHaveBeenCalled();
 
       releaseShutdown.resolve();
       await Promise.all([earlier, next]);
-      expect(readProviders).toHaveBeenCalled();
       expect(run).toHaveBeenCalledOnce();
       expect(registered.shutdown).toHaveBeenCalledOnce();
     } finally {
