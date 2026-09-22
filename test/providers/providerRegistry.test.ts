@@ -119,6 +119,28 @@ describe('provider lifecycle registry', () => {
     expect(provider.shutdown).toHaveBeenCalledTimes(2);
   });
 
+  it('cleans a new lifecycle registered during process shutdown without repeating concurrent shutdowns', async () => {
+    const pending = createDeferred<void>();
+    const provider = { shutdown: vi.fn<() => Promise<void>>() };
+    provider.shutdown
+      .mockImplementationOnce(async () => {
+        providerRegistry.register(provider);
+        await pending.promise;
+      })
+      .mockResolvedValue(undefined);
+    providerRegistry.register(provider);
+
+    const first = providerRegistry.shutdownForProcess();
+    const concurrent = providerRegistry.shutdownForProcess();
+    expect(provider.shutdown).toHaveBeenCalledOnce();
+    pending.resolve();
+    await Promise.all([first, concurrent]);
+
+    await providerRegistry.shutdownForProcess();
+    await providerRegistry.shutdownForProcess();
+    expect(provider.shutdown.mock.calls).toEqual([['process'], ['process']]);
+  });
+
   it('does not repeat a pending shutdown or run an explicitly unregistered provider', async () => {
     const pending = createDeferred<void>();
     const current = { shutdown: vi.fn(() => pending.promise) };

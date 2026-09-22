@@ -2218,7 +2218,6 @@ export class OpenCodeSDKProvider implements ApiProvider {
       this.ephemeralCleanupTasks.size === 0 &&
       this.sessionQueues.size === 0 &&
       this.serverSessionQueues.size === 0 &&
-      this.unconfirmedSessionAborts.size === 0 &&
       this.pendingTempDirectories.size === 0 &&
       this.tempDirectoryRemovals.size === 0 &&
       !this.shutdownRequested &&
@@ -2531,8 +2530,11 @@ export class OpenCodeSDKProvider implements ApiProvider {
     } else {
       result = await client?.session?.delete?.({ ...parameters, signal });
     }
-    if (result && typeof result === 'object') {
+    if (result === true) {
+      this.unconfirmedSessionAborts.delete(session.id);
+    } else if (result && typeof result === 'object') {
       const outcome = result as {
+        data?: unknown;
         error?: unknown;
         response?: { ok?: boolean; status?: number };
       };
@@ -2542,10 +2544,14 @@ export class OpenCodeSDKProvider implements ApiProvider {
           ? outcome.error.name
           : undefined;
       if (status === 404 || (status === undefined && errorName === 'NotFoundError')) {
+        this.unconfirmedSessionAborts.delete(session.id);
         return;
       }
       if (outcome.error != null || outcome.response?.ok === false || (status ?? 0) >= 400) {
         throw new OpenCodeSessionDeleteError(status, outcome.error);
+      }
+      if (outcome.data === true && (status === undefined || status === 200)) {
+        this.unconfirmedSessionAborts.delete(session.id);
       }
     }
   }
@@ -3680,9 +3686,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
       if (processSignal.aborted) {
         return { error: 'OpenCode SDK call aborted before it started' };
       }
-      const cleanup = this.automaticCleanup ?? this.explicitCleanup;
-      if (cleanup) {
-        await this.waitForProcessTermination(cleanup.catch(() => undefined));
+      while (this.automaticCleanup || this.explicitCleanup) {
+        await this.waitForProcessTermination(
+          Promise.allSettled([this.automaticCleanup, this.explicitCleanup]),
+        );
       }
       this.buildEffectivePermissionRules(config);
       await this.waitForProcessTermination(this.ensureOpenCodeModule());

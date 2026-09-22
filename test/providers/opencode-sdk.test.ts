@@ -5960,6 +5960,49 @@ describe('OpenCodeSDKProvider', () => {
       expect(mockServerClose).toHaveBeenCalledTimes(2);
     });
 
+    it.each(['automatic', 'explicit'] as const)(
+      'waits for both cleanup phases when %s cleanup starts first',
+      async (firstPhase) => {
+        const firstEntered = createDeferred<void>();
+        const firstRelease = createDeferred<void>();
+        const secondEntered = createDeferred<void>();
+        const secondRelease = createDeferred<void>();
+        rmSpy.mockRejectedValueOnce(new Error('leave a temporary directory for cleanup'));
+        const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
+        await provider.callApi('warm call');
+        rmSpy
+          .mockImplementationOnce(async () => {
+            firstEntered.resolve();
+            await firstRelease.promise;
+            throw new Error('leave the directory for the next cleanup');
+          })
+          .mockImplementationOnce(async () => {
+            secondEntered.resolve();
+            await secondRelease.promise;
+          });
+        const automatic = () => provider.shutdown('evaluation');
+        const first = firstPhase === 'automatic' ? automatic() : provider.cleanup();
+        await firstEntered.promise;
+        const second = firstPhase === 'automatic' ? provider.cleanup() : automatic();
+        const next = provider.callApi('next call');
+        try {
+          firstRelease.resolve();
+          await secondEntered.promise;
+          await new Promise<void>((resolve) => setImmediate(resolve));
+          expect(mockSessionPrompt).toHaveBeenCalledOnce();
+          expect(mockCreateOpencode).toHaveBeenCalledOnce();
+          secondRelease.resolve();
+          await Promise.all([first, second]);
+          await expect(next).resolves.toMatchObject({ output: 'Test response' });
+          expect(mockCreateOpencode).toHaveBeenCalledTimes(2);
+        } finally {
+          firstRelease.resolve();
+          secondRelease.resolve();
+          await Promise.allSettled([first, second, next]);
+        }
+      },
+    );
+
     it.each([
       { server: 'local', baseUrl: undefined },
       { server: 'remote', baseUrl: 'http://127.0.0.1:4096' },
@@ -7479,6 +7522,116 @@ describe('OpenCodeSDKProvider', () => {
         sessionId: 'fresh-session',
       });
       expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
+      [
+        'affirmative deletion',
+        () => ({ data: true, response: new Response('true', { status: 200 }) }),
+        true,
+      ],
+      [
+        'already deleted',
+        () => ({ error: { name: 'NotFoundError' }, response: new Response(null, { status: 404 }) }),
+        true,
+      ],
+      [
+        'unacknowledged deletion',
+        () => ({ data: false, response: new Response('false', { status: 200 }) }),
+        false,
+      ],
+      [
+        'failed deletion',
+        () => ({
+          error: new Error('delete failed'),
+          response: new Response(null, { status: 500 }),
+        }),
+        false,
+      ],
+    ] as const)(
+      'releases an owned cancellation quarantine only after confirmed cleanup: %s',
+      async (_name, deletion, released) => {
+        const started = createDeferred<void>();
+        const controller = new AbortController();
+        const sessionId = 'owned-quarantined-session';
+        mockSessionCreate.mockResolvedValueOnce(createMockSessionResponse(sessionId));
+        mockSessionPrompt.mockImplementationOnce(
+          (_parameters, options) =>
+            new Promise((_resolve, reject) => {
+              started.resolve();
+              options.signal.addEventListener(
+                'abort',
+                () => reject(new DOMException('Aborted', 'AbortError')),
+                { once: true },
+              );
+            }),
+        );
+        mockSessionAbort.mockRejectedValueOnce(new Error('unconfirmed abort'));
+        mockSessionDelete.mockResolvedValueOnce(deletion());
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            baseUrl: 'http://127.0.0.1:4096',
+            working_dir: '/test/work',
+            persist_sessions: true,
+          },
+        });
+        const first = provider.callApi('first', undefined, { abortSignal: controller.signal });
+        await started.promise;
+        controller.abort();
+        await expect(first).resolves.toMatchObject({ error: 'OpenCode SDK call aborted' });
+
+        await provider.cleanup();
+        const next = await provider.callApi(
+          'same id',
+          createPromptContext({ session_id: sessionId }),
+        );
+        if (released) {
+          expect(next).toMatchObject({ output: 'Test response', sessionId });
+          expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
+        } else {
+          expect(next.error).toContain('previous cancellation could not be confirmed');
+          expect(mockSessionPrompt).toHaveBeenCalledOnce();
+        }
+      },
+    );
+
+    it('keeps an unconfirmed external session blocked after cleanup without retaining an idle registration', async () => {
+      const started = createDeferred<void>();
+      const controller = new AbortController();
+      mockSessionPrompt.mockImplementationOnce(
+        (_parameters, options) =>
+          new Promise((_resolve, reject) => {
+            started.resolve();
+            options.signal.addEventListener(
+              'abort',
+              () => reject(new DOMException('Aborted', 'AbortError')),
+              { once: true },
+            );
+          }),
+      );
+      mockSessionAbort.mockRejectedValueOnce(new Error('unconfirmed external abort'));
+      const unregister = vi.spyOn(providerRegistry, 'unregister');
+      const provider = new OpenCodeSDKProvider({
+        config: { baseUrl: 'http://127.0.0.1:4096', session_id: 'externally-owned-session' },
+      });
+      const first = provider.callApi('first', undefined, { abortSignal: controller.signal });
+      await started.promise;
+      controller.abort();
+      await expect(first).resolves.toMatchObject({ error: 'OpenCode SDK call aborted' });
+      await provider.cleanup();
+
+      const stillBlocked = await provider.callApi('same external id');
+      expect(stillBlocked.error).toContain('previous cancellation could not be confirmed');
+      expect(mockSessionPrompt).toHaveBeenCalledOnce();
+      expect(mockSessionDelete).not.toHaveBeenCalled();
+      await provider.cleanup();
+      unregister.mockClear();
+      const invalid = await provider.callApi(
+        'early invalid configuration',
+        createPromptContext({ permission: { bash: 'invalid' } } as unknown as OpenCodeSDKConfig),
+      );
+      expect(invalid.error).toContain('permission');
+      expect(unregister).toHaveBeenCalledWith(provider);
     });
 
     it.each([

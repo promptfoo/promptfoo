@@ -318,6 +318,9 @@ class ProviderRegistry {
     const finish = () => {
       if (shutdowns.get(provider) === shutdown) {
         shutdowns.delete(provider);
+        if (reason === 'process' && this.providers.has(provider)) {
+          this.escalatedProviders.delete(provider);
+        }
         this.removeShutdownHandlersWhenIdle();
       }
     };
