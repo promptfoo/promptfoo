@@ -219,6 +219,49 @@ describe('SageMaker effective runtime endpoint reuse', () => {
     },
   );
 
+  it('does not retain credential-bearing URLs in retry or clock keys across endpoint rotation', async () => {
+    const provider = new SageMakerCompletionProvider('same-deployment', {
+      config: {
+        region: 'us-east-1',
+        modelType: 'custom',
+        accessKeyId: 'OFFLINE_KEY',
+        secretAccessKey: 'offline-secret',
+      },
+    });
+    providers.add(provider);
+    const url = (variant: string) =>
+      `https://user-${variant}:password-${variant}@private.invalid/routing-${variant}?X-Amz-Signature=signature-${variant}`;
+    vi.stubEnv('AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME', url('first'));
+    const first: SageMakerRuntimeClient = await provider.getSageMakerRuntimeInstance();
+    const firstRetry = await first.config.retryStrategy();
+    first.config.systemClockOffset = 123;
+    provider.cleanup({ reason: 'evaluation-complete' });
+
+    vi.stubEnv('AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME', url('second'));
+    const second: SageMakerRuntimeClient = await provider.getSageMakerRuntimeInstance();
+    expect(await second.config.retryStrategy()).not.toBe(firstRetry);
+    expect(second.config.systemClockOffset).not.toBe(123);
+    second.config.systemClockOffset = 456;
+    provider.cleanup({ reason: 'evaluation-complete' });
+
+    const retries = Reflect.get(provider, 'runtimeRetryStates') as Map<string, unknown>;
+    const clocks = Reflect.get(provider, 'runtimeClockOffsets') as Map<string, number>;
+    expect(retries.size).toBe(2);
+    expect(clocks.size).toBe(2);
+    const retainedKeys = JSON.stringify([[...retries.keys()], [...clocks.keys()]]);
+    expect(retainedKeys).not.toContain('private.invalid');
+    for (const variant of ['first', 'second']) {
+      for (const part of ['user', 'password', 'routing', 'signature']) {
+        expect(retainedKeys).not.toContain(`${part}-${variant}`);
+      }
+    }
+
+    vi.stubEnv('AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME', url('first'));
+    const resumed: SageMakerRuntimeClient = await provider.getSageMakerRuntimeInstance();
+    expect(await resumed.config.retryStrategy()).toBe(firstRetry);
+    expect(resumed.config.systemClockOffset).toBe(123);
+  });
+
   it.each([
     'service',
     'unchanged',

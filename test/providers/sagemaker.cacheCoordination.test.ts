@@ -65,6 +65,104 @@ afterEach(() => {
 });
 
 describe('SageMaker cache coordination across clears', () => {
+  it.each(['global', 'parent namespace'] as const)(
+    'discards writes submitted after an active %s clear has scanned their storage',
+    async (scope) => {
+      const parent = `sagemaker-submitted-during-clear-${scope}`;
+      const namespace = `${parent}:child`;
+      const cache = await scopedCache(namespace);
+      const independent = await scopedCache(`${parent}-unrelated`);
+      const backing = getCache();
+      const store = backing.stores[0];
+      const scanned = deferred();
+      const release = deferred();
+      if (scope === 'global') {
+        const original = store.clear.bind(store);
+        vi.spyOn(store, 'clear').mockImplementation(async () => {
+          const result = await original();
+          scanned.resolve();
+          await release.promise;
+          return result;
+        });
+      } else {
+        const original = store.iterator?.bind(store);
+        if (!original) {
+          throw new Error('Expected the cache test store to support namespace iteration');
+        }
+        vi.spyOn(store, 'iterator').mockImplementation(async function* (storeNamespace) {
+          for await (const entry of original(storeNamespace)) {
+            yield entry;
+          }
+          scanned.resolve();
+          await release.promise;
+        });
+      }
+      const publication = vi.spyOn(backing, 'set');
+      const probe = new CacheProbe();
+      const clearing = scope === 'global' ? clearCache() : (await scopedCache(parent)).clear();
+      try {
+        await scanned.promise;
+        await probe.write(cache, 'entry', 'stale');
+        await probe.write(independent, 'entry', 'independent');
+        expect(publication.mock.calls.filter(([key]) => key === `${namespace}:entry`)).toEqual([]);
+        expect(await cache.get('entry')).toBeUndefined();
+        expect(await independent.get('entry')).toBe(scope === 'global' ? undefined : 'independent');
+
+        release.resolve();
+        await clearing;
+        expect(await cache.get('entry')).toBeUndefined();
+        await probe.write(await scopedCache(namespace), 'entry', 'fresh');
+        expect(await cache.get('entry')).toBe('fresh');
+      } finally {
+        release.resolve();
+        await Promise.allSettled([clearing]);
+      }
+    },
+  );
+
+  it('keeps writes disabled until every overlapping clear of the same namespace finishes', async () => {
+    const namespace = 'sagemaker-overlapping-active-clears';
+    const cache = await scopedCache(namespace);
+    const store = getCache().stores[0];
+    const original = store.iterator?.bind(store);
+    if (!original) {
+      throw new Error('Expected the cache test store to support namespace iteration');
+    }
+    const scans = [deferred(), deferred()];
+    const releases = [deferred(), deferred()];
+    let iteration = 0;
+    vi.spyOn(store, 'iterator').mockImplementation(async function* (storeNamespace) {
+      const index = iteration++;
+      for await (const entry of original(storeNamespace)) {
+        yield entry;
+      }
+      scans[index].resolve();
+      await releases[index].promise;
+    });
+    const first = cache.clear();
+    let second: Promise<boolean> | undefined;
+    const probe = new CacheProbe();
+    try {
+      await scans[0].promise;
+      second = cache.clear();
+      await scans[1].promise;
+      releases[0].resolve();
+      await first;
+      await probe.write(cache, 'entry', 'stale');
+      expect(await cache.get('entry')).toBeUndefined();
+
+      releases[1].resolve();
+      await second;
+      await probe.write(cache, 'entry', 'fresh');
+      expect(await cache.get('entry')).toBe('fresh');
+    } finally {
+      for (const release of releases) {
+        release.resolve();
+      }
+      await Promise.allSettled([first, ...(second ? [second] : [])]);
+    }
+  });
+
   it('discards a preloading write before a parent namespace clear finishes scanning storage', async () => {
     const parent = 'sagemaker-clear-in-progress';
     const namespace = `${parent}:child`;

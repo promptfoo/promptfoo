@@ -32,9 +32,11 @@ import type { FetchOptions } from './util/fetch/types';
 let cacheInstance: Cache | undefined;
 const namespacedCacheInstances = new Map<string, Cache>();
 const namespacedCacheClearGenerations = new Map<string, number>();
+const activeNamespacedCacheClears = new Map<string, number>();
 let cacheClearGeneration = 0;
 let cacheOperationClearGeneration = 0;
 let globalCacheClearGeneration = 0;
+let activeGlobalCacheClears = 0;
 
 const cacheNamespaceStorage = new AsyncLocalStorage<{ namespace: string }>();
 const cacheEnabledStorage = new AsyncLocalStorage<{ enabled: boolean }>();
@@ -120,13 +122,13 @@ function getCacheInstance() {
     });
     const clear = cacheInstance.clear.bind(cacheInstance);
     cacheInstance.clear = async () => {
-      markCacheOperationClear();
+      const finishClear = startCacheOperationClear();
       try {
         const result = await clear();
         cacheClearGeneration += 1;
         return result;
       } finally {
-        markCacheOperationClear();
+        finishClear();
       }
     };
     registerCacheOperationScope(
@@ -134,6 +136,7 @@ function getCacheInstance() {
       cacheInstance,
       (key) => key,
       getCacheKeyClearGeneration,
+      isCacheKeyClearing,
     );
   }
   return cacheInstance;
@@ -184,12 +187,39 @@ function getNamespacedCache(namespace: string) {
     cache,
     (key) => getScopedCacheKey(key, namespace),
     (key) => getCacheKeyClearGeneration(getScopedCacheKey(key, namespace)),
+    (key) => isCacheKeyClearing(getScopedCacheKey(key, namespace)),
   );
   namespacedCacheInstances.set(namespace, namespacedCache);
   return namespacedCache;
 }
 
 // In-flight operations are invalidated both when storage starts clearing and when it settles.
+// Keep each active clear visible to operations submitted between those two points.
+function startCacheOperationClear(namespace?: string) {
+  if (namespace === undefined) {
+    activeGlobalCacheClears++;
+  } else {
+    activeNamespacedCacheClears.set(
+      namespace,
+      (activeNamespacedCacheClears.get(namespace) ?? 0) + 1,
+    );
+  }
+  markCacheOperationClear(namespace);
+  return () => {
+    if (namespace === undefined) {
+      activeGlobalCacheClears--;
+    } else {
+      const remaining = (activeNamespacedCacheClears.get(namespace) ?? 1) - 1;
+      if (remaining) {
+        activeNamespacedCacheClears.set(namespace, remaining);
+      } else {
+        activeNamespacedCacheClears.delete(namespace);
+      }
+    }
+    markCacheOperationClear(namespace);
+  };
+}
+
 function markCacheOperationClear(namespace?: string) {
   cacheOperationClearGeneration += 1;
   if (namespace === undefined) {
@@ -213,6 +243,22 @@ function getCacheKeyClearGeneration(key: string) {
     );
   }
   return generation;
+}
+
+function isCacheKeyClearing(key: string) {
+  if (activeGlobalCacheClears) {
+    return true;
+  }
+  for (
+    let separator = key.indexOf(':');
+    separator !== -1;
+    separator = key.indexOf(':', separator + 1)
+  ) {
+    if (activeNamespacedCacheClears.has(key.slice(0, separator))) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function getCurrentCacheNamespace() {
@@ -248,7 +294,7 @@ function getUnscopedCacheKey(cacheKey: string, namespace: string) {
 async function clearNamespacedCache(cache: Cache, namespace: string) {
   const namespacePrefix = `${namespace}:`;
 
-  markCacheOperationClear(namespace);
+  const finishClear = startCacheOperationClear(namespace);
   try {
     for (const store of cache.stores) {
       if (!store.iterator) {
@@ -284,7 +330,7 @@ async function clearNamespacedCache(cache: Cache, namespace: string) {
     cacheClearGeneration += 1;
     return true;
   } finally {
-    markCacheOperationClear(namespace);
+    finishClear();
   }
 }
 

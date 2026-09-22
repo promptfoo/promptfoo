@@ -426,6 +426,97 @@ ${updated && change === 'comment' ? '# unrelated comment\n' : ''}`;
       },
     );
 
+    it.each([
+      ['configured', 'service endpoint environment', 'environment-service.invalid'],
+      ['environment', 'global endpoint environment', 'environment-global.invalid'],
+      ['configured', 'ignored endpoint environment', 'runtime.sagemaker.us-east-1.amazonaws.com'],
+      ['configured', 'transport environment', 'selected-before.invalid'],
+      ['environment', 'transport environment', 'selected-before.invalid'],
+      ['configured', 'service endpoint over profile', 'selected-before.invalid'],
+    ] as const)(
+      'keeps %s static requests valid when changed profile settings are shadowed by %s',
+      async (source, change, hostname) => {
+        vi.stubEnv('AWS_PROFILE', undefined);
+        vi.stubEnv('AWS_ACCESS_KEY_ID', source === 'environment' ? 'ENV_STATIC' : undefined);
+        vi.stubEnv(
+          'AWS_SECRET_ACCESS_KEY',
+          source === 'environment' ? 'env-static-secret' : undefined,
+        );
+        vi.stubEnv('AWS_SESSION_TOKEN', undefined);
+        if (change === 'service endpoint environment') {
+          vi.stubEnv('AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME', 'https://environment-service.invalid');
+          vi.stubEnv('AWS_ENDPOINT_URL', 'https://environment-global.invalid');
+        } else if (change === 'global endpoint environment') {
+          vi.stubEnv('AWS_ENDPOINT_URL', 'https://environment-global.invalid');
+        } else if (change === 'ignored endpoint environment') {
+          vi.stubEnv('AWS_IGNORE_CONFIGURED_ENDPOINT_URLS', 'true');
+        } else if (change === 'transport environment') {
+          vi.stubEnv('AWS_DEFAULTS_MODE', 'standard');
+        }
+        const configFile = path.join(directory, 'config');
+        const writeConfig = (updated: boolean) => {
+          const transportChanges = updated && change === 'transport environment';
+          const profileChanges = updated && change !== 'transport environment';
+          const serviceChanges = profileChanges && change !== 'service endpoint over profile';
+          return writeFile(
+            configFile,
+            `[default]
+defaults_mode = ${transportChanges ? 'in-region' : 'legacy'}
+use_fips_endpoint = ${transportChanges ? 'true' : 'false'}
+use_dualstack_endpoint = ${transportChanges ? 'true' : 'false'}
+ignore_configured_endpoint_urls = ${transportChanges ? 'true' : 'false'}
+endpoint_url = https://profile-${profileChanges ? 'after' : 'before'}.invalid
+services = selected
+[services selected]
+sagemaker_runtime =
+  endpoint_url = https://selected-${serviceChanges ? 'after' : 'before'}.invalid
+`,
+          );
+        };
+        await writeConfig(false);
+        const entered = deferred();
+        const release = deferred();
+        const Provider =
+          kind === 'completion' ? SageMakerCompletionProvider : SageMakerEmbeddingProvider;
+        const provider = new Provider('deployment', {
+          config: {
+            modelType: 'custom',
+            ...(source === 'configured'
+              ? { accessKeyId: 'CONFIG_STATIC', secretAccessKey: 'config-static-secret' }
+              : {}),
+          },
+          transform: async (input) => {
+            if (input === 'first') {
+              entered.resolve();
+              await release.promise;
+            }
+            return input;
+          },
+        });
+        providers.add(provider);
+        const requests = interceptSageMaker(provider);
+        const pending = invoke(provider, 'first');
+        void pending.catch(() => {});
+        try {
+          await entered.promise;
+          await writeConfig(true);
+          release.resolve();
+          expect(await pending).toMatchObject(expected);
+          expect(await invoke(provider, 'later')).toMatchObject(expected);
+          expect(requests.map((request) => request.hostname)).toEqual([hostname, hostname]);
+          if (change === 'transport environment') {
+            const client = await provider.getSageMakerRuntimeInstance();
+            expect(await client.config.defaultsMode()).toBe('standard');
+            expect(await client.config.useFipsEndpoint()).toBe(false);
+            expect(await client.config.useDualstackEndpoint()).toBe(false);
+          }
+        } finally {
+          release.resolve();
+          await Promise.allSettled([pending]);
+        }
+      },
+    );
+
     it.each(['kept', 'replaced'] as const)(
       'keeps a %s caller-supplied client independent of shared AWS file changes',
       async (mode) => {

@@ -351,6 +351,7 @@ function staticRuntimeFilesFingerprint(
   credentialsContents: string,
   configContents: string,
   selectedProfile: string,
+  environment: CredentialScope['environment'],
 ): string {
   const credentials = sharedFileRuntimeSettings(credentialsContents);
   const config = sharedFileRuntimeSettings(configContents);
@@ -360,20 +361,36 @@ function staticRuntimeFilesFingerprint(
     (selectedProfile === 'default' ? config.get('default') : undefined);
   // Smithy merges the selected profiles, with config fields overriding credentials-file fields.
   const effective = new Map([...(credentialsProfile ?? []), ...(configProfile ?? [])]);
-  const values = [...effective]
-    .filter(([key]) => STATIC_SHARED_FILE_RUNTIME_KEYS.has(key))
-    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
-  const serviceName = effective.get('services');
-  const service = serviceName ? config.get(`services.${serviceName}`) : undefined;
-  const endpoint = serviceName
-    ? [service !== undefined, service?.get('sagemaker_runtime.endpoint_url')]
-    : undefined;
-  return crypto.hash('sha256', JSON.stringify([values, endpoint]), 'hex');
+  const boolean = (value: string | undefined) =>
+    value === 'true' ? true : value === 'false' ? false : undefined;
+  const flag = (name: string, key: string) =>
+    boolean(environment[name]) ?? boolean(effective.get(key)) ?? false;
+  const defaults = (
+    environment.AWS_DEFAULTS_MODE ??
+    effective.get('defaults_mode') ??
+    'legacy'
+  ).toLowerCase();
+  const fips = flag('AWS_USE_FIPS_ENDPOINT', 'use_fips_endpoint');
+  const dualstack = flag('AWS_USE_DUALSTACK_ENDPOINT', 'use_dualstack_endpoint');
+  let endpoint: string | undefined;
+  if (!flag('AWS_IGNORE_CONFIGURED_ENDPOINT_URLS', 'ignore_configured_endpoint_urls')) {
+    endpoint = environment.AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME || environment.AWS_ENDPOINT_URL;
+    if (!endpoint) {
+      const serviceName = effective.get('services');
+      const service = serviceName ? config.get(`services.${serviceName}`) : undefined;
+      // A missing referenced section makes Smithy skip the profile endpoint as well.
+      if (!serviceName || service) {
+        endpoint = service?.get('sagemaker_runtime.endpoint_url') || effective.get('endpoint_url');
+      }
+    }
+  }
+  return crypto.hash('sha256', JSON.stringify([defaults, fips, dualstack, endpoint]), 'hex');
 }
 
 function captureSharedFileState(
   files: SharedFileInputs,
   runtimeProfileForStaticCredentials?: string,
+  environment: CredentialScope['environment'] = {},
 ) {
   let hasCredentialProcess = false;
   const read = (filename: string) => {
@@ -394,6 +411,7 @@ function captureSharedFileState(
         credentials.text,
         config.text,
         runtimeProfileForStaticCredentials,
+        environment,
       ),
       hasCredentialProcess,
     };
@@ -568,7 +586,7 @@ abstract class SageMakerGenericProvider {
   private readonly runtimeClients = new Set<SageMakerRuntimeClient>();
   private readonly runtimeClockOffsets = new Map<string, number>();
   readonly #runtimeInitializations: RuntimeInitialization[] = [];
-  readonly #retryScopeHashKey = crypto.randomBytes(32);
+  readonly #runtimeStateHashKey = crypto.randomBytes(32);
   private readonly runtimeRetryStates = new Map<string, RuntimeRetryState>();
   private readonly runtimeDefaultsStates = new Map<string, RuntimeDefaultsState>();
   #retainedCredentials?: RuntimeCredentials;
@@ -1025,6 +1043,7 @@ abstract class SageMakerGenericProvider {
   ): Promise<T> {
     const scope = getCacheOperationScope(cache, key);
     const submittedGeneration = scope.getGeneration();
+    const submittedWhileClearing = scope.isClearing();
     let entries = runtimeCacheEntries.get(scope.cache);
     if (!entries) {
       entries = new Map();
@@ -1045,7 +1064,7 @@ abstract class SageMakerGenericProvider {
     const entry = state;
     const refresh = () => {
       const generation = scope.getGeneration();
-      if (entry.generation === generation) {
+      if (entry.generation === generation && !scope.isClearing()) {
         return false;
       }
       entry.generation = generation;
@@ -1060,7 +1079,13 @@ abstract class SageMakerGenericProvider {
     const result = entry.tail.then(async () => {
       signal.throwIfAborted();
       refresh();
-      return operation(entry, refresh, scope.getGeneration() !== submittedGeneration);
+      return operation(
+        entry,
+        refresh,
+        submittedWhileClearing ||
+          scope.isClearing() ||
+          scope.getGeneration() !== submittedGeneration,
+      );
     });
     entry.tail = result
       .then(
@@ -1183,7 +1208,7 @@ abstract class SageMakerGenericProvider {
       : undefined;
     const sharedFiles = borrowedRuntime
       ? undefined
-      : captureSharedFileState(files, runtimeProfileForStaticCredentials);
+      : captureSharedFileState(files, runtimeProfileForStaticCredentials, environment);
     const processEnvironment =
       borrowedRuntime || hasStaticCredentials ? undefined : hashCredentialProcessEnvironment();
     return {
@@ -1205,8 +1230,11 @@ abstract class SageMakerGenericProvider {
   ): void {
     if (
       !inputs.borrowedRuntime &&
-      captureSharedFileState(inputs.files, inputs.runtimeProfileForStaticCredentials)
-        .fingerprint !== inputs.filesFingerprint
+      captureSharedFileState(
+        inputs.files,
+        inputs.runtimeProfileForStaticCredentials,
+        inputs.environment,
+      ).fingerprint !== inputs.filesFingerprint
     ) {
       throw new Error(
         'SageMaker shared AWS profile files changed during initialization; retry with stable inputs',
@@ -1214,29 +1242,31 @@ abstract class SageMakerGenericProvider {
     }
   }
 
+  private runtimeStateId(kind: 'credentials' | 'endpoint', value: unknown): string {
+    // Instance-local identifiers never reach response caches or logs.
+    return crypto
+      .createHmac('sha256', this.#runtimeStateHashKey)
+      .update(JSON.stringify([kind, value]))
+      .digest('hex');
+  }
+
   private retryCredentialScopeId(scope: CredentialScope): string {
-    // This instance-local digest is used only for retry state; it never reaches response caches or logs.
     const environment = Object.entries(scope.environment).sort(([left], [right]) =>
       left < right ? -1 : left > right ? 1 : 0,
     );
-    return crypto
-      .createHmac('sha256', this.#retryScopeHashKey)
-      .update(
-        JSON.stringify([
-          scope.region,
-          scope.profile,
-          scope.accessKeyId,
-          scope.secretAccessKey,
-          scope.sessionToken,
-          scope.helperEndpointPolicy,
-          scope.processEnvironment,
-          scope.files?.filepath,
-          scope.files?.configFilepath,
-          scope.credentialFileFingerprint,
-          environment,
-        ]),
-      )
-      .digest('hex');
+    return this.runtimeStateId('credentials', [
+      scope.region,
+      scope.profile,
+      scope.accessKeyId,
+      scope.secretAccessKey,
+      scope.sessionToken,
+      scope.helperEndpointPolicy,
+      scope.processEnvironment,
+      scope.files?.filepath,
+      scope.files?.configFilepath,
+      scope.credentialFileFingerprint,
+      environment,
+    ]);
   }
 
   /**
@@ -1302,7 +1332,7 @@ abstract class SageMakerGenericProvider {
     );
     this.assertSharedFiles(captured);
     this.assertRuntimeGeneration(generation);
-    const runtimeEndpointKey = JSON.stringify([
+    const runtimeEndpointKey = this.runtimeStateId('endpoint', [
       runtimeRegion,
       endpoint.url,
       endpoint.useFipsEndpoint,
