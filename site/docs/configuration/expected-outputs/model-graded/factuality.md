@@ -18,7 +18,7 @@ assert:
     value: The Earth orbits around the Sun
 ```
 
-`model-graded-factuality` is an alias for `factuality`.
+`model-graded-factuality` is an alias for `factuality`; both names use the same grader and options.
 
 For non-English evaluation output, see the [multilingual evaluation guide](/docs/configuration/expected-outputs/model-graded#non-english-evaluation).
 
@@ -140,12 +140,12 @@ The factuality checker will parse either format:
 
 ## Using Factuality with CSV
 
-Use the `factuality:` prefix in `__expected` columns:
+Use either the `factuality:` or `model-graded-factuality:` prefix in `__expected` columns:
 
 ```csv title="tests.csv"
 question,__expected
 "What does GPT stand for?","factuality:Generative Pre-trained Transformer"
-"What is photosynthesis?","factuality:Plants convert sunlight into chemical energy"
+"What is photosynthesis?","model-graded-factuality:Plants convert sunlight into chemical energy"
 ```
 
 To apply factuality to all rows, see [CSV with defaultTest](/docs/configuration/test-cases#csv-with-defaulttest).
