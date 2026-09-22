@@ -43,6 +43,7 @@ class ProviderRegistry {
   private readonly providers = new WeakMap<IdleCleanupProvider, ProviderState>();
   private readonly resources = new Map<CleanupProvider, ResourceState>();
   private shutdownRegistered = false;
+  private processShutdown?: { start: (state: ResourceState) => void; promise: Promise<void> };
 
   /** Nested entry points share a scope; independent evaluations own their own providers. */
   async withEvaluation<T>(run: () => Promise<T>): Promise<T> {
@@ -151,6 +152,7 @@ class ProviderRegistry {
       this.registerShutdownHandlers();
       this.shutdownRegistered = true;
     }
+    this.processShutdown?.start(state);
   }
 
   unregister(resource: CleanupProvider): void {
@@ -163,20 +165,52 @@ class ProviderRegistry {
 
   /** Force ordinary shutdown for all known resources, including pending idle releases. */
   async shutdownAll(): Promise<void> {
-    await this.shutdownResources(false);
-  }
-
-  /** Process shutdown can escalate a provider's already-running idle cleanup. */
-  async shutdownForProcess(): Promise<void> {
-    await this.shutdownResources(true);
-  }
-
-  private async shutdownResources(forProcess: boolean): Promise<void> {
     const releases = [...this.resources.values()].map((state) => {
-      void this.maybeReleaseResource(state, undefined, true, forProcess);
-      return state.release?.start(forProcess);
+      void this.maybeReleaseResource(state, undefined, true);
+      return state.release?.start();
     });
     await Promise.all(releases);
+  }
+
+  /** Process shutdown also starts any resources registered by an in-flight shutdown hook. */
+  shutdownForProcess(): Promise<void> {
+    if (this.processShutdown) {
+      return this.processShutdown.promise;
+    }
+    const seen = new Set<CleanupProvider>();
+    const pending = new Set<Promise<void>>();
+    const start = (state: ResourceState) => {
+      if (seen.has(state.resource)) {
+        return;
+      }
+      seen.add(state.resource);
+      void this.maybeReleaseResource(state, undefined, true, true);
+      const release = state.release?.start(true);
+      if (release) {
+        pending.add(release);
+      }
+    };
+    const shutdown = {
+      start,
+      promise: Promise.resolve()
+        .then(async () => {
+          for (const state of this.resources.values()) {
+            start(state);
+          }
+          while (pending.size) {
+            const batch = [...pending];
+            await Promise.all(batch);
+            for (const release of batch) {
+              pending.delete(release);
+            }
+          }
+        })
+        .finally(() => {
+          this.processShutdown = undefined;
+        }),
+    };
+    this.processShutdown = shutdown;
+    return shutdown.promise;
   }
 
   private getProvider(provider: IdleCleanupProvider): ProviderState {

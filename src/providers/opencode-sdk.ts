@@ -1171,6 +1171,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private providerId = 'opencode:sdk';
   private opencodeModule?: LoadedOpenCodeSDKModule;
   private client?: OpenCodeClient;
+  private clientConfig?: OpenCodeSDKConfig;
   private clientInitialization?: Promise<void>;
   private server?: OpenCodeServer;
   // Every configured value an OpenCode diagnostic could echo. Kept for the provider's lifetime:
@@ -1250,19 +1251,32 @@ export class OpenCodeSDKProvider implements ApiProvider {
    */
   async cleanup(): Promise<void> {
     await this.clientInitialization?.catch(() => undefined);
-    const client = this.client;
-    const sessions = [...this.sessions.values()];
-    this.sessions.clear();
-    await Promise.all(
-      sessions.map((session) =>
-        this.deleteSession(session, client).catch((err) => {
-          logger.debug(`Failed to delete persistent session ${session.id}`, {
-            error: this.formatCallError(err, this.config),
-          });
+    try {
+      if (this.sessions.size && !this.client) {
+        await this.ensureClient(this.clientConfig ?? this.config);
+      }
+      const client = this.client;
+      await Promise.all(
+        [...this.sessions].map(async ([key, session]) => {
+          try {
+            await this.deleteSession(session, client);
+            if (this.sessions.get(key) === session) {
+              this.sessions.delete(key);
+            }
+          } catch (error) {
+            logger.debug(`Failed to delete persistent session ${session.id}`, {
+              error: this.formatCallError(error, this.config),
+            });
+          }
         }),
-      ),
-    );
-    await this.shutdown();
+      );
+    } catch (error) {
+      logger.debug('Failed to reconnect for OpenCode session cleanup', {
+        error: this.formatCallError(error, this.config),
+      });
+    } finally {
+      await this.shutdown();
+    }
   }
 
   /** Evaluation completion stops the local server but keeps persistent sessions resumable. */
@@ -1274,10 +1288,18 @@ export class OpenCodeSDKProvider implements ApiProvider {
     if (!this.processShutdown) {
       const remoteAborts = [...this.remoteSessionAborts].map((abort) => abort());
       this.processTermination.abort();
-      this.processShutdown = Promise.allSettled([this.shutdown(), ...remoteAborts]).then(() => {
-        this.remoteSessionAborts.clear();
-        providerRegistry.unregister(this);
-      });
+      this.processShutdown = Promise.allSettled([this.shutdown(), ...remoteAborts])
+        .then(async () => {
+          this.remoteSessionAborts.clear();
+          if (this.server || this.pendingTempDirs.size) {
+            await this.shutdown();
+          }
+        })
+        .finally(() => {
+          if (this.server || this.pendingTempDirs.size) {
+            this.processShutdown = undefined;
+          }
+        });
     }
     return this.processShutdown;
   }
@@ -1288,20 +1310,26 @@ export class OpenCodeSDKProvider implements ApiProvider {
     if (this.server) {
       try {
         this.server.close();
+        this.server = undefined;
       } catch (err) {
         logger.debug('Failed to close OpenCode server', {
           error: this.formatCallError(err, this.config),
         });
       }
-      this.server = undefined;
     }
-    this.client = undefined;
-    if (this.activeRemoteCalls > 0 && !this.processTermination.signal.aborted) {
+    if (!this.server) {
+      this.client = undefined;
+    }
+    await Promise.all([...this.pendingTempDirs].map((dir) => this.removeTempDir(dir)));
+    if (
+      this.server ||
+      this.pendingTempDirs.size ||
+      (this.activeRemoteCalls > 0 && !this.processTermination.signal.aborted)
+    ) {
       providerRegistry.register(this);
     } else {
       providerRegistry.unregister(this);
     }
-    await Promise.all([...this.pendingTempDirs].map((dir) => this.removeTempDir(dir)));
   }
 
   private async abortRemoteSession(
@@ -1733,7 +1761,19 @@ export class OpenCodeSDKProvider implements ApiProvider {
     session: OpenCodeSessionHandle,
     client: OpenCodeClient | undefined,
   ): Promise<void> {
-    await client?.session?.delete?.(this.buildDeleteSessionParameters(session));
+    if (!client?.session?.delete) {
+      throw new Error('OpenCode SDK does not expose session deletion');
+    }
+    const result = await client.session.delete(this.buildDeleteSessionParameters(session));
+    const envelope = asRecord(result);
+    if (
+      result === false ||
+      envelope?.data === false ||
+      envelope?.error ||
+      asRecord(envelope?.response)?.ok === false
+    ) {
+      throw envelope?.error ?? new Error('OpenCode session deletion failed');
+    }
   }
 
   private buildAbortSessionParameters(
@@ -1845,6 +1885,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
         this.client = createOpencodeClient({
           baseUrl: config.baseUrl,
         });
+        this.clientConfig = config;
         return;
       }
 
@@ -1868,6 +1909,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
       const opencode = await createOpencode(serverOptions);
       this.client = opencode.client;
+      this.clientConfig = config;
       this.server = opencode.server;
       // Stop the server when evaluations finish or the process exits.
       providerRegistry.register(this);
@@ -2581,9 +2623,6 @@ export class OpenCodeSDKProvider implements ApiProvider {
         callOptions.abortSignal.removeEventListener('abort', abortListener);
       }
       releaseRemoteSession?.();
-      if (remoteStateful && --this.activeRemoteCalls === 0 && !this.server) {
-        providerRegistry.unregister(this);
-      }
       if (ephemeralSession) {
         try {
           await this.deleteSession(ephemeralSession, sessionClient);
@@ -2597,6 +2636,13 @@ export class OpenCodeSDKProvider implements ApiProvider {
       // Clean up temp directory without masking the call result on cleanup failure.
       if (isTempDir && workingDir) {
         await this.removeTempDir(workingDir);
+      }
+      if (remoteStateful && --this.activeRemoteCalls === 0 && !this.server) {
+        if (this.pendingTempDirs.size) {
+          providerRegistry.register(this);
+        } else {
+          providerRegistry.unregister(this);
+        }
       }
     }
   }

@@ -152,6 +152,7 @@ describe('OpenCodeSDKProvider', () => {
     mockSessionMessages.mockReset();
     mockSessionDelete.mockReset();
     mockSessionAbort.mockReset();
+    mockServerClose.mockReset();
 
     // Setup mock client with session.prompt()
     const mockClient = {
@@ -2474,6 +2475,100 @@ describe('OpenCodeSDKProvider', () => {
       });
 
       expect(mockServerClose).toHaveBeenCalledOnce();
+      expect(mockSessionDelete).not.toHaveBeenCalled();
+    });
+
+    it.each(['local', 'remote'] as const)(
+      'reconnects to explicitly delete persistent sessions after the %s evaluation releases the provider',
+      async (transport) => {
+        const provider = new OpenCodeSDKProvider({
+          config: transport === 'remote' ? { baseUrl: 'http://remote.test' } : {},
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const context: CallApiContextParams = {
+          vars: {},
+          prompt: {
+            raw: 'p',
+            label: 'p',
+            config: { persist_sessions: true, model: 'a', port: 4321 },
+          },
+        };
+        await providerRegistry.withEvaluation(async () => {
+          await providerRegistry.cleanupWhenIdle([provider]);
+          await provider.callApi('Test prompt', context);
+        });
+        expect(mockSessionDelete).not.toHaveBeenCalled();
+
+        await provider.cleanup();
+        await provider.cleanup();
+
+        expect(deletedIds()).toEqual(['s0']);
+        if (transport === 'local') {
+          expect(mockCreateOpencode).toHaveBeenCalledTimes(2);
+          expect(mockCreateOpencode).toHaveBeenLastCalledWith(
+            expect.objectContaining({ port: 4321 }),
+          );
+          expect(mockServerClose).toHaveBeenCalledTimes(2);
+        } else {
+          expect(mockCreateOpencodeClient).toHaveBeenCalledTimes(2);
+          expect(mockCreateOpencodeClient).toHaveBeenLastCalledWith({
+            baseUrl: 'http://remote.test',
+          });
+          expect(mockServerClose).not.toHaveBeenCalled();
+        }
+      },
+    );
+
+    it('retains persistent sessions when reconnection or the server-side deletion fails', async () => {
+      const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
+      await provider.callApi('Test prompt', persistent('a'));
+      await provider.callApi('Test prompt', persistent('b'));
+      await provider.cleanupAfterEvaluation();
+
+      mockCreateOpencode.mockRejectedValueOnce(new Error('server unavailable'));
+      await provider.cleanup();
+      expect(mockSessionDelete).not.toHaveBeenCalled();
+
+      mockSessionDelete.mockResolvedValueOnce({ error: { message: 'try again' } });
+      await provider.cleanup();
+      expect(deletedIds()).toEqual(['s0', 's1']);
+
+      await provider.cleanup();
+      await provider.cleanup();
+      expect(deletedIds()).toEqual(['s0', 's1', 's0']);
+    });
+
+    it('keeps a failed server close registered until a later shutdown can close the same server', async () => {
+      const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
+      await provider.callApi('Test prompt', persistent('a'));
+      mockServerClose.mockImplementationOnce(() => {
+        throw new Error('server still running');
+      });
+
+      await provider.cleanupAfterEvaluation();
+      await provider.callApi('Test prompt', persistent('a'));
+      expect(mockCreateOpencode).toHaveBeenCalledOnce();
+      expect(mockSessionCreate).toHaveBeenCalledOnce();
+
+      await providerRegistry.shutdownAll();
+      await providerRegistry.shutdownAll();
+      expect(mockServerClose).toHaveBeenCalledTimes(2);
+      expect(mockSessionDelete).not.toHaveBeenCalled();
+    });
+
+    it('keeps a repeatedly failing process close available for a subsequent process shutdown', async () => {
+      const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
+      await provider.callApi('Test prompt', persistent('a'));
+      const fail = () => {
+        throw new Error('server still running');
+      };
+      mockServerClose.mockImplementationOnce(fail).mockImplementationOnce(fail);
+
+      await providerRegistry.shutdownForProcess();
+      expect(mockServerClose).toHaveBeenCalledTimes(2);
+      await providerRegistry.shutdownForProcess();
+      await providerRegistry.shutdownForProcess();
+      expect(mockServerClose).toHaveBeenCalledTimes(3);
       expect(mockSessionDelete).not.toHaveBeenCalled();
     });
 

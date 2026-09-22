@@ -401,6 +401,49 @@ describeEvaluator('registered resources across overlapping evaluations', () => {
     expect(aware.shutdownForProcess).toHaveBeenCalledOnce();
   });
 
+  it('starts resources registered by a process shutdown hook without waiting for that hook to finish', async () => {
+    const nestedStarted = deferred();
+    const releaseRoot = deferred();
+    const leaf = {
+      shutdown: vi.fn(async () => {
+        nestedStarted.resolve();
+      }),
+    };
+    const child = {
+      shutdown: vi.fn(async () => {}),
+      shutdownForProcess: vi.fn(async () => {
+        providerRegistry.register(leaf);
+      }),
+    };
+    const root = {
+      shutdown: vi.fn(async () => {}),
+      shutdownForProcess: vi.fn(async () => {
+        providerRegistry.register(root);
+        providerRegistry.register(child);
+        await releaseRoot.promise;
+      }),
+    };
+    providerRegistry.register(root);
+    const completed = vi.fn();
+    const pending = providerRegistry.shutdownForProcess().then(completed);
+    try {
+      await nestedStarted.promise;
+      expect(root.shutdownForProcess).toHaveBeenCalledOnce();
+      expect(child.shutdownForProcess).toHaveBeenCalledOnce();
+      expect(leaf.shutdown).toHaveBeenCalledOnce();
+      expect(completed).not.toHaveBeenCalled();
+      expect(root.shutdown).not.toHaveBeenCalled();
+      expect(child.shutdown).not.toHaveBeenCalled();
+    } finally {
+      releaseRoot.resolve();
+      await pending;
+      for (const resource of [root, child, leaf]) {
+        providerRegistry.unregister(resource);
+      }
+    }
+    expect(completed).toHaveBeenCalledOnce();
+  });
+
   it('escalates an already-running ordinary release without waiting for it', async () => {
     const started = deferred();
     const complete = deferred();
