@@ -296,12 +296,189 @@ describeEvaluator('registered resources across overlapping evaluations', () => {
     expect(resource.shutdown).toHaveBeenCalledOnce();
   });
 
+  it('only calls registered CLI cleanup through shutdown when shutdown delegates to it', async () => {
+    const provider = {
+      id: () => 'self-registered-cli-provider',
+      cleanup: vi.fn(async () => {}),
+      shutdown: vi.fn(async () => {
+        await provider.cleanup();
+        providerRegistry.unregister(provider);
+      }),
+    };
+    providerRegistry.register(provider);
+    try {
+      await providerRegistry.withEvaluation(async () => {
+        await providerRegistry.cleanupWhenIdle([provider]);
+        await providerRegistry.withProvider(provider, async () => {});
+      });
+      expect(provider.shutdown).toHaveBeenCalledOnce();
+      expect(provider.cleanup).toHaveBeenCalledExactlyOnceWith();
+    } finally {
+      providerRegistry.unregister(provider);
+    }
+  });
+
+  it('runs only an explicit idle cleanup hook for a registered CLI provider', async () => {
+    const provider = {
+      id: () => 'self-registered-cli-provider-with-idle-cleanup',
+      cleanup: vi.fn(),
+      cleanupAfterEvaluation: vi.fn(),
+      shutdown: vi.fn(async () => {}),
+    };
+    providerRegistry.register(provider);
+    try {
+      await providerRegistry.withEvaluation(async () => {
+        await providerRegistry.cleanupWhenIdle([provider]);
+        await providerRegistry.withProvider(provider, async () => {});
+      });
+      expect(provider.cleanupAfterEvaluation).toHaveBeenCalledExactlyOnceWith({
+        reason: 'evaluation-complete',
+      });
+      expect(provider.shutdown).not.toHaveBeenCalled();
+      expect(provider.cleanup).not.toHaveBeenCalled();
+      await providerRegistry.shutdownAll();
+      expect(provider.shutdown).toHaveBeenCalledOnce();
+      expect(provider.cleanupAfterEvaluation).toHaveBeenCalledOnce();
+    } finally {
+      providerRegistry.unregister(provider);
+    }
+  });
+
+  it('tracks each sequential programmatic evaluation of a provider that registered only once', async () => {
+    let open = false;
+    const provider = {
+      id: () => 'constructor-registered-reused-provider',
+      callApi: vi.fn(async (prompt: string) => {
+        open = true;
+        return { output: prompt };
+      }),
+      shutdown: vi.fn(async () => {
+        open = false;
+        providerRegistry.unregister(provider);
+      }),
+    } satisfies ApiProvider & { shutdown(): Promise<void> };
+    providerRegistry.register(provider);
+    try {
+      for (const [index, prompt] of ['first', 'second'].entries()) {
+        const suite = { providers: [provider], prompts: [toPrompt(prompt)], tests: [{}] };
+        const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+        const completed = await evaluate(suite, record, {});
+        expect(await completed.getResults()).toEqual([
+          expect.objectContaining({
+            success: true,
+            response: expect.objectContaining({ output: prompt }),
+          }),
+        ]);
+        expect(provider.callApi).toHaveBeenCalledTimes(index + 1);
+        expect(provider.shutdown).toHaveBeenCalledTimes(index + 1);
+        expect(open).toBe(false);
+      }
+    } finally {
+      providerRegistry.unregister(provider);
+    }
+  });
+
+  it('waits for an old shutdown before restoring a reused provider for process shutdown', async () => {
+    const shutdownStarted = deferred();
+    const releaseShutdown = deferred();
+    const secondStarted = deferred();
+    const releaseSecond = deferred();
+    const cleanup = vi.fn(async () => {});
+    const provider = {
+      id: () => 'constructor-registered-provider-with-pending-shutdown',
+      cleanup,
+      shutdown: vi.fn(async () => {
+        if (provider.shutdown.mock.calls.length === 1) {
+          shutdownStarted.resolve();
+          await releaseShutdown.promise;
+        }
+        await cleanup();
+        providerRegistry.unregister(provider);
+      }),
+    };
+    providerRegistry.register(provider);
+    const first = providerRegistry.withEvaluation(() =>
+      providerRegistry.withProvider(provider, async () => {}),
+    );
+    const secondRun = vi.fn(async () => {
+      secondStarted.resolve();
+      await releaseSecond.promise;
+    });
+    let second: Promise<void> | undefined;
+    try {
+      await shutdownStarted.promise;
+      second = providerRegistry.withEvaluation(async () => {
+        await providerRegistry.cleanupWhenIdle([provider]);
+        await providerRegistry.withProvider(provider, secondRun);
+      });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(secondRun).not.toHaveBeenCalled();
+
+      releaseShutdown.resolve();
+      await Promise.all([first, secondStarted.promise]);
+      expect(provider.shutdown).toHaveBeenCalledOnce();
+      expect(cleanup).toHaveBeenCalledOnce();
+
+      await providerRegistry.shutdownAll();
+      expect(provider.shutdown).toHaveBeenCalledTimes(2);
+      expect(cleanup).toHaveBeenCalledTimes(2);
+      releaseSecond.resolve();
+      await second;
+      expect(cleanup).toHaveBeenCalledTimes(2);
+    } finally {
+      releaseShutdown.resolve();
+      releaseSecond.resolve();
+      await Promise.allSettled([first, ...(second ? [second] : [])]);
+      providerRegistry.unregister(provider);
+    }
+  });
+
+  it('does not restore a reused provider after its queued call has been cancelled', async () => {
+    const shutdownStarted = deferred();
+    const releaseShutdown = deferred();
+    const provider = {
+      id: () => 'constructor-registered-cancelled-provider',
+      shutdown: vi.fn(async () => {
+        shutdownStarted.resolve();
+        await releaseShutdown.promise;
+        providerRegistry.unregister(provider);
+      }),
+    };
+    const controller = new AbortController();
+    const reason = new Error('cancel queued reuse');
+    const run = vi.fn(async () => {});
+    providerRegistry.register(provider);
+    const first = providerRegistry.withEvaluation(() =>
+      providerRegistry.withProvider(provider, async () => {}),
+    );
+    let queued: Promise<void> | undefined;
+    try {
+      await shutdownStarted.promise;
+      queued = providerRegistry.withEvaluation(() =>
+        providerRegistry.withProvider(provider, run, controller.signal),
+      );
+      const rejection = expect(queued).rejects.toBe(reason);
+      controller.abort(reason);
+      await rejection;
+      expect(run).not.toHaveBeenCalled();
+
+      releaseShutdown.resolve();
+      await first;
+      await providerRegistry.shutdownAll();
+      expect(provider.shutdown).toHaveBeenCalledOnce();
+    } finally {
+      releaseShutdown.resolve();
+      await Promise.allSettled([first, ...(queued ? [queued] : [])]);
+      providerRegistry.unregister(provider);
+    }
+  });
+
   it('directly closes a pending registered resource on process shutdown while its provider cleanup is held', async () => {
     const cleanupStarted = deferred();
     const releaseCleanup = deferred();
     const provider = {
       id: () => 'shutdown-during-cleanup',
-      cleanup: vi.fn(async () => {
+      cleanupAfterEvaluation: vi.fn(async () => {
         cleanupStarted.resolve();
         await releaseCleanup.promise;
       }),

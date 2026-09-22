@@ -35,7 +35,7 @@ interface ResourceState {
   users: Set<EvaluationScope>;
   providers: Set<ProviderState>;
   registered: boolean;
-  release?: { promise: Promise<void>; start: () => Promise<void> };
+  release?: { promise: Promise<void>; start: (force?: boolean) => Promise<void> };
 }
 
 class ProviderRegistry {
@@ -43,6 +43,7 @@ class ProviderRegistry {
   private readonly currentProvider = new AsyncLocalStorage<ProviderState>();
   private readonly providers = new WeakMap<IdleCleanupProvider, ProviderState>();
   private readonly resources = new Map<CleanupProvider, ResourceState>();
+  private readonly selfRegisteredProviders = new WeakSet<IdleCleanupProvider>();
   private shutdownRegistered = false;
 
   /** Nested entry points share a scope; independent evaluations own their own providers. */
@@ -114,6 +115,15 @@ class ProviderRegistry {
         if (!scope.active) {
           throw this.closedScopeError();
         }
+        let release = this.restoreProviderRegistration(provider);
+        while (release) {
+          await this.waitForScope(scope, release, signal);
+          signal?.throwIfAborted();
+          if (!scope.active) {
+            throw this.closedScopeError();
+          }
+          release = this.restoreProviderRegistration(provider);
+        }
         return await run();
       } finally {
         state.activeCalls--;
@@ -182,7 +192,9 @@ class ProviderRegistry {
     }
     state.registered = true;
     if ('id' in resource && typeof resource.id === 'function') {
-      const provider = this.providers.get(resource as CleanupProvider & IdleCleanupProvider);
+      const instance = resource as CleanupProvider & IdleCleanupProvider;
+      this.selfRegisteredProviders.add(instance);
+      const provider = this.providers.get(instance);
       if (provider) {
         this.linkResource(provider, state);
       }
@@ -206,7 +218,7 @@ class ProviderRegistry {
   async shutdownAll(): Promise<void> {
     const releases = [...this.resources.values()].map((state) => {
       void this.maybeReleaseResource(state, undefined, true);
-      return state.release?.start();
+      return state.release?.start(true);
     });
     await Promise.all(releases);
   }
@@ -267,6 +279,21 @@ class ProviderRegistry {
       }
     }
     return state;
+  }
+
+  private restoreProviderRegistration(provider: IdleCleanupProvider): Promise<void> | undefined {
+    if (!this.selfRegisteredProviders.has(provider)) {
+      return undefined;
+    }
+    const resource = provider as IdleCleanupProvider & CleanupProvider;
+    const state = this.resources.get(resource);
+    if (state?.release) {
+      return state.release.promise;
+    }
+    if (!state?.registered) {
+      this.register(resource);
+    }
+    return undefined;
   }
 
   private linkResource(provider: ProviderState, resource: ResourceState): void {
@@ -341,6 +368,13 @@ class ProviderRegistry {
       return state.cleanup;
     }
     state.cleanupRequested = false;
+    // Registered providers normally release themselves through shutdown(), which may call cleanup().
+    if (
+      !state.provider.cleanupAfterEvaluation &&
+      this.selfRegisteredProviders.has(state.provider)
+    ) {
+      return undefined;
+    }
     const cleanup = Promise.resolve()
       .then(() =>
         state.provider.cleanupAfterEvaluation
@@ -378,28 +412,42 @@ class ProviderRegistry {
     const promise = new Promise<void>((resolve) => {
       finish = resolve;
     });
+    const usesEvaluationCleanup =
+      prerequisite !== undefined &&
+      [...state.providers].some(
+        ({ provider }) => provider === state.resource && provider.cleanupAfterEvaluation,
+      );
+    const complete = () => {
+      if (state.release?.promise === promise) {
+        state.release = undefined;
+      }
+      this.forgetResource(state);
+      finish();
+    };
     let actual: Promise<void> | undefined;
-    const start = () => {
+    const start = (forceShutdown = false) => {
       if (!actual) {
-        state.registered = false;
-        actual = Promise.resolve()
-          .then(() => state.resource.shutdown())
-          .catch((error) => {
-            logger.warn('Error shutting down provider: ' + String(error));
-          })
-          .then(() => {
-            if (state.release?.promise === promise) {
-              state.release = undefined;
-            }
-            this.forgetResource(state);
-            finish();
-          });
+        if (usesEvaluationCleanup && !forceShutdown) {
+          actual = Promise.resolve();
+          complete();
+        } else {
+          state.registered = false;
+          actual = Promise.resolve()
+            .then(() => state.resource.shutdown())
+            .catch((error) => {
+              logger.warn('Error shutting down provider: ' + String(error));
+            })
+            .then(complete);
+        }
       }
       return actual;
     };
     state.release = { promise, start };
     if (prerequisite) {
-      void prerequisite.then(start, start);
+      void prerequisite.then(
+        () => start(),
+        () => start(),
+      );
     } else {
       void start();
     }
