@@ -500,6 +500,6 @@ To learn more about setting up comprehensive AI red teaming, see [Introduction t
 
 ## Additional Resources
 
-- [OWASP API Security Project](https://owasp.org/API-Security/)
-- [OWASP API Security Top 10 2023](https://owasp.org/API-Security/editions/2023/en/0x00-header/)
+- [OWASP API Security Project](https://api-security.owasp.org/)
+- [OWASP API Security Top 10 2023](https://api-security.owasp.org/editions/2023/en/0x00-header/)
 - [API Security Best Practices](https://cheatsheetseries.owasp.org/cheatsheets/REST_Security_Cheat_Sheet.html)

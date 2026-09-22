@@ -200,7 +200,7 @@ You can also explicitly disable chat completion format with `chatCompletion: fal
 
 ## Inference endpoints
 
-HuggingFace offers paid, privately hosted [Inference Endpoints](https://endpoints.huggingface.co/). Create an endpoint and choose a model and hosting setup.
+Hugging Face offers paid, dedicated [Inference Endpoints](https://huggingface.co/docs/inference-endpoints/guides/create_endpoint). Create an endpoint and choose a model, hosting setup, and security level.
 
 ![huggingface inference endpoint creation](/img/docs/huggingface-create-endpoint.png)
 

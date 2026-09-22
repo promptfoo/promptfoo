@@ -405,7 +405,7 @@ For questions about telecommunications plugins:
 
 1. Review the [general red-teaming documentation](/docs/red-team/)
 2. Check the [plugin configuration guide](/docs/red-team/configuration/)
-3. Join our [community Discord](https://discord.gg/promptfoo)
+3. Report plugin bugs or request improvements on [GitHub Issues](https://github.com/promptfoo/promptfoo/issues)
 4. Consult telecom compliance professionals for implementation guidance
 
 ## See Also
