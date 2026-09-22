@@ -426,6 +426,91 @@ ${updated && change === 'comment' ? '# unrelated comment\n' : ''}`;
       },
     );
 
+    it.each(['kept', 'replaced'] as const)(
+      'keeps a %s caller-supplied client independent of shared AWS file changes',
+      async (mode) => {
+        const files = selectFileCredentials('named');
+        await Promise.all([files.config('before'), files.credentials('before')]);
+        const entered = deferred();
+        const release = deferred();
+        const provider = createProvider('named', async (input) => {
+          if (input === 'first') {
+            entered.resolve();
+            await release.promise;
+          }
+          return input;
+        });
+        const response = () => ({
+          Body: Buffer.from('{"output":"offline response","embedding":[1,0]}'),
+        });
+        const initial = { send: vi.fn(async () => response()), destroy: vi.fn() };
+        const replacement = { send: vi.fn(async () => response()), destroy: vi.fn() };
+        provider.sagemakerRuntime = initial;
+        const credentials = vi.spyOn(provider, 'getCredentials');
+        const pending = invoke(provider, 'first');
+        void pending.catch(() => {});
+        try {
+          await entered.promise;
+          await Promise.all([files.config('after'), files.credentials('after')]);
+          if (mode === 'replaced') {
+            provider.sagemakerRuntime = replacement;
+          }
+          release.resolve();
+          expect(await pending).toMatchObject(expected);
+          expect(initial.send).toHaveBeenCalledOnce();
+          expect(replacement.send).not.toHaveBeenCalled();
+
+          expect(await invoke(provider, 'later')).toMatchObject(expected);
+          expect((mode === 'replaced' ? replacement : initial).send).toHaveBeenCalledTimes(
+            mode === 'replaced' ? 1 : 2,
+          );
+          expect(credentials).not.toHaveBeenCalled();
+          provider.cleanup();
+          expect(initial.destroy).not.toHaveBeenCalled();
+          expect(replacement.destroy).not.toHaveBeenCalled();
+        } finally {
+          release.resolve();
+          await Promise.allSettled([pending]);
+        }
+      },
+    );
+
+    it('continues to validate a managed request when a client is supplied after the request starts', async () => {
+      const files = selectFileCredentials('named');
+      await Promise.all([files.config('before'), files.credentials('before')]);
+      const entered = deferred();
+      const release = deferred();
+      const provider = createProvider('named', async (input) => {
+        if (input === 'first') {
+          entered.resolve();
+          await release.promise;
+        }
+        return input;
+      });
+      const replacement = {
+        send: vi.fn(async () => ({
+          Body: Buffer.from('{"output":"offline response","embedding":[1,0]}'),
+        })),
+        destroy: vi.fn(),
+      };
+      const pending = invoke(provider, 'first');
+      void pending.catch(() => {});
+      try {
+        await entered.promise;
+        provider.sagemakerRuntime = replacement;
+        await files.config('after');
+        release.resolve();
+        await expect(pending).rejects.toThrow(drift);
+        expect(replacement.send).not.toHaveBeenCalled();
+        expect(await invoke(provider, 'later')).toMatchObject(expected);
+        expect(replacement.send).toHaveBeenCalledOnce();
+        expect(replacement.destroy).not.toHaveBeenCalled();
+      } finally {
+        release.resolve();
+        await Promise.allSettled([pending]);
+      }
+    });
+
     it('rejects an edit while the SDK is resolving signing credentials before any send', async () => {
       const files = selectFileCredentials('named');
       await Promise.all([files.config('before'), files.credentials('before')]);

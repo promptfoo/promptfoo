@@ -145,24 +145,33 @@ describe('SageMaker cache coordination across clears', () => {
     }
   });
 
-  it('does not republish an uncancelled write that straddles a cache clear', async () => {
-    const namespace = 'sagemaker-clear-active';
-    const oldCache = await scopedCache(namespace);
-    const paused = pausePublication(getCache(), `${namespace}:entry`);
-    const oldWrite = new CacheProbe().write(oldCache, 'entry', 'stale');
+  it.each(['global', 'parent namespace'] as const)(
+    'does not restore a previous value for an uncancelled write crossing a %s clear',
+    async (scope) => {
+      const parent = `sagemaker-clear-active-${scope}`;
+      const namespace = `${parent}:child`;
+      const oldCache = await scopedCache(namespace);
+      await oldCache.set('entry', 'before clear');
+      const paused = pausePublication(getCache(), `${namespace}:entry`);
+      const oldWrite = new CacheProbe().write(oldCache, 'entry', 'stale');
 
-    try {
-      await paused.entered;
-      await clearCache();
-      paused.release();
-      await oldWrite;
-      const newCache = await scopedCache(namespace);
-      expect(await newCache.get('entry')).toBeUndefined();
-      await new CacheProbe().write(newCache, 'entry', 'fresh');
-      expect(await oldCache.get('entry')).toBe('fresh');
-    } finally {
-      paused.release();
-      await oldWrite;
-    }
-  });
+      try {
+        await paused.entered;
+        if (scope === 'global') {
+          await clearCache();
+        } else {
+          await (await scopedCache(parent)).clear();
+        }
+        paused.release();
+        await oldWrite;
+        const newCache = await scopedCache(namespace);
+        expect(await newCache.get('entry')).toBeUndefined();
+        await new CacheProbe().write(newCache, 'entry', 'fresh');
+        expect(await oldCache.get('entry')).toBe('fresh');
+      } finally {
+        paused.release();
+        await oldWrite;
+      }
+    },
+  );
 });

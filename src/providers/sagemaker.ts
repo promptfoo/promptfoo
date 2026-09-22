@@ -614,6 +614,11 @@ abstract class SageMakerGenericProvider {
     this.#sagemakerRuntime = client;
   }
 
+  private getBorrowedRuntime() {
+    const runtime = this.sagemakerRuntime;
+    return runtime && runtime !== this.#initializedRuntime ? runtime : undefined;
+  }
+
   id(): string {
     // Use custom provider ID if provided, otherwise use default format
     return this.providerId || `sagemaker:${this.endpointName}`;
@@ -910,7 +915,7 @@ abstract class SageMakerGenericProvider {
   protected async getRuntimeCacheNamespace(
     inputs: ReturnType<SageMakerGenericProvider['captureRuntimeInputs']>,
   ): Promise<string | undefined> {
-    if (this.#sagemakerRuntime && this.#sagemakerRuntime !== this.#initializedRuntime) {
+    if (inputs.borrowedRuntime) {
       return undefined;
     }
     const { credentialConfig, environment, files } = inputs;
@@ -1111,7 +1116,7 @@ abstract class SageMakerGenericProvider {
       if (signal.aborted || cleared) {
         state.untrusted = true;
         try {
-          if (state.value === undefined) {
+          if (cleared || state.value === undefined) {
             await cache.del(key);
           } else {
             await cache.set(key, state.value);
@@ -1142,6 +1147,7 @@ abstract class SageMakerGenericProvider {
   }
 
   protected captureRuntimeInputs() {
+    const borrowedRuntime = this.getBorrowedRuntime();
     const credentialConfig = {
       profile: this.config.profile,
       accessKeyId: this.config.accessKeyId,
@@ -1164,17 +1170,19 @@ abstract class SageMakerGenericProvider {
     const runtimeProfileForStaticCredentials = hasStaticCredentials
       ? environment.AWS_PROFILE || 'default'
       : undefined;
-    const sharedFiles = captureSharedFileState(files, runtimeProfileForStaticCredentials);
-    const processEnvironment = hasStaticCredentials
+    const sharedFiles = borrowedRuntime
       ? undefined
-      : hashCredentialProcessEnvironment();
+      : captureSharedFileState(files, runtimeProfileForStaticCredentials);
+    const processEnvironment =
+      borrowedRuntime || hasStaticCredentials ? undefined : hashCredentialProcessEnvironment();
     return {
+      borrowedRuntime,
       credentialConfig,
       environment,
       files,
-      filesFingerprint: sharedFiles.fingerprint,
+      filesFingerprint: sharedFiles?.fingerprint ?? '',
       runtimeProfileForStaticCredentials,
-      hasCredentialProcess: sharedFiles.hasCredentialProcess,
+      hasCredentialProcess: sharedFiles?.hasCredentialProcess ?? false,
       maxAttempts: getEnvInt('AWS_SAGEMAKER_MAX_RETRIES', 3),
       processEnvironment,
     };
@@ -1184,6 +1192,7 @@ abstract class SageMakerGenericProvider {
     inputs: ReturnType<SageMakerGenericProvider['captureRuntimeInputs']>,
   ): void {
     if (
+      !inputs.borrowedRuntime &&
       captureSharedFileState(inputs.files, inputs.runtimeProfileForStaticCredentials)
         .fingerprint !== inputs.filesFingerprint
     ) {
@@ -1202,9 +1211,10 @@ abstract class SageMakerGenericProvider {
     inputs?: ReturnType<SageMakerGenericProvider['captureRuntimeInputs']>,
   ) {
     this.assertRuntimeGeneration(generation);
-    // A caller-supplied client is borrowed, not part of the provider's region pool.
-    if (this.sagemakerRuntime && this.sagemakerRuntime !== this.#initializedRuntime) {
-      return this.sagemakerRuntime;
+    // A request pins the supplied client; direct callers use the currently supplied client.
+    const borrowedRuntime = inputs ? inputs.borrowedRuntime : this.getBorrowedRuntime();
+    if (borrowedRuntime) {
+      return borrowedRuntime;
     }
 
     const importError = (cause: unknown): never => {
