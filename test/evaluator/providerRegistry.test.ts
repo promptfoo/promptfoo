@@ -203,6 +203,84 @@ describeEvaluator('registered resources across overlapping evaluations', () => {
     }
   });
 
+  it('starts the global evaluation timeout before waiting for an earlier provider cleanup', async () => {
+    const cleanupStarted = deferred();
+    const releaseCleanup = deferred();
+    const provider = {
+      id: () => 'globally-timed-out-provider-setup',
+      callApi: vi.fn(async () => ({ output: 'should not start' })),
+      cleanupAfterEvaluation: vi.fn(async () => {
+        cleanupStarted.resolve();
+        await releaseCleanup.promise;
+      }),
+    } satisfies ApiProvider;
+    const suite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('ping')],
+      tests: [{}],
+    };
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    const preceding = providerRegistry.withEvaluation(() =>
+      providerRegistry.cleanupWhenIdle([provider]),
+    );
+    let evaluation: Promise<Eval> | undefined;
+    try {
+      await cleanupStarted.promise;
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      evaluation = evaluate(suite, record, { maxEvalTimeMs: 100 });
+      const rejection = expect(evaluation).rejects.toMatchObject({ name: 'AbortError' });
+
+      await vi.advanceTimersByTimeAsync(100);
+      await rejection;
+      expect(provider.callApi).not.toHaveBeenCalled();
+
+      releaseCleanup.resolve();
+      await preceding;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(provider.callApi).not.toHaveBeenCalled();
+    } finally {
+      releaseCleanup.resolve();
+      await Promise.allSettled([preceding, ...(evaluation ? [evaluation] : [])]);
+      vi.useRealTimers();
+    }
+  });
+
+  it('records CLI cleanup ownership without blocking setup on an earlier teardown', async () => {
+    const cleanupStarted = deferred();
+    const releaseCleanup = deferred();
+    const claimed = deferred();
+    const provider = {
+      id: () => 'cli-setup-with-pending-cleanup',
+      cleanupAfterEvaluation: vi.fn(async () => {
+        cleanupStarted.resolve();
+        await releaseCleanup.promise;
+      }),
+    };
+    const run = vi.fn(async () => {});
+    const preceding = providerRegistry.withEvaluation(() =>
+      providerRegistry.cleanupWhenIdle([provider]),
+    );
+    let next: Promise<void> | undefined;
+    try {
+      await cleanupStarted.promise;
+      next = providerRegistry.withEvaluation(async () => {
+        await providerRegistry.cleanupWhenIdle([provider]);
+        claimed.resolve();
+        await providerRegistry.withProvider(provider, run);
+      });
+      await claimed.promise;
+      expect(run).not.toHaveBeenCalled();
+
+      releaseCleanup.resolve();
+      await Promise.all([preceding, next]);
+      expect(run).toHaveBeenCalledOnce();
+      expect(provider.cleanupAfterEvaluation).toHaveBeenCalledTimes(2);
+    } finally {
+      releaseCleanup.resolve();
+      await Promise.allSettled([preceding, ...(next ? [next] : [])]);
+    }
+  });
+
   it('keeps cleanup with the target behind an evaluation wrapper until its cancelled call drains', async () => {
     const entered = deferred();
     const finish = deferred();
