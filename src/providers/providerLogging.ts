@@ -36,7 +36,8 @@ export function redactProviderText(
   }
   return value.replace(
     pattern,
-    (match: string, group: string) => (prefix?.(match, group) ?? '') + REDACTED,
+    (match: string, group: string | number | undefined) =>
+      (prefix?.(match, typeof group === 'string' ? group : '') ?? '') + REDACTED,
   );
 }
 
