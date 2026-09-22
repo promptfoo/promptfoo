@@ -1017,16 +1017,30 @@ describe('PythonProvider', () => {
       const provider = new PythonProvider('script.py', {
         config: { basePath: process.cwd() },
       });
+      const shutdown = vi.spyOn(provider, 'shutdown');
 
       await provider.initialize();
+      await providerRegistry.shutdownAll();
+      expect(shutdown).toHaveBeenCalledOnce();
 
-      // Provider should be registered
-      expect((providerRegistry as any).providers.has(provider)).toBe(true);
+      await providerRegistry.shutdownAll();
+      expect(shutdown).toHaveBeenCalledOnce();
+      shutdown.mockRestore();
+    });
 
+    it('unregisters a provider that was shut down directly', async () => {
+      const provider = new PythonProvider('script.py', {
+        config: { basePath: process.cwd() },
+      });
+      const shutdown = vi.spyOn(provider, 'shutdown');
+
+      await provider.initialize();
       await provider.shutdown();
+      expect(shutdown).toHaveBeenCalledOnce();
 
-      // Should be unregistered
-      expect((providerRegistry as any).providers.has(provider)).toBe(false);
+      await providerRegistry.shutdownAll();
+      expect(shutdown).toHaveBeenCalledOnce();
+      shutdown.mockRestore();
     });
 
     it('should set isInitialized to false after shutdown', async () => {
