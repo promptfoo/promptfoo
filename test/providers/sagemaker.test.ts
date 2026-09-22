@@ -21,15 +21,16 @@ const { mockSend, mockCacheGet, mockCacheSet, mockCacheDel, mockIsCacheEnabled }
 );
 
 // Create a mock cache object that uses the hoisted mock functions
-const mockCacheObject = {
-  get: mockCacheGet,
-  set: mockCacheSet,
-  del: mockCacheDel,
-};
+const makeMockCache = () => ({ get: mockCacheGet, set: mockCacheSet, del: mockCacheDel });
+let mockCacheObject = makeMockCache();
+
+beforeEach(() => {
+  mockCacheObject = makeMockCache();
+});
 
 // Mock the cache module - this will be used by the dynamic import
 vi.mock('../../src/cache', () => ({
-  getCache: vi.fn().mockReturnValue(mockCacheObject),
+  getCache: vi.fn(() => mockCacheObject),
   isCacheEnabled: mockIsCacheEnabled,
 }));
 vi.mock('../../src/telemetry', () => ({ default: { record: vi.fn() } }));
@@ -108,6 +109,9 @@ describe('SageMaker runtime cache bounds', () => {
 describe('SageMakerCompletionProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv('AWS_PROFILE', undefined);
+    vi.stubEnv('AWS_ACCESS_KEY_ID', 'SYNTHETIC_CACHE_FIXTURE');
+    vi.stubEnv('AWS_SECRET_ACCESS_KEY', 'synthetic-cache-fixture-secret');
     mockIsCacheEnabled.mockReturnValue(false);
     mockCacheGet.mockReset();
     mockCacheSet.mockReset();
@@ -881,6 +885,9 @@ module.exports = transform;
 describe('SageMakerEmbeddingProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv('AWS_PROFILE', undefined);
+    vi.stubEnv('AWS_ACCESS_KEY_ID', 'SYNTHETIC_CACHE_FIXTURE');
+    vi.stubEnv('AWS_SECRET_ACCESS_KEY', 'synthetic-cache-fixture-secret');
     mockIsCacheEnabled.mockReturnValue(false);
     mockCacheGet.mockReset();
     mockCacheSet.mockReset();
@@ -890,6 +897,7 @@ describe('SageMakerEmbeddingProvider', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });
 
@@ -1088,7 +1096,7 @@ describe('SageMakerEmbeddingProvider', () => {
       .digest('hex')
       .substring(0, 8);
     const key = mockCacheGet.mock.calls[0][0];
-    expect(key).toMatch(/^sagemaker:embedding:v2:first-endpoint:/);
+    expect(key).toMatch(/^sagemaker:embedding:v3:first-endpoint:/);
     expect(key.endsWith(`:${configHash}`)).toBe(true);
     expect(mockCacheSet.mock.calls[0][0]).toBe(key);
     expect(mockSend).toHaveBeenCalledWith(
@@ -1330,8 +1338,150 @@ describe.each(['completion', 'embedding'] as const)(
       },
     );
 
+    it.each(['configuration', 'environment', 'shared profile'] as const)(
+      'reuses a %s cache entry across provider instances without sharing another credential scope',
+      async (source) => {
+        const directory = await mkdtemp(path.join(tmpdir(), 'sagemaker-cache-scope-'));
+        const credentialsFile = path.join(directory, 'credentials');
+        const configFile = path.join(directory, 'config');
+        await Promise.all([writeFile(credentialsFile, ''), writeFile(configFile, '')]);
+        vi.stubEnv('AWS_CONFIG_FILE', configFile);
+        vi.stubEnv('AWS_SHARED_CREDENTIALS_FILE', credentialsFile);
+        vi.stubEnv('AWS_PROFILE', undefined);
+        vi.stubEnv('AWS_ACCESS_KEY_ID', undefined);
+        vi.stubEnv('AWS_SECRET_ACCESS_KEY', undefined);
+        vi.stubEnv('AWS_SESSION_TOKEN', undefined);
+        const entries = new Map<string, string>();
+        mockCacheGet.mockImplementation(async (key: string) => entries.get(key));
+        mockCacheSet.mockImplementation(async (key: string, value: string) =>
+          entries.set(key, value),
+        );
+        mockCacheDel.mockImplementation(async (key: string) => entries.delete(key));
+        mockSend
+          .mockResolvedValueOnce({
+            Body: new TextEncoder().encode('{"output":"first","embedding":[1]}'),
+          })
+          .mockResolvedValueOnce({
+            Body: new TextEncoder().encode('{"output":"second","embedding":[2]}'),
+          });
+        const providers: ReturnType<typeof createProvider>[] = [];
+        const withIdentity = async (value: string) => {
+          const accessKeyId = `SYNTHETIC_${value.toUpperCase()}`;
+          const secretAccessKey = `synthetic-${value}-private-key`;
+          const sessionToken = `synthetic-${value}-session-token`;
+          const config: SageMakerCompletionProvider['config'] = { region: 'us-east-1' };
+          if (source === 'configuration') {
+            Object.assign(config, { accessKeyId, secretAccessKey, sessionToken });
+          } else if (source === 'environment') {
+            vi.stubEnv('AWS_ACCESS_KEY_ID', accessKeyId);
+            vi.stubEnv('AWS_SECRET_ACCESS_KEY', secretAccessKey);
+            vi.stubEnv('AWS_SESSION_TOKEN', sessionToken);
+          } else {
+            config.profile = 'cache-proof';
+            await writeFile(
+              credentialsFile,
+              `[cache-proof]\naws_access_key_id = ${accessKeyId}\naws_secret_access_key = ${secretAccessKey}\naws_session_token = ${sessionToken}\n`,
+            );
+          }
+          const provider = createProvider(config);
+          providers.push(provider);
+          return provider;
+        };
+        const firstResult = kind === 'completion' ? { output: 'first' } : { embedding: [1] };
+        const secondResult = kind === 'completion' ? { output: 'second' } : { embedding: [2] };
+        try {
+          const first = await withIdentity('first');
+          expect(await call(first)).toMatchObject(firstResult);
+          first.cleanup();
+          const freshInstance = await withIdentity('first');
+          const credentials = vi.spyOn(freshInstance, 'getCredentials');
+          const runtime = vi.spyOn(freshInstance, 'getSageMakerRuntimeInstance');
+          expect(await call(freshInstance)).toMatchObject({ ...firstResult, cached: true });
+          expect(credentials).not.toHaveBeenCalled();
+          expect(runtime).not.toHaveBeenCalled();
+          const differentScope = await withIdentity('second');
+          const second = await call(differentScope);
+          expect(second).toMatchObject(secondResult);
+          expect(second.cached).not.toBe(true);
+          expect(await call(await withIdentity('first'))).toMatchObject({
+            ...firstResult,
+            cached: true,
+          });
+          expect(mockSend).toHaveBeenCalledTimes(2);
+          const keys = new Set(mockCacheGet.mock.calls.map(([key]) => key as string));
+          expect(keys.size).toBe(2);
+          for (const key of keys) {
+            expect(key).not.toMatch(/SYNTHETIC|private-key|session-token|cache-proof/);
+          }
+        } finally {
+          for (const provider of providers) {
+            provider.cleanup();
+          }
+          await rm(directory, { recursive: true, force: true });
+        }
+      },
+    );
+
+    it.each(['unknown default', 'role'] as const)(
+      'does not read or write shared cache entries when the %s credentials cannot be pinned',
+      async (source) => {
+        const directory = await mkdtemp(path.join(tmpdir(), 'sagemaker-dynamic-cache-'));
+        const credentialsFile = path.join(directory, 'credentials');
+        const configFile = path.join(directory, 'config');
+        await Promise.all([
+          writeFile(
+            credentialsFile,
+            '[base]\naws_access_key_id = SYNTHETIC_BASE\naws_secret_access_key = synthetic-base-secret\n',
+          ),
+          writeFile(
+            configFile,
+            '[profile rotating]\nrole_arn = arn:aws:iam::123456789012:role/rotating\nsource_profile = base\n',
+          ),
+        ]);
+        vi.stubEnv('AWS_CONFIG_FILE', configFile);
+        vi.stubEnv('AWS_SHARED_CREDENTIALS_FILE', credentialsFile);
+        vi.stubEnv('AWS_PROFILE', undefined);
+        vi.stubEnv('AWS_ACCESS_KEY_ID', undefined);
+        vi.stubEnv('AWS_SECRET_ACCESS_KEY', undefined);
+        const providers = Array.from({ length: 2 }, () =>
+          createProvider({
+            region: 'us-east-1',
+            ...(source === 'role' && { profile: 'rotating' }),
+          }),
+        );
+        mockCacheGet.mockResolvedValue(
+          JSON.stringify({ output: 'wrong identity', embedding: [0] }),
+        );
+        mockSend.mockResolvedValue({
+          Body: new TextEncoder().encode('{"output":"fresh","embedding":[1]}'),
+        });
+        try {
+          for (const provider of providers) {
+            const result = await call(provider);
+            expect(result).toMatchObject(
+              kind === 'completion' ? { output: 'fresh' } : { embedding: [1] },
+            );
+            expect(result.cached).not.toBe(true);
+          }
+          expect(mockCacheGet).not.toHaveBeenCalled();
+          expect(mockCacheSet).not.toHaveBeenCalled();
+          expect(mockSend).toHaveBeenCalledTimes(2);
+        } finally {
+          for (const provider of providers) {
+            provider.cleanup();
+          }
+          await rm(directory, { recursive: true, force: true });
+        }
+      },
+    );
+
     it('does not initialize credentials or a runtime for a cache hit', async () => {
-      const provider = createProvider({ region: 'us-east-1', profile: 'must-not-load' });
+      const provider = createProvider({
+        region: 'us-east-1',
+        profile: 'must-not-load',
+        accessKeyId: 'SYNTHETIC_CACHE_KEY',
+        secretAccessKey: 'synthetic-cache-secret',
+      });
       const credentials = vi.spyOn(provider, 'getCredentials');
       const runtime = vi.spyOn(provider, 'getSageMakerRuntimeInstance');
       const expected = kind === 'completion' ? { output: 'cached' } : { embedding: [1, 2, 3] };
@@ -1347,7 +1497,7 @@ describe.each(['completion', 'embedding'] as const)(
       }
     });
 
-    it.each(['no later request', 'newer same-key request'] as const)(
+    it.each(['no later request', 'newer same-key request', 'newer provider instance'] as const)(
       'rolls back a cancelled pending cache write with %s',
       async (scenario) => {
         const provider = createProvider({
@@ -1356,6 +1506,10 @@ describe.each(['completion', 'embedding'] as const)(
           accessKeyId: 'SYNTHETIC_CACHE_KEY',
           secretAccessKey: 'synthetic-cache-secret',
         });
+        const secondProvider =
+          scenario === 'newer provider instance'
+            ? createProvider({ ...provider.config })
+            : provider;
         const entries = new Map<string, string>();
         let enter!: () => void;
         let release!: () => void;
@@ -1406,8 +1560,8 @@ describe.each(['completion', 'embedding'] as const)(
           const reason = new Error('synthetic cancellation during cache publication');
           controller.abort(reason);
           await expect(stale).rejects.toBe(reason);
-          if (scenario === 'newer same-key request') {
-            newer = call(provider);
+          if (scenario !== 'no later request') {
+            newer = call(secondProvider);
           }
           release();
           await rollback;
@@ -1428,6 +1582,9 @@ describe.each(['completion', 'embedding'] as const)(
           release();
           await Promise.allSettled([stale, ...(newer ? [newer] : [])]);
           provider.cleanup();
+          if (secondProvider !== provider) {
+            secondProvider.cleanup();
+          }
         }
       },
     );

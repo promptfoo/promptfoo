@@ -522,6 +522,8 @@ interface RuntimeCacheEntry {
   value?: string;
 }
 
+const runtimeCacheEntries = new WeakMap<Cache, Map<string, RuntimeCacheEntry>>();
+
 interface SageMakerOptions extends ProviderOptions {
   config?: SageMakerConfig;
 }
@@ -541,8 +543,6 @@ abstract class SageMakerGenericProvider {
   #retainedCredentials?: RuntimeCredentials;
   private runtimeGeneration = 0;
   private readonly activeRequests = new Set<AbortController>();
-  #cacheScope?: { identity: (string | undefined)[]; namespace: string };
-  readonly #runtimeCacheEntries = new Map<string, RuntimeCacheEntry>();
   config: SageMakerConfig;
   endpointName: string;
   delay?: number; // Delay between API calls in milliseconds
@@ -877,26 +877,52 @@ abstract class SageMakerGenericProvider {
     return { url, useFipsEndpoint, useDualstackEndpoint };
   }
 
-  private selectCacheNamespace(identity: (string | undefined)[]): string {
-    if (
-      !this.#cacheScope ||
-      this.#cacheScope.identity.some((value, index) => value !== identity[index])
-    ) {
-      // Only this random namespace is written to cache. Credential inputs stay in memory.
-      this.#cacheScope = { identity, namespace: crypto.randomUUID() };
+  protected async getRuntimeCacheNamespace(
+    inputs: ReturnType<SageMakerGenericProvider['captureRuntimeInputs']>,
+  ): Promise<string | undefined> {
+    const { cacheIdentity, credentialConfig, environment, files } = inputs;
+    let secret = credentialConfig.accessKeyId && credentialConfig.secretAccessKey;
+    if (!secret && !credentialConfig.profile && !environment.AWS_PROFILE) {
+      secret = environment.AWS_ACCESS_KEY_ID && environment.AWS_SECRET_ACCESS_KEY;
     }
-    return this.#cacheScope.namespace;
+    if (!secret) {
+      let profiles: Record<string, Record<string, string | undefined>>;
+      try {
+        const { parseKnownFiles } = await import('@smithy/core/config');
+        profiles = await parseKnownFiles({ ...files, ignoreCache: true });
+      } catch {
+        return undefined;
+      }
+      this.assertSharedFiles(inputs);
+      const profile = profiles[credentialConfig.profile || environment.AWS_PROFILE || 'default'];
+      // Roles, credential processes and metadata may change identity without changing these inputs.
+      if (
+        !profile ||
+        profile.role_arn ||
+        !profile.aws_access_key_id ||
+        !profile.aws_secret_access_key
+      ) {
+        return undefined;
+      }
+      secret = profile.aws_secret_access_key;
+    }
+    // Stable across instances, without storing raw credentials or making low-entropy routing inputs guessable.
+    return crypto
+      .createHmac('sha256', secret)
+      .update('promptfoo:sagemaker-cache-namespace:v1\0')
+      .update(JSON.stringify(cacheIdentity))
+      .digest('hex');
   }
 
-  #trimRuntimeCacheEntries() {
-    if (this.#runtimeCacheEntries.size <= 256) {
+  #trimRuntimeCacheEntries(entries: Map<string, RuntimeCacheEntry>) {
+    if (entries.size <= 256) {
       return;
     }
-    for (const [key, entry] of this.#runtimeCacheEntries) {
+    for (const [key, entry] of entries) {
       // A failed rollback must continue hiding the backend's potentially cancelled value.
       if (entry.active === 0 && !entry.untrusted) {
-        this.#runtimeCacheEntries.delete(key);
-        if (this.#runtimeCacheEntries.size <= 256) {
+        entries.delete(key);
+        if (entries.size <= 256) {
           break;
         }
       }
@@ -904,18 +930,25 @@ abstract class SageMakerGenericProvider {
   }
 
   private withRuntimeCacheEntry<T>(
+    cache: Cache,
     key: string,
     signal: AbortSignal,
     operation: (state: RuntimeCacheEntry) => Promise<T>,
   ): Promise<T> {
-    let state = this.#runtimeCacheEntries.get(key);
+    let entries = runtimeCacheEntries.get(cache);
+    if (!entries) {
+      entries = new Map();
+      runtimeCacheEntries.set(cache, entries);
+    }
+    const cacheEntries = entries;
+    let state = cacheEntries.get(key);
     if (!state) {
       state = { tail: Promise.resolve(), active: 0, initialized: false, untrusted: false };
-      this.#runtimeCacheEntries.set(key, state);
+      cacheEntries.set(key, state);
     }
     const entry = state;
     entry.active++;
-    this.#trimRuntimeCacheEntries();
+    this.#trimRuntimeCacheEntries(cacheEntries);
     // A later read or write must wait for any cancelled publication to be rolled back.
     const result = entry.tail.then(async () => {
       signal.throwIfAborted();
@@ -928,7 +961,7 @@ abstract class SageMakerGenericProvider {
       )
       .then(() => {
         entry.active--;
-        this.#trimRuntimeCacheEntries();
+        this.#trimRuntimeCacheEntries(cacheEntries);
       });
     return result;
   }
@@ -938,7 +971,7 @@ abstract class SageMakerGenericProvider {
     key: string,
     signal: AbortSignal,
   ): Promise<string | undefined> {
-    return this.withRuntimeCacheEntry(key, signal, async (state) => {
+    return this.withRuntimeCacheEntry(cache, key, signal, async (state) => {
       if (state.untrusted) {
         // The backend may still contain a cancelled result if its rollback failed.
         return state.value;
@@ -957,7 +990,7 @@ abstract class SageMakerGenericProvider {
     value: string,
     signal: AbortSignal,
   ): Promise<void> {
-    return this.withRuntimeCacheEntry(key, signal, async (state) => {
+    return this.withRuntimeCacheEntry(cache, key, signal, async (state) => {
       if (!state.initialized) {
         state.value = (await cache.get<string>(key)) ?? undefined;
         state.initialized = true;
@@ -1020,7 +1053,7 @@ abstract class SageMakerGenericProvider {
     const processEnvironment = hasStaticCredentials
       ? undefined
       : hashCredentialProcessEnvironment();
-    const cacheNamespace = this.selectCacheNamespace([
+    const cacheIdentity = [
       credentialConfig.profile,
       credentialConfig.accessKeyId,
       credentialConfig.secretAccessKey,
@@ -1028,10 +1061,9 @@ abstract class SageMakerGenericProvider {
       ...CREDENTIAL_ENV_VARS.map((name) => environment[name]),
       environment.AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME,
       sharedFiles.fingerprint,
-      sharedFiles.hasCredentialProcess ? processEnvironment : undefined,
-    ]);
+    ];
     return {
-      cacheNamespace,
+      cacheIdentity,
       credentialConfig,
       environment,
       files,
@@ -1433,8 +1465,6 @@ abstract class SageMakerGenericProvider {
     }
     this.runtimeGeneration++;
     if (!context) {
-      this.#cacheScope = undefined;
-      this.#runtimeCacheEntries.clear();
       this.#retainedCredentials = undefined;
       this.runtimeDefaultsStates.clear();
       this.runtimeRetryStates.clear();
@@ -1972,20 +2002,22 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
 
     const payload = this.formatPayload(transformedPrompt, payloadParameters);
     const request = { payload, ...requestConfig };
-    let cacheKey: string | undefined;
-    const getCacheKey = () => {
-      if (cacheKey === undefined) {
+    let cacheKey: Promise<string | undefined> | undefined;
+    const getCacheKey = () =>
+      (cacheKey ??= this.getRuntimeCacheNamespace(runtimeInputs).then((namespace) => {
+        if (!namespace) {
+          return undefined;
+        }
         const hash = crypto.createHash('sha256').update(JSON.stringify(request)).digest('hex');
-        cacheKey = `sagemaker:v4:${request.endpoint}:${runtimeInputs.cacheNamespace}:${hash}`;
-      }
-      return cacheKey;
-    };
+        return `sagemaker:v5:${request.endpoint}:${namespace}:${hash}`;
+      }));
     const bustCache = context?.bustCache ?? context?.debug === true; // If debug mode is on, bust the cache
-    if (isCacheEnabled() && !bustCache) {
+    const readCacheKey = isCacheEnabled() && !bustCache ? await getCacheKey() : undefined;
+    if (readCacheKey) {
       const cache = getCache();
 
       // Try to get from cache
-      const cachedResult = await this.readRuntimeCache(cache, getCacheKey(), abortSignal);
+      const cachedResult = await this.readRuntimeCache(cache, readCacheKey, abortSignal);
       this.assertSharedFiles(runtimeInputs);
       if (cachedResult) {
         logger.debug(`Using cached SageMaker response for ${request.endpoint}`);
@@ -2104,16 +2136,20 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       };
 
       // Save result to cache if successful and caching enabled
-      if (isCacheEnabled() && !bustCache && result.output && !result.error) {
+      const writeCacheKey =
+        isCacheEnabled() && !bustCache && result.output && !result.error
+          ? await getCacheKey()
+          : undefined;
+      if (writeCacheKey) {
         const cache = getCache();
         const resultToCache = JSON.stringify(result);
         abortSignal.throwIfAborted();
         this.assertRuntimeGeneration(generation);
 
         try {
-          await this.writeRuntimeCache(cache, getCacheKey(), resultToCache, abortSignal);
+          await this.writeRuntimeCache(cache, writeCacheKey, resultToCache, abortSignal);
           logger.debug(
-            `Stored SageMaker response in cache with key: ${getCacheKey().substring(0, 100)}...`,
+            `Stored SageMaker response in cache with key: ${writeCacheKey.substring(0, 100)}...`,
           );
         } catch (_) {
           abortSignal.throwIfAborted();
@@ -2167,7 +2203,7 @@ export class SageMakerEmbeddingProvider
     const textHash = crypto.createHash('sha256').update(text).digest('hex').substring(0, 16);
     const configHash = crypto.createHash('sha256').update(configStr).digest('hex').substring(0, 8);
 
-    return `sagemaker:embedding:v2:${request.endpoint}:${namespace}:${textHash}:${configHash}`;
+    return `sagemaker:embedding:v3:${request.endpoint}:${namespace}:${textHash}:${configHash}`;
   }
 
   /**
@@ -2225,17 +2261,20 @@ export class SageMakerEmbeddingProvider
       );
     }
 
-    let cacheKey: string | undefined;
+    let cacheKey: Promise<string | undefined> | undefined;
     const getCacheKey = () =>
-      (cacheKey ??= this.getCacheKey(transformedText, runtimeInputs.cacheNamespace, request));
+      (cacheKey ??= this.getRuntimeCacheNamespace(runtimeInputs).then((namespace) =>
+        namespace ? this.getCacheKey(transformedText, namespace, request) : undefined,
+      ));
 
     // Check if we should use cache - use the transformed text for cache key
     const bustCache = context?.debug === true; // If debug mode is on, bust the cache
-    if (isCacheEnabled() && !bustCache) {
+    const readCacheKey = isCacheEnabled() && !bustCache ? await getCacheKey() : undefined;
+    if (readCacheKey) {
       const cache = getCache();
 
       // Try to get from cache
-      const cachedResult = await this.readRuntimeCache(cache, getCacheKey(), abortSignal);
+      const cachedResult = await this.readRuntimeCache(cache, readCacheKey, abortSignal);
       this.assertSharedFiles(runtimeInputs);
       abortSignal.throwIfAborted();
       if (cachedResult) {
@@ -2448,7 +2487,7 @@ export class SageMakerEmbeddingProvider
    */
   private async cacheEmbeddingResult(
     result: ProviderEmbeddingResponse,
-    getCacheKey: () => string,
+    getCacheKey: () => Promise<string | undefined>,
     abortSignal: AbortSignal,
     context?: CallApiContextParams,
     isTransformed: boolean = false,
@@ -2458,8 +2497,11 @@ export class SageMakerEmbeddingProvider
     const bustCache = context?.debug === true;
 
     // Save result to cache if successful and caching enabled
-    if (isCacheEnabled() && !bustCache && result.embedding && !result.error) {
-      const cacheKey = getCacheKey();
+    const cacheKey =
+      isCacheEnabled() && !bustCache && result.embedding && !result.error
+        ? await getCacheKey()
+        : undefined;
+    if (cacheKey) {
       const cache = getCache();
 
       // Add metadata about transformation

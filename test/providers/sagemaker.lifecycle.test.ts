@@ -481,6 +481,10 @@ describe('SageMaker runtime lifecycle', () => {
 
     it('does not initialize a client or credentials for a cache hit', async () => {
       const provider = createProvider();
+      Object.assign(provider.config, {
+        accessKeyId: 'SYNTHETIC_LIFECYCLE_CACHE',
+        secretAccessKey: 'synthetic-lifecycle-secret',
+      });
       const credentials = vi.spyOn(provider, 'getCredentials');
       mockIsCacheEnabled.mockReturnValue(true);
       mockCacheGet.mockResolvedValue(JSON.stringify({ output: 'cached', embedding: [0.1, 0.2] }));
@@ -607,6 +611,10 @@ describe('SageMaker runtime lifecycle', () => {
         const started = deferred<void>();
         const continueRequest = deferred<void>();
         if (stage === 'cache lookup') {
+          Object.assign(provider.config, {
+            accessKeyId: 'SYNTHETIC_LIFECYCLE_CACHE',
+            secretAccessKey: 'synthetic-lifecycle-secret',
+          });
           mockIsCacheEnabled.mockReturnValue(true);
           mockCacheGet.mockImplementation(async () => {
             started.resolve();
