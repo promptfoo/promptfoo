@@ -277,11 +277,10 @@ describe('SageMaker ownership of reusable SDK credentials', () => {
     });
     const first = provider.callApi('east A before discovery');
     pending.push(first);
+    void first.catch(() => {});
     await metadataStarted.promise;
     expect(metadataPaths).toEqual(['/latest/api/token', '/latest/meta-data/placement/region']);
-    // The regression requires credentials to change while east/defaults remain
-    // unchanged. Moving west here is a negative control: defaults invalidation
-    // already prevents reuse for that different ordering.
+    // Only the region case changes the defaults inputs while discovery is running.
     if (mode !== 'stable source') {
       setEnvironment({
         AWS_ACCESS_KEY_ID: 'ACCOUNT_B',
@@ -294,7 +293,34 @@ describe('SageMaker ownership of reusable SDK credentials', () => {
       mode === 'region during discovery' ? 'us-west-2' : 'us-east-1',
     );
     releaseMetadata.resolve();
-    await firstSigned.promise;
+    if (mode === 'region during discovery') {
+      await expect(first).rejects.toThrow(
+        'SageMaker defaults inputs changed during initialization; retry with stable inputs',
+      );
+      expect(sageCalls).toHaveLength(0);
+      releaseFirst.resolve();
+      await expectSignedRow('fresh west after rejected discovery', 'ACCOUNT_B', 'us-west-2');
+      setEnvironment({
+        AWS_REGION: 'us-east-1',
+        AWS_ACCESS_KEY_ID: 'ACCOUNT_A',
+        AWS_SECRET_ACCESS_KEY: 'synthetic-secret-a',
+        AWS_SESSION_TOKEN: 'synthetic-token-a',
+      });
+      await expectSignedRow('restored east after rejected discovery', 'ACCOUNT_A', 'us-east-1');
+      expect(sageCalls).toHaveLength(2);
+      expect(sageCalls[1].handler).not.toBe(sageCalls[0].handler);
+      expect(metadataPaths).toHaveLength(6);
+      expect(provider.sagemakerRuntime).toBeUndefined();
+      expect(sageCalls.every(({ handler }) => destroyedHandlers.has(handler))).toBe(true);
+      await expectSignedRow('east A after idle', 'ACCOUNT_A', 'us-east-1');
+      return;
+    }
+    await Promise.race([
+      firstSigned.promise,
+      first.then(() => {
+        throw new Error('Request completed before it could be held');
+      }),
+    ]);
     expect(sageCalls[0].request.headers.authorization).toContain(
       'Credential=ACCOUNT_A/20260101/us-east-1/sagemaker/',
     );
@@ -320,10 +346,8 @@ describe('SageMaker ownership of reusable SDK credentials', () => {
     expect(sageCalls[1].handler).not.toBe(sageCalls[0].handler);
     if (mode === 'stable source' || mode === 'explicit keys') {
       expect(sageCalls[2].handler).toBe(sageCalls[0].handler);
-    } else if (mode === 'region during discovery') {
-      expect(sageCalls[2].handler).not.toBe(sageCalls[0].handler);
     }
-    expect(metadataPaths).toHaveLength(mode === 'region during discovery' ? 6 : 4);
+    expect(metadataPaths).toHaveLength(4);
     releaseFirst.resolve();
     expect(await first).toMatchObject({ output: 'signed response' });
     expect(provider.sagemakerRuntime).toBeUndefined();
@@ -376,11 +400,17 @@ describe('SageMaker ownership of reusable SDK credentials', () => {
       releaseMetadata.resolve();
       releaseCredentials.resolve();
       if (changed) {
-        await expect(first).resolves.toMatchObject({
-          error: expect.stringContaining(
-            'SageMaker credential inputs changed during initialization',
-          ),
-        });
+        if (mode === 'during discovery') {
+          await expect(first).rejects.toThrow(
+            'SageMaker defaults inputs changed during initialization; retry with stable inputs',
+          );
+        } else {
+          await expect(first).resolves.toMatchObject({
+            error: expect.stringContaining(
+              'SageMaker credential inputs changed during initialization',
+            ),
+          });
+        }
         expect(sageCalls).toHaveLength(0);
         expect(metadataPaths.filter((item) => item.startsWith('/credentials/'))).toEqual(
           mode === 'during credentials' ? ['/credentials/a'] : [],
