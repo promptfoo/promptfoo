@@ -53,7 +53,10 @@ export async function callEmbeddingProvider(provider: ApiProvider, input: string
     options && provider.supportsEmbeddingCancellation
       ? await (provider as CancellableEmbeddingProvider).callEmbeddingApi(input, undefined, options)
       : await provider.callEmbeddingApi!(input);
-  options?.abortSignal?.throwIfAborted();
+  // A provider that cannot observe cancellation may report it as an error response.
+  if (result.error) {
+    options?.abortSignal?.throwIfAborted();
+  }
   return result;
 }
 

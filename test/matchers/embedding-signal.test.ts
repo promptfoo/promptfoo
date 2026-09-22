@@ -168,6 +168,19 @@ describe('embedding graders receive evaluation cancellation', () => {
     }
   });
 
+  it('keeps an embedding that finishes after grading is cancelled', async () => {
+    const controller = new AbortController();
+    embed.mockImplementation(async () => {
+      controller.abort(new Error('eval paused'));
+      return response();
+    });
+    await expect(
+      withProviderCallExecutionContext({ abortSignal: controller.signal }, () =>
+        callEmbeddingProvider(provider, 'input'),
+      ),
+    ).resolves.toEqual(response());
+  });
+
   it('preserves an unrelated exception thrown by a running embedding provider during cancellation', async () => {
     const controller = new AbortController();
     const failure = new SyntaxError('malformed embedding response');
