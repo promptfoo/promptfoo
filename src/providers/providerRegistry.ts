@@ -138,7 +138,7 @@ class ProviderRegistry {
     });
   }
 
-  /** The CLI owns its loaded targets; a caller-supplied grader is only borrowed. */
+  /** The CLI owns its loaded targets; the eventual provider call waits for any earlier cleanup. */
   async cleanupWhenIdle(
     providers: Iterable<IdleCleanupProvider>,
     signal?: AbortSignal,
@@ -147,21 +147,10 @@ class ProviderRegistry {
     if (!scope?.active) {
       return;
     }
-    const pending: Promise<void>[] = [];
     for (const provider of providers) {
       const state = this.getProvider(provider);
       state.cleanupRequested = true;
-      const ready = this.claimProvider(scope, state);
-      if (ready) {
-        pending.push(ready);
-      }
-    }
-    if (pending.length) {
-      await this.waitForScope(
-        scope,
-        Promise.all(pending).then(() => undefined),
-        signal,
-      );
+      void this.claimProvider(scope, state);
     }
     signal?.throwIfAborted();
   }

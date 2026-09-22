@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDefaultProviders } from '../src/providers/defaults';
+import { providerRegistry } from '../src/providers/providerRegistry';
 import { generatePrompts } from '../src/suggestions';
 import { createEmptyTokenUsage } from '../src/util/tokenUsageUtils';
 import { createMockProvider } from './factories/provider';
@@ -10,6 +11,25 @@ vi.mock('../src/providers/defaults', () => ({
   getDefaultProviders: vi.fn(),
 }));
 
+function useSuggestionProvider(provider: ReturnType<typeof createMockProvider>) {
+  vi.mocked(getDefaultProviders).mockResolvedValue({
+    embeddingProvider: provider,
+    gradingJsonProvider: provider,
+    gradingProvider: provider,
+    moderationProvider: provider,
+    suggestionsProvider: provider,
+    synthesizeProvider: provider,
+  });
+}
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 describe('generatePrompts', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -17,6 +37,93 @@ describe('generatePrompts', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+  });
+
+  it('does not resolve or dispatch a provider for an already-cancelled request', async () => {
+    const reason = new Error('stop suggestions');
+
+    await expect(generatePrompts('Original prompt', 1, AbortSignal.abort(reason))).rejects.toBe(
+      reason,
+    );
+    expect(getDefaultProviders).not.toHaveBeenCalled();
+  });
+
+  it('stops waiting for a reused provider without dispatching after its cleanup finally settles', async () => {
+    const cleanupStarted = deferred();
+    const releaseCleanup = deferred();
+    const provider = Object.assign(createMockProvider({ id: 'held-suggestions' }), {
+      cleanupAfterEvaluation: vi.fn(async () => {
+        cleanupStarted.resolve();
+        await releaseCleanup.promise;
+      }),
+    });
+    useSuggestionProvider(provider);
+    const preceding = providerRegistry.withEvaluation(() =>
+      providerRegistry.cleanupWhenIdle([provider]),
+    );
+    const controller = new AbortController();
+    const reason = new Error('stop queued suggestions');
+    let generating: ReturnType<typeof generatePrompts> | undefined;
+    try {
+      await cleanupStarted.promise;
+      generating = providerRegistry.withEvaluation(() =>
+        generatePrompts('Original prompt', 2, controller.signal),
+      );
+      const rejection = expect(generating).rejects.toBe(reason);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(getDefaultProviders).toHaveBeenCalledOnce();
+
+      controller.abort(reason);
+      await rejection;
+      expect(provider.callApi).not.toHaveBeenCalled();
+      releaseCleanup.resolve();
+      await preceding;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(provider.callApi).not.toHaveBeenCalled();
+    } finally {
+      controller.abort(reason);
+      releaseCleanup.resolve();
+      await Promise.allSettled([preceding, ...(generating ? [generating] : [])]);
+    }
+  });
+
+  it('passes cancellation to active calls and does not dispatch queued variants if calls ignore it', async () => {
+    const firstCallsStarted = deferred();
+    const releaseCalls = deferred();
+    const provider = createMockProvider({ id: 'active-suggestions' });
+    const signals: (AbortSignal | undefined)[] = [];
+    vi.mocked(provider.callApi).mockImplementation(async (_prompt, _context, options) => {
+      signals.push(options?.abortSignal);
+      if (signals.length === 4) {
+        firstCallsStarted.resolve();
+      }
+      await releaseCalls.promise;
+      return { output: 'variant' };
+    });
+    useSuggestionProvider(provider);
+    const controller = new AbortController();
+    const reason = new Error('stop active suggestions');
+    const generating = providerRegistry.withEvaluation(() =>
+      generatePrompts('Original prompt', 8, controller.signal),
+    );
+    const rejection = expect(generating).rejects.toBe(reason);
+    try {
+      await firstCallsStarted.promise;
+      expect(signals).toEqual(Array(4).fill(controller.signal));
+
+      controller.abort(reason);
+      await rejection;
+      expect(signals.every((signal) => signal?.aborted)).toBe(true);
+      expect(provider.callApi).toHaveBeenCalledTimes(4);
+
+      releaseCalls.resolve();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(provider.callApi).toHaveBeenCalledTimes(4);
+    } finally {
+      controller.abort(reason);
+      releaseCalls.resolve();
+      await Promise.allSettled([generating]);
+    }
   });
 
   it.each([
