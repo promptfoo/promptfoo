@@ -18,7 +18,7 @@ assert:
     value: The Earth orbits around the Sun
 ```
 
-The `model-graded-factuality` assertion type is an alias of `factuality` — both run the same grader.
+`model-graded-factuality` is an alias for `factuality`.
 
 For non-English evaluation output, see the [multilingual evaluation guide](/docs/configuration/expected-outputs/model-graded#non-english-evaluation).
 
