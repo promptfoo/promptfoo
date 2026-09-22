@@ -454,6 +454,44 @@ describe('getOAuthTokenWithExpiry', () => {
     );
   });
 
+  it('replaces only the rejected token and shares in-flight token requests', async () => {
+    let issued = 0;
+    let releaseToken!: () => void;
+    const tokenGate = new Promise<void>((resolve) => (releaseToken = resolve));
+    mockFetch.mockImplementation(async () => {
+      await tokenGate;
+      issued += 1;
+      return {
+        ok: true,
+        json: async () => ({ access_token: `token-${issued}`, expires_in: 3600 }),
+      };
+    });
+    const auth: MCPOAuthClientCredentialsAuth = {
+      type: 'oauth',
+      grantType: 'client_credentials',
+      clientId: 'rejected-token-client',
+      clientSecret: 'secret',
+      tokenUrl: 'https://rejected-token.example.com/token',
+    };
+    const accessToken = async (rejectedToken?: string) =>
+      (await getOAuthTokenWithExpiry(auth, undefined, rejectedToken)).accessToken;
+
+    const concurrent = Promise.all([accessToken(), accessToken(), accessToken()]);
+    releaseToken();
+    await expect(concurrent).resolves.toEqual(['token-1', 'token-1', 'token-1']);
+    await expect(accessToken('stale-token')).resolves.toBe('token-1');
+    await expect(Promise.all([accessToken('token-1'), accessToken('token-1')])).resolves.toEqual([
+      'token-2',
+      'token-2',
+    ]);
+    await expect(accessToken('token-1')).resolves.toBe('token-2');
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+
+    mockFetch.mockRejectedValueOnce(new Error('token endpoint down'));
+    await expect(accessToken('token-2')).rejects.toThrow('token endpoint down');
+    await expect(accessToken('token-2')).resolves.toBe('token-3');
+  });
+
   it('normalizes string scopes for the request and cache key', async () => {
     mockFetch.mockResolvedValue({
       ok: true,

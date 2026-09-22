@@ -167,14 +167,18 @@ export async function discoverTokenEndpoint(serverUrl: string): Promise<string> 
   );
 }
 
+// In-flight token requests, so concurrent callers share one token fetch
+const pendingTokenRequests = new Map<string, Promise<OAuthTokenResult>>();
+
 /**
  * Get OAuth token with expiration info, fetching a new one if needed.
  * If tokenUrl is not configured, attempts OAuth discovery to find the token endpoint.
- * Caches tokens and returns cached version if still valid.
+ * Caches tokens and returns cached version if still valid and not the rejected token.
  */
 export async function getOAuthTokenWithExpiry(
   auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
   serverUrl?: string,
+  rejectedToken?: string,
 ): Promise<OAuthTokenResult> {
   // Use configured tokenUrl or discover it
   let tokenUrl = auth.tokenUrl;
@@ -187,33 +191,36 @@ export async function getOAuthTokenWithExpiry(
 
   const cacheKey = getOAuthCacheKey(auth, tokenUrl);
   const cached = oauthTokenCache.get(cacheKey);
-  const now = Date.now();
-
-  if (cached && now + TOKEN_REFRESH_BUFFER_MS < cached.expiresAt) {
+  if (
+    cached &&
+    cached.accessToken !== rejectedToken &&
+    Date.now() + TOKEN_REFRESH_BUFFER_MS < cached.expiresAt
+  ) {
     logger.debug('[MCP Auth] Using cached OAuth token');
     return { accessToken: cached.accessToken, expiresAt: cached.expiresAt };
   }
 
-  // Use shared OAuth token fetch logic
-  const result = await fetchOAuthToken({
-    tokenUrl,
-    ...(auth.tokenUrl ? {} : { redirect: 'error' as const }),
-    grantType: auth.grantType,
-    clientId: auth.clientId,
-    clientSecret: auth.clientSecret,
-    username: 'username' in auth ? auth.username : undefined,
-    password: 'password' in auth ? auth.password : undefined,
-    scopes: normalizeRenderedOAuthScopes(auth.scopes),
-  });
-
-  // Cache the token
-  oauthTokenCache.set(cacheKey, {
-    accessToken: result.accessToken,
-    expiresAt: result.expiresAt,
-  });
-
-  logger.debug('[MCP Auth] Cached OAuth token');
-  return result;
+  let pending = pendingTokenRequests.get(cacheKey);
+  if (!pending) {
+    pending = fetchOAuthToken({
+      tokenUrl,
+      ...(auth.tokenUrl ? {} : { redirect: 'error' as const }),
+      grantType: auth.grantType,
+      clientId: auth.clientId,
+      clientSecret: auth.clientSecret,
+      username: 'username' in auth ? auth.username : undefined,
+      password: 'password' in auth ? auth.password : undefined,
+      scopes: normalizeRenderedOAuthScopes(auth.scopes),
+    })
+      .then((result) => {
+        oauthTokenCache.set(cacheKey, result);
+        logger.debug('[MCP Auth] Cached OAuth token');
+        return result;
+      })
+      .finally(() => pendingTokenRequests.delete(cacheKey));
+    pendingTokenRequests.set(cacheKey, pending);
+  }
+  return pending;
 }
 
 /**
