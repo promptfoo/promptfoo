@@ -40,11 +40,19 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
   }, [evalId]);
 
   useEffect(() => {
-    const handleShare = async () => {
-      if (!open || !evalId || shareUrl || error) {
-        return;
+    if (!open || !evalId || shareUrl || error) {
+      return;
+    }
+    // Set when the modal closes, reopens, or switches evals, so a stale run never uploads.
+    let cancelled = false;
+    const fail = (message: string) => {
+      if (!cancelled) {
+        setError(message);
       }
+    };
 
+    const handleShare = async () => {
+      let needsSignup: boolean;
       try {
         const response = await callApi(`/results/share/check-domain?id=${evalId}`);
         const data = (await response.json()) as {
@@ -52,35 +60,43 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
           isCloudEnabled: boolean;
           error?: string;
         };
-
-        if (response.ok) {
-          const isPublicDomain = data.domain.includes('promptfoo.app');
-          if (isPublicDomain && !data.isCloudEnabled) {
-            setShowNeedsSignup(true);
-            return;
-          }
-
-          // Sharing is allowed, so generate the share URL.
-          setIsLoading(true);
-          try {
-            const url = await onShare(evalId);
-            setShareUrl(url);
-          } catch (error) {
-            logger.error('Failed to generate share URL', { error, evalId });
-            setError(error instanceof Error ? error.message : 'Failed to generate share URL');
-          } finally {
-            setIsLoading(false);
-          }
-        } else {
-          setError(data.error || 'Failed to check share domain');
+        if (!response.ok) {
+          fail(data.error || 'Failed to check share domain');
+          return;
         }
+        needsSignup = data.domain.includes('promptfoo.app') && !data.isCloudEnabled;
       } catch (error) {
         console.error('Failed to check share domain:', error);
-        setError('Failed to check share domain');
+        fail('Failed to check share domain');
+        return;
+      }
+      if (cancelled) {
+        return;
+      }
+      if (needsSignup) {
+        setShowNeedsSignup(true);
+        return;
+      }
+
+      // Sharing is allowed, so generate the share URL.
+      setIsLoading(true);
+      try {
+        const url = await onShare(evalId);
+        if (!cancelled) {
+          setShareUrl(url);
+        }
+      } catch (error) {
+        logger.error('Failed to generate share URL', { error, evalId });
+        fail(error instanceof Error ? error.message : 'Failed to generate share URL');
+      } finally {
+        setIsLoading(false);
       }
     };
 
     handleShare();
+    return () => {
+      cancelled = true;
+    };
   }, [open, evalId, shareUrl, error, onShare]);
 
   const handleCopyClick = () => {

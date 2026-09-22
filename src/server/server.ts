@@ -313,12 +313,9 @@ export function createApp() {
     } catch (error) {
       const uploadStatus = error instanceof ShareUploadError ? error.status : undefined;
       if (uploadStatus === 401) {
-        sendError(
-          res,
-          401,
-          'The share server rejected your credentials. Run `promptfoo auth login` and retry.',
-          error,
-        );
+        // `promptfoo auth login` only fixes Cloud credentials, not a self-hosted share server's.
+        const hint = cloudConfig.isEnabled() ? ' Run `promptfoo auth login` and retry.' : '';
+        sendError(res, 401, `The share server rejected your credentials.${hint}`, error);
       } else if (uploadStatus === 403 || error instanceof ConfigPermissionError) {
         sendError(res, 403, 'You do not have permission to share this eval', error);
       } else {

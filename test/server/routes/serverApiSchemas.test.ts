@@ -364,6 +364,18 @@ describe('inline server API DTO validation', () => {
     });
   });
 
+  it('only suggests `promptfoo auth login` when a Cloud share is rejected with 401', async () => {
+    mockedEval.findById.mockResolvedValue({ id: 'eval-1' } as never);
+    mockedCreateShareableUrl.mockRejectedValue(new ShareUploadError('401 Unauthorized', 401));
+
+    const selfHosted = await api.post('/api/results/share').send({ id: 'eval-1' });
+    mockedCloudConfig.isEnabled.mockReturnValue(true);
+    const cloud = await api.post('/api/results/share').send({ id: 'eval-1' });
+
+    expect(selfHosted.body).toEqual({ error: 'The share server rejected your credentials.' });
+    expect(cloud.body.error).toContain('Run `promptfoo auth login` and retry.');
+  });
+
   it('returns a 404 DTO when sharing a result whose eval row is missing', async () => {
     mockedEval.findById.mockResolvedValue(null as never);
 

@@ -142,6 +142,25 @@ describe('ShareModal', () => {
     expect(mockCallApi).toHaveBeenCalledWith('/results/share/check-domain?id=test-eval-id');
   });
 
+  it('uploads once when the modal is reopened while the domain check is pending', async () => {
+    const pendingChecks: Array<(response: Response) => void> = [];
+    mockCallApi.mockImplementation(() => new Promise((resolve) => pendingChecks.push(resolve)));
+    mockOnShare.mockResolvedValue('https://promptfoo.app/eval/test-id');
+
+    const { rerender } = render(<ShareModal {...defaultProps} />);
+    rerender(<ShareModal {...defaultProps} open={false} />);
+    rerender(<ShareModal {...defaultProps} />);
+    await waitFor(() => expect(pendingChecks).toHaveLength(2));
+    for (const resolve of pendingChecks) {
+      resolve(Response.json({ domain: 'localhost:3000', isCloudEnabled: false }));
+    }
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('https://promptfoo.app/eval/test-id')).toBeInTheDocument();
+    });
+    expect(mockOnShare).toHaveBeenCalledTimes(1);
+  });
+
   it('calls onClose when close button is clicked', async () => {
     const testUrl = 'https://promptfoo.app/eval/test-id';
     mockOnShare.mockResolvedValue(testUrl);
