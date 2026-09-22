@@ -2952,6 +2952,44 @@ describe('OpenCodeSDKProvider', () => {
       },
     );
 
+    it.each([false, true])(
+      'cleans up when shutdown arrives between remote creation and prompt handoff (persistent: %s)',
+      async (persistSessions) => {
+        const registry = isolateProcessRegistry();
+        const started = createDeferred<void>();
+        const created = createDeferred<ReturnType<typeof createMockSessionResponse>>();
+        const deletionStarted = createDeferred<void>();
+        const deletion = createDeferred<void>();
+        mockSessionCreate.mockImplementationOnce(() => {
+          started.resolve();
+          return created.promise;
+        });
+        mockSessionDelete.mockImplementationOnce(() => {
+          deletionStarted.resolve();
+          return deletion.promise;
+        });
+        const provider = new OpenCodeSDKProvider({
+          config: { baseUrl: 'http://remote.test', persist_sessions: persistSessions },
+        });
+        const call = provider.callApi('creation handoff');
+        await started.promise;
+        const completed = vi.fn();
+        const shutdown = created.promise.then(() => registry.shutdownForProcess()).then(completed);
+        created.resolve(createMockSessionResponse('handoff-session'));
+
+        await deletionStarted.promise;
+        expect(mockSessionPrompt).not.toHaveBeenCalled();
+        expect(mockSessionDelete).toHaveBeenCalledOnce();
+        expect(completed).not.toHaveBeenCalled();
+        deletion.resolve();
+        await shutdown;
+        await expect(call).resolves.toMatchObject({ error: expect.stringContaining('aborted') });
+        expect(mockSessionDelete).toHaveBeenCalledOnce();
+        await provider.cleanup();
+        expect(mockSessionDelete).toHaveBeenCalledOnce();
+      },
+    );
+
     it.each([
       ['v1', 'process'],
       ['v2', 'process'],
