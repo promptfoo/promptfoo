@@ -1197,22 +1197,25 @@ describe('OpenCodeSDKProvider', () => {
         [{ '*': 'allow', skill: 'deny' }, false],
         [{ skill: { 'code-standards': 'allow', '*': 'deny' } }, false],
         [{ skill: 'deny', '*': 'allow' }, true],
-      ] as const)('applies last-match-wins to %j before fetching skill history', async (permission, fetched) => {
-        mockSessionPrompt.mockResolvedValue(
-          createMockPromptResponseWithAnchors('All done.', {
-            id: 'assistant-msg-1',
-            parentID: 'user-msg-1',
-          }),
-        );
-        const provider = new OpenCodeSDKProvider({
-          config: { permission },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
+      ] as const)(
+        'applies last-match-wins to %j before fetching skill history',
+        async (permission, fetched) => {
+          mockSessionPrompt.mockResolvedValue(
+            createMockPromptResponseWithAnchors('All done.', {
+              id: 'assistant-msg-1',
+              parentID: 'user-msg-1',
+            }),
+          );
+          const provider = new OpenCodeSDKProvider({
+            config: { permission },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
 
-        await provider.callApi('Use a skill');
+          await provider.callApi('Use a skill');
 
-        expect(mockSessionMessages).toHaveBeenCalledTimes(fetched ? 1 : 0);
-      });
+          expect(mockSessionMessages).toHaveBeenCalledTimes(fetched ? 1 : 0);
+        },
+      );
 
       it('should skip session.messages fetch when tools config is omitted (skill disabled by default)', async () => {
         // The default tool policy denies every tool through the `*` wildcard, so
@@ -3263,57 +3266,60 @@ describe('OpenCodeSDKProvider', () => {
     it.each([
       ['v2', { sessionID: 'test-session-123' }],
       ['v1', { path: { id: 'test-session-123', sessionID: 'test-session-123' } }],
-    ] as const)('calls %s session.abort when the caller aborts during the prompt', async (apiVersion, expected) => {
-      if (apiVersion === 'v1') {
-        const { importModule } = await import('../../src/esm');
-        vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
-          if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
-            throw new Error('v2 unavailable');
-          }
-          return {
-            createOpencode: mockCreateOpencode,
-            createOpencodeClient: mockCreateOpencodeClient,
-          };
+    ] as const)(
+      'calls %s session.abort when the caller aborts during the prompt',
+      async (apiVersion, expected) => {
+        if (apiVersion === 'v1') {
+          const { importModule } = await import('../../src/esm');
+          vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
+            if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
+              throw new Error('v2 unavailable');
+            }
+            return {
+              createOpencode: mockCreateOpencode,
+              createOpencodeClient: mockCreateOpencodeClient,
+            };
+          });
+        }
+        const controller = new AbortController();
+        const promptStarted = createDeferred<void>();
+        // The prompt mock waits for the abort signal itself, then returns a
+        // canned response — that mirrors how a real server completes after an
+        // abort request rather than hanging forever.
+        mockSessionPrompt.mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              promptStarted.resolve();
+              controller.signal.addEventListener(
+                'abort',
+                () =>
+                  resolve(
+                    createMockPromptResponse([{ type: 'text', text: 'Discarded' }], {
+                      input: 1,
+                      output: 1,
+                    }),
+                  ),
+                { once: true },
+              );
+            }),
+        );
+
+        const provider = new OpenCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
         });
-      }
-      const controller = new AbortController();
-      const promptStarted = createDeferred<void>();
-      // The prompt mock waits for the abort signal itself, then returns a
-      // canned response — that mirrors how a real server completes after an
-      // abort request rather than hanging forever.
-      mockSessionPrompt.mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            promptStarted.resolve();
-            controller.signal.addEventListener(
-              'abort',
-              () =>
-                resolve(
-                  createMockPromptResponse([{ type: 'text', text: 'Discarded' }], {
-                    input: 1,
-                    output: 1,
-                  }),
-                ),
-              { once: true },
-            );
-          }),
-      );
 
-      const provider = new OpenCodeSDKProvider({
-        env: { ANTHROPIC_API_KEY: 'test-api-key' },
-      });
+        const callPromise = provider.callApi('Test prompt', undefined, {
+          abortSignal: controller.signal,
+        });
 
-      const callPromise = provider.callApi('Test prompt', undefined, {
-        abortSignal: controller.signal,
-      });
+        await promptStarted.promise;
+        controller.abort();
 
-      await promptStarted.promise;
-      controller.abort();
-
-      const result = await callPromise;
-      expect(mockSessionAbort).toHaveBeenCalledWith(expect.objectContaining(expected));
-      expect(result.error).toBe('OpenCode SDK call aborted');
-    });
+        const result = await callPromise;
+        expect(mockSessionAbort).toHaveBeenCalledWith(expect.objectContaining(expected));
+        expect(result.error).toBe('OpenCode SDK call aborted');
+      },
+    );
 
     it('does not call session.abort when no signal is provided', async () => {
       const provider = new OpenCodeSDKProvider({

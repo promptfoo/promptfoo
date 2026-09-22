@@ -1238,8 +1238,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
   }
 
   /**
-   * Explicit cleanup also deletes the persistent sessions this instance created. Stopping the
-   * provider otherwise keeps them resumable by ID, as documented for `persist_sessions`.
+   * Explicit cleanup also deletes the persistent sessions tracked on the current connection.
+   * Otherwise they stay resumable by ID after a shutdown, as documented for `persist_sessions`.
    */
   async cleanup(): Promise<void> {
     await this.clientInitialization?.catch(() => undefined);
