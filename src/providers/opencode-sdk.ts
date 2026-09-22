@@ -746,11 +746,14 @@ function redactOpenCodeError(
       new RegExp(unbounded ? pattern : '(?<![\\w.~+-])' + pattern + '(?![\\w.~+=-])', 'g'),
     );
   }
-  result = redactProviderText(
-    result,
-    /((?:["']?)(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|client[_ -]?secret|pass(?:word|wd|phrase)|pwd|sign(?:ature|ing[_ -]?key)|authorization)(?:["']?)\s*[:=]\s*["']?)(?:(?:Bearer|Basic)\s+)?[^\s,"';&}]+/gi,
-    (_match, prefix) => prefix,
-  );
+  const credentialField = String.raw`(?<!\w)["']?(?:api[_ -]?key|(?:(?:access|refresh|session|id|auth|csrf)[_ -]?)?token|(?:client[_ -]?)?secret|credentials?|pass(?:word|wd|phrase)|pwd|sign(?:ature|ing[_ -]?key)|authorization|(?:set[_ -]?)?cookie)["']?\s*[:=]\s*`;
+  for (const pattern of [
+    /(?<!\w)(["']?(?:set[_ -]?)?cookie["']?\s*[:=]\s*["']?)[^\s,"';}]+(?:\s*;\s*[^\s=;,"'}]+=[^\s,"';}]+)*/gi,
+    new RegExp(String.raw`(${credentialField}(["']))(?:\\[^\r\n]|(?!\2)[^\\\r\n])*(?=\2)`, 'gi'),
+    new RegExp(String.raw`(${credentialField}["']?)(?:(?:Bearer|Basic)\s+)?[^\s,"';&}]+`, 'gi'),
+  ]) {
+    result = redactProviderText(result, pattern, (_match, prefix) => prefix);
+  }
   result = redactProviderText(
     result,
     /\b(Bearer|Basic)\s+[\w.~+/=-]+/gi,
@@ -2290,6 +2293,9 @@ export class OpenCodeSDKProvider implements ApiProvider {
     this.clientInitialization = initialization;
     try {
       await initialization;
+    } catch (error) {
+      this.clearClientCredentialsAfterCalls = true;
+      throw error;
     } finally {
       if (this.clientInitialization === initialization) {
         this.clientInitialization = undefined;
@@ -2786,7 +2792,9 @@ export class OpenCodeSDKProvider implements ApiProvider {
     headers?: Record<string, string>,
   ): 'quota' | 'rate_limit' | undefined {
     if (!error || typeof error !== 'object') {
-      return fallbackStatus === 429 ? 'rate_limit' : undefined;
+      return fallbackStatus === 429
+        ? classifyProviderSdkRateLimit({ status: fallbackStatus, body: error, headers })
+        : undefined;
     }
     const item = error as Record<string, unknown>;
     const isSdkApiError = (typeof item.name === 'string' ? item.name : item._tag) === 'APIError';
@@ -2826,14 +2834,15 @@ export class OpenCodeSDKProvider implements ApiProvider {
     error: unknown,
     config: OpenCodeSDKConfig,
     fallbackHeaders: unknown,
-  ): Record<string, string> | undefined {
+  ): { classificationHeaders: Record<string, string>; publicHeaders?: Record<string, string> } {
     const item =
       error && typeof error === 'object' ? (error as Record<string, unknown>) : undefined;
     const data =
       item?.data && typeof item.data === 'object'
         ? (item.data as Record<string, unknown>)
         : undefined;
-    const headers: Record<string, string> = {};
+    const classificationHeaders: Record<string, string> = {};
+    const publicHeaders: Record<string, string> = {};
     let formatHeader: ((error: unknown) => string) | undefined;
     const isHttpDate = (value: string) =>
       /^(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} [A-Za-z]{3} \d{4} \d{2}:\d{2}:\d{2} GMT|(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday), \d{2}-[A-Za-z]{3}-\d{2} \d{2}:\d{2}:\d{2} GMT|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) [A-Za-z]{3} {1,2}\d{1,2} \d{2}:\d{2}:\d{2} \d{4})$/i.test(
@@ -2887,15 +2896,21 @@ export class OpenCodeSDKProvider implements ApiProvider {
         if (!isSafeTimingHeader(key, value)) {
           continue;
         }
+        classificationHeaders[key] = value;
         const redacted = (formatHeader ??= this.getErrorFormatter(config, true))(value);
         // A short numeric credential can coincide with milliseconds or another date component.
         // Exact credentials and non-date timing values still go through the normal redaction.
         if (redacted === value || onlyRedactsTimestampDigits(value, redacted)) {
-          headers[key] = value;
+          publicHeaders[key] = value;
+        } else {
+          delete publicHeaders[key];
         }
       }
     }
-    return Object.keys(headers).length > 0 ? headers : undefined;
+    return {
+      classificationHeaders,
+      publicHeaders: Object.keys(publicHeaders).length > 0 ? publicHeaders : undefined,
+    };
   }
 
   private buildPromptErrorResponse(
@@ -2976,11 +2991,19 @@ export class OpenCodeSDKProvider implements ApiProvider {
     const errorMessage = promptError
       ? 'OpenCode SDK prompt error: ' + formattedError
       : formattedError;
-    const timingHeaders = this.getErrorRateLimitHeaders(error, config, promptError?.headers);
-    const rateLimitKind = this.getErrorRateLimitKind(error, promptError?.status, timingHeaders);
+    const { classificationHeaders, publicHeaders } = this.getErrorRateLimitHeaders(
+      error,
+      config,
+      promptError?.headers,
+    );
+    const rateLimitKind = this.getErrorRateLimitKind(
+      error,
+      promptError?.status,
+      classificationHeaders,
+    );
     const headers =
       rateLimitKind === 'rate_limit' || (!rateLimitKind && promptError?.status === 429)
-        ? timingHeaders
+        ? publicHeaders
         : undefined;
     logger.error('Error calling OpenCode SDK', { error: errorMessage });
     return {
