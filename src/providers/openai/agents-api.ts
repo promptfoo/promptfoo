@@ -48,8 +48,8 @@ interface Usage {
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
-  input_tokens_details?: { cached_tokens?: number };
-  output_tokens_details?: { reasoning_tokens?: number };
+  input_tokens_details?: { cached_tokens?: number | null };
+  output_tokens_details?: { reasoning_tokens?: number | null };
 }
 
 interface Session {
@@ -366,8 +366,8 @@ function toTokenUsage(usage: Usage) {
   };
 }
 
-function addUsage(left: Usage, right: Usage): Usage | undefined {
-  const sum = {
+function addUsage(left: Usage, right: Usage): Usage {
+  return {
     input_tokens: left.input_tokens + right.input_tokens,
     output_tokens: left.output_tokens + right.output_tokens,
     total_tokens: left.total_tokens + right.total_tokens,
@@ -382,7 +382,6 @@ function addUsage(left: Usage, right: Usage): Usage | undefined {
         (right.output_tokens_details?.reasoning_tokens ?? 0),
     },
   };
-  return isUsage(sum) ? sum : undefined;
 }
 
 function referencesVariable(template: string, names: string[]): boolean {
@@ -646,15 +645,12 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
             return { usageMayExcludeSubagents: true };
           }
           sum = sum ? addUsage(sum, turn.usage) : turn.usage;
-          if (!sum) {
-            return { usageMayExcludeSubagents: true };
-          }
         }
       }
       return {
         usageMayExcludeSubagents: true,
-        // A partial sum would understate subagent work, so it is reported only when complete.
-        ...(sum ? { subagentUsage: toTokenUsage(sum) } : {}),
+        // A partial or inexact sum would misstate subagent work, so it is reported only when exact.
+        ...(isUsage(sum) ? { subagentUsage: toTokenUsage(sum) } : {}),
       };
     } catch (error) {
       evalSignal?.throwIfAborted();
