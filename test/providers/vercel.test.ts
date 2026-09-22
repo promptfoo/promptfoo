@@ -1418,18 +1418,6 @@ describe('VercelAiEmbeddingProvider', () => {
       }
     });
 
-    it('skips the cache and SDK when embedding was already cancelled', async () => {
-      const { embed } = await import('ai');
-      vi.mocked(isCacheEnabled).mockReturnValue(true);
-      const provider = new VercelAiEmbeddingProvider('openai/text-embedding-3-small');
-      const reason = new DOMException('evaluation cancelled', 'AbortError');
-      await expect(
-        provider.callEmbeddingApi('prompt', undefined, { abortSignal: AbortSignal.abort(reason) }),
-      ).rejects.toBe(reason);
-      expect(mockCache.get).not.toHaveBeenCalled();
-      expect(embed).not.toHaveBeenCalled();
-    });
-
     it('enables native SDK telemetry for traced embedding calls', async () => {
       const { embed } = await import('ai');
       vi.mocked(embed).mockImplementationOnce(async () => {

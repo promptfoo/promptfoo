@@ -95,7 +95,7 @@ export function runProviderCallWithAbort<T>(
     signal.addEventListener('abort', onAbort, { once: true });
     try {
       void call().then(
-        (value) => finish(() => (signal.aborted ? reject(signal.reason) : resolve(value))),
+        (value) => finish(() => resolve(value)),
         (error) => finish(() => reject(error)),
       );
     } catch (error) {

@@ -38,7 +38,6 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
     _context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
-    options?.abortSignal?.throwIfAborted();
     // Validate API key first (like chat provider)
     if (this.requiresApiKey() && !this.getApiKey()) {
       return {

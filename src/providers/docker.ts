@@ -172,8 +172,6 @@ export class DMREmbeddingProvider extends OpenAiEmbeddingProvider {
         `Model '${this.modelName}' not found. Run 'docker model pull ${this.modelName}'.`,
       );
     }
-    return context || options
-      ? super.callEmbeddingApi(text, context, options)
-      : super.callEmbeddingApi(text);
+    return super.callEmbeddingApi(text, context, options);
   }
 }
