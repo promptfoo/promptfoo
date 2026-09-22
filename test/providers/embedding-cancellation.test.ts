@@ -92,19 +92,6 @@ describe('embedding transport cancellation', () => {
         return provider;
       },
     ],
-    [
-      'SageMaker',
-      () => {
-        const provider = new SageMakerEmbeddingProvider('endpoint', {
-          config: { modelType: 'custom' },
-        });
-        vi.spyOn(provider, 'getSageMakerRuntimeInstance').mockResolvedValue({
-          send: (_command: unknown, options?: { abortSignal?: AbortSignal }) =>
-            rejectAborted(options?.abortSignal),
-        } as never);
-        return provider;
-      },
-    ],
   ])('passes cancellation to the %s request and rejects with its reason', async (_name, create) => {
     const provider = create() as CancellableEmbeddingProvider;
     const reason = new Error('evaluation cancelled');
@@ -115,6 +102,57 @@ describe('embedding transport cancellation', () => {
       reason,
     );
     expect(new Set(signals)).toEqual(new Set([abortSignal]));
+  });
+
+  it('passes cancellation and its reason to an active SageMaker request', async () => {
+    const provider = new SageMakerEmbeddingProvider('endpoint', {
+      config: { modelType: 'custom' },
+    });
+    const controller = new AbortController();
+    const reason = new Error('evaluation cancelled');
+    let markStarted!: (signal: AbortSignal) => void;
+    const started = new Promise<AbortSignal>((resolve) => {
+      markStarted = resolve;
+    });
+    const send = vi.fn(
+      (_command: unknown, options?: { abortSignal?: AbortSignal }) =>
+        new Promise<never>((_resolve, reject) => {
+          const signal = options?.abortSignal;
+          if (!signal) {
+            reject(new Error('SageMaker received no cancellation signal'));
+            return;
+          }
+          if (signal.aborted) {
+            reject(signal.reason);
+          } else {
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+          }
+          markStarted(signal);
+        }),
+    );
+    vi.spyOn(provider, 'getSageMakerRuntimeInstance').mockResolvedValue({ send } as never);
+    const request = provider.callEmbeddingApi('text', undefined, {
+      abortSignal: controller.signal,
+    });
+    void request.catch(() => {});
+    try {
+      const signal = await Promise.race([
+        started,
+        request.then(() => {
+          throw new Error('SageMaker finished before its request started');
+        }),
+      ]);
+      expect(provider.supportsEmbeddingCancellation).toBe(true);
+      expect(signal.aborted).toBe(false);
+      controller.abort(reason);
+      await expect(request).rejects.toBe(reason);
+      expect(signal.aborted).toBe(true);
+      expect(signal.reason).toBe(reason);
+      expect(send).toHaveBeenCalledOnce();
+    } finally {
+      controller.abort();
+      await Promise.allSettled([request]);
+    }
   });
 
   it('cancels the SageMaker request delay before calling the endpoint', async () => {
