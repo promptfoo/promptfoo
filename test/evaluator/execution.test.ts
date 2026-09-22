@@ -137,15 +137,13 @@ describeEvaluator('evaluator execution control', () => {
         await originalClose.call(this);
         throw new Error('simulated close failure');
       });
-    const shutdownSpy = vi.spyOn(providerRegistry, 'shutdownEvaluation');
-    const shutdownAllSpy = vi.spyOn(providerRegistry, 'shutdownAll');
-    const releaseProvider = vi.fn().mockResolvedValue(undefined);
+    const shutdownSpy = vi.spyOn(providerRegistry, 'shutdownAll').mockResolvedValue();
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
     const provider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
-      callApi: vi.fn().mockImplementation(async () => {
-        providerRegistry.registerScoped({ shutdown: releaseProvider });
-        return { output: 'Test output', tokenUsage: createEmptyTokenUsage() };
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: createEmptyTokenUsage(),
       }),
     };
     const testSuite: TestSuite = {
@@ -159,15 +157,12 @@ describeEvaluator('evaluator execution control', () => {
       // Results persisted, so the close failure is recoverable (the output file is
       // regenerated from the database) — the run still succeeds and cleanup still runs.
       await expect(evaluate(testSuite, evalRecord, {})).resolves.toBeDefined();
-      expect(shutdownSpy).toHaveBeenCalled();
-      expect(releaseProvider).toHaveBeenCalledOnce();
-      expect(shutdownAllSpy).not.toHaveBeenCalled();
+      expect(shutdownSpy).toHaveBeenCalledOnce();
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('simulated close failure'));
     } finally {
       warnSpy.mockRestore();
       closeSpy.mockRestore();
       shutdownSpy.mockRestore();
-      shutdownAllSpy.mockRestore();
       fs.rmSync(outputPath, { force: true });
     }
   });

@@ -137,11 +137,10 @@ export interface ApiProvider extends MinimalApiProvider {
   toJSON?: () => any;
   /**
    * Provider-wide cleanup hook for releasing long-lived resources such as worker
-   * processes, browser sessions, or pooled connections. Evaluation completion passes
-   * its reason so providers can distinguish it from an explicit cleanup request.
+   * processes, browser sessions, or pooled connections at eval shutdown.
    * Request-scoped cancellation should be implemented with `abortSignal`.
    */
-  cleanup?: (reason?: 'evaluation') => void | Promise<void>;
+  cleanup?: () => void | Promise<void>;
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {

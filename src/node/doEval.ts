@@ -1288,10 +1288,15 @@ async function doEvalWithEnv(
       showRedteamProviderLabelMissingWarning(testSuite);
     }
 
-    // Release provider resources after evaluation.
-    for (const provider of testSuite.providers) {
-      if (isApiProvider(provider)) {
-        await provider.cleanup?.('evaluation');
+    // Clean up any WebSocket connections
+    if (testSuite.providers.length > 0) {
+      for (const provider of testSuite.providers) {
+        if (isApiProvider(provider)) {
+          const cleanup = provider?.cleanup?.();
+          if (cleanup instanceof Promise) {
+            await cleanup;
+          }
+        }
       }
     }
 

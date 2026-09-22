@@ -5076,8 +5076,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         }
         await stopOtlpReceiverIfNeeded(otlpReceiverAcquired, this.store.id);
 
-        // Clean up provider resources without interrupting other active evaluations.
-        await providerRegistry.shutdownEvaluation();
+        // Clean up Python worker pools to prevent resource leaks
+        await providerRegistry.shutdownAll();
 
         // Log rate limit metrics for debugging before cleanup
         if (this.rateLimitRegistry) {
@@ -5203,7 +5203,7 @@ export function evaluate<
             options,
             resolvedRuntime,
           );
-          return providerRegistry.withEvaluationScope(() => ev.evaluate());
+          return ev.evaluate();
         },
         testSuite.providers.map((provider) => ({ id: provider.id(), config: provider.config })),
       ),

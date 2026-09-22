@@ -2172,7 +2172,7 @@ describe('evalCommand', () => {
 
     await doEval({}, defaultConfig, defaultConfigPath, {});
 
-    expect(cleanup).toHaveBeenCalledExactlyOnceWith('evaluation');
+    expect(cleanup).toHaveBeenCalledTimes(1);
   });
 
   it('should handle redteam config', async () => {
