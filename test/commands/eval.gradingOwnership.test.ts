@@ -190,6 +190,84 @@ describe('provider cleanup across overlapping evaluations', () => {
     vi.resetAllMocks();
   });
 
+  it('applies the public evaluation deadline when an earlier run is still releasing the same provider', async () => {
+    const cleanupStarted = deferred();
+    const finishCleanup = deferred();
+    let shutdowns = 0;
+    const provider = {
+      id: () => 'public-deadline-provider',
+      callApi: vi.fn(async (prompt: string) => ({ output: prompt })),
+      shutdown: vi.fn(async () => {
+        if (++shutdowns === 1) {
+          cleanupStarted.resolve();
+          await finishCleanup.promise;
+        }
+        providerRegistry.unregister(provider);
+      }),
+    } satisfies ApiProvider & { shutdown(): Promise<void> };
+    vi.mocked(loadApiProviders).mockResolvedValue([provider]);
+    providerRegistry.register(provider);
+    const suite = (prompt: string) => ({
+      providers: [provider],
+      prompts: [prompt],
+      tests: [{ vars: {} }],
+    });
+    const first = evaluateWithSource(suite('first'), { cache: false, showProgressBar: false });
+    let second: Promise<Eval> | undefined;
+    let rejection: Promise<void> | undefined;
+    const useProvider = providerRegistry.useProvider.bind(providerRegistry);
+    const reservation = vi.spyOn(providerRegistry, 'useProvider');
+    let sawDeadline = false;
+    try {
+      await Promise.race([
+        cleanupStarted.promise,
+        first.then(() => {
+          throw new Error('The first evaluation finished without entering provider cleanup');
+        }),
+      ]);
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      reservation.mockImplementation((candidate, signal) => {
+        if (candidate === provider && signal) {
+          sawDeadline = true;
+        }
+        return useProvider(candidate, signal);
+      });
+      second = evaluateWithSource(suite('second'), {
+        cache: false,
+        showProgressBar: false,
+        maxEvalTimeMs: 100,
+      });
+      rejection = expect(second).rejects.toMatchObject({ name: 'AbortError' });
+      void rejection.catch(() => {});
+      for (let turn = 0; turn < 10 && !sawDeadline; turn++) {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
+      expect(sawDeadline).toBe(true);
+      await vi.advanceTimersByTimeAsync(100);
+      await rejection;
+      expect(provider.callApi).toHaveBeenCalledOnce();
+
+      finishCleanup.resolve();
+      await first;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(provider.callApi).toHaveBeenCalledOnce();
+      expect(provider.shutdown).toHaveBeenCalledOnce();
+    } finally {
+      finishCleanup.resolve();
+      if (second && vi.isFakeTimers()) {
+        await vi.advanceTimersByTimeAsync(100);
+      }
+      await Promise.allSettled([
+        first,
+        ...(second ? [second] : []),
+        ...(rejection ? [rejection] : []),
+      ]);
+      reservation.mockRestore();
+      providerRegistry.unregister(provider);
+      vi.useRealTimers();
+    }
+  });
+
   it('makes concurrent grading calls wait for an earlier cleanup, even one that rejects', async () => {
     const cleanupStarted = deferred();
     const finishCleanup = deferred();

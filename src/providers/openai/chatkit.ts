@@ -920,7 +920,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
   async callApi(
     prompt: string,
     _context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // Stateful mode requires sequential processing, so disable pool mode
     const usePool = this.chatKitConfig.usePool && !this.chatKitConfig.stateful;
@@ -934,7 +934,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
 
     // Use pool-based execution for better concurrency (not available in stateful mode)
     if (usePool) {
-      return this.callApiWithPool(prompt);
+      return this.callApiWithPool(prompt, callApiOptions?.abortSignal);
     }
 
     const startTime = Date.now();
@@ -1108,7 +1108,8 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
    * Pool-based callApi for better concurrency support.
    * Uses a shared browser with multiple contexts instead of separate browsers.
    */
-  private async callApiWithPool(prompt: string): Promise<ProviderResponse> {
+  private async callApiWithPool(prompt: string, signal?: AbortSignal): Promise<ProviderResponse> {
+    providerRegistry.throwIfResourceUseAborted(signal);
     const apiKey = this.getApiKey();
     if (!apiKey) {
       return {
@@ -1124,10 +1125,14 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     }
 
     // Get or create the pool
-    const pool = await ChatKitBrowserPool.getInstanceForEvaluation({
-      maxConcurrency: this.chatKitConfig.poolSize,
-      headless: this.chatKitConfig.headless,
-    });
+    const pool = await ChatKitBrowserPool.getInstanceForEvaluation(
+      {
+        maxConcurrency: this.chatKitConfig.poolSize,
+        headless: this.chatKitConfig.headless,
+      },
+      signal,
+    );
+    providerRegistry.throwIfResourceUseAborted(signal);
 
     // Generate a unique template key for this workflow configuration
     // This ensures different workflows get isolated pages in the pool
@@ -1152,6 +1157,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     try {
       // Acquire a page from the pool for this specific template
       pooledPage = await pool.acquirePage(templateKey);
+      providerRegistry.throwIfResourceUseAborted(signal);
       const page = pooledPage.page;
 
       logger.debug('[ChatKitProvider] Acquired page from pool', {
@@ -1230,6 +1236,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
         },
       };
     } catch (error) {
+      providerRegistry.throwIfResourceUseAborted(signal);
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('[ChatKitProvider] Pool call failed', { error: errorMessage });
 

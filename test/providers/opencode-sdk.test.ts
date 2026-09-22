@@ -12,7 +12,7 @@ import {
   FS_READONLY_TOOLS,
   OpenCodeSDKProvider,
 } from '../../src/providers/opencode-sdk';
-import { providerRegistry } from '../../src/providers/providerRegistry';
+import { ProviderRegistry, providerRegistry } from '../../src/providers/providerRegistry';
 import { createDeferred, mockProcessEnv } from '../util/utils';
 import type { MockInstance } from 'vitest';
 
@@ -2430,6 +2430,16 @@ describe('OpenCodeSDKProvider', () => {
       prompt: { raw: 'p', label: 'p', config: { persist_sessions: true, model } },
     });
     const deletedIds = () => mockSessionDelete.mock.calls.map(([params]) => params.sessionID);
+    const isolateProcessRegistry = () => {
+      const registry = new ProviderRegistry(false);
+      vi.spyOn(providerRegistry, 'register').mockImplementation((resource) =>
+        registry.register(resource),
+      );
+      vi.spyOn(providerRegistry, 'unregister').mockImplementation((resource) =>
+        registry.unregister(resource),
+      );
+      return registry;
+    };
 
     beforeEach(() => {
       let created = 0;
@@ -2556,7 +2566,8 @@ describe('OpenCodeSDKProvider', () => {
       expect(mockSessionDelete).not.toHaveBeenCalled();
     });
 
-    it('keeps a repeatedly failing process close available for a subsequent process shutdown', async () => {
+    it('retains a repeatedly failing process close for an explicit retry without spinning', async () => {
+      const registry = isolateProcessRegistry();
       const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
       await provider.callApi('Test prompt', persistent('a'));
       const fail = () => {
@@ -2564,15 +2575,16 @@ describe('OpenCodeSDKProvider', () => {
       };
       mockServerClose.mockImplementationOnce(fail).mockImplementationOnce(fail);
 
-      await providerRegistry.shutdownForProcess();
+      await registry.shutdownForProcess();
       expect(mockServerClose).toHaveBeenCalledTimes(2);
-      await providerRegistry.shutdownForProcess();
-      await providerRegistry.shutdownForProcess();
+      await provider.shutdownForProcess();
+      await provider.shutdownForProcess();
       expect(mockServerClose).toHaveBeenCalledTimes(3);
       expect(mockSessionDelete).not.toHaveBeenCalled();
     });
 
     it('cancels a pending local server startup through the SDK on process shutdown', async () => {
+      const registry = isolateProcessRegistry();
       const started = createDeferred<AbortSignal>();
       mockCreateOpencode.mockImplementationOnce(({ signal }) => {
         started.resolve(signal);
@@ -2585,7 +2597,7 @@ describe('OpenCodeSDKProvider', () => {
       const signal = await started.promise;
       expect(signal.aborted).toBe(false);
 
-      await providerRegistry.shutdownForProcess();
+      await registry.shutdownForProcess();
 
       expect(signal.aborted).toBe(true);
       await expect(call).resolves.toEqual({ error: 'OpenCode SDK call aborted' });
@@ -2593,40 +2605,50 @@ describe('OpenCodeSDKProvider', () => {
       expect(mockServerClose).not.toHaveBeenCalled();
     });
 
-    it('finishes process shutdown promptly and closes a local server that resolves after cancellation', async () => {
-      const lateClose = vi.fn();
-      const lateServer = {
-        client: {
-          session: {
-            create: mockSessionCreate,
-            prompt: mockSessionPrompt,
-            messages: mockSessionMessages,
-            delete: mockSessionDelete,
+    it.each([false, true])(
+      'finishes process shutdown promptly and closes a local server that resolves after cancellation (initial close fails: %s)',
+      async (initialCloseFails) => {
+        const registry = isolateProcessRegistry();
+        const lateClose = vi.fn();
+        if (initialCloseFails) {
+          lateClose.mockImplementationOnce(() => {
+            throw new Error('server still running');
+          });
+        }
+        const lateServer = {
+          client: {
+            session: {
+              create: mockSessionCreate,
+              prompt: mockSessionPrompt,
+              messages: mockSessionMessages,
+              delete: mockSessionDelete,
+            },
           },
-        },
-        server: { url: 'http://late.test', close: lateClose },
-      };
-      const started = createDeferred<AbortSignal>();
-      const startup = createDeferred<typeof lateServer>();
-      mockCreateOpencode.mockImplementationOnce(({ signal }) => {
-        started.resolve(signal);
-        return startup.promise;
-      });
-      const provider = new OpenCodeSDKProvider();
-      const call = provider.callApi('pending');
-      const signal = await started.promise;
+          server: { url: 'http://late.test', close: lateClose },
+        };
+        const started = createDeferred<AbortSignal>();
+        const startup = createDeferred<typeof lateServer>();
+        mockCreateOpencode.mockImplementationOnce(({ signal }) => {
+          started.resolve(signal);
+          return startup.promise;
+        });
+        const provider = new OpenCodeSDKProvider();
+        const call = provider.callApi('pending');
+        const signal = await started.promise;
 
-      await providerRegistry.shutdownForProcess();
-      await expect(call).resolves.toEqual({ error: 'OpenCode SDK call aborted' });
-      expect(signal.aborted).toBe(true);
-      expect(lateClose).not.toHaveBeenCalled();
+        await registry.shutdownForProcess();
+        await expect(call).resolves.toEqual({ error: 'OpenCode SDK call aborted' });
+        expect(signal.aborted).toBe(true);
+        expect(lateClose).not.toHaveBeenCalled();
 
-      startup.resolve(lateServer);
-      await vi.waitFor(() => expect(lateClose).toHaveBeenCalledOnce());
-      await providerRegistry.shutdownForProcess();
-      expect(lateClose).toHaveBeenCalledOnce();
-      expect(mockSessionCreate).not.toHaveBeenCalled();
-    });
+        startup.resolve(lateServer);
+        const expectedCalls = initialCloseFails ? 2 : 1;
+        await vi.waitFor(() => expect(lateClose).toHaveBeenCalledTimes(expectedCalls));
+        await registry.shutdownForProcess();
+        expect(lateClose).toHaveBeenCalledTimes(expectedCalls);
+        expect(mockSessionCreate).not.toHaveBeenCalled();
+      },
+    );
 
     it('forgets only the least recently used lookup and never deletes evicted sessions', async () => {
       const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
@@ -2685,6 +2707,7 @@ describe('OpenCodeSDKProvider', () => {
     ] as const)(
       'waits for server acknowledgement before process shutdown for a %s remote session',
       async (_mode, session, cancelFirst) => {
+        const registry = isolateProcessRegistry();
         const started = createDeferred<void>();
         const prompt = createDeferred<ReturnType<typeof createMockPromptResponse>>();
         const acknowledgement = createDeferred<{ data: true }>();
@@ -2708,7 +2731,7 @@ describe('OpenCodeSDKProvider', () => {
           caller.abort();
         }
         const completed = vi.fn();
-        const shutdown = providerRegistry.shutdownForProcess().then(completed);
+        const shutdown = registry.shutdownForProcess().then(completed);
 
         await expect(call).resolves.toEqual({ error: 'OpenCode SDK call aborted' });
         expect(mockSessionAbort).toHaveBeenCalledOnce();
@@ -2726,6 +2749,7 @@ describe('OpenCodeSDKProvider', () => {
     it.each(['v1', 'v2'] as const)(
       'bounds unacknowledged %s process cancellation with a fresh transport',
       async (apiVersion) => {
+        const registry = isolateProcessRegistry();
         if (apiVersion === 'v1') {
           const { importModule } = await import('../../src/esm');
           vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
@@ -2764,7 +2788,7 @@ describe('OpenCodeSDKProvider', () => {
         vi.useFakeTimers();
         try {
           const completed = vi.fn();
-          const shutdown = providerRegistry.shutdownForProcess().then(completed);
+          const shutdown = registry.shutdownForProcess().then(completed);
           await expect(call).resolves.toEqual({ error: 'OpenCode SDK call aborted' });
           expect(promptSignal?.aborted).toBe(true);
           expect(cleanupSignal?.aborted).toBe(false);
@@ -2782,6 +2806,7 @@ describe('OpenCodeSDKProvider', () => {
     );
 
     it('does not start a remote prompt if process shutdown arrives while creating its session', async () => {
+      const registry = isolateProcessRegistry();
       const started = createDeferred<void>();
       const created = createDeferred<ReturnType<typeof createMockSessionResponse>>();
       mockSessionCreate.mockImplementationOnce(() => {
@@ -2794,7 +2819,7 @@ describe('OpenCodeSDKProvider', () => {
       const call = provider.callApi('pending');
       await started.promise;
 
-      await providerRegistry.shutdownForProcess();
+      await registry.shutdownForProcess();
       created.resolve(createMockSessionResponse('late-session'));
 
       await expect(call).resolves.toEqual({ error: 'OpenCode SDK call aborted before it started' });

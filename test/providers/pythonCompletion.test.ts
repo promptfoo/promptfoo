@@ -1000,6 +1000,43 @@ describe('PythonProvider', () => {
   });
 
   describe('cleanup', () => {
+    it('registers an initializing worker pool and does not restore it after forced shutdown', async () => {
+      let poolStarted!: () => void;
+      const started = new Promise<void>((resolve) => {
+        poolStarted = resolve;
+      });
+      let finishInitialization!: () => void;
+      const poolInitialization = new Promise<void>((resolve) => {
+        finishInitialization = resolve;
+      });
+      mockPoolInstance.initialize.mockImplementationOnce(async () => {
+        poolStarted();
+        await poolInitialization;
+      });
+      const provider = new PythonProvider('script.py', {
+        config: { basePath: process.cwd() },
+      });
+      const shutdown = vi.spyOn(provider, 'shutdown');
+      const initialization = provider.initialize();
+      const rejection = expect(initialization).rejects.toThrow('shut down during initialization');
+      try {
+        await started;
+        await providerRegistry.shutdownAll();
+        expect(shutdown).toHaveBeenCalledOnce();
+        expect(mockPoolInstance.shutdown).toHaveBeenCalled();
+
+        finishInitialization();
+        await rejection;
+        await expect(provider.initialize()).resolves.toBeUndefined();
+        expect(mockPoolInstance.initialize).toHaveBeenCalledTimes(2);
+      } finally {
+        finishInitialization();
+        await Promise.allSettled([initialization]);
+        await provider.shutdown();
+        shutdown.mockRestore();
+      }
+    });
+
     it('should cleanup worker pool on shutdown', async () => {
       const provider = new PythonProvider('script.py', {
         config: { basePath: process.cwd() },

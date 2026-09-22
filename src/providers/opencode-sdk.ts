@@ -1289,7 +1289,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     if (!this.processShutdown) {
       const remoteAborts = [...this.remoteSessionAborts].map((abort) => abort());
       this.processTermination.abort();
-      this.processShutdown = Promise.allSettled([this.shutdown(), ...remoteAborts])
+      const shutdown = Promise.allSettled([this.shutdown(), ...remoteAborts])
         .then(async () => {
           this.remoteSessionAborts.clear();
           if (this.server || this.pendingTempDirs.size) {
@@ -1297,10 +1297,11 @@ export class OpenCodeSDKProvider implements ApiProvider {
           }
         })
         .finally(() => {
-          if (this.server || this.pendingTempDirs.size) {
+          if (this.processShutdown === shutdown && (this.server || this.pendingTempDirs.size)) {
             this.processShutdown = undefined;
           }
         });
+      this.processShutdown = shutdown;
     }
     return this.processShutdown;
   }
@@ -1313,10 +1314,13 @@ export class OpenCodeSDKProvider implements ApiProvider {
       this.client = undefined;
     }
     await Promise.all([...this.pendingTempDirs].map((dir) => this.removeTempDir(dir)));
+    this.updateRegistry();
+  }
+
+  private updateRegistry(): void {
     if (
-      this.server ||
-      this.pendingTempDirs.size ||
-      (this.activeRemoteCalls > 0 && !this.processTermination.signal.aborted)
+      !this.processTermination.signal.aborted &&
+      (this.server || this.pendingTempDirs.size || this.activeRemoteCalls > 0)
     ) {
       providerRegistry.register(this);
     } else {
@@ -1931,6 +1935,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
           if (signal.aborted) {
             this.closeLocalServer();
             if (this.server) {
+              this.processShutdown = undefined;
               providerRegistry.register(this);
             }
             signal.throwIfAborted();
@@ -2669,12 +2674,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
       if (isTempDir && workingDir) {
         await this.removeTempDir(workingDir);
       }
-      if (remoteStateful && --this.activeRemoteCalls === 0 && !this.server) {
-        if (this.pendingTempDirs.size) {
-          providerRegistry.register(this);
-        } else {
-          providerRegistry.unregister(this);
-        }
+      if (remoteStateful && --this.activeRemoteCalls === 0) {
+        this.updateRegistry();
       }
     }
   }

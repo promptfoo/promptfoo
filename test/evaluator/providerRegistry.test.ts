@@ -6,7 +6,7 @@ import { expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { MCPProvider } from '../../src/providers/mcp';
-import { providerRegistry } from '../../src/providers/providerRegistry';
+import { ProviderRegistry, providerRegistry } from '../../src/providers/providerRegistry';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
@@ -19,6 +19,260 @@ function deferred() {
   });
   return { promise, resolve };
 }
+
+it('drains an active call that registers a resource after process shutdown starts', async () => {
+  const registry = new ProviderRegistry(false);
+  const callStarted = deferred();
+  const finishInitialization = deferred();
+  const resourceClosing = deferred();
+  const finishResourceClose = deferred();
+  const finishCall = deferred();
+  const provider = { id: () => 'late-process-registration' };
+  const resource = {
+    shutdown: vi.fn(async () => {
+      resourceClosing.resolve();
+      await finishResourceClose.promise;
+    }),
+  };
+  let physical: Promise<void> | undefined;
+  const evaluation = registry.withEvaluation(async () => {
+    physical = registry.withProvider(provider, async () => {
+      callStarted.resolve();
+      await finishInitialization.promise;
+      registry.register(resource);
+      await finishCall.promise;
+    });
+    await callStarted.promise;
+  });
+  const shutdownFinished = vi.fn();
+  let shuttingDown: Promise<void> | undefined;
+  try {
+    await evaluation;
+    shuttingDown = registry.shutdownForProcess().then(shutdownFinished);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(shutdownFinished).not.toHaveBeenCalled();
+
+    finishInitialization.resolve();
+    await resourceClosing.promise;
+    expect(resource.shutdown).toHaveBeenCalledOnce();
+    expect(shutdownFinished).not.toHaveBeenCalled();
+    finishResourceClose.resolve();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(shutdownFinished).not.toHaveBeenCalled();
+
+    finishCall.resolve();
+    await Promise.all([physical, shuttingDown]);
+    expect(shutdownFinished).toHaveBeenCalledOnce();
+    expect(resource.shutdown).toHaveBeenCalledOnce();
+  } finally {
+    finishInitialization.resolve();
+    finishResourceClose.resolve();
+    finishCall.resolve();
+    await Promise.allSettled([
+      evaluation,
+      ...(physical ? [physical] : []),
+      ...(shuttingDown ? [shuttingDown] : []),
+    ]);
+  }
+});
+
+it('closes registrations after an empty process shutdown and preserves a later re-registration', async () => {
+  const registry = new ProviderRegistry(false);
+  const firstClose = deferred();
+  const finishFirstClose = deferred();
+  let shutdowns = 0;
+  const resource = {
+    shutdown: vi.fn(async () => {
+      if (++shutdowns === 1) {
+        firstClose.resolve();
+        await finishFirstClose.promise;
+      }
+      registry.unregister(resource);
+    }),
+  };
+  const run = vi.fn(async () => {});
+  await registry.shutdownForProcess();
+  try {
+    registry.register(resource);
+    await firstClose.promise;
+    registry.register(resource);
+    const draining = registry.shutdownForProcess();
+    finishFirstClose.resolve();
+    await draining;
+    expect(resource.shutdown).toHaveBeenCalledTimes(2);
+
+    await expect(registry.withEvaluation(run)).rejects.toMatchObject({ name: 'AbortError' });
+    await expect(registry.withProvider({ id: () => 'new-call' }, run)).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+    expect(run).not.toHaveBeenCalled();
+  } finally {
+    finishFirstClose.resolve();
+    await registry.shutdownForProcess();
+  }
+});
+
+it('forces CLI-owned cleanup-only providers while their calls are active without cleaning borrowed providers', async () => {
+  const registry = new ProviderRegistry(false);
+  const idle = { id: () => 'already-cleaned-cli-provider', cleanup: vi.fn() };
+  await registry.withEvaluation(() => registry.cleanupWhenIdle([idle]));
+  expect(idle.cleanup).toHaveBeenCalledOnce();
+
+  const callsStarted = deferred();
+  const finishCalls = deferred();
+  const cleanupStarted = deferred();
+  const finishCleanup = deferred();
+  const owned = {
+    id: () => 'cleanup-only-cli-provider',
+    cleanup: vi.fn(async () => {
+      cleanupStarted.resolve();
+      await finishCleanup.promise;
+    }),
+  };
+  const borrowed = { id: () => 'borrowed-provider', cleanup: vi.fn() };
+  let started = 0;
+  const run = async () => {
+    if (++started === 2) {
+      callsStarted.resolve();
+    }
+    await finishCalls.promise;
+  };
+  const physical: Promise<void>[] = [];
+  const evaluation = registry.withEvaluation(async () => {
+    await registry.cleanupWhenIdle([owned]);
+    physical.push(registry.withProvider(owned, run), registry.withProvider(borrowed, run));
+    await callsStarted.promise;
+  });
+  let shuttingDown: Promise<void> | undefined;
+  const shutdownFinished = vi.fn();
+  try {
+    await evaluation;
+    expect(owned.cleanup).not.toHaveBeenCalled();
+    shuttingDown = registry.shutdownForProcess().then(shutdownFinished);
+    await cleanupStarted.promise;
+    expect(owned.cleanup).toHaveBeenCalledExactlyOnceWith();
+    expect(borrowed.cleanup).not.toHaveBeenCalled();
+    expect(idle.cleanup).toHaveBeenCalledOnce();
+    expect(shutdownFinished).not.toHaveBeenCalled();
+
+    finishCleanup.resolve();
+    finishCalls.resolve();
+    await Promise.all([...physical, shuttingDown]);
+    expect(owned.cleanup).toHaveBeenCalledOnce();
+    expect(borrowed.cleanup).not.toHaveBeenCalled();
+    expect(idle.cleanup).toHaveBeenCalledOnce();
+  } finally {
+    finishCleanup.resolve();
+    finishCalls.resolve();
+    await Promise.allSettled([evaluation, ...physical, ...(shuttingDown ? [shuttingDown] : [])]);
+  }
+});
+
+it('starts an owned provider’s explicit process cleanup even when its separate idle hook is blocked', async () => {
+  const registry = new ProviderRegistry(false);
+  const idleStarted = deferred();
+  const finishIdle = deferred();
+  const provider = {
+    id: () => 'distinct-owned-cleanups',
+    cleanupAfterEvaluation: vi.fn(async () => {
+      idleStarted.resolve();
+      await finishIdle.promise;
+    }),
+    cleanup: vi.fn(async () => {}),
+  };
+  const evaluation = registry.withEvaluation(() => registry.cleanupWhenIdle([provider]));
+  try {
+    await idleStarted.promise;
+    await registry.shutdownForProcess();
+    expect(provider.cleanup).toHaveBeenCalledExactlyOnceWith();
+    expect(provider.cleanupAfterEvaluation).toHaveBeenCalledOnce();
+    finishIdle.resolve();
+    await evaluation;
+    expect(provider.cleanup).toHaveBeenCalledOnce();
+  } finally {
+    finishIdle.resolve();
+    await Promise.allSettled([evaluation]);
+  }
+});
+
+it('keeps a standalone provider and resources it opens alive when a concurrent evaluation finishes', async () => {
+  const registry = new ProviderRegistry(false);
+  const started = deferred();
+  const finish = deferred();
+  const resource = { shutdown: vi.fn(async () => {}) };
+  const provider = {
+    id: () => 'standalone-self-registered-provider',
+    shutdown: vi.fn(async () => {}),
+  };
+  registry.register(provider);
+  const standalone = registry.withProvider(provider, async () => {
+    registry.register(resource);
+    started.resolve();
+    await finish.promise;
+  });
+  try {
+    await started.promise;
+    await registry.withEvaluation(() => registry.withProvider(provider, async () => {}));
+    expect(provider.shutdown).not.toHaveBeenCalled();
+    expect(resource.shutdown).not.toHaveBeenCalled();
+
+    finish.resolve();
+    await standalone;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(provider.shutdown).toHaveBeenCalledOnce();
+    expect(resource.shutdown).toHaveBeenCalledOnce();
+  } finally {
+    finish.resolve();
+    await Promise.allSettled([standalone]);
+    await registry.shutdownAll();
+  }
+});
+
+it('waits for earlier provider cleanup in standalone calls and cancels one waiter independently', async () => {
+  const registry = new ProviderRegistry(false);
+  const started = deferred();
+  const finish = deferred();
+  const provider = {
+    id: () => 'standalone-waits-for-evaluation',
+    shutdown: vi.fn(async () => {
+      if (provider.shutdown.mock.calls.length === 1) {
+        started.resolve();
+        await finish.promise;
+      }
+    }),
+  };
+  registry.register(provider);
+  const earlier = registry.withEvaluation(() => registry.withProvider(provider, async () => {}));
+  const controller = new AbortController();
+  const reason = new Error('cancel one standalone call');
+  const cancelledRun = vi.fn(async () => {});
+  const liveRun = vi.fn(async () => {});
+  let cancelled: Promise<void> | undefined;
+  let live: Promise<void> | undefined;
+  try {
+    await started.promise;
+    cancelled = registry.withProvider(provider, cancelledRun, controller.signal);
+    const rejected = expect(cancelled).rejects.toBe(reason);
+    const setup = registry.useProvider(provider, controller.signal);
+    const rejectedSetup = expect(setup).rejects.toBe(reason);
+    live = registry.withProvider(provider, liveRun);
+    controller.abort(reason);
+    await Promise.all([rejected, rejectedSetup]);
+    expect(cancelledRun).not.toHaveBeenCalled();
+    expect(liveRun).not.toHaveBeenCalled();
+
+    finish.resolve();
+    await Promise.all([earlier, live]);
+    expect(liveRun).toHaveBeenCalledOnce();
+    expect(cancelledRun).not.toHaveBeenCalled();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(provider.shutdown).toHaveBeenCalledTimes(2);
+  } finally {
+    finish.resolve();
+    await Promise.allSettled([earlier, ...(cancelled ? [cancelled] : []), ...(live ? [live] : [])]);
+    await registry.shutdownAll();
+  }
+});
 
 describeEvaluator('registered resources across overlapping evaluations', () => {
   it('waits for a shared resource release without delaying an unrelated evaluation', async () => {
@@ -56,6 +310,85 @@ describeEvaluator('registered resources across overlapping evaluations', () => {
       providerRegistry.unregister(registered);
     }
   });
+
+  it.each(['provider call', 'resource reservation'] as const)(
+    'abandons a pending shared resource on %s cancellation without interrupting a sibling',
+    async (signalSource) => {
+      const registry = new ProviderRegistry(false);
+      const shutdownStarted = deferred();
+      const finishShutdown = deferred();
+      const waiting = deferred();
+      const siblingWaiting = deferred();
+      const finishEvaluation = deferred();
+      const resource = {
+        shutdown: vi.fn(async () => {
+          shutdownStarted.resolve();
+          await finishShutdown.promise;
+        }),
+      };
+      const controller = new AbortController();
+      const reason = new Error('evaluation step expired');
+      const abandoned = vi.fn();
+      const sibling = vi.fn();
+      const first = registry.withEvaluation(async () => registry.register(resource));
+      let physical: Promise<void> | undefined;
+      let unaffected: Promise<void> | undefined;
+      let later: Promise<void> | undefined;
+      try {
+        await shutdownStarted.promise;
+        later = registry.withEvaluation(async () => {
+          physical = registry.withProvider(
+            { id: () => 'cancelled-shared-resource-user' },
+            async () => {
+              const ready = registry.useResource(
+                resource,
+                signalSource === 'resource reservation' ? controller.signal : undefined,
+              );
+              waiting.resolve();
+              await ready;
+              registry.throwIfResourceUseAborted();
+              abandoned();
+            },
+            signalSource === 'provider call' ? controller.signal : undefined,
+          );
+          void physical.catch(() => {});
+          unaffected = registry.withProvider(
+            { id: () => 'other-shared-resource-user' },
+            async () => {
+              const ready = registry.useResource(resource);
+              siblingWaiting.resolve();
+              await ready;
+              sibling();
+            },
+          );
+          void unaffected.catch(() => {});
+          await finishEvaluation.promise;
+        });
+        await Promise.all([waiting.promise, siblingWaiting.promise]);
+        controller.abort(reason);
+        await expect(physical).rejects.toBe(reason);
+        expect(abandoned).not.toHaveBeenCalled();
+        expect(sibling).not.toHaveBeenCalled();
+
+        finishShutdown.resolve();
+        await Promise.all([first, unaffected]);
+        expect(abandoned).not.toHaveBeenCalled();
+        expect(sibling).toHaveBeenCalledOnce();
+        finishEvaluation.resolve();
+        await later;
+        expect(resource.shutdown).toHaveBeenCalledOnce();
+      } finally {
+        finishShutdown.resolve();
+        finishEvaluation.resolve();
+        await Promise.allSettled([
+          first,
+          ...(later ? [later] : []),
+          ...(physical ? [physical] : []),
+          ...(unaffected ? [unaffected] : []),
+        ]);
+      }
+    },
+  );
 
   it('blocks only the reused provider while its cleanup is still running, even after a minute', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
@@ -203,6 +536,84 @@ describeEvaluator('registered resources across overlapping evaluations', () => {
     }
   });
 
+  it('starts the global evaluation timeout before waiting for an earlier provider cleanup', async () => {
+    const cleanupStarted = deferred();
+    const releaseCleanup = deferred();
+    const provider = {
+      id: () => 'globally-timed-out-provider-setup',
+      callApi: vi.fn(async () => ({ output: 'should not start' })),
+      cleanupAfterEvaluation: vi.fn(async () => {
+        cleanupStarted.resolve();
+        await releaseCleanup.promise;
+      }),
+    } satisfies ApiProvider;
+    const suite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('ping')],
+      tests: [{}],
+    };
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    const preceding = providerRegistry.withEvaluation(() =>
+      providerRegistry.cleanupWhenIdle([provider]),
+    );
+    let evaluation: Promise<Eval> | undefined;
+    try {
+      await cleanupStarted.promise;
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      evaluation = evaluate(suite, record, { maxEvalTimeMs: 100 });
+      const rejection = expect(evaluation).rejects.toMatchObject({ name: 'AbortError' });
+
+      await vi.advanceTimersByTimeAsync(100);
+      await rejection;
+      expect(provider.callApi).not.toHaveBeenCalled();
+
+      releaseCleanup.resolve();
+      await preceding;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(provider.callApi).not.toHaveBeenCalled();
+    } finally {
+      releaseCleanup.resolve();
+      await Promise.allSettled([preceding, ...(evaluation ? [evaluation] : [])]);
+      vi.useRealTimers();
+    }
+  });
+
+  it('records CLI cleanup ownership without blocking setup on an earlier teardown', async () => {
+    const cleanupStarted = deferred();
+    const releaseCleanup = deferred();
+    const claimed = deferred();
+    const provider = {
+      id: () => 'cli-setup-with-pending-cleanup',
+      cleanupAfterEvaluation: vi.fn(async () => {
+        cleanupStarted.resolve();
+        await releaseCleanup.promise;
+      }),
+    };
+    const run = vi.fn(async () => {});
+    const preceding = providerRegistry.withEvaluation(() =>
+      providerRegistry.cleanupWhenIdle([provider]),
+    );
+    let next: Promise<void> | undefined;
+    try {
+      await cleanupStarted.promise;
+      next = providerRegistry.withEvaluation(async () => {
+        await providerRegistry.cleanupWhenIdle([provider]);
+        claimed.resolve();
+        await providerRegistry.withProvider(provider, run);
+      });
+      await claimed.promise;
+      expect(run).not.toHaveBeenCalled();
+
+      releaseCleanup.resolve();
+      await Promise.all([preceding, next]);
+      expect(run).toHaveBeenCalledOnce();
+      expect(provider.cleanupAfterEvaluation).toHaveBeenCalledTimes(2);
+    } finally {
+      releaseCleanup.resolve();
+      await Promise.allSettled([preceding, ...(next ? [next] : [])]);
+    }
+  });
+
   it('keeps cleanup with the target behind an evaluation wrapper until its cancelled call drains', async () => {
     const entered = deferred();
     const finish = deferred();
@@ -296,12 +707,189 @@ describeEvaluator('registered resources across overlapping evaluations', () => {
     expect(resource.shutdown).toHaveBeenCalledOnce();
   });
 
+  it('only calls registered CLI cleanup through shutdown when shutdown delegates to it', async () => {
+    const provider = {
+      id: () => 'self-registered-cli-provider',
+      cleanup: vi.fn(async () => {}),
+      shutdown: vi.fn(async () => {
+        await provider.cleanup();
+        providerRegistry.unregister(provider);
+      }),
+    };
+    providerRegistry.register(provider);
+    try {
+      await providerRegistry.withEvaluation(async () => {
+        await providerRegistry.cleanupWhenIdle([provider]);
+        await providerRegistry.withProvider(provider, async () => {});
+      });
+      expect(provider.shutdown).toHaveBeenCalledOnce();
+      expect(provider.cleanup).toHaveBeenCalledExactlyOnceWith();
+    } finally {
+      providerRegistry.unregister(provider);
+    }
+  });
+
+  it('runs only an explicit idle cleanup hook for a registered CLI provider', async () => {
+    const provider = {
+      id: () => 'self-registered-cli-provider-with-idle-cleanup',
+      cleanup: vi.fn(),
+      cleanupAfterEvaluation: vi.fn(),
+      shutdown: vi.fn(async () => {}),
+    };
+    providerRegistry.register(provider);
+    try {
+      await providerRegistry.withEvaluation(async () => {
+        await providerRegistry.cleanupWhenIdle([provider]);
+        await providerRegistry.withProvider(provider, async () => {});
+      });
+      expect(provider.cleanupAfterEvaluation).toHaveBeenCalledExactlyOnceWith({
+        reason: 'evaluation-complete',
+      });
+      expect(provider.shutdown).not.toHaveBeenCalled();
+      expect(provider.cleanup).not.toHaveBeenCalled();
+      await providerRegistry.shutdownAll();
+      expect(provider.shutdown).toHaveBeenCalledOnce();
+      expect(provider.cleanupAfterEvaluation).toHaveBeenCalledOnce();
+    } finally {
+      providerRegistry.unregister(provider);
+    }
+  });
+
+  it('tracks each sequential programmatic evaluation of a provider that registered only once', async () => {
+    let open = false;
+    const provider = {
+      id: () => 'constructor-registered-reused-provider',
+      callApi: vi.fn(async (prompt: string) => {
+        open = true;
+        return { output: prompt };
+      }),
+      shutdown: vi.fn(async () => {
+        open = false;
+        providerRegistry.unregister(provider);
+      }),
+    } satisfies ApiProvider & { shutdown(): Promise<void> };
+    providerRegistry.register(provider);
+    try {
+      for (const [index, prompt] of ['first', 'second'].entries()) {
+        const suite = { providers: [provider], prompts: [toPrompt(prompt)], tests: [{}] };
+        const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+        const completed = await evaluate(suite, record, {});
+        expect(await completed.getResults()).toEqual([
+          expect.objectContaining({
+            success: true,
+            response: expect.objectContaining({ output: prompt }),
+          }),
+        ]);
+        expect(provider.callApi).toHaveBeenCalledTimes(index + 1);
+        expect(provider.shutdown).toHaveBeenCalledTimes(index + 1);
+        expect(open).toBe(false);
+      }
+    } finally {
+      providerRegistry.unregister(provider);
+    }
+  });
+
+  it('waits for an old shutdown before restoring a reused provider for process shutdown', async () => {
+    const shutdownStarted = deferred();
+    const releaseShutdown = deferred();
+    const secondStarted = deferred();
+    const releaseSecond = deferred();
+    const cleanup = vi.fn(async () => {});
+    const provider = {
+      id: () => 'constructor-registered-provider-with-pending-shutdown',
+      cleanup,
+      shutdown: vi.fn(async () => {
+        if (provider.shutdown.mock.calls.length === 1) {
+          shutdownStarted.resolve();
+          await releaseShutdown.promise;
+        }
+        await cleanup();
+        providerRegistry.unregister(provider);
+      }),
+    };
+    providerRegistry.register(provider);
+    const first = providerRegistry.withEvaluation(() =>
+      providerRegistry.withProvider(provider, async () => {}),
+    );
+    const secondRun = vi.fn(async () => {
+      secondStarted.resolve();
+      await releaseSecond.promise;
+    });
+    let second: Promise<void> | undefined;
+    try {
+      await shutdownStarted.promise;
+      second = providerRegistry.withEvaluation(async () => {
+        await providerRegistry.cleanupWhenIdle([provider]);
+        await providerRegistry.withProvider(provider, secondRun);
+      });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(secondRun).not.toHaveBeenCalled();
+
+      releaseShutdown.resolve();
+      await Promise.all([first, secondStarted.promise]);
+      expect(provider.shutdown).toHaveBeenCalledOnce();
+      expect(cleanup).toHaveBeenCalledOnce();
+
+      await providerRegistry.shutdownAll();
+      expect(provider.shutdown).toHaveBeenCalledTimes(2);
+      expect(cleanup).toHaveBeenCalledTimes(2);
+      releaseSecond.resolve();
+      await second;
+      expect(cleanup).toHaveBeenCalledTimes(2);
+    } finally {
+      releaseShutdown.resolve();
+      releaseSecond.resolve();
+      await Promise.allSettled([first, ...(second ? [second] : [])]);
+      providerRegistry.unregister(provider);
+    }
+  });
+
+  it('does not restore a reused provider after its queued call has been cancelled', async () => {
+    const shutdownStarted = deferred();
+    const releaseShutdown = deferred();
+    const provider = {
+      id: () => 'constructor-registered-cancelled-provider',
+      shutdown: vi.fn(async () => {
+        shutdownStarted.resolve();
+        await releaseShutdown.promise;
+        providerRegistry.unregister(provider);
+      }),
+    };
+    const controller = new AbortController();
+    const reason = new Error('cancel queued reuse');
+    const run = vi.fn(async () => {});
+    providerRegistry.register(provider);
+    const first = providerRegistry.withEvaluation(() =>
+      providerRegistry.withProvider(provider, async () => {}),
+    );
+    let queued: Promise<void> | undefined;
+    try {
+      await shutdownStarted.promise;
+      queued = providerRegistry.withEvaluation(() =>
+        providerRegistry.withProvider(provider, run, controller.signal),
+      );
+      const rejection = expect(queued).rejects.toBe(reason);
+      controller.abort(reason);
+      await rejection;
+      expect(run).not.toHaveBeenCalled();
+
+      releaseShutdown.resolve();
+      await first;
+      await providerRegistry.shutdownAll();
+      expect(provider.shutdown).toHaveBeenCalledOnce();
+    } finally {
+      releaseShutdown.resolve();
+      await Promise.allSettled([first, ...(queued ? [queued] : [])]);
+      providerRegistry.unregister(provider);
+    }
+  });
+
   it('directly closes a pending registered resource on process shutdown while its provider cleanup is held', async () => {
     const cleanupStarted = deferred();
     const releaseCleanup = deferred();
     const provider = {
       id: () => 'shutdown-during-cleanup',
-      cleanup: vi.fn(async () => {
+      cleanupAfterEvaluation: vi.fn(async () => {
         cleanupStarted.resolve();
         await releaseCleanup.promise;
       }),
@@ -407,12 +995,11 @@ describeEvaluator('registered resources across overlapping evaluations', () => {
     },
   );
 
-  it('waits for an earlier resource shutdown when the physical caller outlives its evaluation', async () => {
+  it('does not start using an earlier shared resource after the physical caller’s evaluation ends', async () => {
     const shutdownStarted = deferred();
     const releaseShutdown = deferred();
     const startUse = deferred();
     const using = deferred();
-    const finish = deferred();
     const resource = {
       shutdown: vi.fn(async () => {
         shutdownStarted.resolve();
@@ -432,7 +1019,6 @@ describeEvaluator('registered resources across overlapping evaluations', () => {
         await providerRegistry.useResource(resource);
         touched();
         providerRegistry.register(resource);
-        await finish.promise;
       });
       void physical.catch(() => {});
     });
@@ -440,23 +1026,16 @@ describeEvaluator('registered resources across overlapping evaluations', () => {
       await Promise.all([shutdownStarted.promise, evaluation]);
       startUse.resolve();
       await using.promise;
-      await new Promise<void>((resolve) => setImmediate(resolve));
+      await expect(physical).rejects.toMatchObject({ name: 'AbortError' });
       expect(touched).not.toHaveBeenCalled();
 
       releaseShutdown.resolve();
       await earlier;
-      await new Promise<void>((resolve) => setImmediate(resolve));
-      expect(touched).toHaveBeenCalledOnce();
+      expect(touched).not.toHaveBeenCalled();
       expect(resource.shutdown).toHaveBeenCalledOnce();
-
-      finish.resolve();
-      await physical;
-      await new Promise<void>((resolve) => setImmediate(resolve));
-      expect(resource.shutdown).toHaveBeenCalledTimes(2);
     } finally {
       startUse.resolve();
       releaseShutdown.resolve();
-      finish.resolve();
       await Promise.allSettled([earlier, evaluation, ...(physical ? [physical] : [])]);
       providerRegistry.unregister(resource);
     }
@@ -530,69 +1109,29 @@ describeEvaluator('registered resources across overlapping evaluations', () => {
   });
 
   it('uses the process-specific shutdown hook only for providers that opt in', async () => {
+    const registry = new ProviderRegistry(false);
+    const ordinaryRegistry = new ProviderRegistry(false);
     const legacy = { shutdown: vi.fn(async () => {}) };
     const aware = {
       shutdown: vi.fn(async () => {}),
       shutdownForProcess: vi.fn(async () => {}),
     };
-    providerRegistry.register(legacy);
-    providerRegistry.register(aware);
+    registry.register(legacy);
+    registry.register(aware);
 
-    await providerRegistry.shutdownForProcess();
+    await registry.shutdownForProcess();
 
     expect(legacy.shutdown).toHaveBeenCalledExactlyOnceWith();
     expect(aware.shutdownForProcess).toHaveBeenCalledExactlyOnceWith();
     expect(aware.shutdown).not.toHaveBeenCalled();
-    providerRegistry.register(aware);
-    await providerRegistry.shutdownAll();
+    ordinaryRegistry.register(aware);
+    await ordinaryRegistry.shutdownAll();
     expect(aware.shutdown).toHaveBeenCalledExactlyOnceWith();
     expect(aware.shutdownForProcess).toHaveBeenCalledOnce();
   });
 
-  it('starts resources registered by a process shutdown hook without waiting for that hook to finish', async () => {
-    const nestedStarted = deferred();
-    const releaseRoot = deferred();
-    const leaf = {
-      shutdown: vi.fn(async () => {
-        nestedStarted.resolve();
-      }),
-    };
-    const child = {
-      shutdown: vi.fn(async () => {}),
-      shutdownForProcess: vi.fn(async () => {
-        providerRegistry.register(leaf);
-      }),
-    };
-    const root = {
-      shutdown: vi.fn(async () => {}),
-      shutdownForProcess: vi.fn(async () => {
-        providerRegistry.register(root);
-        providerRegistry.register(child);
-        await releaseRoot.promise;
-      }),
-    };
-    providerRegistry.register(root);
-    const completed = vi.fn();
-    const pending = providerRegistry.shutdownForProcess().then(completed);
-    try {
-      await nestedStarted.promise;
-      expect(root.shutdownForProcess).toHaveBeenCalledOnce();
-      expect(child.shutdownForProcess).toHaveBeenCalledOnce();
-      expect(leaf.shutdown).toHaveBeenCalledOnce();
-      expect(completed).not.toHaveBeenCalled();
-      expect(root.shutdown).not.toHaveBeenCalled();
-      expect(child.shutdown).not.toHaveBeenCalled();
-    } finally {
-      releaseRoot.resolve();
-      await pending;
-      for (const resource of [root, child, leaf]) {
-        providerRegistry.unregister(resource);
-      }
-    }
-    expect(completed).toHaveBeenCalledOnce();
-  });
-
   it('escalates an already-running ordinary release without waiting for it', async () => {
+    const registry = new ProviderRegistry(false);
     const started = deferred();
     const complete = deferred();
     const resource = {
@@ -602,11 +1141,11 @@ describeEvaluator('registered resources across overlapping evaluations', () => {
       }),
       shutdownForProcess: vi.fn(async () => {}),
     };
-    providerRegistry.register(resource);
-    const ordinary = providerRegistry.shutdownAll();
+    registry.register(resource);
+    const ordinary = registry.shutdownAll();
     await started.promise;
     try {
-      await providerRegistry.shutdownForProcess();
+      await registry.shutdownForProcess();
       expect(resource.shutdownForProcess).toHaveBeenCalledExactlyOnceWith();
       expect(resource.shutdown).toHaveBeenCalledOnce();
     } finally {
