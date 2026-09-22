@@ -293,18 +293,87 @@ function captureSharedFiles(environment: Record<string, string | undefined>): Sh
   };
 }
 
-function captureSharedFileState(files: SharedFileInputs) {
+const STATIC_CREDENTIAL_FILE_RUNTIME_KEYS = new Set([
+  'defaults_mode',
+  'endpoint_url',
+  'services',
+  'ignore_configured_endpoint_urls',
+  'use_fips_endpoint',
+  'use_dualstack_endpoint',
+]);
+
+// Smithy falls back to these flat fields in the credentials file when its preferred config
+// profile does not define them. Static authentication never uses the credential fields.
+function credentialFileRuntimeFingerprint(contents: string, selectedProfile: string): string {
+  const values = new Map<string, string>();
+  let profile: string | undefined;
+  let subsection: string | undefined;
+  for (const original of contents.split(/\r?\n/)) {
+    const line = original.split(/(^|\s)[;#]/, 1)[0].trim();
+    if (line.startsWith('[') && line.endsWith(']')) {
+      const section = line.slice(1, -1);
+      if (section === '__proto__' || section === 'profile __proto__') {
+        values.clear();
+        break;
+      }
+      const prefixed = /^([\w-]+)\s(["'])?([\w@+.%:/-]+)\2$/.exec(section);
+      profile = prefixed
+        ? ['profile', 'sso-session', 'services'].includes(prefixed[1])
+          ? `${prefixed[1]}.${prefixed[3]}`
+          : undefined
+        : section;
+      subsection = undefined;
+      continue;
+    }
+    if (profile !== selectedProfile) {
+      continue;
+    }
+    const separator = line.indexOf('=');
+    if (separator <= 0) {
+      continue;
+    }
+    const key = line.slice(0, separator).trim();
+    const value = line.slice(separator + 1).trim();
+    if (!value) {
+      subsection = key;
+      continue;
+    }
+    if (subsection && original.trimStart() === original) {
+      subsection = undefined;
+    }
+    if (!subsection && STATIC_CREDENTIAL_FILE_RUNTIME_KEYS.has(key)) {
+      values.set(key, value);
+    }
+  }
+  const selected = [...values].sort(([left], [right]) =>
+    left < right ? -1 : left > right ? 1 : 0,
+  );
+  return crypto.hash('sha256', JSON.stringify(selected), 'hex');
+}
+
+function captureSharedFileState(
+  files: SharedFileInputs,
+  runtimeProfileForStaticCredentials?: string,
+) {
   let hasCredentialProcess = false;
-  const fingerprint = (filename: string) => {
+  const fingerprint = (filename: string, runtimeProfile?: string) => {
     try {
       const contents = readFileSync(filename);
       hasCredentialProcess ||= /^\s*credential_process\s*=/im.test(contents.toString('utf8'));
-      return crypto.hash('sha256', contents, 'hex');
+      return runtimeProfile === undefined
+        ? crypto.hash('sha256', contents, 'hex')
+        : credentialFileRuntimeFingerprint(contents.toString('utf8'), runtimeProfile);
     } catch (error) {
+      if (runtimeProfile !== undefined) {
+        return credentialFileRuntimeFingerprint('', runtimeProfile);
+      }
       return (error as NodeJS.ErrnoException).code ?? 'unreadable';
     }
   };
-  const fingerprints = [fingerprint(files.filepath), fingerprint(files.configFilepath)];
+  const fingerprints = [
+    fingerprint(files.filepath, runtimeProfileForStaticCredentials),
+    fingerprint(files.configFilepath),
+  ];
   return { fingerprint: fingerprints.join(':'), hasCredentialProcess };
 }
 
@@ -944,7 +1013,10 @@ abstract class SageMakerGenericProvider {
           environment.AWS_SECRET_ACCESS_KEY),
     );
     const files = captureSharedFiles(environment);
-    const sharedFiles = captureSharedFileState(files);
+    const runtimeProfileForStaticCredentials = hasStaticCredentials
+      ? environment.AWS_PROFILE || 'default'
+      : undefined;
+    const sharedFiles = captureSharedFileState(files, runtimeProfileForStaticCredentials);
     const processEnvironment = hasStaticCredentials
       ? undefined
       : hashCredentialProcessEnvironment();
@@ -964,6 +1036,7 @@ abstract class SageMakerGenericProvider {
       environment,
       files,
       filesFingerprint: sharedFiles.fingerprint,
+      runtimeProfileForStaticCredentials,
       hasCredentialProcess: sharedFiles.hasCredentialProcess,
       maxAttempts: getEnvInt('AWS_SAGEMAKER_MAX_RETRIES', 3),
       processEnvironment,
@@ -973,7 +1046,10 @@ abstract class SageMakerGenericProvider {
   protected assertSharedFiles(
     inputs: ReturnType<SageMakerGenericProvider['captureRuntimeInputs']>,
   ): void {
-    if (captureSharedFileState(inputs.files).fingerprint !== inputs.filesFingerprint) {
+    if (
+      captureSharedFileState(inputs.files, inputs.runtimeProfileForStaticCredentials)
+        .fingerprint !== inputs.filesFingerprint
+    ) {
       throw new Error(
         'SageMaker shared AWS profile files changed during initialization; retry with stable inputs',
       );

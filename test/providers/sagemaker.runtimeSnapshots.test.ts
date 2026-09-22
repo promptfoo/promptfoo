@@ -233,6 +233,82 @@ describe('SageMaker initialization policy snapshot', () => {
       },
     );
 
+    it.each([
+      ['configured', 'credentials only'],
+      ['configured', 'runtime endpoint'],
+      ['environment', 'credentials only'],
+      ['environment', 'runtime endpoint'],
+    ] as const)(
+      'isolates %s static authentication from a %s edit during a transform',
+      async (source, change) => {
+        vi.stubEnv('AWS_PROFILE', undefined);
+        vi.stubEnv('AWS_ACCESS_KEY_ID', source === 'environment' ? 'ENV_STATIC' : undefined);
+        vi.stubEnv(
+          'AWS_SECRET_ACCESS_KEY',
+          source === 'environment' ? 'env-static-secret' : undefined,
+        );
+        vi.stubEnv('AWS_SESSION_TOKEN', undefined);
+        const configFile = path.join(directory, 'config');
+        const credentialsFile = path.join(directory, 'credentials');
+        await writeFile(configFile, '[default]\ndefaults_mode = legacy\n');
+        const credentialFile = (keys: string, endpoint: string) => `[default]
+aws_access_key_id = UNUSED_${keys}
+aws_secret_access_key = unused-${keys}-secret
+endpoint_url = https://static-${endpoint}.invalid
+`;
+        await writeFile(credentialsFile, credentialFile('before', 'before'));
+        const entered = deferred();
+        const release = deferred();
+        const Provider =
+          kind === 'completion' ? SageMakerCompletionProvider : SageMakerEmbeddingProvider;
+        const provider = new Provider('deployment', {
+          config: {
+            modelType: 'custom',
+            ...(source === 'configured'
+              ? { accessKeyId: 'CONFIG_STATIC', secretAccessKey: 'config-static-secret' }
+              : {}),
+          },
+          transform: async (input) => {
+            if (input === 'first') {
+              entered.resolve();
+              await release.promise;
+            }
+            return input;
+          },
+        });
+        providers.add(provider);
+        const requests = interceptSageMaker(provider);
+        const pending = invoke(provider, 'first');
+        void pending.catch(() => {});
+        try {
+          await entered.promise;
+          const nextEndpoint = change === 'runtime endpoint' ? 'after' : 'before';
+          await writeFile(credentialsFile, credentialFile('after', nextEndpoint));
+          release.resolve();
+          if (change === 'runtime endpoint') {
+            await expect(pending).rejects.toThrow(drift);
+            expect(requests).toHaveLength(0);
+          } else {
+            expect(await pending).toMatchObject(expected);
+            expect(requests).toHaveLength(1);
+            expect(requests[0].hostname).toBe('static-before.invalid');
+          }
+          expect(await invoke(provider, 'later')).toMatchObject(expected);
+          expect(requests.at(-1)?.hostname).toBe(`static-${nextEndpoint}.invalid`);
+          expect(
+            requests.every((request) =>
+              request.headers.authorization.includes(
+                `Credential=${source === 'configured' ? 'CONFIG_STATIC' : 'ENV_STATIC'}/`,
+              ),
+            ),
+          ).toBe(true);
+        } finally {
+          release.resolve();
+          await Promise.allSettled([pending]);
+        }
+      },
+    );
+
     it('rejects an edit while the SDK is resolving signing credentials before any send', async () => {
       const files = selectFileCredentials('named');
       await Promise.all([files.config('before'), files.credentials('before')]);
