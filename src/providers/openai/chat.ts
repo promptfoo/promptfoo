@@ -196,12 +196,16 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       capabilityModelName.includes('/o3') ||
       capabilityModelName.includes('/o4');
     const isGPT6Model = isGpt6Model(capabilityModelName);
+    const isOpenRouterGpt6 = isGPT6Model && this.getGenAISystem() === 'openrouter';
     const isReasoningModel =
       passthroughModel === undefined
         ? this.isReasoningModel()
         : super.isReasoningModel(capabilityModelName);
     const maxCompletionTokens = isReasoningModel
-      ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
+      ? (config.max_completion_tokens ??
+        (isOpenRouterGpt6 ? config.max_tokens : undefined) ??
+        getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ??
+        (isOpenRouterGpt6 ? getEnvInt('OPENAI_MAX_TOKENS') : undefined))
       : undefined;
     const maxTokensDefault = config.omitDefaults
       ? getEnvString('OPENAI_MAX_TOKENS') === undefined
@@ -327,6 +331,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     // This catches max_tokens introduced via passthrough or YAML anchors that bypass
     // the normal maxTokens variable logic above.
     if ((isReasoningModel || isGPT5Model) && 'max_tokens' in body) {
+      if (
+        isOpenRouterGpt6 &&
+        config.passthrough?.max_tokens !== undefined &&
+        config.passthrough?.max_completion_tokens === undefined
+      ) {
+        body.max_completion_tokens = body.max_tokens;
+      }
       delete body.max_tokens;
     }
 

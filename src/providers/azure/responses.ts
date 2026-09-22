@@ -159,11 +159,12 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       config.max_output_tokens ??
       (isReasoningModel ? reasoningMaxOutputTokensDefault : maxOutputTokensDefault);
 
-    const temperatureDefault = config.omitDefaults
-      ? getEnvString('OPENAI_TEMPERATURE') === undefined
-        ? undefined
-        : getEnvFloat('OPENAI_TEMPERATURE')
-      : getEnvFloat('OPENAI_TEMPERATURE', 0);
+    const temperatureDefault =
+      config.omitDefaults || isGpt6Model(capabilityModelName)
+        ? getEnvString('OPENAI_TEMPERATURE') === undefined
+          ? undefined
+          : getEnvFloat('OPENAI_TEMPERATURE')
+        : getEnvFloat('OPENAI_TEMPERATURE', 0);
     const temperature =
       isGpt6Model(capabilityModelName) || this.supportsTemperature(capabilityModelName)
         ? (config.temperature ?? temperatureDefault)

@@ -1,4 +1,5 @@
 const REASONING_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
+const UNKNOWN_PERSISTED_EFFORT = Symbol('unknown persisted effort');
 
 type Gpt6Variant = 'astra' | 'sol' | 'luna';
 type Gpt6Reasoning = { effort?: unknown } | null | undefined;
@@ -30,6 +31,40 @@ function normalizeReasoning(body: Record<string, unknown>): Gpt6Reasoning {
     delete body.reasoning;
   }
   return body.reasoning as Gpt6Reasoning;
+}
+
+function getResponsesEffortUpdates(input: unknown): unknown[] {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  const efforts: unknown[] = [];
+  for (const item of input) {
+    if (item?.type === 'configuration_update') {
+      const effort = item.reasoning?.effort;
+      if (effort != null && effort !== '') {
+        efforts.push(effort);
+      }
+    }
+  }
+  return efforts;
+}
+
+function validateReasoningEffort(effort: unknown, variant: Gpt6Variant, modelLabel: string): void {
+  if (
+    effort == null ||
+    effort === '' ||
+    (typeof effort === 'string' &&
+      (REASONING_EFFORTS.has(effort) || (variant !== 'astra' && effort === 'none')))
+  ) {
+    return;
+  }
+
+  throw new Error(
+    variant === 'astra'
+      ? `${modelLabel} supports reasoning effort low, medium, high, xhigh, or max. Use low instead of none or minimal.`
+      : `${modelLabel} supports reasoning effort none, low, medium, high, xhigh, or max.`,
+  );
 }
 
 function validateChatTools(
@@ -91,24 +126,28 @@ export function applyGpt6RequestRules(
     );
   }
   const effort = api === 'chat' ? (body.reasoning_effort ?? reasoning?.effort) : reasoning?.effort;
-  if (
-    effort != null &&
-    effort !== '' &&
-    (typeof effort !== 'string' ||
-      (!REASONING_EFFORTS.has(effort) && !(variant !== 'astra' && effort === 'none')))
-  ) {
-    throw new Error(
-      variant === 'astra'
-        ? `${modelLabel} supports reasoning effort low, medium, high, xhigh, or max. Use low instead of none or minimal.`
-        : `${modelLabel} supports reasoning effort none, low, medium, high, xhigh, or max.`,
-    );
-  }
+  validateReasoningEffort(effort, variant, modelLabel);
 
+  let samplingEffort = effort;
   if (api === 'chat') {
     validateChatTools(body, variant, modelLabel, effort, allowChatTools);
+  } else {
+    const updates = getResponsesEffortUpdates(body.input);
+    for (const update of updates) {
+      validateReasoningEffort(update, variant, modelLabel);
+    }
+    // A linked response or stored conversation can carry an effort we cannot see locally.
+    samplingEffort = updates.length
+      ? updates.at(-1)
+      : body.previous_response_id || body.conversation
+        ? UNKNOWN_PERSISTED_EFFORT
+        : effort;
   }
 
-  if (variant === 'astra' || effort !== 'none') {
+  if (
+    variant === 'astra' ||
+    (samplingEffort !== UNKNOWN_PERSISTED_EFFORT && samplingEffort !== 'none')
+  ) {
     for (const key of ['temperature', 'top_p', 'logprobs', 'top_logprobs']) {
       delete body[key];
     }

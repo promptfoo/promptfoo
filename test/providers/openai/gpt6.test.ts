@@ -236,6 +236,29 @@ describe('GPT-6 Astra requests', () => {
     expect(context.prompt.config.reasoning.effort).toBe('{{effort}}');
   });
 
+  it('rejects Astra conversation updates to none and strips sampling with unknown stored effort', async () => {
+    const provider = new OpenAiResponsesProvider('gpt-6-astra', {
+      config: {
+        previous_response_id: 'resp_previous',
+        reasoning: { effort: 'high' },
+        temperature: 0.3,
+        top_p: 0.8,
+      },
+    });
+    await expect(
+      provider.getOpenAiBody(
+        JSON.stringify([
+          { type: 'configuration_update', reasoning: { effort: 'none' } },
+          { role: 'user', content: 'Say ready.' },
+        ]),
+      ),
+    ).rejects.toThrow('GPT-6 Astra supports reasoning effort');
+
+    const { body } = await provider.getOpenAiBody('Say ready.');
+    expect(body).not.toHaveProperty('temperature');
+    expect(body).not.toHaveProperty('top_p');
+  });
+
   it.each(['max', 'none'])(
     'rejects a Chat-shaped passthrough reasoning_effort of %s on Responses',
     async (effort) => {
@@ -500,6 +523,142 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
       ]) {
         expect(body).not.toHaveProperty(field);
       }
+    }
+  });
+
+  it.each([
+    { topLevel: 'high', updates: ['none'], keepsSampling: true },
+    { topLevel: 'none', updates: ['high'], keepsSampling: false },
+    { topLevel: 'high', updates: ['none', 'high', 'none'], keepsSampling: true },
+    { topLevel: 'none', updates: ['high', 'none', 'low'], keepsSampling: false },
+  ] as const)(
+    'uses the last Responses configuration update for sampling ($topLevel, $updates)',
+    async ({ topLevel, updates, keepsSampling }) => {
+      const input = updates.flatMap((effort) => [
+        { type: 'configuration_update', reasoning: { effort } },
+        { role: 'user', content: 'Say ready.' },
+      ]);
+      const { body } = await new OpenAiResponsesProvider(model, {
+        config: {
+          reasoning: { effort: topLevel },
+          temperature: 0.3,
+          top_p: 0.8,
+          include: ['message.output_text.logprobs', 'reasoning.encrypted_content'],
+          passthrough: { top_logprobs: 2 },
+        },
+      }).getOpenAiBody(JSON.stringify(input));
+
+      expect(body.input).toEqual(input);
+      expect(body.reasoning).toEqual({ effort: topLevel });
+      if (keepsSampling) {
+        expect(body).toMatchObject({ temperature: 0.3, top_p: 0.8, top_logprobs: 2 });
+        expect(body.include).toEqual([
+          'message.output_text.logprobs',
+          'reasoning.encrypted_content',
+        ]);
+      } else {
+        for (const key of ['temperature', 'top_p', 'top_logprobs']) {
+          expect(body).not.toHaveProperty(key);
+        }
+        expect(body.include).toEqual(['reasoning.encrypted_content']);
+      }
+    },
+  );
+
+  it('uses a final passthrough input and validates both request and conversation efforts', async () => {
+    const promptInput = JSON.stringify([
+      { type: 'configuration_update', reasoning: { effort: 'high' } },
+      { role: 'user', content: 'Say ready.' },
+    ]);
+    const input = [
+      { type: 'configuration_update', reasoning: { effort: 'none' } },
+      { role: 'user', content: 'Say ready.' },
+    ];
+    const { body } = await new OpenAiResponsesProvider(model, {
+      config: { reasoning: { effort: 'high' }, temperature: 0.4, passthrough: { input } },
+    }).getOpenAiBody(promptInput);
+    expect(body.input).toBe(input);
+    expect(body.temperature).toBe(0.4);
+
+    for (const config of [
+      { passthrough: { reasoning: { effort: 'ultra' }, input } },
+      {
+        reasoning: { effort: 'none' as const },
+        passthrough: {
+          input: [
+            { type: 'configuration_update', reasoning: { effort: 'ultra' } },
+            { role: 'user', content: 'Say ready.' },
+            ...input,
+          ],
+        },
+      },
+    ]) {
+      await expect(
+        new OpenAiResponsesProvider(model, { config }).getOpenAiBody('Say ready.'),
+      ).rejects.toThrow('supports reasoning effort none, low, medium, high, xhigh, or max');
+    }
+  });
+
+  it.each([
+    { previous_response_id: 'resp_previous' },
+    { passthrough: { conversation: 'conv_previous' } },
+  ])('leaves explicit sampling to the API when the stored effort is unknown', async (history) => {
+    const { body } = await new OpenAiResponsesProvider(model, {
+      config: {
+        ...history,
+        reasoning: { effort: 'high' },
+        temperature: 0.3,
+        top_p: 0.8,
+        include: ['message.output_text.logprobs'],
+      },
+    }).getOpenAiBody('Say ready.');
+    expect(body).toMatchObject({
+      temperature: 0.3,
+      top_p: 0.8,
+      include: ['message.output_text.logprobs'],
+    });
+
+    const { body: defaults } = await new OpenAiResponsesProvider(model, {
+      config: { ...history, reasoning: { effort: 'none' } },
+    }).getOpenAiBody('Say ready.');
+    expect(defaults).not.toHaveProperty('temperature');
+    expect(defaults).not.toHaveProperty('top_p');
+
+    const { body: updated } = await new OpenAiResponsesProvider(model, {
+      config: { ...history, reasoning: { effort: 'none' }, temperature: 0.3 },
+    }).getOpenAiBody(
+      JSON.stringify([
+        { type: 'configuration_update', reasoning: { effort: 'high' } },
+        { role: 'user', content: 'Say ready.' },
+      ]),
+    );
+    expect(updated).not.toHaveProperty('temperature');
+  });
+
+  it.each([
+    [{ max_tokens: 77 }, 77],
+    [{ max_tokens: 77, max_completion_tokens: 88 }, 88],
+    [{ passthrough: { max_tokens: 99 } }, 99],
+    [{ max_completion_tokens: 88, passthrough: { max_tokens: 99 } }, 99],
+    [{ max_tokens: 77, passthrough: { max_tokens: 99, max_completion_tokens: 111 } }, 111],
+  ] as const)('preserves the effective explicit OpenRouter output cap', async (config, cap) => {
+    const { body } = await new OpenRouterProvider(`openai/${model}`, { config }).getOpenAiBody(
+      'Say ready.',
+    );
+    expect(body.max_completion_tokens).toBe(cap);
+    expect(body).not.toHaveProperty('max_tokens');
+  });
+
+  it('uses an explicit legacy OpenRouter token-limit environment value', async () => {
+    const restoreTokenEnv = mockProcessEnv({ OPENAI_MAX_TOKENS: '99' });
+    try {
+      const { body } = await new OpenRouterProvider(`openai/${model}`, {
+        config: {},
+      }).getOpenAiBody('Say ready.');
+      expect(body.max_completion_tokens).toBe(99);
+      expect(body).not.toHaveProperty('max_tokens');
+    } finally {
+      restoreTokenEnv();
     }
   });
 

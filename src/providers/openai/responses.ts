@@ -929,11 +929,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       effectiveReasoningEffort !== undefined &&
       effectiveReasoningEffort !== 'none';
 
-    const temperatureDefault = config.omitDefaults
-      ? getEnvString('OPENAI_TEMPERATURE') === undefined
-        ? undefined
-        : getEnvFloat('OPENAI_TEMPERATURE')
-      : getEnvFloat('OPENAI_TEMPERATURE', 0);
+    const temperatureDefault =
+      config.omitDefaults || isGPT6Model
+        ? getEnvString('OPENAI_TEMPERATURE') === undefined
+          ? undefined
+          : getEnvFloat('OPENAI_TEMPERATURE')
+        : getEnvFloat('OPENAI_TEMPERATURE', 0);
     const temperature =
       supportsTemperature && (isGPT6Model || !hasAzureReasoningEffort)
         ? (config.temperature ?? temperatureDefault)
