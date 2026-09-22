@@ -195,6 +195,85 @@ it('starts an owned provider’s explicit process cleanup even when its separate
   }
 });
 
+it('keeps a standalone provider and resources it opens alive when a concurrent evaluation finishes', async () => {
+  const registry = new ProviderRegistry(false);
+  const started = deferred();
+  const finish = deferred();
+  const resource = { shutdown: vi.fn(async () => {}) };
+  const provider = {
+    id: () => 'standalone-self-registered-provider',
+    shutdown: vi.fn(async () => {}),
+  };
+  registry.register(provider);
+  const standalone = registry.withProvider(provider, async () => {
+    registry.register(resource);
+    started.resolve();
+    await finish.promise;
+  });
+  try {
+    await started.promise;
+    await registry.withEvaluation(() => registry.withProvider(provider, async () => {}));
+    expect(provider.shutdown).not.toHaveBeenCalled();
+    expect(resource.shutdown).not.toHaveBeenCalled();
+
+    finish.resolve();
+    await standalone;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(provider.shutdown).toHaveBeenCalledOnce();
+    expect(resource.shutdown).toHaveBeenCalledOnce();
+  } finally {
+    finish.resolve();
+    await Promise.allSettled([standalone]);
+    await registry.shutdownAll();
+  }
+});
+
+it('waits for earlier provider cleanup in standalone calls and cancels one waiter independently', async () => {
+  const registry = new ProviderRegistry(false);
+  const started = deferred();
+  const finish = deferred();
+  const provider = {
+    id: () => 'standalone-waits-for-evaluation',
+    shutdown: vi.fn(async () => {
+      if (provider.shutdown.mock.calls.length === 1) {
+        started.resolve();
+        await finish.promise;
+      }
+    }),
+  };
+  registry.register(provider);
+  const earlier = registry.withEvaluation(() => registry.withProvider(provider, async () => {}));
+  const controller = new AbortController();
+  const reason = new Error('cancel one standalone call');
+  const cancelledRun = vi.fn(async () => {});
+  const liveRun = vi.fn(async () => {});
+  let cancelled: Promise<void> | undefined;
+  let live: Promise<void> | undefined;
+  try {
+    await started.promise;
+    cancelled = registry.withProvider(provider, cancelledRun, controller.signal);
+    const rejected = expect(cancelled).rejects.toBe(reason);
+    const setup = registry.useProvider(provider, controller.signal);
+    const rejectedSetup = expect(setup).rejects.toBe(reason);
+    live = registry.withProvider(provider, liveRun);
+    controller.abort(reason);
+    await Promise.all([rejected, rejectedSetup]);
+    expect(cancelledRun).not.toHaveBeenCalled();
+    expect(liveRun).not.toHaveBeenCalled();
+
+    finish.resolve();
+    await Promise.all([earlier, live]);
+    expect(liveRun).toHaveBeenCalledOnce();
+    expect(cancelledRun).not.toHaveBeenCalled();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(provider.shutdown).toHaveBeenCalledTimes(2);
+  } finally {
+    finish.resolve();
+    await Promise.allSettled([earlier, ...(cancelled ? [cancelled] : []), ...(live ? [live] : [])]);
+    await registry.shutdownAll();
+  }
+});
+
 describeEvaluator('registered resources across overlapping evaluations', () => {
   it('waits for a shared resource release without delaying an unrelated evaluation', async () => {
     const shutdownStarted = deferred();
