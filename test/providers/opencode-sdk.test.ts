@@ -2440,6 +2440,21 @@ describe('OpenCodeSDKProvider', () => {
       );
       return registry;
     };
+    const useApiVersion = async (apiVersion: 'v1' | 'v2') => {
+      if (apiVersion === 'v2') {
+        return;
+      }
+      const { importModule } = await import('../../src/esm');
+      vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
+        if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
+          throw new Error('v2 unavailable');
+        }
+        return {
+          createOpencode: mockCreateOpencode,
+          createOpencodeClient: mockCreateOpencodeClient,
+        };
+      });
+    };
 
     beforeEach(() => {
       let created = 0;
@@ -2650,7 +2665,7 @@ describe('OpenCodeSDKProvider', () => {
       },
     );
 
-    it('forgets only the least recently used lookup and never deletes evicted sessions', async () => {
+    it('forgets only the least recently used lookup and deletes evicted sessions only on explicit cleanup', async () => {
       const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
       for (let index = 0; index < 100; index++) {
         await provider.callApi('Test prompt', persistent(`m${index}`));
@@ -2664,8 +2679,9 @@ describe('OpenCodeSDKProvider', () => {
       expect(mockSessionCreate).toHaveBeenCalledTimes(101);
 
       await provider.cleanup();
-      expect(deletedIds()).toHaveLength(100);
-      expect(deletedIds()).not.toContain('s1');
+      await provider.cleanup();
+      expect(deletedIds()).toHaveLength(101);
+      expect(deletedIds()).toContain('s1');
     });
 
     it('deletes an ephemeral session through its own client after a concurrent shutdown', async () => {
@@ -2698,6 +2714,21 @@ describe('OpenCodeSDKProvider', () => {
         recursive: true,
         force: true,
       });
+    });
+
+    it('registers failed temp cleanup from an ephemeral remote call for a process retry', async () => {
+      const registry = isolateProcessRegistry();
+      rmSpy.mockRejectedValueOnce(new Error('EBUSY'));
+      const provider = new OpenCodeSDKProvider({ config: { baseUrl: 'http://remote.test' } });
+
+      await expect(provider.callApi('remote temp retry')).resolves.toMatchObject({
+        output: 'Test response',
+      });
+      expect(rmSpy).toHaveBeenCalledOnce();
+      await registry.shutdownForProcess();
+
+      expect(rmSpy).toHaveBeenCalledTimes(2);
+      expect(mockCreateOpencode).not.toHaveBeenCalled();
     });
 
     it.each([
@@ -2750,18 +2781,7 @@ describe('OpenCodeSDKProvider', () => {
       'bounds unacknowledged %s process cancellation with a fresh transport',
       async (apiVersion) => {
         const registry = isolateProcessRegistry();
-        if (apiVersion === 'v1') {
-          const { importModule } = await import('../../src/esm');
-          vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
-            if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
-              throw new Error('v2 unavailable');
-            }
-            return {
-              createOpencode: mockCreateOpencode,
-              createOpencodeClient: mockCreateOpencodeClient,
-            };
-          });
-        }
+        await useApiVersion(apiVersion);
         const started = createDeferred<void>();
         const prompt = createDeferred<ReturnType<typeof createMockPromptResponse>>();
         let promptSignal: AbortSignal | undefined;
@@ -2805,27 +2825,91 @@ describe('OpenCodeSDKProvider', () => {
       },
     );
 
-    it('does not start a remote prompt if process shutdown arrives while creating its session', async () => {
-      const registry = isolateProcessRegistry();
-      const started = createDeferred<void>();
-      const created = createDeferred<ReturnType<typeof createMockSessionResponse>>();
-      mockSessionCreate.mockImplementationOnce(() => {
-        started.resolve();
-        return created.promise;
-      });
-      const provider = new OpenCodeSDKProvider({
-        config: { baseUrl: 'http://remote.test', persist_sessions: true },
-      });
-      const call = provider.callApi('pending');
-      await started.promise;
+    it.each([
+      ['v1', true],
+      ['v1', false],
+      ['v2', true],
+      ['v2', false],
+    ] as const)(
+      'does not start a remote prompt if process shutdown arrives while creating its session (%s, SDK honors abort: %s)',
+      async (apiVersion, honorsAbort) => {
+        const registry = isolateProcessRegistry();
+        await useApiVersion(apiVersion);
+        const started = createDeferred<AbortSignal>();
+        const created = createDeferred<ReturnType<typeof createMockSessionResponse>>();
+        mockSessionCreate.mockImplementationOnce((parameters, options) => {
+          const signal = options?.signal ?? parameters.signal;
+          if (honorsAbort) {
+            signal.addEventListener('abort', () => created.reject(signal.reason), { once: true });
+          }
+          started.resolve(signal);
+          return created.promise;
+        });
+        const provider = new OpenCodeSDKProvider({
+          config: { baseUrl: 'http://remote.test', persist_sessions: true },
+        });
+        const call = provider.callApi('pending');
+        const signal = await started.promise;
 
-      await registry.shutdownForProcess();
-      created.resolve(createMockSessionResponse('late-session'));
+        await registry.shutdownForProcess();
+        await expect(call).resolves.toEqual({ error: 'OpenCode SDK call aborted' });
+        expect(signal.aborted).toBe(true);
+        expect(mockSessionPrompt).not.toHaveBeenCalled();
+        expect(mockSessionAbort).not.toHaveBeenCalled();
 
-      await expect(call).resolves.toEqual({ error: 'OpenCode SDK call aborted before it started' });
-      expect(mockSessionPrompt).not.toHaveBeenCalled();
-      expect(mockSessionAbort).not.toHaveBeenCalled();
-    });
+        if (honorsAbort) {
+          expect(mockSessionDelete).not.toHaveBeenCalled();
+        } else {
+          created.resolve(createMockSessionResponse('late-session'));
+          await vi.waitFor(() => expect(mockSessionDelete).toHaveBeenCalledOnce());
+          const [parameters, options] = mockSessionDelete.mock.calls[0];
+          expect(parameters.sessionID ?? parameters.path?.id).toBe('late-session');
+          const deletionSignal = options?.signal ?? parameters.signal;
+          expect(deletionSignal).not.toBe(signal);
+          expect(deletionSignal.aborted).toBe(false);
+        }
+      },
+    );
+
+    it.each([
+      ['v1', 'process'],
+      ['v2', 'process'],
+      ['v2', 'caller'],
+    ] as const)(
+      'cancels a %s remote history request on %s shutdown without aborting the completed session',
+      async (apiVersion, cause) => {
+        const registry = isolateProcessRegistry();
+        await useApiVersion(apiVersion);
+        const caller = new AbortController();
+        const started = createDeferred<AbortSignal>();
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponseWithAnchors('done', { id: 'assistant', parentID: 'user' }),
+        );
+        mockSessionMessages.mockImplementation((parameters, options) => {
+          const signal = options?.signal ?? parameters.signal;
+          started.resolve(signal);
+          return new Promise((_, reject) =>
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true }),
+          );
+        });
+        const provider = new OpenCodeSDKProvider({
+          config: { baseUrl: 'http://remote.test', session_id: 'external', tools: { skill: true } },
+        });
+        const call = provider.callApi('history', undefined, { abortSignal: caller.signal });
+        const signal = await started.promise;
+
+        if (cause === 'process') {
+          await registry.shutdownForProcess();
+          expect(caller.signal.aborted).toBe(false);
+        } else {
+          caller.abort();
+        }
+        await expect(call).resolves.toEqual({ error: 'OpenCode SDK call aborted' });
+        expect(signal.aborted).toBe(true);
+        expect(mockSessionAbort).not.toHaveBeenCalled();
+        expect(mockSessionDelete).not.toHaveBeenCalled();
+      },
+    );
 
     it('does not start a queued call on a session until its aborted prompt returns', async () => {
       const firstPrompt = createDeferred<ReturnType<typeof createMockPromptResponse>>();
