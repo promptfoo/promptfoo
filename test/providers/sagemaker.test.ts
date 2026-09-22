@@ -616,6 +616,8 @@ module.exports = transform;
     it.each(['configuration', 'environment'] as const)(
       'does not fingerprint the credential-process environment for static %s credentials',
       async (source) => {
+        const environmentKey = 'PROMPTFOO_TEST_SAGEMAKER_PROCESS_FINGERPRINT';
+        vi.stubEnv(environmentKey, 'first-process-value');
         if (source === 'environment') {
           vi.stubEnv('AWS_PROFILE', undefined);
           vi.stubEnv('AWS_ACCESS_KEY_ID', 'STATIC_KEY');
@@ -636,7 +638,13 @@ module.exports = transform;
         const fingerprint = vi.spyOn(crypto, 'hash');
 
         expect(await provider.callApi('A quiet garden')).toMatchObject({ output: 'A garden' });
-        expect(fingerprint).not.toHaveBeenCalled();
+        vi.stubEnv(environmentKey, 'second-process-value');
+        expect(await provider.callApi('A quiet garden')).toMatchObject({ output: 'A garden' });
+        for (const [, input] of fingerprint.mock.calls) {
+          expect(String(input)).not.toContain(environmentKey);
+          expect(String(input)).not.toContain('first-process-value');
+          expect(String(input)).not.toContain('second-process-value');
+        }
       },
     );
 
