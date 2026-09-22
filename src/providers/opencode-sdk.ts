@@ -1188,6 +1188,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private readonly sessionsForCleanup = new Set<OpenCodeSessionHandle>();
   private sessionQueues = new Map<string, Promise<void>>();
   private activeRemoteCalls = 0;
+  private readonly remoteSessionCreations = new Set<Promise<void>>();
   private readonly remoteSessionAborts = new Set<() => Promise<void>>();
   private readonly processTermination = new AbortController();
   private processShutdown?: Promise<void>;
@@ -1297,9 +1298,14 @@ export class OpenCodeSDKProvider implements ApiProvider {
     if (!this.processShutdown) {
       const remoteAborts = [...this.remoteSessionAborts].map((abort) => abort());
       this.processTermination.abort();
-      const shutdown = Promise.allSettled([this.shutdown(), ...remoteAborts])
+      const shutdown = Promise.allSettled([
+        this.shutdown(),
+        this.waitForRemoteSessionCreations(),
+        ...remoteAborts,
+      ])
         .then(async () => {
           this.remoteSessionAborts.clear();
+          this.remoteSessionCreations.clear();
           if (this.server || this.pendingTempDirs.size) {
             await this.shutdown();
           }
@@ -1312,6 +1318,23 @@ export class OpenCodeSDKProvider implements ApiProvider {
       this.processShutdown = shutdown;
     }
     return this.processShutdown;
+  }
+
+  private async waitForRemoteSessionCreations(): Promise<void> {
+    if (!this.remoteSessionCreations.size) {
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        Promise.allSettled([...this.remoteSessionCreations]),
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, SESSION_ABORT_TIMEOUT_MS);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /** Stop the local server (after evaluations or on process exit) and keep the sessions. */
@@ -2106,7 +2129,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
         ? client.session.create(parameters, { signal: processSignal })
         : client.session.create({ ...parameters, signal: processSignal })
       : client.session.create(parameters);
-    const created = request.then((createResult): OpenCodeSessionContext => {
+    const created = request.then(async (createResult): Promise<OpenCodeSessionContext> => {
       const createData = unwrapOpenCodeResult(createResult);
       const sessionId =
         (createData as { id?: string } | undefined)?.id ??
@@ -2116,7 +2139,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
       }
       const session = { id: sessionId, query: sessionQuery };
       if (processSignal?.aborted) {
-        void this.deleteCancelledSession(session, client);
+        await this.deleteCancelledSession(session, client);
         processSignal.throwIfAborted();
       }
       if (config.persist_sessions) {
@@ -2125,7 +2148,16 @@ export class OpenCodeSDKProvider implements ApiProvider {
       }
       return { sessionId, sessionQuery, ephemeralSession: session };
     });
-    return processSignal ? this.waitForRequest(created, processSignal) : created;
+    if (!processSignal) {
+      return created;
+    }
+    const settled = created.then(
+      () => {},
+      () => {},
+    );
+    this.remoteSessionCreations.add(settled);
+    void settled.then(() => this.remoteSessionCreations.delete(settled));
+    return this.waitForRequest(created, processSignal);
   }
 
   private buildPromptBody(config: OpenCodeSDKConfig, prompt: string): Record<string, unknown> {

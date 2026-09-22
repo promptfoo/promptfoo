@@ -2863,6 +2863,14 @@ describe('OpenCodeSDKProvider', () => {
         await useApiVersion(apiVersion);
         const started = createDeferred<AbortSignal>();
         const created = createDeferred<ReturnType<typeof createMockSessionResponse>>();
+        const deletionStarted = createDeferred<void>();
+        const deletion = createDeferred<void>();
+        if (!honorsAbort) {
+          mockSessionDelete.mockImplementationOnce(() => {
+            deletionStarted.resolve();
+            return deletion.promise;
+          });
+        }
         mockSessionCreate.mockImplementationOnce((parameters, options) => {
           const signal = options?.signal ?? parameters.signal;
           if (honorsAbort) {
@@ -2877,22 +2885,69 @@ describe('OpenCodeSDKProvider', () => {
         const call = provider.callApi('pending');
         const signal = await started.promise;
 
-        await registry.shutdownForProcess();
+        const completed = vi.fn();
+        const shutdown = registry.shutdownForProcess().then(completed);
         await expect(call).resolves.toEqual({ error: 'OpenCode SDK call aborted' });
         expect(signal.aborted).toBe(true);
         expect(mockSessionPrompt).not.toHaveBeenCalled();
         expect(mockSessionAbort).not.toHaveBeenCalled();
 
         if (honorsAbort) {
+          await shutdown;
           expect(mockSessionDelete).not.toHaveBeenCalled();
         } else {
+          expect(completed).not.toHaveBeenCalled();
           created.resolve(createMockSessionResponse('late-session'));
-          await vi.waitFor(() => expect(mockSessionDelete).toHaveBeenCalledOnce());
+          await deletionStarted.promise;
+          expect(mockSessionDelete).toHaveBeenCalledOnce();
           const [parameters, options] = mockSessionDelete.mock.calls[0];
           expect(parameters.sessionID ?? parameters.path?.id).toBe('late-session');
           const deletionSignal = options?.signal ?? parameters.signal;
           expect(deletionSignal).not.toBe(signal);
           expect(deletionSignal.aborted).toBe(false);
+          expect(completed).not.toHaveBeenCalled();
+          deletion.resolve();
+          await shutdown;
+        }
+        expect(completed).toHaveBeenCalledOnce();
+      },
+    );
+
+    it.each(['creation', 'deletion'] as const)(
+      'bounds process shutdown when remote session %s never settles',
+      async (stage) => {
+        const registry = isolateProcessRegistry();
+        const started = createDeferred<void>();
+        const created = createDeferred<ReturnType<typeof createMockSessionResponse>>();
+        const deleting = createDeferred<void>();
+        mockSessionCreate.mockImplementationOnce(() => {
+          started.resolve();
+          return created.promise;
+        });
+        mockSessionDelete.mockImplementationOnce(() => {
+          deleting.resolve();
+          return new Promise(() => {});
+        });
+        const provider = new OpenCodeSDKProvider({ config: { baseUrl: 'http://remote.test' } });
+        const call = provider.callApi('bounded creation');
+        await started.promise;
+        vi.useFakeTimers();
+        try {
+          const completed = vi.fn();
+          const shutdown = registry.shutdownForProcess().then(completed);
+          await expect(call).resolves.toEqual({ error: 'OpenCode SDK call aborted' });
+          if (stage === 'deletion') {
+            created.resolve(createMockSessionResponse('late-session'));
+            await deleting.promise;
+          }
+          await vi.advanceTimersByTimeAsync(999);
+          expect(completed).not.toHaveBeenCalled();
+          await vi.advanceTimersByTimeAsync(1);
+          await shutdown;
+          expect(completed).toHaveBeenCalledOnce();
+          expect(mockSessionDelete).toHaveBeenCalledTimes(stage === 'deletion' ? 1 : 0);
+        } finally {
+          vi.useRealTimers();
         }
       },
     );
