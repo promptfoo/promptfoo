@@ -1360,9 +1360,10 @@ describe('OpenCodeSDKProvider', () => {
         const message =
           'token=issued-token-991; secret="issued secret with spaces"; ' +
           'Cookie: sid=issued-cookie-991; csrf=issued-second-cookie-991, ' +
-          'total_tokens=17; billing-total-token=18; usage.input_tokens=19; ' +
+          'total_tokens=17; billing-total-token=18; usage.input_tokens=19; inputToken=20; ' +
           'AWS_SECRET_ACCESS_KEY=issued-aws; OPENAI_API_KEY=issued-openai; ' +
-          'X_AUTH_TOKEN=issued-header; database_password=issued-database; GITHUB_TOKEN=issued-github; useful context';
+          'X_AUTH_TOKEN=issued-header; database_password=issued-database; GITHUB_TOKEN=issued-github; ' +
+          'secretAccessKey=issued-access; databasePassword=issued-password; webhookSecret=issued-webhook; useful context';
         const error = { name: 'APIError', data: { statusCode: 502, message } };
         const response = createMockPromptResponse([]);
         mockSessionPrompt.mockResolvedValueOnce({ error }).mockResolvedValueOnce({
@@ -1384,11 +1385,14 @@ describe('OpenCodeSDKProvider', () => {
               'X_AUTH_TOKEN',
               'database_password',
               'GITHUB_TOKEN',
+              'secretAccessKey',
+              'databasePassword',
+              'webhookSecret',
             ]) {
               expect(diagnostic).toContain(field + '=[REDACTED]');
             }
             expect(diagnostic).toContain(
-              'total_tokens=17; billing-total-token=18; usage.input_tokens=19',
+              'total_tokens=17; billing-total-token=18; usage.input_tokens=19; inputToken=20',
             );
             expect(diagnostic).toContain('useful context');
             expect(diagnostic).not.toContain('issued');
