@@ -618,6 +618,56 @@ describeEvaluator('evaluator grading concurrency', () => {
     errorSpy.mockRestore();
   });
 
+  it('persists a custom embedding abort reason as cancelled rather than a grading failure', async () => {
+    const { default: logger } = await import('../../src/logger');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+    const controller = new AbortController();
+    const reason = new Error('custom embedding shutdown');
+    const target: ApiProvider = {
+      id: () => 'target-provider',
+      callApi: async () => ({ output: 'Target output', tokenUsage: createEmptyTokenUsage() }),
+    };
+    const embedding: ApiProvider = {
+      id: () => 'embedding-judge',
+      callApi: async () => ({ output: '' }),
+      supportsEmbeddingCancellation: true,
+      callEmbeddingApi: async (
+        _input: string,
+        _context?: unknown,
+        options?: { abortSignal?: AbortSignal },
+      ) => {
+        controller.abort(reason);
+        options?.abortSignal?.throwIfAborted();
+        throw new Error('Expected grading signal');
+      },
+    };
+    const suite: TestSuite = {
+      providers: [target],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          vars: { topic: 'alpha' },
+          assert: [{ type: 'similar', value: 'Expected', provider: embedding }],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    try {
+      await evaluate(suite, evalRecord, { maxConcurrency: 1, abortSignal: controller.signal });
+      const result = (await evalRecord.toEvaluateSummary()).results.find(
+        (row) => row.vars.topic === 'alpha',
+      );
+      expect(result?.error).toBe('Aborted: custom embedding shutdown');
+      expect(
+        errorSpy.mock.calls.some(([message]) =>
+          String(message).includes('Assertion grading failed'),
+        ),
+      ).toBe(false);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   it('suppresses the error log when deferred grading throws AbortException under abort', async () => {
     const { default: logger } = await import('../../src/logger');
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);

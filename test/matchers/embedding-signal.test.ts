@@ -6,6 +6,8 @@ import { matchesSimilarity } from '../../src/matchers/similarity';
 import { getDefaultProviders } from '../../src/providers/defaults';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import { withProviderCallExecutionContext } from '../../src/scheduler/providerCallExecutionContext';
+import { ProviderGroupedCallQueue } from '../../src/scheduler/providerCallQueue';
+import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 
 import type {
   ApiEmbeddingProvider,
@@ -161,6 +163,58 @@ describe('embedding graders receive evaluation cancellation', () => {
       await expect(grading).rejects.toBe(reason);
     } finally {
       release();
+      controller.abort(reason);
+      await Promise.allSettled([grading]);
+    }
+  });
+
+  it('removes embedding grading from a real exhausted rate-limit registry on cancellation', async () => {
+    const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+    const controller = new AbortController();
+    const reason = new Error('cancel waiting for quota');
+    await registry.execute(provider, async () => 'seed', {
+      getHeaders: () => ({
+        'x-ratelimit-limit-requests': '1',
+        'x-ratelimit-remaining-requests': '0',
+        'x-ratelimit-reset-requests': '60s',
+      }),
+    });
+    const grading = withProviderCallExecutionContext(
+      { abortSignal: controller.signal, rateLimitRegistry: registry },
+      () => run('similarity'),
+    );
+    void grading.catch(() => {});
+    try {
+      await vi.waitFor(() => expect(Object.values(registry.getMetrics())[0]?.queueDepth).toBe(2));
+      controller.abort(reason);
+      await expect(grading).rejects.toBe(reason);
+      expect(Object.values(registry.getMetrics())[0]?.queueDepth).toBe(0);
+      expect(embed).not.toHaveBeenCalled();
+    } finally {
+      controller.abort(reason);
+      registry.dispose();
+      await Promise.allSettled([grading]);
+    }
+  });
+
+  it('removes grouped embedding grading before its provider runs on cancellation', async () => {
+    const queue = new ProviderGroupedCallQueue();
+    const controller = new AbortController();
+    const reason = new Error('cancel grouped grading');
+    const grading = withProviderCallExecutionContext(
+      { abortSignal: controller.signal, providerCallQueue: queue },
+      () => run('similarity'),
+    );
+    void grading.catch(() => {});
+    try {
+      await vi.waitFor(() => expect(queue.hasJobs()).toBe(true));
+      const group = queue.takeNextGroup();
+      controller.abort(reason);
+      await expect(grading).rejects.toBe(reason);
+      await Promise.all(group.map((job) => queue.run(job)));
+      expect(queue.hasJobs()).toBe(false);
+      expect(embed).not.toHaveBeenCalled();
+    } finally {
       controller.abort(reason);
       await Promise.allSettled([grading]);
     }
