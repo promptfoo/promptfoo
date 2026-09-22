@@ -20,6 +20,7 @@ import {
   validateGrok47RemoteOptions,
   validateXAIReasoningEffort,
   type XAICostConfig,
+  XAIRequestConfigError,
 } from './chat';
 
 import type { EnvOverrides } from '../../types/env';
@@ -349,7 +350,9 @@ export class XAIResponsesProvider implements ApiProvider {
         body.reasoning = renderVarsInObject(body.reasoning, context?.vars);
       } catch (error) {
         if (this.modelName === 'grok-4.7') {
-          throw new Error('xAI Grok 4.7 could not prepare the Responses reasoning options');
+          throw new XAIRequestConfigError(
+            'xAI Grok 4.7 could not prepare the Responses reasoning options',
+          );
         }
         throw error;
       }
@@ -375,6 +378,21 @@ export class XAIResponsesProvider implements ApiProvider {
   }
 
   async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    try {
+      return await this.callResponsesApi(prompt, context, callApiOptions);
+    } catch (error) {
+      if (error instanceof XAIRequestConfigError) {
+        return { error: `xAI request error: ${error.message}` };
+      }
+      throw error;
+    }
+  }
+
+  private async callResponsesApi(
     prompt: string,
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,

@@ -225,12 +225,10 @@ describe('XAIResponsesProvider', () => {
       const provider = new XAIResponsesProvider('grok-4.7', {
         config: { apiKey: 'test-key', passthrough: { reasoning: { effort } } },
       });
-      const error = await provider.callApi('hello').catch((value: Error) => value);
-      expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toContain(
-        'does not support reasoning.effort with the supplied value',
-      );
-      expect((error as Error).message).not.toContain(privateMarker);
+      const { error } = await provider.callApi('hello');
+      expect(error).toContain('does not support reasoning.effort with the supplied value');
+      expect(error).not.toContain(privateMarker);
+      expect(error).not.toContain('API key');
     }
     const provider = new XAIResponsesProvider('grok-4.7', {
       config: {
@@ -238,15 +236,13 @@ describe('XAIResponsesProvider', () => {
         passthrough: { reasoning: { effort: '{{ candidate | load }}' } },
       },
     });
-    const error = await provider
-      .callApi('hello', {
-        prompt: { raw: 'hello', label: 'hello' },
-        vars: { candidate: privateMarker },
-      })
-      .catch((value: Error) => value);
-    expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toContain('could not prepare the Responses reasoning options');
-    expect((error as Error).message).not.toContain(privateMarker);
+    const { error } = await provider.callApi('hello', {
+      prompt: { raw: 'hello', label: 'hello' },
+      vars: { candidate: privateMarker },
+    });
+    expect(error).toContain('could not prepare the Responses reasoning options');
+    expect(error).not.toContain(privateMarker);
+    expect(error).not.toContain('API key');
     expect(mockFetchWithCache).not.toHaveBeenCalled();
   });
 
@@ -256,13 +252,13 @@ describe('XAIResponsesProvider', () => {
       { reasoning: { effort: '{{ effort }}' } },
       { passthrough: { reasoning: { summary: '{{ note }}' } } },
     ]) {
-      await expect(
-        provider.callApi('hello', {
-          prompt: { raw: 'hello', label: 'hello', config: options },
-          vars: { effort: 'high', note: 'safe marker' },
-          test: { options, metadata: { __promptfoo: { remote: true } } },
-        }),
-      ).rejects.toThrow('request options from remote tests must be literal values');
+      const { error } = await provider.callApi('hello', {
+        prompt: { raw: 'hello', label: 'hello', config: options },
+        vars: { effort: 'high', note: 'safe marker' },
+        test: { options, metadata: { __promptfoo: { remote: true } } },
+      });
+      expect(error).toContain('request options from remote tests must be literal values');
+      expect(error).not.toContain('API key');
     }
     expect(mockFetchWithCache).not.toHaveBeenCalled();
   });

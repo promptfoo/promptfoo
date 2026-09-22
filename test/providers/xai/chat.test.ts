@@ -420,6 +420,7 @@ describe('xAI Chat Provider', () => {
         const result = await provider.callApi('hello');
         expect(result.error).toContain('does not support reasoning_effort with the supplied value');
         expect(result.error).not.toContain(privateMarker);
+        expect(result.error).not.toContain('API key');
       }
       for (const limit of [-1, 1.5, '{{ budget }}', privateMarker]) {
         const provider = createXAIProvider('xai:grok-4.7', {
@@ -428,6 +429,7 @@ describe('xAI Chat Provider', () => {
         const result = await provider.callApi('hello');
         expect(result.error).toContain('chat token limit must be a non-negative integer');
         expect(result.error).not.toContain(privateMarker);
+        expect(result.error).not.toContain('API key');
       }
       const provider = createXAIProvider('xai:grok-4.7', {
         config: {
@@ -440,6 +442,7 @@ describe('xAI Chat Provider', () => {
       });
       expect(result.error).toContain('could not prepare the Chat Completions request options');
       expect(result.error).not.toContain(privateMarker);
+      expect(result.error).not.toContain('API key');
       expect(mockFetchWithCache).not.toHaveBeenCalled();
     });
 
@@ -457,6 +460,7 @@ describe('xAI Chat Provider', () => {
           test: { options, metadata: { __promptfoo: { remote: true } } },
         });
         expect(result.error).toContain('request options from remote tests must be literal values');
+        expect(result.error).not.toContain('API key');
       }
       expect(mockFetchWithCache).not.toHaveBeenCalled();
 

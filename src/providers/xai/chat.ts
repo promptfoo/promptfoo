@@ -453,6 +453,8 @@ export const GROK_45_MODELS: ReadonlySet<string> = new Set([
   'grok-build-latest',
 ]);
 
+export class XAIRequestConfigError extends Error {}
+
 export function validateXAIReasoningEffort(
   modelName: string,
   effort: unknown,
@@ -468,7 +470,7 @@ export function validateXAIReasoningEffort(
     const choices = supportsXHigh
       ? '"low", "medium", "high", or "xhigh"'
       : '"low", "medium", or "high"';
-    throw new Error(
+    throw new XAIRequestConfigError(
       `xAI model ${modelName} does not support ${parameter} with the supplied value. ` +
         `Use ${choices}, or omit ${parameter} to use the default "high".`,
     );
@@ -479,7 +481,7 @@ export function validateGrok47RemoteOptions(test?: {
   metadata?: { __promptfoo?: { remote?: boolean } };
   options?: Record<string, unknown>;
 }): void {
-  if (!test?.metadata?.__promptfoo?.remote || !test.options) {
+  if (test?.metadata?.__promptfoo?.remote !== true || !test.options) {
     return;
   }
   const { options } = test;
@@ -497,7 +499,9 @@ export function validateGrok47RemoteOptions(test?: {
   const visited = new WeakSet<object>();
   for (const value of pending) {
     if (typeof value === 'string' && /\{[{%#]/.test(value)) {
-      throw new Error('xAI Grok 4.7 request options from remote tests must be literal values');
+      throw new XAIRequestConfigError(
+        'xAI Grok 4.7 request options from remote tests must be literal values',
+      );
     }
     if (value && typeof value === 'object' && !visited.has(value)) {
       visited.add(value);
@@ -798,7 +802,9 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       result = await super.getOpenAiBody(prompt, context, callApiOptions);
     } catch (error) {
       if (this.modelName === 'grok-4.7') {
-        throw new Error('xAI Grok 4.7 could not prepare the Chat Completions request options');
+        throw new XAIRequestConfigError(
+          'xAI Grok 4.7 could not prepare the Chat Completions request options',
+        );
       }
       throw error;
     }
@@ -816,7 +822,9 @@ class XAIProvider extends OpenAiChatCompletionProvider {
         getGrok47TokenLimit(this.config);
       if (tokenLimit !== undefined) {
         if (typeof tokenLimit !== 'number' || !Number.isSafeInteger(tokenLimit) || tokenLimit < 0) {
-          throw new Error('xAI Grok 4.7 chat token limit must be a non-negative integer');
+          throw new XAIRequestConfigError(
+            'xAI Grok 4.7 chat token limit must be a non-negative integer',
+          );
         }
         Object.assign(result.body, { max_completion_tokens: tokenLimit });
       }
@@ -941,6 +949,9 @@ class XAIProvider extends OpenAiChatCompletionProvider {
 
       return response;
     } catch (err) {
+      if (err instanceof XAIRequestConfigError) {
+        return { error: `xAI request error: ${err.message}` };
+      }
       // Handle JSON parsing errors and other API errors
       const errorMessage = err instanceof Error ? err.message : String(err);
 
