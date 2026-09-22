@@ -22,6 +22,9 @@ describe('provider text redaction', () => {
       redactProviderText('Bearer  hidden', /(Bearer)\s+\S+/, (_match, prefix) => `${prefix} `),
     ).toBe(`Bearer ${REDACTED}`);
     expect(redactProviderText('x1 x2', /x\d/g)).toBe(`${REDACTED} ${REDACTED}`);
+    expect(redactProviderText('x1 x2', /x\d/g, (_match, prefix) => prefix)).toBe(
+      `${REDACTED} ${REDACTED}`,
+    );
   });
 
   it('distinguishes short numeric date fragments from whole values and longer or nonnumeric secrets', () => {
