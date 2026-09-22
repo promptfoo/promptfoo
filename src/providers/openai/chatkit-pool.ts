@@ -145,15 +145,18 @@ export class ChatKitBrowserPool {
 
   static async getInstanceForEvaluation(
     config?: Partial<ChatKitPoolConfig>,
+    signal?: AbortSignal,
   ): Promise<ChatKitBrowserPool> {
     while (true) {
+      providerRegistry.throwIfResourceUseAborted(signal);
       const pool = this.getInstance(config);
       const resource = this.registryResources.get(pool);
-      const ready = resource && providerRegistry.useResource(resource);
+      const ready = resource && providerRegistry.useResource(resource, signal);
       if (!ready) {
         return pool;
       }
       await ready;
+      providerRegistry.throwIfResourceUseAborted(signal);
       if (this.instance === pool) {
         return pool;
       }
