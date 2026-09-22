@@ -176,9 +176,8 @@ export class ProviderRateLimitState extends EventEmitter {
       };
 
       try {
-        options.abortSignal?.throwIfAborted();
+        // Cancellation only interrupts waiting; a call that already finished keeps its result.
         const result = await callFn();
-        options.abortSignal?.throwIfAborted();
         const latencyMs = Date.now() - startTime;
         this.latencies.push(latencyMs);
 

@@ -53,10 +53,10 @@ export class SlotQueue {
 
   /**
    * Acquire a slot. All requests go through the queue to prevent race conditions.
-   * Returns when a slot is available and quota is not exhausted.
+   * Returns when a slot is available and quota is not exhausted. An aborted signal stops
+   * the request from waiting, but a slot that is free immediately is still granted.
    */
   async acquire(requestId: string, signal?: AbortSignal): Promise<void> {
-    signal?.throwIfAborted();
     return new Promise((resolve, reject) => {
       const queuedAt = Date.now();
       let timeoutId: NodeJS.Timeout | undefined;
@@ -100,6 +100,9 @@ export class SlotQueue {
       this.waiting.push(request);
       signal?.addEventListener('abort', onAbort, { once: true });
       this.processQueue();
+      if (signal?.aborted) {
+        onAbort();
+      }
     });
   }
 
