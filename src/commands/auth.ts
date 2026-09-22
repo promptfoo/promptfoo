@@ -501,25 +501,19 @@ export function authCommand(program: Command) {
           throw new Error('No teams found for user');
         }
 
-        const { organizationId: fallbackOrganizationId, teams: organizationTeams } =
-          getOrganizationTeams(
-            teams,
-            undefined,
-            currentOrganizationId ?? getOldestTeam(teams).organizationId,
-          );
-        const savedFallbackTeamId =
-          fallbackOrganizationId === currentOrganizationId
-            ? undefined
-            : cloudConfig.getCurrentTeamId(fallbackOrganizationId);
-        const savedFallbackTeam = organizationTeams.find((team) => team.id === savedFallbackTeamId);
-        const fallbackTeam = savedFallbackTeam ?? getOldestTeam(organizationTeams);
-        if (fallbackOrganizationId !== currentOrganizationId) {
-          cloudConfig.setCurrentOrganization(fallbackOrganizationId);
-        }
-        if (!savedFallbackTeam) {
-          cloudConfig.setCurrentTeamId(fallbackTeam.id, fallbackOrganizationId);
-        }
-        const teamLabelSuffix = savedFallbackTeam ? '' : ` ${chalk.dim('(default)')}`;
+        const { organizationId, teams: organizationTeams } = getOrganizationTeams(
+          teams,
+          undefined,
+          currentOrganizationId ?? getOldestTeam(teams).organizationId,
+        );
+        // The current organization's selection was just cleared, so a saved team can only
+        // be reused when falling back to another organization.
+        const savedTeamId = cloudConfig.getCurrentTeamId(organizationId);
+        const savedTeam = organizationTeams.find((team) => team.id === savedTeamId);
+        const fallbackTeam = savedTeam ?? getOldestTeam(organizationTeams);
+        cloudConfig.setCurrentOrganization(organizationId);
+        cloudConfig.setCurrentTeamId(fallbackTeam.id, organizationId);
+        const teamLabelSuffix = savedTeam ? '' : ` ${chalk.dim('(default)')}`;
         logger.info(`Current team: ${chalk.green(fallbackTeam.name)}${teamLabelSuffix}`);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);

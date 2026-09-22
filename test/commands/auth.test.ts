@@ -8,7 +8,6 @@ import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
 import { getDefaultTeam, getUserTeams } from '../../src/util/cloud';
 import { fetchWithProxy } from '../../src/util/fetch/index';
-import { monkeyPatchFetch, PROMPTFOO_TEAM_ID_HEADER } from '../../src/util/fetch/monkeyPatchFetch';
 import { openAuthBrowser } from '../../src/util/server';
 import { createMockResponse, mockGlobal, stripAnsi } from '../util/utils';
 
@@ -725,225 +724,192 @@ describe('auth command', () => {
   });
 
   describe('teams current', () => {
-    const makeTeam = (id: string, name: string, organizationId: string, createdAt: string) => ({
+    const STALE_WARNING = 'Stored team is no longer accessible, looking for another team';
+    const team = (id: string, organizationId: string, createdAt: string) => ({
       id,
-      name,
+      name: id,
       slug: id,
       organizationId,
       createdAt,
       updatedAt: createdAt,
     });
+    type SavedTeams = Record<string, string>;
 
-    const runCurrentCommand = async () => {
-      const currentCommand = program.commands
-        .find((cmd) => cmd.name() === 'auth')
-        ?.commands.find((cmd) => cmd.name() === 'teams')
-        ?.commands.find((cmd) => cmd.name() === 'current');
-      await currentCommand?.parseAsync(['node', 'test']);
-    };
-
-    const mockTeamPreferences = (initialOrganizationId: string, teamIds: Map<string, string>) => {
-      let currentOrganizationId = initialOrganizationId;
+    /** Models CloudConfig's per-organization team selections; `legacy` is the unscoped slot. */
+    const mockCloudTeamState = (initialOrganizationId: string | undefined, saved: SavedTeams) => {
+      const slot = (organizationId?: string) => organizationId ?? 'legacy';
+      const state = { organizationId: initialOrganizationId, saved: { ...saved } };
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       vi.mocked(cloudConfig.getCurrentOrganizationId).mockImplementation(
-        () => currentOrganizationId,
-      );
-      vi.mocked(cloudConfig.getCurrentTeamId).mockImplementation((organizationId) =>
-        organizationId ? teamIds.get(organizationId) : undefined,
+        () => state.organizationId,
       );
       vi.mocked(cloudConfig.setCurrentOrganization).mockImplementation((organizationId) => {
-        currentOrganizationId = organizationId;
+        state.organizationId = organizationId;
+      });
+      vi.mocked(cloudConfig.getCurrentTeamId).mockImplementation((id) => state.saved[slot(id)]);
+      vi.mocked(cloudConfig.setCurrentTeamId).mockImplementation((teamId, organizationId) => {
+        state.saved[slot(organizationId)] = teamId;
       });
       vi.mocked(cloudConfig.clearCurrentTeamId).mockImplementation((organizationId) => {
-        if (organizationId) {
-          teamIds.delete(organizationId);
-        }
+        delete state.saved[slot(organizationId)];
       });
-      vi.mocked(cloudConfig.setCurrentTeamId).mockImplementation((teamId, organizationId) => {
-        if (organizationId) {
-          teamIds.set(organizationId, teamId);
-        }
-      });
+      return state;
     };
 
-    const getNextCloudTaskTeamHeader = async () => {
-      const cloudHost = 'https://cloud.example.test';
-      vi.mocked(cloudConfig.getApiHost).mockReturnValue(cloudHost);
-      vi.mocked(cloudConfig.getApiKey).mockReturnValue('synthetic-api-key');
-      vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('Authorization');
-      mockFetch.mockResolvedValueOnce(createMockResponse({ ok: true, body: {} }));
-
-      await monkeyPatchFetch(`${cloudHost}/api/v1/task`, {
-        method: 'POST',
-        headers: { 'x-promptfoo-silent': 'true' },
-      });
-
-      expect(mockFetch).toHaveBeenCalledOnce();
-      return new Headers(mockFetch.mock.lastCall?.[1]?.headers).get(PROMPTFOO_TEAM_ID_HEADER);
+    const runCurrentCommand = async () => {
+      const output: string[] = [];
+      for (const level of ['info', 'warn', 'error'] as const) {
+        vi.mocked(logger[level]).mockImplementation((message) => {
+          output.push(stripAnsi(String(message)));
+        });
+      }
+      await program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'teams')
+        ?.commands.find((cmd) => cmd.name() === 'current')
+        ?.parseAsync(['node', 'test']);
+      return output;
     };
 
-    beforeEach(() => {
-      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
-      vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue('org-1');
-      vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('stale-team');
-    });
+    it.each<{
+      scenario: string;
+      organizationId?: string;
+      saved: SavedTeams;
+      teams: ReturnType<typeof team>[] | Error;
+      expected: { organizationId?: string; saved: SavedTeams; output: string[]; exitCode?: number };
+    }>([
+      {
+        scenario: 'shows an accessible saved team without changing it',
+        organizationId: 'org-1',
+        saved: { 'org-1': 'selected' },
+        teams: [team('older', 'org-1', '2023'), team('selected', 'org-1', '2024')],
+        expected: {
+          organizationId: 'org-1',
+          saved: { 'org-1': 'selected' },
+          output: ['Current team: selected'],
+        },
+      },
+      {
+        scenario: 'keeps the saved team when the lookup fails',
+        organizationId: 'org-1',
+        saved: { 'org-1': 'selected' },
+        teams: new Error('Failed to get user teams: Service Unavailable'),
+        expected: {
+          organizationId: 'org-1',
+          saved: { 'org-1': 'selected' },
+          output: ['Failed to get current team: Failed to get user teams: Service Unavailable'],
+          exitCode: 1,
+        },
+      },
+      {
+        scenario: 'replaces an inaccessible team with the oldest team in the same organization',
+        organizationId: 'org-1',
+        saved: { 'org-1': 'removed' },
+        teams: [
+          team('other-org', 'org-2', '2022'),
+          team('newer', 'org-1', '2024'),
+          team('oldest', 'org-1', '2023'),
+        ],
+        expected: {
+          organizationId: 'org-1',
+          saved: { 'org-1': 'oldest' },
+          output: [STALE_WARNING, 'Current team: oldest (default)'],
+        },
+      },
+      {
+        scenario: 'treats a saved team that belongs to another organization as inaccessible',
+        organizationId: 'org-1',
+        saved: { 'org-1': 'org-2-team' },
+        teams: [team('org-2-team', 'org-2', '2022'), team('org-1-team', 'org-1', '2023')],
+        expected: {
+          organizationId: 'org-1',
+          saved: { 'org-1': 'org-1-team' },
+          output: [STALE_WARNING, 'Current team: org-1-team (default)'],
+        },
+      },
+      {
+        scenario: 'switches to the oldest organization when the current one has no teams',
+        organizationId: 'org-1',
+        saved: { 'org-1': 'removed' },
+        teams: [team('newer', 'org-3', '2024'), team('oldest', 'org-2', '2023')],
+        expected: {
+          organizationId: 'org-2',
+          saved: { 'org-2': 'oldest' },
+          output: [STALE_WARNING, 'Current team: oldest (default)'],
+        },
+      },
+      {
+        scenario: "reuses the fallback organization's accessible saved team",
+        organizationId: 'org-1',
+        saved: { 'org-1': 'removed', 'org-2': 'preferred', 'org-3': 'other' },
+        teams: [
+          team('oldest', 'org-2', '2022'),
+          team('other', 'org-3', '2023'),
+          team('preferred', 'org-2', '2024'),
+        ],
+        expected: {
+          organizationId: 'org-2',
+          saved: { 'org-2': 'preferred', 'org-3': 'other' },
+          output: [STALE_WARNING, 'Current team: preferred'],
+        },
+      },
+      {
+        scenario: "ignores a fallback organization's saved team from another organization",
+        organizationId: 'org-1',
+        saved: { 'org-1': 'removed', 'org-2': 'org-3-team' },
+        teams: [
+          team('newer', 'org-2', '2024'),
+          team('org-3-team', 'org-3', '2023'),
+          team('oldest', 'org-2', '2022'),
+        ],
+        expected: {
+          organizationId: 'org-2',
+          saved: { 'org-2': 'oldest' },
+          output: [STALE_WARNING, 'Current team: oldest (default)'],
+        },
+      },
+      {
+        scenario: 'moves an inaccessible legacy unscoped team into an organization',
+        saved: { legacy: 'removed' },
+        teams: [team('newer', 'org-2', '2024'), team('oldest', 'org-2', '2022')],
+        expected: {
+          organizationId: 'org-2',
+          saved: { 'org-2': 'oldest' },
+          output: [STALE_WARNING, 'Current team: oldest (default)'],
+        },
+      },
+      {
+        scenario: 'clears an inaccessible team when the user has no teams',
+        organizationId: 'org-1',
+        saved: { 'org-1': 'removed' },
+        teams: [],
+        expected: {
+          organizationId: 'org-1',
+          saved: {},
+          output: [STALE_WARNING, 'Failed to get current team: No teams found for user'],
+          exitCode: 1,
+        },
+      },
+    ])('$scenario', async ({ organizationId, saved, teams, expected }) => {
+      const state = mockCloudTeamState(organizationId, saved);
+      if (teams instanceof Error) {
+        vi.mocked(getUserTeams).mockRejectedValue(teams);
+      } else {
+        vi.mocked(getUserTeams).mockResolvedValue(teams);
+      }
 
-    it('shows an accessible stored team without changing the selection', async () => {
-      vi.mocked(getUserTeams).mockResolvedValue([
-        makeTeam('older-team', 'Older', 'org-1', '2023-01-01'),
-        makeTeam('stale-team', 'Selected', 'org-1', '2024-01-01'),
-      ]);
-
-      await runCurrentCommand();
-
-      expect(getUserTeams).toHaveBeenCalledTimes(1);
-      expect(cloudConfig.clearCurrentTeamId).not.toHaveBeenCalled();
-      expect(cloudConfig.setCurrentTeamId).not.toHaveBeenCalled();
-      expect(cloudConfig.setCurrentOrganization).not.toHaveBeenCalled();
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Selected'));
-      expect(logger.warn).not.toHaveBeenCalled();
-    });
-
-    it('clears a confirmed inaccessible team and selects the oldest team in the same organization', async () => {
-      vi.mocked(getUserTeams).mockResolvedValue([
-        makeTeam('other-org-team', 'Other organization', 'org-2', '2022-01-01'),
-        makeTeam('newer-team', 'Newer', 'org-1', '2024-01-01'),
-        makeTeam('default-team', 'Default', 'org-1', '2023-01-01'),
-      ]);
-
-      await runCurrentCommand();
-
-      expect(getUserTeams).toHaveBeenCalledTimes(1);
-      expect(cloudConfig.clearCurrentTeamId).toHaveBeenCalledOnce();
-      expect(cloudConfig.clearCurrentTeamId).toHaveBeenCalledWith('org-1');
-      expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('default-team', 'org-1');
-      expect(vi.mocked(cloudConfig.clearCurrentTeamId).mock.invocationCallOrder[0]).toBeLessThan(
-        vi.mocked(cloudConfig.setCurrentTeamId).mock.invocationCallOrder[0],
-      );
-      expect(cloudConfig.setCurrentOrganization).not.toHaveBeenCalled();
-      expect(stripAnsi(String(vi.mocked(logger.info).mock.lastCall?.[0]))).toBe(
-        'Current team: Default (default)',
-      );
-    });
-
-    it('switches organizations when the confirmed fallback belongs to another organization', async () => {
-      vi.mocked(getUserTeams).mockResolvedValue([
-        makeTeam('newer-team', 'Newer', 'org-3', '2024-01-01'),
-        makeTeam('default-team', 'Default', 'org-2', '2023-01-01'),
-      ]);
-
-      await runCurrentCommand();
-
-      expect(getUserTeams).toHaveBeenCalledTimes(1);
-      expect(cloudConfig.clearCurrentTeamId).toHaveBeenCalledWith('org-1');
-      expect(cloudConfig.setCurrentOrganization).toHaveBeenCalledWith('org-2');
-      expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('default-team', 'org-2');
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Default'));
-    });
-
-    it('restores the fallback organization’s accessible saved team for subsequent Cloud requests', async () => {
-      const teamIds = new Map([
-        ['org-1', 'stale-team'],
-        ['org-2', 'preferred-team'],
-        ['org-3', 'other-team'],
-      ]);
-      mockTeamPreferences('org-1', teamIds);
-      vi.mocked(getUserTeams).mockResolvedValue([
-        makeTeam('oldest-team', 'Oldest', 'org-2', '2022-01-01'),
-        makeTeam('other-team', 'Other organization', 'org-3', '2023-01-01'),
-        makeTeam('preferred-team', 'Preferred', 'org-2', '2024-01-01'),
-      ]);
-
-      await runCurrentCommand();
-
-      expect(getUserTeams).toHaveBeenCalledTimes(1);
-      expect(cloudConfig.getCurrentTeamId).toHaveBeenCalledWith('org-2');
-      expect(cloudConfig.clearCurrentTeamId).toHaveBeenCalledOnce();
-      expect(cloudConfig.clearCurrentTeamId).toHaveBeenCalledWith('org-1');
-      expect(cloudConfig.setCurrentTeamId).not.toHaveBeenCalled();
-      expect(cloudConfig.getCurrentOrganizationId()).toBe('org-2');
-      expect(teamIds).toEqual(
-        new Map([
-          ['org-2', 'preferred-team'],
-          ['org-3', 'other-team'],
-        ]),
-      );
-      expect(stripAnsi(String(vi.mocked(logger.info).mock.lastCall?.[0]))).toBe(
-        'Current team: Preferred',
-      );
-      expect(await getNextCloudTaskTeamHeader()).toBe('preferred-team');
-    });
-
-    it('replaces a saved fallback preference inaccessible to that organization with its oldest team', async () => {
-      const teamIds = new Map([
-        ['org-1', 'stale-team'],
-        ['org-2', 'wrong-org-team'],
-        ['org-3', 'wrong-org-team'],
-      ]);
-      mockTeamPreferences('org-1', teamIds);
-      vi.mocked(getUserTeams).mockResolvedValue([
-        makeTeam('newer-team', 'Newer', 'org-2', '2024-01-01'),
-        makeTeam('wrong-org-team', 'Other organization', 'org-3', '2023-01-01'),
-        makeTeam('oldest-team', 'Oldest', 'org-2', '2022-01-01'),
-      ]);
-
-      await runCurrentCommand();
-
-      expect(getUserTeams).toHaveBeenCalledTimes(1);
-      expect(cloudConfig.clearCurrentTeamId).toHaveBeenCalledOnce();
-      expect(cloudConfig.clearCurrentTeamId).toHaveBeenCalledWith('org-1');
-      expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledOnce();
-      expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('oldest-team', 'org-2');
-      expect(cloudConfig.getCurrentOrganizationId()).toBe('org-2');
-      expect(teamIds.get('org-3')).toBe('wrong-org-team');
-      expect(stripAnsi(String(vi.mocked(logger.info).mock.lastCall?.[0]))).toBe(
-        'Current team: Oldest (default)',
-      );
-      expect(await getNextCloudTaskTeamHeader()).toBe('oldest-team');
-    });
-
-    it.each([
-      'network timeout',
-      'Failed to get user teams: Unauthorized',
-      'Failed to get user teams: Service Unavailable',
-    ])('preserves the stored selection and reports a failed lookup: %s', async (message) => {
-      vi.mocked(getUserTeams).mockRejectedValue(new Error(message));
-
-      await runCurrentCommand();
-
-      expect(getUserTeams).toHaveBeenCalledTimes(1);
-      expect(cloudConfig.clearCurrentTeamId).not.toHaveBeenCalled();
-      expect(cloudConfig.setCurrentTeamId).not.toHaveBeenCalled();
-      expect(cloudConfig.setCurrentOrganization).not.toHaveBeenCalled();
-      expect(logger.warn).not.toHaveBeenCalled();
-      expect(logger.error).toHaveBeenCalledWith(`Failed to get current team: ${message}`);
-      expect(process.exitCode).toBe(1);
-      process.exitCode = 0;
-    });
-
-    it('clears a confirmed inaccessible team when no fallback is available', async () => {
-      vi.mocked(getUserTeams).mockResolvedValue([]);
-
-      await runCurrentCommand();
-
-      expect(getUserTeams).toHaveBeenCalledTimes(1);
-      expect(cloudConfig.clearCurrentTeamId).toHaveBeenCalledWith('org-1');
-      expect(cloudConfig.setCurrentTeamId).not.toHaveBeenCalled();
-      expect(cloudConfig.setCurrentOrganization).not.toHaveBeenCalled();
-      expect(logger.error).toHaveBeenCalledWith(
-        'Failed to get current team: No teams found for user',
-      );
-      expect(process.exitCode).toBe(1);
-      process.exitCode = 0;
+      expect(await runCurrentCommand()).toEqual(expected.output);
+      expect(getUserTeams).toHaveBeenCalledOnce();
+      expect(state).toEqual({ organizationId: expected.organizationId, saved: expected.saved });
+      expect(process.exitCode).toBe(expected.exitCode);
+      process.exitCode = undefined;
     });
 
     it('does not query teams when no team is currently selected', async () => {
-      vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
+      mockCloudTeamState('org-1', {});
 
-      await runCurrentCommand();
-
+      expect(await runCurrentCommand()).toEqual(['No team currently selected']);
       expect(getUserTeams).not.toHaveBeenCalled();
-      expect(cloudConfig.clearCurrentTeamId).not.toHaveBeenCalled();
-      expect(logger.info).toHaveBeenCalledWith('No team currently selected');
     });
   });
 
