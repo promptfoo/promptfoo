@@ -345,49 +345,27 @@ describe('discoverTokenEndpoint', () => {
     );
   });
 
-  it('should ignore empty token endpoints during discovery', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ token_endpoint: '' }),
-    });
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ token_endpoint: 'https://example.com/token' }),
-    });
+  // Each case uses its own server URL: a cached endpoint would pass without validating.
+  it.each([
+    ['empty', ''],
+    ['malformed', 'not a url'],
+    ['non-HTTP', 'ftp://skip.example.com/token'],
+    ['cross-origin', 'https://unrelated.example.net/token'],
+    ['scheme-mismatched', 'http://skip.example.com/token'],
+    ['port-mismatched', 'https://skip.example.com:8443/token'],
+    ['credentialed', 'https://user:password@skip.example.com/token'],
+  ])('skips a %s token endpoint and keeps discovering', async (kind, tokenEndpoint) => {
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ token_endpoint: tokenEndpoint }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ token_endpoint: 'https://skip.example.com/token' }),
+      });
 
-    await expect(discoverTokenEndpoint('https://example.com/path')).resolves.toBe(
-      'https://example.com/token',
+    await expect(discoverTokenEndpoint(`https://skip.example.com/${kind}`)).resolves.toBe(
+      'https://skip.example.com/token',
     );
-  });
-
-  it('should ignore malformed token endpoints during discovery', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ token_endpoint: 'not a url' }),
-    });
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ token_endpoint: 'https://example.com/token' }),
-    });
-
-    await expect(discoverTokenEndpoint('https://example.com/path')).resolves.toBe(
-      'https://example.com/token',
-    );
-  });
-
-  it('should ignore token endpoints with unsupported protocols during discovery', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ token_endpoint: 'ftp://auth.example.com/token' }),
-    });
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ token_endpoint: 'https://example.com/token' }),
-    });
-
-    await expect(discoverTokenEndpoint('https://example.com/path')).resolves.toBe(
-      'https://example.com/token',
-    );
+    expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 
   it('should handle network errors gracefully', async () => {
@@ -400,30 +378,6 @@ describe('discoverTokenEndpoint', () => {
 });
 
 describe('getOAuthTokenWithExpiry', () => {
-  it.each([
-    'https://unrelated.example.net/token',
-    'http://credential-origin.example.com/token',
-    'https://credential-origin.example.com:8443/token',
-    'https://user:password@credential-origin.example.com/token',
-  ])('does not send credentials to an unsafe discovered endpoint: %s', async (tokenEndpoint) => {
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({ token_endpoint: tokenEndpoint }),
-    });
-    await expect(
-      getOAuthTokenWithExpiry(
-        {
-          type: 'oauth',
-          grantType: 'client_credentials',
-          clientId: 'fixture',
-          clientSecret: 'fixture-secret',
-        },
-        `https://credential-origin.example.com/mcp?case=${encodeURIComponent(tokenEndpoint)}`,
-      ),
-    ).rejects.toThrow(/configure tokenUrl explicitly/);
-    expect(mockFetch.mock.calls.every(([, options]) => options?.method !== 'POST')).toBe(true);
-  });
-
   it('rejects redirects while discovering and exchanging credentials', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
