@@ -397,7 +397,6 @@ export class ProviderRateLimitState extends EventEmitter {
       }, ms);
       const onAbort = () => {
         clearTimeout(timeout);
-        signal?.removeEventListener('abort', onAbort);
         reject(signal?.reason);
       };
       signal?.addEventListener('abort', onAbort, { once: true });
