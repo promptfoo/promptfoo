@@ -355,9 +355,7 @@ export class TrueFoundryEmbeddingProvider extends OpenAiEmbeddingProvider {
 
     try {
       // Call parent implementation
-      return await (context || options
-        ? super.callEmbeddingApi(text, context, options)
-        : super.callEmbeddingApi(text));
+      return await super.callEmbeddingApi(text, context, options);
     } finally {
       // Restore original headers
       this.config.headers = originalHeaders;
