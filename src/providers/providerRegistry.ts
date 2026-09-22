@@ -117,14 +117,17 @@ class ProviderRegistry {
 
   /** Reserve a shared resource before using it, waiting if its preceding shutdown has started. */
   useResource(resource: CleanupProvider): Promise<void> | undefined {
-    const scope = this.evaluation.getStore();
     const state = this.resources.get(resource);
-    if (!scope?.active || !state) {
+    if (!state) {
       return undefined;
     }
     const provider = this.currentProvider.getStore();
-    if (provider) {
+    if (provider?.activeCalls) {
       this.linkResource(provider, state);
+    }
+    const scope = this.evaluation.getStore();
+    if (!scope?.active) {
+      return provider?.activeCalls ? state.release?.promise : undefined;
     }
     this.claimResource(scope, state);
     return state.release?.promise;

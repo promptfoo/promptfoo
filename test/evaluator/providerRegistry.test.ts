@@ -211,6 +211,109 @@ describeEvaluator('registered resources across overlapping evaluations', () => {
     }
   });
 
+  it.each([false, true])(
+    'closes a resource initialized after its evaluation ends when the physical call settles (failure: %s)',
+    async (fails) => {
+      const startInitialization = deferred();
+      const registered = deferred();
+      const finish = deferred();
+      const resource = { shutdown: vi.fn(async () => {}) };
+      const provider = { id: () => 'late-unawaited-provider', cleanup: vi.fn(async () => {}) };
+      const failure = new Error('underlying provider failed');
+      let physical: Promise<void> | undefined;
+      const evaluation = providerRegistry.withEvaluation(async () => {
+        await providerRegistry.cleanupWhenIdle([provider]);
+        physical = providerRegistry.withProvider(provider, async () => {
+          await startInitialization.promise;
+          providerRegistry.register(resource);
+          registered.resolve();
+          await finish.promise;
+          if (fails) {
+            throw failure;
+          }
+        });
+        void physical.catch(() => {});
+      });
+      try {
+        await evaluation;
+        startInitialization.resolve();
+        await registered.promise;
+        expect(resource.shutdown).not.toHaveBeenCalled();
+        expect(provider.cleanup).not.toHaveBeenCalled();
+
+        finish.resolve();
+        if (fails) {
+          await expect(physical).rejects.toBe(failure);
+        } else {
+          await physical;
+        }
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(resource.shutdown).toHaveBeenCalledOnce();
+        expect(provider.cleanup).toHaveBeenCalledOnce();
+      } finally {
+        startInitialization.resolve();
+        finish.resolve();
+        await Promise.allSettled([evaluation, ...(physical ? [physical] : [])]);
+        providerRegistry.unregister(resource);
+      }
+    },
+  );
+
+  it('waits for an earlier resource shutdown when the physical caller outlives its evaluation', async () => {
+    const shutdownStarted = deferred();
+    const releaseShutdown = deferred();
+    const startUse = deferred();
+    const using = deferred();
+    const finish = deferred();
+    const resource = {
+      shutdown: vi.fn(async () => {
+        shutdownStarted.resolve();
+        await releaseShutdown.promise;
+      }),
+    };
+    const provider = { id: () => 'outliving-resource-caller' };
+    const touched = vi.fn();
+    const earlier = providerRegistry.withEvaluation(async () =>
+      providerRegistry.register(resource),
+    );
+    let physical: Promise<void> | undefined;
+    const evaluation = providerRegistry.withEvaluation(async () => {
+      physical = providerRegistry.withProvider(provider, async () => {
+        await startUse.promise;
+        using.resolve();
+        await providerRegistry.useResource(resource);
+        touched();
+        providerRegistry.register(resource);
+        await finish.promise;
+      });
+      void physical.catch(() => {});
+    });
+    try {
+      await Promise.all([shutdownStarted.promise, evaluation]);
+      startUse.resolve();
+      await using.promise;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(touched).not.toHaveBeenCalled();
+
+      releaseShutdown.resolve();
+      await earlier;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(touched).toHaveBeenCalledOnce();
+      expect(resource.shutdown).toHaveBeenCalledOnce();
+
+      finish.resolve();
+      await physical;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(resource.shutdown).toHaveBeenCalledTimes(2);
+    } finally {
+      startUse.resolve();
+      releaseShutdown.resolve();
+      finish.resolve();
+      await Promise.allSettled([earlier, evaluation, ...(physical ? [physical] : [])]);
+      providerRegistry.unregister(resource);
+    }
+  });
+
   it('shares a lazily registered transport with evaluations already using the same provider', async () => {
     const bothStarted = deferred();
     const finishFirst = deferred();
