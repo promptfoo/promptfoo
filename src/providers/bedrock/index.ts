@@ -2994,6 +2994,8 @@ export class AwsBedrockEmbeddingProvider
   extends AwsBedrockGenericProvider
   implements ApiEmbeddingProvider
 {
+  readonly supportsEmbeddingCancellation = true;
+
   declare config: BedrockEmbeddingOptions;
 
   constructor(

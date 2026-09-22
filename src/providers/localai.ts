@@ -105,6 +105,8 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
 }
 
 export class LocalAiEmbeddingProvider extends LocalAiGenericProvider {
+  readonly supportsEmbeddingCancellation = true;
+
   async callEmbeddingApi(
     text: string,
     _context?: CallApiContextParams,

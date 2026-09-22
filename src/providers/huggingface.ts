@@ -390,6 +390,8 @@ type HuggingfaceFeatureExtractionOptions = HuggingfaceProviderOptions & {
 };
 
 export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
+  readonly supportsEmbeddingCancellation = true;
+
   modelName: string;
   config: HuggingfaceFeatureExtractionOptions;
 

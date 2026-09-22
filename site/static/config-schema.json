@@ -862,6 +862,9 @@
         "id": {},
         "callApi": {},
         "callEmbeddingApi": {},
+        "supportsEmbeddingCancellation": {
+          "type": "boolean"
+        },
         "callClassificationApi": {},
         "label": {},
         "transform": {

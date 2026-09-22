@@ -761,6 +761,8 @@ export class MistralChatCompletionProvider implements ApiProvider {
 }
 
 export class MistralEmbeddingProvider implements ApiProvider {
+  readonly supportsEmbeddingCancellation = true;
+
   modelName: string;
   config: MistralChatCompletionOptions;
   env?: EnvOverrides;

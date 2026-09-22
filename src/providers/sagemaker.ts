@@ -1765,6 +1765,8 @@ export class SageMakerEmbeddingProvider
   extends SageMakerGenericProvider
   implements ApiEmbeddingProvider
 {
+  readonly supportsEmbeddingCancellation = true;
+
   async callApi(): Promise<ProviderResponse> {
     throw new Error(
       'callApi is not implemented for embedding provider. Use callEmbeddingApi instead.',
