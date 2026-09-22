@@ -17,7 +17,7 @@ Evaluations run inside `providerRegistry.withEvaluation()` (`src/providers/provi
 
 **If your provider allocates resources** (Python workers, connections, child processes):
 
-- Implement a `cleanup()` method on your provider; automatic calls pass `{ reason: 'evaluation-complete' }`
+- Implement a `cleanup()` method; it is called without arguments. Providers that distinguish idle evaluation cleanup from explicit shutdown can also implement `cleanupAfterEvaluation({ reason: 'evaluation-complete' })`, which is used instead for automatic cleanup.
 - Register with `providerRegistry` for automatic cleanup
 - Resources are released once no evaluation is active, and on process exit
 

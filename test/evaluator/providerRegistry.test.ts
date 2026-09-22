@@ -80,6 +80,94 @@ describeEvaluator('registered resources across overlapping evaluations', () => {
     }
   });
 
+  it.each(['still running', 'already finished'] as const)(
+    'does not let a timed-out cleanup close resources owned by a newer evaluation that is %s',
+    async (newerState) => {
+      vi.useFakeTimers();
+      const cleanupStarted = deferred();
+      const releaseCleanup = deferred();
+      const newerStarted = deferred();
+      const finishNewer = deferred();
+      const cleanup = {
+        id: () => 'slow-idle-cleanup',
+        cleanup: vi.fn(async () => {
+          cleanupStarted.resolve();
+          await releaseCleanup.promise;
+        }),
+      };
+      const reused = { shutdown: vi.fn(async () => {}) };
+      const fresh = { shutdown: vi.fn(async () => {}) };
+      providerRegistry.register(reused);
+      const earlier = providerRegistry.withEvaluation(async () => {
+        providerRegistry.cleanupWhenIdle([cleanup]);
+      });
+      let newer: Promise<void> | undefined;
+      try {
+        await cleanupStarted.promise;
+        newer = providerRegistry.withEvaluation(async () => {
+          providerRegistry.register(reused);
+          providerRegistry.register(fresh);
+          newerStarted.resolve();
+          await finishNewer.promise;
+        });
+        await vi.advanceTimersByTimeAsync(30_000);
+        await newerStarted.promise;
+        if (newerState === 'already finished') {
+          finishNewer.resolve();
+          await newer;
+          expect(reused.shutdown).toHaveBeenCalledOnce();
+          expect(fresh.shutdown).toHaveBeenCalledOnce();
+        }
+        releaseCleanup.resolve();
+        await earlier;
+        if (newerState === 'still running') {
+          expect(reused.shutdown).not.toHaveBeenCalled();
+          expect(fresh.shutdown).not.toHaveBeenCalled();
+        }
+
+        finishNewer.resolve();
+        await newer;
+        expect(reused.shutdown).toHaveBeenCalledOnce();
+        expect(fresh.shutdown).toHaveBeenCalledOnce();
+      } finally {
+        releaseCleanup.resolve();
+        finishNewer.resolve();
+        await Promise.allSettled([earlier, ...(newer ? [newer] : [])]);
+        providerRegistry.unregister(reused);
+        providerRegistry.unregister(fresh);
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it('calls legacy cleanup without arguments and uses the separate evaluation hook when present', async () => {
+    const legacy = {
+      id: () => 'legacy-optional-force',
+      callApi: async () => ({ output: 'ok' }),
+      cleanup: vi.fn((force?: boolean) => {
+        if (force) {
+          throw new Error('Unexpected forced cleanup');
+        }
+      }),
+    } satisfies ApiProvider;
+    const aware = {
+      id: () => 'evaluation-aware-cleanup',
+      callApi: async () => ({ output: 'ok' }),
+      cleanup: vi.fn(),
+      cleanupAfterEvaluation: vi.fn(),
+    } satisfies ApiProvider;
+
+    await providerRegistry.withEvaluation(async () => {
+      providerRegistry.cleanupWhenIdle([legacy, aware]);
+    });
+
+    expect(legacy.cleanup).toHaveBeenCalledExactlyOnceWith();
+    expect(aware.cleanupAfterEvaluation).toHaveBeenCalledExactlyOnceWith({
+      reason: 'evaluation-complete',
+    });
+    expect(aware.cleanup).not.toHaveBeenCalled();
+  });
+
   it.each(['distinct', 'shared', 'abort', 'error'] as const)(
     'keeps the active registered request alive when the other %s run finishes',
     async (mode) => {
