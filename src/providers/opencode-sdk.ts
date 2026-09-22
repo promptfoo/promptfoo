@@ -746,9 +746,9 @@ function redactOpenCodeError(
       new RegExp(unbounded ? pattern : '(?<![\\w.~+-])' + pattern + '(?![\\w.~+=-])', 'g'),
     );
   }
-  const credentialField = String.raw`(?<![\w.-])["']?(?!(?:[\w.-]+[_.-])?(?:total|input|output|cached|reasoning|prompt|completion|remaining|limit|usage|count|num)[_.-]tokens?["']?\s*[:=])(?:[\w.-]+[_.-])?(?:(?:api|access|private|client)[_ -]?key|(?:(?:access|refresh|session|id|auth|csrf|bearer)[_ -]?)?token|(?:client[_ -]?)?secret|credentials?|pass(?:word|wd|phrase)|pwd|sign(?:ature|ing[_ -]?key)|authorization|(?:set[_ -]?)?cookie)["']?\s*[:=]\s*`;
+  const credentialField = String.raw`(?<![\w.-])["']?(?!(?:[\w.-]+[_.-])?(?:total|input|output|cached|reasoning|prompt|completion|remaining|limit|usage|count|num)[_.-]tokens?["']?\s*[:=])(?:[\w.-]+[_.-])?(?:[a-z0-9]*(?:(?:api|access|private|client)[_ -]?key|(?:access|refresh|session|id|auth|csrf|bearer|api|account)[_ -]?token|(?:client[_ -]?)?secret|credentials?|pass(?:word|wd|phrase)|pwd|sign(?:ature|ing[_ -]?key)|authorization|(?:set[_ -]?)?cookie)|token)["']?\s*[:=]\s*`;
   for (const pattern of [
-    /(?<![\w.-])(["']?(?:[\w.-]+[_.-])?(?:set[_ -]?)?cookie["']?\s*[:=]\s*["']?)[^\s,"';}]+(?:\s*;\s*[^\s=;,"'}]+=[^\s,"';}]+)*/gi,
+    /(?<![\w.-])(["']?(?:[\w.-]+[_.-])?[a-z0-9]*(?:set[_ -]?)?cookie["']?\s*[:=]\s*["']?)[^\s,"';}]+(?:\s*;\s*[^\s=;,"'}]+=[^\s,"';}]+)*/gi,
     new RegExp(String.raw`(${credentialField}(["']))(?:\\[^\r\n]|(?!\2)[^\\\r\n])*(?=\2)`, 'gi'),
     new RegExp(String.raw`(${credentialField}["']?)(?:(?:Bearer|Basic)\s+)?[^\s,"';&}]+`, 'gi'),
   ]) {
