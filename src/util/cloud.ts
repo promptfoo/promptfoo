@@ -567,18 +567,32 @@ export async function resolveTeamId(
   }
 
   // 2. Use stored current team preference (scoped to current organization)
-  const currentOrganizationId = cloudConfig.getCurrentOrganizationId();
+  const configuredOrganizationId = cloudConfig.getCurrentOrganizationId();
+  let currentOrganizationId = configuredOrganizationId;
   const currentTeamId = cloudConfig.getCurrentTeamId(currentOrganizationId);
   if (!currentTeamId && !fallbackToDefault) {
     throw new Error('No team specified and no default available');
   }
+  if (!currentOrganizationId) {
+    const response = await makeRequest('/users/me', 'GET');
+    const organizationId = response.ok ? (await response.json())?.organization?.id : undefined;
+    if (typeof organizationId !== 'string' || !organizationId) {
+      throw new Error(
+        "Could not determine the current organization. Run 'promptfoo auth login' to select it.",
+      );
+    }
+    currentOrganizationId = organizationId;
+  }
   // Let lookup failures propagate: only a successful lookup proves the stored team is gone.
-  // Legacy configs without a current organization consider every team.
   const teams = (await getUserTeams()).filter(
-    (team) => !currentOrganizationId || team.organizationId === currentOrganizationId,
+    (team) => team.organizationId === currentOrganizationId,
   );
   const storedTeam = teams.find((team) => team.id === currentTeamId);
   if (storedTeam) {
+    if (!configuredOrganizationId) {
+      cloudConfig.setCurrentOrganization(currentOrganizationId);
+      cloudConfig.setCurrentTeamId(storedTeam.id, currentOrganizationId);
+    }
     logger.debug(`[Team Resolution] Using stored team ID: ${currentTeamId}`);
     return storedTeam;
   }
@@ -594,13 +608,14 @@ export async function resolveTeamId(
   }
   if (teams.length === 0) {
     throw new Error(
-      currentOrganizationId
-        ? `No accessible teams in organization '${currentOrganizationId}'. Run 'promptfoo auth login --org <orgId>' to switch organizations.`
-        : 'No teams found for user',
+      `No accessible teams in organization '${currentOrganizationId}'. Run 'promptfoo auth login --org <orgId>' to switch organizations.`,
     );
   }
   const defaultTeam = getOldestTeam(teams);
   // Store the default team where the next lookup reads it
+  if (!configuredOrganizationId) {
+    cloudConfig.setCurrentOrganization(currentOrganizationId);
+  }
   cloudConfig.setCurrentTeamId(defaultTeam.id, currentOrganizationId);
   logger.info(`Using team: ${defaultTeam.name} (use 'promptfoo auth teams set <name>' to change)`);
   return defaultTeam;

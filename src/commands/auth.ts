@@ -127,6 +127,8 @@ async function setupTeamContext(
     } else if (savedTeam) {
       // Each organization remembers its team selection across logins.
       selectedTeam = savedTeam;
+    } else if (savedTeamId && organizationTeams.length > 0) {
+      selectedTeam = getOldestTeam(organizationTeams);
     } else if (organizationTeams.length === 1) {
       selectedTeam = organizationTeams[0];
     } else if (organizationTeams.length > 1) {

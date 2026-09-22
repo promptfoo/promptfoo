@@ -773,6 +773,34 @@ describe('auth command', () => {
       expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('own-default', '1');
     });
 
+    it('uses the oldest team without prompting after an interactive login finds a stale saved selection', async () => {
+      vi.mocked(isNonInteractive).mockReturnValue(false);
+      vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('removed');
+      vi.mocked(getUserTeams).mockResolvedValue([
+        {
+          id: 'newer',
+          name: 'Newer',
+          slug: 'newer',
+          organizationId: '1',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
+        {
+          id: 'oldest',
+          name: 'Oldest',
+          slug: 'oldest',
+          organizationId: '1',
+          createdAt: '2023-01-01',
+          updatedAt: '2023-01-01',
+        },
+      ]);
+
+      await program.parseAsync(['node', 'test', 'auth', 'login', '--api-key', 'key']);
+
+      expect(search).not.toHaveBeenCalled();
+      expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('oldest', '1');
+    });
+
     it.each(['name', 'slug'] as const)(
       'prefers an exact team ID in another organization over a local %s',
       async (field) => {
