@@ -37,8 +37,14 @@ vi.mock('../../src/telemetry', () => ({ default: { record: vi.fn() } }));
 
 // Mock AWS SDK
 vi.mock('@aws-sdk/client-sagemaker-runtime', () => ({
-  SageMakerRuntimeClient: vi.fn().mockImplementation(function ({ region }) {
-    return { send: (command: unknown) => mockSend(command, region), destroy: vi.fn() };
+  SageMakerRuntimeClient: vi.fn().mockImplementation(function ({ region, credentials }) {
+    return {
+      config: {
+        credentials: typeof credentials === 'function' ? credentials : async () => credentials,
+      },
+      send: (command: unknown) => mockSend(command, region),
+      destroy: vi.fn(),
+    };
   }),
   InvokeEndpointCommand: vi.fn().mockImplementation(function (params) {
     return params;
