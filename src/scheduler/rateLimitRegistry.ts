@@ -4,6 +4,7 @@ import { getEnvBool, getEnvInt } from '../envars';
 import logger from '../logger';
 import { withFetchRetryContext } from '../util/fetch/retryContext';
 import { sanitizeProviderIdForLog } from '../util/provider';
+import { runProviderCallWithAbort } from './providerCallExecutionContext';
 import { type ProviderMetrics, ProviderRateLimitState } from './providerRateLimitState';
 import { getRateLimitKey } from './rateLimitKey';
 
@@ -55,7 +56,9 @@ export class RateLimitRegistry extends EventEmitter {
     // `fetchWithRetries` picks up the provider's `maxRetries` as its default
     // and `fetchWithProxy` disables transient retries when `maxRetries: 0`.
     if (!this.enabled) {
-      return withFetchRetryContext(providerMaxRetries, callFn);
+      return withFetchRetryContext(providerMaxRetries, () =>
+        runProviderCallWithAbort(callFn, options?.abortSignal),
+      );
     }
 
     const rateLimitKey = getRateLimitKey(provider);
