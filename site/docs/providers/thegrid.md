@@ -1,13 +1,13 @@
 ---
-title: The Grid
-sidebar_label: The Grid
+title: The Grid AI
+sidebar_label: The Grid AI
 sidebar_position: 42
-description: "Evaluate The Grid's capability-tier instruments with promptfoo through the OpenAI-compatible provider, including token budgets, credentials, and cost caveats."
+description: "Evaluate The Grid AI's capability-tier instruments with promptfoo through the OpenAI-compatible provider, including token budgets, credentials, and cost caveats."
 ---
 
-# The Grid
+# The Grid AI
 
-[The Grid](https://thegrid.ai) is an inference marketplace that serves models from several labs behind one OpenAI-compatible API implementing `/v1/chat/completions` and `/v1/responses`. Promptfoo connects to it through the OpenAI provider by changing `apiBaseUrl`; there is no separate `thegrid:` provider.
+[The Grid AI](https://thegrid.ai) is an inference marketplace that serves models from several labs behind one OpenAI-compatible API implementing `/v1/chat/completions` and `/v1/responses`. Promptfoo connects to it through the OpenAI provider by changing `apiBaseUrl`; there is no separate `thegrid:` provider.
 
 Model names are **capability tiers** rather than a lab's model name. `text-standard`, `code-prime` and `agent-max` each route to a model that currently qualifies for that tier, so a config keeps working when the underlying model is replaced.
 
@@ -19,7 +19,7 @@ prompts:
 
 providers:
   - id: openai:chat:text-standard
-    label: The Grid text-standard
+    label: The Grid AI text-standard
     config:
       apiBaseUrl: https://api.thegrid.ai/v1
       apiKey: '{{ env.THEGRID_API_KEY | default("THEGRID_API_KEY_NOT_SET", true) }}'
@@ -37,7 +37,7 @@ tests:
 
 `OpenAiGenericProvider.getApiKey()` resolves `config.apiKey || apiKeyEnvar || OPENAI_API_KEY`. A plain `'{{env.THEGRID_API_KEY}}'` renders to an empty string when the variable is unset or blank, which is falsy, so the provider falls through and sends your OpenAI credential to `api.thegrid.ai`.
 
-The second argument to `default` makes it substitute on any falsy value, not just an undefined one. A missing or blank key then reaches The Grid as `THEGRID_API_KEY_NOT_SET` and comes back as a 401 naming the variable, rather than silently authenticating as you against OpenAI.
+The second argument to `default` makes it substitute on any falsy value, not just an undefined one. A missing or blank key then reaches The Grid AI as `THEGRID_API_KEY_NOT_SET` and comes back as a 401 naming the variable, rather than silently authenticating as you against OpenAI.
 
 :::
 
@@ -67,7 +67,7 @@ Lab-pinned instruments such as `claude-opus-latest` and `gemini-pro-latest` rest
 
 No Grid instrument is an immutable model id, and promptfoo cannot record which model served a request. `OpenAiChatCompletionProvider` discards the top-level `model` field from the response, so exported results carry the instrument name only.
 
-If a published number has to be reproducible, evaluate against a provider that exposes an immutable, versioned model id. Use The Grid for application evals, regression suites and judges, where routing to a current model is the point.
+If a published number has to be reproducible, evaluate against a provider that exposes an immutable, versioned model id. Use The Grid AI for application evals, regression suites and judges, where routing to a current model is the point.
 
 :::
 
@@ -77,7 +77,7 @@ Use `max_tokens`. Promptfoo only forwards `max_completion_tokens` for models it 
 
 Instruments do reason before answering, and those reasoning tokens are billed and count against the output budget while never appearing in the response. A budget sized for the visible answer can therefore truncate it. Leave headroom.
 
-When using The Grid as a judge, set `showThinking: false` so model-graded assertions parse only the final content:
+When using The Grid AI as a judge, set `showThinking: false` so model-graded assertions parse only the final content:
 
 ```yaml
 defaultTest:
@@ -96,13 +96,13 @@ defaultTest:
 
 Promptfoo cannot report cost for Grid instruments. `calculateOpenAIUsageCost` looks up built-in rates by model name and returns `undefined` when there are none, before `inputCost` and `outputCost` overrides are consulted, so those options have no effect for these ids.
 
-The Grid is market-priced, so a per-token rate moves and `/v1/models` can serve `"pricing": null` when the rate cache is cold. A static table would be wrong either way. Use The Grid's own `GET /v1/usage` and `GET /v1/usage/summary` endpoints for actual spend.
+The Grid AI is market-priced, so a per-token rate moves and `/v1/models` can serve `"pricing": null` when the rate cache is cold. A static table would be wrong either way. Use The Grid AI's own `GET /v1/usage` and `GET /v1/usage/summary` endpoints for actual spend.
 
 ## Troubleshooting
 
 | Symptom                                    | Fix                                                                                                                      |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| Promptfoo calls OpenAI instead of The Grid | Set `apiBaseUrl` on the provider. `OPENAI_API_HOST` and `OPENAI_API_BASE_URL` both take priority over `OPENAI_BASE_URL`. |
+| Promptfoo calls OpenAI instead of The Grid AI | Set `apiBaseUrl` on the provider. `OPENAI_API_HOST` and `OPENAI_API_BASE_URL` both take priority over `OPENAI_BASE_URL`. |
 | `401` mentioning `THEGRID_API_KEY_NOT_SET` | `THEGRID_API_KEY` is unset or blank. The sentinel did its job; export a real key.                                        |
 | Empty or truncated output                  | Reasoning tokens consumed the budget. Raise `max_tokens`.                                                                |
 | Judge returns `Could not extract JSON`     | Set `showThinking: false` on the judge provider.                                                                         |
@@ -111,4 +111,4 @@ The Grid is market-priced, so a per-token rate moves and `/v1/models` can serve 
 ## See also
 
 - [OpenAI provider](./openai.md) for the full set of supported parameters
-- [The Grid documentation](https://thegrid.ai/docs)
+- [The Grid AI documentation](https://thegrid.ai/docs)

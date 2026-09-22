@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: The Grid capability tiers via the OpenAI-compatible provider
+description: The Grid AI capability tiers via the OpenAI-compatible provider
 
 prompts:
   - 'Answer concisely: {{question}}'
@@ -9,9 +9,9 @@ providers:
   # `config.apiKey || ... || OPENAI_API_KEY`, so an unset *or empty*
   # THEGRID_API_KEY would fall through and send your OpenAI credential to
   # api.thegrid.ai. `default(..., true)` substitutes on any falsy value, so a
-  # blank key fails closed with a 401 from The Grid instead.
+  # blank key fails closed with a 401 from The Grid AI instead.
   - id: openai:chat:text-standard
-    label: The Grid text-standard
+    label: The Grid AI text-standard
     config:
       apiBaseUrl: https://api.thegrid.ai/v1
       apiKey: '{{ env.THEGRID_API_KEY | default("THEGRID_API_KEY_NOT_SET", true) }}'
@@ -21,7 +21,7 @@ providers:
       max_tokens: 1024
 
   - id: openai:chat:text-prime
-    label: The Grid text-prime
+    label: The Grid AI text-prime
     config:
       apiBaseUrl: https://api.thegrid.ai/v1
       apiKey: '{{ env.THEGRID_API_KEY | default("THEGRID_API_KEY_NOT_SET", true) }}'
