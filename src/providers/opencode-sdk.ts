@@ -2066,7 +2066,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
     for (const key of ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_API_KEY'] as const) {
       remember(getEnvString(key));
     }
-    for (const environment of [process.env, this.env ?? {}]) {
+    // The SDK runs in-process, while a local child also receives invocation-file overrides.
+    for (const environment of new Set([process.env, getProcessEnv(), this.env ?? {}])) {
       for (const [key, value] of Object.entries(environment)) {
         addOpenCodeEnvironmentValue(key, value, remember);
       }
@@ -2082,10 +2083,11 @@ export class OpenCodeSDKProvider implements ApiProvider {
       addStrongOpenCodeConfigCredentials(config, remember);
     }
     remember(this.getApiKey(config));
-    for (const [environment, includePrivateUrlPath] of [
+    for (const [environment, includePrivateUrlPath] of new Map([
       [process.env, false],
+      [getProcessEnv(), false],
       [this.env ?? {}, true],
-    ] as const) {
+    ])) {
       for (const [key, value] of Object.entries(environment)) {
         addStrongOpenCodeEnvironmentCredentials(key, value, remember, includePrivateUrlPath);
       }

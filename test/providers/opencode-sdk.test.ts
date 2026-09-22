@@ -1449,6 +1449,60 @@ describe('OpenCodeSDKProvider', () => {
         }
       });
 
+      it('redacts credentials forwarded only from the invocation env-file, including after its scope ends', async () => {
+        const { default: cliState } =
+          await vi.importActual<typeof import('../../src/cliState')>('../../src/cliState');
+        const hostCredential = 'host-fal-private-value';
+        const restoreEnv = mockProcessEnv({ FAL_KEY: hostCredential, XAI_API_KEY: undefined });
+        const fileEnv = { FAL_KEY: 'q7x9', XAI_API_KEY: 'scoped-xai-private-value' };
+        try {
+          const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+          const error = {
+            name: 'APIError',
+            data: {
+              statusCode: 502,
+              message:
+                'echo prefix-' +
+                fileEnv.FAL_KEY +
+                '-suffix and ' +
+                fileEnv.XAI_API_KEY +
+                ' and inherited ' +
+                hostCredential,
+            },
+          };
+          const response = createMockPromptResponse([]);
+          mockSessionPrompt.mockResolvedValueOnce({ error }).mockResolvedValueOnce({
+            data: { ...response.data, info: { ...response.data.info, error } },
+          });
+          const provider = new OpenCodeSDKProvider();
+          const scoped = await cliState.withEnvFileOverrides(fileEnv, () =>
+            provider.callApi('SDK'),
+          );
+          expect(process.env.FAL_KEY).toBe(hostCredential);
+          expect(process.env.XAI_API_KEY).toBeUndefined();
+          expect(mockCreateOpencode).toHaveBeenCalledWith(
+            expect.objectContaining({ env: expect.objectContaining(fileEnv) }),
+          );
+          const later = await provider.callApi('assistant after the env-file scope');
+          for (const diagnostic of [
+            scoped.error,
+            later.error,
+            ...errorSpy.mock.calls.map(
+              (call) => (call[1] as { error?: string } | undefined)?.error,
+            ),
+          ]) {
+            expect(diagnostic).toContain(
+              'HTTP 502: echo prefix-[REDACTED]-suffix and [REDACTED] and inherited [REDACTED]',
+            );
+            for (const credential of [...Object.values(fileEnv), hostCredential]) {
+              expect(diagnostic).not.toContain(credential);
+            }
+          }
+        } finally {
+          restoreEnv();
+        }
+      });
+
       it('withholds escaped credential fields and their tails while preserving escaped token counts', async () => {
         const escape = (value: string) => JSON.stringify(value).slice(1, -1);
         const secret = 'upstream-issued-value';
