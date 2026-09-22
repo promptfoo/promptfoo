@@ -1527,6 +1527,35 @@ ec2_metadata_v1_disabled = false
     expect(sageCalls[0].request.headers.authorization).toContain('/us-west-2/sagemaker/');
   });
 
+  it.each(['explicit profile', 'default chain'] as const)(
+    'reloads a changed assume-role duration for the %s',
+    async (selection) => {
+      const profile = (duration: number) => `[profile named]
+role_arn = arn:aws:iam::123456789012:role/Target
+source_profile = source
+duration_seconds = ${duration}
+[profile source]
+aws_access_key_id = DURATION_SOURCE
+aws_secret_access_key = synthetic-duration-secret
+`;
+      await configure(profile(900));
+      const provider = createProvider(selection === 'explicit profile' ? { profile: 'named' } : {});
+      await expectSignedRow(provider, 'STS_1');
+
+      vi.setSystemTime(startTime.getTime() + 120_000);
+      await writeFile(configFile, profile(1800));
+      await expectSignedRow(provider, 'STS_2');
+      await expectSignedRow(provider, 'STS_2');
+
+      expect(stsCalls).toHaveLength(2);
+      expect(
+        stsCalls.map(({ request }) =>
+          new URLSearchParams(String(request.body)).get('DurationSeconds'),
+        ),
+      ).toEqual(['900', '1800']);
+    },
+  );
+
   it.each(['profile', 'region', 'config file', 'credentials file'] as const)(
     'replaces the retained chain when %s changes',
     async (input) => {

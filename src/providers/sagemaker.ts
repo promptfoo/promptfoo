@@ -319,6 +319,7 @@ const PROFILE_CREDENTIAL_KEYS = new Set([
   'source_profile',
   'role_arn',
   'role_session_name',
+  'duration_seconds',
   'external_id',
   'mfa_serial',
   'web_identity_token_file',
