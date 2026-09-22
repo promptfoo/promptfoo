@@ -242,8 +242,8 @@ export const shutdownGracefully = async (): Promise<void> => {
   };
 
   const providerShutdown = withTimeout(
-    providerRegistry.shutdownAll(),
-    'providerRegistry.shutdownAll()',
+    providerRegistry.shutdownForProcess(),
+    'providerRegistry.shutdownForProcess()',
   ).catch((error) => {
     logger.debug('[shutdownGracefully] Provider shutdown failed', {
       error: error instanceof Error ? error.message : String(error),
