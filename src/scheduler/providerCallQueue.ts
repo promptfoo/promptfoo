@@ -5,10 +5,10 @@ export interface QueuedProviderCall<T> {
   providerId: string;
   reject: (error: unknown) => void;
   resolve: (result: T) => void;
+  settled: Promise<void>;
 }
 
 export interface ProviderCallQueue {
-  readonly abortSignal?: AbortSignal;
   enqueue<T>(providerId: string, call: () => Promise<T>, signal?: AbortSignal): Promise<T>;
 }
 
@@ -16,21 +16,31 @@ export class ProviderGroupedCallQueue implements ProviderCallQueue {
   private jobs: QueuedProviderCall<unknown>[] = [];
   private waiters: (() => void)[] = [];
 
-  constructor(readonly abortSignal?: AbortSignal) {}
-
   async enqueue<T>(providerId: string, call: () => Promise<T>, signal?: AbortSignal): Promise<T> {
     signal?.throwIfAborted();
     const boundCall = AsyncResource.bind(call);
     return new Promise<T>((resolve, reject) => {
-      const cleanup = () => signal?.removeEventListener('abort', onAbort);
+      let started = false;
+      let pendingAbort: NodeJS.Immediate | undefined;
+      let settle!: () => void;
+      const settled = new Promise<void>((resolveSettled) => {
+        settle = resolveSettled;
+      });
+      const cleanup = () => {
+        signal?.removeEventListener('abort', onAbort);
+        if (pendingAbort) {
+          clearImmediate(pendingAbort);
+        }
+        settle();
+      };
       const job: QueuedProviderCall<unknown> = {
         call: () => {
           signal?.throwIfAborted();
-          // Once running, let the provider report cancellation or its own failure.
-          cleanup();
+          started = true;
           return boundCall();
         },
         providerId,
+        settled,
         reject: (error) => {
           cleanup();
           reject(error);
@@ -41,6 +51,12 @@ export class ProviderGroupedCallQueue implements ProviderCallQueue {
         },
       };
       const onAbort = () => {
+        if (started) {
+          // Preserve a provider failure already unwinding this turn; do not wait for an
+          // uncooperative provider after that when the evaluation has been cancelled.
+          pendingAbort = setImmediate(() => job.reject(signal?.reason));
+          return;
+        }
         const index = this.jobs.indexOf(job);
         if (index !== -1) {
           this.jobs.splice(index, 1);
@@ -92,10 +108,11 @@ export class ProviderGroupedCallQueue implements ProviderCallQueue {
 
   async run(job: QueuedProviderCall<unknown>): Promise<void> {
     try {
-      job.resolve(await job.call());
+      void job.call().then(job.resolve, job.reject);
     } catch (error) {
       job.reject(error);
     }
+    await job.settled;
   }
 
   private notifyWaiters() {
