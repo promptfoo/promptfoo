@@ -473,6 +473,7 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
         embedding,
       };
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       return {
         error: `API call error: ${String(err)}. Output:\n${response?.data}`,
       };

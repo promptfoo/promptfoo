@@ -107,6 +107,7 @@ describe('SageMaker initialization policy snapshot', () => {
       vi.stubEnv('AWS_EXECUTION_ENV', 'AWS_Lambda_nodejs24.x');
       const provider = new SageMakerCompletionProvider('deployment', {
         config: {
+          modelType: 'custom',
           region: 'us-east-1',
           accessKeyId: 'OFFLINE',
           secretAccessKey: 'offline-secret',

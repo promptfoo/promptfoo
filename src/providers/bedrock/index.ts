@@ -3039,6 +3039,7 @@ export class AwsBedrockEmbeddingProvider
         ? await bedrockInstance.invokeModel(command, { abortSignal: options.abortSignal })
         : await bedrockInstance.invokeModel(command);
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       return {
         error: `API call error: ${String(err)}`,
       };

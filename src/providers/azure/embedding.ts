@@ -47,6 +47,7 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
         getRequestTimeoutMs(),
       )) as unknown as any);
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       return {
         error: `API call error: ${String(err)}`,
         tokenUsage: {

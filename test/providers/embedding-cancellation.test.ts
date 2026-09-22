@@ -82,7 +82,8 @@ describe('embedding transport cancellation', () => {
     });
 
     const provider = createProvider();
-    const result = provider.callEmbeddingApi!('text', undefined, {
+    const callEmbedding = provider.callEmbeddingApi as OpenAiEmbeddingProvider['callEmbeddingApi'];
+    const result = callEmbedding.call(provider, 'text', undefined, {
       abortSignal: controller.signal,
     });
     const settled = result.then(
@@ -99,7 +100,7 @@ describe('embedding transport cancellation', () => {
       expect(actual).toBe(controller.signal);
       controller.abort(reason);
       expect(actual.reason).toBe(reason);
-      await settled;
+      await expect(result).rejects.toBe(reason);
     } finally {
       controller.abort(reason);
       await settled;
@@ -110,6 +111,7 @@ describe('embedding transport cancellation', () => {
     'forwards cancellation to the %s SDK request',
     async (name) => {
       const controller = new AbortController();
+      const reason = new DOMException('evaluation cancelled', 'AbortError');
       const { started, hold } = heldRequest();
       const provider =
         name === 'Bedrock'
@@ -142,12 +144,58 @@ describe('embedding transport cancellation', () => {
           }),
         ]);
         expect(actual).toBe(controller.signal);
-        controller.abort();
-        expect(actual.aborted).toBe(true);
-        await settled;
+        controller.abort(reason);
+        expect(actual.reason).toBe(reason);
+        await expect(result).rejects.toBe(reason);
       } finally {
         controller.abort();
         await settled;
+      }
+    },
+  );
+
+  it.each(['success', 'cancellation'] as const)(
+    'shares identical Mistral requests with the same signal through %s',
+    async (outcome) => {
+      const controller = new AbortController();
+      let release!: () => void;
+      const started = new Promise<void>((resolve) => {
+        vi.mocked(fetchWithCache).mockImplementation((_url, options) => {
+          const signal = options?.signal;
+          if (!signal) {
+            throw new Error('Mistral transport received no cancellation signal');
+          }
+          resolve();
+          return new Promise((resolveResponse, reject) => {
+            release = () =>
+              resolveResponse({ data: { data: [{ embedding: [1, 0] }] }, cached: false } as never);
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+          });
+        });
+      });
+      const provider = mistral();
+      const call = () =>
+        provider.callEmbeddingApi('same text', undefined, { abortSignal: controller.signal });
+      const first = call();
+      const second = call();
+      void first.catch(() => {});
+      void second.catch(() => {});
+      try {
+        await started;
+        expect(fetchWithCache).toHaveBeenCalledTimes(1);
+        if (outcome === 'cancellation') {
+          const reason = new DOMException('evaluation cancelled', 'AbortError');
+          controller.abort(reason);
+          await expect(first).rejects.toBe(reason);
+          await expect(second).rejects.toBe(reason);
+        } else {
+          release();
+          await expect(first).resolves.toMatchObject({ embedding: [1, 0] });
+          await expect(second).resolves.toMatchObject({ embedding: [1, 0] });
+        }
+      } finally {
+        controller.abort();
+        await Promise.allSettled([first, second]);
       }
     },
   );
