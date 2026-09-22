@@ -88,6 +88,10 @@ describe('redactDiagnosticText', () => {
       '{"api_key":"upstream-1"} body={\\"token\\":\\"upstream-2\\"}',
     ],
     ['escaped quotes inside a quoted value', '"password": "upstream-1\\" upstream-2"'],
+    [
+      'twice-escaped JSON fields and their unreliable tails',
+      JSON.stringify(JSON.stringify(JSON.stringify({ FAL_KEY: 'upstream-1 "upstream-2"' }))),
+    ],
     ['multi-token authorization', 'Authorization: Token upstream-1 upstream-2; context'],
     [
       'digest authorization',
@@ -108,7 +112,8 @@ describe('redactDiagnosticText', () => {
 
   it('keeps ordinary diagnostic context', () => {
     const text =
-      'HTTP 429: total_tokens=17; usage.input_tokens=19; model: claude; see https://opencode.ai/docs';
+      'HTTP 429: total_tokens=17; usage.input_tokens=19; model: claude; see https://opencode.ai/docs' +
+      ` ${JSON.stringify(JSON.stringify({ total_tokens: 7 }))}`;
     expect(redactDiagnosticText(text, [])).toBe(text);
     expect(redactDiagnosticText('Authorization: Token a1b2c3d4; useful context', [])).toBe(
       `Authorization: ${REDACTED}; useful context`,

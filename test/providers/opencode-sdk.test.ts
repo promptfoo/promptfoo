@@ -3808,8 +3808,9 @@ describe('OpenCodeSDKProvider', () => {
       it('redacts upstream-only credentials and bounds the diagnostic', async () => {
         await expectRedacted({
           message:
-            'Bearer upstream-bearer-12345 FAL_KEY=upstream-fal-1 body={\\"api_key\\":\\"upstream-2\\"} ' +
-            `Authorization: Token upstream-3 upstream-4; useful context ${'x'.repeat(1000)}`,
+            'Bearer upstream-bearer-12345 FAL_KEY=upstream-fal-1 ' +
+            'Authorization: Token upstream-3 upstream-4; useful context ' +
+            `body={\\"api_key\\":\\"upstream-2\\"} ${'x'.repeat(1000)}`,
           secrets: ['upstream-', 'x'.repeat(500)],
           keep: ['useful context'],
         });
@@ -3887,6 +3888,25 @@ describe('OpenCodeSDKProvider', () => {
 
         expect(mockCreateOpencode).toHaveBeenCalledTimes(1);
         expect(result.error).toContain('server still sends [REDACTED]');
+      });
+
+      it('redacts credentials echoed as history anchors in debug logs', async () => {
+        const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+        const secret = 'synthetic-anchor-secret-1';
+        mockSessionPrompt.mockResolvedValueOnce(
+          createMockPromptResponseWithAnchors('ok', { id: 'msg-123', parentID: secret }),
+        );
+        mockSessionMessages.mockResolvedValueOnce([]);
+
+        const result = await new OpenCodeSDKProvider({
+          config: { apiKey: secret, tools: { skill: true } },
+        }).callApi('anchors');
+
+        expect(result.output).toBe('ok');
+        expect(debugSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Parent message [REDACTED] not found'),
+        );
+        expect(JSON.stringify(debugSpy.mock.calls)).not.toContain(secret);
       });
 
       it('redacts credentials in debug logs for cleanup and history failures', async () => {

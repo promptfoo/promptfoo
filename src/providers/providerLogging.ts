@@ -132,14 +132,14 @@ export function getHeadersCredentialForms(headers: unknown): string[] {
 }
 
 const DIAGNOSTIC_URL = /\b[a-z][a-z\d+.-]{0,31}:\/\/[^\s"'<>]+/gi;
-// `name: value`, `name=value`, and quoted or JSON-escaped `"name": "value"` fields.
+// `name: value`, `name=value`, and quoted or (repeatedly) JSON-escaped `"name": "value"` fields.
 const CREDENTIAL_FIELD =
-  /(?<![\w.-])(\\?["']?)([A-Za-z_][\w.-]{0,63})\1\s{0,8}[:=]\s{0,8}(\\?["'])?/g;
+  /(?<![\w.\\-])(\\{0,8}["']?)([A-Za-z_][\w.-]{0,63})\1\s{0,8}[:=]\s{0,8}(\\{0,8}["'])?/g;
 const CREDENTIAL_FIELD_END: Record<string, RegExp> = {
   '"': /(?<!\\)"|[\r\n]/g,
   "'": /(?<!\\)'|[\r\n]/g,
-  '\\"': /\\"|[\r\n]/g,
-  "\\'": /\\'|[\r\n]/g,
+  // An escaped value has no reliable end: its own quotes can be escaped once more.
+  escaped: /[\r\n]/g,
   // Authorization values can span several tokens and comma-separated parameters; cookie values
   // span `;`-separated pairs but cannot contain a comma.
   authorization: /[;\r\n]/g,
@@ -166,7 +166,9 @@ export function redactDiagnosticText(text: string, credentials: Iterable<string>
     }
     const end =
       CREDENTIAL_FIELD_END[
-        quote ?? name.match(/authorization|cookie/i)?.[0].toLowerCase() ?? 'bare'
+        (quote && quote.length > 1 ? 'escaped' : quote) ??
+          name.match(/authorization|cookie/i)?.[0].toLowerCase() ??
+          'bare'
       ];
     end.lastIndex = start;
     redacted += source.slice(copied, start) + REDACTED;

@@ -1949,16 +1949,18 @@ export class OpenCodeSDKProvider implements ApiProvider {
     // concurrent prompt on the same shared session could be included and
     // cause skill-used to pass for the wrong evaluation row.
     const startIndex = messages.findIndex((m) => m.info?.id === parentId);
+    // The anchors are server-controlled, so they go through the same redaction as errors.
+    const redactId = (id: string) => redactDiagnosticText(id, this.knownCredentials);
     if (startIndex === -1) {
       logger.debug(
-        `[OpenCode SDK] Parent message ${parentId} not found in ${messages.length} fetched messages; falling back to final-message parts for skill tracking`,
+        `[OpenCode SDK] Parent message ${redactId(parentId)} not found in ${messages.length} fetched messages; falling back to final-message parts for skill tracking`,
       );
       return [];
     }
     const endIndex = messages.findIndex((m) => m.info?.id === assistantId);
     if (endIndex < startIndex) {
       logger.debug(
-        `[OpenCode SDK] Assistant message ${assistantId} not found after its parent in ${messages.length} fetched messages; falling back to final-message parts for skill tracking`,
+        `[OpenCode SDK] Assistant message ${redactId(assistantId)} not found after its parent in ${messages.length} fetched messages; falling back to final-message parts for skill tracking`,
       );
       return [];
     }
