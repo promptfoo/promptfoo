@@ -642,14 +642,13 @@ export function classifySdkRateLimit({
   const records = [asRecord(body), ...details].filter((record): record is Record<string, unknown> =>
     Boolean(record),
   );
-  const codes = records.flatMap((record) => {
-    const code = normalized(asRecord(record.error)?.code) ?? normalized(record.code);
-    return code ? [code] : [];
-  });
-  const types = records.flatMap((record) => {
-    const type = normalized(extractRateLimitErrorType(record));
-    return type ? [type] : [];
-  });
+  const valuesFor = (field: 'code' | 'type') =>
+    records
+      .flatMap((record) => [asRecord(record.error)?.[field], record[field]])
+      .map(normalized)
+      .filter((value): value is string => value !== undefined);
+  const codes = valuesFor('code');
+  const types = valuesFor('type');
   const messages = [
     ...records.flatMap((record) => [asRecord(record.error)?.message, record.message]),
     textBody,
@@ -689,8 +688,8 @@ export function classifySdkRateLimit({
   const timing = headers ? rateLimitTimingFromHeaders(headers) : undefined;
   return new HttpRateLimitError({
     status,
-    code: codes[0] ?? messageCodes[0],
-    type: definiteCode ?? types[0] ?? inferredType,
+    code: codes.find(known) ?? messageCodes[0] ?? codes[0],
+    type: definiteCode ?? types.find(known) ?? inferredType ?? types[0],
     retryAfterMs: timing?.retryAfterMs,
     resetAt: timing?.resetAt,
   }).kind;

@@ -942,27 +942,33 @@ function addStrongOpenCodeUrlCredentials(
       // Raw values are still covered when the URL is malformed.
     }
   };
-  const oraclePassword = url.match(
-    /^jdbc:oracle:(?:thin|oci(?:8)?):[^/@]+\/(?:(?:"((?:""|[^"])*)")|([^@]*))@/i,
+  const oracleUserInfo = url.match(
+    /^jdbc:oracle:(?:thin|oci(?:8)?):([^/@]+)\/(?:(?:"((?:""|[^"])*)")|([^@]*))@/i,
   );
-  if (oraclePassword) {
-    const password = oraclePassword[1] ?? oraclePassword[2];
+  if (oracleUserInfo) {
+    rememberEncoded(oracleUserInfo[1]);
+    const password = oracleUserInfo[2] ?? oracleUserInfo[3];
     rememberEncoded(password);
-    if (oraclePassword[1] !== undefined) {
+    if (oracleUserInfo[2] !== undefined) {
       rememberEncoded(password.replace(/""/g, '"'));
     }
   }
   const connectionUrl = url.replace(/^jdbc:/i, '');
   try {
     const parsed = new URL(connectionUrl);
+    rememberEncoded(parsed.username);
     rememberEncoded(parsed.password);
     if (includePrivatePath) {
       addOpenCodeUrlPathCredentials(parsed.pathname, rememberEncoded);
     }
   } catch {
-    const password = connectionUrl.match(/^[a-z][\w+.-]*:\/\/[^/?#@:]*:([^/?#@]*)@/i)?.[1];
-    if (password) {
-      rememberEncoded(password);
+    const userInfo = connectionUrl.match(/^(?:[a-z][\w+.-]*:\/\/)?([^/?#]*)@/i)?.[1];
+    if (userInfo !== undefined) {
+      const separator = userInfo.indexOf(':');
+      rememberEncoded(separator === -1 ? userInfo : userInfo.slice(0, separator));
+      if (separator !== -1) {
+        rememberEncoded(userInfo.slice(separator + 1));
+      }
     }
   }
   for (const section of url.split(/[?#]/).slice(1)) {
