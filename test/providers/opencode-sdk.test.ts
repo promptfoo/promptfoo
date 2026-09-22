@@ -3466,12 +3466,58 @@ describe('OpenCodeSDKProvider', () => {
         expect(JSON.stringify(result)).not.toMatch(/synthetic-private/);
       });
 
+      it('keeps only validated numeric accounting on filtered responses', async () => {
+        const refusal = assistantFailure({ name: 'ContentFilterError' });
+        mockSessionPrompt
+          .mockResolvedValueOnce({
+            data: {
+              ...refusal.data,
+              info: {
+                ...refusal.data.info,
+                tokens: {
+                  input: 5,
+                  output: 'synthetic-private-output',
+                  total: -1,
+                  reasoning: Number.NaN,
+                  cache: { read: 4, write: { value: 'synthetic-private-cache' } },
+                },
+                cost: { value: 'synthetic-private-cost' },
+              },
+            },
+          })
+          .mockResolvedValueOnce(
+            assistantFailure(
+              { name: 'ContentFilterError' },
+              [],
+              {
+                input: Number.MAX_SAFE_INTEGER,
+                output: 1,
+              },
+              Infinity,
+            ),
+          );
+        const provider = new OpenCodeSDKProvider();
+        const filtered = await provider.callApi('malformed accounting');
+        expect(filtered.tokenUsage).toEqual({
+          prompt: 5,
+          completion: 0,
+          total: 5,
+          cached: 4,
+          completionDetails: { cacheReadInputTokens: 4, cacheCreationInputTokens: 0 },
+        });
+        expect(filtered).not.toHaveProperty('cost');
+        expect(JSON.stringify(filtered)).not.toContain('synthetic-private');
+        const overflow = await provider.callApi('overflow');
+        expect(overflow.tokenUsage).toEqual({ prompt: Number.MAX_SAFE_INTEGER, completion: 1 });
+        expect(overflow).not.toHaveProperty('cost');
+      });
+
       it.each([
-        { history: false, skills: ['final-skill'] },
-        { history: true, skills: ['history-skill', 'final-skill'] },
+        { history: false, tag: 'name' },
+        { history: true, tag: '_tag' },
       ])(
         'grades content filtering as a private, uncached refusal (history=$history)',
-        async ({ history, skills }) => {
+        async ({ history, tag }) => {
           const skill = (name: string, status = 'completed') => ({
             type: 'tool',
             tool: 'skill',
@@ -3483,13 +3529,14 @@ describe('OpenCodeSDKProvider', () => {
           });
           const finalParts = [
             skill('final-skill'),
+            skill('synthetic-private-final-skill-name'),
             skill('running-skill', 'running'),
             skill('failed-skill', 'error'),
             { type: 'text', text: 'synthetic-private-output' },
           ];
           mockSessionPrompt.mockResolvedValue(
             assistantFailure(
-              { name: 'ContentFilterError', data: { message: 'synthetic-private-message' } },
+              { [tag]: 'ContentFilterError', data: { message: 'synthetic-private-message' } },
               finalParts,
               { input: 8, output: 3 },
               0.025,
@@ -3497,11 +3544,19 @@ describe('OpenCodeSDKProvider', () => {
           );
           mockSessionMessages.mockResolvedValue([
             { info: { id: 'user-msg-123' }, parts: [] },
-            { info: { id: 'intermediate' }, parts: [skill('history-skill')] },
+            {
+              info: { id: 'intermediate' },
+              parts: [skill('history-skill'), skill('synthetic-private-history-skill-name')],
+            },
             { info: { id: 'msg-123' }, parts: finalParts },
             { info: { id: 'later' }, parts: [skill('later-skill')] },
           ]);
-          const provider = new OpenCodeSDKProvider({ config: { tools: { skill: history } } });
+          const provider = new OpenCodeSDKProvider({
+            config: {
+              baseUrl: history ? 'http://127.0.0.1:4096' : undefined,
+              tools: { skill: history },
+            },
+          });
 
           const first = await provider.callApi('filtered');
           const second = await provider.callApi('filtered');
@@ -3513,15 +3568,14 @@ describe('OpenCodeSDKProvider', () => {
             tokenUsage: { prompt: 8, completion: 3, total: 11 },
             cost: 0.025,
             sessionId: 'test-session-123',
-            metadata: {
-              skillCalls: skills.map((name) => ({ name, input: { name }, source: 'tool' })),
-            },
           });
+          expect(first).not.toHaveProperty('metadata');
           expect(first).not.toHaveProperty('error');
           expect(first).not.toHaveProperty('raw');
           expect(JSON.stringify(first)).not.toMatch(/synthetic-private/);
           expect(second.cached).not.toBe(true);
           expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
+          expect(mockSessionMessages).not.toHaveBeenCalled();
         },
       );
 
@@ -3940,6 +3994,57 @@ describe('OpenCodeSDKProvider', () => {
         });
       });
 
+      it.each<[string, string[]]>([
+        ['jq', ['jq', '-n', '$ENV.CUSTOM_GATEWAY | @base64']],
+        ['shell', ['sh', '-c', 'printf %s "$CUSTOM_GATEWAY" | base64']],
+        ['node', ['node', '-p', 'Buffer.from(process.env.CUSTOM_GATEWAY).toString("base64")']],
+      ])('withholds credentials transformed by a local %s command', async (_name, command) => {
+        const credential = 'private-mcp-environment-value';
+        const transformed = Buffer.from(credential).toString('base64');
+        await expectRedacted({
+          config: {
+            mcp: { tool: { type: 'local', command, environment: { CUSTOM_GATEWAY: credential } } },
+          },
+          message: 'Filter output ' + transformed + '; private tail',
+          secrets: [credential, transformed, 'private tail'],
+          keep: ['Upstream diagnostic withheld'],
+        });
+      });
+
+      it('omits oversized upstream messages before scanning without exposing a boundary credential', async () => {
+        const credential = 'cross-boundary-private-credential';
+        await expectRedacted({
+          config: { apiKey: credential },
+          message: 'withheld-prefix-' + 'x'.repeat(490) + credential + 'z'.repeat(100_000),
+          secrets: ['withheld-prefix', 'cross-boundary', 'zzzz'],
+          keep: ['Upstream diagnostic omitted because it is too large'],
+        });
+      });
+
+      it('bounds SDK quota bodies but still classifies short truncated JSON', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        mockSessionPrompt
+          .mockResolvedValueOnce(
+            assistantFailure(
+              apiError('Too many requests', {
+                statusCode: 429,
+                responseBody: 'x'.repeat(40_000) + ' credit_balance_exhausted',
+              }),
+            ),
+          )
+          .mockResolvedValueOnce(
+            assistantFailure(
+              apiError('Too many requests', {
+                statusCode: 429,
+                responseBody: '{"error":{"code":"credit_balance_exhausted"',
+              }),
+            ),
+          );
+        const provider = new OpenCodeSDKProvider();
+        expect((await provider.callApi('oversized')).metadata?.rateLimitKind).toBe('rate_limit');
+        expect((await provider.callApi('truncated')).metadata?.rateLimitKind).toBe('quota');
+      });
+
       it('redacts upstream-only credentials and bounds the diagnostic', async () => {
         await expectRedacted({
           message:
@@ -3980,22 +4085,22 @@ describe('OpenCodeSDKProvider', () => {
           await vi.importActual<typeof import('../../src/cliState')>('../../src/cliState');
         const restoreEnv = mockProcessEnv({ FAL_KEY: 'synthetic-host-fal-key' });
         try {
-          vi.spyOn(logger, 'error').mockImplementation(() => {});
-          const message = 'echoed synthetic-file-fal-key and synthetic-host-fal-key';
+          const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+          const message = 'echoed prefix-q7x9-suffix and synthetic-host-fal-key';
           mockSessionPrompt
             .mockResolvedValueOnce({ error: apiError(message) })
             .mockResolvedValueOnce({ error: apiError(message) });
           const provider = new OpenCodeSDKProvider();
 
-          const scoped = await realCliState.withEnvFileOverrides(
-            { FAL_KEY: 'synthetic-file-fal-key' },
-            () => provider.callApi('scoped'),
+          const scoped = await realCliState.withEnvFileOverrides({ FAL_KEY: 'q7x9' }, () =>
+            provider.callApi('scoped'),
           );
           const later = await provider.callApi('after the env-file scope');
 
           for (const result of [scoped, later]) {
-            expect(result.error).toContain('echoed [REDACTED] and [REDACTED]');
+            expect(result.error).toContain('echoed prefix-[REDACTED]-suffix and [REDACTED]');
           }
+          expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('q7x9');
         } finally {
           restoreEnv();
         }

@@ -601,6 +601,16 @@ function toHttpStatus(value: unknown): number | undefined {
     : undefined;
 }
 
+function getOpenCodeDiagnosticMessage(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  if (value.length > 4_096) {
+    return 'Upstream diagnostic omitted because it is too large';
+  }
+  return value.trim() ? value : undefined;
+}
+
 /**
  * Read an OpenCode `NamedError` (`{ name, data: { message, statusCode } }`), an untagged gateway
  * body, a thrown `Error`, or a string. Response bodies, headers, and causes are never rendered.
@@ -608,7 +618,7 @@ function toHttpStatus(value: unknown): number | undefined {
  */
 function parseOpenCodeError(error: unknown, transportStatus?: number): OpenCodeErrorDetails {
   if (typeof error === 'string') {
-    return { status: toHttpStatus(transportStatus), message: error.trim() ? error : undefined };
+    return { status: toHttpStatus(transportStatus), message: getOpenCodeDiagnosticMessage(error) };
   }
   const item = asRecord(error);
   const data = asRecord(item?.data);
@@ -618,9 +628,8 @@ function parseOpenCodeError(error: unknown, transportStatus?: number): OpenCodeE
     toHttpStatus(transportStatus) ??
     toHttpStatus(item?.statusCode) ??
     toHttpStatus(data?.statusCode);
-  const message = [item?.message, data?.message].find(
-    (value): value is string => typeof value === 'string' && value.trim() !== '',
-  );
+  const message =
+    getOpenCodeDiagnosticMessage(item?.message) ?? getOpenCodeDiagnosticMessage(data?.message);
   return { name, status, message, data };
 }
 
@@ -648,10 +657,14 @@ function getOpenCodeRateLimit(
   }
   let body = data?.responseBody;
   if (typeof body === 'string') {
-    try {
-      body = JSON.parse(body);
-    } catch {
-      // Plain-text bodies are scanned for codes as text.
+    if (body.length > 32_768) {
+      body = undefined;
+    } else {
+      try {
+        body = JSON.parse(body);
+      } catch {
+        // Plain-text and truncated bodies are scanned for codes as text.
+      }
     }
   }
   const headers: Record<string, string> = {};
@@ -699,10 +712,38 @@ function getOpenCodeRateLimitMetadata(rateLimit: OpenCodeRateLimit): Record<stri
 function getOpenCodeAccounting(
   message: OpenCodeAssistantMessage | undefined,
 ): Pick<ProviderResponse, 'tokenUsage' | 'cost'> {
-  const tokenUsage = buildOpenCodeTokenUsage(message?.tokens);
+  const isCount = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+  const source = asRecord(message?.tokens);
+  const tokens: NonNullable<OpenCodeAssistantMessage['tokens']> = {};
+  for (const key of ['total', 'input', 'output', 'reasoning'] as const) {
+    const value = source?.[key];
+    if (isCount(value)) {
+      tokens[key] = value;
+    }
+  }
+  const cache = source?.cache;
+  if (isCount(cache)) {
+    tokens.cache = cache;
+  } else {
+    const raw = asRecord(cache);
+    const read = raw?.read;
+    const write = raw?.write;
+    if (isCount(read) || isCount(write)) {
+      tokens.cache = {
+        ...(isCount(read) ? { read } : {}),
+        ...(isCount(write) ? { write } : {}),
+      };
+    }
+  }
+  const tokenUsage = Object.keys(tokens).length ? buildOpenCodeTokenUsage(tokens) : undefined;
+  if (tokenUsage && !isCount(tokenUsage.total)) {
+    delete tokenUsage.total;
+  }
+  const cost = message?.cost;
   return {
     ...(tokenUsage ? { tokenUsage } : {}),
-    ...(message?.cost === undefined ? {} : { cost: message.cost }),
+    ...(typeof cost === 'number' && Number.isFinite(cost) && cost >= 0 ? { cost } : {}),
   };
 }
 
@@ -786,6 +827,23 @@ function addOpenCodeMcpCredentials(server: unknown, add: (value: unknown) => voi
       }
     }
   }
+}
+
+function hasDynamicOpenCodeMcpCommand(server: unknown): boolean {
+  const mcp = asRecord(server);
+  return (
+    mcp?.type === 'local' &&
+    Array.isArray(mcp.command) &&
+    mcp.command
+      .slice(1)
+      .some(
+        (argument) =>
+          typeof argument === 'string' &&
+          /\$(?:[\w{(])|\x60|\b(?:process\.env|(?:Deno|Bun)\.env|os\.environ|ENV\s*[\[.]|\w+\.join\s*\(|\w+\.toString\s*\()|(?:^|\s)(?:\||(?:printf|base64)\b)/.test(
+            argument,
+          ),
+      )
+  );
 }
 
 /**
@@ -1115,6 +1173,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
   // Every configured value an OpenCode diagnostic could echo. Kept for the provider's lifetime:
   // a reused server keeps the configuration of the call that started it.
   private readonly knownCredentials = new Set<string>();
+  private readonly shortCredentials = new Set<string>();
+  private withholdMcpDiagnostics = false;
   private sessions = new Map<string, OpenCodeSessionHandle>(); // cacheKey -> session, oldest first
   private sessionQueues = new Map<string, Promise<void>>();
   // Temp workspaces a running local server kept open; removal is retried once it stops.
@@ -1253,32 +1313,55 @@ export class OpenCodeSDKProvider implements ApiProvider {
         }
       }
     };
-    add(config.apiKey);
-    add(this.getApiKey(config));
+    const addStrong = (value: unknown) => {
+      add(value);
+      if (typeof value === 'string' && value.length >= 4 && value.length < 8) {
+        this.shortCredentials.add(value);
+      }
+    };
+    addStrong(config.apiKey);
+    addStrong(this.getApiKey(config));
     addOpenCodeUrlCredentials(config.baseUrl, add);
     for (const server of Object.values(asRecord(config.mcp) ?? {})) {
       addOpenCodeMcpCredentials(server, add);
+      this.withholdMcpDiagnostics ||= hasDynamicOpenCodeMcpCommand(server);
+      const mcp = asRecord(server);
+      if (mcp?.type === 'local') {
+        Object.values(asRecord(mcp.environment) ?? {}).forEach(addStrong);
+      } else if (mcp?.type === 'remote') {
+        getHeadersCredentialForms(mcp.headers).forEach(addStrong);
+        addStrong(asRecord(mcp.oauth)?.clientSecret);
+      }
     }
     // The SDK client runs in-process; a spawned server also receives invocation env-file values.
     for (const env of new Set([process.env, getProcessEnv(), this.env ?? {}])) {
       for (const [name, value] of Object.entries(env)) {
         if (typeof value === 'string' && isCredentialName(name)) {
-          getHeaderCredentialForms(value).forEach(add);
+          getHeaderCredentialForms(value).forEach(addStrong);
         }
         addOpenCodeUrlCredentials(value, add);
       }
     }
   }
 
-  private redact(text: string, config: OpenCodeSDKConfig): string {
+  private formatCallError(
+    error: unknown,
+    config: OpenCodeSDKConfig,
+    transportStatus?: number,
+  ): string {
     this.rememberCredentials(config);
+    const details = parseOpenCodeError(error, transportStatus);
+    if (this.withholdMcpDiagnostics && details.message) {
+      details.message =
+        'Upstream diagnostic withheld because a local MCP command may transform credentials';
+    }
+    let text = describeOpenCodeError(details);
+    for (const credential of this.shortCredentials) {
+      text = text.split(credential).join('[REDACTED]');
+    }
     return redactDiagnosticText(text, this.knownCredentials)
       .replace(/[\r\n]+/g, ' ')
       .slice(0, 500);
-  }
-
-  private formatCallError(error: unknown, config: OpenCodeSDKConfig): string {
-    return this.redact(describeOpenCodeError(parseOpenCodeError(error)), config);
   }
 
   /**
@@ -1972,7 +2055,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
     // cause skill-used to pass for the wrong evaluation row.
     const startIndex = messages.findIndex((m) => m.info?.id === parentId);
     // The anchors are server-controlled, so they go through the same redaction as errors.
-    const redactId = (id: string) => redactDiagnosticText(id, this.knownCredentials);
+    const redactId = (id: string) =>
+      this.withholdMcpDiagnostics || id.length > 4_096
+        ? '[REDACTED]'
+        : redactDiagnosticText(id, this.knownCredentials);
     if (startIndex === -1) {
       logger.debug(
         `[OpenCode SDK] Parent message ${redactId(parentId)} not found in ${messages.length} fetched messages; falling back to final-message parts for skill tracking`,
@@ -2136,25 +2222,18 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
   /**
    * Grade an assistant content-filter failure as a refusal. Filtered text, structured output,
-   * and tool inputs stay private; only the names of skills that completed are kept.
+   * and tool metadata stay private.
    */
   private buildRefusalResponse(
     response: OpenCodeSdkResult<OpenCodePromptResponse>,
     sessionId: string,
-    allSessionParts: OpenCodePromptPart[],
   ): ProviderResponse {
-    const responseData = unwrapOpenCodeResult(response);
-    const parts = allSessionParts.length > 0 ? allSessionParts : (responseData?.parts ?? []);
-    const skillCalls = this.deriveSkillCalls(
-      parts.filter((part) => part.state?.status === 'completed'),
-    ).map(({ name }): SkillCallEntry => ({ name, input: { name }, source: 'tool' }));
     return {
       output: 'I cannot assist with this request because it was blocked by a content filter.',
       isRefusal: true,
       guardrails: { flagged: true, flaggedOutput: true },
-      ...getOpenCodeAccounting(responseData?.info),
+      ...getOpenCodeAccounting(unwrapOpenCodeResult(response)?.info),
       sessionId,
-      ...(skillCalls.length === 0 ? {} : { metadata: { skillCalls } }),
     };
   }
 
@@ -2212,7 +2291,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     }
 
     const details = parseOpenCodeError(error, promptError?.status);
-    const description = this.redact(describeOpenCodeError(details), config);
+    const description = this.formatCallError(error, config, promptError?.status);
     const errorMessage = promptError ? `OpenCode SDK prompt error: ${description}` : description;
     const rateLimit = getOpenCodeRateLimit(error, details, promptError?.headers);
     logger.error('Error calling OpenCode SDK', { error: errorMessage });
@@ -2341,9 +2420,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
             return { error: 'OpenCode SDK call aborted' };
           }
           const promptError = getOpenCodePromptError(response);
-          const isRefusal = isOpenCodeContentFilterRefusal(promptError);
-          if (promptError && !isRefusal) {
-            return this.buildPromptErrorResponse(config, response, promptError, session.sessionId);
+          if (promptError) {
+            return isOpenCodeContentFilterRefusal(promptError)
+              ? this.buildRefusalResponse(response, session.sessionId)
+              : this.buildPromptErrorResponse(config, response, promptError, session.sessionId);
           }
           logger.debug('OpenCode SDK response received');
 
@@ -2370,10 +2450,6 @@ export class OpenCodeSDKProvider implements ApiProvider {
             }
           }
 
-          // Refusals are not cached: the filter decision can change between runs.
-          if (isRefusal) {
-            return this.buildRefusalResponse(response, session.sessionId, allSessionParts);
-          }
           const providerResponse = this.buildProviderResponse(
             config,
             response,
