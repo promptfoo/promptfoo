@@ -9,6 +9,7 @@ import {
   getXAICostInUsd,
   XAI_CHAT_MODELS,
 } from '../../../src/providers/xai/chat';
+import { mockProcessEnv } from '../../util/utils';
 
 import type { ProviderOptions } from '../../../src/types/providers';
 
@@ -430,6 +431,31 @@ describe('xAI Chat Provider', () => {
         expect(result.error).not.toContain('API key');
       }
       expect(mockFetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('prioritizes a test effort over provider passthrough and honors disabled templating', async () => {
+      const provider = createXAIProvider('xai:grok-4.7', {
+        config: { config: { apiKey: 'test-key', passthrough: { reasoning_effort: 'high' } } },
+      });
+      const context = {
+        prompt: { raw: 'hello', label: 'hello' },
+        vars: { effort: 'xhigh' },
+        test: { options: { reasoning_effort: 'low' } },
+      };
+      await provider.callApi('hello', context);
+      expect(JSON.parse(mockFetchWithCache.mock.calls[0][1].body).reasoning_effort).toBe('low');
+      mockFetchWithCache.mockClear();
+      const restore = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
+      try {
+        const result = await provider.callApi('hello', {
+          ...context,
+          test: { options: { reasoning_effort: '{{ effort }}' } },
+        });
+        expect(result.error).toContain('reasoning effort');
+        expect(mockFetchWithCache).not.toHaveBeenCalled();
+      } finally {
+        restore();
+      }
     });
 
     it('also accepts the now-documented xhigh effort on Grok 4.6', async () => {

@@ -1,4 +1,4 @@
-import { getEnvInt } from '../../envars';
+import { getEnvBool, getEnvInt } from '../../envars';
 import logger from '../../logger';
 import { renderVarsInObject } from '../../util/index';
 import invariant from '../../util/invariant';
@@ -488,7 +488,7 @@ export function resolveGrok47ReasoningEffort(
   if (typeof value === 'string') {
     // Read an eval variable as data; do not execute test-provided template expressions.
     const variable = /^\{\{\s*([A-Za-z_]\w*)\s*\}\}$/.exec(value)?.[1];
-    if (variable) {
+    if (variable && !getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
       value = vars && Object.hasOwn(vars, variable) ? vars[variable] : null;
     }
   }
@@ -745,6 +745,23 @@ export function getXAIRequestModel(modelName: string, config?: { passthrough?: o
   return typeof model === 'string' ? model : modelName;
 }
 
+export function getXAIRequestOption(
+  key: 'reasoning' | 'reasoning_effort',
+  ...scopes: (object | undefined)[]
+): unknown {
+  for (const scope of scopes) {
+    const config = scope as Record<string, unknown> | undefined;
+    if (config && Object.hasOwn(config, key)) {
+      return config[key];
+    }
+    const raw = config?.passthrough as Record<string, unknown> | undefined;
+    if (raw && Object.hasOwn(raw, key)) {
+      return raw[key];
+    }
+  }
+  return undefined;
+}
+
 class XAIProvider extends OpenAiChatCompletionProvider {
   private originalConfig?: XAIConfig;
 
@@ -776,9 +793,12 @@ class XAIProvider extends OpenAiChatCompletionProvider {
     if (usesGrok47) {
       const raw = config.passthrough;
       effort = resolveGrok47ReasoningEffort(
-        raw && Object.hasOwn(raw, 'reasoning_effort')
-          ? raw.reasoning_effort
-          : config.reasoning_effort,
+        getXAIRequestOption(
+          'reasoning_effort',
+          context?.test?.options,
+          context?.prompt?.config,
+          this.config,
+        ),
         context?.vars,
       );
       validateXAIReasoningEffort(model, effort, 'reasoning_effort');

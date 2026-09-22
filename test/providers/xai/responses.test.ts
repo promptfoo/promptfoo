@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 import { XAIResponsesProvider } from '../../../src/providers/xai/responses';
+import { mockProcessEnv } from '../../util/utils';
 
 const mockMaybeLoadToolsFromExternalFile = vi.hoisted(() => vi.fn());
 
@@ -247,6 +248,31 @@ describe('XAIResponsesProvider', () => {
       expect(error).not.toContain('API key');
     }
     expect(mockFetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('prioritizes a test reasoning object and honors disabled templating', async () => {
+    const provider = new XAIResponsesProvider('grok-4.7', {
+      config: { passthrough: { reasoning: { effort: 'high' } } },
+    });
+    const context = {
+      prompt: { raw: 'hello', label: 'hello' },
+      vars: { effort: 'xhigh' },
+      test: { options: { reasoning: { effort: 'low' } } },
+    };
+    expect((await provider.getRequestBody('hello', context)).body.reasoning).toEqual({
+      effort: 'low',
+    });
+    const restore = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
+    try {
+      await expect(
+        provider.getRequestBody('hello', {
+          ...context,
+          test: { options: { reasoning: { effort: '{{ effort }}' } } },
+        }),
+      ).rejects.toThrow('reasoning effort');
+    } finally {
+      restore();
+    }
   });
 
   it('retains encrypted Grok 4.7 reasoning without requesting include and uses US fallback pricing', async () => {

@@ -17,6 +17,7 @@ import {
   GROK_4_MODELS,
   getXAICostInUsd,
   getXAIRequestModel,
+  getXAIRequestOption,
   hasXAICostOverrides,
   resolveGrok47ReasoningEffort,
   validateXAIReasoningEffort,
@@ -182,6 +183,20 @@ export interface XAIResponsesConfig extends XAICostConfig {
   passthrough?: Record<string, any>;
 }
 
+function resolveGrok47Reasoning(reasoning: unknown, vars?: Record<string, unknown>): unknown {
+  if (reasoning == null) {
+    return reasoning;
+  }
+  if (typeof reasoning !== 'object' || Array.isArray(reasoning)) {
+    throw new XAIRequestConfigError('xAI Grok 4.7 reasoning must be an object');
+  }
+  if (!Object.hasOwn(reasoning, 'effort')) {
+    return reasoning;
+  }
+  const config = reasoning as Record<string, unknown>;
+  return { ...config, effort: resolveGrok47ReasoningEffort(config.effort, vars) };
+}
+
 /**
  * xAI Responses API Provider
  *
@@ -345,23 +360,20 @@ export class XAIResponsesProvider implements ApiProvider {
       ...(config.passthrough || {}),
     };
 
-    if (body.reasoning !== undefined) {
-      if (usesGrok47) {
-        if (
-          body.reasoning != null &&
-          (typeof body.reasoning !== 'object' || Array.isArray(body.reasoning))
-        ) {
-          throw new XAIRequestConfigError('xAI Grok 4.7 reasoning must be an object');
-        }
-        if (body.reasoning && Object.hasOwn(body.reasoning, 'effort')) {
-          body.reasoning = {
-            ...body.reasoning,
-            effort: resolveGrok47ReasoningEffort(body.reasoning.effort, context?.vars),
-          };
-        }
+    if (usesGrok47) {
+      const reasoning = getXAIRequestOption(
+        'reasoning',
+        context?.test?.options,
+        context?.prompt?.config,
+        this.config,
+      );
+      if (reasoning === undefined) {
+        delete body.reasoning;
       } else {
-        body.reasoning = renderVarsInObject(body.reasoning, context?.vars);
+        body.reasoning = resolveGrok47Reasoning(reasoning, context?.vars);
       }
+    } else if (body.reasoning !== undefined) {
+      body.reasoning = renderVarsInObject(body.reasoning, context?.vars);
     }
 
     // Filter unsupported parameters for Grok 4-family models
@@ -396,14 +408,16 @@ export class XAIResponsesProvider implements ApiProvider {
       };
     }
 
-    let request;
-    try {
-      request = await this.getRequestBody(prompt, context, callApiOptions);
-    } catch (error) {
-      if (error instanceof XAIRequestConfigError) {
-        return { error: `xAI request error: ${error.message}` };
-      }
-      throw error;
+    const request = await this.getRequestBody(prompt, context, callApiOptions).catch(
+      (error: unknown) => {
+        if (error instanceof XAIRequestConfigError) {
+          return { error: `xAI request error: ${error.message}` };
+        }
+        throw error;
+      },
+    );
+    if ('error' in request) {
+      return request;
     }
     const { body, config } = request;
 
