@@ -1791,6 +1791,7 @@ describe('OpenCodeSDKProvider', () => {
             sessionID: 'existing-session',
             tools: { '*': false },
           }),
+          { signal: expect.any(AbortSignal) },
         );
       });
 
@@ -2524,6 +2525,130 @@ describe('OpenCodeSDKProvider', () => {
         recursive: true,
         force: true,
       });
+    });
+
+    it.each([
+      ['persistent', { persist_sessions: true }, false],
+      ['explicit', { session_id: 'external-session' }, false],
+      ['previously cancelled explicit', { session_id: 'external-session' }, true],
+    ] as const)(
+      'waits for server acknowledgement before process shutdown for a %s remote session',
+      async (_mode, session, cancelFirst) => {
+        const started = createDeferred<void>();
+        const prompt = createDeferred<ReturnType<typeof createMockPromptResponse>>();
+        const acknowledgement = createDeferred<{ data: true }>();
+        const caller = new AbortController();
+        mockSessionPrompt.mockImplementation((_parameters, options) => {
+          options.signal.addEventListener(
+            'abort',
+            () => prompt.reject(new DOMException('Aborted', 'AbortError')),
+            { once: true },
+          );
+          started.resolve();
+          return prompt.promise;
+        });
+        mockSessionAbort.mockReturnValue(acknowledgement.promise);
+        const provider = new OpenCodeSDKProvider({
+          config: { baseUrl: 'http://remote.test', ...session },
+        });
+        const call = provider.callApi('pending', undefined, { abortSignal: caller.signal });
+        await started.promise;
+        if (cancelFirst) {
+          caller.abort();
+        }
+        const completed = vi.fn();
+        const shutdown = providerRegistry.shutdownForProcess().then(completed);
+
+        await expect(call).resolves.toEqual({ error: 'OpenCode SDK call aborted' });
+        expect(mockSessionAbort).toHaveBeenCalledOnce();
+        expect(mockSessionAbort.mock.calls[0][1].signal.aborted).toBe(false);
+        expect(completed).not.toHaveBeenCalled();
+        expect(mockSessionDelete).not.toHaveBeenCalled();
+
+        acknowledgement.resolve({ data: true });
+        await shutdown;
+        expect(completed).toHaveBeenCalledOnce();
+        expect(mockSessionDelete).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(['v1', 'v2'] as const)(
+      'bounds unacknowledged %s process cancellation with a fresh transport',
+      async (apiVersion) => {
+        if (apiVersion === 'v1') {
+          const { importModule } = await import('../../src/esm');
+          vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
+            if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
+              throw new Error('v2 unavailable');
+            }
+            return {
+              createOpencode: mockCreateOpencode,
+              createOpencodeClient: mockCreateOpencodeClient,
+            };
+          });
+        }
+        const started = createDeferred<void>();
+        const prompt = createDeferred<ReturnType<typeof createMockPromptResponse>>();
+        let promptSignal: AbortSignal | undefined;
+        let cleanupSignal: AbortSignal | undefined;
+        mockSessionPrompt.mockImplementation((parameters, options) => {
+          promptSignal = options?.signal ?? parameters.signal;
+          promptSignal?.addEventListener(
+            'abort',
+            () => prompt.reject(new DOMException('Aborted', 'AbortError')),
+            { once: true },
+          );
+          started.resolve();
+          return prompt.promise;
+        });
+        mockSessionAbort.mockImplementation((parameters, options) => {
+          cleanupSignal = options?.signal ?? parameters.signal;
+          return new Promise(() => {});
+        });
+        const provider = new OpenCodeSDKProvider({
+          config: { baseUrl: 'http://remote.test', persist_sessions: true },
+        });
+        const call = provider.callApi('pending');
+        await started.promise;
+        vi.useFakeTimers();
+        try {
+          const completed = vi.fn();
+          const shutdown = providerRegistry.shutdownForProcess().then(completed);
+          await expect(call).resolves.toEqual({ error: 'OpenCode SDK call aborted' });
+          expect(promptSignal?.aborted).toBe(true);
+          expect(cleanupSignal?.aborted).toBe(false);
+          await vi.advanceTimersByTimeAsync(999);
+          expect(completed).not.toHaveBeenCalled();
+          await vi.advanceTimersByTimeAsync(1);
+          await shutdown;
+          expect(cleanupSignal?.aborted).toBe(true);
+          expect(completed).toHaveBeenCalledOnce();
+          expect(mockSessionDelete).not.toHaveBeenCalled();
+        } finally {
+          vi.useRealTimers();
+        }
+      },
+    );
+
+    it('does not start a remote prompt if process shutdown arrives while creating its session', async () => {
+      const started = createDeferred<void>();
+      const created = createDeferred<ReturnType<typeof createMockSessionResponse>>();
+      mockSessionCreate.mockImplementationOnce(() => {
+        started.resolve();
+        return created.promise;
+      });
+      const provider = new OpenCodeSDKProvider({
+        config: { baseUrl: 'http://remote.test', persist_sessions: true },
+      });
+      const call = provider.callApi('pending');
+      await started.promise;
+
+      await providerRegistry.shutdownForProcess();
+      created.resolve(createMockSessionResponse('late-session'));
+
+      await expect(call).resolves.toEqual({ error: 'OpenCode SDK call aborted before it started' });
+      expect(mockSessionPrompt).not.toHaveBeenCalled();
+      expect(mockSessionAbort).not.toHaveBeenCalled();
     });
 
     it('does not start a queued call on a session until its aborted prompt returns', async () => {
@@ -3875,6 +4000,32 @@ describe('OpenCodeSDKProvider', () => {
               JSON.stringify(apiKeyWithSymbols).slice(1, -1),
             ],
             secrets: ['synthetic', 'value-1'],
+          },
+        ],
+        [
+          'lowercase and repeatedly percent-encoded API keys',
+          {
+            config: { apiKey: 'abc/defgh' },
+            echo: ['abc%2fdefgh', 'abc%252Fdefgh', 'abc%25252fdefgh'],
+            secrets: ['abc/defgh', 'abc%2fdefgh', 'abc%252Fdefgh', 'abc%25252fdefgh'],
+          },
+        ],
+        [
+          'one-to-three-character API keys, URL passwords, and local or inherited env values',
+          {
+            config: {
+              apiKey: 'q',
+              baseUrl: 'https://example:x7@example.test',
+              mcp: {
+                local: {
+                  type: 'local',
+                  command: ['server'],
+                  environment: { CUSTOM_GATEWAY: 'p6' },
+                },
+              },
+            },
+            processEnv: { FAL_KEY: 'n8v' },
+            secrets: ['q', 'x7', 'p6', 'n8v'],
           },
         ],
         [

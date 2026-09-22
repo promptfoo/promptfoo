@@ -168,6 +168,26 @@ describeEvaluator('registered resources across overlapping evaluations', () => {
     expect(aware.cleanup).not.toHaveBeenCalled();
   });
 
+  it('uses the process-specific shutdown hook only for providers that opt in', async () => {
+    const legacy = { shutdown: vi.fn(async () => {}) };
+    const aware = {
+      shutdown: vi.fn(async () => {}),
+      shutdownForProcess: vi.fn(async () => {}),
+    };
+    providerRegistry.register(legacy);
+    providerRegistry.register(aware);
+
+    await providerRegistry.shutdownForProcess();
+
+    expect(legacy.shutdown).toHaveBeenCalledExactlyOnceWith();
+    expect(aware.shutdownForProcess).toHaveBeenCalledExactlyOnceWith();
+    expect(aware.shutdown).not.toHaveBeenCalled();
+    providerRegistry.register(aware);
+    await providerRegistry.shutdownAll();
+    expect(aware.shutdown).toHaveBeenCalledExactlyOnceWith();
+    expect(aware.shutdownForProcess).toHaveBeenCalledOnce();
+  });
+
   it.each(['distinct', 'shared', 'abort', 'error'] as const)(
     'keeps the active registered request alive when the other %s run finishes',
     async (mode) => {

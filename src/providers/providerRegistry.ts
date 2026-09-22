@@ -5,6 +5,7 @@ import logger from '../logger';
  */
 interface CleanupProvider {
   shutdown(): Promise<void>;
+  shutdownForProcess?(): Promise<void>;
 }
 
 interface RegisteredCleanup {
@@ -136,7 +137,7 @@ class ProviderRegistry {
       logger.debug(`Received ${signal}, shutting down ${this.providers.size} Python providers...`);
 
       // Process termination still closes all resources, regardless of active evaluations.
-      await this.shutdownAll();
+      await this.shutdownForProcess();
 
       logger.debug('Python provider shutdown complete');
     };
@@ -163,12 +164,15 @@ class ProviderRegistry {
   private async shutdownResources(
     providers: RegisteredCleanup[],
     skipReregistered = false,
+    forProcess = false,
   ): Promise<void> {
     const results = await Promise.allSettled(
       providers.map(({ provider, generation }) =>
         Promise.resolve().then(() => {
           if (!skipReregistered || this.registrationGenerations.get(provider) === generation) {
-            return provider.shutdown();
+            return forProcess && provider.shutdownForProcess
+              ? provider.shutdownForProcess()
+              : provider.shutdown();
           }
         }),
       ),
@@ -184,6 +188,10 @@ class ProviderRegistry {
 
   async shutdownAll(): Promise<void> {
     await this.shutdownResources(this.takeRegisteredResources());
+  }
+
+  async shutdownForProcess(): Promise<void> {
+    await this.shutdownResources(this.takeRegisteredResources(), false, true);
   }
 }
 

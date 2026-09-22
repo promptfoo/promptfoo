@@ -411,6 +411,7 @@ function isDebugMode(): boolean {
  * Maximum number of sessions to keep in memory to prevent unbounded growth
  */
 const MAX_SESSIONS = 100;
+const SESSION_ABORT_TIMEOUT_MS = 1_000;
 
 /**
  * OpenCode SDK client interface
@@ -422,13 +423,17 @@ interface OpenCodeClient {
     ) => Promise<OpenCodeSdkResult<Record<string, unknown>>>;
     prompt: (
       parameters: Record<string, unknown>,
+      options?: Record<string, unknown>,
     ) => Promise<OpenCodeSdkResult<OpenCodePromptResponse>>;
     messages: (
       parameters: Record<string, unknown>,
       options?: Record<string, unknown>,
     ) => Promise<OpenCodeSdkResult<OpenCodeSessionMessage[]>>;
     delete: (parameters: Record<string, unknown>) => Promise<unknown>;
-    abort?: (parameters: Record<string, unknown>) => Promise<unknown>;
+    abort?: (
+      parameters: Record<string, unknown>,
+      options?: Record<string, unknown>,
+    ) => Promise<unknown>;
   };
 }
 
@@ -1177,6 +1182,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private withholdMcpDiagnostics = false;
   private sessions = new Map<string, OpenCodeSessionHandle>(); // cacheKey -> session, oldest first
   private sessionQueues = new Map<string, Promise<void>>();
+  private activeRemoteCalls = 0;
+  private readonly remoteSessionAborts = new Set<() => Promise<void>>();
+  private readonly processTermination = new AbortController();
+  private processShutdown?: Promise<void>;
   // Temp workspaces a running local server kept open; removal is retried once it stops.
   private readonly pendingTempDirs = new Set<string>();
   private readonly credentialCacheScope = crypto.randomUUID();
@@ -1263,6 +1272,18 @@ export class OpenCodeSDKProvider implements ApiProvider {
     return this.shutdown();
   }
 
+  shutdownForProcess(): Promise<void> {
+    if (!this.processShutdown) {
+      const remoteAborts = [...this.remoteSessionAborts].map((abort) => abort());
+      this.processTermination.abort();
+      this.processShutdown = Promise.allSettled([this.shutdown(), ...remoteAborts]).then(() => {
+        this.remoteSessionAborts.clear();
+        providerRegistry.unregister(this);
+      });
+    }
+    return this.processShutdown;
+  }
+
   /** Stop the local server (after evaluations or on process exit) and keep the sessions. */
   async shutdown(): Promise<void> {
     await this.clientInitialization?.catch(() => undefined);
@@ -1277,8 +1298,93 @@ export class OpenCodeSDKProvider implements ApiProvider {
       this.server = undefined;
     }
     this.client = undefined;
-    providerRegistry.unregister(this);
+    if (this.activeRemoteCalls > 0 && !this.processTermination.signal.aborted) {
+      providerRegistry.register(this);
+    } else {
+      providerRegistry.unregister(this);
+    }
     await Promise.all([...this.pendingTempDirs].map((dir) => this.removeTempDir(dir)));
+  }
+
+  private async abortRemoteSession(
+    client: OpenCodeClient,
+    parameters: Record<string, unknown>,
+  ): Promise<void> {
+    if (!client.session.abort) {
+      throw new Error('OpenCode SDK does not expose session cancellation');
+    }
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<void>((resolve) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        resolve();
+      }, SESSION_ABORT_TIMEOUT_MS);
+    });
+    try {
+      const request =
+        this.opencodeModule?.apiVersion === 'v2'
+          ? client.session.abort(parameters, { signal: controller.signal })
+          : client.session.abort({ ...parameters, signal: controller.signal });
+      await Promise.race([
+        request.then((result) => {
+          const envelope = asRecord(result);
+          if (
+            result !== true &&
+            (envelope?.data !== true || envelope.error || asRecord(envelope.response)?.ok === false)
+          ) {
+            throw new Error('OpenCode did not acknowledge session cancellation');
+          }
+        }),
+        deadline,
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private setupSessionCancellation(
+    client: OpenCodeClient,
+    session: OpenCodeSessionContext,
+    config: OpenCodeSDKConfig,
+    abortSignal: AbortSignal | undefined,
+    tracksRemote: boolean,
+  ): { listener?: () => void; releaseRemote?: () => void } {
+    if ((!client.session.abort || !abortSignal) && !tracksRemote) {
+      return {};
+    }
+    const abortParams = this.buildAbortSessionParameters(session.sessionId, session.sessionQuery);
+    const logAbortError = (error: unknown) => {
+      logger.debug(`[OpenCode SDK] Failed to abort session ${session.sessionId}`, {
+        error: this.formatCallError(error, config),
+      });
+    };
+    let remoteAbort: Promise<void> | undefined;
+    const abortRemote = () =>
+      (remoteAbort ??= this.abortRemoteSession(client, abortParams).catch(logAbortError));
+    let releaseRemote: (() => void) | undefined;
+    if (tracksRemote) {
+      this.remoteSessionAborts.add(abortRemote);
+      releaseRemote = () => {
+        this.remoteSessionAborts.delete(abortRemote);
+      };
+    }
+    let listener: (() => void) | undefined;
+    if (abortSignal && client.session.abort) {
+      listener = () => {
+        if (tracksRemote) {
+          void abortRemote();
+          return;
+        }
+        try {
+          client.session.abort?.(abortParams).catch(logAbortError);
+        } catch (error) {
+          logAbortError(error);
+        }
+      };
+      abortSignal.addEventListener('abort', listener, { once: true });
+    }
+    return { listener, releaseRemote };
   }
 
   private async removeTempDir(workingDir: string): Promise<void> {
@@ -1298,8 +1404,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
    */
   private rememberCredentials(config: OpenCodeSDKConfig): void {
     const add = (value: unknown) => {
-      // Shorter values are not meaningful secrets and would only mangle ordinary diagnostics.
-      if (typeof value !== 'string' || value.trim().length < 4) {
+      if (typeof value !== 'string' || !value.trim()) {
         return;
       }
       for (const form of new Set([value, value.trim()])) {
@@ -2306,12 +2411,23 @@ export class OpenCodeSDKProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    if (this.processTermination.signal.aborted) {
+      return { error: 'OpenCode SDK call aborted before it started' };
+    }
     const { config, isTempDir, workingDir } = this.prepareCall(context);
     // A server started by this call keeps its configuration after later calls replace it.
     this.rememberCredentials(config);
+    const remoteStateful = Boolean(
+      config.baseUrl && (config.session_id || config.persist_sessions),
+    );
+    if (remoteStateful) {
+      this.activeRemoteCalls++;
+      providerRegistry.register(this);
+    }
     let ephemeralSession: OpenCodeSessionHandle | undefined;
     let sessionClient: OpenCodeClient | undefined;
     let abortListener: (() => void) | undefined;
+    let releaseRemoteSession: (() => void) | undefined;
 
     try {
       this.buildEffectivePermissionRules(config);
@@ -2353,7 +2469,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
         return cachedResponse;
       }
 
-      if (callOptions?.abortSignal?.aborted) {
+      if (callOptions?.abortSignal?.aborted || this.processTermination.signal.aborted) {
         return { error: 'OpenCode SDK call aborted before it started' };
       }
 
@@ -2368,7 +2484,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
           sessionClient = client;
           const session = await this.getOrCreateSession(config, workingDir);
           ephemeralSession = session.ephemeralSession;
-          if (callOptions?.abortSignal?.aborted) {
+          if (callOptions?.abortSignal?.aborted || this.processTermination.signal.aborted) {
             return { error: 'OpenCode SDK call aborted before it started' };
           }
 
@@ -2388,27 +2504,22 @@ export class OpenCodeSDKProvider implements ApiProvider {
           // letting it run to completion while we discard the result. The prompt itself is
           // awaited, so a queued call cannot reuse the session while it is still running.
           const abortSignal = callOptions?.abortSignal;
-          if (abortSignal && client.session.abort) {
-            const abortParams = this.buildAbortSessionParameters(
-              session.sessionId,
-              session.sessionQuery,
-            );
-            const logAbortError = (error: unknown) => {
-              logger.debug(`[OpenCode SDK] Failed to abort session ${session.sessionId}`, {
-                error: this.formatCallError(error, config),
-              });
-            };
-            abortListener = () => {
-              try {
-                client.session.abort?.(abortParams).catch(logAbortError);
-              } catch (error) {
-                logAbortError(error);
-              }
-            };
-            abortSignal.addEventListener('abort', abortListener, { once: true });
-          }
+          const cancellation = this.setupSessionCancellation(
+            client,
+            session,
+            config,
+            abortSignal,
+            remoteStateful,
+          );
+          abortListener = cancellation.listener;
+          releaseRemoteSession = cancellation.releaseRemote;
 
-          const response = await client.session.prompt(promptOptions);
+          const processSignal = this.processTermination.signal;
+          const response = remoteStateful
+            ? await (this.opencodeModule?.apiVersion === 'v2'
+                ? client.session.prompt(promptOptions, { signal: processSignal })
+                : client.session.prompt({ ...promptOptions, signal: processSignal }))
+            : await client.session.prompt(promptOptions);
           // The prompt has returned, so an abort from here on must not ask the
           // server to kill the session it already answered.
           if (abortListener && abortSignal) {
@@ -2416,7 +2527,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
             abortListener = undefined;
           }
 
-          if (abortSignal?.aborted) {
+          if (abortSignal?.aborted || processSignal.aborted) {
             return { error: 'OpenCode SDK call aborted' };
           }
           const promptError = getOpenCodePromptError(response);
@@ -2466,6 +2577,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
     } finally {
       if (abortListener && callOptions?.abortSignal) {
         callOptions.abortSignal.removeEventListener('abort', abortListener);
+      }
+      releaseRemoteSession?.();
+      if (remoteStateful && --this.activeRemoteCalls === 0 && !this.server) {
+        providerRegistry.unregister(this);
       }
       if (ephemeralSession) {
         try {
