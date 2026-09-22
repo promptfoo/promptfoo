@@ -8,6 +8,7 @@ import logger from '../logger';
 import {
   canCreateTargets,
   findTeam,
+  getCloudOrganizationLabel,
   getOldestTeam,
   getUserTeams,
   resolveTeamFromIdentifier,
@@ -204,8 +205,7 @@ async function loginWithApiKey(cmdObj: LoginCommandOptions, apiHost: string): Pr
 
     if (cmdObj.team && !cmdObj.org) {
       // Prefer the key's organization when several organizations share a team name or slug.
-      const selectedTeam =
-        findTeam(organizationTeams, cmdObj.team) ?? findTeam(allTeams, cmdObj.team);
+      const selectedTeam = findTeam(allTeams, cmdObj.team, organizationId);
       if (!selectedTeam) {
         const availableTeams = allTeams.map((team) => team.name).join(', ');
         throw new Error(`Team '${cmdObj.team}' not found. Available teams: ${availableTeams}`);
@@ -240,7 +240,7 @@ async function loginWithApiKey(cmdObj: LoginCommandOptions, apiHost: string): Pr
   logger.info(chalk.green.bold('Successfully logged in'));
   logger.info(`User: ${chalk.cyan(user.email)}`);
   logger.info(
-    `Organization: ${chalk.cyan(organizationId === organization.id ? organization.name : organizationId)}`,
+    `Organization: ${chalk.cyan(getCloudOrganizationLabel(organization, organizationId))}`,
   );
   logger.info(`App: ${chalk.cyan(cloudConfig.getAppUrl())}`);
 }
@@ -350,20 +350,21 @@ export function authCommand(program: Command) {
         }
 
         const { user, organization } = await response.json();
+        const organizationLabel = getCloudOrganizationLabel(organization);
 
         try {
           const currentTeam = await resolveTeamId();
           logger.info(dedent`
               ${chalk.green.bold('Currently logged in as:')}
               User: ${chalk.cyan(user.email)}
-              Organization: ${chalk.cyan(organization.name)}
+              Organization: ${chalk.cyan(organizationLabel)}
               Current Team: ${chalk.cyan(currentTeam.name)}
               App URL: ${chalk.cyan(cloudConfig.getAppUrl())}`);
         } catch (teamError) {
           logger.info(dedent`
               ${chalk.green.bold('Currently logged in as:')}
               User: ${chalk.cyan(user.email)}
-              Organization: ${chalk.cyan(organization.name)}
+              Organization: ${chalk.cyan(organizationLabel)}
               App URL: ${chalk.cyan(cloudConfig.getAppUrl())}`);
           logger.warn(
             `Could not determine current team: ${teamError instanceof Error ? teamError.message : String(teamError)}`,

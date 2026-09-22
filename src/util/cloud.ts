@@ -459,16 +459,20 @@ export function getOldestTeam<T extends { createdAt: string }>(teams: T[]): T {
   )[0];
 }
 
-/** Finds a team by exact ID, then case-insensitive name, then slug. */
-export function findTeam<T extends { id: string; name: string; slug: string }>(
-  teams: T[],
-  identifier: string,
-): T | undefined {
+/** Finds an exact team ID first; otherwise prefers names and slugs in the selected organization. */
+export function findTeam<
+  T extends { id: string; name: string; slug: string; organizationId: string },
+>(teams: T[], identifier: string, preferredOrganizationId?: string): T | undefined {
   const name = identifier.toLowerCase();
+  const findByNameOrSlug = (candidates: T[]) =>
+    candidates.find((team) => team.name.toLowerCase() === name) ??
+    candidates.find((team) => team.slug === identifier);
   return (
     teams.find((team) => team.id === identifier) ??
-    teams.find((team) => team.name.toLowerCase() === name) ??
-    teams.find((team) => team.slug === identifier)
+    (preferredOrganizationId
+      ? findByNameOrSlug(teams.filter((team) => team.organizationId === preferredOrganizationId))
+      : undefined) ??
+    findByNameOrSlug(teams)
   );
 }
 
@@ -529,12 +533,7 @@ export async function resolveTeamFromIdentifier(
   identifier: string,
 ): Promise<{ id: string; name: string; organizationId: string; createdAt: string }> {
   const teams = await getUserTeams();
-  const currentOrganizationId = cloudConfig.getCurrentOrganizationId();
-  const team =
-    findTeam(
-      teams.filter((t) => t.organizationId === currentOrganizationId),
-      identifier,
-    ) ?? findTeam(teams, identifier);
+  const team = findTeam(teams, identifier, cloudConfig.getCurrentOrganizationId());
 
   if (!team) {
     const availableTeams = teams.map((t) => t.name).join(', ');
@@ -916,14 +915,16 @@ export async function getOrgContext(): Promise<{
     }
 
     const { organization } = await response.json();
-    const currentTeamId = cloudConfig.getCurrentTeamId(organization.id);
+    const organizationId = cloudConfig.getCurrentOrganizationId() ?? organization.id;
+    const organizationName = getCloudOrganizationLabel(organization, organizationId);
+    const currentTeamId = cloudConfig.getCurrentTeamId(organizationId);
 
     // Only include team name if it differs from organization name
     let teamName: string | undefined;
     if (currentTeamId) {
       try {
         const team = await getTeamById(currentTeamId);
-        if (team.name !== organization.name) {
+        if (team.organizationId === organizationId && team.name !== organizationName) {
           teamName = team.name;
         }
       } catch {
@@ -932,11 +933,21 @@ export async function getOrgContext(): Promise<{
     }
 
     return {
-      organizationName: organization.name,
+      organizationName,
       teamName,
     };
   } catch {
     // Silently fail and return null
     return null;
   }
+}
+
+/** The token's organization name applies only to that organization; otherwise show the active ID. */
+export function getCloudOrganizationLabel(
+  tokenOrganization: { id: string; name: string },
+  organizationId = cloudConfig.getCurrentOrganizationId(),
+): string {
+  return !organizationId || organizationId === tokenOrganization.id
+    ? tokenOrganization.name
+    : organizationId;
 }

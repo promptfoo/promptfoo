@@ -1541,12 +1541,26 @@ describe('cloud utils', () => {
         team('other-default', 'org-2', '2022'),
         team('own-default', 'org-1', '2023'),
         team('elsewhere', 'org-2', '2024'),
+        { ...team('own-name', 'org-1', '2024'), name: 'other-id-name' },
+        { ...team('own-slug', 'org-1', '2024'), slug: 'other-id-slug' },
+        team('other-id-name', 'org-2', '2024'),
+        team('other-id-slug', 'org-2', '2024'),
       ].map((t) => ({ ...t, name: t.id.endsWith('default') ? 'Default' : t.name }));
 
       it.each([
         ['prefers the current organization when names collide', 'default', 'own-default'],
         ['still finds a team that exists only in another organization', 'elsewhere', 'elsewhere'],
         ['matches an exact ID in any organization', 'other-default', 'other-default'],
+        [
+          'prefers an exact ID over a name in the current organization',
+          'other-id-name',
+          'other-id-name',
+        ],
+        [
+          'prefers an exact ID over a slug in the current organization',
+          'other-id-slug',
+          'other-id-slug',
+        ],
       ])('%s', async (_scenario, identifier, expected) => {
         mockTeamState('org-1', {}, teams);
 
@@ -1554,6 +1568,50 @@ describe('cloud utils', () => {
           id: expected,
         });
       });
+    });
+  });
+
+  describe('getOrgContext', () => {
+    const tokenOrganization = { id: 'org-1', name: 'Token Organization' };
+
+    it.each([
+      ['org-2', 'org-2', 'Selected Team', 'org-2', 'Selected Team'],
+      ['org-2', 'org-1', 'Wrong Team', 'org-2', undefined],
+      ['org-1', 'org-1', 'Token Organization', 'Token Organization', undefined],
+      [undefined, 'org-1', 'Legacy Team', 'Token Organization', 'Legacy Team'],
+    ])(
+      'uses the effective organization %s and only its own team',
+      async (selected, teamOrg, teamName, organizationName, expectedTeamName) => {
+        mockCloudConfig.isEnabled.mockReturnValue(true);
+        mockCloudConfig.getCurrentOrganizationId.mockReturnValue(selected);
+        mockCloudConfig.getCurrentTeamId.mockImplementation((id) =>
+          id === (selected ?? tokenOrganization.id) ? 'team-id' : undefined,
+        );
+        mockFetchWithProxy
+          .mockResolvedValueOnce(Response.json({ organization: tokenOrganization }))
+          .mockResolvedValueOnce(
+            Response.json([{ id: 'team-id', name: teamName, organizationId: teamOrg }]),
+          );
+
+        await expect(cloudModule.getOrgContext()).resolves.toEqual({
+          organizationName,
+          teamName: expectedTeamName,
+        });
+        expect(mockCloudConfig.getCurrentTeamId).toHaveBeenCalledWith(
+          selected ?? tokenOrganization.id,
+        );
+      },
+    );
+
+    it('still names the selected organization when team lookup fails', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+      mockCloudConfig.getCurrentOrganizationId.mockReturnValue('org-2');
+      mockCloudConfig.getCurrentTeamId.mockReturnValue('team-id');
+      mockFetchWithProxy
+        .mockResolvedValueOnce(Response.json({ organization: tokenOrganization }))
+        .mockResolvedValueOnce(new Response(null, { status: 503 }));
+
+      await expect(cloudModule.getOrgContext()).resolves.toEqual({ organizationName: 'org-2' });
     });
   });
 
