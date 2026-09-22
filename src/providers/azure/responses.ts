@@ -8,7 +8,7 @@ import {
 } from '../../util/index';
 import invariant from '../../util/invariant';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
-import { applyGpt6AstraRequestRules, isGpt6AstraModel } from '../openai/gpt6';
+import { applyGpt6RequestRules, isGpt6Model } from '../openai/gpt6';
 import { ResponsesProcessor } from '../responses/index';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { AzureGenericProvider } from './generic';
@@ -103,7 +103,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       // GPT-5 series (reasoning by default)
       lowerName.startsWith('gpt-5') ||
       lowerName.includes('-gpt-5') ||
-      isGpt6AstraModel(lowerName) ||
+      isGpt6Model(lowerName) ||
       // DeepSeek reasoning models
       lowerName.includes('deepseek-r1') ||
       lowerName.includes('deepseek_r1') ||
@@ -164,9 +164,10 @@ export class AzureResponsesProvider extends AzureGenericProvider {
         ? undefined
         : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
-    const temperature = this.supportsTemperature(capabilityModelName)
-      ? (config.temperature ?? temperatureDefault)
-      : undefined;
+    const temperature =
+      isGpt6Model(capabilityModelName) || this.supportsTemperature(capabilityModelName)
+        ? (config.temperature ?? temperatureDefault)
+        : undefined;
     const reasoningEffort = isReasoningModel
       ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
       : undefined;
@@ -259,7 +260,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       ...(config.passthrough || {}),
     };
 
-    applyGpt6AstraRequestRules(body, capabilityModelName, 'responses');
+    applyGpt6RequestRules(body, capabilityModelName, 'responses');
 
     logger.debug('Azure Responses API request body', { body });
     return body;

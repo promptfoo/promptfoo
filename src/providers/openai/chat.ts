@@ -29,7 +29,7 @@ import {
 } from '../tracing';
 import { OpenAiGenericProvider } from './';
 import { calculateOpenAIUsageCost } from './billing';
-import { applyGpt6AstraRequestRules, isGpt6AstraModel } from './gpt6';
+import { applyGpt6RequestRules, isGpt6Model } from './gpt6';
 import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
@@ -195,7 +195,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       capabilityModelName.includes('/o1') ||
       capabilityModelName.includes('/o3') ||
       capabilityModelName.includes('/o4');
-    const isGpt6Astra = isGpt6AstraModel(capabilityModelName);
+    const isGPT6Model = isGpt6Model(capabilityModelName);
     const isReasoningModel =
       passthroughModel === undefined
         ? this.isReasoningModel()
@@ -216,8 +216,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? undefined
         : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
+    // GPT-6 sampling depends on the final reasoning effort; its request rules remove it if needed.
     const supportsTemperature =
-      passthroughModel === undefined ? this.supportsTemperature() : !isReasoningModel;
+      isGPT6Model ||
+      (passthroughModel === undefined ? this.supportsTemperature() : !isReasoningModel);
     const temperature = supportsTemperature
       ? (config.temperature ?? temperatureDefault)
       : undefined;
@@ -294,7 +296,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             audio: config.audio || { voice: 'alloy', format: 'wav' },
           }
         : {}),
-      ...((isGPT5Model || isGpt6Astra) && config.verbosity ? { verbosity: config.verbosity } : {}),
+      ...((isGPT5Model || isGPT6Model) && config.verbosity ? { verbosity: config.verbosity } : {}),
     };
     assertOpenAiApiModel(body.model, this.getApiUrl());
 
@@ -329,7 +331,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
 
     // OpenRouter can translate Chat tools to the upstream Responses API.
-    applyGpt6AstraRequestRules(
+    applyGpt6RequestRules(
       body,
       capabilityModelName,
       'chat',
@@ -357,6 +359,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const tokenCost = calculateOpenAIUsageCost(billingModelName, config, data.usage, {
       apiUrl: this.getApiUrl(),
       cachedResponse: cached,
+      provider: this.getGenAISystem(),
       serviceTier: data.service_tier ?? config.service_tier,
     });
     const searchCost = cached ? 0 : getChatSearchSurcharge(modelName);

@@ -22,7 +22,7 @@ import {
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
-import { applyGpt6AstraRequestRules, isGpt6AstraModel } from '../openai/gpt6';
+import { applyGpt6RequestRules, isGpt6Model } from '../openai/gpt6';
 import { getRequestTimeoutMs, parseChatPrompt, transformTools } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
@@ -97,7 +97,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       // GPT-5 series (reasoning by default)
       lowerName.startsWith('gpt-5') ||
       lowerName.includes('-gpt-5') ||
-      isGpt6AstraModel(lowerName) ||
+      isGpt6Model(lowerName) ||
       // DeepSeek reasoning models
       lowerName.includes('deepseek-r1') ||
       lowerName.includes('deepseek_r1') ||
@@ -260,6 +260,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
             ...(maxCompletionTokens === undefined
               ? {}
               : { max_completion_tokens: maxCompletionTokens }),
+            ...(isGpt6Model(capabilityModelName) && temperature !== undefined
+              ? { temperature }
+              : {}),
           }
         : {
             ...(maxTokens === undefined ? {} : { max_tokens: maxTokens }),
@@ -308,7 +311,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       delete body.tool_choice;
     }
 
-    applyGpt6AstraRequestRules(body, capabilityModelName, 'chat');
+    applyGpt6RequestRules(body, capabilityModelName, 'chat');
 
     return {
       body,

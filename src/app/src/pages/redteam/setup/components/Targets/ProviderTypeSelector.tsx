@@ -195,7 +195,7 @@ const allProviderOptions = [
   {
     value: 'openai',
     label: 'OpenAI',
-    description: 'GPT-5.6 Luna, Terra, Sol and GPT-6 Astra',
+    description: 'GPT-6 Luna, Sol, and Astra; GPT-5.6 Terra',
     tag: 'providers',
     recommended: true,
   },

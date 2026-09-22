@@ -471,7 +471,7 @@ describe('ProviderTypeSelector', () => {
     );
 
     expect(screen.getByText('OpenAI')).toBeVisible();
-    expect(screen.getByText('GPT-5.6 Luna, Terra, Sol and GPT-6 Astra')).toBeVisible();
+    expect(screen.getByText('GPT-6 Luna, Sol, and Astra; GPT-5.6 Terra')).toBeVisible();
   });
 
   it('should correctly update provider configuration when switching from Go provider to HTTP provider', async () => {

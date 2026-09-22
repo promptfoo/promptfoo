@@ -1,4 +1,4 @@
-import { isGpt6AstraModel } from './gpt6';
+import { isGpt6Model } from './gpt6';
 import { getOpenAICacheWriteInputTokens, OPENAI_BILLING_MODELS } from './util';
 
 import type { ProviderConfig } from '../shared';
@@ -63,6 +63,8 @@ function buildRateTable<T>(groups: RateGroup<T>[]): Record<string, T> {
 
 const STANDARD_CACHED_INPUT_RATES = buildRateTable<number>([
   { models: ['gpt-6-astra'], rates: perMillion(1) },
+  { models: ['gpt-6-sol'], rates: perMillion(0.2) },
+  { models: ['gpt-6-luna'], rates: perMillion(0.01) },
   { models: ['gpt-5.6', 'gpt-5.6-sol'], rates: perMillion(0.4) },
   { models: ['gpt-5.6-terra'], rates: perMillion(0.2) },
   { models: ['gpt-5.6-luna'], rates: perMillion(0.02) },
@@ -187,6 +189,8 @@ const FINE_TUNED_BATCH_OVERRIDES = buildRateTable<OpenAITextRates>([
 
 const LONG_CONTEXT_CACHED_INPUT_RATES = buildRateTable<number>([
   { models: ['gpt-6-astra'], rates: perMillion(2) },
+  { models: ['gpt-6-sol'], rates: perMillion(0.4) },
+  { models: ['gpt-6-luna'], rates: perMillion(0.02) },
   { models: ['gpt-5.6', 'gpt-5.6-sol'], rates: perMillion(0.8) },
   { models: ['gpt-5.6-terra'], rates: perMillion(0.4) },
   { models: ['gpt-5.6-luna'], rates: perMillion(0.04) },
@@ -196,6 +200,8 @@ const LONG_CONTEXT_CACHED_INPUT_RATES = buildRateTable<number>([
 
 const FLEX_SUPPORTED_TEXT_MODELS = new Set([
   'gpt-6-astra',
+  'gpt-6-sol',
+  'gpt-6-luna',
   'gpt-5.6',
   'gpt-5.6-sol',
   'gpt-5.6-terra',
@@ -241,6 +247,24 @@ const PRIORITY_TEXT_RATES = buildRateTable<OpenAITextRates>([
       cachedInput: perMillion(2),
       cacheWriteInput: perMillion(25),
       output: perMillion(100),
+    },
+  },
+  {
+    models: ['gpt-6-sol'],
+    rates: {
+      input: perMillion(4),
+      cachedInput: perMillion(0.4),
+      cacheWriteInput: perMillion(5),
+      output: perMillion(20),
+    },
+  },
+  {
+    models: ['gpt-6-luna'],
+    rates: {
+      input: perMillion(0.2),
+      cachedInput: perMillion(0.02),
+      cacheWriteInput: perMillion(0.25),
+      output: perMillion(1),
     },
   },
   {
@@ -520,14 +544,17 @@ const TEXT_MODELS_BY_ID = new Map(OPENAI_BILLING_MODELS.map((model) => [model.id
 
 const CACHE_WRITE_MODELS = new Set([
   'gpt-6-astra',
+  'gpt-6-sol',
+  'gpt-6-luna',
   'gpt-5.6',
   'gpt-5.6-sol',
   'gpt-5.6-terra',
   'gpt-5.6-luna',
 ]);
-const OPENAI_REGIONAL_PROCESSING_MODEL = /^(?:gpt-5\.[456]|gpt-6-astra)(?:-|$)/;
+const OPENAI_REGIONAL_PROCESSING_MODEL = /^(?:gpt-5\.[456]|gpt-6-(?:astra|sol|luna))(?:-|$)/;
 const OPENAI_REGIONAL_PROCESSING_MULTIPLIER = 1.1;
 const OPENAI_REGIONAL_PROCESSING_HOSTNAMES = new Set(['us.api.openai.com', 'eu.api.openai.com']);
+const BEDROCK_MODELS_WITHOUT_VERIFIED_RATES = new Set(['gpt-6-sol', 'gpt-6-luna']);
 
 type OpenAIBillingConfig = ProviderConfig & {
   apiHost?: string;
@@ -611,8 +638,8 @@ export function calculateOpenAIUsageCostFromTokenUsage(
   }
 
   const billingModelName = modelName.replace(/^openai\./, '');
-  // Bedrock has not published Astra pricing; do not infer it from direct OpenAI rates.
-  if (modelName.startsWith('openai.') && isGpt6AstraModel(billingModelName)) {
+  // Do not infer Bedrock GPT-6 prices from direct OpenAI rates.
+  if (modelName.startsWith('openai.') && isGpt6Model(billingModelName)) {
     return undefined;
   }
   const cacheWriteTokens = tokenUsage.completionDetails?.cacheCreationInputTokens;
@@ -965,9 +992,18 @@ export function calculateOpenAIUsageCost(
     cachedResponse?: boolean;
     apiUrl?: string;
     regionalProcessing?: boolean;
+    provider?: string;
   } = {},
 ): number | undefined {
   if (!rawUsage) {
+    return undefined;
+  }
+  if (
+    options.provider === 'bedrock' &&
+    BEDROCK_MODELS_WITHOUT_VERIFIED_RATES.has(modelName) &&
+    config.cost === undefined &&
+    (config.inputCost === undefined || config.outputCost === undefined)
+  ) {
     return undefined;
   }
 
@@ -1051,7 +1087,7 @@ function isReasoningModel(modelName: string): boolean {
   const capabilityModelName = modelName.replace(/(^|\/)ft:/, '$1');
   return (
     capabilityModelName.startsWith('gpt-5') ||
-    isGpt6AstraModel(capabilityModelName) ||
+    isGpt6Model(capabilityModelName) ||
     capabilityModelName.startsWith('o1') ||
     capabilityModelName.startsWith('o3') ||
     capabilityModelName.startsWith('o4') ||

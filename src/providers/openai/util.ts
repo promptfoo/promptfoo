@@ -292,6 +292,30 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
       },
     },
   },
+  {
+    id: 'gpt-6-sol',
+    cost: {
+      input: 2 / 1e6,
+      output: 10 / 1e6,
+      longContext: {
+        threshold: GPT_LONG_CONTEXT_THRESHOLD,
+        input: 4 / 1e6,
+        output: 15 / 1e6,
+      },
+    },
+  },
+  {
+    id: 'gpt-6-luna',
+    cost: {
+      input: 0.1 / 1e6,
+      output: 0.5 / 1e6,
+      longContext: {
+        threshold: GPT_LONG_CONTEXT_THRESHOLD,
+        input: 0.2 / 1e6,
+        output: 0.75 / 1e6,
+      },
+    },
+  },
   // GPT-5.6 models
   ...['gpt-5.6', 'gpt-5.6-sol'].map((model) => ({
     id: model,

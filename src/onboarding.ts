@@ -470,7 +470,7 @@ export async function createDummyFiles(
     const choices: { name: string; value: (string | ProviderOptions)[] }[] = [
       { name: `I'll choose later`, value: ['openai:gpt-5.6-luna', 'openai:gpt-5.6-terra'] },
       {
-        name: '[OpenAI] GPT-5.6 Luna, Terra, Sol, GPT-6 Astra, ...',
+        name: '[OpenAI] GPT-6 Luna, Sol, Astra, GPT-5.6 Terra, ...',
         value:
           action === 'agent'
             ? [

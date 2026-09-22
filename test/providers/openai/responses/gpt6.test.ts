@@ -3,6 +3,7 @@ import './setup';
 
 import { describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../../src/cache';
+import { BedrockOpenAiResponsesProvider } from '../../../../src/providers/bedrock/openaiResponses';
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
 
 const responseData = {
@@ -114,4 +115,54 @@ describe('GPT-6 Astra Responses billing', () => {
     });
     expect(overridden.service_tier).toBe('flex');
   });
+});
+
+describe('GPT-6 Sol and Luna Responses billing', () => {
+  it.each([
+    ['gpt-6-sol', 0.013225],
+    ['gpt-6-luna', 0.00066125],
+  ])('returns token usage and the standard estimated cost for %s', async (model, cost) => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      data: { ...responseData, model },
+    });
+    const result = await new OpenAiResponsesProvider(model, {
+      config: { apiKey: 'test-key', reasoning: { effort: 'none' } },
+    }).callApi('Say ready.');
+
+    const [, options] = vi.mocked(cache.fetchWithCache).mock.calls[0];
+    expect(JSON.parse(options?.body as string)).toMatchObject({
+      model,
+      reasoning: { effort: 'none' },
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('Ready.');
+    expect(result.tokenUsage).toMatchObject({
+      prompt: 2000,
+      completion: 1000,
+      completionDetails: { cacheReadInputTokens: 500, cacheCreationInputTokens: 250 },
+    });
+    expect(result.cost).toBeCloseTo(cost, 10);
+  });
+
+  it.each(['gpt-6-sol', 'gpt-6-luna'])(
+    'does not reuse direct OpenAI prices on Bedrock for %s',
+    async (model) => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        data: { ...responseData, model },
+      });
+      const result = await new BedrockOpenAiResponsesProvider(`openai.${model}`, {
+        config: { apiKey: 'test-key', region: 'us-east-2' },
+      }).callApi('Say ready.');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Ready.');
+      expect(result.cost).toBeUndefined();
+    },
+  );
 });

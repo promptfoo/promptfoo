@@ -404,3 +404,226 @@ describe('GPT-6 Astra requests', () => {
     },
   );
 });
+
+describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
+  let restoreEnv: () => void;
+
+  beforeEach(() => {
+    restoreEnv = mockProcessEnv({
+      OPENAI_MAX_TOKENS: undefined,
+      OPENAI_MAX_COMPLETION_TOKENS: undefined,
+      OPENAI_TEMPERATURE: undefined,
+      OPENAI_TOP_P: undefined,
+    });
+  });
+
+  afterEach(() => {
+    restoreEnv();
+  });
+
+  it.each(['none', 'low', 'medium', 'high', 'xhigh', 'max'] as const)(
+    'sends %s reasoning on both endpoints and keeps sampling only for none',
+    async (effort) => {
+      const config = {
+        reasoning_effort: effort,
+        temperature: 0.3,
+        top_p: 0.8,
+        verbosity: 'low' as const,
+      };
+      const { body: chat } = await new OpenAiChatCompletionProvider(model, {
+        config: {
+          ...config,
+          max_completion_tokens: 200,
+          passthrough: { top_logprobs: 2, max_output_tokens: 999, max_tokens: 999 },
+        },
+      }).getOpenAiBody('Say ready.', undefined, { includeLogProbs: true });
+      const { body: responses } = await new OpenAiResponsesProvider(model, {
+        config: {
+          ...config,
+          max_output_tokens: 300,
+          include: ['message.output_text.logprobs', 'reasoning.encrypted_content'],
+          passthrough: { top_logprobs: 2, max_completion_tokens: 999, max_tokens: 999 },
+        },
+      }).getOpenAiBody('Say ready.');
+
+      expect(chat).toMatchObject({
+        reasoning_effort: effort,
+        verbosity: 'low',
+        max_completion_tokens: 200,
+      });
+      expect(responses).toMatchObject({
+        reasoning: { effort },
+        text: { verbosity: 'low' },
+        max_output_tokens: 300,
+      });
+      expect(chat).not.toHaveProperty('max_output_tokens');
+      expect(responses).not.toHaveProperty('max_completion_tokens');
+      for (const body of [chat, responses]) {
+        expect(body).not.toHaveProperty('max_tokens');
+        if (effort === 'none') {
+          expect(body).toMatchObject({ temperature: 0.3, top_p: 0.8, top_logprobs: 2 });
+        } else {
+          for (const key of ['temperature', 'top_p', 'logprobs', 'top_logprobs']) {
+            expect(body).not.toHaveProperty(key);
+          }
+        }
+      }
+      if (effort === 'none') {
+        expect(chat.logprobs).toBe(true);
+      }
+      expect(responses.include).toEqual(
+        effort === 'none'
+          ? ['message.output_text.logprobs', 'reasoning.encrypted_content']
+          : ['reasoning.encrypted_content'],
+      );
+    },
+  );
+
+  it('leaves default reasoning and output limits to the API and removes sampling', async () => {
+    const config = { temperature: 0.5, top_p: 0.8 };
+    const { body: chat } = await new OpenAiChatCompletionProvider(model, { config }).getOpenAiBody(
+      'Say ready.',
+    );
+    const { body: responses } = await new OpenAiResponsesProvider(model, { config }).getOpenAiBody(
+      'Say ready.',
+    );
+
+    for (const body of [chat, responses]) {
+      for (const field of [
+        'reasoning_effort',
+        'reasoning',
+        'temperature',
+        'top_p',
+        'max_tokens',
+        'max_completion_tokens',
+        'max_output_tokens',
+      ]) {
+        expect(body).not.toHaveProperty(field);
+      }
+    }
+  });
+
+  it('allows Chat tools only with explicit none; Responses tools work with reasoning', async () => {
+    const chat = new OpenAiChatCompletionProvider(model, {
+      config: { reasoning_effort: 'none', tools: [statusTool], tool_choice: 'required' },
+    });
+    expect((await chat.getOpenAiBody('Get the status.')).body).toMatchObject({
+      reasoning_effort: 'none',
+      tools: [statusTool],
+      tool_choice: 'required',
+    });
+    const legacy = new OpenAiChatCompletionProvider(model, {
+      config: { reasoning_effort: 'none', functions: [statusTool.function], function_call: 'auto' },
+    });
+    expect((await legacy.getOpenAiBody('Get the status.')).body).toMatchObject({
+      functions: [statusTool.function],
+      function_call: 'auto',
+    });
+
+    for (const effort of [undefined, 'low', 'max'] as const) {
+      for (const passthrough of [
+        { tools: [statusTool] },
+        { tool_choice: 'auto' },
+        { functions: [statusTool.function] },
+        { function_call: 'auto' },
+      ]) {
+        await expect(
+          new OpenAiChatCompletionProvider(model, {
+            config: { reasoning_effort: effort, passthrough },
+          }).getOpenAiBody('Get the status.'),
+        ).rejects.toThrow('Chat Completions function calling requires reasoning_effort: none');
+      }
+      const responses = new OpenAiResponsesProvider(model, {
+        config: { reasoning: { effort }, tools: [statusTool], tool_choice: 'required' },
+      });
+      expect((await responses.getOpenAiBody('Get the status.')).body).toMatchObject({
+        tools: [{ type: 'function', name: 'get_status' }],
+        tool_choice: 'required',
+      });
+    }
+  });
+
+  it('omits empty Chat tool lists without rejecting reasoning', async () => {
+    const passthrough = { tools: [], functions: [] };
+    const { body } = await new OpenAiChatCompletionProvider(model, {
+      config: { reasoning_effort: 'low', passthrough },
+    }).getOpenAiBody('Say ready.');
+
+    expect(body.reasoning_effort).toBe('low');
+    expect(body).not.toHaveProperty('tools');
+    expect(body).not.toHaveProperty('functions');
+    expect(passthrough).toEqual({ tools: [], functions: [] });
+  });
+
+  it('uses the final per-prompt model and reasoning effort for sampling', async () => {
+    const chatProvider = new OpenAiChatCompletionProvider('gpt-4.1');
+    const responsesProvider = new OpenAiResponsesProvider('gpt-4.1');
+    const prompt = { raw: 'Say ready.', label: 'ready' };
+    const settings = { temperature: 0.4, top_p: 0.7 };
+    const { body: chat } = await chatProvider.getOpenAiBody('Say ready.', {
+      vars: { effort: 'none' },
+      prompt: {
+        ...prompt,
+        config: {
+          ...settings,
+          reasoning_effort: '{{effort}}',
+          passthrough: { model, reasoning_effort: 'high' },
+        },
+      },
+    });
+    const { body: responses } = await responsesProvider.getOpenAiBody('Say ready.', {
+      vars: {},
+      prompt: {
+        ...prompt,
+        config: {
+          ...settings,
+          reasoning_effort: 'high',
+          passthrough: { model, reasoning: { effort: 'none' } },
+        },
+      },
+    });
+    expect(chat).toMatchObject({ model, reasoning_effort: 'none', ...settings });
+    expect(responses).toMatchObject({ model, reasoning: { effort: 'none' }, ...settings });
+
+    const { body: overridden } = await responsesProvider.getOpenAiBody('Say ready.', {
+      vars: { effort: 'high' },
+      prompt: {
+        ...prompt,
+        config: {
+          ...settings,
+          reasoning: { effort: '{{effort}}' },
+          passthrough: { model, reasoning: { effort: 'none' } },
+        },
+      },
+    });
+    expect(overridden.reasoning).toEqual({ effort: 'high' });
+    expect(overridden).not.toHaveProperty('temperature');
+    expect(overridden).not.toHaveProperty('top_p');
+  });
+
+  it.each(['minimal', 'ultra', 'unknown'])('rejects unsupported %s reasoning', async (effort) => {
+    await expect(
+      new OpenAiChatCompletionProvider(model, {
+        config: { passthrough: { reasoning_effort: effort } },
+      }).getOpenAiBody('Say ready.'),
+    ).rejects.toThrow('supports reasoning effort none, low, medium, high, xhigh, or max');
+    await expect(
+      new OpenAiResponsesProvider(model, {
+        config: { passthrough: { reasoning: { effort } } },
+      }).getOpenAiBody('Say ready.'),
+    ).rejects.toThrow('supports reasoning effort none, low, medium, high, xhigh, or max');
+  });
+
+  it('rejects the other endpoint’s reasoning shape', async () => {
+    await expect(
+      new OpenAiChatCompletionProvider(model, {
+        config: { passthrough: { reasoning: { effort: 'none' }, tools: [statusTool] } },
+      }).getOpenAiBody('Say ready.'),
+    ).rejects.toThrow('instead of passthrough.reasoning');
+    await expect(
+      new OpenAiResponsesProvider(model, {
+        config: { passthrough: { reasoning_effort: 'none' } },
+      }).getOpenAiBody('Say ready.'),
+    ).rejects.toThrow('instead of passthrough.reasoning_effort');
+  });
+});

@@ -29,7 +29,7 @@ import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
 import { OpenAiGenericProvider } from '.';
 import { calculateObservableOpenAIToolCost, calculateOpenAIUsageCost } from './billing';
-import { applyGpt6AstraRequestRules, isGpt6AstraModel } from './gpt6';
+import { applyGpt6RequestRules, isGpt6Model } from './gpt6';
 import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
@@ -719,8 +719,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-5.2-pro-2025-12-11',
     // GPT-5.3 models
     'gpt-5.3-codex',
-    // GPT-6 Astra
+    // GPT-6 models
     'gpt-6-astra',
+    'gpt-6-sol',
+    'gpt-6-luna',
     // GPT-5.6 models
     'gpt-5.6',
     'gpt-5.6-sol',
@@ -805,6 +807,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       {
         apiUrl: this.getApiUrl(),
         cachedResponse: cached,
+        provider: this.getGenAISystem(),
         regionalProcessing: this.modelName.startsWith('openai.'),
         serviceTier,
       },
@@ -837,7 +840,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
     const capabilityModelName =
       typeof passthroughModel === 'string' ? passthroughModel : this.getCapabilityModelName();
-    const isGpt6Astra = isGpt6AstraModel(capabilityModelName);
+    const isGPT6Model = isGpt6Model(capabilityModelName);
     const hasAzureCustomDeploymentHost =
       typeof passthroughModel !== 'string' &&
       [config.apiHost, config.apiBaseUrl, this.getApiUrl()].some((endpoint) =>
@@ -853,18 +856,20 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // max_output_tokens defaults change unexpectedly.
     const isReasoningModel =
       this.isReasoningModel(capabilityModelName) ||
-      isGpt6Astra ||
+      isGPT6Model ||
       isAzureResponsesDeploymentWithReasoningConfig;
     const supportsVerbosity =
       this.isGPT5Model(capabilityModelName) ||
-      isGpt6Astra ||
+      isGPT6Model ||
       isAzureResponsesDeploymentWithVerbosityConfig;
 
     return {
+      isGPT6Model,
       isAzureResponsesDeploymentWithReasoningConfig,
       isReasoningModel,
       supportsVerbosity,
-      supportsTemperature: this.supportsTemperature(capabilityModelName),
+      // GPT-6 request rules remove sampling unless the final reasoning effort permits it.
+      supportsTemperature: isGPT6Model || this.supportsTemperature(capabilityModelName),
     };
   }
 
@@ -894,6 +899,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
 
     const {
+      isGPT6Model,
       isAzureResponsesDeploymentWithReasoningConfig,
       isReasoningModel,
       supportsVerbosity,
@@ -929,7 +935,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
     const temperature =
-      supportsTemperature && !hasAzureReasoningEffort
+      supportsTemperature && (isGPT6Model || !hasAzureReasoningEffort)
         ? (config.temperature ?? temperatureDefault)
         : undefined;
     const reasoningEffort = isReasoningModel ? effectiveReasoningEffort : undefined;
@@ -1007,7 +1013,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
       ...(temperature === undefined ? {} : { temperature }),
       ...(instructions ? { instructions } : {}),
-      ...((!reasoningEffort || reasoningEffort === 'none') &&
+      ...((isGPT6Model || !reasoningEffort || reasoningEffort === 'none') &&
       (config.top_p !== undefined || getEnvString('OPENAI_TOP_P'))
         ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
         : {}),
@@ -1055,7 +1061,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       delete body.max_tokens;
     }
 
-    applyGpt6AstraRequestRules(
+    applyGpt6RequestRules(
       body,
       config.passthrough?.model ?? this.getCapabilityModelName(),
       'responses',
