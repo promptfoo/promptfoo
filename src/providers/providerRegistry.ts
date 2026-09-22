@@ -101,10 +101,7 @@ export class ProviderRegistry {
     if (this.processShuttingDown) {
       return Promise.reject(this.processShutdownError());
     }
-    if (!scope) {
-      return undefined;
-    }
-    if (!scope.active) {
+    if (scope && !scope.active) {
       return Promise.reject(this.closedScopeError());
     }
     const ready = this.claimProvider(scope, this.getProvider(provider));
@@ -122,10 +119,7 @@ export class ProviderRegistry {
     if (this.processShuttingDown) {
       throw this.processShutdownError();
     }
-    if (!scope) {
-      return this.currentProvider.run({ state: this.getProvider(provider), signal }, run);
-    }
-    if (!scope.active) {
+    if (scope && !scope.active) {
       throw this.closedScopeError();
     }
     const state = this.getProvider(provider);
@@ -142,7 +136,7 @@ export class ProviderRegistry {
           await this.waitForScope(scope, ready, signal);
         }
         signal?.throwIfAborted();
-        if (!scope.active) {
+        if (scope && !scope.active) {
           throw this.closedScopeError();
         }
         if (this.processShuttingDown) {
@@ -152,7 +146,7 @@ export class ProviderRegistry {
         while (release) {
           await this.waitForScope(scope, release, signal);
           signal?.throwIfAborted();
-          if (!scope.active) {
+          if (scope && !scope.active) {
             throw this.closedScopeError();
           }
           if (this.processShuttingDown) {
@@ -460,10 +454,10 @@ export class ProviderRegistry {
   }
 
   private claimProvider(
-    scope: EvaluationScope,
+    scope: EvaluationScope | undefined,
     provider: ProviderState,
   ): Promise<void> | undefined {
-    if (!scope.providers.has(provider)) {
+    if (scope && !scope.providers.has(provider)) {
       scope.providers.add(provider);
       provider.users.add(scope);
     }
@@ -473,7 +467,9 @@ export class ProviderRegistry {
     }
     for (const resource of provider.resources) {
       if (resource.registered || resource.release) {
-        this.claimResource(scope, resource);
+        if (scope) {
+          this.claimResource(scope, resource);
+        }
         if (resource.release) {
           pending.push(resource.release.promise);
         }
