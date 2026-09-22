@@ -2212,6 +2212,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       abortSignal.throwIfAborted();
       this.assertSharedFiles(runtimeInputs);
       const response = await runtime.send(command, { abortSignal });
+      abortSignal.throwIfAborted();
       const endTime = Date.now();
       const _latency = endTime - startTime;
 

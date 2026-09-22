@@ -399,6 +399,46 @@ describe('SageMaker runtime lifecycle', () => {
     expect(SageMakerRuntimeClient).not.toHaveBeenCalled();
   });
 
+  it('does not read or parse a completion response returned by a borrowed client after cancellation', async () => {
+    const provider = new SageMakerCompletionProvider('endpoint', {
+      config: { modelType: 'custom', responseFormat: { path: 'file://response-transform.cjs' } },
+    });
+    const sent = deferred<void>();
+    const reply = deferred<ReturnType<typeof response>>();
+    const borrowed = {
+      send: vi.fn(async () => {
+        sent.resolve();
+        return reply.promise;
+      }),
+      destroy: vi.fn(),
+    };
+    provider.sagemakerRuntime = borrowed;
+    const readBody = vi.fn(() => response('us-east-1').Body);
+    const parse = vi.spyOn(provider, 'parseResponse').mockResolvedValue('transformed');
+    const controller = new AbortController();
+    const reason = new Error('Cancelled before response parsing');
+    const result = provider.callApi('A garden', undefined, { abortSignal: controller.signal });
+    const rejection = expect(result).rejects.toBe(reason);
+    try {
+      await sent.promise;
+      controller.abort(reason);
+      await rejection;
+      reply.resolve({
+        get Body() {
+          return readBody();
+        },
+      });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(readBody).not.toHaveBeenCalled();
+      expect(parse).not.toHaveBeenCalled();
+      expect(borrowed.destroy).not.toHaveBeenCalled();
+    } finally {
+      controller.abort(reason);
+      reply.resolve(response('us-east-1'));
+      await Promise.allSettled([result]);
+    }
+  });
+
   describe.each(['completion', 'embedding'] as const)('%s delayed continuations', (kind) => {
     function createProvider() {
       const options = { config: { region: 'us-east-1', modelType: 'custom' as const } };
