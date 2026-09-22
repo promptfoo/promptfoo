@@ -5,7 +5,7 @@ description: Configure Google's Gemini models with support for text, image, audi
 
 # Google AI / Gemini
 
-The `google` provider enables integration with Google AI Studio and the Gemini API. It provides access to Google's Gemini and hosted Gemma models with support for text, image, audio, video, and PDF inputs.
+The `google` provider calls Gemini and hosted Gemma models through Google AI Studio. Depending on the model, inputs can include text, images, audio, video, and PDFs.
 
 If you are using Vertex AI instead of Google AI Studio, see the [`vertex` provider](/docs/providers/vertex).
 
@@ -265,10 +265,12 @@ Example migration:
 # Before (Google AI Studio)
 providers:
   - google:gemini-2.5-pro
+```
 
+```yaml
 # After (Vertex AI)
 providers:
-  - vertex:gemini-2.5-pro
+  - id: vertex:gemini-2.5-pro
     config:
       projectId: my-project-id
       region: us-central1
@@ -413,13 +415,13 @@ Configuration options:
 
 ```yaml
 providers:
-  - google:image:imagen-3.0-generate-002
+  - id: google:image:imagen-3.0-generate-002
     config:
-      projectId: 'your-project-id'  # Or set GOOGLE_PROJECT_ID
-      region: 'us-central1'          # Optional, defaults to us-central1
+      projectId: 'your-project-id' # Or set GOOGLE_PROJECT_ID
+      region: 'us-central1' # Optional, defaults to us-central1
       aspectRatio: '16:9'
       seed: 42
-      addWatermark: false            # Must be false when using seed
+      addWatermark: false # Must be false when using seed
 ```
 
 See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-imagen).
@@ -778,14 +780,12 @@ Configure system-level instructions for the model:
 providers:
   - id: google:gemini-2.5-pro
     config:
-      # Direct text
       systemInstruction: 'You are a helpful assistant'
-
-      # Or load from file
-      systemInstruction: file://system-instruction.txt
+      # To load from a file instead, use:
+      # systemInstruction: file://system-instruction.txt
 ```
 
-System instructions support Nunjucks templating and can be loaded from external files for better organization and reusability.
+System instructions support Nunjucks templates and can be loaded from a file.
 
 ### Role Mapping Configuration
 
@@ -1193,7 +1193,7 @@ When using Search grounding, the API response includes additional metadata:
 - Search will only be performed when the model determines it's necessary
 - **Important**: Per Google's requirements, applications using Search grounding must display Google Search Suggestions included in the API response metadata
 
-For more details, see the [Google AI Studio documentation on Grounding with Google Search](https://ai.google.dev/docs/gemini_api/grounding).
+For more details, see the [Google AI Studio documentation on Grounding with Google Search](https://ai.google.dev/gemini-api/docs/google-search).
 
 ### Maps Grounding
 
@@ -1380,7 +1380,7 @@ Where `tools.json` contains function declarations and built-in tools:
 ]
 ```
 
-Tools accept both `functionDeclarations` and `function_declarations`. If both aliases define the same function name within a tool, `functionDeclarations` takes precedence. Distinct functions from both aliases are retained.
+Tools accept both `functionDeclarations` and `function_declarations`. If both aliases define the same function name anywhere in the tools list, `functionDeclarations` takes precedence. For repeated names using the same spelling, the first declaration wins. Distinct functions and built-in tools are retained; entries containing only discarded duplicates are omitted.
 
 ### Built-in Tools
 

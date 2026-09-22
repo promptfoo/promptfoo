@@ -421,6 +421,45 @@ describe('RedteamIterativeProvider', () => {
       }
     });
 
+    it('keeps an explicit redteamProvider local when remote generation is enabled', async () => {
+      // Regression test for https://github.com/promptfoo/promptfoo/issues/10970:
+      // a configured redteamProvider must not be swapped for the cloud provider.
+      const explicitProvider = createMockProvider({ id: 'mock-explicit' });
+      const gradingProvider = createMockProvider({ id: 'mock-grader' });
+      const targetProvider = createMockProvider({ id: 'mock-target' });
+      const remoteGenerationSpy = vi
+        .spyOn(remoteGeneration, 'shouldGenerateRemote')
+        .mockReturnValue(true);
+      const attackerProviderSpy = vi
+        .spyOn(redteamProviderManager, 'getProvider')
+        .mockResolvedValue(explicitProvider);
+      const gradingProviderSpy = vi
+        .spyOn(redteamProviderManager, 'getGradingProvider')
+        .mockResolvedValue(gradingProvider);
+
+      try {
+        const provider = new RedteamIterativeTreeProvider({
+          injectVar: 'goal',
+          maxDepth: 1,
+          branchingFactor: 1,
+          redteamProvider: 'ollama:chat:llama3.1:8b',
+        });
+        await provider.callApi('test prompt', {
+          originalProvider: targetProvider,
+          vars: { goal: 'test objective' },
+          prompt: { raw: '{{goal}}', label: 'test' },
+        });
+
+        expect(attackerProviderSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ provider: 'ollama:chat:llama3.1:8b' }),
+        );
+      } finally {
+        remoteGenerationSpy.mockRestore();
+        attackerProviderSpy.mockRestore();
+        gradingProviderSpy.mockRestore();
+      }
+    });
+
     it.each([false, true])(
       'retains the selected earlier verdict and total usage (identical text: %s)',
       async (identicalText) => {

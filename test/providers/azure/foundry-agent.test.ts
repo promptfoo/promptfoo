@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { AzureFoundryAgentProvider } from '../../../src/providers/azure/foundry-agent';
+import { AzureGenericProvider } from '../../../src/providers/azure/generic';
 import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
@@ -165,6 +166,28 @@ describe('AzureFoundryAgentProvider', () => {
   });
 
   describe('instantiation', () => {
+    it('uses the Foundry client without starting or reporting Azure OpenAI authentication', async () => {
+      const genericAuth = vi
+        .spyOn(AzureGenericProvider.prototype, 'getAuthHeaders')
+        .mockRejectedValue(new Error('unused generic authentication'));
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockResolvedValue(createMessageResponse('Foundry response'));
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl, azureClientId: 'private-client' },
+      });
+
+      await expect(provider.ensureInitialized()).resolves.toBeUndefined();
+      await expect(provider.callApi('hello')).resolves.toMatchObject({
+        output: 'Foundry response',
+      });
+      expect(genericAuth).not.toHaveBeenCalled();
+      expect(mockGetAgent).toHaveBeenCalledWith('weather-agent');
+      expect(logger.warn).not.toHaveBeenCalledWith(
+        expect.stringContaining('Service principal configuration'),
+        expect.anything(),
+      );
+    });
+
     it('should create provider with minimal config', () => {
       const provider = new AzureFoundryAgentProvider('weather-agent', {
         config: {

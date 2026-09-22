@@ -145,4 +145,4 @@ providers:
                 unit: { type: 'string', enum: ['celsius', 'fahrenheit'] }
 ```
 
-For more information, refer to the [Together AI documentation](https://docs.together.ai/docs/chat-models).
+For more information, refer to the [Together AI documentation](https://docs.together.ai/docs/serverless-models).

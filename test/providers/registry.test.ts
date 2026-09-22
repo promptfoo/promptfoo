@@ -3,12 +3,14 @@ import path from 'path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadApiProvider } from '../../src/providers';
 import { isFoundationModelProvider } from '../../src/providers/constants';
+import { GolangProvider } from '../../src/providers/golangCompletion';
 import { LlamaApiProvider } from '../../src/providers/llamaApi';
 import { MCPProvider } from '../../src/providers/mcp';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import { getProviderFactories, providerMap } from '../../src/providers/registry';
+import { ScriptCompletionProvider } from '../../src/providers/scriptCompletion';
 
 import type { CometApiImageProvider } from '../../src/providers/cometapi';
 import type { LoadApiProviderContext } from '../../src/types/index';
@@ -1147,15 +1149,14 @@ describe('Provider Registry', () => {
     });
 
     it('should handle bedrock converse providers correctly', async () => {
-      const factories = await getProviderFactories('bedrock:converse:anthropic.claude-v2');
-      const factory = factories.find((f) => f.test('bedrock:converse:anthropic.claude-v2'));
+      // Uses a model AWS still serves: the converse route now rejects retired ids, and the
+      // previous fixture (`anthropic.claude-v2`) is one of them.
+      const path = 'bedrock:converse:anthropic.claude-sonnet-4-6';
+      const factories = await getProviderFactories(path);
+      const factory = factories.find((f) => f.test(path));
       expect(factory).toBeDefined();
 
-      const provider = await factory!.create(
-        'bedrock:converse:anthropic.claude-v2',
-        mockProviderOptions,
-        mockContext,
-      );
+      const provider = await factory!.create(path, mockProviderOptions, mockContext);
       expect(provider.constructor.name).toBe('AwsBedrockConverseProvider');
     });
 
@@ -1245,7 +1246,16 @@ describe('Provider Registry', () => {
       ['sagemaker:endpoint-name', 'SageMakerCompletionProvider', { modelType: 'custom' }, 'custom'],
       ['sagemaker:jumpstart:endpoint-name', 'SageMakerCompletionProvider', {}, 'jumpstart'],
       ['sagemaker:openai:endpoint-name', 'SageMakerCompletionProvider', {}, 'openai'],
-      ['sagemaker:custom:my-jumpstart-endpoint', 'SageMakerCompletionProvider', {}, 'jumpstart'],
+      // An explicit model type wins over an endpoint name containing 'jumpstart'. This
+      // previously resolved to 'jumpstart', silently discarding what the user asked for.
+      ['sagemaker:custom:my-jumpstart-endpoint', 'SageMakerCompletionProvider', {}, 'custom'],
+      [
+        'sagemaker:huggingface:my-jumpstart-endpoint',
+        'SageMakerCompletionProvider',
+        {},
+        'huggingface',
+      ],
+      ['sagemaker:jumpstart:my-jumpstart-endpoint', 'SageMakerCompletionProvider', {}, 'jumpstart'],
     ])(
       'should handle %s providers correctly',
       async (path, expectedProviderName, config, expectedModelType) => {
@@ -1473,30 +1483,34 @@ describe('Provider Registry', () => {
     });
 
     it('should preserve absolute paths in file-based providers', async () => {
-      // Create a simple integration test that verifies the factory functionality
-      // exists but doesn't attempt detailed mocking of the provider internals
-
-      // Create an absolute path that would pass path.isAbsolute() check
       const absoluteGolangPath = path.resolve('/absolute/path/golang-script.go');
       const absolutePythonPath = path.resolve('/absolute/path/python-script.py');
       const absoluteExecPath = path.resolve('/absolute/path/exec-script.sh');
 
-      // Find the correct factories
       const golangFactory = providerMap.find((f) => f.test(`golang:${absoluteGolangPath}`));
       const pythonFactory = providerMap.find((f) => f.test(`python:${absolutePythonPath}`));
       const fileFactory = providerMap.find((f) => f.test(`file://${absolutePythonPath}`));
       const execFactory = providerMap.find((f) => f.test(`exec:${absoluteExecPath}`));
 
-      // Verify factories exist
       expect(golangFactory).toBeDefined();
       expect(pythonFactory).toBeDefined();
       expect(fileFactory).toBeDefined();
       expect(execFactory).toBeDefined();
 
-      // Note: We're not testing the actual mocked implementations here,
-      // just verifying that the factories exist and can be found for absolute paths.
-      // The actual path resolution logic (path.isAbsolute check) is identical in all providers
-      // and is already covered by the implementation in registry.ts.
+      await golangFactory!.create(`golang:${absoluteGolangPath}`, mockProviderOptions, mockContext);
+      expect(GolangProvider).toHaveBeenLastCalledWith(absoluteGolangPath, mockProviderOptions);
+
+      await pythonFactory!.create(`python:${absolutePythonPath}`, mockProviderOptions, mockContext);
+      expect(PythonProvider).toHaveBeenLastCalledWith(absolutePythonPath, mockProviderOptions);
+
+      await fileFactory!.create(`file://${absolutePythonPath}`, mockProviderOptions, mockContext);
+      expect(PythonProvider).toHaveBeenLastCalledWith(absolutePythonPath, mockProviderOptions);
+
+      await execFactory!.create(`exec:${absoluteExecPath}`, mockProviderOptions, mockContext);
+      expect(ScriptCompletionProvider).toHaveBeenLastCalledWith(
+        absoluteExecPath,
+        mockProviderOptions,
+      );
     });
 
     it('should handle helicone provider correctly', async () => {

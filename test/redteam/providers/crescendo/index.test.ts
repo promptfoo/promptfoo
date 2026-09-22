@@ -3132,10 +3132,13 @@ describe('CrescendoProvider - perTurnLayers configuration', () => {
     const docxDataUri =
       'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v';
 
+    // No explicit redteamProvider here: after #10970 an explicit provider
+    // stays local, and the remote materialization path only applies when the
+    // attacker really is the remote task provider.
     const provider = new CrescendoProvider({
       injectVar: 'objective',
       maxTurns: 1,
-      redteamProvider: mockRedTeamProvider,
+      redteamProvider: undefined,
       stateful: true,
       inputs: {
         document: {
@@ -3201,10 +3204,12 @@ describe('CrescendoProvider - perTurnLayers configuration', () => {
     const docxDataUri =
       'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v';
 
+    // No explicit redteamProvider: remote materialization only applies when
+    // the attacker is the remote task provider (explicit stays local).
     const provider = new CrescendoProvider({
       injectVar: 'objective',
       maxTurns: 1,
-      redteamProvider: mockRedTeamProvider,
+      redteamProvider: undefined,
       stateful: true,
       inputs: {
         document: {
@@ -3264,5 +3269,46 @@ describe('CrescendoProvider - perTurnLayers configuration', () => {
       document: docxDataUri,
       question: 'What changed?',
     });
+  });
+
+  it('keeps an explicit redteamProvider local for the attacker and scorer when remote generation is enabled', async () => {
+    // Regression test for https://github.com/promptfoo/promptfoo/issues/10970:
+    // a configured redteamProvider must not be swapped for the cloud provider.
+    vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+    const { PromptfooChatCompletionProvider } = await import('../../../../src/providers/promptfoo');
+    const providerSpy = vi
+      .spyOn(redteamProviderManager, 'getProvider')
+      .mockResolvedValue(mockRedTeamProvider);
+    const gradingSpy = vi
+      .spyOn(redteamProviderManager, 'getGradingProvider')
+      .mockResolvedValue(mockRedTeamProvider);
+
+    try {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        redteamProvider: mockRedTeamProvider,
+      });
+
+      expect((provider as any).attackerUsesRemoteProvider()).toBe(false);
+
+      const attacker = await (provider as any).getRedTeamProvider();
+      const scorer = await (provider as any).getScoringProvider();
+
+      expect(attacker).toBe(mockRedTeamProvider);
+      expect(scorer).toBe(mockRedTeamProvider);
+      expect(providerSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ provider: mockRedTeamProvider }),
+      );
+      expect(vi.mocked(PromptfooChatCompletionProvider)).not.toHaveBeenCalled();
+
+      const cloud = new CrescendoProvider({
+        injectVar: 'objective',
+        redteamProvider: undefined,
+      });
+      expect((cloud as any).attackerUsesRemoteProvider()).toBe(true);
+    } finally {
+      providerSpy.mockRestore();
+      gradingSpy.mockRestore();
+    }
   });
 });
