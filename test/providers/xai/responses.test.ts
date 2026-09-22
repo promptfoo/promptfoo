@@ -304,6 +304,31 @@ describe('XAIResponsesProvider', () => {
     expect((await provider.callApi('billed cost')).cost).toBeCloseTo(0.0000123, 10);
   });
 
+  it.each([
+    ['grok-4.7', 'grok-4.3', 0.00375],
+    ['grok-4.3', 'grok-4.7', 0.0088],
+  ])(
+    'prices the outgoing Responses model when %s is overridden by %s',
+    async (configured, sent, cost) => {
+      const provider = new XAIResponsesProvider(configured, {
+        config: { apiKey: 'test-key', region: 'us', passthrough: { model: sent } },
+      });
+      const data = createMockResponseData(sent);
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          ...data,
+          usage: { input_tokens: 1_000, output_tokens: 1_000, total_tokens: 2_000 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const result = await provider.callApi('hello');
+      expect(JSON.parse(mockFetchWithCache.mock.calls[0][1].body).model).toBe(sent);
+      expect(result.cost).toBeCloseTo(cost, 10);
+    },
+  );
+
   it('rejects unsupported reasoning effort values for Grok 4.5 and its aliases', async () => {
     for (const modelName of ['grok-4.5', 'grok-4.5-latest', 'grok-build-latest']) {
       for (const effort of ['none', 'xhigh']) {

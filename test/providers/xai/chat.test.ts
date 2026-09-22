@@ -440,9 +440,31 @@ describe('xAI Chat Provider', () => {
         prompt: { raw: 'hello', label: 'hello' },
         vars: { candidate: privateMarker },
       });
-      expect(result.error).toContain('could not prepare the Chat Completions request options');
+      expect(result.error).toContain('could not prepare the Chat Completions reasoning options');
       expect(result.error).not.toContain(privateMarker);
       expect(result.error).not.toContain('API key');
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('retains actionable Grok 4.7 errors for malformed prompts and missing local tools', async () => {
+      const provider = createXAIProvider('xai:grok-4.7', {
+        config: { config: { apiKey: 'test-key', reasoning_effort: 'high' } },
+      });
+      const invalidPrompt = await provider.callApi('[{"role": "user",]');
+      expect(invalidPrompt.error).toContain('Chat Completion prompt is not a valid JSON string');
+
+      const missingTools = createXAIProvider('xai:grok-4.7', {
+        config: {
+          config: {
+            apiKey: 'test-key',
+            reasoning_effort: 'high',
+            tools: 'file://missing-grok-47-tools.json' as any,
+          },
+        },
+      });
+      const missing = await missingTools.callApi('hello');
+      expect(missing.error).toContain('File does not exist');
+      expect(missing.error).toContain('missing-grok-47-tools.json');
       expect(mockFetchWithCache).not.toHaveBeenCalled();
     });
 
@@ -523,6 +545,30 @@ describe('xAI Chat Provider', () => {
       });
       expect((await provider.callApi('billed')).cost).toBeCloseTo(0.0000123, 10);
     });
+
+    it.each([
+      ['grok-4.7', 'grok-4.3', 0.00375],
+      ['grok-4.3', 'grok-4.7', 0.0088],
+    ])(
+      'prices the outgoing Chat model when %s is overridden by %s',
+      async (configured, sent, cost) => {
+        const provider = createXAIProvider(`xai:${configured}`, {
+          config: { config: { apiKey: 'test-key', region: 'us', passthrough: { model: sent } } },
+        });
+        mockFetchWithCache.mockResolvedValue({
+          data: {
+            choices: [{ message: { content: 'result' } }],
+            usage: { prompt_tokens: 1_000, completion_tokens: 1_000, total_tokens: 2_000 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        const result = await provider.callApi('hello');
+        expect(JSON.parse(mockFetchWithCache.mock.calls[0][1].body).model).toBe(sent);
+        expect(result.cost).toBeCloseTo(cost, 10);
+      },
+    );
 
     it('recognizes Grok 4.6 as a reasoning model', () => {
       const provider = createXAIProvider('xai:grok-4.6') as any;

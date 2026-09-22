@@ -16,6 +16,7 @@ import {
   calculateXAICost,
   GROK_4_MODELS,
   getXAICostInUsd,
+  getXAIRequestModel,
   hasXAICostOverrides,
   validateGrok47RemoteOptions,
   validateXAIReasoningEffort,
@@ -219,7 +220,7 @@ export class XAIResponsesProvider implements ApiProvider {
         return (
           reportedCost ??
           calculateXAICost(
-            modelName,
+            getXAIRequestModel(modelName, config),
             config || {},
             usage?.input_tokens ?? usage?.prompt_tokens,
             usage?.output_tokens ?? usage?.completion_tokens,

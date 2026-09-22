@@ -3,6 +3,7 @@ import { renderVarsInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { type OpenAiChatCompletionCostData, OpenAiChatCompletionProvider } from '../openai/chat';
 import { clampCachedTokens } from '../shared';
+import { hasGrok47RemoteTemplateOptions } from './remoteTestOptions';
 
 import type { ApiProvider, ProviderOptions } from '../../types/index';
 import type { OpenAiCompletionOptions } from '../openai/types';
@@ -478,35 +479,13 @@ export function validateXAIReasoningEffort(
 }
 
 export function validateGrok47RemoteOptions(test?: {
-  metadata?: { __promptfoo?: { remote?: boolean } };
+  metadata?: Record<string, unknown>;
   options?: Record<string, unknown>;
 }): void {
-  if (test?.metadata?.__promptfoo?.remote !== true || !test.options) {
-    return;
-  }
-  const { options } = test;
-  const passthrough = options.passthrough as Record<string, unknown> | undefined;
-  const pending = [
-    options.max_completion_tokens,
-    options.max_tokens,
-    options.reasoning_effort,
-    options.reasoning,
-    passthrough?.max_completion_tokens,
-    passthrough?.max_tokens,
-    passthrough?.reasoning_effort,
-    passthrough?.reasoning,
-  ];
-  const visited = new WeakSet<object>();
-  for (const value of pending) {
-    if (typeof value === 'string' && /\{[{%#]/.test(value)) {
-      throw new XAIRequestConfigError(
-        'xAI Grok 4.7 request options from remote tests must be literal values',
-      );
-    }
-    if (value && typeof value === 'object' && !visited.has(value)) {
-      visited.add(value);
-      pending.push(...Object.values(value));
-    }
+  if (hasGrok47RemoteTemplateOptions(test)) {
+    throw new XAIRequestConfigError(
+      'xAI Grok 4.7 request options from remote tests must be literal values',
+    );
   }
 }
 
@@ -750,6 +729,11 @@ export function hasXAICostOverrides(config?: XAICostConfig): boolean {
   );
 }
 
+export function getXAIRequestModel(modelName: string, config?: { passthrough?: object }): string {
+  const model = (config?.passthrough as { model?: unknown } | undefined)?.model;
+  return typeof model === 'string' ? model : modelName;
+}
+
 function getGrok47TokenLimit(config?: OpenAiCompletionOptions): unknown {
   const passthrough = config?.passthrough as
     | { max_completion_tokens?: unknown; max_tokens?: unknown }
@@ -784,7 +768,8 @@ class XAIProvider extends OpenAiChatCompletionProvider {
     return true;
   }
 
-  async getOpenAiBody(prompt: string, context?: any, callApiOptions?: any) {
+  private prepareReasoningContext(context?: any) {
+    let parentContext = context;
     if (this.modelName === 'grok-4.7') {
       validateGrok47RemoteOptions(context?.test);
     }
@@ -793,21 +778,35 @@ class XAIProvider extends OpenAiChatCompletionProvider {
         (config) => config && Object.hasOwn(config, 'reasoning_effort'),
       );
       const effort = directConfig?.reasoning_effort;
-      if (effort != null && (typeof effort !== 'string' || effort.length === 0)) {
+      if (this.modelName === 'grok-4.7' && directConfig) {
+        let rendered = effort;
+        if (effort != null) {
+          try {
+            rendered = renderVarsInObject(effort, context?.vars);
+          } catch {
+            throw new XAIRequestConfigError(
+              'xAI Grok 4.7 could not prepare the Chat Completions reasoning options',
+            );
+          }
+          validateXAIReasoningEffort(this.modelName, rendered, 'reasoning_effort');
+        }
+        parentContext = {
+          ...context,
+          prompt: {
+            ...context?.prompt,
+            config: { ...context?.prompt?.config, reasoning_effort: rendered },
+          },
+        };
+      } else if (effort != null && (typeof effort !== 'string' || effort.length === 0)) {
         validateXAIReasoningEffort(this.modelName, effort, 'reasoning_effort');
       }
     }
-    let result;
-    try {
-      result = await super.getOpenAiBody(prompt, context, callApiOptions);
-    } catch (error) {
-      if (this.modelName === 'grok-4.7') {
-        throw new XAIRequestConfigError(
-          'xAI Grok 4.7 could not prepare the Chat Completions request options',
-        );
-      }
-      throw error;
-    }
+    return parentContext;
+  }
+
+  async getOpenAiBody(prompt: string, context?: any, callApiOptions?: any) {
+    const parentContext = this.prepareReasoningContext(context);
+    const result = await super.getOpenAiBody(prompt, parentContext, callApiOptions);
 
     // Ensure we have a valid result
     if (!result || !result.body) {
@@ -915,7 +914,7 @@ class XAIProvider extends OpenAiChatCompletionProvider {
     return (
       reportedCost ??
       calculateXAICost(
-        this.modelName,
+        getXAIRequestModel(this.modelName, xaiConfig),
         xaiConfig,
         usage?.prompt_tokens,
         usage?.completion_tokens,
