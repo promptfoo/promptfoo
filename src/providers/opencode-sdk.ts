@@ -603,8 +603,7 @@ function toHttpStatus(value: unknown): number | undefined {
 /**
  * Read an OpenCode `NamedError` (`{ name, data: { message, statusCode } }`), an untagged gateway
  * body, a thrown `Error`, or a string. Response bodies, headers, and causes are never rendered.
- * The SDK's sibling HTTP status is authoritative except for `APIError`, whose `statusCode` is the
- * upstream model provider's.
+ * The SDK's sibling HTTP status is authoritative, since a gateway body can imitate an SDK tag.
  */
 function parseOpenCodeError(error: unknown, transportStatus?: number): OpenCodeErrorDetails {
   if (typeof error === 'string') {
@@ -614,11 +613,10 @@ function parseOpenCodeError(error: unknown, transportStatus?: number): OpenCodeE
   const data = asRecord(item?.data);
   const tag = typeof item?.name === 'string' ? item.name : item?._tag;
   const name = typeof tag === 'string' && OPEN_CODE_ERROR_NAMES.has(tag) ? tag : undefined;
-  const ownStatus = toHttpStatus(item?.statusCode) ?? toHttpStatus(data?.statusCode);
   const status =
-    name === 'APIError'
-      ? (ownStatus ?? toHttpStatus(transportStatus))
-      : (toHttpStatus(transportStatus) ?? ownStatus);
+    toHttpStatus(transportStatus) ??
+    toHttpStatus(item?.statusCode) ??
+    toHttpStatus(data?.statusCode);
   const message = [item?.message, data?.message].find(
     (value): value is string => typeof value === 'string' && value.trim() !== '',
   );
@@ -673,6 +671,9 @@ function getOpenCodeRateLimit(
   });
 }
 
+/** Longest upstream retry hint passed to the scheduler, whose shared queue state honors it. */
+const OPEN_CODE_MAX_RETRY_AFTER_MS = 60_000;
+
 function getOpenCodeRateLimitMetadata(rateLimit: OpenCodeRateLimit): Record<string, unknown> {
   const retryAfterMs =
     rateLimit.kind === 'rate_limit'
@@ -681,7 +682,8 @@ function getOpenCodeRateLimitMetadata(rateLimit: OpenCodeRateLimit): Record<stri
       : undefined;
   return {
     rateLimitKind: rateLimit.kind,
-    ...(retryAfterMs === undefined
+    // Longer hints still decide the classification above but would stall every queued call.
+    ...(retryAfterMs === undefined || retryAfterMs > OPEN_CODE_MAX_RETRY_AFTER_MS
       ? {}
       : {
           http: {
@@ -1231,7 +1233,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
     for (const server of Object.values(asRecord(config.mcp) ?? {})) {
       addOpenCodeMcpCredentials(server, add);
     }
-    for (const env of [getProcessEnv(), this.env ?? {}]) {
+    // The SDK client runs in-process; a spawned server also receives invocation env-file values.
+    for (const env of new Set([process.env, getProcessEnv(), this.env ?? {}])) {
       for (const [name, value] of Object.entries(env)) {
         if (typeof value === 'string' && isCredentialName(name)) {
           getHeaderCredentialForms(value).forEach(add);

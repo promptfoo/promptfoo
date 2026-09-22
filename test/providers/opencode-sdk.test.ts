@@ -3390,6 +3390,19 @@ describe('OpenCodeSDKProvider', () => {
         },
       );
 
+      it('trusts the transport status over a status in a gateway body', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        mockSessionPrompt.mockResolvedValueOnce({
+          error: apiError('Upstream rejected', { statusCode: 429 }),
+          response: new Response(null, { status: 500 }),
+        });
+
+        const result = await new OpenCodeSDKProvider().callApi('imitated status');
+
+        expect(result.error).toContain('APIError: HTTP 500: Upstream rejected');
+        expect(result.metadata).toBeUndefined();
+      });
+
       it('does not treat a transport-level content filter as an assistant refusal', async () => {
         vi.spyOn(logger, 'error').mockImplementation(() => {});
         mockSessionPrompt.mockResolvedValueOnce({
@@ -3519,6 +3532,24 @@ describe('OpenCodeSDKProvider', () => {
           label: 'a quota code in the message behind a generic wrapper code',
           data: { statusCode: 429, code: 'ERR_API' },
           message: 'insufficient_quota',
+          kind: 'quota',
+        },
+        {
+          label: 'a throttle whose retry hint exceeds the scheduler window',
+          data: {
+            statusCode: 429,
+            responseBody: JSON.stringify({ error: { code: 'rate_limit_exceeded' } }),
+            responseHeaders: { 'retry-after': '7200' },
+          },
+          kind: 'rate_limit',
+        },
+        {
+          label: 'an ambiguous quota code with a far recovery hint',
+          data: {
+            statusCode: 429,
+            responseBody: JSON.stringify({ error: { code: 'insufficient_quota' } }),
+            responseHeaders: { 'retry-after': '7200' },
+          },
           kind: 'quota',
         },
         {
@@ -3803,6 +3834,32 @@ describe('OpenCodeSDKProvider', () => {
             'APIError: HTTP 429: Rate limited for 40 seconds; stream=false; total_tokens=17',
           );
           expect((await schedulerFor()).getRetryAfter?.(result, undefined)).toBe(40_000);
+        } finally {
+          restoreEnv();
+        }
+      });
+
+      it('keeps redacting env-file values forwarded to the server after their scope ends', async () => {
+        const { default: realCliState } =
+          await vi.importActual<typeof import('../../src/cliState')>('../../src/cliState');
+        const restoreEnv = mockProcessEnv({ FAL_KEY: 'synthetic-host-fal-key' });
+        try {
+          vi.spyOn(logger, 'error').mockImplementation(() => {});
+          const message = 'echoed synthetic-file-fal-key and synthetic-host-fal-key';
+          mockSessionPrompt
+            .mockResolvedValueOnce({ error: apiError(message) })
+            .mockResolvedValueOnce({ error: apiError(message) });
+          const provider = new OpenCodeSDKProvider();
+
+          const scoped = await realCliState.withEnvFileOverrides(
+            { FAL_KEY: 'synthetic-file-fal-key' },
+            () => provider.callApi('scoped'),
+          );
+          const later = await provider.callApi('after the env-file scope');
+
+          for (const result of [scoped, later]) {
+            expect(result.error).toContain('echoed [REDACTED] and [REDACTED]');
+          }
         } finally {
           restoreEnv();
         }
