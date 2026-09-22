@@ -1205,13 +1205,34 @@ describe('writeOutput', () => {
   );
 
   it.each([
-    ['hello\u000bworld', 'hello world'],
-    ['hello\u000cworld', 'hello world'],
-    ['a' + '🚀'.repeat(300), 'a' + '🚀'.repeat(254) + '...'],
-  ])('preserves already-valid JUnit identities for %j', async (raw, expected) => {
+    { raw: 'hello\u000bworld', suite: 'hello world', testcase: 'hello world' },
+    { raw: 'hello\u000cworld', suite: 'hello world', testcase: 'hello world' },
+    {
+      raw: 'a' + '🚀'.repeat(300),
+      suite: 'a' + '🚀'.repeat(254) + '...',
+      testcase: 'a' + '🚀'.repeat(254) + '...',
+    },
+    {
+      raw: 'x'.repeat(520) + '\u0000',
+      suite: 'x'.repeat(490) + '...',
+      testcase: 'x'.repeat(509) + '...',
+    },
+    {
+      raw: 'x'.repeat(512) + '\u0001',
+      suite: 'x'.repeat(490) + '...',
+      testcase: 'x'.repeat(509) + '...',
+    },
+    {
+      raw: 'y'.repeat(509) + 'ABC' + '\u0000'.repeat(20),
+      suite: 'y'.repeat(490) + '...',
+      testcase: 'y'.repeat(509) + '...',
+    },
+  ])('preserves visible JUnit text for %j', async ({ raw, suite: expectedSuite, testcase }) => {
     const suite = await junitSuiteWithNames(raw);
-    expect(suite['@_name']).toBe('[' + expected + '] prompt 1');
-    expect(suite.testcase['@_name']).toBe('test 1: ' + expected);
+    expect(suite['@_name'].replace(/ \([a-f0-9]{16}\)$/, '')).toBe(
+      '[' + expectedSuite + '] prompt 1',
+    );
+    expect(suite.testcase['@_name']).toBe('test 1: ' + testcase);
   });
 
   it('keeps identities distinct when an invalid character falls after the display limit', async () => {
