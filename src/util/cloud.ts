@@ -576,14 +576,15 @@ export async function resolveTeamId(
   const currentOrganizationId = cloudConfig.getCurrentOrganizationId();
   const currentTeamId = cloudConfig.getCurrentTeamId(currentOrganizationId);
   if (currentTeamId) {
-    try {
-      logger.debug(`[Team Resolution] Using stored team ID: ${currentTeamId}`);
-      return await getTeamById(currentTeamId);
-    } catch (_error) {
-      logger.warn(
-        `[Team Resolution] Stored team ${currentTeamId} no longer accessible, falling back`,
-      );
+    logger.debug(`[Team Resolution] Using stored team ID: ${currentTeamId}`);
+    // Let lookup failures propagate: only a successful lookup proves the stored team is gone.
+    const storedTeam = (await getUserTeams()).find((team) => team.id === currentTeamId);
+    if (storedTeam) {
+      return storedTeam;
     }
+    logger.warn(
+      `[Team Resolution] Stored team ${currentTeamId} no longer accessible, falling back`,
+    );
   }
 
   // 3. Fall back to server default (oldest team)

@@ -1411,6 +1411,47 @@ describe('cloud utils', () => {
     });
   });
 
+  describe('resolveTeamId', () => {
+    const teams = [
+      { id: 'newer-team', name: 'Newer', organizationId: 'org-1', createdAt: '2024-01-01' },
+      { id: 'oldest-team', name: 'Oldest', organizationId: 'org-1', createdAt: '2022-01-01' },
+    ];
+    const teamsResponse = { ok: true, json: () => Promise.resolve(teams) } as Response;
+
+    beforeEach(() => {
+      mockCloudConfig.getCurrentOrganizationId.mockReturnValue('org-1');
+    });
+
+    it('returns the saved team when it is accessible', async () => {
+      mockCloudConfig.getCurrentTeamId.mockReturnValue('newer-team');
+      mockFetchWithProxy.mockResolvedValue(teamsResponse);
+
+      await expect(cloudModule.resolveTeamId()).resolves.toMatchObject({ id: 'newer-team' });
+      expect(mockCloudConfig.getCurrentTeamId).toHaveBeenCalledWith('org-1');
+      expect(mockCloudConfig.setCurrentTeamId).not.toHaveBeenCalled();
+    });
+
+    it('keeps the saved team when the team lookup fails instead of replacing it', async () => {
+      mockCloudConfig.getCurrentTeamId.mockReturnValue('newer-team');
+      mockFetchWithProxy
+        .mockResolvedValueOnce({ ok: false, statusText: 'Service Unavailable' } as Response)
+        .mockResolvedValue(teamsResponse);
+
+      await expect(cloudModule.resolveTeamId()).rejects.toThrow(
+        'Failed to get user teams: Service Unavailable',
+      );
+      expect(mockCloudConfig.setCurrentTeamId).not.toHaveBeenCalled();
+    });
+
+    it('replaces the saved team with the default only after a lookup proves it inaccessible', async () => {
+      mockCloudConfig.getCurrentTeamId.mockReturnValue('removed-team');
+      mockFetchWithProxy.mockResolvedValue(teamsResponse);
+
+      await expect(cloudModule.resolveTeamId()).resolves.toMatchObject({ id: 'oldest-team' });
+      expect(mockCloudConfig.setCurrentTeamId).toHaveBeenCalledWith('oldest-team', 'org-1');
+    });
+  });
+
   describe('checkCloudPermissions', () => {
     beforeEach(() => {
       mockCloudConfig.isEnabled.mockReturnValue(true);
