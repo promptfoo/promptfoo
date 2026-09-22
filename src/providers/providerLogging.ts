@@ -71,30 +71,35 @@ const TOKEN_CHARACTER = /[A-Za-z0-9._~+/=-]/;
  * `"api-key":"abc"`, and `user:abc@` lose the secret while longer words containing it stay intact.
  */
 function redactCredential(text: string, credential: string): string {
-  if (credential.length >= 8) {
+  if (credential.length > text.length) {
+    return text;
+  }
+  if (credential.length >= 8 && !/%[\da-f]{2}/i.test(credential)) {
     return text.split(credential).join(REDACTED);
   }
-  let redacted = '';
-  let copied = 0;
-  let index = text.indexOf(credential);
-  while (index !== -1) {
-    const end = index + credential.length;
-    const before = text.charAt(index - 1);
+  // A percent escape may change hex case or have its '%' encoded again by nested transports.
+  const pattern = credential
+    .split(/(%[\da-f]{2})/i)
+    .map((part, index) =>
+      index % 2
+        ? `%(?:25){0,2}${part.slice(1).replace(/[a-f]/gi, (hex) => `[${hex.toLowerCase()}${hex.toUpperCase()}]`)}`
+        : part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+    )
+    .join('');
+  return text.replace(new RegExp(pattern, 'g'), (match, start: number) => {
+    if (credential.length >= 8) {
+      return REDACTED;
+    }
+    const end = start + match.length;
+    const before = text.charAt(start - 1);
     const after = text.charAt(end);
     // A key=value separator can precede a token, and a sentence-ending period can follow it.
     const startsToken = before === '=' || !TOKEN_CHARACTER.test(before);
     const endsToken =
       !TOKEN_CHARACTER.test(after) ||
       (after === '.' && !TOKEN_CHARACTER.test(text.charAt(end + 1)));
-    if (startsToken && endsToken) {
-      redacted += text.slice(copied, index) + REDACTED;
-      copied = end;
-      index = text.indexOf(credential, end);
-    } else {
-      index = text.indexOf(credential, index + 1);
-    }
-  }
-  return redacted + text.slice(copied);
+    return startsToken && endsToken ? REDACTED : match;
+  });
 }
 
 /**

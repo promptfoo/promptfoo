@@ -29,6 +29,14 @@ describe('credential redaction', () => {
       'abc',
       'abcdef x-abc abc.def',
     ],
+    ['single-character whole tokens', 'a and a2', 'a', `${REDACTED} and a2`],
+    [
+      'lowercase and nested percent encodings without changing literal case',
+      'aB%2fdefgh aB%252Fdefgh aB%25252fdefgh ab%2fdefgh',
+      'aB%2Fdefgh',
+      `${REDACTED} ${REDACTED} ${REDACTED} ab%2fdefgh`,
+    ],
+    ['short nested percent encodings', 'x=%252f.', '%2F', `x=${REDACTED}.`],
   ])('redacts %s', (_label, text, credential, expected) => {
     expect(redactCredentials(text, [credential])).toBe(expected);
   });

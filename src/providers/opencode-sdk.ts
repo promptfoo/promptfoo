@@ -1272,8 +1272,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
    */
   private rememberCredentials(config: OpenCodeSDKConfig): void {
     const add = (value: unknown) => {
-      // Shorter values are not meaningful secrets and would only mangle ordinary diagnostics.
-      if (typeof value !== 'string' || value.trim().length < 4) {
+      if (typeof value !== 'string' || !value.trim()) {
         return;
       }
       for (const form of new Set([value, value.trim()])) {

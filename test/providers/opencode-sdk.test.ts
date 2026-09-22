@@ -3737,6 +3737,32 @@ describe('OpenCodeSDKProvider', () => {
           },
         ],
         [
+          'lowercase and repeatedly percent-encoded API keys',
+          {
+            config: { apiKey: 'abc/defgh' },
+            echo: ['abc%2fdefgh', 'abc%252Fdefgh', 'abc%25252fdefgh'],
+            secrets: ['abc/defgh', 'abc%2fdefgh', 'abc%252Fdefgh', 'abc%25252fdefgh'],
+          },
+        ],
+        [
+          'one-to-three-character API keys, URL passwords, and local or inherited env values',
+          {
+            config: {
+              apiKey: 'q',
+              baseUrl: 'https://example:x7@example.test',
+              mcp: {
+                local: {
+                  type: 'local',
+                  command: ['server'],
+                  environment: { CUSTOM_GATEWAY: 'p6' },
+                },
+              },
+            },
+            processEnv: { FAL_KEY: 'n8v' },
+            secrets: ['q', 'x7', 'p6', 'n8v'],
+          },
+        ],
+        [
           'provider env API keys',
           {
             env: { ANTHROPIC_API_KEY: 'synthetic-env-api-key' },
