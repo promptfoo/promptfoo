@@ -345,7 +345,9 @@ async function evaluateWithEnv(testSuite: EvaluateTestSuite, options: InternalEv
   const loadedProviders = await loadApiProviders(testSuiteConfig.providers, {
     env: testSuiteConfig.env,
   });
-  await Promise.all(loadedProviders.map((provider) => providerRegistry.useProvider(provider)));
+  await Promise.all(
+    loadedProviders.map((provider) => providerRegistry.useProvider(provider, options.abortSignal)),
+  );
   const providerMap = buildConfiguredProviderMap(loadedProviders);
   const constructedTestSuite = await createRuntimeTestSuite(testSuiteConfig, loadedProviders);
   await resolveNestedProviders(testSuiteConfig, constructedTestSuite, providerMap);

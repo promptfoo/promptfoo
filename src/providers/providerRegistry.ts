@@ -16,6 +16,8 @@ interface IdleCleanupProvider {
 
 interface EvaluationScope {
   active: boolean;
+  closed: Promise<void>;
+  close: () => void;
   providers: Set<ProviderState>;
   resources: Set<ResourceState>;
 }
@@ -50,31 +52,57 @@ class ProviderRegistry {
     if (this.evaluation.getStore()?.active) {
       return run();
     }
-    const scope: EvaluationScope = { active: true, providers: new Set(), resources: new Set() };
+    let close!: () => void;
+    const closed = new Promise<void>((resolve) => {
+      close = resolve;
+    });
+    const scope: EvaluationScope = {
+      active: true,
+      closed,
+      close,
+      providers: new Set(),
+      resources: new Set(),
+    };
     return this.evaluation.run(scope, async () => {
       try {
         return await run();
       } finally {
         scope.active = false;
+        scope.close();
         await this.releaseEvaluation(scope);
       }
     });
   }
 
   /** Reserve a known provider during setup without taking ownership of a caller-supplied instance. */
-  useProvider(provider: IdleCleanupProvider): Promise<void> | undefined {
+  useProvider(provider: IdleCleanupProvider, signal?: AbortSignal): Promise<void> | undefined {
     const scope = this.evaluation.getStore();
-    if (!scope?.active) {
+    if (signal?.aborted) {
+      return Promise.reject(signal.reason);
+    }
+    if (!scope) {
       return undefined;
     }
-    return this.claimProvider(scope, this.getProvider(provider));
+    if (!scope.active) {
+      return Promise.reject(this.closedScopeError());
+    }
+    const ready = this.claimProvider(scope, this.getProvider(provider));
+    return ready ? this.waitForScope(scope, ready, signal) : undefined;
   }
 
   /** Keep a provider and any resources it opens alive until its actual call settles. */
-  withProvider<T>(provider: IdleCleanupProvider, run: () => Promise<T>): Promise<T> {
+  async withProvider<T>(
+    provider: IdleCleanupProvider,
+    run: () => Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> {
     const scope = this.evaluation.getStore();
-    if (!scope?.active) {
+    signal?.throwIfAborted();
+    if (!scope) {
       return run();
+    }
+    if (!scope.active) {
+      throw this.closedScopeError();
     }
     const state = this.getProvider(provider);
     const ready = this.claimProvider(scope, state);
@@ -82,7 +110,11 @@ class ProviderRegistry {
     return this.currentProvider.run(state, async () => {
       try {
         if (ready) {
-          await ready;
+          await this.waitForScope(scope, ready, signal);
+        }
+        signal?.throwIfAborted();
+        if (!scope.active) {
+          throw this.closedScopeError();
         }
         return await run();
       } finally {
@@ -99,7 +131,10 @@ class ProviderRegistry {
   }
 
   /** The CLI owns its loaded targets; a caller-supplied grader is only borrowed. */
-  async cleanupWhenIdle(providers: Iterable<IdleCleanupProvider>): Promise<void> {
+  async cleanupWhenIdle(
+    providers: Iterable<IdleCleanupProvider>,
+    signal?: AbortSignal,
+  ): Promise<void> {
     const scope = this.evaluation.getStore();
     if (!scope?.active) {
       return;
@@ -113,7 +148,14 @@ class ProviderRegistry {
         pending.push(ready);
       }
     }
-    await Promise.all(pending);
+    if (pending.length) {
+      await this.waitForScope(
+        scope,
+        Promise.all(pending).then(() => undefined),
+        signal,
+      );
+    }
+    signal?.throwIfAborted();
   }
 
   /** Reserve a shared resource before using it, waiting if its preceding shutdown has started. */
@@ -213,6 +255,43 @@ class ProviderRegistry {
     return shutdown.promise;
   }
 
+  private closedScopeError(): DOMException {
+    return new DOMException('Evaluation ended before the provider call started', 'AbortError');
+  }
+
+  private waitForScope(
+    scope: EvaluationScope,
+    ready: Promise<void>,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    if (signal?.aborted) {
+      void ready.catch(() => {});
+      return Promise.reject(signal.reason);
+    }
+    const closed = scope.closed.then(() => {
+      signal?.throwIfAborted();
+      throw this.closedScopeError();
+    });
+    const pending = Promise.race([ready, closed]);
+    if (!signal) {
+      return pending;
+    }
+    return new Promise<void>((resolve, reject) => {
+      const onAbort = () => reject(signal.reason);
+      signal.addEventListener('abort', onAbort, { once: true });
+      pending.then(
+        () => {
+          signal.removeEventListener('abort', onAbort);
+          resolve();
+        },
+        (error) => {
+          signal.removeEventListener('abort', onAbort);
+          reject(error);
+        },
+      );
+    });
+  }
+
   private getProvider(provider: IdleCleanupProvider): ProviderState {
     let state = this.providers.get(provider);
     if (!state) {
@@ -283,15 +362,17 @@ class ProviderRegistry {
     }
     const pending: Promise<void>[] = [];
     for (const provider of scope.providers) {
+      const preceding = provider.cleanup;
       const cleanup = this.maybeCleanupProvider(provider);
-      if (cleanup && provider.users.size === 0) {
+      if (cleanup && cleanup !== preceding && provider.users.size === 0) {
         pending.push(cleanup);
       }
     }
     for (const resource of scope.resources) {
+      const preceding = resource.release?.promise;
       const owner = [...resource.providers].find((state) => state.provider === resource.resource);
       const release = this.maybeReleaseResource(resource, owner?.cleanup);
-      if (release && resource.users.size === 0) {
+      if (release && release !== preceding && resource.users.size === 0) {
         pending.push(release);
       }
       this.forgetResource(resource);

@@ -876,6 +876,49 @@ describe('MCPClient', () => {
   });
 
   describe('callTool', () => {
+    it('preserves SDK timeout options and cancels an active request without retrying', async () => {
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'ping', description: 'Health check', inputSchema: {} }],
+      });
+      let markStarted!: () => void;
+      const started = new Promise<void>((resolve) => {
+        markStarted = resolve;
+      });
+      mockClient.callTool.mockImplementation(
+        (_params, _schema, options: { signal: AbortSignal }) =>
+          new Promise((_resolve, reject) => {
+            options.signal.addEventListener('abort', () => reject(new Error('transport stopped')), {
+              once: true,
+            });
+            markStarted();
+          }),
+      );
+      mcpClient = new MCPClient({ enabled: true, timeout: 1200, server: { command: 'mock-mcp' } });
+      await mcpClient.initialize();
+      const abort = new AbortController();
+      const reason = new Error('token request cancelled');
+      const pending = mcpClient.callTool('ping', {}, abort.signal);
+      void pending.catch(() => {});
+      try {
+        await started;
+        expect(mockClient.callTool).toHaveBeenCalledExactlyOnceWith(
+          { name: 'ping', arguments: {} },
+          undefined,
+          { timeout: 1200, signal: abort.signal },
+        );
+        abort.abort(reason);
+        await expect(pending).rejects.toBe(reason);
+        expect(mockClient.callTool).toHaveBeenCalledOnce();
+        await expect(mcpClient.callTool('ping', {}, abort.signal)).rejects.toBe(reason);
+        expect(mockClient.callTool).toHaveBeenCalledOnce();
+      } finally {
+        abort.abort(reason);
+        await Promise.allSettled([pending]);
+        await mcpClient.cleanup();
+      }
+    });
+
     it('records one tool execution span around an MCP request', async () => {
       mockClient.connect.mockResolvedValueOnce(undefined);
       mockClient.listTools.mockResolvedValueOnce({
