@@ -463,9 +463,7 @@ function collectOllamaToolCalls(lines: OllamaChatJsonL[]) {
         arguments:
           typeof call.function.arguments === 'string'
             ? call.function.arguments
-            : call.function.arguments === undefined
-              ? '{}'
-              : JSON.stringify(call.function.arguments),
+            : JSON.stringify(call.function.arguments ?? {}),
       },
     }));
 }
