@@ -166,6 +166,7 @@ describe('package manifests', () => {
 
   it.each([
     ['examples/redteam-mcp-agent/package.json', '@modelcontextprotocol/sdk'],
+    ['examples/simple-mcp/package.json', '@modelcontextprotocol/sdk'],
     ['examples/config-websockets/basic/test-server/package.json', 'ws'],
     ['examples/config-websockets/streaming/server/package.json', 'ws'],
   ])('declares the standalone runtime dependency for %s', (manifest, dependency) => {
@@ -427,6 +428,26 @@ describe('package manifests', () => {
     }
   });
 
+  it('declares static runtime imports as required for installs that omit optional packages', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+
+    for (const dependency of [
+      '@anthropic-ai/sdk',
+      '@apidevtools/json-schema-ref-parser',
+      '@hono/node-server',
+      'compression',
+      'parse5',
+      'protobufjs',
+      'undici',
+      'ws',
+    ]) {
+      expect(packageJson.dependencies, dependency).toHaveProperty(dependency);
+      expect(packageJson.optionalDependencies, dependency).not.toHaveProperty(dependency);
+    }
+
+    expect(packageJson.dependencies).not.toHaveProperty('jsdom');
+  });
+
   it('lets consumers omit separately installed features and platform binaries', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const sitePackageJson = readPackageJson<PackageManifest>('site/package.json');
@@ -440,6 +461,7 @@ describe('package manifests', () => {
     );
 
     for (const dependency of [
+      '@alcalzone/ansi-tokenize',
       '@anthropic-ai/claude-agent-sdk',
       '@langfuse/client',
       '@modelcontextprotocol/sdk',
@@ -463,6 +485,7 @@ describe('package manifests', () => {
     expect(sitePackageJson.devDependencies).not.toHaveProperty('sharp');
 
     for (const dependency of [
+      '@alcalzone/ansi-tokenize',
       '@openai/codex-security',
       '@opencode-ai/sdk',
       '@rollup/rollup-linux-x64-gnu',
