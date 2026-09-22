@@ -142,7 +142,7 @@ Multiple Grok models support reasoning capabilities:
 
 **Grok 4.7 and 4.6**: Chat requests can set `reasoning_effort` to `low`, `medium`, `high` (the default), or `xhigh`. Responses API requests use `reasoning.effort`. Reasoning cannot be disabled; Promptfoo rejects `none` locally.
 
-For Grok 4.7 Chat Completions, use `max_completion_tokens` to cap output. Promptfoo also accepts the legacy `max_tokens` spelling and sends it as `max_completion_tokens`; set the limit to a non-negative integer. Responses API requests use `max_output_tokens`.
+For Grok 4.7, cap output with `max_completion_tokens` for Chat Completions or `max_output_tokens` for Responses. Reasoning effort also accepts a direct eval variable such as `{{ effort }}`.
 
 **Grok 4.5**: Chat requests can set `reasoning_effort` to `low`, `medium`, or `high` (the default); Promptfoo rejects other values locally. Responses API requests use `reasoning.effort` with the same values.
 
@@ -158,16 +158,7 @@ For Grok 4.7 Chat Completions, use `max_completion_tokens` to cap output. Prompt
 
 The [xAI release notes](https://docs.x.ai/developers/release-notes) list $2/M input, $0.50/M cached input, and $6/M output. At 200K or more input tokens, the rates are $4/M, $1/M, and $12/M respectively. When the API does not return a billed cost, Promptfoo uses these rates, including the 10% premium on xAI's US endpoint; explicit custom rates still take precedence. As with other Grok 4 reasoning models, Promptfoo strips `presence_penalty`, `frequency_penalty`, and `stop`.
 
-The Responses API returns encrypted reasoning even when `include` is omitted. Promptfoo keeps these items in `response.raw.output`; when managing conversation history yourself, pass them back unchanged in the next request's `input`. Chat Completions does not return encrypted reasoning.
-
-```yaml
-providers:
-  - id: xai:responses:grok-4.7
-    config:
-      reasoning:
-        effort: xhigh
-      max_output_tokens: 4096
-```
+The Responses API returns encrypted reasoning even when `include` is omitted. Promptfoo keeps it in `response.raw.output`; pass these items back unchanged when managing conversation history yourself.
 
 ### Grok 4.5 Specific Behavior
 
