@@ -791,14 +791,25 @@ abstract class SageMakerGenericProvider {
       // remains SDK-owned; it cannot change our explicit serving region or endpoint.
       defaultsMode: configuredDefaultsMode,
     });
-    const defaultsMode = await defaultsState.provider();
-    if (
-      DEFAULTS_ENV_VARS.some((name) => environment[name] !== process.env[name]) &&
-      this.runtimeDefaultsStates.get(runtimeRegion) === defaultsState
-    ) {
-      // Keep this request's result, but do not retain it under inputs that changed
-      // during discovery. A newer same-region selection owns its own state.
-      this.runtimeDefaultsStates.delete(runtimeRegion);
+    const defaultsInputsChanged = () => {
+      const changed = DEFAULTS_ENV_VARS.some((name) => environment[name] !== process.env[name]);
+      if (changed && this.runtimeDefaultsStates.get(runtimeRegion) === defaultsState) {
+        this.runtimeDefaultsStates.delete(runtimeRegion);
+      }
+      return changed;
+    };
+    const isAutoDefaults = configuredDefaultsMode.toLowerCase() === 'auto';
+    const staleDefaultsMessage =
+      'SageMaker defaults inputs changed during initialization; retry with stable inputs';
+    if (defaultsInputsChanged() && isAutoDefaults) {
+      throw new Error(staleDefaultsMessage);
+    }
+    const defaultsMode = await defaultsState.provider().catch((error) => {
+      defaultsInputsChanged();
+      throw error;
+    });
+    if (defaultsInputsChanged() && isAutoDefaults) {
+      throw new Error(staleDefaultsMessage);
     }
     this.assertRuntimeGeneration(generation);
     for (const credentials of [

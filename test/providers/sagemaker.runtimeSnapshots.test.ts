@@ -14,7 +14,10 @@ import { mockProcessEnv } from '../util/utils';
 import type { SageMakerRuntimeClient } from '@aws-sdk/client-sagemaker-runtime';
 import type { HttpRequest } from '@smithy/core/transport';
 
-const parsing = vi.hoisted(() => ({ pause: undefined as undefined | (() => Promise<void>) }));
+const parsing = vi.hoisted(() => ({
+  pause: undefined as undefined | (() => Promise<void>),
+  defaultsPause: undefined as undefined | (() => Promise<void>),
+}));
 vi.mock('@smithy/core/config', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@smithy/core/config')>();
   return {
@@ -25,6 +28,14 @@ vi.mock('@smithy/core/config', async (importOriginal) => {
       parsing.pause = undefined;
       await pause?.();
       return result;
+    },
+    resolveDefaultsModeConfig: (...args: Parameters<typeof actual.resolveDefaultsModeConfig>) => {
+      const provider = actual.resolveDefaultsModeConfig(...args);
+      return (...options: Parameters<typeof provider>) => {
+        const pause = parsing.defaultsPause;
+        parsing.defaultsPause = undefined;
+        return pause ? pause().then(() => provider(...options)) : provider(...options);
+      };
     },
   };
 });
@@ -81,12 +92,55 @@ describe('SageMaker initialization policy snapshot', () => {
     }
     providers.clear();
     parsing.pause = undefined;
+    parsing.defaultsPause = undefined;
     vi.resetAllMocks();
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
     restoreEnv();
     await rm(directory, { recursive: true, force: true });
   });
+
+  it.each([false, true])(
+    'rejects stale auto defaults without discarding a newer initialization (overlap: %s)',
+    async (overlap) => {
+      vi.stubEnv('AWS_DEFAULTS_MODE', 'AUTO');
+      vi.stubEnv('AWS_EXECUTION_ENV', 'AWS_Lambda_nodejs24.x');
+      const provider = new SageMakerCompletionProvider('deployment', {
+        config: {
+          region: 'us-east-1',
+          accessKeyId: 'OFFLINE',
+          secretAccessKey: 'offline-secret',
+        },
+      });
+      providers.add(provider);
+      const entered = deferred();
+      const release = deferred();
+      parsing.defaultsPause = async () => {
+        entered.resolve();
+        await release.promise;
+      };
+      const first = provider.getSageMakerRuntimeInstance().catch((error: unknown) => error);
+      try {
+        await entered.promise;
+        vi.stubEnv('AWS_REGION', 'us-west-2');
+        const overlapping = overlap ? await provider.getSageMakerRuntimeInstance() : undefined;
+        release.resolve();
+        const stale = await first;
+        expect(stale).toBeInstanceOf(Error);
+        expect((stale as Error).message).toBe(
+          'SageMaker defaults inputs changed during initialization; retry with stable inputs',
+        );
+        const retry = await provider.getSageMakerRuntimeInstance();
+        expect(await retry.config.defaultsMode()).toBe('cross-region');
+        if (overlapping) {
+          expect(retry).toBe(overlapping);
+        }
+      } finally {
+        release.resolve();
+        await first;
+      }
+    },
+  );
 
   it.each(['completion', 'embedding'] as const)(
     'captures %s settings before an asynchronous user transform',
