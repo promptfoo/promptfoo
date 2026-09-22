@@ -4,9 +4,8 @@ import {
   applyQueryParams,
   getAuthHeaders,
   getAuthQueryParams,
-  getOAuthToken,
+  getOAuthTokenWithExpiry,
   renderAuthVars,
-  requiresAsyncAuth,
 } from './util';
 import type { McpServerConfig as ClaudeCodeMcpServerConfig } from '@anthropic-ai/claude-agent-sdk';
 import type Anthropic from '@anthropic-ai/sdk';
@@ -167,14 +166,16 @@ async function transformMCPServerConfigToClaudeCode(
     // Render environment variables in auth config
     const renderedConfig = renderAuthVars(config);
 
-    // Handle OAuth token fetching if needed
-    let oauthToken: string | undefined;
-    if (requiresAsyncAuth(renderedConfig) && renderedConfig.auth?.type === 'oauth') {
-      oauthToken = await getOAuthToken(
-        renderedConfig.auth as MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
-        config.url,
-      );
-    }
+    // The Claude Agent SDK takes static headers, so fetch one OAuth token up front
+    const oauthToken =
+      renderedConfig.auth?.type === 'oauth'
+        ? (
+            await getOAuthTokenWithExpiry(
+              renderedConfig.auth as MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
+              config.url,
+            )
+          ).accessToken
+        : undefined;
 
     // Apply query params for api_key with query placement
     const queryParams = getAuthQueryParams(renderedConfig);

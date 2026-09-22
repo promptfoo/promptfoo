@@ -224,21 +224,9 @@ export async function getOAuthTokenWithExpiry(
 }
 
 /**
- * Get OAuth token, fetching a new one if needed.
- * Discovers the token endpoint from serverUrl when tokenUrl is not configured.
- */
-export async function getOAuthToken(
-  auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
-  serverUrl?: string,
-): Promise<string> {
-  const result = await getOAuthTokenWithExpiry(auth, serverUrl);
-  return result.accessToken;
-}
-
-/**
  * Get authentication headers for an MCP server configuration.
  * Returns headers for bearer, basic, and api_key (header placement) auth types.
- * For OAuth, use getOAuthToken() first then pass the token.
+ * For OAuth, fetch a token with getOAuthTokenWithExpiry() first and pass it in.
  * For api_key with query placement, use getAuthQueryParams() instead.
  */
 export function getAuthHeaders(
@@ -328,11 +316,4 @@ export function applyQueryParams(url: string, params: Record<string, string>): s
     urlObj.searchParams.append(key, value);
   }
   return urlObj.toString();
-}
-
-/**
- * Check if auth requires async token fetching (OAuth)
- */
-export function requiresAsyncAuth(server: MCPServerConfig): boolean {
-  return server.auth?.type === 'oauth';
 }
