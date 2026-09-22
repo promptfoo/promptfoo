@@ -10,6 +10,7 @@ import Eval from './models/eval';
 import { sanitizeProvider } from './models/evalResult';
 import { processPrompts, readProviderPromptMap } from './prompts/index';
 import { loadApiProviders, resolveProvider } from './providers/index';
+import { providerRegistry } from './providers/providerRegistry';
 import { createShareableUrl, isSharingEnabled } from './share';
 import { isApiProvider } from './types/providers';
 import { isTransformFunction } from './types/transform';
@@ -327,7 +328,9 @@ export async function evaluateWithSource(
   const { prompts: _prompts, providers: _providers, ...config } = testSuite;
   return cliState.withConfig(config, () =>
     cliState.withBasePath(path.resolve(testSuite.basePath ?? ''), () =>
-      cliState.withEnv(testSuite.env ?? {}, () => evaluateWithEnv(testSuite, options)),
+      cliState.withEnv(testSuite.env ?? {}, () =>
+        providerRegistry.withEvaluation(() => evaluateWithEnv(testSuite, options)),
+      ),
     ),
   );
 }

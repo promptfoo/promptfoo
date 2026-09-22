@@ -5023,6 +5023,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   async evaluate(): Promise<TEvaluation> {
+    // Registered provider resources are released once the last active evaluation finishes.
+    return providerRegistry.withEvaluation(() => this.evaluateWithResources());
+  }
+
+  private async evaluateWithResources(): Promise<TEvaluation> {
     // Initialize OTEL SDK if tracing is enabled
     // Check env flag, test suite level, and default test metadata
     const tracingEnabled =
@@ -5075,9 +5080,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           await sleep(3000);
         }
         await stopOtlpReceiverIfNeeded(otlpReceiverAcquired, this.store.id);
-
-        // Clean up Python worker pools to prevent resource leaks
-        await providerRegistry.shutdownAll();
 
         // Log rate limit metrics for debugging before cleanup
         if (this.rateLimitRegistry) {
