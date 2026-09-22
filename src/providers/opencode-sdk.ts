@@ -1903,14 +1903,23 @@ export class OpenCodeSDKProvider implements ApiProvider {
    */
   private isSkillToolEnabled(config: OpenCodeSDKConfig): boolean {
     const rules = this.buildEffectivePermissionRules(config);
-    // A pattern-specific rule only overrides earlier rules for matching skill names.
-    // We do not know which skill the model may invoke until after the call, so skip the
-    // history fetch only when every rule that could cover `skill` is a denial. Treating
-    // the final patterned rule as global loses allowed calls for policies such as
-    // { '*': 'allow', 'blocked-skill': 'deny' }.
-    return rules.some(
-      (rule) => (rule.permission === 'skill' || rule.permission === '*') && rule.action !== 'deny',
-    );
+    // OpenCode applies the last matching rule. We do not know which skill the model may invoke,
+    // so walk backwards: a later non-deny rule may allow some skill, a wildcard deny overrides
+    // every earlier rule, and a pattern-specific deny only blocks some names (e.g.
+    // { '*': 'allow', 'blocked-skill': 'deny' } still allows other skills).
+    for (let index = rules.length - 1; index >= 0; index--) {
+      const { permission, pattern, action } = rules[index];
+      if (permission !== 'skill' && permission !== '*') {
+        continue;
+      }
+      if (action !== 'deny') {
+        return true;
+      }
+      if (pattern === '*') {
+        return false;
+      }
+    }
+    return false;
   }
 
   /**

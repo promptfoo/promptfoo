@@ -1193,6 +1193,27 @@ describe('OpenCodeSDKProvider', () => {
         ]);
       });
 
+      it.each([
+        [{ '*': 'allow', skill: 'deny' }, false],
+        [{ skill: { 'code-standards': 'allow', '*': 'deny' } }, false],
+        [{ skill: 'deny', '*': 'allow' }, true],
+      ] as const)('applies last-match-wins to %j before fetching skill history', async (permission, fetched) => {
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponseWithAnchors('All done.', {
+            id: 'assistant-msg-1',
+            parentID: 'user-msg-1',
+          }),
+        );
+        const provider = new OpenCodeSDKProvider({
+          config: { permission },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Use a skill');
+
+        expect(mockSessionMessages).toHaveBeenCalledTimes(fetched ? 1 : 0);
+      });
+
       it('should skip session.messages fetch when tools config is omitted (skill disabled by default)', async () => {
         // The default tool policy denies every tool through the `*` wildcard, so
         // no skill parts can exist and the fetch must be skipped.
