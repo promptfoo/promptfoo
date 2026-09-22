@@ -1,6 +1,24 @@
+import { AzureCliCredential, ClientSecretCredential } from '@azure/identity';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import logger from '../../../src/logger';
 import { AzureGenericProvider } from '../../../src/providers/azure/generic';
 import { mockProcessEnv } from '../../util/utils';
+
+vi.mock('@azure/identity', () => {
+  class FakeCredential {
+    async getToken() {
+      return { token: 't', expiresOnTimestamp: Date.now() + 3_600_000 };
+    }
+  }
+  return {
+    ClientSecretCredential: vi.fn(function () {
+      return new FakeCredential();
+    }),
+    AzureCliCredential: vi.fn(function () {
+      return new FakeCredential();
+    }),
+  };
+});
 
 describe('AzureGenericProvider', () => {
   describe('getApiBaseUrl', () => {
@@ -102,6 +120,68 @@ describe('AzureGenericProvider', () => {
       const callsAfterInit = spy.mock.calls.length;
       await p.ensureInitialized();
       expect(spy.mock.calls.length).toBe(callsAfterInit); // no refetch while valid
+    });
+  });
+
+  describe('getAzureTokenCredential', () => {
+    let restoreEnv: () => void;
+
+    beforeEach(() => {
+      restoreEnv = mockProcessEnv({
+        AZURE_API_KEY: undefined,
+        AZURE_OPENAI_API_KEY: undefined,
+        AZURE_CLIENT_ID: undefined,
+        AZURE_CLIENT_SECRET: undefined,
+        AZURE_TENANT_ID: undefined,
+        AZURE_AUTHORITY_HOST: undefined,
+      });
+      vi.mocked(ClientSecretCredential).mockClear();
+      vi.mocked(AzureCliCredential).mockClear();
+    });
+
+    afterEach(() => {
+      restoreEnv();
+      vi.restoreAllMocks();
+    });
+
+    it('uses a service principal when client id, secret, and tenant are all set', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+      const provider = new AzureGenericProvider('d', {
+        config: { azureClientId: 'client', azureClientSecret: 'secret', azureTenantId: 'tenant' },
+      });
+      await provider.ensureInitialized();
+
+      expect(ClientSecretCredential).toHaveBeenCalledWith('tenant', 'client', 'secret', {
+        authorityHost: 'https://login.microsoftonline.com',
+      });
+      expect(AzureCliCredential).not.toHaveBeenCalled();
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('warns and names the missing fields before falling back to Azure CLI', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+      const provider = new AzureGenericProvider('d', {
+        config: { azureClientId: 'client', azureTenantId: 'tenant' },
+      });
+      await provider.ensureInitialized();
+
+      expect(ClientSecretCredential).not.toHaveBeenCalled();
+      expect(AzureCliCredential).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      const [message] = warnSpy.mock.calls[0];
+      expect(message).toContain('azureClientSecret');
+      expect(message).not.toContain('azureClientId');
+      expect(message).not.toContain('azureTenantId');
+    });
+
+    it('falls back to Azure CLI silently when no service principal fields are set', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+      const provider = new AzureGenericProvider('d', {});
+      await provider.ensureInitialized();
+
+      expect(ClientSecretCredential).not.toHaveBeenCalled();
+      expect(AzureCliCredential).toHaveBeenCalledTimes(1);
+      expect(warnSpy).not.toHaveBeenCalled();
     });
   });
 });
