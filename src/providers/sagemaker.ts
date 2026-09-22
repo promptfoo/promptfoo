@@ -568,7 +568,10 @@ abstract class SageMakerGenericProvider {
   private readonly runtimeClients = new Set<SageMakerRuntimeClient>();
   private readonly runtimeClockOffsets = new Map<string, number>();
   readonly #runtimeInitializations: RuntimeInitialization[] = [];
-  private readonly runtimeRetryStates = new Map<string, RuntimeRetryState>();
+  private readonly runtimeRetryStates = new Map<
+    string,
+    { scope: CredentialScope; retry: RuntimeRetryState }[]
+  >();
   private readonly runtimeDefaultsStates = new Map<string, RuntimeDefaultsState>();
   #retainedCredentials?: RuntimeCredentials;
   private runtimeGeneration = 0;
@@ -1188,6 +1191,7 @@ abstract class SageMakerGenericProvider {
     return {
       borrowedRuntime,
       credentialConfig,
+      deploymentEndpoint: this.getEndpointName(),
       environment,
       files,
       filesFingerprint: sharedFiles?.fingerprint ?? '',
@@ -1275,18 +1279,27 @@ abstract class SageMakerGenericProvider {
     );
     this.assertSharedFiles(captured);
     this.assertRuntimeGeneration(generation);
-    const runtimeStateKey = JSON.stringify([
+    const runtimeEndpointKey = JSON.stringify([
       runtimeRegion,
       endpoint.url,
       endpoint.useFipsEndpoint,
       endpoint.useDualstackEndpoint,
     ]);
-    let retry = this.runtimeRetryStates.get(runtimeStateKey);
-    if (!retry || retry.maxAttempts !== maxAttempts) {
-      retry = { maxAttempts };
-      this.runtimeRetryStates.set(runtimeStateKey, retry);
+    // Adaptive throttling belongs to the deployment and signer, unlike the serving host's clock.
+    const retryKey = JSON.stringify([runtimeEndpointKey, captured.deploymentEndpoint]);
+    let retries = this.runtimeRetryStates.get(retryKey);
+    if (!retries) {
+      retries = [];
+      this.runtimeRetryStates.set(retryKey, retries);
     }
-    const retryState = retry;
+    let retry = retries.find((candidate) => sameCredentialScope(candidate.scope, scope));
+    if (!retry) {
+      retry = { scope, retry: { maxAttempts } };
+      retries.push(retry);
+    } else if (retry.retry.maxAttempts !== maxAttempts) {
+      retry.retry = { maxAttempts };
+    }
+    const retryState = retry.retry;
     const defaultsInputs = [
       ...DEFAULTS_ENV_VARS.map((name) => environment[name]),
       files.filepath,
@@ -1483,7 +1496,7 @@ abstract class SageMakerGenericProvider {
             region: runtimeRegion,
             endpoint: endpoint.url,
             ignoreConfiguredEndpointUrls: true,
-            systemClockOffset: this.runtimeClockOffsets.get(runtimeStateKey),
+            systemClockOffset: this.runtimeClockOffsets.get(runtimeEndpointKey),
             useFipsEndpoint: endpoint.useFipsEndpoint,
             useDualstackEndpoint: endpoint.useDualstackEndpoint,
             defaultsMode,
@@ -1498,18 +1511,21 @@ abstract class SageMakerGenericProvider {
             credentials,
           });
           if (client.config) {
-            if (!this.runtimeClockOffsets.has(runtimeStateKey)) {
-              this.runtimeClockOffsets.set(runtimeStateKey, client.config.systemClockOffset ?? 0);
+            if (!this.runtimeClockOffsets.has(runtimeEndpointKey)) {
+              this.runtimeClockOffsets.set(
+                runtimeEndpointKey,
+                client.config.systemClockOffset ?? 0,
+              );
             }
             // Owned transports for the same endpoint share the SDK's latest correction.
             // A client created before another learns must not restore its stale seed.
             Object.defineProperty(client.config, 'systemClockOffset', {
               enumerable: true,
               configurable: true,
-              get: () => this.runtimeClockOffsets.get(runtimeStateKey) ?? 0,
+              get: () => this.runtimeClockOffsets.get(runtimeEndpointKey) ?? 0,
               set: (offset: number) => {
                 if (Number.isFinite(offset)) {
-                  this.runtimeClockOffsets.set(runtimeStateKey, offset);
+                  this.runtimeClockOffsets.set(runtimeEndpointKey, offset);
                 }
               },
             });
@@ -2096,7 +2112,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     // Capture request and authentication settings before a user transform can yield.
     const runtimeInputs = this.captureRuntimeInputs();
     const requestConfig = {
-      endpoint: this.getEndpointName(),
+      endpoint: runtimeInputs.deploymentEndpoint,
       modelType: this.modelType,
       contentType: this.getContentType(),
       acceptType: this.getAcceptType(),
@@ -2361,7 +2377,7 @@ export class SageMakerEmbeddingProvider
     // Keep lookup, invocation and parsing on the settings present before the transform.
     const runtimeInputs = this.captureRuntimeInputs();
     const request = {
-      endpoint: this.getEndpointName(),
+      endpoint: runtimeInputs.deploymentEndpoint,
       modelType: this.config.modelType,
       contentType: this.getContentType(),
       acceptType: this.getAcceptType(),

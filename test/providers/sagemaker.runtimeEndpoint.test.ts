@@ -106,6 +106,87 @@ describe('SageMaker effective runtime endpoint reuse', () => {
   });
 
   it.each([
+    'deployment',
+    'configured credentials',
+    'environment credentials',
+    'profile credentials',
+  ] as const)(
+    'keeps adaptive throttling separate for a changed %s on the same runtime host',
+    async (mode) => {
+      vi.stubEnv('AWS_SAGEMAKER_MAX_RETRIES', '3');
+      vi.stubEnv('AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME', 'https://same-retry-host.invalid');
+      if (mode === 'profile credentials') {
+        const credentials = path.join(directory, 'retry-credentials');
+        await writeFile(
+          credentials,
+          '[account-a]\naws_access_key_id = ACCOUNT_A_KEY\naws_secret_access_key = synthetic-a\n' +
+            '[account-b]\naws_access_key_id = ACCOUNT_B_KEY\naws_secret_access_key = synthetic-b\n',
+        );
+        vi.stubEnv('AWS_SHARED_CREDENTIALS_FILE', credentials);
+      }
+      const provider = new SageMakerCompletionProvider('fallback-deployment', {
+        config: { region: 'us-east-1', modelType: 'custom' },
+      });
+      providers.add(provider);
+      const select = (variant: 'A' | 'B') => {
+        provider.config.endpoint =
+          mode === 'deployment' ? `deployment-${variant}` : 'same-deployment';
+        if (mode === 'deployment' || mode === 'configured credentials') {
+          const signer = mode === 'deployment' ? 'A' : variant;
+          provider.config.accessKeyId = `ACCOUNT_${signer}_KEY`;
+          provider.config.secretAccessKey = `synthetic-${signer}`;
+        } else if (mode === 'environment credentials') {
+          vi.stubEnv('AWS_ACCESS_KEY_ID', `ACCOUNT_${variant}_KEY`);
+          vi.stubEnv('AWS_SECRET_ACCESS_KEY', `synthetic-${variant}`);
+        } else {
+          provider.config.profile = `account-${variant.toLowerCase()}`;
+        }
+      };
+      select('A');
+      const first: SageMakerRuntimeClient = await provider.getSageMakerRuntimeInstance();
+      const strategyA = await first.config.retryStrategy();
+      if (!('acquireInitialRetryToken' in strategyA)) {
+        throw new Error('Expected the SDK adaptive retry strategy');
+      }
+      const adaptiveA = strategyA as typeof strategyA & {
+        standardRetryStrategy: { getCapacity(): number };
+        rateLimiter: { getSendToken(): Promise<void> };
+      };
+      vi.spyOn(Math, 'random').mockReturnValue(0);
+      const initial = await strategyA.acquireInitialRetryToken('');
+      await strategyA.refreshRetryTokenForRetry(initial, { errorType: 'THROTTLING' });
+      const remainingA = adaptiveA.standardRetryStrategy.getCapacity();
+      expect(remainingA).toBeLessThan(500);
+      const throttleA = vi
+        .spyOn(adaptiveA.rateLimiter, 'getSendToken')
+        .mockResolvedValue(undefined);
+      first.config.systemClockOffset = 12_345;
+
+      select('B');
+      const second: SageMakerRuntimeClient = await provider.getSageMakerRuntimeInstance();
+      const strategyB = await second.config.retryStrategy();
+      expect(strategyB).not.toBe(strategyA);
+      if (!('acquireInitialRetryToken' in strategyB)) {
+        throw new Error('Expected the SDK adaptive retry strategy');
+      }
+      const adaptiveB = strategyB as typeof strategyB & {
+        standardRetryStrategy: { getCapacity(): number };
+      };
+      await strategyB.acquireInitialRetryToken('');
+      expect(throttleA).not.toHaveBeenCalled();
+      expect(adaptiveB.standardRetryStrategy.getCapacity()).toBe(500);
+      expect(second.config.systemClockOffset).toBe(12_345);
+
+      select('A');
+      const resumed: SageMakerRuntimeClient = await provider.getSageMakerRuntimeInstance();
+      expect(await resumed.config.retryStrategy()).toBe(strategyA);
+      await strategyA.acquireInitialRetryToken('');
+      expect(throttleA).toHaveBeenCalledOnce();
+      expect(adaptiveA.standardRetryStrategy.getCapacity()).toBe(remainingA);
+    },
+  );
+
+  it.each([
     'service',
     'unchanged',
     'ignored',
