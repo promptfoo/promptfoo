@@ -762,6 +762,11 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
           agent,
           effectiveConfig.functionToolCallbacks,
         );
+        if (Date.now() - startTime >= maxLoopTimeMs) {
+          return {
+            error: `Azure Foundry agent tool-calling loop timed out after ${maxLoopTimeMs}ms.`,
+          };
+        }
         logger.debug(
           `[AzureFoundryAgentProvider] Submitting ${outputs.length} function_call_output item(s)`,
         );

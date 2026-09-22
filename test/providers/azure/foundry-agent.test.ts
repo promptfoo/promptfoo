@@ -930,6 +930,7 @@ describe('AzureFoundryAgentProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result.error).toContain('tool-calling loop timed out after 100ms');
+      expect(mockResponsesCreate).toHaveBeenCalledTimes(1);
     });
 
     it('should warn once and omit unsupported per-request fields', async () => {

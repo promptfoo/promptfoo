@@ -204,6 +204,7 @@ describe('AzureGenericProvider', () => {
         ]);
         await provider.getAzureTokenCredential();
         expect(warn).toHaveBeenCalledTimes(count);
+        expect(AzureCliCredential).toHaveBeenCalledTimes(count);
       }
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('Falling back to Azure CLI'), {
         missing: ['azureClientId (AZURE_CLIENT_ID)', 'azureTenantId (AZURE_TENANT_ID)'],

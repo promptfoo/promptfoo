@@ -505,7 +505,7 @@ assert:
     threshold: 0.8
 ```
 
-The `contextTransform` property accepts a stringified Javascript expression which itself accepts two arguments: `output` and `context`, and **must return a non-empty string.**
+The `contextTransform` property accepts a stringified JavaScript expression which itself accepts two arguments: `output` and `context`, and **must return a non-empty string.**
 
 ```typescript
 /**
@@ -580,7 +580,7 @@ contextTransform: 'JSON.stringify(output, null, 2)'
 
 ### Examples
 
-Context-based metrics require a `query` and context. Scores are normalized between 0 and 1; when `threshold` is omitted, `answer-relevance`, `context-recall`, `context-relevance`, and `context-faithfulness` default to `0.5`.
+Context-based metrics (`context-recall`, `context-relevance`, and `context-faithfulness`) require a `query` and context. `answer-relevance` requires a `query` but not context. Scores are normalized between 0 and 1; when `threshold` is omitted, `answer-relevance`, `context-recall`, `context-relevance`, and `context-faithfulness` default to `0.5`.
 
 Here's an example config using statically-defined (`test.vars.context`) context:
 

@@ -27,6 +27,8 @@ export class AzureGenericProvider implements ApiProvider {
 
   /** Cached Entra ID credential; reused so @azure/identity can manage its own token cache. */
   private cachedCredential?: TokenCredential;
+  /** In-flight credential initialization, shared by concurrent requests. */
+  private cachedCredentialPromise?: Promise<TokenCredential>;
   #warnedPartialServicePrincipal = false;
   /** Expiry of the currently cached Entra ID bearer token (ms epoch), if token auth is in use. */
   private authTokenExpiresOnTimestamp?: number;
@@ -122,40 +124,54 @@ export class AzureGenericProvider implements ApiProvider {
       return this.cachedCredential;
     }
 
-    try {
-      const { ClientSecretCredential, AzureCliCredential } = await import('@azure/identity');
-
-      if (clientSecret && clientId && tenantId) {
-        logger.debug('[Azure] Using service principal credentials');
-        this.cachedCredential = new ClientSecretCredential(tenantId, clientId, clientSecret, {
-          authorityHost: authorityHost || 'https://login.microsoftonline.com',
-        });
-        return this.cachedCredential;
-      }
-
-      if (!clientId && !clientSecret && !tenantId) {
-        logger.debug('[Azure] Using Azure CLI credentials');
-      } else if (!this.#warnedPartialServicePrincipal) {
-        this.#warnedPartialServicePrincipal = true;
-        const missing = [
-          !clientId && 'azureClientId (AZURE_CLIENT_ID)',
-          !clientSecret && 'azureClientSecret (AZURE_CLIENT_SECRET)',
-          !tenantId && 'azureTenantId (AZURE_TENANT_ID)',
-        ].filter(Boolean);
-        logger.warn(
-          `[Azure] Service principal configuration is incomplete, missing ${missing.join(', ')}. Falling back to Azure CLI credentials.`,
-          { missing },
-        );
-      }
-
-      this.cachedCredential = new AzureCliCredential();
-      return this.cachedCredential;
-    } catch (err) {
-      logger.error(`Error loading @azure/identity: ${err}`);
-      throw new Error(
-        'The @azure/identity package is required for Azure authentication. Please install it with: npm install @azure/identity',
-      );
+    if (this.cachedCredentialPromise) {
+      return this.cachedCredentialPromise;
     }
+
+    this.cachedCredentialPromise = (async () => {
+      try {
+        const { ClientSecretCredential, AzureCliCredential } = await import('@azure/identity');
+
+        if (this.cachedCredential) {
+          return this.cachedCredential;
+        }
+
+        if (clientSecret && clientId && tenantId) {
+          logger.debug('[Azure] Using service principal credentials');
+          this.cachedCredential = new ClientSecretCredential(tenantId, clientId, clientSecret, {
+            authorityHost: authorityHost || 'https://login.microsoftonline.com',
+          });
+          return this.cachedCredential;
+        }
+
+        if (!clientId && !clientSecret && !tenantId) {
+          logger.debug('[Azure] Using Azure CLI credentials');
+        } else if (!this.#warnedPartialServicePrincipal) {
+          this.#warnedPartialServicePrincipal = true;
+          const missing = [
+            !clientId && 'azureClientId (AZURE_CLIENT_ID)',
+            !clientSecret && 'azureClientSecret (AZURE_CLIENT_SECRET)',
+            !tenantId && 'azureTenantId (AZURE_TENANT_ID)',
+          ].filter(Boolean);
+          logger.warn(
+            `[Azure] Service principal configuration is incomplete, missing ${missing.join(', ')}. Falling back to Azure CLI credentials.`,
+            { missing },
+          );
+        }
+
+        this.cachedCredential = new AzureCliCredential();
+        return this.cachedCredential;
+      } catch (err) {
+        logger.error(`Error loading @azure/identity: ${err}`);
+        throw new Error(
+          'The @azure/identity package is required for Azure authentication. Please install it with: npm install @azure/identity',
+        );
+      } finally {
+        this.cachedCredentialPromise = undefined;
+      }
+    })();
+
+    return this.cachedCredentialPromise;
   }
 
   async getAccessToken() {
