@@ -252,6 +252,72 @@ describe('embedding graders receive evaluation cancellation', () => {
     },
   );
 
+  it.each(['resolves', 'rejects'] as const)(
+    'holds a live grading slot after caller cancellation until the provider %s',
+    async (outcome) => {
+      const registry = new RateLimitRegistry({ maxConcurrency: 1, minConcurrency: 1 });
+      const controller = new AbortController();
+      const reason = new Error('caller stopped grading');
+      let markStarted!: () => void;
+      let resolvePhysical!: () => void;
+      let rejectPhysical!: (error: Error) => void;
+      const started = new Promise<void>((resolve) => {
+        markStarted = resolve;
+      });
+      const underlying = new Promise<void>((resolve, reject) => {
+        resolvePhysical = resolve;
+        rejectPhysical = reject;
+      });
+      const first = registry.execute(
+        provider,
+        () => {
+          markStarted();
+          return underlying;
+        },
+        {
+          abortSignal: controller.signal,
+        },
+      );
+      void first.catch(() => {});
+      let second: Promise<string> | undefined;
+      const secondProviderCall = vi.fn(async () => 'second');
+      try {
+        await started;
+        second = registry.execute(provider, secondProviderCall);
+        await vi.waitFor(() =>
+          expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+            activeRequests: 1,
+            queueDepth: 1,
+          }),
+        );
+        controller.abort(reason);
+        await expect(first).rejects.toBe(reason);
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(secondProviderCall).not.toHaveBeenCalled();
+        expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+          activeRequests: 1,
+          queueDepth: 1,
+        });
+
+        if (outcome === 'resolves') {
+          resolvePhysical();
+        } else {
+          rejectPhysical(new Error('late provider failure'));
+        }
+        await expect(second).resolves.toBe('second');
+        expect(secondProviderCall).toHaveBeenCalledOnce();
+        expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+          activeRequests: 0,
+          queueDepth: 0,
+        });
+      } finally {
+        resolvePhysical();
+        await Promise.allSettled([first, ...(second ? [second] : [])]);
+        registry.dispose();
+      }
+    },
+  );
+
   it('removes grouped embedding grading before its provider runs on cancellation', async () => {
     const queue = new ProviderGroupedCallQueue();
     const controller = new AbortController();

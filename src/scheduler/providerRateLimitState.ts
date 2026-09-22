@@ -6,7 +6,6 @@ import {
   WARNING_THRESHOLD,
 } from './adaptiveConcurrency';
 import { parseRateLimitHeaders } from './headerParser';
-import { runProviderCallWithAbort } from './providerCallExecutionContext';
 import { DEFAULT_RETRY_POLICY, getRetryDelay, type RetryPolicy, shouldRetry } from './retryPolicy';
 import { SlotQueue } from './slotQueue';
 
@@ -178,7 +177,8 @@ export class ProviderRateLimitState extends EventEmitter {
 
       try {
         options.abortSignal?.throwIfAborted();
-        const result = await runProviderCallWithAbort(callFn, options.abortSignal);
+        // A slot represents a live provider call, even if its caller stopped waiting.
+        const result = await callFn();
         options.abortSignal?.throwIfAborted();
         const latencyMs = Date.now() - startTime;
         this.latencies.push(latencyMs);

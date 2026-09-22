@@ -1276,4 +1276,102 @@ describeEvaluator('evaluator execution control', () => {
       }
     },
   );
+
+  it.each(['caller', 'deadline'] as const)(
+    'saves completed and interrupted select-best rows when the %s cancels comparison grading',
+    async (cancellation) => {
+      const controller = new AbortController();
+      let markStarted!: () => void;
+      let releaseGrader: (() => void) | undefined;
+      let graderSignal: AbortSignal | undefined;
+      const started = new Promise<void>((resolve) => {
+        markStarted = resolve;
+      });
+      const judge: ApiProvider = {
+        id: () => 'interruptible-comparison-judge',
+        callApi: vi.fn((_prompt, _context, options) => {
+          if (vi.mocked(judge.callApi).mock.calls.length === 1) {
+            return Promise.resolve({ output: '0' });
+          }
+          graderSignal = options?.abortSignal;
+          markStarted();
+          return new Promise<ProviderResponse>((resolve) => {
+            releaseGrader = () => resolve({ output: '0' });
+          });
+        }),
+      };
+      const defaults = await import('../../src/providers/defaults');
+      const defaultProviders = await defaults.getDefaultProviders();
+      const defaultsSpy = vi.spyOn(defaults, 'getDefaultProviders').mockResolvedValue({
+        ...defaultProviders,
+        gradingProvider: judge,
+      });
+      const target: ApiProvider = {
+        id: () => 'comparison-target',
+        callApi: async (prompt) => ({ output: `output: ${prompt}` }),
+      };
+      const suite: TestSuite = {
+        providers: [target],
+        prompts: [toPrompt('first {{topic}}'), toPrompt('second {{topic}}')],
+        tests: ['finished', 'interrupted', 'queued'].map((topic) => ({
+          vars: { topic },
+          assert: [
+            { type: 'contains', value: 'output', metric: 'target-output' },
+            { type: 'select-best', value: `Choose ${topic}` },
+          ],
+        })),
+      };
+      const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const evaluation = evaluate(suite, evalRecord, {
+        maxConcurrency: 2,
+        maxEvalTimeMs: 10_000,
+        abortSignal: controller.signal,
+      });
+      void evaluation.catch(() => {});
+      try {
+        await vi.advanceTimersByTimeAsync(0);
+        await Promise.race([
+          started,
+          evaluation.then(() => {
+            throw new Error('Comparison grading never started');
+          }),
+        ]);
+        expect(graderSignal?.aborted).toBe(false);
+        if (cancellation === 'caller') {
+          controller.abort(new Error('comparison stopped by caller'));
+        } else {
+          await vi.advanceTimersByTimeAsync(10_001);
+        }
+        await expect(evaluation).resolves.toBe(evalRecord);
+        expect(graderSignal?.aborted).toBe(true);
+        expect(judge.callApi).toHaveBeenCalledTimes(2);
+        vi.useRealTimers();
+
+        const reloaded = await Eval.findById(evalRecord.id);
+        expect(reloaded).toBeDefined();
+        const summary = await reloaded!.toEvaluateSummary();
+        expect(summary.results).toHaveLength(6);
+        const finished = summary.results.filter((row) => row.testIdx === 0);
+        expect(finished.map((row) => row.success).sort()).toEqual([false, true]);
+        const pending = summary.results.filter((row) => row.testIdx !== 0);
+        for (const row of pending) {
+          expect(row).toMatchObject({
+            success: false,
+            failureReason: ResultFailureReason.ERROR,
+            error: expect.stringMatching(/^Aborted: /),
+            namedScores: { 'target-output': 1 },
+            response: { output: expect.stringContaining('output:') },
+          });
+        }
+        expect(summary.stats).toMatchObject({ successes: 1, failures: 1, errors: 4 });
+      } finally {
+        controller.abort();
+        releaseGrader?.();
+        await Promise.allSettled([evaluation]);
+        vi.useRealTimers();
+        defaultsSpy.mockRestore();
+      }
+    },
+  );
 });

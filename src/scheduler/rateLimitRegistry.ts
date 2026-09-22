@@ -83,7 +83,9 @@ export class RateLimitRegistry extends EventEmitter {
       });
 
     try {
-      const result = await withFetchRetryContext(providerMaxRetries, run);
+      const result = await withFetchRetryContext(providerMaxRetries, () =>
+        runProviderCallWithAbort(run, options?.abortSignal),
+      );
 
       this.emit('request:completed', {
         rateLimitKey,
