@@ -23,6 +23,8 @@ export class ProviderGroupedCallQueue implements ProviderCallQueue {
       const job: QueuedProviderCall<unknown> = {
         call: () => {
           signal?.throwIfAborted();
+          // Once running, let the provider report cancellation or its own failure.
+          cleanup();
           return boundCall();
         },
         providerId,
