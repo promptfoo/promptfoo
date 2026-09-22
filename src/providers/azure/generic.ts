@@ -27,6 +27,7 @@ export class AzureGenericProvider implements ApiProvider {
 
   /** Cached Entra ID credential; reused so @azure/identity can manage its own token cache. */
   private cachedCredential?: TokenCredential;
+  #warnedPartialServicePrincipal = false;
   /** Expiry of the currently cached Entra ID bearer token (ms epoch), if token auth is in use. */
   private authTokenExpiresOnTimestamp?: number;
   /** Refresh the bearer token when it is within this window of expiring. */
@@ -118,7 +119,6 @@ export class AzureGenericProvider implements ApiProvider {
       getEnvString('AZURE_AUTHORITY_HOST');
 
     if (this.cachedCredential) {
-      // Reuse the credential so @azure/identity can serve/refresh tokens from its own cache.
       return this.cachedCredential;
     }
 
@@ -126,13 +126,28 @@ export class AzureGenericProvider implements ApiProvider {
       const { ClientSecretCredential, AzureCliCredential } = await import('@azure/identity');
 
       if (clientSecret && clientId && tenantId) {
+        logger.debug('[Azure] Using service principal credentials');
         this.cachedCredential = new ClientSecretCredential(tenantId, clientId, clientSecret, {
           authorityHost: authorityHost || 'https://login.microsoftonline.com',
         });
         return this.cachedCredential;
       }
 
-      // Fallback to Azure CLI
+      if (!clientId && !clientSecret && !tenantId) {
+        logger.debug('[Azure] Using Azure CLI credentials');
+      } else if (!this.#warnedPartialServicePrincipal) {
+        this.#warnedPartialServicePrincipal = true;
+        const missing = [
+          !clientId && 'azureClientId (AZURE_CLIENT_ID)',
+          !clientSecret && 'azureClientSecret (AZURE_CLIENT_SECRET)',
+          !tenantId && 'azureTenantId (AZURE_TENANT_ID)',
+        ].filter(Boolean);
+        logger.warn(
+          `[Azure] Service principal configuration is incomplete, missing ${missing.join(', ')}. Falling back to Azure CLI credentials.`,
+          { missing },
+        );
+      }
+
       this.cachedCredential = new AzureCliCredential();
       return this.cachedCredential;
     } catch (err) {
@@ -155,7 +170,6 @@ export class AzureGenericProvider implements ApiProvider {
     if (!tokenResponse) {
       throwConfigurationError('Failed to retrieve access token.');
     }
-    // Track expiry so ensureInitialized() can refresh the token before it lapses mid-run.
     this.authTokenExpiresOnTimestamp = tokenResponse.expiresOnTimestamp;
     return tokenResponse.token;
   }

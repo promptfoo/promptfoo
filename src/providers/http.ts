@@ -5,6 +5,7 @@ import https from 'https';
 import path from 'path';
 
 import httpZ from 'http-z';
+import { LRUCache } from 'lru-cache';
 import { Agent, type Dispatcher, interceptors } from 'undici';
 import { z } from 'zod';
 import { fetchWithCache } from '../cache';
@@ -75,7 +76,7 @@ import type {
 
 const AUTH_TOKEN_CACHE_HMAC_CONTEXT = 'promptfoo:http-auth-token-cache-key';
 const AUTH_TOKEN_CACHE_HMAC_KEY = crypto.randomBytes(32);
-const MAX_AUTH_TOKEN_CACHE_ENTRIES = 256;
+const MAX_AUTH_CACHE_ENTRIES = 256;
 
 /**
  * Escapes string values in variables for safe JSON template substitution.
@@ -775,6 +776,8 @@ type CachedAuthToken = {
 type AuthTokenRefreshLock = {
   promise: Promise<CachedAuthToken>;
 };
+
+type RequestSignature = { timestamp: number; signature: Promise<string> };
 
 /**
  * Configuration for a separate session endpoint that must be called before the main API.
@@ -1753,8 +1756,7 @@ export class HttpProvider implements ApiProvider {
     (prompt: string, vars: Record<string, any>, context?: CallApiContextParams) => any
   >;
   private validateStatus: Promise<(status: number) => boolean>;
-  private lastSignatureTimestamp?: number;
-  private lastSignature?: string;
+  private signatureCache = new LRUCache<string, RequestSignature>({ max: MAX_AUTH_CACHE_ENTRIES });
   private authTokenCache = new Map<string, CachedAuthToken>();
   private tokenRefreshLocks = new Map<string, AuthTokenRefreshLock>();
   private httpsAgent?: Dispatcher;
@@ -2033,7 +2035,7 @@ export class HttpProvider implements ApiProvider {
   }
 
   private enforceAuthTokenCacheLimit(): void {
-    while (this.authTokenCache.size > MAX_AUTH_TOKEN_CACHE_ENTRIES) {
+    while (this.authTokenCache.size > MAX_AUTH_CACHE_ENTRIES) {
       const oldestCacheKey = this.authTokenCache.keys().next().value;
       if (oldestCacheKey == null) {
         return;
@@ -2151,49 +2153,40 @@ export class HttpProvider implements ApiProvider {
     }
   }
 
-  private async refreshSignatureIfNeeded(vars: Record<string, any>): Promise<void> {
-    if (!this.config.signatureAuth) {
-      logger.debug('[HTTP Provider Auth]: No signature auth configured');
-      return;
-    }
-
+  private getSignature(vars: Record<string, any>): RequestSignature {
     const signatureAuth = this.config.signatureAuth;
-
+    const renderedConfig = {
+      type: 'pem',
+      ...signatureAuth,
+      privateKey: signatureAuth.privateKey
+        ? getNunjucksEngine().renderString(signatureAuth.privateKey, vars)
+        : undefined,
+    };
+    const cacheKey = digestAuthCacheInput({ signature: renderedConfig });
+    const cached = this.signatureCache.get(cacheKey);
     if (
-      !this.lastSignatureTimestamp ||
-      !this.lastSignature ||
-      needsSignatureRefresh(
-        this.lastSignatureTimestamp,
+      cached &&
+      !needsSignatureRefresh(
+        cached.timestamp,
         signatureAuth.signatureValidityMs,
         signatureAuth.signatureRefreshBufferMs,
       )
     ) {
-      logger.debug('[HTTP Provider Auth]: Generating new signature');
-      this.lastSignatureTimestamp = Date.now();
-
-      // Render privateKey with template substitution
-      const nunjucks = getNunjucksEngine();
-      const renderedConfig: any = {
-        ...signatureAuth,
-        privateKey: signatureAuth.privateKey
-          ? nunjucks.renderString(signatureAuth.privateKey, vars)
-          : undefined,
-      };
-
-      // Determine the signature auth type for legacy configurations
-      let authConfig = renderedConfig;
-      if (!('type' in renderedConfig)) {
-        authConfig = { ...renderedConfig, type: 'pem' };
-      }
-
-      this.lastSignature = await generateSignature(authConfig, this.lastSignatureTimestamp);
-      logger.debug('[HTTP Provider Auth]: Generated new signature successfully');
-    } else {
-      logger.debug('[HTTP Provider Auth]: Using cached signature');
+      return cached;
     }
 
-    invariant(this.lastSignature, 'Signature should be defined at this point');
-    invariant(this.lastSignatureTimestamp, 'Timestamp should be defined at this point');
+    const timestamp = Date.now();
+    const entry: RequestSignature = {
+      timestamp,
+      signature: generateSignature(renderedConfig, timestamp).catch((error) => {
+        if (this.signatureCache.peek(cacheKey) === entry) {
+          this.signatureCache.delete(cacheKey);
+        }
+        throw error;
+      }),
+    };
+    this.signatureCache.set(cacheKey, entry);
+    return entry;
   }
 
   /**
@@ -2520,25 +2513,20 @@ export class HttpProvider implements ApiProvider {
       vars.expiration = authToken.expiresAt;
     }
 
-    // Add signature values to vars if signature auth is enabled
     if (this.config.signatureAuth) {
-      await this.refreshSignatureIfNeeded(vars);
-      invariant(this.lastSignature, 'Signature should be defined at this point');
-      invariant(this.lastSignatureTimestamp, 'Timestamp should be defined at this point');
+      const pending = this.getSignature(vars);
+      const signature = await pending.signature;
 
-      if (vars.signature) {
-        logger.warn(
-          '[HTTP Provider Auth]: `signature` is already defined in vars and will be overwritten',
-        );
-      }
-      if (vars.signatureTimestamp) {
-        logger.warn(
-          '[HTTP Provider Auth]: `signatureTimestamp` is already defined in vars and will be overwritten',
-        );
+      for (const key of ['signature', 'signatureTimestamp']) {
+        if (vars[key]) {
+          logger.warn(
+            `[HTTP Provider Auth]: \`${key}\` is already defined in vars and will be overwritten`,
+          );
+        }
       }
 
-      vars.signature = this.lastSignature;
-      vars.signatureTimestamp = this.lastSignatureTimestamp;
+      vars.signature = signature;
+      vars.signatureTimestamp = pending.timestamp;
     }
 
     // Resolve session ID from session endpoint if configured

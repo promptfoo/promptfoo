@@ -38,6 +38,7 @@ describe('RSA signature authentication', () => {
   let mockSign: MockInstance;
   let mockUpdate: MockInstance;
   let mockEnd: MockInstance;
+  const emptyHttpResponse = { data: '{}', status: 200, statusText: 'OK', cached: false };
 
   beforeEach(() => {
     mockPrivateKey = '-----BEGIN PRIVATE KEY-----\nMOCK_KEY\n-----END PRIVATE KEY-----';
@@ -125,6 +126,77 @@ describe('RSA signature authentication', () => {
     vi.spyOn(Date, 'now').mockReturnValue(2000); // Still within validity period
     await provider.callApi('test');
     expect(crypto.createSign).toHaveBeenCalledTimes(1); // Should not be called again
+  });
+
+  it('isolates concurrent signatures and reuses them only for the same key', async () => {
+    vi.mocked(crypto.createSign).mockRestore();
+    const createSign = vi.spyOn(crypto, 'createSign');
+    const firstKeys = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const secondKeys = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        method: 'POST',
+        headers: {
+          'x-request': '{{prompt}}',
+          'x-signature': '{{signature}}',
+          'x-signature-timestamp': '{{signatureTimestamp}}',
+        },
+        body: { prompt: '{{prompt}}' },
+        signatureAuth: { privateKey: '{{key}}' },
+      },
+    });
+    vi.mocked(fetchWithCache).mockResolvedValue(emptyHttpResponse);
+    const call = (prompt: string, privateKey: crypto.KeyObject) =>
+      provider.callApi(prompt, {
+        prompt: { raw: prompt, label: prompt },
+        vars: { key: privateKey.export({ format: 'pem', type: 'pkcs8' }) },
+      });
+
+    const first = call('first', firstKeys.privateKey);
+    const same = call('first-in-flight', firstKeys.privateKey);
+    vi.mocked(Date.now).mockReturnValue(2000);
+    const second = call('second', secondKeys.privateKey);
+    const responses = await Promise.all([first, same, second]);
+    responses.push(await call('first-cached', firstKeys.privateKey));
+    expect(responses.every((response) => !response.error)).toBe(true);
+    expect(createSign).toHaveBeenCalledTimes(2);
+
+    const requests = new Map(
+      vi.mocked(fetchWithCache).mock.calls.map(([, options]) => {
+        const headers = new Headers(options?.headers);
+        return [headers.get('x-request'), headers];
+      }),
+    );
+    expect(requests.size).toBe(4);
+    for (const [name, timestamp, publicKey, otherPublicKey] of [
+      ['first', '1000', firstKeys.publicKey, secondKeys.publicKey],
+      ['first-in-flight', '1000', firstKeys.publicKey, secondKeys.publicKey],
+      ['first-cached', '1000', firstKeys.publicKey, secondKeys.publicKey],
+      ['second', '2000', secondKeys.publicKey, firstKeys.publicKey],
+    ] as const) {
+      const headers = requests.get(name)!;
+      const sentTimestamp = headers.get('x-signature-timestamp')!;
+      const signature = Buffer.from(headers.get('x-signature')!, 'base64');
+      const signedData = Buffer.from(sentTimestamp);
+      expect.soft(sentTimestamp).toBe(timestamp);
+      expect.soft(crypto.verify('SHA256', signedData, publicKey, signature)).toBe(true);
+      expect.soft(crypto.verify('SHA256', signedData, otherPublicKey, signature)).toBe(false);
+    }
+  });
+
+  it('retries after signature generation fails', async () => {
+    const provider = new HttpProvider('http://example.com', {
+      config: { body: { prompt: '{{prompt}}' }, signatureAuth: { privateKey: mockPrivateKey } },
+    });
+    mockSign.mockImplementationOnce(() => {
+      throw new Error('temporary signing failure');
+    });
+    vi.mocked(fetchWithCache).mockResolvedValue(emptyHttpResponse);
+
+    await expect(provider.callApi('first')).rejects.toThrow('temporary signing failure');
+    await expect(provider.callApi('retry')).resolves.toMatchObject({ output: {} });
+    expect(mockSign).toHaveBeenCalledTimes(2);
+    expect(fetchWithCache).toHaveBeenCalledTimes(1);
   });
 
   it('should regenerate signature at the default refresh buffer boundary', async () => {
@@ -223,43 +295,31 @@ describe('RSA signature authentication', () => {
     expect(mockSign).toHaveBeenCalledWith(mockPrivateKey);
   });
 
-  it('should warn when vars already contain signatureTimestamp', async () => {
-    const provider = new HttpProvider('http://example.com', {
-      config: {
-        method: 'POST',
-        body: { key: 'value' },
-        signatureAuth: {
-          privateKey: mockPrivateKey,
-          signatureValidityMs: 300000,
-        },
-      },
-    });
-
-    const mockResponse = {
-      data: JSON.stringify({ result: 'success' }),
-      status: 200,
-      statusText: 'OK',
-      cached: false,
-    };
-    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
-
-    const mockWarn = vi.spyOn(logger, 'warn');
-    const timestampWarning =
-      '[HTTP Provider Auth]: `signatureTimestamp` is already defined in vars and will be overwritten';
-
-    try {
-      await provider.callApi('test', {
-        prompt: { raw: 'test', label: 'test' },
-        vars: {
-          signatureTimestamp: 'existing-timestamp',
+  it.each(['signature', 'signatureTimestamp'])(
+    'warns when vars already contain %s',
+    async (key) => {
+      const provider = new HttpProvider('http://example.com', {
+        config: {
+          method: 'POST',
+          body: { key: 'value' },
+          signatureAuth: {
+            privateKey: mockPrivateKey,
+            signatureValidityMs: 300000,
+          },
         },
       });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(emptyHttpResponse);
+      const mockWarn = vi.spyOn(logger, 'warn');
 
-      expect(mockWarn).toHaveBeenCalledWith(timestampWarning);
-    } finally {
-      mockWarn.mockRestore();
-    }
-  });
+      await provider.callApi('test', {
+        prompt: { raw: 'test', label: 'test' },
+        vars: { [key]: 'existing' },
+      });
+      expect(mockWarn).toHaveBeenCalledWith(
+        `[HTTP Provider Auth]: \`${key}\` is already defined in vars and will be overwritten`,
+      );
+    },
+  );
 
   it('should use JKS keystore password from environment variable when config password not provided', async () => {
     // Get the mocked JKS module
