@@ -349,36 +349,48 @@ ${updated && change === 'comment' ? '# unrelated comment\n' : ''}`;
     ] as const)(
       'compares the selected %s %s runtime config during a %s edit',
       async (source, profile, change) => {
-        const selected = profile === 'named' ? 'selected-runtime' : 'default';
-        const section = profile === 'named' ? `profile ${selected}` : 'default';
-        vi.stubEnv('AWS_PROFILE', profile === 'named' ? selected : undefined);
-        vi.stubEnv('AWS_ACCESS_KEY_ID', source === 'environment' ? 'ENV_STATIC' : undefined);
-        vi.stubEnv(
-          'AWS_SECRET_ACCESS_KEY',
-          source === 'environment' ? 'env-static-secret' : undefined,
-        );
+        const selected = {
+          named: {
+            name: 'selected-runtime',
+            section: 'profile selected-runtime',
+            environment: 'selected-runtime',
+          },
+          default: { name: 'default', section: 'default', environment: undefined },
+        }[profile];
+        const identity = {
+          configured: {
+            id: 'CONFIG_STATIC',
+            provider: { accessKeyId: 'CONFIG_STATIC', secretAccessKey: 'config-static-secret' },
+            environmentId: undefined,
+            environmentSecret: undefined,
+          },
+          environment: {
+            id: 'ENV_STATIC',
+            provider: {},
+            environmentId: 'ENV_STATIC',
+            environmentSecret: 'env-static-secret',
+          },
+        }[source];
+        vi.stubEnv('AWS_PROFILE', selected.environment);
+        vi.stubEnv('AWS_ACCESS_KEY_ID', identity.environmentId);
+        vi.stubEnv('AWS_SECRET_ACCESS_KEY', identity.environmentSecret);
         vi.stubEnv('AWS_SESSION_TOKEN', undefined);
         const inCredentials = change === 'service from credentials';
         await writeFile(
           path.join(directory, 'credentials'),
-          `[${selected}]\n${inCredentials ? 'services = chosen\n' : ''}`,
+          `[${selected.name}]\n${inCredentials ? 'services = chosen\n' : ''}`,
         );
         const configFile = path.join(directory, 'config');
         const relevant = change === 'selected service' || inCredentials;
         const writeConfig = (updated: boolean) =>
-          writeFile(configFile, staticRuntimeConfig(section, change, updated));
+          writeFile(configFile, staticRuntimeConfig(selected.section, change, updated));
         await writeConfig(false);
         const entered = deferred();
         const release = deferred();
         const Provider =
           kind === 'completion' ? SageMakerCompletionProvider : SageMakerEmbeddingProvider;
         const provider = new Provider('deployment', {
-          config: {
-            modelType: 'custom',
-            ...(source === 'configured'
-              ? { accessKeyId: 'CONFIG_STATIC', secretAccessKey: 'config-static-secret' }
-              : {}),
-          },
+          config: { modelType: 'custom', ...identity.provider },
           transform: async (input) => {
             if (input === 'first') {
               entered.resolve();
@@ -406,9 +418,7 @@ ${updated && change === 'comment' ? '# unrelated comment\n' : ''}`;
           expect(requests.at(-1)?.hostname).toBe(
             `selected-${relevant ? 'after' : 'before'}.invalid`,
           );
-          expect(requests.at(-1)?.headers.authorization).toContain(
-            `Credential=${source === 'configured' ? 'CONFIG_STATIC' : 'ENV_STATIC'}/`,
-          );
+          expect(requests.at(-1)?.headers.authorization).toContain(`Credential=${identity.id}/`);
         } finally {
           release.resolve();
           await Promise.allSettled([pending]);
