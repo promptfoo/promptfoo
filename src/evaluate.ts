@@ -2,7 +2,7 @@ import * as path from 'path';
 
 import * as cache from './cache';
 import cliState from './cliState';
-import { evaluate as doEvaluate } from './evaluator';
+import { evaluate as doEvaluate, withEvaluationResources } from './evaluator';
 import { getAuthor } from './globalConfig/accounts';
 import logger from './logger';
 import { runDbMigrations } from './migrate';
@@ -327,7 +327,9 @@ export async function evaluateWithSource(
   const { prompts: _prompts, providers: _providers, ...config } = testSuite;
   return cliState.withConfig(config, () =>
     cliState.withBasePath(path.resolve(testSuite.basePath ?? ''), () =>
-      cliState.withEnv(testSuite.env ?? {}, () => evaluateWithEnv(testSuite, options)),
+      cliState.withEnv(testSuite.env ?? {}, () =>
+        withEvaluationResources(() => evaluateWithEnv(testSuite, options), { testSuite }),
+      ),
     ),
   );
 }

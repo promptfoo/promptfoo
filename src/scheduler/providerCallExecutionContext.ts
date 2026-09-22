@@ -49,8 +49,11 @@ export interface ProviderCallTracingContext {
   ) => Promise<ProviderResponse>;
 }
 
+type EvaluationProviderRetainer = (provider: ApiProvider) => Promise<void>;
+
 const providerCallExecutionContext = new AsyncLocalStorage<ProviderCallExecutionContext>();
 const providerCallTracingContext = new AsyncLocalStorage<ProviderCallTracingContext>();
+const evaluationProviderRetainer = new AsyncLocalStorage<EvaluationProviderRetainer>();
 
 export function getProviderCallExecutionContext(): ProviderCallExecutionContext | undefined {
   return providerCallExecutionContext.getStore();
@@ -72,4 +75,15 @@ export function withProviderCallTracingContext<T>(
   fn: () => Promise<T>,
 ): Promise<T> {
   return providerCallTracingContext.run(tracingContext, fn);
+}
+
+export function withEvaluationProviderRetainer<T>(
+  retainProvider: EvaluationProviderRetainer,
+  run: () => Promise<T>,
+): Promise<T> {
+  return evaluationProviderRetainer.run(retainProvider, run);
+}
+
+export function retainEvaluationProvider(provider: ApiProvider): Promise<void> | undefined {
+  return evaluationProviderRetainer.getStore()?.(provider);
 }
