@@ -5,7 +5,7 @@ description: Red team server-side request forgery (SSRF) vulnerabilities by test
 
 # Server-Side Request Forgery (SSRF) Plugin
 
-Use the SSRF plugin to test whether an AI-connected system can be manipulated into fetching attacker-chosen resources, including internal hosts and local files. It targets [OWASP API7](https://owasp.github.io/API-Security/) style behavior where a seemingly ordinary retrieval task becomes a server-side access path.
+Use the SSRF plugin to test whether an AI-connected system can be manipulated into fetching attacker-chosen resources, including internal hosts and local files. It targets [OWASP API7:2023](https://owasp.org/API-Security/editions/2023/en/0xa7-server-side-request-forgery/) style behavior where a seemingly ordinary retrieval task becomes a server-side access path.
 
 ## Purpose
 

@@ -1241,7 +1241,7 @@ When using Search grounding, the API response includes additional metadata:
 - Results may be subject to Google Search rate limits
 - Search will only be performed when the model determines it's necessary
 
-For more details, see the [Google documentation on Grounding with Google Search](https://ai.google.dev/gemini-api/docs/grounding).
+For more details, see the [Google documentation on Grounding with Google Search](https://ai.google.dev/gemini-api/docs/google-search).
 
 ### Maps Grounding
 

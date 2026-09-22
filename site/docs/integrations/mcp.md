@@ -7,7 +7,7 @@ sidebar_position: 20
 
 # Using MCP (Model Context Protocol) in Promptfoo
 
-Promptfoo supports the Model Context Protocol (MCP) for advanced tool use, and agentic workflows. MCP allows you to connect your Promptfoo providers to an external MCP server, such as the [modelcontextprotocol/servers](https://github.com/modelcontextprotocol/servers), to enable tool orchestration, and more.
+Promptfoo supports the Model Context Protocol (MCP) for advanced tool use, and agentic workflows. MCP allows you to connect your Promptfoo providers to an external MCP server, such as the [modelcontextprotocol/server-memory](https://github.com/modelcontextprotocol/servers/tree/main/src/memory), to enable tool orchestration, and more.
 
 :::note MCP SDK dependency
 

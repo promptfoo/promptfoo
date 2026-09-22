@@ -5,7 +5,7 @@ description: Red team object-level authorization by testing AI systems for unaut
 
 # BOLA (Broken Object Level Authorization) Plugin
 
-Use the BOLA plugin to test whether an agent accesses or modifies objects that fall outside the current user's authorization boundary ([OWASP API 1](https://owasp.github.io/API-Security/)). It is most relevant for systems that can read records, update resources, or act across user-owned objects through tools or APIs.
+Use the BOLA plugin to test whether an agent accesses or modifies objects that fall outside the current user's authorization boundary ([OWASP API1:2023](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)). It is most relevant for systems that can read records, update resources, or act across user-owned objects through tools or APIs.
 
 ## Purpose
 
