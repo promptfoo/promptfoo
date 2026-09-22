@@ -457,7 +457,7 @@ providers:
       persist_sessions: true
 ```
 
-This reuse is independent of the promptfoo response cache. It is scoped to the lifetime of the provider instance. If you need to continue a session later, capture its `sessionId` and pass it back with `session_id`.
+This reuse is independent of the promptfoo response cache. It is scoped to the lifetime of the provider instance. Promptfoo does not delete these sessions when an evaluation finishes, so if you need to continue a session later, capture its `sessionId` and pass it back with `session_id`. Calling the provider's `cleanup()` method explicitly deletes all sessions that instance created for reuse, including those no longer in its reuse cache; it does not delete sessions supplied with `session_id`.
 
 ### Session Resumption
 

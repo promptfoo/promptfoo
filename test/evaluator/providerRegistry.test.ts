@@ -1108,6 +1108,52 @@ describeEvaluator('registered resources across overlapping evaluations', () => {
     expect(aware.cleanup).not.toHaveBeenCalled();
   });
 
+  it('uses the process-specific shutdown hook only for providers that opt in', async () => {
+    const registry = new ProviderRegistry(false);
+    const ordinaryRegistry = new ProviderRegistry(false);
+    const legacy = { shutdown: vi.fn(async () => {}) };
+    const aware = {
+      shutdown: vi.fn(async () => {}),
+      shutdownForProcess: vi.fn(async () => {}),
+    };
+    registry.register(legacy);
+    registry.register(aware);
+
+    await registry.shutdownForProcess();
+
+    expect(legacy.shutdown).toHaveBeenCalledExactlyOnceWith();
+    expect(aware.shutdownForProcess).toHaveBeenCalledExactlyOnceWith();
+    expect(aware.shutdown).not.toHaveBeenCalled();
+    ordinaryRegistry.register(aware);
+    await ordinaryRegistry.shutdownAll();
+    expect(aware.shutdown).toHaveBeenCalledExactlyOnceWith();
+    expect(aware.shutdownForProcess).toHaveBeenCalledOnce();
+  });
+
+  it('escalates an already-running ordinary release without waiting for it', async () => {
+    const registry = new ProviderRegistry(false);
+    const started = deferred();
+    const complete = deferred();
+    const resource = {
+      shutdown: vi.fn(async () => {
+        started.resolve();
+        await complete.promise;
+      }),
+      shutdownForProcess: vi.fn(async () => {}),
+    };
+    registry.register(resource);
+    const ordinary = registry.shutdownAll();
+    await started.promise;
+    try {
+      await registry.shutdownForProcess();
+      expect(resource.shutdownForProcess).toHaveBeenCalledExactlyOnceWith();
+      expect(resource.shutdown).toHaveBeenCalledOnce();
+    } finally {
+      complete.resolve();
+      await ordinary;
+    }
+  });
+
   it.each(['distinct', 'shared', 'abort', 'error'] as const)(
     'keeps the active registered request alive when the other %s run finishes',
     async (mode) => {

@@ -23,6 +23,7 @@ import {
   isCredentialName,
   redactDiagnosticText,
 } from './providerLogging';
+import { providerRegistry } from './providerRegistry';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -410,6 +411,7 @@ function isDebugMode(): boolean {
  * Maximum number of sessions to keep in memory to prevent unbounded growth
  */
 const MAX_SESSIONS = 100;
+const SESSION_ABORT_TIMEOUT_MS = 1_000;
 
 /**
  * OpenCode SDK client interface
@@ -418,16 +420,24 @@ interface OpenCodeClient {
   session: {
     create: (
       parameters: Record<string, unknown>,
+      options?: Record<string, unknown>,
     ) => Promise<OpenCodeSdkResult<Record<string, unknown>>>;
     prompt: (
       parameters: Record<string, unknown>,
+      options?: Record<string, unknown>,
     ) => Promise<OpenCodeSdkResult<OpenCodePromptResponse>>;
     messages: (
       parameters: Record<string, unknown>,
       options?: Record<string, unknown>,
     ) => Promise<OpenCodeSdkResult<OpenCodeSessionMessage[]>>;
-    delete: (parameters: Record<string, unknown>) => Promise<unknown>;
-    abort?: (parameters: Record<string, unknown>) => Promise<unknown>;
+    delete: (
+      parameters: Record<string, unknown>,
+      options?: Record<string, unknown>,
+    ) => Promise<unknown>;
+    abort?: (
+      parameters: Record<string, unknown>,
+      options?: Record<string, unknown>,
+    ) => Promise<unknown>;
   };
 }
 
@@ -447,6 +457,7 @@ interface OpenCodeSDKModule {
     hostname?: string;
     port?: number;
     timeout?: number;
+    signal?: AbortSignal;
     config?: Record<string, unknown>;
     env?: Record<string, string>;
   }) => Promise<{ client: OpenCodeClient; server: OpenCodeServer }>;
@@ -470,6 +481,7 @@ interface OpenCodeSessionPath {
 interface OpenCodeSessionHandle {
   id: string;
   query?: OpenCodeSessionQuery;
+  cancelledDeletion?: Promise<boolean>;
 }
 
 interface OpenCodePreparedCall {
@@ -482,6 +494,7 @@ interface OpenCodeSessionContext {
   sessionId: string;
   sessionQuery?: OpenCodeSessionQuery;
   ephemeralSession?: OpenCodeSessionHandle;
+  releaseCreation?: () => void;
 }
 
 type OpenCodeTokenCache =
@@ -1165,6 +1178,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private providerId = 'opencode:sdk';
   private opencodeModule?: LoadedOpenCodeSDKModule;
   private client?: OpenCodeClient;
+  private clientConfig?: OpenCodeSDKConfig;
   private clientInitialization?: Promise<void>;
   private server?: OpenCodeServer;
   // Every configured value an OpenCode diagnostic could echo. Kept for the provider's lifetime:
@@ -1172,9 +1186,16 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private readonly knownCredentials = new Set<string>();
   private readonly shortCredentials = new Set<string>();
   private withholdMcpDiagnostics = false;
-  private sessions: Map<string, OpenCodeSessionHandle> = new Map(); // cacheKey -> session info
-  private sessionOrder: string[] = []; // Track insertion order for LRU eviction
+  private sessions = new Map<string, OpenCodeSessionHandle>(); // cacheKey -> session, oldest first
+  private readonly sessionsForCleanup = new Set<OpenCodeSessionHandle>();
   private sessionQueues = new Map<string, Promise<void>>();
+  private activeRemoteCalls = 0;
+  private readonly remoteSessionCreations = new Set<Promise<void>>();
+  private readonly remoteSessionAborts = new Set<() => Promise<void>>();
+  private readonly processTermination = new AbortController();
+  private processShutdown?: Promise<void>;
+  // Temp workspaces a running local server kept open; removal is retried once it stops.
+  private readonly pendingTempDirs = new Set<string>();
   private readonly credentialCacheScope = crypto.randomUUID();
   private streamingWarningEmitted = false;
 
@@ -1233,34 +1254,263 @@ export class OpenCodeSDKProvider implements ApiProvider {
     return '[OpenCode SDK Provider]';
   }
 
+  /**
+   * Explicit cleanup also deletes the persistent sessions created by this provider.
+   * Otherwise they stay resumable by ID after a shutdown, as documented for `persist_sessions`.
+   */
   async cleanup(): Promise<void> {
     await this.clientInitialization?.catch(() => undefined);
-    this.clientInitialization = undefined;
-    for (const session of this.sessions.values()) {
-      try {
-        await this.deleteSession(session);
-      } catch (err) {
-        logger.debug(`Failed to delete persistent session ${session.id}`, {
-          error: this.formatCallError(err, this.config),
-        });
+    try {
+      if (this.sessionsForCleanup.size && !this.client) {
+        await this.ensureClient(this.clientConfig ?? this.config);
       }
+      const client = this.client;
+      await Promise.all(
+        [...this.sessionsForCleanup].map(async (session) => {
+          try {
+            await this.deleteSession(session, client);
+            this.sessionsForCleanup.delete(session);
+          } catch (error) {
+            logger.debug(`Failed to delete persistent session ${session.id}`, {
+              error: this.formatCallError(error, this.config),
+            });
+          }
+        }),
+      );
+      for (const [key, session] of this.sessions) {
+        if (!this.sessionsForCleanup.has(session)) {
+          this.sessions.delete(key);
+        }
+      }
+    } catch (error) {
+      logger.debug('Failed to reconnect for OpenCode session cleanup', {
+        error: this.formatCallError(error, this.config),
+      });
+    } finally {
+      await this.shutdown();
     }
-    this.sessions.clear();
-    this.sessionOrder = [];
-    this.sessionQueues.clear();
+  }
 
-    // Close server if we started one
+  /** Evaluation completion stops the local server but keeps persistent sessions resumable. */
+  cleanupAfterEvaluation(): Promise<void> {
+    return this.shutdown();
+  }
+
+  shutdownForProcess(): Promise<void> {
+    if (!this.processShutdown) {
+      const remoteAborts = [...this.remoteSessionAborts].map((abort) => abort());
+      this.processTermination.abort();
+      const shutdown = Promise.allSettled([
+        this.shutdown(),
+        this.waitForRemoteSessionCreations(),
+        ...remoteAborts,
+      ])
+        .then(async () => {
+          this.remoteSessionAborts.clear();
+          this.remoteSessionCreations.clear();
+          if (this.server || this.pendingTempDirs.size) {
+            await this.shutdown();
+          }
+        })
+        .finally(() => {
+          if (this.processShutdown === shutdown && (this.server || this.pendingTempDirs.size)) {
+            this.processShutdown = undefined;
+          }
+        });
+      this.processShutdown = shutdown;
+    }
+    return this.processShutdown;
+  }
+
+  private async waitForRemoteSessionCreations(): Promise<void> {
+    if (!this.remoteSessionCreations.size) {
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        Promise.allSettled([...this.remoteSessionCreations]),
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, SESSION_ABORT_TIMEOUT_MS);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /** Stop the local server (after evaluations or on process exit) and keep the sessions. */
+  async shutdown(): Promise<void> {
+    await this.clientInitialization?.catch(() => undefined);
+    this.closeLocalServer();
+    if (!this.server) {
+      this.client = undefined;
+    }
+    await Promise.all([...this.pendingTempDirs].map((dir) => this.removeTempDir(dir)));
+    this.updateRegistry();
+  }
+
+  private updateRegistry(): void {
+    if (
+      !this.processTermination.signal.aborted &&
+      (this.server || this.pendingTempDirs.size || this.activeRemoteCalls > 0)
+    ) {
+      providerRegistry.register(this);
+    } else {
+      providerRegistry.unregister(this);
+    }
+  }
+
+  private closeLocalServer(): void {
     if (this.server) {
       try {
         this.server.close();
+        this.server = undefined;
+        this.client = undefined;
       } catch (err) {
         logger.debug('Failed to close OpenCode server', {
           error: this.formatCallError(err, this.config),
         });
       }
-      this.server = undefined;
     }
-    this.client = undefined;
+  }
+
+  private async waitForRequest<T>(request: Promise<T>, signal: AbortSignal): Promise<T> {
+    if (signal.aborted) {
+      void request.catch(() => {});
+      signal.throwIfAborted();
+    }
+    let onAbort!: () => void;
+    const aborted = new Promise<never>((_, reject) => {
+      onAbort = () => reject(signal.reason);
+      signal.addEventListener('abort', onAbort, { once: true });
+    });
+    try {
+      return await Promise.race([request, aborted]);
+    } finally {
+      signal.removeEventListener('abort', onAbort);
+    }
+  }
+
+  private getHistorySignal(
+    caller: AbortSignal | undefined,
+    remote: boolean,
+  ): AbortSignal | undefined {
+    if (!remote) {
+      return caller;
+    }
+    const processSignal = this.processTermination.signal;
+    return caller ? AbortSignal.any([caller, processSignal]) : processSignal;
+  }
+
+  private promptSession(
+    client: OpenCodeClient,
+    parameters: Record<string, unknown>,
+    remote: boolean,
+  ): Promise<OpenCodeSdkResult<OpenCodePromptResponse>> {
+    if (!remote) {
+      return client.session.prompt(parameters);
+    }
+    const signal = this.processTermination.signal;
+    const request =
+      this.opencodeModule?.apiVersion === 'v2'
+        ? client.session.prompt(parameters, { signal })
+        : client.session.prompt({ ...parameters, signal });
+    return this.waitForRequest(request, signal);
+  }
+
+  private async abortRemoteSession(
+    client: OpenCodeClient,
+    parameters: Record<string, unknown>,
+  ): Promise<void> {
+    if (!client.session.abort) {
+      throw new Error('OpenCode SDK does not expose session cancellation');
+    }
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<void>((resolve) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        resolve();
+      }, SESSION_ABORT_TIMEOUT_MS);
+    });
+    try {
+      const request =
+        this.opencodeModule?.apiVersion === 'v2'
+          ? client.session.abort(parameters, { signal: controller.signal })
+          : client.session.abort({ ...parameters, signal: controller.signal });
+      await Promise.race([
+        request.then((result) => {
+          const envelope = asRecord(result);
+          if (
+            result !== true &&
+            (envelope?.data !== true || envelope.error || asRecord(envelope.response)?.ok === false)
+          ) {
+            throw new Error('OpenCode did not acknowledge session cancellation');
+          }
+        }),
+        deadline,
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private setupSessionCancellation(
+    client: OpenCodeClient,
+    session: OpenCodeSessionContext,
+    config: OpenCodeSDKConfig,
+    abortSignal: AbortSignal | undefined,
+    tracksRemote: boolean,
+  ): { listener?: () => void; releaseRemote?: () => void } {
+    if ((!client.session.abort || !abortSignal) && !tracksRemote) {
+      return {};
+    }
+    const abortParams = this.buildAbortSessionParameters(session.sessionId, session.sessionQuery);
+    const logAbortError = (error: unknown) => {
+      logger.debug(`[OpenCode SDK] Failed to abort session ${session.sessionId}`, {
+        error: this.formatCallError(error, config),
+      });
+    };
+    let remoteAbort: Promise<void> | undefined;
+    const abortRemote = () =>
+      (remoteAbort ??= this.abortRemoteSession(client, abortParams).catch(logAbortError));
+    let releaseRemote: (() => void) | undefined;
+    if (tracksRemote) {
+      this.remoteSessionAborts.add(abortRemote);
+      releaseRemote = () => {
+        this.remoteSessionAborts.delete(abortRemote);
+      };
+    }
+    let listener: (() => void) | undefined;
+    if (abortSignal && client.session.abort) {
+      listener = () => {
+        if (tracksRemote) {
+          void abortRemote();
+          return;
+        }
+        try {
+          client.session.abort?.(abortParams).catch(logAbortError);
+        } catch (error) {
+          logAbortError(error);
+        }
+      };
+      abortSignal.addEventListener('abort', listener, { once: true });
+    }
+    return { listener, releaseRemote };
+  }
+
+  private async removeTempDir(workingDir: string): Promise<void> {
+    try {
+      await fsPromises.rm(workingDir, { recursive: true, force: true });
+      this.pendingTempDirs.delete(workingDir);
+    } catch (error) {
+      this.pendingTempDirs.add(workingDir);
+      if (!this.processTermination.signal.aborted) {
+        providerRegistry.register(this);
+      }
+      logger.debug('Failed to remove temp directory for OpenCode', { workingDir, error });
+    }
   }
 
   /**
@@ -1597,46 +1847,91 @@ export class OpenCodeSDKProvider implements ApiProvider {
     };
   }
 
-  private async deleteSession(session: OpenCodeSessionHandle | undefined): Promise<void> {
-    if (!session) {
-      return;
+  private async deleteSession(
+    session: OpenCodeSessionHandle,
+    client: OpenCodeClient | undefined,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    if (!client?.session?.delete) {
+      throw new Error('OpenCode SDK does not expose session deletion');
     }
-    await this.client?.session?.delete?.(this.buildDeleteSessionParameters(session));
+    const parameters = this.buildDeleteSessionParameters(session);
+    const result = await (signal
+      ? this.opencodeModule?.apiVersion === 'v2'
+        ? client.session.delete(parameters, { signal })
+        : client.session.delete({ ...parameters, signal })
+      : client.session.delete(parameters));
+    const envelope = asRecord(result);
+    if (
+      result === false ||
+      envelope?.data === false ||
+      envelope?.error ||
+      asRecord(envelope?.response)?.ok === false
+    ) {
+      throw envelope?.error ?? new Error('OpenCode session deletion failed');
+    }
+  }
+
+  private deleteCancelledSession(
+    session: OpenCodeSessionHandle,
+    client: OpenCodeClient | undefined,
+  ): Promise<boolean> {
+    if (!session.cancelledDeletion) {
+      const signal = AbortSignal.timeout(SESSION_ABORT_TIMEOUT_MS);
+      session.cancelledDeletion = this.waitForRequest(
+        this.deleteSession(session, client, signal),
+        signal,
+      ).then(
+        () => true,
+        (error) => {
+          logger.debug(`Failed to delete cancelled OpenCode session ${session.id}`, {
+            error: this.formatCallError(error, this.config),
+          });
+          return false;
+        },
+      );
+    }
+    return session.cancelledDeletion;
+  }
+
+  private async cleanupEphemeralSession(
+    session: OpenCodeSessionHandle,
+    client: OpenCodeClient | undefined,
+    config: OpenCodeSDKConfig,
+  ): Promise<void> {
+    try {
+      if (this.processTermination.signal.aborted) {
+        await this.deleteCancelledSession(session, client);
+      } else {
+        await this.deleteSession(session, client);
+      }
+    } catch (error) {
+      logger.debug(`Failed to delete non-persistent session ${session.id}`, {
+        error: this.formatCallError(error, config),
+      });
+    }
   }
 
   private buildAbortSessionParameters(
     sessionId: string,
     sessionQuery: OpenCodeSessionQuery | undefined,
   ): Record<string, unknown> {
-    // session.abort is v2-only. v1 has no equivalent endpoint.
-    return {
-      sessionID: sessionId,
-      ...sessionQuery,
-    };
+    return this.opencodeModule?.apiVersion === 'v2'
+      ? { sessionID: sessionId, ...sessionQuery }
+      : { path: getSessionPath(sessionId), query: sessionQuery };
   }
 
   /**
-   * Add a session to the cache with LRU eviction
+   * Remember a persistent session, most recently used last. Eviction only forgets the oldest
+   * lookup: the session may still be running a queued call, and stays resumable until explicit cleanup.
    */
   private addSession(cacheKey: string, session: OpenCodeSessionHandle): void {
-    // Remove oldest sessions if we've hit the limit
-    while (this.sessions.size >= MAX_SESSIONS && this.sessionOrder.length > 0) {
-      const oldestKey = this.sessionOrder.shift();
-      if (oldestKey) {
-        const oldSession = this.sessions.get(oldestKey);
-        this.sessions.delete(oldestKey);
-        // Best-effort cleanup of old session
-        if (oldSession) {
-          this.deleteSession(oldSession).catch((err) => {
-            logger.debug(`Failed to delete evicted session ${oldSession.id}`, {
-              error: this.formatCallError(err, this.config),
-            });
-          });
-        }
-      }
-    }
+    this.sessionsForCleanup.add(session);
+    this.sessions.delete(cacheKey);
     this.sessions.set(cacheKey, session);
-    this.sessionOrder.push(cacheKey);
+    if (this.sessions.size > MAX_SESSIONS) {
+      this.sessions.delete(this.sessions.keys().next().value!);
+    }
   }
 
   private prepareCall(context?: CallApiContextParams): OpenCodePreparedCall {
@@ -1727,6 +2022,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
         this.client = createOpencodeClient({
           baseUrl: config.baseUrl,
         });
+        this.clientConfig = config;
         return;
       }
 
@@ -1734,12 +2030,14 @@ export class OpenCodeSDKProvider implements ApiProvider {
         hostname: string;
         port: number;
         timeout: number;
+        signal: AbortSignal;
         config?: Record<string, unknown>;
         env?: Record<string, string>;
       } = {
         hostname: config.hostname ?? '127.0.0.1',
         port: config.port ?? 0,
         timeout: config.timeout ?? 30000,
+        signal: this.processTermination.signal,
         env: this.buildServerEnv(config),
       };
 
@@ -1748,10 +2046,31 @@ export class OpenCodeSDKProvider implements ApiProvider {
         serverOptions.config = serverConfig;
       }
 
-      const opencode = await createOpencode(serverOptions);
-      this.client = opencode.client;
-      this.server = opencode.server;
-      logger.debug(`OpenCode server started at ${opencode.server.url}`);
+      const { signal } = serverOptions;
+      signal.throwIfAborted();
+      try {
+        providerRegistry.register(this);
+        const started = createOpencode(serverOptions).then((opencode) => {
+          this.client = opencode.client;
+          this.clientConfig = config;
+          this.server = opencode.server;
+          if (signal.aborted) {
+            this.closeLocalServer();
+            if (this.server) {
+              this.processShutdown = undefined;
+              providerRegistry.register(this);
+            }
+            signal.throwIfAborted();
+          }
+          logger.debug(`OpenCode server started at ${opencode.server.url}`);
+        });
+        await this.waitForRequest(started, signal);
+      } catch (error) {
+        if (!this.server && !this.pendingTempDirs.size) {
+          providerRegistry.unregister(this);
+        }
+        throw error;
+      }
     })();
     this.clientInitialization = initialization;
     try {
@@ -1795,6 +2114,9 @@ export class OpenCodeSDKProvider implements ApiProvider {
     if (!this.client || !this.opencodeModule) {
       throw new Error('OpenCode SDK client is not initialized');
     }
+    const processSignal = config.baseUrl ? this.processTermination.signal : undefined;
+    processSignal?.throwIfAborted();
+    const client = this.client;
 
     const sessionQuery = this.buildQuery(config, workingDir);
     if (config.session_id) {
@@ -1805,43 +2127,62 @@ export class OpenCodeSDKProvider implements ApiProvider {
     }
 
     const sessionCacheKey = this.buildSessionKey(config, workingDir);
-    if (config.persist_sessions && this.sessions.has(sessionCacheKey)) {
-      return {
-        sessionId: this.sessions.get(sessionCacheKey)!.id,
-        sessionQuery,
-      };
+    const cachedSession = config.persist_sessions ? this.sessions.get(sessionCacheKey) : undefined;
+    if (cachedSession) {
+      this.addSession(sessionCacheKey, cachedSession);
+      return { sessionId: cachedSession.id, sessionQuery };
     }
 
-    const createResult = await this.client.session.create(
-      this.buildCreateSessionParameters(config, sessionQuery),
+    const parameters = this.buildCreateSessionParameters(config, sessionQuery);
+    const request = processSignal
+      ? this.opencodeModule.apiVersion === 'v2'
+        ? client.session.create(parameters, { signal: processSignal })
+        : client.session.create({ ...parameters, signal: processSignal })
+      : client.session.create(parameters);
+    const created = request.then(async (createResult): Promise<OpenCodeSessionContext> => {
+      const createData = unwrapOpenCodeResult(createResult);
+      const sessionId =
+        (createData as { id?: string } | undefined)?.id ??
+        (createResult as { id?: string } | undefined)?.id;
+      if (!sessionId) {
+        throw new Error('Failed to get session ID from OpenCode SDK response');
+      }
+      const session = { id: sessionId, query: sessionQuery };
+      let releaseCreation: (() => void) | undefined;
+      if (processSignal) {
+        const discard = async () => {
+          if (await this.deleteCancelledSession(session, client)) {
+            this.sessionsForCleanup.delete(session);
+            if (this.sessions.get(sessionCacheKey) === session) {
+              this.sessions.delete(sessionCacheKey);
+            }
+          }
+        };
+        if (processSignal.aborted) {
+          await discard();
+          processSignal.throwIfAborted();
+        }
+        this.remoteSessionAborts.add(discard);
+        releaseCreation = () => {
+          this.remoteSessionAborts.delete(discard);
+        };
+      }
+      if (config.persist_sessions) {
+        this.addSession(sessionCacheKey, session);
+        return { sessionId, sessionQuery, releaseCreation };
+      }
+      return { sessionId, sessionQuery, ephemeralSession: session, releaseCreation };
+    });
+    if (!processSignal) {
+      return created;
+    }
+    const settled = created.then(
+      () => {},
+      () => {},
     );
-    const createData = unwrapOpenCodeResult(createResult);
-    const sessionId =
-      (createData as { id?: string } | undefined)?.id ??
-      (createResult as { id?: string } | undefined)?.id;
-
-    if (!sessionId) {
-      throw new Error('Failed to get session ID from OpenCode SDK response');
-    }
-
-    const session = {
-      id: sessionId,
-      query: sessionQuery,
-    };
-
-    if (config.persist_sessions) {
-      this.addSession(sessionCacheKey, session);
-      return {
-        sessionId,
-        sessionQuery,
-      };
-    }
-
-    return {
-      sessionId,
-      sessionQuery,
-      ephemeralSession: session,
-    };
+    this.remoteSessionCreations.add(settled);
+    void settled.then(() => this.remoteSessionCreations.delete(settled));
+    return this.waitForRequest(created, processSignal);
   }
 
   private buildPromptBody(config: OpenCodeSDKConfig, prompt: string): Record<string, unknown> {
@@ -1975,14 +2316,23 @@ export class OpenCodeSDKProvider implements ApiProvider {
    */
   private isSkillToolEnabled(config: OpenCodeSDKConfig): boolean {
     const rules = this.buildEffectivePermissionRules(config);
-    // A pattern-specific rule only overrides earlier rules for matching skill names.
-    // We do not know which skill the model may invoke until after the call, so skip the
-    // history fetch only when every rule that could cover `skill` is a denial. Treating
-    // the final patterned rule as global loses allowed calls for policies such as
-    // { '*': 'allow', 'blocked-skill': 'deny' }.
-    return rules.some(
-      (rule) => (rule.permission === 'skill' || rule.permission === '*') && rule.action !== 'deny',
-    );
+    // OpenCode applies the last matching rule. We do not know which skill the model may invoke,
+    // so walk backwards: a later non-deny rule may allow some skill, a wildcard deny overrides
+    // every earlier rule, and a pattern-specific deny only blocks some names (e.g.
+    // { '*': 'allow', 'blocked-skill': 'deny' } still allows other skills).
+    for (let index = rules.length - 1; index >= 0; index--) {
+      const { permission, pattern, action } = rules[index];
+      if (permission !== 'skill' && permission !== '*') {
+        continue;
+      }
+      if (action !== 'deny') {
+        return true;
+      }
+      if (pattern === '*') {
+        return false;
+      }
+    }
+    return false;
   }
 
   /**
@@ -2011,17 +2361,20 @@ export class OpenCodeSDKProvider implements ApiProvider {
       );
       return [];
     }
-    const messagesResult =
+    const request =
       this.opencodeModule?.apiVersion === 'v2'
-        ? await client.session.messages(
+        ? client.session.messages(
             { sessionID: session.sessionId, ...session.sessionQuery },
             abortSignal ? { signal: abortSignal } : undefined,
           )
-        : await client.session.messages({
+        : client.session.messages({
             path: getSessionPath(session.sessionId),
             query: session.sessionQuery,
             ...(abortSignal ? { signal: abortSignal } : {}),
           });
+    const messagesResult = await (abortSignal
+      ? this.waitForRequest(request, abortSignal)
+      : request);
     const messages = unwrapOpenCodeResult(messagesResult) ?? [];
     // Bound the slice with both a start anchor (parentID → user message that
     // triggered this prompt) and an end anchor (assistantMessage.id → the
@@ -2285,11 +2638,22 @@ export class OpenCodeSDKProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    if (this.processTermination.signal.aborted) {
+      return { error: 'OpenCode SDK call aborted before it started' };
+    }
     const { config, isTempDir, workingDir } = this.prepareCall(context);
     // A server started by this call keeps its configuration after later calls replace it.
     this.rememberCredentials(config);
+    const remote = Boolean(config.baseUrl);
+    if (remote) {
+      this.activeRemoteCalls++;
+      providerRegistry.register(this);
+    }
     let ephemeralSession: OpenCodeSessionHandle | undefined;
+    let sessionClient: OpenCodeClient | undefined;
     let abortListener: (() => void) | undefined;
+    let releaseRemoteCreation: (() => void) | undefined;
+    let releaseRemoteSession: (() => void) | undefined;
 
     try {
       this.buildEffectivePermissionRules(config);
@@ -2331,7 +2695,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
         return cachedResponse;
       }
 
-      if (callOptions?.abortSignal?.aborted) {
+      if (callOptions?.abortSignal?.aborted || this.processTermination.signal.aborted) {
         return { error: 'OpenCode SDK call aborted before it started' };
       }
 
@@ -2341,9 +2705,14 @@ export class OpenCodeSDKProvider implements ApiProvider {
         sessionQueueKey,
         callOptions?.abortSignal,
         async () => {
+          // The session belongs to this client even if a concurrent shutdown replaces it.
+          const client = this.client;
+          sessionClient = client;
+          const processSignal = this.processTermination.signal;
           const session = await this.getOrCreateSession(config, workingDir);
           ephemeralSession = session.ephemeralSession;
-          if (callOptions?.abortSignal?.aborted) {
+          releaseRemoteCreation = session.releaseCreation;
+          if (callOptions?.abortSignal?.aborted || this.processTermination.signal.aborted) {
             return { error: 'OpenCode SDK call aborted before it started' };
           }
 
@@ -2355,45 +2724,37 @@ export class OpenCodeSDKProvider implements ApiProvider {
           );
           logger.debug(`OpenCode SDK prompt options:`, promptOptions);
 
-          const client = this.client;
           if (!client) {
             throw new Error('OpenCode SDK client is not initialized');
           }
 
-          // If the caller's abortSignal fires mid-prompt, ask the server to stop
-          // rather than letting it run to completion while we discard the result.
-          // session.abort is only on v2; v1 has no abort primitive, so we still
-          // honor cancellation locally via the response check below.
+          // If the caller's abortSignal fires mid-prompt, ask the server to stop rather than
+          // letting it run to completion while we discard the result. The prompt itself is
+          // awaited, so a queued call cannot reuse the session while it is still running.
           const abortSignal = callOptions?.abortSignal;
-          if (abortSignal && client.session.abort && this.opencodeModule?.apiVersion === 'v2') {
-            const abortParams = this.buildAbortSessionParameters(
-              session.sessionId,
-              session.sessionQuery,
-            );
-            const logAbortError = (error: unknown) => {
-              logger.debug(`[OpenCode SDK] Failed to abort session ${session.sessionId}`, {
-                error: this.formatCallError(error, config),
-              });
-            };
-            abortListener = () => {
-              try {
-                client.session.abort?.(abortParams).catch(logAbortError);
-              } catch (error) {
-                logAbortError(error);
-              }
-            };
-            abortSignal.addEventListener('abort', abortListener, { once: true });
-          }
+          const cancellation = this.setupSessionCancellation(
+            client,
+            session,
+            config,
+            abortSignal,
+            remote,
+          );
+          abortListener = cancellation.listener;
+          releaseRemoteSession = cancellation.releaseRemote;
+          releaseRemoteCreation?.();
+          releaseRemoteCreation = undefined;
 
-          const response = await client.session.prompt(promptOptions);
+          const response = await this.promptSession(client, promptOptions, remote);
           // The prompt has returned, so an abort from here on must not ask the
           // server to kill the session it already answered.
           if (abortListener && abortSignal) {
             abortSignal.removeEventListener('abort', abortListener);
             abortListener = undefined;
           }
+          releaseRemoteSession?.();
+          releaseRemoteSession = undefined;
 
-          if (abortSignal?.aborted) {
+          if (abortSignal?.aborted || processSignal.aborted) {
             return { error: 'OpenCode SDK call aborted' };
           }
           const promptError = getOpenCodePromptError(response);
@@ -2410,19 +2771,20 @@ export class OpenCodeSDKProvider implements ApiProvider {
           // skipped whenever the skill tool is denied and no skill parts can exist.
           let allSessionParts: OpenCodePromptPart[] = [];
           if (this.isSkillToolEnabled(config)) {
+            const historySignal = this.getHistorySignal(abortSignal, remote);
             try {
               allSessionParts = await this.fetchCurrentPromptParts(
                 client,
                 session,
                 response,
-                abortSignal,
+                historySignal,
               );
             } catch (error) {
               logger.debug('[OpenCode SDK] Could not fetch session history for skill tracking', {
                 error: this.formatCallError(error, config),
               });
             }
-            if (abortSignal?.aborted) {
+            if (historySignal?.aborted) {
               return { error: 'OpenCode SDK call aborted' };
             }
           }
@@ -2444,23 +2806,18 @@ export class OpenCodeSDKProvider implements ApiProvider {
       if (abortListener && callOptions?.abortSignal) {
         callOptions.abortSignal.removeEventListener('abort', abortListener);
       }
+      releaseRemoteCreation?.();
+      releaseRemoteSession?.();
       if (ephemeralSession) {
-        try {
-          await this.deleteSession(ephemeralSession);
-        } catch (err) {
-          logger.debug(`Failed to delete non-persistent session ${ephemeralSession.id}`, {
-            error: this.formatCallError(err, config),
-          });
-        }
+        await this.cleanupEphemeralSession(ephemeralSession, sessionClient, config);
       }
 
       // Clean up temp directory without masking the call result on cleanup failure.
       if (isTempDir && workingDir) {
-        try {
-          await fsPromises.rm(workingDir, { recursive: true, force: true });
-        } catch (error) {
-          logger.debug('Failed to remove temp directory for OpenCode', { workingDir, error });
-        }
+        await this.removeTempDir(workingDir);
+      }
+      if (remote && --this.activeRemoteCalls === 0) {
+        this.updateRegistry();
       }
     }
   }
