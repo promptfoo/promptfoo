@@ -1308,70 +1308,33 @@ describe('isRateLimited', () => {
 
 describe('classifySdkRateLimit', () => {
   it.each([
-    [{ status: 500, body: { error: { code: 'credit_balance_exhausted' } } }, undefined],
-    [{ status: 429 }, 'rate_limit'],
+    [{ records: [] }, 'rate_limit'],
+    [{ records: [{ error: { code: 'insufficient_quota' } }] }, 'quota'],
+    [
+      { records: [{ error: { code: 'insufficient_quota' } }], headers: { 'retry-after': '1' } },
+      'rate_limit',
+    ],
     [
       {
-        status: 429,
-        body: { error: { code: 'credit_balance_exhausted' } },
+        records: [{ error: { code: 'credit_balance_exhausted' } }],
         headers: { 'retry-after': '1' },
       },
       'quota',
     ],
-    [{ status: 429, body: '{"error":{"code":"insufficient_quota"}}' }, 'quota'],
-    [{ status: 429, body: '{"error":{"code":"credit_balance_exhausted"' }, 'quota'],
+    [{ records: [{ code: 'ERR_API' }], texts: ['insufficient_quota: no balance'] }, 'quota'],
     [
-      {
-        status: 429,
-        body: '{"error":{"type":"billing_hard_limit_reached"',
-        headers: { 'retry-after': '1' },
-      },
+      { records: [{ error: { code: 'rate_limit_exceeded', type: 'billing_not_active' } }] },
       'quota',
     ],
-    [{ status: 429, body: '{"error":{"message":"truncated ordinary throttle"' }, 'rate_limit'],
-    [{ status: 400, body: '{"error":{"code":"credit_balance_exhausted"' }, undefined],
-    [
-      {
-        status: 429,
-        body: '{"error":{"code":"insufficient_quota"}}',
-        headers: { 'retry-after': '1' },
-      },
-      'rate_limit',
-    ],
-    [{ status: 429, details: [{ code: 'ERR_API', message: 'insufficient_quota' }] }, 'quota'],
-    [
-      {
-        status: 429,
-        details: [{ code: 'ERR_API', message: 'insufficient_quota' }],
-        headers: { 'retry-after': '1' },
-      },
-      'rate_limit',
-    ],
-    [{ status: 429, body: { error: { code: 'ERR_API' }, code: 'insufficient_quota' } }, 'quota'],
-    [
-      {
-        status: 429,
-        details: [{ code: 'ERR_API', type: 'APIError' }, { type: 'insufficient_quota' }],
-      },
-      'quota',
-    ],
-    [
-      {
-        status: 429,
-        details: [{ code: 'ERR_API' }, { code: 'rate_limit_exceeded', type: 'insufficient_quota' }],
-      },
-      'rate_limit',
-    ],
-    [
-      { status: 429, details: [{ message: 'Your credit balance is too low' }], isRetryable: false },
-      'quota',
-    ],
-    [
-      { status: 429, details: [{ message: 'Your credit balance is too low' }], isRetryable: true },
-      'rate_limit',
-    ],
-  ])('classifies only trusted 429 errors with their recovery hints: %#', (input, expected) => {
-    expect(classifySdkRateLimit(input)).toBe(expected);
+  ])('classifies an SDK-reported HTTP 429: %#', (input, kind) => {
+    expect(classifySdkRateLimit(input)).toMatchObject({ status: 429, kind });
+  });
+
+  it('keeps the recovery timing from the headers', () => {
+    expect(classifySdkRateLimit({ records: [], headers: { 'retry-after': '2' } })).toMatchObject({
+      kind: 'rate_limit',
+      retryAfterMs: 2000,
+    });
   });
 });
 
