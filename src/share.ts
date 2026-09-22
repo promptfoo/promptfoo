@@ -17,12 +17,10 @@ import {
   sanitizeResultForJsonlArtifact,
 } from './models/evalResult';
 import {
-  ConfigPermissionError,
   checkCloudPermissions,
   getOrgContext,
   makeRequest as makeCloudRequest,
 } from './util/cloud';
-import { isAbortError } from './util/fetch/errors';
 import { fetchWithProxy } from './util/fetch/index';
 import { createBlobInlineCache, inlineBlobRefsForShare } from './util/inlineBlobsForShare';
 import { sanitizeConfigForOutput } from './util/sanitizer';
@@ -31,8 +29,6 @@ import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
 import type ModelAudit from './models/modelAudit';
 import type { Prompt, TestCase } from './types';
-
-export { ConfigPermissionError, isAbortError };
 
 interface ShareDomainResult {
   domain: string;
@@ -43,10 +39,8 @@ export interface ShareOptions {
   silent?: boolean;
   /** Show authentication info in the URL */
   showAuth?: boolean;
-  /** Propagate upload failures to callers that can return a structured error */
+  /** Rethrow upload failures (after rollback) instead of resolving to null */
   throwOnError?: boolean;
-  /** Cancel an in-flight share and roll back any remote eval already created */
-  signal?: AbortSignal;
 }
 
 /** Error types that indicate chunk size issues */
@@ -66,10 +60,6 @@ interface AdaptiveChunkConfig {
 }
 
 export function isSharingEnabled(evalRecord: Eval): boolean {
-  if (getEnvBool('PROMPTFOO_DISABLE_SHARING')) {
-    return false;
-  }
-
   const sharingConfigOnEval =
     typeof evalRecord.config.sharing === 'object' ? evalRecord.config.sharing.apiBaseUrl : null;
   const sharingEnvUrl = getShareApiBaseUrl();
@@ -89,39 +79,6 @@ export function isSharingEnabled(evalRecord: Eval): boolean {
   }
 
   return false;
-}
-
-export function isSelfHostedShareViewConfigured(evalRecord: Eval): boolean {
-  const sharing = evalRecord.config.sharing;
-  return Boolean(
-    (typeof sharing === 'object' && sharing.appBaseUrl) ||
-      getEnvString('PROMPTFOO_REMOTE_APP_BASE_URL') ||
-      getEnvString('PROMPTFOO_SHARING_APP_BASE_URL'),
-  );
-}
-
-export function getSharingDisabledReason(evalRecord?: Eval): string {
-  if (getEnvBool('PROMPTFOO_DISABLE_SHARING')) {
-    return 'Sharing is disabled by PROMPTFOO_DISABLE_SHARING.';
-  }
-  if (
-    evalRecord &&
-    !cloudConfig.isEnabled() &&
-    isSharingEnabled(evalRecord) &&
-    !isSelfHostedShareViewConfigured(evalRecord)
-  ) {
-    return 'Self-hosted sharing requires an app URL. Configure sharing.appBaseUrl, PROMPTFOO_REMOTE_APP_BASE_URL, or PROMPTFOO_SHARING_APP_BASE_URL.';
-  }
-  return 'Sharing is not configured. Run `promptfoo auth login` to enable cloud sharing.';
-}
-
-export function checkCloudShareAuthentication(signal?: AbortSignal): Promise<Response> {
-  return makeCloudRequest(
-    '/users/me/teams',
-    'GET',
-    undefined,
-    signal ? { signal, silent: true } : { silent: true },
-  );
 }
 
 export function isModelAuditSharingEnabled(): boolean {
@@ -270,11 +227,9 @@ async function sendEvalRecord(
   url: string,
   headers: Record<string, string>,
   stripFlags: ReturnType<typeof getStripFlags>,
-  signal?: AbortSignal,
 ): Promise<string> {
   // Fetch traces for the eval
   const traces = await evalRecord.getTraces();
-  signal?.throwIfAborted();
   const { basePath: _basePath, ...redactedConfig } = sanitizeConfigForOutput(
     evalRecord.config,
     stripFlags,
@@ -343,8 +298,6 @@ async function sendEvalRecord(
   );
 
   const response = await fetchWithProxy(url, {
-    // Do not abort the non-idempotent create after it starts: the remote may persist the eval
-    // before returning its ID. Waiting for that ID lets the caller roll it back on cancellation.
     method: 'POST',
     headers,
     body: jsonData,
@@ -386,7 +339,6 @@ async function sendChunkOfResults(
   url: string,
   evalId: string,
   headers: Record<string, string>,
-  signal?: AbortSignal,
 ): Promise<ChunkSendResult> {
   const targetUrl = `${url}/${evalId}/results`;
   const stringifiedChunk = JSON.stringify(chunk);
@@ -402,7 +354,6 @@ async function sendChunkOfResults(
       headers,
       body: stringifiedChunk,
       compress: true,
-      signal,
     });
 
     if (!response.ok) {
@@ -470,11 +421,9 @@ async function sendChunkWithRetry(
   headers: Record<string, string>,
   config: AdaptiveChunkConfig,
   onProgress: (sentCount: number) => void,
-  signal?: AbortSignal,
   depth: number = 0,
   maxDepth?: number,
 ): Promise<number> {
-  signal?.throwIfAborted();
   // Compute max depth based on chunk size if not provided (allows splitting until minResultsPerChunk)
   const effectiveMaxDepth =
     maxDepth ?? Math.ceil(Math.log2(chunk.length / config.minResultsPerChunk)) + 1;
@@ -487,7 +436,7 @@ async function sendChunkWithRetry(
     return 0;
   }
 
-  const result = await sendChunkOfResults(chunk, url, evalId, headers, signal);
+  const result = await sendChunkOfResults(chunk, url, evalId, headers);
 
   if (result.success) {
     onProgress(chunk.length);
@@ -521,7 +470,6 @@ async function sendChunkWithRetry(
       headers,
       config,
       onProgress,
-      signal,
       depth + 1,
       effectiveMaxDepth,
     );
@@ -532,7 +480,6 @@ async function sendChunkWithRetry(
       headers,
       config,
       onProgress,
-      signal,
       depth + 1,
       effectiveMaxDepth,
     );
@@ -568,9 +515,7 @@ async function prepareChunkForShare(
   inlineCache: ReturnType<typeof createBlobInlineCache> | null,
   remoteBlobUploadCache: ReturnType<typeof createRemoteBlobUploadCache> | null,
   stripFlags: ReturnType<typeof getStripFlags>,
-  signal?: AbortSignal,
 ): Promise<EvalResult[]> {
-  signal?.throwIfAborted();
   const sharedResults = chunk.map((row) => {
     const result = sanitizeResultForJsonlArtifact(row, stripFlags);
     result.provider = stripProviderPaths(result.provider);
@@ -589,38 +534,17 @@ async function prepareChunkForShare(
   if (remoteBlobUploadCache) {
     await Promise.all(
       chunkToSend.map((result) =>
-        uploadBlobRefsForShare(
-          result,
-          remoteBlobUploadCache,
-          {
-            localEvalId,
-            remoteEvalId,
-            promptIdx: result.promptIdx,
-            testIdx: result.testIdx,
-          },
-          signal,
-        ),
+        uploadBlobRefsForShare(result, remoteBlobUploadCache, {
+          localEvalId,
+          remoteEvalId,
+          promptIdx: result.promptIdx,
+          testIdx: result.testIdx,
+        }),
       ),
     );
   }
 
-  signal?.throwIfAborted();
   return chunkToSend;
-}
-
-async function warnAboutFailedBlobUploads(
-  remoteBlobUploadCache: ReturnType<typeof createRemoteBlobUploadCache> | null,
-): Promise<void> {
-  if (!remoteBlobUploadCache || remoteBlobUploadCache.size === 0) {
-    return;
-  }
-  const uploadOutcomes = await Promise.all(remoteBlobUploadCache.values());
-  const failedUploads = uploadOutcomes.filter((uploaded) => !uploaded).length;
-  if (failedUploads > 0) {
-    logger.warn(
-      `${failedUploads} of ${remoteBlobUploadCache.size} referenced media blob(s) were not uploaded and may be unavailable in the shared eval. Run with LOG_LEVEL=debug for details.`,
-    );
-  }
 }
 
 async function sendChunkedResults(
@@ -629,13 +553,11 @@ async function sendChunkedResults(
   options: ShareOptions = {},
 ): Promise<string | null> {
   const isVerbose = isDebugEnabled();
-  const { silent = false, throwOnError = false, signal } = options;
+  const { silent = false, throwOnError = false } = options;
   const stripFlags = getStripFlags(evalRecord.config.env);
   logger.debug(`Starting chunked results upload to ${url}`);
 
-  signal?.throwIfAborted();
-  await checkCloudPermissions(evalRecord.config, signal);
-  signal?.throwIfAborted();
+  await checkCloudPermissions(evalRecord.config);
 
   // Cloud shares upload referenced blobs at share time; self-hosted shares inline blob
   // bytes into the payload instead. At most one of these caches is active.
@@ -646,7 +568,6 @@ async function sendChunkedResults(
     cloudConfig.isEnabled() && !inlineBlobs ? createRemoteBlobUploadCache() : null;
 
   let sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
-  signal?.throwIfAborted();
   sampleResults = sampleResults.map((row) => sanitizeResultForJsonlArtifact(row, stripFlags));
   if (sampleResults.length === 0) {
     logger.debug(`No results found`);
@@ -685,7 +606,6 @@ async function sendChunkedResults(
 
   // Use total row count (not distinct test count) since we iterate over all result rows
   const totalResults = await evalRecord.getTotalResultRowCount();
-  signal?.throwIfAborted();
   logger.debug(`Total results to share: ${totalResults}`);
 
   // Setup progress bar only if not in verbose mode, CI, or silent mode
@@ -704,8 +624,7 @@ async function sendChunkedResults(
   let evalId: string | undefined;
   try {
     // Send initial data and get eval ID
-    evalId = await sendEvalRecord(evalRecord, url, headers, stripFlags, signal);
-    signal?.throwIfAborted();
+    evalId = await sendEvalRecord(evalRecord, url, headers, stripFlags);
     logger.debug(`Initial eval data sent successfully - ${evalId}`);
 
     // Progress callback for adaptive retry
@@ -726,7 +645,6 @@ async function sendChunkedResults(
     let chunkNumber = 0;
 
     for await (const batch of evalRecord.fetchResultsBatched(resultsPerChunk)) {
-      signal?.throwIfAborted();
       for (const result of batch) {
         currentChunk.push(result);
         if (currentChunk.length >= resultsPerChunk) {
@@ -740,18 +658,9 @@ async function sendChunkedResults(
             inlineCache,
             remoteBlobUploadCache,
             stripFlags,
-            signal,
           );
 
-          await sendChunkWithRetry(
-            chunkToSend,
-            url,
-            evalId,
-            headers,
-            chunkConfig,
-            onProgress,
-            signal,
-          );
+          await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);
           currentChunk = [];
         }
       }
@@ -769,35 +678,39 @@ async function sendChunkedResults(
         inlineCache,
         remoteBlobUploadCache,
         stripFlags,
-        signal,
       );
 
-      await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress, signal);
+      await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);
     }
 
     logger.debug(
       `Sharing complete. Total chunks sent: ${chunkNumber}, Total results: ${totalSent}`,
     );
 
-    signal?.throwIfAborted();
-    await warnAboutFailedBlobUploads(remoteBlobUploadCache);
-    signal?.throwIfAborted();
+    if (remoteBlobUploadCache && remoteBlobUploadCache.size > 0) {
+      const uploadOutcomes = await Promise.all(remoteBlobUploadCache.values());
+      const failedUploads = uploadOutcomes.filter((uploaded) => !uploaded).length;
+      if (failedUploads > 0) {
+        logger.warn(
+          `${failedUploads} of ${remoteBlobUploadCache.size} referenced media blob(s) were not uploaded and may be unavailable in the shared eval. Run with LOG_LEVEL=debug for details.`,
+        );
+      }
+    }
 
     return evalId;
   } catch (e) {
-    const error = e instanceof Error ? e : new Error(String(e));
-    if (isAbortError(error)) {
-      logger.debug('[share] Upload cancelled', { evalId, url });
-    } else {
-      logger.error('[share] Upload failed', { evalId, error, url });
+    if (progressBar) {
+      progressBar.stop();
     }
 
+    logger.error(`Upload failed: ${e instanceof Error ? e.message : String(e)}`);
+
     if (evalId) {
-      logger.info('[share] Rolling back after failed upload', { evalId, url });
+      logger.info(`Upload failed, rolling back...`);
       await rollbackEval(url, evalId, headers);
     }
     if (throwOnError) {
-      throw error;
+      throw e;
     }
     return null;
   } finally {
@@ -905,14 +818,14 @@ export async function getShareableUrl(
 /**
  * Shares an eval and returns the shareable URL.
  * @param evalRecord The eval to share.
- * @param options Share options (silent mode, showAuth, and optional error propagation).
+ * @param options Share options (silent mode, showAuth).
  * @returns The shareable URL for the eval.
  */
 export async function createShareableUrl(
   evalRecord: Eval,
   options: ShareOptions = {},
 ): Promise<string | null> {
-  const { silent = false, showAuth = false, throwOnError = false, signal } = options;
+  const { silent = false, showAuth = false, throwOnError = false } = options;
 
   // If sharing is explicitly disabled, return null
   if (getEnvBool('PROMPTFOO_DISABLE_SHARING')) {
@@ -920,12 +833,9 @@ export async function createShareableUrl(
     return null;
   }
 
-  signal?.throwIfAborted();
-
   // Show org/team context before uploading (only when cloud is enabled and not silent)
   if (!silent) {
     const orgContext = await getOrgContext();
-    signal?.throwIfAborted();
     if (orgContext) {
       const teamSuffix = orgContext.teamName ? ` > ${orgContext.teamName}` : '';
       logger.info(
@@ -934,11 +844,8 @@ export async function createShareableUrl(
     }
   }
 
-  // Interactive metadata collection is only appropriate for foreground CLI shares.
-  if (!silent) {
-    await handleEmailCollection(evalRecord);
-    signal?.throwIfAborted();
-  }
+  // 1. Handle email collection
+  await handleEmailCollection(evalRecord);
 
   // 2. Get API configuration
   const { url } = await getApiConfig(evalRecord);
@@ -949,7 +856,7 @@ export async function createShareableUrl(
     `Sharing with ${url} canUseNewResults: ${canUseNewResults} Use old results: ${evalRecord.useOldResults()}`,
   );
 
-  const evalId = await sendChunkedResults(evalRecord, url, { silent, throwOnError, signal });
+  const evalId = await sendChunkedResults(evalRecord, url, { silent, throwOnError });
 
   if (!evalId) {
     return null;

@@ -81,9 +81,6 @@ const ShareCheckDomainQuerySchema = z.object({
 const ShareCheckDomainResponseSchema = z.object({
   domain: z.string(),
   isCloudEnabled: z.boolean(),
-  sharingEnabled: z.boolean(),
-  sharingDisabledReason: z.string().optional(),
-  isRetryable: z.boolean(),
 });
 
 const ShareRequestSchema = z.object({
@@ -91,11 +88,8 @@ const ShareRequestSchema = z.object({
 });
 
 const ShareResponseSchema = z.object({
-  url: z.string().min(1),
+  url: z.string(),
 });
-
-export type ShareCheckDomainResponse = z.infer<typeof ShareCheckDomainResponseSchema>;
-export type ShareResponse = z.infer<typeof ShareResponseSchema>;
 
 const DatasetGenerateRequestSchema = z.object({
   prompts: z.array(DatasetGeneratePromptSchema).min(1),

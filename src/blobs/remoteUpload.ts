@@ -48,7 +48,6 @@ export async function uploadBlobRemote(
     location?: string;
     kind?: string;
   },
-  signal?: AbortSignal,
 ): Promise<BlobStoreResult | null> {
   const target = buildRemoteUploadTarget();
   if (!target) {
@@ -68,7 +67,6 @@ export async function uploadBlobRemote(
         mimeType,
         context,
       }),
-      signal,
     });
 
     if (response.status === 404 || response.status === 400) {
@@ -93,12 +91,6 @@ export async function uploadBlobRemote(
     }
     return data;
   } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.name === 'AbortError' || error.name === 'AbortException')
-    ) {
-      throw error;
-    }
     logger.debug('[RemoteBlob] Error uploading blob', {
       error: error instanceof Error ? error.message : String(error),
     });
