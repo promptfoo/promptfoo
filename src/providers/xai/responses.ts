@@ -15,9 +15,10 @@ import { getRequestTimeoutMs } from '../shared';
 import {
   calculateXAICost,
   GROK_4_MODELS,
-  GROK_45_MODELS,
   getXAICostInUsd,
   hasXAICostOverrides,
+  validateGrok47RemoteOptions,
+  validateXAIReasoningEffort,
   type XAICostConfig,
 } from './chat';
 
@@ -161,7 +162,7 @@ export interface XAIResponsesConfig extends XAICostConfig {
   store?: boolean;
   /** Additional response data to include, such as encrypted reasoning content */
   include?: string[];
-  /** Reasoning configuration for Grok 4.5, Grok 4.3, or multi-agent models */
+  /** Reasoning configuration for Grok 4.7, Grok 4.6, Grok 4.5, Grok 4.3, or multi-agent models */
   reasoning?: {
     effort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
   };
@@ -187,6 +188,7 @@ export interface XAIResponsesConfig extends XAICostConfig {
  * and interact with MCP servers.
  *
  * Usage:
+ *   xai:responses:grok-4.7
  *   xai:responses:grok-4.5
  *   xai:responses:grok-4.3
  *   xai:responses:grok-4.20-0309-reasoning
@@ -224,6 +226,7 @@ export class XAIResponsesProvider implements ApiProvider {
               usage?.completion_tokens_details?.reasoning_tokens,
             usage?.input_tokens_details?.cached_tokens ??
               usage?.prompt_tokens_details?.cached_tokens,
+            { apiUrl: this.getApiUrl() },
           )
         );
       },
@@ -275,6 +278,9 @@ export class XAIResponsesProvider implements ApiProvider {
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ) {
+    if (this.modelName === 'grok-4.7') {
+      validateGrok47RemoteOptions(context?.test);
+    }
     const config = {
       ...this.config,
       ...context?.prompt?.config,
@@ -339,7 +345,14 @@ export class XAIResponsesProvider implements ApiProvider {
     };
 
     if (body.reasoning !== undefined) {
-      body.reasoning = renderVarsInObject(body.reasoning, context?.vars);
+      try {
+        body.reasoning = renderVarsInObject(body.reasoning, context?.vars);
+      } catch (error) {
+        if (this.modelName === 'grok-4.7') {
+          throw new Error('xAI Grok 4.7 could not prepare the Responses reasoning options');
+        }
+        throw error;
+      }
     }
 
     // Filter unsupported parameters for Grok 4-family models
@@ -349,17 +362,7 @@ export class XAIResponsesProvider implements ApiProvider {
       delete body.stop;
     }
 
-    const reasoningEffort = body.reasoning?.effort;
-    if (
-      GROK_45_MODELS.has(this.modelName) &&
-      reasoningEffort !== undefined &&
-      !['low', 'medium', 'high'].includes(reasoningEffort)
-    ) {
-      throw new Error(
-        `xAI model ${this.modelName} does not support reasoning.effort ${JSON.stringify(reasoningEffort)}. ` +
-          'Use "low", "medium", or "high", or omit reasoning.effort to use the default "high".',
-      );
-    }
+    validateXAIReasoningEffort(this.modelName, body.reasoning?.effort, 'reasoning.effort');
 
     return {
       body,

@@ -105,6 +105,7 @@ describe('xAI Chat Provider', () => {
     it('includes Grok 4.5, 4.3, and 4.20 in the reasoning and Grok-4 parameter-restriction lists', () => {
       expect(XAI_CHAT_MODELS).toEqual(
         expect.arrayContaining([
+          expect.objectContaining({ id: 'grok-4.7' }),
           expect.objectContaining({ id: 'grok-4.6' }),
           expect.objectContaining({ id: 'grok-4.5' }),
           expect.objectContaining({ id: 'grok-4.3' }),
@@ -115,6 +116,7 @@ describe('xAI Chat Provider', () => {
       );
       expect(GROK_REASONING_MODELS).toEqual(
         expect.arrayContaining([
+          'grok-4.7',
           'grok-4.6',
           'grok-4.5',
           'grok-4.5-latest',
@@ -128,6 +130,7 @@ describe('xAI Chat Provider', () => {
       );
       expect(GROK_4_MODELS).toEqual(
         expect.arrayContaining([
+          'grok-4.7',
           'grok-4.6',
           'grok-4.5',
           'grok-4.5-latest',
@@ -161,6 +164,7 @@ describe('xAI Chat Provider', () => {
         'grok-4.5',
         'grok-4.5-latest',
         'grok-4.6',
+        'grok-4.7',
         'grok-build-latest',
         'grok-code-fast-1',
         'grok-latest',
@@ -348,6 +352,146 @@ describe('xAI Chat Provider', () => {
   });
 
   describe('Grok-4 specific functionality', () => {
+    it.each(['low', 'medium', 'high', 'xhigh'])(
+      'sends Grok 4.7 chat reasoning effort %s',
+      async (effort) => {
+        const provider = createXAIProvider('xai:grok-4.7', {
+          config: { config: { apiKey: 'test-key', reasoning_effort: effort as 'low' } },
+        });
+        const response = await provider.callApi('hello');
+        const [url, request] = mockFetchWithCache.mock.calls[0];
+        const body = JSON.parse(request.body);
+
+        expect(url).toBe('https://api.x.ai/v1/chat/completions');
+        expect(body).toMatchObject({ model: 'grok-4.7', reasoning_effort: effort });
+        expect(response.output).toBe('Mock response');
+      },
+    );
+
+    it('keeps the API default effort, supports both token-limit spellings, and strips unsupported sampling', async () => {
+      const provider = createXAIProvider('xai:grok-4.7', {
+        config: { config: { max_completion_tokens: 4096 } },
+      }) as any;
+      const defaultBody = (await provider.getOpenAiBody('hello')).body;
+      expect(defaultBody.reasoning_effort).toBeUndefined();
+      expect(defaultBody.max_completion_tokens).toBe(4096);
+
+      const { body } = await provider.getOpenAiBody('hello', {
+        prompt: {
+          config: {
+            max_tokens: 32,
+            presence_penalty: 0.4,
+            frequency_penalty: 0.2,
+            stop: ['end'],
+            temperature: 0.8,
+          },
+        },
+      });
+      expect(body).toMatchObject({
+        model: 'grok-4.7',
+        max_completion_tokens: 32,
+        temperature: 0.8,
+      });
+      expect(body).not.toHaveProperty('max_tokens');
+      expect(body).not.toHaveProperty('presence_penalty');
+      expect(body).not.toHaveProperty('frequency_penalty');
+      expect(body).not.toHaveProperty('stop');
+
+      const canonical = (
+        await provider.getOpenAiBody('hello', {
+          prompt: { config: { max_tokens: 32, max_completion_tokens: 64 } },
+        })
+      ).body;
+      expect(canonical.max_completion_tokens).toBe(64);
+      const zero = (
+        await provider.getOpenAiBody('hello', {
+          prompt: { config: { passthrough: { max_tokens: 0 } } },
+        })
+      ).body;
+      expect(zero.max_completion_tokens).toBe(0);
+    });
+
+    it('rejects invalid Grok 4.7 settings locally without exposing input or template errors', async () => {
+      const privateMarker = 'private-rendered-value-for-this-test';
+      for (const effort of ['none', '', false, 0, privateMarker]) {
+        const provider = createXAIProvider('xai:grok-4.7', {
+          config: { config: { apiKey: 'test-key', reasoning_effort: effort as 'low' } },
+        });
+        const result = await provider.callApi('hello');
+        expect(result.error).toContain('does not support reasoning_effort with the supplied value');
+        expect(result.error).not.toContain(privateMarker);
+      }
+      for (const limit of [-1, 1.5, '{{ budget }}', privateMarker]) {
+        const provider = createXAIProvider('xai:grok-4.7', {
+          config: { config: { apiKey: 'test-key', max_tokens: limit as number } },
+        });
+        const result = await provider.callApi('hello');
+        expect(result.error).toContain('chat token limit must be a non-negative integer');
+        expect(result.error).not.toContain(privateMarker);
+      }
+      const provider = createXAIProvider('xai:grok-4.7', {
+        config: {
+          config: { apiKey: 'test-key', reasoning_effort: '{{ candidate | load }}' as 'low' },
+        },
+      });
+      const result = await provider.callApi('hello', {
+        prompt: { raw: 'hello', label: 'hello' },
+        vars: { candidate: privateMarker },
+      });
+      expect(result.error).toContain('could not prepare the Chat Completions request options');
+      expect(result.error).not.toContain(privateMarker);
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('keeps externally sourced Grok 4.7 test options literal and ignores unrelated row metadata', async () => {
+      const provider = createXAIProvider('xai:grok-4.7', {
+        config: { config: { apiKey: 'test-key' } },
+      });
+      for (const options of [
+        { reasoning_effort: '{{ effort }}' },
+        { passthrough: { max_tokens: '{{ budget }}' } },
+      ]) {
+        const result = await provider.callApi('hello', {
+          prompt: { raw: 'hello', label: 'hello', config: options },
+          vars: { effort: 'high', budget: 32 },
+          test: { options, metadata: { __promptfoo: { remote: true } } },
+        });
+        expect(result.error).toContain('request options from remote tests must be literal values');
+      }
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+
+      const options = { reasoning_effort: 'low', max_tokens: 32 };
+      const result = await provider.callApi('hello', {
+        prompt: { raw: 'hello', label: 'hello', config: options },
+        vars: {},
+        test: {
+          options,
+          metadata: {
+            __promptfoo: {
+              remote: true,
+              xaiTestOptionScopes: [{ values: { max_tokens: '{{ budget }}' } }],
+            },
+          },
+        },
+      });
+      expect(result.output).toBe('Mock response');
+      expect(JSON.parse(mockFetchWithCache.mock.calls[0][1].body)).toMatchObject({
+        reasoning_effort: 'low',
+        max_completion_tokens: 32,
+      });
+    });
+
+    it('also accepts the now-documented xhigh effort on Grok 4.6', async () => {
+      const provider = createXAIProvider('xai:grok-4.6') as any;
+      expect(
+        (
+          await provider.getOpenAiBody('hello', {
+            prompt: { config: { reasoning_effort: 'xhigh' } },
+          })
+        ).body.reasoning_effort,
+      ).toBe('xhigh');
+    });
+
     it('recognizes Grok 4.6 as a reasoning model', () => {
       const provider = createXAIProvider('xai:grok-4.6') as any;
       expect(provider.isReasoningModel()).toBe(true);
@@ -380,7 +524,7 @@ describe('xAI Chat Provider', () => {
     it('rejects unsupported reasoning_effort values for Grok 4.6', async () => {
       // Verified live 2026-08-31: the API returns
       // "This model does not support `reasoning_effort` value `none`."
-      for (const reasoningEffort of ['none', 'xhigh', 'minimal']) {
+      for (const reasoningEffort of ['none', 'minimal']) {
         const provider = createXAIProvider('xai:grok-4.6') as any;
 
         await expect(
@@ -388,7 +532,7 @@ describe('xAI Chat Provider', () => {
             prompt: { config: { reasoning_effort: reasoningEffort } },
           }),
         ).rejects.toThrow(
-          `xAI model grok-4.6 does not support reasoning_effort ${JSON.stringify(reasoningEffort)}`,
+          'xAI model grok-4.6 does not support reasoning_effort with the supplied value',
         );
       }
     });
@@ -436,7 +580,7 @@ describe('xAI Chat Provider', () => {
               prompt: { config: { reasoning_effort: reasoningEffort } },
             }),
           ).rejects.toThrow(
-            `xAI model ${modelName} does not support reasoning_effort ${JSON.stringify(reasoningEffort)}`,
+            `xAI model ${modelName} does not support reasoning_effort with the supplied value`,
           );
         }
       }
@@ -954,6 +1098,46 @@ describe('xAI Chat Provider', () => {
         (100_001 * 4 + 100_000 * 1 + 1_000 * 12) / 1e6,
         10,
       );
+    });
+
+    it('uses Grok 4.7 pricing and cache rates at the 200K boundary and on the official US endpoint', () => {
+      expect(calculateXAICost('grok-4.7', {}, 199_999, 1_000, 0, 100_000)).toBeCloseTo(
+        0.255998,
+        10,
+      );
+      expect(calculateXAICost('grok-4.7', {}, 200_000, 1_000, 0, 100_000)).toBeCloseTo(0.512, 10);
+      const options = { apiUrl: 'https://us.api.x.ai/v1', reasoningBilledSeparately: true };
+      expect(calculateXAICost('grok-4.7', {}, 1_000, 500, 20, 800, options)).toBeCloseTo(
+        0.004312,
+        10,
+      );
+      expect(calculateXAICost('grok-4.7', {}, 200_000, 1_000, 0, 100_000, options)).toBeCloseTo(
+        0.5632,
+        10,
+      );
+      for (const apiUrl of [
+        'https://api.x.ai/v1',
+        'https://eu-west-1.api.x.ai/v1',
+        'https://example.com/v1',
+        'https://us.api.x.ai.example.com/v1',
+      ]) {
+        expect(
+          calculateXAICost('grok-4.7', {}, 1_000, 500, 20, 800, { ...options, apiUrl }),
+        ).toBeCloseTo(0.00392, 10);
+      }
+      expect(
+        calculateXAICost(
+          'grok-4.7',
+          { inputCost: 0.001, outputCost: 0.002, cacheReadCost: 0.0005 },
+          1_000,
+          500,
+          0,
+          800,
+          options,
+        ),
+      ).toBeCloseTo(1.6, 10);
+      expect(XAI_CHAT_MODELS.find((model) => model.id === 'grok-4.7')?.aliases).toBeUndefined();
+      expect(XAI_CHAT_MODELS.some((model) => model.id === 'grok-4.7-fast')).toBe(false);
     });
 
     it('adds reasoning tokens at the output rate when billed separately (chat completions)', () => {

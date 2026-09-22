@@ -175,6 +175,139 @@ describe('XAIResponsesProvider', () => {
     expect(provider.getResolvedApiUrl()).toBe('https://eu-west-1.api.x.ai/v1');
   });
 
+  it.each(['low', 'medium', 'high', 'xhigh'] as const)(
+    'sends Grok 4.7 Responses reasoning effort %s',
+    async (effort) => {
+      mockFetchWithCache.mockResolvedValue({
+        data: createMockResponseData('grok-4.7'),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new XAIResponsesProvider('grok-4.7', {
+        config: {
+          apiKey: 'test-key',
+          reasoning: { effort },
+          max_output_tokens: 128,
+          passthrough: { presence_penalty: 0.2, frequency_penalty: 0.4, stop: ['end'] },
+        },
+      });
+      const result = await provider.callApi('hello');
+      const [url, request] = mockFetchWithCache.mock.calls[0];
+      const body = JSON.parse(request.body);
+
+      expect(provider.id()).toBe('xai:responses:grok-4.7');
+      expect(url).toBe('https://api.x.ai/v1/responses');
+      expect(body).toMatchObject({
+        model: 'grok-4.7',
+        reasoning: { effort },
+        max_output_tokens: 128,
+      });
+      expect(body).not.toHaveProperty('presence_penalty');
+      expect(body).not.toHaveProperty('frequency_penalty');
+      expect(body).not.toHaveProperty('stop');
+      expect(result.output).toBe('hello');
+    },
+  );
+
+  it('leaves Grok 4.7 effort to the API when omitted and enables xhigh on Grok 4.6', async () => {
+    const current = new XAIResponsesProvider('grok-4.7');
+    expect((await current.getRequestBody('hello')).body).not.toHaveProperty('reasoning');
+    const previous = new XAIResponsesProvider('grok-4.6', {
+      config: { reasoning: { effort: 'xhigh' } },
+    });
+    expect((await previous.getRequestBody('hello')).body.reasoning).toEqual({ effort: 'xhigh' });
+  });
+
+  it('rejects invalid Grok 4.7 reasoning without exposing evaluated input or contacting xAI', async () => {
+    const privateMarker = 'private-rendered-value-for-this-test';
+    for (const effort of ['none', '', false, 0, privateMarker]) {
+      const provider = new XAIResponsesProvider('grok-4.7', {
+        config: { apiKey: 'test-key', passthrough: { reasoning: { effort } } },
+      });
+      const error = await provider.callApi('hello').catch((value: Error) => value);
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(
+        'does not support reasoning.effort with the supplied value',
+      );
+      expect((error as Error).message).not.toContain(privateMarker);
+    }
+    const provider = new XAIResponsesProvider('grok-4.7', {
+      config: {
+        apiKey: 'test-key',
+        passthrough: { reasoning: { effort: '{{ candidate | load }}' } },
+      },
+    });
+    const error = await provider
+      .callApi('hello', {
+        prompt: { raw: 'hello', label: 'hello' },
+        vars: { candidate: privateMarker },
+      })
+      .catch((value: Error) => value);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain('could not prepare the Responses reasoning options');
+    expect((error as Error).message).not.toContain(privateMarker);
+    expect(mockFetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('does not render externally sourced Grok 4.7 reasoning settings', async () => {
+    const provider = new XAIResponsesProvider('grok-4.7', { config: { apiKey: 'test-key' } });
+    for (const options of [
+      { reasoning: { effort: '{{ effort }}' } },
+      { passthrough: { reasoning: { summary: '{{ note }}' } } },
+    ]) {
+      await expect(
+        provider.callApi('hello', {
+          prompt: { raw: 'hello', label: 'hello', config: options },
+          vars: { effort: 'high', note: 'safe marker' },
+          test: { options, metadata: { __promptfoo: { remote: true } } },
+        }),
+      ).rejects.toThrow('request options from remote tests must be literal values');
+    }
+    expect(mockFetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('retains encrypted Grok 4.7 reasoning without requesting include and uses US fallback pricing', async () => {
+    const encrypted = { type: 'reasoning', summary: [], encrypted_content: 'opaque-test-payload' };
+    const data = createMockResponseData('grok-4.7');
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        ...data,
+        output: [encrypted, ...data.output],
+        usage: {
+          input_tokens: 1_000,
+          output_tokens: 500,
+          total_tokens: 1_500,
+          input_tokens_details: { cached_tokens: 800 },
+          output_tokens_details: { reasoning_tokens: 20 },
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = new XAIResponsesProvider('grok-4.7', {
+      config: { apiKey: 'test-key', region: 'us' },
+    });
+    const result = await provider.callApi('hello');
+    const [url, request] = mockFetchWithCache.mock.calls[0];
+
+    expect(url).toBe('https://us.api.x.ai/v1/responses');
+    expect(JSON.parse(request.body)).not.toHaveProperty('include');
+    expect(result.output).toBe('hello');
+    expect(result.raw).toMatchObject({ output: expect.arrayContaining([encrypted]) });
+    expect(result.tokenUsage).toMatchObject({ completionDetails: { reasoning: 20 } });
+    expect(result.cost).toBeCloseTo(0.00418, 10);
+
+    mockFetchWithCache.mockResolvedValue({
+      data: { ...data, usage: { ...data.usage, cost_in_usd_ticks: 123_000 } },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    expect((await provider.callApi('billed cost')).cost).toBeCloseTo(0.0000123, 10);
+  });
+
   it('rejects unsupported reasoning effort values for Grok 4.5 and its aliases', async () => {
     for (const modelName of ['grok-4.5', 'grok-4.5-latest', 'grok-build-latest']) {
       for (const effort of ['none', 'xhigh']) {
@@ -183,7 +316,7 @@ describe('XAIResponsesProvider', () => {
         });
 
         await expect(provider.getRequestBody('hello')).rejects.toThrow(
-          `xAI model ${modelName} does not support reasoning.effort ${JSON.stringify(effort)}`,
+          `xAI model ${modelName} does not support reasoning.effort with the supplied value`,
         );
       }
     }
@@ -212,7 +345,9 @@ describe('XAIResponsesProvider', () => {
         prompt: { raw: 'hello', label: 'hello' },
         vars: { effort: 'none' },
       }),
-    ).rejects.toThrow('xAI model grok-4.5 does not support reasoning.effort "none"');
+    ).rejects.toThrow(
+      'xAI model grok-4.5 does not support reasoning.effort with the supplied value',
+    );
   });
 
   it('preserves broader reasoning effort values for models that support them', async () => {
