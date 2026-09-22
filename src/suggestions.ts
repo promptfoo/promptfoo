@@ -2,6 +2,7 @@ import async from 'async';
 import logger from './logger';
 import { SUGGEST_PROMPTS_SYSTEM_MESSAGE } from './prompts/index';
 import { getDefaultProviders } from './providers/defaults';
+import { providerRegistry } from './providers/providerRegistry';
 import { MAX_SUGGESTIONS_COUNT } from './types/index';
 import {
   accumulateTokenUsage,
@@ -27,6 +28,7 @@ export async function generatePrompts(prompt: string, num: number): Promise<Gene
     };
   }
   const provider = (await getDefaultProviders()).suggestionsProvider;
+  await providerRegistry.useProvider(provider);
   const payload = JSON.stringify([
     SUGGEST_PROMPTS_SYSTEM_MESSAGE,
     { role: 'user', content: 'Generate a variant for the following prompt:' },
@@ -36,7 +38,10 @@ export async function generatePrompts(prompt: string, num: number): Promise<Gene
   const indices = Array.from({ length: num }, (_, i) => i);
   const responses = await async.mapLimit(indices, SUGGESTIONS_CONCURRENCY, async (i: number) => {
     try {
-      return { i, resp: await provider.callApi(payload) };
+      return {
+        i,
+        resp: await providerRegistry.withProvider(provider, () => provider.callApi(payload)),
+      };
     } catch (err) {
       // Convert thrown errors into the same {error} shape as a returned failure
       // so a single rejection doesn't discard already-generated variants.
