@@ -3440,7 +3440,9 @@ export async function withEvaluationResources<T>(
       providers.add(provider);
       activeProviderUses.set(provider, (activeProviderUses.get(provider) ?? 0) + 1);
     }
-    await Promise.all(added.map((provider) => pendingProviderCleanups.get(provider)));
+    // Every caller waits, not only the first: a concurrent call that finds the provider
+    // already reserved must not run during an earlier evaluation's pending cleanup.
+    await Promise.all([...candidates].map((provider) => pendingProviderCleanups.get(provider)));
   };
 
   const release = async () => {

@@ -426,6 +426,48 @@ describe('evaluation ownership of supplied grading providers', () => {
     }
   });
 
+  it('makes concurrent grading calls wait for an earlier pending cleanup', async () => {
+    const cleanupStarted = deferred();
+    const finishCleanup = deferred();
+    let cleaning = false;
+    const callsDuringCleanup: string[] = [];
+    const grader = {
+      id: () => 'concurrently-borrowed-grader',
+      callApi: vi.fn(async (prompt: string) => {
+        if (cleaning) {
+          callsDuringCleanup.push(prompt);
+        }
+        return { output: '{"pass":true,"score":1,"reason":"ok"}' };
+      }),
+      cleanup: vi.fn(async () => {
+        cleaning = true;
+        cleanupStarted.resolve();
+        await finishCleanup.promise;
+        cleaning = false;
+      }),
+    } satisfies ApiProvider;
+    const owner = withEvaluationResources(async () => {}, { ownedProviders: [grader] });
+    await cleanupStarted.promise;
+    const borrower = withEvaluationResources(() =>
+      Promise.all(
+        ['first', 'second'].map((rubric) => matchesLlmRubric(rubric, 'output', { provider: grader })),
+      ),
+    );
+    try {
+      for (let i = 0; i < 10; i++) {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
+      expect(grader.callApi).not.toHaveBeenCalled();
+      finishCleanup.resolve();
+      await expect(borrower).resolves.toHaveLength(2);
+      expect(grader.callApi).toHaveBeenCalledTimes(2);
+      expect(callsDuringCleanup).toEqual([]);
+    } finally {
+      finishCleanup.resolve();
+      await Promise.allSettled([owner, borrower]);
+    }
+  });
+
   it.each(['success', 'error', 'abort'] as const)(
     'keeps a resolved shared target alive through pending setup: %s',
     async (outcome) => {
