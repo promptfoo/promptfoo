@@ -747,9 +747,17 @@ function redactOpenCodeError(
     );
   }
   const credentialField = String.raw`(?<![\w.-])["']?(?!(?:[\w.-]+[_.-])?(?:total|input|output|cached|reasoning|prompt|completion|remaining|limit|usage|count|num)[_.-]tokens?["']?\s*[:=])(?:[\w.-]+[_.-])?(?:[a-z0-9]*(?:(?:api|access|private|client)[_ -]?key|(?:access|refresh|session|id|auth|csrf|bearer|api|account)[_ -]?token|(?:client[_ -]?)?secret|credentials?|pass(?:word|wd|phrase)|pwd|sign(?:ature|ing[_ -]?key)|authorization|(?:set[_ -]?)?cookie)|token)["']?\s*[:=]\s*`;
+  const authorizationParameter = String.raw`[\w.-]+\s*=\s*(?:"(?:\\[^\r\n]|[^"\\\r\n])*(?:"|(?=[\r\n]|$))|'(?:\\[^\r\n]|[^'\\\r\n])*(?:'|(?=[\r\n]|$))|[^\s,}"']+)`;
   for (const pattern of [
+    new RegExp(
+      String.raw`(?<![\w.-])(["']?(?:[\w.-]+[_.-])?[a-z0-9]*authorization["']?\s*[:=]\s*)(?:[a-z][\w+.-]*\s+)(?:${authorizationParameter}(?:\s*,\s*${authorizationParameter})*|[^,;\r\n}"']+)`,
+      'gi',
+    ),
     /(?<![\w.-])(["']?(?:[\w.-]+[_.-])?[a-z0-9]*(?:set[_ -]?)?cookie["']?\s*[:=]\s*["']?)[^\s,"';}]+(?:\s*;\s*[^\s=;,"'}]+=[^\s,"';}]+)*/gi,
-    new RegExp(String.raw`(${credentialField}(["']))(?:\\[^\r\n]|(?!\2)[^\\\r\n])*(?=\2)`, 'gi'),
+    new RegExp(
+      String.raw`(${credentialField}(["']))(?:\\[^\r\n]|(?!\2)[^\\\r\n])*(?=\2|[\r\n]|$)`,
+      'gi',
+    ),
     new RegExp(String.raw`(${credentialField}["']?)(?:(?:Bearer|Basic)\s+)?[^\s,"';&}]+`, 'gi'),
   ]) {
     result = redactProviderText(result, pattern, (_match, prefix) => prefix);
@@ -1049,6 +1057,7 @@ function addStrongOpenCodeServerCredentials(
     }
   } else if (server?.type === 'local') {
     for (const [key, value] of Object.entries(server.environment ?? {})) {
+      remember(value);
       addStrongOpenCodeEnvironmentCredentials(key, value, remember, true);
     }
     addStrongOpenCodeCommandCredentials(server.command, remember);

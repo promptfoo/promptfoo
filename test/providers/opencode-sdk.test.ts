@@ -1392,6 +1392,49 @@ describe('OpenCodeSDKProvider', () => {
         }
       });
 
+      it.each([
+        [
+          'Authorization: Token upstream-secret another-secret; useful context',
+          ['upstream-secret', 'another-secret'],
+        ],
+        [
+          'Proxy-Authorization: Digest username="upstream-user", realm="public", response="upstream-response"; useful context',
+          ['upstream-user', 'upstream-response'],
+        ],
+        [
+          'Authorization: "Token upstream-quoted-secret"; useful context',
+          ['upstream-quoted-secret'],
+        ],
+        [
+          'Authorization: Digest response="upstream-truncated-secret',
+          ['upstream-truncated-secret'],
+        ],
+        ['Authorization: "Token upstream-truncated-secret', ['upstream-truncated-secret']],
+      ])('redacts complete upstream authorization values: %s', async (message, secrets) => {
+        const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+        const error = { name: 'APIError', data: { statusCode: 502, message } };
+        const response = createMockPromptResponse([]);
+        mockSessionPrompt.mockResolvedValueOnce({ error }).mockResolvedValueOnce({
+          data: { ...response.data, info: { ...response.data.info, error } },
+        });
+        const provider = new OpenCodeSDKProvider();
+
+        for (const prompt of ['SDK authorization', 'assistant authorization']) {
+          const result = await provider.callApi(prompt);
+          const logged = (errorSpy.mock.lastCall?.[1] as { error?: string } | undefined)?.error;
+          for (const diagnostic of [result.error, logged]) {
+            expect(diagnostic).toContain('Authorization:');
+            expect(diagnostic).toContain('[REDACTED]');
+            if (message.includes('useful context')) {
+              expect(diagnostic).toContain('useful context');
+            }
+            for (const secret of secrets) {
+              expect(diagnostic).not.toContain(secret);
+            }
+          }
+        }
+      });
+
       it('retains public SDK HTTP error tags and sibling status without exposing the response body', async () => {
         const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
         mockSessionPrompt
@@ -2175,6 +2218,18 @@ describe('OpenCodeSDKProvider', () => {
 
       it.each([
         ['provider API key', { apiKey: 'q7x9' }],
+        [
+          'arbitrarily named local MCP environment value',
+          {
+            mcp: {
+              gateway: {
+                type: 'local',
+                command: ['test-server'],
+                environment: { CUSTOM_GATEWAY: 'q7x9' },
+              },
+            },
+          },
+        ],
         [
           'custom MCP header',
           {
