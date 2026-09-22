@@ -11,6 +11,7 @@ import logger from '../src/logger';
 import { getRequestTimeoutMs } from '../src/providers/shared';
 import { HttpRateLimitError } from '../src/util/fetch/errors';
 import {
+  classifySdkRateLimit,
   clearAgentCache,
   computeRateLimitWaitMs,
   fetchWithProxy,
@@ -1302,6 +1303,40 @@ describe('isRateLimited', () => {
       status: 200,
     });
     expect(isRateLimited(response)).toBe(false);
+  });
+});
+
+describe('classifySdkRateLimit', () => {
+  it.each([
+    [{ status: 500, body: { error: { code: 'credit_balance_exhausted' } } }, undefined],
+    [{ status: 429 }, 'rate_limit'],
+    [
+      {
+        status: 429,
+        body: { error: { code: 'credit_balance_exhausted' } },
+        headers: { 'retry-after': '1' },
+      },
+      'quota',
+    ],
+    [{ status: 429, body: '{"error":{"code":"insufficient_quota"}}' }, 'quota'],
+    [
+      {
+        status: 429,
+        body: '{"error":{"code":"insufficient_quota"}}',
+        headers: { 'retry-after': '1' },
+      },
+      'rate_limit',
+    ],
+    [
+      { status: 429, details: [{ message: 'Your credit balance is too low' }], isRetryable: false },
+      'quota',
+    ],
+    [
+      { status: 429, details: [{ message: 'Your credit balance is too low' }], isRetryable: true },
+      'rate_limit',
+    ],
+  ])('classifies only trusted 429 errors with their recovery hints: %#', (input, expected) => {
+    expect(classifySdkRateLimit(input)).toBe(expected);
   });
 });
 
