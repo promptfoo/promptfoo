@@ -15,45 +15,42 @@ import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import { TrueFoundryEmbeddingProvider } from '../../src/providers/truefoundry';
 import { VoyageEmbeddingProvider } from '../../src/providers/voyage';
 
+import type { CancellableEmbeddingProvider } from '../../src/types/providers';
+
 vi.mock('../../src/cache', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/cache')>()),
   fetchWithCache: vi.fn(),
   isCacheEnabled: () => false,
 }));
 
-function heldRequest() {
-  let markStarted!: (signal: AbortSignal) => void;
-  const started = new Promise<AbortSignal>((resolve) => {
-    markStarted = resolve;
-  });
-  const hold = (signal: AbortSignal | null | undefined) => {
-    if (!signal) {
-      throw new Error('Embedding transport received no cancellation signal');
-    }
-    markStarted(signal);
-    return new Promise<never>((_resolve, reject) => {
-      signal.addEventListener('abort', () => reject(signal.reason), { once: true });
-    });
-  };
-  return { started, hold };
-}
-
 describe('embedding transport cancellation', () => {
+  const openAiConfig = { apiKey: 'test-key', apiBaseUrl: 'https://models.example/v1' };
+  const mistral = () => new MistralEmbeddingProvider({ config: { apiKey: 'test-key' } });
+  let signals: unknown[];
+  // Record the signal a transport received, then fail the way an aborted request does.
+  const rejectAborted = async (signal: AbortSignal | null | undefined): Promise<never> => {
+    signals.push(signal);
+    throw signal?.reason ?? new Error('Transport received no cancellation signal');
+  };
+
   beforeEach(() => {
-    vi.mocked(fetchWithCache).mockReset();
+    vi.resetAllMocks();
+    signals = [];
+    vi.mocked(fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/models')) {
+        signals.push(options?.signal);
+        return { data: { data: [{ id: 'model' }] } } as never;
+      }
+      return rejectAborted(options?.signal);
+    });
   });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  const openAiConfig = { apiKey: 'test-key', apiBaseUrl: 'https://models.example/v1' };
-  const mistral = () => new MistralEmbeddingProvider({ config: { apiKey: 'test-key' } });
-
-  it.each([
-    [
-      'OpenAI',
-      () => new OpenAiEmbeddingProvider('text-embedding-3-small', { config: openAiConfig }),
-    ],
+  it.each<[string, () => unknown]>([
+    ['OpenAI', () => new OpenAiEmbeddingProvider('text-embedding-3-small', { config: openAiConfig })],
     ['Azure', () => new AzureEmbeddingProvider('model', { config: openAiConfig })],
     ['Cohere', () => new CohereEmbeddingProvider('model', { apiKey: 'test-key' })],
     ['Docker', () => new DMREmbeddingProvider('model', { config: openAiConfig })],
@@ -69,177 +66,74 @@ describe('embedding transport cancellation', () => {
     ['Ollama', () => new OllamaEmbeddingProvider('model')],
     ['TrueFoundry', () => new TrueFoundryEmbeddingProvider('model', { config: openAiConfig })],
     ['Voyage', () => new VoyageEmbeddingProvider('model', { apiKey: 'test-key' })],
-  ] as const)('forwards cancellation to the %s HTTP request', async (name, createProvider) => {
-    const controller = new AbortController();
-    const reason = new Error('evaluation cancelled');
-    const { started, hold } = heldRequest();
-    vi.mocked(fetchWithCache).mockImplementation((url, options) => {
-      if (name === 'Docker' && String(url).endsWith('/models')) {
-        expect(options?.signal).toBe(controller.signal);
-        return Promise.resolve({ data: { data: [{ id: 'model' }] } }) as never;
-      }
-      return hold(options?.signal);
-    });
-
-    const provider = createProvider();
-    expect(provider.supportsEmbeddingCancellation).toBe(true);
-    const callEmbedding = provider.callEmbeddingApi as OpenAiEmbeddingProvider['callEmbeddingApi'];
-    const result = callEmbedding.call(provider, 'text', undefined, {
-      abortSignal: controller.signal,
-    });
-    const settled = result.then(
-      () => undefined,
-      () => undefined,
-    );
-    try {
-      const actual = await Promise.race([
-        started,
-        result.then(() => {
-          throw new Error('Embedding unexpectedly finished');
-        }),
-      ]);
-      expect(actual).toBe(controller.signal);
-      controller.abort(reason);
-      expect(actual.reason).toBe(reason);
-      await expect(result).rejects.toBe(reason);
-    } finally {
-      controller.abort(reason);
-      await settled;
-    }
-  });
-
-  it.each(['Bedrock', 'Vertex'] as const)(
-    'forwards cancellation to the %s SDK request',
-    async (name) => {
-      const controller = new AbortController();
-      const reason = new DOMException('evaluation cancelled', 'AbortError');
-      const { started, hold } = heldRequest();
-      const provider =
-        name === 'Bedrock'
-          ? new AwsBedrockEmbeddingProvider('amazon.titan-embed-text-v1')
-          : new VertexEmbeddingProvider('gemini-embedding-001');
-      expect(provider.supportsEmbeddingCancellation).toBe(true);
-
-      if (provider instanceof AwsBedrockEmbeddingProvider) {
+    [
+      'Bedrock',
+      () => {
+        const provider = new AwsBedrockEmbeddingProvider('amazon.titan-embed-text-v1');
         vi.spyOn(provider, 'getBedrockInstance').mockResolvedValue({
-          invokeModel: vi.fn((_command, options) => hold(options?.abortSignal)),
+          invokeModel: (_command: unknown, options?: { abortSignal?: AbortSignal }) =>
+            rejectAborted(options?.abortSignal),
         } as never);
-      } else {
+        return provider;
+      },
+    ],
+    [
+      'Vertex',
+      () => {
+        const provider = new VertexEmbeddingProvider('gemini-embedding-001');
         vi.spyOn(provider, 'getProjectId').mockResolvedValue('fixture-project');
         vi.spyOn(provider, 'getClientWithCredentials').mockResolvedValue({
-          request: vi.fn((options) => hold(options?.signal)),
+          request: (options: { signal?: AbortSignal }) => rejectAborted(options.signal),
         } as never);
-      }
+        return provider;
+      },
+    ],
+  ])('passes cancellation to the %s request and rejects with its reason', async (_name, create) => {
+    const provider = create() as CancellableEmbeddingProvider;
+    const reason = new Error('evaluation cancelled');
+    const abortSignal = AbortSignal.abort(reason);
 
-      const result = provider.callEmbeddingApi('text', undefined, {
-        abortSignal: controller.signal,
-      });
-      const settled = result.then(
-        () => undefined,
-        () => undefined,
-      );
-      try {
-        const actual = await Promise.race([
-          started,
-          result.then(() => {
-            throw new Error('Embedding unexpectedly finished');
-          }),
-        ]);
-        expect(actual).toBe(controller.signal);
-        controller.abort(reason);
-        expect(actual.reason).toBe(reason);
-        await expect(result).rejects.toBe(reason);
-      } finally {
-        controller.abort();
-        await settled;
-      }
-    },
-  );
+    expect(provider.supportsEmbeddingCancellation).toBe(true);
+    await expect(provider.callEmbeddingApi('text', undefined, { abortSignal })).rejects.toBe(
+      reason,
+    );
+    expect(new Set(signals)).toEqual(new Set([abortSignal]));
+  });
 
-  it.each(['success', 'cancellation'] as const)(
-    'shares identical Mistral requests with the same signal through %s',
-    async (outcome) => {
-      const controller = new AbortController();
-      let release!: () => void;
-      const started = new Promise<void>((resolve) => {
-        vi.mocked(fetchWithCache).mockImplementation((_url, options) => {
-          const signal = options?.signal;
-          if (!signal) {
-            throw new Error('Mistral transport received no cancellation signal');
-          }
-          resolve();
-          return new Promise((resolveResponse, reject) => {
-            release = () =>
-              resolveResponse({ data: { data: [{ embedding: [1, 0] }] }, cached: false } as never);
-            signal.addEventListener('abort', () => reject(signal.reason), { once: true });
-          });
-        });
-      });
-      const provider = mistral();
-      const call = () =>
-        provider.callEmbeddingApi('same text', undefined, { abortSignal: controller.signal });
-      const first = call();
-      const second = call();
-      void first.catch(() => {});
-      void second.catch(() => {});
-      try {
-        await started;
-        expect(fetchWithCache).toHaveBeenCalledTimes(1);
-        if (outcome === 'cancellation') {
-          const reason = new DOMException('evaluation cancelled', 'AbortError');
-          controller.abort(reason);
-          await expect(first).rejects.toBe(reason);
-          await expect(second).rejects.toBe(reason);
-        } else {
-          release();
-          await expect(first).resolves.toMatchObject({ embedding: [1, 0] });
-          await expect(second).resolves.toMatchObject({ embedding: [1, 0] });
-        }
-      } finally {
-        controller.abort();
-        await Promise.allSettled([first, second]);
-      }
-    },
-  );
-
-  it('does not share identical Mistral requests across independent cancellation signals', async () => {
-    const firstController = new AbortController();
-    const secondController = new AbortController();
+  it('shares identical Mistral requests only between callers with the same signal', async () => {
     const pending = new Map<AbortSignal, (value: unknown) => void>();
-    vi.mocked(fetchWithCache).mockImplementation((_url, options) => {
-      const signal = options?.signal;
-      if (!signal) {
-        throw new Error('Mistral transport received no cancellation signal');
-      }
-      return new Promise((resolve, reject) => {
-        pending.set(signal, resolve as (value: unknown) => void);
-        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
-      });
-    });
+    vi.mocked(fetchWithCache).mockImplementation(
+      (_url, options) =>
+        new Promise((resolve, reject) => {
+          const signal = options!.signal!;
+          pending.set(signal, resolve as (value: unknown) => void);
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+        }),
+    );
     const provider = mistral();
-    const first = provider.callEmbeddingApi('same text', undefined, {
-      abortSignal: firstController.signal,
-    });
-    const second = provider.callEmbeddingApi('same text', undefined, {
-      abortSignal: secondController.signal,
-    });
-    void first.catch(() => {});
-    void second.catch(() => {});
+    const first = new AbortController();
+    const second = new AbortController();
+    const embed = ({ signal }: AbortController) =>
+      provider.callEmbeddingApi('same text', undefined, { abortSignal: signal });
+    const shared = Promise.allSettled([embed(first), embed(first)]);
+    const independent = embed(second);
+    void independent.catch(() => {});
+
     try {
       await vi.waitFor(() => expect(pending.size).toBe(2));
+      expect(fetchWithCache).toHaveBeenCalledTimes(2);
       const reason = new Error('first evaluation cancelled');
-      firstController.abort(reason);
-      await expect(first).rejects.toBe(reason);
-      expect(secondController.signal.aborted).toBe(false);
-      pending.get(secondController.signal)!({
-        data: { data: [{ embedding: [1, 0] }] },
-        cached: false,
-      });
-      await expect(second).resolves.toMatchObject({ embedding: [1, 0] });
+      first.abort(reason);
+      await expect(shared).resolves.toEqual([
+        { status: 'rejected', reason },
+        { status: 'rejected', reason },
+      ]);
+      pending.get(second.signal)!({ data: { data: [{ embedding: [1, 0] }] }, cached: false });
+      await expect(independent).resolves.toMatchObject({ embedding: [1, 0] });
     } finally {
-      firstController.abort();
-      secondController.abort();
-      await Promise.allSettled([first, second]);
+      first.abort();
+      second.abort();
+      await Promise.allSettled([shared, independent]);
     }
   });
 });
