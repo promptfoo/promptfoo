@@ -50,7 +50,10 @@ describe('embedding transport cancellation', () => {
   });
 
   it.each<[string, () => unknown]>([
-    ['OpenAI', () => new OpenAiEmbeddingProvider('text-embedding-3-small', { config: openAiConfig })],
+    [
+      'OpenAI',
+      () => new OpenAiEmbeddingProvider('text-embedding-3-small', { config: openAiConfig }),
+    ],
     ['Azure', () => new AzureEmbeddingProvider('model', { config: openAiConfig })],
     ['Cohere', () => new CohereEmbeddingProvider('model', { apiKey: 'test-key' })],
     ['Docker', () => new DMREmbeddingProvider('model', { config: openAiConfig })],

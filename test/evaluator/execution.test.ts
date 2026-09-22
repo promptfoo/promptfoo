@@ -1221,7 +1221,10 @@ describeEvaluator('evaluator execution control', () => {
     const results: any[] = [];
     const provider: ApiProvider = {
       id: () => 'target-provider',
-      callApi: vi.fn(async () => ({ output: 'Target output', tokenUsage: createEmptyTokenUsage() })),
+      callApi: vi.fn(async () => ({
+        output: 'Target output',
+        tokenUsage: createEmptyTokenUsage(),
+      })),
     };
     // This grader only settles when its request is cancelled.
     const judge: ApiProvider = {

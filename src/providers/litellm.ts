@@ -155,9 +155,7 @@ class LiteLLMEmbeddingProvider extends LiteLLMProviderWrapper implements ApiEmbe
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
-    return this.withAuthHint(
-      await this.embeddingProvider.callEmbeddingApi(text, context, options),
-    );
+    return this.withAuthHint(await this.embeddingProvider.callEmbeddingApi(text, context, options));
   }
 }
 
