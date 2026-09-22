@@ -87,6 +87,10 @@ describe('redactDiagnosticText', () => {
       'token=upstream-1; secret="upstream 2"; api_key: upstream-3',
     ],
     [
+      'arbitrary spaces, tabs, and newlines around delimiters',
+      `api_key${' '.repeat(30)}=${'\t'.repeat(20)}upstream-1; secret\n${' '.repeat(20)}:\n\t"upstream-2"`,
+    ],
+    [
       'env-style fields',
       'FAL_KEY=upstream-1 AWS_SECRET_ACCESS_KEY=upstream-2 db_password=upstream-3',
     ],
@@ -135,6 +139,7 @@ describe('redactDiagnosticText', () => {
     `${'a'.repeat(30)}://`.repeat(10_000),
     'token= '.repeat(40_000),
     '\\"x\\"='.repeat(40_000),
+    `api_key${' '.repeat(100_000)}?`,
   ])('stays linear on adversarial input %#', (text) => {
     const started = performance.now();
     redactDiagnosticText(text, ['known-credential-1']);

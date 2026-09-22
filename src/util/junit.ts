@@ -2,18 +2,17 @@ import * as fsPromises from 'fs/promises';
 
 import { XMLBuilder } from 'fast-xml-parser';
 import { ResultFailureReason } from '../types';
+import { sha256 } from './createHash';
 
 import type Eval from '../models/eval';
 import type EvalResult from '../models/evalResult';
 import type { EvaluateResult, GradingResult } from '../types';
 
 const MAX_JUNIT_NAME_LENGTH = 512;
-const MAX_JUNIT_MESSAGE_LENGTH = 1024;
 const MAX_JUNIT_DETAIL_LENGTH = 8192;
 const JUNIT_ASSERTION_FAILURE_MESSAGE = 'Assertion failed';
 const JUNIT_EVALUATION_ERROR_MESSAGE = 'Evaluation error';
-const SUITE_PROVIDER_SEPARATOR = '\u0001';
-const SUITE_KEY_SEPARATOR = '\u0000';
+const INVALID_XML_CHARACTERS = /[^\t\n\r\u0020-\ud7ff\ue000-\ufffd\u{10000}-\u{10ffff}]/gu;
 
 type JunitProjectedResult = Pick<
   EvaluateResult,
@@ -46,16 +45,25 @@ function truncateText(value: string, maxLength: number): string {
   if (value.length <= maxLength) {
     return value;
   }
-  return `${value.slice(0, maxLength - 3)}...`;
+  const cutoff = maxLength - 3;
+  const end = (value.codePointAt(cutoff - 1) ?? 0) > 0xffff ? cutoff + 1 : cutoff;
+  return `${value.slice(0, end)}...`;
 }
 
 function normalizeInlineText(
   value: string | undefined,
   fallback: string,
   maxLength = MAX_JUNIT_NAME_LENGTH,
+  sanitize = false,
 ): string {
-  const normalized = value?.replace(/\s+/g, ' ').trim();
-  return truncateText(normalized || fallback, maxLength);
+  const normalized = value?.replace(/\s+/g, ' ').trim() || fallback;
+  const bounded = truncateText(normalized, maxLength);
+  return !sanitize && bounded.search(INVALID_XML_CHARACTERS) === -1
+    ? bounded
+    : truncateText(
+        normalized.replace(INVALID_XML_CHARACTERS, '').replace(/\s+/g, ' ').trim() || fallback,
+        maxLength,
+      );
 }
 
 function formatDurationSeconds(durationMs: number | undefined): string {
@@ -69,20 +77,6 @@ function formatDurationSeconds(durationMs: number | undefined): string {
 function getEvaluationTimestamp(evalRecord: Eval): string | undefined {
   const date = new Date(evalRecord.createdAt);
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
-}
-
-// Prefer the human-friendly label and fall back to the canonical id so
-// providers that share an `id` but use distinct `label`s remain distinguishable.
-function getProviderName(result: JunitProjectedResult): string {
-  return normalizeInlineText(result.provider.label || result.provider.id, 'unknown provider');
-}
-
-function getSuiteKey(result: JunitProjectedResult): string {
-  // Distinguish providers that share an id but differ by label (and vice versa)
-  // so multi-target redteam runs do not collapse into a single suite.
-  const providerKey = `${result.provider.id ?? ''}${SUITE_PROVIDER_SEPARATOR}${result.provider.label ?? ''}`;
-  const promptKey = result.promptId || `prompt-index:${result.promptIdx}`;
-  return `${providerKey}${SUITE_KEY_SEPARATOR}${promptKey}`;
 }
 
 function getTestCaseName(result: JunitProjectedResult): string {
@@ -101,14 +95,6 @@ function getAssertionLabel(gradingResult: GradingResult): string {
   return gradingResult.assertion?.type ?? 'assertion';
 }
 
-function getFailureMessage(): string {
-  return normalizeInlineText(undefined, JUNIT_ASSERTION_FAILURE_MESSAGE, MAX_JUNIT_MESSAGE_LENGTH);
-}
-
-function getErrorMessage(): string {
-  return normalizeInlineText(undefined, JUNIT_EVALUATION_ERROR_MESSAGE, MAX_JUNIT_MESSAGE_LENGTH);
-}
-
 function getFailedAssertionLabels(gradingResult: GradingResult | null | undefined): string[] {
   const failedComponents = getFailedComponentResults(gradingResult);
   if (failedComponents.length > 0) {
@@ -118,7 +104,7 @@ function getFailedAssertionLabels(gradingResult: GradingResult | null | undefine
 }
 
 function getFailureDetails(result: JunitProjectedResult): string {
-  const lines = [`Score: ${result.score}`, `Reason: ${getFailureMessage()}`];
+  const lines = [`Score: ${result.score}`, `Reason: ${JUNIT_ASSERTION_FAILURE_MESSAGE}`];
   const failedAssertionLabels = getFailedAssertionLabels(result.gradingResult);
 
   if (failedAssertionLabels.length > 0) {
@@ -128,11 +114,10 @@ function getFailureDetails(result: JunitProjectedResult): string {
     }
   }
 
-  return truncateText(lines.join('\n'), MAX_JUNIT_DETAIL_LENGTH);
-}
-
-function getErrorDetails(): string {
-  return truncateText(`Reason: ${getErrorMessage()}`, MAX_JUNIT_DETAIL_LENGTH);
+  return truncateText(
+    lines.join('\n').replace(INVALID_XML_CHARACTERS, ''),
+    MAX_JUNIT_DETAIL_LENGTH,
+  );
 }
 
 function projectEvalResult(result: EvalResult | EvaluateResult): JunitProjectedResult {
@@ -205,15 +190,30 @@ async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
   const promptOrdinalsByProvider = new Map<string, Map<string, number>>();
 
   for await (const result of iterateJunitProjectedResults(evalRecord)) {
-    const key = getSuiteKey(result);
+    const { provider } = result;
+    const providerKey = JSON.stringify([provider.id ?? '', provider.label ?? '']);
+    const promptKey = result.promptId || `prompt-index:${result.promptIdx}`;
+    const key = JSON.stringify([providerKey, promptKey]);
     let suite = suites.get(key);
     if (!suite) {
-      const providerName = getProviderName(result);
-      const promptKey = result.promptId || `prompt-index:${result.promptIdx}`;
-      let promptOrdinals = promptOrdinalsByProvider.get(providerName);
+      const rawName = provider.label || provider.id || '';
+      const inlineName = truncateText(rawName.replace(/\s+/g, ' ').trim(), MAX_JUNIT_NAME_LENGTH);
+      // Keep names that lose XML characters distinct from each other and unchanged names.
+      const suffix =
+        inlineName.search(INVALID_XML_CHARACTERS) === -1
+          ? ''
+          : ` (${sha256(providerKey).slice(0, 16)})`;
+      const providerName = normalizeInlineText(
+        rawName,
+        'unknown provider',
+        MAX_JUNIT_NAME_LENGTH - suffix.length,
+        Boolean(suffix),
+      );
+      const ordinalKey = suffix ? providerKey : JSON.stringify([providerName]);
+      let promptOrdinals = promptOrdinalsByProvider.get(ordinalKey);
       if (!promptOrdinals) {
         promptOrdinals = new Map();
-        promptOrdinalsByProvider.set(providerName, promptOrdinals);
+        promptOrdinalsByProvider.set(ordinalKey, promptOrdinals);
       }
       let ordinal = promptOrdinals.get(promptKey);
       if (ordinal === undefined) {
@@ -221,7 +221,7 @@ async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
         promptOrdinals.set(promptKey, ordinal);
       }
       suite = {
-        displayName: `[${providerName}] prompt ${ordinal}`,
+        displayName: `[${providerName}] prompt ${ordinal}${suffix}`,
         errors: 0,
         failures: 0,
         skipped: 0,
@@ -261,13 +261,13 @@ function buildJunitTestCase(result: JunitProjectedResult, classname: string) {
     if (result.failureReason === ResultFailureReason.ASSERT) {
       testcase.failure = {
         '#text': getFailureDetails(result),
-        '@_message': getFailureMessage(),
+        '@_message': JUNIT_ASSERTION_FAILURE_MESSAGE,
         '@_type': 'assertion',
       };
     } else {
       testcase.error = {
-        '#text': getErrorDetails(),
-        '@_message': getErrorMessage(),
+        '#text': `Reason: ${JUNIT_EVALUATION_ERROR_MESSAGE}`,
+        '@_message': JUNIT_EVALUATION_ERROR_MESSAGE,
         '@_type': 'error',
       };
     }
@@ -291,7 +291,7 @@ export async function createJunitXml(evalRecord: Eval): Promise<string> {
     indentBy: '  ',
   });
 
-  return xmlBuilder.build({
+  const xml = xmlBuilder.build({
     '?xml': {
       '@_version': '1.0',
       '@_encoding': 'UTF-8',
@@ -317,6 +317,8 @@ export async function createJunitXml(evalRecord: Eval): Promise<string> {
       })),
     },
   });
+
+  return xml.replace(INVALID_XML_CHARACTERS, '');
 }
 
 export async function writeJunitXmlOutput(outputPath: string, evalRecord: Eval): Promise<void> {
