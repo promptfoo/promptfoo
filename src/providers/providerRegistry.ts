@@ -1,12 +1,16 @@
 import logger from '../logger';
 
-import type { ApiProvider } from '../types/providers';
-
 /**
  * Interface for providers that need cleanup on process exit.
  */
 interface CleanupProvider {
   shutdown(): Promise<void>;
+}
+
+/** The part of an ApiProvider that idle cleanup uses. */
+interface IdleCleanupProvider {
+  id(): string;
+  cleanup?: (context: { reason: 'evaluation-complete' }) => void | Promise<void>;
 }
 
 /**
@@ -17,7 +21,7 @@ class ProviderRegistry {
   private providers: Set<CleanupProvider> = new Set();
   private shutdownRegistered: boolean = false;
   private activeEvaluations = 0;
-  private idleCleanups = new Set<ApiProvider>();
+  private idleCleanups = new Set<IdleCleanupProvider>();
   private idleShutdown?: Promise<void>;
 
   /**
@@ -45,7 +49,7 @@ class ProviderRegistry {
   }
 
   /** Call `cleanup()` once, after the last active evaluation finishes. */
-  cleanupWhenIdle(providers: Iterable<ApiProvider>): void {
+  cleanupWhenIdle(providers: Iterable<IdleCleanupProvider>): void {
     for (const provider of providers) {
       this.idleCleanups.add(provider);
     }
