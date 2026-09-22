@@ -625,16 +625,14 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
 
 const ABORTED_GRADING_PREFIX = 'Aborted: ';
 
+function isGradingAbort(error: unknown, abortSignal?: AbortSignal): boolean {
+  return Boolean(abortSignal?.aborted && (isAbortError(error) || error === abortSignal.reason));
+}
+
 function applyGradingError(row: EvaluateResult, error: unknown, abortSignal?: AbortSignal) {
   const errorAsError = error instanceof Error ? error : undefined;
-  // Require both signals: a third-party SDK that throws `AbortError` during a
-  // non-aborted run is a real bug, and a real SyntaxError caught microseconds
-  // after an unrelated abort is also a real bug.
-  const aborted = Boolean(
-    abortSignal?.aborted && (isAbortError(error) || error === abortSignal.reason),
-  );
 
-  if (aborted) {
+  if (isGradingAbort(error, abortSignal)) {
     // Skip stack serialization on the abort path — debug logs usually go
     // unread and a noisy shutdown can fire this per row.
     const shortMessage = errorAsError?.message ?? String(error);
@@ -1475,21 +1473,28 @@ async function gradeRunEvalResponse({
     return;
   }
 
-  const checkResult = await withProviderCallExecutionContext(
-    { abortSignal, rateLimitRegistry },
-    () =>
-      runAssertions({
-        prompt: renderedPrompt,
-        provider,
-        providerResponse: assertionProviderResponse,
-        test,
-        vars,
-        latencyMs: response.latencyMs ?? latencyMs,
-        assertScoringFunction: test.assertScoringFunction as ScoringFunction,
-        traceId,
-      }),
-  );
-  applyGradingResult(ret, checkResult);
+  try {
+    const checkResult = await withProviderCallExecutionContext(
+      { abortSignal, rateLimitRegistry },
+      () =>
+        runAssertions({
+          prompt: renderedPrompt,
+          provider,
+          providerResponse: assertionProviderResponse,
+          test,
+          vars,
+          latencyMs: response.latencyMs ?? latencyMs,
+          assertScoringFunction: test.assertScoringFunction as ScoringFunction,
+          traceId,
+        }),
+    );
+    applyGradingResult(ret, checkResult);
+  } catch (error) {
+    if (!isGradingAbort(error, abortSignal)) {
+      throw error;
+    }
+    applyGradingError(ret, error, abortSignal);
+  }
   ret.response = processedResponse;
 }
 

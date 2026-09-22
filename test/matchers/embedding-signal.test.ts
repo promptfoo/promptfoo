@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
+import { callEmbeddingProvider } from '../../src/matchers/providers';
 import { matchesAnswerRelevance } from '../../src/matchers/rag';
 import { matchesSimilarity } from '../../src/matchers/similarity';
 import { getDefaultProviders } from '../../src/providers/defaults';
@@ -166,6 +167,20 @@ describe('embedding graders receive evaluation cancellation', () => {
       controller.abort(reason);
       await Promise.allSettled([grading]);
     }
+  });
+
+  it('preserves an unrelated exception thrown by a running embedding provider during cancellation', async () => {
+    const controller = new AbortController();
+    const failure = new SyntaxError('malformed embedding response');
+    embed.mockImplementation(async () => {
+      controller.abort(new Error('evaluation stopped'));
+      throw failure;
+    });
+    await expect(
+      withProviderCallExecutionContext({ abortSignal: controller.signal }, () =>
+        callEmbeddingProvider(provider, 'input'),
+      ),
+    ).rejects.toBe(failure);
   });
 
   it('removes embedding grading from a real exhausted rate-limit registry on cancellation', async () => {
