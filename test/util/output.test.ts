@@ -3,6 +3,7 @@ import * as path from 'path';
 
 import { XMLParser } from 'fast-xml-parser';
 import * as yaml from 'js-yaml';
+import { SaxesParser } from 'saxes';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import * as googleSheets from '../../src/googleSheets';
@@ -12,11 +13,13 @@ import { getTraceStore } from '../../src/tracing/store';
 import { type EvaluateResult, ResultFailureReason } from '../../src/types/index';
 import { createJunitXml } from '../../src/util/junit';
 import {
+  createOutputData,
   createOutputMetadata,
   warnOnDegradedJsonlRecovery,
   writeMultipleOutputs,
   writeOutput,
 } from '../../src/util/output';
+import { createEvaluateResult } from '../factories/eval';
 import { mockConsole, mockProcessEnv } from './utils';
 
 vi.mock('../../src/database', () => ({
@@ -332,6 +335,124 @@ describe('writeOutput', () => {
     expect(outputJson).not.toContain('tiny-reader-key');
     expect(parsed.config.tracing.provider.headers).toEqual({ 'X-Scope-OrgID': 'tenant-a' });
   });
+
+  it.each(['json', 'yaml'])('redacts gateway URL credentials in %s exports', async (extension) => {
+    const url = 'https://gateway-user:gateway-password@gateway.example/v1?token=short-secret';
+    const eval_ = new Eval({
+      env: { ENVOY_API_BASE_URL: url },
+      providers: [{ id: 'envoy:route', config: { apiBaseUrl: url } }],
+    });
+
+    await writeOutput(`output.${extension}`, eval_, null);
+
+    const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const parsed = yaml.load(written) as Record<string, any>;
+    expect(parsed.config.env.ENVOY_API_BASE_URL).toBe(
+      'https://***:***@gateway.example/v1?token=%5BREDACTED%5D',
+    );
+    expect(parsed.config.providers[0].config.apiBaseUrl).toBe(parsed.config.env.ENVOY_API_BASE_URL);
+    expect(written).not.toContain('gateway-user');
+    expect(written).not.toContain('gateway-password');
+    expect(written).not.toContain('short-secret');
+    expect(eval_.config.env).toEqual({ ENVOY_API_BASE_URL: url });
+  });
+
+  it.each([true, false])(
+    'uses saved strip flags (%s) for exports outside the evaluation scope',
+    async (strip) => {
+      const flags = {
+        PROMPTFOO_STRIP_PROMPT_TEXT: String(strip),
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strip),
+        PROMPTFOO_STRIP_TEST_VARS: String(strip),
+        PROMPTFOO_STRIP_GRADING_RESULT: String(strip),
+        PROMPTFOO_STRIP_METADATA: String(strip),
+      };
+      const restoreEnv = mockProcessEnv(
+        Object.fromEntries(Object.keys(flags).map((key) => [key, String(!strip)])),
+      );
+      const testCase = {
+        vars: { input: 'private-input' },
+        metadata: { note: 'private-note' },
+        providerOutput: 'private-output',
+      };
+      const traceSpy = vi.spyOn(getTraceStore(), 'getTracesByEvaluation').mockResolvedValue([
+        {
+          traceId: 'trace',
+          evaluationId: 'eval',
+          testCaseId: 'test',
+          metadata: { note: 'private-trace-note' },
+          spans: [
+            {
+              spanId: 'span',
+              name: 'provider',
+              startTime: 1,
+              attributes: {
+                'promptfoo.request.body': 'private-trace-prompt',
+                'promptfoo.response.body': 'private-trace-response',
+              },
+            },
+          ],
+        },
+      ]);
+      const eval_ = new Eval({ env: flags, tests: [testCase], prompts: ['private-config-prompt'] });
+      await eval_.addResult(
+        createEvaluateResult({
+          prompt: { raw: 'private-prompt', template: 'private-template', label: 'label' },
+          testCase,
+          response: { output: 'private-output', raw: 'private-raw-output' },
+          metadata: { note: 'private-note' },
+          gradingResult: { pass: true, score: 1, reason: 'private-grade' },
+        }),
+      );
+      try {
+        eval_.prompts = [
+          {
+            raw: 'private-prompt',
+            template: 'private-template',
+            label: 'public',
+            provider: 'echo',
+          },
+        ];
+        const resultsFile = await eval_.toResultsFile();
+        expect(resultsFile.prompts?.[0].raw).toBe(strip ? '[prompt stripped]' : 'private-prompt');
+        expect(JSON.stringify(resultsFile).includes('private-')).toBe(!strip);
+        const output = await createOutputData(eval_, null);
+        expect(JSON.stringify(output).includes('private-')).toBe(!strip);
+        expect(output.results.results[0]).toMatchObject({ success: true, score: 1 });
+        if (!strip) {
+          expect(output.results.results[0]).toMatchObject({
+            prompt: { raw: 'private-prompt' },
+            testCase,
+            response: { output: 'private-output', raw: 'private-raw-output' },
+            metadata: { note: 'private-note' },
+            gradingResult: { reason: 'private-grade' },
+          });
+        }
+
+        for (const extension of ['json', 'yaml', 'xml', 'jsonl']) {
+          vi.mocked(fsPromises.writeFile).mockClear();
+          vi.mocked(fsPromises.appendFile).mockClear();
+          await writeOutput(`output.${extension}`, eval_, null);
+          const contents = [
+            ...vi.mocked(fsPromises.writeFile).mock.calls,
+            ...vi.mocked(fsPromises.appendFile).mock.calls,
+          ]
+            .map((call) => call[1])
+            .join('');
+          expect(contents, extension).not.toBe('');
+          expect(contents.includes('private-'), extension).toBe(!strip);
+        }
+
+        expect(eval_.config.tests).toEqual([testCase]);
+        expect(eval_.config.prompts).toEqual(['private-config-prompt']);
+        expect(eval_.prompts[0].template).toBe('private-template');
+        expect(eval_.results[0].response?.output).toBe('private-output');
+      } finally {
+        traceSpy.mockRestore();
+        restoreEnv();
+      }
+    },
+  );
 
   it.each([
     {
@@ -989,29 +1110,36 @@ describe('writeOutput', () => {
     });
   });
 
+  async function junitSuiteWithNames(label: string, description = label) {
+    const eval_ = new Eval({});
+    const provider = { id: 'echo', label };
+    await eval_.addResult(createEvaluateResult({ provider, testCase: { description } }));
+    const xml = await createJunitXml(eval_);
+    expect(() => new SaxesParser().write(xml).close()).not.toThrow();
+    return new XMLParser({ ignoreAttributes: false }).parse(xml).testsuites.testsuite;
+  }
+
+  it('exports well-formed JUnit XML when names contain forbidden characters', async () => {
+    const invalid = '\u0000\u0001\u0008\u000e\u001b\u001f\ud800\ufffe\udfff\uffff';
+    const suite = await junitSuiteWithNames(
+      `target${invalid} & <model>`,
+      `case${invalid} \u{1f680} \u4e2d\u6587`,
+    );
+    expect(suite['@_name']).toMatch(/^\[target & <model>\] prompt 1 \([a-f0-9]{16}\)$/);
+    expect(suite.testcase['@_name']).toBe('test 1: case \u{1f680} \u4e2d\u6587');
+  });
+
   it('keeps JUnit failure messages compact when raw assertion reasons are long', async () => {
     const longReason = 'x'.repeat(600);
     const eval_ = new Eval({});
-    await eval_.addResult({
-      success: false,
-      failureReason: ResultFailureReason.ASSERT,
-      score: 0,
-      namedScores: {},
-      latencyMs: 0,
-      provider: { id: 'echo' },
-      prompt: { raw: 'Prompt', label: 'Prompt' },
-      response: { output: '' },
-      vars: {},
-      promptIdx: 0,
-      testIdx: 0,
-      testCase: {},
-      gradingResult: {
-        pass: false,
+    await eval_.addResult(
+      createEvaluateResult({
+        success: false,
+        failureReason: ResultFailureReason.ASSERT,
         score: 0,
-        reason: longReason,
-      },
-      promptId: 'long-message',
-    });
+        gradingResult: { pass: false, score: 0, reason: longReason },
+      }),
+    );
 
     const xml = await createJunitXml(eval_);
     const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
@@ -1020,50 +1148,135 @@ describe('writeOutput', () => {
     expect(xml).not.toContain(longReason);
   });
 
-  it('separates JUnit suites for providers that share an id but differ by label', async () => {
+  it.each([
+    ['target-A', 'target-B'],
+    ['model', 'mo\u0000del'],
+    ['mo\u0000del', 'mo\u0001del'],
+    ['mo del', 'mo \u0000del'],
+    ['x'.repeat(508) + '🚀tailmore', 'x'.repeat(508) + '...'],
+    ['\u0001target', 'target', 'echo\u0001'],
+  ])(
+    'keeps JUnit identities distinct and stable for %j and %j',
+    async (first, second, secondId = 'echo') => {
+      const names: string[][] = [];
+      for (const labels of [
+        [first, second],
+        [second, first],
+      ]) {
+        const eval_ = new Eval({});
+        for (const [promptIdx, label] of labels.entries()) {
+          const success = label === first;
+          await eval_.addResult(
+            createEvaluateResult({
+              provider: { id: label === second ? secondId : 'echo', label },
+              promptId: 'shared',
+              promptIdx,
+              success,
+              score: Number(success),
+              failureReason: success ? ResultFailureReason.NONE : ResultFailureReason.ASSERT,
+              gradingResult: { pass: success, score: Number(success), reason: 'fixture' },
+            }),
+          );
+        }
+        const xml = await createJunitXml(eval_);
+        expect(() => new SaxesParser().write(xml).close()).not.toThrow();
+        const report = new XMLParser({ ignoreAttributes: false }).parse(xml).testsuites;
+        expect(report).toMatchObject({ '@_tests': '2', '@_failures': '1' });
+        expect(Array.isArray(report.testsuite)).toBe(true);
+        expect(report.testsuite[labels.indexOf(second)].testcase.failure).toBeDefined();
+        const current: string[] = [];
+        for (const suite of report.testsuite) {
+          expect(suite.testcase['@_classname']).toBe(suite['@_name']);
+          current.push(suite['@_name']);
+        }
+        expect(new Set(current).size).toBe(2);
+        names.push(current);
+      }
+      expect(names[1]).toEqual([...names[0]].reverse());
+      if (first === 'target-A') {
+        expect(names[0]).toEqual(['[target-A] prompt 1', '[target-B] prompt 1']);
+      } else if (first.includes('🚀')) {
+        expect(names[0][0]).toContain('🚀...');
+      } else if (secondId !== 'echo') {
+        expect(names[0][0]).toMatch(/^\[target\] prompt 1 \([a-f0-9]{16}\)$/);
+        expect(names[0][1]).toBe('[target] prompt 1');
+      }
+    },
+  );
+
+  it.each([
+    ['hello\u000bworld', 'hello world'],
+    ['hello\u000cworld', 'hello world'],
+    ['a' + '🚀'.repeat(300), 'a' + '🚀'.repeat(254) + '...'],
+    ['x'.repeat(520) + '\u0000', 'x'.repeat(509) + '...'],
+    ['x'.repeat(512) + '\u0001', 'x'.repeat(509) + '...'],
+    ['y'.repeat(509) + 'ABC' + '\u0000'.repeat(20), 'y'.repeat(509) + '...'],
+  ])('preserves already-valid JUnit identities for %j', async (raw, expected) => {
+    const suite = await junitSuiteWithNames(raw);
+    expect(suite['@_name']).toBe('[' + expected + '] prompt 1');
+    expect(suite.testcase['@_name']).toBe('test 1: ' + expected);
+  });
+
+  it.each([
+    ['case \u0000 name', 'case name'],
+    [' \u0001 case \u0000  name \u001f ', 'case name'],
+    ['x'.repeat(490) + '\u0000-v2', 'x'.repeat(490) + '-v2'],
+    ['x'.repeat(490) + '\u0000'.repeat(14) + 'XY', 'x'.repeat(490) + 'XY'],
+  ])('keeps visible JUnit text after removing controls from %j', async (raw, expected) => {
+    const suite = await junitSuiteWithNames(raw);
+    const nameWithoutHash = suite['@_name'].replace(/ \([a-f0-9]{16}\)$/, '');
+    expect(nameWithoutHash).toBe('[' + expected + '] prompt 1');
+    expect(suite.testcase['@_classname']).toBe(suite['@_name']);
+    expect(suite.testcase['@_name']).toBe('test 1: ' + expected);
+  });
+
+  it('removes forbidden name characters before fallback and length limits', async () => {
     const eval_ = new Eval({});
-    await eval_.addResult({
-      success: true,
-      failureReason: ResultFailureReason.NONE,
-      score: 1,
-      namedScores: {},
-      latencyMs: 100,
-      provider: { id: 'echo', label: 'target-A' },
-      prompt: { raw: 'Greet {{name}}', label: 'Greet prompt' },
-      response: { output: '' },
-      vars: { name: 'Alice' },
-      promptIdx: 0,
-      testIdx: 0,
-      testCase: {},
-      promptId: 'prompt-shared',
-    });
-    await eval_.addResult({
-      success: false,
-      failureReason: ResultFailureReason.ASSERT,
-      score: 0,
-      namedScores: {},
-      latencyMs: 200,
-      provider: { id: 'echo', label: 'target-B' },
-      prompt: { raw: 'Greet {{name}}', label: 'Greet prompt' },
-      response: { output: '' },
-      vars: { name: 'Alice' },
-      promptIdx: 1,
-      testIdx: 0,
-      testCase: {},
-      gradingResult: { pass: false, score: 0, reason: 'B failed' },
-      promptId: 'prompt-shared',
-    });
-
+    const cases = [
+      ['\u0000', '\u0000', 'unknown provider', 'test 1'],
+      [
+        '\ud800'.repeat(510) + 'VISIBLE_PROVIDER',
+        '\u0000'.repeat(510) + 'VISIBLE_TEST',
+        'VISIBLE_PROVIDER',
+        'test 2: VISIBLE_TEST',
+      ],
+      [
+        'y'.repeat(508) + '🚀tailmore',
+        'y'.repeat(508) + '🚀tailmore',
+        'y'.repeat(508) + '🚀...',
+        'test 3: ' + 'y'.repeat(508) + '🚀...',
+      ],
+    ];
+    for (const [testIdx, [label, description]] of cases.entries()) {
+      await eval_.addResult(
+        createEvaluateResult({
+          provider: { id: 'echo', label },
+          testCase: { description },
+          testIdx,
+        }),
+      );
+    }
     const xml = await createJunitXml(eval_);
-    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+    expect(() => new SaxesParser().write(xml).close()).not.toThrow();
+    const suites = new XMLParser({ ignoreAttributes: false }).parse(xml).testsuites.testsuite;
+    for (const [index, [, , provider, testcase]] of cases.entries()) {
+      expect(suites[index]['@_name']).toContain('[' + provider + '] prompt 1');
+      expect(suites[index].testcase['@_name']).toBe(testcase);
+    }
+  });
 
-    expect(parsed.testsuites.testsuite).toEqual([
-      expect.objectContaining({ '@_name': '[target-A] prompt 1', '@_tests': '1' }),
-      expect.objectContaining({
-        '@_name': '[target-B] prompt 1',
-        '@_tests': '1',
-        '@_failures': '1',
-      }),
+  it('keeps different clean prompts numbered under a shared display name', async () => {
+    const eval_ = new Eval({});
+    for (const id of ['first', 'second']) {
+      await eval_.addResult(
+        createEvaluateResult({ provider: { id, label: 'shared' }, prompt: { raw: id, label: id } }),
+      );
+    }
+    const suites = new XMLParser({ ignoreAttributes: false }).parse(await createJunitXml(eval_))
+      .testsuites.testsuite;
+    expect(suites).toMatchObject([
+      { '@_name': '[shared] prompt 1' },
+      { '@_name': '[shared] prompt 2' },
     ]);
   });
 
@@ -1108,25 +1321,14 @@ describe('writeOutput', () => {
     }
   });
 
-  it('omits raw JUnit error text when it matches the inline reason', async () => {
+  it.each([
+    ['request failed: 500', 'request failed: 500'],
+    ['API error: 401\n{"code":"invalid_api_key"}', 'invalid_api_key'],
+  ])('omits raw JUnit error text: %s', async (error, secret) => {
     const eval_ = new Eval({});
-    await eval_.addResult({
-      success: false,
-      failureReason: ResultFailureReason.ERROR,
-      score: 0,
-      namedScores: {},
-      latencyMs: 100,
-      provider: { id: 'echo' },
-      prompt: { raw: 'p', label: '' },
-      response: { output: '' },
-      error: 'request failed: 500',
-      vars: {},
-      promptIdx: 0,
-      testIdx: 0,
-      testCase: {},
-      promptId: 'collapsed-error',
-    });
-
+    await eval_.addResult(
+      createEvaluateResult({ success: false, failureReason: ResultFailureReason.ERROR, error }),
+    );
     const xml = await createJunitXml(eval_);
     const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
 
@@ -1134,36 +1336,7 @@ describe('writeOutput', () => {
       '#text': 'Reason: Evaluation error',
       '@_message': 'Evaluation error',
     });
-    expect(xml).not.toContain('request failed: 500');
-  });
-
-  it('omits multiline raw JUnit error payloads', async () => {
-    const eval_ = new Eval({});
-    await eval_.addResult({
-      success: false,
-      failureReason: ResultFailureReason.ERROR,
-      score: 0,
-      namedScores: {},
-      latencyMs: 100,
-      provider: { id: 'echo' },
-      prompt: { raw: 'p', label: '' },
-      response: { output: '' },
-      error: 'API error: 401\n{"code":"invalid_api_key"}',
-      vars: {},
-      promptIdx: 0,
-      testIdx: 0,
-      testCase: {},
-      promptId: 'multiline-error',
-    });
-
-    const xml = await createJunitXml(eval_);
-    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
-
-    expect(parsed.testsuites.testsuite.testcase.error).toMatchObject({
-      '#text': 'Reason: Evaluation error',
-      '@_message': 'Evaluation error',
-    });
-    expect(xml).not.toContain('invalid_api_key');
+    expect(xml).not.toContain(secret);
   });
 
   it('omits raw model outputs from JUnit assertion details', async () => {
