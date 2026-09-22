@@ -8,12 +8,15 @@ export interface QueuedProviderCall<T> {
 }
 
 export interface ProviderCallQueue {
+  readonly abortSignal?: AbortSignal;
   enqueue<T>(providerId: string, call: () => Promise<T>, signal?: AbortSignal): Promise<T>;
 }
 
 export class ProviderGroupedCallQueue implements ProviderCallQueue {
   private jobs: QueuedProviderCall<unknown>[] = [];
   private waiters: (() => void)[] = [];
+
+  constructor(readonly abortSignal?: AbortSignal) {}
 
   async enqueue<T>(providerId: string, call: () => Promise<T>, signal?: AbortSignal): Promise<T> {
     signal?.throwIfAborted();
