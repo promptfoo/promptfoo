@@ -39,8 +39,12 @@ function heldRequest() {
 }
 
 describe('embedding transport cancellation', () => {
-  beforeEach(() => vi.mocked(fetchWithCache).mockReset());
-  afterEach(() => vi.restoreAllMocks());
+  beforeEach(() => {
+    vi.mocked(fetchWithCache).mockReset();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
   const openAiConfig = { apiKey: 'test-key', apiBaseUrl: 'https://models.example/v1' };
   const mistral = () => new MistralEmbeddingProvider({ config: { apiKey: 'test-key' } });
