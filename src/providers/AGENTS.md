@@ -19,6 +19,7 @@ Evaluations run inside `providerRegistry.withEvaluation()` (`src/providers/provi
 
 - Implement a `cleanup()` method; it is called without arguments. Providers that distinguish idle evaluation cleanup from explicit shutdown can also implement `cleanupAfterEvaluation({ reason: 'evaluation-complete' })`, which is used instead for automatic cleanup.
 - Register with `providerRegistry` for automatic cleanup. Shared singleton transports must call and await `useResource()` on every access.
+- Pass the request signal to `withProvider()` and use the provider that owns cleanup when calling through a temporary adapter. Cancelled calls waiting for older cleanup never start; calls already in progress retain their resources until they settle.
 - A resource is released after its last using evaluation, or immediately on process shutdown.
 
 **Reference implementations:**

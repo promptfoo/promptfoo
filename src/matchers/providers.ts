@@ -77,18 +77,22 @@ export function callGradingProvider<T extends ProviderResponse>(
   const executionContext = getProviderCallExecutionContext();
   const tracingContext = getProviderCallTracingContext();
   const callProvider = (): Promise<T> =>
-    providerRegistry.withProvider(provider, async () => {
-      const result = await (tracingContext
-        ? (tracingContext.withProviderSpan(
-            { provider, callContext, operationName, role: 'grader', promptLabel: label },
-            invoke,
-          ) as Promise<T>)
-        : invoke(callContext));
-      if (result.error) {
-        executionContext?.abortSignal?.throwIfAborted();
-      }
-      return result;
-    });
+    providerRegistry.withProvider(
+      provider,
+      async () => {
+        const result = await (tracingContext
+          ? (tracingContext.withProviderSpan(
+              { provider, callContext, operationName, role: 'grader', promptLabel: label },
+              invoke,
+            ) as Promise<T>)
+          : invoke(callContext));
+        if (result.error) {
+          executionContext?.abortSignal?.throwIfAborted();
+        }
+        return result;
+      },
+      executionContext?.abortSignal,
+    );
 
   const executeCall = async () => {
     // Never start a grader after cancellation; queued graders check once they reach the front.
