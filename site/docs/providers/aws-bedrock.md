@@ -524,9 +524,9 @@ providers:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
-  - id: bedrock:openai.gpt-5.6-sol # frontier: Responses API, uses a Bedrock key or AWS credentials
+  - id: bedrock:openai.gpt-6-sol # frontier: Responses API, uses a Bedrock key or AWS credentials
     config:
-      region: 'us-east-2'
+      region: 'us-east-1'
       apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}'
       reasoning_effort: 'medium'
       max_output_tokens: 256
@@ -1077,6 +1077,15 @@ requests and return the final assistant message directly.
 Amazon Bedrock hosts two families of OpenAI models, and they are served by **different
 APIs**. promptfoo routes each `bedrock:openai.*` id to the correct one automatically.
 
+GPT-6 Sol (`openai.gpt-6-sol`) and Luna (`openai.gpt-6-luna`) use the
+[OpenAI-compatible Responses API on Mantle](https://developers.openai.com/api/docs/guides/amazon-bedrock)
+in `us-east-1`, which promptfoo selects by default for those two IDs. AWS also offers the
+models through Bedrock Runtime with United States and global routing; the bare promptfoo
+selectors use Mantle. For region-specific Standard processing, promptfoo estimates
+$2.20 input / $11 output for Sol and $0.11 input / $0.55 output per million tokens.
+See [OpenAI's Bedrock pricing guidance](https://developers.openai.com/api/docs/guides/amazon-bedrock#pricing)
+for regional pricing and AWS billing terms.
+
 #### Frontier models (GPT-5.x)
 
 - **`openai.gpt-5.6-sol`**: Flagship reasoning tier (`us-east-1`, `us-east-2`)
@@ -1090,8 +1099,8 @@ endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1/responses`) for bar
 GPT-5.6 also supports [Runtime Converse](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-56-sol.html).
 Promptfoo routes the bare
 `bedrock:openai.gpt-5.x` IDs to its OpenAI Responses provider, preserves the Bedrock request
-model ID, and returns the clean final answer. `us-east-2` is the default when no Region is
-configured; GPT-5.6 region availability is checked before a request is made.
+model ID, and returns the clean final answer. `us-east-2` is the default for these GPT-5
+models when no Region is configured; GPT-5.6 region availability is checked before a request is made.
 
 Authentication accepts either a pre-generated **Amazon Bedrock API key** or AWS credentials:
 

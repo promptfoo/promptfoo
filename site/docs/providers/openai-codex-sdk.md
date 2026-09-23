@@ -41,10 +41,10 @@ You can reference this provider using either base ID, and you can inline the mod
 
 ## Installation
 
-Promptfoo includes the Codex SDK as an optional dependency. If optional dependencies are omitted, install it manually. GPT-6 Sol and Luna require [Codex 0.155.0 or later](https://github.com/openai/codex/releases/tag/rust-v0.155.0); Astra requires 0.153.1 or later:
+Promptfoo includes the Codex SDK as an optional dependency. If optional dependencies are omitted, install it manually. Use [Codex 0.156.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.156.1) for GPT-6 Sol and Luna; it bundles their model metadata, including Sol's Ultra setting. Astra requires 0.153.1 or later:
 
 ```bash
-npm install @openai/codex-sdk@^0.155.0
+npm install @openai/codex-sdk@^0.156.1
 ```
 
 Use Node.js `>=22.22.0`, which matches promptfoo's repo/runtime requirement and the provider's loader checks.
@@ -121,8 +121,9 @@ prompts:
 Notes:
 
 - **Model ids are Bedrock ids**: use `openai.gpt-5.6-sol`, `openai.gpt-5.6-terra`, or `openai.gpt-5.6-luna`, not a bare `gpt-5.6` alias. The Codex Bedrock provider serves frontier models through Bedrock's OpenAI-compatible Responses endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1/responses`), which is separate from the classic `bedrock-runtime` `InvokeModel` API.
-- **Region matters**: Sol is available in `us-east-1` and `us-east-2`; Terra and Luna also support `us-west-2`. GPT-5.5 remains available in `us-east-1` and `us-east-2`, and GPT-5.4 in `us-east-1`, `us-east-2`, and `us-west-2`. Request model access first.
+- **Region matters**: GPT-5.6 Sol is available in `us-east-1` and `us-east-2`; GPT-5.6 Terra and Luna also support `us-west-2`. GPT-5.5 remains available in `us-east-1` and `us-east-2`, and GPT-5.4 in `us-east-1`, `us-east-2`, and `us-west-2`. Request model access first.
 - **Use a current Codex CLI**: GPT-5.6 Bedrock catalog support and `max` reasoning require Codex 0.144.0 or later. Codex `ultra` is a multi-agent mode for supported models, not a Responses API reasoning-effort value.
+- **GPT-6 on Bedrock**: AWS serves Sol and Luna on Mantle in `us-east-1`, but the [bundled Codex Bedrock catalog](https://github.com/openai/codex/blob/rust-v0.156.1/codex-rs/model-provider/src/amazon_bedrock/catalog.rs) does not yet list them. Use the [direct Promptfoo Bedrock provider](/docs/providers/aws-bedrock/#openai-models) for these models.
 - **Credentials must reach the Codex CLI**: the Codex CLI reads AWS credentials from its own environment. Because promptfoo runs the CLI with a minimal environment by default, pass `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` (or `AWS_BEARER_TOKEN_BEDROCK`, or `AWS_PROFILE`) and `AWS_REGION` via `cli_env`, or set `inherit_process_env: true`. If you use **temporary credentials** (SSO, STS, assumed roles, or MFA), also forward `AWS_SESSION_TOKEN` — without it the credentials are incomplete and Codex will fail to authenticate. For direct inference, `bedrock:openai.gpt-5.x` uses a Bedrock API key; the AWS SDK credential chain applies to `InvokeModel` models such as `gpt-oss`.
 
 :::warning
@@ -262,7 +263,7 @@ The `approval_policy` parameter controls when user approval is required:
 
 ## Models
 
-Use `gpt-6-sol` or `gpt-6-luna` with [Codex 0.155.0 or later](https://github.com/openai/codex/releases/tag/rust-v0.155.0) when available to your account. `gpt-6-astra` requires [Codex 0.153.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.153.1) and an account with Astra access. GPT-5.6 tiers remain available during the rollout. Availability depends on the installed Codex runtime and authentication method; consult [OpenAI's Codex model guide](https://learn.chatgpt.com/docs/models).
+Use `gpt-6-sol` or `gpt-6-luna` with [Codex 0.156.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.156.1) when available to your account. `gpt-6-astra` requires [Codex 0.153.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.153.1) and an account with Astra access. GPT-5.6 tiers remain available during the rollout. Availability depends on the installed Codex runtime and authentication method; consult [OpenAI's Codex model guide](https://learn.chatgpt.com/docs/models).
 
 ```yaml
 providers:

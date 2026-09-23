@@ -24,7 +24,7 @@ providers:
 
 `openai:codex-desktop` is an alias for the same app-server protocol. Promptfoo starts its own `codex app-server` process; it does not attach to an already-running Codex Desktop app process.
 
-For [GPT-6 Astra](/docs/providers/openai#gpt-6-astra), use Codex 0.153.1 or later and an account with Astra access. [Sol and Luna](/docs/providers/openai#gpt-6-sol-and-luna) require [Codex 0.155.0 or later](https://github.com/openai/codex/releases/tag/rust-v0.155.0) and account access. Reasoning levels depend on the runtime's model catalog. Codex `ultra` is available for Sol, but not Luna; it is not a direct Responses API reasoning value.
+For [GPT-6 Astra](/docs/providers/openai#gpt-6-astra), use Codex 0.153.1 or later and an account with Astra access. For [Sol and Luna](/docs/providers/openai#gpt-6-sol-and-luna), use [Codex 0.156.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.156.1) and an account with access. This release bundles the model metadata used to select reasoning levels. Codex `ultra` is available for Sol, but not Luna; it is not a direct Responses API reasoning value.
 
 ## Codex SDK vs App Server vs Desktop App
 
@@ -93,7 +93,9 @@ providers:
         AWS_SECRET_ACCESS_KEY: '{{env.AWS_SECRET_ACCESS_KEY}}'
 ```
 
-The same notes as the [Codex SDK Bedrock setup](/docs/providers/openai-codex-sdk/#option-3-run-on-amazon-bedrock) apply: use the `openai.`-prefixed model IDs, request model access in a supported Region (Sol: `us-east-1`/`us-east-2`; Terra and Luna also support `us-west-2`), forward `AWS_SESSION_TOKEN` as well when using temporary/SSO credentials, and remember that credentials in `cli_env` are exposed to the agent's shell environment.
+The same notes as the [Codex SDK Bedrock setup](/docs/providers/openai-codex-sdk/#option-3-run-on-amazon-bedrock) apply: use the `openai.`-prefixed model IDs, request model access in a supported Region (GPT-5.6 Sol: `us-east-1`/`us-east-2`; GPT-5.6 Terra and Luna also support `us-west-2`), forward `AWS_SESSION_TOKEN` as well when using temporary/SSO credentials, and remember that credentials in `cli_env` are exposed to the agent's shell environment.
+
+For GPT-6 Sol and Luna on AWS, use the [direct Promptfoo Bedrock provider](/docs/providers/aws-bedrock/#openai-models); the bundled Codex Bedrock catalog does not yet list them.
 
 ## Basic Usage
 
