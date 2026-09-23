@@ -753,11 +753,9 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       // The loop is bounded by wall-clock time rather than by a turn count: both
       // the model round trips and the user's callbacks spend the same budget.
       const outOfBudget = () => Date.now() - startTime >= maxLoopTimeMs;
-      const toolLoopTimeout = (): ProviderResponse => ({
-        error:
-          `Azure Foundry agent tool-calling loop timed out after ${maxLoopTimeMs}ms. ` +
-          'Increase maxPollTimeMs if this evaluation legitimately needs a longer tool-calling loop.',
-      });
+      const toolLoopTimeoutError =
+        `Azure Foundry agent tool-calling loop timed out after ${maxLoopTimeMs}ms. ` +
+        'Increase maxPollTimeMs if this evaluation legitimately needs a longer tool-calling loop.';
       let functionCalls = this.getCallableFunctionCalls(
         response,
         effectiveConfig.functionToolCallbacks,
@@ -772,7 +770,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         // Callbacks can exhaust the budget on their own. Stop before spending
         // another round trip on outputs the loop can no longer act on.
         if (outOfBudget()) {
-          return toolLoopTimeout();
+          return { error: toolLoopTimeoutError };
         }
         logger.debug(
           `[AzureFoundryAgentProvider] Submitting ${outputs.length} function_call_output item(s)`,
@@ -801,7 +799,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       // final model response, so a run that produced one is complete even if the
       // last turn pushed it past the budget.
       if (functionCalls.length > 0) {
-        return toolLoopTimeout();
+        return { error: toolLoopTimeoutError };
       }
 
       const result = await this.processResponse(response, effectiveConfig);
