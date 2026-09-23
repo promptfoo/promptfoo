@@ -1939,6 +1939,38 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
     },
   );
 
+  it.each([false, true])(
+    'renders dynamic OpenRouter reasoning.enabled=%s from provider or prompt config',
+    async (enabled) => {
+      for (const layer of ['provider', 'prompt'] as const) {
+        const selected = vi.fn(({ vars }: { vars: { enabled: boolean } }) => vars.enabled);
+        const provider = new OpenRouterProvider(`openai/${model}`, {
+          config: {
+            passthrough: {
+              reasoning:
+                layer === 'provider'
+                  ? { enabled: selected, exclude: true }
+                  : { effort: 'high', exclude: true },
+            },
+          },
+        });
+        const { body } = await provider.getOpenAiBody('Say ready.', {
+          vars: { enabled },
+          prompt: {
+            raw: 'Say ready.',
+            label: 'ready',
+            ...(layer === 'prompt'
+              ? { config: { passthrough: { reasoning: { enabled: selected } } } }
+              : {}),
+          },
+        });
+        expect(JSON.parse(JSON.stringify(body)).reasoning).toEqual({ enabled, exclude: true });
+        expect(body).not.toHaveProperty('reasoning_effort');
+        expect(selected).toHaveBeenCalledTimes(1);
+      }
+    },
+  );
+
   it.each([
     ['high', ['high', 'none'], true],
     ['none', ['none', 'high'], false],

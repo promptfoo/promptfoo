@@ -171,8 +171,9 @@ function getOpenRouterReasoningControl(
   if (budget !== undefined) {
     return { kind: 'budget' as const, value: budget };
   }
-  if (typeof passthrough.reasoning?.enabled === 'boolean') {
-    return { kind: 'enabled' as const, value: passthrough.reasoning.enabled };
+  const enabled = renderVarsInObject(passthrough.reasoning?.enabled, vars);
+  if (typeof enabled === 'boolean') {
+    return { kind: 'enabled' as const, value: enabled };
   }
   return undefined;
 }
