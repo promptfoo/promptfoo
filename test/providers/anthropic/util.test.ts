@@ -2467,8 +2467,8 @@ describe('Anthropic utilities', () => {
         );
         expect(isAlwaysOnAdaptiveThinkingClaudeModel(id)).toBe(true);
         expect(isForcedToolChoiceUnsupportedClaudeModel(id)).toBe(true);
-        expect(isThinkingOnByDefaultClaudeModel(id)).toBe(true);
         expect(claudeThinkingConsumesTokens(id, undefined)).toBe(true);
+        expect(claudeThinkingConsumesTokens(id, { type: 'disabled' })).toBe(true);
       }
       expect(isForcedToolChoiceUnsupportedClaudeModel('claude-opus-5')).toBe(false);
       expect(getClaudeModelWarningName('claude-opus-5-5')).toBe('Claude Opus 5.5');

@@ -746,6 +746,21 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params.max_tokens).toBe(1024);
     });
 
+    it.each(['global.anthropic.claude-opus-5-5', 'global.anthropic.claude-fable-5-1'])(
+      'keeps thinking headroom for always-on %s even when thinking is disabled',
+      async (model) => {
+        // The rejected `disabled` block is dropped, so the model still thinks against max_tokens.
+        const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+          { region: 'us-east-1', thinking: { type: 'disabled' } },
+          'hi',
+          undefined,
+          model,
+        );
+        expect(params).not.toHaveProperty('thinking');
+        expect(params.max_tokens).toBe(2048);
+      },
+    );
+
     it('keeps the 1024 default for models that do not think by default', async () => {
       const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
         { region: 'us-east-1' },

@@ -281,7 +281,6 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     samplingParamsDeprecated: true,
     alwaysOnAdaptiveThinking: true,
     forcedToolChoiceUnsupported: true,
-    thinkingOnByDefault: true,
     regionalPremium: true,
     cacheReadMultiplier: 0.05,
   },

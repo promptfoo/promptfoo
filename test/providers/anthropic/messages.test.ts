@@ -4262,11 +4262,9 @@ describe('AnthropicMessagesProvider', () => {
         expect(params.tools).toHaveLength(1);
         if (tool_choice.type === 'any' || tool_choice.type === 'tool') {
           expect(params).not.toHaveProperty('tool_choice');
-          if (model === 'claude-opus-5-5') {
-            expect(warnSpy).toHaveBeenCalledWith(
-              expect.stringContaining('(forced tool use) is not supported on Claude Opus 5.5'),
-            );
-          }
+          expect(warnSpy).toHaveBeenCalledWith(
+            expect.stringContaining('(forced tool use) is not supported on Claude'),
+          );
         } else {
           expect(params.tool_choice).toEqual(tool_choice);
         }
