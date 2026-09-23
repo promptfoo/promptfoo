@@ -1,5 +1,4 @@
 import OpenAI from 'openai';
-import { DEFINITIVE_BILLING_ERROR_CODES } from '../../util/fetch/errors';
 import { maybeLoadFromExternalFileWithVars } from '../../util/index';
 import { getAjv, safeJsonStringify } from '../../util/json';
 import { isNonCredentialHeader, looksLikeSecret, sanitizeUrl } from '../../util/sanitizer';
@@ -113,18 +112,6 @@ export function getOpenAiGatewayErrorType(data: unknown): string | undefined {
     error?.error_type,
     choiceError ? undefined : response?.error_type,
   ].find((value): value is string => typeof value === 'string' && value.length > 0);
-}
-
-export function getOpenAiGatewayRateLimitKind(data: unknown): 'quota' | 'rate_limit' | undefined {
-  if (getOpenAiGatewayErrorType(data) !== 'rate_limit_exceeded') {
-    return undefined;
-  }
-  const error = getOpenAiChatChoiceError(data)?.error;
-  const providerCode = getRecord(error?.metadata)?.provider_code;
-  return typeof providerCode === 'string' &&
-    DEFINITIVE_BILLING_ERROR_CODES.has(providerCode.toLowerCase())
-    ? 'quota'
-    : 'rate_limit';
 }
 
 export function getOpenAiPartialOutput(output: unknown, jsonSchema: boolean): unknown {

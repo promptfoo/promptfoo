@@ -1,4 +1,3 @@
-import type { ProviderResponse } from '../types/providers';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 type OpenRouterUsage = {
@@ -67,9 +66,7 @@ export function calculateOpenRouterResponseCost(
   return isNonNegativeFiniteNumber(cost) ? cost : undefined;
 }
 
-export function getOpenRouterBillingMetadata(
-  data: OpenRouterBillingData,
-): ProviderResponse['metadata'] {
+export function getOpenRouterBillingMetadata(data: OpenRouterBillingData) {
   const usage = data.usage;
   if (!usage || typeof usage !== 'object' || Array.isArray(usage)) {
     return undefined;

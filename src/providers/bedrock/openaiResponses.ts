@@ -168,7 +168,8 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
     const config = { ...this.config, ...context?.prompt?.config };
     const model = (config.passthrough as { model?: unknown } | undefined)?.model;
     const supportedRegions =
-      typeof model === 'string' && Object.hasOwn(BEDROCK_OPENAI_MODEL_REGIONS, model)
+      typeof model === 'string' &&
+      Object.prototype.hasOwnProperty.call(BEDROCK_OPENAI_MODEL_REGIONS, model)
         ? BEDROCK_OPENAI_MODEL_REGIONS[model]
         : undefined;
     if (supportedRegions && model !== this.modelName) {

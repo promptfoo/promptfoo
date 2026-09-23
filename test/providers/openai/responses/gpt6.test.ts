@@ -623,7 +623,7 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
           const result = await new OpenAiResponsesProvider(model, {
             config: { apiKey: 'test-key', apiBaseUrl, stream: true },
           }).callApi('A benign test prompt');
-          if (refusal && !apiBaseUrl.includes('api.openai.com')) {
+          if (refusal && apiBaseUrl !== 'https://api.openai.com/v1') {
             expect(result.error).toBeUndefined();
             expect(result.output).toBe(partial);
             expect(result.isRefusal).toBe(true);

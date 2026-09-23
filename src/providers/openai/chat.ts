@@ -1,7 +1,11 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
+import {
+  DEFINITIVE_BILLING_ERROR_CODES,
+  formatRateLimitErrorMessage,
+  HttpRateLimitError,
+} from '../../util/fetch/errors';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import {
   maybeLoadFromExternalFileWithVars,
@@ -45,7 +49,6 @@ import {
   assertOpenAiApiModel,
   getOpenAiChatChoiceError,
   getOpenAiGatewayErrorType,
-  getOpenAiGatewayRateLimitKind,
   getOpenAiPartialOutput,
   getOpenAiPolicyRefusal,
   getTokenUsage,
@@ -68,6 +71,18 @@ export type OpenAiChatCompletionCostData = Pick<
   OpenAI.Chat.Completions.ChatCompletion,
   'service_tier' | 'usage'
 >;
+
+export function getOpenAiGatewayRateLimitKind(data: unknown): 'quota' | 'rate_limit' | undefined {
+  if (getOpenAiGatewayErrorType(data) !== 'rate_limit_exceeded') {
+    return undefined;
+  }
+  const error = getOpenAiChatChoiceError(data)?.error;
+  const providerCode = (error?.metadata as { provider_code?: unknown } | undefined)?.provider_code;
+  return typeof providerCode === 'string' &&
+    DEFINITIVE_BILLING_ERROR_CODES.has(providerCode.toLowerCase())
+    ? 'quota'
+    : 'rate_limit';
+}
 
 function getChatSearchCitations(
   annotations: unknown,
@@ -240,7 +255,10 @@ function reconcileOpenRouterReasoning(
     delete reasoning.enabled;
   }
   // OpenRouter rejects conflicting aliases; retain nested options when canonicalizing an effort.
-  if (reasoning && (control.kind === 'nested' || Object.hasOwn(reasoning, 'effort'))) {
+  if (
+    reasoning &&
+    (control.kind === 'nested' || Object.prototype.hasOwnProperty.call(reasoning, 'effort'))
+  ) {
     body.reasoning = { ...reasoning, effort };
     delete body.reasoning_effort;
   } else {

@@ -2,12 +2,11 @@ import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../util/finishReason';
-import { OpenAiChatCompletionProvider } from './openai/chat';
+import { getOpenAiGatewayRateLimitKind, OpenAiChatCompletionProvider } from './openai/chat';
 import {
   appendOpenAiApiPath,
   formatOpenAiError,
   getOpenAiChatChoiceError,
-  getOpenAiGatewayRateLimitKind,
   getOpenAiPartialOutput,
   getOpenAiPolicyRefusal,
   getTokenUsage,

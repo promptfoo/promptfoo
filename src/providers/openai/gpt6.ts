@@ -7,7 +7,7 @@ type Gpt6Variant = 'astra' | 'sol' | 'luna';
 type Gpt6Reasoning = { effort?: unknown; enabled?: unknown; mode?: unknown } | null | undefined;
 
 function getGpt6BaseModelName(modelName: string): string {
-  const model = modelName.split('/').at(-1) ?? modelName;
+  const model = modelName.slice(modelName.lastIndexOf('/') + 1);
   const [name, fineTuneBase] = model.split(':', 2);
   return name === 'ft' ? (fineTuneBase ?? '') : (name ?? '');
 }
@@ -315,7 +315,7 @@ function getSamplingEffort(
     }
   }
   if (updates.length) {
-    const latest = updates.at(-1);
+    const latest = updates[updates.length - 1];
     return latest === COMPACTED_EFFORT ? effort : latest;
   }
   // A linked response or stored conversation can carry an effort we cannot see locally.
@@ -378,7 +378,7 @@ export function applyGpt6RequestRules(
   if (
     api === 'responses' &&
     samplingEffort === 'none' &&
-    !Object.hasOwn(body, 'temperature') &&
+    !Object.prototype.hasOwnProperty.call(body, 'temperature') &&
     options.defaultResponsesTemperature !== undefined
   ) {
     body.temperature = options.defaultResponsesTemperature;
