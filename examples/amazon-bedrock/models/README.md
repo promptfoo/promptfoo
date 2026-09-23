@@ -271,15 +271,15 @@ promptfoo eval -c examples/amazon-bedrock/models/promptfooconfig.openai-response
 
 ## OpenAI Frontier Models Example
 
-The frontier example (`promptfooconfig.openai-frontier.yaml`) demonstrates OpenAI's GPT-5.x frontier models on Bedrock:
+The frontier example (`promptfooconfig.openai-frontier.yaml`) compares these OpenAI frontier models on Bedrock:
 
-- **openai.gpt-5.6-sol** - Flagship reasoning tier (available in `us-east-1` and `us-east-2`)
-- **openai.gpt-5.6-terra** - Balanced tier (available in `us-east-1`, `us-east-2`, and `us-west-2`)
-- **openai.gpt-5.6-luna** - Fast, cost-efficient tier (available in `us-east-1`, `us-east-2`, and `us-west-2`)
+- **openai.gpt-6-sol** - Max reasoning in `us-east-1`
+- **openai.gpt-5.6-terra** - Medium reasoning in `us-west-2`
+- **openai.gpt-6-luna** - Low reasoning with streaming in `us-east-1`
 
 ### Key Features
 
-- **Responses API**: Frontier models are served through Bedrock's OpenAI-compatible Responses API (`https://bedrock-mantle.<region>.api.aws/openai/v1/responses`), not `InvokeModel` or `Converse`. Promptfoo routes `bedrock:openai.gpt-5.x` there automatically and preserves the Bedrock model ID.
+- **Responses API**: Frontier models are served through Bedrock's OpenAI-compatible Responses API (`https://bedrock-mantle.<region>.api.aws/openai/v1/responses`), not `InvokeModel` or `Converse`. Promptfoo routes these `bedrock:openai.*` model IDs there and preserves the Bedrock model ID.
 - **Authentication**: Use standard AWS credentials (explicit keys, a named profile, or the default credential chain) to generate short-lived bearer tokens with the optional `@aws/bedrock-token-generator` package. Alternatively, supply an Amazon Bedrock API key:
 
   ```bash
@@ -288,7 +288,7 @@ The frontier example (`promptfooconfig.openai-frontier.yaml`) demonstrates OpenA
 
   Explicit AWS keys or `config.profile` override environment bearer tokens. Unset `AWS_BEARER_TOKEN_BEDROCK` when relying on environment AWS credentials or the default credential chain instead.
 
-- **Native Reasoning Effort**: GPT-5.6 supports `none`, `low`, `medium`, `high`, `xhigh`, and `max` (`minimal` is not supported by these Bedrock models).
+- **Native Reasoning Effort**: The example sets `max` for Sol, `medium` for Terra, and `low` for Luna.
 - **Prompt caching and streaming**: The example marks its stable system instructions with an explicit cache breakpoint, uses a stable `prompt_cache_key`, and enables streaming for Luna. Cache reads receive a 90% discount; cache writes cost 1.25x the uncached input rate.
 - **Region-gated**: Request model access in a supported region before running.
 
