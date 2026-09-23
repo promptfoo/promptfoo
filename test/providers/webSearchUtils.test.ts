@@ -327,15 +327,19 @@ describe('webSearchUtils', () => {
       expect(hasWebSearchCapability(provider as ApiProvider)).toBe(false);
     });
 
-    it('should return true for Anthropic provider with web_search tool', () => {
-      const provider: Partial<ApiProvider> = {
-        id: () => 'anthropic:messages:claude-opus-4-6',
-        config: {
-          tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
-        },
-      };
-      expect(hasWebSearchCapability(provider as ApiProvider)).toBe(true);
-    });
+    // Both the legacy basic variant and the current dynamic-filtering variant count.
+    it.each(['web_search_20250305', 'web_search_20260209'])(
+      'should return true for Anthropic provider with the %s tool',
+      (toolType) => {
+        const provider: Partial<ApiProvider> = {
+          id: () => 'anthropic:messages:claude-opus-5',
+          config: {
+            tools: [{ type: toolType, name: 'web_search', max_uses: 5 }],
+          },
+        };
+        expect(hasWebSearchCapability(provider as ApiProvider)).toBe(true);
+      },
+    );
 
     it('should return false for Anthropic provider without web_search tool', () => {
       const provider: Partial<ApiProvider> = {
@@ -374,9 +378,9 @@ describe('webSearchUtils', () => {
   describe('loadWebSearchProvider', () => {
     const mockLoadApiProvider = vi.mocked(loadApiProvider);
     const mockAnthropicWebSearchProvider = (): Partial<ApiProvider> => ({
-      id: () => 'anthropic:messages:claude-opus-4-8',
+      id: () => 'anthropic:messages:claude-opus-5',
       config: {
-        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
+        tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 5 }],
       },
     });
     const mockOpenAiWebSearchProvider = (): Partial<ApiProvider> =>
@@ -422,12 +426,12 @@ describe('webSearchUtils', () => {
 
       expect(result).toBe(mockProvider);
       expect(mockLoadApiProvider).toHaveBeenCalledWith(
-        'anthropic:messages:claude-opus-4-8',
+        'anthropic:messages:claude-opus-5',
         expect.objectContaining({
           options: expect.objectContaining({
             config: expect.objectContaining({
               tools: expect.arrayContaining([
-                expect.objectContaining({ type: 'web_search_20250305' }),
+                expect.objectContaining({ type: 'web_search_20260209' }),
               ]),
             }),
           }),
