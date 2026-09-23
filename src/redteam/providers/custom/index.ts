@@ -14,7 +14,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
-import { getTargetConversation, withGradingUsage } from '../../grading/storedResult';
+import { getTargetConversation } from '../../grading/storedResult';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import {
@@ -32,6 +32,7 @@ import {
   accumulateUnblockingTokenUsage,
   buildGraderResultAssertion,
   callGradingProvider,
+  captureFlaggedTurn,
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getLastMessageContent,
@@ -39,6 +40,7 @@ import {
   isConversationEndedResponse,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
+  resolveStoredGraderResult,
   runRedteamGrader,
   type TargetResponse,
   tryUnblocking,
@@ -59,7 +61,7 @@ import type {
 } from '../../../types/index';
 import type { RedteamGradingContext } from '../../grading/types';
 import type { BaseRedteamMetadata } from '../../types';
-import type { Message } from '../shared';
+import type { FlaggedTurn, Message } from '../shared';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
@@ -363,17 +365,8 @@ export class CustomProvider implements ApiProvider {
     const { getGraderById } = await import('../../graders');
     let graderPassed: boolean | undefined;
     let storedGraderResult: GradingResult | undefined;
-    // The first round the plugin grader called a vulnerability. `continueAfterSuccess` keeps
-    // attacking past that round, and a later refusal must not replace the verdict or the
-    // round that earned it.
-    let vulnerableRound:
-      | {
-          graderResult: GradingResult;
-          output: string;
-          prompt: string | undefined;
-          messages: Message[];
-        }
-      | undefined;
+    // The first round a grader flagged. `continueAfterSuccess` keeps attacking past it.
+    let flaggedRound: FlaggedTurn | undefined;
 
     // Generate goal-specific evaluation rubric
     const additionalRubric = getGoalRubric(this.userGoal);
@@ -666,16 +659,13 @@ export class CustomProvider implements ApiProvider {
           // recordSuccessfulAttack ignores a turn it has already recorded, so with
           // continueAfterSuccess the check after the evaluator doesn't record this turn twice.
           this.recordSuccessfulAttack(roundNum, attackPrompt, lastResponse.output);
-          if (!vulnerableRound && storedGraderResult) {
-            vulnerableRound = {
-              graderResult: storedGraderResult,
-              output: lastResponse.output,
-              // Must stay the value the grading hash was built from, or the assertion
-              // layer re-grades the turn instead of reusing this verdict.
-              prompt: lastFinalAttackPrompt,
-              messages: [...lastResponseMessages],
-            };
-          }
+          // `prompt` and `output` must stay the values the grading hash was built from, or
+          // the assertion layer re-grades the round instead of reusing this verdict.
+          flaggedRound ??= captureFlaggedTurn(storedGraderResult, {
+            output: lastResponse.output,
+            prompt: lastFinalAttackPrompt,
+            messages: lastResponseMessages,
+          });
           if (!this.config.continueAfterSuccess) {
             exitReason = 'Grader failed';
             logger.debug(
@@ -757,12 +747,12 @@ export class CustomProvider implements ApiProvider {
 
     // Report the round the grader flagged. Without this the eval grades the last round, so a
     // refusal after a successful attack hides the vulnerability behind a passing row.
-    const messages = vulnerableRound ? vulnerableRound.messages : lastResponseMessages;
-    const finalPrompt = vulnerableRound
-      ? vulnerableRound.prompt
+    const messages = flaggedRound ? flaggedRound.messages : lastResponseMessages;
+    const finalPrompt = flaggedRound
+      ? flaggedRound.prompt
       : lastFinalAttackPrompt || getLastMessageContent(messages, 'user');
     return {
-      output: vulnerableRound ? vulnerableRound.output : lastResponse.output,
+      output: flaggedRound ? flaggedRound.output : lastResponse.output,
       prompt: finalPrompt,
       metadata: {
         redteamFinalPrompt: finalPrompt,
@@ -775,16 +765,17 @@ export class CustomProvider implements ApiProvider {
         redteamHistory,
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,
-        storedGraderResult: vulnerableRound
-          ? withGradingUsage(vulnerableRound.graderResult, storedGraderResult?.tokensUsed)
-          : storedGraderResult,
+        storedGraderResult: resolveStoredGraderResult(
+          flaggedRound?.graderResult,
+          storedGraderResult,
+        ),
         sessionId: getSessionId(lastResponse, context),
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastResponse?.guardrails,
       // A target failure in a later round does not describe the round being reported, and an
       // error row would hide the vulnerability the grader already confirmed.
-      ...(vulnerableRound
+      ...(flaggedRound
         ? {}
         : lastTargetError
           ? { error: lastTargetError }
