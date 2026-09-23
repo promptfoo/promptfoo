@@ -131,8 +131,8 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * Reasoning effort levels for model reasoning intensity.
  *
  * Model support varies:
- * - gpt-6-astra / gpt-5.6-sol / gpt-5.6-terra: 'low', 'medium', 'high', 'xhigh', 'max', and 'ultra'
- * - gpt-6-sol / gpt-6-luna / gpt-5.6-luna: 'low', 'medium', 'high', 'xhigh', and 'max';
+ * - gpt-6-astra / gpt-6-sol / gpt-5.6-sol / gpt-5.6-terra: 'low', 'medium', 'high', 'xhigh', 'max', and 'ultra'
+ * - gpt-6-luna / gpt-5.6-luna: 'low', 'medium', 'high', 'xhigh', and 'max';
  *   gpt-6-luna does not support 'ultra'
  * - gpt-5.5: 'minimal', 'low', 'medium', 'high', 'xhigh' in the Codex SDK;
  *   the OpenAI API uses 'none' instead of 'minimal'

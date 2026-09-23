@@ -342,12 +342,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
 
     // OpenRouter can translate Chat tools to the upstream Responses API.
-    applyGpt6RequestRules(
-      body,
-      capabilityModelName,
-      'chat',
-      this.getGenAISystem() === 'openrouter',
-    );
+    applyGpt6RequestRules(body, capabilityModelName, 'chat', {
+      allowChatTools: this.getGenAISystem() === 'openrouter',
+    });
 
     return { body, config: { ...config, service_tier: body.service_tier } };
   }

@@ -526,6 +526,71 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
     }
   });
 
+  it('only applies the default Responses temperature when the current effort is known to be none', async () => {
+    const responseFor = (config: ConstructorParameters<typeof OpenAiResponsesProvider>[1] = {}) =>
+      new OpenAiResponsesProvider(model, config).getOpenAiBody('Say ready.');
+
+    for (const config of [
+      { reasoning: { effort: 'none' as const } },
+      { reasoning_effort: 'none' as const },
+      { passthrough: { reasoning: { effort: 'none' } } },
+    ]) {
+      expect((await responseFor({ config })).body.temperature).toBe(0);
+    }
+    for (const config of [
+      { reasoning: { effort: 'none' as const }, omitDefaults: true },
+      { reasoning: { effort: 'high' as const } },
+      {},
+    ]) {
+      expect((await responseFor({ config })).body).not.toHaveProperty('temperature');
+    }
+    const passthrough = { temperature: undefined };
+    const { body: explicitlyOmitted } = await responseFor({
+      config: { reasoning: { effort: 'none' }, passthrough },
+    });
+    expect(explicitlyOmitted.temperature).toBeUndefined();
+
+    const restoreTemperature = mockProcessEnv({ OPENAI_TEMPERATURE: '0.45' });
+    try {
+      const { body: fromEnv } = await responseFor({
+        config: { reasoning: { effort: 'none' }, omitDefaults: true },
+      });
+      expect(fromEnv.temperature).toBe(0.45);
+      const { body: fromConfig } = await responseFor({
+        config: { reasoning: { effort: 'none' }, temperature: 0.2 },
+      });
+      expect(fromConfig.temperature).toBe(0.2);
+    } finally {
+      restoreTemperature();
+    }
+
+    const updatedInput = JSON.stringify([
+      { type: 'configuration_update', reasoning: { effort: 'none' } },
+      { role: 'user', content: 'Say ready.' },
+    ]);
+    const { body: updated } = await new OpenAiResponsesProvider(model, {
+      config: { previous_response_id: 'resp_previous', reasoning: { effort: 'high' } },
+    }).getOpenAiBody(updatedInput);
+    expect(updated.temperature).toBe(0);
+
+    const azure = await new AzureResponsesProvider(`prod-${model}`, {
+      config: { apiKey: 'test-key', reasoning_effort: 'none' },
+    }).getAzureResponsesBody('Say ready.');
+    const azureOmitted = await new AzureResponsesProvider(`prod-${model}`, {
+      config: { apiKey: 'test-key', reasoning_effort: 'none', omitDefaults: true },
+    }).getAzureResponsesBody('Say ready.');
+    const azureStored = await new AzureResponsesProvider(`prod-${model}`, {
+      config: {
+        apiKey: 'test-key',
+        reasoning_effort: 'none',
+        previous_response_id: 'resp_previous',
+      },
+    }).getAzureResponsesBody('Say ready.');
+    expect(azure.temperature).toBe(0);
+    expect(azureOmitted).not.toHaveProperty('temperature');
+    expect(azureStored).not.toHaveProperty('temperature');
+  });
+
   it.each([
     { topLevel: 'high', updates: ['none'], keepsSampling: true },
     { topLevel: 'none', updates: ['high'], keepsSampling: false },
@@ -713,6 +778,17 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
     expect(body).not.toHaveProperty('functions');
     expect(passthrough).toEqual({ tools: [], functions: [] });
   });
+
+  it.each([{ tool_choice: 'none' }, { function_call: 'none' }])(
+    'rejects an explicit native Chat tool selector without definitions, as the endpoint does',
+    async (passthrough) => {
+      await expect(
+        new OpenAiChatCompletionProvider(model, {
+          config: { reasoning_effort: 'high', passthrough },
+        }).getOpenAiBody('Say ready.'),
+      ).rejects.toThrow('Chat Completions function calling requires reasoning_effort: none');
+    },
+  );
 
   it('uses the final per-prompt model and reasoning effort for sampling', async () => {
     const chatProvider = new OpenAiChatCompletionProvider('gpt-4.1');

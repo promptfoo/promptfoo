@@ -1066,6 +1066,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       body,
       config.passthrough?.model ?? this.getCapabilityModelName(),
       'responses',
+      { defaultResponsesTemperature: config.omitDefaults ? undefined : 0 },
     );
 
     return {

@@ -261,7 +261,9 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       ...(config.passthrough || {}),
     };
 
-    applyGpt6RequestRules(body, capabilityModelName, 'responses');
+    applyGpt6RequestRules(body, capabilityModelName, 'responses', {
+      defaultResponsesTemperature: config.omitDefaults ? undefined : 0,
+    });
 
     logger.debug('Azure Responses API request body', { body });
     return body;

@@ -82,6 +82,7 @@ function validateChatTools(
       }
     }
   }
+  // Native Chat rejects an explicit tool_choice or function_call without definitions, even `none`.
   if (
     allowChatTools ||
     !['tools', 'tool_choice', 'functions', 'function_call'].some((key) => body[key] != null)
@@ -106,7 +107,7 @@ export function applyGpt6RequestRules(
   body: Record<string, unknown>,
   modelName: unknown,
   api: 'chat' | 'responses',
-  allowChatTools = false,
+  options: { allowChatTools?: boolean; defaultResponsesTemperature?: number } = {},
 ): void {
   const variant = getGpt6Variant(modelName);
   if (!variant) {
@@ -120,7 +121,7 @@ export function applyGpt6RequestRules(
       `${modelLabel} Responses requests use reasoning.effort. Configure reasoning or reasoning_effort instead of passthrough.reasoning_effort.`,
     );
   }
-  if (api === 'chat' && variant !== 'astra' && !allowChatTools && body.reasoning != null) {
+  if (api === 'chat' && variant !== 'astra' && !options.allowChatTools && body.reasoning != null) {
     throw new Error(
       `${modelLabel} Chat Completions requests use reasoning_effort. Configure reasoning_effort instead of passthrough.reasoning.`,
     );
@@ -130,7 +131,7 @@ export function applyGpt6RequestRules(
 
   let samplingEffort = effort;
   if (api === 'chat') {
-    validateChatTools(body, variant, modelLabel, effort, allowChatTools);
+    validateChatTools(body, variant, modelLabel, effort, options.allowChatTools ?? false);
   } else {
     const updates = getResponsesEffortUpdates(body.input);
     for (const update of updates) {
@@ -142,6 +143,13 @@ export function applyGpt6RequestRules(
       : body.previous_response_id || body.conversation
         ? UNKNOWN_PERSISTED_EFFORT
         : effort;
+    if (
+      samplingEffort === 'none' &&
+      !Object.hasOwn(body, 'temperature') &&
+      options.defaultResponsesTemperature !== undefined
+    ) {
+      body.temperature = options.defaultResponsesTemperature;
+    }
   }
 
   if (
