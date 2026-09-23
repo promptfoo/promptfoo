@@ -98,6 +98,8 @@ Cache replays retain logical cost and billing metadata. The evaluator records ze
 
 For GPT-6 Sol and Luna, set `reasoning_effort` or use `passthrough.reasoning`. A named effort and `passthrough.reasoning.max_tokens` are alternative controls. OpenRouter also supports changing reasoning effort through a [`configuration_update` on an empty system or developer message](https://openrouter.ai/docs/cookbook/evaluate-and-optimize/model-migrations/gpt-6#chat-completions-api). That message extension applies only to OpenRouter, not to native OpenAI Chat Completions. OpenRouter Responses is stateless: replay the conversation instead of sending `previous_response_id`.
 
+OpenRouter can report a [provider error alongside partial Chat output](https://openrouter.ai/docs/api/reference/errors-and-debugging). If OpenRouter explicitly marks that error as a refusal, promptfoo preserves the partial output and records the refusal for the [`is-refusal` assertion](/docs/configuration/expected-outputs/deterministic/#is-refusal). Provider access errors and other generation errors remain evaluation errors; their raw response includes any partial output.
+
 Some models like Gemini 2.5 Pro include thinking tokens in their responses. You can control whether these are shown using the `showThinking` parameter:
 
 ```yaml title="promptfooconfig.yaml"
