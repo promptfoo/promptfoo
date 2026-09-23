@@ -23,10 +23,8 @@ export const ANTHROPIC_MODELS = [
       },
     }),
   ),
-  // Claude Opus 5.5 — successor to Opus 5 at a lower list price ($4/$20). Same 1M context
-  // window and 128K max output; the full 1M context bills at this flat rate. Cache reads are
-  // 0.05x input ($0.20/MTok, see calculateCacheInputCost). Fast mode ($8/$40, Claude API
-  // only) is a separate research-preview rate that is intentionally not encoded here.
+  // Claude Opus 5.5 — 1M context billed at a flat rate. Fast mode ($8/$40, Claude API only)
+  // is a separate research-preview rate that is intentionally not encoded here.
   ...['claude-opus-5-5'].map((model) => ({
     id: model,
     cost: {
@@ -246,6 +244,8 @@ interface ClaudeModelFamily {
   disabledThinkingEffortCapped?: boolean;
   /** 10% premium on Bedrock regional / Vertex regional+multi-region endpoints vs global. */
   regionalPremium?: boolean;
+  /** Cache-read price as a fraction of the input rate, when it differs from the usual 0.1. */
+  cacheReadMultiplier?: number;
 }
 
 /**
@@ -263,6 +263,7 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     alwaysOnAdaptiveThinking: true,
     forcedToolChoiceUnsupported: true,
     regionalPremium: true,
+    cacheReadMultiplier: 0.025,
   },
   {
     match: CLAUDE_FABLE_MYTHOS_5_PATTERN,
@@ -282,6 +283,7 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     forcedToolChoiceUnsupported: true,
     thinkingOnByDefault: true,
     regionalPremium: true,
+    cacheReadMultiplier: 0.05,
   },
   // Opus 5 thinks by default (omitting `thinking` runs adaptive, unlike Opus 4.7/4.8) and
   // still accepts `disabled`, but only at effort `high` or below.
@@ -337,7 +339,7 @@ export function isClaudeOpus55Model(modelId: string): boolean {
   return CLAUDE_OPUS_55_PATTERN.test(modelId);
 }
 
-/** Matches Claude Opus 5 model IDs (not `claude-opus-4-5`, `claude-opus-5-5`, or `claude-opus-50`). */
+/** Matches Claude Opus 5 model IDs (not `claude-opus-4-5`, `-5-5`, or `-50`). */
 export function isClaudeOpus5Model(modelId: string): boolean {
   return CLAUDE_OPUS_5_PATTERN.test(modelId);
 }
@@ -496,7 +498,7 @@ export function isSamplingParamsDeprecatedClaudeModel(
  * Normalize a Claude thinking config for models that deprecate manual
  * budget-based thinking: an `enabled` budget converts to adaptive thinking
  * (preserving `display`), and `disabled` is omitted on always-on adaptive
- * thinking models (Fable/Mythos 5 and 5.1, Opus 5.5), which reject it. `disabled` is also
+ * thinking models (Fable 5 / Mythos 5), which reject it. `disabled` is also
  * omitted on effort-capped models (Opus 5) when `effort` is high enough that
  * the combination would 400. The Anthropic, Bedrock InvokeModel/Converse, and
  * Vertex paths all share this transform; user-facing warnings stay at the call
@@ -688,8 +690,8 @@ export function parseMessages(messages: string): {
 /**
  * Compute input cost with Anthropic cache pricing applied.
  * Anthropic docs: input_tokens is the non-cached portion; cache_read and cache_creation are additive.
- * Cache reads cost 2.5% of base rate on Fable/Mythos 5.1, 5% on Opus 5.5, and 10% on other
- * models. Five-minute cache writes cost 125% of base rate (25% surcharge).
+ * Cache reads cost 10% of base rate unless the model's family sets `cacheReadMultiplier`
+ * (e.g. Fable/Mythos 5.1). Five-minute cache writes cost 125% of base rate (25% surcharge).
  */
 export function calculateCacheInputCost(
   baseInputRate: number,
@@ -698,11 +700,10 @@ export function calculateCacheInputCost(
   cacheCreation: number,
   modelId = '',
 ): number {
-  const cacheReadMultiplier = CLAUDE_FABLE_MYTHOS_51_PATTERN.test(modelId)
-    ? 0.025
-    : CLAUDE_OPUS_55_PATTERN.test(modelId)
-      ? 0.05
-      : 0.1;
+  const cacheReadMultiplier =
+    CLAUDE_MODEL_FAMILIES.find(
+      (family) => family.cacheReadMultiplier !== undefined && family.match.test(modelId),
+    )?.cacheReadMultiplier ?? 0.1;
   return (
     uncachedInputTokens * baseInputRate +
     cacheRead * baseInputRate * cacheReadMultiplier +

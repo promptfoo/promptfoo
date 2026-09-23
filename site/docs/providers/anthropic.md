@@ -628,34 +628,21 @@ access is limited through Project Glasswing and may require provider approval. B
 
 ### Claude Opus 5.5 notes
 
-Opus 5.5 is an Opus-tier model priced below Opus 5, with the same context window, maximum
-output, and tokenizer. Its request rules match Fable 5.1's, and promptfoo adjusts requests to
-follow them:
+Opus 5.5 is priced below Opus 5 and has the same context window, maximum output, and tokenizer.
+Its request rules match Fable 5.1's, and promptfoo adjusts requests to follow them:
 
-- **Thinking is always on.** Opus 5.5 rejects `thinking: { type: 'disabled' }` at every
-  effort level, which is stricter than Opus 5. Promptfoo removes it and logs a warning
-  once. A legacy `thinking: { type: 'enabled', budget_tokens: N }` config becomes
-  `thinking: { type: 'adaptive' }`. Because `max_tokens` covers thinking _plus_ the answer,
-  promptfoo raises its default `max_tokens` to leave room for thinking.
-- **`effort` is the only way to control thinking, and it defaults to `medium`.** Opus 5
-  and earlier Opus models default to `high`. If you leave `effort` unset, Opus 5.5 runs one
-  level lower than Opus 5, so set `effort` explicitly when you compare them. See the
-  [Effort Level](#effort-level) section.
-- **Forced tool use is rejected.** Promptfoo removes `tool_choice` values of type `any` or
-  `tool` and logs a warning. Use `auto` or `none` instead.
-- **Promptfoo handles sampling controls for you.** Opus 5.5 rejects `temperature`, `top_p`,
-  and `top_k` with a 400, so promptfoo leaves all three out of every request, including its
-  built-in `temperature: 0` default.
+- **Thinking is always on.** Opus 5.5 rejects `thinking: { type: 'disabled' }` at every effort
+  level, so promptfoo removes it and logs a warning once. Manual
+  `thinking: { type: 'enabled', budget_tokens: N }` configs become `thinking: { type: 'adaptive' }`.
+- **`effort` defaults to `medium`**, one level below Opus 5's `high`. Set `effort` explicitly
+  when you compare the two. It is the only way to control how much the model thinks.
+- **Forced tool use and sampling controls are rejected.** Promptfoo omits `tool_choice` values
+  of type `any` or `tool` (use `auto` or `none`) and all of `temperature`, `top_p`, and `top_k`.
 
-Opus 5.5 has a 1M-token context window and supports up to 128K output tokens. It costs a
-flat **$4 per million input tokens and $20 per million output tokens**, with no extra charge
-for prompts over 200K tokens. Cache reads cost **$0.20 per million tokens** (0.05× the input
-price), and promptfoo's cost estimates include that rate. Anthropic's fast mode ($8 / $40,
-Claude API only) is a research-preview rate that promptfoo doesn't track automatically. To
-track it, set `inputCost: 8 / 1e6` and `outputCost: 40 / 1e6`.
-
-As with Fable 5.1, when you replay Opus 5.5 thinking blocks, don't change earlier messages,
-system prompts, or tools. Edited history can cause API errors.
+Opus 5.5 costs a flat **$4 per million input tokens and $20 per million output tokens** across
+its 1M-token context window. Cache reads cost **$0.20 per million tokens**, and promptfoo's cost
+estimates include that rate. To track Anthropic's fast mode, set `inputCost: 8 / 1e6` and
+`outputCost: 40 / 1e6`.
 
 ```yaml title="promptfooconfig.yaml"
 providers:

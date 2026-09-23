@@ -75,7 +75,6 @@ Anthropic's Claude models are available with the following versions:
 - `vertex:claude-fable-5-1` - Claude Fable 5.1 with always-on adaptive thinking and $0.25/MTok cache reads
 - `vertex:claude-mythos-5-1` - Claude Mythos 5.1 (provider approval required)
 - `vertex:claude-fable-5` - Claude Fable 5 with a 1M-token context window and always-on adaptive thinking
-- `vertex:claude-opus-5-5` - Claude Opus 5.5 (see its entry below)
 
 Promptfoo omits unsupported `temperature`, `top_p`, and `top_k` values for the adaptive-only
 Claude models — Fable 5, Mythos 5, Opus 5.5, Opus 5, Sonnet 5, and Opus 4.7/4.8 (see their entries below).

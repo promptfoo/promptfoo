@@ -220,20 +220,6 @@ describe('calculateBedrockCost', () => {
     ).toBeCloseTo(15, 6);
   });
 
-  it('prices Claude Opus 5.5 at $4/$20 and not at the Opus 5 rate (prefix-collision guard)', () => {
-    // `anthropic.claude-opus-5-5` contains `anthropic.claude-opus-5`, and BEDROCK_PRICING is
-    // matched first-come with `includes()`, so Opus 5.5 must be listed before Opus 5.
-    expect(calculateBedrockCost('global.anthropic.claude-opus-5-5', 1_000_000, 0)).toBeCloseTo(
-      4,
-      6,
-    );
-    expect(calculateBedrockCost('global.anthropic.claude-opus-5-5', 0, 1_000_000)).toBeCloseTo(
-      20,
-      6,
-    );
-    expect(calculateBedrockCost('global.anthropic.claude-opus-5', 1_000_000, 0)).toBeCloseTo(5, 6);
-  });
-
   it.each([
     'global.anthropic.claude-opus-5-5',
     'us.anthropic.claude-opus-5-5',
@@ -242,7 +228,8 @@ describe('calculateBedrockCost', () => {
     'au.anthropic.claude-opus-5-5',
   ])('prices Opus 5.5 cache reads at 0.05x input for %s', (model) => {
     // AWS price list (us-east-1): global $4 in / $20 out / $0.20 cache read / $5 cache write;
-    // geo profiles are 1.1x ($4.40 / $22 / $0.22 / $5.50).
+    // geo profiles are 1.1x. Also guards the first-match `includes()` lookup: Opus 5's $5/$25
+    // row must not win for `anthropic.claude-opus-5-5`.
     // 1000*4 + 200*0.2 + 100*5 + 500*20 = 14,540 per 1e6
     const expected = 0.01454 * (model.startsWith('global.') ? 1 : 1.1);
     expect(calculateBedrockCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
