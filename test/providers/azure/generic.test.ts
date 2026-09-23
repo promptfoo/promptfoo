@@ -197,14 +197,17 @@ describe('AzureGenericProvider', () => {
       const config = { azureClientSecret: 'private-secret' };
       for (const count of [1, 2]) {
         const provider = new AzureGenericProvider('d', { config });
-        await Promise.all([
+        const [, ...credentials] = await Promise.all([
           provider.ensureInitialized(),
           provider.getAzureTokenCredential(),
           provider.getAzureTokenCredential(),
         ]);
-        await provider.getAzureTokenCredential();
+        credentials.push(await provider.getAzureTokenCredential());
+        // Assert on credential identity rather than constructor call counts: a
+        // concurrent first dynamic import of a vi.mock'd package can resolve to
+        // the real module, which makes the mock's call count meaningless here.
+        expect(new Set(credentials).size).toBe(1);
         expect(warn).toHaveBeenCalledTimes(count);
-        expect(AzureCliCredential).toHaveBeenCalledTimes(count);
       }
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('Falling back to Azure CLI'), {
         missing: ['azureClientId (AZURE_CLIENT_ID)', 'azureTenantId (AZURE_TENANT_ID)'],
