@@ -554,7 +554,6 @@ const CACHE_WRITE_MODELS = new Set([
 const OPENAI_REGIONAL_PROCESSING_MODEL = /^(?:gpt-5\.[456]|gpt-6-(?:astra|sol|luna))(?:-|$)/;
 const OPENAI_REGIONAL_PROCESSING_MULTIPLIER = 1.1;
 const OPENAI_REGIONAL_PROCESSING_HOSTNAMES = new Set(['us.api.openai.com', 'eu.api.openai.com']);
-const BEDROCK_MODELS_WITHOUT_VERIFIED_RATES = new Set(['gpt-6-sol', 'gpt-6-luna']);
 
 type OpenAIBillingConfig = ProviderConfig & {
   apiHost?: string;
@@ -638,8 +637,8 @@ export function calculateOpenAIUsageCostFromTokenUsage(
   }
 
   const billingModelName = modelName.replace(/^openai\./, '');
-  // Do not infer Bedrock GPT-6 prices from direct OpenAI rates.
-  if (modelName.startsWith('openai.') && isGpt6Model(billingModelName)) {
+  // Preserve the pre-existing unknown estimate for Bedrock Astra.
+  if (modelName.startsWith('openai.') && billingModelName === 'gpt-6-astra') {
     return undefined;
   }
   const cacheWriteTokens = tokenUsage.completionDetails?.cacheCreationInputTokens;
@@ -998,15 +997,6 @@ export function calculateOpenAIUsageCost(
   if (!rawUsage) {
     return undefined;
   }
-  if (
-    options.provider === 'bedrock' &&
-    BEDROCK_MODELS_WITHOUT_VERIFIED_RATES.has(modelName) &&
-    config.cost === undefined &&
-    (config.inputCost === undefined || config.outputCost === undefined)
-  ) {
-    return undefined;
-  }
-
   const usageParts = getOpenAIUsageParts(rawUsage);
   const usage = extractOpenAIBillingUsage(rawUsage);
   const tier = normalizeServiceTier(options.serviceTier);

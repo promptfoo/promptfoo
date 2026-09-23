@@ -2,6 +2,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
 import { AzureResponsesProvider } from '../../../src/providers/azure/responses';
 import { calculateAzureCost } from '../../../src/providers/azure/util';
+import {
+  BedrockOpenAiResponsesProvider,
+  createBedrockOpenAiResponsesProvider,
+} from '../../../src/providers/bedrock/openaiResponses';
 import { CloudflareGatewayOpenAiProvider } from '../../../src/providers/cloudflare-gateway';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
@@ -728,6 +732,57 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
     }
   });
 
+  it('uses the published default Bedrock Mantle region for the OpenAI model', () => {
+    const bedrockModel = `openai.${model}`;
+    const restoreAwsEnv = mockProcessEnv({
+      AWS_BEDROCK_REGION: undefined,
+      AWS_REGION: undefined,
+      AWS_DEFAULT_REGION: undefined,
+    });
+    try {
+      for (const provider of [
+        new BedrockOpenAiResponsesProvider(bedrockModel),
+        createBedrockOpenAiResponsesProvider(bedrockModel),
+      ]) {
+        expect(provider.getApiUrl()).toBe('https://bedrock-mantle.us-east-1.api.aws/openai/v1');
+      }
+      expect(() =>
+        createBedrockOpenAiResponsesProvider(bedrockModel, { config: { region: 'us-east-2' } }),
+      ).toThrow('Supported Regions: us-east-1');
+      expect(
+        createBedrockOpenAiResponsesProvider(bedrockModel, {
+          config: { region: 'us-east-2', apiBaseUrl: 'https://proxy.example.com/openai/v1' },
+        }).getApiUrl(),
+      ).toBe('https://proxy.example.com/openai/v1');
+    } finally {
+      restoreAwsEnv();
+    }
+  });
+
+  it.each(['none', 'high'] as const)(
+    'preserves a prompt-level Bedrock OpenAI model override with %s reasoning',
+    async (effort) => {
+      const bedrockModel = `openai.${model}`;
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-terra', {
+        config: { region: 'us-east-1' },
+      });
+      const { body } = await provider.getOpenAiBody('Say ready.', {
+        vars: {},
+        prompt: {
+          raw: 'Say ready.',
+          label: 'ready',
+          config: { reasoning: { effort }, temperature: 0.3, passthrough: { model: bedrockModel } },
+        },
+      });
+      expect(body).toMatchObject({ model: bedrockModel, reasoning: { effort } });
+      if (effort === 'none') {
+        expect(body.temperature).toBe(0.3);
+      } else {
+        expect(body).not.toHaveProperty('temperature');
+      }
+    },
+  );
+
   it('reconciles OpenRouter reasoning aliases using the most specific configuration', async () => {
     const prompt = { raw: 'Say ready.', label: 'ready' };
     const baseNested = new OpenRouterProvider(`openai/${model}`, {
@@ -769,6 +824,107 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
     expect(sameLayer.reasoning).toEqual({ effort: 'high', exclude: false });
     expect(sameLayer).not.toHaveProperty('reasoning_effort');
     expect(sameLayer).not.toHaveProperty('temperature');
+  });
+
+  it.each([
+    [{ reasoning_effort: 'high' }, { passthrough: { reasoning_effort: 'none' } }, 'none'],
+    [{ reasoning_effort: 'high' }, { passthrough: { reasoning: { enabled: false } } }, false],
+    [{ reasoning_effort: 'none' }, { passthrough: { reasoning: { enabled: true } } }, true],
+    [
+      { passthrough: { reasoning: { effort: 'high', exclude: true } } },
+      { passthrough: { reasoning_effort: '{{ effort }}' } },
+      'none',
+    ],
+    [
+      { passthrough: { reasoning: { enabled: false, exclude: true } } },
+      { reasoning_effort: 'high' },
+      'high',
+    ],
+  ] as const)(
+    'applies prompt-level OpenRouter reasoning controls before provider aliases',
+    async (base, override, expected) => {
+      const provider = new OpenRouterProvider(`openai/${model}`, {
+        config: { temperature: 0.4, top_p: 0.8, ...base },
+      });
+      const { body } = await provider.getOpenAiBody('Say ready.', {
+        vars: { effort: 'none' },
+        prompt: { raw: 'Say ready.', label: 'ready', config: override },
+      });
+      const nested = body.reasoning;
+      if (typeof expected === 'boolean') {
+        expect(nested).toMatchObject({ enabled: expected });
+        expect(nested).not.toHaveProperty('effort');
+        expect(body).not.toHaveProperty('reasoning_effort');
+      } else {
+        expect(nested?.effort ?? body.reasoning_effort).toBe(expected);
+        expect(nested?.enabled).not.toBe(expected === 'none');
+      }
+      if ('passthrough' in base && base.passthrough.reasoning?.exclude) {
+        expect(nested).toHaveProperty('exclude', true);
+      }
+      if (expected === false || expected === 'none') {
+        expect(body).toMatchObject({ temperature: 0.4, top_p: 0.8 });
+      } else {
+        expect(body).not.toHaveProperty('temperature');
+        expect(body).not.toHaveProperty('top_p');
+      }
+    },
+  );
+
+  it.each([
+    [{ max_completion_tokens: 900 }, { max_tokens: 25 }],
+    [{ max_tokens: 900 }, { max_completion_tokens: 25 }],
+    [{ passthrough: { max_tokens: 900 } }, { max_completion_tokens: 25 }],
+    [{ passthrough: { max_completion_tokens: 900 } }, { max_tokens: 25 }],
+    [{ max_completion_tokens: 900 }, { passthrough: { max_tokens: 25 } }],
+    [{ max_tokens: 900 }, { passthrough: { max_completion_tokens: 25 } }],
+  ] as const)(
+    'applies prompt-level OpenRouter token caps before provider aliases',
+    async (base, override) => {
+      const provider = new OpenRouterProvider(`openai/${model}`, { config: base });
+      const { body } = await provider.getOpenAiBody('Say ready.', {
+        vars: {},
+        prompt: { raw: 'Say ready.', label: 'ready', config: override },
+      });
+      expect(body.max_completion_tokens).toBe(25);
+      expect(body).not.toHaveProperty('max_tokens');
+    },
+  );
+
+  it('supports the verified OpenRouter endpoint through a generic OpenAI Chat provider', async () => {
+    const config = {
+      reasoning_effort: 'high',
+      tools: [statusTool],
+      max_tokens: 23,
+      temperature: 0.4,
+      passthrough: { reasoning: { effort: 'high', exclude: true } },
+    } as const;
+    const { body } = await new OpenAiChatCompletionProvider(`openai/${model}`, {
+      config: { ...config, tools: [statusTool], apiBaseUrl: 'https://openrouter.ai/api/v1' },
+    }).getOpenAiBody('Get the status.');
+    expect(body).toMatchObject({
+      model: `openai/${model}`,
+      tools: [statusTool],
+      max_completion_tokens: 23,
+      reasoning: { effort: 'high', exclude: true },
+    });
+    expect(body).not.toHaveProperty('temperature');
+
+    for (const apiBaseUrl of [
+      'https://api.openai.com/v1',
+      'https://openrouter.ai.example.com/v1',
+    ]) {
+      await expect(
+        new OpenAiChatCompletionProvider(`openai/${model}`, {
+          config: { ...config, tools: [statusTool], apiBaseUrl },
+        }).getOpenAiBody('Get the status.'),
+      ).rejects.toThrow('Chat Completions requests use reasoning_effort');
+    }
+
+    const { body: proxied } = await new OpenRouterProvider(`openai/${model}`, {
+      config: { ...config, tools: [statusTool], apiBaseUrl: 'https://proxy.example.com/v1' },
+    }).getOpenAiBody('Get the status.');
+    expect(proxied.tools).toEqual([statusTool]);
   });
 
   it.each([':nitro', ':floor', '-2026-09-22:nitro'])(

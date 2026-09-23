@@ -91,35 +91,112 @@ function getChatSearchSurcharge(modelName: string): number {
   return 0;
 }
 
-type OpenRouterReasoning = { effort?: unknown; [key: string]: unknown };
-type OpenRouterPromptReasoning = {
+type OpenRouterReasoning = { effort?: unknown; enabled?: unknown; [key: string]: unknown };
+type OpenRouterPassthrough = {
   reasoning_effort?: unknown;
-  passthrough?: { reasoning_effort?: unknown; reasoning?: OpenRouterReasoning | null };
+  reasoning?: OpenRouterReasoning | null;
+  max_tokens?: number;
+  max_completion_tokens?: number;
 };
+
+function getOpenRouterPassthrough(config?: OpenAiCompletionOptions): OpenRouterPassthrough {
+  const passthrough = config?.passthrough;
+  return passthrough && typeof passthrough === 'object' && !Array.isArray(passthrough)
+    ? (passthrough as OpenRouterPassthrough)
+    : {};
+}
+
+function getOpenRouterOutputCap(config?: OpenAiCompletionOptions): number | undefined {
+  const passthrough = getOpenRouterPassthrough(config);
+  return (
+    passthrough.max_completion_tokens ??
+    passthrough.max_tokens ??
+    config?.max_completion_tokens ??
+    config?.max_tokens
+  );
+}
+
+function getOpenRouterReasoningControl(config?: OpenAiCompletionOptions) {
+  const passthrough = getOpenRouterPassthrough(config);
+  const efforts = [
+    ['flat', config?.reasoning_effort],
+    ['flat', passthrough.reasoning_effort],
+    ['nested', passthrough.reasoning?.effort],
+  ] as const;
+  for (const [kind, value] of efforts) {
+    if (value != null && value !== '') {
+      return { kind, value };
+    }
+  }
+  if (typeof passthrough.reasoning?.enabled === 'boolean') {
+    return { kind: 'enabled' as const, value: passthrough.reasoning.enabled };
+  }
+  return undefined;
+}
 
 function reconcileOpenRouterReasoning(
   body: Record<string, unknown>,
-  promptConfig?: OpenRouterPromptReasoning,
+  providerConfig: OpenAiCompletionOptions,
+  promptConfig?: OpenAiCompletionOptions,
+  vars?: CallApiContextParams['vars'],
 ): void {
-  if (!body.reasoning || typeof body.reasoning !== 'object' || Array.isArray(body.reasoning)) {
-    return;
-  }
-  const reasoning = body.reasoning as OpenRouterReasoning;
-  const topLevelEffort = body.reasoning_effort;
-  if (!topLevelEffort || !reasoning.effort) {
+  const providerReasoning = getOpenRouterPassthrough(providerConfig).reasoning;
+  const promptReasoning = getOpenRouterPassthrough(promptConfig).reasoning;
+  const hasReasoning =
+    promptReasoning !== null && (providerReasoning != null || promptReasoning != null);
+  const reasoning = hasReasoning ? { ...providerReasoning, ...promptReasoning } : undefined;
+  const control =
+    getOpenRouterReasoningControl(promptConfig) ?? getOpenRouterReasoningControl(providerConfig);
+  if (!control) {
+    if (reasoning) {
+      body.reasoning = reasoning;
+    }
     return;
   }
 
-  // OpenRouter rejects mismatched aliases. A prompt-level value beats the other provider-level form.
-  const promptEffort =
-    promptConfig?.reasoning_effort || promptConfig?.passthrough?.reasoning_effort;
-  const promptNestedEffort = promptConfig?.passthrough?.reasoning?.effort;
-  const effort = !promptEffort && promptNestedEffort ? reasoning.effort : topLevelEffort;
-  body.reasoning = { ...reasoning, effort };
-  delete body.reasoning_effort;
+  if (control.kind === 'enabled') {
+    const normalizedReasoning = { ...reasoning, enabled: control.value };
+    delete normalizedReasoning.effort;
+    body.reasoning = normalizedReasoning;
+    delete body.reasoning_effort;
+    return;
+  }
+
+  const effort = renderVarsInObject(control.value, vars);
+  if (
+    reasoning &&
+    typeof reasoning.enabled === 'boolean' &&
+    reasoning.enabled === (effort === 'none')
+  ) {
+    delete reasoning.enabled;
+  }
+  // OpenRouter rejects conflicting aliases; retain nested options when canonicalizing an effort.
+  if (reasoning && (control.kind === 'nested' || Object.hasOwn(reasoning, 'effort'))) {
+    body.reasoning = { ...reasoning, effort };
+    delete body.reasoning_effort;
+  } else {
+    body.reasoning_effort = effort;
+    if (reasoning && Object.keys(reasoning).length) {
+      body.reasoning = reasoning;
+    } else if (reasoning || promptReasoning === null) {
+      delete body.reasoning;
+    }
+  }
 }
 
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
+  private usesOpenRouter(): boolean {
+    const system = this.getGenAISystem();
+    if (system !== 'openai') {
+      return system === 'openrouter';
+    }
+    try {
+      return new URL(this.getApiUrl()).hostname === 'openrouter.ai';
+    } catch {
+      return false;
+    }
+  }
+
   getAudioInputFormat(): 'openai' | undefined {
     const model =
       (this.config.passthrough as { model?: unknown } | undefined)?.model ?? this.modelName;
@@ -224,16 +301,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       capabilityModelName.includes('/o3') ||
       capabilityModelName.includes('/o4');
     const isGPT6Model = isGpt6Model(capabilityModelName);
-    const isOpenRouterGpt6 = isGPT6Model && this.getGenAISystem() === 'openrouter';
+    const isOpenRouterGpt6 = isGPT6Model && this.usesOpenRouter();
     const isReasoningModel =
       passthroughModel === undefined
         ? this.isReasoningModel()
         : super.isReasoningModel(capabilityModelName);
     const maxCompletionTokens = isReasoningModel
-      ? (config.max_completion_tokens ??
-        (isOpenRouterGpt6 ? config.max_tokens : undefined) ??
-        getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ??
-        (isOpenRouterGpt6 ? getEnvInt('OPENAI_MAX_TOKENS') : undefined))
+      ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
     const maxTokensDefault = config.omitDefaults
       ? getEnvString('OPENAI_MAX_TOKENS') === undefined
@@ -359,22 +433,25 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     // This catches max_tokens introduced via passthrough or YAML anchors that bypass
     // the normal maxTokens variable logic above.
     if ((isReasoningModel || isGPT5Model) && 'max_tokens' in body) {
-      if (
-        isOpenRouterGpt6 &&
-        config.passthrough?.max_tokens !== undefined &&
-        config.passthrough?.max_completion_tokens === undefined
-      ) {
-        body.max_completion_tokens = body.max_tokens;
-      }
       delete body.max_tokens;
     }
 
     if (isOpenRouterGpt6) {
-      reconcileOpenRouterReasoning(body, context?.prompt?.config);
+      const gatewayOutputCap =
+        getOpenRouterOutputCap(context?.prompt?.config) ??
+        getOpenRouterOutputCap(this.config) ??
+        getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ??
+        getEnvInt('OPENAI_MAX_TOKENS');
+      if (gatewayOutputCap === undefined) {
+        delete body.max_completion_tokens;
+      } else {
+        body.max_completion_tokens = gatewayOutputCap;
+      }
+      reconcileOpenRouterReasoning(body, this.config, context?.prompt?.config, context?.vars);
     }
     // OpenRouter can translate Chat tools to the upstream Responses API.
     applyGpt6RequestRules(body, capabilityModelName, 'chat', {
-      isOpenRouter: this.getGenAISystem() === 'openrouter',
+      isOpenRouter: isOpenRouterGpt6,
     });
 
     return { body, config: { ...config, service_tier: body.service_tier } };

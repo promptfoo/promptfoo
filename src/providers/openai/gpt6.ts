@@ -6,7 +6,9 @@ type Gpt6Reasoning = { effort?: unknown; enabled?: unknown } | null | undefined;
 
 function getGpt6Variant(modelName: unknown): Gpt6Variant | undefined {
   return typeof modelName === 'string'
-    ? (/(?:^|[/-])gpt-6-(astra|sol|luna)(?:[-:]|$)/.exec(modelName)?.[1] as Gpt6Variant | undefined)
+    ? (/(?:^|[./-])gpt-6-(astra|sol|luna)(?:[-:]|$)/.exec(modelName)?.[1] as
+        | Gpt6Variant
+        | undefined)
     : undefined;
 }
 

@@ -147,22 +147,45 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
     expect(result.cost).toBeCloseTo(cost, 10);
   });
 
-  it.each(['gpt-6-sol', 'gpt-6-luna'])(
-    'does not reuse direct OpenAI prices on Bedrock for %s',
-    async (model) => {
+  it.each([
+    { model: 'gpt-6-sol', cost: 0.0145475, override: false },
+    { model: 'gpt-6-luna', cost: 0.000727375, override: false },
+    { model: 'gpt-6-sol', cost: 0.0145475, override: true },
+    { model: 'gpt-6-luna', cost: 0.000727375, override: true },
+  ])(
+    'estimates published regional Bedrock prices for $model (prompt override: $override)',
+    async ({ model, cost, override }) => {
       vi.mocked(cache.fetchWithCache).mockResolvedValue({
         cached: false,
         status: 200,
         statusText: 'OK',
         data: { ...responseData, model },
       });
-      const result = await new BedrockOpenAiResponsesProvider(`openai.${model}`, {
-        config: { apiKey: 'test-key', region: 'us-east-2' },
-      }).callApi('Say ready.');
+      const bedrockModel = `openai.${model}`;
+      const provider = new BedrockOpenAiResponsesProvider(
+        override ? 'openai.gpt-5.6-terra' : bedrockModel,
+        { config: { apiKey: 'test-key', region: 'us-east-1' } },
+      );
+      const result = await provider.callApi(
+        'Say ready.',
+        override
+          ? {
+              vars: {},
+              prompt: {
+                raw: 'Say ready.',
+                label: 'ready',
+                config: { passthrough: { model: bedrockModel } },
+              },
+            }
+          : undefined,
+      );
 
+      const [url, options] = vi.mocked(cache.fetchWithCache).mock.calls[0];
+      expect(url).toBe('https://bedrock-mantle.us-east-1.api.aws/openai/v1/responses');
+      expect(JSON.parse(options?.body as string)).toMatchObject({ model: bedrockModel });
       expect(result.error).toBeUndefined();
       expect(result.output).toBe('Ready.');
-      expect(result.cost).toBeUndefined();
+      expect(result.cost).toBeCloseTo(cost, 10);
     },
   );
 });

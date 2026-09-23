@@ -799,7 +799,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       typeof passthroughModel === 'string' && passthroughModel !== this.modelName
         ? passthroughModel
         : this.getBillingModelName(config);
-    const billingModelName = modelName.split('/').pop() ?? modelName;
+    const unprefixedModelName = modelName.split('/').pop() ?? modelName;
+    const billingModelName =
+      this.getGenAISystem() === 'bedrock'
+        ? unprefixedModelName.replace(/^openai\./, '')
+        : unprefixedModelName;
     const responseCost = calculateOpenAIUsageCost(
       billingModelName,
       config,

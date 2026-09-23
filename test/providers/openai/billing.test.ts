@@ -162,11 +162,20 @@ describe('OpenAI billing helpers', () => {
           prompt: 2000,
           completion: 1000,
         }),
-      ).toBeUndefined();
-      expect(calculateOpenAIUsageCost(model, {}, usage, { provider: 'bedrock' })).toBeUndefined();
+      ).toBeCloseTo(((2000 * input + 1000 * output) / 1e6) * 1.1, 10);
+      expect(calculateOpenAIUsageCost(model, {}, usage, { provider: 'bedrock' })).toBeCloseTo(
+        expected,
+        10,
+      );
+      for (const options of [
+        { provider: 'bedrock', apiUrl: 'https://bedrock-mantle.us-east-1.api.aws/openai/v1' },
+        { provider: 'bedrock', regionalProcessing: true },
+      ]) {
+        expect(calculateOpenAIUsageCost(model, {}, usage, options)).toBeCloseTo(expected * 1.1, 10);
+      }
       expect(
         calculateOpenAIUsageCost(model, { inputCost: 2 / 1e6 }, usage, { provider: 'bedrock' }),
-      ).toBeUndefined();
+      ).toBeCloseTo((2000 * 2 + 1000 * output) / 1e6, 10);
       expect(
         calculateOpenAIUsageCost(model, { inputCost: 2 / 1e6, outputCost: 3 / 1e6 }, usage, {
           provider: 'bedrock',
