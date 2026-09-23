@@ -9,6 +9,7 @@ import {
   isBedrockGptOssResponsesModel,
   isBedrockGrokModel,
   isBedrockMantleResponsesModel,
+  isBedrockOpenAiResponsesModel,
 } from './routing';
 import { BedrockTokenProvider } from './tokenProvider';
 
@@ -171,12 +172,21 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
         ? BEDROCK_OPENAI_MODEL_REGIONS[model]
         : undefined;
     if (supportedRegions && model !== this.modelName) {
-      const region = /^bedrock-mantle\.([a-z0-9-]+)\.api\.aws$/.exec(
-        new URL(this.getApiUrl()).hostname,
-      )?.[1];
+      if (!isBedrockOpenAiResponsesModel(this.modelName)) {
+        throw new Error(
+          `Bedrock model ${model} cannot use the ${this.modelName} Responses provider. Configure a separate provider using bedrock:responses:${model}.`,
+        );
+      }
+      const url = new URL(this.getApiUrl());
+      const region = /^bedrock-mantle\.([a-z0-9-]+)\.api\.aws$/.exec(url.hostname)?.[1];
       if (region && !supportedRegions.includes(region)) {
         throw new Error(
           `Bedrock model ${model} is not available at the configured Mantle endpoint in ${region}. Set the provider config.region to ${supportedRegions.join(' or ')}, or use a separate provider for this model.`,
+        );
+      }
+      if (region && url.pathname.replace(/\/+$/, '') !== '/openai/v1') {
+        throw new Error(
+          `Bedrock model ${model} requires the /openai/v1 Mantle endpoint. Configure a separate provider using bedrock:responses:${model}, or set the frontier provider's apiBaseUrl to the /openai/v1 endpoint.`,
         );
       }
     }

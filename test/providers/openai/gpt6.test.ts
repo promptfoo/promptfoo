@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
 import { AzureResponsesProvider } from '../../../src/providers/azure/responses';
 import { calculateAzureCost } from '../../../src/providers/azure/util';
@@ -36,6 +36,21 @@ describe('GPT-6 Astra requests', () => {
 
   afterEach(() => {
     restoreEnv();
+  });
+
+  it('renders a dynamic GPT-6 Astra Responses reasoning object once', async () => {
+    const reasoning = vi.fn(({ vars }: { vars: { effort: string } }) => ({
+      effort: vars.effort,
+      summary: 'auto',
+    }));
+    const { body } = await new OpenAiResponsesProvider('gpt-6-astra', {
+      config: { reasoning: reasoning as any },
+    }).getOpenAiBody('Say ready.', {
+      vars: { effort: 'low' },
+      prompt: { raw: 'Say ready.', label: 'ready' },
+    });
+    expect(body.reasoning).toEqual({ effort: 'low', summary: 'auto' });
+    expect(reasoning).toHaveBeenCalledTimes(1);
   });
 
   it.each(['low', 'medium', 'high', 'xhigh', 'max'] as const)(
@@ -919,6 +934,40 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
     expect(cleared).not.toHaveProperty('temperature');
   });
 
+  it('renders dynamic Responses reasoning at each configuration layer before applying precedence', async () => {
+    const providerReasoning = vi.fn(({ vars }: { vars: { providerEffort: string } }) => ({
+      effort: vars.providerEffort,
+      summary: 'auto',
+    }));
+    const promptReasoning = vi.fn(({ vars }: { vars: { promptEffort: string } }) => ({
+      effort: vars.promptEffort,
+    }));
+    const provider = new OpenAiResponsesProvider(model, {
+      config: { reasoning: providerReasoning as any, temperature: 0.3 },
+    });
+    const context = {
+      vars: { providerEffort: 'high', promptEffort: 'none' },
+      prompt: { raw: 'Say ready.', label: 'ready', config: { reasoning: promptReasoning as any } },
+    };
+    const { body } = await provider.getOpenAiBody('Say ready.', context);
+    expect(body.reasoning).toEqual({ effort: 'none', summary: 'auto' });
+    expect(body.temperature).toBe(0.3);
+    expect(providerReasoning).toHaveBeenCalledTimes(1);
+    expect(promptReasoning).toHaveBeenCalledTimes(1);
+
+    const passthroughReasoning = vi.fn(({ vars }: { vars: { promptEffort: string } }) => ({
+      effort: vars.promptEffort,
+    }));
+    const { body: fromPassthrough } = await provider.getOpenAiBody('Say ready.', {
+      ...context,
+      vars: { providerEffort: 'none', promptEffort: 'high' },
+      prompt: { ...context.prompt, config: { passthrough: { reasoning: passthroughReasoning } } },
+    });
+    expect(fromPassthrough.reasoning).toEqual({ effort: 'high', summary: 'auto' });
+    expect(fromPassthrough).not.toHaveProperty('temperature');
+    expect(passthroughReasoning).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     [{ max_tokens: 77 }, 77],
     [{ max_tokens: 77, max_completion_tokens: 88 }, 88],
@@ -1013,6 +1062,37 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
     } finally {
       restoreAwsEnv();
     }
+  });
+
+  it('requires an OpenAI frontier route when switching an existing Bedrock provider per prompt', async () => {
+    const target = `openai.${model}`;
+    const context = {
+      vars: {},
+      prompt: { raw: 'Say ready.', label: 'ready', config: { passthrough: { model: target } } },
+    };
+    for (const provider of [
+      createBedrockOpenAiResponsesProvider('openai.gpt-oss-120b', {
+        config: { region: 'us-east-1' },
+      }),
+      createBedrockOpenAiResponsesProvider('openai.gpt-oss-20b', {
+        config: { region: 'us-east-1', apiBaseUrl: 'https://proxy.example.test/openai/v1' },
+      }),
+      createBedrockOpenAiResponsesProvider('xai.grok-4.3', { config: { region: 'us-west-2' } }),
+    ]) {
+      await expect(provider.getOpenAiBody('Say ready.', context)).rejects.toThrow(
+        `Configure a separate provider using bedrock:responses:${target}`,
+      );
+    }
+    const wrongPath = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-terra', {
+      config: { region: 'us-east-1', apiBaseUrl: 'https://bedrock-mantle.us-east-1.api.aws/v1' },
+    });
+    await expect(wrongPath.getOpenAiBody('Say ready.', context)).rejects.toThrow(
+      'requires the /openai/v1 Mantle endpoint',
+    );
+    const frontier = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-terra', {
+      config: { region: 'us-east-1' },
+    });
+    expect((await frontier.getOpenAiBody('Say ready.', context)).body.model).toBe(target);
   });
 
   it.each(['none', 'high'] as const)(
@@ -1445,6 +1525,28 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
         prompt: { raw: 'Get the status.', label: 'status', config: { tools: [statusTool] } },
       }),
     ).rejects.toThrow('Chat Completions function calling requires reasoning_effort: none');
+  });
+
+  it('uses the final gateway model segment when an account name contains an OpenAI GPT-6 model', async () => {
+    const gatewayModel = `${model}-prod/gpt-4.1`;
+    const config = { temperature: 0.4, top_p: 0.8, tools: [statusTool] };
+    const { body: chat } = await new TrueFoundryProvider(gatewayModel, {
+      config,
+    }).getOpenAiBody('Get the status.');
+    expect(chat).toMatchObject({ model: gatewayModel, ...config });
+    expect(chat).not.toHaveProperty('reasoning_effort');
+
+    const { body: responses } = await new OpenAiResponsesProvider(gatewayModel, {
+      config: { temperature: 0.4, top_p: 0.8 },
+    }).getOpenAiBody('Say ready.');
+    expect(responses).toMatchObject({ model: gatewayModel, temperature: 0.4, top_p: 0.8 });
+    expect(responses).not.toHaveProperty('reasoning');
+
+    const { body: azure } = await new AzureChatCompletionProvider(`prod-${model}`, {
+      config: { reasoning_effort: 'high', temperature: 0.4 },
+    }).getOpenAiBody('Say ready.');
+    expect(azure.reasoning_effort).toBe('high');
+    expect(azure).not.toHaveProperty('temperature');
   });
 
   it('allows Chat tools only with explicit none; Responses tools work with reasoning', async () => {

@@ -5,11 +5,11 @@ type Gpt6Variant = 'astra' | 'sol' | 'luna';
 type Gpt6Reasoning = { effort?: unknown; enabled?: unknown; mode?: unknown } | null | undefined;
 
 function getGpt6Variant(modelName: unknown): Gpt6Variant | undefined {
-  return typeof modelName === 'string'
-    ? (/(?:^|[./-])gpt-6-(astra|sol|luna)(?:[-:]|$)/.exec(modelName)?.[1] as
-        | Gpt6Variant
-        | undefined)
-    : undefined;
+  if (typeof modelName !== 'string') {
+    return undefined;
+  }
+  const model = modelName.split('/').at(-1) ?? modelName;
+  return /(?:^|[.-])gpt-6-(astra|sol|luna)(?:[-:]|$)/.exec(model)?.[1] as Gpt6Variant | undefined;
 }
 
 export function isGpt6Model(modelName: unknown): boolean {
@@ -40,24 +40,28 @@ export function getGpt6ChatReasoningEffort(
   );
 }
 
-function getResponsesReasoning(config?: ReasoningConfig) {
-  const passthrough = getObject(config?.passthrough)?.reasoning;
-  const typed = config?.reasoning;
+function getResponsesReasoning(
+  config: ReasoningConfig | undefined,
+  render: (value: unknown) => unknown,
+) {
+  const passthrough = render(getObject(config?.passthrough)?.reasoning);
+  const typed = render(config?.reasoning);
   const options = { ...getObject(passthrough), ...getObject(typed) };
   const effort = firstDefined(
     typed === null ? null : getObject(typed)?.effort,
     passthrough === null ? null : getObject(passthrough)?.effort,
-    config?.reasoning_effort,
+    render(config?.reasoning_effort),
   );
   return { options, effort, clearOptions: typed === null || passthrough === null };
 }
 
 export function getGpt6ResponsesReasoning(
   providerConfig: ReasoningConfig,
-  promptConfig?: ReasoningConfig,
+  promptConfig: ReasoningConfig | undefined,
+  render: (value: unknown) => unknown,
 ): Record<string, unknown> | undefined {
-  const provider = getResponsesReasoning(providerConfig);
-  const prompt = getResponsesReasoning(promptConfig);
+  const provider = getResponsesReasoning(providerConfig, render);
+  const prompt = getResponsesReasoning(promptConfig, render);
   const options = { ...(prompt.clearOptions ? {} : provider.options), ...prompt.options };
   const effort = firstDefined(prompt.effort, provider.effort);
   if (effort === null) {

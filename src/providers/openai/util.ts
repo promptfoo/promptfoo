@@ -19,11 +19,14 @@ function getRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
-/** Recognize an upstream policy block without treating ordinary authorization errors as refusals. */
+/** A gateway refusal marker distinguishes prompt blocks from native access-level policy errors. */
 export function getOpenAiPolicyRefusal(
   data: unknown,
   allowGatewayMarker = false,
 ): { message: string; code?: string } | undefined {
+  if (!allowGatewayMarker) {
+    return undefined;
+  }
   const root = getRecord(data);
   const response = getRecord(root?.response) ?? root;
   const error = getRecord(response?.error);
@@ -32,19 +35,20 @@ export function getOpenAiPolicyRefusal(
   }
   const metadata = getRecord(error.metadata);
   const providerCode = metadata?.provider_code ?? error.code;
-  const knownCode = providerCode === 'bio_policy' || providerCode === 'cyber_policy';
   const marked =
     metadata?.error_type === 'refusal' ||
     error.error_type === 'refusal' ||
     response?.error_type === 'refusal';
-  if (!knownCode && !(allowGatewayMarker && marked)) {
+  const message = typeof error.message === 'string' ? error.message : '';
+  const accessRevoked =
+    /\b(?:access|permissions?)\b.{0,80}\b(?:revoked|suspended|disabled)\b|\b(?:revoked|suspended|disabled)\b.{0,80}\b(?:access|permissions?)\b/i.test(
+      message,
+    );
+  if (!marked || accessRevoked) {
     return undefined;
   }
   return {
-    message:
-      typeof error.message === 'string' && error.message.trim()
-        ? error.message
-        : 'The model provider declined this request.',
+    message: message.trim() ? message : 'The model provider declined this request.',
     ...(typeof providerCode === 'string' ? { code: providerCode } : {}),
   };
 }

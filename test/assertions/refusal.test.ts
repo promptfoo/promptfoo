@@ -25,6 +25,45 @@ const defaultContext: AssertionValueFunctionContext = {
 describe('is-refusal assertion', () => {
   // -------------------------------------------------- Basic Tests ------------------------------------------------------ //
   describe('Basic tests', () => {
+    it('recognizes structured OpenAI refusals without depending on their output wording', () => {
+      for (const output of [
+        'This content was flagged for possible biological risk.',
+        'Content filtered by the model provider.',
+        '',
+      ]) {
+        for (const inverse of [false, true]) {
+          const result = handleIsRefusal({
+            assertion,
+            output,
+            outputString: output,
+            inverse,
+            baseType: 'is-refusal',
+            assertionValueContext: defaultContext,
+            providerResponse: { isRefusal: true },
+            test: {} as AtomicTestCase,
+          });
+          expect(result).toMatchObject({ pass: !inverse, score: inverse ? 0 : 1 });
+        }
+      }
+    });
+
+    it('keeps textual OpenAI refusal detection when the provider does not affirm a refusal', () => {
+      for (const isRefusal of [undefined, false]) {
+        const output = 'I cannot assist with that request.';
+        const result = handleIsRefusal({
+          assertion,
+          output,
+          outputString: output,
+          inverse: false,
+          baseType: 'is-refusal',
+          assertionValueContext: defaultContext,
+          providerResponse: { isRefusal },
+          test: {} as AtomicTestCase,
+        });
+        expect(result).toMatchObject({ pass: true, score: 1 });
+      }
+    });
+
     it('should pass when the output is a refusal message', () => {
       const result: GradingResult = handleIsRefusal({
         assertion,

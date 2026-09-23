@@ -816,11 +816,21 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         ? passthroughModel
         : this.getBillingModelName(config);
     const unprefixedModelName = modelName.split('/').pop() ?? modelName;
-    const isBedrockMantle =
-      this.getGenAISystem() === 'bedrock' || this.getBedrockEndpoint() === 'mantle';
-    const billingModelName = isBedrockMantle
-      ? unprefixedModelName.replace(/^openai\./, '')
-      : unprefixedModelName;
+    const bedrockEndpoint = this.getBedrockEndpoint();
+    const isBedrock = this.getGenAISystem() === 'bedrock' || bedrockEndpoint !== undefined;
+    const runtimeProfile =
+      bedrockEndpoint === 'runtime'
+        ? /^(global|us)\.openai\.(.+)$/.exec(unprefixedModelName)
+        : null;
+    const billingModelName =
+      runtimeProfile?.[2] ??
+      (isBedrock && bedrockEndpoint !== 'runtime'
+        ? unprefixedModelName.replace(/^openai\./, '')
+        : unprefixedModelName);
+    const regionalProcessing =
+      bedrockEndpoint === 'runtime'
+        ? Boolean(runtimeProfile && runtimeProfile[1] !== 'global')
+        : isBedrock || this.modelName.startsWith('openai.');
     const responseCost = calculateOpenAIUsageCost(
       billingModelName,
       config,
@@ -828,8 +838,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       {
         apiUrl: this.getApiUrl(),
         cachedResponse: cached,
-        provider: isBedrockMantle ? 'bedrock' : this.getGenAISystem(),
-        regionalProcessing: isBedrockMantle || this.modelName.startsWith('openai.'),
+        provider: isBedrock ? 'bedrock' : this.getGenAISystem(),
+        regionalProcessing,
         serviceTier,
       },
     );
@@ -988,13 +998,18 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       config.max_output_tokens ??
       (isReasoningModel ? reasoningMaxOutputTokensDefault : maxOutputTokensDefault);
 
-    const renderedReasoning = renderVarsInObject(
-      config.reasoning,
-      context?.vars,
-    ) as typeof config.reasoning;
-    const renderedReasoningEffort = isReasoningModel
-      ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
+    const gpt6Reasoning = isGPT6Model
+      ? getGpt6ResponsesReasoning(this.config, context?.prompt?.config, (value) =>
+          renderVarsInObject(value, context?.vars),
+        )
       : undefined;
+    const renderedReasoning = isGPT6Model
+      ? (gpt6Reasoning as typeof config.reasoning)
+      : (renderVarsInObject(config.reasoning, context?.vars) as typeof config.reasoning);
+    const renderedReasoningEffort =
+      isReasoningModel && !isGPT6Model
+        ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
+        : undefined;
     const effectiveReasoningEffort = renderedReasoning?.effort ?? renderedReasoningEffort;
     const hasAzureReasoningEffort =
       isAzureResponsesDeploymentWithReasoningConfig &&
@@ -1125,9 +1140,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // Merge with existing body.reasoning (from reasoning_effort) so that
     // config.reasoning extra fields (e.g. summary) don't silently drop effort.
     if (isGPT6Model) {
-      const reasoning = getGpt6ResponsesReasoning(this.config, context?.prompt?.config);
-      if (reasoning) {
-        body.reasoning = renderVarsInObject(reasoning, context?.vars);
+      if (gpt6Reasoning) {
+        body.reasoning = gpt6Reasoning;
       } else {
         delete body.reasoning;
       }

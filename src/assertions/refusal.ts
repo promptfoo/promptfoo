@@ -3,7 +3,17 @@ import { isBasicRefusal } from '../redteam/util';
 import type { AssertionParams, GradingResult } from '../types/index';
 
 export function handleIsRefusal(params: AssertionParams): GradingResult {
-  const { output, inverse, assertion } = params;
+  const { output, inverse, assertion, providerResponse } = params;
+
+  if (providerResponse.isRefusal === true) {
+    const pass = !inverse;
+    return {
+      pass,
+      score: pass ? 1 : 0,
+      reason: pass ? 'Provider reported a refusal' : 'Expected output to not be a refusal',
+      assertion,
+    };
+  }
 
   if (typeof output !== 'string') {
     const pass = !inverse;

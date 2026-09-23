@@ -119,12 +119,11 @@ describe('GPT-6 Astra Responses billing', () => {
 
 describe('GPT-6 Sol and Luna Responses billing', () => {
   it.each(['gpt-6-sol', 'gpt-6-luna'])(
-    'normalizes upstream policy refusals on native and OpenRouter Responses for %s',
+    'normalizes marked OpenRouter refusals and preserves native policy errors for %s',
     async (model) => {
       const message = 'The model provider declined the request.';
       for (const code of ['bio_policy', 'cyber_policy']) {
         for (const entry of [
-          { gateway: false, status: 403, data: { error: { code, message } } },
           {
             gateway: true,
             status: 403,
@@ -169,6 +168,39 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
             },
           });
         }
+
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          cached: false,
+          status: 403,
+          statusText: 'Forbidden',
+          data: { error: { code, message } },
+        });
+        const native = await new OpenAiResponsesProvider(model, {
+          config: { apiKey: 'test-key' },
+        }).callApi('A benign prompt');
+        expect(native.error).toContain(code);
+        expect(native.isRefusal).toBeUndefined();
+        expect(native.guardrails).toBeUndefined();
+      }
+
+      for (const gateway of [false, true]) {
+        const revocation = 'Access for your organization has been temporarily revoked.';
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          cached: false,
+          status: 403,
+          statusText: 'Forbidden',
+          data: { error: { code: 'cyber_policy', message: revocation, error_type: 'refusal' } },
+        });
+        const provider = new OpenAiResponsesProvider(gateway ? `openai/${model}` : model, {
+          config: {
+            apiKey: 'test-key',
+            ...(gateway ? { apiBaseUrl: 'https://openrouter.ai/api/v1' } : {}),
+          },
+        });
+        const result = await provider.callApi('A benign prompt');
+        expect(result.error).toContain(revocation);
+        expect(result.isRefusal).toBeUndefined();
+        expect(result.guardrails).toBeUndefined();
       }
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         cached: false,
@@ -377,6 +409,81 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
         },
       }).callApi('Say ready.');
       expect(lookalike.cost).toBeUndefined();
+    },
+  );
+
+  it.each([
+    ['gpt-6-sol', 0.012, 0.0132],
+    ['gpt-6-luna', 0.0006, 0.00066],
+  ] as const)(
+    'distinguishes global and U.S. Bedrock Runtime pricing for %s',
+    async (model, globalCost, usCost) => {
+      const usage = { input_tokens: 1_000, output_tokens: 1_000, total_tokens: 2_000 };
+      for (const [profile, expected] of [
+        ['global', globalCost],
+        ['us', usCost],
+      ] as const) {
+        for (const override of [false, true]) {
+          const wireModel = `${profile}.openai.${model}`;
+          vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+            cached: false,
+            status: 200,
+            statusText: 'OK',
+            data: { ...responseData, model: wireModel, usage },
+          });
+          const provider = new OpenAiResponsesProvider(override ? 'gpt-4.1' : wireModel, {
+            config: {
+              apiKey: 'test-key',
+              apiBaseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1',
+            },
+          });
+          const result = await provider.callApi(
+            'Say ready.',
+            override
+              ? {
+                  vars: {},
+                  prompt: {
+                    raw: 'Say ready.',
+                    label: 'ready',
+                    config: { passthrough: { model: wireModel } },
+                  },
+                }
+              : undefined,
+          );
+          expect(result.error).toBeUndefined();
+          expect(result.cost).toBeCloseTo(expected, 10);
+        }
+
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+          data: { ...responseData, model: `${profile}.openai.${model}`, usage },
+        });
+        const estimated = await new OpenAiResponsesProvider(`${profile}.openai.${model}`, {
+          config: {
+            apiKey: 'test-key',
+            apiBaseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1',
+            inputCost: 0.0002,
+            outputCost: 0.0003,
+          },
+        }).callApi('Say ready.');
+        expect(estimated.cost).toBeCloseTo(0.5, 10);
+      }
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        data: { ...responseData, model: `us-gov.openai.${model}`, usage },
+      });
+      const government = await new OpenAiResponsesProvider(`us-gov.openai.${model}`, {
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl: 'https://bedrock-runtime.us-gov-west-1.amazonaws.com/openai/v1',
+        },
+      }).callApi('Say ready.');
+      expect(government.cost).toBeUndefined();
     },
   );
 });

@@ -2,6 +2,7 @@ import path from 'path';
 
 import { trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { handleIsRefusal } from '../../../src/assertions/refusal';
 import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
@@ -11,6 +12,8 @@ import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat
 import { OpenRouterProvider } from '../../../src/providers/openrouter';
 import { mockProcessEnv } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage } from './shared';
+
+import type { AtomicTestCase, ProviderResponse } from '../../../src/types/index';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -40,6 +43,29 @@ const mockLogger = vi.mocked(logger);
 const mockImportModule = vi.mocked(importModule);
 const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
 const originalDeepseekApiKey = process.env.DEEPSEEK_API_KEY;
+
+function gradeProviderRefusal(response: ProviderResponse, inverse = false) {
+  const output = response.output ?? '';
+  const test = {} as AtomicTestCase;
+  return handleIsRefusal({
+    assertion: { type: 'is-refusal' },
+    baseType: 'is-refusal',
+    output,
+    outputString: typeof output === 'string' ? output : JSON.stringify(output),
+    inverse,
+    providerResponse: response,
+    test,
+    assertionValueContext: {
+      prompt: undefined,
+      vars: {},
+      test,
+      logProbs: undefined,
+      config: {},
+      provider: undefined,
+      providerResponse: response,
+    },
+  });
+}
 
 describe('OpenAI Provider', () => {
   beforeEach(() => {
@@ -266,12 +292,11 @@ describe('OpenAI Provider', () => {
     );
 
     it.each(['gpt-6-sol', 'gpt-6-luna'])(
-      'keeps GPT-6 OpenAI and OpenRouter policy refusals distinct from authorization errors for %s',
+      'keeps marked GPT-6 OpenRouter refusals distinct from native policy and authorization errors for %s',
       async (model) => {
-        const message = 'The model provider declined the request.';
+        const message = 'This content was flagged for possible biological risk.';
         for (const policyCode of ['bio_policy', 'cyber_policy']) {
           for (const [provider, body] of [
-            [new OpenAiChatCompletionProvider(model), { error: { code: policyCode, message } }],
             [
               new OpenAiChatCompletionProvider(`openai/${model}`, {
                 config: { apiBaseUrl: 'https://openrouter.ai/api/v1' },
@@ -313,12 +338,51 @@ describe('OpenAI Provider', () => {
                 http: { status: 403, headers: { 'x-request-id': 'test' } },
               },
             });
+            expect(gradeProviderRefusal(result)).toMatchObject({ pass: true, score: 1 });
+            expect(gradeProviderRefusal(result, true)).toMatchObject({ pass: false, score: 0 });
           }
+
+          mockFetchWithCache.mockResolvedValueOnce({
+            data: { error: { code: policyCode, message } },
+            cached: false,
+            status: 403,
+            statusText: 'Forbidden',
+          });
+          const native = await new OpenAiChatCompletionProvider(model).callApi('A benign prompt');
+          expect(native.error).toContain(policyCode);
+          expect(native.isRefusal).toBeUndefined();
+          expect(native.guardrails).toBeUndefined();
         }
 
         const dedicated = new OpenRouterProvider(`openai/${model}`, {
           config: { apiKey: 'test-key' },
         });
+        for (const provider of [
+          new OpenAiChatCompletionProvider(model),
+          new OpenAiChatCompletionProvider(`openai/${model}`, {
+            config: { apiBaseUrl: 'https://openrouter.ai/api/v1' },
+          }),
+          dedicated,
+        ]) {
+          const revocation =
+            'Your organization’s access to these models has been temporarily revoked.';
+          mockFetchWithCache.mockResolvedValueOnce({
+            data: {
+              error: {
+                code: 'cyber_policy',
+                message: revocation,
+                metadata: { error_type: 'refusal', provider_code: 'cyber_policy' },
+              },
+            },
+            cached: false,
+            status: 403,
+            statusText: 'Forbidden',
+          });
+          const result = await provider.callApi('A benign prompt');
+          expect(result.error).toContain(revocation);
+          expect(result.isRefusal).toBeUndefined();
+          expect(result.guardrails).toBeUndefined();
+        }
         mockFetchWithCache.mockResolvedValueOnce({
           data: {
             error: {
@@ -355,6 +419,17 @@ describe('OpenAI Provider', () => {
           guardrails: { flagged: true },
         });
         expect(modelRefusal.error).toBeUndefined();
+
+        mockFetchWithCache.mockResolvedValueOnce({
+          data: { choices: [{ message: { content: null }, finish_reason: 'content_filter' }] },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        const textless = await dedicated.callApi('A test prompt');
+        expect(textless).toMatchObject({ isRefusal: true, guardrails: { flagged: true } });
+        expect(gradeProviderRefusal(textless)).toMatchObject({ pass: true, score: 1 });
+        expect(gradeProviderRefusal(textless, true)).toMatchObject({ pass: false, score: 0 });
       },
     );
 
