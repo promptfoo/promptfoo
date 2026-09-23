@@ -1081,10 +1081,10 @@ GPT-6 Sol (`openai.gpt-6-sol`) and Luna (`openai.gpt-6-luna`) use the
 [OpenAI-compatible Responses API on Mantle](https://developers.openai.com/api/docs/guides/amazon-bedrock)
 in `us-east-1`, which promptfoo selects by default for those two IDs. AWS also offers the
 models through Bedrock Runtime with United States and global routing; the bare promptfoo
-selectors use Mantle. To switch an existing provider to either model per prompt, configure that
-provider in `us-east-1`. Bedrock does not support Responses reasoning updates; use the request-level effort.
+selectors use Mantle. To switch an existing OpenAI frontier provider to either model per prompt,
+configure that provider in `us-east-1`; GPT OSS and other provider families need a separate frontier provider. Bedrock does not support Responses reasoning updates; use the request-level effort.
 For region-specific Standard processing, promptfoo estimates
-$2.20 input / $11 output for Sol and $0.11 input / $0.55 output per million tokens.
+$2.20 input / $11 output for Sol and $0.11 input / $0.55 output per million tokens. Bedrock Runtime global profiles use the global Standard rates: $2 / $10 for Sol and $0.10 / $0.50 for Luna per million tokens.
 See [OpenAI's Bedrock pricing guidance](https://developers.openai.com/api/docs/guides/amazon-bedrock#pricing)
 for regional pricing and AWS billing terms.
 
