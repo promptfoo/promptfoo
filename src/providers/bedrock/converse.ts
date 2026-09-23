@@ -22,6 +22,7 @@ import {
 } from '../../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import {
+  getClaudeModelWarningName,
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
   normalizeClaudeThinkingConfig,
@@ -969,7 +970,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       ('any' in requestedToolChoice || 'tool' in requestedToolChoice);
     if (dropForcedToolChoice && !this.forcedToolChoiceRemovalWarned) {
       logger.warn(
-        'Forced tool choice (any/tool) is incompatible with the always-on adaptive thinking of Claude Fable 5 and Claude Mythos 5 and has been omitted. The model decides when to call tools; remove toolChoice to silence this warning.',
+        `Forced tool choice (any/tool) is incompatible with the always-on adaptive thinking of ${getClaudeModelWarningName(this.modelName) ?? 'this Claude model'} and has been omitted. The model decides when to call tools; remove toolChoice to silence this warning.`,
       );
       this.forcedToolChoiceRemovalWarned = true;
     }
