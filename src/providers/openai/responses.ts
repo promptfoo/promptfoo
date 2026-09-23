@@ -29,6 +29,7 @@ import {
 } from '../openrouterBilling';
 import { ResponsesProcessor } from '../responses/index';
 import { normalizeResponsesInput } from '../responses/input';
+import { getResponsesTokenUsage } from '../responses/processor';
 import { readResponsesStream } from '../responses/stream';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
@@ -40,7 +41,6 @@ import {
   assertOpenAiApiModel,
   formatOpenAiError,
   getOpenAiPolicyRefusal,
-  getTokenUsage,
   hasSensitiveOpenAiCachePath,
   hasSensitiveOpenAiCacheString,
 } from './util';
@@ -67,7 +67,9 @@ interface OpenAIErrorResponse {
 
 interface OpenAIResponsesResponse {
   id?: string;
+  model?: string;
   status?: string;
+  response?: OpenAIResponsesResponse;
   output?: Array<{
     content?: Array<{
       type: string;
@@ -900,19 +902,24 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     if (!policy) {
       return undefined;
     }
+    const response = data.response ?? data;
+    const billingData = { ...response, usage: response.usage ?? data.usage };
     return this.applyBilling(
       {
         output: policy.message,
-        ...(data.usage ? { tokenUsage: getTokenUsage(data, cached) } : {}),
+        ...(billingData.usage ? { tokenUsage: getResponsesTokenUsage(billingData, cached) } : {}),
         cached,
         isRefusal: true,
         guardrails: { flagged: true, flaggedInput: true, reason: policy.message },
+        raw: response,
         metadata: {
+          ...(response.id ? { responseId: response.id } : {}),
+          ...(response.model ? { model: response.model } : {}),
           ...(policy.code ? { providerPolicy: { code: policy.code } } : {}),
           http: { status, statusText, headers: headers ?? {} },
         },
       },
-      data,
+      billingData,
       config,
       cached,
     );
@@ -1527,11 +1534,15 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           typeof data === 'string' ? data : JSON.stringify(data)
         }`;
 
-        // Check if this is an invalid_prompt error code (indicates refusal)
-        if (typeof data === 'object' && data?.error?.code === 'invalid_prompt') {
+        // OpenRouter reuses invalid_prompt for malformed requests; actual refusals are explicitly marked.
+        if (
+          typeof data === 'object' &&
+          data?.error?.code === 'invalid_prompt' &&
+          !isOpenRouterEndpoint(this.getApiUrl())
+        ) {
           return {
             output: errorMessage,
-            tokenUsage: data?.usage ? getTokenUsage(data, cached) : undefined,
+            tokenUsage: data?.usage ? getResponsesTokenUsage(data, cached) : undefined,
             isRefusal: true,
             metadata: {
               http: {

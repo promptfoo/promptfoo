@@ -1,10 +1,11 @@
 const REASONING_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
 const UNKNOWN_PERSISTED_EFFORT = Symbol('unknown persisted effort');
+const COMPACTED_EFFORT = Symbol('effort before compaction');
 
 type Gpt6Variant = 'astra' | 'sol' | 'luna';
 type Gpt6Reasoning = { effort?: unknown; enabled?: unknown; mode?: unknown } | null | undefined;
 
-function getGpt6Variant(modelName: unknown): Gpt6Variant | undefined {
+export function getGpt6Variant(modelName: unknown): Gpt6Variant | undefined {
   if (typeof modelName !== 'string') {
     return undefined;
   }
@@ -44,14 +45,19 @@ function getResponsesReasoning(
   config: ReasoningConfig | undefined,
   render: (value: unknown) => unknown,
 ) {
-  const passthrough = render(getObject(config?.passthrough)?.reasoning);
   const typed = render(config?.reasoning);
+  const passthrough = render(getObject(config?.passthrough)?.reasoning);
+  for (const value of [typed, passthrough]) {
+    if (value != null && !getObject(value)) {
+      throw new Error('GPT-6 Responses reasoning must be an object or null. Use { effort: none }.');
+    }
+  }
   const options = { ...getObject(passthrough), ...getObject(typed) };
-  const effort = firstDefined(
+  const nestedEffort = firstDefined(
     typed === null ? null : getObject(typed)?.effort,
     passthrough === null ? null : getObject(passthrough)?.effort,
-    render(config?.reasoning_effort),
   );
+  const effort = nestedEffort === undefined ? render(config?.reasoning_effort) : nestedEffort;
   return { options, effort, clearOptions: typed === null || passthrough === null };
 }
 
@@ -60,10 +66,10 @@ export function getGpt6ResponsesReasoning(
   promptConfig: ReasoningConfig | undefined,
   render: (value: unknown) => unknown,
 ): Record<string, unknown> | undefined {
-  const provider = getResponsesReasoning(providerConfig, render);
   const prompt = getResponsesReasoning(promptConfig, render);
-  const options = { ...(prompt.clearOptions ? {} : provider.options), ...prompt.options };
-  const effort = firstDefined(prompt.effort, provider.effort);
+  const provider = prompt.clearOptions ? undefined : getResponsesReasoning(providerConfig, render);
+  const options = { ...provider?.options, ...prompt.options };
+  const effort = firstDefined(prompt.effort, provider?.effort);
   if (effort === null) {
     delete options.effort;
   } else if (effort !== undefined) {
@@ -98,6 +104,18 @@ function getResponsesEffortUpdates(input: unknown): unknown[] {
 
   const efforts: unknown[] = [];
   for (const item of input) {
+    if (
+      typeof item?.id === 'string' &&
+      (item.type === 'item_reference' ||
+        (item.type === undefined && Object.keys(item).every((key) => key === 'id')))
+    ) {
+      efforts.push(UNKNOWN_PERSISTED_EFFORT);
+      continue;
+    }
+    if (item?.type === 'compaction') {
+      efforts.push(COMPACTED_EFFORT);
+      continue;
+    }
     if (item?.type === 'configuration_update') {
       const effort = item.reasoning?.effort;
       if (effort != null && effort !== '') {
@@ -197,10 +215,13 @@ function getSamplingEffort(
       ? getOpenRouterChatEffortUpdates(body.messages)
       : getResponsesEffortUpdates(body.input);
   for (const update of updates) {
-    validateReasoningEffort(update, variant, modelLabel);
+    if (update !== UNKNOWN_PERSISTED_EFFORT && update !== COMPACTED_EFFORT) {
+      validateReasoningEffort(update, variant, modelLabel);
+    }
   }
   if (updates.length) {
-    return updates.at(-1);
+    const latest = updates.at(-1);
+    return latest === COMPACTED_EFFORT ? effort : latest;
   }
   // A linked response or stored conversation can carry an effort we cannot see locally.
   if (api === 'responses' && (body.previous_response_id || body.conversation)) {

@@ -91,10 +91,6 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       operationName: 'chat',
       model: this.modelName,
       providerId: this.id(),
-      temperature: this.config.temperature,
-      topP: this.config.top_p,
-      maxTokens: this.getChatTracingMaxTokens(context),
-      stopSequences: this.config.stop,
       testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
@@ -117,20 +113,30 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       return result;
     };
 
+    let prepared: Awaited<ReturnType<OpenAiChatCompletionProvider['getOpenAiBody']>>;
+    try {
+      prepared = await this.getOpenAiBody(prompt, context, callApiOptions);
+    } catch (error) {
+      return withGenAISpan(
+        spanContext,
+        async () => {
+          throw error;
+        },
+        resultExtractor,
+      );
+    }
     return withGenAISpan(
-      spanContext,
-      () => this.executeOpenRouterCall(prompt, context, callApiOptions),
+      { ...spanContext, ...this.getChatTracingRequest(prepared.body) },
+      () => this.executeOpenRouterCall(prepared, context),
       resultExtractor,
     );
   }
 
   private async executeOpenRouterCall(
-    prompt: string,
+    prepared: Awaited<ReturnType<OpenAiChatCompletionProvider['getOpenAiBody']>>,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    // Get the request body and config
-    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = prepared;
 
     // Make the API call directly
     logger.debug(`Calling OpenRouter API: model=${this.modelName}`);
@@ -233,12 +239,13 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
     if (message.refusal || finishReason === FINISH_REASON_MAP.content_filter) {
       return {
-        output: message.refusal || message.content || 'Content filtered by the model provider.',
+        output: message.content || message.refusal || 'Content filtered by the model provider.',
         tokenUsage: getTokenUsage(data, cached),
         cached,
         cost: this.calculateResponseCost(data, config),
         isRefusal: true,
         guardrails: { flagged: true },
+        raw: data,
         metadata: getOpenRouterBillingMetadata(data),
         ...(finishReason && { finishReason }),
       };

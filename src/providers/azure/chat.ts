@@ -22,7 +22,7 @@ import {
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
-import { applyGpt6RequestRules, isGpt6Model } from '../openai/gpt6';
+import { applyGpt6RequestRules, getGpt6Variant, isGpt6Model } from '../openai/gpt6';
 import { getRequestTimeoutMs, parseChatPrompt, transformTools } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
@@ -205,15 +205,18 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         : (config.modelName ?? this.deploymentName)
     ).toLowerCase();
     const isReasoningModel = this.isReasoningModel(capabilityModelName);
+    const gpt6Variant = getGpt6Variant(capabilityModelName);
+    const useModelDefaults = gpt6Variant === 'sol' || gpt6Variant === 'luna';
     const samplingParamsDeprecated = this.isSamplingParamsDeprecatedClaudeModel(config);
     const grokSamplingRestricted = this.isGrok4OrNewerModel();
 
     // Get max tokens based on model type
-    const maxTokensDefault = config.omitDefaults
-      ? getEnvString('OPENAI_MAX_TOKENS') === undefined
-        ? undefined
-        : getEnvInt('OPENAI_MAX_TOKENS')
-      : getEnvInt('OPENAI_MAX_TOKENS', 1024);
+    const maxTokensDefault =
+      config.omitDefaults || useModelDefaults
+        ? getEnvString('OPENAI_MAX_TOKENS') === undefined
+          ? undefined
+          : getEnvInt('OPENAI_MAX_TOKENS')
+        : getEnvInt('OPENAI_MAX_TOKENS', 1024);
     const maxTokens = config.max_tokens ?? maxTokensDefault;
     const maxCompletionTokens =
       config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? maxTokens;
@@ -236,7 +239,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       : (config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0));
 
     // Get reasoning effort for reasoning models
-    const reasoningEffort = config.reasoning_effort ?? (config.omitDefaults ? undefined : 'medium');
+    const reasoningEffort =
+      config.reasoning_effort ?? (config.omitDefaults || useModelDefaults ? undefined : 'medium');
 
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];

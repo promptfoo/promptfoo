@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { runAssertion } from '../../src/assertions/index';
 import { handleIsRefusal } from '../../src/assertions/refusal';
 
 import type {
@@ -61,6 +62,29 @@ describe('is-refusal assertion', () => {
           test: {} as AtomicTestCase,
         });
         expect(result).toMatchObject({ pass: true, score: 1 });
+      }
+    });
+
+    it('grades only the selected OpenAI output when the refusal assertion has a transform', async () => {
+      const providerResponse = {
+        output: ['The result is 42.', 'I cannot assist with that request.'],
+        isRefusal: true,
+      };
+      for (const [transform, positive, negative] of [
+        ['output[0]', false, true],
+        ['output[1]', true, false],
+      ] as const) {
+        for (const [type, pass] of [
+          ['is-refusal', positive],
+          ['not-is-refusal', negative],
+        ] as const) {
+          const result = await runAssertion({
+            assertion: { type, transform },
+            test: {} as AtomicTestCase,
+            providerResponse,
+          });
+          expect(result).toMatchObject({ pass, score: pass ? 1 : 0 });
+        }
       }
     });
 

@@ -245,19 +245,23 @@ describe('OpenAI Provider', () => {
           },
         } as any);
         try {
+          const sampling = { reasoning_effort: 'none' as const, temperature: 0.4, top_p: 0.8 };
           const providers = [
-            new OpenAiChatCompletionProvider(model, { config: { max_completion_tokens: 50 } }),
+            new OpenAiChatCompletionProvider(model, {
+              config: { max_completion_tokens: 50, ...sampling },
+            }),
             createLiteLLMProvider(`litellm:${model}`, {
               config: {
                 config: {
                   apiKey: 'test-key',
                   apiBaseUrl: 'https://proxy.example/v1',
                   max_tokens: 50,
+                  ...sampling,
                 },
               },
             }),
             new OpenRouterProvider(`openai/${model}`, {
-              config: { apiKey: 'test-key', max_completion_tokens: 50 },
+              config: { apiKey: 'test-key', max_completion_tokens: 50, ...sampling },
             }),
           ];
           const prompt = { raw: 'Say ready.', label: 'ready' };
@@ -284,12 +288,99 @@ describe('OpenAI Provider', () => {
               expect(request).not.toHaveProperty('max_tokens');
               expect(attributes.at(-1)?.['gen_ai.request.max_tokens']).toBe(expected);
             }
+            for (const reasoning_effort of ['none', 'high'] as const) {
+              await provider.callApi(prompt.raw, {
+                vars: {},
+                prompt: { ...prompt, config: { reasoning_effort } },
+              });
+              const request = JSON.parse(mockFetchWithCache.mock.calls.at(-1)![1]?.body as string);
+              const expectedTemperature = reasoning_effort === 'none' ? 0.4 : undefined;
+              const expectedTopP = reasoning_effort === 'none' ? 0.8 : undefined;
+              expect(request.temperature).toBe(expectedTemperature);
+              expect(request.top_p).toBe(expectedTopP);
+              expect(attributes.at(-1)?.['gen_ai.request.temperature']).toBe(expectedTemperature);
+              expect(attributes.at(-1)?.['gen_ai.request.top_p']).toBe(expectedTopP);
+            }
           }
         } finally {
           tracer.mockRestore();
         }
       },
     );
+
+    it('traces the token field actually sent for earlier OpenAI Chat models', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: { choices: [{ message: { content: 'Ready' }, finish_reason: 'stop' }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const attributes: Record<string, unknown>[] = [];
+      const tracer = vi.spyOn(trace, 'getTracer').mockReturnValue({
+        startActiveSpan: (
+          _name: string,
+          options: { attributes?: Record<string, unknown> },
+          _context: unknown,
+          callback: any,
+        ) => {
+          const span = { ...options.attributes };
+          attributes.push(span);
+          return callback({
+            setAttribute: (key: string, value: unknown) => {
+              span[key] = value;
+            },
+            setStatus: vi.fn(),
+            recordException: vi.fn(),
+            end: vi.fn(),
+          });
+        },
+      } as any);
+      try {
+        const prompt = { raw: 'Say ready.', label: 'ready' };
+        for (const { model, providerConfig, promptConfig, wireField, expected } of [
+          {
+            model: 'gpt-4o',
+            providerConfig: { max_tokens: 50, max_completion_tokens: 100 },
+            promptConfig: undefined,
+            wireField: 'max_tokens',
+            expected: 50,
+          },
+          {
+            model: 'gpt-5.6-sol',
+            providerConfig: { max_completion_tokens: 4096 },
+            promptConfig: { max_tokens: 50 },
+            wireField: 'max_completion_tokens',
+            expected: 4096,
+          },
+          {
+            model: 'gpt-4o',
+            providerConfig: { max_tokens: 50 },
+            promptConfig: { passthrough: { max_tokens: 23 } },
+            wireField: 'max_tokens',
+            expected: 23,
+          },
+          {
+            model: 'gpt-5.6-sol',
+            providerConfig: { max_completion_tokens: 4096 },
+            promptConfig: { passthrough: { max_completion_tokens: null } },
+            wireField: 'max_completion_tokens',
+            expected: undefined,
+          },
+        ]) {
+          const provider = new OpenAiChatCompletionProvider(model, { config: providerConfig });
+          const result = await provider.callApi(
+            prompt.raw,
+            promptConfig ? { vars: {}, prompt: { ...prompt, config: promptConfig } } : undefined,
+          );
+          expect(result.error).toBeUndefined();
+          const request = JSON.parse(mockFetchWithCache.mock.calls.at(-1)![1]?.body as string);
+          expect(request[wireField] ?? undefined).toBe(expected);
+          expect(attributes.at(-1)?.['gen_ai.request.max_tokens']).toBe(expected);
+        }
+      } finally {
+        tracer.mockRestore();
+      }
+    });
 
     it.each(['gpt-6-sol', 'gpt-6-luna'])(
       'keeps marked GPT-6 OpenRouter refusals distinct from native policy and authorization errors for %s',
@@ -430,6 +521,33 @@ describe('OpenAI Provider', () => {
         expect(textless).toMatchObject({ isRefusal: true, guardrails: { flagged: true } });
         expect(gradeProviderRefusal(textless)).toMatchObject({ pass: true, score: 1 });
         expect(gradeProviderRefusal(textless, true)).toMatchObject({ pass: false, score: 0 });
+      },
+    );
+
+    it.each(['gpt-6-sol', 'gpt-6-luna'])(
+      'preserves partial OpenRouter Chat output when the completed message also refuses for %s',
+      async (model) => {
+        const partial = 'The answer starts here: 42.';
+        const refusal = 'The gateway declined to complete the response.';
+        const provider = new OpenRouterProvider(`openai/${model}`, {
+          config: { apiKey: 'test-key' },
+        });
+        const completed = {
+          choices: [{ message: { content: partial, refusal }, finish_reason: 'content_filter' }],
+        };
+        mockFetchWithCache.mockResolvedValueOnce({
+          data: completed,
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        const completedResult = await provider.callApi('A test prompt');
+        expect(completedResult).toMatchObject({
+          output: partial,
+          raw: completed,
+          isRefusal: true,
+        });
+        expect(gradeProviderRefusal(completedResult)).toMatchObject({ pass: true, score: 1 });
       },
     );
 

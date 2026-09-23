@@ -146,22 +146,29 @@ function resolveGpt6ChatOutputCap(
   return cap === OUTPUT_CAP_RESET ? undefined : cap;
 }
 
-function getOpenRouterReasoningControl(config?: OpenAiCompletionOptions) {
+function getOpenRouterReasoningControl(
+  config?: OpenAiCompletionOptions,
+  vars?: CallApiContextParams['vars'],
+) {
   const passthrough = getOpenRouterPassthrough(config);
   const efforts = [
     ['flat', config?.reasoning_effort],
     ['flat', passthrough.reasoning_effort],
     ['nested', passthrough.reasoning === null ? null : passthrough.reasoning?.effort],
   ] as const;
-  for (const [kind, value] of efforts) {
-    if (value === null) {
+  for (const [kind, configured] of efforts) {
+    if (configured === undefined) {
+      continue;
+    }
+    const value = renderVarsInObject(configured, vars);
+    if (value === null || value === '') {
       return { kind: 'reset' as const };
     }
-    if (value !== undefined && value !== '') {
+    if (value !== undefined) {
       return { kind, value };
     }
   }
-  const budget = passthrough.reasoning?.max_tokens;
+  const budget = renderVarsInObject(passthrough.reasoning?.max_tokens, vars);
   if (budget === null) {
     return { kind: 'reset' as const };
   }
@@ -186,9 +193,19 @@ function reconcileOpenRouterReasoning(
     promptReasoning !== null && (providerReasoning != null || promptReasoning != null);
   const reasoning = hasReasoning ? { ...providerReasoning, ...promptReasoning } : undefined;
   const control =
-    getOpenRouterReasoningControl(promptConfig) ?? getOpenRouterReasoningControl(providerConfig);
+    getOpenRouterReasoningControl(promptConfig, vars) ??
+    getOpenRouterReasoningControl(providerConfig, vars);
   if (!control) {
+    if (typeof body.reasoning_effort === 'function') {
+      delete body.reasoning_effort;
+    }
     if (reasoning) {
+      if (typeof reasoning.effort === 'function') {
+        delete reasoning.effort;
+      }
+      if (typeof reasoning.max_tokens === 'function') {
+        delete reasoning.max_tokens;
+      }
       body.reasoning = reasoning;
     }
     return;
@@ -221,7 +238,7 @@ function reconcileOpenRouterReasoning(
   if (control.kind === 'budget') {
     const normalizedReasoning = {
       ...reasoning,
-      max_tokens: renderVarsInObject(control.value, vars),
+      max_tokens: control.value,
     };
     delete normalizedReasoning.effort;
     if (normalizedReasoning.enabled === false) {
@@ -232,7 +249,7 @@ function reconcileOpenRouterReasoning(
     return;
   }
 
-  const effort = renderVarsInObject(control.value, vars);
+  const effort = control.value;
   delete reasoning?.max_tokens;
   if (
     reasoning &&
@@ -395,9 +412,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const temperature = supportsTemperature
       ? (config.temperature ?? temperatureDefault)
       : undefined;
-    const reasoningEffort = isReasoningModel
-      ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
-      : undefined;
+    const reasoningEffort =
+      isReasoningModel && !isGPT6Model
+        ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
+        : undefined;
 
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
@@ -473,7 +491,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     assertOpenAiApiModel(body.model, this.getApiUrl());
 
     // Handle reasoning_effort and reasoning parameters for reasoning models
-    if (config.reasoning_effort && (isReasoningModel || capabilityModelName.includes('gpt-oss'))) {
+    if (
+      !isGPT6Model &&
+      config.reasoning_effort &&
+      (isReasoningModel || capabilityModelName.includes('gpt-oss'))
+    ) {
       body.reasoning_effort = renderVarsInObject(config.reasoning_effort, context?.vars);
     }
 
@@ -573,16 +595,20 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       : {};
   }
 
-  protected getChatTracingMaxTokens(context?: CallApiContextParams): number | undefined {
-    const promptConfig = context?.prompt?.config;
-    const config = { ...this.config, ...promptConfig };
-    const model = config.passthrough?.model ?? this.getCapabilityModelName();
-    return isGpt6Model(model)
-      ? resolveGpt6ChatOutputCap(this.config, promptConfig, this.usesOpenRouter())
-      : (promptConfig?.max_completion_tokens ??
-          promptConfig?.max_tokens ??
-          this.config.max_completion_tokens ??
-          this.config.max_tokens);
+  protected getChatTracingRequest(
+    body: Record<string, unknown>,
+  ): Pick<GenAISpanContext, 'maxTokens' | 'temperature' | 'topP' | 'stopSequences'> {
+    const asNumber = (value: unknown) => (typeof value === 'number' ? value : undefined);
+    return {
+      maxTokens: asNumber(body.max_completion_tokens) ?? asNumber(body.max_tokens),
+      temperature: asNumber(body.temperature),
+      topP: asNumber(body.top_p),
+      stopSequences: Array.isArray(body.stop)
+        ? body.stop
+        : typeof body.stop === 'string'
+          ? [body.stop]
+          : undefined,
+    };
   }
 
   async callApi(
@@ -605,11 +631,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       openaiApiType: 'chat_completions',
       model: this.modelName,
       providerId: this.id(),
-      // Optional request parameters
-      maxTokens: this.getChatTracingMaxTokens(context),
-      temperature: this.config.temperature,
-      topP: this.config.top_p,
-      stopSequences: this.config.stop,
       // Promptfoo context from test case if available
       evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
       testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
@@ -620,10 +641,22 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       requestBody: prompt,
     };
 
+    let prepared: Awaited<ReturnType<OpenAiChatCompletionProvider['getOpenAiBody']>>;
+    try {
+      prepared = await this.getOpenAiBody(prompt, context, callApiOptions);
+    } catch (error) {
+      return withGenAISpan(
+        spanContext,
+        async () => {
+          throw error;
+        },
+        extractProviderResponseAttributes,
+      );
+    }
     // Wrap the API call in a span
     return withGenAISpan(
-      spanContext,
-      () => this.callApiInternal(prompt, context, callApiOptions, apiKey),
+      { ...spanContext, ...this.getChatTracingRequest(prepared.body) },
+      () => this.callApiInternal(prepared, context, callApiOptions, apiKey),
       extractProviderResponseAttributes,
     );
   }
@@ -633,12 +666,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
    * This is called by callApi after setting up the tracing span.
    */
   private async callApiInternal(
-    prompt: string,
+    prepared: Awaited<ReturnType<OpenAiChatCompletionProvider['getOpenAiBody']>>,
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
     apiKey?: string,
   ): Promise<ProviderResponse> {
-    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = prepared;
     const getAuthHeaders = this.getRequestAuthentication();
 
     type OpenAIChatCompletionResponse = OpenAI.ChatCompletion & {

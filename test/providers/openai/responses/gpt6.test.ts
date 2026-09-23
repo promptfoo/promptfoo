@@ -219,6 +219,100 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
   );
 
   it.each(['gpt-6-sol', 'gpt-6-luna'])(
+    'preserves the raw OpenRouter Responses refusal, usage, and response metadata for %s',
+    async (model) => {
+      const data = {
+        id: `resp_policy_${model}`,
+        model: `openai/${model}`,
+        status: 'failed',
+        error_type: 'refusal',
+        error: { code: 'bio_policy', message: 'The provider declined this request.' },
+        usage: { input_tokens: 100, output_tokens: 50, total_tokens: 150, cost: 0.004 },
+      };
+      for (const [stream, upstream] of [
+        [false, data],
+        [true, `data: ${JSON.stringify({ type: 'response.failed', response: data })}\n\n`],
+      ] as const) {
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+          data: upstream,
+        });
+        const result = await new OpenAiResponsesProvider(`openai/${model}`, {
+          config: { apiKey: 'test-key', apiBaseUrl: 'https://openrouter.ai/api/v1', stream },
+        }).callApi('A test prompt');
+        expect(result).toMatchObject({
+          isRefusal: true,
+          raw: data,
+          tokenUsage: { prompt: 100, completion: 50, total: 150, numRequests: 1 },
+          cost: 0.004,
+          metadata: {
+            responseId: data.id,
+            model: data.model,
+            providerPolicy: { code: 'bio_policy' },
+          },
+        });
+      }
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+        data,
+      });
+      const cached = await new OpenAiResponsesProvider(`openai/${model}`, {
+        config: { apiKey: 'test-key', apiBaseUrl: 'https://openrouter.ai/api/v1' },
+      }).callApi('A test prompt');
+      expect(cached.tokenUsage).toMatchObject({ cached: 150, total: 150 });
+    },
+  );
+
+  it.each(['gpt-6-sol', 'gpt-6-luna'])(
+    'treats OpenRouter invalid_prompt request errors as errors unless explicitly marked as a refusal for %s',
+    async (model) => {
+      for (const errorType of [
+        'context_length_exceeded',
+        'invalid_request',
+        undefined,
+        'refusal',
+      ]) {
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          cached: false,
+          status: 400,
+          statusText: 'Bad Request',
+          data: {
+            error_type: errorType,
+            error: { code: 'invalid_prompt', message: 'Request rejected by the gateway.' },
+          },
+        });
+        const result = await new OpenAiResponsesProvider(`openai/${model}`, {
+          config: { apiKey: 'test-key', apiBaseUrl: 'https://openrouter.ai/api/v1' },
+        }).callApi('A benign prompt');
+        if (errorType === 'refusal') {
+          expect(result.isRefusal).toBe(true);
+          expect(result.error).toBeUndefined();
+        } else {
+          expect(result.isRefusal).toBeUndefined();
+          expect(result.guardrails).toBeUndefined();
+          expect(result.error).toContain('invalid_prompt');
+        }
+      }
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+        data: { error: { code: 'invalid_prompt', message: 'The native provider declined.' } },
+      });
+      const native = await new OpenAiResponsesProvider(model, {
+        config: { apiKey: 'test-key' },
+      }).callApi('A test prompt');
+      expect(native.isRefusal).toBe(true);
+    },
+  );
+
+  it.each(['gpt-6-sol', 'gpt-6-luna'])(
     'uses reported OpenRouter Responses billing and preserves BYOK uncertainty for %s',
     async (model) => {
       const counts = { input_tokens: 1_000, output_tokens: 100, total_tokens: 1_100 };

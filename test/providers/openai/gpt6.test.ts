@@ -708,6 +708,65 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
     },
   );
 
+  it('treats referenced Responses items as opaque until a later reasoning update', async () => {
+    const user = { role: 'user', content: 'Say ready.' };
+    const update = (effort: string) => ({ type: 'configuration_update', reasoning: { effort } });
+    for (const reference of [
+      { type: 'item_reference', id: 'item_opaque' },
+      { id: 'item_opaque' },
+    ]) {
+      const provider = new OpenAiResponsesProvider(model, {
+        config: { reasoning: { effort: 'high' }, temperature: 0.3, top_p: 0.8 },
+      });
+      for (const input of [
+        [reference, user],
+        [update('none'), user, reference, user],
+      ]) {
+        const { body } = await provider.getOpenAiBody(JSON.stringify(input));
+        expect(body).toMatchObject({ temperature: 0.3, top_p: 0.8 });
+      }
+      const { body: high } = await provider.getOpenAiBody(
+        JSON.stringify([reference, user, update('high'), user]),
+      );
+      expect(high).not.toHaveProperty('temperature');
+      expect(high).not.toHaveProperty('top_p');
+      const { body: none } = await provider.getOpenAiBody(
+        JSON.stringify([reference, user, update('none'), user]),
+      );
+      expect(none).toMatchObject({ temperature: 0.3, top_p: 0.8 });
+
+      const { body: noDefault } = await new OpenAiResponsesProvider(model, {
+        config: { reasoning: { effort: 'none' } },
+      }).getOpenAiBody(JSON.stringify([reference, user]));
+      expect(noDefault).not.toHaveProperty('temperature');
+    }
+  });
+
+  it('discards reasoning updates before a returned Responses compaction item', async () => {
+    const user = { role: 'user', content: 'Say ready.' };
+    const update = (effort: string) => ({ type: 'configuration_update', reasoning: { effort } });
+    const compaction = { type: 'compaction', id: 'item_compacted', encrypted_content: 'opaque' };
+    for (const [baseline, earlier] of [
+      ['high', 'none'],
+      ['none', 'high'],
+    ] as const) {
+      const provider = new OpenAiResponsesProvider(model, {
+        config: { reasoning: { effort: baseline }, temperature: 0.3, top_p: 0.8 },
+      });
+      const { body } = await provider.getOpenAiBody(
+        JSON.stringify([update(earlier), user, compaction, user]),
+      );
+      expect(body.temperature).toBe(baseline === 'none' ? 0.3 : undefined);
+      expect(body.top_p).toBe(baseline === 'none' ? 0.8 : undefined);
+
+      const { body: fresh } = await provider.getOpenAiBody(
+        JSON.stringify([update(earlier), user, compaction, update(earlier), user]),
+      );
+      expect(fresh.temperature).toBe(earlier === 'none' ? 0.3 : undefined);
+      expect(fresh.top_p).toBe(earlier === 'none' ? 0.8 : undefined);
+    }
+  });
+
   it('uses a final passthrough input and validates both request and conversation efforts', async () => {
     const promptInput = JSON.stringify([
       { type: 'configuration_update', reasoning: { effort: 'high' } },
@@ -967,6 +1026,159 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
     expect(fromPassthrough).not.toHaveProperty('temperature');
     expect(passthroughReasoning).toHaveBeenCalledTimes(1);
   });
+
+  it('renders only the selected GPT-6 Chat reasoning callback, once', async () => {
+    const prompt = { raw: 'Say ready.', label: 'ready' };
+    for (const providerModel of [
+      { Provider: OpenAiChatCompletionProvider, name: model },
+      { Provider: OpenRouterProvider, name: `openai/${model}` },
+    ]) {
+      const selected = vi.fn(({ vars }: { vars: { effort: string } }) => vars.effort);
+      const provider = new providerModel.Provider(providerModel.name, {
+        config: { reasoning_effort: selected as any, temperature: 0.3 },
+      });
+      const { body } = await provider.getOpenAiBody(prompt.raw, {
+        vars: { effort: 'none' },
+        prompt,
+      });
+      expect(body).toMatchObject({ reasoning_effort: 'none', temperature: 0.3 });
+      expect(selected).toHaveBeenCalledTimes(1);
+
+      const overridden = vi.fn(() => {
+        throw new Error('The overridden provider callback must not run');
+      });
+      const withOverride = new providerModel.Provider(providerModel.name, {
+        config: { reasoning_effort: overridden as any, temperature: 0.3 },
+      });
+      for (const config of [
+        { reasoning_effort: 'none' as const },
+        { passthrough: { reasoning_effort: 'none' } },
+      ]) {
+        const { body: overriddenBody } = await withOverride.getOpenAiBody(prompt.raw, {
+          vars: {},
+          prompt: { ...prompt, config: { ...config, tools: [statusTool] } },
+        });
+        expect(overriddenBody).toMatchObject({ reasoning_effort: 'none', temperature: 0.3 });
+      }
+      const { body: reset } = await withOverride.getOpenAiBody(prompt.raw, {
+        vars: {},
+        prompt: { ...prompt, config: { passthrough: { reasoning_effort: null } } },
+      });
+      expect(reset).not.toHaveProperty('reasoning_effort');
+      expect(overridden).not.toHaveBeenCalled();
+    }
+  });
+
+  it('treats empty OpenRouter effort values as prompt-level resets', async () => {
+    const prompt = { raw: 'Say ready.', label: 'ready' };
+    const provider = new OpenRouterProvider(`openai/${model}`, {
+      config: { reasoning_effort: 'none', temperature: 0.8 },
+    });
+    for (const config of [
+      { reasoning_effort: '' },
+      { passthrough: { reasoning_effort: '' } },
+      { passthrough: { reasoning: { effort: '' } } },
+      { reasoning_effort: '{{ optional }}' },
+      { passthrough: { reasoning: { effort: '{{ optional }}' } } },
+    ]) {
+      const { body } = await provider.getOpenAiBody(prompt.raw, {
+        vars: {},
+        prompt: { ...prompt, config: config as any },
+      });
+      expect(body).not.toHaveProperty('reasoning_effort');
+      expect(body.reasoning ?? {}).not.toHaveProperty('effort');
+      expect(body).not.toHaveProperty('temperature');
+    }
+  });
+
+  it('leaves Azure OpenAI Chat caps and reasoning defaults to the GPT-6 model', async () => {
+    for (const [deployment, config] of [
+      [`prod-${model}`, {}],
+      ['production', { modelName: model }],
+    ] as const) {
+      const provider = new AzureChatCompletionProvider(deployment, { config });
+      const { body } = await provider.getOpenAiBody('Say ready.');
+      expect(body).not.toHaveProperty('max_completion_tokens');
+      expect(body).not.toHaveProperty('max_tokens');
+      expect(body).not.toHaveProperty('reasoning_effort');
+
+      const { body: configured } = await new AzureChatCompletionProvider(deployment, {
+        config: { ...config, max_tokens: 2500, reasoning_effort: 'none' },
+      }).getOpenAiBody('Say ready.');
+      expect(configured).toMatchObject({ max_completion_tokens: 2500, reasoning_effort: 'none' });
+    }
+
+    for (const [override, expected] of [
+      [{ OPENAI_MAX_TOKENS: '3000' }, 3000],
+      [{ OPENAI_MAX_TOKENS: '3000', OPENAI_MAX_COMPLETION_TOKENS: '4000' }, 4000],
+    ] as const) {
+      const restore = mockProcessEnv(override);
+      try {
+        const { body } = await new AzureChatCompletionProvider(`prod-${model}`).getOpenAiBody(
+          'Say ready.',
+        );
+        expect(body.max_completion_tokens).toBe(expected);
+      } finally {
+        restore();
+      }
+    }
+  });
+
+  it('does not evaluate provider Responses reasoning when the prompt resets the object', async () => {
+    const prompt = { raw: 'Say ready.', label: 'ready' };
+    const overridden = vi.fn(() => {
+      throw new Error('The overridden provider callback must not run');
+    });
+    const provider = new OpenAiResponsesProvider(model, {
+      config: { reasoning: overridden as any, temperature: 0.3 },
+    });
+    for (const config of [
+      { reasoning: null },
+      { passthrough: { reasoning: null } },
+      { reasoning: (() => null) as any },
+    ]) {
+      const { body } = await provider.getOpenAiBody(prompt.raw, {
+        vars: {},
+        prompt: { ...prompt, config },
+      });
+      expect(body).not.toHaveProperty('reasoning');
+      expect(body).not.toHaveProperty('temperature');
+    }
+    expect(overridden).not.toHaveBeenCalled();
+
+    const shadowedAlias = vi.fn(() => {
+      throw new Error('The overridden effort alias must not run');
+    });
+    const { body } = await new OpenAiResponsesProvider(model, {
+      config: { reasoning: { effort: 'none' }, reasoning_effort: shadowedAlias as any },
+    }).getOpenAiBody(prompt.raw, { vars: {}, prompt });
+    expect(body.reasoning).toEqual({ effort: 'none' });
+    expect(shadowedAlias).not.toHaveBeenCalled();
+  });
+
+  it.each(['none', true, 3, ['none']])(
+    'rejects invalid GPT-6 Responses reasoning %j rather than using the default',
+    async (invalid) => {
+      const prompt = { raw: 'Say ready.', label: 'ready' };
+      for (const name of [model, 'gpt-6-astra']) {
+        const config = { passthrough: { reasoning: invalid }, temperature: 0.3 };
+        await expect(
+          new OpenAiResponsesProvider(name, { config }).getOpenAiBody(prompt.raw),
+        ).rejects.toThrow('GPT-6 Responses reasoning must be an object or null');
+        await expect(
+          new OpenAiResponsesProvider(name).getOpenAiBody(prompt.raw, {
+            vars: {},
+            prompt: { ...prompt, config },
+          }),
+        ).rejects.toThrow('GPT-6 Responses reasoning must be an object or null');
+        await expect(
+          new OpenAiResponsesProvider(name, {
+            config: { reasoning: (() => invalid) as any },
+          }).getOpenAiBody(prompt.raw, { vars: {}, prompt }),
+        ).rejects.toThrow('GPT-6 Responses reasoning must be an object or null');
+      }
+    },
+  );
 
   it.each([
     [{ max_tokens: 77 }, 77],

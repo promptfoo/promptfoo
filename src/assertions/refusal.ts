@@ -5,7 +5,7 @@ import type { AssertionParams, GradingResult } from '../types/index';
 export function handleIsRefusal(params: AssertionParams): GradingResult {
   const { output, inverse, assertion, providerResponse } = params;
 
-  if (providerResponse.isRefusal === true) {
+  if (!assertion.transform && providerResponse.isRefusal === true) {
     const pass = !inverse;
     return {
       pass,
