@@ -25,6 +25,7 @@ import {
 import {
   extractProviderResponseAttributes,
   type GenAISpanContext,
+  setGenAIRequestAttributes,
   withGenAISpan,
 } from '../tracing';
 import { OpenAiGenericProvider } from './';
@@ -37,6 +38,7 @@ import {
   OPENAI_CHAT_MODELS,
   validateFunctionCall,
 } from './util';
+import type { Span } from '@opentelemetry/api';
 import type OpenAI from 'openai';
 
 import type { EnvOverrides } from '../../types/env';
@@ -89,6 +91,23 @@ function getChatSearchSurcharge(modelName: string): number {
     return 0.025;
   }
   return 0;
+}
+
+/** Narrow a wire-body value to a span-safe number, dropping NaN/Infinity. */
+function asFiniteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+/** Normalize the OpenAI `stop` field (string | string[]) to a string array. */
+function asStopSequences(value: unknown): string[] | undefined {
+  if (typeof value === 'string') {
+    return [value];
+  }
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const sequences = value.filter((entry): entry is string => typeof entry === 'string');
+  return sequences.length > 0 ? sequences : undefined;
 }
 
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
@@ -391,11 +410,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       openaiApiType: 'chat_completions',
       model: this.modelName,
       providerId: this.id(),
-      // Optional request parameters
-      maxTokens: this.config.max_tokens,
-      temperature: this.config.temperature,
-      topP: this.config.top_p,
-      stopSequences: this.config.stop,
+      // The sampling parameters are deliberately omitted here: `this.config` is not
+      // what gets sent. callApiInternal stamps the effective values off the finished
+      // wire body via setGenAIRequestAttributes. OpenTelemetry has no way to remove
+      // an attribute once set, so setting a configured-but-dropped parameter now
+      // would leave the span permanently wrong.
       // Promptfoo context from test case if available
       evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
       testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
@@ -409,7 +428,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     // Wrap the API call in a span
     return withGenAISpan(
       spanContext,
-      () => this.callApiInternal(prompt, context, callApiOptions, apiKey),
+      (span) => this.callApiInternal(prompt, context, callApiOptions, apiKey, span),
       extractProviderResponseAttributes,
     );
   }
@@ -423,9 +442,27 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
     apiKey?: string,
+    span?: Span,
   ): Promise<ProviderResponse> {
     const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
     const getAuthHeaders = this.getRequestAuthentication();
+
+    if (span) {
+      // Re-stamp gen_ai.request.* from the body that is actually sent. callApi only
+      // had this.config to go on, which misses env defaults (OPENAI_MAX_TOKENS,
+      // OPENAI_TEMPERATURE), the parameters getOpenAiBody strips for reasoning and
+      // GPT-5 models, and a `passthrough.model` override.
+      setGenAIRequestAttributes(span, {
+        model: typeof body.model === 'string' ? body.model : undefined,
+        operationName: 'chat',
+        maxTokens: asFiniteNumber(body.max_completion_tokens ?? body.max_tokens),
+        temperature: asFiniteNumber(body.temperature),
+        topP: asFiniteNumber(body.top_p),
+        stopSequences: asStopSequences(body.stop),
+        frequencyPenalty: asFiniteNumber(body.frequency_penalty),
+        presencePenalty: asFiniteNumber(body.presence_penalty),
+      });
+    }
 
     type OpenAIChatCompletionResponse = OpenAI.ChatCompletion & {
       choices: Array<
@@ -567,7 +604,15 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const message = data.choices[0].message;
       const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
       const cost = this.calculateResponseCost(data, config, cached);
-      const providerMetadata = this.getProviderResponseMetadata(data);
+      // gen_ai.response.id / gen_ai.response.model come off the raw payload: the
+      // served model routinely differs from the requested one (an alias resolving
+      // to a dated snapshot, a router picking a backend). A subclass override of
+      // getProviderResponseMetadata still wins for any key it sets itself.
+      const providerMetadata = {
+        ...(typeof data.id === 'string' && data.id ? { responseId: data.id } : {}),
+        ...(typeof data.model === 'string' && data.model ? { model: data.model } : {}),
+        ...this.getProviderResponseMetadata(data),
+      };
 
       // Track content filtering for guardrails
       const contentFiltered = finishReason === FINISH_REASON_MAP.content_filter;

@@ -1166,6 +1166,17 @@ export function sanitizeUrlEncodedString(value: string): string {
 }
 
 /**
+ * `endpoint` is the conventional key for an exporter or gateway URL (OTLP exporters,
+ * tracing providers, proxy configs), and such a URL routinely carries the credential
+ * itself as userinfo (`https://user:token@host`), a query parameter, or a path
+ * segment. Only treat the value as a URL when it actually looks like one, so an
+ * `endpoint` holding a bare host or a symbolic name is left alone.
+ */
+function isEndpointUrlValue(key: string, value: string): boolean {
+  return key === 'endpoint' && /^(?:[a-z][a-z\d+.-]*:\/\/|\/)/i.test(value);
+}
+
+/**
  * Sanitize plain object fields
  */
 function sanitizePlainObject(
@@ -1216,6 +1227,7 @@ function sanitizePlainObject(
       (key === 'url' ||
         key === 'apiBaseUrl' ||
         key === 'server_url' ||
+        isEndpointUrlValue(key, value) ||
         (isEnvMap && key.toUpperCase().endsWith('_URL')))
     ) {
       sanitized[key] =

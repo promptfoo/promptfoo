@@ -80,8 +80,20 @@ Instrumented model and agent calls can include these attributes on their GenAI s
 - `gen_ai.request.temperature` - Temperature setting
 - `gen_ai.request.top_p` - Top-p setting
 - `gen_ai.request.stop_sequences` - Stop sequences
+- `gen_ai.request.frequency_penalty` - Frequency penalty setting
+- `gen_ai.request.presence_penalty` - Presence penalty setting
+
+Request attributes describe the request that was actually sent, not the provider
+configuration. Defaults filled in by promptfoo or the environment are recorded, and a
+parameter the provider drops for a given model (reasoning models reject `temperature`
+and `max_tokens`, for example) is left off the span even when it is configured.
 
 **Response Attributes:**
+
+- `gen_ai.response.id` - Provider's response identifier, when the API returns one
+- `gen_ai.response.model` - The model that actually served the request, which can differ
+  from `gen_ai.request.model` when an alias resolves to a dated snapshot or a router
+  picks a backend
 
 - `gen_ai.usage.input_tokens` - Input/prompt token count
 - `gen_ai.usage.output_tokens` - Output/completion token count
@@ -122,6 +134,7 @@ Span: chat gpt-4
 ├─ gen_ai.usage.input_tokens: 150
 ├─ gen_ai.usage.output_tokens: 85
 ├─ promptfoo.usage.total_tokens: 235
+├─ gen_ai.response.model: gpt-4-0613
 ├─ gen_ai.response.finish_reasons: ["stop"]
 ├─ promptfoo.provider.id: openai:chat:gpt-4
 └─ promptfoo.test.index: 0
