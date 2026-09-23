@@ -157,7 +157,7 @@ Use `openai:responses:gpt-6-sol` for complex coding and agentic workflows, or `o
 
 Responses supports function calling and built-in tools with reasoning. Chat Completions supports function calling only with `reasoning_effort: none`; Promptfoo reports an error if Chat tools are combined with another or unspecified effort. Temperature, top-p, and log probabilities are available on either endpoint with effort `none` and are omitted with other efforts. See the [Sol](https://developers.openai.com/api/docs/models/gpt-6-sol) and [Luna](https://developers.openai.com/api/docs/models/gpt-6-luna) model guides.
 
-On Responses, a [`configuration_update`](https://developers.openai.com/api/docs/guides/reasoning#change-reasoning-mid-conversation) in the input selects the effort used for sampling. If you only reference a previous response or stored conversation, Promptfoo cannot see earlier updates; it forwards explicitly configured sampling parameters for OpenAI to validate. When the current effort is known to be `none`, Promptfoo defaults `temperature` to `0` unless you set `omitDefaults: true`.
+On Responses in standard, single-agent mode, a [`configuration_update`](https://developers.openai.com/api/docs/guides/reasoning#change-reasoning-mid-conversation) in the input selects the effort used for sampling. If you only reference a previous response or stored conversation in this mode, Promptfoo cannot see earlier updates; it forwards explicitly configured sampling parameters for OpenAI to validate. Pro and multi-agent mode use the request-level effort. When the current effort is known to be `none`, Promptfoo defaults `temperature` to `0` unless you set `omitDefaults: true`.
 
 ### Fine-tuned models {#fine-tuned-and-legacy-completion-models}
 

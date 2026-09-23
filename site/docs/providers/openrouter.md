@@ -66,7 +66,7 @@ providers:
 
 ## Cost reporting
 
-By default, promptfoo uses the [reported `usage.cost`](https://openrouter.ai/docs/cookbook/administration/usage-accounting) as the charge to your OpenRouter account. Missing or invalid charges remain unknown. Reported upstream amounts remain separate metadata fields.
+By default, promptfoo uses the [reported `usage.cost`](https://openrouter.ai/docs/cookbook/administration/usage-accounting) as the charge to your OpenRouter account. This also applies to the generic OpenAI Chat provider when its `apiBaseUrl` points to `https://openrouter.ai/api/v1`. Missing or invalid charges remain unknown. Reported upstream amounts remain separate metadata fields.
 
 For responses explicitly marked `usage.is_byok: true`, generic `cost` is unavailable unless you configure complete, valid token rates. With [Bring Your Own Key (BYOK)](https://openrouter.ai/docs/guides/overview/auth/byok), your upstream provider bills inference separately, so a zero or fee-only OpenRouter charge does not establish the combined cost. Responses with a missing or invalid BYOK flag continue to use the reported account charge; their route remains unknown in metadata.
 
