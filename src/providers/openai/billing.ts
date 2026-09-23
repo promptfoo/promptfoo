@@ -560,6 +560,32 @@ type OpenAIBillingConfig = ProviderConfig & {
   apiBaseUrl?: string;
 };
 
+function usesAzureOpenAI(
+  config: OpenAIBillingConfig,
+  resolvedApiUrl: string | undefined,
+  provider: string | undefined,
+): boolean {
+  if (provider === 'azure' || provider === 'azure-openai') {
+    return true;
+  }
+  const endpoint = resolvedApiUrl || config.apiHost || config.apiBaseUrl;
+  if (!endpoint) {
+    return false;
+  }
+  try {
+    const url = new URL(
+      /^[a-z][a-z0-9+.-]*:\/\//i.test(endpoint) ? endpoint : `https://${endpoint}`,
+    );
+    return (
+      /(?:^|\.)openai\.azure\.com$/.test(url.hostname) ||
+      (url.hostname === 'gateway.ai.cloudflare.com' &&
+        /^\/v1\/[^/]+\/[^/]+\/azure-openai(?:\/|$)/.test(url.pathname))
+    );
+  } catch {
+    return false;
+  }
+}
+
 function usesOpenAIRegionalProcessing(
   config: OpenAIBillingConfig,
   resolvedApiUrl: string | undefined,
@@ -999,6 +1025,23 @@ export function calculateOpenAIUsageCost(
   }
   const usageParts = getOpenAIUsageParts(rawUsage);
   const usage = extractOpenAIBillingUsage(rawUsage);
+  if (
+    /^gpt-6-(?:sol|luna)(?:-|$)/.test(modelName) &&
+    usesAzureOpenAI(config, options.apiUrl, options.provider)
+  ) {
+    const inputRate = config.inputCost ?? config.cost;
+    const outputRate = config.outputCost ?? config.cost;
+    if (
+      (inputRate === undefined && outputRate === undefined) ||
+      (usage.totalInputTokens > 0 && inputRate === undefined) ||
+      (usage.totalOutputTokens > 0 && outputRate === undefined)
+    ) {
+      return undefined;
+    }
+    return options.cachedResponse
+      ? 0
+      : usage.totalInputTokens * (inputRate ?? 0) + usage.totalOutputTokens * (outputRate ?? 0);
+  }
   const tier = normalizeServiceTier(options.serviceTier);
   const modelRates = getModelRates(modelName, tier, usage.totalInputTokens);
   if (!modelRates) {

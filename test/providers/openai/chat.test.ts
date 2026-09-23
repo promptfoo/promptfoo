@@ -7,6 +7,7 @@ import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
+import { CloudflareGatewayOpenAiProvider } from '../../../src/providers/cloudflare-gateway';
 import { createLiteLLMProvider } from '../../../src/providers/litellm';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 import { OpenRouterProvider } from '../../../src/providers/openrouter';
@@ -548,6 +549,44 @@ describe('OpenAI Provider', () => {
           isRefusal: true,
         });
         expect(gradeProviderRefusal(completedResult)).toMatchObject({ pass: true, score: 1 });
+      },
+    );
+
+    it.each(['gpt-6-sol', 'gpt-6-luna'])(
+      'leaves Cloudflare-routed Azure Chat pricing unknown without supplied rates for %s',
+      async (model) => {
+        const data = {
+          choices: [{ message: { content: 'Ready' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 1000, completion_tokens: 100, total_tokens: 1100 },
+        };
+        for (const [rates, expected] of [
+          [{}, undefined],
+          [{ inputCost: 2 / 1e6, outputCost: 3 / 1e6 }, 0.0023],
+        ] as const) {
+          mockFetchWithCache.mockResolvedValueOnce({
+            data,
+            cached: false,
+            status: 200,
+            statusText: 'OK',
+          });
+          const provider = new CloudflareGatewayOpenAiProvider('azure-openai', model, {
+            config: {
+              apiKey: 'test-key',
+              accountId: 'account',
+              gatewayId: 'gateway',
+              resourceName: 'resource',
+              deploymentName: 'deployment',
+              ...rates,
+            },
+          });
+          const result = await provider.callApi('A test prompt');
+          expect(result.error).toBeUndefined();
+          if (expected === undefined) {
+            expect(result.cost).toBeUndefined();
+          } else {
+            expect(result.cost).toBeCloseTo(expected, 10);
+          }
+        }
       },
     );
 

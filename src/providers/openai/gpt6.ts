@@ -107,7 +107,7 @@ function getResponsesEffortUpdates(input: unknown): unknown[] {
     if (
       typeof item?.id === 'string' &&
       (item.type === 'item_reference' ||
-        (item.type === undefined && Object.keys(item).every((key) => key === 'id')))
+        (item.type == null && Object.keys(item).every((key) => key === 'id' || key === 'type')))
     ) {
       efforts.push(UNKNOWN_PERSISTED_EFFORT);
       continue;

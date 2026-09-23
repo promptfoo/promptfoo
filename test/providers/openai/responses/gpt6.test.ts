@@ -119,6 +119,41 @@ describe('GPT-6 Astra Responses billing', () => {
 
 describe('GPT-6 Sol and Luna Responses billing', () => {
   it.each(['gpt-6-sol', 'gpt-6-luna'])(
+    'does not use direct OpenAI pricing for generic Responses configured with an Azure endpoint for %s',
+    async (model) => {
+      const data = {
+        ...responseData,
+        model,
+        usage: { input_tokens: 1000, output_tokens: 100, total_tokens: 1100 },
+      };
+      for (const [rates, expected] of [
+        [{}, undefined],
+        [{ inputCost: 2 / 1e6, outputCost: 3 / 1e6 }, 0.0023],
+      ] as const) {
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          data,
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        const result = await new OpenAiResponsesProvider(model, {
+          config: {
+            apiKey: 'test-key',
+            apiBaseUrl: 'https://resource.openai.azure.com/openai/v1',
+            ...rates,
+          },
+        }).callApi('A test prompt');
+        expect(result.error).toBeUndefined();
+        if (expected === undefined) {
+          expect(result.cost).toBeUndefined();
+        } else {
+          expect(result.cost).toBeCloseTo(expected, 10);
+        }
+      }
+    },
+  );
+
+  it.each(['gpt-6-sol', 'gpt-6-luna'])(
     'normalizes marked OpenRouter refusals and preserves native policy errors for %s',
     async (model) => {
       const message = 'The model provider declined the request.';

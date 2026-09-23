@@ -714,6 +714,7 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
     for (const reference of [
       { type: 'item_reference', id: 'item_opaque' },
       { id: 'item_opaque' },
+      { id: 'item_opaque', type: null },
     ]) {
       const provider = new OpenAiResponsesProvider(model, {
         config: { reasoning: { effort: 'high' }, temperature: 0.3, top_p: 0.8 },

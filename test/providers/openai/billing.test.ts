@@ -184,6 +184,64 @@ describe('OpenAI billing helpers', () => {
       expect(calculateOpenAIUsageCost(`${model}-unpublished`, {}, usage)).toBeUndefined();
     });
 
+    it('does not substitute direct OpenAI prices for Azure without complete explicit rates', () => {
+      const usage = { input_tokens: 1000, output_tokens: 100 };
+      for (const options of [
+        { provider: 'azure-openai' },
+        { provider: 'azure' },
+        { provider: 'openai', apiUrl: 'https://example.openai.azure.com/openai/v1' },
+        {
+          apiUrl:
+            'https://gateway.ai.cloudflare.com/v1/account/gateway/azure-openai/resource/deployment',
+        },
+      ]) {
+        expect(calculateOpenAIUsageCost(model, {}, usage, options)).toBeUndefined();
+        expect(
+          calculateOpenAIUsageCost(model, { inputCost: 2 / 1e6 }, usage, options),
+        ).toBeUndefined();
+        expect(
+          calculateOpenAIUsageCost(
+            model,
+            { inputCost: 2 / 1e6, outputCost: 3 / 1e6 },
+            usage,
+            options,
+          ),
+        ).toBeCloseTo(0.0023, 10);
+        expect(calculateOpenAIUsageCost(model, { cost: 2 / 1e6 }, usage, options)).toBeCloseTo(
+          0.0022,
+          10,
+        );
+        expect(
+          calculateOpenAIUsageCost(model, { cost: 2 / 1e6 }, usage, {
+            ...options,
+            cachedResponse: true,
+          }),
+        ).toBe(0);
+        expect(
+          calculateOpenAIUsageCost(
+            model,
+            { inputCost: 2 / 1e6 },
+            { input_tokens: 1000, output_tokens: 0 },
+            options,
+          ),
+        ).toBeCloseTo(0.002, 10);
+      }
+      expect(
+        calculateOpenAIUsageCost(model, { apiHost: 'example.openai.azure.com' }, usage),
+      ).toBeUndefined();
+      for (const apiUrl of [
+        'https://example.openai.azure.com.invalid/openai/v1',
+        'https://gateway.ai.cloudflare.com/v1/account/gateway/openai',
+        'https://gateway.ai.cloudflare.com.invalid/v1/account/gateway/azure-openai/resource/deployment',
+        'https://api.openai.com/v1',
+      ]) {
+        expect(calculateOpenAIUsageCost(model, {}, usage, { apiUrl })).toBeCloseTo(
+          (1000 * input + 100 * output) / 1e6,
+          10,
+        );
+      }
+    });
+
     it('uses reasoning-model web search preview pricing', () => {
       expect(
         calculateObservableOpenAIToolCost(
