@@ -2059,6 +2059,30 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
     expect(azure).not.toHaveProperty('temperature');
   });
 
+  it('keeps GPT-4.1 request parameters when the TrueFoundry account contains GPT-6', async () => {
+    const gatewayModel = `${model}-prod/gpt-4.1`;
+    const { body } = await new TrueFoundryProvider(gatewayModel, {
+      config: { reasoning_effort: 'none', max_tokens: 77 },
+    }).getOpenAiBody('Say ready.');
+    expect(body).toMatchObject({ model: gatewayModel, max_tokens: 77 });
+    expect(body).not.toHaveProperty('reasoning_effort');
+    expect(body).not.toHaveProperty('max_completion_tokens');
+
+    const { body: reasoningBody } = await new TrueFoundryProvider(gatewayModel, {
+      config: { reasoning: { effort: 'high' } },
+    }).getOpenAiBody('Say ready.');
+    expect(reasoningBody.model).toBe(gatewayModel);
+  });
+
+  it('keeps GPT-5.6 reasoning sampling rules when the TrueFoundry account contains GPT-6', async () => {
+    const gatewayModel = `${model}-prod/gpt-5.6-terra`;
+    const { body } = await new TrueFoundryProvider(gatewayModel, {
+      config: { reasoning_effort: 'high', temperature: 0.4 },
+    }).getOpenAiBody('Say ready.');
+    expect(body).toMatchObject({ model: gatewayModel, reasoning_effort: 'high' });
+    expect(body).not.toHaveProperty('temperature');
+  });
+
   it('allows Chat tools only with explicit none; Responses tools work with reasoning', async () => {
     const chat = new OpenAiChatCompletionProvider(model, {
       config: { reasoning_effort: 'none', tools: [statusTool], tool_choice: 'required' },

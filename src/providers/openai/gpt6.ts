@@ -19,10 +19,11 @@ export function getGpt6Variant(modelName: unknown): Gpt6Variant | undefined {
 }
 
 export function isGpt6Model(modelName: unknown): boolean {
-  return (
-    getGpt6Variant(modelName) !== undefined ||
-    (typeof modelName === 'string' && /(?:^|[/-])gpt-6(?:[.-]|$)/.test(modelName))
-  );
+  if (typeof modelName !== 'string') {
+    return false;
+  }
+  const finalModel = modelName.split('/').at(-1) ?? modelName;
+  return getGpt6Variant(finalModel) !== undefined || /(?:^|[/-])gpt-6(?:[.-]|$)/.test(finalModel);
 }
 
 type ReasoningConfig = { reasoning?: unknown; reasoning_effort?: unknown; passthrough?: unknown };
