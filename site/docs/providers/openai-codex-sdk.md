@@ -30,7 +30,7 @@ You can reference this provider using either base ID, and you can inline the mod
 | Final assistant text               | Yes        | Returned in `response.output` as a string.                                                                                                                                                                                                                                                                                                                                                                                                        |
 | Text + local image prompt inputs   | Partial    | Pass plain text as usual, or pass a JSON array of `{"type":"text","text":"..."}` and `{"type":"local_image","path":"/abs/file.png"}` entries. Other JSON prompt shapes are treated as plain text.                                                                                                                                                                                                                                                 |
 | JSON schema output                 | Yes        | Pass `output_schema`; use `is-json` and `JSON.parse(output)` in JS assertions because the provider does not auto-parse the final text.                                                                                                                                                                                                                                                                                                            |
-| Token usage and estimated cost     | Yes        | `tokenUsage` is returned when the SDK reports usage, including `completionDetails.reasoning` when Codex reports reasoning output tokens. Standard API cost is estimated when `config.model` is known to promptfoo's pricing table, including GPT-6 Astra. Missing cache-write counts can understate costs. Codex's own instruction preamble and tool schemas are included in prompt tokens, so tiny prompts can still report high `input_tokens`. |
+| Token usage and estimated cost     | Yes        | `tokenUsage` is returned when available, including `completionDetails.reasoning` when Codex reports reasoning output tokens. Standard API cost is estimated when `config.model` is known to promptfoo's pricing table, including GPT-6 Astra, Sol, and Luna. Missing cache-write counts can understate costs. Codex's instruction preamble and tool schemas are included in prompt tokens, so small prompts can still report high `input_tokens`. |
 | Session/thread IDs                 | Yes        | `sessionId` is returned from the underlying Codex thread.                                                                                                                                                                                                                                                                                                                                                                                         |
 | Shell/MCP/search/file trajectories | Yes        | Enable `enable_streaming` for provider-level spans. Enable `deep_tracing` to propagate OTEL context into the Codex CLI process.                                                                                                                                                                                                                                                                                                                   |
 | Skill usage assertions             | Partial    | `skill-used` relies on heuristic detection of direct `SKILL.md` command reads, not a first-class SDK skill event.                                                                                                                                                                                                                                                                                                                                 |
@@ -41,10 +41,10 @@ You can reference this provider using either base ID, and you can inline the mod
 
 ## Installation
 
-Promptfoo includes the Codex SDK as an optional dependency. If optional dependencies are omitted, install it manually. GPT-6 Astra requires version 0.153.1 or later:
+Promptfoo includes the Codex SDK as an optional dependency. If optional dependencies are omitted, install it manually. Use [Codex 0.156.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.156.1) for GPT-6 Sol and Luna; it bundles their model metadata, including Sol's Ultra setting. Astra requires 0.153.1 or later:
 
 ```bash
-npm install @openai/codex-sdk@^0.153.2
+npm install @openai/codex-sdk@^0.156.1
 ```
 
 Use Node.js `>=22.22.0`, which matches promptfoo's repo/runtime requirement and the provider's loader checks.
@@ -121,8 +121,9 @@ prompts:
 Notes:
 
 - **Model ids are Bedrock ids**: use `openai.gpt-5.6-sol`, `openai.gpt-5.6-terra`, or `openai.gpt-5.6-luna`, not a bare `gpt-5.6` alias. The Codex Bedrock provider serves frontier models through Bedrock's OpenAI-compatible Responses endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1/responses`), which is separate from the classic `bedrock-runtime` `InvokeModel` API.
-- **Region matters**: Sol is available in `us-east-1` and `us-east-2`; Terra and Luna also support `us-west-2`. GPT-5.5 remains available in `us-east-1` and `us-east-2`, and GPT-5.4 in `us-east-1`, `us-east-2`, and `us-west-2`. Request model access first.
+- **Region matters**: GPT-5.6 Sol is available in `us-east-1` and `us-east-2`; GPT-5.6 Terra and Luna also support `us-west-2`. GPT-5.5 remains available in `us-east-1` and `us-east-2`, and GPT-5.4 in `us-east-1`, `us-east-2`, and `us-west-2`. Request model access first.
 - **Use a current Codex CLI**: GPT-5.6 Bedrock catalog support and `max` reasoning require Codex 0.144.0 or later. Codex `ultra` is a multi-agent mode for supported models, not a Responses API reasoning-effort value.
+- **GPT-6 on Bedrock**: AWS serves Sol and Luna on Mantle in `us-east-1`, but the [bundled Codex Bedrock catalog](https://github.com/openai/codex/blob/rust-v0.156.1/codex-rs/model-provider/src/amazon_bedrock/catalog.rs) does not yet list them. Use the [direct Promptfoo Bedrock provider](/docs/providers/aws-bedrock/#openai-models) for these models.
 - **Credentials must reach the Codex CLI**: the Codex CLI reads AWS credentials from its own environment. Because promptfoo runs the CLI with a minimal environment by default, pass `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` (or `AWS_BEARER_TOKEN_BEDROCK`, or `AWS_PROFILE`) and `AWS_REGION` via `cli_env`, or set `inherit_process_env: true`. If you use **temporary credentials** (SSO, STS, assumed roles, or MFA), also forward `AWS_SESSION_TOKEN` — without it the credentials are incomplete and Codex will fail to authenticate. For direct inference, `bedrock:openai.gpt-5.x` uses a Bedrock API key; the AWS SDK credential chain applies to `InvokeModel` models such as `gpt-oss`.
 
 :::warning
@@ -262,38 +263,38 @@ The `approval_policy` parameter controls when user approval is required:
 
 ## Models
 
-Use `gpt-6-astra` with [Codex 0.153.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.153.1) and an account with Astra access. For GPT-5.6, select a concrete tier such as `gpt-5.6-sol`, `gpt-5.6-terra`, or `gpt-5.6-luna` when you want to specify that choice. Available aliases depend on the installed Codex runtime and authentication method; consult [OpenAI's Codex model guide](https://learn.chatgpt.com/docs/models).
+Use `gpt-6-sol` or `gpt-6-luna` with [Codex 0.156.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.156.1) when available to your account. `gpt-6-astra` requires [Codex 0.153.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.153.1) and an account with Astra access. GPT-5.6 tiers remain available during the rollout. Availability depends on the installed Codex runtime and authentication method; consult [OpenAI's Codex model guide](https://learn.chatgpt.com/docs/models).
 
 ```yaml
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-6-astra
+      model: gpt-6-sol
       model_reasoning_effort: max
 ```
 
 For new evals, choose from the current models in [OpenAI's Codex model guide](https://learn.chatgpt.com/docs/models). Availability depends on the sign-in method and account:
 
 - **GPT-6 Astra** (`gpt-6-astra`) - Use for the most demanding reasoning and coding tasks, when your account has access.
-- **GPT-5.6 Sol** (`gpt-5.6-sol`) - Use for complex professional and coding workflows.
-- **GPT-5.6 Terra** (`gpt-5.6-terra`) - Start here to balance capability and cost.
-- **GPT-5.6 Luna** (`gpt-5.6-luna`) - Use for cost-sensitive, high-volume evals.
+- **GPT-6 Sol** (`gpt-6-sol`) - Use for complex professional and coding workflows.
+- **GPT-6 Luna** (`gpt-6-luna`) - Use for cost-sensitive, high-volume evals.
+- **GPT-5.6 Terra** (`gpt-5.6-terra`) - An option for saved GPT-5.6 configurations.
 
-With ChatGPT sign-in, `gpt-5.4` and `gpt-5.4-mini` retired from Codex on August 31, 2026; `gpt-5.2` and `gpt-5.3-codex` are also deprecated for that sign-in method. Use `gpt-5.6-terra` or `gpt-5.6-luna` in new saved configurations. API-key authentication follows the separate [OpenAI API model lifecycle](https://developers.openai.com/api/docs/deprecations), so this Codex sign-in retirement does not invalidate API-key configurations or Promptfoo's native API grading pins. `gpt-5.3-codex-spark` requires eligible ChatGPT Pro/Codex authentication and is not available through the public Responses API.
+With ChatGPT sign-in, `gpt-5.4` and `gpt-5.4-mini` retired from Codex on August 31, 2026; `gpt-5.2` and `gpt-5.3-codex` are also deprecated for that sign-in method. Use `gpt-6-sol` or `gpt-6-luna` in new saved configurations when available. API-key authentication follows the separate [OpenAI API model lifecycle](https://developers.openai.com/api/docs/deprecations), so this Codex sign-in retirement does not invalidate API-key configurations or Promptfoo's native API grading pins. `gpt-5.3-codex-spark` requires eligible ChatGPT Pro/Codex authentication and is not available through the public Responses API.
 
 If you omit `config.model`, the Codex CLI may choose an internal default model alias and the backend may resolve that alias to a different concrete model. The current Codex SDK turn payload exposed to Promptfoo includes `items`, `finalResponse`, and `usage`, but not the backend-resolved model name, so tracing and cost attribution use the requested `config.model` when present and otherwise leave `response.cost` undefined.
 
-GPT-6 Astra, GPT-5.6, and GPT-5.5 receive Standard API cost estimates from the token usage reported by Codex. Missing cache-write counts can understate costs. Batch, Flex, and Fast mode are not automatically inferred from Codex runtime settings. Provider availability and pricing are separate; see [Astra hosting availability](/docs/providers/openai#gpt-6-astra).
+GPT-6 Astra, Sol, and Luna, GPT-5.6, and GPT-5.5 receive Standard API cost estimates from the token usage reported by Codex. Missing cache-write counts can understate costs. Batch, Flex, and Fast mode are not automatically inferred from Codex runtime settings. See the [OpenAI provider cost estimates](/docs/providers/openai#cost-estimates).
 
 ### Mini Models
 
-For lower-cost evals, use the current GPT-5.6 Luna model:
+For lower-cost evals, use GPT-6 Luna when available:
 
 ```yaml
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.6-luna
+      model: gpt-6-luna
 ```
 
 ## Thread Management
@@ -620,19 +621,19 @@ providers:
 
 Available levels vary by model:
 
-| Level     | Description                                     | Supported Models                                                                                                          |
-| --------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `minimal` | Minimal reasoning overhead                      | gpt-5.5, gpt-5.4, gpt-5.2                                                                                                 |
-| `low`     | Light reasoning, faster responses               | All models                                                                                                                |
-| `medium`  | Balanced (default for GPT-5.6 Terra and Luna)   | All models                                                                                                                |
-| `high`    | Thorough reasoning for complex tasks            | All models                                                                                                                |
-| `xhigh`   | Extra-high reasoning depth                      | gpt-6-astra, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5, gpt-5.5-pro, gpt-5.4, gpt-5.4-pro, gpt-5.3-codex, gpt-5.2 |
-| `max`     | Deepest single-agent reasoning                  | gpt-6-astra, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna                                                                     |
-| `ultra`   | Proactive multi-agent reasoning using subagents | gpt-6-astra, gpt-5.6-sol, gpt-5.6-terra                                                                                   |
+| Level     | Description                                     | Supported Models                                                                                                                                 |
+| --------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `minimal` | Minimal reasoning overhead                      | gpt-5.5, gpt-5.4, gpt-5.2                                                                                                                        |
+| `low`     | Light reasoning, faster responses               | All models                                                                                                                                       |
+| `medium`  | Balanced; check your model's runtime default    | All models                                                                                                                                       |
+| `high`    | Thorough reasoning for complex tasks            | All models                                                                                                                                       |
+| `xhigh`   | Extra-high reasoning depth                      | gpt-6-astra, gpt-6-sol, gpt-6-luna, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5, gpt-5.5-pro, gpt-5.4, gpt-5.4-pro, gpt-5.3-codex, gpt-5.2 |
+| `max`     | Deepest single-agent reasoning                  | gpt-6-astra, gpt-6-sol, gpt-6-luna, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna                                                                     |
+| `ultra`   | Proactive multi-agent reasoning using subagents | gpt-6-astra, gpt-6-sol, gpt-5.6-sol, gpt-5.6-terra                                                                                               |
 
 Promptfoo validates the allowed enum values, but model-specific support is ultimately enforced by the Codex SDK/runtime. If a value is not supported by the selected model, the provider returns a normal provider error row.
 
-`ultra` is Codex-specific and uses subagents; do not send it as a Responses API `reasoning.effort` value.
+`ultra` is Codex-specific and uses subagents; do not send it as a Responses API `reasoning.effort` value. GPT-6 Luna does not support `ultra` in Codex.
 
 :::note GPT-5.6 requires Codex 0.144.0 or later
 Use `@openai/codex-sdk` 0.144.0 or later. If optional dependencies are omitted, install that version explicitly. An older SDK or Codex binary may silently ignore GPT-5.6 reasoning levels. Confirm the effective reasoning with request tracing. For direct `max` reasoning, you can also use `openai:responses:gpt-5.6-sol`.

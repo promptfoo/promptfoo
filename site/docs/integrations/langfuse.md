@@ -86,7 +86,7 @@ prompts:
   - 'langfuse://chat-prompt:2:chat' # Numeric → version 2
 
 providers:
-  - openai:responses:gpt-5.6-luna
+  - openai:responses:gpt-6-luna
 
 tests:
   - vars:
