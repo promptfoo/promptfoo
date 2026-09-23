@@ -106,24 +106,24 @@ Instrumented model and agent calls can include these attributes on their GenAI s
 Grading spans describe each assertion with `gen_ai.evaluation.name`,
 `gen_ai.evaluation.score.value`, and `gen_ai.evaluation.score.label`. When a grader supplies a
 reason, `gen_ai.evaluation.explanation` records a sanitized, shortened version. Any model call used
-by the grader appears in a child span.
+by the grader appears in a child span. The [`is-refusal` assertion](/docs/configuration/expected-outputs/deterministic/#is-refusal) accepts a refusal explicitly reported by the provider even when its message lacks typical refusal wording. Provider access or authentication errors remain eval errors.
 
 ### Example Trace Output
 
-When calling OpenAI's GPT-4:
+When calling OpenAI's GPT-6 Luna through Chat Completions with `reasoning_effort: none`:
 
 ```
-Span: chat gpt-4
+Span: chat gpt-6-luna
 ├─ gen_ai.provider.name: openai
 ├─ gen_ai.operation.name: chat
-├─ gen_ai.request.model: gpt-4
+├─ gen_ai.request.model: gpt-6-luna
 ├─ gen_ai.request.max_tokens: 1000
 ├─ gen_ai.request.temperature: 0.7
 ├─ gen_ai.usage.input_tokens: 150
 ├─ gen_ai.usage.output_tokens: 85
 ├─ promptfoo.usage.total_tokens: 235
 ├─ gen_ai.response.finish_reasons: ["stop"]
-├─ promptfoo.provider.id: openai:chat:gpt-4
+├─ promptfoo.provider.id: openai:chat:gpt-6-luna
 └─ promptfoo.test.index: 0
 ```
 
@@ -249,7 +249,7 @@ tests:
 
       - type: trajectory:goal-success
         value: 'Determine the shipping status for order {{ order_id }} and tell the user whether it has shipped'
-        provider: openai:gpt-5-mini
+        provider: openai:gpt-6-luna
 ```
 
 Use trajectory assertions when your spans identify tools, commands, searches, reasoning steps, or messages. Promptfoo also normalizes common command-like tool spans, including OpenAI Agents SDK `exec_command` calls with `cmd` arguments and `shell` calls with `commands` arrays, into command trajectory steps. For traced tool calls, Promptfoo recognizes both generic attributes such as `tool.name` and `tool.arguments` and framework-specific ones such as Vercel AI SDK's `ai.toolCall.name`, `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. If you only need raw span counts, durations, or error detection, use [`trace-span-count`](/docs/configuration/expected-outputs/deterministic/#trace-span-count), [`trace-span-duration`](/docs/configuration/expected-outputs/deterministic/#trace-span-duration), or [`trace-error-spans`](/docs/configuration/expected-outputs/deterministic/#trace-error-spans).
@@ -651,7 +651,7 @@ Include context that helps debugging:
 span.setAttributes({
   'prompt.tokens': tokenCount,
   'documents.count': documents.length,
-  'model.name': 'gpt-4',
+  'model.name': 'gpt-6-luna',
   'cache.hit': false,
 });
 ```
