@@ -22,6 +22,11 @@ import {
 import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
 import { sleep } from '../../util/time';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
+import {
+  calculateOpenRouterResponseCost,
+  getOpenRouterBillingMetadata,
+  isOpenRouterEndpoint,
+} from '../openrouterBilling';
 import { ResponsesProcessor } from '../responses/index';
 import { normalizeResponsesInput } from '../responses/input';
 import { readResponsesStream } from '../responses/stream';
@@ -34,6 +39,7 @@ import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
   formatOpenAiError,
+  getOpenAiPolicyRefusal,
   getTokenUsage,
   hasSensitiveOpenAiCachePath,
   hasSensitiveOpenAiCacheString,
@@ -792,6 +798,16 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     config: OpenAiCompletionOptions,
     cached: boolean,
   ): ProviderResponse {
+    if (this.getGenAISystem() === 'openai' && isOpenRouterEndpoint(this.getApiUrl())) {
+      const { cost: _existingCost, ...unbilled } = result;
+      const cost = calculateOpenRouterResponseCost(data, config, 'responses');
+      const billingMetadata = getOpenRouterBillingMetadata(data);
+      return {
+        ...unbilled,
+        ...(cost === undefined ? {} : { cost }),
+        ...(billingMetadata ? { metadata: { ...result.metadata, ...billingMetadata } } : {}),
+      };
+    }
     const serviceTier =
       (data as { service_tier?: string | null }).service_tier ?? config.service_tier;
     const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
@@ -800,10 +816,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         ? passthroughModel
         : this.getBillingModelName(config);
     const unprefixedModelName = modelName.split('/').pop() ?? modelName;
-    const billingModelName =
-      this.getGenAISystem() === 'bedrock'
-        ? unprefixedModelName.replace(/^openai\./, '')
-        : unprefixedModelName;
+    const isBedrockMantle =
+      this.getGenAISystem() === 'bedrock' || this.getBedrockEndpoint() === 'mantle';
+    const billingModelName = isBedrockMantle
+      ? unprefixedModelName.replace(/^openai\./, '')
+      : unprefixedModelName;
     const responseCost = calculateOpenAIUsageCost(
       billingModelName,
       config,
@@ -811,8 +828,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       {
         apiUrl: this.getApiUrl(),
         cachedResponse: cached,
-        provider: this.getGenAISystem(),
-        regionalProcessing: this.modelName.startsWith('openai.'),
+        provider: isBedrockMantle ? 'bedrock' : this.getGenAISystem(),
+        regionalProcessing: isBedrockMantle || this.modelName.startsWith('openai.'),
         serviceTier,
       },
     );
@@ -840,15 +857,55 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
   }
 
-  private supportsPersistedGpt6EffortUpdates(): boolean {
-    if (this.getGenAISystem() === 'bedrock') {
-      return false;
-    }
+  private getBedrockEndpoint(): 'mantle' | 'runtime' | undefined {
     try {
-      return !/^bedrock-mantle\.[a-z0-9-]+\.api\.aws$/.test(new URL(this.getApiUrl()).hostname);
+      const hostname = new URL(this.getApiUrl()).hostname;
+      if (/^bedrock-mantle\.[a-z0-9-]+\.api\.aws$/.test(hostname)) {
+        return 'mantle';
+      }
+      if (/^bedrock-runtime\.[a-z0-9-]+\.amazonaws\.com$/.test(hostname)) {
+        return 'runtime';
+      }
     } catch {
-      return true;
+      // Invalid custom URLs are reported when the request is made.
     }
+    return undefined;
+  }
+
+  private supportsPersistedGpt6EffortUpdates(): boolean {
+    return this.getGenAISystem() !== 'bedrock' && this.getBedrockEndpoint() === undefined;
+  }
+
+  private getPolicyResponse(
+    data: OpenAIResponsesResponse,
+    config: OpenAiCompletionOptions,
+    cached: boolean,
+    status: number,
+    statusText: string,
+    headers?: Record<string, string>,
+  ): ProviderResponse | undefined {
+    const isOpenRouter =
+      this.getGenAISystem() === 'openai' && isOpenRouterEndpoint(this.getApiUrl());
+    const policy = getOpenAiPolicyRefusal(data, isOpenRouter);
+    if (!policy) {
+      return undefined;
+    }
+    return this.applyBilling(
+      {
+        output: policy.message,
+        ...(data.usage ? { tokenUsage: getTokenUsage(data, cached) } : {}),
+        cached,
+        isRefusal: true,
+        guardrails: { flagged: true, flaggedInput: true, reason: policy.message },
+        metadata: {
+          ...(policy.code ? { providerPolicy: { code: policy.code } } : {}),
+          http: { status, statusText, headers: headers ?? {} },
+        },
+      },
+      data,
+      config,
+      cached,
+    );
   }
 
   private getDeploymentCapabilities(config: OpenAiCompletionOptions) {
@@ -1440,6 +1497,17 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
             ));
       }
 
+      const policyResponse = this.getPolicyResponse(
+        data,
+        config,
+        cached,
+        status,
+        statusText,
+        responseHeaders,
+      );
+      if (policyResponse) {
+        return policyResponse;
+      }
       if (status < 200 || status >= 300) {
         const errorMessage = `API error: ${status} ${statusText}\n${
           typeof data === 'string' ? data : JSON.stringify(data)
@@ -1507,6 +1575,18 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         status = polled.status;
         statusText = polled.statusText;
         responseHeaders = polled.headers;
+        const polledPolicy = this.getPolicyResponse(
+          data,
+          config,
+          cached,
+          status,
+          statusText,
+          responseHeaders,
+        );
+        if (polledPolicy) {
+          await deleteFromCache?.();
+          return polledPolicy;
+        }
         if (!polled.error && (data.status === 'completed' || data.status === 'incomplete')) {
           await updateCache?.(data, status, statusText, responseHeaders);
         }

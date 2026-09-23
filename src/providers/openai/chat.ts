@@ -19,6 +19,7 @@ import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
 import {
   calculateOpenRouterResponseCost,
   getOpenRouterBillingMetadata,
+  isOpenRouterEndpoint,
 } from '../openrouterBilling';
 import {
   getRequestTimeoutMs,
@@ -37,6 +38,7 @@ import { applyGpt6RequestRules, getGpt6ChatReasoningEffort, isGpt6Model } from '
 import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
+  getOpenAiPolicyRefusal,
   getTokenUsage,
   OPENAI_CHAT_MODELS,
   validateFunctionCall,
@@ -95,8 +97,13 @@ function getChatSearchSurcharge(modelName: string): number {
   return 0;
 }
 
-type OpenRouterReasoning = { effort?: unknown; enabled?: unknown; [key: string]: unknown };
-const OPENROUTER_RESET = Symbol('OpenRouter default');
+type OpenRouterReasoning = {
+  effort?: unknown;
+  enabled?: unknown;
+  max_tokens?: unknown;
+  [key: string]: unknown;
+};
+const OUTPUT_CAP_RESET = Symbol('default output cap');
 type OpenRouterPassthrough = {
   reasoning_effort?: unknown;
   reasoning?: OpenRouterReasoning | null;
@@ -111,17 +118,32 @@ function getOpenRouterPassthrough(config?: OpenAiCompletionOptions): OpenRouterP
     : {};
 }
 
-function getOpenRouterOutputCap(
+function getGpt6ChatOutputCap(
   config?: OpenAiCompletionOptions,
-): number | typeof OPENROUTER_RESET | undefined {
+  isOpenRouter = false,
+): number | typeof OUTPUT_CAP_RESET | undefined {
   const passthrough = getOpenRouterPassthrough(config);
   const cap = [
     passthrough.max_completion_tokens,
-    passthrough.max_tokens,
-    config?.max_completion_tokens,
+    ...(isOpenRouter
+      ? [passthrough.max_tokens, config?.max_completion_tokens]
+      : [config?.max_completion_tokens, passthrough.max_tokens]),
     config?.max_tokens,
   ].find((value) => value !== undefined);
-  return cap === null ? OPENROUTER_RESET : cap;
+  return cap === null ? OUTPUT_CAP_RESET : cap;
+}
+
+function resolveGpt6ChatOutputCap(
+  providerConfig: OpenAiCompletionOptions,
+  promptConfig: OpenAiCompletionOptions | undefined,
+  isOpenRouter: boolean,
+): number | undefined {
+  const cap =
+    getGpt6ChatOutputCap(promptConfig, isOpenRouter) ??
+    getGpt6ChatOutputCap(providerConfig, isOpenRouter) ??
+    getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ??
+    getEnvInt('OPENAI_MAX_TOKENS');
+  return cap === OUTPUT_CAP_RESET ? undefined : cap;
 }
 
 function getOpenRouterReasoningControl(config?: OpenAiCompletionOptions) {
@@ -138,6 +160,13 @@ function getOpenRouterReasoningControl(config?: OpenAiCompletionOptions) {
     if (value !== undefined && value !== '') {
       return { kind, value };
     }
+  }
+  const budget = passthrough.reasoning?.max_tokens;
+  if (budget === null) {
+    return { kind: 'reset' as const };
+  }
+  if (budget !== undefined) {
+    return { kind: 'budget' as const, value: budget };
   }
   if (typeof passthrough.reasoning?.enabled === 'boolean') {
     return { kind: 'enabled' as const, value: passthrough.reasoning.enabled };
@@ -170,6 +199,7 @@ function reconcileOpenRouterReasoning(
     if (reasoning) {
       delete reasoning.effort;
       delete reasoning.enabled;
+      delete reasoning.max_tokens;
     }
     if (reasoning && Object.keys(reasoning).length) {
       body.reasoning = reasoning;
@@ -182,12 +212,28 @@ function reconcileOpenRouterReasoning(
   if (control.kind === 'enabled') {
     const normalizedReasoning = { ...reasoning, enabled: control.value };
     delete normalizedReasoning.effort;
+    delete normalizedReasoning.max_tokens;
+    body.reasoning = normalizedReasoning;
+    delete body.reasoning_effort;
+    return;
+  }
+
+  if (control.kind === 'budget') {
+    const normalizedReasoning = {
+      ...reasoning,
+      max_tokens: renderVarsInObject(control.value, vars),
+    };
+    delete normalizedReasoning.effort;
+    if (normalizedReasoning.enabled === false) {
+      delete normalizedReasoning.enabled;
+    }
     body.reasoning = normalizedReasoning;
     delete body.reasoning_effort;
     return;
   }
 
   const effort = renderVarsInObject(control.value, vars);
+  delete reasoning?.max_tokens;
   if (
     reasoning &&
     typeof reasoning.enabled === 'boolean' &&
@@ -212,14 +258,9 @@ function reconcileOpenRouterReasoning(
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   private usesOpenRouter(): boolean {
     const system = this.getGenAISystem();
-    if (system !== 'openai') {
-      return system === 'openrouter';
-    }
-    try {
-      return new URL(this.getApiUrl()).hostname === 'openrouter.ai';
-    } catch {
-      return false;
-    }
+    return (
+      system === 'openrouter' || (system === 'openai' && isOpenRouterEndpoint(this.getApiUrl()))
+    );
   }
 
   getAudioInputFormat(): 'openai' | undefined {
@@ -461,19 +502,26 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       delete body.max_tokens;
     }
 
-    if (isOpenRouterGpt6) {
-      const gatewayOutputCap =
-        getOpenRouterOutputCap(context?.prompt?.config) ??
-        getOpenRouterOutputCap(this.config) ??
-        getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ??
-        getEnvInt('OPENAI_MAX_TOKENS');
-      if (gatewayOutputCap === undefined || gatewayOutputCap === OPENROUTER_RESET) {
+    if (isGPT6Model) {
+      const outputCap = resolveGpt6ChatOutputCap(
+        this.config,
+        context?.prompt?.config,
+        isOpenRouterGpt6,
+      );
+      if (outputCap === undefined) {
         delete body.max_completion_tokens;
       } else {
-        body.max_completion_tokens = gatewayOutputCap;
+        body.max_completion_tokens = outputCap;
       }
+    }
+    if (isOpenRouterGpt6) {
       reconcileOpenRouterReasoning(body, this.config, context?.prompt?.config, context?.vars);
     } else if (isGPT6Model) {
+      if (config.reasoning != null) {
+        throw new Error(
+          'GPT-6 Chat Completions requests use reasoning_effort. Configure reasoning_effort, or use the Responses API for config.reasoning.',
+        );
+      }
       const effort = getGpt6ChatReasoningEffort(this.config, context?.prompt?.config);
       if (effort !== undefined) {
         body.reasoning_effort = renderVarsInObject(effort, context?.vars);
@@ -525,6 +573,18 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       : {};
   }
 
+  protected getChatTracingMaxTokens(context?: CallApiContextParams): number | undefined {
+    const promptConfig = context?.prompt?.config;
+    const config = { ...this.config, ...promptConfig };
+    const model = config.passthrough?.model ?? this.getCapabilityModelName();
+    return isGpt6Model(model)
+      ? resolveGpt6ChatOutputCap(this.config, promptConfig, this.usesOpenRouter())
+      : (promptConfig?.max_completion_tokens ??
+          promptConfig?.max_tokens ??
+          this.config.max_completion_tokens ??
+          this.config.max_tokens);
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -546,7 +606,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       model: this.modelName,
       providerId: this.id(),
       // Optional request parameters
-      maxTokens: this.config.max_tokens,
+      maxTokens: this.getChatTracingMaxTokens(context),
       temperature: this.config.temperature,
       topP: this.config.top_p,
       stopSequences: this.config.stop,
@@ -641,6 +701,25 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         this.shouldBustCache(context),
         this.config.maxRetries,
       ));
+
+      const policy = getOpenAiPolicyRefusal(data, this.usesOpenRouter());
+      if (policy) {
+        const cost = this.calculateResponseCost(data, config, cached);
+        return {
+          output: policy.message,
+          tokenUsage: data?.usage ? getTokenUsage(data, cached) : undefined,
+          cached,
+          latencyMs,
+          ...(cost === undefined ? {} : { cost }),
+          isRefusal: true,
+          guardrails: { flagged: true, flaggedInput: true, reason: policy.message },
+          metadata: {
+            ...this.getProviderResponseMetadata(data),
+            ...(policy.code ? { providerPolicy: { code: policy.code } } : {}),
+            http: { status, statusText, headers: responseHeaders ?? {} },
+          },
+        };
+      }
 
       if (status < 200 || status >= 300) {
         const errorMessage = `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`;

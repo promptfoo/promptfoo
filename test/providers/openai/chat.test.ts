@@ -6,7 +6,9 @@ import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
+import { createLiteLLMProvider } from '../../../src/providers/litellm';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import { OpenRouterProvider } from '../../../src/providers/openrouter';
 import { mockProcessEnv } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage } from './shared';
 
@@ -186,6 +188,175 @@ describe('OpenAI Provider', () => {
         getTracerSpy.mockRestore();
       }
     });
+
+    it.each(['gpt-6-sol', 'gpt-6-luna'])(
+      'sends LiteLLM token budgets and records the effective native Chat token cap for %s',
+      async (model) => {
+        mockFetchWithCache.mockResolvedValue({
+          data: { choices: [{ message: { content: 'Ready' }, finish_reason: 'stop' }] },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        const attributes: Record<string, unknown>[] = [];
+        const tracer = vi.spyOn(trace, 'getTracer').mockReturnValue({
+          startActiveSpan: (
+            _name: string,
+            options: { attributes?: Record<string, unknown> },
+            _context: unknown,
+            callback: any,
+          ) => {
+            const span = { ...options.attributes };
+            attributes.push(span);
+            return callback({
+              setAttribute: (key: string, value: unknown) => {
+                span[key] = value;
+              },
+              setStatus: vi.fn(),
+              recordException: vi.fn(),
+              end: vi.fn(),
+            });
+          },
+        } as any);
+        try {
+          const providers = [
+            new OpenAiChatCompletionProvider(model, { config: { max_completion_tokens: 50 } }),
+            createLiteLLMProvider(`litellm:${model}`, {
+              config: {
+                config: {
+                  apiKey: 'test-key',
+                  apiBaseUrl: 'https://proxy.example/v1',
+                  max_tokens: 50,
+                },
+              },
+            }),
+            new OpenRouterProvider(`openai/${model}`, {
+              config: { apiKey: 'test-key', max_completion_tokens: 50 },
+            }),
+          ];
+          const prompt = { raw: 'Say ready.', label: 'ready' };
+          for (const provider of providers) {
+            for (const [override, expected] of [
+              [undefined, 50],
+              [{ max_tokens: 23 }, 23],
+              [{ passthrough: { max_completion_tokens: 37 } }, 37],
+              [{ passthrough: { max_tokens: null } }, undefined],
+            ] as const) {
+              const result = await provider.callApi(
+                'Say ready.',
+                override
+                  ? {
+                      vars: {},
+                      prompt: { ...prompt, config: override },
+                    }
+                  : undefined,
+              );
+              expect(result.error).toBeUndefined();
+              const last = mockFetchWithCache.mock.calls.at(-1)!;
+              const request = JSON.parse(last[1]?.body as string);
+              expect(request.max_completion_tokens).toBe(expected);
+              expect(request).not.toHaveProperty('max_tokens');
+              expect(attributes.at(-1)?.['gen_ai.request.max_tokens']).toBe(expected);
+            }
+          }
+        } finally {
+          tracer.mockRestore();
+        }
+      },
+    );
+
+    it.each(['gpt-6-sol', 'gpt-6-luna'])(
+      'keeps GPT-6 OpenAI and OpenRouter policy refusals distinct from authorization errors for %s',
+      async (model) => {
+        const message = 'The model provider declined the request.';
+        for (const policyCode of ['bio_policy', 'cyber_policy']) {
+          for (const [provider, body] of [
+            [new OpenAiChatCompletionProvider(model), { error: { code: policyCode, message } }],
+            [
+              new OpenAiChatCompletionProvider(`openai/${model}`, {
+                config: { apiBaseUrl: 'https://openrouter.ai/api/v1' },
+              }),
+              {
+                error: {
+                  code: 403,
+                  message,
+                  metadata: { error_type: 'refusal', provider_code: policyCode },
+                },
+              },
+            ],
+            [
+              new OpenRouterProvider(`openai/${model}`, { config: { apiKey: 'test-key' } }),
+              {
+                error: {
+                  code: 403,
+                  message,
+                  metadata: { error_type: 'refusal', provider_code: policyCode },
+                },
+              },
+            ],
+          ] as const) {
+            mockFetchWithCache.mockResolvedValueOnce({
+              data: body,
+              cached: false,
+              status: 403,
+              statusText: 'Forbidden',
+              headers: { 'x-request-id': 'test' },
+            });
+            const result = await provider.callApi('A test prompt');
+            expect(result.error).toBeUndefined();
+            expect(result).toMatchObject({
+              output: message,
+              isRefusal: true,
+              guardrails: { flagged: true, flaggedInput: true, reason: message },
+              metadata: {
+                providerPolicy: { code: policyCode },
+                http: { status: 403, headers: { 'x-request-id': 'test' } },
+              },
+            });
+          }
+        }
+
+        const dedicated = new OpenRouterProvider(`openai/${model}`, {
+          config: { apiKey: 'test-key' },
+        });
+        mockFetchWithCache.mockResolvedValueOnce({
+          data: {
+            error: {
+              code: 403,
+              message: 'Unauthorized',
+              metadata: { error_type: 'authentication', provider_code: 'invalid_api_key' },
+            },
+          },
+          cached: false,
+          status: 403,
+          statusText: 'Forbidden',
+        });
+        const denied = await dedicated.callApi('A test prompt');
+        expect(denied.error).toContain('Unauthorized');
+        expect(denied.isRefusal).toBeUndefined();
+
+        mockFetchWithCache.mockResolvedValueOnce({
+          data: {
+            choices: [
+              {
+                message: { content: null, refusal: 'I cannot help with that.' },
+                finish_reason: 'content_filter',
+              },
+            ],
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        const modelRefusal = await dedicated.callApi('A test prompt');
+        expect(modelRefusal).toMatchObject({
+          output: 'I cannot help with that.',
+          isRefusal: true,
+          guardrails: { flagged: true },
+        });
+        expect(modelRefusal.error).toBeUndefined();
+      },
+    );
 
     it('should send a case-variant originator override on the wire instead of the default', async () => {
       const mockResponse = {

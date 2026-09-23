@@ -1,20 +1,33 @@
 import type { ProviderResponse } from '../types/providers';
-import type { OpenAiChatCompletionCostData } from './openai/chat';
 import type { OpenAiCompletionOptions } from './openai/types';
 
-type OpenRouterUsage = NonNullable<OpenAiChatCompletionCostData['usage']> & {
+type OpenRouterUsage = {
+  prompt_tokens?: unknown;
+  completion_tokens?: unknown;
+  input_tokens?: unknown;
+  output_tokens?: unknown;
   cost?: unknown;
   is_byok?: unknown;
   cost_details?: unknown;
 };
+type OpenRouterBillingData = { usage?: OpenRouterUsage | null };
+
+export function isOpenRouterEndpoint(apiUrl: string): boolean {
+  try {
+    return new URL(apiUrl).hostname === 'openrouter.ai';
+  } catch {
+    return false;
+  }
+}
 
 function isNonNegativeFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
 
 export function calculateOpenRouterResponseCost(
-  data: OpenAiChatCompletionCostData,
+  data: OpenRouterBillingData,
   config: OpenAiCompletionOptions,
+  api: 'chat' | 'responses' = 'chat',
 ): number | undefined {
   // Cache replay preserves logical cost; the evaluator tracks incurred spending separately.
   if (
@@ -25,8 +38,13 @@ export function calculateOpenRouterResponseCost(
     // Explicit user rates override billing; incomplete rates must not fall back to OpenAI prices.
     const inputCost = config.inputCost ?? config.cost;
     const outputCost = config.outputCost ?? config.cost;
-    const promptTokens = data.usage?.prompt_tokens;
-    const completionTokens = data.usage?.completion_tokens;
+    const usage = data.usage;
+    const promptTokens =
+      api === 'responses' ? (usage?.input_tokens ?? usage?.prompt_tokens) : usage?.prompt_tokens;
+    const completionTokens =
+      api === 'responses'
+        ? (usage?.output_tokens ?? usage?.completion_tokens)
+        : usage?.completion_tokens;
     if (
       !isNonNegativeFiniteNumber(inputCost) ||
       !isNonNegativeFiniteNumber(outputCost) ||
@@ -39,7 +57,7 @@ export function calculateOpenRouterResponseCost(
     return Number.isFinite(cost) ? cost : undefined;
   }
 
-  const usage = data.usage as OpenRouterUsage | undefined;
+  const usage = data.usage;
   // BYOK is billed separately upstream, so the gateway charge cannot represent the total cost.
   if (usage?.is_byok === true) {
     return undefined;
@@ -50,9 +68,9 @@ export function calculateOpenRouterResponseCost(
 }
 
 export function getOpenRouterBillingMetadata(
-  data: OpenAiChatCompletionCostData,
+  data: OpenRouterBillingData,
 ): ProviderResponse['metadata'] {
-  const usage = data.usage as OpenRouterUsage | undefined;
+  const usage = data.usage;
   if (!usage || typeof usage !== 'object' || Array.isArray(usage)) {
     return undefined;
   }

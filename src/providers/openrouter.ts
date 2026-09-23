@@ -1,9 +1,14 @@
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
-import { normalizeFinishReason } from '../util/finishReason';
+import { FINISH_REASON_MAP, normalizeFinishReason } from '../util/finishReason';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { appendOpenAiApiPath, formatOpenAiError, getTokenUsage } from './openai/util';
+import {
+  appendOpenAiApiPath,
+  formatOpenAiError,
+  getOpenAiPolicyRefusal,
+  getTokenUsage,
+} from './openai/util';
 import { calculateOpenRouterResponseCost, getOpenRouterBillingMetadata } from './openrouterBilling';
 import { getRequestTimeoutMs } from './shared';
 import type OpenAI from 'openai';
@@ -88,7 +93,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       providerId: this.id(),
       temperature: this.config.temperature,
       topP: this.config.top_p,
-      maxTokens: this.config.max_tokens,
+      maxTokens: this.getChatTracingMaxTokens(context),
       stopSequences: this.config.stop,
       testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
@@ -152,26 +157,48 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     let status: number;
     let statusText: string;
     let cached = false;
+    let responseHeaders: Record<string, string> | undefined;
 
     try {
-      ({ data, cached, status, statusText } =
-        await fetchWithCache<OpenRouterChatCompletionResponse>(
-          appendOpenAiApiPath(this.getApiUrl(), 'chat/completions'),
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${this.getApiKey()}`,
-              ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-              ...config.headers,
-            },
-            body: JSON.stringify(body),
+      ({
+        data,
+        cached,
+        status,
+        statusText,
+        headers: responseHeaders,
+      } = await fetchWithCache<OpenRouterChatCompletionResponse>(
+        appendOpenAiApiPath(this.getApiUrl(), 'chat/completions'),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.getApiKey()}`,
+            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+            ...config.headers,
           },
-          getRequestTimeoutMs(),
-          'json',
-          context?.bustCache ?? context?.debug,
-        ));
+          body: JSON.stringify(body),
+        },
+        getRequestTimeoutMs(),
+        'json',
+        context?.bustCache ?? context?.debug,
+      ));
 
+      const policy = getOpenAiPolicyRefusal(data, true);
+      if (policy) {
+        return {
+          output: policy.message,
+          ...(data.usage ? { tokenUsage: getTokenUsage(data, cached) } : {}),
+          cached,
+          cost: this.calculateResponseCost(data, config),
+          isRefusal: true,
+          guardrails: { flagged: true, flaggedInput: true, reason: policy.message },
+          metadata: {
+            ...getOpenRouterBillingMetadata(data),
+            ...(policy.code ? { providerPolicy: { code: policy.code } } : {}),
+            http: { status, statusText, headers: responseHeaders ?? {} },
+          },
+        };
+      }
       if (status < 200 || status >= 300) {
         return {
           error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
@@ -204,6 +231,18 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     // Process the response with special handling for Gemini
     const message: any = data.choices[0].message;
     const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
+    if (message.refusal || finishReason === FINISH_REASON_MAP.content_filter) {
+      return {
+        output: message.refusal || message.content || 'Content filtered by the model provider.',
+        tokenUsage: getTokenUsage(data, cached),
+        cached,
+        cost: this.calculateResponseCost(data, config),
+        isRefusal: true,
+        guardrails: { flagged: true },
+        metadata: getOpenRouterBillingMetadata(data),
+        ...(finishReason && { finishReason }),
+      };
+    }
 
     // Prioritize tool calls over content and reasoning
     let output: string | object = '';

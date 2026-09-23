@@ -13,6 +13,42 @@ const GPT_LONG_CONTEXT_THRESHOLD = 272_000;
 const OPAQUE_CREDENTIAL_PATH_SEGMENT =
   /(?:^|\/)(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32,}|(?:token|key|secret|credential|auth)[-_][a-z0-9._-]{8,})(?:\/|$)/i;
 
+function getRecord(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+/** Recognize an upstream policy block without treating ordinary authorization errors as refusals. */
+export function getOpenAiPolicyRefusal(
+  data: unknown,
+  allowGatewayMarker = false,
+): { message: string; code?: string } | undefined {
+  const root = getRecord(data);
+  const response = getRecord(root?.response) ?? root;
+  const error = getRecord(response?.error);
+  if (!error) {
+    return undefined;
+  }
+  const metadata = getRecord(error.metadata);
+  const providerCode = metadata?.provider_code ?? error.code;
+  const knownCode = providerCode === 'bio_policy' || providerCode === 'cyber_policy';
+  const marked =
+    metadata?.error_type === 'refusal' ||
+    error.error_type === 'refusal' ||
+    response?.error_type === 'refusal';
+  if (!knownCode && !(allowGatewayMarker && marked)) {
+    return undefined;
+  }
+  return {
+    message:
+      typeof error.message === 'string' && error.message.trim()
+        ? error.message
+        : 'The model provider declined this request.',
+    ...(typeof providerCode === 'string' ? { code: providerCode } : {}),
+  };
+}
+
 function hasInlineSecret(value: string): boolean {
   return (
     looksLikeSecret(value) ||
