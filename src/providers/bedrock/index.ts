@@ -1610,15 +1610,21 @@ export const BEDROCK_MODEL = {
       // Models that think by default (Opus 5) spend part of max_tokens on thinking even
       // when the request carries no `thinking` field, so the bare 1024 default truncates
       // ordinary answers. Give those the same headroom the Anthropic Messages path uses.
+      // Always-on models (Fable, Opus 5.5) think even when `disabled` is set, because
+      // that rejected block is dropped below.
       //
       // Intentionally narrower than the shared claudeThinkingConsumesTokens(): that helper
       // also returns true for an explicitly-enabled `thinking` block, which would raise this
       // path's default from 1024 to 2048 for every Claude model, not just the thinks-by-
       // default ones. That may well be the right default here too, but it is a behavior
       // change for existing configs and belongs in its own change.
-      const thinksByDefault = modelName
-        ? isThinkingOnByDefaultClaudeModel(modelName) && config?.thinking?.type !== 'disabled'
-        : false;
+      const alwaysOnAdaptiveThinking =
+        !!modelName && isAlwaysOnAdaptiveThinkingClaudeModel(modelName);
+      const thinksByDefault =
+        alwaysOnAdaptiveThinking ||
+        (!!modelName &&
+          isThinkingOnByDefaultClaudeModel(modelName) &&
+          config?.thinking?.type !== 'disabled');
       addConfigParam(
         params,
         'max_tokens',
@@ -1649,9 +1655,6 @@ export const BEDROCK_MODEL = {
       // Like the sampling-param drop above, the forced-tool-choice and
       // disabled-thinking drops below normalize silently — the Converse and
       // Anthropic Messages providers surface the one-time warnings.
-      const alwaysOnAdaptiveThinking = modelName
-        ? isAlwaysOnAdaptiveThinkingClaudeModel(modelName)
-        : false;
       const toolChoice =
         alwaysOnAdaptiveThinking &&
         (config?.tool_choice?.type === 'any' || config?.tool_choice?.type === 'tool')
@@ -2356,6 +2359,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-opus-5-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2424,6 +2428,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'eu.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.anthropic.claude-opus-5-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-sonnet-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2459,6 +2464,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-opus-5-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-sonnet-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2563,6 +2569,12 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   // `global.`), and no older `apac.` prefix.
   'global.anthropic.claude-opus-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
 
+  // Claude Opus 5.5 geo and global cross-region inference profiles. Verified via
+  // `aws bedrock list-inference-profiles` (2026-09-23): base + `us.`/`eu.`/`jp.`/`au.`/`global.`.
+  'global.anthropic.claude-opus-5-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'jp.anthropic.claude-opus-5-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'au.anthropic.claude-opus-5-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
+
   // Claude Fable 5 base, global, and geo inference profiles.
   'global.anthropic.claude-fable-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'global.anthropic.claude-fable-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2573,6 +2585,43 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
+/**
+ * Model IDs AWS no longer serves. Kept so a config pinned to one fails with a clear local
+ * error instead of reaching the `anthropic.claude` catch-all below (or, on the Converse
+ * route, the remote API) and failing with something less obvious.
+ *
+ * The Claude entries were verified absent from `list-foundation-models` in all 17 commercial
+ * regions on 2026-09-04. Note this is Bedrock's lifecycle, not Anthropic's: several models
+ * retired on the Anthropic API are still served here and must NOT be listed.
+ */
+export const RETIRED_BEDROCK_MODELS = new Set([
+  'anthropic.claude-3-opus-20240229-v1:0',
+  'us.anthropic.claude-3-opus-20240229-v1:0',
+  'anthropic.claude-opus-4-20250514-v1:0',
+  'us.anthropic.claude-opus-4-20250514-v1:0',
+  'anthropic.claude-3-5-haiku-20241022-v1:0',
+  'us.anthropic.claude-3-5-haiku-20241022-v1:0',
+  'anthropic.claude-instant-v1',
+  'anthropic.claude-v1',
+  'anthropic.claude-v2',
+  'anthropic.claude-v2:1',
+  'cohere.command-text-v14',
+  'cohere.command-light-text-v14',
+  'meta.llama2-13b-chat-v1',
+  'meta.llama2-70b-chat-v1',
+]);
+
+/**
+ * Throw for a model AWS has withdrawn. Called from both `getHandlerForModel` and the explicit
+ * `bedrock:converse:` factory route, which builds its provider directly and would otherwise
+ * skip the check entirely.
+ */
+export function assertBedrockModelIsAvailable(modelName: string): void {
+  if (RETIRED_BEDROCK_MODELS.has(modelName)) {
+    throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
+  }
+}
+
 export function getHandlerForModel(
   modelName: string,
   config?: BedrockInvokeModelOptions,
@@ -2657,29 +2706,7 @@ export function getHandlerForModel(
   if (ret) {
     return ret;
   }
-  if (
-    [
-      'anthropic.claude-3-opus-20240229-v1:0',
-      'us.anthropic.claude-3-opus-20240229-v1:0',
-      'anthropic.claude-opus-4-20250514-v1:0',
-      'us.anthropic.claude-opus-4-20250514-v1:0',
-      // Withdrawn from Bedrock: absent from list-foundation-models in all 17 commercial
-      // regions on 2026-09-04. Listed here so it fails with a clear message instead of
-      // falling through to the `anthropic.claude` catch-all and failing at request time.
-      'anthropic.claude-3-5-haiku-20241022-v1:0',
-      'us.anthropic.claude-3-5-haiku-20241022-v1:0',
-      'anthropic.claude-instant-v1',
-      'anthropic.claude-v1',
-      'anthropic.claude-v2',
-      'anthropic.claude-v2:1',
-      'cohere.command-text-v14',
-      'cohere.command-light-text-v14',
-      'meta.llama2-13b-chat-v1',
-      'meta.llama2-70b-chat-v1',
-    ].includes(modelName)
-  ) {
-    throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
-  }
+  assertBedrockModelIsAvailable(modelName);
   if (modelName.startsWith('ai21.')) {
     return BEDROCK_MODEL.AI21;
   }

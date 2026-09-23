@@ -912,7 +912,7 @@ describe('AzureChatCompletionProvider', () => {
       },
     );
 
-    it.each(['claude-fable-5-1', 'claude-mythos-5-1'])(
+    it.each(['claude-fable-5-1', 'claude-mythos-5-1', 'claude-opus-5-5'])(
       'omits forced tool choice for %s',
       async (model) => {
         const provider = new AzureChatCompletionProvider(model, {

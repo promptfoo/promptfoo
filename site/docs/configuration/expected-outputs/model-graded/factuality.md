@@ -1,6 +1,6 @@
 ---
 sidebar_label: Factuality
-description: 'Validate factual accuracy of LLM responses using AI-powered fact-checking against verified knowledge bases and sources'
+description: "Check whether an LLM response is factually consistent with a reference answer you provide, using a model grader based on OpenAI's factuality eval prompt"
 ---
 
 # Factuality
@@ -17,6 +17,8 @@ assert:
     # Specify the reference statement to check against:
     value: The Earth orbits around the Sun
 ```
+
+`model-graded-factuality` is an alias for `factuality`; both names use the same grader and options.
 
 For non-English evaluation output, see the [multilingual evaluation guide](/docs/configuration/expected-outputs/model-graded#non-english-evaluation).
 
@@ -138,12 +140,12 @@ The factuality checker will parse either format:
 
 ## Using Factuality with CSV
 
-Use the `factuality:` prefix in `__expected` columns:
+Use either the `factuality:` or `model-graded-factuality:` prefix in `__expected` columns:
 
 ```csv title="tests.csv"
 question,__expected
 "What does GPT stand for?","factuality:Generative Pre-trained Transformer"
-"What is photosynthesis?","factuality:Plants convert sunlight into chemical energy"
+"What is photosynthesis?","model-graded-factuality:Plants convert sunlight into chemical energy"
 ```
 
 To apply factuality to all rows, see [CSV with defaultTest](/docs/configuration/test-cases#csv-with-defaulttest).

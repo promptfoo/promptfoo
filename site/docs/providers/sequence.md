@@ -1,24 +1,25 @@
 ---
 sidebar_label: Sequence
-description: 'Chain multiple AI providers sequentially to create sophisticated evaluation workflows with data transformation and routing'
+description: 'Send several independent prompts to the provider under test, combine the responses, and run assertions on the combined output.'
 ---
 
 # Sequence Provider
 
-The Sequence Provider allows you to send a series of prompts to another provider in sequence, collecting and combining all responses. This is useful for multi-step interactions, conversation flows, or breaking down complex prompts into smaller pieces.
+The Sequence Provider sends several prompts to the provider under test and combines the responses. Each prompt is sent independently; later prompts do not receive earlier responses or conversation history.
 
 ## Configuration
 
-To use the Sequence Provider, set the provider `id` to `sequence` and provide a configuration object with an array of inputs:
+Set `sequence` on `tests[].provider` or `defaultTest.provider`. Keep the model you want to test in the top-level `providers` array:
 
 ```yaml
-providers:
-  - id: sequence
+defaultTest:
+  provider:
+    id: sequence
     config:
       inputs:
         - 'First question: {{prompt}}'
-        - 'Follow up: Can you elaborate on that?'
-        - 'Finally: Can you summarize your thoughts?'
+        - 'Give an example of {{prompt}}.'
+        - 'Summarize {{prompt}} in one sentence.'
       separator: "\n---\n" # Optional, defaults to "\n---\n"
 ```
 
@@ -28,27 +29,30 @@ The Sequence Provider:
 
 1. Takes each input string from the `inputs` array
 2. Renders it using Nunjucks templating (with access to the original prompt and test variables)
-3. Sends it to the original provider
+3. Sends it to the provider under test
 4. Collects all responses
 5. Joins them together using the specified separator
 
 ## Usage Example
 
-Here's a complete example showing how to use the Sequence Provider to create a multi-turn conversation:
+This example sends three related prompts and runs assertions on their combined output:
 
 ```yaml
 providers:
-  - openai:chat:gpt-4
-  - id: sequence
+  - openai:chat:gpt-5.6-luna
+
+prompts:
+  - '{{prompt}}'
+
+defaultTest:
+  provider:
+    id: sequence
     config:
       inputs:
         - 'What is {{prompt}}?'
         - 'What are the potential drawbacks of {{prompt}}?'
         - 'Can you summarize the pros and cons of {{prompt}}?'
       separator: "\n\n=== Next Response ===\n\n"
-
-prompts:
-  - 'artificial intelligence'
 
 tests:
   - vars:
@@ -71,17 +75,17 @@ Each input string supports Nunjucks templating and has access to:
 For example:
 
 ```yaml
-providers:
-  - id: sequence
-    config:
-      inputs:
-        - 'Question about {{topic}}: {{prompt}}'
-        - 'Follow up: How does {{topic}} relate to {{industry}}?'
 tests:
   - vars:
       topic: AI
       industry: healthcare
       prompt: What are the main applications?
+    provider:
+      id: sequence
+      config:
+        inputs:
+          - 'Question about {{topic}}: {{prompt}}'
+          - 'Follow up: How does {{topic}} relate to {{industry}}?'
 ```
 
 ## Configuration Options

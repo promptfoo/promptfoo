@@ -16,7 +16,7 @@ First, set the `COMETAPI_KEY` environment variable with your CometAPI API key:
 export COMETAPI_KEY=your_api_key_here
 ```
 
-You can obtain an API key from the [CometAPI console](https://api.cometapi.com/console/token).
+You can obtain an API key from the [CometAPI console](https://www.cometapi.com/console/token).
 
 You can also supply `config.apiKey` or select a credential variable with `config.apiKeyEnvar`. CometAPI does not fall back to `OPENAI_API_KEY` by default; set `apiKeyEnvar: OPENAI_API_KEY` to use that variable explicitly.
 
@@ -170,7 +170,7 @@ CometAPI supports 500+ models from multiple providers. You can view available mo
 curl -H "Authorization: Bearer $COMETAPI_KEY" https://api.cometapi.com/v1/models
 ```
 
-Or browse models on the [CometAPI pricing page](https://api.cometapi.com/pricing).
+Or browse models on the [CometAPI pricing page](https://www.cometapi.com/pricing/).
 
 Use the exact CometAPI model ID with the matching type prefix from the configuration section. Check that model's API reference for endpoint and feature support. For example, the [GPT Image quickstart](https://apidoc.cometapi.com/quickstarts/image/gpt-image-api) returns a completed `b64_json` image, while FLUX.2 Pro requires the asynchronous flow described above.
 
@@ -178,4 +178,4 @@ Use the exact CometAPI model ID with the matching type prefix from the configura
 
 | Variable       | Description                                                                                    |
 | -------------- | ---------------------------------------------------------------------------------------------- |
-| `COMETAPI_KEY` | Your CometAPI key. Get one at [CometAPI console token](https://api.cometapi.com/console/token) |
+| `COMETAPI_KEY` | Your CometAPI key. Get one at [CometAPI console token](https://www.cometapi.com/console/token) |
