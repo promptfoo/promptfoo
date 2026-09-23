@@ -212,6 +212,7 @@ describe('bedrock openaiResponses helper', () => {
         config: { apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}' },
       });
       expect((provider.config as any).apiKey).toBe('{{env.AWS_BEARER_TOKEN_BEDROCK}}');
+      expect(provider.getApiKey()).not.toBe('{{env.AWS_BEARER_TOKEN_BEDROCK}}');
     });
 
     it('falls back to the env var when apiKey is an unresolved template but the env is set', () => {
