@@ -66,7 +66,7 @@ providers:
 
 ## Cost reporting
 
-By default, promptfoo uses the [reported `usage.cost`](https://openrouter.ai/docs/cookbook/administration/usage-accounting) as the charge to your OpenRouter account. This also applies to the generic OpenAI Chat provider when its `apiBaseUrl` points to `https://openrouter.ai/api/v1`. Missing or invalid charges remain unknown. Reported upstream amounts remain separate metadata fields.
+By default, promptfoo uses the [reported `usage.cost`](https://openrouter.ai/docs/cookbook/administration/usage-accounting) as the charge to your OpenRouter account. This also applies to the generic OpenAI Chat and Responses providers when their `apiBaseUrl` points to `https://openrouter.ai/api/v1`. Missing or invalid charges remain unknown. Reported upstream amounts remain separate metadata fields.
 
 For responses explicitly marked `usage.is_byok: true`, generic `cost` is unavailable unless you configure complete, valid token rates. With [Bring Your Own Key (BYOK)](https://openrouter.ai/docs/guides/overview/auth/byok), your upstream provider bills inference separately, so a zero or fee-only OpenRouter charge does not establish the combined cost. Responses with a missing or invalid BYOK flag continue to use the reported account charge; their route remains unknown in metadata.
 
@@ -96,7 +96,7 @@ Cache replays retain logical cost and billing metadata. The evaluator records ze
 
 ## Thinking/Reasoning Models
 
-For GPT-6 Sol and Luna, set `reasoning_effort` or use `passthrough.reasoning`. OpenRouter also supports changing reasoning effort through a [`configuration_update` on an empty system or developer message](https://openrouter.ai/docs/cookbook/evaluate-and-optimize/model-migrations/gpt-6#chat-completions-api). That message extension applies only to OpenRouter, not to native OpenAI Chat Completions.
+For GPT-6 Sol and Luna, set `reasoning_effort` or use `passthrough.reasoning`. A named effort and `passthrough.reasoning.max_tokens` are alternative controls. OpenRouter also supports changing reasoning effort through a [`configuration_update` on an empty system or developer message](https://openrouter.ai/docs/cookbook/evaluate-and-optimize/model-migrations/gpt-6#chat-completions-api). That message extension applies only to OpenRouter, not to native OpenAI Chat Completions. OpenRouter Responses is stateless: replay the conversation instead of sending `previous_response_id`.
 
 Some models like Gemini 2.5 Pro include thinking tokens in their responses. You can control whether these are shown using the `showThinking` parameter:
 
