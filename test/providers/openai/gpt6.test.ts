@@ -474,10 +474,10 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
     expect(getGpt6Variant(`prod-${model}`)).toBe(model.slice(6));
 
     const { body: chat } = await new OpenAiChatCompletionProvider(unrelated, {
-      config: { temperature: 0.4, top_p: 0.8, tools: [statusTool] },
+      config: { temperature: 0.4, top_p: 0.8, tools: [statusTool], verbosity: 'low' },
     }).getOpenAiBody('Get the job status.');
     const { body: responses } = await new OpenAiResponsesProvider(unrelated, {
-      config: { temperature: 0.4, top_p: 0.8, tools: [statusTool] },
+      config: { temperature: 0.4, top_p: 0.8, tools: [statusTool], verbosity: 'low' },
     }).getOpenAiBody('Get the job status.');
     expect(chat).toMatchObject({
       model: unrelated,
@@ -485,12 +485,14 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
       top_p: 0.8,
       tools: [statusTool],
     });
+    expect(chat).not.toHaveProperty('verbosity');
     expect(responses).toMatchObject({
       model: unrelated,
       temperature: 0.4,
       top_p: 0.8,
       tools: [{ type: 'function', name: 'get_status' }],
     });
+    expect(responses).not.toHaveProperty('verbosity');
   });
 
   it.each(['none', 'low', 'medium', 'high', 'xhigh', 'max'] as const)(

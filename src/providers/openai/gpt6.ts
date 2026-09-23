@@ -6,13 +6,17 @@ const OUTPUT_CAP_RESET = Symbol('default output cap');
 type Gpt6Variant = 'astra' | 'sol' | 'luna';
 type Gpt6Reasoning = { effort?: unknown; enabled?: unknown; mode?: unknown } | null | undefined;
 
+function getGpt6BaseModelName(modelName: string): string {
+  const model = modelName.split('/').at(-1) ?? modelName;
+  const [name, fineTuneBase] = model.split(':', 2);
+  return name === 'ft' ? (fineTuneBase ?? '') : (name ?? '');
+}
+
 export function getGpt6Variant(modelName: unknown): Gpt6Variant | undefined {
   if (typeof modelName !== 'string') {
     return undefined;
   }
-  const model = modelName.split('/').at(-1) ?? modelName;
-  const [name, fineTuneBase] = model.split(':', 2);
-  const baseModel = name === 'ft' ? (fineTuneBase ?? '') : (name ?? '');
+  const baseModel = getGpt6BaseModelName(modelName);
   return /(?:^|[.-])gpt-6-(astra|sol|luna)(?:[-:]|$)/.exec(baseModel)?.[1] as
     | Gpt6Variant
     | undefined;
@@ -22,8 +26,8 @@ export function isGpt6Model(modelName: unknown): boolean {
   if (typeof modelName !== 'string') {
     return false;
   }
-  const finalModel = modelName.split('/').at(-1) ?? modelName;
-  return getGpt6Variant(finalModel) !== undefined || /(?:^|[/-])gpt-6(?:[.-]|$)/.test(finalModel);
+  const baseModel = getGpt6BaseModelName(modelName);
+  return getGpt6Variant(baseModel) !== undefined || /(?:^|[/-])gpt-6(?:[.-]|$)/.test(baseModel);
 }
 
 type ReasoningConfig = { reasoning?: unknown; reasoning_effort?: unknown; passthrough?: unknown };
