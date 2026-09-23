@@ -4,9 +4,9 @@ prompts:
   - 'Extract information about the event: {{event}}'
 
 providers:
-  # Current OpenAI models with structured output
-  - id: openai:responses:gpt-6-sol
-    label: gpt-6-sol-json-schema
+  # GPT-5.6 tiers with structured output
+  - id: openai:responses:gpt-5.6-sol
+    label: gpt-5.6-sol-json-schema
     config:
       reasoning:
         effort: none
@@ -34,8 +34,8 @@ providers:
           required: ['event_name', 'date', 'location', 'participants']
           additionalProperties: false
 
-  - id: openai:responses:gpt-6-luna
-    label: gpt-6-luna-json-schema
+  - id: openai:responses:gpt-5.6-luna
+    label: gpt-5.6-luna-json-schema
     config:
       reasoning:
         effort: none

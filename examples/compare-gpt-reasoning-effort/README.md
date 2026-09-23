@@ -9,7 +9,7 @@ cd compare-gpt-reasoning-effort
 
 ## Usage
 
-This example compares the same `gpt-6-luna` Responses API model with two reasoning settings:
+This example compares the same `gpt-5.4-mini` Responses API model with two reasoning settings:
 
 - `none` for low-latency tasks that do not need reasoning tokens
 - `medium` for tasks where extra deliberation may improve reliability

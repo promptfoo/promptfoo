@@ -1,21 +1,17 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Comparing GPT-6 Luna behavior at different temperature settings
+description: Comparing GPT-4o behavior at different temperature settings
 
 prompts:
   - 'Respond to the following instruction: {{message}}'
 
 providers:
-  - id: openai:gpt-6-luna
-    label: openai-gpt-6-luna-lowtemp
+  - id: openai:gpt-4o
+    label: openai-gpt-4o-lowtemp
     config:
-      reasoning:
-        effort: none
       temperature: 0
-  - id: openai:gpt-6-luna
-    label: openai-gpt-6-luna-hightemp
+  - id: openai:gpt-4o
+    label: openai-gpt-4o-hightemp
     config:
-      reasoning:
-        effort: none
       temperature: 1
 
 tests:

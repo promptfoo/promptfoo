@@ -13,7 +13,7 @@ cd openai-responses
 
 ### Basic Responses API (`promptfooconfig.yaml`)
 
-Basic example showing how to use the Responses API with GPT-6 Sol and Luna, GPT-5.6 Terra, and a GPT-4.1 comparison model.
+Basic example showing how to use the Responses API with GPT-5.6 Sol, Terra, and Luna, plus a GPT-4.1 comparison model.
 
 ### External Response Format (`promptfooconfig.external-format.yaml`)
 
@@ -48,7 +48,7 @@ Key differences from regular function calling:
 
 ### Reasoning Models (`promptfooconfig.reasoning.yaml`)
 
-Compare GPT-6 Sol, Luna, and Astra with GPT-5.6 Terra using explicit reasoning budgets. Sol and Luna also support `none` reasoning.
+Compare GPT-5.6 Sol, Terra, and Luna with GPT-6 Astra using explicit reasoning budgets.
 
 ### GPT-5.1 (`promptfooconfig.gpt-5.1.yaml`)
 

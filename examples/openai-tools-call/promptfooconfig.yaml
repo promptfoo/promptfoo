@@ -5,9 +5,8 @@ prompts:
   - 'What is the weather like in {{city}}?'
 
 providers:
-  - id: openai:chat:gpt-6-luna
+  - id: openai:chat:gpt-5.6-luna
     config:
-      reasoning_effort: none
       verbosity: high
       tools:
         [
