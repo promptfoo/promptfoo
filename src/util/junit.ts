@@ -197,10 +197,12 @@ async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
     let suite = suites.get(key);
     if (!suite) {
       const rawName = provider.label || provider.id || '';
-      const normalizedRawName = rawName.replace(/\s+/g, ' ').trim();
-      // Keep names that lose XML characters distinct from each other and unchanged names.
+      // Every forbidden character is erased from the rendered name, wherever it
+      // sits and even when it is whitespace that collapses into a plain space,
+      // so two providers can render identically. Keep them apart with a stable
+      // hash of the provider identity.
       const suffix =
-        normalizedRawName.search(INVALID_XML_CHARACTERS) === -1
+        rawName.search(INVALID_XML_CHARACTERS) === -1
           ? ''
           : ` (${sha256(providerKey).slice(0, 16)})`;
       const providerName = normalizeInlineText(

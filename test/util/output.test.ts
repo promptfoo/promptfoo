@@ -1235,21 +1235,30 @@ describe('writeOutput', () => {
     expect(suite.testcase['@_name']).toBe('test 1: ' + testcase);
   });
 
-  it('keeps identities distinct when an invalid character falls after the display limit', async () => {
-    const label = 'abcdefgh'.repeat(64);
+  // Each pair renders to the same visible text once the forbidden character is
+  // removed, so only the uniqueness suffix keeps the two suites apart.
+  it.each([
+    ['a vertical tab collapses into a space', 'my\u000bmodel', 'my model'],
+    ['a form feed collapses into a space', 'my\u000cmodel', 'my model'],
+    [
+      'the forbidden character falls after the display limit',
+      `${'x'.repeat(600)}\u0000`,
+      'x'.repeat(600),
+    ],
+  ])('keeps suite identities distinct when %s', async (_scenario, sanitized, clean) => {
     const eval_ = new Eval({});
-    for (const providerLabel of [label, `${label}\u0000`]) {
-      await eval_.addResult(
-        createEvaluateResult({ provider: { id: 'echo', label: providerLabel } }),
-      );
+    for (const label of [sanitized, clean]) {
+      await eval_.addResult(createEvaluateResult({ provider: { id: 'echo', label } }));
     }
 
-    const suites = new XMLParser({ ignoreAttributes: false }).parse(await createJunitXml(eval_))
+    const xml = await createJunitXml(eval_);
+    expect(() => new SaxesParser().write(xml).close()).not.toThrow();
+    const suites: { '@_name': string }[] = new XMLParser({ ignoreAttributes: false }).parse(xml)
       .testsuites.testsuite;
-    expect(suites.map((suite: { '@_name': string }) => suite['@_name'])).toEqual([
-      `[${label}] prompt 1`,
-      expect.stringMatching(/^\[(?:abcdefgh){61}ab\.\.\.\] prompt 1 \([a-f0-9]{16}\)$/),
-    ]);
+    const names = suites.map((suite) => suite['@_name']);
+    expect(names[0]).toMatch(/ \([a-f0-9]{16}\)$/);
+    expect(names[1]).not.toMatch(/ \([a-f0-9]{16}\)$/);
+    expect(new Set(names).size).toBe(2);
   });
 
   it.each([
