@@ -746,6 +746,14 @@ export function getXAIRequestModel(modelName: string, config?: { passthrough?: o
 }
 
 type XAIRequestOption = 'reasoning' | 'reasoning_effort' | 'max_completion_tokens' | 'max_tokens';
+const TEST_OPTION_SCOPES = Symbol.for('promptfoo.testOptionScopes');
+
+export function getXAITestOptionScopes(test?: { options?: object }): (object | undefined)[] {
+  const original = (test as { [TEST_OPTION_SCOPES]?: (object | undefined)[] } | undefined)?.[
+    TEST_OPTION_SCOPES
+  ];
+  return original ?? [test?.options];
+}
 
 export function getXAIRequestOption(
   key: XAIRequestOption | readonly XAIRequestOption[],
@@ -767,7 +775,7 @@ export function getXAIRequestOption(
         );
       }
       for (const name of keys) {
-        if (source && Object.hasOwn(source, name)) {
+        if (source && Object.hasOwn(source, name) && (keys.length === 1 || source[name] != null)) {
           return source[name];
         }
       }
@@ -809,7 +817,7 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       effort = resolveGrok47ReasoningEffort(
         getXAIRequestOption(
           'reasoning_effort',
-          context?.test?.options,
+          ...getXAITestOptionScopes(context?.test),
           context?.prompt?.config,
           this.config,
         ),
@@ -846,7 +854,7 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       const tokenLimit =
         getXAIRequestOption(
           ['max_completion_tokens', 'max_tokens'],
-          context?.test?.options,
+          ...getXAITestOptionScopes(context?.test),
           context?.prompt?.config,
           this.config,
         ) ??

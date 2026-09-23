@@ -18,6 +18,7 @@ import {
   getXAICostInUsd,
   getXAIRequestModel,
   getXAIRequestOption,
+  getXAITestOptionScopes,
   hasXAICostOverrides,
   resolveGrok47ReasoningEffort,
   validateXAIReasoningEffort,
@@ -363,7 +364,7 @@ export class XAIResponsesProvider implements ApiProvider {
     if (usesGrok47) {
       const reasoning = getXAIRequestOption(
         'reasoning',
-        context?.test?.options,
+        ...getXAITestOptionScopes(context?.test),
         context?.prompt?.config,
         this.config,
       );

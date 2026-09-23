@@ -269,6 +269,20 @@ describe('XAIResponsesProvider', () => {
       },
     });
     expect(sameScope.body.reasoning).toEqual({ effort: 'xhigh' });
+    const inherited = await provider.getRequestBody('hello', {
+      ...context,
+      test: {
+        options: {
+          reasoning: { effort: 'low' },
+          passthrough: { reasoning: { effort: 'high' } },
+        },
+        [Symbol.for('promptfoo.testOptionScopes')]: [
+          { reasoning: { effort: 'low' } },
+          { passthrough: { reasoning: { effort: 'high' } } },
+        ],
+      },
+    });
+    expect(inherited.body.reasoning).toEqual({ effort: 'low' });
     const restore = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
     try {
       await expect(

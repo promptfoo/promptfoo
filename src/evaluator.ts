@@ -134,6 +134,9 @@ import type {
 import type { InternalEvaluateOptions } from './types/internal';
 import type { CallApiContextParams } from './types/providers';
 
+// Preserve option precedence for providers that accept multiple names for one setting.
+const TEST_OPTION_SCOPES = Symbol.for('promptfoo.testOptionScopes');
+
 export class PromptSuggestionsRejectedError extends Error {
   constructor(message = 'No prompts selected. Aborting.') {
     super(message);
@@ -2452,6 +2455,7 @@ function mergeScenarioTest(
       ...data.options,
       ...test.options,
     },
+    [TEST_OPTION_SCOPES]: [test.options, data.options, defaultTest?.options],
     assert: [...(data.assert || []), ...(test.assert || [])],
     metadata: mergedMetadata,
   } as AtomicTestCase;
@@ -2579,6 +2583,10 @@ async function prepareTestCaseForEval(
     ...(testCase.assert || []),
   ];
   testCase.threshold = testCase.threshold ?? defaultTest?.threshold;
+  const scopedTest = testCase as AtomicTestCase & {
+    [TEST_OPTION_SCOPES]?: (AtomicTestCase['options'] | undefined)[];
+  };
+  scopedTest[TEST_OPTION_SCOPES] ??= [testCase.options, defaultTest?.options];
   testCase.options = {
     ...(defaultTest?.options || {}),
     ...testCase.options,

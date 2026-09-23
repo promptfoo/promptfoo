@@ -411,6 +411,27 @@ describe('xAI Chat Provider', () => {
           prompt: { config: { max_completion_tokens: 64, max_tokens: 32 } },
         }),
       ).rejects.toThrow('conflicting max_tokens and max_completion_tokens');
+      const optionScopes = Symbol.for('promptfoo.testOptionScopes');
+      for (const [defaults, row] of [
+        [{ max_completion_tokens: 2048 }, { max_tokens: 64 }],
+        [{ max_tokens: 2048 }, { max_completion_tokens: 64 }],
+      ]) {
+        const scoped = await provider.getOpenAiBody('hello', {
+          test: { options: { ...defaults, ...row }, [optionScopes]: [row, defaults] },
+        });
+        expect(scoped.body.max_completion_tokens).toBe(64);
+      }
+      const nullish = createXAIProvider('xai:grok-4.7', {
+        config: { config: { max_tokens: 128, max_completion_tokens: null } as any },
+      }) as any;
+      expect((await nullish.getOpenAiBody('hello')).body.max_completion_tokens).toBe(128);
+      expect(
+        (
+          await nullish.getOpenAiBody('hello', {
+            test: { options: { max_completion_tokens: null } },
+          })
+        ).body.max_completion_tokens,
+      ).toBe(128);
       const restore = mockProcessEnv({
         OPENAI_MAX_COMPLETION_TOKENS: undefined,
         OPENAI_MAX_TOKENS: '37',
@@ -468,6 +489,17 @@ describe('xAI Chat Provider', () => {
         test: { options: { reasoning_effort: 'low', passthrough: { reasoning_effort: 'xhigh' } } },
       });
       expect(JSON.parse(mockFetchWithCache.mock.calls[1][1].body).reasoning_effort).toBe('xhigh');
+      await provider.callApi('hello', {
+        ...context,
+        test: {
+          options: { reasoning_effort: 'low', passthrough: { reasoning_effort: 'high' } },
+          [Symbol.for('promptfoo.testOptionScopes')]: [
+            { reasoning_effort: 'low' },
+            { passthrough: { reasoning_effort: 'high' } },
+          ],
+        },
+      });
+      expect(JSON.parse(mockFetchWithCache.mock.calls[2][1].body).reasoning_effort).toBe('low');
       mockFetchWithCache.mockClear();
       const restore = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
       try {
