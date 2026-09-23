@@ -29,7 +29,7 @@ import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
 import { OpenAiGenericProvider } from '.';
 import { calculateObservableOpenAIToolCost, calculateOpenAIUsageCost } from './billing';
-import { applyGpt6RequestRules, isGpt6Model } from './gpt6';
+import { applyGpt6RequestRules, getGpt6ResponsesReasoning, isGpt6Model } from './gpt6';
 import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
@@ -840,6 +840,17 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
   }
 
+  private supportsPersistedGpt6EffortUpdates(): boolean {
+    if (this.getGenAISystem() === 'bedrock') {
+      return false;
+    }
+    try {
+      return !/^bedrock-mantle\.[a-z0-9-]+\.api\.aws$/.test(new URL(this.getApiUrl()).hostname);
+    } catch {
+      return true;
+    }
+  }
+
   private getDeploymentCapabilities(config: OpenAiCompletionOptions) {
     const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
     const capabilityModelName =
@@ -1056,7 +1067,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // Note: reasoning_effort is deprecated and has been moved to reasoning.effort
     // Merge with existing body.reasoning (from reasoning_effort) so that
     // config.reasoning extra fields (e.g. summary) don't silently drop effort.
-    if (renderedReasoning && isReasoningModel) {
+    if (isGPT6Model) {
+      const reasoning = getGpt6ResponsesReasoning(this.config, context?.prompt?.config);
+      if (reasoning) {
+        body.reasoning = renderVarsInObject(reasoning, context?.vars);
+      } else {
+        delete body.reasoning;
+      }
+    } else if (renderedReasoning && isReasoningModel) {
       body.reasoning = { ...body.reasoning, ...renderedReasoning };
     }
 
@@ -1070,7 +1088,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       body,
       config.passthrough?.model ?? this.getCapabilityModelName(),
       'responses',
-      { defaultResponsesTemperature: config.omitDefaults ? undefined : 0 },
+      {
+        defaultResponsesTemperature: config.omitDefaults ? undefined : 0,
+        supportsPersistedEffortUpdates: this.supportsPersistedGpt6EffortUpdates(),
+      },
     );
 
     return {

@@ -159,6 +159,30 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
     return this.config.apiBaseUrl || super.getApiUrl();
   }
 
+  async getOpenAiBody(
+    prompt: string,
+    context?: BedrockOpenAiResponsesBodyContext,
+    callApiOptions?: BedrockOpenAiResponsesCallApiOptions,
+  ) {
+    const config = { ...this.config, ...context?.prompt?.config };
+    const model = (config.passthrough as { model?: unknown } | undefined)?.model;
+    const supportedRegions =
+      typeof model === 'string' && Object.hasOwn(BEDROCK_OPENAI_MODEL_REGIONS, model)
+        ? BEDROCK_OPENAI_MODEL_REGIONS[model]
+        : undefined;
+    if (supportedRegions && model !== this.modelName) {
+      const region = /^bedrock-mantle\.([a-z0-9-]+)\.api\.aws$/.exec(
+        new URL(this.getApiUrl()).hostname,
+      )?.[1];
+      if (region && !supportedRegions.includes(region)) {
+        throw new Error(
+          `Bedrock model ${model} is not available at the configured Mantle endpoint in ${region}. Set the provider config.region to ${supportedRegions.join(' or ')}, or use a separate provider for this model.`,
+        );
+      }
+    }
+    return super.getOpenAiBody(prompt, context, callApiOptions);
+  }
+
   getOpenAiRequestHeaders(
     customHeaders: Record<string, string> | undefined = this.config.headers,
   ): Record<string, string> {

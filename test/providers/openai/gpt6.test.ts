@@ -705,6 +705,138 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
     expect(updated).not.toHaveProperty('temperature');
   });
 
+  it('uses request-level reasoning for linked native pro, multi-agent, and Bedrock responses', async () => {
+    for (const [effort, keepsSampling] of [
+      ['high', false],
+      ['none', true],
+    ] as const) {
+      for (const provider of [
+        new OpenAiResponsesProvider(model, {
+          config: { reasoning: { effort, mode: 'pro' }, top_p: 0.8 },
+        }),
+        new OpenAiResponsesProvider(model, {
+          config: {
+            reasoning: { effort },
+            top_p: 0.8,
+            passthrough: { multi_agent: { enabled: true } },
+          },
+        }),
+        createBedrockOpenAiResponsesProvider(`openai.${model}`, {
+          config: { region: 'us-east-1', reasoning: { effort }, top_p: 0.8 },
+        }),
+        new OpenAiResponsesProvider(`openai.${model}`, {
+          config: {
+            apiBaseUrl: 'https://bedrock-mantle.us-east-1.api.aws/openai/v1',
+            reasoning: { effort },
+            top_p: 0.8,
+          },
+        }),
+      ]) {
+        const context = {
+          vars: {},
+          prompt: {
+            raw: 'Say ready.',
+            label: 'ready',
+            config: { previous_response_id: 'resp_previous' },
+          },
+        };
+        const { body } = await provider.getOpenAiBody('Say ready.', context);
+        const { body: ignoredUpdate } = await provider.getOpenAiBody(
+          JSON.stringify([
+            {
+              type: 'configuration_update',
+              reasoning: { effort: keepsSampling ? 'high' : 'none' },
+            },
+            { role: 'user', content: 'Say ready.' },
+          ]),
+          context,
+        );
+        for (const result of [body, ignoredUpdate]) {
+          expect(result.reasoning.effort).toBe(effort);
+          if (keepsSampling) {
+            expect(result).toMatchObject({ temperature: 0, top_p: 0.8 });
+          } else {
+            expect(result).not.toHaveProperty('temperature');
+            expect(result).not.toHaveProperty('top_p');
+          }
+        }
+      }
+    }
+
+    const { body: singleAgent } = await new OpenAiResponsesProvider(model, {
+      config: {
+        previous_response_id: 'resp_previous',
+        reasoning: { effort: 'high' },
+        temperature: 0.3,
+        passthrough: { multi_agent: { enabled: false } },
+      },
+    }).getOpenAiBody('Say ready.');
+    expect(singleAgent.temperature).toBe(0.3);
+  });
+
+  it('lets prompt-native reasoning aliases override provider reasoning before capability checks', async () => {
+    const prompt = { raw: 'Say ready.', label: 'ready' };
+    for (const [providerEffort, promptEffort] of [
+      ['high', 'none'],
+      ['none', 'high'],
+    ] as const) {
+      const chat = new OpenAiChatCompletionProvider(model, {
+        config: { reasoning_effort: providerEffort, temperature: 0.3 },
+      });
+      const { body: chatBody } = await chat.getOpenAiBody('Say ready.', {
+        vars: { effort: promptEffort },
+        prompt: {
+          ...prompt,
+          config: {
+            ...(promptEffort === 'none' ? { tools: [statusTool] } : {}),
+            passthrough: { reasoning_effort: '{{ effort }}' },
+          },
+        },
+      });
+      expect(chatBody.reasoning_effort).toBe(promptEffort);
+      if (promptEffort === 'none') {
+        expect(chatBody).toMatchObject({ tools: [statusTool], temperature: 0.3 });
+      } else {
+        expect(chatBody).not.toHaveProperty('temperature');
+      }
+
+      const responses = new OpenAiResponsesProvider(model, {
+        config: { reasoning: { effort: providerEffort, summary: 'auto' }, temperature: 0.3 },
+      });
+      const { body: responseBody } = await responses.getOpenAiBody('Say ready.', {
+        vars: { effort: promptEffort },
+        prompt: {
+          ...prompt,
+          config: { passthrough: { reasoning: { effort: '{{ effort }}' } } },
+        },
+      });
+      expect(responseBody.reasoning).toEqual({ effort: promptEffort, summary: 'auto' });
+      if (promptEffort === 'none') {
+        expect(responseBody.temperature).toBe(0.3);
+      } else {
+        expect(responseBody).not.toHaveProperty('temperature');
+      }
+    }
+
+    const { body: sameLayer } = await new OpenAiResponsesProvider(model, {
+      config: {
+        reasoning_effort: 'high',
+        reasoning: { summary: 'auto' },
+        passthrough: { reasoning: { effort: 'none' } },
+      },
+    }).getOpenAiBody('Say ready.');
+    expect(sameLayer.reasoning).toEqual({ effort: 'none', summary: 'auto' });
+
+    const { body: cleared } = await new OpenAiResponsesProvider(model, {
+      config: { reasoning: { effort: 'none', summary: 'auto' }, temperature: 0.3 },
+    }).getOpenAiBody('Say ready.', {
+      vars: {},
+      prompt: { ...prompt, config: { passthrough: { reasoning: { effort: null } } } },
+    });
+    expect(cleared.reasoning).toEqual({ summary: 'auto' });
+    expect(cleared).not.toHaveProperty('temperature');
+  });
+
   it.each([
     [{ max_tokens: 77 }, 77],
     [{ max_tokens: 77, max_completion_tokens: 88 }, 88],
@@ -754,6 +886,48 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
           config: { region: 'us-east-2', apiBaseUrl: 'https://proxy.example.com/openai/v1' },
         }).getApiUrl(),
       ).toBe('https://proxy.example.com/openai/v1');
+    } finally {
+      restoreAwsEnv();
+    }
+  });
+
+  it('checks the selected AWS region before applying a Bedrock prompt model override', async () => {
+    const restoreAwsEnv = mockProcessEnv({
+      AWS_BEDROCK_REGION: undefined,
+      AWS_REGION: undefined,
+      AWS_DEFAULT_REGION: undefined,
+    });
+    try {
+      const initialModel = 'openai.gpt-5.6-terra';
+      const overriddenModel = `openai.${model}`;
+      const context = (effectiveModel: string) => ({
+        vars: {},
+        prompt: {
+          raw: 'Say ready.',
+          label: 'ready',
+          config: { passthrough: { model: effectiveModel } },
+        },
+      });
+      for (const provider of [
+        new BedrockOpenAiResponsesProvider(initialModel),
+        createBedrockOpenAiResponsesProvider(initialModel),
+        createBedrockOpenAiResponsesProvider(initialModel, { config: { region: 'us-west-2' } }),
+      ]) {
+        await expect(
+          provider.getOpenAiBody('Say ready.', context(overriddenModel)),
+        ).rejects.toThrow('Set the provider config.region to us-east-1');
+        expect(provider.getApiUrl()).not.toContain('us-east-1');
+        const { body } = await provider.getOpenAiBody('Say ready.', context('openai.gpt-5.6-luna'));
+        expect(body.model).toBe('openai.gpt-5.6-luna');
+      }
+      for (const config of [
+        { region: 'us-east-1' },
+        { region: 'us-east-2', apiBaseUrl: 'https://proxy.example.com/openai/v1' },
+      ]) {
+        const provider = createBedrockOpenAiResponsesProvider(initialModel, { config });
+        const { body } = await provider.getOpenAiBody('Say ready.', context(overriddenModel));
+        expect(body.model).toBe(overriddenModel);
+      }
     } finally {
       restoreAwsEnv();
     }
@@ -824,6 +998,72 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
     expect(sameLayer.reasoning).toEqual({ effort: 'high', exclude: false });
     expect(sameLayer).not.toHaveProperty('reasoning_effort');
     expect(sameLayer).not.toHaveProperty('temperature');
+  });
+
+  it('allows prompt-level OpenRouter nulls to restore default reasoning and clear output limits', async () => {
+    const restoreTokenEnv = mockProcessEnv({
+      OPENAI_MAX_COMPLETION_TOKENS: '700',
+      OPENAI_MAX_TOKENS: '800',
+    });
+    try {
+      const prompt = { raw: 'Say ready.', label: 'ready' };
+      for (const effort of ['none', 'high'] as const) {
+        const provider = new OpenRouterProvider(`openai/${model}`, {
+          config: {
+            temperature: 0.4,
+            passthrough: {
+              reasoning: { effort, enabled: effort !== 'none', exclude: true },
+              max_completion_tokens: 64,
+            },
+          },
+        });
+        for (const reasoningReset of [
+          { reasoning_effort: null },
+          { reasoning: { effort: null } },
+          { reasoning: null },
+        ]) {
+          for (const tokenReset of [{ max_completion_tokens: null }, { max_tokens: null }]) {
+            const { body } = await provider.getOpenAiBody('Say ready.', {
+              vars: {},
+              prompt: {
+                ...prompt,
+                config: { passthrough: { ...reasoningReset, ...tokenReset } },
+              },
+            });
+            expect(body).not.toHaveProperty('reasoning_effort');
+            expect(body).not.toHaveProperty('reasoning.effort');
+            expect(body).not.toHaveProperty('reasoning.enabled');
+            if ('reasoning' in reasoningReset && reasoningReset.reasoning === null) {
+              expect(body).not.toHaveProperty('reasoning');
+            } else {
+              expect(body.reasoning).toEqual({ exclude: true });
+            }
+            expect(body).not.toHaveProperty('temperature');
+            expect(body).not.toHaveProperty('max_completion_tokens');
+            expect(body).not.toHaveProperty('max_tokens');
+          }
+        }
+        const { body: inherited } = await provider.getOpenAiBody('Say ready.', {
+          vars: {},
+          prompt: { ...prompt, config: { passthrough: { logprobs: true } } },
+        });
+        expect(inherited.reasoning.effort).toBe(effort);
+        expect(inherited.max_completion_tokens).toBe(64);
+      }
+      const { body: directBaseCleared } = await new OpenRouterProvider(`openai/${model}`, {
+        config: { reasoning_effort: 'none', max_completion_tokens: 50 },
+      }).getOpenAiBody('Say ready.', {
+        vars: {},
+        prompt: {
+          ...prompt,
+          config: { passthrough: { reasoning_effort: null, max_tokens: null } },
+        },
+      });
+      expect(directBaseCleared).not.toHaveProperty('reasoning_effort');
+      expect(directBaseCleared).not.toHaveProperty('max_completion_tokens');
+    } finally {
+      restoreTokenEnv();
+    }
   });
 
   it.each([

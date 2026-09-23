@@ -17,6 +17,10 @@ import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
 import {
+  calculateOpenRouterResponseCost,
+  getOpenRouterBillingMetadata,
+} from '../openrouterBilling';
+import {
   getRequestTimeoutMs,
   parseChatPrompt,
   transformToolChoice,
@@ -29,7 +33,7 @@ import {
 } from '../tracing';
 import { OpenAiGenericProvider } from './';
 import { calculateOpenAIUsageCost } from './billing';
-import { applyGpt6RequestRules, isGpt6Model } from './gpt6';
+import { applyGpt6RequestRules, getGpt6ChatReasoningEffort, isGpt6Model } from './gpt6';
 import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
@@ -92,11 +96,12 @@ function getChatSearchSurcharge(modelName: string): number {
 }
 
 type OpenRouterReasoning = { effort?: unknown; enabled?: unknown; [key: string]: unknown };
+const OPENROUTER_RESET = Symbol('OpenRouter default');
 type OpenRouterPassthrough = {
   reasoning_effort?: unknown;
   reasoning?: OpenRouterReasoning | null;
-  max_tokens?: number;
-  max_completion_tokens?: number;
+  max_tokens?: number | null;
+  max_completion_tokens?: number | null;
 };
 
 function getOpenRouterPassthrough(config?: OpenAiCompletionOptions): OpenRouterPassthrough {
@@ -106,14 +111,17 @@ function getOpenRouterPassthrough(config?: OpenAiCompletionOptions): OpenRouterP
     : {};
 }
 
-function getOpenRouterOutputCap(config?: OpenAiCompletionOptions): number | undefined {
+function getOpenRouterOutputCap(
+  config?: OpenAiCompletionOptions,
+): number | typeof OPENROUTER_RESET | undefined {
   const passthrough = getOpenRouterPassthrough(config);
-  return (
-    passthrough.max_completion_tokens ??
-    passthrough.max_tokens ??
-    config?.max_completion_tokens ??
-    config?.max_tokens
-  );
+  const cap = [
+    passthrough.max_completion_tokens,
+    passthrough.max_tokens,
+    config?.max_completion_tokens,
+    config?.max_tokens,
+  ].find((value) => value !== undefined);
+  return cap === null ? OPENROUTER_RESET : cap;
 }
 
 function getOpenRouterReasoningControl(config?: OpenAiCompletionOptions) {
@@ -121,10 +129,13 @@ function getOpenRouterReasoningControl(config?: OpenAiCompletionOptions) {
   const efforts = [
     ['flat', config?.reasoning_effort],
     ['flat', passthrough.reasoning_effort],
-    ['nested', passthrough.reasoning?.effort],
+    ['nested', passthrough.reasoning === null ? null : passthrough.reasoning?.effort],
   ] as const;
   for (const [kind, value] of efforts) {
-    if (value != null && value !== '') {
+    if (value === null) {
+      return { kind: 'reset' as const };
+    }
+    if (value !== undefined && value !== '') {
       return { kind, value };
     }
   }
@@ -150,6 +161,20 @@ function reconcileOpenRouterReasoning(
   if (!control) {
     if (reasoning) {
       body.reasoning = reasoning;
+    }
+    return;
+  }
+
+  if (control.kind === 'reset') {
+    delete body.reasoning_effort;
+    if (reasoning) {
+      delete reasoning.effort;
+      delete reasoning.enabled;
+    }
+    if (reasoning && Object.keys(reasoning).length) {
+      body.reasoning = reasoning;
+    } else {
+      delete body.reasoning;
     }
     return;
   }
@@ -442,12 +467,17 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         getOpenRouterOutputCap(this.config) ??
         getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ??
         getEnvInt('OPENAI_MAX_TOKENS');
-      if (gatewayOutputCap === undefined) {
+      if (gatewayOutputCap === undefined || gatewayOutputCap === OPENROUTER_RESET) {
         delete body.max_completion_tokens;
       } else {
         body.max_completion_tokens = gatewayOutputCap;
       }
       reconcileOpenRouterReasoning(body, this.config, context?.prompt?.config, context?.vars);
+    } else if (isGPT6Model) {
+      const effort = getGpt6ChatReasoningEffort(this.config, context?.prompt?.config);
+      if (effort !== undefined) {
+        body.reasoning_effort = renderVarsInObject(effort, context?.vars);
+      }
     }
     // OpenRouter can translate Chat tools to the upstream Responses API.
     applyGpt6RequestRules(body, capabilityModelName, 'chat', {
@@ -468,6 +498,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     config: OpenAiCompletionOptions,
     cached: boolean,
   ): number | undefined {
+    if (this.usesOpenRouter()) {
+      return calculateOpenRouterResponseCost(data, config);
+    }
     const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
     const modelName =
       typeof passthroughModel === 'string' ? passthroughModel : this.getBillingModelName(config);
@@ -486,8 +519,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   /**
    * Extract provider-specific fields while the raw OpenAI-compatible response is still available.
    */
-  protected getProviderResponseMetadata(_data: unknown): Record<string, unknown> {
-    return {};
+  protected getProviderResponseMetadata(data: unknown): Record<string, unknown> {
+    return this.usesOpenRouter() && data && typeof data === 'object'
+      ? (getOpenRouterBillingMetadata(data as OpenAiChatCompletionCostData) ?? {})
+      : {};
   }
 
   async callApi(
@@ -626,6 +661,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               flaggedInput: true, // This error specifically indicates input was rejected
             },
             metadata: {
+              ...this.getProviderResponseMetadata(data),
               http: {
                 status,
                 statusText,

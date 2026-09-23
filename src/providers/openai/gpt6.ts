@@ -2,7 +2,7 @@ const REASONING_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
 const UNKNOWN_PERSISTED_EFFORT = Symbol('unknown persisted effort');
 
 type Gpt6Variant = 'astra' | 'sol' | 'luna';
-type Gpt6Reasoning = { effort?: unknown; enabled?: unknown } | null | undefined;
+type Gpt6Reasoning = { effort?: unknown; enabled?: unknown; mode?: unknown } | null | undefined;
 
 function getGpt6Variant(modelName: unknown): Gpt6Variant | undefined {
   return typeof modelName === 'string'
@@ -14,6 +14,58 @@ function getGpt6Variant(modelName: unknown): Gpt6Variant | undefined {
 
 export function isGpt6Model(modelName: unknown): boolean {
   return getGpt6Variant(modelName) !== undefined;
+}
+
+type ReasoningConfig = { reasoning?: unknown; reasoning_effort?: unknown; passthrough?: unknown };
+
+function getObject(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function firstDefined(...values: unknown[]): unknown {
+  return values.find((value) => value !== undefined);
+}
+
+export function getGpt6ChatReasoningEffort(
+  providerConfig: ReasoningConfig,
+  promptConfig?: ReasoningConfig,
+): unknown {
+  return firstDefined(
+    promptConfig?.reasoning_effort,
+    getObject(promptConfig?.passthrough)?.reasoning_effort,
+    providerConfig.reasoning_effort,
+    getObject(providerConfig.passthrough)?.reasoning_effort,
+  );
+}
+
+function getResponsesReasoning(config?: ReasoningConfig) {
+  const passthrough = getObject(config?.passthrough)?.reasoning;
+  const typed = config?.reasoning;
+  const options = { ...getObject(passthrough), ...getObject(typed) };
+  const effort = firstDefined(
+    typed === null ? null : getObject(typed)?.effort,
+    passthrough === null ? null : getObject(passthrough)?.effort,
+    config?.reasoning_effort,
+  );
+  return { options, effort, clearOptions: typed === null || passthrough === null };
+}
+
+export function getGpt6ResponsesReasoning(
+  providerConfig: ReasoningConfig,
+  promptConfig?: ReasoningConfig,
+): Record<string, unknown> | undefined {
+  const provider = getResponsesReasoning(providerConfig);
+  const prompt = getResponsesReasoning(promptConfig);
+  const options = { ...(prompt.clearOptions ? {} : provider.options), ...prompt.options };
+  const effort = firstDefined(prompt.effort, provider.effort);
+  if (effort === null) {
+    delete options.effort;
+  } else if (effort !== undefined) {
+    options.effort = effort;
+  }
+  return Object.keys(options).length ? options : undefined;
 }
 
 function normalizeReasoning(body: Record<string, unknown>): Gpt6Reasoning {
@@ -128,8 +180,12 @@ function getSamplingEffort(
   variant: Gpt6Variant,
   modelLabel: string,
   isOpenRouter: boolean,
+  supportsPersistedEffortUpdates: boolean,
 ): unknown {
-  if (api === 'chat' && !isOpenRouter) {
+  if (
+    (api === 'chat' && !isOpenRouter) ||
+    (api === 'responses' && !supportsPersistedEffortUpdates)
+  ) {
     return effort;
   }
   const updates =
@@ -154,7 +210,11 @@ export function applyGpt6RequestRules(
   body: Record<string, unknown>,
   modelName: unknown,
   api: 'chat' | 'responses',
-  options: { isOpenRouter?: boolean; defaultResponsesTemperature?: number } = {},
+  options: {
+    isOpenRouter?: boolean;
+    defaultResponsesTemperature?: number;
+    supportsPersistedEffortUpdates?: boolean;
+  } = {},
 ): void {
   const variant = getGpt6Variant(modelName);
   if (!variant) {
@@ -191,6 +251,9 @@ export function applyGpt6RequestRules(
     variant,
     modelLabel,
     options.isOpenRouter ?? false,
+    (options.supportsPersistedEffortUpdates ?? true) &&
+      reasoning?.mode !== 'pro' &&
+      getObject(body.multi_agent)?.enabled !== true,
   );
   if (
     api === 'responses' &&

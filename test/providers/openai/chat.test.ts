@@ -515,6 +515,82 @@ describe('OpenAI Provider', () => {
       },
     );
 
+    it.each(['gpt-6-sol', 'gpt-6-luna'])(
+      'uses gateway charges and preserves BYOK uncertainty for %s on the exact OpenRouter host',
+      async (model) => {
+        for (const row of [
+          { gateway: { cost: 0.03, is_byok: false }, cached: false, config: {}, expected: 0.03 },
+          { gateway: { cost: 0, is_byok: false }, cached: false, config: {}, expected: 0 },
+          { gateway: { cost: 0.03, is_byok: false }, cached: true, config: {}, expected: 0.03 },
+          {
+            gateway: { cost: 0.03, is_byok: true },
+            cached: false,
+            config: {},
+            expected: undefined,
+          },
+          { gateway: {}, cached: false, config: {}, expected: undefined },
+          {
+            gateway: { cost: 0.03, is_byok: true },
+            cached: false,
+            config: { inputCost: 0.00002, outputCost: 0.00003 },
+            expected: 0.05,
+          },
+          {
+            gateway: { cost: 0.03, is_byok: false },
+            cached: false,
+            config: { inputCost: 0.00002 },
+            expected: undefined,
+          },
+        ]) {
+          mockFetchWithCache.mockResolvedValueOnce({
+            data: {
+              choices: [{ message: { content: 'Ready' }, finish_reason: 'stop' }],
+              usage: {
+                prompt_tokens: 1_000,
+                completion_tokens: 1_000,
+                total_tokens: 2_000,
+                cost_details: { upstream_inference_cost: 0.02 },
+                ...row.gateway,
+              },
+            },
+            cached: row.cached,
+            status: 200,
+            statusText: 'OK',
+          });
+          const result = await new OpenAiChatCompletionProvider(`openai/${model}`, {
+            config: { apiBaseUrl: 'https://openrouter.ai/api/v1', ...row.config },
+          }).callApi('Say ready.');
+          expect(result.output).toBe('Ready');
+          expect(result.cost).toBe(row.expected);
+          expect(result.metadata?.openrouter).toEqual({
+            ...('cost' in row.gateway ? { accountCharge: row.gateway.cost } : {}),
+            ...('is_byok' in row.gateway ? { isByok: row.gateway.is_byok } : {}),
+            reportedUpstreamInferenceCost: 0.02,
+          });
+        }
+
+        mockFetchWithCache.mockResolvedValueOnce({
+          data: {
+            choices: [{ message: { content: 'Ready' }, finish_reason: 'stop' }],
+            usage: {
+              prompt_tokens: 1_000,
+              completion_tokens: 1_000,
+              total_tokens: 2_000,
+              cost: 9,
+            },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        const similarHost = await new OpenAiChatCompletionProvider(`openai/${model}`, {
+          config: { apiBaseUrl: 'https://openrouter.ai.example/api/v1' },
+        }).callApi('Say ready.');
+        expect(similarHost.cost).not.toBe(9);
+        expect(similarHost.metadata).not.toHaveProperty('openrouter');
+      },
+    );
+
     it('should build and bill a Chat search request using the effective passthrough model', async () => {
       mockFetchWithCache.mockResolvedValueOnce({
         data: {
