@@ -553,6 +553,98 @@ describe('OpenAI Provider', () => {
     );
 
     it.each(['gpt-6-sol', 'gpt-6-luna'])(
+      'recognizes OpenRouter refusals within partial Chat choices and preserves technical errors for %s',
+      async (model) => {
+        const providers = [
+          new OpenAiChatCompletionProvider(`openai/${model}`, {
+            config: { apiBaseUrl: 'https://openrouter.ai/api/v1' },
+          }),
+          new OpenRouterProvider(`openai/${model}`, { config: { apiKey: 'test-key' } }),
+        ];
+        const partial = 'The answer starts here: 42.';
+        const declined = 'The provider declined to complete the response.';
+        const usage = { prompt_tokens: 10, completion_tokens: 3, total_tokens: 13, cost: 0.004 };
+        const selected = (content: unknown, message: string, errorType: string) => ({
+          message: { role: 'assistant', content },
+          finish_reason: 'error',
+          error: {
+            code: 403,
+            message,
+            metadata: { error_type: errorType, provider_code: 'cyber_policy' },
+          },
+        });
+        for (const provider of providers) {
+          for (const content of [partial, '', null]) {
+            const data = { choices: [selected(content, declined, 'refusal')], usage };
+            mockFetchWithCache.mockResolvedValueOnce({
+              data,
+              cached: false,
+              status: 200,
+              statusText: 'OK',
+            });
+            const result = await provider.callApi('A test prompt');
+            expect(result).toMatchObject({
+              output: content || declined,
+              raw: data,
+              isRefusal: true,
+              tokenUsage: { total: 13 },
+              metadata: { providerPolicy: { code: 'cyber_policy' } },
+            });
+            expect(result.guardrails).toEqual({ flagged: true, reason: declined });
+            expect(result.error).toBeUndefined();
+            expect(result.cost).toBeCloseTo(0.004, 10);
+            expect(gradeProviderRefusal(result)).toMatchObject({ pass: true, score: 1 });
+            expect(gradeProviderRefusal(result, true)).toMatchObject({ pass: false, score: 0 });
+          }
+          for (const [message, errorType] of [
+            ['The provider disconnected.', 'provider_unavailable'],
+            ['Your organization access was revoked.', 'refusal'],
+          ]) {
+            const data = { choices: [selected(partial, message, errorType)], usage };
+            mockFetchWithCache.mockResolvedValueOnce({
+              data,
+              cached: false,
+              status: 200,
+              statusText: 'OK',
+            });
+            const result = await provider.callApi('A test prompt');
+            expect(result.error).toContain(message);
+            expect(result.raw).toEqual(data);
+            expect(result.isRefusal).toBeUndefined();
+            expect(result.guardrails).toBeUndefined();
+          }
+          const normal = {
+            choices: [
+              { message: { role: 'assistant', content: partial }, finish_reason: 'stop' },
+              selected('Other choice', declined, 'refusal'),
+            ],
+            usage,
+          };
+          mockFetchWithCache.mockResolvedValueOnce({
+            data: normal,
+            cached: false,
+            status: 200,
+            statusText: 'OK',
+          });
+          const result = await provider.callApi('A test prompt');
+          expect(result.output).toBe(partial);
+          expect(result.isRefusal).not.toBe(true);
+        }
+
+        const unrelated = { choices: [selected(partial, declined, 'refusal')], usage };
+        mockFetchWithCache.mockResolvedValueOnce({
+          data: unrelated,
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        const native = await new OpenAiChatCompletionProvider(model).callApi('A test prompt');
+        expect(native.output).toBe(partial);
+        expect(native.isRefusal).not.toBe(true);
+      },
+    );
+
+    it.each(['gpt-6-sol', 'gpt-6-luna'])(
       'leaves Cloudflare-routed Azure Chat pricing unknown without supplied rates for %s',
       async (model) => {
         const data = {

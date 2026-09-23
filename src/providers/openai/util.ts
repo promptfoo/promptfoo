@@ -19,17 +19,65 @@ function getRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
+export function isAzureOpenAiEndpoint(value: string | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+  try {
+    const endpoint = /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? value : `https://${value}`;
+    return /(?:^|\.)(?:openai\.azure\.com|services\.ai\.azure\.com)$/.test(
+      new URL(endpoint).hostname,
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function getOpenAiChatChoiceError(data: unknown):
+  | {
+      error: Record<string, unknown> & { message: string };
+      partialOutput?: string | unknown[];
+    }
+  | undefined {
+  const response = getRecord(data);
+  const choice = Array.isArray(response?.choices) ? getRecord(response.choices[0]) : undefined;
+  if (choice?.finish_reason !== 'error') {
+    return undefined;
+  }
+  const error = getRecord(choice.error);
+  if (!error) {
+    return undefined;
+  }
+  const content = getRecord(choice.message)?.content;
+  return {
+    error: {
+      ...error,
+      message:
+        typeof error.message === 'string'
+          ? error.message
+          : 'The provider failed during generation.',
+    },
+    ...((typeof content === 'string' || Array.isArray(content)) && content.length
+      ? { partialOutput: content }
+      : {}),
+  };
+}
+
 /** A gateway refusal marker distinguishes prompt blocks from native access-level policy errors. */
 export function getOpenAiPolicyRefusal(
   data: unknown,
   allowGatewayMarker = false,
-): { message: string; code?: string } | undefined {
+):
+  | { message: string; code?: string; fromChoice: boolean; partialOutput?: string | unknown[] }
+  | undefined {
   if (!allowGatewayMarker) {
     return undefined;
   }
   const root = getRecord(data);
   const response = getRecord(root?.response) ?? root;
-  const error = getRecord(response?.error);
+  const topLevelError = getRecord(response?.error);
+  const choiceError = topLevelError ? undefined : getOpenAiChatChoiceError(response);
+  const error = topLevelError ?? choiceError?.error;
   if (!error) {
     return undefined;
   }
@@ -38,7 +86,7 @@ export function getOpenAiPolicyRefusal(
   const marked =
     metadata?.error_type === 'refusal' ||
     error.error_type === 'refusal' ||
-    response?.error_type === 'refusal';
+    (!choiceError && response?.error_type === 'refusal');
   const message = typeof error.message === 'string' ? error.message : '';
   const accessRevoked =
     /\b(?:access|permissions?)\b.{0,80}\b(?:revoked|suspended|disabled)\b|\b(?:revoked|suspended|disabled)\b.{0,80}\b(?:access|permissions?)\b/i.test(
@@ -50,6 +98,10 @@ export function getOpenAiPolicyRefusal(
   return {
     message: message.trim() ? message : 'The model provider declined this request.',
     ...(typeof providerCode === 'string' ? { code: providerCode } : {}),
+    fromChoice: Boolean(choiceError),
+    ...(choiceError?.partialOutput === undefined
+      ? {}
+      : { partialOutput: choiceError.partialOutput }),
   };
 }
 

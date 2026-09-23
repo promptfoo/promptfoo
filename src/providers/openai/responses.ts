@@ -34,8 +34,17 @@ import { readResponsesStream } from '../responses/stream';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
 import { OpenAiGenericProvider } from '.';
-import { calculateObservableOpenAIToolCost, calculateOpenAIUsageCost } from './billing';
-import { applyGpt6RequestRules, getGpt6ResponsesReasoning, isGpt6Model } from './gpt6';
+import {
+  calculateObservableOpenAIToolCost,
+  calculateOpenAIUsageCost,
+  usesAzureOpenAiBilling,
+} from './billing';
+import {
+  applyGpt6RequestRules,
+  getGpt6ResponsesReasoning,
+  getGpt6Variant,
+  isGpt6Model,
+} from './gpt6';
 import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
@@ -43,6 +52,7 @@ import {
   getOpenAiPolicyRefusal,
   hasSensitiveOpenAiCachePath,
   hasSensitiveOpenAiCacheString,
+  isAzureOpenAiEndpoint,
 } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -63,6 +73,19 @@ interface OpenAIErrorResponse {
     type?: string;
     code?: string;
   };
+}
+
+function hasUnpricedAzureResponsesToolUsage(data: any): boolean {
+  const output = Array.isArray(data?.output) ? data.output : [];
+  if (output.some((item: any) => item?.type === 'file_search_call')) {
+    return true;
+  }
+  const webSearch = data?.tool_usage?.web_search;
+  const requests = webSearch?.num_requests;
+  if (typeof requests === 'number' && Number.isFinite(requests) && requests >= 0) {
+    return requests > 0;
+  }
+  return webSearch != null || output.some((item: any) => item?.type === 'web_search_call');
 }
 
 interface OpenAIResponsesResponse {
@@ -845,6 +868,16 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         serviceTier,
       },
     );
+    const variant = getGpt6Variant(billingModelName);
+    if (
+      (variant === 'sol' || variant === 'luna') &&
+      usesAzureOpenAiBilling(config, this.getApiUrl(), this.getGenAISystem())
+    ) {
+      const { cost: _existingCost, ...unbilled } = result;
+      return responseCost === undefined || (!cached && hasUnpricedAzureResponsesToolUsage(data))
+        ? unbilled
+        : { ...unbilled, cost: responseCost };
+    }
     const observableToolCost = cached
       ? 0
       : calculateObservableOpenAIToolCost(data, billingModelName, config);
@@ -855,27 +888,13 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     };
   }
 
-  private isAzureOpenAiEndpoint(value: string | undefined): boolean {
-    if (!value) {
-      return false;
-    }
-
-    const endpoint = /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? value : `https://${value}`;
-    try {
-      const hostname = new URL(endpoint).hostname.toLowerCase();
-      return hostname === 'openai.azure.com' || hostname.endsWith('.openai.azure.com');
-    } catch {
-      return false;
-    }
-  }
-
   private getBedrockEndpoint(): 'mantle' | 'runtime' | undefined {
     try {
       const hostname = new URL(this.getApiUrl()).hostname;
       if (/^bedrock-mantle\.[a-z0-9-]+\.api\.aws$/.test(hostname)) {
         return 'mantle';
       }
-      if (/^bedrock-runtime\.[a-z0-9-]+\.amazonaws\.com$/.test(hostname)) {
+      if (/^bedrock-runtime(?:-fips)?\.[a-z0-9-]+\.(?:amazonaws\.com|api\.aws)$/.test(hostname)) {
         return 'runtime';
       }
     } catch {
@@ -932,9 +951,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const isGPT6Model = isGpt6Model(capabilityModelName);
     const hasAzureCustomDeploymentHost =
       typeof passthroughModel !== 'string' &&
-      [config.apiHost, config.apiBaseUrl, this.getApiUrl()].some((endpoint) =>
-        this.isAzureOpenAiEndpoint(endpoint),
-      );
+      [config.apiHost, config.apiBaseUrl, this.getApiUrl()].some(isAzureOpenAiEndpoint);
     const isAzureResponsesDeploymentWithReasoningConfig =
       hasAzureCustomDeploymentHost &&
       (config.reasoning !== undefined || config.reasoning_effort !== undefined);

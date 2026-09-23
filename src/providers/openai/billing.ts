@@ -1,5 +1,9 @@
 import { isGpt6Model } from './gpt6';
-import { getOpenAICacheWriteInputTokens, OPENAI_BILLING_MODELS } from './util';
+import {
+  getOpenAICacheWriteInputTokens,
+  isAzureOpenAiEndpoint,
+  OPENAI_BILLING_MODELS,
+} from './util';
 
 import type { ProviderConfig } from '../shared';
 
@@ -560,7 +564,7 @@ type OpenAIBillingConfig = ProviderConfig & {
   apiBaseUrl?: string;
 };
 
-function usesAzureOpenAI(
+export function usesAzureOpenAiBilling(
   config: OpenAIBillingConfig,
   resolvedApiUrl: string | undefined,
   provider: string | undefined,
@@ -572,14 +576,16 @@ function usesAzureOpenAI(
   if (!endpoint) {
     return false;
   }
+  if (isAzureOpenAiEndpoint(endpoint)) {
+    return true;
+  }
   try {
     const url = new URL(
       /^[a-z][a-z0-9+.-]*:\/\//i.test(endpoint) ? endpoint : `https://${endpoint}`,
     );
     return (
-      /(?:^|\.)openai\.azure\.com$/.test(url.hostname) ||
-      (url.hostname === 'gateway.ai.cloudflare.com' &&
-        /^\/v1\/[^/]+\/[^/]+\/azure-openai(?:\/|$)/.test(url.pathname))
+      url.hostname === 'gateway.ai.cloudflare.com' &&
+      /^\/v1\/[^/]+\/[^/]+\/azure-openai(?:\/|$)/.test(url.pathname)
     );
   } catch {
     return false;
@@ -1027,7 +1033,7 @@ export function calculateOpenAIUsageCost(
   const usage = extractOpenAIBillingUsage(rawUsage);
   if (
     /^gpt-6-(?:sol|luna)(?:-|$)/.test(modelName) &&
-    usesAzureOpenAI(config, options.apiUrl, options.provider)
+    usesAzureOpenAiBilling(config, options.apiUrl, options.provider)
   ) {
     const inputRate = config.inputCost ?? config.cost;
     const outputRate = config.outputCost ?? config.cost;

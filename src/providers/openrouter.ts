@@ -6,6 +6,7 @@ import { OpenAiChatCompletionProvider } from './openai/chat';
 import {
   appendOpenAiApiPath,
   formatOpenAiError,
+  getOpenAiChatChoiceError,
   getOpenAiPolicyRefusal,
   getTokenUsage,
 } from './openai/util';
@@ -192,15 +193,34 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       const policy = getOpenAiPolicyRefusal(data, true);
       if (policy) {
         return {
-          output: policy.message,
+          output: policy.partialOutput ?? policy.message,
           ...(data.usage ? { tokenUsage: getTokenUsage(data, cached) } : {}),
           cached,
           cost: this.calculateResponseCost(data, config),
           isRefusal: true,
-          guardrails: { flagged: true, flaggedInput: true, reason: policy.message },
+          guardrails: {
+            flagged: true,
+            ...(policy.fromChoice ? {} : { flaggedInput: true }),
+            reason: policy.message,
+          },
+          raw: data,
           metadata: {
             ...getOpenRouterBillingMetadata(data),
             ...(policy.code ? { providerPolicy: { code: policy.code } } : {}),
+            http: { status, statusText, headers: responseHeaders ?? {} },
+          },
+        };
+      }
+      const choiceError = data.error ? undefined : getOpenAiChatChoiceError(data);
+      if (choiceError) {
+        return {
+          error: `API error: ${choiceError.error.message}`,
+          ...(data.usage ? { tokenUsage: getTokenUsage(data, cached) } : {}),
+          cached,
+          cost: this.calculateResponseCost(data, config),
+          raw: data,
+          metadata: {
+            ...getOpenRouterBillingMetadata(data),
             http: { status, statusText, headers: responseHeaders ?? {} },
           },
         };

@@ -190,6 +190,8 @@ describe('OpenAI billing helpers', () => {
         { provider: 'azure-openai' },
         { provider: 'azure' },
         { provider: 'openai', apiUrl: 'https://example.openai.azure.com/openai/v1' },
+        { provider: 'openai', apiUrl: 'https://example.services.ai.azure.com/openai/v1' },
+        { apiUrl: 'https://example.services.ai.azure.com/api/projects/project/openai/v1' },
         {
           apiUrl:
             'https://gateway.ai.cloudflare.com/v1/account/gateway/azure-openai/resource/deployment',
@@ -229,8 +231,14 @@ describe('OpenAI billing helpers', () => {
       expect(
         calculateOpenAIUsageCost(model, { apiHost: 'example.openai.azure.com' }, usage),
       ).toBeUndefined();
+      expect(
+        calculateOpenAIUsageCost(model, { apiHost: 'example.services.ai.azure.com' }, usage),
+      ).toBeUndefined();
       for (const apiUrl of [
         'https://example.openai.azure.com.invalid/openai/v1',
+        'https://example.services.ai.azure.com.invalid/openai/v1',
+        'https://services.ai.azure.com.attacker.test/api/projects/project/openai/v1',
+        'https://nonazure-services.ai.azure.example/openai/v1',
         'https://gateway.ai.cloudflare.com/v1/account/gateway/openai',
         'https://gateway.ai.cloudflare.com.invalid/v1/account/gateway/azure-openai/resource/deployment',
         'https://api.openai.com/v1',

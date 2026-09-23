@@ -878,6 +878,20 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
             top_p: 0.8,
           },
         }),
+        ...[
+          'bedrock-runtime.us-east-1.api.aws',
+          'bedrock-runtime-fips.us-east-1.amazonaws.com',
+          'bedrock-runtime-fips.us-east-1.api.aws',
+        ].map(
+          (hostname) =>
+            new OpenAiResponsesProvider(`global.openai.${model}`, {
+              config: {
+                apiBaseUrl: `https://${hostname}/openai/v1`,
+                reasoning: { effort },
+                top_p: 0.8,
+              },
+            }),
+        ),
       ]) {
         const context = {
           vars: {},
@@ -920,15 +934,21 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
     }).getOpenAiBody('Say ready.');
     expect(singleAgent.temperature).toBe(0.3);
 
-    const { body: lookalike } = await new OpenAiResponsesProvider(`us.openai.${model}`, {
-      config: {
-        apiBaseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com.example/openai/v1',
-        previous_response_id: 'resp_previous',
-        reasoning: { effort: 'high' },
-        temperature: 0.3,
-      },
-    }).getOpenAiBody('Say ready.');
-    expect(lookalike.temperature).toBe(0.3);
+    for (const hostname of [
+      'bedrock-runtime.us-east-1.amazonaws.com.example',
+      'bedrock-runtime.us-east-1.api.aws.example',
+      'bedrock-runtime-fips.us-east-1.api.aws.example',
+    ]) {
+      const { body: lookalike } = await new OpenAiResponsesProvider(`us.openai.${model}`, {
+        config: {
+          apiBaseUrl: `https://${hostname}/openai/v1`,
+          previous_response_id: 'resp_previous',
+          reasoning: { effort: 'high' },
+          temperature: 0.3,
+        },
+      }).getOpenAiBody('Say ready.');
+      expect(lookalike.temperature).toBe(0.3);
+    }
   });
 
   it('lets prompt-native reasoning aliases override provider reasoning before capability checks', async () => {
@@ -1125,6 +1145,78 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
     }
   });
 
+  it('applies prompt-level OpenAI reasoning before Azure capability validation', async () => {
+    const prompt = { raw: 'Say ready.', label: 'ready' };
+    for (const [baseline, effort] of [
+      ['high', 'none'],
+      ['none', 'high'],
+    ] as const) {
+      for (const [base, override] of [
+        [{ passthrough: { reasoning_effort: baseline } }, { reasoning_effort: effort }],
+        [{ reasoning_effort: baseline }, { passthrough: { reasoning_effort: effort } }],
+      ]) {
+        const { body } = await new AzureChatCompletionProvider(`prod-${model}`, {
+          config: { ...base, temperature: 0.3 },
+        }).getOpenAiBody(prompt.raw, { vars: {}, prompt: { ...prompt, config: override } });
+        expect(body.reasoning_effort).toBe(effort);
+        if (effort === 'none') {
+          expect(body.temperature).toBe(0.3);
+        } else {
+          expect(body).not.toHaveProperty('temperature');
+        }
+      }
+
+      for (const override of [
+        { reasoning_effort: effort },
+        { reasoning: { effort } },
+        { passthrough: { reasoning: { effort } } },
+      ]) {
+        const body = await new AzureResponsesProvider(`prod-${model}`, {
+          config: {
+            passthrough: { reasoning: { effort: baseline, summary: 'auto' } },
+            temperature: 0.3,
+          },
+        }).getAzureResponsesBody(prompt.raw, { vars: {}, prompt: { ...prompt, config: override } });
+        expect(body.reasoning).toEqual({ effort, summary: 'auto' });
+        if (effort === 'none') {
+          expect(body.temperature).toBe(0.3);
+        } else {
+          expect(body).not.toHaveProperty('temperature');
+        }
+      }
+    }
+
+    const shadowed = vi.fn(() => {
+      throw new Error('The Azure effort is overridden');
+    });
+    const chat = new AzureChatCompletionProvider(`prod-${model}`, {
+      config: { reasoning_effort: shadowed as any },
+    });
+    const responses = new AzureResponsesProvider(`prod-${model}`, {
+      config: {
+        reasoning_effort: shadowed as any,
+        passthrough: { reasoning: { summary: 'auto' } },
+      },
+    });
+    const override = {
+      vars: {},
+      prompt: { ...prompt, config: { reasoning_effort: 'high' as const } },
+    };
+    expect((await chat.getOpenAiBody(prompt.raw, override)).body.reasoning_effort).toBe('high');
+    expect((await responses.getAzureResponsesBody(prompt.raw, override)).reasoning).toEqual({
+      effort: 'high',
+      summary: 'auto',
+    });
+    expect(shadowed).not.toHaveBeenCalled();
+
+    const reset = await responses.getAzureResponsesBody(prompt.raw, {
+      vars: {},
+      prompt: { ...prompt, config: { passthrough: { reasoning: null } } },
+    });
+    expect(reset).not.toHaveProperty('reasoning');
+    expect(shadowed).not.toHaveBeenCalled();
+  });
+
   it('does not evaluate provider Responses reasoning when the prompt resets the object', async () => {
     const prompt = { raw: 'Say ready.', label: 'ready' };
     const overridden = vi.fn(() => {
@@ -1155,6 +1247,40 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
     }).getOpenAiBody(prompt.raw, { vars: {}, prompt });
     expect(body.reasoning).toEqual({ effort: 'none' });
     expect(shadowedAlias).not.toHaveBeenCalled();
+  });
+
+  it('skips an overridden Responses effort callback and still merges provider options', async () => {
+    const prompt = { raw: 'Say ready.', label: 'ready' };
+    for (const name of [model, 'gpt-6-astra']) {
+      const lowerPriority = vi.fn(() => {
+        throw new Error('The provider effort should not run for this prompt');
+      });
+      const provider = new OpenAiResponsesProvider(name, {
+        config: { reasoning_effort: lowerPriority as any, reasoning: { summary: 'auto' } },
+      });
+      for (const config of [
+        { reasoning_effort: 'high' as const },
+        { reasoning: { effort: 'high' as const } },
+        { passthrough: { reasoning: { effort: 'high' } } },
+      ]) {
+        const { body } = await provider.getOpenAiBody(prompt.raw, {
+          vars: {},
+          prompt: { ...prompt, config },
+        });
+        expect(body.reasoning).toEqual({ effort: 'high', summary: 'auto' });
+      }
+      expect(lowerPriority).not.toHaveBeenCalled();
+
+      const selected = vi.fn(({ vars }: { vars: { effort: string } }) => vars.effort);
+      const { body } = await new OpenAiResponsesProvider(name, {
+        config: { reasoning_effort: selected as any, reasoning: { summary: 'auto' } },
+      }).getOpenAiBody(prompt.raw, {
+        vars: { effort: 'high' },
+        prompt: { ...prompt, config: { reasoning: { summary: 'detailed' } } },
+      });
+      expect(body.reasoning).toEqual({ effort: 'high', summary: 'detailed' });
+      expect(selected).toHaveBeenCalledTimes(1);
+    }
   });
 
   it.each(['none', true, 3, ['none']])(
@@ -1782,9 +1908,9 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
     for (const effort of [undefined, 'low', 'max'] as const) {
       for (const passthrough of [
         { tools: [statusTool] },
-        { tool_choice: 'auto' },
+        { tools: [statusTool], tool_choice: 'auto' },
         { functions: [statusTool.function] },
-        { function_call: 'auto' },
+        { functions: [statusTool.function], function_call: 'auto' },
       ]) {
         await expect(
           new OpenAiChatCompletionProvider(model, {
@@ -1814,14 +1940,36 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
     expect(passthrough).toEqual({ tools: [], functions: [] });
   });
 
-  it.each([{ tool_choice: 'none' }, { function_call: 'none' }])(
-    'rejects an explicit native Chat tool selector without definitions, as the endpoint does',
-    async (passthrough) => {
-      await expect(
-        new OpenAiChatCompletionProvider(model, {
-          config: { reasoning_effort: 'high', passthrough },
-        }).getOpenAiBody('Say ready.'),
-      ).rejects.toThrow('Chat Completions function calling requires reasoning_effort: none');
+  it.each([
+    ['tool_choice', 'tools', statusTool],
+    ['function_call', 'functions', statusTool.function],
+  ] as const)(
+    'rejects an explicit native Chat %s without definitions regardless of reasoning',
+    async (selector, definitions, definition) => {
+      for (const Provider of [OpenAiChatCompletionProvider, AzureChatCompletionProvider]) {
+        for (const effort of [undefined, 'high', 'none'] as const) {
+          for (const selectorValue of ['none', 'auto']) {
+            for (const list of [{}, { [definitions]: [] }]) {
+              await expect(
+                new Provider(model, {
+                  config: {
+                    reasoning_effort: effort,
+                    passthrough: { [selector]: selectorValue, ...list },
+                  },
+                }).getOpenAiBody('Say ready.'),
+              ).rejects.toThrow(`${selector} requires a non-empty ${definitions} list`);
+            }
+          }
+        }
+        const { body } = await new Provider(model, {
+          config: {
+            reasoning_effort: 'none',
+            passthrough: { [selector]: 'none', [definitions]: [definition] },
+          },
+        }).getOpenAiBody('Say ready.');
+        expect(body[selector]).toBe('none');
+        expect(body[definitions]).toEqual([definition]);
+      }
     },
   );
 

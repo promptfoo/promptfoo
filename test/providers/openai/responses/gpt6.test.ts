@@ -126,29 +126,95 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
         model,
         usage: { input_tokens: 1000, output_tokens: 100, total_tokens: 1100 },
       };
-      for (const [rates, expected] of [
-        [{}, undefined],
-        [{ inputCost: 2 / 1e6, outputCost: 3 / 1e6 }, 0.0023],
+      for (const apiBaseUrl of [
+        'https://resource.openai.azure.com/openai/v1',
+        'https://resource.services.ai.azure.com/openai/v1',
+        'https://resource.services.ai.azure.com/api/projects/project/openai/v1',
+      ]) {
+        for (const [rates, expected] of [
+          [{}, undefined],
+          [{ inputCost: 2 / 1e6 }, undefined],
+          [{ inputCost: 2 / 1e6, outputCost: 3 / 1e6 }, 0.0023],
+        ] as const) {
+          vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+            data,
+            cached: false,
+            status: 200,
+            statusText: 'OK',
+          });
+          const result = await new OpenAiResponsesProvider(model, {
+            config: { apiKey: 'test-key', apiBaseUrl, ...rates },
+          }).callApi('A test prompt');
+          expect(result.error).toBeUndefined();
+          if (expected === undefined) {
+            expect(result.cost).toBeUndefined();
+          } else {
+            expect(result.cost).toBeCloseTo(expected, 10);
+          }
+        }
+      }
+    },
+  );
+
+  it.each(['gpt-6-sol', 'gpt-6-luna'])(
+    'leaves Azure hosted-tool totals unknown instead of adding direct OpenAI fees for %s',
+    async (model) => {
+      const rates = { inputCost: 0.0002, outputCost: 0.001 };
+      const webItem = { type: 'web_search_call', status: 'completed', action: { type: 'search' } };
+      const fileItem = { type: 'file_search_call', status: 'completed' };
+      const payload = (items: unknown[], toolUsage?: unknown) => ({
+        ...responseData,
+        model,
+        output: [...items, ...responseData.output],
+        usage: { input_tokens: 1000, output_tokens: 100, total_tokens: 1100 },
+        ...(toolUsage === undefined ? {} : { tool_usage: toolUsage }),
+      });
+      for (const apiBaseUrl of [
+        'https://resource.openai.azure.com/openai/v1',
+        'https://resource.services.ai.azure.com/api/projects/project/openai/v1',
+      ]) {
+        const provider = new OpenAiResponsesProvider(model, {
+          config: { apiKey: 'test-key', apiBaseUrl, ...rates },
+        });
+        for (const [items, toolUsage, cached, expected] of [
+          [[webItem], { web_search: { num_requests: 1 } }, false, undefined],
+          [[webItem], { web_search: { num_requests: 5 } }, false, undefined],
+          [[], { web_search: { num_requests: 5 } }, false, undefined],
+          [[webItem], undefined, false, undefined],
+          [[fileItem], undefined, false, undefined],
+          [[webItem], { web_search: { num_requests: 0 } }, false, 0.3],
+          [[], undefined, false, 0.3],
+          [[webItem], { web_search: { num_requests: 5 } }, true, 0],
+        ] as const) {
+          vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+            data: payload([...items], toolUsage),
+            cached,
+            status: 200,
+            statusText: 'OK',
+          });
+          const result = await provider.callApi('A test prompt');
+          expect(result.error).toBeUndefined();
+          if (expected === undefined) {
+            expect(result.cost).toBeUndefined();
+          } else {
+            expect(result.cost).toBeCloseTo(expected, 10);
+          }
+        }
+      }
+      for (const [item, expected] of [
+        [webItem, 0.31],
+        [fileItem, 0.3025],
       ] as const) {
         vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-          data,
+          data: payload([item]),
           cached: false,
           status: 200,
           statusText: 'OK',
         });
-        const result = await new OpenAiResponsesProvider(model, {
-          config: {
-            apiKey: 'test-key',
-            apiBaseUrl: 'https://resource.openai.azure.com/openai/v1',
-            ...rates,
-          },
+        const native = await new OpenAiResponsesProvider(model, {
+          config: { apiKey: 'test-key', ...rates },
         }).callApi('A test prompt');
-        expect(result.error).toBeUndefined();
-        if (expected === undefined) {
-          expect(result.cost).toBeUndefined();
-        } else {
-          expect(result.cost).toBeCloseTo(expected, 10);
-        }
+        expect(native.cost).toBeCloseTo(expected, 10);
       }
     },
   );
@@ -613,6 +679,39 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
         },
       }).callApi('Say ready.');
       expect(government.cost).toBeUndefined();
+    },
+  );
+
+  it.each([
+    ['gpt-6-sol', 0.012, 0.0132],
+    ['gpt-6-luna', 0.0006, 0.00066],
+  ] as const)(
+    'uses Bedrock Runtime rates across dual-stack and FIPS hosts for %s',
+    async (model, global, us) => {
+      const usage = { input_tokens: 1_000, output_tokens: 1_000, total_tokens: 2_000 };
+      for (const hostname of [
+        'bedrock-runtime.us-east-1.api.aws',
+        'bedrock-runtime-fips.us-east-1.amazonaws.com',
+        'bedrock-runtime-fips.us-east-1.api.aws',
+      ]) {
+        for (const [profile, expected] of [
+          ['global', global],
+          ['us', us],
+        ] as const) {
+          const wireModel = `${profile}.openai.${model}`;
+          vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+            cached: false,
+            status: 200,
+            statusText: 'OK',
+            data: { ...responseData, model: wireModel, usage },
+          });
+          const result = await new OpenAiResponsesProvider(wireModel, {
+            config: { apiKey: 'test-key', apiBaseUrl: `https://${hostname}/openai/v1` },
+          }).callApi('Say ready.');
+          expect(result.error).toBeUndefined();
+          expect(result.cost).toBeCloseTo(expected, 10);
+        }
+      }
     },
   );
 });

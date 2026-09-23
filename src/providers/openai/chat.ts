@@ -38,6 +38,7 @@ import { applyGpt6RequestRules, getGpt6ChatReasoningEffort, isGpt6Model } from '
 import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
+  getOpenAiChatChoiceError,
   getOpenAiPolicyRefusal,
   getTokenUsage,
   OPENAI_CHAT_MODELS,
@@ -739,16 +740,38 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       if (policy) {
         const cost = this.calculateResponseCost(data, config, cached);
         return {
-          output: policy.message,
+          output: policy.partialOutput ?? policy.message,
           tokenUsage: data?.usage ? getTokenUsage(data, cached) : undefined,
           cached,
           latencyMs,
           ...(cost === undefined ? {} : { cost }),
           isRefusal: true,
-          guardrails: { flagged: true, flaggedInput: true, reason: policy.message },
+          guardrails: {
+            flagged: true,
+            ...(policy.fromChoice ? {} : { flaggedInput: true }),
+            reason: policy.message,
+          },
+          raw: data,
           metadata: {
             ...this.getProviderResponseMetadata(data),
             ...(policy.code ? { providerPolicy: { code: policy.code } } : {}),
+            http: { status, statusText, headers: responseHeaders ?? {} },
+          },
+        };
+      }
+      const choiceError =
+        this.usesOpenRouter() && !data?.error ? getOpenAiChatChoiceError(data) : undefined;
+      if (choiceError) {
+        const cost = this.calculateResponseCost(data, config, cached);
+        return {
+          error: `API error: ${choiceError.error.message}`,
+          tokenUsage: data?.usage ? getTokenUsage(data, cached) : undefined,
+          cached,
+          latencyMs,
+          ...(cost === undefined ? {} : { cost }),
+          raw: data,
+          metadata: {
+            ...this.getProviderResponseMetadata(data),
             http: { status, statusText, headers: responseHeaders ?? {} },
           },
         };

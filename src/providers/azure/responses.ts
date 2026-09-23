@@ -8,7 +8,7 @@ import {
 } from '../../util/index';
 import invariant from '../../util/invariant';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
-import { applyGpt6RequestRules, isGpt6Model } from '../openai/gpt6';
+import { applyGpt6RequestRules, getGpt6ResponsesReasoning, isGpt6Model } from '../openai/gpt6';
 import { ResponsesProcessor } from '../responses/index';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { AzureGenericProvider } from './generic';
@@ -148,6 +148,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
         : (config.modelName ?? this.deploymentName)
     ).toLowerCase();
     const isReasoningModel = this.isReasoningModel(capabilityModelName);
+    const isGPT6Model = isGpt6Model(capabilityModelName);
     const maxOutputTokensDefault = config.omitDefaults
       ? getEnvString('OPENAI_MAX_TOKENS') === undefined
         ? undefined
@@ -160,18 +161,24 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       (isReasoningModel ? reasoningMaxOutputTokensDefault : maxOutputTokensDefault);
 
     const temperatureDefault =
-      config.omitDefaults || isGpt6Model(capabilityModelName)
+      config.omitDefaults || isGPT6Model
         ? getEnvString('OPENAI_TEMPERATURE') === undefined
           ? undefined
           : getEnvFloat('OPENAI_TEMPERATURE')
         : getEnvFloat('OPENAI_TEMPERATURE', 0);
     const temperature =
-      isGpt6Model(capabilityModelName) || this.supportsTemperature(capabilityModelName)
+      isGPT6Model || this.supportsTemperature(capabilityModelName)
         ? (config.temperature ?? temperatureDefault)
         : undefined;
-    const reasoningEffort = isReasoningModel
-      ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
+    const gpt6Reasoning = isGPT6Model
+      ? getGpt6ResponsesReasoning(this.config, context?.prompt?.config, (value) =>
+          renderVarsInObject(value, context?.vars),
+        )
       : undefined;
+    const reasoningEffort =
+      isReasoningModel && !isGPT6Model
+        ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
+        : undefined;
 
     const instructions = config.instructions;
 
@@ -261,6 +268,13 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       ...(config.passthrough || {}),
     };
 
+    if (isGPT6Model) {
+      if (gpt6Reasoning) {
+        Object.assign(body, { reasoning: gpt6Reasoning });
+      } else {
+        delete body.reasoning;
+      }
+    }
     applyGpt6RequestRules(body, capabilityModelName, 'responses', {
       defaultResponsesTemperature: config.omitDefaults ? undefined : 0,
     });

@@ -44,6 +44,7 @@ export function getGpt6ChatReasoningEffort(
 function getResponsesReasoning(
   config: ReasoningConfig | undefined,
   render: (value: unknown) => unknown,
+  resolveScalarEffort = true,
 ) {
   const typed = render(config?.reasoning);
   const passthrough = render(getObject(config?.passthrough)?.reasoning);
@@ -57,7 +58,10 @@ function getResponsesReasoning(
     typed === null ? null : getObject(typed)?.effort,
     passthrough === null ? null : getObject(passthrough)?.effort,
   );
-  const effort = nestedEffort === undefined ? render(config?.reasoning_effort) : nestedEffort;
+  const effort =
+    nestedEffort === undefined && resolveScalarEffort
+      ? render(config?.reasoning_effort)
+      : nestedEffort;
   return { options, effort, clearOptions: typed === null || passthrough === null };
 }
 
@@ -67,7 +71,9 @@ export function getGpt6ResponsesReasoning(
   render: (value: unknown) => unknown,
 ): Record<string, unknown> | undefined {
   const prompt = getResponsesReasoning(promptConfig, render);
-  const provider = prompt.clearOptions ? undefined : getResponsesReasoning(providerConfig, render);
+  const provider = prompt.clearOptions
+    ? undefined
+    : getResponsesReasoning(providerConfig, render, prompt.effort === undefined);
   const options = { ...provider?.options, ...prompt.options };
   const effort = firstDefined(prompt.effort, provider?.effort);
   if (effort === null) {
@@ -175,7 +181,6 @@ function validateChatTools(
       }
     }
   }
-  // Native Chat rejects an explicit tool_choice or function_call without definitions, even `none`.
   if (
     allowChatTools ||
     !['tools', 'tool_choice', 'functions', 'function_call'].some((key) => body[key] != null)
@@ -187,6 +192,16 @@ function validateChatTools(
     throw new Error(
       'GPT-6 Astra tool calling requires the Responses API. Use openai:responses:gpt-6-astra or azure:responses:<deployment>.',
     );
+  }
+  for (const [selector, definitions] of [
+    ['tool_choice', 'tools'],
+    ['function_call', 'functions'],
+  ]) {
+    if (body[selector] != null && body[definitions] == null) {
+      throw new Error(
+        `${modelLabel} Chat Completions ${selector} requires a non-empty ${definitions} list. Omit ${selector} when no ${definitions} are configured.`,
+      );
+    }
   }
   if (effort !== 'none') {
     throw new Error(

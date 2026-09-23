@@ -22,7 +22,12 @@ import {
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
-import { applyGpt6RequestRules, getGpt6Variant, isGpt6Model } from '../openai/gpt6';
+import {
+  applyGpt6RequestRules,
+  getGpt6ChatReasoningEffort,
+  getGpt6Variant,
+  isGpt6Model,
+} from '../openai/gpt6';
 import { getRequestTimeoutMs, parseChatPrompt, transformTools } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
@@ -239,8 +244,18 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       : (config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0));
 
     // Get reasoning effort for reasoning models
-    const reasoningEffort =
-      config.reasoning_effort ?? (config.omitDefaults || useModelDefaults ? undefined : 'medium');
+    const configuredGpt6Effort = gpt6Variant
+      ? getGpt6ChatReasoningEffort(this.config, context?.prompt?.config)
+      : undefined;
+    const defaultReasoningEffort = config.omitDefaults || useModelDefaults ? undefined : 'medium';
+    const reasoningEffort = gpt6Variant
+      ? configuredGpt6Effort === undefined
+        ? defaultReasoningEffort
+        : configuredGpt6Effort
+      : (config.reasoning_effort ?? defaultReasoningEffort);
+    const renderedReasoningEffort = isReasoningModel
+      ? renderVarsInObject(reasoningEffort, context?.vars)
+      : undefined;
 
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
@@ -258,9 +273,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       messages,
       ...(isReasoningModel
         ? {
-            ...(reasoningEffort === undefined
+            ...(renderedReasoningEffort === undefined
               ? {}
-              : { reasoning_effort: renderVarsInObject(reasoningEffort, context?.vars) }),
+              : { reasoning_effort: renderedReasoningEffort }),
             ...(maxCompletionTokens === undefined
               ? {}
               : { max_completion_tokens: maxCompletionTokens }),
@@ -315,6 +330,13 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       delete body.tool_choice;
     }
 
+    if (gpt6Variant) {
+      if (renderedReasoningEffort === undefined) {
+        delete body.reasoning_effort;
+      } else {
+        body.reasoning_effort = renderedReasoningEffort;
+      }
+    }
     applyGpt6RequestRules(body, capabilityModelName, 'chat');
 
     return {
