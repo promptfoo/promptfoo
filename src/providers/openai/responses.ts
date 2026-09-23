@@ -29,7 +29,7 @@ import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
 import { OpenAiGenericProvider } from '.';
 import { calculateObservableOpenAIToolCost, calculateOpenAIUsageCost } from './billing';
-import { applyGpt6AstraRequestRules, isGpt6AstraModel } from './gpt6';
+import { applyGpt6AstraRequestRules, isGpt6Model } from './gpt6';
 import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
@@ -837,7 +837,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
     const capabilityModelName =
       typeof passthroughModel === 'string' ? passthroughModel : this.getCapabilityModelName();
-    const isGpt6Astra = isGpt6AstraModel(capabilityModelName);
+    const isGpt6 = isGpt6Model(capabilityModelName);
     const hasAzureCustomDeploymentHost =
       typeof passthroughModel !== 'string' &&
       [config.apiHost, config.apiBaseUrl, this.getApiUrl()].some((endpoint) =>
@@ -853,11 +853,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // max_output_tokens defaults change unexpectedly.
     const isReasoningModel =
       this.isReasoningModel(capabilityModelName) ||
-      isGpt6Astra ||
+      isGpt6 ||
       isAzureResponsesDeploymentWithReasoningConfig;
     const supportsVerbosity =
       this.isGPT5Model(capabilityModelName) ||
-      isGpt6Astra ||
+      isGpt6 ||
       isAzureResponsesDeploymentWithVerbosityConfig;
 
     return {

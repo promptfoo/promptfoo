@@ -4,6 +4,11 @@ export function isGpt6AstraModel(modelName: unknown): boolean {
   return typeof modelName === 'string' && /(?:^|[/-])gpt-6-astra(?:-|$)/.test(modelName);
 }
 
+/** Any GPT-6 model (Astra, Sol, Luna). Like GPT-5, these are all reasoning models. */
+export function isGpt6Model(modelName: unknown): boolean {
+  return typeof modelName === 'string' && /(?:^|[/-])gpt-6(?:[.-]|$)/.test(modelName);
+}
+
 /** Apply Astra's request restrictions after config and passthrough have been merged. */
 export function applyGpt6AstraRequestRules(
   body: Record<string, unknown>,
