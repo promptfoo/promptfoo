@@ -20,6 +20,22 @@ vi.mock('@app/hooks/useTelemetry', () => ({
 }));
 
 describe('ProviderTypeSelector', () => {
+  it('defaults newly selected OpenRouter targets to OpenAI GPT-6 Sol', async () => {
+    const user = userEvent.setup();
+    const setProvider = vi.fn();
+    renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={{ id: '', config: {}, label: 'OpenRouter target' }}
+        setProvider={setProvider}
+      />,
+    );
+    await user.click(screen.getByText('OpenRouter').closest('[role="button"]')!);
+    expect(setProvider).toHaveBeenCalledWith(
+      { id: 'openrouter:openai/gpt-6-sol', config: {}, label: 'OpenRouter target' },
+      'openrouter',
+    );
+  });
+
   it('defaults newly selected Bedrock targets to the OpenAI Responses API', async () => {
     const user = userEvent.setup();
     const setProvider = vi.fn();
