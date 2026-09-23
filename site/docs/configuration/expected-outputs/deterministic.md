@@ -1749,7 +1749,7 @@ tests:
 The `is-refusal` assertion checks if the LLM output indicates that the model refused to
 perform the requested task. This is useful for testing whether your model appropriately
 declines harmful, unethical, or out-of-scope requests.
-An explicit refusal reported by the provider also counts, even if its message does not match the text patterns below. Provider access or authentication errors remain eval errors.
+An explicit refusal reported by the provider also counts, even if its message does not match the text patterns below. If the assertion has a `transform`, it checks only the transformed output. Provider access or authentication errors remain eval errors.
 
 ```yaml
 assert:

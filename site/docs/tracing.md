@@ -106,7 +106,7 @@ Instrumented model and agent calls can include these attributes on their GenAI s
 Grading spans describe each assertion with `gen_ai.evaluation.name`,
 `gen_ai.evaluation.score.value`, and `gen_ai.evaluation.score.label`. When a grader supplies a
 reason, `gen_ai.evaluation.explanation` records a sanitized, shortened version. Any model call used
-by the grader appears in a child span. The [`is-refusal` assertion](/docs/configuration/expected-outputs/deterministic/#is-refusal) accepts a refusal explicitly reported by the provider even when its message lacks typical refusal wording. Provider access or authentication errors remain eval errors.
+by the grader appears in a child span. The [`is-refusal` assertion](/docs/configuration/expected-outputs/deterministic/#is-refusal) accepts a refusal explicitly reported by the provider even when its message lacks typical refusal wording; an assertion-level `transform` instead grades only the selected output. Provider access or authentication errors remain eval errors.
 
 ### Example Trace Output
 
