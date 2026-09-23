@@ -709,6 +709,45 @@ describe('OpenAI Provider', () => {
             );
           }
 
+          for (const [providerCode, expected] of [
+            ['rate_limited', 'rate_limit'],
+            ['credit_balance_exhausted', 'quota'],
+          ] as const) {
+            mockFetchWithCache.mockResolvedValueOnce({
+              data: {
+                error: {
+                  message: 'Too many requests',
+                  metadata: { error_type: 'rate_limit_exceeded', provider_code: providerCode },
+                },
+              },
+              cached: false,
+              status: 429,
+              statusText: 'Too Many Requests',
+              headers: { 'retry-after': '2' },
+            });
+            const result = await provider.callApi('A benign test prompt');
+            expect(result.metadata?.rateLimitKind).toBe(expected);
+            expect(result.metadata?.http).toMatchObject({ status: 429 });
+            expect(isProviderResponseRateLimited(result, undefined)).toBe(
+              expected === 'rate_limit',
+            );
+          }
+
+          mockFetchWithCache.mockResolvedValueOnce({
+            data: {
+              error: {
+                message: 'Insufficient credits',
+                metadata: { provider_code: 'credit_balance_exhausted' },
+              },
+            },
+            cached: false,
+            status: 429,
+            statusText: 'Too Many Requests',
+          });
+          const quotaWithoutMarker = await provider.callApi('A benign test prompt');
+          expect(quotaWithoutMarker.metadata?.rateLimitKind).toBe('quota');
+          expect(isProviderResponseRateLimited(quotaWithoutMarker, undefined)).toBe(false);
+
           for (const [content, expected] of [
             ['{"answer":"visible"}', { answer: 'visible' }],
             ['{"answer":', '{"answer":'],
@@ -1088,6 +1127,22 @@ describe('OpenAI Provider', () => {
       expect(result.error).toContain('Retries will not help');
       expect(result.metadata?.rateLimitKind).toBe('quota');
       expect(result.metadata?.http?.status).toBe(429);
+    });
+
+    it('preserves structured quota errors in the dedicated OpenRouter provider', async () => {
+      const { HttpRateLimitError } = await import('../../../src/util/fetch/errors');
+      mockFetchWithCache.mockRejectedValueOnce(
+        new HttpRateLimitError({ status: 429, code: 'credit_balance_exhausted' }),
+      );
+
+      const result = await new OpenRouterProvider('openai/gpt-6-luna', {
+        config: { apiKey: 'test-key' },
+      }).callApi('Say ready.');
+
+      expect(result.error).toContain('Quota exceeded');
+      expect(result.metadata?.rateLimitKind).toBe('quota');
+      expect(result.metadata?.http?.status).toBe(429);
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
     });
 
     it('should include HTTP metadata in error response', async () => {

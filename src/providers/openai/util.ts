@@ -113,6 +113,15 @@ export function getOpenAiGatewayErrorType(data: unknown): string | undefined {
   ].find((value): value is string => typeof value === 'string' && value.length > 0);
 }
 
+export function getOpenAiGatewayProviderCode(data: unknown): string | undefined {
+  const root = getRecord(data);
+  const response = getRecord(root?.response) ?? root;
+  const error = getRecord(response?.error) ?? getOpenAiChatChoiceError(response)?.error;
+  const metadata = getRecord(error?.metadata);
+  const code = metadata?.provider_code ?? error?.code;
+  return typeof code === 'string' ? code : undefined;
+}
+
 export function getOpenAiPartialOutput(output: unknown, jsonSchema: boolean): unknown {
   if (jsonSchema && typeof output === 'string') {
     try {

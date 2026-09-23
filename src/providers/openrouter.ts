@@ -1,6 +1,7 @@
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import { formatRateLimitErrorMessage, HttpRateLimitError } from '../util/fetch/errors';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../util/finishReason';
 import { getOpenAiGatewayRateLimitKind, OpenAiChatCompletionProvider } from './openai/chat';
 import {
@@ -238,12 +239,30 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
         };
       }
       if (status < 200 || status >= 300) {
+        const rateLimitKind = getOpenAiGatewayRateLimitKind(data);
         return {
           error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
+          metadata: {
+            ...(rateLimitKind ? { rateLimitKind } : {}),
+            http: { status, statusText, headers: responseHeaders ?? {} },
+          },
         };
       }
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);
+      if (err instanceof HttpRateLimitError) {
+        return {
+          error: formatRateLimitErrorMessage(err),
+          metadata: {
+            rateLimitKind: err.kind,
+            http: {
+              status: err.status,
+              statusText: err.statusText,
+              headers: err.headers ?? responseHeaders ?? {},
+            },
+          },
+        };
+      }
       return {
         error: `API call error: ${String(err)}`,
       };

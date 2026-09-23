@@ -49,6 +49,7 @@ import {
   assertOpenAiApiModel,
   getOpenAiChatChoiceError,
   getOpenAiGatewayErrorType,
+  getOpenAiGatewayProviderCode,
   getOpenAiPartialOutput,
   getOpenAiPolicyRefusal,
   getTokenUsage,
@@ -73,15 +74,11 @@ export type OpenAiChatCompletionCostData = Pick<
 >;
 
 export function getOpenAiGatewayRateLimitKind(data: unknown): 'quota' | 'rate_limit' | undefined {
-  if (getOpenAiGatewayErrorType(data) !== 'rate_limit_exceeded') {
-    return undefined;
+  const providerCode = getOpenAiGatewayProviderCode(data);
+  if (providerCode && DEFINITIVE_BILLING_ERROR_CODES.has(providerCode.toLowerCase())) {
+    return 'quota';
   }
-  const error = getOpenAiChatChoiceError(data)?.error;
-  const providerCode = (error?.metadata as { provider_code?: unknown } | undefined)?.provider_code;
-  return typeof providerCode === 'string' &&
-    DEFINITIVE_BILLING_ERROR_CODES.has(providerCode.toLowerCase())
-    ? 'quota'
-    : 'rate_limit';
+  return getOpenAiGatewayErrorType(data) === 'rate_limit_exceeded' ? 'rate_limit' : undefined;
 }
 
 function getChatSearchCitations(
@@ -807,6 +804,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
       if (status < 200 || status >= 300) {
         const errorMessage = `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`;
+        const rateLimitKind = getOpenAiGatewayRateLimitKind(data);
 
         // OpenRouter also uses invalid_prompt for request errors; refusals have an explicit marker.
         if (
@@ -842,6 +840,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         return {
           error: errorMessage,
           metadata: {
+            ...(rateLimitKind ? { rateLimitKind } : {}),
             http: {
               status,
               statusText,
