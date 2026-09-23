@@ -8,15 +8,15 @@ prompts:
     Task: {{task}}
 
 providers:
-  - id: openai:responses:gpt-5.4-mini
-    label: gpt-5.4-mini-no-reasoning
+  - id: openai:responses:gpt-6-luna
+    label: gpt-6-luna-no-reasoning
     config:
       reasoning:
         effort: none
       verbosity: low
       max_output_tokens: 512
-  - id: openai:responses:gpt-5.4-mini
-    label: gpt-5.4-mini-medium-reasoning
+  - id: openai:responses:gpt-6-luna
+    label: gpt-6-luna-medium-reasoning
     config:
       reasoning:
         effort: medium
