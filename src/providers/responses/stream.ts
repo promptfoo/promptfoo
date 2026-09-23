@@ -2,6 +2,8 @@ type ResponsesStreamEvent = {
   type?: string;
   response?: any;
   delta?: string;
+  output_index?: number;
+  content_index?: number;
   output_text?: { delta?: string };
   output?: any[];
   code?: string;
@@ -85,6 +87,7 @@ export async function readResponsesStream(
   let buffer = '';
   let latestResponse: any;
   let outputText = '';
+  const textByOutputIndex = new Map<number, Map<number, string>>();
 
   const processChunk = (chunk: string) => {
     const event = parseSseEvent(chunk, providerName, logger);
@@ -108,10 +111,16 @@ export async function readResponsesStream(
     }
 
     if (event.type === 'response.output_text.delta') {
-      if (typeof event.delta === 'string') {
-        outputText += event.delta;
-      } else if (typeof event.output_text?.delta === 'string') {
-        outputText += event.output_text.delta;
+      const delta = typeof event.delta === 'string' ? event.delta : event.output_text?.delta;
+      if (typeof delta === 'string') {
+        outputText += delta;
+        if (options?.preserveFailedOutput) {
+          const index = typeof event.output_index === 'number' ? event.output_index : 0;
+          const partIndex = typeof event.content_index === 'number' ? event.content_index : 0;
+          const content = textByOutputIndex.get(index) ?? new Map<number, string>();
+          content.set(partIndex, (content.get(partIndex) ?? '') + delta);
+          textByOutputIndex.set(index, content);
+        }
       }
     }
   };
@@ -137,12 +146,23 @@ export async function readResponsesStream(
 
   if (latestResponse) {
     if (options?.preserveFailedOutput && latestResponse.status === 'failed' && outputText) {
+      const streamedText = Array.from(textByOutputIndex)
+        .sort(([left], [right]) => left - right)
+        .map(([, content]) =>
+          Array.from(content)
+            .sort(([left], [right]) => left - right)
+            .map(([, text]) => text)
+            .join(''),
+        )
+        .filter((text) => text.trim())
+        .join('\n');
       const reportedText = getResponsesOutputText(latestResponse);
       if (
-        !reportedText ||
-        (outputText.length > reportedText.length && outputText.startsWith(reportedText))
+        streamedText &&
+        (!reportedText ||
+          (streamedText.length > reportedText.length && streamedText.startsWith(reportedText)))
       ) {
-        return { ...latestResponse, output_text: outputText };
+        return { ...latestResponse, output_text: streamedText };
       }
     }
     return latestResponse;

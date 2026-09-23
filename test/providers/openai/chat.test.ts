@@ -11,6 +11,7 @@ import { CloudflareGatewayOpenAiProvider } from '../../../src/providers/cloudfla
 import { createLiteLLMProvider } from '../../../src/providers/litellm';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 import { OpenRouterProvider } from '../../../src/providers/openrouter';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
 import { mockProcessEnv } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage } from './shared';
 
@@ -645,6 +646,111 @@ describe('OpenAI Provider', () => {
     );
 
     it.each(['gpt-6-sol', 'gpt-6-luna'])(
+      'keeps rate-limit retry metadata and structured JSON in OpenRouter Chat results for %s',
+      async (model) => {
+        const responseFormat = {
+          type: 'json_schema' as const,
+          json_schema: {
+            name: 'result',
+            strict: true,
+            schema: {
+              type: 'object' as const,
+              properties: { answer: { type: 'string' } },
+              required: ['answer'],
+              additionalProperties: false as const,
+            },
+          },
+        };
+        const generic = new OpenAiChatCompletionProvider(`openai/${model}`, {
+          config: { apiBaseUrl: 'https://openrouter.ai/api/v1', response_format: responseFormat },
+        });
+        const dedicated = new OpenRouterProvider(`openai/${model}`, {
+          config: { apiKey: 'test-key', response_format: responseFormat },
+        });
+        const choiceError = (
+          message: string,
+          errorType: string,
+          providerCode?: string,
+          content?: string,
+        ) => ({
+          choices: [
+            {
+              message: { content },
+              finish_reason: 'error',
+              error: {
+                code: 429,
+                message,
+                metadata: { error_type: errorType, provider_code: providerCode },
+              },
+            },
+          ],
+        });
+        for (const provider of [generic, dedicated]) {
+          for (const [errorType, providerCode, expected] of [
+            ['rate_limit_exceeded', 'rate_limited', 'rate_limit'],
+            ['rate_limit_exceeded', 'credit_balance_exhausted', 'quota'],
+            ['provider_unavailable', 'upstream_disconnected', undefined],
+          ] as const) {
+            mockFetchWithCache.mockResolvedValueOnce({
+              data: choiceError('Too many requests', errorType, providerCode),
+              cached: false,
+              status: 200,
+              statusText: 'OK',
+              headers: { 'retry-after': '2' },
+            });
+            const result = await provider.callApi('A benign test prompt');
+            expect(result.metadata?.rateLimitKind).toBe(expected);
+            expect(result.metadata?.http).toMatchObject({
+              status: 200,
+              headers: { 'retry-after': '2' },
+            });
+            expect(isProviderResponseRateLimited(result, undefined)).toBe(
+              expected === 'rate_limit',
+            );
+          }
+
+          for (const [content, expected] of [
+            ['{"answer":"visible"}', { answer: 'visible' }],
+            ['{"answer":', '{"answer":'],
+          ] as const) {
+            const data = choiceError('The response was declined.', 'refusal', undefined, content);
+            mockFetchWithCache.mockResolvedValueOnce({
+              data,
+              cached: false,
+              status: 200,
+              statusText: 'OK',
+            });
+            const result = await provider.callApi('A benign test prompt');
+            expect(result.output).toEqual(expected);
+            expect(result.isRefusal).toBe(true);
+            expect(result.raw).toEqual(data);
+
+            if (provider === dedicated) {
+              const completed = {
+                choices: [
+                  {
+                    message: { content, refusal: 'The response was declined.' },
+                    finish_reason: 'content_filter',
+                  },
+                ],
+              };
+              mockFetchWithCache.mockResolvedValueOnce({
+                data: completed,
+                cached: false,
+                status: 200,
+                statusText: 'OK',
+              });
+              const finished = await provider.callApi('A benign test prompt');
+              expect(finished.output).toEqual(expected);
+              expect(finished.isRefusal).toBe(true);
+              expect(finished.raw).toEqual(completed);
+            }
+          }
+        }
+      },
+    );
+
+    it.each(['gpt-6-sol', 'gpt-6-luna'])(
       'evicts OpenRouter Chat choice outages so the next identical request can recover for %s',
       async (model) => {
         for (const provider of [
@@ -756,6 +862,64 @@ describe('OpenAI Provider', () => {
             }
           }
         }
+      },
+    );
+
+    it.each(['gpt-6-sol', 'gpt-6-luna'])(
+      'preserves gateway HTTP status for null JSON and documented Chat error classifications for %s',
+      async (model) => {
+        const generic = new OpenAiChatCompletionProvider(`openai/${model}`, {
+          config: { apiBaseUrl: 'https://proxy.example.test/openrouter/api/v1' },
+        });
+        const dedicated = new OpenRouterProvider(`openai/${model}`, {
+          config: { apiKey: 'test-key' },
+        });
+        for (const provider of [generic, dedicated]) {
+          for (const [status, errorType, refused] of [
+            [400, 'invalid_request', false],
+            [400, 'context_length_exceeded', false],
+            [403, 'refusal', true],
+          ] as const) {
+            mockFetchWithCache.mockResolvedValueOnce({
+              data: {
+                error: {
+                  code: status,
+                  message: 'Request rejected by the gateway.',
+                  metadata: { error_type: errorType },
+                },
+              },
+              cached: false,
+              status,
+              statusText: 'Request rejected',
+            });
+            const result = await provider.callApi('A benign test prompt');
+            expect(result.isRefusal).toBe(refused ? true : undefined);
+            if (refused) {
+              expect(result.error).toBeUndefined();
+              expect(gradeProviderRefusal(result)).toMatchObject({ pass: true, score: 1 });
+            } else {
+              expect(result.error).toContain('Request rejected');
+            }
+          }
+          mockFetchWithCache.mockResolvedValueOnce({
+            data: null,
+            cached: false,
+            status: 401,
+            statusText: 'Unauthorized',
+          });
+          const unauthorized = await provider.callApi('A benign test prompt');
+          expect(unauthorized.error).toContain('401 Unauthorized');
+          expect(unauthorized.isRefusal).toBeUndefined();
+        }
+        mockFetchWithCache.mockResolvedValueOnce({
+          data: null,
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        const malformed = await dedicated.callApi('A benign test prompt');
+        expect(malformed.error).toContain('Malformed response data: null');
+        expect(malformed.isRefusal).toBeUndefined();
       },
     );
 

@@ -398,6 +398,21 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
         };
         const streamed = (delta: string, terminalText: string) =>
           `data: ${JSON.stringify({ type: 'response.output_text.delta', delta })}\n\ndata: ${JSON.stringify({ type: 'response.failed', response: { ...base, output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: terminalText }] }] } })}\n\n`;
+        const multiple = ['First', 'Second'].map((text) => ({
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text }],
+        }));
+        const multipleStream = (terminalOutput: typeof multiple) =>
+          [
+            { type: 'response.output_text.delta', output_index: 1, content_index: 1, delta: 'ond' },
+            { type: 'response.output_text.delta', output_index: 0, content_index: 0, delta: 'Fi' },
+            { type: 'response.output_text.delta', output_index: 1, content_index: 0, delta: 'Sec' },
+            { type: 'response.output_text.delta', output_index: 0, content_index: 0, delta: 'rst' },
+            { type: 'response.failed', response: { ...base, output: terminalOutput } },
+          ]
+            .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+            .join('');
         for (const [stream, raw, partialExpected] of [
           [false, { ...base, output }, partial],
           [
@@ -413,6 +428,10 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
           [true, streamed('Visible ', `${partial} and more`), `${partial} and more`],
           [true, streamed(partial, 'Visible '), partial],
           [true, streamed('Different delta text', partial), partial],
+          [false, { ...base, output: multiple }, 'First\nSecond'],
+          [true, multipleStream(multiple), 'First\nSecond'],
+          [true, multipleStream([multiple[0]]), 'First\nSecond'],
+          [true, multipleStream([]), 'First\nSecond'],
           [
             false,
             {
@@ -427,23 +446,28 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
             undefined,
           ],
         ] as const) {
-          vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-            data: raw,
-            cached: false,
-            status: 200,
-            statusText: 'OK',
-          });
-          const result = await new OpenAiResponsesProvider(`openai/${model}`, {
-            config: { apiKey: 'test-key', apiBaseUrl: 'https://openrouter.ai/api/v1', stream },
-          }).callApi('A benign test prompt');
-          expect(result.error).toBeUndefined();
-          expect(result.output).toBe(partialExpected ?? description);
-          expect(result.isRefusal).toBe(true);
-          expect(result.guardrails?.flagged).toBe(true);
-          expect(result.guardrails?.flaggedInput).toBe(
-            !partialExpected && marker === 'refusal' ? true : undefined,
-          );
-          expect(result.raw).toMatchObject({ id: 'resp_policy', error_type: marker });
+          for (const apiBaseUrl of [
+            'https://openrouter.ai/api/v1',
+            'https://proxy.example.test/openrouter/api/v1',
+          ]) {
+            vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+              data: raw,
+              cached: false,
+              status: 200,
+              statusText: 'OK',
+            });
+            const result = await new OpenAiResponsesProvider(`openai/${model}`, {
+              config: { apiKey: 'test-key', apiBaseUrl, stream },
+            }).callApi('A benign test prompt');
+            expect(result.error).toBeUndefined();
+            expect(result.output).toBe(partialExpected ?? description);
+            expect(result.isRefusal).toBe(true);
+            expect(result.guardrails?.flagged).toBe(true);
+            expect(result.guardrails?.flaggedInput).toBe(
+              !partialExpected && marker === 'refusal' ? true : undefined,
+            );
+            expect(result.raw).toMatchObject({ id: 'resp_policy', error_type: marker });
+          }
         }
       }
     },
@@ -458,25 +482,33 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
         undefined,
         'refusal',
       ]) {
-        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-          cached: false,
-          status: 400,
-          statusText: 'Bad Request',
-          data: {
-            error_type: errorType,
-            error: { code: 'invalid_prompt', message: 'Request rejected by the gateway.' },
-          },
-        });
-        const result = await new OpenAiResponsesProvider(`openai/${model}`, {
-          config: { apiKey: 'test-key', apiBaseUrl: 'https://openrouter.ai/api/v1' },
-        }).callApi('A benign prompt');
-        if (errorType === 'refusal') {
-          expect(result.isRefusal).toBe(true);
-          expect(result.error).toBeUndefined();
-        } else {
-          expect(result.isRefusal).toBeUndefined();
-          expect(result.guardrails).toBeUndefined();
-          expect(result.error).toContain('invalid_prompt');
+        for (const apiBaseUrl of [
+          'https://openrouter.ai/api/v1',
+          'https://proxy.example.test/openrouter/api/v1',
+        ]) {
+          if (errorType === undefined && apiBaseUrl.includes('proxy.example')) {
+            continue;
+          }
+          vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+            cached: false,
+            status: 400,
+            statusText: 'Bad Request',
+            data: {
+              error_type: errorType,
+              error: { code: 'invalid_prompt', message: 'Request rejected by the gateway.' },
+            },
+          });
+          const result = await new OpenAiResponsesProvider(`openai/${model}`, {
+            config: { apiKey: 'test-key', apiBaseUrl },
+          }).callApi('A benign prompt');
+          if (errorType === 'refusal') {
+            expect(result.isRefusal).toBe(true);
+            expect(result.error).toBeUndefined();
+          } else {
+            expect(result.isRefusal).toBeUndefined();
+            expect(result.guardrails).toBeUndefined();
+            expect(result.error).toContain('invalid_prompt');
+          }
         }
       }
 

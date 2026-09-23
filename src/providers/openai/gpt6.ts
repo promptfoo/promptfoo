@@ -11,7 +11,11 @@ export function getGpt6Variant(modelName: unknown): Gpt6Variant | undefined {
     return undefined;
   }
   const model = modelName.split('/').at(-1) ?? modelName;
-  return /(?:^|[.-])gpt-6-(astra|sol|luna)(?:[-:]|$)/.exec(model)?.[1] as Gpt6Variant | undefined;
+  const [name, fineTuneBase] = model.split(':', 2);
+  const baseModel = name === 'ft' ? (fineTuneBase ?? '') : (name ?? '');
+  return /(?:^|[.-])gpt-6-(astra|sol|luna)(?:[-:]|$)/.exec(baseModel)?.[1] as
+    | Gpt6Variant
+    | undefined;
 }
 
 export function isGpt6Model(modelName: unknown): boolean {
@@ -77,13 +81,37 @@ export function getGpt6ChatReasoningEffort(
   );
 }
 
+function renderResponsesReasoning(
+  value: unknown,
+  render: (value: unknown) => unknown,
+  resolveEffort: boolean,
+): unknown {
+  const object = getObject(value);
+  if (!resolveEffort && object) {
+    const { effort: _effort, ...options } = object;
+    return render(options);
+  }
+  const result = render(value);
+  const renderedObject = getObject(result);
+  if (!resolveEffort && renderedObject) {
+    const { effort: _effort, ...options } = renderedObject;
+    return options;
+  }
+  return result;
+}
+
 function getResponsesReasoning(
   config: ReasoningConfig | undefined,
   render: (value: unknown) => unknown,
-  resolveScalarEffort = true,
+  resolveEffort = true,
 ) {
-  const typed = render(config?.reasoning);
-  const passthrough = render(getObject(config?.passthrough)?.reasoning);
+  const typed = renderResponsesReasoning(config?.reasoning, render, resolveEffort);
+  const typedEffort = typed === null ? null : getObject(typed)?.effort;
+  const passthrough = renderResponsesReasoning(
+    getObject(config?.passthrough)?.reasoning,
+    render,
+    resolveEffort && typedEffort === undefined,
+  );
   for (const value of [typed, passthrough]) {
     if (value != null && !getObject(value)) {
       throw new Error('GPT-6 Responses reasoning must be an object or null. Use { effort: none }.');
@@ -91,13 +119,11 @@ function getResponsesReasoning(
   }
   const options = { ...getObject(passthrough), ...getObject(typed) };
   const nestedEffort = firstDefined(
-    typed === null ? null : getObject(typed)?.effort,
+    typedEffort,
     passthrough === null ? null : getObject(passthrough)?.effort,
   );
   const effort =
-    nestedEffort === undefined && resolveScalarEffort
-      ? render(config?.reasoning_effort)
-      : nestedEffort;
+    nestedEffort === undefined && resolveEffort ? render(config?.reasoning_effort) : nestedEffort;
   return { options, effort, clearOptions: typed === null || passthrough === null };
 }
 

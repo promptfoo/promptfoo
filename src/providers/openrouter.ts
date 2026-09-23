@@ -7,6 +7,8 @@ import {
   appendOpenAiApiPath,
   formatOpenAiError,
   getOpenAiChatChoiceError,
+  getOpenAiGatewayRateLimitKind,
+  getOpenAiPartialChatOutput,
   getOpenAiPolicyRefusal,
   getTokenUsage,
 } from './openai/util';
@@ -195,7 +197,13 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       const policy = getOpenAiPolicyRefusal(data, true);
       if (policy) {
         return {
-          output: policy.partialOutput ?? policy.message,
+          output:
+            policy.partialOutput === undefined
+              ? policy.message
+              : getOpenAiPartialChatOutput(
+                  policy.partialOutput,
+                  config.response_format?.type === 'json_schema',
+                ),
           ...(data.usage ? { tokenUsage: getTokenUsage(data, cached) } : {}),
           cached,
           cost: this.calculateResponseCost(data, config),
@@ -213,9 +221,10 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
           },
         };
       }
-      const choiceError = data.error ? undefined : getOpenAiChatChoiceError(data);
+      const choiceError = data?.error ? undefined : getOpenAiChatChoiceError(data);
       if (choiceError) {
         await deleteFromCache?.();
+        const rateLimitKind = getOpenAiGatewayRateLimitKind(data);
         return {
           error: `API error: ${choiceError.error.message}`,
           ...(data.usage ? { tokenUsage: getTokenUsage(data, cached) } : {}),
@@ -224,6 +233,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
           raw: data,
           metadata: {
             ...getOpenRouterBillingMetadata(data),
+            ...(rateLimitKind ? { rateLimitKind } : {}),
             http: { status, statusText, headers: responseHeaders ?? {} },
           },
         };
@@ -240,7 +250,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       };
     }
 
-    if (data.error) {
+    if (data?.error) {
       return {
         error: formatOpenAiError(data as OpenAIErrorResponse),
       };
@@ -250,7 +260,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     // (soft moderation block, upstream hiccup, or n>1 edge cases). Without this,
     // `data.choices[0]` is undefined and `.message` throws an opaque TypeError.
     // Mirrors the sibling OpenAI-compatible providers (mistral.ts, ai21.ts).
-    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+    if (!data?.choices?.[0]?.message) {
       return {
         error: `Malformed response data: ${JSON.stringify(data)}`,
         cached,
@@ -262,7 +272,12 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
     if (message.refusal || finishReason === FINISH_REASON_MAP.content_filter) {
       return {
-        output: message.content || message.refusal || 'Content filtered by the model provider.',
+        output: message.content
+          ? getOpenAiPartialChatOutput(
+              message.content,
+              config.response_format?.type === 'json_schema',
+            )
+          : message.refusal || 'Content filtered by the model provider.',
         tokenUsage: getTokenUsage(data, cached),
         cached,
         cost: this.calculateResponseCost(data, config),

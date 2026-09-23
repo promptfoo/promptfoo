@@ -8,6 +8,7 @@ import {
 } from '../../../src/providers/bedrock/openaiResponses';
 import { CloudflareGatewayOpenAiProvider } from '../../../src/providers/cloudflare-gateway';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import { getGpt6Variant } from '../../../src/providers/openai/gpt6';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
 import { OpenRouterProvider } from '../../../src/providers/openrouter';
 import { TrueFoundryProvider } from '../../../src/providers/truefoundry';
@@ -462,6 +463,34 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
 
   afterEach(() => {
     restoreEnv();
+  });
+
+  it('uses a fine-tune base model without treating its user-supplied suffix as a model', async () => {
+    const unrelated = `ft:gpt-4.1-mini-2025-04-14:org:compare-${model}:id`;
+    expect(getGpt6Variant(unrelated)).toBeUndefined();
+    expect(getGpt6Variant(`openai/${unrelated}`)).toBeUndefined();
+    expect(getGpt6Variant(`ft:${model}:org:compare-gpt-4.1-mini:id`)).toBe(model.slice(6));
+    expect(getGpt6Variant(`openai/ft:${model}:org:experiment:id`)).toBe(model.slice(6));
+    expect(getGpt6Variant(`prod-${model}`)).toBe(model.slice(6));
+
+    const { body: chat } = await new OpenAiChatCompletionProvider(unrelated, {
+      config: { temperature: 0.4, top_p: 0.8, tools: [statusTool] },
+    }).getOpenAiBody('Get the job status.');
+    const { body: responses } = await new OpenAiResponsesProvider(unrelated, {
+      config: { temperature: 0.4, top_p: 0.8, tools: [statusTool] },
+    }).getOpenAiBody('Get the job status.');
+    expect(chat).toMatchObject({
+      model: unrelated,
+      temperature: 0.4,
+      top_p: 0.8,
+      tools: [statusTool],
+    });
+    expect(responses).toMatchObject({
+      model: unrelated,
+      temperature: 0.4,
+      top_p: 0.8,
+      tools: [{ type: 'function', name: 'get_status' }],
+    });
   });
 
   it.each(['none', 'low', 'medium', 'high', 'xhigh', 'max'] as const)(
@@ -1046,6 +1075,55 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
     expect(fromPassthrough.reasoning).toEqual({ effort: 'high', summary: 'auto' });
     expect(fromPassthrough).not.toHaveProperty('temperature');
     expect(passthroughReasoning).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not render a nested Responses effort overridden by the prompt', async () => {
+    const rawEffort = '{{ budget | load }}';
+    const prompt = { raw: 'Say ready.', label: 'ready' };
+    for (const providerKind of ['openai', 'azure']) {
+      for (const layer of ['reasoning', 'passthrough']) {
+        const reasoning = { effort: rawEffort, summary: '{{ summary }}' };
+        const config = {
+          apiKey: 'test-key',
+          ...(layer === 'reasoning'
+            ? { reasoning: reasoning as any }
+            : { passthrough: { reasoning } }),
+        };
+        const provider =
+          providerKind === 'azure'
+            ? new AzureResponsesProvider(model, { config })
+            : new OpenAiResponsesProvider(model, { config });
+        const context = {
+          vars: { summary: 'auto' },
+          prompt: { ...prompt, config: { reasoning: { effort: 'none' as const } } },
+        };
+        const body =
+          provider instanceof AzureResponsesProvider
+            ? await provider.getAzureResponsesBody(prompt.raw, context)
+            : (await provider.getOpenAiBody(prompt.raw, context)).body;
+        expect(body.reasoning).toEqual({ effort: 'none', summary: 'auto' });
+        expect(reasoning.effort).toBe(rawEffort);
+
+        const unresolvedContext = { vars: { summary: 'auto' }, prompt };
+        const unresolved =
+          provider instanceof AzureResponsesProvider
+            ? provider.getAzureResponsesBody(prompt.raw, unresolvedContext)
+            : provider.getOpenAiBody(prompt.raw, unresolvedContext);
+        await expect(unresolved).rejects.toThrow();
+      }
+    }
+
+    const provider = new OpenAiResponsesProvider(model, {
+      config: {
+        reasoning: { effort: 'none' },
+        passthrough: { reasoning: { effort: rawEffort, summary: '{{ summary }}' } },
+      },
+    });
+    const { body } = await provider.getOpenAiBody(prompt.raw, {
+      vars: { summary: 'auto' },
+      prompt,
+    });
+    expect(body.reasoning).toEqual({ effort: 'none', summary: 'auto' });
   });
 
   it('renders only the selected GPT-6 Chat reasoning callback, once', async () => {

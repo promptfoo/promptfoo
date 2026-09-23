@@ -49,10 +49,12 @@ import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
   formatOpenAiError,
+  getOpenAiGatewayErrorType,
   getOpenAiPolicyRefusal,
   hasSensitiveOpenAiCachePath,
   hasSensitiveOpenAiCacheString,
   isAzureOpenAiEndpoint,
+  isCustomOpenAiEndpoint,
 } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -820,6 +822,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     return modelName === 'codex-mini-latest' || super.isReasoningModel(modelName);
   }
 
+  private usesGatewayErrorFormat(): boolean {
+    return this.getGenAISystem() === 'openai' && isCustomOpenAiEndpoint(this.getApiUrl());
+  }
+
   protected getBillingUsage(data: any, _config: OpenAiCompletionOptions): any {
     return data.usage;
   }
@@ -922,9 +928,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     statusText: string,
     headers?: Record<string, string>,
   ): ProviderResponse | undefined {
-    const isOpenRouter =
-      this.getGenAISystem() === 'openai' && isOpenRouterEndpoint(this.getApiUrl());
-    const policy = getOpenAiPolicyRefusal(data, isOpenRouter);
+    const policy = getOpenAiPolicyRefusal(data, this.usesGatewayErrorFormat());
     if (!policy) {
       return undefined;
     }
@@ -1445,8 +1449,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
                   }
                 },
                 {
-                  preserveFailedOutput:
-                    this.getGenAISystem() === 'openai' && isOpenRouterEndpoint(this.getApiUrl()),
+                  preserveFailedOutput: this.usesGatewayErrorFormat(),
                 },
               );
             } else {
@@ -1508,8 +1511,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
               logger,
               undefined,
               {
-                preserveFailedOutput:
-                  this.getGenAISystem() === 'openai' && isOpenRouterEndpoint(this.getApiUrl()),
+                preserveFailedOutput: this.usesGatewayErrorFormat(),
               },
             );
           } else {
@@ -1580,7 +1582,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         if (
           typeof data === 'object' &&
           data?.error?.code === 'invalid_prompt' &&
-          !isOpenRouterEndpoint(this.getApiUrl())
+          !isOpenRouterEndpoint(this.getApiUrl()) &&
+          (!this.usesGatewayErrorFormat() || getOpenAiGatewayErrorType(data) === undefined)
         ) {
           return {
             output: errorMessage,

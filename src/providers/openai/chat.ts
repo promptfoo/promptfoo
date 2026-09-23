@@ -44,8 +44,12 @@ import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
   getOpenAiChatChoiceError,
+  getOpenAiGatewayErrorType,
+  getOpenAiGatewayRateLimitKind,
+  getOpenAiPartialChatOutput,
   getOpenAiPolicyRefusal,
   getTokenUsage,
+  isCustomOpenAiEndpoint,
   OPENAI_CHAT_MODELS,
   validateFunctionCall,
 } from './util';
@@ -254,6 +258,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const system = this.getGenAISystem();
     return (
       system === 'openrouter' || (system === 'openai' && isOpenRouterEndpoint(this.getApiUrl()))
+    );
+  }
+
+  private usesGatewayErrorFormat(): boolean {
+    const system = this.getGenAISystem();
+    return (
+      system === 'openrouter' || (system === 'openai' && isCustomOpenAiEndpoint(this.getApiUrl()))
     );
   }
 
@@ -716,11 +727,18 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         this.config.maxRetries,
       ));
 
-      const policy = getOpenAiPolicyRefusal(data, this.usesOpenRouter());
+      const gatewayErrorFormat = this.usesGatewayErrorFormat();
+      const policy = getOpenAiPolicyRefusal(data, gatewayErrorFormat);
       if (policy) {
         const cost = this.calculateResponseCost(data, config, cached);
         return {
-          output: policy.partialOutput ?? policy.message,
+          output:
+            policy.partialOutput === undefined
+              ? policy.message
+              : getOpenAiPartialChatOutput(
+                  policy.partialOutput,
+                  config.response_format?.type === 'json_schema',
+                ),
           tokenUsage: data?.usage ? getTokenUsage(data, cached) : undefined,
           cached,
           latencyMs,
@@ -740,10 +758,15 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         };
       }
       const choiceError =
-        this.usesOpenRouter() && !data?.error ? getOpenAiChatChoiceError(data) : undefined;
+        (this.usesOpenRouter() ||
+          (gatewayErrorFormat && getOpenAiGatewayErrorType(data) !== undefined)) &&
+        !data?.error
+          ? getOpenAiChatChoiceError(data)
+          : undefined;
       if (choiceError) {
         await deleteFromCache?.();
         const cost = this.calculateResponseCost(data, config, cached);
+        const rateLimitKind = getOpenAiGatewayRateLimitKind(data);
         return {
           error: `API error: ${choiceError.error.message}`,
           tokenUsage: data?.usage ? getTokenUsage(data, cached) : undefined,
@@ -753,6 +776,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           raw: data,
           metadata: {
             ...this.getProviderResponseMetadata(data),
+            ...(rateLimitKind ? { rateLimitKind } : {}),
             http: { status, statusText, headers: responseHeaders ?? {} },
           },
         };
@@ -761,8 +785,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       if (status < 200 || status >= 300) {
         const errorMessage = `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`;
 
-        // Check if this is an invalid_prompt error code (indicates refusal)
-        if (typeof data === 'object' && data?.error?.code === 'invalid_prompt') {
+        // OpenRouter also uses invalid_prompt for request errors; refusals have an explicit marker.
+        if (
+          typeof data === 'object' &&
+          data?.error?.code === 'invalid_prompt' &&
+          !this.usesOpenRouter() &&
+          (!gatewayErrorFormat || getOpenAiGatewayErrorType(data) === undefined)
+        ) {
           const cost = this.calculateResponseCost(data, config, cached);
 
           return {

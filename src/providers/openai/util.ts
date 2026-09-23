@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { DEFINITIVE_BILLING_ERROR_CODES } from '../../util/fetch/errors';
 import { maybeLoadFromExternalFileWithVars } from '../../util/index';
 import { getAjv, safeJsonStringify } from '../../util/json';
 import { isNonCredentialHeader, looksLikeSecret, sanitizeUrl } from '../../util/sanitizer';
@@ -28,6 +29,16 @@ export function isAzureOpenAiEndpoint(value: string | undefined): boolean {
     return /(?:^|\.)(?:openai\.azure\.com|services\.ai\.azure\.com)$/.test(
       new URL(endpoint).hostname,
     );
+  } catch {
+    return false;
+  }
+}
+
+export function isCustomOpenAiEndpoint(value: string): boolean {
+  try {
+    const endpoint = /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? value : `https://${value}`;
+    const hostname = new URL(endpoint).hostname;
+    return !/^(?:[a-z0-9-]+\.)?api\.openai\.com$/.test(hostname) && !isAzureOpenAiEndpoint(value);
   } catch {
     return false;
   }
@@ -72,6 +83,43 @@ function isOpenAiPolicyAccessRevoked(message: string): boolean {
   ].some((pattern) => pattern.test(message));
 }
 
+export function getOpenAiGatewayErrorType(data: unknown): string | undefined {
+  const root = getRecord(data);
+  const response = getRecord(root?.response) ?? root;
+  const topLevelError = getRecord(response?.error);
+  const choiceError = topLevelError ? undefined : getOpenAiChatChoiceError(response);
+  const error = topLevelError ?? choiceError?.error;
+  const metadata = getRecord(error?.metadata);
+  return [
+    metadata?.error_type,
+    error?.error_type,
+    choiceError ? undefined : response?.error_type,
+  ].find((value): value is string => typeof value === 'string' && value.length > 0);
+}
+
+export function getOpenAiGatewayRateLimitKind(data: unknown): 'quota' | 'rate_limit' | undefined {
+  if (getOpenAiGatewayErrorType(data) !== 'rate_limit_exceeded') {
+    return undefined;
+  }
+  const error = getOpenAiChatChoiceError(data)?.error;
+  const providerCode = getRecord(error?.metadata)?.provider_code;
+  return typeof providerCode === 'string' &&
+    DEFINITIVE_BILLING_ERROR_CODES.has(providerCode.toLowerCase())
+    ? 'quota'
+    : 'rate_limit';
+}
+
+export function getOpenAiPartialChatOutput(output: unknown, jsonSchema: boolean): unknown {
+  if (jsonSchema && typeof output === 'string') {
+    try {
+      return JSON.parse(output);
+    } catch {
+      // A refusal can interrupt a JSON response before it is complete.
+    }
+  }
+  return output;
+}
+
 /** A gateway refusal marker distinguishes prompt blocks from native access-level policy errors. */
 export function getOpenAiPolicyRefusal(
   data: unknown,
@@ -92,13 +140,12 @@ export function getOpenAiPolicyRefusal(
   }
   const metadata = getRecord(error.metadata);
   const providerCode = metadata?.provider_code ?? error.code;
-  const marker = [
-    metadata?.error_type,
-    error.error_type,
-    choiceError ? undefined : response?.error_type,
-  ].find((value) => value === 'refusal' || value === 'content_policy_violation');
+  const marker = getOpenAiGatewayErrorType(data);
   const message = typeof error.message === 'string' ? error.message : '';
-  if (!marker || (marker === 'refusal' && isOpenAiPolicyAccessRevoked(message))) {
+  if (
+    (marker !== 'refusal' && marker !== 'content_policy_violation') ||
+    (marker === 'refusal' && isOpenAiPolicyAccessRevoked(message))
+  ) {
     return undefined;
   }
   return {
