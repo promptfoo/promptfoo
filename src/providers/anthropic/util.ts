@@ -23,6 +23,17 @@ export const ANTHROPIC_MODELS = [
       },
     }),
   ),
+  // Claude Opus 5.5 — successor to Opus 5 at a lower list price ($4/$20). Same 1M context
+  // window and 128K max output; the full 1M context bills at this flat rate. Cache reads are
+  // 0.05x input ($0.20/MTok, see calculateCacheInputCost). Fast mode ($8/$40, Claude API
+  // only) is a separate research-preview rate that is intentionally not encoded here.
+  ...['claude-opus-5-5'].map((model) => ({
+    id: model,
+    cost: {
+      input: 4 / 1e6, // $4 / MTok
+      output: 20 / 1e6, // $20 / MTok
+    },
+  })),
   // Claude Opus 5 — the Opus-tier Claude 5 model. 1M context window (both the default
   // and the maximum) with the full low→max effort ladder, at the same list pricing as
   // Opus 4.8 ($5/$25), so it is a drop-in cost swap. The full 1M context bills at this
@@ -190,7 +201,10 @@ export const ANTHROPIC_MODELS = [
 // `claude-opus-4-8-20260528`.
 const CLAUDE_FABLE_MYTHOS_5_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5(?![a-z0-9])/i;
 const CLAUDE_FABLE_MYTHOS_51_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5-1(?![a-z0-9])/i;
-const CLAUDE_OPUS_5_PATTERN = /(^|[^a-z0-9])claude-opus-5(?![a-z0-9])/i;
+const CLAUDE_OPUS_55_PATTERN = /(^|[^a-z0-9])claude-opus-5-5(?![a-z0-9])/i;
+// `claude-opus-5-5` must not read as Opus 5: a single-digit `-N` suffix is a point release, not
+// a dated snapshot, so it is excluded while `claude-opus-5-20260801`-style suffixes still match.
+const CLAUDE_OPUS_5_PATTERN = /(^|[^a-z0-9])claude-opus-5(?!-[0-9](?![0-9]))(?![a-z0-9])/i;
 const CLAUDE_SONNET_5_PATTERN = /(^|[^a-z0-9])claude-sonnet-5(?![a-z0-9])/i;
 const CLAUDE_OPUS_48_PATTERN = /(^|[^a-z0-9])claude-opus-4-8(?![0-9])/i;
 const CLAUDE_OPUS_47_PATTERN = /(^|[^a-z0-9])claude-opus-4-7(?![0-9])/i;
@@ -257,6 +271,18 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     alwaysOnAdaptiveThinking: true,
     regionalPremium: true,
   },
+  // Opus 5.5 always thinks, like Fable/Mythos 5.1: `thinking: { type: 'disabled' }` and manual
+  // budgets are rejected at every effort level, as are forced `tool_choice` values (verified
+  // live). Unlike Opus 5, lowering `effort` is the only way to reduce thinking.
+  {
+    match: CLAUDE_OPUS_55_PATTERN,
+    warningName: 'Claude Opus 5.5',
+    samplingParamsDeprecated: true,
+    alwaysOnAdaptiveThinking: true,
+    forcedToolChoiceUnsupported: true,
+    thinkingOnByDefault: true,
+    regionalPremium: true,
+  },
   // Opus 5 thinks by default (omitting `thinking` runs adaptive, unlike Opus 4.7/4.8) and
   // still accepts `disabled`, but only at effort `high` or below.
   {
@@ -306,7 +332,12 @@ function hasClaudeCapability(modelId: string, capability: ClaudeCapability): boo
   return CLAUDE_MODEL_FAMILIES.some((family) => family[capability] && family.match.test(modelId));
 }
 
-/** Matches Claude Opus 5 model IDs (not `claude-opus-4-5`, not `claude-opus-50`). */
+/** Matches Claude Opus 5.5 model IDs. */
+export function isClaudeOpus55Model(modelId: string): boolean {
+  return CLAUDE_OPUS_55_PATTERN.test(modelId);
+}
+
+/** Matches Claude Opus 5 model IDs (not `claude-opus-4-5`, `claude-opus-5-5`, or `claude-opus-50`). */
 export function isClaudeOpus5Model(modelId: string): boolean {
   return CLAUDE_OPUS_5_PATTERN.test(modelId);
 }
@@ -465,7 +496,7 @@ export function isSamplingParamsDeprecatedClaudeModel(
  * Normalize a Claude thinking config for models that deprecate manual
  * budget-based thinking: an `enabled` budget converts to adaptive thinking
  * (preserving `display`), and `disabled` is omitted on always-on adaptive
- * thinking models (Fable 5 / Mythos 5), which reject it. `disabled` is also
+ * thinking models (Fable/Mythos 5 and 5.1, Opus 5.5), which reject it. `disabled` is also
  * omitted on effort-capped models (Opus 5) when `effort` is high enough that
  * the combination would 400. The Anthropic, Bedrock InvokeModel/Converse, and
  * Vertex paths all share this transform; user-facing warnings stay at the call
@@ -657,8 +688,8 @@ export function parseMessages(messages: string): {
 /**
  * Compute input cost with Anthropic cache pricing applied.
  * Anthropic docs: input_tokens is the non-cached portion; cache_read and cache_creation are additive.
- * Cache reads cost 2.5% of base rate on Fable/Mythos 5.1 and 10% on other models.
- * Five-minute cache writes cost 125% of base rate (25% surcharge).
+ * Cache reads cost 2.5% of base rate on Fable/Mythos 5.1, 5% on Opus 5.5, and 10% on other
+ * models. Five-minute cache writes cost 125% of base rate (25% surcharge).
  */
 export function calculateCacheInputCost(
   baseInputRate: number,
@@ -667,7 +698,11 @@ export function calculateCacheInputCost(
   cacheCreation: number,
   modelId = '',
 ): number {
-  const cacheReadMultiplier = CLAUDE_FABLE_MYTHOS_51_PATTERN.test(modelId) ? 0.025 : 0.1;
+  const cacheReadMultiplier = CLAUDE_FABLE_MYTHOS_51_PATTERN.test(modelId)
+    ? 0.025
+    : CLAUDE_OPUS_55_PATTERN.test(modelId)
+      ? 0.05
+      : 0.1;
   return (
     uncachedInputTokens * baseInputRate +
     cacheRead * baseInputRate * cacheReadMultiplier +

@@ -626,8 +626,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
    * Three model-level rules apply, each verified against the live API:
    * - Manual budget thinking (`type: 'enabled'`) is rejected on adaptive-only models and is
    *   converted to `type: 'adaptive'`.
-   * - `type: 'disabled'` is rejected outright on always-on models (Fable 5 / Mythos 5), and on
-   *   Opus 5 when `effort` is `xhigh`/`max`. In both cases it is dropped rather than sent.
+   * - `type: 'disabled'` is rejected outright on always-on models (Fable/Mythos 5 and 5.1,
+   *   Opus 5.5), and on Opus 5 when `effort` is `xhigh`/`max`. In both cases it is dropped
+   *   rather than sent.
    * - On Opus 5 an *omitted* thinking config still runs adaptive thinking, so it counts as
    *   enabled — callers size the default `max_tokens` off this, and treating it as disabled
    *   truncates responses mid-answer.
@@ -795,7 +796,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     // Validate and warn about thinking-incompatible params. Skip when the model
     // deprecates sampling params entirely — the deduped model-level warning
     // below already covers the omission, and the "disable thinking" advice is
-    // impossible on always-on adaptive thinking models (Fable 5 / Mythos 5).
+    // impossible on always-on adaptive thinking models (Fable/Mythos 5 and 5.1,
+    // Opus 5.5).
     if (thinkingEnabled && !samplingParamsDeprecated) {
       if (config.top_k != null) {
         logger.warn(
@@ -814,7 +816,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
     }
 
-    // Legacy budget-based thinking and Fable/Mythos 5.1 reject forced tool use.
+    // Legacy budget-based thinking, Fable/Mythos 5.1, and Opus 5.5 reject forced tool use.
     // Earlier adaptive models, including Fable 5, accept forced choices. Do not gate
     // this on thinkingEnabled: doing so would silently change their tool-routing evals.
     const modelRejectsForcedToolChoice = isForcedToolChoiceUnsupportedClaudeModel(this.modelName);

@@ -10,9 +10,11 @@ import {
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isClaudeFableOrMythos5Model,
   isClaudeOpus5Model,
+  isClaudeOpus55Model,
   isClaudeRegionalPremiumModel,
   isClaudeSonnet5Model,
   isDisabledThinkingRejectedAtEffort,
+  isForcedToolChoiceUnsupportedClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
   isThinkingOnByDefaultClaudeModel,
   normalizeClaudeThinkingConfig,
@@ -2430,6 +2432,87 @@ describe('Anthropic utilities', () => {
       // Regional-premium-only tiers and unrecognized models have no warning name.
       expect(getClaudeModelWarningName('claude-sonnet-4-6')).toBeUndefined();
       expect(getClaudeModelWarningName('claude-3-7-sonnet-20250219')).toBeUndefined();
+    });
+  });
+
+  describe('Claude Opus 5.5', () => {
+    const OPUS_55_IDS = [
+      'claude-opus-5-5',
+      'anthropic:messages:claude-opus-5-5',
+      'anthropic.claude-opus-5-5',
+      'us.anthropic.claude-opus-5-5',
+      'eu.anthropic.claude-opus-5-5',
+      'jp.anthropic.claude-opus-5-5',
+      'au.anthropic.claude-opus-5-5',
+      'global.anthropic.claude-opus-5-5',
+      'claude-opus-5-5-20260921',
+    ];
+
+    it('detects Opus 5.5 across provider naming schemes without matching Opus 5', () => {
+      for (const id of OPUS_55_IDS) {
+        expect(isClaudeOpus55Model(id)).toBe(true);
+        // The Opus 5 matcher previously accepted any `-` suffix, which made Opus 5.5
+        // inherit Opus 5's effort-gated `disabled` thinking (a 400 on Opus 5.5).
+        expect(isClaudeOpus5Model(id)).toBe(false);
+      }
+      expect(isClaudeOpus55Model('claude-opus-5')).toBe(false);
+      expect(isClaudeOpus55Model('claude-opus-5-50')).toBe(false);
+      expect(isClaudeOpus5Model('claude-opus-5-20260724')).toBe(true);
+    });
+
+    it('has the always-on thinking, sampling, and tool_choice restrictions verified live', () => {
+      for (const id of OPUS_55_IDS) {
+        expect(isSamplingParamsDeprecatedClaudeModel(id, { allowGenerationFallback: false })).toBe(
+          true,
+        );
+        expect(isAlwaysOnAdaptiveThinkingClaudeModel(id)).toBe(true);
+        expect(isForcedToolChoiceUnsupportedClaudeModel(id)).toBe(true);
+        expect(isThinkingOnByDefaultClaudeModel(id)).toBe(true);
+        expect(claudeThinkingConsumesTokens(id, undefined)).toBe(true);
+      }
+      expect(isForcedToolChoiceUnsupportedClaudeModel('claude-opus-5')).toBe(false);
+      expect(getClaudeModelWarningName('claude-opus-5-5')).toBe('Claude Opus 5.5');
+      expect(getClaudeModelWarningName('global.anthropic.claude-opus-5-5')).toBe('Claude Opus 5.5');
+    });
+
+    it('drops disabled thinking at every effort level and converts manual budgets', () => {
+      for (const effort of [undefined, 'low', 'medium', 'high', 'xhigh', 'max'] as const) {
+        expect(
+          normalizeClaudeThinkingConfig('claude-opus-5-5', { type: 'disabled' }, effort),
+        ).toBeUndefined();
+      }
+      expect(
+        normalizeClaudeThinkingConfig(
+          'us.anthropic.claude-opus-5-5',
+          { type: 'enabled', budget_tokens: 4096, display: 'summarized' } as any,
+          'high',
+        ),
+      ).toEqual({ type: 'adaptive', display: 'summarized' });
+    });
+
+    it('bills $4/$20 with 0.05x cache reads and a flat 1M context', () => {
+      // 1000 * 4e-6 + 500 * 20e-6 = 0.014
+      expect(calculateAnthropicCost('claude-opus-5-5', {}, 1000, 500)).toBeCloseTo(0.014, 10);
+      // + 200 cache reads * 0.2e-6 + 100 cache writes * 5e-6 = 0.00004 + 0.0005
+      expect(calculateAnthropicCost('claude-opus-5-5', {}, 1000, 500, 200, 100)).toBeCloseTo(
+        0.01454,
+        10,
+      );
+      // No >200K surcharge: 300,000 * 4e-6 + 20,000 * 20e-6 = 1.6
+      expect(calculateAnthropicCost('claude-opus-5-5', {}, 300_000, 20_000)).toBeCloseTo(1.6, 10);
+    });
+
+    it('applies the regional premium on geo profiles but not on global', () => {
+      expect(isClaudeRegionalPremiumModel('claude-opus-5-5')).toBe(true);
+      for (const geo of ['us', 'eu', 'jp', 'au']) {
+        expect(
+          calculateAnthropicCost(`${geo}.anthropic.claude-opus-5-5`, {}, 1000, 500),
+        ).toBeCloseTo(0.0154, 10);
+      }
+      expect(calculateAnthropicCost('global.anthropic.claude-opus-5-5', {}, 1000, 500)).toBeCloseTo(
+        0.014,
+        10,
+      );
     });
   });
 });

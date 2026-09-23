@@ -3510,6 +3510,22 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     expect(getHandlerForModel('us.anthropic.claude-opus-5')).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
   });
 
+  it('maps Claude Opus 5.5 across the base and regional inference profiles', () => {
+    // Verified via `aws bedrock list-inference-profiles` (2026-09-23): Opus 5.5 exposes
+    // base + us./eu./jp./au./global.
+    for (const id of [
+      'anthropic.claude-opus-5-5',
+      'us.anthropic.claude-opus-5-5',
+      'eu.anthropic.claude-opus-5-5',
+      'jp.anthropic.claude-opus-5-5',
+      'au.anthropic.claude-opus-5-5',
+      'global.anthropic.claude-opus-5-5',
+    ]) {
+      expect(AWS_BEDROCK_MODELS[id]).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+      expect(getHandlerForModel(id)).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    }
+  });
+
   it('maps Claude Sonnet 5 across the base and regional inference profiles', () => {
     // Sonnet 5 mirrors the Claude 5-generation profile set: base + us./eu./global.
     expect(AWS_BEDROCK_MODELS['anthropic.claude-sonnet-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
@@ -3910,6 +3926,7 @@ describe('AwsBedrockCompletionProvider', () => {
 
   it.each([
     ['global.anthropic.claude-fable-5-1', 1000, 0.0363],
+    ['global.anthropic.claude-opus-5-5', 1000, 0.01454],
     ['global.anthropic.claude-mythos-5-1', 0, 0.0263],
     ['global.anthropic.claude-fable-5', 0, 0.02645],
   ] as const)(
