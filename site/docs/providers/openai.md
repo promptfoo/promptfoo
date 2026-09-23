@@ -322,8 +322,7 @@ When grading generated text with embeddings, configure the embedding provider on
 
 ## Responses API
 
-{/_ Preserve existing links to consolidated sections. _/}
-
+{/* Preserve existing links to consolidated sections. */}
 <Link id="supported-responses-models" />
 <Link id="using-the-responses-api" />
 <Link id="advanced-configuration" />
@@ -396,8 +395,7 @@ Authenticated background jobs are persisted for resumption only when a non-secre
 
 ## Structured output {#using-response_format}
 
-{/_ Preserve existing links to consolidated sections. _/}
-
+{/* Preserve existing links to consolidated sections. */}
 <Link id="prompt-config-example" />
 <Link id="provider-config-example" />
 <Link id="per-test-structured-output" />
@@ -603,8 +601,7 @@ Keep callback files inside the configuration's base directory. Promptfoo rejects
 
 ## Web search {#web-search-support}
 
-{/_ Preserve existing links to consolidated sections. _/}
-
+{/* Preserve existing links to consolidated sections. */}
 <Link id="enabling-web-search" />
 <Link id="using-web-search-assertions" />
 <Link id="cost-considerations" />
@@ -806,8 +803,7 @@ Cost estimates may be absent for `quality: auto` or custom sizes. Returned usage
 
 ## Audio {#audio-capabilities}
 
-{/_ Preserve existing links to consolidated sections. _/}
-
+{/* Preserve existing links to consolidated sections. */}
 <Link id="audio-configuration-options" />
 
 Choose the route for your task: `openai:chat:gpt-audio-1.5` for audio input or output in a chat request, [text to speech](#text-to-speech) for reading supplied text aloud, or [Realtime](#realtime-api-models) for conversational sessions. The Responses provider does not support this audio-chat format.
@@ -913,8 +909,7 @@ Keep `gpt-4o-transcribe-diarize` for speaker labels and `whisper-1` for word tim
 
 ## Realtime {#realtime-api-models}
 
-{/_ Preserve existing links to consolidated sections. _/}
-
+{/* Preserve existing links to consolidated sections. */}
 <Link id="supported-realtime-models" />
 <Link id="using-realtime-api" />
 <Link id="function-calling-with-realtime-api" />
@@ -1045,8 +1040,7 @@ For these long-running Responses requests, `REQUEST_TIMEOUT_MS` does not overrid
 
 ## Migrating older configurations
 
-{/_ Preserve existing links to consolidated sections. _/}
-
+{/* Preserve existing links to consolidated sections. */}
 <Link id="video-generation-sora" />
 <Link id="basic-usage" />
 <Link id="configuration-options" />
@@ -1075,8 +1069,7 @@ OpenAI-compatible services have their own lifecycle and API contracts. A provide
 
 ## Agent providers {#agentic-providers}
 
-{/_ Preserve existing links to consolidated sections. _/}
-
+{/* Preserve existing links to consolidated sections. */}
 <Link id="agents-sdk" />
 <Link id="codex-sdk" />
 <Link id="codex-security-sdk" />
