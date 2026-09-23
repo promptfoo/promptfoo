@@ -216,6 +216,18 @@ describe('AzureGenericProvider', () => {
       expect(ClientSecretCredential).not.toHaveBeenCalled();
     });
 
+    it('retries credential initialization after a failed attempt', async () => {
+      vi.mocked(AzureCliCredential).mockImplementationOnce(function () {
+        throw new Error('credential unavailable');
+      });
+      // api-key auth keeps the constructor off the credential path so this test
+      // owns both attempts.
+      const provider = new AzureGenericProvider('d', { config: { apiKey: 'k' } });
+
+      await expect(provider.getAzureTokenCredential()).rejects.toThrow('@azure/identity');
+      await expect(provider.getAzureTokenCredential()).resolves.toBeDefined();
+    });
+
     it('does not warn when an API key takes precedence over a partial service principal', async () => {
       const warn = vi.spyOn(logger, 'warn');
       const provider = new AzureGenericProvider('d', {
