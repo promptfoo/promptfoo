@@ -20,7 +20,6 @@ import {
   hasRestrictedProviderOverride,
   type ProviderOptions,
   reconcileProvidersWithCatalog,
-  type UnifiedConfig,
 } from '@promptfoo/types';
 import { loadYaml } from '@promptfoo/util/yamlLoad';
 import deepEqual from 'fast-deep-equal';
@@ -35,6 +34,7 @@ import { StepSection } from './StepSection';
 import { countTests, normalizePrompts, normalizeProviders } from './setupReadiness';
 import TestCasesSection from './TestCasesSection';
 import YamlEditor from './YamlEditor';
+import { validateYamlConfigDraft } from './yamlConfigValidation';
 
 // Local view of the /api/providers response. Kept app-local deliberately:
 // importing @promptfoo/types/api/providers here is a restricted app ->
@@ -293,13 +293,13 @@ const EvaluateTestSuiteCreator = () => {
           );
         } else {
           try {
-            const parsedConfig = loadYaml(content) as Record<string, unknown>;
-            if (parsedConfig && typeof parsedConfig === 'object') {
-              updateConfig(parsedConfig as Partial<UnifiedConfig>);
+            const validation = validateYamlConfigDraft(loadYaml(content));
+            if (validation.success) {
+              updateConfig(validation.config);
               setResetKey((k) => k + 1);
               showToast('Configuration loaded successfully', 'success');
             } else {
-              showToast('Invalid YAML configuration', 'error');
+              showToast(validation.error, 'error');
             }
           } catch (err) {
             showToast(

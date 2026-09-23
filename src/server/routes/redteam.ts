@@ -261,6 +261,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   }
 
   const { config, force, verbose, delay, maxConcurrency } = bodyResult.data;
+  const { basePath: _basePath, ...localConfig } = config;
   const id = crypto.randomUUID();
   currentJobId = id;
   currentAbortController = new AbortController();
@@ -272,7 +273,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
 
   // Run redteam in background
   doRedteamRun({
-    liveRedteamConfig: config,
+    liveRedteamConfig: localConfig,
     force,
     verbose,
     ...(delay === undefined ? {} : { delay }),

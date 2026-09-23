@@ -29,6 +29,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
+import { withGradingUsage } from '../grading/storedResult';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import {
@@ -542,6 +543,7 @@ async function runRedteamConversation({
   excludeTargetOutputFromAgenticAttackGeneration,
   perTurnLayers = [],
   inputs,
+  attackerUsesRemoteProvider = shouldGenerateRemote(),
   targetId,
   treeParams,
 }: {
@@ -558,6 +560,9 @@ async function runRedteamConversation({
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
   perTurnLayers?: LayerConfig[];
   inputs?: Inputs;
+  /** Whether the attacker is the remote task provider; explicit providers
+   * force false so multi-input materialization stays on the local path. */
+  attackerUsesRemoteProvider?: boolean;
   targetId?: string;
   treeParams?: {
     maxDepth?: number;
@@ -612,6 +617,11 @@ async function runRedteamConversation({
   let bestScore = 0;
   let noImprovementCount = 0;
   let storedGraderResult: GradingResult | undefined = undefined;
+  let bestGraderResult: GradingResult | undefined;
+  const getBestGraderResult = () =>
+    bestGraderResult
+      ? withGradingUsage(bestGraderResult, storedGraderResult?.tokensUsed)
+      : storedGraderResult;
 
   const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
 
@@ -659,7 +669,7 @@ async function runRedteamConversation({
           attackPromptResult = await getNewPrompt(
             redteamProvider,
             [...redteamHistory, { role: 'assistant', content: node.prompt }],
-            shouldGenerateRemote()
+            attackerUsesRemoteProvider
               ? {
                   inputs,
                   materializationIndex: attempts,
@@ -690,7 +700,7 @@ async function runRedteamConversation({
               attempts,
               redteamTreeHistory: treeOutputs,
               stopReason: 'ATTACKER_ERROR',
-              storedGraderResult,
+              storedGraderResult: getBestGraderResult(),
               sessionIds: extractSessionIds(treeOutputs),
             },
             tokenUsage: totalTokenUsage,
@@ -704,7 +714,7 @@ async function runRedteamConversation({
           materializedVars,
           prompt: newInjectVar,
         } = attackPromptResult;
-        if (inputs && shouldGenerateRemote()) {
+        if (inputs && attackerUsesRemoteProvider) {
           assertRemoteMaterializationHandled(
             { inputMaterialization, materializationHandled, materializedVars },
             'Iterative Tree multi-input generation',
@@ -789,7 +799,7 @@ async function runRedteamConversation({
 
         // If inputs is defined, extract individual keys from the attack prompt JSON
         if (inputs && Object.keys(inputs).length > 0) {
-          if (shouldGenerateRemote()) {
+          if (attackerUsesRemoteProvider) {
             try {
               const parsed = JSON.parse(newInjectVar);
               Object.assign(
@@ -899,7 +909,8 @@ async function runRedteamConversation({
           }),
         );
 
-        if (score > maxScore) {
+        const isNewBest = score > maxScore;
+        if (isNewBest) {
           maxScore = score;
           bestResponse = targetResponse.output;
           bestNode.prompt = newInjectVar;
@@ -1004,7 +1015,7 @@ async function runRedteamConversation({
 
             const { grade, rubric } = await runRedteamGrader(
               grader,
-              newInjectVar,
+              finalInjectVar,
               targetResponse.output,
               iterationTest,
               gradingProvider,
@@ -1013,10 +1024,22 @@ async function runRedteamConversation({
               undefined, // skipRefusalCheck
               gradingContext,
             );
-            storedGraderResult = accumulateGraderResult(storedGraderResult, {
-              ...grade,
-              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-            });
+            storedGraderResult = accumulateGraderResult(
+              storedGraderResult,
+              {
+                ...grade,
+                assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+              },
+              {
+                prompt: finalInjectVar,
+                output: targetResponse.output,
+                pluginId: test.metadata?.pluginId,
+                assertion: assertToUse,
+              },
+            );
+            if (isNewBest) {
+              bestGraderResult = storedGraderResult;
+            }
             graderPassed = grade.pass;
           }
         }
@@ -1044,10 +1067,10 @@ async function runRedteamConversation({
           });
           return {
             output: targetResponse.output,
-            prompt: bestNode.prompt,
+            prompt: newInjectVar,
             metadata: {
               highestScore: maxScore,
-              redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
+              redteamFinalPrompt: finalInjectVar,
               messages: treeOutputs as Record<string, any>[],
               attempts,
               redteamTreeHistory: treeOutputs,
@@ -1095,7 +1118,7 @@ async function runRedteamConversation({
               attempts,
               redteamTreeHistory: treeOutputs,
               stopReason: stoppingReason,
-              storedGraderResult,
+              storedGraderResult: getBestGraderResult(),
               sessionIds: extractSessionIds(treeOutputs),
               ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
                 transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
@@ -1139,7 +1162,7 @@ async function runRedteamConversation({
               attempts,
               redteamTreeHistory: treeOutputs,
               stopReason: stoppingReason,
-              storedGraderResult,
+              storedGraderResult: getBestGraderResult(),
               sessionIds: extractSessionIds(treeOutputs),
               ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
                 transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
@@ -1206,7 +1229,7 @@ async function runRedteamConversation({
   if (inputs && Object.keys(inputs).length > 0) {
     try {
       const parsed = JSON.parse(bestPrompt);
-      if (shouldGenerateRemote()) {
+      if (attackerUsesRemoteProvider) {
         const remoteBestNodeMaterialization = {
           inputMaterialization: bestNode.inputMaterialization,
           materializationHandled: bestNode.materializationHandled,
@@ -1286,7 +1309,7 @@ async function runRedteamConversation({
       attempts,
       redteamTreeHistory: treeOutputs,
       stopReason: stoppingReason,
-      storedGraderResult,
+      storedGraderResult: getBestGraderResult(),
       sessionIds: extractSessionIds(treeOutputs),
       ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
         transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
@@ -1376,7 +1399,11 @@ class RedteamIterativeTreeProvider implements ApiProvider {
     let redteamProvider: ApiProvider;
     let gradingProvider: ApiProvider;
 
-    if (shouldGenerateRemote()) {
+    // Remote task handlers only know the built-in default. An explicit
+    // redteamProvider must stay local even when remote generation is enabled.
+    const attackerUsesRemoteProvider = shouldGenerateRemote() && !this.config.redteamProvider;
+
+    if (attackerUsesRemoteProvider) {
       gradingProvider = new PromptfooChatCompletionProvider({
         task: 'judge',
         jsonOnly: true,
@@ -1423,6 +1450,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
       excludeTargetOutputFromAgenticAttackGeneration:
         this.excludeTargetOutputFromAgenticAttackGeneration,
       inputs: this.inputs,
+      attackerUsesRemoteProvider,
       targetId: typeof this.config.targetId === 'string' ? this.config.targetId : undefined,
       treeParams: this.treeParams,
     });

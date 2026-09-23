@@ -162,7 +162,7 @@ describe('handleAnswerRelevance', () => {
     ).rejects.toThrow('answer-relevance assertion type must have a prompt');
   });
 
-  it('should use default threshold of 0 if not specified', async () => {
+  it('should use default threshold of 0.5 if not specified', async () => {
     const mockMatchesAnswerRelevance = vi.mocked(matchesAnswerRelevance);
     mockMatchesAnswerRelevance.mockResolvedValue({
       pass: true,
@@ -193,7 +193,7 @@ describe('handleAnswerRelevance', () => {
     expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith(
       'test prompt',
       'test output',
-      0,
+      0.5,
       {},
       undefined,
     );
@@ -204,6 +204,51 @@ describe('handleAnswerRelevance', () => {
       pass: true,
       score: 0.8,
       reason: 'test reason',
+    });
+  });
+
+  it('should invert omitted-threshold not-answer-relevance results', async () => {
+    const mockMatchesAnswerRelevance = vi.mocked(matchesAnswerRelevance);
+    mockMatchesAnswerRelevance.mockResolvedValue({
+      pass: false,
+      score: 0.4,
+      reason: 'Relevance 0.40 is less than threshold 0.5',
+    });
+
+    const result = await handleAnswerRelevance({
+      assertion: {
+        type: 'not-answer-relevance',
+      },
+      output: 'test output',
+      prompt: 'test prompt',
+      test: {
+        vars: {},
+        options: {},
+      },
+      baseType: 'answer-relevance',
+      assertionValueContext: {} as AssertionValueFunctionContext,
+      inverse: true,
+      outputString: 'test output',
+      providerResponse: {
+        output: 'test output',
+        tokenUsage: {},
+      },
+    });
+
+    expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith(
+      'test prompt',
+      'test output',
+      0.5,
+      {},
+      undefined,
+    );
+    expect(result).toEqual({
+      assertion: {
+        type: 'not-answer-relevance',
+      },
+      pass: true,
+      score: 0.6,
+      reason: 'Relevance 0.40 is less than threshold 0.5',
     });
   });
 });
