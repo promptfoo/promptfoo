@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'OpenAI GPT-5.6 Sol, Terra, and Luna via Amazon Bedrock'
+description: 'OpenAI GPT-6 Sol and Luna via Amazon Bedrock'
 
 # Frontier models use Bedrock's OpenAI-compatible Responses API.
 # Authentication: use an Amazon Bedrock API key OR standard AWS credentials.
@@ -26,12 +26,12 @@ prompts:
     ]
 
 providers:
-  # Sol is available in us-east-1 and us-east-2. Promptfoo routes the bare Bedrock ID to
+  # GPT-6 Sol and Luna use Mantle in us-east-1. Promptfoo routes the bare Bedrock ID to
   # https://bedrock-mantle.<region>.api.aws/openai/v1/responses.
-  - id: bedrock:openai.gpt-5.6-sol
-    label: GPT-5.6 Sol (max reasoning)
+  - id: bedrock:openai.gpt-6-sol
+    label: GPT-6 Sol (max reasoning)
     config:
-      region: us-east-2
+      region: us-east-1
       reasoning_effort: max
       verbosity: low
       max_output_tokens: 2048
@@ -40,7 +40,7 @@ providers:
       prompt_cache_options:
         mode: explicit
         ttl: 30m
-  # Terra is available in us-east-1, us-east-2, and us-west-2.
+  # GPT-5.6 Terra remains available in us-east-1, us-east-2, and us-west-2.
   - id: bedrock:openai.gpt-5.6-terra
     label: GPT-5.6 Terra (medium reasoning)
     config:
@@ -52,9 +52,8 @@ providers:
       prompt_cache_options:
         mode: explicit
         ttl: 30m
-  # Luna is available in us-east-1, us-east-2, and us-west-2.
-  - id: bedrock:openai.gpt-5.6-luna
-    label: GPT-5.6 Luna (low reasoning, streaming)
+  - id: bedrock:openai.gpt-6-luna
+    label: GPT-6 Luna (low reasoning, streaming)
     config:
       region: us-east-1
       reasoning_effort: low

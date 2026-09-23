@@ -42,7 +42,7 @@ from agents.sandbox.entries import File
 from agents.sandbox.sandboxes.unix_local import UnixLocalSandboxClient
 from promptfoo_tracing import configure_promptfoo_tracing
 
-DEFAULT_MODEL = os.getenv("OPENAI_AGENT_MODEL", "gpt-5.6-luna")
+DEFAULT_MODEL = os.getenv("OPENAI_AGENT_MODEL", "gpt-6-luna")
 SESSION_DB_PATH = Path(__file__).with_name(".promptfoo-openai-agents.sqlite3")
 EXAMPLE_DIR = Path(__file__).resolve().parent
 DISCOUNT_REVIEW_SKILL_DIR = EXAMPLE_DIR / "skills" / "discount-review"

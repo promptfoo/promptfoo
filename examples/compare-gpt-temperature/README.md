@@ -1,4 +1,6 @@
-# compare-gpt-temperature (Gpt 4o Temperature Comparison)
+# compare-gpt-temperature (GPT-6 Luna Temperature Comparison)
+
+This example compares temperatures with GPT-6 Luna. Its reasoning effort is set to `none` so the model uses the requested temperature.
 
 You can run this example with:
 
