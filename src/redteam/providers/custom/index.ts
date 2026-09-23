@@ -749,16 +749,17 @@ export class CustomProvider implements ApiProvider {
 
     // Report the round the grader flagged. Without this the eval grades the last round, so a
     // refusal after a successful attack hides the vulnerability behind a passing row.
-    const messages = flaggedRound ? flaggedRound.messages : lastResponseMessages;
-    const finalPrompt = flaggedRound
-      ? flaggedRound.prompt
-      : lastFinalAttackPrompt || getLastMessageContent(messages, 'user');
+    const reported = flaggedRound ?? {
+      output: lastResponse.output,
+      prompt: lastFinalAttackPrompt || getLastMessageContent(lastResponseMessages, 'user'),
+      messages: lastResponseMessages,
+    };
     return {
-      output: flaggedRound ? flaggedRound.output : lastResponse.output,
-      prompt: finalPrompt,
+      output: reported.output,
+      prompt: reported.prompt,
       metadata: {
-        redteamFinalPrompt: finalPrompt,
-        messages: messages as Record<string, any>[],
+        redteamFinalPrompt: reported.prompt,
+        messages: reported.messages as Record<string, any>[],
         customRoundsCompleted: roundNum,
         customBacktrackCount: backtrackCount,
         customResult: evalFlag,

@@ -854,10 +854,14 @@ export class CrescendoProvider implements ApiProvider {
 
     // Report the round the grader flagged. Without this the eval grades the last round, so a
     // refusal after a successful attack hides the vulnerability behind a passing row.
-    const messages = flaggedRound ? flaggedRound.messages : lastResponseMessages;
-    const finalPrompt = getLastMessageContent(messages, 'user');
+    const reported = flaggedRound ?? {
+      output: lastResponse.output,
+      prompt: lastFinalAttackPrompt || getLastMessageContent(lastResponseMessages, 'user'),
+      messages: lastResponseMessages,
+    };
+    const finalPrompt = getLastMessageContent(reported.messages, 'user');
     return {
-      output: flaggedRound ? flaggedRound.output : lastResponse.output,
+      output: reported.output,
       // A target failure in a later round does not describe the round being reported, and an
       // error row would hide the vulnerability the grader already confirmed.
       ...(flaggedRound
@@ -871,10 +875,8 @@ export class CrescendoProvider implements ApiProvider {
       metadata: {
         sessionId: getSessionId(lastResponse, context),
         // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
-        redteamFinalPrompt: flaggedRound
-          ? flaggedRound.prompt
-          : lastFinalAttackPrompt || finalPrompt,
-        messages: messages as Record<string, any>[],
+        redteamFinalPrompt: reported.prompt,
+        messages: reported.messages as Record<string, any>[],
         crescendoRoundsCompleted: roundNum,
         crescendoBacktrackCount: backtrackCount,
         crescendoResult: evalFlag,
