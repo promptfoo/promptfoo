@@ -29,7 +29,7 @@ providers:
       delegation:
         type: responses
         responses:
-          model: gpt-6-luna
+          model: gpt-5.6-luna
           instructions: Return concise, factual answers.
 tests:
   - assert:

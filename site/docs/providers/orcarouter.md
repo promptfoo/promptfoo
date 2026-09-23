@@ -32,8 +32,6 @@ OrcaRouter's full live catalog is at [orcarouter.ai/models](https://www.orcarout
 | `deepseek/deepseek-reasoner`  | DeepSeek reasoning model (`temperature` is stripped — see note below).     |
 | `grok/grok-4-fast-reasoning`  | xAI reasoning model.                                                       |
 
-As of September 23, 2026, [OrcaRouter reports](https://www.orcarouter.ai/blog/gpt-6-luna-vs-gpt-6-sol) that GPT-6 Sol and Luna are not in its catalog. Use the [OpenAI provider](/docs/providers/openai/) to call them directly.
-
 ## Basic Configuration
 
 ```yaml

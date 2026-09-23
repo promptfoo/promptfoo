@@ -18,9 +18,9 @@ OpenRouter's catalog changes quickly. These are current popular and recent model
 
 | Model ID                                                                                                   | Context (tokens) | Good for                           |
 | ---------------------------------------------------------------------------------------------------------- | ---------------: | ---------------------------------- |
-| [openai/gpt-6-sol](https://openrouter.ai/openai/gpt-6-sol)                                                 |        1,050,000 | Complex reasoning and coding       |
+| [openai/gpt-5.4](https://openrouter.ai/openai/gpt-5.4)                                                     |        1,050,000 | Highest-quality general evaluation |
 | [anthropic/claude-opus-4.7](https://openrouter.ai/anthropic/claude-opus-4.7)                               |        1,000,000 | Long-running agentic workflows     |
-| [openai/gpt-6-luna](https://openrouter.ai/openai/gpt-6-luna)                                               |        1,050,000 | Fast, lower-cost OpenAI evals      |
+| [openai/gpt-5.4-mini](https://openrouter.ai/openai/gpt-5.4-mini)                                           |          400,000 | Fast, lower-cost GPT-5 workflows   |
 | [anthropic/claude-haiku-4.5](https://openrouter.ai/anthropic/claude-haiku-4.5)                             |          200,000 | Lower-latency Claude runs          |
 | [google/gemini-2.5-pro](https://openrouter.ai/google/gemini-2.5-pro)                                       |        1,048,576 | Reasoning-heavy tasks              |
 | [google/gemini-2.5-flash](https://openrouter.ai/google/gemini-2.5-flash)                                   |        1,048,576 | Fast multimodal and general chat   |
@@ -36,9 +36,8 @@ For the full catalog of 300+ models and current pricing, visit [OpenRouter Model
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: openrouter:openai/gpt-6-sol
+  - id: openrouter:openai/gpt-5.4
     config:
-      reasoning_effort: none
       temperature: 0.7
       max_tokens: 1000
 
@@ -58,7 +57,7 @@ The same pattern applies to `apiKeyEnvar` — set it to read your API key from a
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openrouter:openai/gpt-6-luna
+  - id: openrouter:openai/gpt-5.4
     config:
       apiBaseUrl: https://proxy.example.com/openrouter/api/v1
       apiKeyEnvar: MY_PROXY_KEY # optional: read the Bearer token from $MY_PROXY_KEY
@@ -66,7 +65,7 @@ providers:
 
 ## Cost reporting
 
-By default, promptfoo uses the [reported `usage.cost`](https://openrouter.ai/docs/cookbook/administration/usage-accounting) as the charge to your OpenRouter account. This also applies to the generic OpenAI Chat and Responses providers when their `apiBaseUrl` points to `https://openrouter.ai/api/v1`. Missing or invalid charges remain unknown. Reported upstream amounts remain separate metadata fields.
+By default, promptfoo uses the [reported `usage.cost`](https://openrouter.ai/docs/cookbook/administration/usage-accounting) as the charge to your OpenRouter account. Missing or invalid charges remain unknown. Reported upstream amounts remain separate metadata fields.
 
 For responses explicitly marked `usage.is_byok: true`, generic `cost` is unavailable unless you configure complete, valid token rates. With [Bring Your Own Key (BYOK)](https://openrouter.ai/docs/guides/overview/auth/byok), your upstream provider bills inference separately, so a zero or fee-only OpenRouter charge does not establish the combined cost. Responses with a missing or invalid BYOK flag continue to use the reported account charge; their route remains unknown in metadata.
 
@@ -95,10 +94,6 @@ Cache replays retain logical cost and billing metadata. The evaluator records ze
 - Pay-as-you-go pricing
 
 ## Thinking/Reasoning Models
-
-For GPT-6 Sol and Luna, set `reasoning_effort` or use `passthrough.reasoning`. A named effort and `passthrough.reasoning.max_tokens` are alternative controls. OpenRouter also supports changing reasoning effort through a [`configuration_update` on an empty system or developer message](https://openrouter.ai/docs/cookbook/evaluate-and-optimize/model-migrations/gpt-6#chat-completions-api). That message extension applies only to OpenRouter, not to native OpenAI Chat Completions. OpenRouter Responses is stateless: replay the conversation instead of sending `previous_response_id`.
-
-OpenRouter can report a [provider error alongside partial output](https://openrouter.ai/docs/api/reference/errors-and-debugging). If OpenRouter explicitly marks the error as a refusal or a content-policy block, promptfoo preserves available output from Chat or Responses and records the refusal for the [`is-refusal` assertion](/docs/configuration/expected-outputs/deterministic/#is-refusal). Provider access errors and other generation errors remain evaluation errors; Chat also retains any partial output in the raw response.
 
 Some models like Gemini 2.5 Pro include thinking tokens in their responses. You can control whether these are shown using the `showThinking` parameter:
 

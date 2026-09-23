@@ -358,7 +358,7 @@ prompts:
     label: claude_prompt
 
 providers:
-  - id: openai:gpt-6-sol
+  - id: openai:gpt-5.6
     prompts: [gpt_prompt]
   - id: anthropic:claude-sonnet-4-6
     prompts: [claude_prompt]

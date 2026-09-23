@@ -54,9 +54,8 @@ Define your tools once in OpenAI format and reuse them across all providers usin
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-6-luna
+  - id: openai:chat:gpt-5.4-mini
     config:
-      reasoning_effort: none
       tools: &tools # Anchor: define tools once
         - type: function
           function:
@@ -83,9 +82,8 @@ Define tools in OpenAI format:
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-6-sol
+  - id: openai:gpt-5.6
     config:
-      reasoning_effort: none
       tools:
         - type: function
           function:
@@ -183,9 +181,8 @@ Tool choice controls _when_ and _how_ the model uses the tools you've defined. B
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-6-sol
+  - id: openai:gpt-5.6
     config:
-      reasoning_effort: none
       tools:
         - type: function
           function:
@@ -272,9 +269,8 @@ Tools can be loaded from external files:
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-6-sol
+  - id: openai:gpt-5.6
     config:
-      reasoning_effort: none
       tools: file://tools/my-tools.json
 ```
 
@@ -313,8 +309,7 @@ providers:
         Content-Type: application/json
       transformToolsFormat: openai # Tools already in OpenAI format, pass through
       body:
-        model: gpt-6-sol
-        reasoning_effort: none
+        model: gpt-5.6
         messages: '{{ prompt }}'
         tools: '{{ tools }}'
         tool_choice: '{{ tool_choice }}'

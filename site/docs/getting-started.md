@@ -142,8 +142,8 @@ Now that you've created an initial configuration, you can update `promptfooconfi
 
    ```yaml
    providers:
-     - openai:gpt-6-sol
-     - openai:gpt-6-luna
+     - openai:chat:gpt-5.4
+     - openai:chat:gpt-5.4-mini
      - anthropic:messages:claude-opus-4-6
      - google:gemini-3.8-flash
      # Or use your own custom provider
@@ -271,7 +271,7 @@ description: Automatic response evaluation using LLM rubric scoring
 prompts:
   - file://prompts.txt
 providers:
-  - openai:gpt-6-sol
+  - openai:chat:gpt-5.4
 defaultTest:
   assert:
     - type: llm-rubric
@@ -324,7 +324,7 @@ You can also output a [spreadsheet](https://docs.google.com/spreadsheets/d/1nano
 
 ### Model quality
 
-In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-openai-models), we evaluate GPT-6 Luna, GPT-5.6 Terra, GPT-6 Sol, and GPT-6 Astra on the same prompts:
+In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-openai-models), we evaluate the difference between GPT-5.4 and GPT-5.4 Mini outputs for a given prompt:
 
 You can quickly set up this example by running:
 
@@ -351,41 +351,23 @@ You can quickly set up this example by running:
 
 ```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Comparing current OpenAI models on riddles
+description: Comparing OpenAI flagship and mini models performance on riddles
 
 prompts:
   - 'Solve this riddle: {{riddle}}'
 
 providers:
-  - id: openai:responses:gpt-6-luna
-    config:
-      reasoning:
-        effort: low
-      max_output_tokens: 2048
-  - id: openai:responses:gpt-5.6-terra
-    config:
-      reasoning:
-        effort: low
-      max_output_tokens: 2048
-  - id: openai:responses:gpt-6-sol
-    config:
-      reasoning:
-        effort: low
-      max_output_tokens: 2048
-  - id: openai:responses:gpt-6-astra
-    config:
-      reasoning:
-        effort: low
-      max_output_tokens: 2048
+  - openai:chat:gpt-5.4
+  - openai:chat:gpt-5.4-mini
 
 defaultTest:
   assert:
-    # Example per-response budget (USD)
+    # Inference should always cost less than this (USD)
     - type: cost
-      threshold: 0.15
-    # Example per-response latency budget (milliseconds)
+      threshold: 0.002
+    # Inference should always be faster than this (milliseconds)
     - type: latency
-      threshold: 60000
+      threshold: 3000
 
 tests:
   - vars:
@@ -479,7 +461,7 @@ It produces the following table, with Gemini models replacing the GPT models in 
 
 A similar approach can be used to run other model comparisons. For example, you can:
 
-- Compare GPT-6 Luna reasoning effort settings (see [GPT reasoning effort comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-gpt-reasoning-effort))
+- Compare GPT-5.4 reasoning effort settings (see [GPT reasoning effort comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-gpt-reasoning-effort))
 - Compare models with different temperatures (see [GPT temperature comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-gpt-temperature))
 - Compare open-source models (see [Comparing Open-Source Models](/docs/guides/compare-open-source-models))
 - Compare Retrieval-Augmented Generation (RAG) with LangChain vs. regular GPT (see [LangChain example](/docs/configuration/testing-llm-chains))
