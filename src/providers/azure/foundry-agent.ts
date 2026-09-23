@@ -750,22 +750,29 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         throw err;
       }
       const startTime = Date.now();
+      // The loop is bounded by wall-clock time rather than by a turn count: both
+      // the model round trips and the user's callbacks spend the same budget.
+      const outOfBudget = () => Date.now() - startTime >= maxLoopTimeMs;
+      const toolLoopTimeout = (): ProviderResponse => ({
+        error:
+          `Azure Foundry agent tool-calling loop timed out after ${maxLoopTimeMs}ms. ` +
+          'Increase maxPollTimeMs if this evaluation legitimately needs a longer tool-calling loop.',
+      });
       let functionCalls = this.getCallableFunctionCalls(
         response,
         effectiveConfig.functionToolCallbacks,
       );
-      const hasToolCalls = functionCalls.length > 0;
-      while (functionCalls.length > 0 && Date.now() - startTime < maxLoopTimeMs) {
+      while (functionCalls.length > 0 && !outOfBudget()) {
         const outputs = await this.buildFunctionCallOutputs(
           functionCalls,
           response,
           agent,
           effectiveConfig.functionToolCallbacks,
         );
-        if (Date.now() - startTime >= maxLoopTimeMs) {
-          return {
-            error: `Azure Foundry agent tool-calling loop timed out after ${maxLoopTimeMs}ms.`,
-          };
+        // Callbacks can exhaust the budget on their own. Stop before spending
+        // another round trip on outputs the loop can no longer act on.
+        if (outOfBudget()) {
+          return toolLoopTimeout();
         }
         logger.debug(
           `[AzureFoundryAgentProvider] Submitting ${outputs.length} function_call_output item(s)`,
@@ -790,10 +797,11 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         );
       }
 
-      if (hasToolCalls && Date.now() - startTime >= maxLoopTimeMs) {
-        return {
-          error: `Azure Foundry agent tool-calling loop timed out after ${maxLoopTimeMs}ms.`,
-        };
+      // Tool calls left unanswered are the only way out of the loop other than a
+      // final model response, so a run that produced one is complete even if the
+      // last turn pushed it past the budget.
+      if (functionCalls.length > 0) {
+        return toolLoopTimeout();
       }
 
       const result = await this.processResponse(response, effectiveConfig);

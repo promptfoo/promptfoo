@@ -933,6 +933,32 @@ describe('AzureFoundryAgentProvider', () => {
       expect(mockResponsesCreate).toHaveBeenCalledTimes(1);
     });
 
+    it('returns the final response when the last turn finishes past maxPollTimeMs', async () => {
+      vi.useFakeTimers();
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate
+        .mockResolvedValueOnce(createFunctionCallResponse())
+        .mockImplementationOnce(async () => {
+          // The follow-up turn spends the rest of the budget but does answer.
+          vi.advanceTimersByTime(101);
+          return createMessageResponse('Tool finished');
+        });
+
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: {
+          projectUrl,
+          maxPollTimeMs: 100,
+          functionToolCallbacks: { get_weather: vi.fn().mockResolvedValue('sunny') },
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Tool finished');
+      expect(mockResponsesCreate).toHaveBeenCalledTimes(2);
+    });
+
     it('should warn once and omit unsupported per-request fields', async () => {
       mockGetAgent.mockResolvedValue(mockAgent);
       mockResponsesCreate.mockResolvedValue(createMessageResponse('Test response'));
