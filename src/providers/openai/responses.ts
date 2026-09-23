@@ -48,8 +48,10 @@ import {
 import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
+  classifyOpenAiGatewayStreamError,
   formatOpenAiError,
   getOpenAiGatewayErrorType,
+  getOpenAiPartialOutput,
   getOpenAiPolicyRefusal,
   hasSensitiveOpenAiCachePath,
   hasSensitiveOpenAiCacheString,
@@ -937,7 +939,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const partialOutput = getResponsesOutputText(response);
     return this.applyBilling(
       {
-        output: partialOutput ?? policy.message,
+        output:
+          partialOutput === undefined
+            ? policy.message
+            : getOpenAiPartialOutput(partialOutput, config.response_format?.type === 'json_schema'),
         ...(billingData.usage ? { tokenUsage: getResponsesTokenUsage(billingData, cached) } : {}),
         cached,
         isRefusal: true,
@@ -1450,6 +1455,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
                 },
                 {
                   preserveFailedOutput: this.usesGatewayErrorFormat(),
+                  classifyError: classifyOpenAiGatewayStreamError,
                 },
               );
             } else {
@@ -1512,6 +1518,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
               undefined,
               {
                 preserveFailedOutput: this.usesGatewayErrorFormat(),
+                classifyError: classifyOpenAiGatewayStreamError,
               },
             );
           } else {

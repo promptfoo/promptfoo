@@ -8,7 +8,7 @@ import {
   formatOpenAiError,
   getOpenAiChatChoiceError,
   getOpenAiGatewayRateLimitKind,
-  getOpenAiPartialChatOutput,
+  getOpenAiPartialOutput,
   getOpenAiPolicyRefusal,
   getTokenUsage,
 } from './openai/util';
@@ -200,7 +200,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
           output:
             policy.partialOutput === undefined
               ? policy.message
-              : getOpenAiPartialChatOutput(
+              : getOpenAiPartialOutput(
                   policy.partialOutput,
                   config.response_format?.type === 'json_schema',
                 ),
@@ -273,10 +273,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     if (message.refusal || finishReason === FINISH_REASON_MAP.content_filter) {
       return {
         output: message.content
-          ? getOpenAiPartialChatOutput(
-              message.content,
-              config.response_format?.type === 'json_schema',
-            )
+          ? getOpenAiPartialOutput(message.content, config.response_format?.type === 'json_schema')
           : message.refusal || 'Content filtered by the model provider.',
         tokenUsage: getTokenUsage(data, cached),
         cached,

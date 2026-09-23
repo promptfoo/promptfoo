@@ -46,7 +46,7 @@ import {
   getOpenAiChatChoiceError,
   getOpenAiGatewayErrorType,
   getOpenAiGatewayRateLimitKind,
-  getOpenAiPartialChatOutput,
+  getOpenAiPartialOutput,
   getOpenAiPolicyRefusal,
   getTokenUsage,
   isCustomOpenAiEndpoint,
@@ -536,9 +536,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           'GPT-6 Chat Completions requests use reasoning_effort. Configure reasoning_effort, or use the Responses API for config.reasoning.',
         );
       }
-      const effort = getGpt6ChatReasoningEffort(this.config, context?.prompt?.config);
-      if (effort !== undefined) {
-        body.reasoning_effort = renderVarsInObject(effort, context?.vars);
+      const effort = getGpt6ChatReasoningEffort(this.config, context?.prompt?.config, (value) =>
+        renderVarsInObject(value, context?.vars),
+      );
+      if (effort === undefined) {
+        delete body.reasoning_effort;
+      } else {
+        body.reasoning_effort = effort;
       }
     }
     // OpenRouter can translate Chat tools to the upstream Responses API.
@@ -735,7 +739,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           output:
             policy.partialOutput === undefined
               ? policy.message
-              : getOpenAiPartialChatOutput(
+              : getOpenAiPartialOutput(
                   policy.partialOutput,
                   config.response_format?.type === 'json_schema',
                 ),

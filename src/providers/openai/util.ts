@@ -75,12 +75,30 @@ export function getOpenAiChatChoiceError(data: unknown):
 }
 
 function isOpenAiPolicyAccessRevoked(message: string): boolean {
-  return [
-    /\b(?:your|this)\s+(?:(?:organization|account|api key)(?:['’]s)?\s+)?(?:access|permissions?)\b(?:\s+[\w’'-]+){0,10}\s+(?:(?:has|have)\s+been|is|are|was|were)\s+(?:(?:temporarily|permanently)\s+)?(?:revoked|suspended|disabled|restricted)\b/i,
-    /\b(?:access|permissions?)\s+(?:for|of)\s+(?:your|this|the)\s+(?:organization|account|api key)\b(?:\s+[\w’'-]+){0,6}\s+(?:(?:has|have)\s+been|is|are|was|were)\s+(?:(?:temporarily|permanently)\s+)?(?:revoked|suspended|disabled|restricted)\b/i,
-    /\b(?:we|openai|the provider)\s+(?:have|has)\s+(?:(?:temporarily|permanently)\s+)?(?:revoked|suspended|disabled|restricted)\s+(?:your|this)\s+(?:(?:organization|account|api key)(?:['’]s)?\s+)?(?:access|permissions?)\b/i,
-    /\b(?:your|this)\s+(?:organization|account|api key)\s+(?:(?:has|have)\s+been|is|was)\s+(?:(?:temporarily|permanently)\s+)?(?:revoked|suspended|disabled|restricted)\b/i,
-  ].some((pattern) => pattern.test(message));
+  const entity = String.raw`(?:organization|account|api key|user|safety[- ]identifier)`;
+  const access = String.raw`(?:access|permissions?)`;
+  const providerTarget = String.raw`(?:(?:these|this|the|our|openai(?:['’]s)?)\s+)?(?:models?|api|service|platform|provider)`;
+  const state = String.raw`(?:(?:has|have)\s+been|is|are|was|were)\s+(?:(?:temporarily|permanently)\s+)?(?:revoked|suspended|disabled|restricted)\b`;
+  const patterns = [
+    new RegExp(
+      String.raw`^(?:your|this)\s+${entity}(?:['’]s)?\s+${access}(?:\s+to\s+${providerTarget})?\s+${state}`,
+      'i',
+    ),
+    new RegExp(String.raw`^(?:your|this)\s+${access}\s+to\s+${providerTarget}\s+${state}`, 'i'),
+    new RegExp(
+      String.raw`^${access}\s+(?:for|of)\s+(?:(?:your|this|the)\s+)?${entity}(?:\s+["'][\w.-]+["'])?\s+${state}`,
+      'i',
+    ),
+    new RegExp(String.raw`^(?:your|this|the)\s+${entity}\s+${state}`, 'i'),
+    new RegExp(
+      String.raw`^(?:we|openai|the provider)\s+(?:have|has)\s+(?:(?:temporarily|permanently)\s+)?(?:revoked|suspended|disabled|restricted)\s+(?:your|this)\s+(?:${entity}(?:['’]s)?\s+)?${access}(?:\s+to\s+${providerTarget})?(?:$|[!,;]|\s+(?:because|due)\b)`,
+      'i',
+    ),
+  ];
+  return message.split(/(?:[!?]|\.(?:\s|$)|\n)+/).some((part) => {
+    const sentence = part.trim().replace(/^error:\s*/i, '');
+    return patterns.some((pattern) => pattern.test(sentence));
+  });
 }
 
 export function getOpenAiGatewayErrorType(data: unknown): string | undefined {
@@ -109,7 +127,7 @@ export function getOpenAiGatewayRateLimitKind(data: unknown): 'quota' | 'rate_li
     : 'rate_limit';
 }
 
-export function getOpenAiPartialChatOutput(output: unknown, jsonSchema: boolean): unknown {
+export function getOpenAiPartialOutput(output: unknown, jsonSchema: boolean): unknown {
   if (jsonSchema && typeof output === 'string') {
     try {
       return JSON.parse(output);
@@ -160,6 +178,34 @@ export function getOpenAiPolicyRefusal(
       ? {}
       : { partialOutput: choiceError.partialOutput }),
   };
+}
+
+export function classifyOpenAiGatewayStreamError(
+  data: unknown,
+): 'refusal' | 'content_policy_violation' | 'potential' | 'technical' | undefined {
+  const marker = getOpenAiGatewayErrorType(data);
+  if (getOpenAiPolicyRefusal(data, true)) {
+    return marker as 'refusal' | 'content_policy_violation';
+  }
+  if (marker) {
+    return 'technical';
+  }
+  const root = getRecord(data);
+  const response = getRecord(root?.response) ?? root;
+  const error = getRecord(response?.error);
+  switch (error?.code) {
+    case 'image_content_policy_violation':
+    case 'content_policy_violation':
+    case 'content_filter':
+      return 'content_policy_violation';
+    case 'refusal':
+      return 'refusal';
+    case 'bio_policy':
+    case 'cyber_policy':
+      return 'potential';
+    default:
+      return undefined;
+  }
 }
 
 function hasInlineSecret(value: string): boolean {

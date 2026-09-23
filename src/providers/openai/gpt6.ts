@@ -71,14 +71,24 @@ export function resolveGpt6ChatOutputCap(
 
 export function getGpt6ChatReasoningEffort(
   providerConfig: ReasoningConfig,
-  promptConfig?: ReasoningConfig,
+  promptConfig: ReasoningConfig | undefined,
+  render: (value: unknown) => unknown,
 ): unknown {
-  return firstDefined(
+  const candidates = [
     promptConfig?.reasoning_effort,
     getObject(promptConfig?.passthrough)?.reasoning_effort,
     providerConfig.reasoning_effort,
     getObject(providerConfig.passthrough)?.reasoning_effort,
-  );
+  ];
+  for (const candidate of candidates) {
+    if (candidate !== undefined) {
+      const effort = render(candidate);
+      if (effort !== undefined) {
+        return effort;
+      }
+    }
+  }
+  return undefined;
 }
 
 function renderResponsesReasoning(

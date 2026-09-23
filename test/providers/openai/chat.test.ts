@@ -812,6 +812,9 @@ describe('OpenAI Provider', () => {
         const descriptions = [
           'I cannot help you gain access to disabled user accounts.',
           'I cannot assist with restoring permissions on a suspended account.',
+          'Your access to the requested private data is restricted; I cannot help obtain it.',
+          'I cannot assist with access if your account is suspended.',
+          'If your API key has been disabled, I cannot provide the requested private data.',
         ];
         const accountErrors = [
           'Your organization’s access to these models has been temporarily revoked.',
@@ -819,6 +822,10 @@ describe('OpenAI Provider', () => {
           'Your organization access was revoked.',
           'We have revoked your account’s access to these models.',
           'Your API key has been disabled.',
+          'Access for this user has been temporarily revoked.',
+          'Your access to these models has been temporarily revoked.',
+          'Error: Access for this safety identifier has been temporarily revoked.',
+          "Access for safety identifier 'sample.user' has been permanently restricted.",
         ];
         for (const provider of providers) {
           for (const location of ['outer', 'choice']) {

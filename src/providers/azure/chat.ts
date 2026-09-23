@@ -246,7 +246,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
     // Get reasoning effort for reasoning models
     const configuredGpt6Effort = gpt6Variant
-      ? getGpt6ChatReasoningEffort(this.config, context?.prompt?.config)
+      ? getGpt6ChatReasoningEffort(this.config, context?.prompt?.config, (value) =>
+          renderVarsInObject(value, context?.vars),
+        )
       : undefined;
     const defaultReasoningEffort = config.omitDefaults || useModelDefaults ? undefined : 'medium';
     const reasoningEffort = gpt6Variant
@@ -255,7 +257,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         : configuredGpt6Effort
       : (config.reasoning_effort ?? defaultReasoningEffort);
     const renderedReasoningEffort = isReasoningModel
-      ? renderVarsInObject(reasoningEffort, context?.vars)
+      ? gpt6Variant
+        ? reasoningEffort
+        : renderVarsInObject(reasoningEffort, context?.vars)
       : undefined;
 
     // --- MCP tool injection logic ---

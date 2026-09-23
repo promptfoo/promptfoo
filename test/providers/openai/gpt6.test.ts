@@ -1168,6 +1168,51 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
     }
   });
 
+  it('inherits a Chat effort when a higher-priority callback returns undefined', async () => {
+    const prompt = { raw: 'Say ready.', label: 'ready' };
+    for (const [kind, Provider, name] of [
+      ['OpenAI', OpenAiChatCompletionProvider, model],
+      ['Azure', AzureChatCompletionProvider, model],
+    ] as const) {
+      for (const providerLayer of ['direct', 'passthrough']) {
+        const omitted = vi.fn(() => undefined);
+        const fallback = vi.fn(() => 'none');
+        const provider = new Provider(name, {
+          config: {
+            apiKey: 'test-key',
+            tools: [statusTool],
+            temperature: 0.7,
+            ...(providerLayer === 'direct'
+              ? { reasoning_effort: fallback as any }
+              : { passthrough: { reasoning_effort: fallback } }),
+          },
+        });
+        const { body } = await provider.getOpenAiBody(prompt.raw, {
+          vars: {},
+          prompt: { ...prompt, config: { reasoning_effort: omitted as any } },
+        });
+        expect(body.reasoning_effort, kind).toBe('none');
+        expect(body.temperature, kind).toBe(0.7);
+        expect(body.tools, kind).toHaveLength(1);
+        expect(omitted, kind).toHaveBeenCalledTimes(1);
+        expect(fallback, kind).toHaveBeenCalledTimes(1);
+      }
+      for (const reset of [null, '']) {
+        const fallback = vi.fn(() => 'none');
+        const provider = new Provider(name, {
+          config: { apiKey: 'test-key', temperature: 0.7, reasoning_effort: fallback as any },
+        });
+        const { body } = await provider.getOpenAiBody(prompt.raw, {
+          vars: {},
+          prompt: { ...prompt, config: { reasoning_effort: (() => reset) as any } },
+        });
+        expect(body).not.toHaveProperty('reasoning_effort');
+        expect(body).not.toHaveProperty('temperature');
+        expect(fallback).not.toHaveBeenCalled();
+      }
+    }
+  });
+
   it('treats empty OpenRouter effort values as prompt-level resets', async () => {
     const prompt = { raw: 'Say ready.', label: 'ready' };
     const provider = new OpenRouterProvider(`openai/${model}`, {

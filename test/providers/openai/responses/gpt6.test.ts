@@ -136,20 +136,22 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
           [{ inputCost: 2 / 1e6 }, undefined],
           [{ inputCost: 2 / 1e6, outputCost: 3 / 1e6 }, 0.0023],
         ] as const) {
-          vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-            data,
-            cached: false,
-            status: 200,
-            statusText: 'OK',
-          });
-          const result = await new OpenAiResponsesProvider(model, {
-            config: { apiKey: 'test-key', apiBaseUrl, ...rates },
-          }).callApi('A test prompt');
-          expect(result.error).toBeUndefined();
-          if (expected === undefined) {
-            expect(result.cost).toBeUndefined();
-          } else {
-            expect(result.cost).toBeCloseTo(expected, 10);
+          for (const deployment of [model, `prod-${model}`]) {
+            vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+              data: { ...data, model: deployment },
+              cached: false,
+              status: 200,
+              statusText: 'OK',
+            });
+            const result = await new OpenAiResponsesProvider(deployment, {
+              config: { apiKey: 'test-key', apiBaseUrl, ...rates },
+            }).callApi('A test prompt');
+            expect(result.error).toBeUndefined();
+            if (expected === undefined) {
+              expect(result.cost).toBeUndefined();
+            } else {
+              expect(result.cost).toBeCloseTo(expected, 10);
+            }
           }
         }
       }
@@ -467,6 +469,170 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
               !partialExpected && marker === 'refusal' ? true : undefined,
             );
             expect(result.raw).toMatchObject({ id: 'resp_policy', error_type: marker });
+          }
+        }
+      }
+    },
+  );
+
+  it.each(['gpt-6-sol', 'gpt-6-luna'])(
+    'parses complete structured Responses refusal output and distinguishes gateway access errors for %s',
+    async (model) => {
+      const provider = new OpenAiResponsesProvider(`openai/${model}`, {
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl: 'https://openrouter.ai/api/v1',
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'answer',
+              strict: true,
+              schema: {
+                type: 'object',
+                properties: { answer: { type: 'string' } },
+                required: ['answer'],
+                additionalProperties: false,
+              },
+            },
+          },
+        },
+      });
+      const resultFor = async (text: string | undefined, message: string) => {
+        const data = {
+          id: 'refusal',
+          model,
+          status: 'failed',
+          error_type: 'refusal',
+          error: { code: 'cyber_policy', message },
+          output:
+            text === undefined
+              ? []
+              : [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text }] }],
+        };
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          data,
+          cached: false,
+          status: 400,
+          statusText: 'Bad Request',
+        });
+        return { result: await provider.callApi('A benign prompt'), data };
+      };
+      for (const [text, expected] of [
+        ['{"answer":"visible"}', { answer: 'visible' }],
+        ['{"answer":', '{"answer":'],
+      ] as const) {
+        const { result, data } = await resultFor(text, 'The provider declined the response.');
+        expect(result.output).toEqual(expected);
+        expect(result.isRefusal).toBe(true);
+        expect(result.raw).toEqual(data);
+      }
+      for (const [message, expected] of [
+        ['Your access to the requested private data is restricted; I cannot help obtain it.', true],
+        ['I cannot assist with access if your account is suspended.', true],
+        ['Access for this user has been temporarily revoked.', false],
+        ['Error: Access for this safety identifier has been temporarily revoked.', false],
+      ] as const) {
+        const { result } = await resultFor(undefined, message);
+        expect(result.isRefusal).toBe(expected ? true : undefined);
+        if (expected) {
+          expect(result.output).toBe(message);
+          expect(result.error).toBeUndefined();
+        } else {
+          expect(result.error).toContain(message);
+        }
+      }
+    },
+  );
+
+  it.each(['gpt-6-sol', 'gpt-6-luna'])(
+    'retains gateway policy output after standalone Responses stream errors and preserves technical errors for %s',
+    async (model) => {
+      const partial = 'Visible partial answer';
+      const message = 'The output was blocked.';
+      const delta = {
+        type: 'response.output_text.delta',
+        output_index: 0,
+        content_index: 0,
+        delta: partial,
+      };
+      const terminal = (errorType: string, code: string) => ({
+        type: 'response.failed',
+        response: {
+          id: 'stream-policy',
+          status: 'failed',
+          error_type: errorType,
+          error: { code, message },
+          output: [],
+        },
+      });
+      const plain = (code: string, errorType?: string) => ({
+        type: 'error',
+        error: { code, message },
+        ...(errorType ? { error_type: errorType } : {}),
+      });
+      const cases = [
+        {
+          events: [
+            delta,
+            plain('image_content_policy_violation'),
+            terminal('content_policy_violation', 'image_content_policy_violation'),
+          ],
+          refusal: true,
+        },
+        {
+          events: [
+            delta,
+            plain('cyber_policy'),
+            terminal('content_policy_violation', 'cyber_policy'),
+          ],
+          refusal: true,
+        },
+        { events: [delta, plain('cyber_policy', 'content_policy_violation')], refusal: true },
+        { events: [delta, plain('image_content_policy_violation')], refusal: true },
+        { events: [delta, plain('cyber_policy')], refusal: false },
+        {
+          events: [
+            delta,
+            plain('provider_unavailable'),
+            terminal('provider_unavailable', 'provider_unavailable'),
+          ],
+          refusal: false,
+        },
+        {
+          events: [
+            delta,
+            plain('image_content_policy_violation'),
+            terminal('provider_unavailable', 'provider_unavailable'),
+          ],
+          refusal: false,
+        },
+      ];
+      for (const apiBaseUrl of [
+        'https://openrouter.ai/api/v1',
+        'https://proxy.example.test/openrouter/api/v1',
+        'https://api.openai.com/v1',
+      ]) {
+        for (const { events, refusal } of cases) {
+          const raw = events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join('');
+          vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+            data: raw,
+            cached: false,
+            status: 200,
+            statusText: 'OK',
+          });
+          const result = await new OpenAiResponsesProvider(model, {
+            config: { apiKey: 'test-key', apiBaseUrl, stream: true },
+          }).callApi('A benign test prompt');
+          if (refusal && !apiBaseUrl.includes('api.openai.com')) {
+            expect(result.error).toBeUndefined();
+            expect(result.output).toBe(partial);
+            expect(result.isRefusal).toBe(true);
+            expect(result.guardrails?.flagged).toBe(true);
+            expect(result.guardrails?.flaggedInput).toBeUndefined();
+          } else {
+            expect(result.error).toContain('streaming response error');
+            expect(result.isRefusal).toBeUndefined();
+            expect(result.output).toBeUndefined();
           }
         }
       }

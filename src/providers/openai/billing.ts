@@ -1,4 +1,4 @@
-import { isGpt6Model } from './gpt6';
+import { getGpt6Variant, isGpt6Model } from './gpt6';
 import {
   getOpenAICacheWriteInputTokens,
   isAzureOpenAiEndpoint,
@@ -1031,8 +1031,9 @@ export function calculateOpenAIUsageCost(
   }
   const usageParts = getOpenAIUsageParts(rawUsage);
   const usage = extractOpenAIBillingUsage(rawUsage);
+  const gpt6Variant = getGpt6Variant(modelName);
   if (
-    /^gpt-6-(?:sol|luna)(?:-|$)/.test(modelName) &&
+    (gpt6Variant === 'sol' || gpt6Variant === 'luna') &&
     usesAzureOpenAiBilling(config, options.apiUrl, options.provider)
   ) {
     const inputRate = config.inputCost ?? config.cost;

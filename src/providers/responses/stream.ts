@@ -8,12 +8,20 @@ type ResponsesStreamEvent = {
   output?: any[];
   code?: string;
   message?: string;
-  error?: { code?: string; message?: string };
+  error_type?: string;
+  error?: {
+    code?: string;
+    message?: string;
+    error_type?: string;
+    metadata?: Record<string, unknown>;
+  };
 };
 
 type ResponsesStreamLogger = {
   debug(message: string, context?: Record<string, unknown>): unknown;
 };
+
+type StreamErrorClassification = 'refusal' | 'content_policy_violation' | 'potential' | 'technical';
 
 export function getResponsesOutputText(response: any): string | undefined {
   if (typeof response.output_text === 'string' && response.output_text.trim()) {
@@ -76,7 +84,10 @@ export async function readResponsesStream(
   providerName: string,
   logger: ResponsesStreamLogger,
   onResponse?: (response: any) => void,
-  options?: { preserveFailedOutput?: boolean },
+  options?: {
+    preserveFailedOutput?: boolean;
+    classifyError?: (response: unknown) => StreamErrorClassification | undefined;
+  },
 ): Promise<any> {
   if (!response.body) {
     throw new Error(`${providerName} streaming response has no body`);
@@ -88,6 +99,9 @@ export async function readResponsesStream(
   let latestResponse: any;
   let outputText = '';
   const textByOutputIndex = new Map<number, Map<number, string>>();
+  let pendingError:
+    | { error: Error; response: Record<string, unknown>; classification: StreamErrorClassification }
+    | undefined;
 
   const processChunk = (chunk: string) => {
     const event = parseSseEvent(chunk, providerName, logger);
@@ -98,9 +112,22 @@ export async function readResponsesStream(
     if (event.type === 'error') {
       const code = event.error?.code ?? event.code;
       const message = event.error?.message ?? event.message ?? 'unknown stream error';
-      throw new Error(
+      const error = new Error(
         `${providerName} streaming response error${code ? ` (${code})` : ''}: ${message}`,
       );
+      const errorResponse = {
+        status: 'failed',
+        error: event.error ?? { code, message },
+        ...(event.error_type ? { error_type: event.error_type } : {}),
+      };
+      const classification = options?.preserveFailedOutput
+        ? options.classifyError?.(errorResponse)
+        : undefined;
+      if (!classification || classification === 'technical') {
+        throw error;
+      }
+      pendingError = { error, response: errorResponse, classification };
+      return;
     }
 
     if (event.response && typeof event.response === 'object') {
@@ -142,6 +169,26 @@ export async function readResponsesStream(
   buffer += decoder.decode();
   if (buffer.trim()) {
     processChunk(buffer);
+  }
+
+  if (pendingError) {
+    const terminal =
+      latestResponse?.status === 'failed' ? options?.classifyError?.(latestResponse) : undefined;
+    if (
+      terminal === 'technical' ||
+      (terminal !== 'refusal' &&
+        terminal !== 'content_policy_violation' &&
+        pendingError.classification === 'potential')
+    ) {
+      throw pendingError.error;
+    }
+    if (terminal !== 'refusal' && terminal !== 'content_policy_violation') {
+      latestResponse = {
+        ...latestResponse,
+        ...pendingError.response,
+        error_type: pendingError.classification,
+      };
+    }
   }
 
   if (latestResponse) {
