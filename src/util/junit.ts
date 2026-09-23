@@ -54,16 +54,17 @@ function normalizeInlineText(
   value: string | undefined,
   fallback: string,
   maxLength = MAX_JUNIT_NAME_LENGTH,
-  sanitize = false,
 ): string {
-  const normalized = value?.replace(/\s+/g, ' ').trim() || fallback;
-  const bounded = truncateText(normalized, maxLength);
-  return !sanitize && bounded.search(INVALID_XML_CHARACTERS) === -1
-    ? bounded
-    : truncateText(
-        normalized.replace(INVALID_XML_CHARACTERS, '').replace(/\s+/g, ' ').trim() || fallback,
-        maxLength,
-      );
+  // Collapse whitespace first so forbidden whitespace (vertical tab, form feed)
+  // separates words instead of joining them, then drop what XML rejects and
+  // collapse again to close the gaps it left behind. Sanitizing before
+  // truncating keeps the visible text as long as the limit allows.
+  const sanitized = (value ?? '')
+    .replace(/\s+/g, ' ')
+    .replace(INVALID_XML_CHARACTERS, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return truncateText(sanitized || fallback, maxLength);
 }
 
 function formatDurationSeconds(durationMs: number | undefined): string {
@@ -209,7 +210,6 @@ async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
         rawName,
         'unknown provider',
         MAX_JUNIT_NAME_LENGTH - suffix.length,
-        Boolean(suffix),
       );
       const ordinalKey = suffix ? providerKey : JSON.stringify([providerName]);
       let promptOrdinals = promptOrdinalsByProvider.get(ordinalKey);
