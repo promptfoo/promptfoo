@@ -871,7 +871,9 @@ export class CrescendoProvider implements ApiProvider {
       metadata: {
         sessionId: getSessionId(lastResponse, context),
         // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
-        redteamFinalPrompt: flaggedRound ? flaggedRound.prompt : lastFinalAttackPrompt || finalPrompt,
+        redteamFinalPrompt: flaggedRound
+          ? flaggedRound.prompt
+          : lastFinalAttackPrompt || finalPrompt,
         messages: messages as Record<string, any>[],
         crescendoRoundsCompleted: roundNum,
         crescendoBacktrackCount: backtrackCount,
