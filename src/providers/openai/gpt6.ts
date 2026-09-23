@@ -2,11 +2,11 @@ const REASONING_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
 const UNKNOWN_PERSISTED_EFFORT = Symbol('unknown persisted effort');
 
 type Gpt6Variant = 'astra' | 'sol' | 'luna';
-type Gpt6Reasoning = { effort?: unknown } | null | undefined;
+type Gpt6Reasoning = { effort?: unknown; enabled?: unknown } | null | undefined;
 
 function getGpt6Variant(modelName: unknown): Gpt6Variant | undefined {
   return typeof modelName === 'string'
-    ? (/(?:^|[/-])gpt-6-(astra|sol|luna)(?:-|$)/.exec(modelName)?.[1] as Gpt6Variant | undefined)
+    ? (/(?:^|[/-])gpt-6-(astra|sol|luna)(?:[-:]|$)/.exec(modelName)?.[1] as Gpt6Variant | undefined)
     : undefined;
 }
 
@@ -42,6 +42,23 @@ function getResponsesEffortUpdates(input: unknown): unknown[] {
   for (const item of input) {
     if (item?.type === 'configuration_update') {
       const effort = item.reasoning?.effort;
+      if (effort != null && effort !== '') {
+        efforts.push(effort);
+      }
+    }
+  }
+  return efforts;
+}
+
+function getOpenRouterChatEffortUpdates(messages: unknown): unknown[] {
+  if (!Array.isArray(messages)) {
+    return [];
+  }
+
+  const efforts: unknown[] = [];
+  for (const message of messages) {
+    if ((message?.role === 'system' || message?.role === 'developer') && message.content === '') {
+      const effort = message.configuration_update?.reasoning?.effort;
       if (effort != null && effort !== '') {
         efforts.push(effort);
       }
@@ -102,12 +119,40 @@ function validateChatTools(
   }
 }
 
+function getSamplingEffort(
+  body: Record<string, unknown>,
+  api: 'chat' | 'responses',
+  effort: unknown,
+  variant: Gpt6Variant,
+  modelLabel: string,
+  isOpenRouter: boolean,
+): unknown {
+  if (api === 'chat' && !isOpenRouter) {
+    return effort;
+  }
+  const updates =
+    api === 'chat'
+      ? getOpenRouterChatEffortUpdates(body.messages)
+      : getResponsesEffortUpdates(body.input);
+  for (const update of updates) {
+    validateReasoningEffort(update, variant, modelLabel);
+  }
+  if (updates.length) {
+    return updates.at(-1);
+  }
+  // A linked response or stored conversation can carry an effort we cannot see locally.
+  if (api === 'responses' && (body.previous_response_id || body.conversation)) {
+    return UNKNOWN_PERSISTED_EFFORT;
+  }
+  return effort;
+}
+
 /** Apply GPT-6 request restrictions after config and passthrough have been merged. */
 export function applyGpt6RequestRules(
   body: Record<string, unknown>,
   modelName: unknown,
   api: 'chat' | 'responses',
-  options: { allowChatTools?: boolean; defaultResponsesTemperature?: number } = {},
+  options: { isOpenRouter?: boolean; defaultResponsesTemperature?: number } = {},
 ): void {
   const variant = getGpt6Variant(modelName);
   if (!variant) {
@@ -121,35 +166,37 @@ export function applyGpt6RequestRules(
       `${modelLabel} Responses requests use reasoning.effort. Configure reasoning or reasoning_effort instead of passthrough.reasoning_effort.`,
     );
   }
-  if (api === 'chat' && variant !== 'astra' && !options.allowChatTools && body.reasoning != null) {
+  if (api === 'chat' && variant !== 'astra' && !options.isOpenRouter && body.reasoning != null) {
     throw new Error(
       `${modelLabel} Chat Completions requests use reasoning_effort. Configure reasoning_effort instead of passthrough.reasoning.`,
     );
   }
-  const effort = api === 'chat' ? (body.reasoning_effort ?? reasoning?.effort) : reasoning?.effort;
+  const effort =
+    api === 'chat'
+      ? (body.reasoning_effort ??
+        reasoning?.effort ??
+        (options.isOpenRouter && reasoning?.enabled === false ? 'none' : undefined))
+      : reasoning?.effort;
   validateReasoningEffort(effort, variant, modelLabel);
 
-  let samplingEffort = effort;
   if (api === 'chat') {
-    validateChatTools(body, variant, modelLabel, effort, options.allowChatTools ?? false);
-  } else {
-    const updates = getResponsesEffortUpdates(body.input);
-    for (const update of updates) {
-      validateReasoningEffort(update, variant, modelLabel);
-    }
-    // A linked response or stored conversation can carry an effort we cannot see locally.
-    samplingEffort = updates.length
-      ? updates.at(-1)
-      : body.previous_response_id || body.conversation
-        ? UNKNOWN_PERSISTED_EFFORT
-        : effort;
-    if (
-      samplingEffort === 'none' &&
-      !Object.hasOwn(body, 'temperature') &&
-      options.defaultResponsesTemperature !== undefined
-    ) {
-      body.temperature = options.defaultResponsesTemperature;
-    }
+    validateChatTools(body, variant, modelLabel, effort, options.isOpenRouter ?? false);
+  }
+  const samplingEffort = getSamplingEffort(
+    body,
+    api,
+    effort,
+    variant,
+    modelLabel,
+    options.isOpenRouter ?? false,
+  );
+  if (
+    api === 'responses' &&
+    samplingEffort === 'none' &&
+    !Object.hasOwn(body, 'temperature') &&
+    options.defaultResponsesTemperature !== undefined
+  ) {
+    body.temperature = options.defaultResponsesTemperature;
   }
 
   if (

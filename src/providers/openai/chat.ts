@@ -91,6 +91,34 @@ function getChatSearchSurcharge(modelName: string): number {
   return 0;
 }
 
+type OpenRouterReasoning = { effort?: unknown; [key: string]: unknown };
+type OpenRouterPromptReasoning = {
+  reasoning_effort?: unknown;
+  passthrough?: { reasoning_effort?: unknown; reasoning?: OpenRouterReasoning | null };
+};
+
+function reconcileOpenRouterReasoning(
+  body: Record<string, unknown>,
+  promptConfig?: OpenRouterPromptReasoning,
+): void {
+  if (!body.reasoning || typeof body.reasoning !== 'object' || Array.isArray(body.reasoning)) {
+    return;
+  }
+  const reasoning = body.reasoning as OpenRouterReasoning;
+  const topLevelEffort = body.reasoning_effort;
+  if (!topLevelEffort || !reasoning.effort) {
+    return;
+  }
+
+  // OpenRouter rejects mismatched aliases. A prompt-level value beats the other provider-level form.
+  const promptEffort =
+    promptConfig?.reasoning_effort || promptConfig?.passthrough?.reasoning_effort;
+  const promptNestedEffort = promptConfig?.passthrough?.reasoning?.effort;
+  const effort = !promptEffort && promptNestedEffort ? reasoning.effort : topLevelEffort;
+  body.reasoning = { ...reasoning, effort };
+  delete body.reasoning_effort;
+}
+
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   getAudioInputFormat(): 'openai' | undefined {
     const model =
@@ -341,9 +369,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       delete body.max_tokens;
     }
 
+    if (isOpenRouterGpt6) {
+      reconcileOpenRouterReasoning(body, context?.prompt?.config);
+    }
     // OpenRouter can translate Chat tools to the upstream Responses API.
     applyGpt6RequestRules(body, capabilityModelName, 'chat', {
-      allowChatTools: this.getGenAISystem() === 'openrouter',
+      isOpenRouter: this.getGenAISystem() === 'openrouter',
     });
 
     return { body, config: { ...config, service_tier: body.service_tier } };
