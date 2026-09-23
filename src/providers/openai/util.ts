@@ -10,6 +10,7 @@ import type { ProviderConfig } from '../shared';
 const ajv = getAjv();
 
 const GPT_LONG_CONTEXT_THRESHOLD = 272_000;
+const AZURE_OPENAI_HOSTNAME = /(?:^|\.)(?:openai\.azure\.com|services\.ai\.azure\.com)$/;
 const OPAQUE_CREDENTIAL_PATH_SEGMENT =
   /(?:^|\/)(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32,}|(?:token|key|secret|credential|auth)[-_][a-z0-9._-]{8,})(?:\/|$)/i;
 
@@ -19,28 +20,26 @@ function getRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
-export function isAzureOpenAiEndpoint(value: string | undefined): boolean {
-  if (!value) {
-    return false;
-  }
+function getOpenAiEndpointHostname(value: string): string | undefined {
   try {
     const endpoint = /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? value : `https://${value}`;
-    return /(?:^|\.)(?:openai\.azure\.com|services\.ai\.azure\.com)$/.test(
-      new URL(endpoint).hostname,
-    );
+    return new URL(endpoint).hostname;
   } catch {
-    return false;
+    return undefined;
   }
 }
 
+export function isAzureOpenAiEndpoint(value: string | undefined): boolean {
+  return value !== undefined && AZURE_OPENAI_HOSTNAME.test(getOpenAiEndpointHostname(value) ?? '');
+}
+
 export function isCustomOpenAiEndpoint(value: string): boolean {
-  try {
-    const endpoint = /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? value : `https://${value}`;
-    const hostname = new URL(endpoint).hostname;
-    return !/^(?:[a-z0-9-]+\.)?api\.openai\.com$/.test(hostname) && !isAzureOpenAiEndpoint(value);
-  } catch {
-    return false;
-  }
+  const hostname = getOpenAiEndpointHostname(value);
+  return (
+    hostname !== undefined &&
+    !/^(?:[a-z0-9-]+\.)?api\.openai\.com$/.test(hostname) &&
+    !AZURE_OPENAI_HOSTNAME.test(hostname)
+  );
 }
 
 export function getOpenAiChatChoiceError(data: unknown):
