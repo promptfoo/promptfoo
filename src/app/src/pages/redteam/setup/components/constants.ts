@@ -30,6 +30,7 @@ export const predefinedTargets: RedteamUITarget[] = [
   { value: 'claude-fable-5-1', label: 'Anthropic Claude Fable 5.1' },
   { value: 'claude-mythos-5-1', label: 'Anthropic Claude Mythos 5.1 (limited access)' },
   { value: 'claude-fable-5', label: 'Anthropic Claude Fable 5' },
+  { value: 'claude-opus-5-5', label: 'Anthropic Claude Opus 5.5' },
   { value: 'claude-opus-5', label: 'Anthropic Claude Opus 5' },
   { value: 'claude-opus-4-8', label: 'Anthropic Claude 4.8 Opus' },
   { value: 'claude-sonnet-5', label: 'Anthropic Claude Sonnet 5' },
