@@ -50,7 +50,7 @@ providers:
       model_reasoning_effort: medium
       max_cost_usd: 1
 
-  - id: openai:codex-security:gpt-6-sol
+  - id: openai:codex-security:gpt-5.6-sol
     label: standard-sol-high
     config:
       operation: security-scan
@@ -58,7 +58,7 @@ providers:
       model_reasoning_effort: high
       max_cost_usd: 1
 
-  - id: openai:codex-security:gpt-6-sol
+  - id: openai:codex-security:gpt-5.6-sol
     label: deep-sol-high
     config:
       operation: deep-security-scan
@@ -147,7 +147,7 @@ Pass a structured finding directly or load it from `finding_file`:
 
 ```yaml
 providers:
-  - id: openai:codex-security:gpt-6-sol
+  - id: openai:codex-security:gpt-5.6-sol
     config:
       operation: validation
       repository: ./isolated-checkout

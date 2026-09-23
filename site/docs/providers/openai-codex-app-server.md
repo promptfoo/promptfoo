@@ -24,7 +24,7 @@ providers:
 
 `openai:codex-desktop` is an alias for the same app-server protocol. Promptfoo starts its own `codex app-server` process; it does not attach to an already-running Codex Desktop app process.
 
-For [GPT-6 Astra](/docs/providers/openai#gpt-6-astra), use Codex 0.153.1 or later and an account with Astra access. [Sol and Luna](/docs/providers/openai#gpt-6-sol-and-luna) are also available when supported by your Codex client and account. Reasoning levels depend on the runtime's model catalog. Codex `ultra` is a multi-agent mode, not a direct Responses API reasoning value.
+For [GPT-6 Astra](/docs/providers/openai#gpt-6-astra), use Codex 0.153.1 or later and an account with Astra access. [Sol and Luna](/docs/providers/openai#gpt-6-sol-and-luna) require [Codex 0.155.0 or later](https://github.com/openai/codex/releases/tag/rust-v0.155.0) and account access. Reasoning levels depend on the runtime's model catalog. Codex `ultra` is available for Sol, but not Luna; it is not a direct Responses API reasoning value.
 
 ## Codex SDK vs App Server vs Desktop App
 

@@ -157,7 +157,7 @@ Use `openai:responses:gpt-6-sol` for complex coding and agentic workflows, or `o
 
 Responses supports function calling and built-in tools with reasoning. Chat Completions supports function calling only with `reasoning_effort: none`; Promptfoo reports an error if Chat tools are combined with another or unspecified effort. Temperature, top-p, and log probabilities are available on either endpoint with effort `none` and are omitted with other efforts. See the [Sol](https://developers.openai.com/api/docs/models/gpt-6-sol) and [Luna](https://developers.openai.com/api/docs/models/gpt-6-luna) model guides.
 
-On Responses, a [`configuration_update`](https://developers.openai.com/api/docs/guides/reasoning#change-reasoning-mid-conversation) in the input selects the effort used for sampling. If you only reference a previous response or stored conversation, Promptfoo cannot see earlier updates; it forwards explicitly configured sampling parameters for OpenAI to validate.
+On Responses, a [`configuration_update`](https://developers.openai.com/api/docs/guides/reasoning#change-reasoning-mid-conversation) in the input selects the effort used for sampling. If you only reference a previous response or stored conversation, Promptfoo cannot see earlier updates; it forwards explicitly configured sampling parameters for OpenAI to validate. When the current effort is known to be `none`, Promptfoo defaults `temperature` to `0` unless you set `omitDefaults: true`.
 
 ### Fine-tuned models {#fine-tuned-and-legacy-completion-models}
 
@@ -322,7 +322,8 @@ When grading generated text with embeddings, configure the embedding provider on
 
 ## Responses API
 
-{/* Preserve existing links to consolidated sections. */}
+{/_ Preserve existing links to consolidated sections. _/}
+
 <Link id="supported-responses-models" />
 <Link id="using-the-responses-api" />
 <Link id="advanced-configuration" />
@@ -395,7 +396,8 @@ Authenticated background jobs are persisted for resumption only when a non-secre
 
 ## Structured output {#using-response_format}
 
-{/* Preserve existing links to consolidated sections. */}
+{/_ Preserve existing links to consolidated sections. _/}
+
 <Link id="prompt-config-example" />
 <Link id="provider-config-example" />
 <Link id="per-test-structured-output" />
@@ -601,7 +603,8 @@ Keep callback files inside the configuration's base directory. Promptfoo rejects
 
 ## Web search {#web-search-support}
 
-{/* Preserve existing links to consolidated sections. */}
+{/_ Preserve existing links to consolidated sections. _/}
+
 <Link id="enabling-web-search" />
 <Link id="using-web-search-assertions" />
 <Link id="cost-considerations" />
@@ -803,7 +806,8 @@ Cost estimates may be absent for `quality: auto` or custom sizes. Returned usage
 
 ## Audio {#audio-capabilities}
 
-{/* Preserve existing links to consolidated sections. */}
+{/_ Preserve existing links to consolidated sections. _/}
+
 <Link id="audio-configuration-options" />
 
 Choose the route for your task: `openai:chat:gpt-audio-1.5` for audio input or output in a chat request, [text to speech](#text-to-speech) for reading supplied text aloud, or [Realtime](#realtime-api-models) for conversational sessions. The Responses provider does not support this audio-chat format.
@@ -909,7 +913,8 @@ Keep `gpt-4o-transcribe-diarize` for speaker labels and `whisper-1` for word tim
 
 ## Realtime {#realtime-api-models}
 
-{/* Preserve existing links to consolidated sections. */}
+{/_ Preserve existing links to consolidated sections. _/}
+
 <Link id="supported-realtime-models" />
 <Link id="using-realtime-api" />
 <Link id="function-calling-with-realtime-api" />
@@ -1040,7 +1045,8 @@ For these long-running Responses requests, `REQUEST_TIMEOUT_MS` does not overrid
 
 ## Migrating older configurations
 
-{/* Preserve existing links to consolidated sections. */}
+{/_ Preserve existing links to consolidated sections. _/}
+
 <Link id="video-generation-sora" />
 <Link id="basic-usage" />
 <Link id="configuration-options" />
@@ -1069,7 +1075,8 @@ OpenAI-compatible services have their own lifecycle and API contracts. A provide
 
 ## Agent providers {#agentic-providers}
 
-{/* Preserve existing links to consolidated sections. */}
+{/_ Preserve existing links to consolidated sections. _/}
+
 <Link id="agents-sdk" />
 <Link id="codex-sdk" />
 <Link id="codex-security-sdk" />

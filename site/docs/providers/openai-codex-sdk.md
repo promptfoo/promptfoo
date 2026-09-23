@@ -41,10 +41,10 @@ You can reference this provider using either base ID, and you can inline the mod
 
 ## Installation
 
-Promptfoo includes the Codex SDK as an optional dependency. If optional dependencies are omitted, install it manually. GPT-6 Astra requires version 0.153.1 or later:
+Promptfoo includes the Codex SDK as an optional dependency. If optional dependencies are omitted, install it manually. GPT-6 Sol and Luna require [Codex 0.155.0 or later](https://github.com/openai/codex/releases/tag/rust-v0.155.0); Astra requires 0.153.1 or later:
 
 ```bash
-npm install @openai/codex-sdk@^0.153.2
+npm install @openai/codex-sdk@^0.155.0
 ```
 
 Use Node.js `>=22.22.0`, which matches promptfoo's repo/runtime requirement and the provider's loader checks.
@@ -262,7 +262,7 @@ The `approval_policy` parameter controls when user approval is required:
 
 ## Models
 
-Use `gpt-6-sol` or `gpt-6-luna` when available to your client and account. `gpt-6-astra` requires [Codex 0.153.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.153.1) and an account with Astra access. GPT-5.6 tiers remain available during the rollout. Availability depends on the installed Codex runtime and authentication method; consult [OpenAI's Codex model guide](https://learn.chatgpt.com/docs/models).
+Use `gpt-6-sol` or `gpt-6-luna` with [Codex 0.155.0 or later](https://github.com/openai/codex/releases/tag/rust-v0.155.0) when available to your account. `gpt-6-astra` requires [Codex 0.153.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.153.1) and an account with Astra access. GPT-5.6 tiers remain available during the rollout. Availability depends on the installed Codex runtime and authentication method; consult [OpenAI's Codex model guide](https://learn.chatgpt.com/docs/models).
 
 ```yaml
 providers:
@@ -628,7 +628,7 @@ Available levels vary by model:
 | `high`    | Thorough reasoning for complex tasks            | All models                                                                                                                                       |
 | `xhigh`   | Extra-high reasoning depth                      | gpt-6-astra, gpt-6-sol, gpt-6-luna, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5, gpt-5.5-pro, gpt-5.4, gpt-5.4-pro, gpt-5.3-codex, gpt-5.2 |
 | `max`     | Deepest single-agent reasoning                  | gpt-6-astra, gpt-6-sol, gpt-6-luna, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna                                                                     |
-| `ultra`   | Proactive multi-agent reasoning using subagents | gpt-6-astra, gpt-5.6-sol, gpt-5.6-terra                                                                                                          |
+| `ultra`   | Proactive multi-agent reasoning using subagents | gpt-6-astra, gpt-6-sol, gpt-5.6-sol, gpt-5.6-terra                                                                                               |
 
 Promptfoo validates the allowed enum values, but model-specific support is ultimately enforced by the Codex SDK/runtime. If a value is not supported by the selected model, the provider returns a normal provider error row.
 
