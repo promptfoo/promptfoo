@@ -164,6 +164,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     let status: number;
     let statusText: string;
     let cached = false;
+    let deleteFromCache: (() => Promise<void>) | undefined;
     let responseHeaders: Record<string, string> | undefined;
 
     try {
@@ -172,6 +173,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
         cached,
         status,
         statusText,
+        deleteFromCache,
         headers: responseHeaders,
       } = await fetchWithCache<OpenRouterChatCompletionResponse>(
         appendOpenAiApiPath(this.getApiUrl(), 'chat/completions'),
@@ -200,7 +202,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
           isRefusal: true,
           guardrails: {
             flagged: true,
-            ...(policy.fromChoice ? {} : { flaggedInput: true }),
+            ...(policy.flaggedInput ? { flaggedInput: true } : {}),
             reason: policy.message,
           },
           raw: data,
@@ -213,6 +215,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       }
       const choiceError = data.error ? undefined : getOpenAiChatChoiceError(data);
       if (choiceError) {
+        await deleteFromCache?.();
         return {
           error: `API error: ${choiceError.error.message}`,
           ...(data.usage ? { tokenUsage: getTokenUsage(data, cached) } : {}),

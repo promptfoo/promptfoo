@@ -63,12 +63,21 @@ export function getOpenAiChatChoiceError(data: unknown):
   };
 }
 
+function isOpenAiPolicyAccessRevoked(message: string): boolean {
+  return [
+    /\b(?:your|this)\s+(?:(?:organization|account|api key)(?:['’]s)?\s+)?(?:access|permissions?)\b(?:\s+[\w’'-]+){0,10}\s+(?:(?:has|have)\s+been|is|are|was|were)\s+(?:(?:temporarily|permanently)\s+)?(?:revoked|suspended|disabled|restricted)\b/i,
+    /\b(?:access|permissions?)\s+(?:for|of)\s+(?:your|this|the)\s+(?:organization|account|api key)\b(?:\s+[\w’'-]+){0,6}\s+(?:(?:has|have)\s+been|is|are|was|were)\s+(?:(?:temporarily|permanently)\s+)?(?:revoked|suspended|disabled|restricted)\b/i,
+    /\b(?:we|openai|the provider)\s+(?:have|has)\s+(?:(?:temporarily|permanently)\s+)?(?:revoked|suspended|disabled|restricted)\s+(?:your|this)\s+(?:(?:organization|account|api key)(?:['’]s)?\s+)?(?:access|permissions?)\b/i,
+    /\b(?:your|this)\s+(?:organization|account|api key)\s+(?:(?:has|have)\s+been|is|was)\s+(?:(?:temporarily|permanently)\s+)?(?:revoked|suspended|disabled|restricted)\b/i,
+  ].some((pattern) => pattern.test(message));
+}
+
 /** A gateway refusal marker distinguishes prompt blocks from native access-level policy errors. */
 export function getOpenAiPolicyRefusal(
   data: unknown,
   allowGatewayMarker = false,
 ):
-  | { message: string; code?: string; fromChoice: boolean; partialOutput?: string | unknown[] }
+  | { message: string; code?: string; flaggedInput?: true; partialOutput?: string | unknown[] }
   | undefined {
   if (!allowGatewayMarker) {
     return undefined;
@@ -83,22 +92,23 @@ export function getOpenAiPolicyRefusal(
   }
   const metadata = getRecord(error.metadata);
   const providerCode = metadata?.provider_code ?? error.code;
-  const marked =
-    metadata?.error_type === 'refusal' ||
-    error.error_type === 'refusal' ||
-    (!choiceError && response?.error_type === 'refusal');
+  const marker = [
+    metadata?.error_type,
+    error.error_type,
+    choiceError ? undefined : response?.error_type,
+  ].find((value) => value === 'refusal' || value === 'content_policy_violation');
   const message = typeof error.message === 'string' ? error.message : '';
-  const accessRevoked =
-    /\b(?:access|permissions?)\b.{0,80}\b(?:revoked|suspended|disabled)\b|\b(?:revoked|suspended|disabled)\b.{0,80}\b(?:access|permissions?)\b/i.test(
-      message,
-    );
-  if (!marked || accessRevoked) {
+  if (!marker || (marker === 'refusal' && isOpenAiPolicyAccessRevoked(message))) {
     return undefined;
   }
   return {
     message: message.trim() ? message : 'The model provider declined this request.',
     ...(typeof providerCode === 'string' ? { code: providerCode } : {}),
-    fromChoice: Boolean(choiceError),
+    ...(!choiceError &&
+    marker === 'refusal' &&
+    (providerCode === 'bio_policy' || providerCode === 'cyber_policy')
+      ? { flaggedInput: true as const }
+      : {}),
     ...(choiceError?.partialOutput === undefined
       ? {}
       : { partialOutput: choiceError.partialOutput }),

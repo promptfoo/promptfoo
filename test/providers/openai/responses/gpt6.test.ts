@@ -162,6 +162,12 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
       const rates = { inputCost: 0.0002, outputCost: 0.001 };
       const webItem = { type: 'web_search_call', status: 'completed', action: { type: 'search' } };
       const fileItem = { type: 'file_search_call', status: 'completed' };
+      const interpreterItem = {
+        type: 'code_interpreter_call',
+        status: 'completed',
+        container_id: 'container',
+      };
+      const imageItem = { type: 'image_generation_call', status: 'completed' };
       const payload = (items: unknown[], toolUsage?: unknown) => ({
         ...responseData,
         model,
@@ -182,6 +188,10 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
           [[], { web_search: { num_requests: 5 } }, false, undefined],
           [[webItem], undefined, false, undefined],
           [[fileItem], undefined, false, undefined],
+          [[interpreterItem], undefined, false, undefined],
+          [[imageItem], undefined, false, undefined],
+          [[interpreterItem], { web_search: { num_requests: 0 } }, false, undefined],
+          [[interpreterItem], undefined, true, 0],
           [[webItem], { web_search: { num_requests: 0 } }, false, 0.3],
           [[], undefined, false, 0.3],
           [[webItem], { web_search: { num_requests: 5 } }, true, 0],
@@ -238,6 +248,7 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
             status: 200,
             data: {
               ...responseData,
+              output: [],
               status: 'failed',
               error_type: 'refusal',
               error: { code, message },
@@ -366,6 +377,70 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
         config: { apiKey: 'test-key', apiBaseUrl: 'https://openrouter.ai/api/v1' },
       }).callApi('A test prompt');
       expect(cached.tokenUsage).toMatchObject({ cached: 150, total: 150 });
+    },
+  );
+
+  it.each(['gpt-6-sol', 'gpt-6-luna'])(
+    'preserves partial OpenRouter Responses output and grades late content blocks for %s',
+    async (model) => {
+      const partial = 'Visible partial answer';
+      const description = 'The provider stopped generation.';
+      const output = [
+        { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: partial }] },
+      ];
+      for (const marker of ['refusal', 'content_policy_violation']) {
+        const base = {
+          id: 'resp_policy',
+          status: 'failed',
+          model: `openai/${model}`,
+          error_type: marker,
+          error: { code: 'cyber_policy', message: description },
+        };
+        for (const [stream, raw, partialExpected] of [
+          [false, { ...base, output }, partial],
+          [
+            true,
+            `data: ${JSON.stringify({ type: 'response.failed', response: { ...base, output } })}\n\n`,
+            partial,
+          ],
+          [
+            true,
+            `data: ${JSON.stringify({ type: 'response.output_text.delta', delta: 'Visible ' })}\n\ndata: ${JSON.stringify({ type: 'response.output_text.delta', delta: 'partial answer' })}\n\ndata: ${JSON.stringify({ type: 'response.failed', response: { ...base, output: [] } })}\n\n`,
+            partial,
+          ],
+          [
+            false,
+            {
+              ...base,
+              output: [
+                {
+                  type: 'reasoning',
+                  content: [{ type: 'output_text', text: 'Private reasoning' }],
+                },
+              ],
+            },
+            undefined,
+          ],
+        ] as const) {
+          vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+            data: raw,
+            cached: false,
+            status: 200,
+            statusText: 'OK',
+          });
+          const result = await new OpenAiResponsesProvider(`openai/${model}`, {
+            config: { apiKey: 'test-key', apiBaseUrl: 'https://openrouter.ai/api/v1', stream },
+          }).callApi('A benign test prompt');
+          expect(result.error).toBeUndefined();
+          expect(result.output).toBe(partialExpected ?? description);
+          expect(result.isRefusal).toBe(true);
+          expect(result.guardrails?.flagged).toBe(true);
+          expect(result.guardrails?.flaggedInput).toBe(
+            !partialExpected && marker === 'refusal' ? true : undefined,
+          );
+          expect(result.raw).toMatchObject({ id: 'resp_policy', error_type: marker });
+        }
+      }
     },
   );
 

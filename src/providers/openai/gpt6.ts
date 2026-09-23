@@ -1,6 +1,7 @@
 const REASONING_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
 const UNKNOWN_PERSISTED_EFFORT = Symbol('unknown persisted effort');
 const COMPACTED_EFFORT = Symbol('effort before compaction');
+const OUTPUT_CAP_RESET = Symbol('default output cap');
 
 type Gpt6Variant = 'astra' | 'sol' | 'luna';
 type Gpt6Reasoning = { effort?: unknown; enabled?: unknown; mode?: unknown } | null | undefined;
@@ -27,6 +28,41 @@ function getObject(value: unknown): Record<string, unknown> | undefined {
 
 function firstDefined(...values: unknown[]): unknown {
   return values.find((value) => value !== undefined);
+}
+
+type ChatOutputCapConfig = {
+  max_tokens?: number | null;
+  max_completion_tokens?: number | null;
+  passthrough?: unknown;
+};
+
+function getGpt6ChatOutputCap(config?: ChatOutputCapConfig, isOpenRouter = false) {
+  const passthrough = (getObject(config?.passthrough) ?? {}) as Omit<
+    ChatOutputCapConfig,
+    'passthrough'
+  >;
+  const cap = [
+    passthrough.max_completion_tokens,
+    ...(isOpenRouter
+      ? [passthrough.max_tokens, config?.max_completion_tokens]
+      : [config?.max_completion_tokens, passthrough.max_tokens]),
+    config?.max_tokens,
+  ].find((value) => value !== undefined);
+  return cap === null ? OUTPUT_CAP_RESET : cap;
+}
+
+export function resolveGpt6ChatOutputCap(
+  providerConfig: ChatOutputCapConfig,
+  promptConfig: ChatOutputCapConfig | undefined,
+  isOpenRouter: boolean,
+  environment: { maxCompletionTokens?: number; maxTokens?: number },
+): number | undefined {
+  const cap =
+    getGpt6ChatOutputCap(promptConfig, isOpenRouter) ??
+    getGpt6ChatOutputCap(providerConfig, isOpenRouter) ??
+    environment.maxCompletionTokens ??
+    environment.maxTokens;
+  return cap === OUTPUT_CAP_RESET ? undefined : cap;
 }
 
 export function getGpt6ChatReasoningEffort(

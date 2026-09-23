@@ -44,6 +44,7 @@ export async function readResponsesStream(
   providerName: string,
   logger: ResponsesStreamLogger,
   onResponse?: (response: any) => void,
+  options?: { preserveFailedOutput?: boolean },
 ): Promise<any> {
   if (!response.body) {
     throw new Error(`${providerName} streaming response has no body`);
@@ -105,6 +106,13 @@ export async function readResponsesStream(
   }
 
   if (latestResponse) {
+    if (options?.preserveFailedOutput && latestResponse.status === 'failed' && outputText) {
+      const reportedText =
+        typeof latestResponse.output_text === 'string' ? latestResponse.output_text : '';
+      if (reportedText.length < outputText.length) {
+        return { ...latestResponse, output_text: outputText };
+      }
+    }
     return latestResponse;
   }
 

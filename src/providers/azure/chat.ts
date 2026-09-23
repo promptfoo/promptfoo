@@ -27,6 +27,7 @@ import {
   getGpt6ChatReasoningEffort,
   getGpt6Variant,
   isGpt6Model,
+  resolveGpt6ChatOutputCap,
 } from '../openai/gpt6';
 import { getRequestTimeoutMs, parseChatPrompt, transformTools } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
@@ -335,6 +336,17 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         delete body.reasoning_effort;
       } else {
         body.reasoning_effort = renderedReasoningEffort;
+      }
+    }
+    if (useModelDefaults) {
+      const outputCap = resolveGpt6ChatOutputCap(this.config, context?.prompt?.config, false, {
+        maxCompletionTokens: getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'),
+        maxTokens: getEnvInt('OPENAI_MAX_TOKENS'),
+      });
+      if (outputCap === undefined) {
+        delete body.max_completion_tokens;
+      } else {
+        body.max_completion_tokens = outputCap;
       }
     }
     applyGpt6RequestRules(body, capabilityModelName, 'chat');

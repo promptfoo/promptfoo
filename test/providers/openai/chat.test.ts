@@ -645,6 +645,121 @@ describe('OpenAI Provider', () => {
     );
 
     it.each(['gpt-6-sol', 'gpt-6-luna'])(
+      'evicts OpenRouter Chat choice outages so the next identical request can recover for %s',
+      async (model) => {
+        for (const provider of [
+          new OpenAiChatCompletionProvider(`openai/${model}`, {
+            config: { apiBaseUrl: 'https://openrouter.ai/api/v1' },
+          }),
+          new OpenRouterProvider(`openai/${model}`, { config: { apiKey: 'test-key' } }),
+        ]) {
+          const broken = {
+            choices: [
+              {
+                message: { content: 'partial' },
+                finish_reason: 'error',
+                error: {
+                  message: 'Temporary outage',
+                  metadata: { error_type: 'provider_unavailable' },
+                },
+              },
+            ],
+          };
+          const healthy = {
+            choices: [{ message: { content: 'Recovered' }, finish_reason: 'stop' }],
+          };
+          let cacheValue: typeof broken | typeof healthy | undefined;
+          let networkCalls = 0;
+          const deleteFromCache = vi.fn(async () => {
+            cacheValue = undefined;
+          });
+          mockFetchWithCache.mockImplementation(async () => {
+            const cached = cacheValue !== undefined;
+            if (!cacheValue) {
+              networkCalls++;
+              cacheValue = networkCalls === 1 ? broken : healthy;
+            }
+            return { data: cacheValue, cached, status: 200, statusText: 'OK', deleteFromCache };
+          });
+          const first = await provider.callApi('Same prompt');
+          const second = await provider.callApi('Same prompt');
+          expect(first.error).toContain('Temporary outage');
+          expect(second).toMatchObject({ output: 'Recovered', cached: false });
+          expect(second.error).toBeUndefined();
+          expect(networkCalls).toBe(2);
+          expect(deleteFromCache).toHaveBeenCalledTimes(1);
+          mockFetchWithCache.mockReset();
+        }
+      },
+    );
+
+    it.each(['gpt-6-sol', 'gpt-6-luna'])(
+      'grades explicit OpenRouter content blocks and distinguishes account revocation from refusal text for %s',
+      async (model) => {
+        const providers = [
+          new OpenAiChatCompletionProvider(`openai/${model}`, {
+            config: { apiBaseUrl: 'https://openrouter.ai/api/v1' },
+          }),
+          new OpenRouterProvider(`openai/${model}`, { config: { apiKey: 'test-key' } }),
+        ];
+        const partial = 'Partial text';
+        const descriptions = [
+          'I cannot help you gain access to disabled user accounts.',
+          'I cannot assist with restoring permissions on a suspended account.',
+        ];
+        const accountErrors = [
+          'Your organization’s access to these models has been temporarily revoked.',
+          'Access for your organization has been temporarily revoked.',
+          'Your organization access was revoked.',
+          'We have revoked your account’s access to these models.',
+          'Your API key has been disabled.',
+        ];
+        for (const provider of providers) {
+          for (const location of ['outer', 'choice']) {
+            for (const [marker, description, refused] of [
+              ...descriptions.map((description) => ['refusal', description, true] as const),
+              ['content_policy_violation', 'The content filter stopped generation.', true] as const,
+              ...accountErrors.map((description) => ['refusal', description, false] as const),
+            ]) {
+              const error = {
+                code: 403,
+                message: description,
+                metadata: { error_type: marker, provider_code: 'cyber_policy' },
+              };
+              const data =
+                location === 'outer'
+                  ? { error }
+                  : { choices: [{ message: { content: partial }, finish_reason: 'error', error }] };
+              const deleteFromCache = vi.fn(async () => {});
+              mockFetchWithCache.mockResolvedValueOnce({
+                data,
+                cached: false,
+                status: location === 'outer' ? 403 : 200,
+                statusText: '',
+                deleteFromCache,
+              });
+              const result = await provider.callApi('A benign test prompt');
+              if (refused) {
+                expect(result.error).toBeUndefined();
+                expect(result.output).toBe(location === 'choice' ? partial : description);
+                expect(result.isRefusal).toBe(true);
+                expect(result.guardrails?.flagged).toBe(true);
+                if (marker === 'content_policy_violation' || location === 'choice') {
+                  expect(result.guardrails?.flaggedInput).toBeUndefined();
+                }
+                expect(gradeProviderRefusal(result)).toMatchObject({ pass: true, score: 1 });
+                expect(deleteFromCache).not.toHaveBeenCalled();
+              } else {
+                expect(result.error).toContain(description);
+                expect(result.isRefusal).toBeUndefined();
+              }
+            }
+          }
+        }
+      },
+    );
+
+    it.each(['gpt-6-sol', 'gpt-6-luna'])(
       'leaves Cloudflare-routed Azure Chat pricing unknown without supplied rates for %s',
       async (model) => {
         const data = {

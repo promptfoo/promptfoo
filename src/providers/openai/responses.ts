@@ -77,7 +77,11 @@ interface OpenAIErrorResponse {
 
 function hasUnpricedAzureResponsesToolUsage(data: any): boolean {
   const output = Array.isArray(data?.output) ? data.output : [];
-  if (output.some((item: any) => item?.type === 'file_search_call')) {
+  if (
+    output.some((item: any) =>
+      ['file_search_call', 'code_interpreter_call', 'image_generation_call'].includes(item?.type),
+    )
+  ) {
     return true;
   }
   const webSearch = data?.tool_usage?.web_search;
@@ -93,7 +97,10 @@ interface OpenAIResponsesResponse {
   model?: string;
   status?: string;
   response?: OpenAIResponsesResponse;
+  output_text?: string;
   output?: Array<{
+    type?: string;
+    role?: string;
     content?: Array<{
       type: string;
       text?: string;
@@ -114,6 +121,29 @@ interface OpenAIResponsesResponse {
     code?: string;
     message?: string;
   };
+}
+
+function getPartialOpenAiResponsesOutput(response: OpenAIResponsesResponse): string | undefined {
+  if (typeof response.output_text === 'string' && response.output_text.trim()) {
+    return response.output_text;
+  }
+  const parts = (response.output ?? []).flatMap((item) => {
+    if (
+      (item.type !== 'message' && item.type !== 'output_message') ||
+      (item.role && item.role !== 'assistant')
+    ) {
+      return [];
+    }
+    const text = (item.content ?? [])
+      .filter(
+        (part) =>
+          (part.type === 'output_text' || part.type === 'text') && typeof part.text === 'string',
+      )
+      .map((part) => part.text)
+      .join('');
+    return text.trim() ? [text] : [];
+  });
+  return parts.length ? parts.join('\n') : undefined;
 }
 
 interface BackgroundResponseResult {
@@ -923,13 +953,18 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
     const response = data.response ?? data;
     const billingData = { ...response, usage: response.usage ?? data.usage };
+    const partialOutput = getPartialOpenAiResponsesOutput(response);
     return this.applyBilling(
       {
-        output: policy.message,
+        output: partialOutput ?? policy.message,
         ...(billingData.usage ? { tokenUsage: getResponsesTokenUsage(billingData, cached) } : {}),
         cached,
         isRefusal: true,
-        guardrails: { flagged: true, flaggedInput: true, reason: policy.message },
+        guardrails: {
+          flagged: true,
+          ...(!partialOutput && policy.flaggedInput ? { flaggedInput: true } : {}),
+          reason: policy.message,
+        },
         raw: response,
         metadata: {
           ...(response.id ? { responseId: response.id } : {}),
@@ -1432,6 +1467,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
                     }
                   }
                 },
+                {
+                  preserveFailedOutput:
+                    this.getGenAISystem() === 'openai' && isOpenRouterEndpoint(this.getApiUrl()),
+                },
               );
             } else {
               const text = await response.text();
@@ -1486,7 +1525,16 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           statusText = response.statusText;
           responseHeaders = response.headers;
           if (status >= 200 && status < 300) {
-            data = await readResponsesStream(new Response(response.data), 'OpenAI', logger);
+            data = await readResponsesStream(
+              new Response(response.data),
+              'OpenAI',
+              logger,
+              undefined,
+              {
+                preserveFailedOutput:
+                  this.getGenAISystem() === 'openai' && isOpenRouterEndpoint(this.getApiUrl()),
+              },
+            );
           } else {
             try {
               data = JSON.parse(response.data);

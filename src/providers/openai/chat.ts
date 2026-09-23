@@ -34,7 +34,12 @@ import {
 } from '../tracing';
 import { OpenAiGenericProvider } from './';
 import { calculateOpenAIUsageCost } from './billing';
-import { applyGpt6RequestRules, getGpt6ChatReasoningEffort, isGpt6Model } from './gpt6';
+import {
+  applyGpt6RequestRules,
+  getGpt6ChatReasoningEffort,
+  isGpt6Model,
+  resolveGpt6ChatOutputCap,
+} from './gpt6';
 import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
@@ -104,7 +109,6 @@ type OpenRouterReasoning = {
   max_tokens?: unknown;
   [key: string]: unknown;
 };
-const OUTPUT_CAP_RESET = Symbol('default output cap');
 type OpenRouterPassthrough = {
   reasoning_effort?: unknown;
   reasoning?: OpenRouterReasoning | null;
@@ -117,34 +121,6 @@ function getOpenRouterPassthrough(config?: OpenAiCompletionOptions): OpenRouterP
   return passthrough && typeof passthrough === 'object' && !Array.isArray(passthrough)
     ? (passthrough as OpenRouterPassthrough)
     : {};
-}
-
-function getGpt6ChatOutputCap(
-  config?: OpenAiCompletionOptions,
-  isOpenRouter = false,
-): number | typeof OUTPUT_CAP_RESET | undefined {
-  const passthrough = getOpenRouterPassthrough(config);
-  const cap = [
-    passthrough.max_completion_tokens,
-    ...(isOpenRouter
-      ? [passthrough.max_tokens, config?.max_completion_tokens]
-      : [config?.max_completion_tokens, passthrough.max_tokens]),
-    config?.max_tokens,
-  ].find((value) => value !== undefined);
-  return cap === null ? OUTPUT_CAP_RESET : cap;
-}
-
-function resolveGpt6ChatOutputCap(
-  providerConfig: OpenAiCompletionOptions,
-  promptConfig: OpenAiCompletionOptions | undefined,
-  isOpenRouter: boolean,
-): number | undefined {
-  const cap =
-    getGpt6ChatOutputCap(promptConfig, isOpenRouter) ??
-    getGpt6ChatOutputCap(providerConfig, isOpenRouter) ??
-    getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ??
-    getEnvInt('OPENAI_MAX_TOKENS');
-  return cap === OUTPUT_CAP_RESET ? undefined : cap;
 }
 
 function getOpenRouterReasoningControl(
@@ -530,6 +506,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         this.config,
         context?.prompt?.config,
         isOpenRouterGpt6,
+        {
+          maxCompletionTokens: getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'),
+          maxTokens: getEnvInt('OPENAI_MAX_TOKENS'),
+        },
       );
       if (outputCap === undefined) {
         delete body.max_completion_tokens;
@@ -748,7 +728,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           isRefusal: true,
           guardrails: {
             flagged: true,
-            ...(policy.fromChoice ? {} : { flaggedInput: true }),
+            ...(policy.flaggedInput ? { flaggedInput: true } : {}),
             reason: policy.message,
           },
           raw: data,
@@ -762,6 +742,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const choiceError =
         this.usesOpenRouter() && !data?.error ? getOpenAiChatChoiceError(data) : undefined;
       if (choiceError) {
+        await deleteFromCache?.();
         const cost = this.calculateResponseCost(data, config, cached);
         return {
           error: `API error: ${choiceError.error.message}`,

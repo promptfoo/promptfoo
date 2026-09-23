@@ -1145,6 +1145,54 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
     }
   });
 
+  it('resolves Azure OpenAI Chat output caps by prompt, provider, then environment', async () => {
+    const restore = mockProcessEnv({
+      OPENAI_MAX_COMPLETION_TOKENS: '900',
+      OPENAI_MAX_TOKENS: '950',
+    });
+    const prompt = { raw: 'Say ready.', label: 'ready' };
+    try {
+      for (const [providerConfig, promptConfig, expected] of [
+        [{}, {}, 900],
+        [{ max_tokens: 50 }, {}, 50],
+        [{ passthrough: { max_tokens: 60 } }, {}, 60],
+        [{ max_completion_tokens: 400 }, { max_tokens: 50 }, 50],
+        [{ passthrough: { max_completion_tokens: 400 } }, { max_completion_tokens: 50 }, 50],
+        [{ passthrough: { max_completion_tokens: 400 } }, { passthrough: { max_tokens: 50 } }, 50],
+        [{ max_tokens: 400 }, { passthrough: { max_completion_tokens: 50 } }, 50],
+        [{ max_tokens: 400 }, { passthrough: { max_tokens: null } }, undefined],
+        [{ max_tokens: 400 }, { max_completion_tokens: null }, undefined],
+        [{ max_tokens: 40, max_completion_tokens: 50, passthrough: { max_tokens: 60 } }, {}, 50],
+        [
+          { max_tokens: 40, max_completion_tokens: 50, passthrough: { max_completion_tokens: 70 } },
+          {},
+          70,
+        ],
+      ] as const) {
+        for (const [deployment, modelConfig] of [
+          [`prod-${model}`, {}],
+          ['opaque', { modelName: model }],
+        ] as const) {
+          const provider = new AzureChatCompletionProvider(deployment, {
+            config: { ...modelConfig, ...providerConfig } as any,
+          });
+          const { body } = await provider.getOpenAiBody(prompt.raw, {
+            vars: {},
+            prompt: { ...prompt, config: promptConfig as any },
+          });
+          if (expected === undefined) {
+            expect(body).not.toHaveProperty('max_completion_tokens');
+          } else {
+            expect(body.max_completion_tokens).toBe(expected);
+          }
+          expect(body).not.toHaveProperty('max_tokens');
+        }
+      }
+    } finally {
+      restore();
+    }
+  });
+
   it('applies prompt-level OpenAI reasoning before Azure capability validation', async () => {
     const prompt = { raw: 'Say ready.', label: 'ready' };
     for (const [baseline, effort] of [
