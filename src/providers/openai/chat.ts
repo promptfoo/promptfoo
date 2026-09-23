@@ -81,6 +81,26 @@ export function getOpenAiGatewayRateLimitKind(data: unknown): 'quota' | 'rate_li
   return getOpenAiGatewayErrorType(data) === 'rate_limit_exceeded' ? 'rate_limit' : undefined;
 }
 
+export function getOpenAiRateLimitResponse(
+  error: unknown,
+  responseHeaders?: Record<string, string>,
+): ProviderResponse | undefined {
+  if (!(error instanceof HttpRateLimitError)) {
+    return undefined;
+  }
+  return {
+    error: formatRateLimitErrorMessage(error),
+    metadata: {
+      rateLimitKind: error.kind,
+      http: {
+        status: error.status,
+        statusText: error.statusText,
+        headers: error.headers ?? responseHeaders ?? {},
+      },
+    },
+  };
+}
+
 function getChatSearchCitations(
   annotations: unknown,
   output: unknown,
@@ -860,18 +880,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       // and so the user-facing message stays the canonical
       // "Rate limit exceeded:" / "Quota exceeded:" form rather than being
       // wrapped in "API call error: HttpRateLimitError: ...".
-      if (err instanceof HttpRateLimitError) {
-        return {
-          error: formatRateLimitErrorMessage(err),
-          metadata: {
-            rateLimitKind: err.kind,
-            http: {
-              status: err.status,
-              statusText: err.statusText,
-              headers: err.headers ?? responseHeaders ?? {},
-            },
-          },
-        };
+      const rateLimitResponse = getOpenAiRateLimitResponse(err, responseHeaders);
+      if (rateLimitResponse) {
+        return rateLimitResponse;
       }
       return {
         error: `API call error: ${String(err)}`,
