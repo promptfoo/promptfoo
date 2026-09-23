@@ -633,6 +633,15 @@ export class CustomProvider implements ApiProvider {
                 assertion: assertToUse,
               },
             );
+            if (!grade.pass) {
+              // `prompt` and `output` must stay the values the grading hash was built from,
+              // or the assertion layer re-grades the round instead of reusing this verdict.
+              flaggedRound ??= captureFlaggedTurn(storedGraderResult, {
+                output: lastResponse.output,
+                prompt: lastFinalAttackPrompt,
+                messages: lastResponseMessages,
+              });
+            }
           }
         }
 
@@ -659,13 +668,6 @@ export class CustomProvider implements ApiProvider {
           // recordSuccessfulAttack ignores a turn it has already recorded, so with
           // continueAfterSuccess the check after the evaluator doesn't record this turn twice.
           this.recordSuccessfulAttack(roundNum, attackPrompt, lastResponse.output);
-          // `prompt` and `output` must stay the values the grading hash was built from, or
-          // the assertion layer re-grades the round instead of reusing this verdict.
-          flaggedRound ??= captureFlaggedTurn(storedGraderResult, {
-            output: lastResponse.output,
-            prompt: lastFinalAttackPrompt,
-            messages: lastResponseMessages,
-          });
           if (!this.config.continueAfterSuccess) {
             exitReason = 'Grader failed';
             logger.debug(

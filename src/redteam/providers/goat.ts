@@ -257,7 +257,6 @@ export default class GoatProvider implements ApiProvider {
 
     let assertToUse: Assertion | AssertionSet | undefined;
     let graderPassed: boolean | undefined;
-    let gradedPrompt = '';
     let storedGraderResult: GradingResult | undefined;
     // The first turn a grader flagged. `continueAfterSuccess` keeps attacking past it.
     let flaggedTurn: FlaggedTurn | undefined;
@@ -825,7 +824,7 @@ export default class GoatProvider implements ApiProvider {
             gradingContext,
           );
           graderPassed = grade.pass;
-          gradedPrompt =
+          const gradedPrompt =
             lastFinalAttackPrompt ||
             getLastMessageContent(messages, 'user') ||
             attackerMessage.content;
@@ -843,6 +842,15 @@ export default class GoatProvider implements ApiProvider {
               assertion: assertToUse,
             },
           );
+          if (!grade.pass) {
+            // `prompt` and `output` must stay the values the grading hash was built from,
+            // or the assertion layer re-grades the turn instead of reusing this verdict.
+            flaggedTurn ??= captureFlaggedTurn(storedGraderResult, {
+              output: finalOutput,
+              prompt: gradedPrompt,
+              messages,
+            });
+          }
         }
 
         if (graderPassed === false) {
@@ -852,14 +860,6 @@ export default class GoatProvider implements ApiProvider {
             prompt: attackerMessage.content,
             response: finalOutput,
             traceSummary: attackTraceSummary,
-          });
-
-          // `prompt` and `output` must stay the values the grading hash was built from, or
-          // the assertion layer re-grades the turn instead of reusing this verdict.
-          flaggedTurn ??= captureFlaggedTurn(storedGraderResult, {
-            output: finalOutput,
-            prompt: gradedPrompt,
-            messages,
           });
 
           // Only break early if continueAfterSuccess is false

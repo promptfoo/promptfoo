@@ -407,7 +407,6 @@ export class CrescendoProvider implements ApiProvider {
 
     const { getGraderById } = await import('../../graders');
     let graderPassed: boolean | undefined;
-    let gradedPrompt: string | undefined;
 
     // Generate goal-specific evaluation rubric
     const additionalRubric = getGoalRubric(this.userGoal);
@@ -732,7 +731,7 @@ export class CrescendoProvider implements ApiProvider {
             );
 
             graderPassed = grade.pass;
-            gradedPrompt =
+            const gradedPrompt =
               lastFinalAttackPrompt ||
               getLastMessageContent(
                 this.memory.getConversation(this.targetConversationId),
@@ -753,6 +752,15 @@ export class CrescendoProvider implements ApiProvider {
                 assertion: assertToUse,
               },
             );
+            if (!grade.pass) {
+              // `prompt` and `output` must stay the values the grading hash was built from,
+              // or the assertion layer re-grades the round instead of reusing this verdict.
+              flaggedRound ??= captureFlaggedTurn(storedGraderResult, {
+                output: lastResponse.output,
+                prompt: gradedPrompt,
+                messages: lastResponseMessages,
+              });
+            }
           }
         }
 
@@ -778,12 +786,6 @@ export class CrescendoProvider implements ApiProvider {
 
         if (graderPassed === false) {
           this.recordSuccessfulAttack(roundNum, attackPrompt, lastResponse.output);
-
-          flaggedRound ??= captureFlaggedTurn(storedGraderResult, {
-            output: lastResponse.output,
-            prompt: gradedPrompt ?? attackPrompt,
-            messages: lastResponseMessages,
-          });
 
           // Only break early if continueAfterSuccess is false
           if (this.config.continueAfterSuccess) {
