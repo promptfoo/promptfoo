@@ -580,7 +580,13 @@ contextTransform: 'JSON.stringify(output, null, 2)'
 
 ### Examples
 
-`context-relevance` and `context-faithfulness` require a `query` variable and context. `context-recall` compares the context against the fact in `value`, and uses the prompt as context when no context is set. `answer-relevance` needs no context, and uses the `query` variable when it is set and the prompt otherwise. Scores are normalized between 0 and 1; when `threshold` is omitted, `answer-relevance`, `context-recall`, `context-relevance`, and `context-faithfulness` default to `0.5`.
+What each metric needs:
+
+- `context-relevance` and `context-faithfulness`: a `query` variable and context.
+- `context-recall`: context, plus the fact to look for in `value`. Falls back to the prompt as context.
+- `answer-relevance`: no context. Uses the `query` variable if set, otherwise the prompt.
+
+Scores are normalized between 0 and 1; when `threshold` is omitted, `answer-relevance`, `context-recall`, `context-relevance`, and `context-faithfulness` default to `0.5`.
 
 Here's an example config using statically-defined (`test.vars.context`) context:
 
