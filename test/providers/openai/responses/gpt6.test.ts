@@ -396,6 +396,8 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
           error_type: marker,
           error: { code: 'cyber_policy', message: description },
         };
+        const streamed = (delta: string, terminalText: string) =>
+          `data: ${JSON.stringify({ type: 'response.output_text.delta', delta })}\n\ndata: ${JSON.stringify({ type: 'response.failed', response: { ...base, output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: terminalText }] }] } })}\n\n`;
         for (const [stream, raw, partialExpected] of [
           [false, { ...base, output }, partial],
           [
@@ -408,6 +410,9 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
             `data: ${JSON.stringify({ type: 'response.output_text.delta', delta: 'Visible ' })}\n\ndata: ${JSON.stringify({ type: 'response.output_text.delta', delta: 'partial answer' })}\n\ndata: ${JSON.stringify({ type: 'response.failed', response: { ...base, output: [] } })}\n\n`,
             partial,
           ],
+          [true, streamed('Visible ', `${partial} and more`), `${partial} and more`],
+          [true, streamed(partial, 'Visible '), partial],
+          [true, streamed('Different delta text', partial), partial],
           [
             false,
             {

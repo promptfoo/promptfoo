@@ -13,6 +13,36 @@ type ResponsesStreamLogger = {
   debug(message: string, context?: Record<string, unknown>): unknown;
 };
 
+export function getResponsesOutputText(response: any): string | undefined {
+  if (typeof response.output_text === 'string' && response.output_text.trim()) {
+    return response.output_text;
+  }
+  if (!Array.isArray(response.output)) {
+    return undefined;
+  }
+  const result = response.output
+    .flatMap((item: any) => {
+      if (
+        !['message', 'output_message'].includes(item?.type) ||
+        (item.role && item.role !== 'assistant')
+      ) {
+        return [];
+      }
+      const text = Array.isArray(item.content)
+        ? item.content
+            .filter(
+              (part: any) =>
+                ['output_text', 'text'].includes(part?.type) && typeof part.text === 'string',
+            )
+            .map((part: any) => part.text)
+            .join('')
+        : '';
+      return text.trim() ? [text] : [];
+    })
+    .join('\n');
+  return result || undefined;
+}
+
 function parseSseEvent(
   chunk: string,
   providerName: string,
@@ -107,9 +137,11 @@ export async function readResponsesStream(
 
   if (latestResponse) {
     if (options?.preserveFailedOutput && latestResponse.status === 'failed' && outputText) {
-      const reportedText =
-        typeof latestResponse.output_text === 'string' ? latestResponse.output_text : '';
-      if (reportedText.length < outputText.length) {
+      const reportedText = getResponsesOutputText(latestResponse);
+      if (
+        !reportedText ||
+        (outputText.length > reportedText.length && outputText.startsWith(reportedText))
+      ) {
         return { ...latestResponse, output_text: outputText };
       }
     }

@@ -30,7 +30,7 @@ import {
 import { ResponsesProcessor } from '../responses/index';
 import { normalizeResponsesInput } from '../responses/input';
 import { getResponsesTokenUsage } from '../responses/processor';
-import { readResponsesStream } from '../responses/stream';
+import { getResponsesOutputText, readResponsesStream } from '../responses/stream';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
 import { OpenAiGenericProvider } from '.';
@@ -121,29 +121,6 @@ interface OpenAIResponsesResponse {
     code?: string;
     message?: string;
   };
-}
-
-function getPartialOpenAiResponsesOutput(response: OpenAIResponsesResponse): string | undefined {
-  if (typeof response.output_text === 'string' && response.output_text.trim()) {
-    return response.output_text;
-  }
-  const parts = (response.output ?? []).flatMap((item) => {
-    if (
-      (item.type !== 'message' && item.type !== 'output_message') ||
-      (item.role && item.role !== 'assistant')
-    ) {
-      return [];
-    }
-    const text = (item.content ?? [])
-      .filter(
-        (part) =>
-          (part.type === 'output_text' || part.type === 'text') && typeof part.text === 'string',
-      )
-      .map((part) => part.text)
-      .join('');
-    return text.trim() ? [text] : [];
-  });
-  return parts.length ? parts.join('\n') : undefined;
 }
 
 interface BackgroundResponseResult {
@@ -953,7 +930,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
     const response = data.response ?? data;
     const billingData = { ...response, usage: response.usage ?? data.usage };
-    const partialOutput = getPartialOpenAiResponsesOutput(response);
+    const partialOutput = getResponsesOutputText(response);
     return this.applyBilling(
       {
         output: partialOutput ?? policy.message,
