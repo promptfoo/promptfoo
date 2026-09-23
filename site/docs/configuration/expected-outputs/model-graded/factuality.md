@@ -1,6 +1,6 @@
 ---
 sidebar_label: Factuality
-description: 'Validate factual consistency of LLM responses against a configured reference answer'
+description: "Check whether an LLM response is factually consistent with a reference answer you provide, using a model grader based on OpenAI's factuality eval prompt"
 ---
 
 # Factuality
