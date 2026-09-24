@@ -139,8 +139,14 @@ const FoundationModelConfiguration = ({
   const [modelId, setModelId] = useState(
     isBedrock ? getBedrockModelFromId(selectedTarget.id) : selectedTarget.id || '',
   );
+  const bedrockModelIdForValidation =
+    isBedrock && bedrockApiMode
+      ? getBedrockModelFromId(buildBedrockProviderId(bedrockApiMode, modelId))
+      : modelId;
   const bedrockApiError =
-    isBedrock && bedrockApiMode ? getBedrockApiError(bedrockApiMode, modelId) : undefined;
+    isBedrock && bedrockApiMode
+      ? getBedrockApiError(bedrockApiMode, bedrockModelIdForValidation)
+      : undefined;
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [isMcpOpen, setIsMcpOpen] = useState(Boolean(selectedTarget.config?.mcp?.servers?.length));
   const [isBedrockSettingsOpen, setIsBedrockSettingsOpen] = useState(
