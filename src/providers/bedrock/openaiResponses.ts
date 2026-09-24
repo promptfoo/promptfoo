@@ -86,6 +86,7 @@ export function getBedrockMantleResponsesBaseUrl(region: string): string {
  */
 export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
   private readonly bedrockTokenProvider: BedrockTokenProvider;
+  private readonly bedrockRegion: string;
 
   constructor(
     modelName: string,
@@ -104,6 +105,7 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
             ? DEFAULT_BEDROCK_MANTLE_RESPONSES_REGION
             : getDefaultBedrockOpenAiRegion(modelName),
       );
+    this.bedrockRegion = region;
     // Direct construction must be as isolated from ambient OpenAI endpoints as the factory.
     this.config = {
       ...this.config,
@@ -130,6 +132,10 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
 
   protected override getGenAISystem(): string {
     return 'bedrock';
+  }
+
+  protected override getBillingRegion(): string {
+    return this.bedrockRegion;
   }
 
   /**

@@ -961,6 +961,35 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
   );
 
   it.each([
+    ['gpt-5.6-terra', 0.014],
+    ['gpt-5.6-luna', 0.0014],
+  ] as const)('uses GovCloud Runtime rates for regional %s profiles', async (model, baseCost) => {
+    const usage = { input_tokens: 1_000, output_tokens: 1_000, total_tokens: 2_000 };
+    for (const [profile, expected] of [
+      ['us', baseCost * 1.1 * 1.2],
+      ['global', baseCost],
+    ] as const) {
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        data: { ...responseData, model: `${profile}.openai.${model}`, usage },
+      });
+      const provider = new OpenAiResponsesProvider(`${profile}.openai.${model}`, {
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl: 'https://bedrock-runtime.us-gov-west-1.amazonaws.com/openai/v1',
+        },
+      });
+
+      const result = await provider.callApi('Say ready.');
+
+      expect(result.error).toBeUndefined();
+      expect(result.cost).toBeCloseTo(expected, 10);
+    }
+  });
+
+  it.each([
     ['gpt-6-sol', 0.012, 0.0132],
     ['gpt-6-luna', 0.0006, 0.00066],
   ] as const)(

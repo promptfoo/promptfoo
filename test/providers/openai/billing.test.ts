@@ -685,6 +685,19 @@ describe('OpenAI billing helpers', () => {
           longBaseCost * 1.1 * 1.2,
           10,
         );
+        for (const runtimeHost of [
+          `bedrock-runtime.${region}.amazonaws.com`,
+          `bedrock-runtime.${region}.api.aws`,
+          `bedrock-runtime-fips.${region}.amazonaws.com`,
+        ]) {
+          expect(
+            calculateOpenAIUsageCost(model, {}, shortUsage, {
+              apiUrl: `https://${runtimeHost}/openai/v1`,
+              provider: 'bedrock',
+              regionalProcessing: true,
+            }),
+          ).toBeCloseTo(shortBaseCost * 1.1 * 1.2, 10);
+        }
       }
 
       expect(
@@ -695,11 +708,26 @@ describe('OpenAI billing helpers', () => {
         }),
       ).toBeCloseTo(shortBaseCost * 1.1 * 1.2, 10);
       expect(
+        calculateOpenAIUsageCost(model, {}, shortUsage, {
+          provider: 'bedrock',
+          region: 'us-gov-west-1',
+          regionalProcessing: true,
+          apiUrl: 'https://proxy.example.test/openai/v1',
+        }),
+      ).toBeCloseTo(shortBaseCost * 1.1 * 1.2, 10);
+      expect(
         calculateOpenAIUsageCost(model, { region: 'us-gov-east-1' }, shortUsage, {
           provider: 'bedrock',
           apiUrl: 'https://bedrock-mantle.us-east-1.api.aws/openai/v1',
         }),
       ).toBeCloseTo(shortBaseCost * 1.1, 10);
+      expect(
+        calculateOpenAIUsageCost(model, {}, shortUsage, {
+          apiUrl: 'https://bedrock-runtime.us-gov-west-1.amazonaws.com/openai/v1',
+          provider: 'bedrock',
+          regionalProcessing: false,
+        }),
+      ).toBeCloseTo(shortBaseCost, 10);
       expect(
         calculateOpenAIUsageCost(model, { inputCost: 7 / 1e6 }, shortUsage, {
           apiUrl: 'https://bedrock-mantle.us-gov-east-1.api.aws/openai/v1',

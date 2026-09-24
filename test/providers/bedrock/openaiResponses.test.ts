@@ -465,6 +465,36 @@ describe('bedrock openaiResponses helper', () => {
     });
 
     it.each([
+      ['AWS_BEDROCK_REGION', { AWS_BEDROCK_REGION: 'us-gov-west-1' }, undefined],
+      ['AWS_REGION', { AWS_REGION: 'us-gov-east-1' }, undefined],
+      ['providerOptions.env', {}, { AWS_BEDROCK_REGION: 'us-gov-west-1' }],
+    ])(
+      'uses the resolved %s for GovCloud pricing through a custom proxy',
+      async (_, processEnv, env) => {
+        restoreEnv = mockProcessEnv(processEnv);
+        const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-terra', {
+          config: { apiKey: 'bedrock-key', apiBaseUrl: 'http://localhost:15571/openai/v1' },
+          env,
+        });
+
+        const result = await provider.callApi('hello');
+
+        expect(result.cost).toBeCloseTo((10 * 2.64 + 5 * 15.84) / 1e6, 10);
+      },
+    );
+
+    it('uses the resolved region for GovCloud pricing when constructed directly', async () => {
+      const provider = new BedrockOpenAiResponsesProvider('openai.gpt-5.6-luna', {
+        config: { apiKey: 'bedrock-key', apiBaseUrl: 'http://localhost:15571/openai/v1' },
+        env: { AWS_REGION: 'us-gov-west-1' },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.cost).toBeCloseTo((10 * 0.264 + 5 * 1.584) / 1e6, 10);
+    });
+
+    it.each([
       ['openai.gpt-5.6-sol', 4.4, 22],
       ['openai.gpt-5.6-terra', 2.2, 13.2],
       ['openai.gpt-5.6-luna', 0.22, 1.32],

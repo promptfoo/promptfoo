@@ -573,26 +573,31 @@ function usesBedrockGovCloudPricing(
   config: OpenAIBillingConfig,
   apiUrl: string | undefined,
   provider: string | undefined,
+  region: string | undefined,
 ): boolean {
   if (!BEDROCK_GOVCLOUD_MODELS.has(modelName)) {
     return false;
   }
   try {
     const hostname = new URL(apiUrl || config.apiBaseUrl || '').hostname;
-    if (/^bedrock-(?:mantle|runtime(?:-fips)?)\./.test(hostname)) {
-      return /^bedrock-mantle\.us-gov-(?:east|west)-1\.api\.aws$/.test(hostname);
+    const endpointRegion =
+      /^bedrock-(?:mantle|runtime(?:-fips)?)\.([a-z0-9-]+)\.(?:amazonaws\.com|api\.aws)$/.exec(
+        hostname,
+      )?.[1];
+    if (endpointRegion) {
+      return /^us-gov-(?:east|west)-1$/.test(endpointRegion);
     }
   } catch {
-    // An explicitly configured region still identifies the target behind a custom proxy.
+    // The resolved region still identifies the target behind a custom proxy.
   }
-  return provider === 'bedrock' && /^us-gov-(?:east|west)-1$/.test(config.region ?? '');
+  return provider === 'bedrock' && /^us-gov-(?:east|west)-1$/.test(region ?? config.region ?? '');
 }
 
 function applyRegionalProcessingRates(
   modelName: string,
   modelRates: OpenAIModelRates,
   config: OpenAIBillingConfig,
-  options: { apiUrl?: string; regionalProcessing?: boolean; provider?: string },
+  options: { apiUrl?: string; regionalProcessing?: boolean; provider?: string; region?: string },
 ): OpenAIModelRates {
   if (
     !OPENAI_REGIONAL_PROCESSING_MODEL.test(modelName) ||
@@ -602,7 +607,7 @@ function applyRegionalProcessingRates(
   }
   const multiplier =
     OPENAI_REGIONAL_PROCESSING_MULTIPLIER *
-    (usesBedrockGovCloudPricing(modelName, config, options.apiUrl, options.provider)
+    (usesBedrockGovCloudPricing(modelName, config, options.apiUrl, options.provider, options.region)
       ? BEDROCK_GOVCLOUD_MULTIPLIER
       : 1);
   return { ...modelRates, text: applyRateMultiplier(modelRates.text, multiplier) };
@@ -1068,6 +1073,7 @@ export function calculateOpenAIUsageCost(
     apiUrl?: string;
     regionalProcessing?: boolean;
     provider?: string;
+    region?: string;
   } = {},
 ): number | undefined {
   if (!rawUsage) {
