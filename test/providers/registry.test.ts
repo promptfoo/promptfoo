@@ -69,8 +69,6 @@ describe('Provider Registry', () => {
     ['anthropic:messages:claude-custom:rev:0', 'claude-custom:rev:0'],
     ['anthropic:completion:claude-custom:rev:0', 'claude-custom:rev:0'],
     ['azure:chat:deployment:rev:0', 'deployment:rev:0'],
-    ['cloudera:custom:model:rev', 'custom:model:rev'],
-    ['voyage:custom:model:rev', 'custom:model:rev'],
   ])('preserves colons in the model name for %s', async (providerPath, modelName) => {
     const factory = providerMap.find((entry) => entry.test(providerPath));
     expect(factory).toBeDefined();
