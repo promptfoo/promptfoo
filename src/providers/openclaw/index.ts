@@ -46,26 +46,27 @@ export function createOpenClawProvider(
 ): ApiProvider {
   const splits = providerPath.split(':');
   const keyword = splits[1];
+  // Agent IDs and tool names may themselves contain colons.
+  const target = splits.slice(2).join(':') || undefined;
   const opts = { ...providerOptions, env };
 
   if (keyword === 'responses') {
-    return new OpenClawResponsesProvider(splits.slice(2).join(':') || undefined, opts);
+    return new OpenClawResponsesProvider(target, opts);
   }
 
   if (keyword === 'embedding' || keyword === 'embeddings') {
-    return new OpenClawEmbeddingProvider(splits.slice(2).join(':') || undefined, opts);
+    return new OpenClawEmbeddingProvider(target, opts);
   }
 
   if (keyword === 'agent') {
-    return new OpenClawAgentProvider(splits.slice(2).join(':') || undefined, opts);
+    return new OpenClawAgentProvider(target, opts);
   }
 
   if (keyword === 'tools') {
-    const toolName = splits.slice(2).join(':');
-    if (!toolName) {
+    if (!target) {
       throw new Error('OpenClaw tools provider requires a tool name: openclaw:tools:<tool-name>');
     }
-    return new OpenClawToolInvokeProvider(toolName, opts);
+    return new OpenClawToolInvokeProvider(target, opts);
   }
 
   // Default: chat provider
