@@ -6,6 +6,7 @@ import { type OpenAiChatCompletionCostData, OpenAiChatCompletionProvider } from 
 import {
   clampCachedTokens,
   getOpenAIChatOutputLimitFromEnv,
+  getOpenAICompletionTokenLimitFromEnv,
   resolveDirectTestVariable,
 } from '../shared';
 
@@ -863,6 +864,8 @@ class XAIProvider extends OpenAiChatCompletionProvider {
     const config = { ...this.config, ...context?.prompt?.config };
     const model = getXAIRequestModel(this.modelName, config);
     const usesGrok47 = model === 'grok-4.7';
+    const usesPassthroughReasoningModel =
+      typeof config.passthrough?.model === 'string' && GROK_REASONING_MODELS.includes(model);
     let effort: string | undefined;
     let parentContext = context;
     if (usesGrok47) {
@@ -902,6 +905,19 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       } else {
         Object.assign(result.body, { reasoning_effort: effort });
       }
+    } else if (usesPassthroughReasoningModel && GROK_REASONING_EFFORT_MODELS.includes(model)) {
+      const configuredEffort = getXAIRequestOption(
+        'reasoning_effort',
+        context?.prompt?.config,
+        this.config,
+      );
+      const resolvedEffort =
+        configuredEffort == null ? undefined : renderVarsInObject(configuredEffort, context?.vars);
+      if (resolvedEffort === undefined) {
+        delete result.body.reasoning_effort;
+      } else {
+        Object.assign(result.body, { reasoning_effort: resolvedEffort });
+      }
     }
     if (model === 'grok-4.7') {
       const tokenLimit =
@@ -912,6 +928,16 @@ class XAIProvider extends OpenAiChatCompletionProvider {
           this.config,
         ) ?? getOpenAIChatOutputLimitFromEnv();
       delete result.body.max_tokens;
+      delete result.body.max_completion_tokens;
+      if (tokenLimit !== undefined) {
+        Object.assign(result.body, { max_completion_tokens: tokenLimit });
+      }
+    } else if (usesPassthroughReasoningModel) {
+      const tokenLimit =
+        getXAIRequestOption('max_completion_tokens', context?.prompt?.config, this.config) ??
+        getOpenAICompletionTokenLimitFromEnv();
+      delete result.body.max_tokens;
+      delete result.body.max_completion_tokens;
       if (tokenLimit !== undefined) {
         Object.assign(result.body, { max_completion_tokens: tokenLimit });
       }

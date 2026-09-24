@@ -23,7 +23,11 @@ export function resolveDirectTestVariable(value: unknown, vars?: Record<string, 
 
 /** Match OpenAI-compatible output-limit environment precedence. */
 export function getOpenAIChatOutputLimitFromEnv(): number | undefined {
-  return getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? getEnvInt('OPENAI_MAX_TOKENS');
+  return getOpenAICompletionTokenLimitFromEnv() ?? getEnvInt('OPENAI_MAX_TOKENS');
+}
+
+export function getOpenAICompletionTokenLimitFromEnv(): number | undefined {
+  return getEnvInt('OPENAI_MAX_COMPLETION_TOKENS');
 }
 
 /**

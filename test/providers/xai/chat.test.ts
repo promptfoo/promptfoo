@@ -502,6 +502,62 @@ describe('xAI Chat Provider', () => {
       }
     });
 
+    it('omits a null Grok 4.7 passthrough output cap', async () => {
+      const restoreEnv = mockProcessEnv({
+        OPENAI_MAX_COMPLETION_TOKENS: undefined,
+        OPENAI_MAX_TOKENS: undefined,
+      });
+      try {
+        const provider = createXAIProvider('xai:grok-4.7', {
+          config: { config: { passthrough: { max_completion_tokens: null } } },
+        }) as any;
+        const { body } = await provider.getOpenAiBody('hello');
+        expect(body).not.toHaveProperty('max_completion_tokens');
+        expect(body).not.toHaveProperty('max_tokens');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it.each([
+      ['grok-4.6', 'xhigh'],
+      ['grok-4.3', 'none'],
+    ] as const)('keeps reasoning options when passthrough selects %s', async (model, effort) => {
+      const provider = createXAIProvider('xai:grok-4.7', {
+        config: {
+          config: {
+            reasoning_effort: effort,
+            max_completion_tokens: 256,
+            passthrough: { model },
+          },
+        },
+      }) as any;
+      const { body } = await provider.getOpenAiBody('hello');
+      expect(body).toMatchObject({ model, reasoning_effort: effort, max_completion_tokens: 256 });
+      expect(body).not.toHaveProperty('max_tokens');
+    });
+
+    it('lets prompt options override provider defaults for a passthrough Grok model', async () => {
+      const provider = createXAIProvider('xai:grok-4.7', {
+        config: {
+          config: {
+            reasoning_effort: 'low',
+            max_completion_tokens: 256,
+            passthrough: { model: 'grok-4.6' },
+          },
+        },
+      }) as any;
+      const { body } = await provider.getOpenAiBody('hello', {
+        prompt: { config: { reasoning_effort: 'xhigh', max_completion_tokens: 128 } },
+      });
+      expect(body).toMatchObject({
+        model: 'grok-4.6',
+        reasoning_effort: 'xhigh',
+        max_completion_tokens: 128,
+      });
+      expect(body).not.toHaveProperty('max_tokens');
+    });
+
     it('accepts a simple eval variable and rejects other reasoning expressions before a request', async () => {
       const provider = createXAIProvider('xai:grok-4.7', {
         config: { config: { apiKey: 'test-key' } },
