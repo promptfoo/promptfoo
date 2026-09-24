@@ -228,6 +228,9 @@ assert:
     value: file://./path/to/schema.json
 ```
 
+Boolean JSON Schemas are also supported: `value: true` accepts every JSON value,
+while `value: false` rejects every JSON value.
+
 See also: [`is-json`](#is-json)
 
 ### Contains-Html
@@ -393,6 +396,9 @@ assert:
   - type: is-json
     value: file://./path/to/schema.json
 ```
+
+Boolean JSON Schemas are also supported: `value: true` accepts every JSON value,
+while `value: false` rejects every JSON value.
 
 ### Is-XML
 
