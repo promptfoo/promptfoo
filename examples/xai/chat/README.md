@@ -70,6 +70,8 @@ xAI's current flagship supports text and image input with a 500K context window:
 - `xai:grok-4.7` - Chat Completions; set `reasoning_effort` to `low`, `medium`, `high` (default), or `xhigh`
 - `xai:responses:grok-4.7` - Responses API; set `reasoning.effort` to the same values
 
+The Grok 4.7 example reads `effort` from each test case so both endpoints use the same reasoning setting. Set `XAI_API_KEY` before running it.
+
 ### Grok 4.6
 
 xAI's previous flagship model for coding, agentic tasks, and knowledge work (500K context):

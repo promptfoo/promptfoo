@@ -421,6 +421,20 @@ describe('xAI Chat Provider', () => {
         });
         expect(scoped.body.max_completion_tokens).toBe(64);
       }
+      const hooked = await provider.getOpenAiBody('hello', {
+        test: {
+          options: { max_completion_tokens: 2048, max_tokens: 64 },
+          [optionScopes]: [{ max_completion_tokens: 2048 }],
+        },
+      });
+      expect(hooked.body.max_completion_tokens).toBe(64);
+      const serialized = await provider.getOpenAiBody('hello', {
+        test: {
+          options: { max_completion_tokens: 2048, max_tokens: 64 },
+          [optionScopes]: [{ max_tokens: 64 }, { max_completion_tokens: 2048 }],
+        },
+      });
+      expect(serialized.body.max_completion_tokens).toBe(64);
       const nullish = createXAIProvider('xai:grok-4.7', {
         config: { config: { max_tokens: 128, max_completion_tokens: null } as any },
       }) as any;
@@ -523,6 +537,20 @@ describe('xAI Chat Provider', () => {
           })
         ).body.reasoning_effort,
       ).toBe('xhigh');
+    });
+
+    it('validates effort against a passthrough Grok 4.3 model', async () => {
+      const provider = createXAIProvider('xai:grok-4.7', {
+        config: {
+          config: {
+            apiKey: 'test-key',
+            passthrough: { model: 'grok-4.3', reasoning_effort: 'xhigh' },
+          },
+        },
+      });
+      const result = await provider.callApi('hello');
+      expect(result.error).toContain('grok-4.3 does not support reasoning_effort');
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
     });
 
     it('uses Grok 4.7 US chat fallback prices and still prefers the billed cost', async () => {
@@ -1183,6 +1211,11 @@ describe('xAI Chat Provider', () => {
         (100_001 * 4 + 100_000 * 1 + 1_000 * 12) / 1e6,
         10,
       );
+      expect(
+        calculateXAICost('grok-4.6', {}, 1_000, 500, 0, 800, {
+          apiUrl: 'https://us.api.x.ai/v1',
+        }),
+      ).toBeCloseTo(((200 * 2 + 800 * 0.5 + 500 * 6) / 1e6) * 1.1, 10);
     });
 
     it('uses Grok 4.7 pricing and cache rates at the 200K boundary and on the official US endpoint', () => {

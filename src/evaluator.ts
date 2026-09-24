@@ -3589,7 +3589,20 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const beforeEachOut = await runExtensionHook(testSuite.extensions, 'beforeEach', {
       test: evalStep.test,
     });
+    const optionScopes = (
+      evalStep.test as AtomicTestCase & {
+        [TEST_OPTION_SCOPES]?: (AtomicTestCase['options'] | undefined)[];
+      }
+    )[TEST_OPTION_SCOPES];
     evalStep.test = beforeEachOut.test;
+    // Serialized hooks can replace the test object and drop its symbol metadata.
+    if (optionScopes && !Object.prototype.hasOwnProperty.call(evalStep.test, TEST_OPTION_SCOPES)) {
+      (
+        evalStep.test as AtomicTestCase & {
+          [TEST_OPTION_SCOPES]?: (AtomicTestCase['options'] | undefined)[];
+        }
+      )[TEST_OPTION_SCOPES] = optionScopes;
+    }
 
     const rows = await runEvalInternal({
       ...evalStep,

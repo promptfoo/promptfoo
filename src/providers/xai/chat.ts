@@ -1,9 +1,13 @@
-import { getEnvBool, getEnvInt } from '../../envars';
+import isEqual from 'fast-deep-equal';
 import logger from '../../logger';
 import { renderVarsInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { type OpenAiChatCompletionCostData, OpenAiChatCompletionProvider } from '../openai/chat';
-import { clampCachedTokens } from '../shared';
+import {
+  clampCachedTokens,
+  getOpenAIChatOutputLimitFromEnv,
+  resolveDirectTestVariable,
+} from '../shared';
 
 import type { ApiProvider, ProviderOptions } from '../../types/index';
 import type { OpenAiCompletionOptions } from '../openai/types';
@@ -461,19 +465,28 @@ export function validateXAIReasoningEffort(
   effort: unknown,
   parameter: 'reasoning_effort' | 'reasoning.effort',
 ): void {
-  if (!GROK_45_MODELS.has(modelName) || effort === undefined) {
+  const supportsNone = ['grok-4.3', 'grok-4.3-latest', 'grok-latest'].includes(modelName);
+  if ((!GROK_45_MODELS.has(modelName) && !supportsNone) || effort === undefined) {
     return;
   }
 
   const supportsXHigh = modelName === 'grok-4.7' || modelName === 'grok-4.6';
-  const allowed = supportsXHigh ? ['low', 'medium', 'high', 'xhigh'] : ['low', 'medium', 'high'];
+  const allowed = supportsXHigh
+    ? ['low', 'medium', 'high', 'xhigh']
+    : supportsNone
+      ? ['none', 'low', 'medium', 'high']
+      : ['low', 'medium', 'high'];
   if (typeof effort !== 'string' || !allowed.includes(effort)) {
     const choices = supportsXHigh
       ? '"low", "medium", "high", or "xhigh"'
-      : '"low", "medium", or "high"';
+      : supportsNone
+        ? '"none", "low", "medium", or "high"'
+        : '"low", "medium", or "high"';
+    const guidance = supportsNone
+      ? `Use ${choices}, or omit ${parameter}.`
+      : `Use ${choices}, or omit ${parameter} to use the default "high".`;
     throw new XAIRequestConfigError(
-      `xAI model ${modelName} does not support ${parameter} with the supplied value. ` +
-        `Use ${choices}, or omit ${parameter} to use the default "high".`,
+      `xAI model ${modelName} does not support ${parameter} with the supplied value. ${guidance}`,
     );
   }
 }
@@ -485,13 +498,7 @@ export function resolveGrok47ReasoningEffort(
   if (value == null) {
     return undefined;
   }
-  if (typeof value === 'string') {
-    // Read an eval variable as data; do not execute test-provided template expressions.
-    const variable = /^\{\{\s*([A-Za-z_]\w*)\s*\}\}$/.exec(value)?.[1];
-    if (variable && !getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
-      value = vars && Object.hasOwn(vars, variable) ? vars[variable] : null;
-    }
-  }
+  value = resolveDirectTestVariable(value, vars);
   if (typeof value === 'string' && ['none', 'low', 'medium', 'high', 'xhigh'].includes(value)) {
     return value;
   }
@@ -643,7 +650,7 @@ export function calculateXAICost(
   reasoningTokens?: number,
   cachedTokens?: number,
   options?: {
-    /** Grok 4.7 catalog prices are 10% higher on the official US endpoint. */
+    /** Grok 4.7 and 4.6 catalog prices are 10% higher on the official US endpoint. */
     apiUrl?: string;
     /**
      * Set when `completion_tokens` EXCLUDES reasoning tokens, so reasoning must be
@@ -683,7 +690,7 @@ export function calculateXAICost(
       ? model.cost.longContext
       : model?.cost;
   const catalogMultiplier =
-    model?.id === 'grok-4.7' &&
+    (model?.id === 'grok-4.7' || model?.id === 'grok-4.6') &&
     options?.apiUrl &&
     URL.canParse(options.apiUrl) &&
     new URL(options.apiUrl).origin === 'https://us.api.x.ai'
@@ -752,7 +759,33 @@ export function getXAITestOptionScopes(test?: { options?: object }): (object | u
   const original = (test as { [TEST_OPTION_SCOPES]?: (object | undefined)[] } | undefined)?.[
     TEST_OPTION_SCOPES
   ];
-  return original ?? [test?.options];
+  if (!original) {
+    return [test?.options];
+  }
+
+  // The evaluator merges default/scenario/row options before beforeEach hooks run.
+  // Keep their original precedence, then place only hook changes above it.
+  const merged = Object.assign({}, ...original.filter((scope) => scope != null).reverse());
+  const current = test?.options as Record<string, unknown> | undefined;
+  const base = merged as Record<string, unknown>;
+  const changed: Record<string, unknown> = {};
+  for (const key of ['reasoning', 'reasoning_effort', 'max_completion_tokens', 'max_tokens']) {
+    if (!isEqual(current?.[key], base[key])) {
+      changed[key] = current?.[key];
+    }
+  }
+  const currentPassthrough = current?.passthrough as Record<string, unknown> | undefined;
+  const basePassthrough = base.passthrough as Record<string, unknown> | undefined;
+  const changedPassthrough: Record<string, unknown> = {};
+  for (const key of ['reasoning', 'reasoning_effort', 'max_completion_tokens', 'max_tokens']) {
+    if (!isEqual(currentPassthrough?.[key], basePassthrough?.[key])) {
+      changedPassthrough[key] = currentPassthrough?.[key];
+    }
+  }
+  if (Object.keys(changedPassthrough).length > 0) {
+    changed.passthrough = changedPassthrough;
+  }
+  return Object.keys(changed).length > 0 ? [changed, ...original] : original;
 }
 
 export function getXAIRequestOption(
@@ -767,7 +800,9 @@ export function getXAIRequestOption(
       if (
         source &&
         keys.length === 2 &&
-        keys.every((name) => Object.hasOwn(source, name) && source[name] != null) &&
+        keys.every(
+          (name) => Object.prototype.hasOwnProperty.call(source, name) && source[name] != null,
+        ) &&
         source[keys[0]] !== source[keys[1]]
       ) {
         throw new XAIRequestConfigError(
@@ -775,7 +810,11 @@ export function getXAIRequestOption(
         );
       }
       for (const name of keys) {
-        if (source && Object.hasOwn(source, name) && (keys.length === 1 || source[name] != null)) {
+        if (
+          source &&
+          Object.prototype.hasOwnProperty.call(source, name) &&
+          (keys.length === 1 || source[name] != null)
+        ) {
           return source[name];
         }
       }
@@ -809,7 +848,7 @@ class XAIProvider extends OpenAiChatCompletionProvider {
   async getOpenAiBody(prompt: string, context?: any, callApiOptions?: any) {
     const config = { ...this.config, ...context?.prompt?.config };
     const model = getXAIRequestModel(this.modelName, config);
-    const usesGrok47 = this.modelName === 'grok-4.7' || model === 'grok-4.7';
+    const usesGrok47 = model === 'grok-4.7';
     let effort: string | undefined;
     let parentContext = context;
     if (usesGrok47) {
@@ -857,9 +896,7 @@ class XAIProvider extends OpenAiChatCompletionProvider {
           ...getXAITestOptionScopes(context?.test),
           context?.prompt?.config,
           this.config,
-        ) ??
-        getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ??
-        getEnvInt('OPENAI_MAX_TOKENS');
+        ) ?? getOpenAIChatOutputLimitFromEnv();
       delete result.body.max_tokens;
       if (tokenLimit !== undefined) {
         Object.assign(result.body, { max_completion_tokens: tokenLimit });

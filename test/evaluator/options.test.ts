@@ -34,6 +34,46 @@ describeEvaluator('evaluator options and hooks', () => {
     expect(summary.results[0].response?.output).toBe('Test output postprocessed');
   });
 
+  it('preserves option precedence when a beforeEach hook replaces the test', async () => {
+    const scopeKey = Symbol.for('promptfoo.testOptionScopes');
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({ output: 'Test output' }),
+    };
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName !== 'beforeEach') {
+        return context;
+      }
+      const test = (context as { test: Record<string, any> }).test;
+      // Simulate a Python hook's serialized return value, which loses symbol keys.
+      return {
+        test: {
+          ...Object.fromEntries(Object.entries(test)),
+          options: { ...test.options, max_tokens: 64 },
+        },
+      } as typeof context;
+    });
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      defaultTest: { options: { max_completion_tokens: 2048 } },
+      tests: [{}],
+      extensions: ['file://hook.py:beforeEach'],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    const callContext = vi.mocked(provider.callApi).mock.calls[0]?.[1];
+    expect(callContext?.test?.options).toMatchObject({
+      max_completion_tokens: 2048,
+      max_tokens: 64,
+    });
+    expect((callContext?.test as Record<symbol, unknown>)?.[scopeKey]).toEqual([
+      undefined,
+      { max_completion_tokens: 2048 },
+    ]);
+  });
+
   it('should apply prompt config to provider call', async () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),

@@ -31,7 +31,7 @@ To use xAI's API, set the `XAI_API_KEY` environment variable or specify via `api
 export XAI_API_KEY=your_api_key_here
 ```
 
-When xAI is the selected fallback provider family, Promptfoo can use xAI defaults for grading, suggestions, synthesis, and web search. These automatic defaults currently use `grok-4.3` so they work for both US and EU accounts; select `grok-4.7`, `grok-4.6`, or `grok-4.5` explicitly where they are available. xAI does not currently expose a public embeddings or moderation API, so those defaults fall back to OpenAI when xAI is selected. Explicit provider IDs in your config still take precedence.
+When xAI is the selected fallback provider family, Promptfoo can use xAI defaults for grading, suggestions, synthesis, and web search. These automatic defaults currently use `grok-4.3` on the global endpoint; select `grok-4.7`, `grok-4.6`, or `grok-4.5` explicitly where they are available. xAI does not currently expose a public embeddings or moderation API, so those defaults fall back to OpenAI when xAI is selected. Explicit provider IDs in your config still take precedence.
 
 ## Supported Models
 
@@ -142,7 +142,7 @@ Multiple Grok models support reasoning capabilities:
 
 **Grok 4.7 and 4.6**: Chat requests can set `reasoning_effort` to `low`, `medium`, `high` (the default), or `xhigh`. Responses API requests use `reasoning.effort`. Reasoning cannot be disabled; Promptfoo rejects `none` locally.
 
-For Grok 4.7, cap output with `max_completion_tokens` (also accepted as `max_tokens`; use one spelling) for Chat Completions or `max_output_tokens` for Responses. Reasoning effort also accepts a direct eval variable such as `{{ effort }}`.
+For Grok 4.7, cap output with `max_completion_tokens` (also accepted as `max_tokens`; use one spelling) for Chat Completions or `max_output_tokens` for Responses. Reasoning effort also accepts a direct eval variable such as `{{ effort }}`; see the [Grok 4.7 example](https://github.com/promptfoo/promptfoo/blob/main/examples/xai/chat/promptfooconfig.grok-4.7.yaml).
 
 **Grok 4.5**: Chat requests can set `reasoning_effort` to `low`, `medium`, or `high` (the default); Promptfoo rejects other values locally. Responses API requests use `reasoning.effort` with the same values.
 
@@ -274,7 +274,7 @@ providers:
 
 This is equivalent to setting `base_url="https://eu-west-1.api.x.ai/v1"` in the Python client. The same `region` option is also accepted by the xAI image, video, Responses, and realtime voice providers.
 
-xAI's global endpoint automatically routes requests to models available to your team. Regional endpoints are useful for data-residency requirements, but model availability varies by region and account. xAI also serves [Grok 4.7 on the US endpoint](https://docs.x.ai/developers/grok-4-7#where-it-runs) (`region: us`), at a 10% token-price premium. Check the xAI Console or the model's documentation before selecting a regional endpoint.
+xAI's global endpoint automatically routes requests to models available to your team. Regional endpoints are useful for data-residency requirements, but model availability varies by region and account. The [US endpoint](https://docs.x.ai/developers/advanced-api-usage/regions) (`region: us`) currently serves only Grok 4.7 and 4.6, at a 10% token-price premium; `grok-4.3` and image, video, and voice APIs are unavailable there. Check the xAI Console or the model's documentation before selecting a regional endpoint.
 
 ### Live Search (Beta)
 

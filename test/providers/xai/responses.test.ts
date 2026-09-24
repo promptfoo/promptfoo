@@ -337,6 +337,27 @@ describe('XAIResponsesProvider', () => {
     expect((await provider.callApi('billed cost')).cost).toBeCloseTo(0.0000123, 10);
   });
 
+  it('omits reasoning when a test clears a Grok 4.7 provider default', async () => {
+    const provider = new XAIResponsesProvider('grok-4.7', {
+      config: { reasoning: { effort: 'high' } },
+    });
+    const request = await provider.getRequestBody('hello', {
+      prompt: { raw: 'hello', label: 'hello' },
+      vars: {},
+      test: { options: { reasoning: null } },
+    });
+    expect(request.body).not.toHaveProperty('reasoning');
+  });
+
+  it('validates effort against a passthrough Grok 4.3 model', async () => {
+    const provider = new XAIResponsesProvider('grok-4.7', {
+      config: { passthrough: { model: 'grok-4.3', reasoning: { effort: 'xhigh' } } },
+    });
+    await expect(provider.getRequestBody('hello')).rejects.toThrow(
+      'grok-4.3 does not support reasoning.effort',
+    );
+  });
+
   it.each([
     ['grok-4.7', 'grok-4.3', 0.00375],
     ['grok-4.3', 'grok-4.7', 0.0088],

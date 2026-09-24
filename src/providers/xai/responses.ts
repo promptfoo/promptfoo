@@ -191,7 +191,7 @@ function resolveGrok47Reasoning(reasoning: unknown, vars?: Record<string, unknow
   if (typeof reasoning !== 'object' || Array.isArray(reasoning)) {
     throw new XAIRequestConfigError('xAI Grok 4.7 reasoning must be an object');
   }
-  if (!Object.hasOwn(reasoning, 'effort')) {
+  if (!Object.prototype.hasOwnProperty.call(reasoning, 'effort')) {
     return reasoning;
   }
   const config = reasoning as Record<string, unknown>;
@@ -301,7 +301,7 @@ export class XAIResponsesProvider implements ApiProvider {
       ...context?.prompt?.config,
     };
     const model = getXAIRequestModel(this.modelName, config);
-    const usesGrok47 = this.modelName === 'grok-4.7' || model === 'grok-4.7';
+    const usesGrok47 = model === 'grok-4.7';
 
     // Parse input - can be string or array of messages. Chat-format content parts are
     // translated to their Responses equivalents so multimodal prompts authored for the chat
@@ -368,7 +368,7 @@ export class XAIResponsesProvider implements ApiProvider {
         context?.prompt?.config,
         this.config,
       );
-      if (reasoning === undefined) {
+      if (reasoning == null) {
         delete body.reasoning;
       } else {
         body.reasoning = resolveGrok47Reasoning(reasoning, context?.vars);
@@ -497,20 +497,7 @@ export class XAIResponsesProvider implements ApiProvider {
       }
 
       if (status < 200 || status >= 300) {
-        const errorMessage = `xAI API error: ${status} ${statusText}\n${
-          typeof data === 'string' ? data : JSON.stringify(data)
-        }`;
-
-        // Check for specific error types
-        if (data?.error?.code === 'invalid_prompt') {
-          return {
-            output: errorMessage,
-            tokenUsage: this.getTokenUsage(data, cached),
-            isRefusal: true,
-          };
-        }
-
-        return { error: errorMessage };
+        return this.handleUnsuccessfulResponse(data, status, statusText, cached);
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -541,6 +528,25 @@ export class XAIResponsesProvider implements ApiProvider {
       result.cost = 0;
     }
     return result;
+  }
+
+  private handleUnsuccessfulResponse(
+    data: any,
+    status: number,
+    statusText: string,
+    cached: boolean,
+  ): ProviderResponse {
+    const errorMessage = `xAI API error: ${status} ${statusText}\n${
+      typeof data === 'string' ? data : JSON.stringify(data)
+    }`;
+    if (data?.error?.code === 'invalid_prompt') {
+      return {
+        output: errorMessage,
+        tokenUsage: this.getTokenUsage(data, cached),
+        isRefusal: true,
+      };
+    }
+    return { error: errorMessage };
   }
 
   private getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {

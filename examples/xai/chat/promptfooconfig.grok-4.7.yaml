@@ -7,16 +7,17 @@ prompts:
 providers:
   - id: xai:grok-4.7
     config:
-      reasoning_effort: xhigh
+      reasoning_effort: '{{ effort }}'
       max_completion_tokens: 2048
   - id: xai:responses:grok-4.7
     config:
       reasoning:
-        effort: xhigh
+        effort: '{{ effort }}'
       max_output_tokens: 2048
 
 tests:
   - vars:
+      effort: xhigh
       question: What is the smallest prime number greater than 20?
     assert:
       - type: contains
