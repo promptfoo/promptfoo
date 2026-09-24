@@ -3855,5 +3855,4 @@ describe('OpenClaw Provider', () => {
     const provider = createOpenClawProvider(providerPath);
     expect(provider.id()).toBe(expectedId);
   });
-
 });
