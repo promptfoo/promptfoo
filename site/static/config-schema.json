@@ -270,6 +270,9 @@
         "CDP_TOKEN": {
           "type": "string"
         },
+        "CHEAPERINFERENCE_API_KEY": {
+          "type": "string"
+        },
         "CLAUDE_CODE_USE_BEDROCK": {
           "type": "string"
         },

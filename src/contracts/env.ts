@@ -34,6 +34,7 @@ export const ProviderEnvOverridesSchema = z.object({
   AZURE_TOKEN_SCOPE: z.string().optional(),
   CDP_DOMAIN: z.string().optional(),
   CDP_TOKEN: z.string().optional(),
+  CHEAPERINFERENCE_API_KEY: z.string().optional(),
   CLAUDE_CODE_USE_BEDROCK: z.string().optional(),
   CLAUDE_CODE_USE_VERTEX: z.string().optional(),
   CLAUDE_CONFIG_DIR: z.string().optional(),
