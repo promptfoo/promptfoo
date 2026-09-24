@@ -1,4 +1,3 @@
-import isEqual from 'fast-deep-equal';
 import logger from '../../logger';
 import { renderVarsInObject } from '../../util/index';
 import invariant from '../../util/invariant';
@@ -754,68 +753,39 @@ export function getXAIRequestModel(modelName: string, config?: { passthrough?: o
 }
 
 type XAIRequestOption = 'reasoning' | 'reasoning_effort' | 'max_completion_tokens' | 'max_tokens';
-const TEST_OPTION_SCOPES = Symbol.for('promptfoo.testOptionScopes');
-// Keep hook deletions distinct from an unset option in the original scopes.
-const REMOVED_TEST_OPTION = Symbol('promptfoo.removedTestOption');
-
-export function getXAITestOptionScopes(test?: { options?: object }): (object | undefined)[] {
-  const original = (test as { [TEST_OPTION_SCOPES]?: (object | undefined)[] } | undefined)?.[
-    TEST_OPTION_SCOPES
-  ];
-  if (!original) {
-    return [test?.options];
-  }
-
-  // The evaluator merges default/scenario/row options before beforeEach hooks run.
-  // Keep their original precedence, then place only hook changes above it.
-  const merged = Object.assign({}, ...original.filter((scope) => scope != null).reverse());
-  const current = test?.options as Record<string, unknown> | undefined;
-  const base = merged as Record<string, unknown>;
-  const changed: Record<string, unknown> = {};
-  for (const key of ['reasoning', 'reasoning_effort', 'max_completion_tokens', 'max_tokens']) {
-    if (!isEqual(current?.[key], base[key])) {
-      changed[key] = current?.[key] === undefined ? REMOVED_TEST_OPTION : current[key];
-    }
-  }
-  if (!isEqual(current?.passthrough, base.passthrough)) {
-    // A hook replaces the whole passthrough object, just like an option scope does.
-    changed.passthrough = current?.passthrough;
-  }
-  return Object.keys(changed).length > 0 ? [changed, ...original] : original;
-}
 
 export function getXAIRequestOption(
   key: XAIRequestOption | readonly XAIRequestOption[],
   ...scopes: (object | undefined)[]
 ): unknown {
   const keys = typeof key === 'string' ? [key] : key;
-  const removedFromPassthrough = new Set<XAIRequestOption>();
-  const removedFromConfig = new Set<XAIRequestOption>();
   let passthroughReplaced = false;
-  for (const scope of scopes) {
+  for (const [index, scope] of scopes.entries()) {
     const config = scope as Record<string, unknown> | undefined;
     const raw = passthroughReplaced
       ? undefined
       : (config?.passthrough as Record<string, unknown> | undefined);
+    if (
+      index === 0 &&
+      raw &&
+      keys.some((name) => Object.prototype.hasOwnProperty.call(raw, name)) &&
+      keys.some((name) => config && Object.prototype.hasOwnProperty.call(config, name))
+    ) {
+      throw new XAIRequestConfigError(
+        `xAI received ${keys.join('/')} in both test options and test passthrough; use one location`,
+      );
+    }
     if (config && Object.prototype.hasOwnProperty.call(config, 'passthrough')) {
       passthroughReplaced = true;
     }
-    for (const [source, removed] of [
-      [raw, removedFromPassthrough],
-      [config, removedFromConfig],
-    ] as const) {
-      for (const name of keys) {
-        if (source?.[name] === REMOVED_TEST_OPTION) {
-          removed.add(name);
-        }
-      }
-      const availableKeys = keys.filter((name) => !removed.has(name));
+    for (const source of [raw, config]) {
+      const availableKeys = keys.filter(
+        (name) => source && Object.prototype.hasOwnProperty.call(source, name),
+      );
       if (
         source &&
         availableKeys.length === 2 &&
-        availableKeys.every(
-          (name) => Object.prototype.hasOwnProperty.call(source, name) && source[name] != null,
-        ) &&
+        availableKeys.every((name) => source[name] != null) &&
         source[availableKeys[0]] !== source[availableKeys[1]]
       ) {
         throw new XAIRequestConfigError(
@@ -823,11 +793,7 @@ export function getXAIRequestOption(
         );
       }
       for (const name of availableKeys) {
-        if (
-          source &&
-          Object.prototype.hasOwnProperty.call(source, name) &&
-          (keys.length === 1 || source[name] != null)
-        ) {
+        if (source && (keys.length === 1 || source[name] != null)) {
           return source[name];
         }
       }
@@ -864,18 +830,13 @@ class XAIProvider extends OpenAiChatCompletionProvider {
     const usesGrok47 = model === 'grok-4.7';
     const usesPassthroughReasoningModel =
       typeof config.passthrough?.model === 'string' && GROK_REASONING_MODELS.includes(model);
-    const testOptionScopes = getXAITestOptionScopes(context?.test);
+    const testOptions = context?.test?.options;
     let effort: string | undefined;
     let parentContext = context;
     if (usesGrok47) {
       const raw = config.passthrough;
       effort = resolveGrok47ReasoningEffort(
-        getXAIRequestOption(
-          'reasoning_effort',
-          ...testOptionScopes,
-          context?.prompt?.config,
-          this.config,
-        ),
+        getXAIRequestOption('reasoning_effort', testOptions, context?.prompt?.config, this.config),
         context?.vars,
       );
       validateXAIReasoningEffort(model, effort, 'reasoning_effort');
@@ -907,7 +868,7 @@ class XAIProvider extends OpenAiChatCompletionProvider {
     } else if (usesPassthroughReasoningModel && GROK_REASONING_EFFORT_MODELS.includes(model)) {
       const configuredEffort = getXAIRequestOption(
         'reasoning_effort',
-        ...testOptionScopes,
+        testOptions,
         context?.prompt?.config,
         this.config,
       );
@@ -923,7 +884,7 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       const tokenLimit =
         getXAIRequestOption(
           ['max_completion_tokens', 'max_tokens'],
-          ...testOptionScopes,
+          testOptions,
           context?.prompt?.config,
           this.config,
         ) ?? getOpenAIChatOutputLimitFromEnv();
@@ -936,7 +897,7 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       const tokenLimit =
         getXAIRequestOption(
           'max_completion_tokens',
-          ...testOptionScopes,
+          testOptions,
           context?.prompt?.config,
           this.config,
         ) ?? getOpenAICompletionTokenLimitFromEnv();

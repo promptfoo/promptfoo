@@ -262,27 +262,17 @@ describe('XAIResponsesProvider', () => {
     expect((await provider.getRequestBody('hello', context)).body.reasoning).toEqual({
       effort: 'low',
     });
-    const sameScope = await provider.getRequestBody('hello', {
-      ...context,
-      test: {
-        options: { reasoning: { effort: 'low' }, passthrough: { reasoning: { effort: 'xhigh' } } },
-      },
-    });
-    expect(sameScope.body.reasoning).toEqual({ effort: 'xhigh' });
-    const inherited = await provider.getRequestBody('hello', {
-      ...context,
-      test: {
-        options: {
-          reasoning: { effort: 'low' },
-          passthrough: { reasoning: { effort: 'high' } },
+    await expect(
+      provider.getRequestBody('hello', {
+        ...context,
+        test: {
+          options: {
+            reasoning: { effort: 'low' },
+            passthrough: { reasoning: { effort: 'xhigh' } },
+          },
         },
-        [Symbol.for('promptfoo.testOptionScopes')]: [
-          { reasoning: { effort: 'low' } },
-          { passthrough: { reasoning: { effort: 'high' } } },
-        ],
-      },
-    });
-    expect(inherited.body.reasoning).toEqual({ effort: 'low' });
+      }),
+    ).rejects.toThrow('both test options and test passthrough');
     const restore = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
     try {
       await expect(
@@ -363,24 +353,12 @@ describe('XAIResponsesProvider', () => {
       ).body,
     ).not.toHaveProperty('reasoning');
 
-    const defaults = { passthrough: { reasoning: { effort: 'high' } } };
-    for (const test of [
-      {
-        options: partial,
-        [Symbol.for('promptfoo.testOptionScopes')]: [partial, defaults],
-      },
-      {
-        options: partial,
-        [Symbol.for('promptfoo.testOptionScopes')]: [defaults],
-      },
-    ]) {
-      const request = await provider.getRequestBody('hello', {
-        prompt: { raw: 'hello', label: 'hello', config: partial },
-        vars: {},
-        test,
-      });
-      expect(request.body).not.toHaveProperty('reasoning');
-    }
+    const request = await provider.getRequestBody('hello', {
+      prompt: { raw: 'hello', label: 'hello' },
+      vars: {},
+      test: { options: partial },
+    });
+    expect(request.body).not.toHaveProperty('reasoning');
   });
 
   it('validates effort against a passthrough Grok 4.3 model', async () => {

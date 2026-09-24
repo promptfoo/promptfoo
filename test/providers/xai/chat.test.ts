@@ -411,30 +411,15 @@ describe('xAI Chat Provider', () => {
           prompt: { config: { max_completion_tokens: 64, max_tokens: 32 } },
         }),
       ).rejects.toThrow('conflicting max_tokens and max_completion_tokens');
-      const optionScopes = Symbol.for('promptfoo.testOptionScopes');
-      for (const [defaults, row] of [
-        [{ max_completion_tokens: 2048 }, { max_tokens: 64 }],
-        [{ max_tokens: 2048 }, { max_completion_tokens: 64 }],
-      ]) {
-        const scoped = await provider.getOpenAiBody('hello', {
-          test: { options: { ...defaults, ...row }, [optionScopes]: [row, defaults] },
-        });
-        expect(scoped.body.max_completion_tokens).toBe(64);
-      }
-      const hooked = await provider.getOpenAiBody('hello', {
-        test: {
-          options: { max_completion_tokens: 2048, max_tokens: 64 },
-          [optionScopes]: [{ max_completion_tokens: 2048 }],
-        },
+      const testOverride = await provider.getOpenAiBody('hello', {
+        test: { options: { max_tokens: 64 } },
       });
-      expect(hooked.body.max_completion_tokens).toBe(64);
-      const serialized = await provider.getOpenAiBody('hello', {
-        test: {
-          options: { max_completion_tokens: 2048, max_tokens: 64 },
-          [optionScopes]: [{ max_tokens: 64 }, { max_completion_tokens: 2048 }],
-        },
-      });
-      expect(serialized.body.max_completion_tokens).toBe(64);
+      expect(testOverride.body.max_completion_tokens).toBe(64);
+      await expect(
+        provider.getOpenAiBody('hello', {
+          test: { options: { max_completion_tokens: 2048, max_tokens: 64 } },
+        }),
+      ).rejects.toThrow('conflicting max_tokens and max_completion_tokens');
       const nullish = createXAIProvider('xai:grok-4.7', {
         config: { config: { max_tokens: 128, max_completion_tokens: null } as any },
       }) as any;
@@ -458,51 +443,7 @@ describe('xAI Chat Provider', () => {
       }
     });
 
-    it('honors beforeEach removal of inherited output limits', async () => {
-      const restoreEnv = mockProcessEnv({
-        OPENAI_MAX_COMPLETION_TOKENS: undefined,
-        OPENAI_MAX_TOKENS: undefined,
-      });
-      try {
-        const provider = createXAIProvider('xai:grok-4.7') as any;
-        const optionScopes = Symbol.for('promptfoo.testOptionScopes');
-        const removed = await provider.getOpenAiBody('hello', {
-          test: {
-            options: {},
-            [optionScopes]: [{ max_completion_tokens: 2048 }],
-          },
-        });
-        expect(removed.body).not.toHaveProperty('max_completion_tokens');
-
-        const remainingAlias = await provider.getOpenAiBody('hello', {
-          test: {
-            options: { max_tokens: 64 },
-            [optionScopes]: [{ max_completion_tokens: 2048, max_tokens: 64 }],
-          },
-        });
-        expect(remainingAlias.body.max_completion_tokens).toBe(64);
-
-        const removedPassthrough = await provider.getOpenAiBody('hello', {
-          test: {
-            options: { passthrough: {} },
-            [optionScopes]: [{ passthrough: { max_tokens: 128 } }],
-          },
-        });
-        expect(removedPassthrough.body).not.toHaveProperty('max_completion_tokens');
-
-        const revealedTopLevel = await provider.getOpenAiBody('hello', {
-          test: {
-            options: { max_tokens: 64, passthrough: {} },
-            [optionScopes]: [{ max_tokens: 64, passthrough: { max_tokens: 128 } }],
-          },
-        });
-        expect(revealedTopLevel.body.max_completion_tokens).toBe(64);
-      } finally {
-        restoreEnv();
-      }
-    });
-
-    it('does not restore passthrough settings replaced by a prompt, row, or hook', async () => {
+    it('does not restore passthrough settings replaced by a prompt or test', async () => {
       const restoreEnv = mockProcessEnv({
         OPENAI_MAX_COMPLETION_TOKENS: undefined,
         OPENAI_MAX_TOKENS: undefined,
@@ -525,25 +466,9 @@ describe('xAI Chat Provider', () => {
         expect(promptBody).not.toHaveProperty('reasoning_effort');
         expect(promptBody).not.toHaveProperty('max_completion_tokens');
 
-        const defaults = {
-          passthrough: {
-            model: 'grok-4.7',
-            reasoning_effort: 'high',
-            max_completion_tokens: 128,
-          },
-        };
-        const optionScopes = Symbol.for('promptfoo.testOptionScopes');
-        for (const test of [
-          { options: partial, [optionScopes]: [partial, defaults] },
-          { options: partial, [optionScopes]: [defaults] },
-        ]) {
-          const { body } = await provider.getOpenAiBody('hello', {
-            prompt: { config: partial },
-            test,
-          });
-          expect(body).not.toHaveProperty('reasoning_effort');
-          expect(body).not.toHaveProperty('max_completion_tokens');
-        }
+        const { body } = await provider.getOpenAiBody('hello', { test: { options: partial } });
+        expect(body).not.toHaveProperty('reasoning_effort');
+        expect(body).not.toHaveProperty('max_completion_tokens');
       } finally {
         restoreEnv();
       }
@@ -605,30 +530,27 @@ describe('xAI Chat Provider', () => {
       expect(body).not.toHaveProperty('max_tokens');
     });
 
-    it('preserves row and hook precedence over passthrough Grok defaults', async () => {
-      const provider = createXAIProvider('xai:grok-4.7') as any;
-      const optionScopes = Symbol.for('promptfoo.testOptionScopes');
-      const defaults = {
-        passthrough: {
-          model: 'grok-4.6',
-          reasoning_effort: 'high',
-          max_completion_tokens: 256,
+    it('lets test options override passthrough Grok defaults', async () => {
+      const provider = createXAIProvider('xai:grok-4.7', {
+        config: {
+          config: {
+            passthrough: {
+              model: 'grok-4.6',
+              reasoning_effort: 'high',
+              max_completion_tokens: 256,
+            },
+          },
         },
-      };
-      const row = { reasoning_effort: 'low', max_completion_tokens: 128 };
-      const options = { ...defaults, ...row };
-      for (const scopes of [[row, defaults], [defaults]]) {
-        const { body } = await provider.getOpenAiBody('hello', {
-          prompt: { config: options },
-          test: { options, [optionScopes]: scopes },
-        });
-        expect(body).toMatchObject({
-          model: 'grok-4.6',
-          reasoning_effort: 'low',
-          max_completion_tokens: 128,
-        });
-        expect(body).not.toHaveProperty('max_tokens');
-      }
+      }) as any;
+      const { body } = await provider.getOpenAiBody('hello', {
+        test: { options: { reasoning_effort: 'low', max_completion_tokens: 128 } },
+      });
+      expect(body).toMatchObject({
+        model: 'grok-4.6',
+        reasoning_effort: 'low',
+        max_completion_tokens: 128,
+      });
+      expect(body).not.toHaveProperty('max_tokens');
     });
 
     it('accepts a simple eval variable and rejects other reasoning expressions before a request', async () => {
@@ -671,22 +593,12 @@ describe('xAI Chat Provider', () => {
       };
       await provider.callApi('hello', context);
       expect(JSON.parse(mockFetchWithCache.mock.calls[0][1].body).reasoning_effort).toBe('low');
-      await provider.callApi('hello', {
+      const conflicting = await provider.callApi('hello', {
         ...context,
         test: { options: { reasoning_effort: 'low', passthrough: { reasoning_effort: 'xhigh' } } },
       });
-      expect(JSON.parse(mockFetchWithCache.mock.calls[1][1].body).reasoning_effort).toBe('xhigh');
-      await provider.callApi('hello', {
-        ...context,
-        test: {
-          options: { reasoning_effort: 'low', passthrough: { reasoning_effort: 'high' } },
-          [Symbol.for('promptfoo.testOptionScopes')]: [
-            { reasoning_effort: 'low' },
-            { passthrough: { reasoning_effort: 'high' } },
-          ],
-        },
-      });
-      expect(JSON.parse(mockFetchWithCache.mock.calls[2][1].body).reasoning_effort).toBe('low');
+      expect(conflicting.error).toContain('both test options and test passthrough');
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       mockFetchWithCache.mockClear();
       const restore = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
       try {
