@@ -551,6 +551,34 @@ describe('bedrock openaiResponses helper', () => {
       expect(body.temperature).toBeUndefined();
     });
 
+    it.each(['openai.gpt-6-sol', 'openai.gpt-6-luna'])(
+      'treats %s as a reasoning model like GPT-5',
+      async (model) => {
+        restoreEnv = mockProcessEnv({
+          AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key',
+          OPENAI_MAX_TOKENS: undefined,
+          OPENAI_MAX_COMPLETION_TOKENS: undefined,
+          OPENAI_TEMPERATURE: undefined,
+        });
+
+        // These models reject promptfoo's default temperature 0, so it must not be added.
+        const { body: defaults } = await (
+          createBedrockOpenAiResponsesProvider(model) as any
+        ).getOpenAiBody('hello');
+        expect(defaults.model).toBe(model);
+        expect(defaults.temperature).toBeUndefined();
+        expect(defaults.max_output_tokens).toBeUndefined();
+
+        const { body } = await (
+          createBedrockOpenAiResponsesProvider(model, {
+            config: { reasoning_effort: 'high', verbosity: 'low' } as any,
+          }) as any
+        ).getOpenAiBody('hello');
+        expect(body.reasoning).toEqual({ effort: 'high' });
+        expect(body.text?.verbosity).toBe('low');
+      },
+    );
+
     it('honors AWS_BEARER_TOKEN_BEDROCK and AWS_REGION supplied via promptfoo env overrides', () => {
       restoreEnv = mockProcessEnv({
         AWS_BEARER_TOKEN_BEDROCK: undefined,

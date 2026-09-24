@@ -92,6 +92,7 @@ providers:
 | `apiKeyEnvar`      | string   | Custom environment variable name for API key |
 | `temperature`      | number   | Controls randomness (0.0 to 1.0)             |
 | `maxTokens`        | number   | Maximum number of tokens to generate         |
+| `maxRetries`       | number   | Retry attempts for a failed request          |
 | `topP`             | number   | Nucleus sampling parameter                   |
 | `topK`             | number   | Top-k sampling parameter                     |
 | `frequencyPenalty` | number   | Penalizes frequent tokens                    |
@@ -99,7 +100,7 @@ providers:
 | `stopSequences`    | string[] | Sequences where generation stops             |
 | `timeout`          | number   | Request timeout in milliseconds              |
 | `headers`          | object   | Additional HTTP headers                      |
-| `streaming`        | boolean  | Enable streaming responses                   |
+| `streaming`        | boolean  | Use the streaming API for text generation    |
 | `responseSchema`   | object   | JSON schema for structured output            |
 | `baseUrl`          | string   | Override the AI Gateway base URL             |
 
@@ -140,7 +141,7 @@ tests:
 
 ## Streaming
 
-Enable streaming for real-time responses:
+Use Vercel's streaming API for text generation. Promptfoo collects the chunks and runs assertions on the completed response:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -171,18 +172,28 @@ For a complete list, see the [Vercel AI Gateway documentation](https://vercel.co
 
 Generate embeddings for text similarity, search, and RAG applications:
 
+Set the embedding provider for the `similar` assertion under `defaultTest.options.provider.embedding`:
+
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - vercel:embedding:openai/text-embedding-3-small
+  - vercel:openai/gpt-5.6-luna
 
 prompts:
-  - 'Generate embedding for: {{text}}'
+  - 'Answer concisely: {{question}}'
+
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: vercel:embedding:openai/text-embedding-3-small
 
 tests:
   - vars:
-      text: 'Hello world'
+      question: 'What is the capital of France?'
     assert:
-      - type: is-valid-embedding
+      - type: similar
+        value: Paris
+        threshold: 0.8
 ```
 
 Supported embedding models:
@@ -255,10 +266,11 @@ tests:
 
 ## Environment Variables
 
-| Variable                     | Description                 |
-| ---------------------------- | --------------------------- |
-| `VERCEL_AI_GATEWAY_API_KEY`  | API key for AI Gateway      |
-| `VERCEL_AI_GATEWAY_BASE_URL` | Override the AI Gateway URL |
+| Variable                     | Description                                                                   |
+| ---------------------------- | ----------------------------------------------------------------------------- |
+| `VERCEL_AI_GATEWAY_API_KEY`  | API key for AI Gateway                                                        |
+| `AI_GATEWAY_API_KEY`         | Fallback from the shell environment when `VERCEL_AI_GATEWAY_API_KEY` is unset |
+| `VERCEL_AI_GATEWAY_BASE_URL` | Override the AI Gateway URL                                                   |
 
 ## Troubleshooting
 

@@ -107,7 +107,7 @@ export function getProviderDocumentationUrl(providerType?: string): string {
     return BASE_DOCS_URL;
   }
 
-  // Handle provider formats like 'openrouter:openai/gpt-5.4' or 'azure:chat:'
+  // Handle provider formats like 'openrouter:openai/gpt-6-sol' or 'azure:chat:'
   const normalizedType =
     providerType === 'openai:codex-security' || providerType.startsWith('openai:codex-security:')
       ? 'codex-security'

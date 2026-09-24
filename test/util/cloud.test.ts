@@ -1411,6 +1411,264 @@ describe('cloud utils', () => {
     });
   });
 
+  describe('team resolution', () => {
+    const team = (id: string, organizationId: string, createdAt: string) => ({
+      id,
+      name: id,
+      slug: id,
+      organizationId,
+      createdAt,
+      updatedAt: createdAt,
+    });
+    type SavedTeams = Record<string, string>;
+
+    /** Models CloudConfig's per-organization team selections; `legacy` is the unscoped slot. */
+    const mockTeamState = (
+      organizationId: string | undefined,
+      saved: SavedTeams,
+      teams: ReturnType<typeof team>[] | Error,
+      tokenOrganization: string | Error | null = 'org-1',
+    ) => {
+      const slot = (id?: string) => id ?? 'legacy';
+      const state = { organizationId, saved: { ...saved } };
+      mockCloudConfig.getCurrentOrganizationId.mockImplementation(() => state.organizationId);
+      mockCloudConfig.setCurrentOrganization.mockImplementation((id) => {
+        state.organizationId = id;
+      });
+      mockCloudConfig.getCurrentTeamId.mockImplementation((id) => state.saved[slot(id)]);
+      mockCloudConfig.setCurrentTeamId.mockImplementation((teamId, id) => {
+        state.saved[slot(id)] = teamId;
+      });
+      mockFetchWithProxy.mockImplementation(async (url) => {
+        if (String(url).endsWith('/users/me')) {
+          return tokenOrganization instanceof Error
+            ? new Response(null, { status: 503 })
+            : Response.json({ organization: tokenOrganization ? { id: tokenOrganization } : null });
+        }
+        return teams instanceof Error
+          ? ({ ok: false, statusText: teams.message } as Response)
+          : ({ ok: true, json: () => Promise.resolve(teams) } as Response);
+      });
+      return state;
+    };
+
+    describe('resolveTeamId', () => {
+      it.each<{
+        scenario: string;
+        organizationId?: string;
+        saved: SavedTeams;
+        teams: ReturnType<typeof team>[] | Error;
+        tokenOrganization?: string | Error | null;
+        fallbackToDefault?: boolean;
+        expected: { team?: string; error?: string; saved: SavedTeams; organizationId?: string };
+      }>([
+        {
+          scenario: 'returns an accessible saved team without changing it',
+          organizationId: 'org-1',
+          saved: { 'org-1': 'selected' },
+          teams: [team('older', 'org-1', '2023'), team('selected', 'org-1', '2024')],
+          expected: { team: 'selected', saved: { 'org-1': 'selected' } },
+        },
+        {
+          scenario: 'keeps the saved team when the lookup fails',
+          organizationId: 'org-1',
+          saved: { 'org-1': 'selected' },
+          teams: new Error('Service Unavailable'),
+          expected: {
+            error: 'Failed to get user teams: Service Unavailable',
+            saved: { 'org-1': 'selected' },
+          },
+        },
+        {
+          scenario: 'replaces a stale team with the oldest team in the current organization',
+          organizationId: 'org-1',
+          saved: { 'org-1': 'removed', 'org-2': 'kept' },
+          teams: [
+            team('kept', 'org-2', '2021'),
+            team('newer', 'org-1', '2024'),
+            team('oldest', 'org-1', '2023'),
+          ],
+          expected: { team: 'oldest', saved: { 'org-1': 'oldest', 'org-2': 'kept' } },
+        },
+        {
+          scenario: 'treats a saved team from another organization as stale',
+          organizationId: 'org-1',
+          saved: { 'org-1': 'org-2-team' },
+          teams: [team('org-2-team', 'org-2', '2022'), team('org-1-team', 'org-1', '2023')],
+          expected: { team: 'org-1-team', saved: { 'org-1': 'org-1-team' } },
+        },
+        {
+          scenario: 'defaults to the current organization when nothing is saved',
+          organizationId: 'org-1',
+          saved: { 'org-2': 'kept' },
+          teams: [team('kept', 'org-2', '2021'), team('own', 'org-1', '2024')],
+          expected: { team: 'own', saved: { 'org-1': 'own', 'org-2': 'kept' } },
+        },
+        {
+          scenario: 'refuses to fall back into another organization',
+          organizationId: 'org-1',
+          saved: { 'org-1': 'removed', 'org-2': 'kept' },
+          teams: [team('kept', 'org-2', '2021'), team('oldest', 'org-2', '2020')],
+          expected: {
+            error: "No accessible teams in organization 'org-1'. Run 'promptfoo auth login --org",
+            saved: { 'org-1': 'removed', 'org-2': 'kept' },
+          },
+        },
+        {
+          scenario: 'migrates a stale legacy selection only to the token organization',
+          saved: { legacy: 'removed' },
+          teams: [team('oldest', 'org-2', '2022'), team('own', 'org-1', '2024')],
+          expected: {
+            team: 'own',
+            saved: { legacy: 'removed', 'org-1': 'own' },
+            organizationId: 'org-1',
+          },
+        },
+        {
+          scenario: 'migrates an accessible legacy selection to the token organization',
+          saved: { legacy: 'selected' },
+          teams: [team('selected', 'org-1', '2024'), team('oldest', 'org-2', '2020')],
+          expected: {
+            team: 'selected',
+            saved: { legacy: 'selected', 'org-1': 'selected' },
+            organizationId: 'org-1',
+          },
+        },
+        {
+          scenario: 'does not change legacy state if the token organization lookup fails',
+          saved: { legacy: 'removed' },
+          teams: [team('other', 'org-2', '2022')],
+          tokenOrganization: new Error('Service Unavailable'),
+          expected: {
+            error: 'Could not determine the current organization',
+            saved: { legacy: 'removed' },
+          },
+        },
+        {
+          scenario:
+            'does not use a foreign team when a legacy user has no token-organization teams',
+          saved: { legacy: 'removed' },
+          teams: [team('other', 'org-2', '2022')],
+          expected: {
+            error: "No accessible teams in organization 'org-1'",
+            saved: { legacy: 'removed' },
+          },
+        },
+        {
+          scenario: 'does not replace a stale team when fallback is disabled',
+          organizationId: 'org-1',
+          saved: { 'org-1': 'removed' },
+          teams: [team('oldest', 'org-1', '2023')],
+          fallbackToDefault: false,
+          expected: {
+            error: 'No team specified and no default available',
+            saved: { 'org-1': 'removed' },
+          },
+        },
+      ])(
+        '$scenario',
+        async ({
+          organizationId,
+          saved,
+          teams,
+          tokenOrganization,
+          fallbackToDefault,
+          expected,
+        }) => {
+          const state = mockTeamState(organizationId, saved, teams, tokenOrganization);
+
+          const result = cloudModule.resolveTeamId(undefined, fallbackToDefault);
+
+          await (expected.error
+            ? expect(result).rejects.toThrow(expected.error)
+            : expect(result).resolves.toMatchObject({ id: expected.team }));
+          expect(state).toEqual({
+            organizationId: expected.organizationId ?? organizationId,
+            saved: expected.saved,
+          });
+        },
+      );
+    });
+
+    describe('resolveTeamFromIdentifier', () => {
+      const teams = [
+        team('other-default', 'org-2', '2022'),
+        team('own-default', 'org-1', '2023'),
+        team('elsewhere', 'org-2', '2024'),
+        { ...team('own-name', 'org-1', '2024'), name: 'other-id-name' },
+        { ...team('own-slug', 'org-1', '2024'), slug: 'other-id-slug' },
+        team('other-id-name', 'org-2', '2024'),
+        team('other-id-slug', 'org-2', '2024'),
+      ].map((t) => ({ ...t, name: t.id.endsWith('default') ? 'Default' : t.name }));
+
+      it.each([
+        ['prefers the current organization when names collide', 'default', 'own-default'],
+        ['still finds a team that exists only in another organization', 'elsewhere', 'elsewhere'],
+        ['matches an exact ID in any organization', 'other-default', 'other-default'],
+        [
+          'prefers an exact ID over a name in the current organization',
+          'other-id-name',
+          'other-id-name',
+        ],
+        [
+          'prefers an exact ID over a slug in the current organization',
+          'other-id-slug',
+          'other-id-slug',
+        ],
+      ])('%s', async (_scenario, identifier, expected) => {
+        mockTeamState('org-1', {}, teams);
+
+        await expect(cloudModule.resolveTeamFromIdentifier(identifier)).resolves.toMatchObject({
+          id: expected,
+        });
+      });
+    });
+  });
+
+  describe('getOrgContext', () => {
+    const tokenOrganization = { id: 'org-1', name: 'Token Organization' };
+
+    it.each([
+      ['org-2', 'org-2', 'Selected Team', 'org-2', 'Selected Team'],
+      ['org-2', 'org-1', 'Wrong Team', 'org-2', undefined],
+      ['org-1', 'org-1', 'Token Organization', 'Token Organization', undefined],
+      [undefined, 'org-1', 'Legacy Team', 'Token Organization', 'Legacy Team'],
+    ])(
+      'uses the effective organization %s and only its own team',
+      async (selected, teamOrg, teamName, organizationName, expectedTeamName) => {
+        mockCloudConfig.isEnabled.mockReturnValue(true);
+        mockCloudConfig.getCurrentOrganizationId.mockReturnValue(selected);
+        mockCloudConfig.getCurrentTeamId.mockImplementation((id) =>
+          id === (selected ?? tokenOrganization.id) ? 'team-id' : undefined,
+        );
+        mockFetchWithProxy
+          .mockResolvedValueOnce(Response.json({ organization: tokenOrganization }))
+          .mockResolvedValueOnce(
+            Response.json([{ id: 'team-id', name: teamName, organizationId: teamOrg }]),
+          );
+
+        await expect(cloudModule.getOrgContext()).resolves.toEqual({
+          organizationName,
+          teamName: expectedTeamName,
+        });
+        expect(mockCloudConfig.getCurrentTeamId).toHaveBeenCalledWith(
+          selected ?? tokenOrganization.id,
+        );
+      },
+    );
+
+    it('still names the selected organization when team lookup fails', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+      mockCloudConfig.getCurrentOrganizationId.mockReturnValue('org-2');
+      mockCloudConfig.getCurrentTeamId.mockReturnValue('team-id');
+      mockFetchWithProxy
+        .mockResolvedValueOnce(Response.json({ organization: tokenOrganization }))
+        .mockResolvedValueOnce(new Response(null, { status: 503 }));
+
+      await expect(cloudModule.getOrgContext()).resolves.toEqual({ organizationName: 'org-2' });
+    });
+  });
+
   describe('checkCloudPermissions', () => {
     beforeEach(() => {
       mockCloudConfig.isEnabled.mockReturnValue(true);

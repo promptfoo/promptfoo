@@ -227,9 +227,15 @@ export class CrescendoProvider implements ApiProvider {
     logger.debug('[Crescendo] CrescendoProvider initialized with config', { config });
   }
 
+  private attackerUsesRemoteProvider(): boolean {
+    // Remote task handlers only know the built-in default. An explicit
+    // redteamProvider must stay local.
+    return shouldGenerateRemote() && !this.config.redteamProvider;
+  }
+
   private async getRedTeamProvider(): Promise<ApiProvider> {
     if (!this.redTeamProvider) {
-      if (shouldGenerateRemote()) {
+      if (this.attackerUsesRemoteProvider()) {
         this.redTeamProvider = new PromptfooChatCompletionProvider({
           task: 'crescendo',
           jsonOnly: true,
@@ -251,7 +257,7 @@ export class CrescendoProvider implements ApiProvider {
 
   private async getScoringProvider(): Promise<ApiProvider> {
     if (!this.scoringProvider) {
-      if (shouldGenerateRemote()) {
+      if (this.attackerUsesRemoteProvider()) {
         this.scoringProvider = new PromptfooChatCompletionProvider({
           task: 'crescendo',
           jsonOnly: false,
@@ -929,7 +935,7 @@ export class CrescendoProvider implements ApiProvider {
           raw: JSON.stringify(redTeamingHistory),
           label: 'history',
         },
-        vars: shouldGenerateRemote()
+        vars: this.attackerUsesRemoteProvider()
           ? buildRemoteMaterializationContextVars({
               injectVar: this.config.injectVar,
               inputs: this.config.inputs,
@@ -1054,7 +1060,7 @@ export class CrescendoProvider implements ApiProvider {
     }
 
     // Extract input vars from the processed prompt for multi-input mode
-    if (this.config.inputs && shouldGenerateRemote()) {
+    if (this.config.inputs && this.attackerUsesRemoteProvider()) {
       assertRemoteMaterializationHandled(remoteMaterialization, 'Crescendo multi-input generation');
     }
     const currentInputVars = extractInputVarsFromPrompt(processedPrompt, this.config.inputs);
@@ -1063,14 +1069,14 @@ export class CrescendoProvider implements ApiProvider {
       | undefined;
     if (
       this.config.inputs &&
-      shouldGenerateRemote() &&
+      this.attackerUsesRemoteProvider() &&
       !currentInputVars &&
       !remoteMaterialization?.materializedVars
     ) {
       throw new Error('Crescendo remote multi-input generation returned an invalid prompt format');
     }
     if ((currentInputVars || remoteMaterialization?.materializedVars) && this.config.inputs) {
-      if (shouldGenerateRemote()) {
+      if (this.attackerUsesRemoteProvider()) {
         materializedInputVars = buildRemoteMaterializedInputVariables(
           remoteMaterialization ?? {},
           currentInputVars ?? {},
