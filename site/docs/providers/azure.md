@@ -48,6 +48,8 @@ Or set them in the provider `config` (see [full example below](#using-client-cre
 - `azureClientSecret`
 - `azureTenantId`
 
+If no API key is configured and only some service principal values are set, the Azure OpenAI providers warn and fall back to Azure CLI credentials. Foundry Agent uses the Azure SDK's default credential chain instead.
+
 Optionally, you can also set:
 
 - `AZURE_AUTHORITY_HOST` / `azureAuthorityHost` (defaults to `https://login.microsoftonline.com`)
@@ -982,7 +984,7 @@ providers:
       max_tokens: 4096
 ```
 
-Fable and Mythos 5.1, Fable 5, and Opus 4.7/4.8 deployments whose names contain the model identifier automatically omit unsupported sampling parameters. Fable and Mythos 5.1 also omit forced `tool_choice` values; use `auto` or `none` instead.
+Fable and Mythos 5.1, Fable 5, Opus 5.5, and Opus 4.7/4.8 deployments whose names contain the model identifier automatically omit unsupported sampling parameters. Fable and Mythos 5.1 and Opus 5.5 also omit forced `tool_choice` values; use `auto` or `none` instead.
 
 If your Azure deployment uses a custom alias, set `modelName` to the underlying Claude model ID. Promptfoo uses it for request compatibility and cost estimates while continuing to send the deployment name to Azure:
 
@@ -1007,6 +1009,7 @@ Available Claude deployments on Azure AI Foundry:
 | `claude-fable-5-1`           | Claude Fable 5.1                               |
 | `claude-mythos-5-1`          | Claude Mythos 5.1 (provider approval required) |
 | `claude-fable-5`             | Claude Fable 5                                 |
+| `claude-opus-5-5`            | Claude Opus 5.5                                |
 | `claude-opus-5`              | Claude Opus 5                                  |
 | `claude-opus-4-8`            | Claude Opus 4.8                                |
 | `claude-opus-4-7`            | Claude Opus 4.7                                |

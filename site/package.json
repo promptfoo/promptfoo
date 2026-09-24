@@ -93,7 +93,7 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "dompurify": "^3.4.8",
-    "js-yaml": "5.4.1",
+    "js-yaml": "5.4.2",
     "react-countup": "^6.5.3",
     "react-turnstile": "^1.1.5",
     "swiper": "^14.0.0"

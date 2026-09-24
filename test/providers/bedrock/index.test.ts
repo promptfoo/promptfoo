@@ -746,6 +746,21 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params.max_tokens).toBe(1024);
     });
 
+    it.each(['global.anthropic.claude-opus-5-5', 'global.anthropic.claude-fable-5-1'])(
+      'keeps thinking headroom for always-on %s even when thinking is disabled',
+      async (model) => {
+        // The rejected `disabled` block is dropped, so the model still thinks against max_tokens.
+        const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+          { region: 'us-east-1', thinking: { type: 'disabled' } },
+          'hi',
+          undefined,
+          model,
+        );
+        expect(params).not.toHaveProperty('thinking');
+        expect(params.max_tokens).toBe(2048);
+      },
+    );
+
     it('keeps the 1024 default for models that do not think by default', async () => {
       const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
         { region: 'us-east-1' },
@@ -3510,6 +3525,22 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     expect(getHandlerForModel('us.anthropic.claude-opus-5')).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
   });
 
+  it('maps Claude Opus 5.5 across the base and regional inference profiles', () => {
+    // Verified via `aws bedrock list-inference-profiles` (2026-09-23): Opus 5.5 exposes
+    // base + us./eu./jp./au./global.
+    for (const id of [
+      'anthropic.claude-opus-5-5',
+      'us.anthropic.claude-opus-5-5',
+      'eu.anthropic.claude-opus-5-5',
+      'jp.anthropic.claude-opus-5-5',
+      'au.anthropic.claude-opus-5-5',
+      'global.anthropic.claude-opus-5-5',
+    ]) {
+      expect(AWS_BEDROCK_MODELS[id]).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+      expect(getHandlerForModel(id)).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    }
+  });
+
   it('maps Claude Sonnet 5 across the base and regional inference profiles', () => {
     // Sonnet 5 mirrors the Claude 5-generation profile set: base + us./eu./global.
     expect(AWS_BEDROCK_MODELS['anthropic.claude-sonnet-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
@@ -3910,6 +3941,7 @@ describe('AwsBedrockCompletionProvider', () => {
 
   it.each([
     ['global.anthropic.claude-fable-5-1', 1000, 0.0363],
+    ['global.anthropic.claude-opus-5-5', 1000, 0.01454],
     ['global.anthropic.claude-mythos-5-1', 0, 0.0263],
     ['global.anthropic.claude-fable-5', 0, 0.02645],
   ] as const)(

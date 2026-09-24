@@ -97,6 +97,170 @@ describe('OpenAI billing helpers', () => {
     });
   });
 
+  describe.each([
+    { model: 'gpt-6-sol', input: 2, cached: 0.2, write: 2.5, output: 10 },
+    { model: 'gpt-6-luna', input: 0.1, cached: 0.01, write: 0.125, output: 0.5 },
+  ])('$model', ({ model, input, cached, write, output }) => {
+    it.each([272_000, 272_001])(
+      'prices every processing tier at %i input tokens',
+      (inputTokens) => {
+        const inputMultiplier = inputTokens > 272_000 ? 2 : 1;
+        const outputMultiplier = inputTokens > 272_000 ? 1.5 : 1;
+        const usage = {
+          input_tokens: inputTokens,
+          output_tokens: 1000,
+          input_tokens_details: { cached_tokens: 500, cache_write_tokens: 250 },
+        };
+        const standardCost =
+          (((inputTokens - 750) * input + 500 * cached + 250 * write) * inputMultiplier +
+            1000 * output * outputMultiplier) /
+          1e6;
+        for (const [serviceTier, multiplier] of [
+          ['default', 1],
+          ['batch', 0.5],
+          ['flex', 0.5],
+          ['fast', 2],
+          ['priority', 2],
+        ] as const) {
+          expect(calculateOpenAIUsageCost(model, {}, usage, { serviceTier })).toBeCloseTo(
+            standardCost * multiplier,
+            10,
+          );
+        }
+      },
+    );
+
+    it('prices regional and normalized Codex usage while honoring explicit overrides', () => {
+      const usage = {
+        input_tokens: 2000,
+        output_tokens: 1000,
+        input_tokens_details: { cached_tokens: 500, cache_write_tokens: 250 },
+      };
+      const expected = (1250 * input + 500 * cached + 250 * write + 1000 * output) / 1e6;
+      for (const apiUrl of ['https://us.api.openai.com/v1', 'https://eu.api.openai.com/v1']) {
+        expect(calculateOpenAIUsageCost(model, {}, usage, { apiUrl })).toBeCloseTo(
+          expected * 1.1,
+          10,
+        );
+        expect(calculateOpenAIUsageCost(model, {}, usage, { apiUrl, cachedResponse: true })).toBe(
+          0,
+        );
+      }
+      expect(
+        calculateOpenAIUsageCostFromTokenUsage(model, {
+          prompt: 2000,
+          completion: 1000,
+          cached: 500,
+          completionDetails: { cacheCreationInputTokens: 250 },
+        }),
+      ).toBeCloseTo(expected, 10);
+      expect(
+        calculateOpenAIUsageCost(model, { inputCost: 2 / 1e6, outputCost: 3 / 1e6 }, usage),
+      ).toBeCloseTo(0.007, 10);
+      expect(
+        calculateOpenAIUsageCostFromTokenUsage(`openai.${model}`, {
+          prompt: 2000,
+          completion: 1000,
+        }),
+      ).toBeCloseTo(((2000 * input + 1000 * output) / 1e6) * 1.1, 10);
+      expect(calculateOpenAIUsageCost(model, {}, usage, { provider: 'bedrock' })).toBeCloseTo(
+        expected,
+        10,
+      );
+      for (const options of [
+        { provider: 'bedrock', apiUrl: 'https://bedrock-mantle.us-east-1.api.aws/openai/v1' },
+        { provider: 'bedrock', regionalProcessing: true },
+      ]) {
+        expect(calculateOpenAIUsageCost(model, {}, usage, options)).toBeCloseTo(expected * 1.1, 10);
+      }
+      expect(
+        calculateOpenAIUsageCost(model, { inputCost: 2 / 1e6 }, usage, { provider: 'bedrock' }),
+      ).toBeCloseTo((2000 * 2 + 1000 * output) / 1e6, 10);
+      expect(
+        calculateOpenAIUsageCost(model, { inputCost: 2 / 1e6, outputCost: 3 / 1e6 }, usage, {
+          provider: 'bedrock',
+        }),
+      ).toBeCloseTo(0.007, 10);
+      expect(calculateOpenAIUsageCost(`${model}-unpublished`, {}, usage)).toBeUndefined();
+    });
+
+    it('does not substitute direct OpenAI prices for Azure without complete explicit rates', () => {
+      const usage = { input_tokens: 1000, output_tokens: 100 };
+      for (const options of [
+        { provider: 'azure-openai' },
+        { provider: 'azure' },
+        { provider: 'openai', apiUrl: 'https://example.openai.azure.com/openai/v1' },
+        { provider: 'openai', apiUrl: 'https://example.services.ai.azure.com/openai/v1' },
+        { apiUrl: 'https://example.services.ai.azure.com/api/projects/project/openai/v1' },
+        {
+          apiUrl:
+            'https://gateway.ai.cloudflare.com/v1/account/gateway/azure-openai/resource/deployment',
+        },
+      ]) {
+        expect(calculateOpenAIUsageCost(model, {}, usage, options)).toBeUndefined();
+        expect(
+          calculateOpenAIUsageCost(model, { inputCost: 2 / 1e6 }, usage, options),
+        ).toBeUndefined();
+        expect(
+          calculateOpenAIUsageCost(
+            model,
+            { inputCost: 2 / 1e6, outputCost: 3 / 1e6 },
+            usage,
+            options,
+          ),
+        ).toBeCloseTo(0.0023, 10);
+        expect(calculateOpenAIUsageCost(model, { cost: 2 / 1e6 }, usage, options)).toBeCloseTo(
+          0.0022,
+          10,
+        );
+        expect(
+          calculateOpenAIUsageCost(model, { cost: 2 / 1e6 }, usage, {
+            ...options,
+            cachedResponse: true,
+          }),
+        ).toBe(0);
+        expect(
+          calculateOpenAIUsageCost(
+            model,
+            { inputCost: 2 / 1e6 },
+            { input_tokens: 1000, output_tokens: 0 },
+            options,
+          ),
+        ).toBeCloseTo(0.002, 10);
+      }
+      expect(
+        calculateOpenAIUsageCost(model, { apiHost: 'example.openai.azure.com' }, usage),
+      ).toBeUndefined();
+      expect(
+        calculateOpenAIUsageCost(model, { apiHost: 'example.services.ai.azure.com' }, usage),
+      ).toBeUndefined();
+      for (const apiUrl of [
+        'https://example.openai.azure.com.invalid/openai/v1',
+        'https://example.services.ai.azure.com.invalid/openai/v1',
+        'https://services.ai.azure.com.attacker.test/api/projects/project/openai/v1',
+        'https://nonazure-services.ai.azure.example/openai/v1',
+        'https://gateway.ai.cloudflare.com/v1/account/gateway/openai',
+        'https://gateway.ai.cloudflare.com.invalid/v1/account/gateway/azure-openai/resource/deployment',
+        'https://api.openai.com/v1',
+      ]) {
+        expect(calculateOpenAIUsageCost(model, {}, usage, { apiUrl })).toBeCloseTo(
+          (1000 * input + 100 * output) / 1e6,
+          10,
+        );
+      }
+    });
+
+    it('uses reasoning-model web search preview pricing', () => {
+      expect(
+        calculateObservableOpenAIToolCost(
+          { output: [{ type: 'web_search_call', action: { type: 'search' } }] },
+          model,
+          { tools: [{ type: 'web_search_preview' }] },
+        ),
+      ).toBe(0.01);
+    });
+  });
+
   it('extracts multimodal usage details from responses payloads', () => {
     expect(
       extractOpenAIBillingUsage({

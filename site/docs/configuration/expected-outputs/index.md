@@ -191,7 +191,8 @@ See [Model-graded evals](/docs/configuration/expected-outputs/model-graded), [cl
 | [context-relevance](/docs/configuration/expected-outputs/model-graded)                               | Ensure that context is relevant to original query (default threshold 0.5)        |
 | [conversation-relevance](/docs/configuration/expected-outputs/model-graded)                          | Ensure that responses remain relevant throughout a conversation                  |
 | [trajectory:goal-success](/docs/configuration/expected-outputs/model-graded/#trajectorygoal-success) | Use an LLM judge to decide whether the traced agent run achieved its goal        |
-| [factuality](/docs/configuration/expected-outputs/model-graded)                                      | LLM output adheres to the given facts, using Factuality method from OpenAI eval  |
+| [factuality](/docs/configuration/expected-outputs/model-graded/factuality)                           | LLM output adheres to the given facts, using Factuality method from OpenAI eval  |
+| [model-graded-factuality](/docs/configuration/expected-outputs/model-graded/factuality)              | Alias for `factuality`                                                           |
 | [model-graded-closedqa](/docs/configuration/expected-outputs/model-graded)                           | LLM output adheres to given criteria, using Closed QA method from OpenAI eval    |
 | [pi](/docs/configuration/expected-outputs/model-graded/pi)                                           | Alternative scoring approach that uses a dedicated model for evaluating criteria |
 | [select-best](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded)                | Compare multiple outputs for a test case and pick the best one                   |
