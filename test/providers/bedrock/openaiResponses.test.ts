@@ -363,6 +363,7 @@ describe('bedrock openaiResponses helper', () => {
         ['openai.gpt-6-astra', 'us-east-1', 'us-west-2'],
         ['openai.gpt-6-sol', 'us-east-2', 'us-east-1'],
         ['openai.gpt-5.6-sol', 'us-west-2', 'us-east-1, us-east-2'],
+        ['openai.gpt-5.5', 'us-west-2', 'us-east-1, us-east-2'],
         [
           'openai.gpt-5.6-luna',
           'eu-west-1',
@@ -389,6 +390,43 @@ describe('bedrock openaiResponses helper', () => {
         expect(errorSpy).toHaveBeenCalledWith(hint);
       });
 
+      it('points an explicit Mantle apiBaseUrl at a listed region', async () => {
+        mockMantleResponse('openai.gpt-6-astra');
+        const provider = createBedrockOpenAiResponsesProvider('openai.gpt-6-astra', {
+          config: {
+            apiKey: 'bedrock-key',
+            region: 'us-west-2',
+            apiBaseUrl: 'https://bedrock-mantle.us-east-1.api.aws/openai/v1',
+          },
+        });
+
+        const result = await provider.callApi('hello');
+
+        expect(result.error).toContain(
+          'Amazon Bedrock does not list openai.gpt-6-astra on the Mantle endpoint in us-east-1. ' +
+            'Point config.apiBaseUrl at a listed Region: us-west-2.',
+        );
+      });
+
+      it('does not turn a 404 refusal into an error', async () => {
+        restoreEnv = mockProcessEnv({ AWS_REGION: 'us-east-1' });
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          data: { error: { code: 'invalid_prompt', message: 'Invalid prompt' } },
+          cached: false,
+          status: 404,
+          statusText: 'Not Found',
+        });
+        const provider = createBedrockOpenAiResponsesProvider('openai.gpt-6-astra', {
+          config: { apiKey: 'bedrock-key' },
+        });
+
+        const result = await provider.callApi('hello');
+
+        expect(result.isRefusal).toBe(true);
+        expect(result.error).toBeUndefined();
+        expect(errorSpy).not.toHaveBeenCalled();
+      });
+
       it('uses the regions of a prompt-level model override', async () => {
         mockMantleResponse('openai.gpt-6-sol');
         const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-terra', {
@@ -412,7 +450,7 @@ describe('bedrock openaiResponses helper', () => {
 
       it.each([
         ['a listed region', 'openai.gpt-5.6-terra', { region: 'us-west-2' }, 404],
-        ['an unlisted model', 'openai.gpt-5.5', { region: 'us-west-2' }, 404],
+        ['an unlisted model', 'openai.gpt-5.5-2026-04-23', { region: 'us-west-2' }, 404],
         [
           'a custom endpoint',
           'openai.gpt-6-astra',

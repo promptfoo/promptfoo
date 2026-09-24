@@ -66,6 +66,8 @@ const BEDROCK_OPENAI_MANTLE_REGIONS = new Map<string, readonly string[]>([
     'openai.gpt-5.6-luna',
     ['us-east-1', 'us-east-2', 'us-west-2', 'us-gov-west-1', 'us-gov-east-1'],
   ],
+  ['openai.gpt-5.5', ['us-east-1', 'us-east-2']],
+  ['openai.gpt-5.4', ['us-east-1', 'us-east-2', 'us-west-2']],
 ]);
 
 function getDefaultBedrockOpenAiRegion(modelName: string): string {
@@ -79,12 +81,22 @@ function getMantleEndpointRegion(url: URL): string | undefined {
   return /^bedrock-mantle\.([a-z0-9-]+)\.api\.aws$/.exec(url.hostname)?.[1];
 }
 
-function getMantleRegionHint(modelName: string, region: string): string | undefined {
+function getMantleRegionHint(
+  modelName: string,
+  region: string,
+  customEndpoint: boolean,
+): string | undefined {
   const regions = BEDROCK_OPENAI_MANTLE_REGIONS.get(modelName);
-  return regions && !regions.includes(region)
-    ? `Amazon Bedrock does not list ${modelName} on the Mantle endpoint in ${region}. ` +
-        `Set config.region or AWS_BEDROCK_REGION to a listed Region: ${regions.join(', ')}.`
-    : undefined;
+  if (!regions || regions.includes(region)) {
+    return undefined;
+  }
+  const fix = customEndpoint
+    ? 'Point config.apiBaseUrl at'
+    : 'Set config.region or AWS_BEDROCK_REGION to';
+  return (
+    `Amazon Bedrock does not list ${modelName} on the Mantle endpoint in ${region}. ` +
+    `${fix} a listed Region: ${regions.join(', ')}.`
+  );
 }
 
 /** Sole launch region for xAI Grok on Bedrock (us-west-2); used when none is configured. */
@@ -234,7 +246,10 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
       return result;
     }
     const region = getMantleEndpointRegion(new URL(this.getApiUrl()));
-    const hint = region && getMantleRegionHint(this.getRequestModelName(context), region);
+    // A Mantle URL for a Region other than the resolved one came from an explicit apiBaseUrl.
+    const hint =
+      region &&
+      getMantleRegionHint(this.getRequestModelName(context), region, region !== this.bedrockRegion);
     if (!hint) {
       return result;
     }
