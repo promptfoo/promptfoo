@@ -40,8 +40,8 @@ export const DEFAULT_BEDROCK_OPENAI_REGION = 'us-east-2';
 export const DEFAULT_BEDROCK_MANTLE_RESPONSES_REGION = 'us-east-1';
 
 /**
- * Mantle Regions for GPT-6 models from the OpenAI Bedrock guide, and GPT-5.6 Regions
- * verified against the mantle model catalog (`GET /v1/models`). AWS expands availability —
+ * Mantle Regions from AWS model cards (GPT-5.6 and Astra) and the OpenAI Bedrock guide
+ * (GPT-6 Sol/Luna), checked 2026-09-24. AWS expands availability —
  * gpt-5.4/gpt-5.5 later became servable in us-east-1 — so keep this table in sync with the
  * catalog: a stale entry hard-blocks a Region that actually serves the model. An explicit
  * `config.apiBaseUrl` bypasses this check.
@@ -51,8 +51,8 @@ const BEDROCK_OPENAI_MODEL_REGIONS: Record<string, readonly string[]> = {
   'openai.gpt-6-sol': ['us-east-1'],
   'openai.gpt-6-luna': ['us-east-1'],
   'openai.gpt-5.6-sol': ['us-east-1', 'us-east-2'],
-  'openai.gpt-5.6-terra': ['us-east-1', 'us-east-2', 'us-west-2'],
-  'openai.gpt-5.6-luna': ['us-east-1', 'us-east-2', 'us-west-2'],
+  'openai.gpt-5.6-terra': ['us-east-1', 'us-east-2', 'us-west-2', 'us-gov-east-1', 'us-gov-west-1'],
+  'openai.gpt-5.6-luna': ['us-east-1', 'us-east-2', 'us-west-2', 'us-gov-east-1', 'us-gov-west-1'],
 };
 
 function getDefaultBedrockOpenAiRegion(modelName: string): string {
@@ -92,7 +92,8 @@ export function getBedrockMantleResponsesBaseUrl(region: string): string {
  * Without this, GPT-5 controls (reasoning effort, verbosity) would be dropped and a
  * `temperature` default wrongly applied. We strip the prefix for those capability/billing
  * checks while still sending the real `openai.gpt-5.6-sol` id as the request `model` — Bedrock
- * uses OpenAI regional-processing rates, which are 10% above first-party rates.
+ * uses OpenAI regional-processing rates in commercial regions, with a further GovCloud
+ * adjustment for GPT-5.6 Terra/Luna.
  */
 export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
   private readonly bedrockTokenProvider: BedrockTokenProvider;

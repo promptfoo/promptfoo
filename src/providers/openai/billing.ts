@@ -558,11 +558,55 @@ const CACHE_WRITE_MODELS = new Set([
 const OPENAI_REGIONAL_PROCESSING_MODEL = /^(?:gpt-5\.[456]|gpt-6-(?:astra|sol|luna))(?:-|$)/;
 const OPENAI_REGIONAL_PROCESSING_MULTIPLIER = 1.1;
 const OPENAI_REGIONAL_PROCESSING_HOSTNAMES = new Set(['us.api.openai.com', 'eu.api.openai.com']);
+// AWS's GPT-5.6 Terra/Luna model cards price GovCloud 20% above commercial In-Region rates.
+const BEDROCK_GOVCLOUD_MODELS = new Set(['gpt-5.6-terra', 'gpt-5.6-luna']);
+const BEDROCK_GOVCLOUD_MULTIPLIER = 1.2;
 
 type OpenAIBillingConfig = ProviderConfig & {
   apiHost?: string;
   apiBaseUrl?: string;
+  region?: string;
 };
+
+function usesBedrockGovCloudPricing(
+  modelName: string,
+  config: OpenAIBillingConfig,
+  apiUrl: string | undefined,
+  provider: string | undefined,
+): boolean {
+  if (!BEDROCK_GOVCLOUD_MODELS.has(modelName)) {
+    return false;
+  }
+  try {
+    const hostname = new URL(apiUrl || config.apiBaseUrl || '').hostname;
+    if (/^bedrock-(?:mantle|runtime(?:-fips)?)\./.test(hostname)) {
+      return /^bedrock-mantle\.us-gov-(?:east|west)-1\.api\.aws$/.test(hostname);
+    }
+  } catch {
+    // An explicitly configured region still identifies the target behind a custom proxy.
+  }
+  return provider === 'bedrock' && /^us-gov-(?:east|west)-1$/.test(config.region ?? '');
+}
+
+function applyRegionalProcessingRates(
+  modelName: string,
+  modelRates: OpenAIModelRates,
+  config: OpenAIBillingConfig,
+  options: { apiUrl?: string; regionalProcessing?: boolean; provider?: string },
+): OpenAIModelRates {
+  if (
+    !OPENAI_REGIONAL_PROCESSING_MODEL.test(modelName) ||
+    !(options.regionalProcessing || usesOpenAIRegionalProcessing(config, options.apiUrl))
+  ) {
+    return modelRates;
+  }
+  const multiplier =
+    OPENAI_REGIONAL_PROCESSING_MULTIPLIER *
+    (usesBedrockGovCloudPricing(modelName, config, options.apiUrl, options.provider)
+      ? BEDROCK_GOVCLOUD_MULTIPLIER
+      : 1);
+  return { ...modelRates, text: applyRateMultiplier(modelRates.text, multiplier) };
+}
 
 export function usesAzureOpenAiBilling(
   config: OpenAIBillingConfig,
@@ -1055,14 +1099,7 @@ export function calculateOpenAIUsageCost(
     return undefined;
   }
 
-  const rates =
-    OPENAI_REGIONAL_PROCESSING_MODEL.test(modelName) &&
-    (options.regionalProcessing || usesOpenAIRegionalProcessing(config, options.apiUrl))
-      ? {
-          ...modelRates,
-          text: applyRateMultiplier(modelRates.text, OPENAI_REGIONAL_PROCESSING_MULTIPLIER),
-        }
-      : modelRates;
+  const rates = applyRegionalProcessingRates(modelName, modelRates, config, options);
 
   if (options.cachedResponse) {
     return 0;
