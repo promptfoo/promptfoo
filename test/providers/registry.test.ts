@@ -79,7 +79,10 @@ describe('Provider Registry', () => {
       { basePath: '.', options: {} },
     );
 
-    expect(provider).toHaveProperty('modelName', modelName);
+    expect(provider).toHaveProperty(
+      providerPath.startsWith('azure:') ? 'deploymentName' : 'modelName',
+      modelName,
+    );
   });
 
   it('preserves colons in the promptfoo:model name', async () => {
