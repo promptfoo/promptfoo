@@ -1,3 +1,4 @@
+import logger from '../../logger';
 import { OpenAiResponsesProvider } from '../openai/responses';
 import {
   getBedrockMantleOrigin,
@@ -13,7 +14,11 @@ import {
 } from './routing';
 import { BedrockTokenProvider } from './tokenProvider';
 
-import type { ProviderResponse } from '../../types/index';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
 import type { ProviderOptions } from '../../types/providers';
 import type { OpenAiCompletionOptions } from '../openai/types';
 
@@ -33,22 +38,53 @@ type BedrockOpenAiResponsesCallApiOptions = Parameters<OpenAiResponsesProvider['
  * `bedrock:responses:openai.gpt-oss-*` route for the standard mantle `/v1/responses` path.
  */
 
-/** GA region for the OpenAI frontier models on Bedrock; used when none is configured. */
+/**
+ * Default region for OpenAI frontier models on Bedrock when none is configured, unless
+ * `BEDROCK_OPENAI_MANTLE_REGIONS` shows that Mantle does not serve the model there.
+ */
 export const DEFAULT_BEDROCK_OPENAI_REGION = 'us-east-2';
 
 /** Default region for standard mantle Responses models such as GPT OSS. */
 export const DEFAULT_BEDROCK_MANTLE_RESPONSES_REGION = 'us-east-1';
 
-// Defaults for models that do not use the shared us-east-2 default. Explicit config/env
-// regions always take precedence; model availability changes independently of promptfoo.
-const BEDROCK_OPENAI_DEFAULT_REGIONS: Record<string, string> = {
-  'openai.gpt-6-astra': 'us-west-2',
-  'openai.gpt-6-sol': 'us-east-1',
-  'openai.gpt-6-luna': 'us-east-1',
-};
+/**
+ * Mantle Regions that serve each OpenAI frontier model: the regional Mantle catalogs
+ * (`GET /v1/models`, verified 2026-09-24) plus the GovCloud Regions from the AWS model cards.
+ * AWS changes availability independently of promptfoo, so this table only picks the default
+ * Region and explains Mantle 404s; configured Regions are always used as given.
+ */
+const BEDROCK_OPENAI_MANTLE_REGIONS = new Map<string, readonly string[]>([
+  ['openai.gpt-6-astra', ['us-west-2']],
+  ['openai.gpt-6-sol', ['us-east-1']],
+  ['openai.gpt-6-luna', ['us-east-1']],
+  ['openai.gpt-5.6-sol', ['us-east-1', 'us-east-2']],
+  [
+    'openai.gpt-5.6-terra',
+    ['us-east-1', 'us-east-2', 'us-west-2', 'us-gov-west-1', 'us-gov-east-1'],
+  ],
+  [
+    'openai.gpt-5.6-luna',
+    ['us-east-1', 'us-east-2', 'us-west-2', 'us-gov-west-1', 'us-gov-east-1'],
+  ],
+]);
 
 function getDefaultBedrockOpenAiRegion(modelName: string): string {
-  return BEDROCK_OPENAI_DEFAULT_REGIONS[modelName] ?? DEFAULT_BEDROCK_OPENAI_REGION;
+  const regions = BEDROCK_OPENAI_MANTLE_REGIONS.get(modelName);
+  return !regions || regions.includes(DEFAULT_BEDROCK_OPENAI_REGION)
+    ? DEFAULT_BEDROCK_OPENAI_REGION
+    : regions[0];
+}
+
+function getMantleEndpointRegion(url: URL): string | undefined {
+  return /^bedrock-mantle\.([a-z0-9-]+)\.api\.aws$/.exec(url.hostname)?.[1];
+}
+
+function getMantleRegionHint(modelName: string, region: string): string | undefined {
+  const regions = BEDROCK_OPENAI_MANTLE_REGIONS.get(modelName);
+  return regions && !regions.includes(region)
+    ? `Amazon Bedrock does not list ${modelName} on the Mantle endpoint in ${region}. ` +
+        `Set config.region or AWS_BEDROCK_REGION to a listed Region: ${regions.join(', ')}.`
+    : undefined;
 }
 
 /** Sole launch region for xAI Grok on Bedrock (us-west-2); used when none is configured. */
@@ -87,6 +123,7 @@ export function getBedrockMantleResponsesBaseUrl(region: string): string {
 export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
   private readonly bedrockTokenProvider: BedrockTokenProvider;
   private readonly bedrockRegion: string;
+  private readonly loggedMantleRegionHints = new Set<string>();
 
   constructor(
     modelName: string,
@@ -158,32 +195,55 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
     return this.config.apiBaseUrl || super.getApiUrl();
   }
 
+  private getRequestModelName(context?: BedrockOpenAiResponsesBodyContext): string {
+    const config = { ...this.config, ...context?.prompt?.config };
+    const model = (config.passthrough as { model?: unknown } | undefined)?.model;
+    return typeof model === 'string' ? model : this.modelName;
+  }
+
   async getOpenAiBody(
     prompt: string,
     context?: BedrockOpenAiResponsesBodyContext,
     callApiOptions?: BedrockOpenAiResponsesCallApiOptions,
   ) {
-    const config = { ...this.config, ...context?.prompt?.config };
-    const model = (config.passthrough as { model?: unknown } | undefined)?.model;
-    if (
-      typeof model === 'string' &&
-      isBedrockOpenAiResponsesModel(model) &&
-      model !== this.modelName
-    ) {
+    const model = this.getRequestModelName(context);
+    if (isBedrockOpenAiResponsesModel(model) && model !== this.modelName) {
       if (!isBedrockOpenAiResponsesModel(this.modelName)) {
         throw new Error(
           `Bedrock model ${model} cannot use the ${this.modelName} Responses provider. Configure a separate provider using bedrock:responses:${model}.`,
         );
       }
       const url = new URL(this.getApiUrl());
-      const region = /^bedrock-mantle\.([a-z0-9-]+)\.api\.aws$/.exec(url.hostname)?.[1];
-      if (region && url.pathname.replace(/\/+$/, '') !== '/openai/v1') {
+      if (getMantleEndpointRegion(url) && url.pathname.replace(/\/+$/, '') !== '/openai/v1') {
         throw new Error(
           `Bedrock model ${model} requires the /openai/v1 Mantle endpoint. Configure a separate provider using bedrock:responses:${model}, or set the frontier provider's apiBaseUrl to the /openai/v1 endpoint.`,
         );
       }
     }
     return super.getOpenAiBody(prompt, context, callApiOptions);
+  }
+
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const result = await super.callApi(prompt, context, callApiOptions);
+    // Mantle reports an unavailable Region as "model does not exist" (HTTP 404).
+    if (result.metadata?.http?.status !== 404 || typeof result.error !== 'string') {
+      return result;
+    }
+    const region = getMantleEndpointRegion(new URL(this.getApiUrl()));
+    const hint = region && getMantleRegionHint(this.getRequestModelName(context), region);
+    if (!hint) {
+      return result;
+    }
+    // The eval aborts on a 404 without printing the provider error, so log the fix too.
+    if (!this.loggedMantleRegionHints.has(hint)) {
+      this.loggedMantleRegionHints.add(hint);
+      logger.error(hint);
+    }
+    return { ...result, error: `${result.error}\n\n${hint}` };
   }
 
   getOpenAiRequestHeaders(

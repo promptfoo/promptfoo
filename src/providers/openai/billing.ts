@@ -559,8 +559,10 @@ const OPENAI_REGIONAL_PROCESSING_MODEL = /^(?:gpt-5\.[456]|gpt-6-(?:astra|sol|lu
 const OPENAI_REGIONAL_PROCESSING_MULTIPLIER = 1.1;
 const OPENAI_REGIONAL_PROCESSING_HOSTNAMES = new Set(['us.api.openai.com', 'eu.api.openai.com']);
 // AWS's GPT-5.6 Terra/Luna model cards price GovCloud 20% above commercial In-Region rates.
+// GovCloud serves them only In-Region on Mantle; Runtime offers only commercial CRIS profiles.
 const BEDROCK_GOVCLOUD_MODELS = new Set(['gpt-5.6-terra', 'gpt-5.6-luna']);
 const BEDROCK_GOVCLOUD_MULTIPLIER = 1.2;
+const BEDROCK_GOVCLOUD_REGION = /^us-gov-(?:east|west)-1$/;
 
 type OpenAIBillingConfig = ProviderConfig & {
   apiHost?: string;
@@ -580,17 +582,17 @@ function usesBedrockGovCloudPricing(
   }
   try {
     const hostname = new URL(apiUrl || config.apiBaseUrl || '').hostname;
-    const endpointRegion =
-      /^bedrock-(?:mantle|runtime(?:-fips)?)\.([a-z0-9-]+)\.(?:amazonaws\.com|api\.aws)$/.exec(
+    const endpoint =
+      /^bedrock-(mantle|runtime(?:-fips)?)\.([a-z0-9-]+)\.(?:amazonaws\.com|api\.aws)$/.exec(
         hostname,
-      )?.[1];
-    if (endpointRegion) {
-      return /^us-gov-(?:east|west)-1$/.test(endpointRegion);
+      );
+    if (endpoint) {
+      return endpoint[1] === 'mantle' && BEDROCK_GOVCLOUD_REGION.test(endpoint[2]);
     }
   } catch {
     // The resolved region still identifies the target behind a custom proxy.
   }
-  return provider === 'bedrock' && /^us-gov-(?:east|west)-1$/.test(region ?? config.region ?? '');
+  return provider === 'bedrock' && BEDROCK_GOVCLOUD_REGION.test(region ?? config.region ?? '');
 }
 
 function applyRegionalProcessingRates(

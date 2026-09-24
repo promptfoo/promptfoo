@@ -685,18 +685,20 @@ describe('OpenAI billing helpers', () => {
           longBaseCost * 1.1 * 1.2,
           10,
         );
+        // GovCloud rates are In-Region Mantle rates; Runtime has only commercial CRIS profiles.
         for (const runtimeHost of [
           `bedrock-runtime.${region}.amazonaws.com`,
           `bedrock-runtime.${region}.api.aws`,
           `bedrock-runtime-fips.${region}.amazonaws.com`,
         ]) {
           expect(
-            calculateOpenAIUsageCost(model, {}, shortUsage, {
+            calculateOpenAIUsageCost(model, { region }, shortUsage, {
               apiUrl: `https://${runtimeHost}/openai/v1`,
               provider: 'bedrock',
+              region,
               regionalProcessing: true,
             }),
-          ).toBeCloseTo(shortBaseCost * 1.1 * 1.2, 10);
+          ).toBeCloseTo(shortBaseCost * 1.1, 10);
         }
       }
 

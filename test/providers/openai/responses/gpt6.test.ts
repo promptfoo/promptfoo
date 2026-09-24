@@ -963,30 +963,30 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
   it.each([
     ['gpt-5.6-terra', 0.014],
     ['gpt-5.6-luna', 0.0014],
-  ] as const)('uses GovCloud Runtime rates for regional %s profiles', async (model, baseCost) => {
+  ] as const)('applies GovCloud rates for %s only on In-Region Mantle', async (model, baseCost) => {
     const usage = { input_tokens: 1_000, output_tokens: 1_000, total_tokens: 2_000 };
-    for (const [profile, expected] of [
-      ['us', baseCost * 1.1 * 1.2],
-      ['global', baseCost],
-    ] as const) {
+    const runtimeUrl = 'https://bedrock-runtime.us-gov-west-1.amazonaws.com/openai/v1';
+    const callApi = async (wireModel: string, apiBaseUrl: string) => {
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         cached: false,
         status: 200,
         statusText: 'OK',
-        data: { ...responseData, model: `${profile}.openai.${model}`, usage },
+        data: { ...responseData, model: wireModel, usage },
       });
-      const provider = new OpenAiResponsesProvider(`${profile}.openai.${model}`, {
-        config: {
-          apiKey: 'test-key',
-          apiBaseUrl: 'https://bedrock-runtime.us-gov-west-1.amazonaws.com/openai/v1',
-        },
-      });
-
-      const result = await provider.callApi('Say ready.');
-
+      const result = await new OpenAiResponsesProvider(wireModel, {
+        config: { apiKey: 'test-key', apiBaseUrl },
+      }).callApi('Say ready.');
       expect(result.error).toBeUndefined();
-      expect(result.cost).toBeCloseTo(expected, 10);
-    }
+      return result.cost;
+    };
+
+    // AWS lists GovCloud for these models only on Mantle; Runtime has no GovCloud profile.
+    expect(
+      await callApi(`openai.${model}`, 'https://bedrock-mantle.us-gov-west-1.api.aws/openai/v1'),
+    ).toBeCloseTo(baseCost * 1.1 * 1.2, 10);
+    expect(await callApi(`us.openai.${model}`, runtimeUrl)).toBeCloseTo(baseCost * 1.1, 10);
+    expect(await callApi(`global.openai.${model}`, runtimeUrl)).toBeCloseTo(baseCost, 10);
+    expect(await callApi(`us-gov.openai.${model}`, runtimeUrl)).toBeUndefined();
   });
 
   it.each([

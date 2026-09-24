@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
+import logger from '../../../src/logger';
 import {
   BedrockGptOssResponsesProvider,
   BedrockGrokResponsesProvider,
@@ -327,6 +328,109 @@ describe('bedrock openaiResponses helper', () => {
         true,
         undefined,
       );
+    });
+
+    describe('Mantle region hints', () => {
+      let errorSpy: ReturnType<typeof vi.spyOn>;
+
+      const mockMantleResponse = (model: string, status = 404) => {
+        const data = {
+          error: {
+            code: status === 404 ? 'not_found_error' : 'invalid_request_error',
+            message: `The model '${model}' does not exist`,
+            param: null,
+            type: 'invalid_request_error',
+          },
+        };
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          data,
+          cached: false,
+          status,
+          statusText: status === 404 ? 'Not Found' : 'Bad Request',
+        });
+        return data;
+      };
+
+      beforeEach(() => {
+        errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+      });
+
+      afterEach(() => {
+        errorSpy.mockRestore();
+      });
+
+      it.each([
+        ['openai.gpt-6-astra', 'us-east-1', 'us-west-2'],
+        ['openai.gpt-6-sol', 'us-east-2', 'us-east-1'],
+        ['openai.gpt-5.6-sol', 'us-west-2', 'us-east-1, us-east-2'],
+        [
+          'openai.gpt-5.6-luna',
+          'eu-west-1',
+          'us-east-1, us-east-2, us-west-2, us-gov-west-1, us-gov-east-1',
+        ],
+      ])('explains a Mantle 404 for %s in an unlisted region %s', async (model, region, listed) => {
+        restoreEnv = mockProcessEnv({ AWS_REGION: region });
+        const body = mockMantleResponse(model);
+        const provider = createBedrockOpenAiResponsesProvider(model, {
+          config: { apiKey: 'bedrock-key' },
+        });
+
+        const first = await provider.callApi('hello');
+        const second = await provider.callApi('hello');
+
+        const hint =
+          `Amazon Bedrock does not list ${model} on the Mantle endpoint in ${region}. ` +
+          `Set config.region or AWS_BEDROCK_REGION to a listed Region: ${listed}.`;
+        expect(first.error).toBe(`API error: 404 Not Found\n${JSON.stringify(body)}\n\n${hint}`);
+        expect(second.error).toBe(first.error);
+        expect(first.metadata?.http?.status).toBe(404);
+        // Logged once per provider, since concurrent eval rows can all hit the same 404.
+        expect(errorSpy).toHaveBeenCalledTimes(1);
+        expect(errorSpy).toHaveBeenCalledWith(hint);
+      });
+
+      it('uses the regions of a prompt-level model override', async () => {
+        mockMantleResponse('openai.gpt-6-sol');
+        const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-terra', {
+          config: { apiKey: 'bedrock-key', region: 'us-east-2' },
+        });
+
+        const result = await provider.callApi('hello', {
+          vars: {},
+          prompt: {
+            raw: 'hello',
+            label: 'hello',
+            config: { passthrough: { model: 'openai.gpt-6-sol' } },
+          },
+        });
+
+        expect(result.error).toContain(
+          'Amazon Bedrock does not list openai.gpt-6-sol on the Mantle endpoint in us-east-2. ' +
+            'Set config.region or AWS_BEDROCK_REGION to a listed Region: us-east-1.',
+        );
+      });
+
+      it.each([
+        ['a listed region', 'openai.gpt-5.6-terra', { region: 'us-west-2' }, 404],
+        ['an unlisted model', 'openai.gpt-5.5', { region: 'us-west-2' }, 404],
+        [
+          'a custom endpoint',
+          'openai.gpt-6-astra',
+          { region: 'us-east-1', apiBaseUrl: 'https://proxy.example.test/openai/v1' },
+          404,
+        ],
+        ['a non-404 error', 'openai.gpt-6-astra', { region: 'us-east-1' }, 400],
+      ])('leaves the error unchanged for %s', async (_, model, config, status) => {
+        mockMantleResponse(model, status);
+        const provider = createBedrockOpenAiResponsesProvider(model, {
+          config: { apiKey: 'bedrock-key', ...config },
+        });
+
+        const result = await provider.callApi('hello');
+
+        expect(result.error).toMatch(/^API error: \d{3} [A-Za-z ]+\n\{.*\}$/);
+        expect(errorSpy).not.toHaveBeenCalled();
+      });
     });
 
     it('respects an explicit apiBaseUrl override', () => {
