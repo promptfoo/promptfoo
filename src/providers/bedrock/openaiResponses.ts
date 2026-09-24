@@ -39,27 +39,16 @@ export const DEFAULT_BEDROCK_OPENAI_REGION = 'us-east-2';
 /** Default region for standard mantle Responses models such as GPT OSS. */
 export const DEFAULT_BEDROCK_MANTLE_RESPONSES_REGION = 'us-east-1';
 
-/**
- * Mantle Regions from AWS model cards (GPT-5.6 and Astra) and the OpenAI Bedrock guide
- * (GPT-6 Sol/Luna), checked 2026-09-24. AWS expands availability —
- * gpt-5.4/gpt-5.5 later became servable in us-east-1 — so keep this table in sync with the
- * catalog: a stale entry hard-blocks a Region that actually serves the model. An explicit
- * `config.apiBaseUrl` bypasses this check.
- */
-const BEDROCK_OPENAI_MODEL_REGIONS: Record<string, readonly string[]> = {
-  'openai.gpt-6-astra': ['us-west-2'],
-  'openai.gpt-6-sol': ['us-east-1'],
-  'openai.gpt-6-luna': ['us-east-1'],
-  'openai.gpt-5.6-sol': ['us-east-1', 'us-east-2'],
-  'openai.gpt-5.6-terra': ['us-east-1', 'us-east-2', 'us-west-2', 'us-gov-east-1', 'us-gov-west-1'],
-  'openai.gpt-5.6-luna': ['us-east-1', 'us-east-2', 'us-west-2', 'us-gov-east-1', 'us-gov-west-1'],
+// Defaults for models that do not use the shared us-east-2 default. Explicit config/env
+// regions always take precedence; model availability changes independently of promptfoo.
+const BEDROCK_OPENAI_DEFAULT_REGIONS: Record<string, string> = {
+  'openai.gpt-6-astra': 'us-west-2',
+  'openai.gpt-6-sol': 'us-east-1',
+  'openai.gpt-6-luna': 'us-east-1',
 };
 
 function getDefaultBedrockOpenAiRegion(modelName: string): string {
-  const supportedRegions = BEDROCK_OPENAI_MODEL_REGIONS[modelName];
-  return supportedRegions && !supportedRegions.includes(DEFAULT_BEDROCK_OPENAI_REGION)
-    ? supportedRegions[0]
-    : DEFAULT_BEDROCK_OPENAI_REGION;
+  return BEDROCK_OPENAI_DEFAULT_REGIONS[modelName] ?? DEFAULT_BEDROCK_OPENAI_REGION;
 }
 
 /** Sole launch region for xAI Grok on Bedrock (us-west-2); used when none is configured. */
@@ -170,12 +159,11 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
   ) {
     const config = { ...this.config, ...context?.prompt?.config };
     const model = (config.passthrough as { model?: unknown } | undefined)?.model;
-    const supportedRegions =
+    if (
       typeof model === 'string' &&
-      Object.prototype.hasOwnProperty.call(BEDROCK_OPENAI_MODEL_REGIONS, model)
-        ? BEDROCK_OPENAI_MODEL_REGIONS[model]
-        : undefined;
-    if (supportedRegions && model !== this.modelName) {
+      isBedrockOpenAiResponsesModel(model) &&
+      model !== this.modelName
+    ) {
       if (!isBedrockOpenAiResponsesModel(this.modelName)) {
         throw new Error(
           `Bedrock model ${model} cannot use the ${this.modelName} Responses provider. Configure a separate provider using bedrock:responses:${model}.`,
@@ -183,11 +171,6 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
       }
       const url = new URL(this.getApiUrl());
       const region = /^bedrock-mantle\.([a-z0-9-]+)\.api\.aws$/.exec(url.hostname)?.[1];
-      if (region && !supportedRegions.includes(region)) {
-        throw new Error(
-          `Bedrock model ${model} is not available at the configured Mantle endpoint in ${region}. Set the provider config.region to ${supportedRegions.join(' or ')}, or use a separate provider for this model.`,
-        );
-      }
       if (region && url.pathname.replace(/\/+$/, '') !== '/openai/v1') {
         throw new Error(
           `Bedrock model ${model} requires the /openai/v1 Mantle endpoint. Configure a separate provider using bedrock:responses:${model}, or set the frontier provider's apiBaseUrl to the /openai/v1 endpoint.`,
@@ -338,14 +321,6 @@ function getBedrockResponsesBaseUrl(
           `"https://bedrock-mantle.us-east-1.api.aws/v1".`,
       );
     }
-  }
-
-  const supportedRegions = BEDROCK_OPENAI_MODEL_REGIONS[modelName];
-  if (supportedRegions && !supportedRegions.includes(region)) {
-    throw new Error(
-      `Amazon Bedrock model "${modelName}" is not available in AWS region "${region}". ` +
-        `Supported Regions: ${supportedRegions.join(', ')}.`,
-    );
   }
 
   return modelName.startsWith('openai.') && !isBedrockGptOssResponsesModel(modelName)

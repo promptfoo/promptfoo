@@ -286,82 +286,48 @@ describe('bedrock openaiResponses helper', () => {
       );
     });
 
-    it.each(['us-east-1', 'us-east-2'])(
-      'rejects GPT-6 Astra in unsupported config region %s before a request',
-      (region) => {
-        expect(() =>
-          createBedrockOpenAiResponsesProvider('openai.gpt-6-astra', {
-            config: { apiKey: 'bedrock-key', region },
-          }),
-        ).toThrow(
-          `Amazon Bedrock model "openai.gpt-6-astra" is not available in AWS region "${region}". Supported Regions: us-west-2.`,
-        );
-        expect(fetchWithCache).not.toHaveBeenCalled();
-      },
-    );
-
-    it('rejects GPT-6 Astra with AWS_REGION=us-east-1 before a request', () => {
-      restoreEnv = mockProcessEnv({ AWS_REGION: 'us-east-1' });
-
-      expect(() =>
-        createBedrockOpenAiResponsesProvider('openai.gpt-6-astra', {
-          config: { apiKey: 'bedrock-key' },
-        }),
-      ).toThrow('Supported Regions: us-west-2');
-      expect(fetchWithCache).not.toHaveBeenCalled();
-    });
-
     it.each([
-      ['openai.gpt-6-astra', 'us-west-2'],
-      ['openai.gpt-6-sol', 'us-east-1'],
-      ['openai.gpt-6-luna', 'us-east-1'],
-      ['openai.gpt-5.6-sol', 'us-east-1'],
-      ['openai.gpt-5.6-sol', 'us-east-2'],
-      ['openai.gpt-5.6-terra', 'us-east-1'],
-      ['openai.gpt-5.6-terra', 'us-east-2'],
-      ['openai.gpt-5.6-terra', 'us-west-2'],
-      ['openai.gpt-5.6-terra', 'us-gov-east-1'],
-      ['openai.gpt-5.6-terra', 'us-gov-west-1'],
-      ['openai.gpt-5.6-luna', 'us-east-1'],
-      ['openai.gpt-5.6-luna', 'us-east-2'],
-      ['openai.gpt-5.6-luna', 'us-west-2'],
-      ['openai.gpt-5.6-luna', 'us-gov-east-1'],
-      ['openai.gpt-5.6-luna', 'us-gov-west-1'],
-    ])('accepts the supported Mantle region %s / %s', (modelId, region) => {
-      const provider = createBedrockOpenAiResponsesProvider(modelId, {
-        config: { apiKey: 'bedrock-key', region },
+      ['AWS_BEDROCK_REGION', 'eu-west-1'],
+      ['AWS_REGION', 'us-east-1'],
+      ['AWS_DEFAULT_REGION', 'ap-southeast-2'],
+    ])('uses %s for GPT-6 Astra when configured', async (envVar, region) => {
+      restoreEnv = mockProcessEnv({ [envVar]: region });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-6-astra', {
+        config: { apiKey: 'bedrock-key' },
       });
-
-      expect((provider.config as any).apiBaseUrl).toBe(
-        `https://bedrock-mantle.${region}.api.aws/openai/v1`,
+      await provider.callApi('hello');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        `https://bedrock-mantle.${region}.api.aws/openai/v1/responses`,
+        expect.anything(),
+        expect.any(Number),
+        'json',
+        true,
+        undefined,
       );
     });
 
     it.each([
-      ['openai.gpt-6-sol', 'us-east-2', 'us-east-1'],
-      ['openai.gpt-6-luna', 'us-east-2', 'us-east-1'],
-      ['openai.gpt-5.6-sol', 'us-west-2', 'us-east-1, us-east-2'],
-      ['openai.gpt-5.6-sol', 'us-gov-west-1', 'us-east-1, us-east-2'],
-      [
-        'openai.gpt-5.6-terra',
-        'eu-west-1',
-        'us-east-1, us-east-2, us-west-2, us-gov-east-1, us-gov-west-1',
-      ],
-      [
-        'openai.gpt-5.6-luna',
-        'ap-southeast-2',
-        'us-east-1, us-east-2, us-west-2, us-gov-east-1, us-gov-west-1',
-      ],
-    ])(
-      'rejects the unsupported Mantle region %s / %s before auth',
-      (modelId, region, supported) => {
-        restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
+      ['openai.gpt-6-astra', 'us-east-1'],
+      ['openai.gpt-6-sol', 'us-west-2'],
+      ['openai.gpt-6-luna', 'us-east-2'],
+      ['openai.gpt-5.6-sol', 'us-gov-west-1'],
+      ['openai.gpt-5.6-terra', 'eu-west-1'],
+      ['openai.gpt-5.6-luna', 'ap-southeast-2'],
+    ])('uses an explicitly configured region for %s / %s', async (modelId, region) => {
+      const provider = createBedrockOpenAiResponsesProvider(modelId, {
+        config: { apiKey: 'bedrock-key', region },
+      });
 
-        expect(() => createBedrockOpenAiResponsesProvider(modelId, { config: { region } })).toThrow(
-          `Supported Regions: ${supported}`,
-        );
-      },
-    );
+      await provider.callApi('hello');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        `https://bedrock-mantle.${region}.api.aws/openai/v1/responses`,
+        expect.anything(),
+        expect.any(Number),
+        'json',
+        true,
+        undefined,
+      );
+    });
 
     it('respects an explicit apiBaseUrl override', () => {
       restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
@@ -371,7 +337,7 @@ describe('bedrock openaiResponses helper', () => {
       expect((provider.config as any).apiBaseUrl).toBe('https://example.test/openai/v1');
     });
 
-    it('normalizes an explicit apiBaseUrl and does not apply regional availability to custom endpoints', () => {
+    it('normalizes an explicit apiBaseUrl', () => {
       const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-sol', {
         config: {
           apiKey: 'bedrock-key',
