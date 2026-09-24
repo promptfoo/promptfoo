@@ -501,6 +501,8 @@ describe('Provider Registry', () => {
         'gpt-5.10',
         'gpt-6',
         'gpt-6-astra',
+        'gpt-6-sol',
+        'gpt-6-luna',
         'gpt-6-astra-2026-09-01',
         'gpt-6.1',
         'gpt-7-mini',
@@ -512,7 +514,7 @@ describe('Provider Registry', () => {
         expect(provider.id()).toBe(`openai:${model}`);
       });
 
-      it.each(['gpt-5.6', 'gpt-5.6-luna', 'gpt-6-astra', 'gpt-7-mini'])(
+      it.each(['gpt-5.6', 'gpt-5.6-luna', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-7-mini'])(
         'honors the explicit Chat endpoint for %s',
         async (model) => {
           const provider = await registry.create(`openai:chat:${model}`);
