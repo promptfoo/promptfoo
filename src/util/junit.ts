@@ -185,6 +185,14 @@ async function* iterateJunitProjectedResults(
 
 async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
   const suites = new Map<string, JunitSuite>();
+  const rawNamesByDisplayName = new Map<string, Set<string>>();
+  for await (const result of iterateJunitProjectedResults(evalRecord)) {
+    const rawName = result.provider.label || result.provider.id || '';
+    const displayName = normalizeInlineText(rawName, 'unknown provider');
+    const rawNames = rawNamesByDisplayName.get(displayName) ?? new Set<string>();
+    rawNames.add(rawName);
+    rawNamesByDisplayName.set(displayName, rawNames);
+  }
   // Assign each unique provider+prompt combination a stable 1-based ordinal so
   // the suite display name (and every contained testcase classname) match
   // regardless of which result happened to insert the suite first.
@@ -198,19 +206,17 @@ async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
     let suite = suites.get(key);
     if (!suite) {
       const rawName = provider.label || provider.id || '';
-      // Every forbidden character is erased from the rendered name, wherever it
-      // sits and even when it is whitespace that collapses into a plain space,
-      // so two providers can render identically. Keep them apart with a stable
-      // hash of the provider identity.
+      const baseProviderName = normalizeInlineText(rawName, 'unknown provider');
+      const hasDisplayCollision = (rawNamesByDisplayName.get(baseProviderName)?.size ?? 0) > 1;
+      // Every forbidden character is erased from the rendered name, and whitespace
+      // is collapsed. Keep colliding provider identities apart with a stable hash.
       const suffix =
-        rawName.search(INVALID_XML_CHARACTERS) === -1
+        rawName.search(INVALID_XML_CHARACTERS) === -1 && !hasDisplayCollision
           ? ''
           : ` (${sha256(providerKey).slice(0, 16)})`;
-      const providerName = normalizeInlineText(
-        rawName,
-        'unknown provider',
-        MAX_JUNIT_NAME_LENGTH - suffix.length,
-      );
+      const providerName = suffix
+        ? normalizeInlineText(rawName, 'unknown provider', MAX_JUNIT_NAME_LENGTH - suffix.length)
+        : baseProviderName;
       const ordinalKey = suffix ? providerKey : JSON.stringify([providerName]);
       let promptOrdinals = promptOrdinalsByProvider.get(ordinalKey);
       if (!promptOrdinals) {

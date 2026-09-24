@@ -536,9 +536,23 @@ export class XAIResponsesProvider implements ApiProvider {
       typeof data === 'string' ? data : JSON.stringify(data)
     }`;
     if (data?.error?.code === 'invalid_prompt') {
+      const tokenUsage = this.getTokenUsage(data, cached);
+      const reportedCost = hasXAICostOverrides(this.config)
+        ? undefined
+        : getXAICostInUsd(data.usage);
+      const fallbackCost = calculateXAICost(
+        getXAIRequestModel(this.modelName, this.config),
+        this.config,
+        tokenUsage.prompt,
+        tokenUsage.completion,
+        tokenUsage.completionDetails?.reasoning,
+        undefined,
+        { apiUrl: this.getApiUrl() },
+      );
       return {
         output: errorMessage,
-        tokenUsage: this.getTokenUsage(data, cached),
+        tokenUsage,
+        cost: cached ? 0 : (reportedCost ?? fallbackCost),
         isRefusal: true,
       };
     }
