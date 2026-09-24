@@ -558,6 +558,32 @@ describe('xAI Chat Provider', () => {
       expect(body).not.toHaveProperty('max_tokens');
     });
 
+    it('preserves row and hook precedence over passthrough Grok defaults', async () => {
+      const provider = createXAIProvider('xai:grok-4.7') as any;
+      const optionScopes = Symbol.for('promptfoo.testOptionScopes');
+      const defaults = {
+        passthrough: {
+          model: 'grok-4.6',
+          reasoning_effort: 'high',
+          max_completion_tokens: 256,
+        },
+      };
+      const row = { reasoning_effort: 'low', max_completion_tokens: 128 };
+      const options = { ...defaults, ...row };
+      for (const scopes of [[row, defaults], [defaults]]) {
+        const { body } = await provider.getOpenAiBody('hello', {
+          prompt: { config: options },
+          test: { options, [optionScopes]: scopes },
+        });
+        expect(body).toMatchObject({
+          model: 'grok-4.6',
+          reasoning_effort: 'low',
+          max_completion_tokens: 128,
+        });
+        expect(body).not.toHaveProperty('max_tokens');
+      }
+    });
+
     it('accepts a simple eval variable and rejects other reasoning expressions before a request', async () => {
       const provider = createXAIProvider('xai:grok-4.7', {
         config: { config: { apiKey: 'test-key' } },

@@ -866,6 +866,7 @@ class XAIProvider extends OpenAiChatCompletionProvider {
     const usesGrok47 = model === 'grok-4.7';
     const usesPassthroughReasoningModel =
       typeof config.passthrough?.model === 'string' && GROK_REASONING_MODELS.includes(model);
+    const testOptionScopes = getXAITestOptionScopes(context?.test);
     let effort: string | undefined;
     let parentContext = context;
     if (usesGrok47) {
@@ -873,7 +874,7 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       effort = resolveGrok47ReasoningEffort(
         getXAIRequestOption(
           'reasoning_effort',
-          ...getXAITestOptionScopes(context?.test),
+          ...testOptionScopes,
           context?.prompt?.config,
           this.config,
         ),
@@ -908,6 +909,7 @@ class XAIProvider extends OpenAiChatCompletionProvider {
     } else if (usesPassthroughReasoningModel && GROK_REASONING_EFFORT_MODELS.includes(model)) {
       const configuredEffort = getXAIRequestOption(
         'reasoning_effort',
+        ...testOptionScopes,
         context?.prompt?.config,
         this.config,
       );
@@ -923,7 +925,7 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       const tokenLimit =
         getXAIRequestOption(
           ['max_completion_tokens', 'max_tokens'],
-          ...getXAITestOptionScopes(context?.test),
+          ...testOptionScopes,
           context?.prompt?.config,
           this.config,
         ) ?? getOpenAIChatOutputLimitFromEnv();
@@ -934,8 +936,12 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       }
     } else if (usesPassthroughReasoningModel) {
       const tokenLimit =
-        getXAIRequestOption('max_completion_tokens', context?.prompt?.config, this.config) ??
-        getOpenAICompletionTokenLimitFromEnv();
+        getXAIRequestOption(
+          'max_completion_tokens',
+          ...testOptionScopes,
+          context?.prompt?.config,
+          this.config,
+        ) ?? getOpenAICompletionTokenLimitFromEnv();
       delete result.body.max_tokens;
       delete result.body.max_completion_tokens;
       if (tokenLimit !== undefined) {
