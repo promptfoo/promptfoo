@@ -260,7 +260,7 @@
     "knip": "~6.27.0",
     "langium": "4.4.0",
     "node-sql-parser": "^5.4.0",
-    "oxc-parser": "^0.149.0",
+    "oxc-parser": "^0.150.0",
     "pdf-parse": "^2.4.5",
     "prettier": "^3.8.1",
     "read-excel-file": "^9.3.9",
