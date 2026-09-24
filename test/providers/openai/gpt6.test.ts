@@ -1521,9 +1521,11 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
       ]) {
         expect(provider.getApiUrl()).toBe('https://bedrock-mantle.us-east-1.api.aws/openai/v1');
       }
-      expect(() =>
-        createBedrockOpenAiResponsesProvider(bedrockModel, { config: { region: 'us-east-2' } }),
-      ).toThrow('Supported Regions: us-east-1');
+      expect(
+        createBedrockOpenAiResponsesProvider(bedrockModel, {
+          config: { region: 'us-east-2' },
+        }).getApiUrl(),
+      ).toBe('https://bedrock-mantle.us-east-2.api.aws/openai/v1');
       expect(
         createBedrockOpenAiResponsesProvider(bedrockModel, {
           config: { region: 'us-east-2', apiBaseUrl: 'https://proxy.example.com/openai/v1' },
@@ -1534,7 +1536,7 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
     }
   });
 
-  it('checks the selected AWS region before applying a Bedrock prompt model override', async () => {
+  it('keeps the selected AWS region when applying a Bedrock prompt model override', async () => {
     const restoreAwsEnv = mockProcessEnv({
       AWS_BEDROCK_REGION: undefined,
       AWS_REGION: undefined,
@@ -1556,12 +1558,9 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
         createBedrockOpenAiResponsesProvider(initialModel),
         createBedrockOpenAiResponsesProvider(initialModel, { config: { region: 'us-west-2' } }),
       ]) {
-        await expect(
-          provider.getOpenAiBody('Say ready.', context(overriddenModel)),
-        ).rejects.toThrow('Set the provider config.region to us-east-1');
+        const { body } = await provider.getOpenAiBody('Say ready.', context(overriddenModel));
+        expect(body.model).toBe(overriddenModel);
         expect(provider.getApiUrl()).not.toContain('us-east-1');
-        const { body } = await provider.getOpenAiBody('Say ready.', context('openai.gpt-5.6-luna'));
-        expect(body.model).toBe('openai.gpt-5.6-luna');
       }
       for (const config of [
         { region: 'us-east-1' },

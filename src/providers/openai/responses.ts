@@ -832,6 +832,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     return data.usage;
   }
 
+  protected getBillingRegion(): string | undefined {
+    return undefined;
+  }
+
   protected applyBilling(
     result: ProviderResponse,
     data: any,
@@ -879,6 +883,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         apiUrl: this.getApiUrl(),
         cachedResponse: cached,
         provider: isBedrock ? 'bedrock' : this.getGenAISystem(),
+        region: this.getBillingRegion(),
         regionalProcessing,
         serviceTier,
       },

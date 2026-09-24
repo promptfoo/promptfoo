@@ -660,6 +660,85 @@ describe('OpenAI billing helpers', () => {
   });
 
   it.each([
+    ['gpt-5.6-terra', 2, 12, 4, 18],
+    ['gpt-5.6-luna', 0.2, 1.2, 0.4, 1.8],
+  ])(
+    'prices Bedrock GovCloud %s at its published rates',
+    (model, input, output, longInput, longOutput) => {
+      const shortUsage = {
+        input_tokens: 2_000,
+        output_tokens: 1_000,
+        input_tokens_details: { cached_tokens: 500, cache_write_tokens: 250 },
+      };
+      const shortBaseCost =
+        (1_250 * input + 500 * input * 0.1 + 250 * input * 1.25 + 1_000 * output) / 1e6;
+      const longUsage = { input_tokens: 300_000, output_tokens: 1_000 };
+      const longBaseCost = (300_000 * longInput + 1_000 * longOutput) / 1e6;
+
+      for (const region of ['us-gov-east-1', 'us-gov-west-1']) {
+        const apiUrl = `https://bedrock-mantle.${region}.api.aws/openai/v1`;
+        expect(calculateOpenAIUsageCost(model, {}, shortUsage, { apiUrl })).toBeCloseTo(
+          shortBaseCost * 1.1 * 1.2,
+          10,
+        );
+        expect(calculateOpenAIUsageCost(model, {}, longUsage, { apiUrl })).toBeCloseTo(
+          longBaseCost * 1.1 * 1.2,
+          10,
+        );
+        // GovCloud rates are In-Region Mantle rates; Runtime has only commercial CRIS profiles.
+        for (const runtimeHost of [
+          `bedrock-runtime.${region}.amazonaws.com`,
+          `bedrock-runtime.${region}.api.aws`,
+          `bedrock-runtime-fips.${region}.amazonaws.com`,
+        ]) {
+          expect(
+            calculateOpenAIUsageCost(model, { region }, shortUsage, {
+              apiUrl: `https://${runtimeHost}/openai/v1`,
+              provider: 'bedrock',
+              region,
+              regionalProcessing: true,
+            }),
+          ).toBeCloseTo(shortBaseCost * 1.1, 10);
+        }
+      }
+
+      expect(
+        calculateOpenAIUsageCost(model, { region: 'us-gov-east-1' }, shortUsage, {
+          provider: 'bedrock',
+          regionalProcessing: true,
+          apiUrl: 'https://proxy.example.test/openai/v1',
+        }),
+      ).toBeCloseTo(shortBaseCost * 1.1 * 1.2, 10);
+      expect(
+        calculateOpenAIUsageCost(model, {}, shortUsage, {
+          provider: 'bedrock',
+          region: 'us-gov-west-1',
+          regionalProcessing: true,
+          apiUrl: 'https://proxy.example.test/openai/v1',
+        }),
+      ).toBeCloseTo(shortBaseCost * 1.1 * 1.2, 10);
+      expect(
+        calculateOpenAIUsageCost(model, { region: 'us-gov-east-1' }, shortUsage, {
+          provider: 'bedrock',
+          apiUrl: 'https://bedrock-mantle.us-east-1.api.aws/openai/v1',
+        }),
+      ).toBeCloseTo(shortBaseCost * 1.1, 10);
+      expect(
+        calculateOpenAIUsageCost(model, {}, shortUsage, {
+          apiUrl: 'https://bedrock-runtime.us-gov-west-1.amazonaws.com/openai/v1',
+          provider: 'bedrock',
+          regionalProcessing: false,
+        }),
+      ).toBeCloseTo(shortBaseCost, 10);
+      expect(
+        calculateOpenAIUsageCost(model, { inputCost: 7 / 1e6 }, shortUsage, {
+          apiUrl: 'https://bedrock-mantle.us-gov-east-1.api.aws/openai/v1',
+        }),
+      ).toBeCloseTo((2_000 * 7 + 1_000 * output * 1.1 * 1.2) / 1e6, 10);
+    },
+  );
+
+  it.each([
     'gpt-5.4',
     'gpt-5.4-2026-03-05',
     'gpt-5.4-mini',
