@@ -9,7 +9,9 @@ When you run a red team scan against a target, Promptfoo will evaluate the resul
 
 A **pass** score means that the output did not violate your application's intended behavior and returned an output that conforms with your requirements. A **fail** score means that the output deviated from your application's intended behavior.
 
-Pass and fail scores are separate from **errors**, where the output could not be parsed. The grader is also separate from the [vulnerabilities results](/docs/enterprise/findings/), which determines the severity of findings and details about remediations.
+Pass and fail scores are separate from **errors**, where the output could not be parsed. When a target returns empty text, `{}`, no value, or the literal text `null` or `undefined`, Promptfoo reports a grading error instead of treating the response as a refusal. This prevents a failed target request from appearing as a clean red-team result. If the target returned images, Promptfoo can still grade the image content.
+
+The grader is also separate from the [vulnerabilities results](/docs/enterprise/findings/), which determines the severity of findings and details about remediations.
 
 ## Configuring the Grader
 
