@@ -64,6 +64,36 @@ vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 
 describe('Provider Registry', () => {
+  it.each([
+    ['ai21:custom:model:rev', 'custom:model:rev'],
+    ['anthropic:messages:claude-custom:rev:0', 'claude-custom:rev:0'],
+    ['anthropic:completion:claude-custom:rev:0', 'claude-custom:rev:0'],
+    ['azure:chat:deployment:rev:0', 'deployment:rev:0'],
+    ['cloudera:custom:model:rev', 'custom:model:rev'],
+    ['voyage:custom:model:rev', 'custom:model:rev'],
+  ])('preserves colons in the model name for %s', async (providerPath, modelName) => {
+    const factory = providerMap.find((entry) => entry.test(providerPath));
+    expect(factory).toBeDefined();
+
+    const provider = await factory!.create(
+      providerPath,
+      { config: { apiKey: 'test-key', apiHost: 'example.test' } },
+      { basePath: '.', options: {} },
+    );
+
+    expect(provider).toHaveProperty('modelName', modelName);
+  });
+
+  it('preserves colons in the promptfoo:model name', async () => {
+    const providerPath = 'promptfoo:model:custom:model:rev';
+    const factory = providerMap.find((entry) => entry.test(providerPath));
+    expect(factory).toBeDefined();
+
+    const provider = await factory!.create(providerPath, {}, { basePath: '.', options: {} });
+
+    expect(provider.id()).toBe(providerPath);
+  });
+
   it.each(['openai:agents-api', 'openai:agents-api:gpt-6-astra'])(
     'routes %s to the hosted Agents API with scoped credentials',
     async (providerPath) => {
