@@ -200,7 +200,7 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      const modelName = providerPath.split(':')[1];
+      const modelName = providerPath.split(':').slice(1).join(':');
       return new AI21ChatCompletionProvider(modelName, providerOptions);
     },
   },
@@ -300,7 +300,7 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
-      const modelName = splits[2];
+      const modelName = splits.slice(2).join(':');
 
       if (modelType === 'messages') {
         return new AnthropicMessagesProvider(modelName, providerOptions);
@@ -353,7 +353,7 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
-      const deploymentName = splits[2];
+      const deploymentName = splits.slice(2).join(':');
 
       // Azure model types that have no sensible default deployment must name one in
       // the provider path (`azure:<type>:<name>`). Without this, the registry would
@@ -487,7 +487,7 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      const modelName = providerPath.split(':')[1];
+      const modelName = providerPath.split(':').slice(1).join(':');
       return new ClouderaAiChatCompletionProvider(modelName, {
         ...providerOptions,
         config: providerOptions.config || {},
@@ -1399,7 +1399,7 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      return new VoyageEmbeddingProvider(providerPath.split(':')[1], providerOptions);
+      return new VoyageEmbeddingProvider(providerPath.split(':').slice(1).join(':'), providerOptions);
     },
   },
   {
@@ -1628,7 +1628,7 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      const modelName = providerPath.split(':')[2];
+      const modelName = providerPath.split(':').slice(2).join(':');
       return new PromptfooModelProvider(modelName, {
         ...providerOptions,
         model: modelName,
