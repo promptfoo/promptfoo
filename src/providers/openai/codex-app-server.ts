@@ -1330,6 +1330,22 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     // but runtime variable rendering must not recurse into provider methods.
     delete mergedConfig.provider;
     const config = renderVarsInObject(mergedConfig, context?.vars) as CodexAppServerConfig;
+
+    return this.callApiWithRenderedConfig(prompt, config, context, callOptions);
+  }
+
+  /**
+   * Execute a fully resolved configuration from an internal provider adapter.
+   * The regular provider entry point remains responsible for merging and rendering;
+   * adapters that do that work themselves pass the complete configuration here.
+   * The runtime schema is still checked before any Codex request is made.
+   */
+  async callApiWithRenderedConfig(
+    prompt: string,
+    config: CodexAppServerConfig,
+    context?: CallApiContextParams,
+    callOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     const requestedModel =
       typeof config.model === 'string' && config.model ? config.model : undefined;
 
