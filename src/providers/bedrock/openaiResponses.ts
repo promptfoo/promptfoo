@@ -40,13 +40,14 @@ export const DEFAULT_BEDROCK_OPENAI_REGION = 'us-east-2';
 export const DEFAULT_BEDROCK_MANTLE_RESPONSES_REGION = 'us-east-1';
 
 /**
- * Mantle Regions for GPT-6 Sol/Luna from the OpenAI Bedrock guide, and GPT-5.6 Regions
+ * Mantle Regions for GPT-6 models from the OpenAI Bedrock guide, and GPT-5.6 Regions
  * verified against the mantle model catalog (`GET /v1/models`). AWS expands availability —
  * gpt-5.4/gpt-5.5 later became servable in us-east-1 — so keep this table in sync with the
  * catalog: a stale entry hard-blocks a Region that actually serves the model. An explicit
  * `config.apiBaseUrl` bypasses this check.
  */
 const BEDROCK_OPENAI_MODEL_REGIONS: Record<string, readonly string[]> = {
+  'openai.gpt-6-astra': ['us-west-2'],
   'openai.gpt-6-sol': ['us-east-1'],
   'openai.gpt-6-luna': ['us-east-1'],
   'openai.gpt-5.6-sol': ['us-east-1', 'us-east-2'],
@@ -55,8 +56,9 @@ const BEDROCK_OPENAI_MODEL_REGIONS: Record<string, readonly string[]> = {
 };
 
 function getDefaultBedrockOpenAiRegion(modelName: string): string {
-  return modelName === 'openai.gpt-6-sol' || modelName === 'openai.gpt-6-luna'
-    ? 'us-east-1'
+  const supportedRegions = BEDROCK_OPENAI_MODEL_REGIONS[modelName];
+  return supportedRegions && !supportedRegions.includes(DEFAULT_BEDROCK_OPENAI_REGION)
+    ? supportedRegions[0]
     : DEFAULT_BEDROCK_OPENAI_REGION;
 }
 

@@ -264,7 +264,55 @@ describe('bedrock openaiResponses helper', () => {
       );
     });
 
+    it('defaults GPT-6 Astra to us-west-2 in the factory and direct constructor', async () => {
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-6-astra', {
+        config: { apiKey: 'bedrock-key' },
+      });
+      const direct = new BedrockOpenAiResponsesProvider('openai.gpt-6-astra', {
+        config: { apiKey: 'bedrock-key' },
+      });
+
+      expect(provider.getApiUrl()).toBe('https://bedrock-mantle.us-west-2.api.aws/openai/v1');
+      expect(direct.getApiUrl()).toBe('https://bedrock-mantle.us-west-2.api.aws/openai/v1');
+
+      await provider.callApi('hello');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://bedrock-mantle.us-west-2.api.aws/openai/v1/responses',
+        expect.objectContaining({ body: expect.stringContaining('"model":"openai.gpt-6-astra"') }),
+        expect.any(Number),
+        'json',
+        true,
+        undefined,
+      );
+    });
+
+    it.each(['us-east-1', 'us-east-2'])(
+      'rejects GPT-6 Astra in unsupported config region %s before a request',
+      (region) => {
+        expect(() =>
+          createBedrockOpenAiResponsesProvider('openai.gpt-6-astra', {
+            config: { apiKey: 'bedrock-key', region },
+          }),
+        ).toThrow(
+          `Amazon Bedrock model "openai.gpt-6-astra" is not available in AWS region "${region}". Supported Regions: us-west-2.`,
+        );
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      },
+    );
+
+    it('rejects GPT-6 Astra with AWS_REGION=us-east-1 before a request', () => {
+      restoreEnv = mockProcessEnv({ AWS_REGION: 'us-east-1' });
+
+      expect(() =>
+        createBedrockOpenAiResponsesProvider('openai.gpt-6-astra', {
+          config: { apiKey: 'bedrock-key' },
+        }),
+      ).toThrow('Supported Regions: us-west-2');
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
     it.each([
+      ['openai.gpt-6-astra', 'us-west-2'],
       ['openai.gpt-5.6-sol', 'us-east-1'],
       ['openai.gpt-5.6-sol', 'us-east-2'],
       ['openai.gpt-5.6-terra', 'us-west-2'],
