@@ -32,8 +32,7 @@ promptfoo view
 
 This example includes configurations to test different Grok capabilities:
 
-- **Text Generation** (`promptfooconfig.yaml`) - Mathematical reasoning with Grok 4.3 and Grok 4.20, plus opt-in Grok 4.6 and 4.5 providers
-- **Grok 4.7** (`promptfooconfig.grok-4.7.yaml`) - Compare Chat Completions and Responses API reasoning
+- **Text Generation** (`promptfooconfig.yaml`) - Grok 4.3 and Grok 4.20, with optional Grok 4.7 Chat and Responses, Grok 4.6, and Grok 4.5
 - **Image Generation** (`promptfooconfig.images.yaml`) - Artistic image creation using Grok's image models
 - **Search Tools** (`promptfooconfig.search.yaml`) - Real-time web and X search using the Responses API
 - **Agent Tools (Responses API)** (`promptfooconfig.responses.yaml`) - Autonomous web and X search using Agent Tools
@@ -44,9 +43,6 @@ This example includes configurations to test different Grok capabilities:
 ```bash
 # Text generation with mathematical reasoning
 promptfoo eval -c promptfooconfig.yaml
-
-# Grok 4.7 via Chat Completions and the Responses API
-promptfoo eval -c promptfooconfig.grok-4.7.yaml
 
 # Image generation with artistic styles
 promptfoo eval -c promptfooconfig.images.yaml
@@ -70,7 +66,7 @@ xAI's current flagship supports text and image input with a 500K context window:
 - `xai:grok-4.7` - Chat Completions; set `reasoning_effort` to `low`, `medium`, `high` (default), or `xhigh`
 - `xai:responses:grok-4.7` - Responses API; set `reasoning.effort` to the same values
 
-The Grok 4.7 example reads `effort` from each test case so both endpoints use the same reasoning setting. Set `XAI_API_KEY` before running it.
+Uncomment the Grok 4.7 blocks in `promptfooconfig.yaml` to compare the two endpoints. Both read `effort` from the test case, so they use the same reasoning setting.
 
 ### Grok 4.6
 
