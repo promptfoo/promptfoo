@@ -527,6 +527,45 @@ describe('evaluator', () => {
       expect(reloaded?.prompts[0].metrics?.cachedRows).toBe(1);
       expect(reloaded?.getStats().cachedRows).toBe(1);
     });
+
+    it('preserves cached-row metrics when separate eval instances append concurrently', async () => {
+      const seed = await Eval.create({}, [{ raw: 'cached prompt', label: 'cached prompt' }], {
+        id: 'set-results-concurrent-cached-rows',
+      });
+      await seed.addPrompts([
+        createCompletedPrompt('cached prompt', {
+          metrics: createPromptMetrics({ cachedRows: 0 }),
+        }),
+      ]);
+
+      const firstEval = await Eval.findById(seed.id);
+      const secondEval = await Eval.findById(seed.id);
+      const firstResult = await EvalResult.createFromEvaluateResult(
+        seed.id,
+        createEvaluateResult({
+          testIdx: 0,
+          response: { output: 'first cached result', cached: true },
+        }),
+        { persist: false },
+      );
+      const secondResult = await EvalResult.createFromEvaluateResult(
+        seed.id,
+        createEvaluateResult({
+          testIdx: 1,
+          response: { output: 'second cached result', cached: true },
+        }),
+        { persist: false },
+      );
+
+      await Promise.all([
+        firstEval!.setResults([firstResult]),
+        secondEval!.setResults([secondResult]),
+      ]);
+
+      const reloaded = await Eval.findById(seed.id);
+      expect(reloaded?.prompts[0].metrics?.cachedRows).toBe(2);
+      expect(await reloaded?.getCachedResponseRowsCount()).toBe(2);
+    });
   });
 
   describe('summaryResults', () => {

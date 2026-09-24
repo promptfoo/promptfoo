@@ -120,22 +120,30 @@ function hasLegacyCachedRowsMetrics(prompts: CompletedPrompt[]): boolean {
   return prompts.some((prompt) => !isValidCachedRowsMetric(prompt.metrics?.cachedRows));
 }
 
-function updateCachedRowsMetrics(prompts: CompletedPrompt[], results: EvalResult[]): boolean {
-  let updated = false;
+function updateCachedRowsMetrics(
+  prompts: CompletedPrompt[],
+  results: EvalResult[],
+): Map<number, number> {
+  const cachedRowsByPrompt = new Map<number, number>();
   for (const result of results) {
     if (result.response?.cached !== true) {
       continue;
     }
 
-    const metrics = prompts[result.promptIdx]?.metrics;
+    const { promptIdx } = result;
+    if (!Number.isInteger(promptIdx) || promptIdx < 0 || promptIdx >= prompts.length) {
+      continue;
+    }
+
+    const metrics = prompts[promptIdx]?.metrics;
     if (!metrics || !isValidCachedRowsMetric(metrics.cachedRows)) {
       continue;
     }
 
     metrics.cachedRows += 1;
-    updated = true;
+    cachedRowsByPrompt.set(promptIdx, (cachedRowsByPrompt.get(promptIdx) ?? 0) + 1);
   }
-  return updated;
+  return cachedRowsByPrompt;
 }
 
 /** Result from queries extracting variable keys with eval IDs */
@@ -1436,7 +1444,7 @@ export default class Eval {
 
   async setResults(results: EvalResult[]) {
     this.results = results;
-    const cachedRowsMetricsUpdated = updateCachedRowsMetrics(this.prompts, results);
+    const cachedRowsByPrompt = updateCachedRowsMetrics(this.prompts, results);
     if (this.persisted && results.length > 0) {
       const db = await getDb();
       await db
@@ -1449,10 +1457,16 @@ export default class Eval {
           })),
         )
         .run();
-      if (cachedRowsMetricsUpdated) {
+      if (cachedRowsByPrompt.size > 0) {
+        const metricUpdates = Array.from(cachedRowsByPrompt, ([promptIdx, count]) => {
+          const jsonPath = `$[${promptIdx}].metrics.cachedRows`;
+          return sql`${jsonPath}, COALESCE(json_extract(${evalsTable.prompts}, ${jsonPath}), 0) + ${count}`;
+        });
         await db
           .update(evalsTable)
-          .set({ prompts: this.prompts })
+          .set({
+            prompts: sql`json_set(${evalsTable.prompts}, ${sql.join(metricUpdates, sql`, `)})`,
+          })
           .where(eq(evalsTable.id, this.id))
           .run();
       }
