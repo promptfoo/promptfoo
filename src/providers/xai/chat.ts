@@ -777,17 +777,9 @@ export function getXAITestOptionScopes(test?: { options?: object }): (object | u
       changed[key] = current?.[key] === undefined ? REMOVED_TEST_OPTION : current[key];
     }
   }
-  const currentPassthrough = current?.passthrough as Record<string, unknown> | undefined;
-  const basePassthrough = base.passthrough as Record<string, unknown> | undefined;
-  const changedPassthrough: Record<string, unknown> = {};
-  for (const key of ['reasoning', 'reasoning_effort', 'max_completion_tokens', 'max_tokens']) {
-    if (!isEqual(currentPassthrough?.[key], basePassthrough?.[key])) {
-      changedPassthrough[key] =
-        currentPassthrough?.[key] === undefined ? REMOVED_TEST_OPTION : currentPassthrough[key];
-    }
-  }
-  if (Object.keys(changedPassthrough).length > 0) {
-    changed.passthrough = changedPassthrough;
+  if (!isEqual(current?.passthrough, base.passthrough)) {
+    // A hook replaces the whole passthrough object, just like an option scope does.
+    changed.passthrough = current?.passthrough;
   }
   return Object.keys(changed).length > 0 ? [changed, ...original] : original;
 }
@@ -799,9 +791,15 @@ export function getXAIRequestOption(
   const keys = typeof key === 'string' ? [key] : key;
   const removedFromPassthrough = new Set<XAIRequestOption>();
   const removedFromConfig = new Set<XAIRequestOption>();
+  let passthroughReplaced = false;
   for (const scope of scopes) {
     const config = scope as Record<string, unknown> | undefined;
-    const raw = config?.passthrough as Record<string, unknown> | undefined;
+    const raw = passthroughReplaced
+      ? undefined
+      : (config?.passthrough as Record<string, unknown> | undefined);
+    if (config && Object.prototype.hasOwnProperty.call(config, 'passthrough')) {
+      passthroughReplaced = true;
+    }
     for (const [source, removed] of [
       [raw, removedFromPassthrough],
       [config, removedFromConfig],

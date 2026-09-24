@@ -502,6 +502,53 @@ describe('xAI Chat Provider', () => {
       }
     });
 
+    it('does not restore passthrough settings replaced by a prompt, row, or hook', async () => {
+      const restoreEnv = mockProcessEnv({
+        OPENAI_MAX_COMPLETION_TOKENS: undefined,
+        OPENAI_MAX_TOKENS: undefined,
+      });
+      try {
+        const provider = createXAIProvider('xai:grok-4.7', {
+          config: {
+            config: {
+              passthrough: {
+                model: 'grok-4.7',
+                reasoning_effort: 'high',
+                max_completion_tokens: 256,
+              },
+            },
+          },
+        }) as any;
+        const partial = { passthrough: { model: 'grok-4.7' } };
+        const promptBody = (await provider.getOpenAiBody('hello', { prompt: { config: partial } }))
+          .body;
+        expect(promptBody).not.toHaveProperty('reasoning_effort');
+        expect(promptBody).not.toHaveProperty('max_completion_tokens');
+
+        const defaults = {
+          passthrough: {
+            model: 'grok-4.7',
+            reasoning_effort: 'high',
+            max_completion_tokens: 128,
+          },
+        };
+        const optionScopes = Symbol.for('promptfoo.testOptionScopes');
+        for (const test of [
+          { options: partial, [optionScopes]: [partial, defaults] },
+          { options: partial, [optionScopes]: [defaults] },
+        ]) {
+          const { body } = await provider.getOpenAiBody('hello', {
+            prompt: { config: partial },
+            test,
+          });
+          expect(body).not.toHaveProperty('reasoning_effort');
+          expect(body).not.toHaveProperty('max_completion_tokens');
+        }
+      } finally {
+        restoreEnv();
+      }
+    });
+
     it('omits a null Grok 4.7 passthrough output cap', async () => {
       const restoreEnv = mockProcessEnv({
         OPENAI_MAX_COMPLETION_TOKENS: undefined,

@@ -349,6 +349,40 @@ describe('XAIResponsesProvider', () => {
     expect(request.body).not.toHaveProperty('reasoning');
   });
 
+  it('does not restore reasoning from a replaced passthrough object', async () => {
+    const provider = new XAIResponsesProvider('grok-4.7', {
+      config: { passthrough: { model: 'grok-4.7', reasoning: { effort: 'high' } } },
+    });
+    const partial = { passthrough: { model: 'grok-4.7' } };
+    expect(
+      (
+        await provider.getRequestBody('hello', {
+          prompt: { raw: 'hello', label: 'hello', config: partial },
+          vars: {},
+        })
+      ).body,
+    ).not.toHaveProperty('reasoning');
+
+    const defaults = { passthrough: { reasoning: { effort: 'high' } } };
+    for (const test of [
+      {
+        options: partial,
+        [Symbol.for('promptfoo.testOptionScopes')]: [partial, defaults],
+      },
+      {
+        options: partial,
+        [Symbol.for('promptfoo.testOptionScopes')]: [defaults],
+      },
+    ]) {
+      const request = await provider.getRequestBody('hello', {
+        prompt: { raw: 'hello', label: 'hello', config: partial },
+        vars: {},
+        test,
+      });
+      expect(request.body).not.toHaveProperty('reasoning');
+    }
+  });
+
   it('validates effort against a passthrough Grok 4.3 model', async () => {
     const provider = new XAIResponsesProvider('grok-4.7', {
       config: { passthrough: { model: 'grok-4.3', reasoning: { effort: 'xhigh' } } },
