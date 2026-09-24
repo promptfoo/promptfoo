@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 
-import { PROMPT_DELIMITER } from '../constants';
+import { getPromptDelimiter } from '../constants';
 
 import type { Prompt } from '../../types/index';
 
@@ -29,8 +29,9 @@ export function processTxtFile(filePath: string, { label }: Partial<Prompt>): Pr
     buffer = [];
   };
 
+  const delimiter = getPromptDelimiter();
   for (const line of lines) {
-    if (line.trim() === PROMPT_DELIMITER) {
+    if (line.trim() === delimiter) {
       flush();
     } else {
       buffer.push(line);

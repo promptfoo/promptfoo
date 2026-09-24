@@ -1,8 +1,10 @@
 import * as fs from 'fs';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { PROMPT_DELIMITER } from '../../../src/prompts/constants';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../../src/cliState';
+import { getPromptDelimiter } from '../../../src/prompts/constants';
 import { processTxtFile } from '../../../src/prompts/processors/text';
+import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('fs');
 
@@ -40,7 +42,7 @@ describe('processTxtFile', () => {
   });
 
   it('should process a text file with multiple prompts and a label', () => {
-    const fileContent = `Prompt 1\n${PROMPT_DELIMITER}\nPrompt 2\n${PROMPT_DELIMITER}\nPrompt 3`;
+    const fileContent = `Prompt 1\n${getPromptDelimiter()}\nPrompt 2\n${getPromptDelimiter()}\nPrompt 3`;
     mockReadFileSync.mockReturnValue(fileContent);
     expect(processTxtFile('file.txt', { label: 'Label' })).toEqual([
       {
@@ -61,7 +63,7 @@ describe('processTxtFile', () => {
 
   it('should handle text file with leading and trailing delimiters', () => {
     const filePath = 'file.txt';
-    const fileContent = `${PROMPT_DELIMITER}\nPrompt 1\n${PROMPT_DELIMITER}\nPrompt 2\n${PROMPT_DELIMITER}`;
+    const fileContent = `${getPromptDelimiter()}\nPrompt 1\n${getPromptDelimiter()}\nPrompt 2\n${getPromptDelimiter()}`;
     mockReadFileSync.mockReturnValue(fileContent);
     expect(processTxtFile(filePath, {})).toEqual([
       {
@@ -78,7 +80,7 @@ describe('processTxtFile', () => {
 
   it('should return an empty array for a file with only delimiters', () => {
     const filePath = 'file.txt';
-    const fileContent = `${PROMPT_DELIMITER}\n${PROMPT_DELIMITER}`;
+    const fileContent = `${getPromptDelimiter()}\n${getPromptDelimiter()}`;
     mockReadFileSync.mockReturnValue(fileContent);
     expect(processTxtFile(filePath, {})).toEqual([]);
     expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf-8');
@@ -103,5 +105,48 @@ describe('processTxtFile', () => {
       },
     ]);
     expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf-8');
+  });
+});
+
+// Uses the real getEnvString and cliState. The CLI populates both sources after this module is
+// imported: `--env-file` into process.env, `env:` into cliState.config.
+describe('processTxtFile with PROMPTFOO_PROMPT_SEPARATOR', () => {
+  const mockReadFileSync = vi.mocked(fs.readFileSync);
+  let originalConfig: typeof cliState.config;
+  let restoreEnv: () => void;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    originalConfig = cliState.config;
+    cliState.config = undefined;
+    restoreEnv = mockProcessEnv({ PROMPTFOO_PROMPT_SEPARATOR: undefined });
+  });
+
+  afterEach(() => {
+    cliState.config = originalConfig;
+    restoreEnv();
+  });
+
+  const rawPrompts = (fileContent: string) => {
+    mockReadFileSync.mockReturnValue(fileContent);
+    return processTxtFile('file.txt', {}).map((prompt) => prompt.raw);
+  };
+
+  it('splits on a separator set after the module is imported', () => {
+    mockProcessEnv({ PROMPTFOO_PROMPT_SEPARATOR: '%%%' });
+
+    expect(rawPrompts('Prompt 1\n%%%\nPrompt 2')).toEqual(['Prompt 1', 'Prompt 2']);
+  });
+
+  it('splits on a separator from the config env block', () => {
+    cliState.config = { env: { PROMPTFOO_PROMPT_SEPARATOR: '%%%' } };
+
+    expect(rawPrompts('Prompt 1\n%%%\nPrompt 2')).toEqual(['Prompt 1', 'Prompt 2']);
+  });
+
+  it('keeps the default separator inside a prompt once a custom one is set', () => {
+    mockProcessEnv({ PROMPTFOO_PROMPT_SEPARATOR: '%%%' });
+
+    expect(rawPrompts('Front matter\n---\nBody')).toEqual(['Front matter\n---\nBody']);
   });
 });
