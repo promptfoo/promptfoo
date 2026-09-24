@@ -1,5 +1,6 @@
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { isGpt6Model } from './openai/gpt6';
 
 import type {
   ApiEmbeddingProvider,
@@ -211,7 +212,7 @@ export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
   }
 
   /**
-   * Override isReasoningModel to correctly detect GPT-5 and other reasoning models
+   * Override isReasoningModel to correctly detect OpenAI reasoning models
    * despite TrueFoundry's provider-account/model-name format
    */
   protected isReasoningModel(): boolean {
@@ -221,7 +222,8 @@ export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
       actualModelName.startsWith('o1') ||
       actualModelName.startsWith('o3') ||
       actualModelName.startsWith('o4') ||
-      actualModelName.startsWith('gpt-5')
+      actualModelName.startsWith('gpt-5') ||
+      isGpt6Model(actualModelName)
     );
   }
 

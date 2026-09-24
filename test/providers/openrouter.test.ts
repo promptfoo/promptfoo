@@ -356,7 +356,7 @@ describe('OpenRouter', () => {
       [
         'a content-filter response',
         { message: { content: null }, finish_reason: 'content_filter' },
-        'Content filtered by provider',
+        'Content filtered by the model provider.',
         'content_filter',
       ],
     ])('preserves %s as a flagged refusal', async (_description, choice, output, finishReason) => {
@@ -477,8 +477,9 @@ describe('OpenRouter', () => {
           .mockResolvedValueOnce(recoveredResponse);
 
         const failed = await provider.callApi('Test prompt');
-        expect(failed.error).toBe('API error: OpenRouter provider returned a generation error');
-        expect(failed.error).not.toContain('PRIVATE_DIAGNOSTIC');
+        // The provider's choice-level error message is surfaced as the error;
+        // the partial output that rode along must never be graded.
+        expect(failed.error).toBe(`API error: ${privateDiagnostic}`);
         expect(failed.error).not.toContain('partial output must not be graded');
         expect(failed).toMatchObject({
           tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
@@ -744,13 +745,14 @@ describe('OpenRouter', () => {
         });
 
         expect(result).toMatchObject({
-          error: 'API error: OpenRouter provider returned a generation error',
+          error: 'API error: PRIVATE_RATE_LIMIT_DIAGNOSTIC',
           finishReason: 'error',
           tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
           cost: 0.0042,
-          metadata: { rateLimitKind: 'rate_limit', http: { status: 429 } },
+          // The transport really was a 200; the choice-level code drives the
+          // rate_limit classification the scheduler retries on.
+          metadata: { rateLimitKind: 'rate_limit', http: { status: 200 } },
         });
-        expect(JSON.stringify(result)).not.toContain('PRIVATE_RATE_LIMIT_DIAGNOSTIC');
       } finally {
         registry.dispose();
         restoreEnv();
@@ -833,7 +835,9 @@ describe('OpenRouter', () => {
 
         expect(result.metadata).toMatchObject({
           retryableErrorKind: 'transient_availability',
-          http: { status: 503, headers: { 'retry-after': '12' } },
+          // The transport exchange really was a 200; the choice-level code
+          // drives the retryable classification, not the recorded status.
+          http: { status: 200, headers: { 'retry-after': '12' } },
         });
         expect(createProviderRateLimitOptions().getRetryAfter?.(result, undefined)).toBe(12_000);
       } finally {

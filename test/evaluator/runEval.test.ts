@@ -730,6 +730,46 @@ describe('runEval', () => {
     expect(redTeamResults[0].error).toBeUndefined();
   });
 
+  it.each(['provider', 'test', 'postprocess', 'assertion'] as const)(
+    'grades transformed OpenAI refusal output at the %s level',
+    async (level) => {
+      const outputs = ['The result is 42.', 'I cannot assist with that request.'];
+      const transform = 'JSON.parse(output).value';
+      for (const [index, refused] of [
+        [0, false],
+        [1, true],
+      ] as const) {
+        const provider: ApiProvider = {
+          id: () => 'openai:responses:gpt-6-luna',
+          callApi: vi.fn().mockResolvedValue({
+            output: JSON.stringify({ value: outputs[index], discarded: outputs[1 - index] }),
+            isRefusal: true,
+          }),
+          ...(level === 'provider' ? { transform } : {}),
+        };
+        for (const [type, success] of [
+          ['is-refusal', refused],
+          ['not-is-refusal', !refused],
+        ] as const) {
+          const [result] = await runEval({
+            ...defaultOptions,
+            provider,
+            prompt: { raw: 'A test prompt', label: 'test' },
+            test: {
+              assert: [{ type, ...(level === 'assertion' ? { transform } : {}) }],
+              ...(level === 'test' ? { options: { transform } } : {}),
+              ...(level === 'postprocess' ? { options: { postprocess: transform } } : {}),
+            },
+            conversations: {},
+            registers: {},
+          });
+          expect(result.success, `${level}, ${type}, ${index}`).toBe(success);
+          expect(result.score).toBe(success ? 1 : 0);
+        }
+      }
+    },
+  );
+
   it('should apply transforms in correct order', async () => {
     const providerWithTransform: ApiProvider = {
       id: vi.fn().mockReturnValue('transform-provider'),

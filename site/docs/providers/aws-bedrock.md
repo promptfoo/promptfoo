@@ -829,9 +829,11 @@ config:
 
 For Claude models (e.g., `anthropic.claude-fable-5`, `anthropic.claude-sonnet-5`, `anthropic.claude-sonnet-4-6`, `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-haiku-4-5-20251001-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `us.anthropic.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
 
-**Note**: Claude Opus 4.8 (`anthropic.claude-opus-4-8`) and Claude Opus 4.7 (`anthropic.claude-opus-4-7`) are available via cross-region inference profiles (`us.`, `eu.`, `jp.`, `global.`) and, in select regions, through the base foundation model ID. Claude Opus 4.6 (`anthropic.claude-opus-4-6-v1`) and Claude Opus 4.5 (`anthropic.claude-opus-4-5-20251101-v1:0`) require an inference profile ARN and cannot be used as a direct model ID. See the [Application Inference Profiles](#application-inference-profiles) section for setup. promptfoo automatically omits unsupported sampling parameters (`temperature`, `topP`, and `topK` — including raw `top_k` in `additionalModelRequestFields`) and converts configured manual thinking to adaptive thinking for Opus 4.7, Opus 4.8, Opus 5, and Sonnet 5.
+**Note**: Claude Opus 4.8 (`anthropic.claude-opus-4-8`) and Claude Opus 4.7 (`anthropic.claude-opus-4-7`) are available via cross-region inference profiles (`us.`, `eu.`, `jp.`, `global.`) and, in select regions, through the base foundation model ID. Claude Opus 4.6 (`anthropic.claude-opus-4-6-v1`) and Claude Opus 4.5 (`anthropic.claude-opus-4-5-20251101-v1:0`) require an inference profile ARN and cannot be used as a direct model ID. See the [Application Inference Profiles](#application-inference-profiles) section for setup. promptfoo automatically omits unsupported sampling parameters (`temperature`, `topP`, and `topK` — including raw `top_k` in `additionalModelRequestFields`) and converts configured manual thinking to adaptive thinking for Opus 4.7, Opus 4.8, Opus 5, Opus 5.5, and Sonnet 5.
 
 **Note**: Claude Opus 5 (`anthropic.claude-opus-5`) is available through the base foundation model ID and the `us.`/`eu.`/`global.` cross-region inference profiles (e.g. `bedrock:global.anthropic.claude-opus-5`); use the `global.` profile for dynamic routing. Unlike Opus 4.7/4.8 there is no `jp.` profile — the Japan regions surface Opus 5 through `global.` only. Cost is reported on both the default `bedrock:` (InvokeModel) and `bedrock:converse:` paths — the `global.` endpoint bills at the standard $5/$25 rate and regional profiles (`us.`/`eu.`) add the 10% Claude 4.5+ regional premium.
+
+**Note**: Use Claude Opus 5.5 (`anthropic.claude-opus-5-5`) through a cross-region inference profile — `global.`, `us.`, `eu.`, `jp.`, or `au.` (for example, `bedrock:global.anthropic.claude-opus-5-5`). On-demand calls to the base model ID return a `ValidationException`. Cost is reported on both the `bedrock:` and `bedrock:converse:` paths: `global.` bills $4 / $20 per million input / output tokens, and geo profiles add the 10% regional premium.
 
 **Note**: Claude Sonnet 5 (`anthropic.claude-sonnet-5`) is available through the base foundation model ID and the `us.`/`eu.`/`global.` cross-region inference profiles (e.g. `bedrock:global.anthropic.claude-sonnet-5`); use the `global.` profile for dynamic routing. Cost is reported on both the default `bedrock:` (InvokeModel) and `bedrock:converse:` paths — the `global.` endpoint bills at the standard $3/$15 rate and regional/geo profiles (`us.`/`eu.`) add the 10% Claude 4.5+ regional premium.
 
@@ -1080,8 +1082,8 @@ APIs**. promptfoo routes each `bedrock:openai.*` id to the correct one automatic
 #### Frontier models (GPT-5.x)
 
 - **`openai.gpt-5.6-sol`**: Flagship reasoning tier (`us-east-1`, `us-east-2`)
-- **`openai.gpt-5.6-terra`**: Balanced tier (`us-east-1`, `us-east-2`, `us-west-2`)
-- **`openai.gpt-5.6-luna`**: Fast, cost-efficient tier (`us-east-1`, `us-east-2`, `us-west-2`)
+- **`openai.gpt-5.6-terra`**: Balanced tier (`us-east-1`, `us-east-2`, `us-west-2`, `us-gov-west-1`, `us-gov-east-1`)
+- **`openai.gpt-5.6-luna`**: Fast, cost-efficient tier (`us-east-1`, `us-east-2`, `us-west-2`, `us-gov-west-1`, `us-gov-east-1`)
 - **`openai.gpt-5.5`**: Earlier flagship frontier model (`us-east-1`, `us-east-2`)
 - **`openai.gpt-5.4`**: Earlier frontier model (`us-east-1`, `us-east-2`, `us-west-2`)
 
@@ -1090,8 +1092,11 @@ endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1/responses`) for bar
 GPT-5.6 also supports [Runtime Converse](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-56-sol.html).
 Promptfoo routes the bare
 `bedrock:openai.gpt-5.x` IDs to its OpenAI Responses provider, preserves the Bedrock request
-model ID, and returns the clean final answer. `us-east-2` is the default when no Region is
-configured; GPT-5.6 region availability is checked before a request is made.
+model ID, and returns the clean final answer. When no Region is configured, promptfoo uses
+`us-west-2` for `openai.gpt-6-astra`, `us-east-1` for `openai.gpt-6-sol` and `openai.gpt-6-luna`,
+and `us-east-2` for other frontier models. A configured Region is always used; if Mantle does not
+serve the model there, it returns HTTP 404 ("model does not exist") and promptfoo adds the
+Regions that list the model to the error.
 
 Authentication accepts either a pre-generated **Amazon Bedrock API key** or AWS credentials:
 
@@ -1161,7 +1166,8 @@ when inputs or outputs must not be retained; Bedrock otherwise keeps stored resp
 days in the source Region and allows follow-up requests with `previous_response_id`.
 
 GPT-5.6 pricing on Bedrock includes a 10% regional-processing uplift: [Sol](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-56-sol.html) is $4.40 input /
-$22 output, Terra $2.20 / $13.20, and Luna $0.22 / $1.32 per million tokens. Cache reads
+$22 output, Terra $2.20 / $13.20, and Luna $0.22 / $1.32 per million tokens. In AWS GovCloud
+(US), Terra is $2.64 / $15.84 and Luna $0.264 / $1.584 per million tokens. Cache reads
 receive a 90% discount, cache writes cost 1.25x the uncached input rate, and cached prefixes
 remain available for at least 30 minutes. Place
 `prompt_cache_breakpoint: { mode: explicit }` on a stable
