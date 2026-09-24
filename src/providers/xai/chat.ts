@@ -754,6 +754,8 @@ export function getXAIRequestModel(modelName: string, config?: { passthrough?: o
 
 type XAIRequestOption = 'reasoning' | 'reasoning_effort' | 'max_completion_tokens' | 'max_tokens';
 const TEST_OPTION_SCOPES = Symbol.for('promptfoo.testOptionScopes');
+// Keep hook deletions distinct from an unset option in the original scopes.
+const REMOVED_TEST_OPTION = Symbol('promptfoo.removedTestOption');
 
 export function getXAITestOptionScopes(test?: { options?: object }): (object | undefined)[] {
   const original = (test as { [TEST_OPTION_SCOPES]?: (object | undefined)[] } | undefined)?.[
@@ -771,7 +773,7 @@ export function getXAITestOptionScopes(test?: { options?: object }): (object | u
   const changed: Record<string, unknown> = {};
   for (const key of ['reasoning', 'reasoning_effort', 'max_completion_tokens', 'max_tokens']) {
     if (!isEqual(current?.[key], base[key])) {
-      changed[key] = current?.[key];
+      changed[key] = current?.[key] === undefined ? REMOVED_TEST_OPTION : current[key];
     }
   }
   const currentPassthrough = current?.passthrough as Record<string, unknown> | undefined;
@@ -779,7 +781,8 @@ export function getXAITestOptionScopes(test?: { options?: object }): (object | u
   const changedPassthrough: Record<string, unknown> = {};
   for (const key of ['reasoning', 'reasoning_effort', 'max_completion_tokens', 'max_tokens']) {
     if (!isEqual(currentPassthrough?.[key], basePassthrough?.[key])) {
-      changedPassthrough[key] = currentPassthrough?.[key];
+      changedPassthrough[key] =
+        currentPassthrough?.[key] === undefined ? REMOVED_TEST_OPTION : currentPassthrough[key];
     }
   }
   if (Object.keys(changedPassthrough).length > 0) {
@@ -793,23 +796,34 @@ export function getXAIRequestOption(
   ...scopes: (object | undefined)[]
 ): unknown {
   const keys = typeof key === 'string' ? [key] : key;
+  const removedFromPassthrough = new Set<XAIRequestOption>();
+  const removedFromConfig = new Set<XAIRequestOption>();
   for (const scope of scopes) {
     const config = scope as Record<string, unknown> | undefined;
     const raw = config?.passthrough as Record<string, unknown> | undefined;
-    for (const source of [raw, config]) {
+    for (const [source, removed] of [
+      [raw, removedFromPassthrough],
+      [config, removedFromConfig],
+    ] as const) {
+      for (const name of keys) {
+        if (source?.[name] === REMOVED_TEST_OPTION) {
+          removed.add(name);
+        }
+      }
+      const availableKeys = keys.filter((name) => !removed.has(name));
       if (
         source &&
-        keys.length === 2 &&
-        keys.every(
+        availableKeys.length === 2 &&
+        availableKeys.every(
           (name) => Object.prototype.hasOwnProperty.call(source, name) && source[name] != null,
         ) &&
-        source[keys[0]] !== source[keys[1]]
+        source[availableKeys[0]] !== source[availableKeys[1]]
       ) {
         throw new XAIRequestConfigError(
           'xAI Grok 4.7 received conflicting max_tokens and max_completion_tokens; use one spelling',
         );
       }
-      for (const name of keys) {
+      for (const name of availableKeys) {
         if (
           source &&
           Object.prototype.hasOwnProperty.call(source, name) &&

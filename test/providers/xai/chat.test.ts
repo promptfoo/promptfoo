@@ -458,6 +458,50 @@ describe('xAI Chat Provider', () => {
       }
     });
 
+    it('honors beforeEach removal of inherited output limits', async () => {
+      const restoreEnv = mockProcessEnv({
+        OPENAI_MAX_COMPLETION_TOKENS: undefined,
+        OPENAI_MAX_TOKENS: undefined,
+      });
+      try {
+        const provider = createXAIProvider('xai:grok-4.7') as any;
+        const optionScopes = Symbol.for('promptfoo.testOptionScopes');
+        const removed = await provider.getOpenAiBody('hello', {
+          test: {
+            options: {},
+            [optionScopes]: [{ max_completion_tokens: 2048 }],
+          },
+        });
+        expect(removed.body).not.toHaveProperty('max_completion_tokens');
+
+        const remainingAlias = await provider.getOpenAiBody('hello', {
+          test: {
+            options: { max_tokens: 64 },
+            [optionScopes]: [{ max_completion_tokens: 2048, max_tokens: 64 }],
+          },
+        });
+        expect(remainingAlias.body.max_completion_tokens).toBe(64);
+
+        const removedPassthrough = await provider.getOpenAiBody('hello', {
+          test: {
+            options: { passthrough: {} },
+            [optionScopes]: [{ passthrough: { max_tokens: 128 } }],
+          },
+        });
+        expect(removedPassthrough.body).not.toHaveProperty('max_completion_tokens');
+
+        const revealedTopLevel = await provider.getOpenAiBody('hello', {
+          test: {
+            options: { max_tokens: 64, passthrough: {} },
+            [optionScopes]: [{ max_tokens: 64, passthrough: { max_tokens: 128 } }],
+          },
+        });
+        expect(revealedTopLevel.body.max_completion_tokens).toBe(64);
+      } finally {
+        restoreEnv();
+      }
+    });
+
     it('accepts a simple eval variable and rejects other reasoning expressions before a request', async () => {
       const provider = createXAIProvider('xai:grok-4.7', {
         config: { config: { apiKey: 'test-key' } },

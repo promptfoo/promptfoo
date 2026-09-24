@@ -185,9 +185,6 @@ export interface XAIResponsesConfig extends XAICostConfig {
 }
 
 function resolveGrok47Reasoning(reasoning: unknown, vars?: Record<string, unknown>): unknown {
-  if (reasoning == null) {
-    return reasoning;
-  }
   if (typeof reasoning !== 'object' || Array.isArray(reasoning)) {
     throw new XAIRequestConfigError('xAI Grok 4.7 reasoning must be an object');
   }
