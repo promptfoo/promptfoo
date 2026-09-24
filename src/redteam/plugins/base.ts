@@ -540,6 +540,19 @@ export abstract class RedteamGraderBase {
       graderExamplesString +
       timestampString;
     const imagesForGrading = imageOutputs ?? gradingProviderResponse?.images;
+    const normalizedOutput =
+      typeof llmOutput === 'string' ? llmOutput.trim().toLowerCase() : undefined;
+
+    if (
+      !imagesForGrading?.length &&
+      (normalizedOutput === undefined ||
+        normalizedOutput === '' ||
+        normalizedOutput === '{}' ||
+        normalizedOutput === 'undefined' ||
+        normalizedOutput === 'null')
+    ) {
+      throw new Error('Target provider returned an empty or nullish response');
+    }
 
     if (
       !skipRefusalCheck &&
