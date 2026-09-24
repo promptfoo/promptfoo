@@ -49,15 +49,15 @@ export function createOpenClawProvider(
   const opts = { ...providerOptions, env };
 
   if (keyword === 'responses') {
-    return new OpenClawResponsesProvider(splits[2], opts);
+    return new OpenClawResponsesProvider(splits.slice(2).join(':') || undefined, opts);
   }
 
   if (keyword === 'embedding' || keyword === 'embeddings') {
-    return new OpenClawEmbeddingProvider(splits[2], opts);
+    return new OpenClawEmbeddingProvider(splits.slice(2).join(':') || undefined, opts);
   }
 
   if (keyword === 'agent') {
-    return new OpenClawAgentProvider(splits[2], opts);
+    return new OpenClawAgentProvider(splits.slice(2).join(':') || undefined, opts);
   }
 
   if (keyword === 'tools') {
