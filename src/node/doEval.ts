@@ -1100,6 +1100,9 @@ async function doEvalWithEnv(
       errors,
       duration,
       maxConcurrency,
+      // The totals above pool every prompt/provider column over the same test rows, so the
+      // pass-rate interval is only reported when there is a single column.
+      columnCount: evalRecord.prompts.length,
       tracker,
       targetErrorStatus,
     });
