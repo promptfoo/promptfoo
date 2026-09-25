@@ -47,9 +47,9 @@ import {
 } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
-  accumulateGenerationTokenUsage,
   accumulateTokenUsage,
   createEmptyTokenUsage,
+  mergeMissingGenerationTokenUsage,
 } from '../util/tokenUsageUtils';
 import {
   invalidateEvaluationCache,
@@ -1231,6 +1231,7 @@ export default class Eval {
       evalId: this.id,
       numPrompts: this.prompts.length,
       whereSql,
+      generationTokenUsage: this.config.metadata?.generationAccounting?.tokenUsage,
     });
   }
 
@@ -1426,7 +1427,7 @@ export default class Eval {
       accumulateTokenUsage(stats.tokenUsage, prompt.metrics?.tokenUsage);
     }
 
-    accumulateGenerationTokenUsage(
+    mergeMissingGenerationTokenUsage(
       stats.tokenUsage,
       this.config.metadata?.generationAccounting?.tokenUsage,
     );

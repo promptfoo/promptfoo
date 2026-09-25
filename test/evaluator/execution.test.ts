@@ -1155,6 +1155,9 @@ describeEvaluator('evaluator execution control', () => {
       prompts: [toPrompt('Test prompt {{topic}}')],
       tests: ['alpha', 'beta', 'gamma'].map((topic) => ({
         vars: { topic },
+        ...(topic === 'alpha'
+          ? {}
+          : { metadata: { providerTokenUsage: { total: 7, numRequests: 1 } } }),
         assert: [{ type: 'llm-rubric', value: `Judge ${topic}`, provider: judge }],
       })),
     };
@@ -1184,5 +1187,8 @@ describeEvaluator('evaluator execution control', () => {
     );
     expect(resultByTopic.get('alpha')?.error).toBeUndefined();
     expect(resultByTopic.get('gamma')?.error).toContain('Evaluation exceeded max duration');
+    expect(results.filter((result) => result.testCase.metadata?.providerTokenUsage)).toHaveLength(
+      2,
+    );
   });
 });
