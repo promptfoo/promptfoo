@@ -20,6 +20,7 @@ export async function matchesAgentRubric(
   vars?: Record<string, VarValue>,
   assertion?: Assertion,
   providerCallContext?: CallApiContextParams,
+  targetWorkingDir?: string,
 ): Promise<GradingResult> {
   if (!grading) {
     throw new Error(
@@ -49,6 +50,12 @@ export async function matchesAgentRubric(
     },
     label: 'agent-rubric',
     providerCallContext,
+    // A copied target workspace is the default grader workspace. Explicit grader
+    // working_dir remains authoritative; the shared instance is never mutated.
+    providerPromptConfig:
+      targetWorkingDir && (!configuredProvider || !agentProvider.config?.working_dir)
+        ? { working_dir: targetWorkingDir }
+        : undefined,
     vars: {
       ...(vars || {}),
       output: tryParse(llmOutput),

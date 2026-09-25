@@ -5056,6 +5056,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       const writerCloseResults = await Promise.allSettled(
         this.fileWriters.map((writer) => writer.close()),
       );
+      // Assertions (including deferred graders) and afterEach hooks have finished.
+      // Active SDK calls that outlive a timeout release their own copies when they settle.
+      await providerRegistry.releaseEvaluationWorkingDirectories(this.store.id);
       const writerCloseErrors = writerCloseResults.flatMap((result) =>
         result.status === 'rejected' ? [result.reason] : [],
       );

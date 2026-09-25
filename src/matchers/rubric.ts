@@ -847,6 +847,7 @@ export async function runJsonGradingPrompt({
   grading,
   label,
   providerCallContext,
+  providerPromptConfig,
   throwOnError,
   vars,
   images,
@@ -858,6 +859,7 @@ export async function runJsonGradingPrompt({
   grading: GradingConfig;
   label: string;
   providerCallContext?: CallApiContextParams;
+  providerPromptConfig?: CallApiContextParams['prompt']['config'];
   throwOnError?: boolean;
   vars: Record<string, VarValue>;
   images?: ImageOutput[];
@@ -886,6 +888,7 @@ export async function runJsonGradingPrompt({
     label,
     vars,
     providerCallContext,
+    providerPromptConfig,
   );
   if (resp.error || !resp.output) {
     if (throwOnError) {

@@ -1,4 +1,5 @@
 import logger from '../logger';
+import { releaseWorkingDirectoryCopies } from './workingDirectoryCopies';
 
 /**
  * Interface for providers that need cleanup on process exit.
@@ -54,6 +55,12 @@ class ProviderRegistry {
     process.once('SIGTERM', () => void shutdown('SIGTERM'));
     // Use beforeExit for async cleanup (exit event cannot await)
     process.once('beforeExit', () => void shutdown('beforeExit'));
+  }
+
+  async releaseEvaluationWorkingDirectories(evaluationId: string): Promise<void> {
+    for (const error of await releaseWorkingDirectoryCopies(evaluationId)) {
+      logger.warn('Failed to remove Claude Agent SDK working directory copy', { error });
+    }
   }
 
   async shutdownAll(): Promise<void> {
