@@ -1492,6 +1492,7 @@ export type ResultLightweightWithLabel = ResultLightweight & { label: string };
 
 export type EvalSummary = ResultLightweightWithLabel & {
   isRedteam: boolean;
+  isFavorite?: boolean;
   passRate: number;
   label: string;
   providers: {
