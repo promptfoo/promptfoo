@@ -1463,6 +1463,8 @@ METEOR evaluates text by:
    - Unigram recall (coverage of reference words)
    - Word order/fragmentation (how well the word order matches)
 
+Surrounding whitespace is ignored: both the output and each reference are trimmed and split on runs of whitespace before matching, in line with BLEU and GLEU, so `"  hello world\n"` scores the same as `"hello world"`. An output or reference that is empty after trimming contains no tokens and scores `0`.
+
 #### Basic Usage
 
 ```yaml
