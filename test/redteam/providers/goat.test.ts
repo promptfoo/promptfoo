@@ -805,8 +805,6 @@ describe('RedteamGoatProvider', () => {
         prompt: 'test response',
         response: 'second harmful response',
       });
-      // The verdict stays with the first flagged turn while usage still covers every
-      // grading call, so continuing the search cannot turn a vulnerability into a pass.
       expect(result.metadata?.storedGraderResult).toMatchObject({
         pass: false,
         tokensUsed: { total: 15, prompt: 7, completion: 8, numRequests: 3 },
@@ -1280,6 +1278,9 @@ describe('RedteamGoatProvider', () => {
     });
 
     const targetProvider = createMockTargetProvider();
+    targetProvider.callApi
+      .mockResolvedValueOnce({ output: 'harmful response' })
+      .mockResolvedValueOnce({ output: 'blocked response', guardrails: { flagged: true } });
 
     const firstGraderResult = {
       pass: false,
@@ -1328,19 +1329,17 @@ describe('RedteamGoatProvider', () => {
 
     const result = await provider.callApi('test prompt', context);
 
-    // Should continue to max turns and report the turn the grader flagged
     expect(result.metadata?.storedGraderResult).toMatchObject(firstGraderResult);
     expect(result.metadata?.storedGraderResult?.assertion).toBeDefined();
     expect(result.metadata?.stopReason).toBe('Max turns reached');
     expect(result.metadata?.successfulAttacks).toHaveLength(1);
+    expect(result.guardrails).toBeUndefined();
     // The successful attack should be from the first turn
     expect(result.metadata?.successfulAttacks?.[0]).toMatchObject({
       turn: 0,
       prompt: expect.any(String),
       response: expect.any(String),
     });
-    // The reported conversation ends at the flagged turn, so the grade matches the output
-    // the eval scores. Without that the assertion layer re-grades the refusal that followed.
     expect(result.metadata?.messages).toHaveLength(2);
     expect(result.metadata?.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
       getGradingInputHash(
@@ -1350,6 +1349,49 @@ describe('RedteamGoatProvider', () => {
         'contains',
       ),
     );
+  });
+
+  it('reports the flagged turn display variables after continuing', async () => {
+    const runtime = await import('../../../src/redteam/shared/runtimeTransform');
+    const transform = vi.spyOn(runtime, 'applyRuntimeTransforms');
+    transform
+      .mockResolvedValueOnce({
+        prompt: 'first fetch prompt',
+        originalPrompt: 'first attack',
+        displayVars: { embeddedInjection: 'first payload' },
+      })
+      .mockResolvedValueOnce({
+        prompt: 'second fetch prompt',
+        originalPrompt: 'second attack',
+        displayVars: { embeddedInjection: 'second payload' },
+      });
+    mockGrader.getResult
+      .mockResolvedValueOnce({ grade: { pass: false, score: 0, reason: 'Jailbreak detected' } })
+      .mockResolvedValueOnce({ grade: { pass: true, score: 1, reason: 'Refused' } });
+
+    try {
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 2,
+        continueAfterSuccess: true,
+        _perTurnLayers: ['indirect-web-pwn'],
+      });
+      const context = createMockContext(
+        createMockTargetProvider(),
+        { goal: 'test goal' },
+        {
+          assert: [{ type: 'promptfoo:redteam:contracts' }],
+          metadata: { pluginId: 'contracts' },
+        },
+      );
+      const result = await provider.callApi('', context);
+
+      expect(transform).toHaveBeenCalledTimes(2);
+      expect(result.metadata?.redteamFinalPrompt).toBe('first fetch prompt');
+      expect(result.metadata?.transformDisplayVars).toEqual({ embeddedInjection: 'first payload' });
+    } finally {
+      transform.mockRestore();
+    }
   });
 
   it('should grade image-only target responses', async () => {

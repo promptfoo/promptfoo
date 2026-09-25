@@ -1407,9 +1407,9 @@ describe('CustomProvider', () => {
       }),
     });
 
-    mockTargetProvider.callApi.mockResolvedValue({
-      output: 'target response',
-    });
+    mockTargetProvider.callApi
+      .mockResolvedValueOnce({ output: 'target response', guardrails: { flagged: false } })
+      .mockResolvedValueOnce({ output: 'target response', guardrails: { flagged: true } });
 
     // Mock scoring provider responses for both turns
     mockScoringProvider.callApi.mockResolvedValue({
@@ -1422,8 +1422,6 @@ describe('CustomProvider', () => {
 
     const result = await testProvider.callApi(prompt, context);
 
-    // Should continue to max rounds and report the round the grader flagged
-    // (with assertion.value set to rubric)
     expect(result.metadata?.storedGraderResult).toEqual({
       metadata: {
         redteamGradingInputHash: expect.any(String),
@@ -1435,8 +1433,7 @@ describe('CustomProvider', () => {
     expect(result.metadata?.stopReason).toBe('Max rounds reached');
     expect(result.metadata?.successfulAttacks).toHaveLength(1);
     expect(result.metadata?.totalSuccessfulAttacks).toBe(1);
-    // The reported round is the flagged one, so the assertion layer reuses this verdict
-    // instead of re-grading the refusal that followed.
+    expect(result.guardrails).toEqual({ flagged: false });
     expect(result.metadata?.messages).toHaveLength(2);
     expect(result.metadata?.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
       getGradingInputHash(

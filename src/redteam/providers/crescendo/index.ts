@@ -113,6 +113,7 @@ interface CrescendoMetadata extends BaseRedteamMetadata {
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
   traceSnapshots?: Record<string, unknown>[];
+  transformDisplayVars?: Record<string, string>;
 }
 
 /**
@@ -340,8 +341,7 @@ export class CrescendoProvider implements ApiProvider {
     let evalPercentage: number | null = null;
 
     let objectiveScore: { value: number; rationale: string } | undefined;
-    let storedGraderResult: any = undefined;
-    // The first round a grader flagged. `continueAfterSuccess` keeps attacking past it.
+    let storedGraderResult: GradingResult | undefined;
     let flaggedRound: FlaggedTurn | undefined;
 
     let exitReason: RoundBacktrackingStopReason = 'Max rounds reached';
@@ -716,12 +716,20 @@ export class CrescendoProvider implements ApiProvider {
               ),
             };
 
-            const { grade, rubric } = await runRedteamGrader(
-              grader,
-              lastFinalAttackPrompt ||
+            const gradedTurn = {
+              prompt:
+                lastFinalAttackPrompt ||
                 getLastMessageContent(lastResponseMessages, 'user') ||
                 attackPrompt,
-              lastResponse.output,
+              output: lastResponse.output,
+              messages: lastResponseMessages,
+              guardrails: lastResponse.guardrails,
+              transformDisplayVars: lastTransformDisplayVars,
+            };
+            const { grade, rubric } = await runRedteamGrader(
+              grader,
+              gradedTurn.prompt,
+              gradedTurn.output,
               test,
               provider,
               getGraderAssertionValue(assertToUse),
@@ -731,13 +739,6 @@ export class CrescendoProvider implements ApiProvider {
             );
 
             graderPassed = grade.pass;
-            const gradedPrompt =
-              lastFinalAttackPrompt ||
-              getLastMessageContent(
-                this.memory.getConversation(this.targetConversationId),
-                'user',
-              ) ||
-              attackPrompt;
             storedGraderResult = accumulateGraderResult(
               storedGraderResult,
               {
@@ -745,22 +746,12 @@ export class CrescendoProvider implements ApiProvider {
                 assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
               },
               {
-                prompt: gradedPrompt,
-                output: lastResponse.output,
-                messages: lastResponseMessages,
+                ...gradedTurn,
                 pluginId: test.metadata?.pluginId,
                 assertion: assertToUse,
               },
             );
-            if (!grade.pass) {
-              // `prompt` and `output` must stay the values the grading hash was built from,
-              // or the assertion layer re-grades the round instead of reusing this verdict.
-              flaggedRound ??= captureFlaggedTurn(storedGraderResult, {
-                output: lastResponse.output,
-                prompt: gradedPrompt,
-                messages: lastResponseMessages,
-              });
-            }
+            flaggedRound ??= captureFlaggedTurn(storedGraderResult, gradedTurn);
           }
         }
 
@@ -852,25 +843,20 @@ export class CrescendoProvider implements ApiProvider {
       // exitReason is already properly set - either from early break or 'Max rounds reached'
     }
 
-    // Report the round the grader flagged. Without this the eval grades the last round, so a
-    // refusal after a successful attack hides the vulnerability behind a passing row.
     const reported = flaggedRound ?? {
       output: lastResponse.output,
       prompt: lastFinalAttackPrompt || getLastMessageContent(lastResponseMessages, 'user'),
       messages: lastResponseMessages,
+      guardrails: lastResponse.guardrails,
+      transformDisplayVars: lastTransformDisplayVars,
     };
     const finalPrompt = getLastMessageContent(reported.messages, 'user');
+    const error =
+      lastResponse.error ||
+      (hasTargetResponse ? undefined : lastAttemptError || 'No target request was completed.');
     return {
       output: reported.output,
-      // A target failure in a later round does not describe the round being reported, and an
-      // error row would hide the vulnerability the grader already confirmed.
-      ...(flaggedRound
-        ? {}
-        : lastResponse.error
-          ? { error: lastResponse.error }
-          : hasTargetResponse
-            ? {}
-            : { error: lastAttemptError || 'No target request was completed.' }),
+      ...(!flaggedRound && error ? { error } : {}),
       prompt: finalPrompt,
       metadata: {
         sessionId: getSessionId(lastResponse, context),
@@ -893,10 +879,12 @@ export class CrescendoProvider implements ApiProvider {
           traceSnapshots.length > 0
             ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
             : undefined,
-        ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+        ...(reported.transformDisplayVars && {
+          transformDisplayVars: reported.transformDisplayVars,
+        }),
       },
       tokenUsage: totalTokenUsage,
-      guardrails: lastResponse?.guardrails,
+      guardrails: reported.guardrails,
     };
   }
 

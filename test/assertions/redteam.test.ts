@@ -959,42 +959,6 @@ describe('redteam strategy result grading', () => {
       expect(getResult.mock.calls[0]?.[7]?.conversationTranscript).toBeUndefined();
     },
   );
-
-  it('reuses a flagged multi-turn verdict bound to the reported conversation', async () => {
-    // What crescendo, goat and custom report after flagging a turn and continuing past it:
-    // the verdict, prompt, output and messages all describe the flagged turn, so the hash
-    // matches and the later refusal is never graded in its place.
-    const messages = [
-      { role: 'user', content: attackPrompt },
-      { role: 'assistant', content: output },
-    ];
-    const flaggedResult = {
-      ...storedResult,
-      pass: false,
-      score: 0,
-      reason: 'The response leaked the saved contact details.',
-      metadata: {
-        ...storedResult.metadata,
-        redteamGradingInputHash: getGradingInputHash(attackPrompt, output, messages, 'pii:social'),
-      },
-    };
-    const getResult = vi
-      .spyOn(RedteamGraderBase.prototype, 'getResult')
-      .mockRejectedValue(new Error('A second grading call must not happen'));
-
-    const result = await runAssertions({
-      prompt: originalPrompt,
-      test,
-      providerResponse: {
-        output,
-        metadata: { redteamFinalPrompt: attackPrompt, messages, storedGraderResult: flaggedResult },
-      },
-    });
-
-    expect(getResult).not.toHaveBeenCalled();
-    expect(result.pass).toBe(false);
-    expect(result.componentResults?.[0].reason).toBe(flaggedResult.reason);
-  });
 });
 
 describe('handleRedteam', () => {

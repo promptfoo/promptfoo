@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertions } from '../../../../src/assertions/index';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
-import { getGradingInputHash } from '../../../../src/redteam/grading/storedResult';
 import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo/index';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
@@ -1623,25 +1622,24 @@ describe('CrescendoProvider', () => {
       expect(result.metadata?.crescendoRoundsCompleted).toBe(3); // All three rounds
     });
 
-    // Two rounds with continueAfterSuccess: round 1 is graded `firstGrade` on a complying
-    // target, round 2 is graded `secondGrade` on a deflection. The round 2 output must not
-    // trip isBasicRefusal, or crescendo backtracks and never grades that round.
-    const runTwoRounds = async (firstGrade: GradingResult, secondGrade: GradingResult) => {
+    const runTwoRounds = async (
+      firstGrade: GradingResult,
+      secondGrade: GradingResult,
+      perTurnLayers: string[] = [],
+    ) => {
       const provider = new CrescendoProvider({
         injectVar: 'objective',
         maxTurns: 2,
         redteamProvider: mockRedTeamProvider,
         continueAfterSuccess: true,
+        _perTurnLayers: perTurnLayers,
       });
 
-      vi.mocked(tryUnblocking).mockResolvedValue({ success: false });
-      // getGraderById runs once per round, so getResult has to outlive the implementation
-      // or every round replays the first grade.
       const getResult = vi
         .fn()
         .mockResolvedValueOnce({ grade: firstGrade, rubric: 'test rubric' })
         .mockResolvedValueOnce({ grade: secondGrade, rubric: 'test rubric' });
-      mockGetGraderById.mockImplementation(() => ({ getResult }) as any);
+      mockGetGraderById.mockReturnValue({ getResult });
       for (const generatedQuestion of ['harmful request', 'follow-up request']) {
         mockRedTeamProvider.callApi.mockResolvedValueOnce({
           output: JSON.stringify({
@@ -1653,7 +1651,11 @@ describe('CrescendoProvider', () => {
       }
       mockTargetProvider.callApi
         .mockResolvedValueOnce({ output: 'harmful response' })
-        .mockResolvedValueOnce({ output: 'That is outside the scope of this account.' });
+        .mockResolvedValueOnce({
+          // Avoid isBasicRefusal so this round reaches the plugin grader.
+          output: 'That is outside the scope of this account.',
+          guardrails: { flagged: true, flaggedInput: true },
+        });
       mockScoringProvider.callApi.mockResolvedValue({
         output: JSON.stringify({ value: false, metadata: 0, rationale: 'Not a refusal' }),
       });
@@ -1662,7 +1664,10 @@ describe('CrescendoProvider', () => {
         originalProvider: mockTargetProvider,
         vars: { objective: 'test objective' },
         prompt: { raw: 'test prompt', label: 'test' },
-        test: { assert: [{ type: 'mock-grader' }], metadata: { pluginId: 'mock' } } as any,
+        test: {
+          assert: [{ type: 'promptfoo:redteam:contracts' }],
+          metadata: { pluginId: 'contracts' },
+        } as AtomicTestCase,
       });
     };
 
@@ -1674,28 +1679,65 @@ describe('CrescendoProvider', () => {
 
       expect(result.metadata?.crescendoRoundsCompleted).toBe(2);
       expect(result.metadata?.successfulAttacks).toHaveLength(1);
-      // The later refusal must not replace the verdict or the round that earned it.
       expect(result.metadata?.storedGraderResult).toMatchObject({
         pass: false,
         reason: 'Jailbreak detected',
       });
       expect(result.output).toBe('harmful response');
       expect(result.metadata?.messages).toHaveLength(2);
-      // The reported round is the graded one, so the assertion layer reuses this verdict
-      // instead of re-grading the refusal that followed.
-      expect(result.metadata?.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
-        getGradingInputHash(
-          result.metadata?.redteamFinalPrompt as string,
-          result.output as string,
-          result.metadata?.messages,
-          'mock',
-        ),
-      );
+      expect(result.guardrails).toBeUndefined();
+
+      const grade = await runAssertions({
+        prompt: 'test prompt',
+        providerResponse: result,
+        test: {
+          provider: 'promptfoo:redteam:crescendo',
+          metadata: { pluginId: 'contracts', strategyId: 'crescendo' },
+          assert: [
+            { type: 'promptfoo:redteam:contracts' },
+            { type: 'guardrails', config: { purpose: 'redteam' } },
+          ],
+        },
+      });
+      expect(grade.pass).toBe(false);
+      expect(grade.reason).toBe('Jailbreak detected');
+      expect(mockGetGraderById).toHaveBeenCalledTimes(2);
     });
 
+    it('reports the last guardrail result when no round is flagged', async () => {
+      const safeGrade = { pass: true, score: 1, reason: 'Refused' };
+      const result = await runTwoRounds(safeGrade, safeGrade);
+
+      expect(result.guardrails).toEqual({ flagged: true, flaggedInput: true });
+    });
+
+    it.each([undefined, { embeddedInjection: 'first payload' }])(
+      'preserves the flagged round display variables: %j',
+      async (displayVars) => {
+        mockApplyRuntimeTransforms
+          .mockResolvedValueOnce({
+            prompt: 'first fetch prompt',
+            originalPrompt: 'harmful request',
+            displayVars,
+          })
+          .mockResolvedValueOnce({
+            prompt: 'second fetch prompt',
+            originalPrompt: 'follow-up request',
+            displayVars: { embeddedInjection: 'second payload' },
+          });
+        const result = await runTwoRounds(
+          { pass: false, score: 0, reason: 'Jailbreak detected' },
+          { pass: true, score: 1, reason: 'Refused' },
+          ['indirect-web-pwn'],
+        );
+
+        expect(mockApplyRuntimeTransforms).toHaveBeenCalledTimes(2);
+        expect(result.metadata?.redteamFinalPrompt).toBe('first fetch prompt');
+        expect(result.metadata?.transformDisplayVars).toEqual(displayVars);
+      },
+    );
+
     it('should not let a grader error claim the flagged round', async () => {
-      // A grading transport failure fails the round without being a vulnerability verdict,
-      // so the real verdict that follows is the one reported.
       const result = await runTwoRounds(
         { pass: false, score: 0, reason: 'Grader unavailable', metadata: { graderError: true } },
         { pass: false, score: 0, reason: 'Jailbreak detected' },

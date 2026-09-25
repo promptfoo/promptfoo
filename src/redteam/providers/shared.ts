@@ -759,33 +759,27 @@ export function accumulateGraderResult(
   return withGradingUsage(current, tokensUsed);
 }
 
-/** The turn a plugin grader called a vulnerability, and the conversation that earned it. */
 export interface FlaggedTurn {
   graderResult: GradingResult;
   output: string;
   prompt: string | undefined;
   messages: Message[];
+  guardrails?: ProviderResponse['guardrails'];
+  transformDisplayVars?: Record<string, string>;
 }
 
-/**
- * Capture the turn a grader just flagged. `continueAfterSuccess` keeps attacking past that
- * turn, and the strategy reports this turn so a later refusal cannot replace the verdict.
- * A grader error is not a verdict, so it never pins a turn.
- */
+/** Keep the verdict and its inputs together; grader errors do not identify vulnerabilities. */
 export function captureFlaggedTurn(
-  graderResult: GradingResult | undefined,
-  turn: { output: string; prompt: string | undefined; messages: Message[] },
+  graderResult: GradingResult,
+  turn: Omit<FlaggedTurn, 'graderResult'>,
 ): FlaggedTurn | undefined {
-  if (!graderResult || graderResult.metadata?.graderError === true) {
+  if (graderResult.pass || graderResult.metadata?.graderError === true) {
     return undefined;
   }
   return { graderResult, ...turn, messages: [...turn.messages] };
 }
 
-/**
- * Report the flagged turn's verdict, carrying the usage accumulated across every grading
- * turn so continuing the search neither loses nor double counts grading tokens.
- */
+/** Preserve the flagged verdict with grading usage from all turns. */
 export function resolveStoredGraderResult(
   flaggedResult: GradingResult | undefined,
   storedGraderResult: GradingResult | undefined,

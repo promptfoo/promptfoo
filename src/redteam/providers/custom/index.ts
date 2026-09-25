@@ -365,7 +365,6 @@ export class CustomProvider implements ApiProvider {
     const { getGraderById } = await import('../../graders');
     let graderPassed: boolean | undefined;
     let storedGraderResult: GradingResult | undefined;
-    // The first round a grader flagged. `continueAfterSuccess` keeps attacking past it.
     let flaggedRound: FlaggedTurn | undefined;
 
     // Generate goal-specific evaluation rubric
@@ -607,10 +606,16 @@ export class CustomProvider implements ApiProvider {
                 getTargetConversation(lastResponseMessages).conversationTranscript,
               ...(lastResponse.images?.length ? { imageOutputs: lastResponse.images } : {}),
             };
+            const gradedTurn = {
+              prompt: lastFinalAttackPrompt,
+              output: lastResponse.output,
+              messages: lastResponseMessages,
+              guardrails: lastResponse.guardrails,
+            };
             const { grade, rubric } = await runRedteamGrader(
               grader,
-              lastFinalAttackPrompt,
-              lastResponse.output,
+              gradedTurn.prompt,
+              gradedTurn.output,
               test,
               provider,
               getGraderAssertionValue(assertToUse),
@@ -626,22 +631,12 @@ export class CustomProvider implements ApiProvider {
                 assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
               },
               {
-                prompt: lastFinalAttackPrompt,
-                output: lastResponse.output,
-                messages: lastResponseMessages,
+                ...gradedTurn,
                 pluginId: test.metadata?.pluginId,
                 assertion: assertToUse,
               },
             );
-            if (!grade.pass) {
-              // `prompt` and `output` must stay the values the grading hash was built from,
-              // or the assertion layer re-grades the round instead of reusing this verdict.
-              flaggedRound ??= captureFlaggedTurn(storedGraderResult, {
-                output: lastResponse.output,
-                prompt: lastFinalAttackPrompt,
-                messages: lastResponseMessages,
-              });
-            }
+            flaggedRound ??= captureFlaggedTurn(storedGraderResult, gradedTurn);
           }
         }
 
@@ -747,13 +742,15 @@ export class CustomProvider implements ApiProvider {
       // exitReason is already properly set - either from early break or 'Max rounds reached'
     }
 
-    // Report the round the grader flagged. Without this the eval grades the last round, so a
-    // refusal after a successful attack hides the vulnerability behind a passing row.
     const reported = flaggedRound ?? {
       output: lastResponse.output,
       prompt: lastFinalAttackPrompt || getLastMessageContent(lastResponseMessages, 'user'),
       messages: lastResponseMessages,
+      guardrails: lastResponse.guardrails,
     };
+    const error =
+      lastTargetError ||
+      (hasTargetResponse ? undefined : lastAttemptError || 'No target request was completed.');
     return {
       output: reported.output,
       prompt: reported.prompt,
@@ -775,16 +772,8 @@ export class CustomProvider implements ApiProvider {
         sessionId: getSessionId(lastResponse, context),
       },
       tokenUsage: totalTokenUsage,
-      guardrails: lastResponse?.guardrails,
-      // A target failure in a later round does not describe the round being reported, and an
-      // error row would hide the vulnerability the grader already confirmed.
-      ...(flaggedRound
-        ? {}
-        : lastTargetError
-          ? { error: lastTargetError }
-          : hasTargetResponse
-            ? {}
-            : { error: lastAttemptError || 'No target request was completed.' }),
+      guardrails: reported.guardrails,
+      ...(!flaggedRound && error ? { error } : {}),
     };
   }
 

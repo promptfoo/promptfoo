@@ -96,6 +96,7 @@ interface GoatMetadata extends BaseRedteamMetadata {
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
   traceSnapshots?: Record<string, unknown>[];
+  transformDisplayVars?: Record<string, string>;
 }
 
 /**
@@ -258,7 +259,6 @@ export default class GoatProvider implements ApiProvider {
     let assertToUse: Assertion | AssertionSet | undefined;
     let graderPassed: boolean | undefined;
     let storedGraderResult: GradingResult | undefined;
-    // The first turn a grader flagged. `continueAfterSuccess` keeps attacking past it.
     let flaggedTurn: FlaggedTurn | undefined;
     const { getGraderById } = await import('../graders');
     let test: AtomicTestCase | undefined;
@@ -810,12 +810,20 @@ export default class GoatProvider implements ApiProvider {
             };
           }
 
-          const { grade, rubric } = await runRedteamGrader(
-            grader,
-            lastFinalAttackPrompt ||
+          const gradedTurn = {
+            prompt:
+              lastFinalAttackPrompt ||
               getLastMessageContent(messages, 'user') ||
               attackerMessage.content,
-            finalOutput,
+            output: finalOutput,
+            messages,
+            guardrails: finalResponse.guardrails,
+            transformDisplayVars: lastTransformDisplayVars,
+          };
+          const { grade, rubric } = await runRedteamGrader(
+            grader,
+            gradedTurn.prompt,
+            gradedTurn.output,
             test,
             targetProvider,
             getGraderAssertionValue(assertToUse),
@@ -824,10 +832,6 @@ export default class GoatProvider implements ApiProvider {
             gradingContext,
           );
           graderPassed = grade.pass;
-          const gradedPrompt =
-            lastFinalAttackPrompt ||
-            getLastMessageContent(messages, 'user') ||
-            attackerMessage.content;
           storedGraderResult = accumulateGraderResult(
             storedGraderResult,
             {
@@ -835,22 +839,12 @@ export default class GoatProvider implements ApiProvider {
               assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
             },
             {
-              prompt: gradedPrompt,
-              output: finalOutput,
-              messages: messages,
+              ...gradedTurn,
               pluginId: test.metadata?.pluginId,
               assertion: assertToUse,
             },
           );
-          if (!grade.pass) {
-            // `prompt` and `output` must stay the values the grading hash was built from,
-            // or the assertion layer re-grades the turn instead of reusing this verdict.
-            flaggedTurn ??= captureFlaggedTurn(storedGraderResult, {
-              output: finalOutput,
-              prompt: gradedPrompt,
-              messages,
-            });
-          }
+          flaggedTurn ??= captureFlaggedTurn(storedGraderResult, gradedTurn);
         }
 
         if (graderPassed === false) {
@@ -889,12 +883,12 @@ export default class GoatProvider implements ApiProvider {
     }
 
     const finalPrompt = getLastMessageContent(messages, 'user') || '';
-    // Report the turn the grader flagged. Without this the eval grades the last turn, so a
-    // refusal after a successful attack hides the vulnerability behind a passing row.
     const reported = flaggedTurn ?? {
       output: getLastMessageContent(messages, 'assistant') || '',
       prompt: finalPrompt,
       messages,
+      guardrails: lastTargetResponse?.guardrails,
+      transformDisplayVars: lastTransformDisplayVars,
     };
     return {
       output: reported.output,
@@ -916,10 +910,12 @@ export default class GoatProvider implements ApiProvider {
             ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
             : undefined,
         sessionId: getSessionId(lastTargetResponse, context),
-        ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+        ...(reported.transformDisplayVars && {
+          transformDisplayVars: reported.transformDisplayVars,
+        }),
       },
       tokenUsage: totalTokenUsage,
-      guardrails: lastTargetResponse?.guardrails,
+      guardrails: reported.guardrails,
     };
   }
 }
