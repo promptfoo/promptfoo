@@ -347,17 +347,14 @@ export class TrueFoundryEmbeddingProvider extends OpenAiEmbeddingProvider {
       headers['X-TFY-LOGGING-CONFIG'] = JSON.stringify(tfConfig.loggingConfig);
     }
 
-    // Temporarily set headers in config
-    const originalHeaders = this.config.headers;
-    this.config.headers = headers;
-
-    try {
-      // Call parent implementation
-      return await super.callEmbeddingApi(text);
-    } finally {
-      // Restore original headers
-      this.config.headers = originalHeaders;
-    }
+    // The parent embeds request headers in the request config. Use an isolated
+    // provider instance so concurrent calls cannot observe or overwrite this
+    // provider's shared config.
+    const providerForRequest = new TrueFoundryEmbeddingProvider(this.modelName, {
+      config: { ...this.config, headers },
+      env: this.env,
+    });
+    return OpenAiEmbeddingProvider.prototype.callEmbeddingApi.call(providerForRequest, text);
   }
 
   id(): string {

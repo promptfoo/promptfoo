@@ -144,7 +144,7 @@ describe('renderRedteamConfig', () => {
       providers: [
         {
           id: 'custom-provider',
-          label: 'Custom API',
+          label: 'Custom API: preview\n# generated target',
           config: {
             apiKey: '{{CUSTOM_API_KEY}}',
             baseUrl: 'https://api.custom.com',
@@ -166,7 +166,7 @@ describe('renderRedteamConfig', () => {
     expect(parsedConfig.targets).toBeDefined();
     expect(parsedConfig.targets[0]).toMatchObject({
       id: 'custom-provider',
-      label: 'Custom API',
+      label: 'Custom API: preview\n# generated target',
       config: {
         apiKey: '{{CUSTOM_API_KEY}}',
         baseUrl: 'https://api.custom.com',

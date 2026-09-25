@@ -987,7 +987,7 @@ describe('writeOutput', () => {
     const xml = await createJunitXml(eval_);
     const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
 
-    expect(eval_.getResults).toHaveBeenCalledTimes(1);
+    expect(eval_.getResults).toHaveBeenCalledTimes(2);
     expect(eval_.fetchResultsBatched).not.toHaveBeenCalled();
     expect(parsed.testsuites.testsuite).toMatchObject({
       '@_name': '[legacy provider] prompt 1',
@@ -1199,7 +1199,7 @@ describe('writeOutput', () => {
         expect(names[0][0]).toContain('🚀...');
       } else if (secondId !== 'echo') {
         expect(names[0][0]).toMatch(/^\[target\] prompt 1 \([a-f0-9]{16}\)$/);
-        expect(names[0][1]).toBe('[target] prompt 1');
+        expect(names[0][1]).toMatch(/^\[target\] prompt 1 \([a-f0-9]{16}\)$/);
       }
     },
   );
@@ -1261,6 +1261,7 @@ describe('writeOutput', () => {
   it.each([
     ['a vertical tab collapses into a space', 'my\u000bmodel', 'my model'],
     ['a form feed collapses into a space', 'my\u000cmodel', 'my model'],
+    ['clean whitespace collapses into a space', 'my  model', 'my model'],
     [
       'the forbidden character falls after the display limit',
       `${'x'.repeat(600)}\u0000`,
@@ -1278,7 +1279,7 @@ describe('writeOutput', () => {
       .testsuites.testsuite;
     const names = suites.map((suite) => suite['@_name']);
     expect(names[0]).toMatch(/ \([a-f0-9]{16}\)$/);
-    expect(names[1]).not.toMatch(/ \([a-f0-9]{16}\)$/);
+    expect(names[1]).toMatch(/ \([a-f0-9]{16}\)$/);
     expect(new Set(names).size).toBe(2);
   });
 

@@ -758,6 +758,7 @@ describe('TrueFoundry', () => {
       expect(requestOptions.headers['X-TFY-LOGGING-CONFIG']).toBe(
         JSON.stringify({ enabled: true }),
       );
+      expect(providerWithHeaders.config.headers).toBeUndefined();
     });
 
     it('should handle embedding API errors', async () => {
