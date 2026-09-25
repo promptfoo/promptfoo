@@ -300,7 +300,7 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
-      const modelName = splits[2];
+      const modelName = splits.slice(2).join(':');
 
       if (modelType === 'messages') {
         return new AnthropicMessagesProvider(modelName, providerOptions);
