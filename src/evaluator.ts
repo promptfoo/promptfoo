@@ -4171,6 +4171,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     rowsWithMaxScoreAssertion,
     rowsWithSelectBestAssertion,
     runEvalOptions,
+    comparisonTestCasesByTestIdx,
   }: {
     ciProgressReporter: CIProgressReporter | null;
     isWebUI: boolean;
@@ -4181,6 +4182,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     rowsWithMaxScoreAssertion: Set<number>;
     rowsWithSelectBestAssertion: Set<number>;
     runEvalOptions: RunEvalOptions[];
+    comparisonTestCasesByTestIdx: Map<number, AtomicTestCase>;
   }) {
     const compareRowsCount = rowsWithSelectBestAssertion.size + rowsWithMaxScoreAssertion.size;
     updateComparisonReporterTotals({
@@ -4200,6 +4202,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       repeatCacheContextByTestIdx,
       rowsWithSelectBestAssertion,
       runEvalOptions,
+      comparisonTestCasesByTestIdx,
     });
 
     await this.processMaxScoreAssertions({
@@ -4223,6 +4226,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     repeatCacheContextByTestIdx,
     rowsWithSelectBestAssertion,
     runEvalOptions,
+    comparisonTestCasesByTestIdx,
   }: {
     ciProgressReporter: CIProgressReporter | null;
     compareRowsCount: number;
@@ -4233,6 +4237,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     repeatCacheContextByTestIdx: Map<number, RepeatCacheContext>;
     rowsWithSelectBestAssertion: Set<number>;
     runEvalOptions: RunEvalOptions[];
+    comparisonTestCasesByTestIdx: Map<number, AtomicTestCase>;
   }) {
     let compareCount = 0;
     for (const testIdx of rowsWithSelectBestAssertion) {
@@ -4247,6 +4252,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         providerAbortSignal,
         repeatCacheContextByTestIdx,
         runEvalOptions,
+        comparisonTestCasesByTestIdx,
         testIdx,
       });
     }
@@ -4263,6 +4269,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     providerAbortSignal,
     repeatCacheContextByTestIdx,
     runEvalOptions,
+    comparisonTestCasesByTestIdx,
     testIdx,
   }: {
     ciProgressReporter: CIProgressReporter | null;
@@ -4274,6 +4281,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     providerAbortSignal?: AbortSignal;
     repeatCacheContextByTestIdx: Map<number, RepeatCacheContext>;
     runEvalOptions: RunEvalOptions[];
+    comparisonTestCasesByTestIdx: Map<number, AtomicTestCase>;
     testIdx: number;
   }) {
     if (isWebUI) {
@@ -4289,8 +4297,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     // Persisted results redact provider settings before comparison assertions run.
     // Use the current run's test case so a grader can still access its runtime config.
     const comparisonTestCase =
-      runEvalOptions.find((option) => option.testIdx === testIdx)?.test ??
-      resultsToCompare[0].testCase;
+      comparisonTestCasesByTestIdx.get(testIdx) ?? resultsToCompare[0].testCase;
     const compareAssertion = comparisonTestCase.assert?.find(
       (a) => a.type === 'select-best',
     ) as Assertion;
@@ -4850,6 +4857,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       tests,
     });
     markComparisonRows(runEvalOptions, rowsWithSelectBestAssertion, rowsWithMaxScoreAssertion);
+    const comparisonTestCasesByTestIdx = new Map(
+      runEvalOptions.map(({ testIdx, test }) => [testIdx, test]),
+    );
     const repeatCacheContextByTestIdx = buildRepeatCacheContextByTestIdx(runEvalOptions);
     await filterCompletedResumeSteps(runEvalOptions, this.store);
 
@@ -5004,6 +5014,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       rowsWithMaxScoreAssertion,
       rowsWithSelectBestAssertion,
       runEvalOptions,
+      comparisonTestCasesByTestIdx,
     });
 
     await this.finalizeEvaluation({
