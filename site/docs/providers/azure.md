@@ -113,6 +113,7 @@ Azure provides access to OpenAI models as well as third-party models through Azu
 
 | Category             | Models                                                                                                                                                                                                                                          |
 | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **GPT-6 Series**     | `gpt-6-astra`, `gpt-6-sol`, `gpt-6-luna`                                                                                                                                                                                                        |
 | **GPT-5 Series**     | `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, `gpt-5.5-pro`, `gpt-5.4`, `gpt-5.4-pro`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5.2-pro`, `gpt-5`, `gpt-5-pro`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5.1`, `gpt-5.1-chat`, `gpt-5.1-codex` |
 | **GPT-4.1 Series**   | `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`                                                                                                                                                                                                       |
 | **GPT-4o Series**    | `gpt-4o`, `gpt-4o-mini`, `gpt-4o-realtime`                                                                                                                                                                                                      |
@@ -139,6 +140,20 @@ Azure AI Foundry provides access to models from multiple providers:
 | **Core42**           | `JAIS-70b-chat`, `Falcon3-7B-Instruct`                                                                                                                                                                                                                                                                                                                                            |
 
 For the complete list of models with pricing, see the [Microsoft Foundry model catalog](https://azure.microsoft.com/en-us/products/ai-foundry).
+
+### GPT-6 on Azure
+
+Azure supports `gpt-6-astra`, `gpt-6-sol`, and `gpt-6-luna` through Chat Completions and Responses. Use your deployment name with `azure:chat:` or `azure:responses:`. Check the [Azure model catalog](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure#gpt-6) for availability.
+
+Microsoft publishes these [Global Standard rates](https://azure.microsoft.com/en-us/blog/gpt-6-astra-sol-and-luna-for-production-agents-in-microsoft-foundry/) in USD per million tokens. Each cell shows short-context / long-context pricing:
+
+| Model       | Input         | Cached input  | Cache writes   | Output        |
+| ----------- | ------------- | ------------- | -------------- | ------------- |
+| GPT-6 Astra | $10 / $20     | $1 / $2       | $12.50 / $25   | $50 / $75     |
+| GPT-6 Sol   | $2 / $4       | $0.20 / $0.40 | $2.50 / $5     | $10 / $15     |
+| GPT-6 Luna  | $0.10 / $0.20 | $0.01 / $0.02 | $0.125 / $0.25 | $0.50 / $0.75 |
+
+Promptfoo's Azure providers do not yet estimate GPT-6 costs. Check Azure billing for your deployment; Data Zone, priority, and provisioned rates differ.
 
 ### GPT-5.6 on Azure
 
@@ -984,7 +999,7 @@ providers:
       max_tokens: 4096
 ```
 
-Fable and Mythos 5.1, Fable 5, and Opus 4.7/4.8 deployments whose names contain the model identifier automatically omit unsupported sampling parameters. Fable and Mythos 5.1 also omit forced `tool_choice` values; use `auto` or `none` instead.
+Fable and Mythos 5.1, Fable 5, Opus 5.5, and Opus 4.7/4.8 deployments whose names contain the model identifier automatically omit unsupported sampling parameters. Fable and Mythos 5.1 and Opus 5.5 also omit forced `tool_choice` values; use `auto` or `none` instead.
 
 If your Azure deployment uses a custom alias, set `modelName` to the underlying Claude model ID. Promptfoo uses it for request compatibility and cost estimates while continuing to send the deployment name to Azure:
 
@@ -1009,6 +1024,7 @@ Available Claude deployments on Azure AI Foundry:
 | `claude-fable-5-1`           | Claude Fable 5.1                               |
 | `claude-mythos-5-1`          | Claude Mythos 5.1 (provider approval required) |
 | `claude-fable-5`             | Claude Fable 5                                 |
+| `claude-opus-5-5`            | Claude Opus 5.5                                |
 | `claude-opus-5`              | Claude Opus 5                                  |
 | `claude-opus-4-8`            | Claude Opus 4.8                                |
 | `claude-opus-4-7`            | Claude Opus 4.7                                |

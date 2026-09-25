@@ -118,6 +118,8 @@ export interface AzureCompletionOptions {
 export interface AzureChatResponsesOptions extends AzureCompletionOptions {
   /** Underlying model ID for request compatibility and cost estimates when the deployment is aliased. */
   modelName?: string;
+  /** Responses only: continue a previously stored response. */
+  previous_response_id?: string;
   /**
    * When true, omit hardcoded defaults for temperature, max_tokens, top_p, etc.
    * Only values explicitly set via config or environment variables will be sent.
