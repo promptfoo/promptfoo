@@ -1450,7 +1450,7 @@ async function gradeRunEvalResponse({
     invariant(providerCallQueue, 'providerCallQueue is required when deferGrading is enabled');
     ret.response = processedResponse;
     const gradingPromise = withProviderCallExecutionContext(
-      { abortSignal, providerCallQueue, rateLimitRegistry },
+      { abortSignal, evaluationId: evalId, providerCallQueue, rateLimitRegistry },
       () =>
         runAssertions({
           prompt: renderedPrompt,
@@ -1470,7 +1470,7 @@ async function gradeRunEvalResponse({
   }
 
   const checkResult = await withProviderCallExecutionContext(
-    { abortSignal, rateLimitRegistry },
+    { abortSignal, evaluationId: evalId, rateLimitRegistry },
     () =>
       runAssertions({
         prompt: renderedPrompt,
@@ -4457,6 +4457,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const originalProvider = this.testSuite.providers.find((p) => p.id() === providerId);
     return {
       getCache,
+      evaluationId: this.store.id,
       ...(originalProvider && { originalProvider }),
       prompt: firstResult.prompt,
       promptIdx: firstResult.promptIdx,

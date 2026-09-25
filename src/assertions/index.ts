@@ -615,11 +615,13 @@ async function runAssertionInternal({
       ? activeTraceparent
       : generateTraceparent(traceId, generateSpanId())
     : undefined;
+  const gradingEvaluationId = getProviderCallExecutionContext()?.evaluationId;
   const providerCallContext: CallApiContextParams | undefined = provider
     ? {
         originalProvider: provider,
         prompt: { raw: prompt || '', label: '' },
         vars: resolvedVars,
+        ...(gradingEvaluationId && { evaluationId: gradingEvaluationId }),
         ...(graderTraceparent && { traceparent: graderTraceparent }),
       }
     : undefined;
