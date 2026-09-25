@@ -39,7 +39,6 @@ import {
 } from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
-import { sanitizeObject } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { transform } from '../util/transform';
@@ -903,12 +902,14 @@ export async function runCompareAssertion(
     test.vars,
     context,
   );
-  const safeAssertion = sanitizeObject(assertion, {
-    context: 'select-best assertion',
-    maxDepth: Number.POSITIVE_INFINITY,
-    sanitizeUrls: true,
-    throwOnError: true,
-  }) as Assertion;
+  // The runtime assertion may contain a live grader and secrets. Results only need
+  // the comparison criteria and scoring labels, so keep provider config out of memory.
+  const safeAssertion: Assertion = {
+    type: assertion.type,
+    value: assertion.value,
+    metric: assertion.metric,
+    weight: assertion.weight,
+  };
   return comparisonResults.map((result) => ({
     ...result,
     assertion: safeAssertion,

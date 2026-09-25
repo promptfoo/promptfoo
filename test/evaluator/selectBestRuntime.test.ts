@@ -32,7 +32,18 @@ function makeSuite() {
   const suite: TestSuite = {
     providers: [target],
     prompts: [toPrompt('first'), toPrompt('second')],
-    tests: [{ assert: [{ type: 'select-best', value: 'choose the best', provider: grader }] }],
+    tests: [
+      {
+        assert: [
+          {
+            type: 'select-best',
+            value: 'choose the best',
+            provider: grader,
+            config: { apiKey: secret },
+          },
+        ],
+      },
+    ],
   };
   return { grader, seenKeys, suite, target };
 }
@@ -48,7 +59,9 @@ describeEvaluator('select-best runtime grading configuration', () => {
     expect(grader.callApi).toHaveBeenCalledTimes(1);
     expect(seenKeys).toEqual([secret]);
     expect(JSON.stringify(result.assertion)).not.toContain(secret);
-    expect(result.assertion?.provider).toMatchObject({ config: { apiKey: '[REDACTED]' } });
+    expect(result.assertion).toMatchObject({ type: 'select-best', value: 'choose the best' });
+    expect(result.assertion?.provider).toBeUndefined();
+    expect(result.assertion?.config).toBeUndefined();
     expect(grader.config?.apiKey).toBe(secret);
   });
 
@@ -78,9 +91,8 @@ describeEvaluator('select-best runtime grading configuration', () => {
     expect(seenKeys).toEqual([secret]);
     expect(persisted).toHaveLength(2);
     expect(JSON.stringify(persisted.map((row) => row.gradingResult))).not.toContain(secret);
-    expect(persisted[0].gradingResult?.componentResults?.[0].assertion?.provider).toMatchObject({
-      config: { apiKey: '[REDACTED]' },
-    });
+    expect(persisted[0].gradingResult?.componentResults?.[0].assertion?.provider).toBeUndefined();
+    expect(persisted[0].gradingResult?.componentResults?.[0].assertion?.config).toBeUndefined();
   });
 
   it('redacts a raw grader key when updating an existing result', async () => {
