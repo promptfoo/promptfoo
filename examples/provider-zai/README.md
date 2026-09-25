@@ -2,6 +2,8 @@
 
 Compare GLM-5.3, GLM-5.3-Flash, and GLM-5.3-FlashX through Z.AI's OpenAI-compatible API.
 
+## Run
+
 ```sh
 npx promptfoo@latest init --example provider-zai
 cd provider-zai
