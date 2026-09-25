@@ -844,6 +844,54 @@ describe('ResultsTable Metrics Display', () => {
       );
     });
 
+    it('renders variable image data URIs without file metadata with lightbox support', async () => {
+      const user = userEvent.setup();
+      const imageDataUri = 'data:image/png;base64,encodedImage';
+
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        setTable: vi.fn(),
+        table: {
+          body: [
+            {
+              outputs: [
+                {
+                  pass: true,
+                  score: 1,
+                  text: 'test output',
+                },
+              ],
+              test: {},
+              vars: [imageDataUri],
+            },
+          ],
+          head: {
+            prompts: [{}],
+            vars: ['imageVar'],
+          },
+        },
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+          },
+        },
+      }));
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      const imageElement = screen.getByRole('img', { name: 'Base64 encoded image' });
+      expect(imageElement).toHaveAttribute('src', imageDataUri);
+
+      await user.click(imageElement);
+
+      expect(screen.getByRole('img', { name: 'Lightbox' })).toHaveAttribute('src', imageDataUri);
+    });
+
     it('renders variable video from file metadata', () => {
       vi.mocked(useTableStore).mockImplementation(() => ({
         config: {},
