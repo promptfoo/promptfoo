@@ -1,18 +1,30 @@
-import { describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { registerGetEvaluationDetailsTool } from '../../../../src/commands/mcp/tools/getEvaluationDetails';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { z } from 'zod';
 
-// Schema from getEvaluationDetails.ts
-const evalIdSchema = z
-  .string()
-  .min(1, 'Eval ID cannot be empty')
-  .regex(/^[a-zA-Z0-9_:-]+$/, 'Invalid eval ID format');
+vi.mock('../../../../src/util/database', () => ({ readResult: vi.fn() }));
 
 describe('getEvaluationDetails eval ID validation', () => {
+  let evalIdSchema: z.ZodString;
+
+  beforeEach(() => {
+    const server = { tool: vi.fn() };
+    registerGetEvaluationDetailsTool(server as unknown as McpServer);
+    evalIdSchema = server.tool.mock.calls[0][1].id;
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
   describe('valid eval IDs', () => {
     it('should accept new format eval IDs with random sequence', () => {
       const validIds = [
         'eval-8h1-2025-11-15T14:17:18',
+        'eval-8h1XyZ-2025-11-15T14:17:18',
         'eval-abc-2024-01-01T00:00:00',
+        'eval-abc123-2024-01-01T00:00:00',
         'eval-XyZ-2025-12-31T23:59:59',
         'eval-123-2025-06-15T12:30:45',
       ];
