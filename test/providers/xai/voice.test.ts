@@ -152,13 +152,14 @@ describe('XAI Voice Provider', () => {
 
   describe('WebSocket requests', () => {
     let handlers: Record<string, (...args: unknown[]) => unknown>;
+    let restoreEnv: () => void;
     const send = vi.fn();
     const close = vi.fn();
 
     beforeEach(() => {
       vi.useFakeTimers();
       vi.setSystemTime(0);
-      mockProcessEnv({ XAI_API_BASE_URL: undefined });
+      restoreEnv = mockProcessEnv({ XAI_API_BASE_URL: undefined });
       handlers = {};
       send.mockReset();
       close.mockReset();
@@ -174,6 +175,7 @@ describe('XAI Voice Provider', () => {
     });
 
     afterEach(() => {
+      restoreEnv();
       vi.useRealTimers();
     });
 
@@ -219,6 +221,27 @@ describe('XAI Voice Provider', () => {
       expect(close).toHaveBeenCalledOnce();
     });
 
+    it.each(['response.output_audio', 'response.audio'])(
+      'preserves the transcript for %s events',
+      async (eventPrefix) => {
+        const { response } = await start();
+        await receive({
+          type: `${eventPrefix}.delta`,
+          delta: Buffer.alloc(48000).toString('base64'),
+        });
+        await receive({ type: `${eventPrefix}_transcript.delta`, delta: 'Hello ' });
+        await receive({ type: `${eventPrefix}_transcript.delta`, delta: 'back' });
+        await receive({ type: `${eventPrefix}_transcript.done`, transcript: 'Hello back' });
+        await receive({ type: `${eventPrefix}.done` });
+        await receive({ type: 'response.done' });
+
+        expect(await response).toMatchObject({
+          output: 'Hello back',
+          audio: { transcript: 'Hello back', format: 'wav' },
+        });
+      },
+    );
+
     it.each([
       ['Rex', 'rex'],
       ['rex', 'rex'],
@@ -254,6 +277,28 @@ describe('XAI Voice Provider', () => {
       const result = await response;
       expect(result.cost).toBeCloseTo(0.004 + 0.08 / 60, 8);
       expect(result.metadata).toMatchObject({ durationMs: 20000, hasAudio: true });
+    });
+
+    it.each([
+      { type: 'audio/pcmu' as const, samples: [-32124, 32124] },
+      { type: 'audio/pcma' as const, samples: [-5504, 5504] },
+    ])('returns playable PCM WAV from $type output', async ({ type, samples }) => {
+      const { response } = await start({ audio: { output: { format: { type } } } });
+      await receive({
+        type: 'response.audio.delta',
+        delta: Buffer.from([0, 128]).toString('base64'),
+      });
+      await receive({ type: 'response.done' });
+
+      const result = await response;
+      expect(result.audio?.format).toBe('wav');
+      const wav = Buffer.from(result.audio!.data!, 'base64');
+      expect(wav.toString('ascii', 0, 4)).toBe('RIFF');
+      expect(wav.readUInt16LE(20)).toBe(1);
+      expect(wav.readUInt32LE(24)).toBe(8000);
+      expect(wav.readUInt16LE(34)).toBe(16);
+      expect(wav.readUInt32LE(40)).toBe(4);
+      expect([wav.readInt16LE(44), wav.readInt16LE(46)]).toEqual(samples);
     });
 
     it('retains connection-duration pricing for Voice 1.0', async () => {

@@ -13,6 +13,7 @@ import WebSocket from 'ws';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import { convertG711ToPcm16, convertPcm16ToWav } from '../openai/audio';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -165,54 +166,6 @@ export interface XAIFunctionCallOutput {
 // ============================================================================
 // Utility Functions
 // ============================================================================
-
-/**
- * Convert PCM16 audio data to WAV format for browser playback
- */
-function convertPcm16ToWav(pcmData: Buffer, sampleRate = 24000): Buffer {
-  const numChannels = 1;
-  const bitsPerSample = 16;
-  const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
-  const blockAlign = (numChannels * bitsPerSample) / 8;
-  const dataSize = pcmData.length;
-  const fileSize = 36 + dataSize;
-
-  const wavHeader = Buffer.alloc(44);
-  let offset = 0;
-
-  // RIFF header
-  wavHeader.write('RIFF', offset);
-  offset += 4;
-  wavHeader.writeUInt32LE(fileSize, offset);
-  offset += 4;
-  wavHeader.write('WAVE', offset);
-  offset += 4;
-
-  // fmt chunk
-  wavHeader.write('fmt ', offset);
-  offset += 4;
-  wavHeader.writeUInt32LE(16, offset);
-  offset += 4;
-  wavHeader.writeUInt16LE(1, offset);
-  offset += 2;
-  wavHeader.writeUInt16LE(numChannels, offset);
-  offset += 2;
-  wavHeader.writeUInt32LE(sampleRate, offset);
-  offset += 4;
-  wavHeader.writeUInt32LE(byteRate, offset);
-  offset += 4;
-  wavHeader.writeUInt16LE(blockAlign, offset);
-  offset += 2;
-  wavHeader.writeUInt16LE(bitsPerSample, offset);
-  offset += 2;
-
-  // data chunk
-  wavHeader.write('data', offset);
-  offset += 4;
-  wavHeader.writeUInt32LE(dataSize, offset);
-
-  return Buffer.concat([wavHeader, pcmData]);
-}
 
 /**
  * Estimate text-input voice cost. For Voice 2.0, duration is generated audio;
@@ -509,10 +462,12 @@ export class XAIVoiceProvider implements ApiProvider {
               break;
 
             // Transcript streaming
+            case 'response.audio_transcript.delta':
             case 'response.output_audio_transcript.delta':
               responseTranscript += message.delta as string;
               break;
 
+            case 'response.audio_transcript.done':
             case 'response.output_audio_transcript.done':
               logger.debug('[xAI Voice] Transcript complete');
               break;
@@ -533,6 +488,7 @@ export class XAIVoiceProvider implements ApiProvider {
               break;
             }
 
+            case 'response.audio.done':
             case 'response.output_audio.done':
               logger.debug('[xAI Voice] Audio complete', {
                 chunks: audioChunks.length,
@@ -647,13 +603,15 @@ export class XAIVoiceProvider implements ApiProvider {
 
               // Prepare audio data
               let finalAudioData: string | null = null;
-              const sampleRate =
-                this.config.audio?.output?.format?.rate || XAI_VOICE_DEFAULTS.sampleRate;
 
               if (hasAudioContent && audioChunks.length > 0) {
                 try {
-                  const rawPcmData = Buffer.concat(audioChunks);
-                  const wavData = convertPcm16ToWav(rawPcmData, sampleRate);
+                  const rawAudio = Buffer.concat(audioChunks);
+                  const rawPcmData =
+                    outputFormat && outputFormat.type !== 'audio/pcm'
+                      ? convertG711ToPcm16(rawAudio, outputFormat.type)
+                      : rawAudio;
+                  const wavData = convertPcm16ToWav(rawPcmData, outputRate);
                   finalAudioData = wavData.toString('base64');
                   logger.debug('[xAI Voice] Audio converted', {
                     pcmBytes: rawPcmData.length,

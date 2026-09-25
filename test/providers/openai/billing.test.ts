@@ -1090,6 +1090,63 @@ describe('OpenAI billing helpers', () => {
         ),
       ).toBe(0);
     });
+
+    it('prices explicit text and audio usage separately for unknown models', () => {
+      const mixedUsage = {
+        prompt_tokens: 30,
+        completion_tokens: 23,
+        prompt_tokens_details: { text_tokens: 21, audio_tokens: 9, cached_tokens: 5 },
+        completion_tokens_details: { text_tokens: 16, audio_tokens: 7 },
+      };
+      const config = {
+        inputCost: 2 / 1e6,
+        outputCost: 3 / 1e6,
+        audioInputCost: 20 / 1e6,
+        audioOutputCost: 30 / 1e6,
+      };
+
+      expect(calculateOpenAIUsageCost('custom-audio-model', config, mixedUsage)).toBeCloseTo(
+        (21 * 2 + 9 * 20 + 16 * 3 + 7 * 30) / 1e6,
+        10,
+      );
+      expect(
+        calculateOpenAIUsageCost('custom-audio-model', config, mixedUsage, {
+          cachedResponse: true,
+        }),
+      ).toBe(0);
+    });
+
+    it.each([
+      { config: { audioCost: 20 / 1e6 }, expected: (9 * 20 + 7 * 20) / 1e6 },
+      {
+        config: { audioCost: 20 / 1e6, audioInputCost: 0, audioOutputCost: 30 / 1e6 },
+        expected: (7 * 30) / 1e6,
+      },
+    ])('prices audio-only usage without text rates for $config', ({ config, expected }) => {
+      expect(
+        calculateOpenAIUsageCost('custom-audio-model', config, {
+          input_tokens: 9,
+          output_tokens: 7,
+          input_tokens_details: { audio_tokens: 9 },
+          output_tokens_details: { audio_tokens: 7 },
+        }),
+      ).toBeCloseTo(expected, 10);
+    });
+
+    it.each([
+      { inputCost: 2 / 1e6, outputCost: 3 / 1e6 },
+      { cost: 2 / 1e6, audioInputCost: 20 / 1e6 },
+      { audioCost: 20 / 1e6 },
+    ])('does not invent missing modality rates for %j', (config) => {
+      expect(
+        calculateOpenAIUsageCost('custom-audio-model', config, {
+          prompt_tokens: 30,
+          completion_tokens: 23,
+          prompt_tokens_details: { text_tokens: 21, audio_tokens: 9 },
+          completion_tokens_details: { text_tokens: 16, audio_tokens: 7 },
+        }),
+      ).toBeUndefined();
+    });
   });
 
   it('prices audio text and audio tokens separately', () => {
