@@ -594,6 +594,24 @@ describe('FoundationModelConfiguration', () => {
     expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('id', expectedId);
   });
 
+  it('validates recognized GPT shorthand as the canonical OpenAI model', async () => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{ id: 'bedrock:responses:openai.gpt-5.5', config: {} }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+
+    const input = screen.getByLabelText(/Model ID/i);
+    await user.clear(input);
+    await user.paste('gpt-5.6-sol');
+
+    expect(input).toHaveAttribute('aria-invalid', 'false');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('should preserve the Responses prefix and use Responses-specific settings', async () => {
     const user = userEvent.setup();
     render(
