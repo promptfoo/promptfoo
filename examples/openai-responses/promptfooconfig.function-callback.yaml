@@ -6,7 +6,7 @@ prompts:
   - 'What is {{a}} plus {{b}}?'
 
 providers:
-  - id: openai:responses:gpt-5.6-terra
+  - id: openai:responses:gpt-6-sol
     config:
       reasoning:
         effort: none

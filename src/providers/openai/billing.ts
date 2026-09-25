@@ -1084,9 +1084,12 @@ export function calculateOpenAIUsageCost(
   const usageParts = getOpenAIUsageParts(rawUsage);
   const usage = extractOpenAIBillingUsage(rawUsage);
   const gpt6Variant = getGpt6Variant(modelName);
+  const tier = normalizeServiceTier(options.serviceTier);
+  const modelRates = getModelRates(modelName, tier, usage.totalInputTokens);
   if (
-    (gpt6Variant === 'sol' || gpt6Variant === 'luna') &&
-    usesAzureOpenAiBilling(config, options.apiUrl, options.provider)
+    !modelRates ||
+    ((gpt6Variant === 'sol' || gpt6Variant === 'luna') &&
+      usesAzureOpenAiBilling(config, options.apiUrl, options.provider))
   ) {
     const inputRate = config.inputCost ?? config.cost;
     const outputRate = config.outputCost ?? config.cost;
@@ -1101,12 +1104,6 @@ export function calculateOpenAIUsageCost(
       ? 0
       : usage.totalInputTokens * (inputRate ?? 0) + usage.totalOutputTokens * (outputRate ?? 0);
   }
-  const tier = normalizeServiceTier(options.serviceTier);
-  const modelRates = getModelRates(modelName, tier, usage.totalInputTokens);
-  if (!modelRates) {
-    return undefined;
-  }
-
   const rates = applyRegionalProcessingRates(modelName, modelRates, config, options);
 
   if (options.cachedResponse) {

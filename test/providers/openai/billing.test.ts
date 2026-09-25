@@ -1021,6 +1021,77 @@ describe('OpenAI billing helpers', () => {
     ).toBeUndefined();
   });
 
+  describe('custom rates for unknown models', () => {
+    const usage = {
+      prompt_tokens: 2000,
+      completion_tokens: 1000,
+      prompt_tokens_details: { cached_tokens: 500, cache_write_tokens: 250 },
+    };
+
+    it.each(['standard', 'batch', 'flex', 'priority'])(
+      'uses explicit rates without assumed discounts for %s',
+      (serviceTier) => {
+        expect(
+          calculateOpenAIUsageCost(
+            'custom-text-model',
+            { inputCost: 2 / 1e6, outputCost: 3 / 1e6 },
+            usage,
+            { serviceTier },
+          ),
+        ).toBeCloseTo(0.007, 10);
+      },
+    );
+
+    it('uses the shared rate with explicit direction overrides, including zero', () => {
+      expect(calculateOpenAIUsageCost('custom-text-model', { cost: 2 / 1e6 }, usage)).toBeCloseTo(
+        0.006,
+        10,
+      );
+      expect(
+        calculateOpenAIUsageCost(
+          'custom-text-model',
+          { cost: 2 / 1e6, inputCost: 0, outputCost: 3 / 1e6 },
+          usage,
+        ),
+      ).toBeCloseTo(0.003, 10);
+    });
+
+    it.each([{}, { inputCost: 2 / 1e6 }, { outputCost: 3 / 1e6 }])(
+      'does not invent missing rates for %j',
+      (config) => {
+        expect(calculateOpenAIUsageCost('custom-text-model', config, usage)).toBeUndefined();
+      },
+    );
+
+    it('requires a rate only for token directions used by the response', () => {
+      expect(
+        calculateOpenAIUsageCost(
+          'custom-embedding-model',
+          { inputCost: 2 / 1e6 },
+          { prompt_tokens: 2000, completion_tokens: 0 },
+        ),
+      ).toBeCloseTo(0.004, 10);
+      expect(
+        calculateOpenAIUsageCost(
+          'custom-output-model',
+          { outputCost: 3 / 1e6 },
+          { input_tokens: 0, output_tokens: 1000 },
+        ),
+      ).toBeCloseTo(0.003, 10);
+    });
+
+    it('does not charge for local cache hits when custom rates are configured', () => {
+      expect(
+        calculateOpenAIUsageCost(
+          'custom-text-model',
+          { inputCost: 2 / 1e6, outputCost: 3 / 1e6 },
+          usage,
+          { cachedResponse: true },
+        ),
+      ).toBe(0);
+    });
+  });
+
   it('prices audio text and audio tokens separately', () => {
     const cost = calculateOpenAIUsageCost(
       'gpt-4o-mini-audio-preview',
