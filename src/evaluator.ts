@@ -75,6 +75,7 @@ import {
   TestSuiteConfigSchema,
 } from './types/index';
 import { type ApiProvider, isApiProvider } from './types/providers';
+import { filterTests } from './util/eval/filterTests';
 import { isAbortError, isNonTransientHttpStatus } from './util/fetch/errors';
 import { filterByRange } from './util/filterRange';
 import { warnEmptyFilterRange } from './util/filterRangeWarn';
@@ -97,7 +98,11 @@ import {
   sanitizeProviderIdForLog,
 } from './util/provider';
 import { promptYesNo } from './util/readline';
-import { analyzeTemplateReference, extractVariablesFromTemplate } from './util/templates';
+import {
+  analyzeTemplateReference,
+  extractVariablesFromTemplate,
+  getNunjucksEngine,
+} from './util/templates';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
@@ -2424,6 +2429,19 @@ function buildScenarioTests(
   return scenarioTests.map((test) => mergeScenarioTest(testSuite, data, test, scenarioIndex));
 }
 
+function renderScenarioDescription(description: AtomicTestCase['description'], vars: Vars) {
+  if (typeof description !== 'string') {
+    return description;
+  }
+
+  try {
+    return getNunjucksEngine().renderString(description, vars);
+  } catch (error) {
+    logger.debug(`Failed to template test description: ${error}`);
+    return description;
+  }
+}
+
 function mergeScenarioTest(
   testSuite: TestSuite,
   data: NonNullable<TestSuite['scenarios']>[number]['config'][number],
@@ -2438,15 +2456,22 @@ function mergeScenarioTest(
   };
   mergedMetadata.conversationId ??= `__scenario_${scenarioIndex}__`;
 
+  const vars = {
+    ...(defaultTest?.vars || {}),
+    ...data.vars,
+    ...test.vars,
+  };
+  // `defaultTest` omits `description` in its schema, so the cast is needed to read it.
+  const defaultDescription = (defaultTest as Pick<AtomicTestCase, 'description'> | undefined)
+    ?.description;
+  const description = test.description ?? data.description ?? defaultDescription;
+
   return {
     ...(defaultTest || {}),
     ...data,
     ...test,
-    vars: {
-      ...(defaultTest?.vars || {}),
-      ...data.vars,
-      ...test.vars,
-    },
+    description: renderScenarioDescription(description, vars),
+    vars,
     options: {
       ...(defaultTest?.options || {}),
       ...data.options,
@@ -4821,6 +4846,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     await this.store.appendPrompts(prompts);
 
     let tests = buildTestsFromSuite(testSuite);
+    if (options.filterPattern) {
+      tests = (await filterTests(
+        { tests, providers: [], prompts: [] },
+        { pattern: options.filterPattern },
+      )) as AtomicTestCase[];
+    }
     tests = filterByRange(tests, options.filterRange, warnEmptyFilterRange);
     maybeEmitAzureOpenAiWarning(testSuite, tests);
 

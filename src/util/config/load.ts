@@ -1196,6 +1196,9 @@ async function resolveLoadedConfig(
         );
       }
       invariant(typeof scenario === 'object', 'scenario must be an object');
+
+      // Note: Pattern filtering for scenarios is handled in the evaluator after scenario expansion,
+      // so that templated descriptions can be properly matched. Other filters are applied here.
       const filteredTests = await filterTests(
         {
           ...(scenario ?? {}),
@@ -1204,7 +1207,8 @@ async function resolveLoadedConfig(
         },
         {
           firstN: cmdObj.filterFirstN,
-          pattern: cmdObj.filterPattern,
+          // Pattern filtering is intentionally omitted here - it's handled in the evaluator
+          // after scenario expansion so templated descriptions can be matched
           failing: cmdObj.filterFailing,
           sample: filterSample,
           sampleSeed:
