@@ -1,5 +1,5 @@
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs/promises';
+import { createServer } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -143,14 +143,19 @@ describe('Claude Agent SDK copied working directory', () => {
       return;
     }
     const source = await fixture();
-    execFileSync('mkfifo', [path.join(source, 'pipe')]);
-    const provider = new ClaudeCodeSDKProvider({
-      config: { apiKey: 'test', working_dir: source, copy_working_dir: true },
-    });
-    const response = await provider.callApi('same');
-    expect(response.error).toMatch(/special files/i);
-    expect(mockQuery).not.toHaveBeenCalled();
-    await provider.cleanup();
+    const socket = createServer();
+    await new Promise<void>((resolve) => socket.listen(path.join(source, 'socket'), resolve));
+    try {
+      const provider = new ClaudeCodeSDKProvider({
+        config: { apiKey: 'test', working_dir: source, copy_working_dir: true },
+      });
+      const response = await provider.callApi('same');
+      expect(response.error).toMatch(/special files/i);
+      expect(mockQuery).not.toHaveBeenCalled();
+      await provider.cleanup();
+    } finally {
+      await new Promise<void>((resolve) => socket.close(() => resolve()));
+    }
   });
 
   it('keeps an aborted call copy until the SDK settles, then removes it', async () => {
