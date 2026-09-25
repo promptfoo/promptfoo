@@ -1,7 +1,13 @@
 import logger from '../logger';
 import { providerRegistry } from './providerRegistry';
 
-import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types/index';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderEmbeddingResponse,
+  ProviderResponse,
+} from '../types/index';
 
 /**
  * Common options for all Transformers.js providers
@@ -145,8 +151,13 @@ type Pipeline = {
 const pipelineCache = new Map<string, Pipeline>();
 const pendingPipelines = new Map<string, Promise<Pipeline>>();
 
-// Track if cleanup has been registered
-let cleanupRegistered = false;
+const pipelineResource = {
+  async shutdown() {
+    logger.debug('[Transformers] Shutting down all pipelines...');
+    await disposePipelines();
+    logger.debug('[Transformers] All pipelines disposed');
+  },
+};
 
 function getPipelineCacheKey(
   task: string,
@@ -162,7 +173,11 @@ async function getOrCreatePipeline(
   task: string,
   model: string,
   options: TransformersBaseOptions,
+  signal?: AbortSignal,
 ): Promise<Pipeline> {
+  await providerRegistry.useResource(pipelineResource, signal);
+  providerRegistry.throwIfResourceUseAborted(signal);
+  providerRegistry.register(pipelineResource);
   const cacheKey = getPipelineCacheKey(task, model, options);
 
   // Return cached pipeline
@@ -297,18 +312,7 @@ async function disposePipelines(): Promise<void> {
  * Ensure cleanup handler is registered with the provider registry.
  */
 function ensureCleanupRegistered(): void {
-  if (cleanupRegistered) {
-    return;
-  }
-  cleanupRegistered = true;
-
-  providerRegistry.register({
-    shutdown: async () => {
-      logger.debug('[Transformers] Shutting down all pipelines...');
-      await disposePipelines();
-      logger.debug('[Transformers] All pipelines disposed');
-    },
-  });
+  providerRegistry.register(pipelineResource);
 }
 
 /**
@@ -351,13 +355,18 @@ export class TransformersEmbeddingProvider implements ApiProvider {
     };
   }
 
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    text: string,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
     try {
       const extractor = await getOrCreatePipeline(
         'feature-extraction',
         this.modelName,
         this.config,
+        options?.abortSignal,
       );
+      providerRegistry.throwIfResourceUseAborted(options?.abortSignal);
 
       // Apply prefix if configured (critical for BGE, E5, Instructor models)
       const inputText = this.config.prefix ? `${this.config.prefix}${text}` : text;
@@ -394,6 +403,7 @@ export class TransformersEmbeddingProvider implements ApiProvider {
         latencyMs,
       };
     } catch (err) {
+      providerRegistry.throwIfResourceUseAborted(options?.abortSignal);
       const error = err as Error;
 
       // Check for model not found
@@ -450,9 +460,19 @@ export class TransformersTextGenerationProvider implements ApiProvider {
     return `[Transformers Text Generation Provider ${this.modelName}]`;
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     try {
-      const generator = await getOrCreatePipeline('text-generation', this.modelName, this.config);
+      const generator = await getOrCreatePipeline(
+        'text-generation',
+        this.modelName,
+        this.config,
+        options?.abortSignal,
+      );
+      providerRegistry.throwIfResourceUseAborted(options?.abortSignal);
 
       // Build generation options (convert camelCase to snake_case for library)
       const generationOptions: Record<string, unknown> = {
@@ -525,6 +545,7 @@ export class TransformersTextGenerationProvider implements ApiProvider {
         latencyMs,
       };
     } catch (err) {
+      providerRegistry.throwIfResourceUseAborted(options?.abortSignal);
       const error = err as Error;
 
       if (error.message?.includes('Could not locate file')) {

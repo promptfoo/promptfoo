@@ -46,6 +46,10 @@ interface ChatKitPoolConfig {
 export class ChatKitBrowserPool {
   private static instance: ChatKitBrowserPool | null = null;
   private static cleanupRegistered: boolean = false;
+  private static readonly registryResources = new WeakMap<
+    ChatKitBrowserPool,
+    { shutdown(): Promise<void> }
+  >();
 
   private browser: Browser | null = null;
   private server: http.Server | null = null;
@@ -109,14 +113,16 @@ export class ChatKitBrowserPool {
       // Register with providerRegistry for cleanup at end of evaluation
       // This is cleaner than relying only on process exit handlers
       const instance = ChatKitBrowserPool.instance;
-      providerRegistry.register({
+      const resource = {
         async shutdown() {
-          if (instance) {
-            await instance.shutdown();
+          await instance.shutdown();
+          if (ChatKitBrowserPool.instance === instance) {
             ChatKitBrowserPool.instance = null;
           }
         },
-      });
+      };
+      ChatKitBrowserPool.registryResources.set(instance, resource);
+      providerRegistry.register(resource);
     } else if (config) {
       // Warn if different config is requested for existing instance
       const existing = ChatKitBrowserPool.instance.config;
@@ -135,6 +141,26 @@ export class ChatKitBrowserPool {
       }
     }
     return ChatKitBrowserPool.instance;
+  }
+
+  static async getInstanceForEvaluation(
+    config?: Partial<ChatKitPoolConfig>,
+    signal?: AbortSignal,
+  ): Promise<ChatKitBrowserPool> {
+    while (true) {
+      providerRegistry.throwIfResourceUseAborted(signal);
+      const pool = this.getInstance(config);
+      const resource = this.registryResources.get(pool);
+      const ready = resource && providerRegistry.useResource(resource, signal);
+      if (!ready) {
+        return pool;
+      }
+      await ready;
+      providerRegistry.throwIfResourceUseAborted(signal);
+      if (this.instance === pool) {
+        return pool;
+      }
+    }
   }
 
   /**

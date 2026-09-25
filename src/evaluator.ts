@@ -1065,10 +1065,11 @@ async function callActiveProvider({
   vars: Vars;
 }): Promise<ProviderResponse> {
   const originalProvider = maybeWrapMcpProviderForRedteam(provider, test);
-  const activeProvider = maybeWrapMcpProviderForRedteam(
-    isApiProvider(test.provider) ? test.provider : originalProvider,
-    test,
-  );
+  const cleanupOwner = isApiProvider(test.provider) ? test.provider : provider;
+  const activeProvider =
+    cleanupOwner === provider
+      ? originalProvider
+      : maybeWrapMcpProviderForRedteam(cleanupOwner, test);
   logger.debug(`Provider type: ${sanitizeProviderIdForLog(activeProvider.id())}`);
 
   const callApiContext = buildCallApiContext({
@@ -1084,25 +1085,30 @@ async function callActiveProvider({
   });
   const callApiOptions = abortSignal ? { abortSignal } : undefined;
 
-  const callApi = () => {
-    onProviderInvoked();
-    const invoke = () =>
-      traceContext?.traceparent
-        ? withTracedProviderCall(
-            {
-              provider: activeProvider,
-              callContext: callApiContext,
-              promptLabel: promptForRender.label,
-              evalId: callApiContext.evaluationId,
-              testIndex,
-            },
-            async (context) => activeProvider.callApi(renderedPrompt, context, callApiOptions),
-          )
-        : activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
-    return testSuite?.tracing
-      ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
-      : invoke();
-  };
+  const callApi = () =>
+    providerRegistry.withProvider(
+      cleanupOwner,
+      async () => {
+        onProviderInvoked();
+        const invoke = () =>
+          traceContext?.traceparent
+            ? withTracedProviderCall(
+                {
+                  provider: activeProvider,
+                  callContext: callApiContext,
+                  promptLabel: promptForRender.label,
+                  evalId: callApiContext.evaluationId,
+                  testIndex,
+                },
+                async (context) => activeProvider.callApi(renderedPrompt, context, callApiOptions),
+              )
+            : activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
+        return testSuite?.tracing
+          ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
+          : invoke();
+      },
+      abortSignal,
+    );
   const response = rateLimitRegistry
     ? await rateLimitRegistry.execute(activeProvider, callApi, createProviderRateLimitOptions())
     : await callApi();
@@ -2199,7 +2205,11 @@ function ensureDefaultTestForExtensions(testSuite: TestSuite) {
   }
 }
 
-async function maybeAddGeneratedPrompts(testSuite: TestSuite, options: InternalEvaluateOptions) {
+async function maybeAddGeneratedPrompts(
+  testSuite: TestSuite,
+  options: InternalEvaluateOptions,
+  abortSignal?: AbortSignal,
+) {
   if (!options.generateSuggestions) {
     return true;
   }
@@ -2217,7 +2227,9 @@ async function maybeAddGeneratedPrompts(testSuite: TestSuite, options: InternalE
   const { prompts: newPrompts, error } = await generatePrompts(
     testSuite.prompts[0].raw,
     requestedCount,
+    abortSignal,
   );
+  abortSignal?.throwIfAborted();
   if (error || !newPrompts) {
     throw new Error(`Failed to generate prompts: ${error}`);
   }
@@ -2232,11 +2244,14 @@ async function maybeAddGeneratedPrompts(testSuite: TestSuite, options: InternalE
   logger.info(chalk.blue('Generated prompts:'));
   let numAdded = 0;
   for (const prompt of newPrompts) {
+    abortSignal?.throwIfAborted();
     logger.info('--------------------------------------------------------');
     logger.info(`${prompt}`);
     logger.info('--------------------------------------------------------');
 
-    if (await promptYesNo('Do you want to test this prompt?', false)) {
+    const selected = await promptYesNo('Do you want to test this prompt?', false);
+    abortSignal?.throwIfAborted();
+    if (selected) {
       testSuite.prompts.push({ raw: prompt, label: prompt });
       numAdded++;
     } else {
@@ -3332,6 +3347,14 @@ function usesExampleProvider(testSuite: TestSuite) {
     const label = provider.label || '';
     return url.includes('promptfoo.app') || label.toLowerCase().includes('example');
   });
+}
+
+interface EvaluationDeadline {
+  startTime: number;
+  maxEvalTimeMs: number;
+  providerAbortSignal?: AbortSignal;
+  globalTimeout?: NodeJS.Timeout;
+  isTimedOut: () => boolean;
 }
 
 class Evaluator<TEvaluation extends EvaluationRecord, TResult extends EvaluationStoreResult> {
@@ -4747,15 +4770,16 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
   }
 
-  private async _runEvaluation(): Promise<TEvaluation> {
+  private async _runEvaluation({
+    startTime,
+    maxEvalTimeMs,
+    providerAbortSignal,
+    globalTimeout,
+    isTimedOut,
+  }: EvaluationDeadline): Promise<TEvaluation> {
     const { options } = this;
     let { testSuite } = this;
 
-    const startTime = Date.now();
-    const maxEvalTimeMs = options.maxEvalTimeMs ?? getMaxEvalTimeMs();
-    let evalTimedOut = false;
-    let globalTimeout: NodeJS.Timeout | undefined;
-    let globalAbortController: AbortController | undefined;
     const processedIndices = new Set<number>();
 
     const targetErrorAbortController = new AbortController();
@@ -4764,29 +4788,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     let ciProgressReporter: CIProgressReporter | null = null;
     let progressBarManager: ProgressBarManager | null = null;
 
-    // Create abort signals:
-    // - providerAbortSignal: passed to providers (user signal + timeout, but NOT target error)
-    // - combinedAbortSignal: used internally for checkAbort (includes target error signal)
-    // Target error signal is not passed to providers because by the time we detect a 403 etc,
-    // the provider call has already completed - it's only used to stop the evaluator loop.
-    let providerAbortSignal: AbortSignal | undefined = options.abortSignal;
-    let combinedAbortSignal: AbortSignal = options.abortSignal
-      ? AbortSignal.any([options.abortSignal, targetErrorAbortController.signal])
+    // Target errors stop the evaluator loop; only caller cancellation and the timeout reach providers.
+    const combinedAbortSignal = providerAbortSignal
+      ? AbortSignal.any([providerAbortSignal, targetErrorAbortController.signal])
       : targetErrorAbortController.signal;
-
-    if (maxEvalTimeMs > 0) {
-      globalAbortController = new AbortController();
-      // Providers need timeout signal to cancel long-running requests
-      providerAbortSignal = providerAbortSignal
-        ? AbortSignal.any([providerAbortSignal, globalAbortController.signal])
-        : globalAbortController.signal;
-      // Internal signal includes all abort sources
-      combinedAbortSignal = AbortSignal.any([combinedAbortSignal, globalAbortController.signal]);
-      globalTimeout = setTimeout(() => {
-        evalTimedOut = true;
-        globalAbortController?.abort();
-      }, maxEvalTimeMs);
-    }
 
     const vars = new Set<string>();
     const checkAbort = () => {
@@ -4812,7 +4817,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
     testSuite = beforeAllOut.suite;
 
-    if (!(await maybeAddGeneratedPrompts(testSuite, options))) {
+    if (!(await maybeAddGeneratedPrompts(testSuite, options, providerAbortSignal))) {
       return this.store.evaluation;
     }
 
@@ -4974,7 +4979,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       evalStepIndexMap,
       globalTimeout,
       groupedRunEvalOptions: [...serialRunEvalOptions, ...concurrentRunEvalOptions],
-      isEvalTimedOut: () => evalTimedOut,
+      isEvalTimedOut: isTimedOut,
       isWebUI,
       maxEvalTimeMs,
       processingContext,
@@ -5004,7 +5009,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       assertionTypes,
       ciProgressReporter,
       concurrency,
-      evalTimedOut,
+      evalTimedOut: isTimedOut(),
       globalTimeout,
       maxEvalTimeMs,
       options,
@@ -5023,6 +5028,40 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   async evaluate(): Promise<TEvaluation> {
+    return providerRegistry.withEvaluation(async () => {
+      const startTime = Date.now();
+      const maxEvalTimeMs = this.options.maxEvalTimeMs ?? getMaxEvalTimeMs();
+      const timeoutController = maxEvalTimeMs > 0 ? new AbortController() : undefined;
+      let providerAbortSignal = this.options.abortSignal;
+      if (timeoutController) {
+        providerAbortSignal = providerAbortSignal
+          ? AbortSignal.any([providerAbortSignal, timeoutController.signal])
+          : timeoutController.signal;
+      }
+      let timedOut = false;
+      const globalTimeout = timeoutController
+        ? setTimeout(() => {
+            timedOut = true;
+            timeoutController.abort();
+          }, maxEvalTimeMs)
+        : undefined;
+      try {
+        return await this.evaluateWithResources({
+          startTime,
+          maxEvalTimeMs,
+          providerAbortSignal,
+          globalTimeout,
+          isTimedOut: () => timedOut,
+        });
+      } finally {
+        if (globalTimeout) {
+          clearTimeout(globalTimeout);
+        }
+      }
+    });
+  }
+
+  private async evaluateWithResources(deadline: EvaluationDeadline): Promise<TEvaluation> {
     // Initialize OTEL SDK if tracing is enabled
     // Check env flag, test suite level, and default test metadata
     const tracingEnabled =
@@ -5036,6 +5075,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     let evaluationError: unknown;
     try {
+      await Promise.all(
+        this.testSuite.providers.map((provider) =>
+          providerRegistry.useProvider(provider, deadline.providerAbortSignal),
+        ),
+      );
       otlpReceiverAcquired = await startOtlpReceiverIfNeeded(this.testSuite, this.store.id);
       if (tracingEnabled) {
         logger.debug('[Evaluator] Initializing OTEL SDK for tracing');
@@ -5044,7 +5088,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         otelInitialized = true;
       }
 
-      return await this._runEvaluation();
+      return await this._runEvaluation(deadline);
     } catch (error) {
       evaluationError = error;
       throw error;
@@ -5075,9 +5119,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           await sleep(3000);
         }
         await stopOtlpReceiverIfNeeded(otlpReceiverAcquired, this.store.id);
-
-        // Clean up Python worker pools to prevent resource leaks
-        await providerRegistry.shutdownAll();
 
         // Log rate limit metrics for debugging before cleanup
         if (this.rateLimitRegistry) {
