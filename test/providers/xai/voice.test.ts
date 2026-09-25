@@ -119,34 +119,18 @@ describe('XAI Voice Provider', () => {
       },
     );
 
-    it('calculates cost correctly for 1 minute', () => {
-      const cost = calculateXAIVoiceCost(60000, 'grok-voice-think-fast-1.0');
-      expect(cost).toBe(0.05);
-    });
-
-    it('calculates cost correctly for 2 minutes', () => {
-      const cost = calculateXAIVoiceCost(120000, 'grok-voice-think-fast-1.0');
-      expect(cost).toBe(0.1);
-    });
-
-    it('calculates cost correctly for 30 seconds', () => {
-      const cost = calculateXAIVoiceCost(30000, 'grok-voice-think-fast-1.0');
-      expect(cost).toBe(0.025);
-    });
-
-    it('calculates cost correctly for 0 duration', () => {
-      const cost = calculateXAIVoiceCost(0, 'grok-voice-think-fast-1.0');
-      expect(cost).toBe(0);
-    });
-
-    it('calculates cost correctly for fractional minutes', () => {
-      const cost = calculateXAIVoiceCost(90000, 'grok-voice-think-fast-1.0');
-      expect(cost).toBeCloseTo(0.075, 4);
-    });
-
-    it('calculates cost correctly for 10 minutes', () => {
-      const cost = calculateXAIVoiceCost(600000, 'grok-voice-think-fast-1.0');
-      expect(cost).toBe(0.5);
+    it.each([
+      [0, 0],
+      [30_000, 0.025],
+      [60_000, 0.05],
+      [90_000, 0.075],
+      [120_000, 0.1],
+      [600_000, 0.5],
+    ])('bills %s ms of Voice 1.0 at $%s', (durationMs, expected) => {
+      expect(calculateXAIVoiceCost(durationMs, 'grok-voice-think-fast-1.0')).toBeCloseTo(
+        expected,
+        8,
+      );
     });
   });
 

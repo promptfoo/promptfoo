@@ -57,11 +57,11 @@ describe('DeepSeek current models', () => {
     const { body } = await provider({ reasoning_effort: 'high', max_tokens: 8192 }).getOpenAiBody(
       'Hello',
       {
-        vars: {},
+        vars: { effort: 'none' },
         prompt: {
           raw: 'Hello',
           label: 'fixture',
-          config: { reasoning_effort: 'none', max_tokens: 32 },
+          config: { reasoning_effort: '{{ effort }}', max_tokens: 32 },
         },
       },
     );

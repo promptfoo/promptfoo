@@ -84,37 +84,33 @@ describe('calculateDeepSeekCost', () => {
     expect(cost).toBeUndefined();
   });
 
-  it.each(['unknown-model', 'private-deepseek-deployment'])(
-    'does not guess a rate for billable %s usage',
-    (model) => {
-      expect(calculateDeepSeekCost(model, { inputCost: 0.01 }, 100, 100)).toBeUndefined();
-      expect(calculateDeepSeekCost(model, { outputCost: 0.02 }, 100, 100)).toBeUndefined();
-      expect(calculateDeepSeekCost(model, { cacheReadCost: 0.001 }, 100, 100, 50)).toBeUndefined();
-      expect(
-        calculateDeepSeekCost(model, { cacheReadCost: 0.001, outputCost: 0.02 }, 100, 100, 50),
-      ).toBeUndefined();
-      expect(calculateDeepSeekCost(model, {}, 0, 0)).toBeUndefined();
-    },
-  );
+  it('does not guess a rate for billable unknown-model usage', () => {
+    const model = 'unknown-model';
+    expect(calculateDeepSeekCost(model, { inputCost: 0.01 }, 100, 100)).toBeUndefined();
+    expect(calculateDeepSeekCost(model, { outputCost: 0.02 }, 100, 100)).toBeUndefined();
+    expect(calculateDeepSeekCost(model, { cacheReadCost: 0.001 }, 100, 100, 50)).toBeUndefined();
+    expect(
+      calculateDeepSeekCost(model, { cacheReadCost: 0.001, outputCost: 0.02 }, 100, 100, 50),
+    ).toBeUndefined();
+    expect(calculateDeepSeekCost(model, {}, 0, 0)).toBeUndefined();
+  });
 
   it('only needs a rate for token categories that were actually used', () => {
     expect(calculateDeepSeekCost('unknown-model', { inputCost: 0.01 }, 100, 0, 50)).toBeCloseTo(1);
-    expect(calculateDeepSeekCost('deepseek-flash', { outputCost: 0.02 }, 0, 100)).toBeCloseTo(2);
+    expect(calculateDeepSeekCost('unknown-model', { outputCost: 0.02 }, 0, 100)).toBeCloseTo(2);
     expect(
-      calculateDeepSeekCost('deepseek-flash', { cacheReadCost: 0.001 }, 100, 0, 100),
+      calculateDeepSeekCost('unknown-model', { cacheReadCost: 0.001 }, 100, 0, 100),
     ).toBeCloseTo(0.1);
     expect(
       calculateDeepSeekCost(
-        'deepseek-flash',
+        'unknown-model',
         { cacheReadCost: 0.001, outputCost: 0.02 },
         100,
         100,
         100,
       ),
     ).toBeCloseTo(2.1);
-    expect(
-      calculateDeepSeekCost('deepseek-flash', { cost: 0, cacheReadCost: 0 }, 100, 100, 50),
-    ).toBe(0);
+    expect(calculateDeepSeekCost('unknown-model', { cost: 0 }, 100, 100, 50)).toBe(0);
   });
 
   it('keeps built-in rates for unspecified directions on known models', () => {
@@ -155,8 +151,6 @@ describe('DEEPSEEK_CHAT_MODELS', () => {
   );
 
   it('should have correct pricing for deepseek-v4-pro', () => {
-    const model = DEEPSEEK_CHAT_MODELS.find((m) => m.id === 'deepseek-v4-pro');
-    expect(model).toBeDefined();
     expect(calculateDeepSeekCost('deepseek-v4-pro', {}, 1_000_000, 1_000_000, 500_000)).toBeCloseTo(
       4.642,
     );

@@ -183,16 +183,14 @@ class DeepSeekProvider extends OpenAiChatCompletionProvider {
   }
 
   protected override calculateResponseCost(
-    data: OpenAiChatCompletionCostData,
+    data: OpenAiChatCompletionCostData & { usage?: { prompt_cache_hit_tokens?: number } },
     config: OpenAiCompletionOptions,
     cached: boolean,
   ): number | undefined {
     if (cached) {
       return undefined;
     }
-    const usage = data.usage as
-      | (NonNullable<OpenAiChatCompletionCostData['usage']> & { prompt_cache_hit_tokens?: number })
-      | undefined;
+    const { usage } = data;
     const passthrough = config.passthrough as { model?: string } | undefined;
     return calculateDeepSeekCost(
       passthrough?.model ?? this.modelName,

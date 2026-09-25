@@ -1745,12 +1745,7 @@ describe('AnthropicMessagesProvider', () => {
           } as Anthropic.Messages.Message)
           .mockResolvedValueOnce({
             content: [],
-            container: null,
             model: 'claude-opus-5-5',
-            id: 'test-id',
-            role: 'assistant',
-            type: 'message',
-            stop_sequence: null,
             stop_reason: 'refusal',
             stop_details: { type: 'refusal', category, explanation: null },
             usage: { input_tokens: 2000, output_tokens: 0 },
@@ -4027,14 +4022,9 @@ describe('AnthropicMessagesProvider', () => {
         const provider = createProvider('claude-opus-5-5', { config: {} });
         vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
           content: [],
-          container: null,
           model: 'claude-opus-5-5',
-          id: 'test-id',
-          role: 'assistant',
           stop_reason: 'refusal',
           stop_details: { type: 'refusal', category, explanation: null },
-          stop_sequence: null,
-          type: 'message',
           usage: { input_tokens: 1000, output_tokens: outputTokens },
         } as unknown as Anthropic.Messages.Message);
 
