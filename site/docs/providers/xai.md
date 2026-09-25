@@ -729,7 +729,7 @@ The xAI Voice Agent API enables real-time voice conversations with Grok models v
 
 ```yaml
 providers:
-  - xai:voice:grok-voice-think-fast-1.0
+  - xai:voice:grok-voice-think-fast-2.0
 ```
 
 #### Configuration
@@ -737,7 +737,7 @@ providers:
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: xai:voice:grok-voice-think-fast-1.0
+  - id: xai:voice:grok-voice-think-fast-2.0
     config:
       voice: 'Ara' # Ara, Rex, Sal, Eve, or Leo
       instructions: 'You are a helpful voice assistant.'
@@ -754,6 +754,8 @@ providers:
 ```
 
 #### Available Voices
+
+Use any lowercase [built-in voice ID or custom voice ID](https://docs.x.ai/developers/model-capabilities/audio/speech-to-speech#available-voices). Legacy names such as `Ara` are converted to lowercase. Set `config.reasoning.effort` to `high` (default) or `none`.
 
 | Voice | Description  |
 | ----- | ------------ |
@@ -803,7 +805,7 @@ You can define custom function tools inline or load them from external files:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: xai:voice:grok-voice-think-fast-1.0
+  - id: xai:voice:grok-voice-think-fast-2.0
     config:
       # Inline tool definition
       tools:
@@ -879,7 +881,7 @@ You can configure a custom WebSocket endpoint for the Voice API, useful for prox
 
 ```yaml
 providers:
-  - id: xai:voice:grok-voice-think-fast-1.0
+  - id: xai:voice:grok-voice-think-fast-2.0
     config:
       # Option 1: Full base URL (transforms https:// to wss://)
       apiBaseUrl: 'https://my-proxy.example.com/v1'
@@ -902,7 +904,7 @@ For advanced use cases like local testing, custom proxies, or endpoints requirin
 
 ```yaml
 providers:
-  - id: xai:voice:grok-voice-think-fast-1.0
+  - id: xai:voice:grok-voice-think-fast-2.0
     config:
       # Use this URL exactly as-is (no transformation applied)
       websocketUrl: 'wss://custom-endpoint.example.com/path?token=xyz&session=abc'
@@ -943,7 +945,7 @@ prompts:
   - file://input.json
 
 providers:
-  - id: xai:voice:grok-voice-think-fast-1.0
+  - id: xai:voice:grok-voice-think-fast-2.0
     config:
       voice: 'Ara'
       instructions: 'You are a helpful voice assistant.'
@@ -961,7 +963,7 @@ tests:
 
 #### Pricing
 
-The Voice Agent API is billed at **$0.05 per minute** of connection time.
+Grok Voice 2.0 is billed at [$0.08 per minute of audio and $0.004 per text input](https://docs.x.ai/developers/models/speech-to-speech). Promptfoo sends one text input per test and estimates cost from the returned audio duration. Tool-result messages do not add a text-input charge.
 
 For more information on the available models and API usage, refer to the [xAI documentation](https://docs.x.ai/docs).
 

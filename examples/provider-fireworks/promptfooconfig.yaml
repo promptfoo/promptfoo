@@ -15,17 +15,22 @@ providers:
     label: 'GPT-OSS 120B'
     config:
       temperature: 0.2
-      max_tokens: 1024
-  - id: fireworks:accounts/fireworks/models/deepseek-v4-pro
-    label: 'DeepSeek V4 Pro'
+      max_tokens: 8192
+  - id: fireworks:accounts/fireworks/models/deepseek-v4p1-flash
+    label: 'DeepSeek V4.1 Flash'
     config:
-      temperature: 0.2
-      max_tokens: 1024
-  - id: fireworks:accounts/fireworks/models/kimi-k2p6
-    label: 'Kimi K2.6'
+      max_tokens: 8192
+      inputCost: 0.00000022
+      cacheReadInputCost: 0.000000007
+      outputCost: 0.00000066
+  - id: fireworks:accounts/fireworks/models/kimi-k3
+    label: 'Kimi K3'
     config:
-      temperature: 0.2
-      max_tokens: 1024
+      temperature: 1
+      max_tokens: 8192
+      inputCost: 0.000003
+      cacheReadInputCost: 0.0000003
+      outputCost: 0.000015
 
 # Fireworks also serves embedding models on the same key. Here a `similar`
 # assertion is graded by the serverless Qwen3 embedding model via the
@@ -34,7 +39,7 @@ defaultTest:
   options:
     provider:
       embedding:
-        id: fireworks:embedding:accounts/fireworks/models/qwen3-embedding-8b
+        id: fireworks:embedding:fireworks/qwen3-embedding-8b
 
 tests:
   - vars:
