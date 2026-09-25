@@ -290,6 +290,11 @@ const redTeamSidebar = [
       },
       {
         type: 'doc',
+        label: 'AgentDojo Benchmark',
+        id: 'guides/agentdojo-security-benchmark',
+      },
+      {
+        type: 'doc',
         label: 'MCP Security',
         id: 'red-team/mcp-security-testing',
       },
