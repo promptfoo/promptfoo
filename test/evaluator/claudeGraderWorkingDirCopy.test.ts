@@ -155,6 +155,17 @@ describeEvaluator('Claude grader working directory copy', () => {
       return graderResult('0');
     });
     const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    const fetchResults = record.fetchResultsByTestIdx.bind(record);
+    vi.spyOn(record, 'fetchResultsByTestIdx').mockImplementation(async (testIdx) => {
+      const results = await fetchResults(testIdx);
+      for (const result of results) {
+        const provider = result.testCase.options?.provider;
+        if (provider && typeof provider !== 'string' && provider.config) {
+          provider.config.working_dir = '[REDACTED]';
+        }
+      }
+      return results;
+    });
     await evaluate(suite, record, { maxConcurrency: 2 });
     expect(workspaces).toHaveLength(1);
     await expect(fs.stat(workspaces[0])).rejects.toMatchObject({ code: 'ENOENT' });

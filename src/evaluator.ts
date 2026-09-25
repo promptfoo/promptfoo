@@ -4286,7 +4286,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       return;
     }
 
-    const compareAssertion = resultsToCompare[0].testCase.assert?.find(
+    // Persisted results redact provider settings before comparison assertions run.
+    // Use the current run's test case so a grader can still access its runtime config.
+    const comparisonTestCase =
+      runEvalOptions.find((option) => option.testIdx === testIdx)?.test ??
+      resultsToCompare[0].testCase;
+    const compareAssertion = comparisonTestCase.assert?.find(
       (a) => a.type === 'select-best',
     ) as Assertion;
     if (!compareAssertion) {
@@ -4307,7 +4312,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           { abortSignal: providerAbortSignal, rateLimitRegistry: this.rateLimitRegistry },
           () =>
             runCompareAssertion(
-              resultsToCompare[0].testCase,
+              comparisonTestCase,
               compareAssertion,
               outputs,
               this.getComparisonCallApiContext(resultsToCompare[0], repeatCacheContext),
