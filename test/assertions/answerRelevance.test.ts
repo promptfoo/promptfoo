@@ -251,4 +251,45 @@ describe('handleAnswerRelevance', () => {
       reason: 'Relevance 0.40 is less than threshold 0.5',
     });
   });
+
+  it('should clamp not-answer-relevance scores when relevance is negative', async () => {
+    // matchesAnswerRelevance averages raw cosine similarities, so a negative
+    // score means every generated question pointed away from the prompt. Inverting
+    // that with a bare `1 - score` reports a score above the documented 0-1 range.
+    const mockMatchesAnswerRelevance = vi.mocked(matchesAnswerRelevance);
+    mockMatchesAnswerRelevance.mockResolvedValue({
+      pass: false,
+      score: -0.4,
+      reason: 'Relevance -0.40 is less than threshold 0.5',
+    });
+
+    const result = await handleAnswerRelevance({
+      assertion: {
+        type: 'not-answer-relevance',
+      },
+      output: 'test output',
+      prompt: 'test prompt',
+      test: {
+        vars: {},
+        options: {},
+      },
+      baseType: 'answer-relevance',
+      assertionValueContext: {} as AssertionValueFunctionContext,
+      inverse: true,
+      outputString: 'test output',
+      providerResponse: {
+        output: 'test output',
+        tokenUsage: {},
+      },
+    });
+
+    expect(result).toEqual({
+      assertion: {
+        type: 'not-answer-relevance',
+      },
+      pass: true,
+      score: 1,
+      reason: 'Relevance -0.40 is less than threshold 0.5',
+    });
+  });
 });
