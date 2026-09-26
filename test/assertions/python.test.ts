@@ -701,9 +701,14 @@ describe('Python file references', { timeout: 15000 }, () => {
     expect(pythonResult).not.toHaveProperty('tokensUsed');
   });
 
-  it.each(['namedScores', 'named_scores', 'namedScoreWeights'])(
+  it.each([
+    ['namedScores', 'namedScores'],
+    ['named_scores', 'namedScores'],
+    ['namedScoreWeights', 'namedScoreWeights'],
+    ['named_score_weights', 'namedScoreWeights'],
+  ])(
     'accepts nullable %s maps and component lists, including nested results',
-    async (field) => {
+    async (field, mappedField) => {
       const scriptResult = {
         pass_: true,
         score: 1,
@@ -723,7 +728,6 @@ describe('Python file references', { timeout: 15000 }, () => {
       });
 
       expect(result).toMatchObject({ pass: true, score: 1, reason: 'ok' });
-      const mappedField = field === 'named_scores' ? 'namedScores' : field;
       expect(result).toHaveProperty(mappedField, null);
       expect(result.componentResults?.[0]).toMatchObject({
         pass: true,
@@ -733,6 +737,46 @@ describe('Python file references', { timeout: 15000 }, () => {
       });
       expect(scriptResult[field]).toBeNull();
       expect(scriptResult.component_results[0][field]).toBeNull();
+    },
+  );
+
+  it.each([2, Number.POSITIVE_INFINITY])(
+    'validates snake_case weights in nested script results: %s',
+    async (weight) => {
+      const scriptResult = {
+        pass_: true,
+        score: 1,
+        reason: 'ok',
+        named_scores: { quality: 0.5 },
+        named_score_weights: { quality: 3 },
+        component_results: [
+          {
+            pass_: true,
+            score: 0.75,
+            reason: 'nested',
+            named_scores: { quality: 0.75 },
+            named_score_weights: { quality: weight },
+          },
+        ],
+      };
+      vi.mocked(runPythonCode).mockResolvedValueOnce(scriptResult);
+
+      const result = await runAssertion({
+        prompt: 'Test',
+        assertion: { type: 'python', value: 'unused' },
+        test: {},
+        providerResponse: { output: 'Test output' },
+      });
+
+      if (Number.isFinite(weight)) {
+        expect(result.namedScoreWeights).toEqual({ quality: 3 });
+        expect(result.componentResults?.[0].namedScoreWeights).toEqual({ quality: weight });
+      } else {
+        expect(result).toMatchObject({ pass: false, score: 0 });
+        expect(result.componentResults).toBeUndefined();
+      }
+      expect(scriptResult).not.toHaveProperty('namedScoreWeights');
+      expect(scriptResult.component_results[0]).not.toHaveProperty('namedScoreWeights');
     },
   );
 
