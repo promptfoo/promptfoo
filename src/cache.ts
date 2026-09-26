@@ -21,6 +21,8 @@ import {
   PROMPTFOO_TEAM_ID_HEADER,
   preserveCloudAuthRedirects,
 } from './util/fetch/monkeyPatchFetch';
+import { assertFipsDispatcher, resolveTlsOptions } from './util/fetch/tls';
+import { isFipsEnabled } from './util/fips';
 import { isSecretField, looksLikeSecret, sanitizeUrlForLogging } from './util/sanitizer';
 import { sleep } from './util/time';
 import type { Cache } from 'cache-manager';
@@ -562,6 +564,7 @@ function getFetchCacheKey(
   method: string,
   format: 'json' | 'text',
   repeatIndex?: number,
+  cacheVersion = 'v3',
 ) {
   const bodyForCacheKey = getBodyForFetchCacheKey(
     options.body ?? (url instanceof Request ? url.body : undefined),
@@ -577,7 +580,7 @@ function getFetchCacheKey(
 
   const repeatSuffix = shouldApplyRepeatCacheSuffix(repeatIndex) ? `:repeat${repeatIndex}` : '';
   return getScopedCacheKey(
-    `fetch:v3:${hashFetchCacheKey({
+    `fetch:${cacheVersion}:${hashFetchCacheKey({
       format,
       headers: getHeadersForCacheKey(url, options),
       method,
@@ -847,6 +850,14 @@ export async function fetchWithCache<T = unknown>(
   maxRetries?: number,
 ): Promise<FetchWithCacheResult<T>> {
   const fetchOptions = preserveCloudAuthRedirects(url, options);
+  const fipsEnabled = isFipsEnabled();
+  if (fipsEnabled) {
+    // A warm cache must not hide invalid hardened-runtime configuration.
+    assertFipsDispatcher(fetchOptions.dispatcher);
+    await resolveTlsOptions();
+  }
+  // Never reuse a response cached by a runtime without the FIPS policy.
+  const cacheVersion = fipsEnabled ? 'fips:v1' : 'v3';
   const cacheOptions: CacheOptions =
     typeof bustOrOptions === 'boolean' ? { bust: bustOrOptions } : (bustOrOptions ?? {});
   const { bust = false, repeatIndex, cacheKey: providedCacheKey } = cacheOptions;
@@ -868,13 +879,13 @@ export async function fetchWithCache<T = unknown>(
   const repeatSuffix = shouldApplyRepeatCacheSuffix(repeatIndex) ? `:repeat${repeatIndex}` : '';
   // Caller-provided keys must not reuse responses accepted without Cloud redirect protection.
   const providedKeyPrefix = fetchOptions.restrictCloudAuthRedirects
-    ? 'fetch:cloud-auth:v3'
-    : 'fetch:v3';
+    ? `fetch:cloud-auth:${cacheVersion}`
+    : `fetch:${cacheVersion}`;
   const cacheKey =
     cacheEnabled && !bust
       ? providedCacheKey
         ? getScopedCacheKey(`${providedKeyPrefix}:${providedCacheKey}${repeatSuffix}`)
-        : getFetchCacheKey(url, fetchOptions, method, format, repeatIndex)
+        : getFetchCacheKey(url, fetchOptions, method, format, repeatIndex, cacheVersion)
       : null;
 
   if (!cacheEnabled || bust || cacheKey == null) {

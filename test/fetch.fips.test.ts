@@ -5,6 +5,7 @@ import { Agent, ProxyAgent } from 'undici';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvOverridesProvider, setEnvOverridesProvider } from '../src/envOverrides';
 import { clearAgentCache, fetchWithProxy } from '../src/util/fetch/index';
+import { createTlsAgent } from '../src/util/fetch/tls';
 import * as fips from '../src/util/fips';
 import { mockProcessEnv } from './util/utils';
 
@@ -58,6 +59,32 @@ afterEach(() => {
 });
 
 describe('FIPS fetch policy with the real environment parser', () => {
+  it('rejects an opaque custom dispatcher before fetching in FIPS mode', async () => {
+    const dispatcher = new Agent({ connect: { rejectUnauthorized: false } });
+    await expect(fetchWithProxy('https://example.test', { dispatcher })).rejects.toThrow(
+      'FIPS mode requires a Promptfoo-managed HTTP dispatcher',
+    );
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it('accepts a dispatcher built with validated TLS settings in FIPS mode', async () => {
+    const dispatcher = createTlsAgent({ rejectUnauthorized: true, ca: 'CA fixture' });
+    await fetchWithProxy('https://example.test', { dispatcher });
+    expect(lastDispatcher()).toBe(dispatcher);
+  });
+
+  it('rejects insecure settings when creating a managed FIPS dispatcher', () => {
+    expect(() => createTlsAgent({ rejectUnauthorized: false })).toThrow('FIPS mode requires TLS');
+    expect(Agent).not.toHaveBeenCalled();
+  });
+
+  it('preserves opaque custom dispatchers outside FIPS mode', async () => {
+    vi.mocked(fips.isFipsEnabled).mockReturnValue(false);
+    const dispatcher = new Agent({ connect: { rejectUnauthorized: false } });
+    await fetchWithProxy('https://example.test', { dispatcher });
+    expect(lastDispatcher()).toBe(dispatcher);
+  });
+
   it.each([false, true])(
     'requires verification with proxy=%s when no override is set',
     async (proxy) => {
@@ -165,6 +192,17 @@ describe('FIPS fetch policy with the real environment parser', () => {
     expect(lastDispatcher()).not.toBe(first);
     clearAgentCache();
     expect(latest.close).toHaveBeenCalledOnce();
+    expect(first.close).toHaveBeenCalledOnce();
+  });
+
+  it('keeps requests working when closing an evicted pool rejects', async () => {
+    await fetchWithProxy('https://example.test');
+    const first = lastDispatcher() as { close: ReturnType<typeof vi.fn> };
+    first.close.mockRejectedValueOnce(new Error('fixture pool cleanup failure'));
+    clearAgentCache();
+    const response = await fetchWithProxy('https://example.test');
+    expect(response.status).toBe(200);
+    expect(lastDispatcher()).not.toBe(first);
     expect(first.close).toHaveBeenCalledOnce();
   });
 

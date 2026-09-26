@@ -6,7 +6,6 @@ import path from 'path';
 
 import httpZ from 'http-z';
 import { LRUCache } from 'lru-cache';
-import { Agent, type Dispatcher, interceptors } from 'undici';
 import { z } from 'zod';
 import { fetchWithCache } from '../cache';
 import cliState from '../cliState';
@@ -21,8 +20,7 @@ import { HttpTlsFieldsSchema } from '../contracts/providerConfig/httpTls';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { stripDecompressionHeaders } from '../util/fetch/stripDecompressionHeaders';
-import { assertFipsTlsVerification } from '../util/fetch/tls';
+import { assertFipsTlsVerification, createTlsAgent } from '../util/fetch/tls';
 import {
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
@@ -63,6 +61,7 @@ import {
 } from './shared';
 import { normalizeResponseTransformResult } from './transformResult';
 import { loadTransformModule, parseFileTransformReference } from './transformUtils';
+import type { Dispatcher } from 'undici';
 
 export { loadTransformModule } from './transformUtils';
 
@@ -1764,14 +1763,7 @@ async function createHttpsAgent(
 
   logger.debug(`[HTTP Provider] Creating HTTPS agent with TLS configuration`);
 
-  // Compose the decompress interceptor like the shared pooled agents do — on
-  // Node 26 undici no longer auto-decompresses, so without this a gzip/br
-  // response body comes back to callers as raw compressed bytes.
-  return new Agent({
-    connect: tlsOptions,
-  })
-    .compose(interceptors.decompress({ skipErrorResponses: false }))
-    .compose(stripDecompressionHeaders());
+  return createTlsAgent(tlsOptions);
 }
 
 export class HttpProvider implements ApiProvider {

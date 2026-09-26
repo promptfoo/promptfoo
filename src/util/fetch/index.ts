@@ -1,5 +1,3 @@
-import * as fsPromises from 'node:fs/promises';
-import path from 'path';
 import type { ConnectionOptions } from 'tls';
 
 import { LRUCache } from 'lru-cache';
@@ -25,7 +23,7 @@ import {
 import { monkeyPatchFetch, preserveCloudAuthRedirects } from './monkeyPatchFetch';
 import { getFetchRetryContextMaxRetries } from './retryContext';
 import { stripDecompressionHeaders } from './stripDecompressionHeaders';
-import { assertFipsTlsVerification } from './tls';
+import { assertFipsDispatcher, resolveTlsOptions } from './tls';
 
 import type { FetchOptions } from './types';
 
@@ -287,29 +285,10 @@ export async function fetchWithProxy(
     }
   }
 
-  assertFipsTlsVerification();
-  const tlsOptions: ConnectionOptions = {
-    rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', !isFipsEnabled()),
-  };
-
-  // Support custom CA certificates
-  const caCertPath = getEnvString('PROMPTFOO_CA_CERT_PATH');
-  if (caCertPath) {
-    try {
-      const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
-      const ca = await fsPromises.readFile(resolvedPath, 'utf8');
-      tlsOptions.ca = ca;
-      logger.debug(`Using custom CA certificate from ${resolvedPath}`);
-    } catch (e) {
-      if (isFipsEnabled()) {
-        throw Object.assign(
-          new Error('Failed to read the configured CA certificate in FIPS mode'),
-          { cause: e },
-        );
-      }
-      logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
-    }
-  }
+  assertFipsDispatcher(finalOptions.dispatcher);
+  const resolvedTlsOptions = resolveTlsOptions();
+  const tlsOptions =
+    resolvedTlsOptions instanceof Promise ? await resolvedTlsOptions : resolvedTlsOptions;
   const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
 
   // Bind the dispatcher per-request to avoid global state races under concurrency.
