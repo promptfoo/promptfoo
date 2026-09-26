@@ -1984,6 +1984,20 @@ describe('synthesize', () => {
       expect(resolveCloudTeam).toHaveBeenCalledExactlyOnceWith();
     });
 
+    it('resolves an invalidated remembered environment team before Cloud generation', async () => {
+      vi.mocked(cloudConfig.hasPendingEnvironmentSelection).mockReturnValue(true);
+      vi.mocked(isPromptfooCloudApiHost).mockReturnValue(true);
+      await synthesize({
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      expect(resolveCloudTeam).toHaveBeenCalledExactlyOnceWith();
+    });
+
     it.each(['local', 'custom endpoint', 'Cloud target', 'no saved team'])(
       'does not resolve a default team for %s generation',
       async (mode) => {

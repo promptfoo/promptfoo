@@ -4,6 +4,8 @@ import logger from '../../src/logger';
 import { PromptfooModelProvider } from '../../src/providers/promptfooModel';
 import type { Mock } from 'vitest';
 
+vi.mock('../../src/util/cloud', () => ({ ensureCloudTeamContext: vi.fn() }));
+
 describe('PromptfooModelProvider', () => {
   let mockFetch: Mock;
   let mockCloudConfig: ReturnType<typeof vi.spyOn>;

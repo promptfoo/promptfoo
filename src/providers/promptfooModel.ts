@@ -1,5 +1,6 @@
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
+import { ensureCloudTeamContext } from '../util/cloud';
 import { PROMPTFOO_TEAM_ID_HEADER } from '../util/fetch/monkeyPatchFetch';
 import { fetchWithProviderProxy } from './fetch';
 
@@ -102,6 +103,7 @@ export class PromptfooModelProvider implements ApiProvider {
         config: this.config,
       };
 
+      await ensureCloudTeamContext();
       const { apiHost, headers: authHeaders, teamId } = cloudConfig.getRequestConfig();
       const url = `${apiHost}/api/v1/task`;
       if (!authHeaders) {

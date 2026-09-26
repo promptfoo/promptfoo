@@ -12,6 +12,7 @@ import {
 } from '../redteam/remoteGeneration';
 import { getRemoteMaterializationContextFromVars } from '../redteam/remoteMaterialization';
 import { BaseTokenUsageSchema } from '../types/shared';
+import { ensureCloudTeamContext } from '../util/cloud';
 import { fetchWithRetries } from '../util/fetch/index';
 import { getRequestTimeoutMs } from './shared';
 
@@ -98,12 +99,14 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
     };
 
     try {
+      await ensureCloudTeamContext(getRemoteGenerationUrlForUnaligned(), body.targetId);
+      const url = getRemoteGenerationUrlForUnaligned();
       logger.debug(
-        `[HarmfulCompletionProvider] Calling generate harmful API (${getRemoteGenerationUrlForUnaligned()}) with body: ${JSON.stringify(body)}`,
+        `[HarmfulCompletionProvider] Calling generate harmful API (${url}) with body: ${JSON.stringify(body)}`,
       );
       // We're using the promptfoo API to avoid having users provide their own unaligned model.
       const response = await fetchWithRetries(
-        getRemoteGenerationUrlForUnaligned(),
+        url,
         {
           method: 'POST',
           headers: getRemoteGenerationHeaders(),
@@ -243,8 +246,10 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
     };
 
     try {
+      await ensureCloudTeamContext(getRemoteGenerationUrl(), body.targetId);
+      const url = getRemoteGenerationUrl();
       const response = await fetchWithRetries(
-        getRemoteGenerationUrl(),
+        url,
         {
           method: 'POST',
           headers: getRemoteGenerationHeaders(),
@@ -367,8 +372,10 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
     };
 
     try {
+      await ensureCloudTeamContext(getRemoteGenerationUrl(), body.targetId);
+      const url = getRemoteGenerationUrl();
       const response = await fetchWithRetries(
-        getRemoteGenerationUrl(),
+        url,
         {
           method: 'POST',
           headers: getRemoteGenerationHeaders(),
