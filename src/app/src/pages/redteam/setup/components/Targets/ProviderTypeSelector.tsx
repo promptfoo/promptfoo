@@ -195,7 +195,7 @@ const allProviderOptions = [
   {
     value: 'openai',
     label: 'OpenAI',
-    description: 'GPT-5.6 Luna, Terra, Sol and GPT-6 Astra',
+    description: 'GPT-6 Luna, Sol, and Astra; GPT-5.6 Terra',
     tag: 'providers',
     recommended: true,
   },
@@ -585,7 +585,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'anthropic') {
       setProvider(
         {
-          id: 'anthropic:messages:claude-sonnet-4-5-20250929',
+          id: 'anthropic:messages:claude-sonnet-5',
           config: {},
           label: currentLabel,
         },
@@ -648,7 +648,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'deepseek') {
       setProvider(
         {
-          id: 'deepseek:deepseek-chat',
+          id: 'deepseek:deepseek-flash',
           config: {},
           label: currentLabel,
         },
@@ -657,7 +657,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'openrouter') {
       setProvider(
         {
-          id: 'openrouter:openai/gpt-5.4',
+          id: 'openrouter:openai/gpt-6-sol',
           config: {},
           label: currentLabel,
         },
@@ -765,7 +765,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'xai') {
       setProvider(
         {
-          id: 'xai:grok-4.20-reasoning',
+          id: 'xai:grok-4.7',
           config: {},
           label: currentLabel,
         },
