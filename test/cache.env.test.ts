@@ -317,23 +317,23 @@ describe('invocation-scoped cache settings', () => {
     const secondEnv = disk(path.join(tempDir, 'second'));
     const namespaced = (env: typeof firstEnv, ttl: string) =>
       cliState.withEnv({ ...env, PROMPTFOO_CACHE_TTL: ttl }, () =>
-        cache.withCacheNamespace('run', () => cache.getCache()),
+        cache.withCacheNamespace('run', async () => cache.getCache()),
       );
-    const short = namespaced(firstEnv, '1');
-    const long = namespaced(firstEnv, '10');
-    const other = namespaced(secondEnv, '1');
+    const short = await namespaced(firstEnv, '1');
+    const long = await namespaced(firstEnv, '10');
+    const other = await namespaced(secondEnv, '1');
     await short.set('key', 'stale');
     await other.set('key', 'other backend');
 
     await cliState.withEnv(firstEnv, () => cache.clearCache());
 
-    expect(namespaced(firstEnv, '1')).not.toBe(short);
-    expect(namespaced(firstEnv, '10')).not.toBe(long);
-    expect(namespaced(secondEnv, '1')).toBe(other);
+    expect(await namespaced(firstEnv, '1')).not.toBe(short);
+    expect(await namespaced(firstEnv, '10')).not.toBe(long);
+    expect(await namespaced(secondEnv, '1')).toBe(other);
     expect(await other.get('key')).toBe('other backend');
     // Existing callers can retain a wrapper and continue using the same store.
     expect(await short.get('key')).toBeUndefined();
     await short.set('key', 'fresh');
-    expect(await namespaced(firstEnv, '10').get('key')).toBe('fresh');
+    expect(await (await namespaced(firstEnv, '10')).get('key')).toBe('fresh');
   });
 });
