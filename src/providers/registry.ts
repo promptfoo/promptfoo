@@ -129,7 +129,7 @@ function getProviderEnvAliasGroups(providerPath: string): readonly (readonly str
   if (providerPath.startsWith('azure:foundry-agent:')) {
     return [['AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET', 'AZURE_TENANT_ID']];
   }
-  if (providerPath.startsWith('huggingface:')) {
+  if (providerPath.startsWith('huggingface:') || providerPath.startsWith('hf:')) {
     return [['HF_TOKEN', 'HF_API_TOKEN']];
   }
   const awsAuth = [
@@ -596,7 +596,7 @@ export const providerMap: ProviderFactory[] = [
       const modelName = splits.slice(2).join(':');
 
       if (modelType === 'embedding' || modelType === 'embeddings') {
-        return new CohereEmbeddingProvider(modelName, providerOptions);
+        return new CohereEmbeddingProvider(modelName, providerOptions.config, providerOptions.env);
       }
       if (modelType === 'chat' || modelType === undefined) {
         return new CohereChatCompletionProvider(modelName || modelType, providerOptions);
@@ -1461,7 +1461,11 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      return new VoyageEmbeddingProvider(providerPath.split(':')[1], providerOptions);
+      return new VoyageEmbeddingProvider(
+        providerPath.split(':')[1],
+        providerOptions.config,
+        providerOptions.env,
+      );
     },
   },
   {
