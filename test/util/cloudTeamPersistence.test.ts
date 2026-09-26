@@ -210,7 +210,7 @@ describe('team resolution with persisted preferences and environment credentials
     expect(readGlobalConfig()).toEqual(newer);
     expect(fetchWithProxy).toHaveBeenCalledTimes(2);
     for (const [url, options] of vi.mocked(fetchWithProxy).mock.calls) {
-      expect(String(url)).toMatch(/^https:\/\/cloud.example.com\//);
+      expect(new URL(String(url)).origin).toBe('https://cloud.example.com');
       expect(new Headers(options?.headers).get('Authorization')).toBe('Bearer environment-a');
     }
   });
