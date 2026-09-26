@@ -73,6 +73,8 @@ type ResponseFunctionCallItem = Extract<
 type EffectiveFoundryConfig = AzureAssistantOptions & Record<string, any>;
 type FunctionToolCallbacks = AzureAssistantOptions['functionToolCallbacks'];
 const MAX_REQUEST_TIMEOUT_MS = 2_147_483_647;
+// Match the scheduler's default maximum wait without retrying before a longer server hint.
+const MAX_RETRY_DELAY_MS = 60_000;
 
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) {
@@ -219,22 +221,26 @@ function responseRetryDelay(
       return undefined;
     }
   }
-  return (
-    rateLimitTimingFromHeaders(headers).retryAfterMs ??
-    Math.min(500 * 2 ** attempt, 8000) * (1 - Math.random() * 0.25)
-  );
+  const retryAfterMs = rateLimitTimingFromHeaders(headers).retryAfterMs;
+  if (retryAfterMs !== undefined) {
+    // Do not retry earlier than requested or wait indefinitely outside the attempt deadline.
+    return retryAfterMs <= MAX_RETRY_DELAY_MS ? retryAfterMs : undefined;
+  }
+  return Math.min(500 * 2 ** attempt, 8000) * (1 - Math.random() * 0.25);
 }
 
 /**
  * Provider response for a structured rate-limit error. The HTTP status and
- * headers travel in `metadata.http` so the scheduler can honour the
- * advertised Retry-After instead of its default backoff.
+ * headers travel in `metadata.http` so the scheduler can honour retryable
+ * Retry-After hints without losing the evidence for delays we refuse to wait.
  */
 function rateLimitResponse(error: HttpRateLimitError, details?: string): ProviderResponse {
   return {
     error: formatRateLimitErrorMessage(error, details),
     metadata: {
       rateLimitKind: error.kind,
+      ...(error.retryAfterMs !== undefined &&
+        error.retryAfterMs > MAX_RETRY_DELAY_MS && { rateLimitRetryable: false }),
       http: {
         status: error.status,
         statusText: error.statusText,
@@ -738,8 +744,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         if (attempt >= maxRetries || delay === undefined) {
           throw error;
         }
-        // Node turns delays above its timer limit into an immediate 1ms retry.
-        retryDelay = Math.min(delay, MAX_REQUEST_TIMEOUT_MS);
+        retryDelay = delay;
       } finally {
         clearTimeout(timeout);
         signal?.removeEventListener('abort', relayAbort);

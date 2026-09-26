@@ -79,7 +79,7 @@ These request-time settings are ignored by the v2 runtime and should be configur
 - `seed`
 - `stop`
 
-Other `retryOptions` fields are unsupported. Promptfoo follows the SDK retry policy with cancellable backoff and standard server delay hints; hard-quota failures are not retried. The SDK's internal retries are disabled. `numRequests` counts logical Responses turns; `metadata.transportRetries` records extra attempts, whose unreported usage and cost are marked incomplete.
+Other `retryOptions` fields are unsupported. Promptfoo follows the SDK retry policy with cancellable backoff and standard server delay hints up to 60 seconds; hard-quota failures are not retried. Larger delay hints return the original error immediately instead of retrying. For 429 responses, `metadata.rateLimitRetryable: false` prevents the scheduler from retrying or applying that delay to queued calls while preserving the original HTTP metadata. The SDK's internal retries are disabled. `numRequests` counts logical Responses turns; `metadata.transportRetries` records extra attempts, whose unreported usage and cost are marked incomplete.
 
 `maxPollTimeMs` is a cooperative budget starting after the initial response. It is checked between callback batches and model requests, and preserves a final answer that arrives after the budget. It does not interrupt a pending request or callback. Callers using the JavaScript API can cancel with `callApiOptions.abortSignal`; callbacks receive that signal as `context.abortSignal` and should pass it to their own asynchronous operations. A callback that ignores cancellation can continue after the eval stops waiting.
 
