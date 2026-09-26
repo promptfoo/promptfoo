@@ -15,7 +15,8 @@ export async function loginWithApiKey(
     selectTeam?: (teams: UserTeam[]) => Promise<UserTeam>;
   } = {},
 ) {
-  const requestConfig = cloudConfig.getRequestConfig();
+  const selection = cloudConfig.getTeamSelection();
+  const requestConfig = selection.request;
   const normalizedApiHost = (apiHost || requestConfig.apiHost).replace(/\/+$/, '');
   const authHeaderName = options.authHeaderName || requestConfig.authHeaderName;
   const validation = await cloudConfig.validateApiToken(token, normalizedApiHost, authHeaderName);
@@ -81,6 +82,7 @@ export async function loginWithApiKey(
     authHeaderName,
     organizationId,
     teamId: teamsLookedUp ? (selectedTeam?.id ?? null) : undefined,
+    expectedSelection: selection,
   });
   return { ...validation, organizationId, team: selectedTeam };
 }

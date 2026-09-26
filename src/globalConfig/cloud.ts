@@ -206,12 +206,19 @@ export class CloudConfig {
     };
   }
 
+  private isTeamSelectionCurrent(
+    config: CloudConfigState,
+    expected: ReturnType<CloudConfig['getTeamSelection']>,
+  ): boolean {
+    return (
+      this.getSessionId(config) === expected.request.sessionId &&
+      !!config.apiKey === expected.hasSavedApiKey &&
+      isDeepStrictEqual(this.getSelection(config), expected.selection)
+    );
+  }
+
   assertTeamSelection(expected: ReturnType<CloudConfig['getTeamSelection']>): void {
-    const config = this.config;
-    if (
-      this.getSessionId(config) !== expected.request.sessionId ||
-      !isDeepStrictEqual(this.getSelection(config), expected.selection)
-    ) {
+    if (!this.isTeamSelectionCurrent(this.config, expected)) {
       throw new CloudSelectionChangedError();
     }
   }
@@ -371,6 +378,7 @@ export class CloudConfig {
       organizationId?: string;
       // Undefined preserves a remembered preference after discovery fails; null clears it.
       teamId?: string | null;
+      expectedSelection?: ReturnType<CloudConfig['getTeamSelection']>;
     },
   ): void {
     const { user, organization, app, hasActiveLicense } = parseTokenValidation(session);
@@ -380,6 +388,12 @@ export class CloudConfig {
       user.createdAt != null && new Date(user.createdAt) < SHARING_CUTOFF_DATE;
     updateGlobalConfig((config) => {
       const cloud = (config.cloud ??= {});
+      if (
+        session.expectedSelection &&
+        !this.isTeamSelectionCurrent(cloud, session.expectedSelection)
+      ) {
+        throw new CloudSelectionChangedError();
+      }
       cloud.apiKey = session.token;
       cloud.apiHost = session.apiHost.replace(/\/+$/, '');
       cloud.appUrl = app.url;
