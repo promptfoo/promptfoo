@@ -496,7 +496,10 @@ def update_seat(
             f"Unable to update seat because {normalized_confirmation_number} "
             "was not found."
         )
-    if not context.context.user_passenger_name or not context.context.user_passenger_name.strip():
+    if (
+        not context.context.user_passenger_name
+        or not context.context.user_passenger_name.strip()
+    ):
         return (
             "Unable to update the seat because passenger identity could not be "
             "verified. The passenger must authenticate before requesting changes."
