@@ -606,6 +606,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   private getResponseTokenUsage(response: FoundryResponse): {
     tokenUsage: Partial<TokenUsage>;
     complete: boolean;
+    pricingComplete: boolean;
   } {
     let complete = true;
     const count = (value: unknown, required = false): number | undefined => {
@@ -622,7 +623,6 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     const usage = response.usage;
     const prompt = count(usage?.input_tokens, true);
     const completion = count(usage?.output_tokens, true);
-    const total = count(usage?.total_tokens) ?? (prompt ?? 0) + (completion ?? 0);
     const cached = count(usage?.input_tokens_details?.cached_tokens);
     // Pricing also consumes modality counts that are absent from TokenUsage.
     // Validate supplied values before treating this response's cost as complete.
@@ -636,6 +636,12 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     ]) {
       count(value);
     }
+    const pricingComplete = complete;
+    // Totals and reporting details do not affect pricing. Keep their validation
+    // separate so malformed reporting fields do not discard calculable cost.
+    const total = count(usage?.total_tokens) ?? (prompt ?? 0) + (completion ?? 0);
+    // The shared detail helper drops malformed cache-write values before normalization.
+    count((usage?.input_tokens_details as any)?.cache_write_tokens);
     const details = usage ? getOpenAICompletionTokenDetails(usage) : undefined;
     const completionDetails = Object.fromEntries(
       Object.entries(details ?? {}).flatMap(([key, value]) => {
@@ -652,6 +658,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         ...(Object.keys(completionDetails).length > 0 && { completionDetails }),
       },
       complete,
+      pricingComplete,
     };
   }
 
@@ -741,7 +748,8 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     if (failure) {
       return {
         ...result,
-        ...(result.error && response.output_text && { output: response.output_text }),
+        ...((result.error || (result.isRefusal && result.output === '')) &&
+          response.output_text && { output: response.output_text }),
         error: failure,
         raw: response,
         metadata,
@@ -903,7 +911,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
           const responseUsage = this.getResponseTokenUsage(response);
           accumulateTokenUsage(tokenUsage, { ...responseUsage.tokenUsage, numRequests: 0 });
           usageComplete &&= responseUsage.complete;
-          const responseCost = responseUsage.complete
+          const responseCost = responseUsage.pricingComplete
             ? this.calculateResponseCost(response, effectiveConfig)
             : undefined;
           if (responseCost === undefined) {
