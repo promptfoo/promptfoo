@@ -152,7 +152,7 @@ describe('provider environment scopes', () => {
   });
 
   it.each(keyProviders)('%s prefers a scoped alias to a host alias', (_name, key, create) => {
-    Object.assign(process.env, { GOOGLE_API_KEY: 'host-key', HF_TOKEN: 'host-key' });
+    mockProcessEnv({ GOOGLE_API_KEY: 'host-key', HF_TOKEN: 'host-key' });
     cliState.withEnvFileOverrides({ [key]: 'file-key' }, () => {
       expect(apiKey(create({}))).toBe('file-key');
     });
