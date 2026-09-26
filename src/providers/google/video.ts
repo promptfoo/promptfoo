@@ -7,6 +7,7 @@ import logger from '../../logger';
 import { fetchWithTimeout } from '../../util/fetch/index';
 import { ellipsize } from '../../util/text';
 import { sleep } from '../../util/time';
+import { resolveProviderEnv } from '../env';
 import {
   determineGoogleVertexMode,
   getGoogleApiKey,
@@ -856,10 +857,11 @@ export class GoogleVideoProvider implements ApiProvider {
     if (isVertexMode) {
       let projectId =
         effectiveConfig.projectId ||
-        this.env?.GOOGLE_CLOUD_PROJECT ||
-        this.env?.GOOGLE_PROJECT_ID ||
-        getEnvString('GOOGLE_CLOUD_PROJECT') ||
-        getEnvString('GOOGLE_PROJECT_ID');
+        resolveProviderEnv(this.env, [
+          'VERTEX_PROJECT_ID',
+          'GOOGLE_PROJECT_ID',
+          'GOOGLE_CLOUD_PROJECT',
+        ])?.value;
 
       if (!projectId) {
         try {

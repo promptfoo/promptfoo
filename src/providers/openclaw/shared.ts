@@ -3,7 +3,6 @@ import os from 'os';
 import path from 'path';
 
 import JSON5 from 'json5';
-import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { resolveProviderEnv } from '../env';
 
@@ -32,8 +31,7 @@ export function resetConfigCache(): void {
 
 function resolveConfigPath(env?: Record<string, string | undefined>): string {
   return (
-    env?.OPENCLAW_CONFIG_PATH ||
-    getEnvString('OPENCLAW_CONFIG_PATH') ||
+    resolveProviderEnv(env, ['OPENCLAW_CONFIG_PATH'])?.value ||
     path.join(os.homedir(), '.openclaw', 'openclaw.json')
   );
 }
@@ -141,7 +139,7 @@ function resolveGatewayUrlFromConfig(
 }
 
 function resolveGatewayPortOverride(env?: Record<string, string | undefined>): number | undefined {
-  const rawPort = env?.OPENCLAW_GATEWAY_PORT || getEnvString('OPENCLAW_GATEWAY_PORT');
+  const rawPort = resolveProviderEnv(env, ['OPENCLAW_GATEWAY_PORT'])?.value;
   const trimmedPort = rawPort?.trim();
   if (!trimmedPort || !/^\d+$/.test(trimmedPort)) {
     return undefined;
@@ -287,21 +285,14 @@ export function resolveAuthSecret(
   }
 
   // 2. Per-provider env overrides, then process environment variable
-  const envToken =
-    env?.OPENCLAW_GATEWAY_TOKEN ||
-    getEnvString('OPENCLAW_GATEWAY_TOKEN') ||
-    env?.CLAWDBOT_GATEWAY_TOKEN ||
-    getEnvString('CLAWDBOT_GATEWAY_TOKEN');
-  if (envToken) {
-    return { kind: 'token', value: envToken };
-  }
-  const envPassword =
-    env?.OPENCLAW_GATEWAY_PASSWORD ||
-    getEnvString('OPENCLAW_GATEWAY_PASSWORD') ||
-    env?.CLAWDBOT_GATEWAY_PASSWORD ||
-    getEnvString('CLAWDBOT_GATEWAY_PASSWORD');
-  if (envPassword) {
-    return { kind: 'password', value: envPassword };
+  const auth = resolveProviderEnv(env, [
+    'OPENCLAW_GATEWAY_TOKEN',
+    'CLAWDBOT_GATEWAY_TOKEN',
+    'OPENCLAW_GATEWAY_PASSWORD',
+    'CLAWDBOT_GATEWAY_PASSWORD',
+  ]);
+  if (auth) {
+    return { kind: auth.name.endsWith('_TOKEN') ? 'token' : 'password', value: auth.value };
   }
 
   // 3. Auto-detect from the active OpenClaw config file

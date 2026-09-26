@@ -116,7 +116,11 @@ export class GoogleImageProvider implements ApiProvider {
     // Check if we should use Vertex AI (when projectId is provided)
     const projectId =
       this.config.projectId ||
-      resolveProviderEnv(this.env, ['GOOGLE_CLOUD_PROJECT', 'GOOGLE_PROJECT_ID'])?.value;
+      resolveProviderEnv(this.env, [
+        'VERTEX_PROJECT_ID',
+        'GOOGLE_PROJECT_ID',
+        'GOOGLE_CLOUD_PROJECT',
+      ])?.value;
 
     if (projectId) {
       // Use Vertex AI if project ID is available

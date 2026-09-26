@@ -195,7 +195,7 @@ export class CohereChatCompletionProvider implements ApiProvider {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.apiKey}`,
             'X-Client-Name':
-              this.env?.COHERE_CLIENT_NAME || getEnvString('COHERE_CLIENT_NAME') || 'promptfoo',
+              (this.env?.COHERE_CLIENT_NAME ?? getEnvString('COHERE_CLIENT_NAME')) || 'promptfoo',
           },
           body: JSON.stringify(body),
         },
@@ -295,7 +295,7 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.getApiKey()}`,
             'X-Client-Name':
-              this.env?.COHERE_CLIENT_NAME || getEnvString('COHERE_CLIENT_NAME') || 'promptfoo',
+              (this.env?.COHERE_CLIENT_NAME ?? getEnvString('COHERE_CLIENT_NAME')) || 'promptfoo',
           },
           body: JSON.stringify(body),
         },

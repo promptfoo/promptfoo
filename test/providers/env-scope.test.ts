@@ -84,6 +84,168 @@ describe('provider environment scopes', () => {
     vi.restoreAllMocks();
   });
 
+  it.each(['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'] as const)(
+    'keeps masked %s out of Google mode detection',
+    (name) => {
+      mockProcessEnv({ [name]: 'ambient-project' });
+      expect(GoogleAuthManager.determineVertexMode({}, { [name]: '' })).toBe(false);
+      expect(GoogleAuthManager.determineVertexMode({}, { [name]: 'provider-project' })).toBe(true);
+    },
+  );
+  it.each(['false', '0', ''])('honors a retained Google Vertex mode flag of %j', (value) => {
+    mockProcessEnv({ GOOGLE_GENAI_USE_VERTEXAI: 'true' });
+    const options = ProviderOptionsSchema.parse({ env: { GOOGLE_GENAI_USE_VERTEXAI: value } });
+    expect(GoogleAuthManager.determineVertexMode({}, options.env)).toBe(false);
+    expect(
+      GoogleAuthManager.determineVertexMode(
+        { vertexai: true },
+        { GOOGLE_GENAI_USE_VERTEXAI: value },
+      ),
+    ).toBe(true);
+  });
+  it.each([
+    'google:image:imagen-4.0-generate-001',
+    'google:gemini-2.5-flash-image',
+    'palm:gemini-2.5-flash-image',
+  ])('%s uses the provider project alias in the actual Vertex request', async (route) => {
+    const request = vi.fn().mockResolvedValue({ data: {} });
+    const client = { request } as never;
+    vi.mocked(googleUtil.getGoogleClient).mockResolvedValue({ client, projectId: 'adc-project' });
+    vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValue({
+      client,
+      projectId: 'adc-project',
+    });
+    const target = await loadApiProvider(route, {
+      env: { VERTEX_PROJECT_ID: 'suite-project' },
+      options: { env: { GOOGLE_CLOUD_PROJECT: 'provider-project' } },
+    });
+    await target.callApi('a blue square');
+    expect(request).toHaveBeenCalledWith(
+      expect.objectContaining({ url: expect.stringContaining('/projects/provider-project/') }),
+    );
+  });
+  it.each([
+    ['Imagen', GoogleImageProvider],
+    ['native image', GeminiImageProvider],
+  ] as const)(
+    '%s recognizes a retained Vertex project alias without a lower project alias',
+    async (_name, Provider) => {
+      const request = vi.fn().mockResolvedValue({ data: {} });
+      const client = { request } as never;
+      vi.mocked(googleUtil.getGoogleClient).mockResolvedValue({ client, projectId: 'adc-project' });
+      vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValue({
+        client,
+        projectId: 'adc-project',
+      });
+      const target = new Provider('gemini-2.5-flash-image', {
+        env: { VERTEX_PROJECT_ID: 'provider-project' },
+      });
+      await target.callApi('a blue square');
+      expect(request).toHaveBeenCalledWith(
+        expect.objectContaining({ url: expect.stringContaining('/projects/provider-project/') }),
+      );
+    },
+  );
+  it('keeps a masked native-image project on the AI Studio route', async () => {
+    mockProcessEnv({ GOOGLE_CLOUD_PROJECT: 'ambient-project' });
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {},
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const target = new GeminiImageProvider('gemini-2.5-flash-image', {
+      config: { apiKey: 'fixture' },
+      env: { GOOGLE_CLOUD_PROJECT: '' },
+    });
+    await target.callApi('a blue square');
+    expect(googleUtil.getGoogleClient).not.toHaveBeenCalled();
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      expect.stringContaining('generativelanguage.googleapis.com'),
+      expect.any(Object),
+      expect.any(Number),
+      'json',
+      false,
+    );
+  });
+  it('uses the local default after an empty native-image location mask', async () => {
+    mockProcessEnv({ GOOGLE_LOCATION: 'ambient-region' });
+    const request = vi.fn().mockResolvedValue({ data: {} });
+    const client = { request } as never;
+    vi.mocked(googleUtil.getGoogleClient).mockResolvedValue({ client, projectId: 'adc-project' });
+    vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValue({
+      client,
+      projectId: 'adc-project',
+    });
+    const target = new GeminiImageProvider('gemini-2.5-flash-image', {
+      config: { projectId: 'fixture' },
+      env: { GOOGLE_LOCATION: '' },
+    });
+    await target.callApi('a blue square');
+    expect(request).toHaveBeenCalledWith(
+      expect.objectContaining({ url: expect.stringContaining('/locations/us-central1/') }),
+    );
+  });
+  it('keeps a masked Video project out of the effective request configuration', async () => {
+    mockProcessEnv({ GOOGLE_CLOUD_PROJECT: 'ambient-project' });
+    vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValue({
+      projectId: 'credential-project',
+    } as never);
+    const target = new GoogleVideoProvider('veo-3.0-generate-001', {
+      config: { vertexai: true },
+      env: { GOOGLE_CLOUD_PROJECT: '' },
+    });
+    const create = vi
+      .spyOn(
+        target as unknown as {
+          createVideoJob: (prompt: string, config: unknown) => Promise<{ error: string }>;
+        },
+        'createVideoJob',
+      )
+      .mockResolvedValue({ error: 'fixture stop' });
+    expect(await target.callApi('a blue square')).toEqual({ error: 'fixture stop' });
+    expect(create).toHaveBeenCalledWith(
+      'a blue square',
+      expect.objectContaining({ projectId: 'credential-project' }),
+    );
+  });
+  it.each(['chat', 'embedding'])(
+    'Cohere %s uses its default client name after an explicit mask',
+    async (kind) => {
+      mockProcessEnv({ COHERE_CLIENT_NAME: 'ambient-client' });
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { text: 'ok', embeddings: [[1]] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const env = { COHERE_API_KEY: 'fixture', COHERE_CLIENT_NAME: '' };
+      if (kind === 'chat') {
+        await new CohereChatCompletionProvider('command-r', { env }).callApi('hello');
+      } else {
+        await new CohereEmbeddingProvider('embed-english-v3.0', {}, env).callEmbeddingApi('hello');
+      }
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({ 'X-Client-Name': 'promptfoo' }),
+        }),
+        expect.any(Number),
+      );
+    },
+  );
+  it('preserves Azure base URL priority when host and base aliases share a scope', async () => {
+    const target = new AzureGenericProvider('fixture', {
+      config: { apiKey: 'fixture' },
+      env: {
+        AZURE_API_HOST: 'host.example.invalid',
+        AZURE_API_BASE_URL: 'https://base.example.invalid',
+      },
+    });
+    await target.ensureInitialized();
+    expect(target.getApiBaseUrl()).toBe('https://base.example.invalid');
+  });
+
   const endpointProviders = [
     [
       'openai:chat:gpt-4.1-mini',

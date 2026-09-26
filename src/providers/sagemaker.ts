@@ -7,6 +7,7 @@ import telemetry from '../telemetry';
 import { getTransformErrorMessage, TransformInputType, transform } from '../util/transform';
 import { StringOrFunctionSchema } from '../validators/shared';
 import { getScopedAwsCredentialConfig, resolveAwsCredentials } from './awsCredentials';
+import { resolveProviderEnv } from './env';
 import { createEnvironmentScopedState } from './scopedState';
 
 import type { EnvOverrides } from '../types/env';
@@ -224,10 +225,7 @@ abstract class SageMakerGenericProvider {
   getRegion(): string {
     return (
       this.config?.region ||
-      this.env?.AWS_REGION ||
-      this.env?.AWS_DEFAULT_REGION ||
-      getEnvString('AWS_REGION') ||
-      getEnvString('AWS_DEFAULT_REGION') ||
+      resolveProviderEnv(this.env, ['AWS_REGION', 'AWS_DEFAULT_REGION'])?.value ||
       'us-east-1'
     );
   }

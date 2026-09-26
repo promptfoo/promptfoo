@@ -230,8 +230,9 @@ export class GoogleAuthManager {
     const isStrict = strictMutualExclusivity === true;
 
     // Check for Python SDK environment variables
-    const useVertexEnv = getEnvString('GOOGLE_GENAI_USE_VERTEXAI');
-    const cloudProject = env?.GOOGLE_CLOUD_PROJECT || getEnvString('GOOGLE_CLOUD_PROJECT');
+    const useVertexEnv =
+      env?.GOOGLE_GENAI_USE_VERTEXAI ?? getEnvString('GOOGLE_GENAI_USE_VERTEXAI');
+    const cloudProject = env?.GOOGLE_CLOUD_PROJECT ?? getEnvString('GOOGLE_CLOUD_PROJECT');
 
     // SDK alignment: project/location and apiKey are mutually exclusive
     // Only applies to explicit config values, not env vars (matching SDK behavior)
@@ -307,7 +308,8 @@ export class GoogleAuthManager {
     }
 
     // 2. Python SDK env var
-    const useVertexEnv = getEnvString('GOOGLE_GENAI_USE_VERTEXAI');
+    const useVertexEnv =
+      env?.GOOGLE_GENAI_USE_VERTEXAI ?? getEnvString('GOOGLE_GENAI_USE_VERTEXAI');
     if (useVertexEnv === 'true' || useVertexEnv === '1') {
       logger.debug('[Google] Vertex AI mode enabled via GOOGLE_GENAI_USE_VERTEXAI');
       return true;
@@ -319,12 +321,8 @@ export class GoogleAuthManager {
     // 3. Auto-detect from config/env (explicit project/credentials suggests Vertex)
     const hasProjectId = Boolean(
       config.projectId ||
-        env?.VERTEX_PROJECT_ID ||
-        getEnvString('VERTEX_PROJECT_ID') ||
-        env?.GOOGLE_PROJECT_ID ||
-        getEnvString('GOOGLE_PROJECT_ID') ||
-        env?.GOOGLE_CLOUD_PROJECT ||
-        getEnvString('GOOGLE_CLOUD_PROJECT'),
+        resolveProviderEnv(env, ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'])
+          ?.value,
     );
     const hasCredentials = Boolean(config.credentials);
 

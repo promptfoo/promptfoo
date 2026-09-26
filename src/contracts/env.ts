@@ -69,6 +69,7 @@ export const ProviderEnvOverridesSchema = z.object({
   GOOGLE_PROJECT_ID: z.string().optional(),
   GOOGLE_LOCATION: z.string().optional(),
   GOOGLE_GENERATIVE_AI_API_KEY: z.string().optional(),
+  GOOGLE_GENAI_USE_VERTEXAI: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
   GROQ_API_KEY: z.string().optional(),
   HELICONE_API_KEY: z.string().optional(),
