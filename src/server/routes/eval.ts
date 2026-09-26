@@ -383,6 +383,9 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   const indices = table.body.map((row) => row.testIdx);
 
   let returnTable = { head: table.head, body: table.body };
+  const derivedMetricNamesByPrompt = table.head.prompts.map(
+    () => eval_.config.derivedMetrics?.map((metric) => metric.name) ?? [],
+  );
 
   if (comparisonEvalIds.length > 0) {
     // Fetch comparison evals and their tables, keeping track of eval IDs
@@ -400,7 +403,12 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
           searchQuery: searchText,
           filters,
         });
-        return { evalId: comparisonEval_.id, table: comparisonTable };
+        return {
+          evalId: comparisonEval_.id,
+          table: comparisonTable,
+          derivedMetricNames:
+            comparisonEval_.config.derivedMetrics?.map((metric) => metric.name) ?? [],
+        };
       }),
     );
 
@@ -410,13 +418,17 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
       return;
     }
 
+    derivedMetricNamesByPrompt.push(
+      ...comparisonData.flatMap((data) =>
+        data ? data.table.head.prompts.map(() => data.derivedMetricNames) : [],
+      ),
+    );
+
     // Use shared merge function (fixes bug where table.id was incorrectly referenced)
     returnTable = mergeComparisonTables(
       id,
       table,
-      comparisonData.filter(
-        (data): data is { evalId: string; table: typeof table } => data !== null,
-      ),
+      comparisonData.filter((data): data is NonNullable<typeof data> => data !== null),
     );
   }
 
@@ -474,6 +486,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     totalCount: table.totalCount,
     filteredCount: table.filteredCount,
     filteredMetrics,
+    derivedMetricNamesByPrompt,
     config: redactAzureBlobSasTokens(eval_.config),
     author: eval_.author || null,
     version: eval_.version(),

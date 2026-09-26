@@ -6,14 +6,14 @@
  * evaluation without loading the full filtered dataset into memory.
  *
  * SECURITY: whereSql is a Drizzle SQL fragment, not a raw string. Persisted
- * metric templates are handled by accumulateNamedMetric's data-only renderer.
+ * metric templates are handled by accumulateNamedMetrics's data-only renderer.
  */
 
 import { type SQL, sql } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import logger from '../logger';
 import { ResultFailureReason } from '../types/index';
-import { accumulateNamedMetric } from './namedMetrics';
+import { accumulateNamedMetrics } from './namedMetrics';
 
 import type { PromptMetrics, Vars } from '../types/index';
 
@@ -228,30 +228,11 @@ type QueryDatabase = Pick<Database, 'all'>;
 
 class FilteredMetricsLimitError extends Error {}
 
-async function withReadSnapshot<T>(callback: (db: QueryDatabase) => Promise<T>): Promise<T> {
-  const db = await getDb();
-  const readTransaction = await db.$client.transaction('read');
-  const { drizzle } = await import('drizzle-orm/libsql/node');
-  const readDb = drizzle(readTransaction as unknown as Database['$client']);
-
-  try {
-    const result = await callback(readDb);
-    await readTransaction.commit();
-    return result;
-  } catch (error) {
-    if (!readTransaction.closed) {
-      await readTransaction.rollback();
-    }
-    throw error;
-  } finally {
-    readTransaction.close();
-  }
-}
-
 export async function calculateFilteredMetrics(
   opts: FilteredMetricsOptions,
 ): Promise<PromptMetrics[]> {
-  return withReadSnapshot((db) => calculateWithOptimizedQuery(opts, db));
+  const db = await getDb();
+  return db.transaction((tx) => calculateWithOptimizedQuery(opts, tx));
 }
 
 async function calculateWithOptimizedQuery(
@@ -304,7 +285,7 @@ async function calculateWithOptimizedQuery(
       prompt_idx,
       SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as pass_count,
       SUM(CASE WHEN success = 0 AND failure_reason != ${ResultFailureReason.ERROR} THEN 1 ELSE 0 END) as fail_count,
-      SUM(CASE WHEN failure_reason = ${ResultFailureReason.ERROR} THEN 1 ELSE 0 END) as error_count,
+      SUM(CASE WHEN success = 0 AND failure_reason = ${ResultFailureReason.ERROR} THEN 1 ELSE 0 END) as error_count,
       SUM(score) as total_score,
       SUM(latency_ms) as total_latency,
       SUM(cost) as total_cost,
@@ -499,17 +480,7 @@ function accumulateResultDetails(metrics: PromptMetrics[], row: ResultDetailsRow
   const testVars = getTestVars(parseJsonObject(row.test_case));
 
   if (namedScores) {
-    for (const [metricName, metricValue] of Object.entries(namedScores)) {
-      if (typeof metricValue !== 'number' || !Number.isFinite(metricValue)) {
-        continue;
-      }
-      accumulateNamedMetric(metrics[idx], {
-        metricName,
-        metricValue,
-        gradingResult,
-        testVars,
-      });
-    }
+    accumulateNamedMetrics(metrics[idx], { namedScores, gradingResult, testVars });
   }
 
   accumulateAssertionCounts(metrics[idx], gradingResult);
@@ -555,23 +526,31 @@ async function aggregateResultDetails(
       break;
     }
 
-    const pageBytes = pageRows.reduce((total, row) => {
+    let pageBytes = 0;
+    let pageRowCount = 0;
+    for (const row of pageRows) {
       if (!Number.isFinite(row.row_cursor) || !Number.isFinite(row.detail_bytes)) {
         throw new Error('Invalid result detail page metadata');
       }
-      return total + row.detail_bytes;
-    }, 0);
+      if (row.detail_bytes > MAX_RESULT_DETAILS_PAGE_BYTES) {
+        throw new FilteredMetricsLimitError(
+          'Filtered result details exceed the safe processing limit',
+        );
+      }
+      if (pageBytes + row.detail_bytes > MAX_RESULT_DETAILS_PAGE_BYTES) {
+        break;
+      }
+      pageBytes += row.detail_bytes;
+      pageRowCount++;
+    }
     totalDetailBytes += pageBytes;
-    if (
-      pageBytes > MAX_RESULT_DETAILS_PAGE_BYTES ||
-      totalDetailBytes > MAX_RESULT_DETAILS_TOTAL_BYTES
-    ) {
+    if (totalDetailBytes > MAX_RESULT_DETAILS_TOTAL_BYTES) {
       throw new FilteredMetricsLimitError(
         'Filtered result details exceed the safe processing limit',
       );
     }
 
-    const pageLastRowCursor = pageRows[pageRows.length - 1]?.row_cursor;
+    const pageLastRowCursor = pageRows[pageRowCount - 1]?.row_cursor;
     if (pageLastRowCursor === undefined) {
       break;
     }
@@ -588,7 +567,7 @@ async function aggregateResultDetails(
         AND (${hasNamedScoreEntriesSql} OR grading_result IS NOT NULL)
       ORDER BY eval_results.rowid
     `)) as ResultDetailsRow[];
-    if (rows.length !== pageRows.length) {
+    if (rows.length !== pageRowCount) {
       throw new Error('Filtered result detail page changed during aggregation');
     }
 
@@ -603,7 +582,7 @@ async function aggregateResultDetails(
       );
     }
     lastRowCursor = pageLastRowCursor;
-    if (pageRows.length < RESULT_DETAILS_BATCH_SIZE) {
+    if (pageRowCount === pageRows.length && pageRows.length < RESULT_DETAILS_BATCH_SIZE) {
       break;
     }
   }

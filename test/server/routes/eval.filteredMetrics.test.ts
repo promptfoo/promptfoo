@@ -451,6 +451,27 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
   });
 
   describe('Comparison mode', () => {
+    it('returns derived metric ownership aligned with every comparison column', async () => {
+      const base = await EvalFactory.create({ numResults: 1 });
+      base.config.derivedMetrics = [{ name: 'quality', value: '1' }];
+      await base.save();
+      const assertionsOnly = await EvalFactory.create({ numResults: 1 });
+      const otherDerived = await EvalFactory.create({ numResults: 1 });
+      otherDerived.config.derivedMetrics = [{ name: 'other', value: '2' }];
+      await otherDerived.save();
+
+      const response = await api.get(`/api/eval/${base.id}/table`).query({
+        comparisonEvalIds: [assertionsOnly.id, otherDerived.id],
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.body.table.head.prompts).toHaveLength(3);
+      expect(response.body.derivedMetricNamesByPrompt).toEqual([['quality'], [], ['other']]);
+
+      const standalone = await api.get(`/api/eval/${otherDerived.id}/table`);
+      expect(standalone.body.derivedMetricNamesByPrompt).toEqual([['other']]);
+    });
+
     it('should include filteredMetrics for base eval even when comparison evals are present', async () => {
       const eval1 = await EvalFactory.create({
         numResults: 10,

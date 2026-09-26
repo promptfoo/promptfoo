@@ -518,6 +518,8 @@ export type EvalTableDTO = {
   totalCount: number;
   filteredCount: number;
   filteredMetrics: PromptMetrics[] | null;
+  /** Derived metric names from each prompt column's owning eval, aligned with table.head.prompts. */
+  derivedMetricNamesByPrompt?: string[][];
   config: Partial<UnifiedConfig>;
   author: string | null;
   version: number;

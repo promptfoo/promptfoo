@@ -1139,6 +1139,7 @@ function PromptColumnHeader({
   testCounts,
   passingTestCounts,
   hasCompleteFilteredMetrics,
+  derivedMetricNames,
   config,
   filterMode,
   headPromptCount,
@@ -1159,6 +1160,7 @@ function PromptColumnHeader({
   testCounts: PromptSummaryMetric[];
   passingTestCounts: PromptSummaryMetric[];
   hasCompleteFilteredMetrics: boolean;
+  derivedMetricNames: string[];
   config: ReturnType<typeof useTableStore.getState>['config'];
   filterMode: EvalResultsFilterMode;
   headPromptCount: number;
@@ -1169,7 +1171,6 @@ function PromptColumnHeader({
 }) {
   const columnId = `Prompt ${idx + 1}`;
   const { total: metrics, filtered: filteredMetrics } = getMetrics(idx);
-  const derivedMetricNames = config?.derivedMetrics?.map((metric) => metric.name) ?? [];
   const displayMetrics = mergeFilteredNamedMetrics(
     metrics,
     hasCompleteFilteredMetrics ? filteredMetrics : null,
@@ -1693,6 +1694,7 @@ function ResultsTable({
     isFetching,
     filters,
     filteredMetrics,
+    derivedMetricNamesByPrompt,
   } = useTableStore();
   const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
   const { setFilterMode } = useFilterMode();
@@ -2200,6 +2202,11 @@ function ResultsTable({
                 testCounts={testCounts}
                 passingTestCounts={passingTestCounts}
                 hasCompleteFilteredMetrics={hasCompleteFilteredMetrics}
+                derivedMetricNames={
+                  derivedMetricNamesByPrompt?.[idx] ??
+                  config?.derivedMetrics?.map((metric) => metric.name) ??
+                  []
+                }
                 config={config}
                 filterMode={filterMode}
                 headPromptCount={head.prompts.length}
@@ -2267,6 +2274,7 @@ function ResultsTable({
     head,
     head.prompts,
     hasCompleteFilteredMetrics,
+    derivedMetricNamesByPrompt,
     isRedteam,
     maxTextLength,
     numAsserts,

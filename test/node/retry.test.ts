@@ -85,6 +85,7 @@ function createEval(overrides: Partial<Eval> = {}): Eval {
     config: {},
     persisted: false,
     prompts: [],
+    results: [],
     addPrompts: vi.fn().mockResolvedValue(undefined),
     fetchResultsBatched: vi.fn(async function* () {}),
     ...overrides,
@@ -180,18 +181,21 @@ describe('retryCommand', () => {
     ).resolves.toEqual({ allRequestedDeleted: false, hadNamedScores: false });
   });
 
-  it('preserves named metrics only for complete reused prompt metrics without derived metrics', () => {
+  it('preserves named metrics only for complete reused prompt metrics without derived metrics', async () => {
     const metrics = {
       namedScores: { quality: 3 },
       namedScoresCount: { quality: 2 },
       namedScoreWeights: { quality: 4 },
+      testPassCount: 0,
+      testFailCount: 0,
+      testErrorCount: 0,
     } as any;
     // `evaluate()` clones the stored metrics into each column and marks the clone, so the
     // guard must accept a marked copy and reject an unmarked one -- never object identity,
     // which no longer survives the clone.
     const seededMetrics = markNamedMetricsSeededFromPreviousRun({ ...metrics });
     const originalEval = createEval({ prompts: [{ metrics }] as any[] });
-    const canPreserve = createNamedMetricsPreservationGuard(originalEval);
+    const canPreserve = await createNamedMetricsPreservationGuard(originalEval);
 
     expect(
       canPreserve(createEval({ prompts: [{ metrics: seededMetrics }] as any[] }), undefined),
@@ -211,7 +215,7 @@ describe('retryCommand', () => {
       prompts: [{ metrics }] as any[],
     });
     expect(
-      createNamedMetricsPreservationGuard(derivedEval)(
+      (await createNamedMetricsPreservationGuard(derivedEval))(
         createEval({ prompts: [{ metrics: seededMetrics }] as any[] }),
         undefined,
       ),
@@ -219,7 +223,7 @@ describe('retryCommand', () => {
 
     const incompleteMetrics = { namedScores: {}, namedScoresCount: {} } as any;
     const incompleteEval = createEval({ prompts: [{ metrics: incompleteMetrics }] as any[] });
-    const incompleteGuard = createNamedMetricsPreservationGuard(incompleteEval);
+    const incompleteGuard = await createNamedMetricsPreservationGuard(incompleteEval);
     incompleteMetrics.namedScoreWeights = {};
     markNamedMetricsSeededFromPreviousRun(incompleteMetrics);
     expect(incompleteGuard(incompleteEval, undefined)).toBe(false);
@@ -230,9 +234,9 @@ describe('retryCommand', () => {
       namedScoreWeights: {},
     }) as any;
     const mismatchedEval = createEval({ prompts: [{ metrics: mismatchedMetrics }] as any[] });
-    expect(createNamedMetricsPreservationGuard(mismatchedEval)(mismatchedEval, undefined)).toBe(
-      false,
-    );
+    expect(
+      (await createNamedMetricsPreservationGuard(mismatchedEval))(mismatchedEval, undefined),
+    ).toBe(false);
 
     const orphanCountMetrics = markNamedMetricsSeededFromPreviousRun({
       namedScores: {},
@@ -240,16 +244,19 @@ describe('retryCommand', () => {
       namedScoreWeights: { quality: 4 },
     }) as any;
     const orphanCountEval = createEval({ prompts: [{ metrics: orphanCountMetrics }] as any[] });
-    expect(createNamedMetricsPreservationGuard(orphanCountEval)(orphanCountEval, undefined)).toBe(
-      false,
-    );
+    expect(
+      (await createNamedMetricsPreservationGuard(orphanCountEval))(orphanCountEval, undefined),
+    ).toBe(false);
   });
 
-  it('rebuilds named metrics when seeded columns have duplicate identities or change order', () => {
+  it('rebuilds named metrics when seeded columns have duplicate identities or change order', async () => {
     const makePrompt = (provider: string, id: string, score: number) => ({
       provider,
       id,
       metrics: markNamedMetricsSeededFromPreviousRun({
+        testPassCount: 0,
+        testFailCount: 0,
+        testErrorCount: 0,
         namedScores: { quality: score },
         namedScoresCount: { quality: 2 },
         namedScoreWeights: { quality: 2 },
@@ -259,11 +266,13 @@ describe('retryCommand', () => {
     const duplicate = makePrompt('echo', 'prompt', 2);
     const original = createEval({ prompts: [first, duplicate] as any });
     const wronglySeeded = createEval({ prompts: [duplicate, duplicate] as any });
-    expect(createNamedMetricsPreservationGuard(original)(wronglySeeded, undefined)).toBe(false);
+    expect((await createNamedMetricsPreservationGuard(original))(wronglySeeded, undefined)).toBe(
+      false,
+    );
 
     const second = makePrompt('other', 'prompt', 2);
     const unique = createEval({ prompts: [first, second] as any });
-    const canPreserve = createNamedMetricsPreservationGuard(unique);
+    const canPreserve = await createNamedMetricsPreservationGuard(unique);
     expect(canPreserve(unique, undefined)).toBe(true);
     expect(canPreserve(createEval({ prompts: [second, first] as any }), undefined)).toBe(false);
   });

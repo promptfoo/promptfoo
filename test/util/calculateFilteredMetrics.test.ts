@@ -10,6 +10,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { getDb } from '../../src/database/index';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
+import EvalResult from '../../src/models/evalResult';
 import { ResultFailureReason, type TokenUsage } from '../../src/types/index';
 import { calculateFilteredMetrics } from '../../src/util/calculateFilteredMetrics';
 import EvalFactory from '../factories/evalFactory';
@@ -67,6 +68,56 @@ describe('calculateFilteredMetrics', () => {
   });
 
   describe('basic metrics aggregation', () => {
+    it.each(['all', 'passes'] as const)(
+      'counts a saved manual pass only once with the %s filter',
+      async (filterMode) => {
+        const eval_ = await EvalFactory.create({
+          numResults: 3,
+          resultTypes: ['error', 'error', 'failure'],
+        });
+        const [overriddenResult] = await EvalResult.findManyByEvalId(eval_.id, { testIdx: 0 });
+        // Saved manual overrides can retain the original runtime-error reason.
+        expect(overriddenResult.failureReason).toBe(ResultFailureReason.ERROR);
+        overriddenResult.success = true;
+        overriddenResult.score = 1;
+        overriddenResult.gradingResult = { pass: true, score: 1, reason: 'Manual pass' };
+        await overriddenResult.save();
+
+        const [metrics] = await eval_.getFilteredMetrics({ filterMode });
+        const expectedCount = filterMode === 'all' ? 3 : 1;
+
+        expect(metrics).toMatchObject({
+          testPassCount: 1,
+          testFailCount: filterMode === 'all' ? 1 : 0,
+          testErrorCount: filterMode === 'all' ? 1 : 0,
+          totalLatencyMs: expectedCount * 100,
+          tokenUsage: { total: expectedCount * 10 },
+        });
+        expect(metrics.cost).toBeCloseTo(expectedCount * 0.007);
+        expect(metrics.testPassCount + metrics.testFailCount + metrics.testErrorCount).toBe(
+          expectedCount,
+        );
+      },
+    );
+
+    it('queues overlapping metrics reads and database writes', async () => {
+      const evaluation = await EvalFactory.create();
+      const db = await getDb();
+      const options = {
+        evalId: evaluation.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${evaluation.id}`,
+      };
+      const [first, , second] = await Promise.all([
+        calculateFilteredMetrics(options),
+        db.run(sql`UPDATE eval_results SET latency_ms = 50 WHERE eval_id = ${evaluation.id}`),
+        calculateFilteredMetrics(options),
+      ]);
+      expect([100, 200]).toContain(first[0].totalLatencyMs);
+      expect([100, 200]).toContain(second[0].totalLatencyMs);
+      expect(first[0].testPassCount).toBe(second[0].testPassCount);
+      expect((await calculateFilteredMetrics(options))[0].totalLatencyMs).toBe(100);
+    });
     it('should aggregate basic metrics for all results', async () => {
       const eval_ = await EvalFactory.create({
         numResults: 10,
@@ -1627,6 +1678,35 @@ describe('calculateFilteredMetrics', () => {
   });
 
   describe('OOM protection', () => {
+    it('splits ordinary rows across byte-bounded detail pages', async () => {
+      const evaluation = await EvalFactory.create({ numResults: 0 });
+      const db = await getDb();
+      await db.run(sql`
+        WITH RECURSIVE row_numbers(value) AS (
+          SELECT 1 UNION ALL SELECT value + 1 FROM row_numbers WHERE value < 4000
+        )
+        INSERT INTO eval_results (
+          id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
+          success, score, named_scores, grading_result
+        )
+        SELECT printf('detail-page-%06d', value), ${evaluation.id}, 0, value,
+          ${JSON.stringify({ vars: { context: 'x'.repeat(2200) } })}, ${'{}'}, ${'{}'},
+          1, 1, ${'{"accuracy":1}'},
+          ${JSON.stringify({ componentResults: [{ pass: true, assertion: { metric: 'accuracy' } }] })}
+        FROM row_numbers
+      `);
+      const [metrics] = await calculateFilteredMetrics({
+        evalId: evaluation.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${evaluation.id}`,
+      });
+      expect(metrics).toMatchObject({
+        testPassCount: 4000,
+        namedScores: { accuracy: 4000 },
+        namedScoresCount: { accuracy: 4000 },
+        assertPassCount: 4000,
+      });
+    });
     it('should stop before aggregating result details when the row limit is exceeded', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
       const db = await getDb();

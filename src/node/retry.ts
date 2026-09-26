@@ -15,7 +15,10 @@ import {
   getPersistedProviderFilterOptions,
   getProviderFilterRegexError,
 } from '../util/eval/filterProviders';
-import { accumulateNamedMetric, wereNamedMetricsSeededFromPreviousRun } from '../util/namedMetrics';
+import {
+  accumulateNamedMetrics,
+  wereNamedMetricsSeededFromPreviousRun,
+} from '../util/namedMetrics';
 import { filterFiniteScores } from '../util/numeric';
 import { writeMultipleOutputs } from '../util/output';
 import { getOutputFileFormat } from '../util/outputFormats';
@@ -88,7 +91,7 @@ function isCompleteFiniteNamedMetrics(metrics: PromptMetrics | undefined): boole
  * carry-over cannot be detected by comparing object identity. `buildCompletedPrompts` marks each
  * seeded clone in a WeakSet without adding metadata to the persisted metrics payload.
  */
-export function createNamedMetricsPreservationGuard(evalRecord: Eval) {
+export async function createNamedMetricsPreservationGuard(evalRecord: Eval) {
   const originalHasDerivedMetrics = Boolean(evalRecord.config.derivedMetrics?.length);
   const completeSnapshots = evalRecord.prompts.map(({ metrics }) =>
     isCompleteFiniteNamedMetrics(metrics),
@@ -97,8 +100,33 @@ export function createNamedMetricsPreservationGuard(evalRecord: Eval) {
   // column's totals, so those evaluations must rebuild named metrics from their stored rows.
   const columnKeys = evalRecord.prompts.map(({ provider, id }) => `${provider}:${id}`);
   const hasUniqueColumns = new Set(columnKeys).size === columnKeys.length;
+  // Results are persisted before the throttled prompt-metrics checkpoint. A stopped run can
+  // therefore have well-formed metric maps that do not cover all retained rows.
+  const resultCounts = new Map<number, number>();
+  if (evalRecord.persisted) {
+    const db = await getDb();
+    const rows = await db.all<{ prompt_idx: number; count: number }>(sql`
+      SELECT prompt_idx, COUNT(*) AS count FROM eval_results
+      WHERE eval_id = ${evalRecord.id}
+      GROUP BY prompt_idx
+    `);
+    for (const row of rows) {
+      resultCounts.set(row.prompt_idx, row.count);
+    }
+  } else {
+    for (const result of evalRecord.results) {
+      resultCounts.set(result.promptIdx, (resultCounts.get(result.promptIdx) ?? 0) + 1);
+    }
+  }
+  const checkpointCoversResults = evalRecord.prompts.every(
+    ({ metrics }, index) =>
+      metrics &&
+      metrics.testPassCount + metrics.testFailCount + metrics.testErrorCount ===
+        (resultCounts.get(index) ?? 0),
+  );
 
   return (retriedEval: Eval, derivedMetrics: TestSuite['derivedMetrics']): boolean =>
+    checkpointCoversResults &&
     hasUniqueColumns &&
     !originalHasDerivedMetrics &&
     !derivedMetrics?.length &&
@@ -361,14 +389,11 @@ export async function recalculatePromptMetrics(
         metrics.cost += result.cost || 0;
 
         if (!options.preserveNamedMetrics) {
-          for (const [key, value] of Object.entries(result.namedScores || {})) {
-            accumulateNamedMetric(metrics, {
-              metricName: key,
-              metricValue: value,
-              gradingResult: result.gradingResult,
-              testVars: result.testCase?.vars || {},
-            });
-          }
+          accumulateNamedMetrics(metrics, {
+            namedScores: result.namedScores || {},
+            gradingResult: result.gradingResult,
+            testVars: result.testCase?.vars || {},
+          });
         }
 
         // Update assertion counts
@@ -525,7 +550,7 @@ async function retryWithConfig(
     eventSource: 'cli',
     showProgressBar: !cmdObj.verbose, // Show progress bar unless verbose mode
   };
-  const canPreserveNamedMetrics = createNamedMetricsPreservationGuard(originalEval);
+  const canPreserveNamedMetrics = await createNamedMetricsPreservationGuard(originalEval);
 
   try {
     // Run the retry evaluation - this will only run ERROR test cases due to retry mode

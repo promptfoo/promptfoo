@@ -947,7 +947,7 @@ async function doEvalWithEnv(
     // Run the evaluation!!!!!!
     let ret;
     const canPreserveNamedMetrics = retryErrors
-      ? createNamedMetricsPreservationGuard(evalRecord)
+      ? await createNamedMetricsPreservationGuard(evalRecord)
       : undefined;
     try {
       ret = await evaluate(testSuite, evalRecord, {

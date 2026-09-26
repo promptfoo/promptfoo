@@ -293,6 +293,7 @@ interface TableState {
    * When present, components should use these metrics instead of prompt.metrics.
    */
   filteredMetrics: PromptMetrics[] | null;
+  derivedMetricNamesByPrompt: string[][] | null;
   setFilteredMetrics: (metrics: PromptMetrics[] | null) => void;
 
   /**
@@ -534,7 +535,8 @@ const isFilterApplied = (filter: Partial<ResultsFilter> | ResultsFilter): boolea
 export const useTableStore = create<TableState>()(
   subscribeWithSelector((set, get) => ({
     evalId: null,
-    setEvalId: (evalId: string) => set(() => ({ evalId, filteredMetrics: null })),
+    setEvalId: (evalId: string) =>
+      set(() => ({ evalId, filteredMetrics: null, derivedMetricNamesByPrompt: null })),
 
     author: null,
     setAuthor: (author: string | null) => set(() => ({ author })),
@@ -569,6 +571,9 @@ export const useTableStore = create<TableState>()(
 
         set((prevState) => ({
           table,
+          derivedMetricNamesByPrompt: table.head.prompts.map(
+            () => resultsFile.config.derivedMetrics?.map((metric) => metric.name) ?? [],
+          ),
           version: resultsFile.version,
           highlightedResultsCount: computeHighlightCount(table),
           userRatedResultsCount: computeUserRatedCount(table),
@@ -593,6 +598,9 @@ export const useTableStore = create<TableState>()(
 
         set((prevState) => ({
           table: results.table,
+          derivedMetricNamesByPrompt: results.table.head.prompts.map(
+            () => resultsFile.config.derivedMetrics?.map((metric) => metric.name) ?? [],
+          ),
           version: resultsFile.version,
           highlightedResultsCount: computeHighlightCount(results.table),
           userRatedResultsCount: computeUserRatedCount(results.table),
@@ -617,6 +625,7 @@ export const useTableStore = create<TableState>()(
     setTotalResultsCount: (count: number) => set(() => ({ totalResultsCount: count })),
 
     filteredMetrics: null,
+    derivedMetricNamesByPrompt: null,
     setFilteredMetrics: (metrics: PromptMetrics[] | null) =>
       set(() => ({ filteredMetrics: metrics })),
 
@@ -725,6 +734,10 @@ export const useTableStore = create<TableState>()(
             shouldHighlightSearchText: searchText !== '',
             // Store filtered metrics from backend (null when no filters or feature disabled)
             filteredMetrics: data.filteredMetrics || null,
+            // Legacy comparison responses cannot apply the base config to other evals' columns.
+            derivedMetricNamesByPrompt:
+              data.derivedMetricNamesByPrompt ??
+              (comparisonEvalIds.length > 0 ? data.table.head.prompts.map(() => []) : null),
             // Store evaluation-level stats including durationMs
             stats: data.stats || null,
             filters: {

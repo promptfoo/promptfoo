@@ -21,6 +21,7 @@ import {
 } from '../../src/node/retry';
 import { ResultFailureReason } from '../../src/types/index';
 import { shouldShareResults } from '../../src/util/sharing';
+import { createEvaluateResult } from '../factories/eval';
 
 vi.mock('../../src/database/signal', async () => {
   const actual = await vi.importActual('../../src/database/signal');
@@ -167,6 +168,69 @@ describe('retry command', () => {
   });
 
   describe('retryCommand', () => {
+    it('rebuilds named metrics when an interrupted checkpoint omits a retained result', async () => {
+      const prompt = { raw: 'Hello', label: 'Hello' };
+      const testCase = {
+        assert: [{ type: 'contains' as const, value: 'Hello', metric: 'quality' }],
+      };
+      const evaluation = await Eval.create(
+        { prompts: ['Hello'], providers: ['echo'], tests: [testCase, testCase] },
+        [prompt],
+        {
+          id: uniqueEvalId(),
+          completedPrompts: [
+            {
+              ...prompt,
+              id: generateIdFromPrompt(prompt),
+              provider: 'echo',
+              metrics: createPromptMetrics(),
+            },
+          ],
+        },
+      );
+      await evaluation.addResult(
+        createEvaluateResult({
+          prompt,
+          testCase,
+          provider: { id: 'echo' },
+          testIdx: 0,
+          namedScores: { quality: 1 },
+          gradingResult: {
+            pass: true,
+            score: 1,
+            reason: 'passed',
+            componentResults: [
+              { pass: true, score: 1, reason: 'passed', assertion: testCase.assert[0] },
+            ],
+          },
+        }),
+      );
+      await evaluation.addResult(
+        createEvaluateResult({
+          prompt,
+          testCase,
+          provider: { id: 'echo' },
+          testIdx: 1,
+          success: false,
+          score: 0,
+          failureReason: ResultFailureReason.ERROR,
+          error: 'Interrupted provider request',
+          namedScores: {},
+          gradingResult: null,
+        }),
+      );
+
+      const retried = await retryCommand(evaluation.id, { maxConcurrency: 1 });
+
+      expect(retried.prompts[0].metrics).toMatchObject({
+        testPassCount: 2,
+        testErrorCount: 0,
+        namedScores: { quality: 2 },
+        namedScoresCount: { quality: 2 },
+        namedScoreWeights: { quality: 2 },
+      });
+      expect(await getErrorResultIds(evaluation.id)).toEqual([]);
+    });
     it('preserves persisted errors when an override config no longer matches the stored provider filter', async () => {
       const artifactId = randomUUID();
       const configPath = path.join(os.tmpdir(), `promptfoo-retry-filter-${artifactId}.yaml`);
@@ -275,7 +339,7 @@ describe('retry command', () => {
             ...prompt,
             id: generateIdFromPrompt(prompt),
             provider: 'echo',
-            metrics: createPromptMetrics(),
+            metrics: createPromptMetrics({ testErrorCount: testCases.length }),
           },
         ],
       });

@@ -74,6 +74,33 @@ describe('MetricsTable', () => {
     } as any);
   });
 
+  it('uses independent derived metric definitions for comparison columns', () => {
+    const prompts = [0.7, 8, 0.9].map((quality, idx) => ({
+      ...mockTableData.head.prompts[0],
+      provider: `provider-${idx}`,
+      metrics: {
+        ...mockTableData.head.prompts[0].metrics!,
+        namedScores: { quality },
+        namedScoresCount: { quality: 10 },
+        namedScoreWeights: { quality: 10 },
+      },
+    }));
+    vi.mocked(useTableStore).mockReturnValue({
+      ...useTableStore(),
+      config: { derivedMetrics: [{ name: 'quality', value: '0.7' }] },
+      derivedMetricNamesByPrompt: [['quality'], [], ['quality']],
+      table: { ...mockTableData, head: { ...mockTableData.head, prompts } },
+    });
+
+    render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+
+    const row = screen.getByRole('cell', { name: 'quality' }).closest('tr')!;
+    const cells = within(row)
+      .getAllByRole('cell')
+      .map((cell) => cell.textContent);
+    expect(cells.slice(1, 10)).toEqual(['—', '0.7', '—', '80.00%', '8', '10', '—', '0.9', '—']);
+  });
+
   it('should apply the correct metric filter and close the dialog when the filter icon is clicked for a non-policy metric row', async () => {
     render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
     const user = userEvent.setup();

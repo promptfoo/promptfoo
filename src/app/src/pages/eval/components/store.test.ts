@@ -4,7 +4,7 @@ import { callApi } from '@app/utils/api';
 import { Severity } from '@promptfoo/redteam/constants';
 import { act } from '@testing-library/react';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
-import { type ResultsFilter, useTableStore } from './store';
+import { type ResultsFilter, useResultsViewSettingsStore, useTableStore } from './store';
 import type {
   EvalTableDTO,
   EvaluateTable,
@@ -195,7 +195,10 @@ describe('useTableStore', () => {
     ];
 
     act(() => {
-      useTableStore.setState({ filteredMetrics: initialMetrics });
+      useTableStore.setState({
+        filteredMetrics: initialMetrics,
+        derivedMetricNamesByPrompt: [['old']],
+      });
     });
 
     const newEvalId = 'new-eval-id';
@@ -206,6 +209,7 @@ describe('useTableStore', () => {
 
     const state = useTableStore.getState();
     expect(state.filteredMetrics).toBeNull();
+    expect(state.derivedMetricNamesByPrompt).toBeNull();
     expect(state.evalId).toBe(newEvalId);
   });
 
@@ -2371,6 +2375,46 @@ describe('useTableStore', () => {
       expect(metadataFilter?.field).toBe('plugin');
       expect(metadataFilter?.value).toBe('my-custom-plugin');
     });
+  });
+
+  describe('derived metric ownership', () => {
+    it.each([
+      { comparisons: [], metadata: undefined, expected: null },
+      { comparisons: ['comparison'], metadata: undefined, expected: [[], []] },
+      { comparisons: ['comparison'], metadata: [['quality'], []], expected: [['quality'], []] },
+    ])(
+      'handles comparison metadata $metadata with comparisons $comparisons',
+      async ({ comparisons, metadata, expected }) => {
+        const previousIds = useResultsViewSettingsStore.getState().comparisonEvalIds;
+        useResultsViewSettingsStore.setState({ comparisonEvalIds: comparisons });
+        try {
+          vi.mocked(callApi).mockResolvedValue({
+            ok: true,
+            json: async () => ({
+              table: {
+                head: {
+                  prompts: [
+                    { raw: 'a', label: 'a', provider: 'echo' },
+                    { raw: 'b', label: 'b', provider: 'echo' },
+                  ],
+                  vars: [],
+                },
+                body: [],
+              },
+              config: { derivedMetrics: [{ name: 'quality', value: '1' }] },
+              derivedMetricNamesByPrompt: metadata,
+              filteredMetrics: null,
+              totalCount: 0,
+              filteredCount: 0,
+            }),
+          } as Response);
+          await useTableStore.getState().fetchEvalData('base');
+          expect(useTableStore.getState().derivedMetricNamesByPrompt).toEqual(expected);
+        } finally {
+          useResultsViewSettingsStore.setState({ comparisonEvalIds: previousIds });
+        }
+      },
+    );
   });
 
   describe('filteredMetrics', () => {

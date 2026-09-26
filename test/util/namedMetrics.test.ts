@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
-  accumulateNamedMetric,
+  accumulateNamedMetrics,
   backfillNamedScoreWeights,
   markNamedMetricsSeededFromPreviousRun,
   type NamedMetricAccumulator,
@@ -8,7 +8,28 @@ import {
   wereNamedMetricsSeededFromPreviousRun,
 } from '../../src/util/namedMetrics';
 
-describe('accumulateNamedMetric', () => {
+describe('accumulateNamedMetrics', () => {
+  it('renders each component once when a result contributes to multiple metrics', () => {
+    const metrics: NamedMetricAccumulator = { namedScores: {}, namedScoresCount: {} };
+    const render = vi.fn((metric) => metric);
+    accumulateNamedMetrics(
+      metrics,
+      {
+        namedScores: { accuracy: 1.5, relevance: 0.5 },
+        gradingResult: {
+          componentResults: [
+            { assertion: { metric: 'accuracy' } },
+            { assertion: { metric: 'accuracy' } },
+            { assertion: { metric: 'relevance' } },
+          ],
+        },
+      },
+      render,
+    );
+    expect(metrics.namedScoresCount).toEqual({ accuracy: 2, relevance: 1 });
+    expect(metrics.namedScoreWeights).toEqual({ accuracy: 2, relevance: 1 });
+    expect(render).toHaveBeenCalledTimes(3);
+  });
   it('preserves weighted totals from grading results while keeping assertion counts', () => {
     const metrics = {
       namedScores: {},
@@ -16,9 +37,8 @@ describe('accumulateNamedMetric', () => {
       namedScoreWeights: {},
     };
 
-    accumulateNamedMetric(metrics, {
-      metricName: 'accuracy',
-      metricValue: 0.75,
+    accumulateNamedMetrics(metrics, {
+      namedScores: { ['accuracy']: 0.75 },
       gradingResult: {
         pass: false,
         score: 0.75,
@@ -55,9 +75,8 @@ describe('accumulateNamedMetric', () => {
       namedScoreWeights: {},
     };
 
-    accumulateNamedMetric(metrics, {
-      metricName: 'accuracy:alpha',
-      metricValue: 0.8,
+    accumulateNamedMetrics(metrics, {
+      namedScores: { ['accuracy:alpha']: 0.8 },
       testVars: { suffix: 'alpha' },
       gradingResult: {
         pass: true,
@@ -88,9 +107,8 @@ describe('accumulateNamedMetric', () => {
       namedScoreWeights: {},
     };
 
-    accumulateNamedMetric(metrics, {
-      metricName: 'accuracy',
-      metricValue: 0.8,
+    accumulateNamedMetrics(metrics, {
+      namedScores: { ['accuracy']: 0.8 },
       gradingResult: {
         pass: false,
         score: 0.8,
@@ -115,14 +133,12 @@ describe('accumulateNamedMetric', () => {
         namedScoreWeights: {},
       };
 
-      accumulateNamedMetric(metrics, {
-        metricName,
-        metricValue: 0.8,
+      accumulateNamedMetrics(metrics, {
+        namedScores: { [metricName]: 0.8 },
         gradingResult: undefined,
       });
-      accumulateNamedMetric(metrics, {
-        metricName,
-        metricValue: 0.8,
+      accumulateNamedMetrics(metrics, {
+        namedScores: { [metricName]: 0.8 },
         gradingResult: undefined,
       });
 
@@ -146,9 +162,8 @@ describe('accumulateNamedMetric', () => {
         namedScoreWeights: {},
       };
 
-      accumulateNamedMetric(metrics, {
-        metricName: 'accuracy',
-        metricValue: 0.8,
+      accumulateNamedMetrics(metrics, {
+        namedScores: { ['accuracy']: 0.8 },
         gradingResult: {
           namedScoreWeights: { accuracy: invalidWeight },
           componentResults: [
@@ -173,9 +188,8 @@ describe('accumulateNamedMetric', () => {
       namedScoreWeights: {},
     };
 
-    accumulateNamedMetric(metrics, {
-      metricName: 'accuracy',
-      metricValue: 0.8,
+    accumulateNamedMetrics(metrics, {
+      namedScores: { ['accuracy']: 0.8 },
       gradingResult: {
         namedScoreWeights: { accuracy: 0 },
         componentResults: [
@@ -199,9 +213,8 @@ describe('accumulateNamedMetric', () => {
       namedScoreWeights: {},
     };
 
-    accumulateNamedMetric(metrics, {
-      metricName: 'huge',
-      metricValue: 1e308,
+    accumulateNamedMetrics(metrics, {
+      namedScores: { ['huge']: 1e308 },
       gradingResult: { namedScoreWeights: { huge: 1e308 } },
     });
 
@@ -219,9 +232,8 @@ describe('accumulateNamedMetric', () => {
       namedScoreWeights: { huge: 1 },
     };
 
-    accumulateNamedMetric(metrics, {
-      metricName: 'huge',
-      metricValue: 1e308,
+    accumulateNamedMetrics(metrics, {
+      namedScores: { ['huge']: 1e308 },
       gradingResult: undefined,
     });
 
@@ -241,11 +253,10 @@ describe('accumulateNamedMetric', () => {
     const renderLiveMetric = (metric: string | undefined) =>
       metric === 'accuracy:{% if suffix %}alpha{% endif %}' ? 'accuracy:alpha' : metric;
 
-    accumulateNamedMetric(
+    accumulateNamedMetrics(
       metrics,
       {
-        metricName: 'accuracy:alpha',
-        metricValue: 0.8,
+        namedScores: { ['accuracy:alpha']: 0.8 },
         gradingResult: {
           componentResults: [
             { assertion: { metric: 'accuracy:{% if suffix %}alpha{% endif %}' } },

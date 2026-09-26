@@ -139,7 +139,7 @@ function SummaryMetricGroupHeader() {
 }
 
 const MetricsTable = ({ onClose }: { onClose: () => void }) => {
-  const { table, config, filteredMetrics } = useTableStore();
+  const { table, config, filteredMetrics, derivedMetricNamesByPrompt } = useTableStore();
   const applyFilterFromMetric = useApplyFilterFromMetric();
 
   if (!table || !table.head || !table.head.prompts) {
@@ -227,21 +227,27 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
 
   const hasCompleteFilteredMetrics = filteredMetrics?.length === table.head.prompts.length;
   const derivedMetricNames = React.useMemo(
-    () => config?.derivedMetrics?.map((metric) => metric.name) ?? [],
-    [config?.derivedMetrics],
+    () =>
+      table.head.prompts.map(
+        (_, idx) =>
+          derivedMetricNamesByPrompt?.[idx] ??
+          config?.derivedMetrics?.map((metric) => metric.name) ??
+          [],
+      ),
+    [config?.derivedMetrics, derivedMetricNamesByPrompt, table.head.prompts],
   );
   const totalMetricNames = React.useMemo(() => {
     const names = new Set<string>();
     if (!hasCompleteFilteredMetrics) {
       return names;
     }
-    for (const metricName of derivedMetricNames) {
-      table.head.prompts.forEach((prompt) => {
+    table.head.prompts.forEach((prompt, idx) => {
+      for (const metricName of derivedMetricNames[idx]) {
         if (Object.prototype.hasOwnProperty.call(prompt.metrics?.namedScores ?? {}, metricName)) {
           names.add(metricName);
         }
-      });
-    }
+      }
+    });
     return names;
   }, [derivedMetricNames, hasCompleteFilteredMetrics, table.head.prompts]);
   const displayMetrics = React.useMemo(
@@ -250,7 +256,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
         mergeFilteredNamedMetrics(
           prompt.metrics,
           hasCompleteFilteredMetrics ? (filteredMetrics?.[idx] ?? null) : null,
-          derivedMetricNames,
+          derivedMetricNames[idx],
         ),
       ),
     [derivedMetricNames, filteredMetrics, hasCompleteFilteredMetrics, table.head.prompts],

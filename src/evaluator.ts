@@ -87,7 +87,7 @@ import {
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
 import {
-  accumulateNamedMetric,
+  accumulateNamedMetrics,
   backfillNamedScoreWeights,
   markNamedMetricsSeededFromPreviousRun,
 } from './util/namedMetrics';
@@ -3502,18 +3502,15 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     row: EvaluateResult;
   }): void {
     metrics.score += row.score;
-    for (const [key, value] of Object.entries(row.namedScores)) {
-      accumulateNamedMetric(
-        metrics,
-        {
-          metricName: key,
-          metricValue: value,
-          gradingResult: row.gradingResult,
-          testVars: row.testCase?.vars || {},
-        },
-        renderMetricName,
-      );
-    }
+    accumulateNamedMetrics(
+      metrics,
+      {
+        namedScores: row.namedScores,
+        gradingResult: row.gradingResult,
+        testVars: row.testCase?.vars || {},
+      },
+      renderMetricName,
+    );
 
     if (derivedMetrics) {
       invariant(mathjsModule, 'Expected mathjs to be loaded for derived metrics');
