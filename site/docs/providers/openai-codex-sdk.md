@@ -41,7 +41,7 @@ You can reference this provider using either base ID, and you can inline the mod
 
 ## Installation
 
-Install Promptfoo and the Codex SDK together in your eval project. Use [Codex 0.156.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.156.1) for GPT-6 Sol and Luna; it bundles their model metadata, including Sol's Ultra setting. Astra requires 0.153.1 or later:
+Install Promptfoo and the Codex SDK together in your eval project. Use Codex SDK `^0.156.1` (at least `0.156.1`, below `0.157.0`). [Codex 0.156.1](https://github.com/openai/codex/releases/tag/rust-v0.156.1) bundles GPT-6 Sol, Luna, and Astra model metadata, including Sol's Ultra setting:
 
 ```bash
 npm install promptfoo @openai/codex-sdk@^0.156.1

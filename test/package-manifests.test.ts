@@ -9,8 +9,6 @@ type PackageManifest = {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
   optionalDependencies?: Record<string, string>;
-  peerDependencies?: Record<string, string>;
-  peerDependenciesMeta?: Record<string, { optional?: boolean }>;
 };
 
 type PackageLockManifest<T> = {
@@ -494,20 +492,6 @@ describe('package manifests', () => {
     expect(sitePackageJson.optionalDependencies).toHaveProperty('sharp');
     expect(sitePackageJson.dependencies).not.toHaveProperty('sharp');
     expect(sitePackageJson.devDependencies).not.toHaveProperty('sharp');
-
-    for (const dependency of [
-      '@anthropic-ai/claude-agent-sdk',
-      '@openai/codex-sdk',
-      '@openai/codex-security',
-    ]) {
-      expect(packageJson.dependencies, dependency).not.toHaveProperty(dependency);
-      expect(packageJson.optionalDependencies, dependency).not.toHaveProperty(dependency);
-      expect(packageJson.devDependencies, dependency).toHaveProperty(dependency);
-      // Runtime loaders validate versions only when the feature is used, so an
-      // unrelated consumer's existing SDK cannot block installing Promptfoo.
-      expect(packageJson.peerDependencies?.[dependency], dependency).toBe('*');
-      expect(packageJson.peerDependenciesMeta?.[dependency]?.optional, dependency).toBe(true);
-    }
 
     for (const dependency of [
       '@alcalzone/ansi-tokenize',

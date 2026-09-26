@@ -709,12 +709,22 @@ async function runInstalledCodingSdkEval(consumerDir: string, configDir: string)
 import path from 'node:path';
 import { evaluate } from 'promptfoo';
 
-const installed = process.argv[2] === 'installed';
-if (!installed) {
+const mode = process.argv[2];
+const installed = mode === 'installed';
+if (mode === 'missing') {
   for (const sdk of ['@openai/codex-sdk', '@anthropic-ai/claude-agent-sdk', '@openai/codex-security']) {
     assert.throws(() => import.meta.resolve(sdk), { code: 'ERR_MODULE_NOT_FOUND' });
   }
 }
+// An older SDK used elsewhere in the project must not break ordinary evaluations.
+const ordinary = await evaluate({
+  prompts: ['hello fixture'],
+  providers: ['echo'],
+  tests: [{ vars: {}, assert: [{ type: 'equals', value: 'hello fixture' }] }],
+}, { cache: false, maxConcurrency: 1 });
+const { results: ordinaryResults } = await ordinary.toEvaluateSummary();
+assert.equal(ordinaryResults.length, 1);
+assert.equal(ordinaryResults[0].success, true);
 const fixture = (name) => path.join(import.meta.dirname, 'coding-sdks', name);
 const record = await evaluate({
   prompts: ['{{input}}'],
@@ -749,6 +759,9 @@ for (const result of results) {
   if (!installed) {
     assert.equal(result.success, false);
     assert.match(result.response.error, new RegExp('npm install promptfoo @(openai/codex-sdk|anthropic-ai/claude-agent-sdk)'));
+    if (mode === 'incompatible') {
+      assert.match(result.response.error, /found 0\\.(154\\.0|3\\.235)/);
+    }
   } else if (result.vars.input === 'fixture error') {
     assert.equal(result.success, false);
     assert.match(result.response.error, /fixture request failed|error_during_execution/);
@@ -776,6 +789,9 @@ assert.equal(scanResults[0].success, false);
 assert.ok(scanResults[0].response.error.includes(installed
   ? 'Repository is not a directory'
   : 'npm install promptfoo @openai/codex-security@^0.1.31'));
+if (mode === 'incompatible') {
+  assert.ok(scanResults[0].response.error.includes('incompatible (0.1.28)'));
+}
 `,
   );
   const env = {
@@ -785,6 +801,20 @@ assert.ok(scanResults[0].response.error.includes(installed
     PROMPTFOO_DISABLE_UPDATE: 'true',
   };
   await runAsync(process.execPath, [scriptPath, 'missing'], consumerDir, env);
+  runNpm(
+    [
+      'install',
+      '--ignore-scripts',
+      '--no-audit',
+      '--no-fund',
+      '--no-package-lock',
+      '@openai/codex-sdk@0.154.0',
+      '@anthropic-ai/claude-agent-sdk@0.3.235',
+      '@openai/codex-security@0.1.28',
+    ],
+    consumerDir,
+  );
+  await runAsync(process.execPath, [scriptPath, 'incompatible'], consumerDir, env);
   runNpm(
     [
       'install',
