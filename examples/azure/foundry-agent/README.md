@@ -67,7 +67,7 @@ These per-request settings are supported:
 - `metadata`
 - `passthrough`
 - `maxPollTimeMs`
-- `timeoutMs` (positive deadline up to `2147483647` ms for each Responses attempt, including credential wait and body reads; excludes shared client initialization, agent lookup, and callbacks)
+- `timeoutMs` (positive integer deadline up to `2147483647` ms for each Responses attempt, including credential wait and body reads; excludes shared client initialization, agent lookup, and callbacks)
 - `retryOptions.maxRetries` (request retries; defaults to 2)
 - `maxToolIterations` (callback batches; defaults to 8, valid range 1–64)
 
@@ -79,7 +79,7 @@ These request-time settings are ignored by the v2 runtime and should be configur
 - `seed`
 - `stop`
 
-Other `retryOptions` fields are unsupported. Promptfoo follows the SDK retry policy with cancellable backoff and standard server delay hints up to 60 seconds; hard-quota failures are not retried. Larger delay hints return the original error immediately instead of retrying. For 429 responses, `metadata.rateLimitRetryable: false` prevents the scheduler from retrying or applying that delay to queued calls while preserving the original HTTP metadata. The SDK's internal retries are disabled. `numRequests` counts logical Responses turns; `metadata.transportRetries` records extra attempts, whose unreported usage and cost are marked incomplete.
+Other `retryOptions` fields are unsupported. Promptfoo follows the SDK retry policy with cancellable backoff and standard server delay hints up to 60 seconds. Responses classified as `metadata.rateLimitKind: 'quota'`, including definitive billing failures, are not retried. Ambiguous `insufficient_quota` or `quota_exceeded` errors can instead become recoverable rate limits when a retry or reset hint indicates recovery within one hour; their retry-delay hints still follow the 60-second limit. Larger delay hints return the original error immediately instead of retrying. For 429 responses, `metadata.rateLimitRetryable: false` prevents the scheduler from retrying or applying that delay to queued calls while preserving the original HTTP metadata. The SDK's internal retries are disabled. `numRequests` counts logical Responses turns; `metadata.transportRetries` records extra attempts, whose unreported usage and cost are marked incomplete.
 
 `maxPollTimeMs` is a cooperative budget starting after the initial response. It is checked between callback batches and model requests, and preserves a final answer that arrives after the budget. It does not interrupt a pending request or callback. Callers using the JavaScript API can cancel with `callApiOptions.abortSignal`; callbacks receive that signal as `context.abortSignal` and should pass it to their own asynchronous operations. A callback that ignores cancellation can continue after the eval stops waiting.
 
