@@ -131,7 +131,7 @@ export async function queryTestIndicesOptimized(
 
   // Add mode filter (these can use indexes)
   if (mode === 'errors') {
-    baseQuery = sql`${baseQuery} AND failure_reason = ${2}`; // ResultFailureReason.ERROR
+    baseQuery = sql`${baseQuery} AND success = 0 AND failure_reason = ${2}`; // ResultFailureReason.ERROR
   } else if (mode === 'failures') {
     baseQuery = sql`${baseQuery} AND success = 0 AND failure_reason != ${2}`;
   } else if (mode === 'passes') {

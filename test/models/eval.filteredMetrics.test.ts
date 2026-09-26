@@ -12,6 +12,9 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { runDbMigrations } from '../../src/migrate';
+import { queryTestIndicesOptimized } from '../../src/models/evalPerformance';
+import EvalResult from '../../src/models/evalResult';
+import { ResultFailureReason } from '../../src/types/index';
 import EvalFactory from '../factories/evalFactory';
 
 describe('Filtered Metrics - WHERE Clause Consistency', () => {
@@ -40,6 +43,43 @@ describe('Filtered Metrics - WHERE Clause Consistency', () => {
    * If this fails, the WHERE clauses have diverged!
    */
   describe('CRITICAL: Row count consistency', () => {
+    it.each([
+      { filterMode: 'errors' as const, expectedIndices: [1], passes: 0, errors: 1 },
+      { filterMode: 'passes' as const, expectedIndices: [0, 3], passes: 2, errors: 0 },
+    ])(
+      'classifies a saved manual pass consistently in the $filterMode view',
+      async ({ filterMode, expectedIndices, passes, errors }) => {
+        const eval_ = await EvalFactory.create({
+          numResults: 4,
+          resultTypes: ['error', 'error', 'failure', 'success'],
+        });
+        const [overriddenResult] = await EvalResult.findManyByEvalId(eval_.id, { testIdx: 0 });
+        // Older saved ratings can preserve the original runtime-error reason.
+        expect(overriddenResult.failureReason).toBe(ResultFailureReason.ERROR);
+        overriddenResult.success = true;
+        overriddenResult.score = 1;
+        overriddenResult.gradingResult = { pass: true, score: 1, reason: 'Manual pass' };
+        await overriddenResult.save();
+
+        const page = await (eval_ as any).queryTestIndices({ filterMode });
+        const optimizedPage = await queryTestIndicesOptimized(eval_.id, { filterMode });
+        for (const result of [page, optimizedPage]) {
+          expect(result.testIndices).toEqual(expectedIndices);
+          expect(result.filteredCount).toBe(expectedIndices.length);
+        }
+
+        const [metrics] = await eval_.getFilteredMetrics({ filterMode });
+        expect(metrics).toMatchObject({
+          testPassCount: passes,
+          testFailCount: 0,
+          testErrorCount: errors,
+        });
+        expect(metrics.testPassCount + metrics.testFailCount + metrics.testErrorCount).toBe(
+          expectedIndices.length,
+        );
+      },
+    );
+
     it('should return same row count for pagination and metrics with no filters', async () => {
       const eval_ = await EvalFactory.create({
         numResults: 20,

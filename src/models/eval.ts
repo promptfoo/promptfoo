@@ -925,7 +925,7 @@ export default class Eval {
     const conditions: SQL<unknown>[] = [sql`eval_id = ${this.id}`];
 
     if (mode === 'errors') {
-      conditions.push(sql`failure_reason = ${ResultFailureReason.ERROR}`);
+      conditions.push(sql`success = 0 AND failure_reason = ${ResultFailureReason.ERROR}`);
     } else if (mode === 'failures') {
       conditions.push(sql`success = 0 AND failure_reason != ${ResultFailureReason.ERROR}`);
     } else if (mode === 'passes') {
