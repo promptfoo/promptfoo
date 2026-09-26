@@ -13,7 +13,7 @@ It demonstrates:
 
 The tracing path is important: the example installs a custom OpenAI Agents tracing processor that exports the SDK's spans to Promptfoo's built-in OTLP receiver. That is what makes the trajectory assertions and trace visualization work inside Promptfoo. The bridge maps SDK custom spans, including `sandbox.*` lifecycle spans and experimental Codex command spans, into normal OTLP attributes, and Promptfoo normalizes OpenAI Agents `exec_command` tool spans as command trajectory steps. The config accepts both OTLP JSON and protobuf because the SDK bridge emits JSON while the optional Python wrapper span uses protobuf by default.
 
-The example uses `gpt-6-luna`. Set `config.model` or `OPENAI_AGENT_MODEL` to use Terra, Sol, or Astra for more demanding tasks.
+The example uses `gpt-6-luna`. Set `config.model` to `gpt-6-sol` or `gpt-6-astra` to compare other models your OpenAI account can access. `OPENAI_AGENT_MODEL` supplies the default when `config.model` is omitted.
 
 ## Files
 

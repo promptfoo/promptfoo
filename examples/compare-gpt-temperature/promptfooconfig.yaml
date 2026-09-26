@@ -5,13 +5,13 @@ prompts:
   - 'Respond to the following instruction: {{message}}'
 
 providers:
-  - id: openai:gpt-6-luna
+  - id: openai:responses:gpt-6-luna
     label: openai-gpt-6-luna-lowtemp
     config:
       reasoning:
         effort: none
       temperature: 0
-  - id: openai:gpt-6-luna
+  - id: openai:responses:gpt-6-luna
     label: openai-gpt-6-luna-hightemp
     config:
       reasoning:

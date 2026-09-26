@@ -41,7 +41,7 @@ This directory contains several example configurations for different Bedrock mod
 - [`promptfooconfig.claude.yaml`](promptfooconfig.claude.yaml) - Claude 4.6 Opus, Claude 4.1 Opus, Claude 4 Opus/Sonnet, Claude Haiku 4.5
 - [`promptfooconfig.openai.yaml`](promptfooconfig.openai.yaml) - OpenAI GPT-OSS models (120B and 20B) with reasoning effort
 - [`promptfooconfig.openai-responses.yaml`](promptfooconfig.openai-responses.yaml) - OpenAI GPT-OSS 120B through the Bedrock Responses API (AWS credentials or `AWS_BEARER_TOKEN_BEDROCK`)
-- [`promptfooconfig.openai-frontier.yaml`](promptfooconfig.openai-frontier.yaml) - OpenAI GPT-6 Sol and Luna on Mantle in `us-east-1`, compared with GPT-5.6 Terra, using reasoning, explicit prompt caching, and streaming ([model availability](https://developers.openai.com/api/docs/guides/amazon-bedrock#endpoint-differences))
+- [`promptfooconfig.openai-frontier.yaml`](promptfooconfig.openai-frontier.yaml) - OpenAI GPT-6 Sol and Luna compared with GPT-5.6 Terra, with reasoning, explicit prompt caching, and streaming
 - [`promptfooconfig.grok.yaml`](promptfooconfig.grok.yaml) - xAI Grok 4.3 on the Bedrock Mantle endpoint (AWS credentials or `AWS_BEARER_TOKEN_BEDROCK`)
 - [`promptfooconfig.mantle.yaml`](promptfooconfig.mantle.yaml) - `bedrock:mantle:` Chat Completions endpoint for mantle-only models like GLM 4.6 and DeepSeek V3.1 (AWS credentials or `AWS_BEARER_TOKEN_BEDROCK`)
 - [`promptfooconfig.llama.yaml`](promptfooconfig.llama.yaml) - Llama3
@@ -279,7 +279,7 @@ The frontier example (`promptfooconfig.openai-frontier.yaml`) compares these Ope
 
 ### Key Features
 
-- **Responses API**: Frontier models are served through Bedrock's OpenAI-compatible Responses API (`https://bedrock-mantle.<region>.api.aws/openai/v1/responses`), not `InvokeModel` or `Converse`. Promptfoo routes these `bedrock:openai.*` model IDs there and preserves the Bedrock model ID.
+- **Responses API**: Promptfoo routes these frontier model IDs through Bedrock's OpenAI-compatible Responses API (`https://bedrock-mantle.<region>.api.aws/openai/v1/responses`) and preserves the Bedrock model ID.
 - **Authentication**: Use standard AWS credentials (explicit keys, a named profile, or the default credential chain) to generate short-lived bearer tokens with the optional `@aws/bedrock-token-generator` package. Alternatively, supply an Amazon Bedrock API key:
 
   ```bash
@@ -290,9 +290,7 @@ The frontier example (`promptfooconfig.openai-frontier.yaml`) compares these Ope
 
 - **Native Reasoning Effort**: The example sets `max` for Sol, `medium` for Terra, and `low` for Luna.
 - **Prompt caching and streaming**: The example marks its stable system instructions with an explicit cache breakpoint, uses a stable `prompt_cache_key`, and enables streaming for Luna. Cache reads receive a 90% discount; cache writes cost 1.25x the uncached input rate.
-- **Region-gated**: Request model access in a supported region before running.
-
-These are the same model IDs that back OpenAI's [Codex](https://developers.openai.com/codex/) coding agent when it is configured with the `amazon-bedrock` provider.
+- **Region-gated**: Request model access in a [supported region](https://developers.openai.com/api/docs/guides/amazon-bedrock#endpoint-differences) before running.
 
 Run the frontier example with:
 

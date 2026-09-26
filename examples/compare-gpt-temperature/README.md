@@ -1,6 +1,6 @@
 # compare-gpt-temperature (GPT-6 Luna Temperature Comparison)
 
-This example compares temperatures with GPT-6 Luna. Its reasoning effort is set to `none` so the model uses the requested temperature.
+This example compares temperatures `0` and `1` with GPT-6 Luna through the Responses API. Both providers set reasoning effort to `none`, which enables temperature sampling.
 
 You can run this example with:
 

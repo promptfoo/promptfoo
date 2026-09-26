@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'OpenAI GPT-6 Sol and Luna via Amazon Bedrock'
+description: 'Compare OpenAI frontier models on Amazon Bedrock'
 
 # Frontier models use Bedrock's OpenAI-compatible Responses API.
 # Authentication: use an Amazon Bedrock API key OR standard AWS credentials.
