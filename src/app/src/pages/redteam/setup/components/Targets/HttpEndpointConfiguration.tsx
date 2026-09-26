@@ -1,6 +1,6 @@
 import './syntax-highlighting.css';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import Editor from '@app/components/ui/code-editor';
@@ -145,12 +145,22 @@ Content-Type: application/json
   const [copied, setCopied] = useState(false);
 
   // Test Target state
-  const [isTestRunning, setIsTestRunning] = useState(false);
-  const [testResult, setTestResult] = useState<TestResult | null>(null);
+  const [testRunningTarget, setTestRunningTarget] = useState<ProviderOptions | null>(null);
+  const [testResultState, setTestResultState] = useState<{
+    target: ProviderOptions;
+    result: TestResult;
+  } | null>(null);
   const [testDetailsExpanded, setTestDetailsExpanded] = useState(false);
+  const [responseParserApplyStatus, setResponseParserApplyStatus] = useState('');
+  const testRequestIdRef = useRef(0);
+  const latestSelectedTargetRef = useRef(selectedTarget);
+  latestSelectedTargetRef.current = selectedTarget;
+  const isTestRunning = testRunningTarget === selectedTarget;
+  const testResult = testResultState?.target === selectedTarget ? testResultState.result : null;
 
   // Response transform test state
   const [responseTestOpen, setResponseTestOpen] = useState(false);
+  const responseParserId = useId();
 
   // Request body type (json or text)
   const [requestBodyType, setRequestBodyType] = useState<'json' | 'text'>('json');
@@ -171,19 +181,27 @@ Content-Type: application/json
       onTargetTested?.(false);
       return;
     }
-    setIsTestRunning(true);
-    setTestResult(null);
+    const requestId = ++testRequestIdRef.current;
+    const testedTarget = selectedTarget;
+    const isCurrentRequest = () =>
+      requestId === testRequestIdRef.current && latestSelectedTargetRef.current === testedTarget;
+    setTestRunningTarget(testedTarget);
+    setTestResultState(null);
+    setResponseParserApplyStatus('');
 
     // Validate URL before testing (skip validation for raw request mode)
-    if (!selectedTarget.config?.request) {
+    if (!testedTarget.config?.request) {
       if (!targetUrl || targetUrl.trim() === '' || targetUrl === 'http') {
-        setTestResult({
-          success: false,
-          message:
-            'Please configure a valid HTTP URL for your target. Enter a complete URL (e.g., https://api.example.com/endpoint).',
+        setTestResultState({
+          target: testedTarget,
+          result: {
+            success: false,
+            message:
+              'Please configure a valid HTTP URL for your target. Enter a complete URL (e.g., https://api.example.com/endpoint).',
+          },
         });
         setTestDetailsExpanded(true);
-        setIsTestRunning(false);
+        setTestRunningTarget(null);
         onTargetTested?.(false);
         return;
       }
@@ -193,11 +211,17 @@ Content-Type: application/json
       const response = await callApi('/providers/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ providerOptions: selectedTarget }),
+        body: JSON.stringify({ providerOptions: testedTarget }),
       });
+      if (!isCurrentRequest()) {
+        return;
+      }
 
       if (response.ok) {
         const data = await response.json();
+        if (!isCurrentRequest()) {
+          return;
+        }
 
         // Check for changes_needed field (configuration issues) or success field
         const hasConfigIssues = data.testResult?.changes_needed === true;
@@ -209,28 +233,42 @@ Content-Type: application/json
           message = data.testResult?.changes_needed_reason || 'Configuration changes are needed';
         }
 
-        setTestResult({
-          success: isSuccess,
-          message: message,
-          providerResponse: data.providerResponse || {},
-          transformedRequest: data.transformedRequest,
-          changes_needed: hasConfigIssues,
-          changes_needed_suggestions: data.testResult?.changes_needed_suggestions,
+        setTestResultState({
+          target: testedTarget,
+          result: {
+            success: isSuccess,
+            message,
+            providerResponse: data.providerResponse || {},
+            transformedRequest: data.transformedRequest,
+            changes_needed: hasConfigIssues,
+            changes_needed_suggestions: data.testResult?.changes_needed_suggestions,
+            configuration_change_suggestion: data.testResult?.configuration_change_suggestion,
+          },
         });
+
         setTestDetailsExpanded(!isSuccess || hasConfigIssues);
         onTargetTested?.(isSuccess);
       } else {
         const errorData = await response.json();
-        setTestResult({
-          success: false,
-          message: errorData.error || 'Failed to test target configuration',
-          providerResponse: errorData.providerResponse || {},
-          transformedRequest: errorData.transformedRequest,
+        if (!isCurrentRequest()) {
+          return;
+        }
+        setTestResultState({
+          target: testedTarget,
+          result: {
+            success: false,
+            message: errorData.error || 'Failed to test target configuration',
+            providerResponse: errorData.providerResponse || {},
+            transformedRequest: errorData.transformedRequest,
+          },
         });
         setTestDetailsExpanded(true);
         onTargetTested?.(false);
       }
     } catch (error) {
+      if (!isCurrentRequest()) {
+        return;
+      }
       console.error('Error testing target:', error);
       let errorMessage = 'Failed to test target configuration';
       if (error instanceof Error) {
@@ -244,14 +282,19 @@ Content-Type: application/json
           errorMessage = error.message;
         }
       }
-      setTestResult({
-        success: false,
-        message: errorMessage,
+      setTestResultState({
+        target: testedTarget,
+        result: {
+          success: false,
+          message: errorMessage,
+        },
       });
       setTestDetailsExpanded(true);
       onTargetTested?.(false);
     } finally {
-      setIsTestRunning(false);
+      if (isCurrentRequest()) {
+        setTestRunningTarget(null);
+      }
     }
   }, [selectedTarget, onTargetTested, targetUrl, isTargetConfigInvalid]);
 
@@ -773,7 +816,9 @@ ${exampleRequest}`;
         )}
 
         {/* Response Transform Section - Common for both modes */}
-        <p className="mb-2 mt-6 font-medium">Response Parser</p>
+        <Label htmlFor={responseParserId} className="mb-2 mt-6 block font-medium">
+          Response Parser
+        </Label>
         <div className="mb-4 text-sm text-muted-foreground">
           <p>
             This tells promptfoo how to extract the AI's response from your API. Most APIs return
@@ -810,8 +855,12 @@ ${exampleRequest}`;
           style={{ contain: 'inline-size' }}
         >
           <Editor
+            textareaId={responseParserId}
             value={selectedTarget.config.transformResponse || ''}
-            onValueChange={(code) => updateCustomTarget('transformResponse', code)}
+            onValueChange={(code) => {
+              setResponseParserApplyStatus('');
+              updateCustomTarget('transformResponse', code);
+            }}
             highlight={highlightJS}
             padding={10}
             placeholder={'json.choices[0].message.content'}
@@ -836,6 +885,9 @@ ${exampleRequest}`;
             Test
           </Button>
         </div>
+        <p role="status" aria-live="polite" className="sr-only">
+          {responseParserApplyStatus}
+        </p>
 
         {/* Test Target Section - Common for both modes */}
         <TestSection
@@ -849,6 +901,12 @@ ${exampleRequest}`;
           }
           detailsExpanded={testDetailsExpanded}
           onDetailsExpandedChange={setTestDetailsExpanded}
+          onApplyTransformResponseSuggestion={(transformResponse) => {
+            document.getElementById(responseParserId)?.focus();
+            setResponseParserApplyStatus('Response parser suggestion applied');
+            setTestResultState(null);
+            updateCustomTarget('transformResponse', transformResponse);
+          }}
         />
       </div>
 
