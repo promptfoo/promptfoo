@@ -659,7 +659,7 @@ derivedMetrics:
 - Debug errors with: `LOG_LEVEL=debug promptfoo eval`
 - No circular dependency protection - order your metrics carefully
 
-Derived metrics appear in all outputs alongside regular metrics - in the web UI metrics column, JSON `namedScores`, and CSV columns.
+Derived metrics appear in the web UI and in prompt-level JSON `metrics.namedScores`. Per-row CSV exports include assertion named metrics, but do not add columns for aggregate-only derived metrics.
 
 See also:
 
