@@ -11,6 +11,7 @@ import { getProviderCallTracingContext, wrapProviderWithRateLimiting } from '../
 import {
   callProviderWithContext,
   getProviderCallExecutionContext,
+  waitForProviderCall,
 } from '../../scheduler/providerCallExecutionContext';
 import {
   type ApiProvider,
@@ -508,9 +509,11 @@ export function callGradingProvider(
   const callOptions = signal ? { ...options, abortSignal: signal } : options;
   const invoke = async (context?: CallApiContextParams) => {
     signal?.throwIfAborted();
-    return callOptions === undefined
-      ? provider.callApi(prompt, context)
-      : provider.callApi(prompt, context, callOptions);
+    const result =
+      callOptions === undefined
+        ? provider.callApi(prompt, context)
+        : provider.callApi(prompt, context, callOptions);
+    return waitForProviderCall(result, signal);
   };
   const tracingContext = getProviderCallTracingContext();
   if (!tracingContext) {
