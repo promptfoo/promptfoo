@@ -2,7 +2,7 @@ import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import { getRequestTimeoutMs } from './shared';
 
-import type { EnvOverrides } from '../types/env';
+import type { EnvOverrides } from '../contracts/env';
 import type { ApiProvider, ProviderResponse } from '../types/index';
 
 interface LlamaCompletionOptions {

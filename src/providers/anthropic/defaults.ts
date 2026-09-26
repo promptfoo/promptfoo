@@ -100,6 +100,7 @@ export function getAnthropicProviders(env?: EnvOverrides): AnthropicProviders {
   // Resolve every construction input before reuse, including partial explicit maps.
   // Match the provider's existing empty-value behavior for keys, URLs and headers.
   const resolvedEnv = {
+    ...env,
     ANTHROPIC_API_KEY: env?.ANTHROPIC_API_KEY || getEnvString('ANTHROPIC_API_KEY'),
     ANTHROPIC_BASE_URL: env?.ANTHROPIC_BASE_URL || getEnvString('ANTHROPIC_BASE_URL'),
     ANTHROPIC_CUSTOM_HEADERS:
@@ -107,7 +108,11 @@ export function getAnthropicProviders(env?: EnvOverrides): AnthropicProviders {
   };
   const scope = cliState.envScope;
   const cached = scope ? scopedProviders.get(scope) : undefined;
-  if (cached && Object.entries(resolvedEnv).every(([key, value]) => cached.env[key] === value)) {
+  if (
+    cached &&
+    Object.keys(cached.env).length === Object.keys(resolvedEnv).length &&
+    Object.entries(resolvedEnv).every(([key, value]) => cached.env[key] === value)
+  ) {
     return cached.providers;
   }
   const gradingProvider = new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL, {

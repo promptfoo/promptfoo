@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, withCacheEnabled } from '../../src/cache';
 import cliState from '../../src/cliState';
+import logger from '../../src/logger';
 import { getAnthropicProviders } from '../../src/providers/anthropic/defaults';
 import {
   AnthropicGenericProvider,
@@ -136,6 +137,28 @@ describe('default provider environment ownership', () => {
           'X-Scope'
         ],
       ).toBe('second');
+    });
+  });
+  it('retains explicit Anthropic sampling settings and refreshes when they are removed', async () => {
+    await cliState.withEnv({ ANTHROPIC_API_KEY: 'synthetic-key' }, async () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const first = getAnthropicProviders({ ANTHROPIC_TEMPERATURE: '0.25' });
+      const provider = first.gradingProvider as AnthropicMessagesProvider;
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'fixture' }],
+      } as never);
+      await provider.callApi('sampling fixture');
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('ANTHROPIC_TEMPERATURE'));
+      expect(getAnthropicProviders({ ANTHROPIC_TEMPERATURE: '0.25' })).toBe(first);
+      const removed = getAnthropicProviders();
+      expect(removed).not.toBe(first);
+      const second = removed.gradingProvider as AnthropicMessagesProvider;
+      vi.spyOn(second.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'fixture' }],
+      } as never);
+      warn.mockClear();
+      await second.callApi('sampling fixture');
+      expect(warn).not.toHaveBeenCalled();
     });
   });
   it('does not select OpenAI or Azure defaults from explicitly masked ambient keys', async () => {
