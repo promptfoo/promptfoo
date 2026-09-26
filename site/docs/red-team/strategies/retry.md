@@ -79,7 +79,7 @@ And previously some hate speech tests failed against your target, the retry stra
 2. Use it in combination with other strategies for maximum coverage
 
 :::info
-Currently, the retry strategy uses only your local database. Cloud sharing of retry test cases across teams is coming soon.
+The retry strategy combines failures from your local database and, when connected to Promptfoo Cloud, your cloud history. Cloud failures are available even when the target has no local history; duplicate test cases are included only once.
 :::
 
 ## Related Concepts
