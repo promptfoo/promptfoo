@@ -190,11 +190,11 @@ for (const test of cases) {
   let terminalError: string | undefined;
   try {
     await run(
-      'npm',
+      process.execPath,
       [
-        'run',
-        'local',
-        '--',
+        '--import',
+        'tsx',
+        'src/localEntrypoint.ts',
         'eval',
         '-c',
         configPath,
