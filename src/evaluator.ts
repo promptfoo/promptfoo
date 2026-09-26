@@ -132,7 +132,7 @@ import type {
   Vars,
   VarValue,
 } from './types/index';
-import type { InternalEvaluateOptions } from './types/internal';
+import type { InternalEvaluateOptions, InternalRunEvalOptions } from './types/internal';
 import type { CallApiContextParams } from './types/providers';
 
 export class PromptSuggestionsRejectedError extends Error {
@@ -1621,11 +1621,15 @@ export async function runEval(options: RunEvalOptions): Promise<EvaluateResult[]
   );
 }
 
-function runEvalInternal(options: RunEvalOptions): Promise<EvaluateResult[]> {
-  const delay = resolveInvocationDelay(options.provider, options.delay, options.evaluateOptions);
+function runEvalInternal(options: InternalRunEvalOptions): Promise<EvaluateResult[]> {
+  const delay = resolveInvocationDelay(
+    options.provider,
+    options.delayOmitted ? undefined : options.delay,
+    options.evaluateOptions,
+  );
   return withProviderCallExecutionContext(
     { ...getProviderCallExecutionContext(), providerDelay: { provider: options.provider, delay } },
-    () => runEvalInContext({ ...options, delay }),
+    () => runEvalInContext({ ...options, delay: delay ?? 0 }),
   );
 }
 
@@ -2889,9 +2893,10 @@ function createRunEvalOption({
   testIdx: number;
   testSuite: TestSuite;
   vars: Vars | undefined;
-}): RunEvalOptions {
+}): InternalRunEvalOptions {
   return {
-    delay: options.delay,
+    delay: options.delay ?? 0,
+    delayOmitted: options.delay === undefined,
     provider,
     prompt: {
       ...prompt,

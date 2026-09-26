@@ -5,6 +5,7 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import { getProviderDelay } from '../scheduler/providerCallExecutionContext';
 import telemetry from '../telemetry';
+import { sleep } from '../util/time';
 import { getTransformErrorMessage, TransformInputType, transform } from '../util/transform';
 import { StringOrFunctionSchema } from '../validators/shared';
 
@@ -19,13 +20,6 @@ import type {
   ProviderResponse,
 } from '../types/index';
 import type { TransformContext, TransformFunction } from '../types/transform';
-
-/**
- * Sleep utility function for implementing delays
- * @param ms Milliseconds to sleep
- * @returns Promise that resolves after the specified delay
- */
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 function stringifyTransformResult(result: unknown): string | undefined {
   if (result === undefined || result === null) {
@@ -97,6 +91,7 @@ abstract class SageMakerGenericProvider {
   config: SageMakerConfig;
   endpointName: string;
   delay?: number; // Delay between API calls in milliseconds
+  readonly handlesOwnDelay = true;
   transform?: string | TransformFunction;
 
   // Custom provider ID, separate from the id() method
@@ -117,7 +112,7 @@ abstract class SageMakerGenericProvider {
     }
 
     this.config = config ?? {};
-    this.delay = delay || this.config.delay;
+    this.delay = delay ?? this.config.delay;
     this.transform = transform || this.config.transform;
     this.providerId = id; // Store custom ID if provided
 
@@ -662,8 +657,11 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     // Import cache functions dynamically to avoid circular dependencies
     const { isCacheEnabled, getCache } = await import('../cache');
 
-    // Get the delay value - the context delay takes precedence over the provider's delay
-    const delayMs = getProviderDelay(context?.originalProvider) ?? this.delay;
+    // Target-call orchestration applies inherited delays; graders can inherit their target's pacing.
+    const delayMs =
+      context?.originalProvider === this
+        ? this.delay
+        : (getProviderDelay(context?.originalProvider) ?? this.delay);
 
     const transformResult = await this.runTransformSafely(
       prompt,
@@ -887,8 +885,11 @@ export class SageMakerEmbeddingProvider
     // Import cache functions dynamically to avoid circular dependencies
     const { isCacheEnabled, getCache } = await import('../cache');
 
-    // Get the delay value - the context delay takes precedence over the provider's delay
-    const delayMs = getProviderDelay(context?.originalProvider) ?? this.delay;
+    // Target-call orchestration applies inherited delays; graders can inherit their target's pacing.
+    const delayMs =
+      context?.originalProvider === this
+        ? this.delay
+        : (getProviderDelay(context?.originalProvider) ?? this.delay);
 
     const transformResult = await this.runTransformSafely(
       text,

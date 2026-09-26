@@ -1,5 +1,5 @@
 import type { EventSource } from './eventSource';
-import type { EvaluateOptions } from './index';
+import type { EvaluateOptions, RunEvalOptions } from './index';
 import type { TokenUsage } from './shared';
 
 /**
@@ -13,4 +13,9 @@ export type InternalEvaluateOptions = EvaluateOptions & {
   delayResolved?: boolean;
   generationEventId?: string;
   generationTokenUsage?: TokenUsage;
+};
+
+/** Preserve omitted pacing without changing the numeric public progress-callback field. */
+export type InternalRunEvalOptions = RunEvalOptions & {
+  delayOmitted?: boolean;
 };
