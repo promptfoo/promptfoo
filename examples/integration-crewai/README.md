@@ -19,7 +19,7 @@ cd integration-crewai
 
 This example requires the following:
 
-1. **Python 3.10+**
+1. **Python 3.10–3.13**
 2. **Node.js >=22.22.0 (Node.js 24 LTS recommended)**
 3. **Provider credentials** - The default model requires a valid OpenAI API key
 
@@ -41,23 +41,25 @@ Create a `.env` file in this directory:
 OPENAI_API_KEY=your-api-key-here
 ```
 
-If using a `.env` file, uncomment `python-dotenv` in `requirements.txt` and reinstall dependencies.
+When using a `.env` file, run `npx promptfoo@latest eval --env-file .env`.
+No extra Python package is needed.
 
 ## Installation
 
-Install Python packages:
+Create an isolated environment and install the example's only direct dependency:
 
 ```bash
-pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+python -m pip install -r requirements.txt
 ```
 
-Note: The openai package and other dependencies (langchain, pydantic, etc.) will be automatically installed as dependencies of crewai.
+CrewAI installs the OpenAI SDK, Pydantic, and its other runtime dependencies.
+This example uses CrewAI 1.15.22 or newer within the 1.x release series.
 
-Install promptfoo CLI:
-
-```bash
-npm install -g promptfoo
-```
+Keep the environment activated when running Promptfoo so its Python provider uses
+the installed packages. Alternatively, set `PROMPTFOO_PYTHON` to the virtual
+environment's Python executable.
 
 ## Files
 
@@ -80,13 +82,13 @@ When using a real LLM, you may notice that the agent's output is not always reli
 Run the evaluation:
 
 ```bash
-promptfoo eval
+npx promptfoo@latest eval --no-cache
 ```
 
 Explore results in browser:
 
 ```bash
-promptfoo view
+npx promptfoo@latest view
 ```
 
 ## Troubleshooting
