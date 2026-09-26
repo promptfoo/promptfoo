@@ -171,6 +171,30 @@
     "__schema7": {
       "type": "object",
       "properties": {
+        "ALL_PROXY": {
+          "type": "string"
+        },
+        "all_proxy": {
+          "type": "string"
+        },
+        "HTTP_PROXY": {
+          "type": "string"
+        },
+        "http_proxy": {
+          "type": "string"
+        },
+        "HTTPS_PROXY": {
+          "type": "string"
+        },
+        "https_proxy": {
+          "type": "string"
+        },
+        "NO_PROXY": {
+          "type": "string"
+        },
+        "no_proxy": {
+          "type": "string"
+        },
         "ABLIT_API_BASE_URL": {
           "type": "string"
         },

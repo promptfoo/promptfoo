@@ -1,17 +1,44 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import cliState from '../../../src/cliState';
+import { CreateJobRequestSchema } from '../../../src/types/api/eval';
 import { getProxyEnvironment, getProxyForUrl } from '../../../src/util/fetch/proxy';
 import { mockProcessEnv, PROXY_ENV_KEYS } from '../utils';
 
 let restore = () => {};
 
 beforeEach(() => {
-  restore = mockProcessEnv(Object.fromEntries(PROXY_ENV_KEYS.map((key) => [key, undefined])));
+  restore = mockProcessEnv(
+    Object.fromEntries(
+      [...PROXY_ENV_KEYS, 'WSS_PROXY', 'wss_proxy'].map((key) => [key, undefined]),
+    ),
+  );
 });
 
 afterEach(() => restore());
 
 describe('effective proxy environment', () => {
+  it.each(['upper', 'lower'])('keeps %s proxy settings through API validation', (casing) => {
+    const values = {
+      HTTP_PROXY: 'http://http-proxy.example:8080',
+      HTTPS_PROXY: 'http://https-proxy.example:8080',
+      ALL_PROXY: 'http://fallback-proxy.example:8080',
+      NO_PROXY: 'internal.example',
+    };
+    const env = Object.fromEntries(
+      Object.entries(values).map(([key, value]) => [
+        casing === 'lower' ? key.toLowerCase() : key,
+        value,
+      ]),
+    );
+    const job = CreateJobRequestSchema.parse({ providers: ['echo'], prompts: ['fixture'], env });
+    cliState.withEnv(job.env, () => {
+      expect(getProxyForUrl('http://external.example')).toBe(values.HTTP_PROXY);
+      expect(getProxyForUrl('https://external.example')).toBe(values.HTTPS_PROXY);
+      expect(getProxyForUrl('wss://external.example')).toBe(values.ALL_PROXY);
+      expect(getProxyForUrl('https://internal.example')).toBe('');
+    });
+  });
+
   it('resolves suite > file > shell across uppercase and lowercase aliases', () => {
     mockProcessEnv({ https_proxy: 'http://shell.example:8080' });
     cliState.withEnvFileOverrides({ HTTPS_PROXY: 'http://file.example:8080' }, () => {

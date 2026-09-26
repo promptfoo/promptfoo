@@ -1,6 +1,14 @@
 import { z } from 'zod';
 
 export const ProviderEnvOverridesSchema = z.object({
+  ALL_PROXY: z.string().optional(),
+  all_proxy: z.string().optional(),
+  HTTP_PROXY: z.string().optional(),
+  http_proxy: z.string().optional(),
+  HTTPS_PROXY: z.string().optional(),
+  https_proxy: z.string().optional(),
+  NO_PROXY: z.string().optional(),
+  no_proxy: z.string().optional(),
   ABLIT_API_BASE_URL: z.string().optional(),
   ABLIT_KEY: z.string().optional(),
   AI21_API_BASE_URL: z.string().optional(),
