@@ -148,15 +148,22 @@ providers:
 tests:
   - assert:
       - type: javascript
-        value: |
-          const fs = process.mainModule.require('node:fs');
-          return fs.existsSync(context.metadata.workingDir + '/expected.txt');
+        value: file://assertions/check-workspace.js
       - type: agent-rubric
         value: Inspect the written files and verify the requested change.
 ```
 
+```js title="assertions/check-workspace.js"
+const fs = require('node:fs');
+const path = require('node:path');
+
+module.exports = (output, context) =>
+  fs.existsSync(path.join(context.metadata.workingDir, 'expected.txt'));
+```
+
 The actual copy path is available as `response.metadata.workingDir` and as
-`context.metadata.workingDir` in JavaScript assertions. An `agent-rubric` grader
+`context.metadata.workingDir` in JavaScript assertions. Inline JavaScript assertions
+cannot load Node modules, so read the files from a file-based assertion as shown. An `agent-rubric` grader
 without an explicit `working_dir` uses that copy during grading; an explicit grader
 workspace still wins. Copies remain available through assertions and `afterEach` hooks,
 then are removed when the eval ends. Saved result paths are therefore temporary.
