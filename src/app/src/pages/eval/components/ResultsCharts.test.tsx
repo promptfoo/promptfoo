@@ -570,6 +570,139 @@ describe('ResultsCharts', () => {
     });
   });
 
+  describe('Histogram bin boundaries', () => {
+    function renderHistogram(scores: number[]) {
+      vi.mocked(useTableStore).mockReturnValue({
+        table: {
+          head: {
+            prompts: [
+              { provider: 'first', metrics: { namedScores: {} } },
+              { provider: 'second', metrics: { namedScores: {} } },
+            ],
+            vars: [],
+          },
+          body: scores.map((score) => ({
+            outputs: [{ score }, { score }],
+            vars: [],
+          })),
+        },
+      });
+      render(<ResultsCharts scores={scores} />);
+      return vi.mocked(Chart).mock.calls.map(([, config]) => config)[1];
+    }
+
+    it.each([
+      ['decimal boundaries', [0, 0.1, 0.2, 0.3, 0.6, 1]],
+      ['negative and unbounded scores', [-2, -1.5, -1, 0, 1, 2, 3]],
+      ['uniform integer scores', [2, 2, 2]],
+      [
+        'non-finite scores',
+        [0, 0.3, 1, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY],
+      ],
+    ])('counts every finite loaded score exactly once with %s', (_name, scores) => {
+      const config = renderHistogram(scores);
+      for (const dataset of config.data.datasets) {
+        const counts = dataset.data as number[];
+        expect(counts.reduce((total, count) => total + count, 0)).toBe(
+          scores.filter(Number.isFinite).length,
+        );
+      }
+    });
+
+    it('assigns decimal boundary values to one bin and includes the maximum boundary', () => {
+      const config = renderHistogram([0, 0.1, 0.2, 0.3, 0.6, 1]);
+      expect(config.data.datasets[0].data).toEqual([1, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1]);
+    });
+
+    it('shows a zero upper boundary in negative-score tooltips', () => {
+      const config = renderHistogram([-1, -0.2, 0, 1]);
+      const tooltip = config.options!.plugins!.tooltip!.callbacks!.label!;
+      expect(tooltip.call({} as any, { dataIndex: 4 } as any)).toBe('-0.2 <= score < 0');
+    });
+  });
+
+  describe('Metric meaning and chart scope', () => {
+    function renderMetrics(namedScores: Record<string, number>[], scores = [0, 1]) {
+      vi.mocked(useTableStore).mockReturnValue({
+        table: {
+          head: {
+            prompts: namedScores.map((values, index) => ({
+              provider: `provider-${index}`,
+              metrics: {
+                namedScores: values,
+                namedScoresCount: { accuracy: index === 0 ? 8 : 4 },
+                testPassCount: 1,
+                testFailCount: 1,
+              },
+            })),
+            vars: [],
+          },
+          body: [{ outputs: namedScores.map(() => ({ score: 1, pass: true })), vars: [] }],
+        },
+      });
+      render(<ResultsCharts scores={scores} />);
+      return vi.mocked(Chart).mock.calls.map(([, config]) => config)[1];
+    }
+
+    it('describes normalized totals as relative scores and includes the original score', () => {
+      // Both prompts have 50% accuracy (4/8 and 2/4). Relative totals remain 100% and 50%.
+      const config = renderMetrics([
+        { accuracy: 4, precision: 2 },
+        { accuracy: 2, precision: 2 },
+      ]);
+      expect(config.data.datasets.map((dataset) => dataset.data)).toEqual([
+        [1, 1],
+        [0.5, 1],
+      ]);
+      const tooltip = config.options!.plugins!.tooltip!.callbacks!.label!;
+      const invokeTooltip = (datasetIndex: number, y: number) =>
+        tooltip.call({} as any, { datasetIndex, dataIndex: 0, parsed: { y } } as any);
+      expect(invokeTooltip(0, 1)).toBe('accuracy: 4 (100.00% relative score)');
+      expect(invokeTooltip(1, 0.5)).toBe('accuracy: 2 (50.00% relative score)');
+      expect(config.options!.scales!.y).toMatchObject({
+        title: { display: true, text: 'Relative score (%)' },
+      });
+      expect(screen.getByRole('heading', { name: 'Relative metric scores' })).toBeInTheDocument();
+      expect(screen.getAllByText('Full eval')).toHaveLength(2);
+      expect(screen.getAllByText('Loaded page')).toHaveLength(1);
+    });
+
+    it('includes finite metrics from later prompts without turning missing values into zero', () => {
+      const config = renderMetrics([
+        { accuracy: 0, invalid: Number.NaN },
+        { precision: 2, invalid: Number.POSITIVE_INFINITY },
+        { accuracy: 4, precision: 1, invalid: Number.NEGATIVE_INFINITY },
+      ]);
+      expect(config.data.labels).toEqual(['accuracy', 'precision']);
+      expect(config.data.datasets.map((dataset) => dataset.data)).toEqual([
+        [0, null],
+        [null, 1],
+        [1, 0.5],
+      ]);
+      expect(screen.getByRole('heading', { name: 'Relative metric scores' })).toBeInTheDocument();
+    });
+
+    it('keeps negative values when positive and missing values coexist', () => {
+      const config = renderMetrics([
+        { mixed: -4, negative: -2 },
+        { mixed: 2, later: 0 },
+      ]);
+      expect(config.data.labels).toEqual(['mixed', 'negative', 'later']);
+      expect(config.data.datasets.map((dataset) => dataset.data)).toEqual([
+        [-2, -1, null],
+        [1, null, 0],
+      ]);
+    });
+
+    it('marks distribution and comparison charts as limited to the loaded page', () => {
+      renderMetrics([{}, {}], [0, 0.25, 0.5, 0.75, 1]);
+      expect(screen.getByRole('heading', { name: 'Score distribution' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Prompt score comparison' })).toBeInTheDocument();
+      expect(screen.getAllByText('Full eval')).toHaveLength(1);
+      expect(screen.getAllByText('Loaded page')).toHaveLength(2);
+    });
+  });
+
   describe('Chart Type Selection', () => {
     it('shows MetricChart when scores are limited but named scores exist', () => {
       const mockTableWithNamedScores = {
