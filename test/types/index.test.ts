@@ -210,14 +210,43 @@ describe('isGradingResult', () => {
     ).toBe(true);
   });
 
-  it.each([null, [], { quality: '1' }, { quality: null }, { quality: undefined }])(
-    'rejects malformed named score and weight records: %j',
-    (value) => {
-      const result = { pass: true, score: 1, reason: '' };
-      expect(isGradingResult({ ...result, namedScores: value })).toBe(false);
-      expect(isGradingResult({ ...result, namedScoreWeights: value })).toBe(false);
-    },
-  );
+  it.each([
+    null,
+    [],
+    new Date(0),
+    new Map([['quality', 1]]),
+    new Set([1]),
+    { quality: '1' },
+    { quality: null },
+    { quality: undefined },
+  ])('rejects malformed named score and weight records: %j', (value) => {
+    const result = { pass: true, score: 1, reason: '' };
+    expect(isGradingResult({ ...result, namedScores: value })).toBe(false);
+    expect(isGradingResult({ ...result, namedScoreWeights: value })).toBe(false);
+  });
+
+  it.each([
+    { quality: 2 },
+    Object.setPrototypeOf({ quality: -2 }, null),
+    new (class {
+      quality = 0.8;
+    })(),
+  ])('accepts numeric records that serialize to object maps: %j', (value) => {
+    const result = {
+      pass: true,
+      score: 1,
+      reason: '',
+      namedScores: value,
+      namedScoreWeights: value,
+    };
+
+    expect(isGradingResult(result)).toBe(true);
+    expect(JSON.parse(JSON.stringify(result))).toEqual({
+      ...result,
+      namedScores: { quality: value.quality },
+      namedScoreWeights: { quality: value.quality },
+    });
+  });
 
   it('should return false for non-object', () => {
     expect(isGradingResult('not an object')).toBe(false);
