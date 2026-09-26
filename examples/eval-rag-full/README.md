@@ -19,6 +19,8 @@ There are 3 parts:
 
 1. `promptfooconfig.yaml`: Test inputs and requirements.
 
+This example requires Python 3.10 or later.
+
 To get started:
 
 1. Set the OPENAI_API_KEY environment variable.
@@ -45,3 +47,13 @@ Promptfoo is a Node.js CLI, but the `file://retrieve.py` provider runs inside Py
 Afterwards, you can view the results by running `npx promptfoo@latest view`
 
 See `promptfooconfig.with-asserts.yaml` for a more complete example that compares the performance of two RAG configurations. The smaller retrieval configuration is intentionally expected to miss a couple of details so the comparison view demonstrates failures as well as passes.
+
+## Tests
+
+After installing the requirements, run the PDF ingestion tests from this example directory:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+These tests use a local HTTP server and generated PDFs. They do not need an API key or download the SEC filings.
