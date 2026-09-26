@@ -36,6 +36,10 @@ To disable telemetry, set the following environment variable:
 PROMPTFOO_DISABLE_TELEMETRY=1
 ```
 
+The CLI sends a one-time opt-out acknowledgment, which can include your local user ID and email. See the [FAQ](/docs/faq#do-you-collect-any-pii).
+
+For the web UI, set this variable when building the app. Changing the server environment does not change a prebuilt UI.
+
 ## Updates
 
 The CLI checks NPM's package registry for updates. If there is a newer version available, it will display a banner to the user.
