@@ -769,7 +769,7 @@ const scan = await evaluate({
     id: 'openai:codex-security',
     config: { repository: path.join(import.meta.dirname, 'does-not-exist') },
   }],
-  tests: [{}],
+  tests: [{ vars: {} }],
 }, { cache: false, maxConcurrency: 1 });
 const { results: scanResults } = await scan.toEvaluateSummary();
 assert.equal(scanResults.length, 1);
