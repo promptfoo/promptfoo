@@ -655,7 +655,9 @@ Manage authentication for cloud features.
 
 ### `promptfoo auth login`
 
-Login to the promptfoo cloud.
+Log in to Promptfoo Cloud.
+
+API-key login defaults to the key's organization. Use `--org` or `--team` to select a different organization or team; both options apply only with `--api-key`.
 
 | Option                      | Description                                                                |
 | --------------------------- | -------------------------------------------------------------------------- |
