@@ -7,6 +7,7 @@ import type { ApiProvider, ProviderOptions, ProviderResponse } from 'promptfoo';
 export default class CustomApiProvider implements ApiProvider {
   protected providerId: string;
   public config: any;
+  private apiKey: string | undefined;
 
   constructor(options: ProviderOptions) {
     // The caller may override Provider ID (e.g. when using multiple instances of the same provider)
@@ -14,6 +15,7 @@ export default class CustomApiProvider implements ApiProvider {
 
     // The config object contains any options passed to the provider in the config file.
     this.config = options.config;
+    this.apiKey = this.config?.apiKey ?? options.env?.OPENAI_API_KEY;
   }
 
   id(): string {
@@ -40,7 +42,7 @@ export default class CustomApiProvider implements ApiProvider {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          Authorization: `Bearer ${this.apiKey ?? process.env.OPENAI_API_KEY}`,
         },
         body: JSON.stringify(body),
       },
