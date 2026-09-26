@@ -56,7 +56,7 @@ const routingState = (globalScopes[OTEL_ROUTING_KEY] ??= {
   provider: createRoutingProvider(),
   owners: new Set<NodeTracerProvider>(),
 });
-const ownedProviders = new Set<NodeTracerProvider>();
+const ownedProviders = new Map<NodeTracerProvider, OtelScope>();
 const contextProbeKey = createContextKey('promptfoo.contextProbe');
 
 /** Isolate provider ownership even for evaluations with tracing disabled. */
@@ -237,7 +237,7 @@ export function initializeOtel(config: OtelConfig): void {
 
   // Create trace provider with resource and span processors
   scope.provider = new NodeTracerProvider({ resource, spanProcessors });
-  ownedProviders.add(scope.provider);
+  ownedProviders.set(scope.provider, scope);
   routingState.owners.add(scope.provider);
   ensureContextManager();
   // Keep a stable fields array so cleanup can recognize our registration through
@@ -282,6 +282,10 @@ async function shutdownProvider(provider: NodeTracerProvider): Promise<void> {
   } catch (error) {
     logger.error('[OtelSdk] Error shutting down OpenTelemetry SDK', { error });
   } finally {
+    const scope = ownedProviders.get(provider);
+    if (scope?.provider === provider) {
+      scope.provider = undefined;
+    }
     ownedProviders.delete(provider);
     releaseGlobalTracingRegistrations(provider);
     if (ownedProviders.size === 0) {
@@ -320,11 +324,11 @@ export function isOtelInitialized(): boolean {
 // Signal callbacks do not execute within an evaluation's async context. Drain only
 // providers owned here, and keep one set of listeners until the last scope closes.
 function onShutdown(): void {
-  void Promise.all([...ownedProviders].map(shutdownProvider));
+  void Promise.all([...ownedProviders.keys()].map(shutdownProvider));
 }
 
 async function onBeforeExit(): Promise<void> {
-  await Promise.allSettled([...ownedProviders].map((provider) => provider.forceFlush()));
+  await Promise.allSettled([...ownedProviders.keys()].map((provider) => provider.forceFlush()));
 }
 
 function setupShutdownHandlers(): void {

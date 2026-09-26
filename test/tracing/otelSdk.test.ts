@@ -474,6 +474,30 @@ describe('evaluation-owned OpenTelemetry', () => {
     },
   );
 
+  it.each(['SIGINT', 'SIGTERM'] as const)(
+    'clears the owning scope after %s shuts its provider down',
+    async (signal) => {
+      const existingListeners = new Set(process.listeners(signal));
+      await runScoped({}, async () => {
+        const shutdownListener = process
+          .listeners(signal)
+          .find((listener) => !existingListeners.has(listener));
+        expect(shutdownListener).toBeDefined();
+        // Invoke only this module's handler, outside the owning async scope.
+        withOtelContext(() => shutdownListener!(signal));
+        await vi.waitFor(() => expect(isOtelInitialized()).toBe(false));
+
+        initializeOtel({ ...config, serviceName: 'replacement' });
+        expect(isOtelInitialized()).toBe(true);
+        getOtelTracer('fixture').startSpan('after handled signal').end();
+      });
+      expect(
+        localSpans.map((span) => [span.name, span.resource.attributes['service.name']]),
+      ).toEqual([['after handled signal', 'replacement']]);
+      expect(process.listeners(signal)).toEqual([...existingListeners]);
+    },
+  );
+
   it('removes owned shutdown handlers after a failed operation', async () => {
     const counts = ['SIGINT', 'SIGTERM', 'beforeExit'].map((signal) =>
       process.listenerCount(signal),
