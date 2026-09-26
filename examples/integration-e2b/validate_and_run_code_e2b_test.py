@@ -49,13 +49,27 @@ class SandboxAssertionTest(unittest.TestCase):
         self.assertNotIn("Here is", program)
         self.assertNotIn("This doubles", program)
 
-    def test_unfenced_program_preserves_imports_and_blank_lines(self):
-        output = "import math\n\ndef double(value):\n    result = value * 2\n\n    return math.floor(result)"
+    def test_fenced_program_preserves_imports_and_blank_lines(self):
+        output = "```python\nimport math\n\ndef double(value):\n    result = value * 2\n\n    return math.floor(result)\n```"
         self.assertTrue(validator.get_assert(output, self.context)["pass"])
         program = self.sandbox.run_code.call_args.args[0]
         compile(program, "<generated>", "exec")
         self.assertIn("import math", program)
         self.assertIn("return math.floor(result)", program)
+
+    def test_prose_before_helper_preserves_both_functions(self):
+        output = "Here is the requested function:\ndef _double(value):\n    return value * 2\n\ndef double(value):\n    return _double(value)"
+        extracted = validator._extract_function(output, "double")
+        self.assertIsNotNone(extracted)
+        # This fixed, trusted fixture proves its helper survives extraction.
+        namespace = {}
+        exec(extracted, namespace)
+        self.assertEqual(namespace["double"](3), 6)
+
+    def test_unfenced_example_call_does_not_change_result(self):
+        output = "def double(value):\n    return value * 2\n\nprint(double(2))"
+        extracted = validator._extract_function(output, "double")
+        self.assertEqual(extracted, "def double(value):\n    return value * 2")
 
     def test_sdk_error_does_not_retry_without_controls(self):
         self.sandbox.run_code.side_effect = TypeError("unsupported SDK call")

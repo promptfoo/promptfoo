@@ -1,6 +1,5 @@
 """Grade generated Python in an E2B sandbox with outbound internet disabled."""
 
-import ast
 import re
 import time
 
@@ -32,27 +31,23 @@ def is_unsafe(code: str) -> bool:
 
 
 def _extract_function(output: str, fn_name: str) -> str | None:
-    fenced = FENCE_RE.search(output)
-    code = fenced.group(1).strip() if fenced else output.strip()
-    if not re.search(rf"\bdef\s+{re.escape(fn_name)}\s*\(", code):
-        return None
-    if fenced:
-        return code
+    """Extract the generated function from fenced code or plain text output."""
+    m = FENCE_RE.search(output)
+    if m:
+        return m.group(1).strip()
 
-    # Keep complete Python programs (including imports and helper functions).
-    try:
-        ast.parse(code)
-        return code
-    except SyntaxError:
-        # Models also return unfenced functions with a prose introduction or
-        # explanation. Preserve the original example's extraction for these.
-        function = re.search(
-            rf"(def\s+{re.escape(fn_name)}\s*\(.*?\)\s*:[\s\S]*?)"
-            r"(?=\n\s*\n|^```|^class\s+|^def\s+|\Z)",
-            code,
-            re.MULTILINE,
-        )
-        return function.group(1).strip() if function else None
+    by_name = re.search(
+        rf"(def\s+{re.escape(fn_name)}\s*\(.*?\)\s*:[\s\S]*?)(?=\n\s*\n|^```|^class\s+|^def\s+)",
+        output,
+        re.IGNORECASE | re.MULTILINE,
+    )
+    if by_name:
+        return by_name.group(1).strip()
+
+    any_def = re.search(r"(def\s+\w+\s*\(.*?\)\s*:[\s\S]*)", output)
+    if any_def:
+        return any_def.group(1).strip()
+    return None
 
 
 def get_assert(output, context):
