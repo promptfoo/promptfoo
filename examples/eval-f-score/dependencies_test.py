@@ -8,10 +8,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import prepare_data
 from datasets import Dataset, DatasetDict, load_dataset_builder
 from datasets.download.streaming_download_manager import StreamingDownloadManager
-
-import prepare_data
 
 
 class DatasetDependenciesTest(unittest.TestCase):
