@@ -1,6 +1,7 @@
 import { DEFAULT_AGENT_GRADING_PROMPT } from '../prompts/grading';
 import { isAgenticGradingProvider } from '../providers/agentic-utils';
 import { getCodexDefaultProviders } from '../providers/openai/codexDefaults';
+import { isWorkingDirectoryCopy } from '../providers/workingDirectoryCopies';
 import { getGradingProvider } from './providers';
 import { runJsonGradingPrompt } from './rubric';
 import { tryParse } from './shared';
@@ -51,9 +52,12 @@ export async function matchesAgentRubric(
     label: 'agent-rubric',
     providerCallContext,
     // A copied target workspace is the default grader workspace. Explicit grader
-    // working_dir remains authoritative; the shared instance is never mutated.
+    // working_dir remains authoritative; the shared instance is never mutated. The path
+    // comes from the target's response metadata, so accept only a copy this process owns.
     providerPromptConfig:
-      targetWorkingDir && (!configuredProvider || !agentProvider.config?.working_dir)
+      targetWorkingDir &&
+      isWorkingDirectoryCopy(targetWorkingDir) &&
+      (!configuredProvider || !agentProvider.config?.working_dir)
         ? { working_dir: targetWorkingDir }
         : undefined,
     vars: {

@@ -5,6 +5,7 @@
  * inspect files after callApi returns. Evaluation owners release idle copies at the
  * end of the evaluation; active calls release themselves after the SDK settles.
  */
+import { rmSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -12,6 +13,36 @@ import path from 'node:path';
 type Owner = string | object;
 
 const copiesByOwner = new Map<Owner, Set<WorkingDirectoryCopy>>();
+let exitCleanupRegistered = false;
+
+// A call still running when the process exits (e.g. after an eval timeout) never settles,
+// so its copy would outlive the process. `exit` handlers must be synchronous.
+function registerExitCleanup(): void {
+  if (exitCleanupRegistered) {
+    return;
+  }
+  exitCleanupRegistered = true;
+  process.once('exit', () => {
+    for (const copies of copiesByOwner.values()) {
+      for (const copy of copies) {
+        copy.removeSync();
+      }
+    }
+  });
+}
+
+/** Whether `dir` is the workspace of a copy this process created and has not removed. */
+export function isWorkingDirectoryCopy(dir: string): boolean {
+  const resolved = path.resolve(dir);
+  for (const copies of copiesByOwner.values()) {
+    for (const copy of copies) {
+      if (copy.workingDir === resolved) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
 
 async function assertRegularTree(root: string): Promise<void> {
   const visit = async (entryPath: string): Promise<void> => {
@@ -46,6 +77,15 @@ export class WorkingDirectoryCopy {
     const copies = copiesByOwner.get(owner) ?? new Set<WorkingDirectoryCopy>();
     copies.add(this);
     copiesByOwner.set(owner, copies);
+    registerExitCleanup();
+  }
+
+  removeSync(): void {
+    try {
+      rmSync(this.root, { recursive: true, force: true });
+    } catch {
+      // Best effort: the process is exiting.
+    }
   }
 
   private async remove(): Promise<void> {
