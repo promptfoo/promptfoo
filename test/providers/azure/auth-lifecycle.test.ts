@@ -122,6 +122,23 @@ describe('Azure authentication lifecycle', () => {
     expect(getToken).toHaveBeenCalledTimes(2);
   });
 
+  it('retries credential construction through ensureInitialized after an initial failure', async () => {
+    vi.mocked(AzureCliCredential).mockImplementationOnce(function () {
+      throw new Error('temporary credential construction failure');
+    });
+    const provider = new AzureGenericProvider('deployment');
+
+    await expect(provider.ensureInitialized()).rejects.toThrow('Azure Authentication failed');
+    expect(provider.authHeaders).toBeUndefined();
+    expect(AzureCliCredential).toHaveBeenCalledTimes(1);
+    expect(getToken).not.toHaveBeenCalled();
+
+    await provider.ensureInitialized();
+    expect(provider.authHeaders).toEqual({ Authorization: 'Bearer initial' });
+    expect(AzureCliCredential).toHaveBeenCalledTimes(2);
+    expect(getToken).toHaveBeenCalledTimes(1);
+  });
+
   it.each([3_300_000, 3_600_000])(
     'rejects a failed refresh after %sms and retries on the next request',
     async (elapsed) => {

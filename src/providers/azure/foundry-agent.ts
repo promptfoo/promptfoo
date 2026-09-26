@@ -23,9 +23,8 @@ import {
 import { sleepWithAbort } from '../../util/time';
 import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
-import { resolveMaxToolIterations } from '../openai/util';
+import { getOpenAICompletionTokenDetails, resolveMaxToolIterations } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
-import { getResponsesTokenUsage } from '../responses/processor';
 import {
   buildChatSpanContext,
   emitTurnMarkerSpan,
@@ -752,13 +751,55 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
 
   private responseFailureMessage(response: FoundryResponse): string | undefined {
     if (response.error) {
-      return response.error.message || response.error.code || 'Azure Foundry agent response failed';
+      return typeof response.error === 'string'
+        ? response.error
+        : response.error.message || response.error.code || 'Azure Foundry agent response failed';
     }
     if (response.status && response.status !== 'completed') {
       const reason = response.incomplete_details?.reason;
       return `Azure Foundry agent response status: ${response.status}${reason ? ` (${reason})` : ''}`;
     }
     return undefined;
+  }
+
+  private getResponseTokenUsage(response: FoundryResponse): {
+    tokenUsage: Partial<TokenUsage>;
+    complete: boolean;
+  } {
+    let complete = true;
+    const count = (value: unknown, required = false): number | undefined => {
+      if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+        return value;
+      }
+      if (required || value !== undefined) {
+        complete = false;
+      }
+      return undefined;
+    };
+    // SDK response types are not runtime validation. Retain known subtotals
+    // without letting absent counts look complete or malformed scalars add as strings.
+    const usage = response.usage;
+    const prompt = count(usage?.input_tokens, true);
+    const completion = count(usage?.output_tokens, true);
+    const total = count(usage?.total_tokens) ?? (prompt ?? 0) + (completion ?? 0);
+    const cached = count(usage?.input_tokens_details?.cached_tokens);
+    const details = usage ? getOpenAICompletionTokenDetails(usage) : undefined;
+    const completionDetails = Object.fromEntries(
+      Object.entries(details ?? {}).flatMap(([key, value]) => {
+        const validCount = count(value);
+        return validCount === undefined ? [] : [[key, validCount]];
+      }),
+    );
+    return {
+      tokenUsage: {
+        prompt,
+        completion,
+        total,
+        cached,
+        ...(Object.keys(completionDetails).length > 0 && { completionDetails }),
+      },
+      complete,
+    };
   }
 
   private calculateResponseCost(
@@ -806,7 +847,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     body: Record<string, any>,
     config: EffectiveFoundryConfig,
   ): string | undefined {
-    const maxLoopTimeMs = config.maxPollTimeMs ?? 300000;
+    const maxLoopTimeMs = config.maxPollTimeMs === undefined ? 300000 : config.maxPollTimeMs;
     if (!Number.isFinite(maxLoopTimeMs) || maxLoopTimeMs < 0) {
       return 'Azure Foundry agent maxPollTimeMs must be a finite, non-negative number.';
     }
@@ -906,7 +947,8 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       () => this.buildResponsesBody(prompt, context),
       abortSignal,
     );
-    const maxLoopTimeMs = effectiveConfig.maxPollTimeMs ?? 300000;
+    const maxLoopTimeMs =
+      effectiveConfig.maxPollTimeMs === undefined ? 300000 : effectiveConfig.maxPollTimeMs;
     const configError = this.validateResponseConfig(body, effectiveConfig);
     if (configError) {
       return { error: configError };
@@ -1036,13 +1078,12 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
             },
             abortSignal,
           );
-          accumulateTokenUsage(tokenUsage, {
-            ...getResponsesTokenUsage(response, false),
-            cached: response.usage?.input_tokens_details?.cached_tokens,
-            numRequests: 0,
-          });
-          usageComplete &&= response.usage != null;
-          const responseCost = this.calculateResponseCost(response, effectiveConfig);
+          const responseUsage = this.getResponseTokenUsage(response);
+          accumulateTokenUsage(tokenUsage, { ...responseUsage.tokenUsage, numRequests: 0 });
+          usageComplete &&= responseUsage.complete;
+          const responseCost = responseUsage.complete
+            ? this.calculateResponseCost(response, effectiveConfig)
+            : undefined;
           if (responseCost === undefined) {
             costComplete = false;
           } else {

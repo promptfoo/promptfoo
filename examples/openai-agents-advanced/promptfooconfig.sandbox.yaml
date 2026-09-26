@@ -13,6 +13,8 @@ tracing:
 
 providers:
   - id: openai:agents:workspace-agent
+    # Allow the SDK's batched spans to arrive before trajectory assertions.
+    delay: 1500
     config:
       agent: file://./agents/workspace-agent.ts
       sandbox:
