@@ -738,7 +738,8 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         if (attempt >= maxRetries || delay === undefined) {
           throw error;
         }
-        retryDelay = delay;
+        // Node turns delays above its timer limit into an immediate 1ms retry.
+        retryDelay = Math.min(delay, MAX_REQUEST_TIMEOUT_MS);
       } finally {
         clearTimeout(timeout);
         signal?.removeEventListener('abort', relayAbort);

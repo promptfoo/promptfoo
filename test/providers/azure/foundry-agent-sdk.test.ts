@@ -128,6 +128,56 @@ describe('Foundry SDK cancellation and retries', () => {
     },
   );
 
+  describe.each<Record<string, string>>([
+    { 'retry-after-ms': '2147483648' },
+    { 'retry-after': '2147484' },
+    { 'retry-after': 'Sun, 01 Feb 2026 00:00:00 GMT' },
+  ])('oversized retry hint %j', (headers) => {
+    beforeEach(() => {
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+    });
+
+    it('caps the wait at the maximum timer delay and counts only the actual retry', async () => {
+      fetchMock.mockResolvedValueOnce(failure(429, headers, 'rate_limit_exceeded'));
+      const setTimer = vi.spyOn(globalThis, 'setTimeout');
+      const pending = provider({ retryOptions: { maxRetries: 1 } }).callApi('hello');
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(setTimer).toHaveBeenLastCalledWith(expect.any(Function), 2_147_483_647);
+      await vi.advanceTimersByTimeAsync(2_147_483_646);
+      expect(fetchMock).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(await pending).toMatchObject({
+        output: 'ok',
+        tokenUsage: { total: 15, numRequests: 1 },
+        metadata: { transportRetries: 1, usageIncomplete: true, costIncomplete: true },
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('cancels promptly without an immediate retry or retained timers', async () => {
+      fetchMock.mockResolvedValueOnce(failure(429, headers, 'rate_limit_exceeded'));
+      const controller = new AbortController();
+      const pending = provider({ retryOptions: { maxRetries: 1 } }).callApi('hello', undefined, {
+        abortSignal: controller.signal,
+      });
+      const outcome = pending.catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(fetchMock).toHaveBeenCalledOnce();
+      expect(vi.getTimerCount()).toBe(1);
+
+      controller.abort();
+      expect(await outcome).toMatchObject({ name: 'AbortError' });
+
+      expect(vi.getTimerCount()).toBe(0);
+      expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(2_147_483_647);
+      expect(fetchMock).toHaveBeenCalledOnce();
+    });
+  });
+
   it('preserves agent reference and logical turn accounting across a recovered retry', async () => {
     fetchMock.mockResolvedValueOnce(failure(503, { 'retry-after-ms': '0' }));
     const pending = provider({ retryOptions: { maxRetries: 1 } }).callApi('hello');
