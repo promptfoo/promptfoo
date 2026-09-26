@@ -1,0 +1,47 @@
+name: Python Provider Example
+
+on:
+  pull_request:
+    paths:
+      - 'examples/provider-python/**'
+      - '.github/workflows/python-provider-example.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'examples/provider-python/**'
+      - '.github/workflows/python-provider-example.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  dependencies:
+    name: Python provider dependencies (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.14']
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Use Python ${{ matrix.python-version }}
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install example dependencies
+        run: python -m pip install --disable-pip-version-check -r examples/provider-python/requirements.txt
+
+      - name: Run dependency regressions
+        run: python -m unittest discover -s examples/provider-python -p '*_test.py' -v
