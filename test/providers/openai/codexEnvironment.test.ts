@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
+import { loadApiProvider } from '../../../src/providers/index';
 import { OpenAICodexAppServerProvider } from '../../../src/providers/openai/codex-app-server';
 import { OpenAICodexSDKProvider } from '../../../src/providers/openai/codex-sdk';
 import { providerRegistry } from '../../../src/providers/providerRegistry';
+import { mergeProviderEnv } from '../../../src/providers/registry';
 import { mockProcessEnv } from '../../util/utils';
 
 import type { EnvOverrides } from '../../../src/types/env';
@@ -106,5 +108,40 @@ describe.each([
     const env = Reflect.get(provider, 'prepareEnvironment').call(provider, provider.config);
     expect(env.CODEX_API_KEY).toBe('explicit-cli-key');
     expect(env).not.toHaveProperty('OPENAI_API_KEY');
+  });
+});
+
+describe('Codex registered route environment aliases', () => {
+  let restoreEnv: () => void;
+  beforeEach(() => {
+    restoreEnv = mockProcessEnv({ OPENAI_API_KEY: 'host-openai', CODEX_API_KEY: 'host-codex' });
+    vi.spyOn(providerRegistry, 'register').mockImplementation(() => undefined);
+  });
+  afterEach(() => {
+    restoreEnv();
+    vi.restoreAllMocks();
+    vi.resetAllMocks();
+  });
+
+  it.each(
+    ['codex', 'codex-sdk', 'codex-app-server', 'codex-desktop'].flatMap((route) => [
+      `openai:${route}`,
+      `openai:${route}:gpt-5.4`,
+    ]),
+  )('preserves provider and suite aliases for %s', async (id) => {
+    const create = (env: EnvOverrides | undefined, suite: EnvOverrides) =>
+      loadApiProvider(id, { env: suite, options: { env } });
+    const ownKey = await create(
+      { CODEX_API_KEY: 'provider-codex' },
+      { OPENAI_API_KEY: 'suite-openai' },
+    );
+    expect(Reflect.get(ownKey, 'getApiKey').call(ownKey)).toBe('provider-codex');
+    const suiteKey = await create(undefined, { CODEX_API_KEY: 'suite-codex' });
+    expect(Reflect.get(suiteKey, 'getApiKey').call(suiteKey)).toBe('suite-codex');
+    const masked = await create(masks, { OPENAI_API_KEY: 'suite-openai' });
+    expect(Reflect.get(masked, 'getApiKey').call(masked)).toBeUndefined();
+    const endpoints = { OPENAI_API_HOST: 'suite.example.invalid' };
+    const ownEndpoint = { OPENAI_BASE_URL: 'https://provider.example.invalid' };
+    expect(mergeProviderEnv(id, endpoints, ownEndpoint)).toEqual({ ...endpoints, ...ownEndpoint });
   });
 });
