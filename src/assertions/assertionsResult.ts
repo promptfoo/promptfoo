@@ -311,7 +311,11 @@ export class AssertionsResult {
       return this.result;
     }
 
-    const score = this.totalWeight > 0 ? this.totalScore / this.totalWeight : 0;
+    let score = this.totalWeight > 0 ? this.totalScore / this.totalWeight : 0;
+    if (!Number.isFinite(this.totalScore) || !Number.isFinite(this.totalWeight)) {
+      // An infinite denominator can hide overflow behind a finite quotient.
+      score = Number.NaN;
+    }
 
     // An empty explanation still records a failed assertion.
     let pass = this.failedReason === undefined;

@@ -384,6 +384,46 @@ describe('AssertionsResult', () => {
       expect(result.namedScoreWeights).toBeUndefined();
     });
 
+    it.each([undefined, 0, 0.2])(
+      'rejects unlabelled weight overflow even when the quotient is finite (threshold %s)',
+      async (threshold) => {
+        const assertionsResult = new AssertionsResult({ threshold });
+        for (let index = 0; index < 2; index++) {
+          assertionsResult.addResult({
+            index,
+            result: { pass: true, score: 0.25, reason: 'Finite input' },
+            weight: Number.MAX_VALUE,
+          });
+        }
+
+        expect(await assertionsResult.testResult()).toMatchObject({
+          pass: false,
+          score: 0,
+          reason: 'Assertion aggregation error: scores or weights must remain finite',
+          namedScores: {},
+          componentResults: [
+            { pass: true, score: 0.25 },
+            { pass: true, score: 0.25 },
+          ],
+        });
+      },
+    );
+
+    it('allows valid custom scoring to override unlabelled weight overflow', async () => {
+      const assertionsResult = new AssertionsResult({ threshold: 0.9 });
+      for (let index = 0; index < 2; index++) {
+        assertionsResult.addResult({
+          index,
+          result: { pass: true, score: 0.25, reason: 'Finite input' },
+          weight: Number.MAX_VALUE,
+        });
+      }
+
+      expect(
+        await assertionsResult.testResult(() => ({ pass: true, score: 2, reason: 'Custom' })),
+      ).toMatchObject({ pass: true, score: 2, reason: 'Custom' });
+    });
+
     it.each([
       { score: Number.MAX_VALUE, weight: 2, count: 1 },
       { score: -Number.MAX_VALUE, weight: 2, count: 1 },

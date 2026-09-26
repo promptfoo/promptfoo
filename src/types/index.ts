@@ -542,16 +542,16 @@ export interface GradingResult {
   reason: string;
 
   // Map of labeled metrics to values
-  namedScores?: Record<string, number>;
+  namedScores?: Record<string, number> | null;
 
   // Total weight contributing to each named score
-  namedScoreWeights?: Record<string, number>;
+  namedScoreWeights?: Record<string, number> | null;
 
   // Record of tokens usage for this assertion
   tokensUsed?: TokenUsage;
 
   // List of results for each component of the assertion
-  componentResults?: GradingResult[];
+  componentResults?: GradingResult[] | null;
 
   // The assertion that was evaluated
   // TODO(Will): Can we move to this being required?

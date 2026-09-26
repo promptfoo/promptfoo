@@ -24,7 +24,12 @@ import { dereferenceConfig } from '../../src/util/config/load';
 import { PromptConfigSchema } from '../../src/validators/prompts';
 import { createMockProvider } from '../factories/provider';
 
-import type { ScoringFunction, TestSuite, TestSuiteConfig } from '../../src/types/index';
+import type {
+  GradingResult,
+  ScoringFunction,
+  TestSuite,
+  TestSuiteConfig,
+} from '../../src/types/index';
 
 describe('AssertionSchema', () => {
   it('should validate a basic assertion', () => {
@@ -204,6 +209,18 @@ describe('isGradingResult', () => {
     const result = { pass: true, score: 1, reason: '', componentResults };
     expect(isGradingResult(result)).toBe(false);
     expect(isGradingResult({ ...result, componentResults: [result] })).toBe(false);
+  });
+
+  it('supports nullable optional containers in the public grading result type', () => {
+    const result: GradingResult = {
+      pass: true,
+      score: 0.75,
+      reason: '',
+      namedScores: null,
+      namedScoreWeights: null,
+      componentResults: null,
+    };
+    expect(isGradingResult(result)).toBe(true);
   });
 
   it.each(['namedScores', 'namedScoreWeights', 'componentResults'])(
