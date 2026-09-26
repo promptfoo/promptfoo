@@ -1288,7 +1288,7 @@ interface ResultSuggestion {
 
 interface GradingResult {
   pass: boolean; // did test pass?
-  score: number; // score between 0 and 1
+  score: number; // finite score, usually between 0 and 1
   reason: string; // plaintext reason for outcome
   namedScores?: Record<string, number>; // labeled metrics attached to this result
   namedScoreWeights?: Record<string, number>; // weighted denominator for namedScores

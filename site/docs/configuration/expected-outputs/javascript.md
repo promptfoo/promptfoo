@@ -77,6 +77,8 @@ interface GradingResult {
 
 If `componentResults` is set, a table of assertion details will be shown in the test output modal in the Eval view.
 
+Numeric results and the `score`, `namedScores`, and `namedScoreWeights` values in a `GradingResult` must be finite numbers, including in nested `componentResults`. Returning `NaN` or an infinity fails the assertion. Finite scores outside 0–1 are accepted. An empty `reason` does not turn `pass: false` into a passing result.
+
 ## Multiline functions
 
 Javascript assertions support multiline strings:
