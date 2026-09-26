@@ -558,16 +558,13 @@ export class MistralChatCompletionProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    logger.debug(`Mistral apiKeyenvar: ${this.config.apiKeyEnvar}`);
-    const apiKeyCandidate =
-      this.config?.apiKey ||
-      (this.config?.apiKeyEnvar
-        ? this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides] ||
-          getEnvString(this.config.apiKeyEnvar as EnvVarKey)
-        : undefined) ||
-      this.env?.MISTRAL_API_KEY ||
-      getEnvString('MISTRAL_API_KEY');
-    return apiKeyCandidate;
+    const namedKey = this.config.apiKeyEnvar
+      ? (this.env?.[this.config.apiKeyEnvar] ?? getEnvString(this.config.apiKeyEnvar as EnvVarKey))
+      : undefined;
+    return (
+      this.config.apiKey ||
+      (namedKey ?? this.env?.MISTRAL_API_KEY ?? getEnvString('MISTRAL_API_KEY'))
+    );
   }
 
   private getCacheIdentityHash(apiUrl: string): string {
@@ -799,16 +796,13 @@ export class MistralEmbeddingProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    logger.debug(`Mistral apiKeyenvar: ${this.config.apiKeyEnvar}`);
-    const apiKeyCandidate =
-      this.config?.apiKey ||
-      (this.config?.apiKeyEnvar
-        ? this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides] ||
-          getEnvString(this.config.apiKeyEnvar as EnvVarKey)
-        : undefined) ||
-      this.env?.MISTRAL_API_KEY ||
-      getEnvString('MISTRAL_API_KEY');
-    return apiKeyCandidate;
+    const namedKey = this.config.apiKeyEnvar
+      ? (this.env?.[this.config.apiKeyEnvar] ?? getEnvString(this.config.apiKeyEnvar as EnvVarKey))
+      : undefined;
+    return (
+      this.config.apiKey ||
+      (namedKey ?? this.env?.MISTRAL_API_KEY ?? getEnvString('MISTRAL_API_KEY'))
+    );
   }
 
   private getCacheIdentityHash(apiUrl: string): string {

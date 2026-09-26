@@ -212,6 +212,43 @@ describe('Provider override tests', () => {
     expect(moderationProvider.apiVersion).toBe('2024-01-01');
   });
 
+  it.each([
+    'ANTHROPIC_API_KEY',
+    'GOOGLE_API_KEY',
+    'GEMINI_API_KEY',
+    'PALM_API_KEY',
+    'MISTRAL_API_KEY',
+    'XAI_API_KEY',
+  ] as const)('ignores a masked %s when selecting defaults', async (key) => {
+    const fallback =
+      key === 'MISTRAL_API_KEY' || key === 'XAI_API_KEY' ? {} : { MISTRAL_API_KEY: 'scoped-key' };
+    const expected = await getDefaultProviders(fallback);
+    mockProcessEnv({ [key]: 'ambient-key' });
+    const providers = await getDefaultProviders({ ...fallback, [key]: '' });
+    expect(providers.gradingProvider.id()).toBe(expected.gradingProvider.id());
+  });
+
+  it('does not select Azure when a service principal credential is masked', async () => {
+    mockProcessEnv({
+      AZURE_CLIENT_ID: 'ambient-client',
+      AZURE_CLIENT_SECRET: 'ambient-secret',
+      AZURE_TENANT_ID: 'ambient-tenant',
+      AZURE_DEPLOYMENT_NAME: 'chat',
+      AZURE_OPENAI_DEPLOYMENT_NAME: 'chat',
+    });
+    const providers = await getDefaultProviders({
+      AZURE_CLIENT_SECRET: '',
+      MISTRAL_API_KEY: 'scoped-key',
+    });
+    expect(providers.gradingProvider.id()).toContain('mistral:');
+  });
+
+  it('does not select a masked Azure moderation endpoint', async () => {
+    mockProcessEnv({ AZURE_CONTENT_SAFETY_ENDPOINT: 'https://ambient.example.invalid' });
+    const providers = await getDefaultProviders({ AZURE_CONTENT_SAFETY_ENDPOINT: '' });
+    expect(providers.moderationProvider.id()).toBe(DefaultModerationProvider.id());
+  });
+
   it('should use Mistral providers when MISTRAL_API_KEY is set', async () => {
     mockProcessEnv({ MISTRAL_API_KEY: 'test-key' });
 
@@ -365,6 +402,35 @@ describe('Provider override tests', () => {
           'fixture-embedding-key',
         );
       }
+    });
+
+    it.each(['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'PALM_API_KEY', 'MISTRAL_API_KEY'] as const)(
+      'skips masked %s when choosing an Azure embedding fallback',
+      async (key) => {
+        mockProcessEnv({ [key]: 'ambient-key' });
+        const providers = await getDefaultProviders({
+          ...azureEnv,
+          [key]: '',
+          VOYAGE_API_KEY: 'scoped-key',
+        });
+        expect(providers.embeddingProvider.id()).toBe('voyage:voyage-3.5');
+      },
+    );
+
+    it('skips a masked Azure embedding deployment', async () => {
+      mockProcessEnv({ AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: 'ambient-vectors' });
+      const providers = await getDefaultProviders({
+        ...azureEnv,
+        AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: '',
+        VOYAGE_API_KEY: 'scoped-key',
+      });
+      expect(providers.embeddingProvider.id()).toBe('voyage:voyage-3.5');
+    });
+
+    it('skips a masked Voyage embedding key', async () => {
+      mockProcessEnv({ VOYAGE_API_KEY: 'ambient-key' });
+      const providers = await getDefaultProviders({ ...azureEnv, VOYAGE_API_KEY: '' });
+      expect(providers.embeddingProvider.id()).toBe(OpenAiEmbeddingProvider.id());
     });
 
     it('uses process embedding credentials without reusing the chat deployment', async () => {

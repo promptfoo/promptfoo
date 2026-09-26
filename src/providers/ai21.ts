@@ -142,15 +142,11 @@ export class AI21ChatCompletionProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    logger.debug(`AI21 apiKeyenvar: ${this.config.apiKeyEnvar}`);
+    const namedKey = this.config.apiKeyEnvar
+      ? (this.env?.[this.config.apiKeyEnvar] ?? getEnvString(this.config.apiKeyEnvar as EnvVarKey))
+      : undefined;
     return (
-      this.config.apiKey ||
-      (this.config?.apiKeyEnvar
-        ? this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides] ||
-          getEnvString(this.config.apiKeyEnvar)
-        : undefined) ||
-      this.env?.AI21_API_KEY ||
-      getEnvString('AI21_API_KEY')
+      this.config.apiKey || (namedKey ?? this.env?.AI21_API_KEY ?? getEnvString('AI21_API_KEY'))
     );
   }
 

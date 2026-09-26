@@ -37,7 +37,7 @@ async function getEmbeddingProviderForAzureDefaults(env?: EnvOverrides): Promise
   }
 
   const embeddingDeploymentName =
-    env?.AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME ||
+    env?.AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME ??
     getEnvString('AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME');
   if (embeddingDeploymentName) {
     return new AzureEmbeddingProvider(embeddingDeploymentName, { env });
@@ -45,20 +45,13 @@ async function getEmbeddingProviderForAzureDefaults(env?: EnvOverrides): Promise
 
   // A chat deployment is not an embedding deployment. Prefer configured embedding
   // API credentials before probing ADC, without changing Azure's chat selection.
-  if (
-    env?.GEMINI_API_KEY ||
-    getEnvString('GEMINI_API_KEY') ||
-    env?.GOOGLE_API_KEY ||
-    getEnvString('GOOGLE_API_KEY') ||
-    env?.PALM_API_KEY ||
-    getEnvString('PALM_API_KEY')
-  ) {
+  if (resolveProviderApiKey(undefined, env, ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'PALM_API_KEY'])) {
     return new AIStudioEmbeddingProvider('gemini-embedding-001', { env });
   }
-  if (env?.MISTRAL_API_KEY || getEnvString('MISTRAL_API_KEY')) {
+  if (resolveProviderApiKey(undefined, env, ['MISTRAL_API_KEY'])) {
     return new MistralEmbeddingApiProvider({ env });
   }
-  if (env?.VOYAGE_API_KEY || getEnvString('VOYAGE_API_KEY')) {
+  if (resolveProviderApiKey(undefined, env, ['VOYAGE_API_KEY'])) {
     return new VoyageEmbeddingProvider('voyage-3.5', {}, env);
   }
   if (await hasGoogleDefaultCredentials()) {
@@ -81,33 +74,28 @@ async function getDefaultProviderPreferences(
   env?: EnvOverrides,
 ): Promise<DefaultProviderPreferences> {
   const hasAnthropicCredentials = Boolean(
-    getEnvString('ANTHROPIC_API_KEY') || env?.ANTHROPIC_API_KEY,
+    resolveProviderApiKey(undefined, env, ['ANTHROPIC_API_KEY']),
   );
   const hasOpenAiCredentials = Boolean(resolveProviderApiKey(undefined, env, ['OPENAI_API_KEY']));
   const hasGoogleAiStudioCredentials = Boolean(
-    getEnvString('GEMINI_API_KEY') ||
-      env?.GEMINI_API_KEY ||
-      getEnvString('GOOGLE_API_KEY') ||
-      env?.GOOGLE_API_KEY ||
-      getEnvString('PALM_API_KEY') ||
-      env?.PALM_API_KEY,
+    resolveProviderApiKey(undefined, env, ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'PALM_API_KEY']),
   );
   const hasAzureApiKey = resolveProviderApiKey(undefined, env, [
     'AZURE_API_KEY',
     'AZURE_OPENAI_API_KEY',
   ]);
   const hasAzureClientCreds =
-    (getEnvString('AZURE_CLIENT_ID') || env?.AZURE_CLIENT_ID) &&
-    (getEnvString('AZURE_CLIENT_SECRET') || env?.AZURE_CLIENT_SECRET) &&
-    (getEnvString('AZURE_TENANT_ID') || env?.AZURE_TENANT_ID);
-  const hasMistralCredentials = Boolean(getEnvString('MISTRAL_API_KEY') || env?.MISTRAL_API_KEY);
-  const hasXAICredentials = Boolean(getEnvString('XAI_API_KEY') || env?.XAI_API_KEY);
+    (env?.AZURE_CLIENT_ID ?? getEnvString('AZURE_CLIENT_ID')) &&
+    (env?.AZURE_CLIENT_SECRET ?? getEnvString('AZURE_CLIENT_SECRET')) &&
+    (env?.AZURE_TENANT_ID ?? getEnvString('AZURE_TENANT_ID'));
+  const hasMistralCredentials = Boolean(resolveProviderApiKey(undefined, env, ['MISTRAL_API_KEY']));
+  const hasXAICredentials = Boolean(resolveProviderApiKey(undefined, env, ['XAI_API_KEY']));
 
   const preferAzure = Boolean(
     !hasOpenAiCredentials &&
       (hasAzureApiKey || hasAzureClientCreds) &&
-      (getEnvString('AZURE_DEPLOYMENT_NAME') || env?.AZURE_DEPLOYMENT_NAME) &&
-      (env?.AZURE_OPENAI_DEPLOYMENT_NAME || getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME')),
+      (env?.AZURE_DEPLOYMENT_NAME ?? getEnvString('AZURE_DEPLOYMENT_NAME')) &&
+      (env?.AZURE_OPENAI_DEPLOYMENT_NAME ?? getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME')),
   );
   const preferAnthropic = !hasOpenAiCredentials && hasAnthropicCredentials;
   const shouldUseFallbackDefaults =
@@ -168,7 +156,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
   if (preferAzure) {
     logger.debug('Using Azure OpenAI default providers');
     const deploymentName =
-      env?.AZURE_OPENAI_DEPLOYMENT_NAME || getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME');
+      env?.AZURE_OPENAI_DEPLOYMENT_NAME ?? getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME');
     if (!deploymentName) {
       throw new Error('AZURE_OPENAI_DEPLOYMENT_NAME must be set when using Azure OpenAI');
     }
@@ -251,7 +239,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
   }
 
   // If Azure Content Safety endpoint is available, use it for moderation
-  if (getEnvString('AZURE_CONTENT_SAFETY_ENDPOINT') || env?.AZURE_CONTENT_SAFETY_ENDPOINT) {
+  if (env?.AZURE_CONTENT_SAFETY_ENDPOINT ?? getEnvString('AZURE_CONTENT_SAFETY_ENDPOINT')) {
     providers.moderationProvider = new AzureModerationProvider('text-content-safety', { env });
   }
 

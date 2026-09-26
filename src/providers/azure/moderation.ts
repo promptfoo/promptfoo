@@ -4,11 +4,10 @@ import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
+import { resolveProviderApiKey } from '../credentials';
 import { getRequestTimeoutMs } from '../shared';
 import { AzureGenericProvider } from './generic';
 
-import type { EnvVarKey } from '../../envars';
-import type { EnvOverrides } from '../../types/env';
 import type {
   ApiModerationProvider,
   ModerationFlag,
@@ -187,18 +186,11 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
   }
 
   getContentSafetyApiKey(): string | undefined {
-    const extendedEnv = this.env as EnvOverrides & { AZURE_CONTENT_SAFETY_API_KEY?: string };
-
-    return (
-      this.configWithHeaders.apiKey ||
-      (this.configWithHeaders.apiKeyEnvar
-        ? this.env?.[this.configWithHeaders.apiKeyEnvar] ||
-          getEnvString(this.configWithHeaders.apiKeyEnvar as EnvVarKey)
-        : undefined) ||
-      extendedEnv?.AZURE_CONTENT_SAFETY_API_KEY ||
-      getEnvString('AZURE_CONTENT_SAFETY_API_KEY') ||
-      this.getApiKey()
-    );
+    return resolveProviderApiKey(this.configWithHeaders, this.env, [
+      'AZURE_CONTENT_SAFETY_API_KEY',
+      'AZURE_API_KEY',
+      'AZURE_OPENAI_API_KEY',
+    ]);
   }
 
   async callModerationApi(

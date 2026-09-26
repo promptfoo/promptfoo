@@ -82,7 +82,7 @@ export class CohereChatCompletionProvider implements ApiProvider {
   ) {
     const { config, id, env } = options;
     this.env = env;
-    this.apiKey = config?.apiKey || env?.COHERE_API_KEY || getEnvString('COHERE_API_KEY') || '';
+    this.apiKey = config?.apiKey || (env?.COHERE_API_KEY ?? getEnvString('COHERE_API_KEY') ?? '');
     this.modelName = modelName;
     if (!CohereChatCompletionProvider.COHERE_CHAT_MODELS.includes(this.modelName)) {
       logger.warn(`Using unknown Cohere chat model: ${this.modelName}`);
@@ -257,14 +257,11 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
   }
 
   getApiKey(): string | undefined {
+    const namedKey = this.config.apiKeyEnvar
+      ? (this.env?.[this.config.apiKeyEnvar] ?? getEnvString(this.config.apiKeyEnvar))
+      : undefined;
     return (
-      this.config.apiKey ||
-      (this.config?.apiKeyEnvar
-        ? this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides] ||
-          getEnvString(this.config.apiKeyEnvar)
-        : undefined) ||
-      this.env?.COHERE_API_KEY ||
-      getEnvString('COHERE_API_KEY')
+      this.config.apiKey || (namedKey ?? this.env?.COHERE_API_KEY ?? getEnvString('COHERE_API_KEY'))
     );
   }
 
