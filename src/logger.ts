@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-import chalk from 'chalk';
+import { Chalk } from 'chalk';
 import winston from 'winston';
 import cliState from './cliState';
 import { getEnvBool, getEnvString } from './envars';
@@ -10,6 +10,8 @@ import { safeJsonStringify } from './util/json';
 import { getLogFiles } from './util/logFiles';
 import { sanitizeObject, sanitizeUrl } from './util/sanitizer';
 
+// Named construction also works when the CommonJS bundle loads Chalk as an ES module.
+const chalk = new Chalk();
 const MAX_LOG_FILES = 50;
 
 type LogCallback = (message: string) => void;
