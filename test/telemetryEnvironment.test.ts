@@ -219,6 +219,25 @@ describe('telemetry test-mode environment restrictions', () => {
     }
   });
 
+  it.each([true, false])(
+    'captures host test mode for direct instances (eager=%s)',
+    async (eager) => {
+      mockProcessEnv({ IS_TESTING: 'true' });
+      const { Telemetry } = await import('../src/telemetry');
+      const telemetry = new Telemetry(eager);
+      mockProcessEnv({ IS_TESTING: 'false' });
+      telemetry.initialize(false);
+      await telemetry.identify();
+      telemetry.record('eval_ran', {});
+      mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: 'true' });
+      telemetry.record('eval_ran', {});
+      await telemetry.shutdown();
+      expect(PostHog).not.toHaveBeenCalled();
+      expect(client.capture).not.toHaveBeenCalled();
+      expect(request).not.toHaveBeenCalled();
+    },
+  );
+
   it('retains the captured CLI host restriction across later initialization calls', async () => {
     const { Telemetry } = await import('../src/telemetry');
     const telemetry = new Telemetry(false);

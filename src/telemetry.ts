@@ -42,7 +42,7 @@ export class Telemetry {
   private shutdownPromise: Promise<void> = Promise.resolve();
 
   private telemetryDisabledRecorded = false;
-  private testMode = false;
+  private testMode = parseEnvBool(process.env.IS_TESTING);
   private id: string | null = null;
 
   constructor(initializeImmediately: boolean = true) {
