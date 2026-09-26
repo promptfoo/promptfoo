@@ -104,6 +104,76 @@ describe('telemetry test-mode environment restrictions', () => {
     expect(request).not.toHaveBeenCalled();
   });
 
+  it.each([{ IS_TESTING: 'true' }, { PROMPTFOO_DISABLE_TELEMETRY: 'true' }])(
+    'does not let a suppressed instance shut down another instance: %j',
+    async (env) => {
+      const { default: cliState } = await import('../src/cliState');
+      const { Telemetry } = await import('../src/telemetry');
+      const active = new Telemetry();
+      await cliState.withEnv(env, async () => {
+        const suppressed = new Telemetry();
+        await suppressed.shutdown();
+      });
+      expect(client.shutdown).not.toHaveBeenCalled();
+      active.record('eval_ran', {});
+      expect(client.capture).toHaveBeenCalledOnce();
+      await active.shutdown();
+      expect(client.shutdown).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('creates a fresh client when enabled use resumes after scoped shutdown', async () => {
+    const { default: cliState } = await import('../src/cliState');
+    const { Telemetry } = await import('../src/telemetry');
+    const nextClient = {
+      ...client,
+      capture: vi.fn(),
+      shutdown: vi.fn().mockResolvedValue(undefined),
+    };
+    vi.mocked(PostHog)
+      .mockImplementationOnce(function () {
+        return client as unknown as PostHog;
+      })
+      .mockImplementationOnce(function () {
+        return nextClient as unknown as PostHog;
+      });
+    const telemetry = new Telemetry();
+    await cliState.withEnv({ IS_TESTING: 'true' }, () => telemetry.shutdown());
+    telemetry.record('eval_ran', {});
+    expect(PostHog).toHaveBeenCalledTimes(2);
+    expect(nextClient.capture).toHaveBeenCalledOnce();
+    expect(client.capture).not.toHaveBeenCalled();
+    await Promise.all([telemetry.shutdown(), telemetry.shutdown()]);
+    expect(client.shutdown).toHaveBeenCalledOnce();
+    expect(nextClient.shutdown).toHaveBeenCalledOnce();
+  });
+
+  it('keeps enabled instances independently owned', async () => {
+    const { Telemetry } = await import('../src/telemetry');
+    const nextClient = {
+      ...client,
+      capture: vi.fn(),
+      shutdown: vi.fn().mockResolvedValue(undefined),
+    };
+    vi.mocked(PostHog)
+      .mockImplementationOnce(function () {
+        return client as unknown as PostHog;
+      })
+      .mockImplementationOnce(function () {
+        return nextClient as unknown as PostHog;
+      });
+    const first = new Telemetry();
+    const second = new Telemetry();
+    await first.shutdown();
+    second.record('eval_ran', {});
+    expect(PostHog).toHaveBeenCalledTimes(2);
+    expect(client.shutdown).toHaveBeenCalledOnce();
+    expect(nextClient.shutdown).not.toHaveBeenCalled();
+    expect(nextClient.capture).toHaveBeenCalledOnce();
+    await second.shutdown();
+    expect(nextClient.shutdown).toHaveBeenCalledOnce();
+  });
+
   it('retains the captured CLI host restriction across later initialization calls', async () => {
     const { Telemetry } = await import('../src/telemetry');
     const telemetry = new Telemetry(false);

@@ -12,9 +12,6 @@ export { TELEMETRY_EVENTS, TelemetryEventSchema } from './telemetryEvents';
 
 export type { EventProperties, TelemetryEventTypes } from './telemetryEvents';
 
-let posthogClient: PostHog | null = null;
-let isShuttingDown = false;
-
 // An invocation or suite cannot turn off the host's test-mode restriction.
 function isTestMode(): boolean {
   return (
@@ -22,30 +19,6 @@ function isTestMode(): boolean {
     parseEnvBool(getEnvOverrides('file')?.IS_TESTING) ||
     getEnvBool('IS_TESTING')
   );
-}
-
-function getPostHogClient(): PostHog | null {
-  if (getEnvBool('PROMPTFOO_DISABLE_TELEMETRY') || isTestMode()) {
-    return null;
-  }
-
-  if (posthogClient === null && POSTHOG_KEY) {
-    try {
-      posthogClient = new PostHog(POSTHOG_KEY, {
-        host: EVENTS_ENDPOINT,
-        fetch: fetchWithProxy,
-        // Disable automatic flush interval to prevent keeping the event loop alive.
-        // Without this, PostHog's internal setInterval keeps the Node.js event loop
-        // alive indefinitely, causing processes that import promptfoo to hang.
-        // Events are still sent immediately via explicit flush() calls after each capture.
-        // See: https://github.com/promptfoo/promptfoo/issues/5893
-        flushInterval: 0,
-      });
-    } catch {
-      posthogClient = null;
-    }
-  }
-  return posthogClient;
 }
 
 const TELEMETRY_TIMEOUT_MS = 1000;
@@ -60,6 +33,9 @@ function getRuntimeMetadata() {
 }
 
 export class Telemetry {
+  private posthogClient: PostHog | null = null;
+  private shutdownPromise: Promise<void> = Promise.resolve();
+
   private telemetryDisabledRecorded = false;
   private testMode = false;
   private id: string | null = null;
@@ -80,6 +56,30 @@ export class Telemetry {
     void this.identify();
   }
 
+  private getPostHogClient(): PostHog | null {
+    if (getEnvBool('PROMPTFOO_DISABLE_TELEMETRY') || isTestMode()) {
+      return null;
+    }
+
+    if (this.posthogClient === null && POSTHOG_KEY) {
+      try {
+        this.posthogClient = new PostHog(POSTHOG_KEY, {
+          host: EVENTS_ENDPOINT,
+          fetch: fetchWithProxy,
+          // Disable automatic flush interval to prevent keeping the event loop alive.
+          // Without this, PostHog's internal setInterval keeps the Node.js event loop
+          // alive indefinitely, causing processes that import promptfoo to hang.
+          // Events are still sent immediately via explicit flush() calls after each capture.
+          // See: https://github.com/promptfoo/promptfoo/issues/5893
+          flushInterval: 0,
+        });
+      } catch {
+        this.posthogClient = null;
+      }
+    }
+    return this.posthogClient;
+  }
+
   private getId(): string {
     this.id ??= getUserId();
     return this.id;
@@ -98,7 +98,7 @@ export class Telemetry {
       return;
     }
 
-    const client = getPostHogClient();
+    const client = this.getPostHogClient();
     if (client) {
       try {
         const personProperties = this.getPersonProperties(isCI());
@@ -149,7 +149,7 @@ export class Telemetry {
       ...getRuntimeMetadata(),
     };
 
-    const client = getPostHogClient();
+    const client = this.getPostHogClient();
     if (client) {
       try {
         client.capture({
@@ -190,25 +190,19 @@ export class Telemetry {
     });
   }
 
-  async shutdown(): Promise<void> {
-    // Guard against multiple shutdown calls (from beforeExit + explicit shutdown in main.ts)
-    if (isShuttingDown) {
-      return;
+  shutdown(): Promise<void> {
+    const client = this.posthogClient;
+    if (client) {
+      // Detach before awaiting so enabled use can acquire a fresh client.
+      this.posthogClient = null;
+      const shutdown = Promise.resolve()
+        .then(() => client.shutdown())
+        .catch((error) => {
+          logger.debug(`PostHog shutdown error: ${error}`);
+        });
+      this.shutdownPromise = Promise.all([this.shutdownPromise, shutdown]).then(() => undefined);
     }
-
-    const client = posthogClient;
-    if (!client) {
-      // No client to shut down - don't set the flag so future shutdowns work
-      // if telemetry becomes enabled (e.g., in test harnesses)
-      return;
-    }
-
-    isShuttingDown = true;
-    try {
-      await client.shutdown();
-    } catch (error) {
-      logger.debug(`PostHog shutdown error: ${error}`);
-    }
+    return this.shutdownPromise;
   }
 
   /**
