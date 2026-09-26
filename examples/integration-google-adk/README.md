@@ -37,13 +37,13 @@ within the 2.x release series, with Google GenAI and the three OpenTelemetry
 packages imported directly by the provider. ADK 2 keeps optional integrations
 out of its default installation.
 
-To use ADK's optional OpenAI adapter, install the OpenAI SDK and set an unprefixed
-model ID:
+To use OpenAI GPT-5 models, install the optional LiteLLM adapter and keep the
+provider prefix so ADK selects the compatible adapter:
 
 ```bash
-python -m pip install 'openai>=2.20,<3'
+python -m pip install 'litellm>=1.101,<2'
 export OPENAI_API_KEY=your_openai_api_key_here
-export ADK_MODEL=gpt-5.4-mini
+export ADK_MODEL=openai/gpt-5.4-mini
 ```
 
 If Promptfoo is launched outside the activated virtual environment, point the Python provider at it explicitly:
