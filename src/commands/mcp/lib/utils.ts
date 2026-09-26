@@ -127,20 +127,6 @@ export function filterNonNull<T>(array: (T | null | undefined)[]): T[] {
 }
 
 /**
- * Debounce function for rate limiting
- */
-export function debounce<T extends unknown[]>(
-  func: (...args: T) => void,
-  wait: number,
-): (...args: T) => void {
-  let timeout: NodeJS.Timeout;
-  return (...args: T) => {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), wait);
-  };
-}
-
-/**
  * Create a retry function with exponential backoff
  */
 export async function retry<T>(
