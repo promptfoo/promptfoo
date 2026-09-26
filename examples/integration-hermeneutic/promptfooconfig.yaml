@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Local wording review with Hermeneutic
+
+prompts:
+  - '{{draft}}'
+
+providers:
+  - echo
+
+defaultTest:
+  assert:
+    - type: python
+      value: file://assertion.py
+      config:
+        minSeverity: med
+
+tests:
+  - description: Bounded wording passes
+    vars:
+      draft: The patch passed the local tests.
+  - description: Numeric completion claim needs evidence review
+    vars:
+      draft: Finished 12 tests.
+  - description: Absolute wording needs review
+    vars:
+      draft: This always works.
+  - description: Partial completion guard avoids a completion flag
+    vars:
+      draft: Finished 3 files, but 5 remain.
+  - description: A false fact can pass this wording check
+    vars:
+      draft: Paris is the capital of Germany.
