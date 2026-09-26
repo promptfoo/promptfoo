@@ -28,8 +28,7 @@ const clientOwners = ((process as unknown as Record<symbol, Set<Telemetry>>)[CLI
 function isTestMode(): boolean {
   return (
     isHostTesting ||
-    parseEnvBool(process.env.IS_TESTING) ||
-    parseEnvBool(getEnvOverrides('file')?.IS_TESTING) ||
+    parseEnvBool(getEnvOverrides('file')?.IS_TESTING ?? process.env.IS_TESTING) ||
     getEnvBool('IS_TESTING')
   );
 }

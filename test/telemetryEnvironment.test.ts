@@ -301,6 +301,26 @@ describe('telemetry test-mode environment restrictions', () => {
     },
   );
 
+  it.each(['false', '0', ''])(
+    'lets an isolated file override %j mask an implicit process test flag',
+    async (fileFlag) => {
+      const { default: cliState } = await import('../src/cliState');
+      const { Telemetry } = await import('../src/telemetry');
+      // The original host flag was absent; implicit dotenv loaded this value later.
+      mockProcessEnv({ IS_TESTING: 'true' });
+      const telemetry = new Telemetry(false);
+      await cliState.withEnvFileOverrides({ IS_TESTING: fileFlag }, () =>
+        cliState.withEnv({ IS_TESTING: 'false' }, async () => {
+          telemetry.record('eval_ran', {});
+          await telemetry.shutdown();
+        }),
+      );
+      expect(process.env.IS_TESTING).toBe('true');
+      expect(client.capture).toHaveBeenCalledOnce();
+      expect(request).toHaveBeenCalledOnce();
+    },
+  );
+
   it('sends the production opt-out acknowledgment after a test scope suppressed it', async () => {
     const { default: cliState } = await import('../src/cliState');
     const { Telemetry } = await import('../src/telemetry');
