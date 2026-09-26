@@ -1176,12 +1176,9 @@ function PromptColumnHeader({
     hasCompleteFilteredMetrics ? filteredMetrics : null,
     derivedMetricNames,
   );
-  const totalMetricNames =
-    hasCompleteFilteredMetrics && filteredMetrics
-      ? derivedMetricNames.filter((metricName) =>
-          Object.prototype.hasOwnProperty.call(metrics?.namedScores ?? {}, metricName),
-        )
-      : [];
+  const totalMetricNames = derivedMetricNames.filter((metricName) =>
+    Object.prototype.hasOwnProperty.call(metrics?.namedScores ?? {}, metricName),
+  );
   const metricTotals = getNamedMetricTotals(displayMetrics);
 
   return (

@@ -98,7 +98,17 @@ describe('MetricsTable', () => {
     const cells = within(row)
       .getAllByRole('cell')
       .map((cell) => cell.textContent);
-    expect(cells.slice(1, 10)).toEqual(['—', '0.7', '—', '80.00%', '8', '10', '—', '0.9', '—']);
+    expect(cells.slice(1, 10)).toEqual([
+      '—',
+      '0.7 (total)',
+      '—',
+      '80.00%',
+      '8',
+      '10',
+      '—',
+      '0.9 (total)',
+      '—',
+    ]);
   });
 
   it('should apply the correct metric filter and close the dialog when the filter icon is clicked for a non-policy metric row', async () => {
@@ -186,34 +196,36 @@ describe('MetricsTable', () => {
     expect(screen.queryByText('another-metric')).not.toBeInTheDocument();
   });
 
-  it('labels derived metrics that remain evaluation-wide under a filter', async () => {
-    vi.mocked(useTableStore).mockReturnValue({
-      table: mockTableData,
-      filteredMetrics: [
-        {
-          namedScores: { accuracy: 1.5 },
-          namedScoresCount: { accuracy: 2 },
+  it.each([
+    { filteredMetrics: null },
+    { filteredMetrics: [] },
+    { filteredMetrics: [{ namedScores: { accuracy: 1.5 }, namedScoresCount: { accuracy: 2 } }] },
+  ])(
+    'labels derived totals with filtered metrics $filteredMetrics',
+    async ({ filteredMetrics }) => {
+      vi.mocked(useTableStore).mockReturnValue({
+        table: mockTableData,
+        filteredMetrics,
+        config: {
+          redteam: { plugins: [] },
+          derivedMetrics: [{ name: 'another-metric', value: 'accuracy' }],
         },
-      ],
-      config: {
-        redteam: { plugins: [] },
-        derivedMetrics: [{ name: 'another-metric', value: 'accuracy' }],
-      },
-      addFilter: mockAddFilter,
-      filters: {
-        values: {},
-        appliedCount: 1,
-        options: { metric: [], metadata: [] },
-      },
-    } as any);
+        addFilter: mockAddFilter,
+        filters: {
+          values: {},
+          appliedCount: 1,
+          options: { metric: [], metadata: [] },
+        },
+      } as any);
 
-    render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+      render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
 
-    expect(await screen.findByText('another-metric (total)')).toHaveAttribute(
-      'title',
-      'Derived metric from the unfiltered evaluation',
-    );
-  });
+      expect(await screen.findByText('0.8 (total)')).toHaveAttribute(
+        'title',
+        'Derived metric from the unfiltered evaluation: 0.8',
+      );
+    },
+  );
 
   it.each([true, false])(
     'displays a derived collision as a raw value with filtered=%s',
@@ -228,14 +240,58 @@ describe('MetricsTable', () => {
         filters: { values: {}, appliedCount: filtered ? 1 : 0 },
       } as any);
       render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
-      const row = screen
-        .getByText(filtered ? 'another-metric (total)' : 'another-metric')
-        .closest('tr')!;
+      const row = screen.getByText('another-metric').closest('tr')!;
       expect(
         within(row)
           .getAllByRole('cell')
           .map((cell) => cell.textContent),
-      ).toEqual([filtered ? 'another-metric (total)' : 'another-metric', '—', '0.8', '—', '']);
+      ).toEqual(['another-metric', '—', '0.8 (total)', '—', '']);
+    },
+  );
+
+  it.each([false, true])(
+    'labels only the derived comparison value with reversed=%s',
+    (reversed) => {
+      const columns = [
+        { score: 0.7, names: ['quality'] },
+        { score: 8, names: [] },
+        { score: undefined, names: ['quality'] },
+      ];
+      if (reversed) {
+        columns.reverse();
+      }
+      vi.mocked(useTableStore).mockReturnValue({
+        table: {
+          head: {
+            vars: [],
+            prompts: columns.map(({ score }, idx) => ({
+              provider: `provider-${idx}`,
+              metrics: {
+                namedScores: score === undefined ? {} : { quality: score },
+                namedScoresCount: { quality: 10 },
+              },
+            })),
+          },
+          body: [],
+        },
+        derivedMetricNamesByPrompt: columns.map(({ names }) => names),
+        filteredMetrics: null,
+        config: {},
+        addFilter: mockAddFilter,
+        filters: { values: {}, appliedCount: 1 },
+      } as any);
+      render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+      const row = screen.getByText('quality').closest('tr')!;
+      const scoreCells = within(row).getAllByRole('cell');
+      expect(columns.map((_, idx) => scoreCells[2 + idx * 3].textContent)).toEqual(
+        columns.map(({ score }) =>
+          score === undefined ? '—' : score === 0.7 ? '0.7 (total)' : '8',
+        ),
+      );
+      expect(within(row).getAllByText(/\(total\)/)).toHaveLength(1);
+      expect(scoreCells[1 + columns.findIndex(({ score }) => score === 8) * 3]).toHaveTextContent(
+        '80.00%',
+      );
     },
   );
 

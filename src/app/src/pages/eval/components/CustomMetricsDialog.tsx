@@ -27,6 +27,7 @@ type MetricScore = {
   score: number;
   total: number | undefined;
   hasScore: boolean;
+  isTotal: boolean;
 };
 
 interface MetricRow {
@@ -236,20 +237,6 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
       ),
     [config?.derivedMetrics, derivedMetricNamesByPrompt, table.head.prompts],
   );
-  const totalMetricNames = React.useMemo(() => {
-    const names = new Set<string>();
-    if (!hasCompleteFilteredMetrics) {
-      return names;
-    }
-    table.head.prompts.forEach((prompt, idx) => {
-      for (const metricName of derivedMetricNames[idx]) {
-        if (Object.prototype.hasOwnProperty.call(prompt.metrics?.namedScores ?? {}, metricName)) {
-          names.add(metricName);
-        }
-      }
-    });
-    return names;
-  }, [derivedMetricNames, hasCompleteFilteredMetrics, table.head.prompts]);
   const displayMetrics = React.useMemo(
     () =>
       table.head.prompts.map((prompt, idx) =>
@@ -294,13 +281,6 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
               displayValue = formatPolicyIdentifierAsMetric(policy.name ?? policy.id, value);
             }
           }
-          if (totalMetricNames.has(value)) {
-            return (
-              <span title="Derived metric from the unfiltered evaluation">
-                {displayValue} (total)
-              </span>
-            );
-          }
           return displayValue;
         },
       },
@@ -341,11 +321,21 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
             },
             cell: ({ row }) => {
               const metricScore = row.original[columnId] as MetricScore;
-              const { hasScore, score } = metricScore;
+              const { hasScore, score, isTotal } = metricScore;
               const displayValue = hasScore ? formatCompactMetricNumber(score) : '—';
               return (
-                <span className="text-sm" title={hasScore ? String(score) : 'Score unavailable'}>
+                <span
+                  className="text-sm"
+                  title={
+                    isTotal
+                      ? `Derived metric from the unfiltered evaluation: ${score}`
+                      : hasScore
+                        ? String(score)
+                        : 'Score unavailable'
+                  }
+                >
                   {displayValue}
+                  {isTotal ? ' (total)' : ''}
                 </span>
               );
             },
@@ -451,13 +441,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
     });
 
     return cols;
-  }, [
-    table.head.prompts,
-    policiesById,
-    renderPercentageValue,
-    handleMetricFilterClick,
-    totalMetricNames,
-  ]);
+  }, [table.head.prompts, policiesById, renderPercentageValue, handleMetricFilterClick]);
 
   // Create rows for DataTable
   const rows: MetricRow[] = React.useMemo(() => {
@@ -483,12 +467,13 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
           score: score ?? 0,
           total,
           hasScore,
+          isTotal: hasScore && derivedMetricNames[idx].includes(metric),
         };
       });
 
       return row;
     });
-  }, [displayMetrics, promptMetricNames]);
+  }, [derivedMetricNames, displayMetrics, promptMetricNames]);
 
   if (promptMetricNames.length === 0) {
     return null;

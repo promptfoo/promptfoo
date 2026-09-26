@@ -3292,36 +3292,50 @@ describe('ResultsTable Filtered Metrics Display', () => {
     );
   });
 
-  it('preserves an assertion denominator when another eval derives the same metric name', () => {
-    const prompts = [0.7, 8].map((quality, idx) => ({
-      ...mockTable.head.prompts[0],
-      provider: `provider-${idx}`,
-      metrics: {
-        ...mockTable.head.prompts[0].metrics,
-        namedScores: { quality },
-        namedScoresCount: { quality: 10 },
-        namedScoreWeights: { quality: 10 },
-      },
-    }));
-    vi.mocked(useTableStore).mockReturnValue({
-      ...useTableStore(),
-      config: { derivedMetrics: [{ name: 'quality', value: '0.7' }] },
-      derivedMetricNamesByPrompt: [['quality'], []],
-      filteredMetrics: null,
-      table: {
-        ...mockTable,
-        head: { ...mockTable.head, prompts },
-        body: mockTable.body.map((row) => ({ ...row, outputs: [row.outputs[0], row.outputs[0]] })),
-      },
-    });
+  it.each([
+    { filteredMetrics: null },
+    { filteredMetrics: [{ namedScores: { quality: 1 }, namedScoresCount: { quality: 1 } }] },
+  ])(
+    'preserves per-column derived labels and assertion denominators with incomplete metrics $filteredMetrics',
+    ({ filteredMetrics }) => {
+      const prompts = [0.7, 8].map((quality, idx) => ({
+        ...mockTable.head.prompts[0],
+        provider: `provider-${idx}`,
+        metrics: {
+          ...mockTable.head.prompts[0].metrics,
+          namedScores: { quality },
+          namedScoresCount: { quality: 10 },
+          namedScoreWeights: { quality: 10 },
+        },
+      }));
+      vi.mocked(useTableStore).mockReturnValue({
+        ...useTableStore(),
+        config: { derivedMetrics: [{ name: 'quality', value: '0.7' }] },
+        derivedMetricNamesByPrompt: [['quality'], []],
+        filteredMetrics,
+        table: {
+          ...mockTable,
+          head: { ...mockTable.head, prompts },
+          body: mockTable.body.map((row) => ({
+            ...row,
+            outputs: [row.outputs[0], row.outputs[0]],
+          })),
+        },
+      });
 
-    renderWithProviders(<ResultsTable {...defaultProps} />);
+      renderWithProviders(<ResultsTable {...defaultProps} />);
 
-    expect(screen.getAllByTestId('metric-value-quality').map((el) => el.textContent)).toEqual([
-      '0.70',
-      '80.00% (8.00/10.00)',
-    ]);
-  });
+      expect(screen.getAllByTestId('metric-name-quality').map((el) => el.textContent)).toEqual([
+        'quality (total)',
+        'quality',
+      ]);
+
+      expect(screen.getAllByTestId('metric-value-quality').map((el) => el.textContent)).toEqual([
+        '0.70',
+        '80.00% (8.00/10.00)',
+      ]);
+    },
+  );
 
   it('displays each prompt column with its filtered named metric denominator', () => {
     const firstPrompt = {

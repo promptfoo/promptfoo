@@ -2,6 +2,31 @@ import { describe, expect, it } from 'vitest';
 import { EvalSchemas } from '../../../src/types/api/eval';
 
 describe('Eval API schemas', () => {
+  it.each([
+    { value: undefined, valid: true },
+    { value: [['quality'], []], valid: true },
+    { value: ['quality'], valid: false },
+    { value: [[42]], valid: false },
+    { value: null, valid: false },
+  ])('validates optional per-column derived metric names: $value', ({ value, valid }) => {
+    const result = EvalSchemas.Table.Response.safeParse({
+      table: { head: { prompts: [], vars: [] }, body: [] },
+      totalCount: 0,
+      filteredCount: 0,
+      filteredMetrics: null,
+      derivedMetricNamesByPrompt: value,
+      config: {},
+      author: null,
+      version: 4,
+      id: 'eval-1',
+      stats: {},
+    });
+    expect(result.success).toBe(valid);
+    if (result.success) {
+      expect(result.data.derivedMetricNamesByPrompt).toEqual(value);
+    }
+  });
+
   it('validates table response envelopes without deep-parsing table rows', () => {
     const body = new Proxy([{ outputs: [{ text: 'large output' }] }], {
       get(target, property, receiver) {

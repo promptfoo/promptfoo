@@ -143,6 +143,18 @@ describe('server OpenAPI generation', () => {
       expect.objectContaining({ type: 'string' }),
     );
     expect(evalTableJsonSchema?.oneOf ?? evalTableJsonSchema?.anyOf).toHaveLength(2);
+    expect(evalTableJsonSchema?.oneOf ?? evalTableJsonSchema?.anyOf).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          properties: expect.objectContaining({
+            derivedMetricNamesByPrompt: {
+              type: 'array',
+              items: { type: 'array', items: { type: 'string' } },
+            },
+          }),
+        }),
+      ]),
+    );
     expect(evalTableLimitParam?.schema).toEqual(
       expect.objectContaining({ default: 50, type: 'integer' }),
     );
