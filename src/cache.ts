@@ -1,3 +1,5 @@
+/// <reference lib="es2021.weakref" />
+
 import { AsyncLocalStorage } from 'node:async_hooks';
 import crypto from 'node:crypto';
 import fs from 'fs';
