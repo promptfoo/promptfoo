@@ -7,7 +7,7 @@ import express from 'express';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cloudConfig } from '../../../src/globalConfig/cloud';
-import { readGlobalConfig } from '../../../src/globalConfig/globalConfig';
+import { readGlobalConfig, writeGlobalConfig } from '../../../src/globalConfig/globalConfig';
 import { userRouter } from '../../../src/server/routes/user';
 import telemetry from '../../../src/telemetry';
 import { setConfigDirectoryPath } from '../../../src/util/config/manage';
@@ -147,6 +147,32 @@ describe('Cloud login route with persisted configuration', () => {
       expect(config.cloud?.teams?.['old-org']?.currentTeamId).toBe('old-team');
     },
   );
+
+  it.each([
+    { legacy: 'newer', expected: 'newer' },
+    { legacy: 'foreign', expected: 'oldest' },
+    { legacy: 'removed', expected: 'oldest' },
+  ])('validates and migrates legacy team $legacy on web re-login', async ({ legacy, expected }) => {
+    writeGlobalConfig({
+      id: 'installation',
+      cloud: {
+        apiKey: 'new-key',
+        apiHost: 'https://new.example.com',
+        currentTeamId: legacy,
+        teams: { 'old-org': { currentTeamId: 'old-team' } },
+      },
+    });
+
+    const response = await api.post('/api/user/login').send({ apiKey: 'new-key' });
+
+    expect(response.status).toBe(200);
+    expect(readGlobalConfig().cloud?.currentTeamId).toBeUndefined();
+    expect(readGlobalConfig().cloud?.teams).toEqual({
+      'new-org': { currentTeamId: expected },
+      'old-org': { currentTeamId: 'old-team' },
+    });
+    expect(getCloudTaskTeamId('https://new.example.com/api/v1/task')).toBe(expected);
+  });
 
   it('preserves the remembered team when the same key logs in during a team-service outage', async () => {
     vi.mocked(fetchWithProxy).mockImplementation(async (url) =>

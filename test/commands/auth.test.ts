@@ -66,11 +66,13 @@ afterAll(() => {
 
 describe('auth command', () => {
   let program: Command;
+  let savedTeams: Record<string, { currentTeamId: string }>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetAllMocks();
     program = new Command();
+    savedTeams = {};
     process.exitCode = undefined;
     authCommand(program);
 
@@ -95,7 +97,7 @@ describe('auth command', () => {
         currentOrganizationId: cloudConfig.getCurrentOrganizationId(),
         currentTeamId: undefined,
         selectionContext: undefined,
-        teams: undefined,
+        teams: savedTeams,
       },
     }));
     vi.mocked(getUserTeams).mockResolvedValue([]);
@@ -207,7 +209,7 @@ describe('auth command', () => {
     it.each([false, true])(
       'handles team lookup failure before saving (explicit: %s)',
       async (explicit) => {
-        vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('stale-team');
+        savedTeams['1'] = { currentTeamId: 'stale-team' };
         vi.mocked(getUserTeams).mockRejectedValue(new Error('Teams unavailable'));
         await program.parseAsync([
           'node',
@@ -650,7 +652,7 @@ describe('auth command', () => {
         ];
 
         vi.mocked(getUserTeams).mockResolvedValue(mockTeams);
-        vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-2');
+        savedTeams = { '1': { currentTeamId: 'team-2' }, 'org-2': { currentTeamId: 'team-2' } };
 
         await program.parseAsync([
           'node',
@@ -888,9 +890,7 @@ describe('auth command', () => {
           updatedAt: '2024-01-01',
         },
       ]);
-      vi.mocked(cloudConfig.getCurrentTeamId).mockImplementation((organizationId) =>
-        organizationId === '1' ? 'saved' : undefined,
-      );
+      savedTeams['1'] = { currentTeamId: 'saved' };
 
       await program.parseAsync(['node', 'test', 'auth', 'login', '--api-key', 'test-key']);
 
@@ -942,7 +942,7 @@ describe('auth command', () => {
 
     it('uses the oldest team without prompting after an interactive login finds a stale saved selection', async () => {
       vi.mocked(isNonInteractive).mockReturnValue(false);
-      vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('removed');
+      savedTeams['1'] = { currentTeamId: 'removed' };
       vi.mocked(getUserTeams).mockResolvedValue([
         {
           id: 'newer',

@@ -200,6 +200,47 @@ describe('Cloud login with persisted configuration', () => {
     },
   );
 
+  it.each([
+    { legacy: 'chosen', expected: 'chosen' },
+    { legacy: 'foreign', expected: 'older' },
+    { legacy: 'removed', expected: 'older' },
+    { legacy: 'chosen', scoped: 'older', expected: 'older' },
+    { legacy: 'chosen', scoped: 'removed', expected: 'older' },
+  ])(
+    'validates legacy preference $legacy with scoped preference $scoped during login',
+    async ({ legacy, scoped, expected }) => {
+      writeGlobalConfig({
+        id: 'installation',
+        cloud: {
+          apiKey: 'candidate-key',
+          apiHost: validation.app.url,
+          currentTeamId: legacy,
+          teams: {
+            ...(scoped ? { 'candidate-org': { currentTeamId: scoped } } : {}),
+            'other-org': { currentTeamId: 'remembered' },
+          },
+        },
+      });
+      vi.mocked(fetchWithProxy).mockImplementation(async (url) =>
+        Response.json(
+          String(url).endsWith('/users/me')
+            ? validation
+            : [{ ...teams[0], id: 'foreign', organizationId: 'other-org' }, ...teams],
+        ),
+      );
+
+      await expect(loginWithApiKey('candidate-key')).resolves.toMatchObject({
+        team: { id: expected },
+      });
+
+      expect(readGlobalConfig().cloud?.currentTeamId).toBeUndefined();
+      expect(readGlobalConfig().cloud?.teams).toEqual({
+        'candidate-org': { currentTeamId: expected },
+        'other-org': { currentTeamId: 'remembered' },
+      });
+    },
+  );
+
   it.each(['empty', 'selected'])(
     'clears the legacy slot after authoritative %s discovery',
     async (result) => {

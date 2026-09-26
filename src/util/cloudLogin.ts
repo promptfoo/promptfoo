@@ -59,7 +59,9 @@ export async function loginWithApiKey(
     organizationId = selectedTeam.organizationId;
     organizationTeams = allTeams.filter((team) => team.organizationId === organizationId);
   } else {
-    const savedTeamId = cloudConfig.getCurrentTeamId(organizationId);
+    const savedTeamId =
+      selection.selection.teams?.[organizationId]?.currentTeamId ||
+      selection.selection.currentTeamId;
     selectedTeam = organizationTeams.find((team) => team.id === savedTeamId);
     if (!selectedTeam && organizationTeams.length > 0) {
       selectedTeam =
