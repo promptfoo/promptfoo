@@ -23,7 +23,11 @@ import {
   getStandaloneEvalCacheKey,
   setCachedStandaloneEvals,
 } from '../../src/util/standaloneEvalCache';
-import { createEvaluateResult } from '../factories/eval';
+import {
+  createCompletedPrompt,
+  createEvaluateResult,
+  createPromptMetrics,
+} from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 
 vi.mock('../../src/globalConfig/accounts', async () => {
@@ -384,6 +388,78 @@ describe('evaluator', () => {
   });
 
   describe('summaryResults', () => {
+    it.each([
+      { label: 'unequal provider selection', columns: [[0, 1], [0]], numTests: 2 },
+      { label: 'disjoint provider selection', columns: [[0], [1]], numTests: 2 },
+      { label: 'empty first column', columns: [[], [0, 1]], numTests: 2 },
+      { label: 'sparse test indices', columns: [[3], [7]], numTests: 2 },
+    ])('counts $label without assuming a rectangular eval', async ({ columns, numTests }) => {
+      const evaluation = await Eval.create({}, []);
+      await evaluation.addPrompts(
+        columns.map((indices, promptIdx) =>
+          createCompletedPrompt('Test prompt', {
+            provider: `provider-${promptIdx}`,
+            metrics: createPromptMetrics({ testPassCount: indices.length }),
+          }),
+        ),
+      );
+      for (const [promptIdx, indices] of columns.entries()) {
+        for (const testIdx of indices) {
+          await evaluation.addResult(createEvaluateResult({ promptIdx, testIdx }));
+        }
+      }
+
+      expect(await getEvalSummaries()).toEqual([
+        expect.objectContaining({ evalId: evaluation.id, numTests, passRate: 100 }),
+      ]);
+    });
+
+    it('includes errors in the actual run count for pass rate and attack success rate', async () => {
+      const evaluation = await Eval.create({ redteam: {} }, []);
+      await evaluation.addPrompts([
+        createCompletedPrompt('First', {
+          metrics: createPromptMetrics({ testPassCount: 1, testErrorCount: 1 }),
+        }),
+        createCompletedPrompt('Second', {
+          metrics: createPromptMetrics({ testPassCount: 0, testFailCount: 1 }),
+        }),
+      ]);
+
+      expect(await getEvalSummaries(undefined, 'redteam')).toEqual([
+        expect.objectContaining({
+          evalId: evaluation.id,
+          numTests: 2,
+          passRate: (1 / 3) * 100,
+          attackSuccessRate: (1 / 3) * 100,
+        }),
+      ]);
+    });
+
+    it.each([0, 1])(
+      'preserves complete uploaded metrics with %i result chunks present',
+      async (rows) => {
+        const evaluation = await Eval.create({}, []);
+        await evaluation.addPrompts([
+          createCompletedPrompt('First', { metrics: createPromptMetrics({ testPassCount: 2 }) }),
+          createCompletedPrompt('Second', { metrics: createPromptMetrics({ testPassCount: 3 }) }),
+        ]);
+        if (rows) {
+          await evaluation.addResult(createEvaluateResult());
+        }
+
+        expect(await getEvalSummaries()).toEqual([
+          expect.objectContaining({ evalId: evaluation.id, numTests: 3, passRate: 100 }),
+        ]);
+      },
+    );
+
+    it('returns zero counts and rate when no tests have run', async () => {
+      const evaluation = await Eval.create({}, []);
+      expect(await getEvalSummaries()).toEqual([
+        expect.objectContaining({ evalId: evaluation.id, numTests: 0, passRate: 0 }),
+      ]);
+    });
+
     it('should return all evaluations', async () => {
       const eval1 = await EvalFactory.create();
       const eval2 = await EvalFactory.create();

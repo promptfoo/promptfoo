@@ -1764,6 +1764,11 @@ export async function getEvalSummaries(
       datasetId: evalsToDatasetsTable.datasetId,
       isRedteam: evalsTable.isRedteam,
       prompts: evalsTable.prompts,
+      persistedTestCount: sql<number>`(
+        SELECT COUNT(DISTINCT ${evalResultsTable.testIdx})
+        FROM ${evalResultsTable}
+        WHERE ${evalResultsTable.evalId} = ${evalsTable.id}
+      )`,
       // Configs can contain very large embedded test definitions. Only materialize them
       // for the report surface that requests provider labels.
       config: includeProviders ? evalsTable.config : sql<Partial<UnifiedConfig> | null>`NULL`,
@@ -1777,8 +1782,8 @@ export async function getEvalSummaries(
   /**
    * Deserialize the evals. A few things to note:
    *
-   * - Test statistics are derived from the prompt metrics as this is the only reliable source of truth
-   * that's written to the evals table.
+   * - Outcome counts come from prompt metrics, including for legacy and partially uploaded evals.
+   * - Persisted test indices distinguish test cases from runs across provider/prompt columns.
    */
   return results.map((result) => {
     const passCount =
@@ -1791,7 +1796,7 @@ export async function getEvalSummaries(
         return memo + (prompt.metrics?.testFailCount ?? 0);
       }, 0) ?? 0;
 
-    // All prompts should have the same number of test cases:
+    // Provider selection can give each column a different number of runs.
     const testCounts = result.prompts?.map((p) => {
       return (
         (p.metrics?.testPassCount ?? 0) +
@@ -1800,11 +1805,9 @@ export async function getEvalSummaries(
       );
     }) ?? [0];
 
-    // Derive the number of tests from the first prompt.
-    const testCount = testCounts.length > 0 ? testCounts[0] : 0;
-
-    // Test count * prompt count
-    const testRunCount = testCount * (result.prompts?.length ?? 0);
+    // Legacy evals may have no result rows, and uploads send complete metrics before row chunks.
+    const testCount = Math.max(result.persistedTestCount, ...testCounts, 0);
+    const testRunCount = testCounts.reduce((total, count) => total + count, 0);
 
     // Construct an array of providers
     const deserializedProviders = [];
