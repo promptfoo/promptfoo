@@ -196,10 +196,9 @@ providers:
       apiKey: your_api_key_here
 ```
 
-For the same supported environment variable, the provider's `env` value takes priority over
-the evaluation's top-level `env`, values loaded with `--env-file`, and shell variables.
-Explicit provider `config` values take priority over environment settings. Provider overrides
-stay with that provider during requests.
+For providers that support `env` overrides, values are resolved in this order:
+provider `env`, evaluation `env`, `--env-file`, then shell variables. Explicit provider
+`config` values take priority. See each provider's documentation for supported settings.
 
 ### Overriding Pricing
 

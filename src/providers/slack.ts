@@ -53,7 +53,7 @@ export class SlackProvider implements ApiProvider {
     this.options = options;
 
     const token =
-      options.config?.token || options.env?.SLACK_BOT_TOKEN || getEnvString('SLACK_BOT_TOKEN');
+      options.config?.token || (options.env?.SLACK_BOT_TOKEN ?? getEnvString('SLACK_BOT_TOKEN'));
     if (!token) {
       throw new Error(
         'Slack provider requires a token. Set SLACK_BOT_TOKEN or provide it in config.',
