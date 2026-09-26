@@ -91,6 +91,19 @@ describe('contracts leaf surface', () => {
       },
     );
 
+    it.each([
+      'AZURE_AI_PROJECT_URL',
+      'SNOWFLAKE_ACCOUNT_IDENTIFIER',
+      'GOOGLE_APPLICATION_CREDENTIALS',
+      'PROMPTFOO_TRACING_ENABLED',
+      'PROMPTFOO_MAX_CONCURRENCY',
+    ])('preserves %s strings and empty masks while rejecting other values', (key) => {
+      for (const value of ['fixture', '']) {
+        expect(ProviderEnvOverridesSchema.parse({ [key]: value })).toEqual({ [key]: value });
+      }
+      expect(ProviderEnvOverridesSchema.safeParse({ [key]: 123 }).success).toBe(false);
+    });
+
     it('parses a known env key', () => {
       const parsed = ProviderEnvOverridesSchema.safeParse({ OPENAI_API_KEY: 'sk-known' });
       expect(parsed.success).toBe(true);

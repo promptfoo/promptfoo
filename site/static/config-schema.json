@@ -219,6 +219,9 @@
         "AZURE_API_BASE_URL": {
           "type": "string"
         },
+        "AZURE_AI_PROJECT_URL": {
+          "type": "string"
+        },
         "AZURE_API_HOST": {
           "type": "string"
         },
@@ -343,6 +346,9 @@
           "type": "string"
         },
         "GOOGLE_API_HOST": {
+          "type": "string"
+        },
+        "GOOGLE_APPLICATION_CREDENTIALS": {
           "type": "string"
         },
         "GOOGLE_API_BASE_URL": {
@@ -522,7 +528,13 @@
         "PROMPTFOO_CA_CERT_PATH": {
           "type": "string"
         },
+        "PROMPTFOO_MAX_CONCURRENCY": {
+          "type": "string"
+        },
         "PROMPTFOO_PFX_CERT_PATH": {
+          "type": "string"
+        },
+        "PROMPTFOO_TRACING_ENABLED": {
           "type": "string"
         },
         "PROMPTFOO_PFX_PASSWORD": {
@@ -565,6 +577,9 @@
           "type": "string"
         },
         "SLACK_BOT_TOKEN": {
+          "type": "string"
+        },
+        "SNOWFLAKE_ACCOUNT_IDENTIFIER": {
           "type": "string"
         },
         "TOGETHER_API_KEY": {

@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ProviderOptionsSchema } from '../../../src/validators/providers';
 
 const mockRun = vi.hoisted(() => vi.fn());
 const mockGetOrCreateTrace = vi.hoisted(() => vi.fn(async (fn: () => Promise<unknown>) => fn()));
@@ -1317,10 +1318,13 @@ describe('OpenAiAgentsProvider', () => {
   ])(
     'retains provider tracing=%s over suite tracing=%s',
     async (providerValue, suiteValue, enabled) => {
-      const provider = new OpenAiAgentsProvider('gpt-5-mini', {
-        config: { agent: { name: 'Scoped Agent', instructions: 'Return a test answer.' } },
-        env: { PROMPTFOO_TRACING_ENABLED: providerValue },
-      });
+      const provider = new OpenAiAgentsProvider(
+        'gpt-5-mini',
+        ProviderOptionsSchema.parse({
+          config: { agent: { name: 'Scoped Agent', instructions: 'Return a test answer.' } },
+          env: { PROMPTFOO_TRACING_ENABLED: providerValue },
+        }),
+      );
       await cliState.withEnv({ PROMPTFOO_TRACING_ENABLED: suiteValue }, () =>
         provider.callApi('hello'),
       );
