@@ -22,7 +22,7 @@ This example showcases:
 
 ## Prerequisites
 
-- Python 3.9+
+- Python 3.10+
 - [OpenAI API key](https://platform.openai.com/api-keys) (default) or other supported provider
 
 ## Setup
@@ -30,10 +30,12 @@ This example showcases:
 ### 1. Install Python dependencies
 
 ```bash
-pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+python -m pip install -r requirements.txt
 ```
 
-This installs:
+This installs Strands 1.56 or newer within the 1.x release series:
 
 - [`strands-agents[openai]`](https://pypi.org/project/strands-agents/) - The Strands Agents SDK with OpenAI support
 
@@ -48,26 +50,24 @@ export OPENAI_API_KEY=your-api-key-here
 [Strands supports multiple model providers](https://strandsagents.com/latest/user-guide/concepts/model-providers/). To use [Anthropic](https://www.anthropic.com/):
 
 ```bash
-pip install 'strands-agents[anthropic]'
+python -m pip install 'strands-agents[anthropic]>=1.56.0,<2'
 export ANTHROPIC_API_KEY=your-key
 ```
 
 Then modify `agent.py` to use [`AnthropicModel`](https://strandsagents.com/latest/user-guide/concepts/model-providers/anthropic/) instead of [`OpenAIModel`](https://strandsagents.com/latest/user-guide/concepts/model-providers/openai/).
 
-To use [Amazon Bedrock](https://strandsagents.com/latest/user-guide/concepts/model-providers/amazon-bedrock/):
-
-```bash
-pip install 'strands-agents[bedrock]'
-```
+Amazon Bedrock support is included in the base SDK. To use it, replace
+`OpenAIModel` in `agent.py` with `BedrockModel` and configure AWS credentials; no
+additional Python package is required.
 
 ## Running the example
 
 ```bash
 # Run evaluation
-npx promptfoo eval
+npx promptfoo@latest eval --no-cache
 
 # View results in the web UI
-npx promptfoo view
+npx promptfoo@latest view
 ```
 
 ## How it works
