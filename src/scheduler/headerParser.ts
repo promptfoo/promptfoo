@@ -4,6 +4,8 @@ export interface ParsedRateLimitHeaders {
   limitRequests?: number;
   limitTokens?: number;
   resetAt?: number; // Absolute Unix timestamp in milliseconds
+  resetAtRequests?: number; // Absolute Unix timestamp in milliseconds
+  resetAtTokens?: number; // Absolute Unix timestamp in milliseconds
   retryAfterMs?: number; // Relative duration in milliseconds
 }
 
@@ -76,6 +78,16 @@ export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRa
   ]);
 
   // --- Reset time (ordered: OpenAI, Anthropic, Standard) ---
+  result.resetAtRequests = parseFirstReset(h, [
+    OPENAI_HEADERS.resetRequests,
+    ANTHROPIC_HEADERS.resetRequests,
+  ]);
+  result.resetAtTokens = parseFirstReset(h, [
+    OPENAI_HEADERS.resetTokens,
+    ANTHROPIC_HEADERS.resetTokens,
+  ]);
+
+  // Preserve the legacy shared reset clock for non-scheduler consumers.
   for (const name of [
     OPENAI_HEADERS.resetRequests,
     OPENAI_HEADERS.resetTokens,
@@ -154,6 +166,19 @@ function parseFirstMatch(headers: Record<string, string>, names: string[]): numb
       const num = Number.parseInt(value, 10);
       if (Number.isFinite(num) && num >= 0) {
         return num;
+      }
+    }
+  }
+  return undefined;
+}
+
+function parseFirstReset(headers: Record<string, string>, names: string[]): number | undefined {
+  for (const name of names) {
+    const value = headers[name];
+    if (value !== undefined) {
+      const parsed = parseResetTime(value);
+      if (parsed !== null) {
+        return parsed;
       }
     }
   }
