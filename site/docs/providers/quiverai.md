@@ -17,7 +17,7 @@ Two endpoints are supported:
 
 ## Setup
 
-1. Create an API key in the [QuiverAI Developer Platform](https://platform.quiver.ai/api-keys).
+1. Create an API key in the [QuiverAI Developer Platform](https://app.quiver.ai/settings/api-keys).
 2. Set the environment variable:
 
 ```bash

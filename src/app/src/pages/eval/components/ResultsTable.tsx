@@ -1138,7 +1138,6 @@ function PromptColumnHeader({
   numGoodAsserts,
   testCounts,
   passingTestCounts,
-  legacyMetricTotals,
   hasCompleteFilteredMetrics,
   config,
   filterMode,
@@ -1159,7 +1158,6 @@ function PromptColumnHeader({
   numGoodAsserts: number[];
   testCounts: PromptSummaryMetric[];
   passingTestCounts: PromptSummaryMetric[];
-  legacyMetricTotals: Record<string, number>;
   hasCompleteFilteredMetrics: boolean;
   config: ReturnType<typeof useTableStore.getState>['config'];
   filterMode: EvalResultsFilterMode;
@@ -1185,7 +1183,7 @@ function PromptColumnHeader({
             !Object.prototype.hasOwnProperty.call(filteredMetrics.namedScores ?? {}, metricName),
         )
       : [];
-  const metricTotals = getNamedMetricTotals(displayMetrics) ?? legacyMetricTotals;
+  const metricTotals = getNamedMetricTotals(displayMetrics);
 
   return (
     <div className="output-header">
@@ -1239,7 +1237,6 @@ function PromptColumnHeader({
           <div className="collapse-hidden">
             <CustomMetrics
               lookup={displayMetrics.namedScores}
-              counts={metricTotals}
               metricTotals={metricTotals}
               totalMetricNames={totalMetricNames}
               onShowMore={() => setCustomMetricsDialogOpen(true)}
@@ -2182,26 +2179,6 @@ function ResultsTable({
     [tableBody],
   );
 
-  const legacyMetricTotals = React.useMemo(() => {
-    const totals: Record<string, number> = {};
-    table?.body.forEach((row) => {
-      row.test.assert?.forEach((assertion) => {
-        if (assertion.metric) {
-          totals[assertion.metric] = (totals[assertion.metric] || 0) + (assertion.weight ?? 1);
-        }
-        if ('assert' in assertion && Array.isArray(assertion.assert)) {
-          assertion.assert.forEach((subAssertion) => {
-            if ('metric' in subAssertion && subAssertion.metric) {
-              totals[subAssertion.metric] =
-                (totals[subAssertion.metric] || 0) + (subAssertion.weight ?? 1);
-            }
-          });
-        }
-      });
-    });
-    return totals;
-  }, [table?.body]);
-
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const promptColumns = React.useMemo(() => {
     return [
@@ -2224,7 +2201,6 @@ function ResultsTable({
                 numGoodAsserts={numGoodAsserts}
                 testCounts={testCounts}
                 passingTestCounts={passingTestCounts}
-                legacyMetricTotals={legacyMetricTotals}
                 hasCompleteFilteredMetrics={hasCompleteFilteredMetrics}
                 config={config}
                 filterMode={filterMode}
@@ -2295,7 +2271,6 @@ function ResultsTable({
     hasCompleteFilteredMetrics,
     isRedteam,
     maxTextLength,
-    legacyMetricTotals,
     numAsserts,
     numGoodAsserts,
     onFailureFilterToggle,

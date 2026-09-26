@@ -1,8 +1,7 @@
 import { createHash, randomUUID } from 'crypto';
 
 import Anthropic from '@anthropic-ai/sdk';
-import { getEnvString } from '../../envars';
-import { getEnvOverrides } from '../../envOverrides';
+import { getEnvOverrides, getEnvString } from '../../envars';
 import logger from '../../logger';
 import {
   CLAUDE_CODE_OAUTH_BETA_FEATURES,

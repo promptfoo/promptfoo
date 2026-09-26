@@ -17,7 +17,10 @@ type ClouderaAiProviderOptions = ProviderOptions & {
 export class ClouderaAiChatCompletionProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: ClouderaAiProviderOptions) {
     // https://docs.cloudera.com/machine-learning/cloud/ai-inference/topics/ml-caii-openai-inference-protocol-using-curl.html
-    const domain = providerOptions.config?.domain || getEnvString('CDP_DOMAIN');
+    const domain =
+      providerOptions.config?.domain ||
+      providerOptions.env?.CDP_DOMAIN ||
+      getEnvString('CDP_DOMAIN');
     const namespace = providerOptions.config?.namespace || 'serving-default';
     const endpoint = providerOptions.config?.endpoint || modelName;
 
@@ -25,8 +28,10 @@ export class ClouderaAiChatCompletionProvider extends OpenAiChatCompletionProvid
       ...providerOptions,
       config: {
         ...providerOptions.config,
-        apiKeyEnvar: 'CDP_TOKEN',
-        apiBaseUrl: `https://${domain}/namespaces/${namespace}/endpoints/${endpoint}/v1`,
+        apiKeyEnvar: providerOptions.config?.apiKeyEnvar || 'CDP_TOKEN',
+        apiBaseUrl:
+          providerOptions.config?.apiBaseUrl ||
+          `https://${domain}/namespaces/${namespace}/endpoints/${endpoint}/v1`,
       },
     });
   }
