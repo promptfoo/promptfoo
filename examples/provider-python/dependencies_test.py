@@ -43,14 +43,21 @@ class ProcessPoolTest(unittest.TestCase):
     def test_worker_stderr_does_not_block_results(self) -> None:
         # Isolate the process pool from unittest's __main__ and bound regressions
         # with a timeout: an undrained stderr pipe otherwise blocks indefinitely.
+        worker_script = "\n".join(
+            [
+                "import sys",
+                "sys.path.insert(0, sys.argv[1])",
+                "import anyio",
+                "from anyio import to_process",
+                "from dependencies_test import write_worker_stderr",
+                "assert anyio.run(to_process.run_sync, write_worker_stderr) == 1024 * 1024",
+            ]
+        )
         subprocess.run(
             [
                 sys.executable,
                 "-c",
-                "import sys; sys.path.insert(0, sys.argv[1]); "
-                "import anyio; from anyio import to_process; "
-                "from dependencies_test import write_worker_stderr; "
-                "assert anyio.run(to_process.run_sync, write_worker_stderr) == 1024 * 1024",
+                worker_script,
                 str(Path(__file__).parent.resolve()),
             ],
             cwd=Path(__file__).parent,
