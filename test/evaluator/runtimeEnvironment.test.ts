@@ -3,11 +3,13 @@ import './setup';
 import { expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { evaluate } from '../../src/evaluator';
+import * as comparisonMatchers from '../../src/matchers/comparison';
 import Eval from '../../src/models/eval';
 import { EchoProvider } from '../../src/providers/echo';
 import * as targetWrapping from '../../src/redteam/mcpTargetProvider';
 import { getTargetResponse, redteamProviderManager } from '../../src/redteam/providers/shared';
 import { getProviderDelay } from '../../src/scheduler/providerCallExecutionContext';
+import { ProviderGroupedCallQueue } from '../../src/scheduler/providerCallQueue';
 import { isRateLimitWrapped } from '../../src/scheduler/providerWrapper';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { sleep } from '../../src/util/time';
@@ -174,6 +176,75 @@ describeEvaluator('evaluation environment defaults', () => {
     expect(target.delay).toBeUndefined();
     expect(getProviderDelay(target)).toBeUndefined();
   });
+
+  it.each([
+    { maxConcurrency: 2, delay: undefined, expected: 7 },
+    { maxConcurrency: 2, delay: 0, expected: 0 },
+    { maxConcurrency: 1, delay: undefined, expected: 7 },
+    { maxConcurrency: 1, delay: 0, expected: 0 },
+  ])(
+    'preserves invocation delay through immediate and queued grading: %j',
+    async ({ maxConcurrency, delay, expected }) => {
+      const target = createProvider();
+      const observed: Array<number | undefined> = [];
+      const grader: ApiProvider = {
+        id: () => 'offline-grader',
+        callApi: async (_prompt, context) => {
+          await Promise.resolve();
+          expect(context?.originalProvider).toBe(target);
+          observed.push(getProviderDelay(context?.originalProvider));
+          return { output: '{"pass":true,"score":1,"reason":"fixture"}' };
+        },
+      };
+      const suite = createSuite(target, { PROMPTFOO_DELAY_MS: '7' });
+      suite.tests = [{ assert: [{ type: 'llm-rubric', value: 'fixture', provider: grader }] }];
+      const queued = vi.spyOn(ProviderGroupedCallQueue.prototype, 'enqueue');
+      const record = new Eval({});
+      try {
+        await evaluate(suite, record, { maxConcurrency, delay });
+        expect(observed).toEqual([expected]);
+        expect(queued).toHaveBeenCalledTimes(maxConcurrency === 1 ? 1 : 0);
+        expect((await record.getResults())[0]).toMatchObject({ success: true, score: 1 });
+        expect(target.delay).toBeUndefined();
+        expect(getProviderDelay(target)).toBeUndefined();
+      } finally {
+        queued.mockRestore();
+      }
+    },
+  );
+
+  it.each([undefined, 0])(
+    'preserves invocation delay for comparison grading with override %s',
+    async (delay) => {
+      const target = createProvider();
+      const observed: Array<number | undefined> = [];
+      const grader: ApiProvider = {
+        id: () => 'offline-comparison-grader',
+        callApi: async (_prompt, context) => {
+          observed.push(getProviderDelay(context?.originalProvider));
+          return { output: '0' };
+        },
+      };
+      const suite = createSuite(target, { PROMPTFOO_DELAY_MS: '7' });
+      suite.prompts = [toPrompt('first'), toPrompt('second')];
+      suite.tests = [{ assert: [{ type: 'select-best', value: 'fixture' }] }];
+      const compare = vi
+        .spyOn(comparisonMatchers, 'matchesSelectBest')
+        .mockImplementation(async (_criteria, outputs, _grading, _vars, context) => {
+          await grader.callApi('fixture', context);
+          return outputs.map(() => ({ pass: true, score: 1, reason: 'fixture' }));
+        });
+      const record = new Eval({});
+      try {
+        await evaluate(suite, record, { delay });
+        expect(observed).toEqual([delay ?? 7]);
+        expect(target.delay).toBeUndefined();
+        expect((await record.getResults()).every((result) => result.success)).toBe(true);
+      } finally {
+        compare.mockRestore();
+      }
+    },
+  );
 
   it('isolates concurrent delay defaults on the same provider object', async () => {
     let calls = 0;

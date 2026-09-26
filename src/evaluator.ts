@@ -1474,7 +1474,7 @@ async function gradeRunEvalResponse({
     invariant(providerCallQueue, 'providerCallQueue is required when deferGrading is enabled');
     ret.response = processedResponse;
     const gradingPromise = withProviderCallExecutionContext(
-      { abortSignal, providerCallQueue, rateLimitRegistry },
+      { ...getProviderCallExecutionContext(), abortSignal, providerCallQueue, rateLimitRegistry },
       () =>
         runAssertions({
           prompt: renderedPrompt,
@@ -1494,7 +1494,7 @@ async function gradeRunEvalResponse({
   }
 
   const checkResult = await withProviderCallExecutionContext(
-    { abortSignal, rateLimitRegistry },
+    { ...getProviderCallExecutionContext(), abortSignal, rateLimitRegistry },
     () =>
       runAssertions({
         prompt: renderedPrompt,
@@ -1631,7 +1631,21 @@ export async function runEval(options: RunEvalOptions): Promise<EvaluateResult[]
   );
 }
 
-async function runEvalInternal({
+function runEvalInternal(options: RunEvalOptions): Promise<EvaluateResult[]> {
+  const delay = resolveInvocationDelay(options.provider, options.delay);
+  return withProviderCallExecutionContext(
+    { ...getProviderCallExecutionContext(), providerDelay: { provider: options.provider, delay } },
+    () => runEvalInContext({ ...options, delay }),
+  );
+}
+
+function resolveInvocationDelay(provider: ApiProvider, delay?: number): number {
+  const effectiveDelay = provider.delay ?? delay ?? getEnvInt('PROMPTFOO_DELAY_MS', 0);
+  invariant(typeof effectiveDelay === 'number', `Invalid delay for ${provider.label}`);
+  return effectiveDelay;
+}
+
+async function runEvalInContext({
   provider,
   prompt, // raw prompt
   test,
@@ -1652,9 +1666,7 @@ async function runEvalInternal({
   providerCallQueue,
   rateLimitRegistry,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
-  const effectiveDelay = provider.delay ?? delay ?? getEnvInt('PROMPTFOO_DELAY_MS', 0);
-  invariant(typeof effectiveDelay === 'number', `Invalid delay for ${provider.label}`);
-
+  const effectiveDelay = delay;
   const state = createRunEvalState({ provider, prompt, promptIndex, test });
   attachConversationVar({
     conversations,
@@ -4313,6 +4325,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     const repeatCacheContext = repeatCacheContextByTestIdx.get(testIdx);
     const outputs = resultsToCompare.map((r) => r.response?.output || '');
+    const callApiContext = this.getComparisonCallApiContext(
+      resultsToCompare[0],
+      repeatCacheContext,
+    );
+    const originalProvider = callApiContext.originalProvider;
     const gradingResults = await withCacheNamespace(
       repeatCacheContext
         ? getRepeatCacheNamespace(
@@ -4322,13 +4339,22 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         : undefined,
       () =>
         withProviderCallExecutionContext(
-          { abortSignal: providerAbortSignal, rateLimitRegistry: this.rateLimitRegistry },
+          {
+            abortSignal: providerAbortSignal,
+            rateLimitRegistry: this.rateLimitRegistry,
+            providerDelay: originalProvider
+              ? {
+                  provider: originalProvider,
+                  delay: resolveInvocationDelay(originalProvider, this.options.delay),
+                }
+              : undefined,
+          },
           () =>
             runCompareAssertion(
               resultsToCompare[0].testCase,
               compareAssertion,
               outputs,
-              this.getComparisonCallApiContext(resultsToCompare[0], repeatCacheContext),
+              callApiContext,
             ),
         ),
     );
