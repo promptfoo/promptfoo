@@ -64,16 +64,27 @@ async function resolveAuthenticationHeaders(
 //
 // Trust settings can vary between concurrent evals. Never share a connection
 // pool across TLS policies, CA contents, or runtime FIPS modes.
-function createAgentCache(): LRUCache<string, Dispatcher> {
-  return new LRUCache<string, Dispatcher>({
+interface PooledAgent {
+  dispatcher: Dispatcher;
+  requests: number;
+  evicted: boolean;
+}
+
+function closeEvictedAgent(agent: PooledAgent): void {
+  if (agent.evicted && agent.requests === 0 && typeof agent.dispatcher.close === 'function') {
+    // Graceful close also lets response bodies finish streaming.
+    void Promise.resolve(agent.dispatcher.close()).catch((error) => {
+      logger.debug('Failed to close an evicted HTTP dispatcher', { error });
+    });
+  }
+}
+
+function createAgentCache(): LRUCache<string, PooledAgent> {
+  return new LRUCache<string, PooledAgent>({
     max: 32,
     disposeAfter(agent) {
-      // Graceful close lets in-flight requests finish when a policy is evicted.
-      if (typeof agent.close === 'function') {
-        void Promise.resolve(agent.close()).catch((error) => {
-          logger.debug('Failed to close an evicted HTTP dispatcher', { error });
-        });
-      }
+      agent.evicted = true;
+      closeEvictedAgent(agent);
     },
   });
 }
@@ -108,7 +119,7 @@ export function clearAgentCache(): void {
   cachedProxyAgents.clear();
 }
 
-function getOrCreateAgent(tlsOptions: ConnectionOptions): Dispatcher {
+function getOrCreateAgent(tlsOptions: ConnectionOptions): PooledAgent {
   const concurrency = getConnectionPoolSize();
   const cacheKey = JSON.stringify([concurrency, isFipsEnabled(), tlsOptions]);
   const existing = cachedAgents.get(cacheKey);
@@ -124,11 +135,12 @@ function getOrCreateAgent(tlsOptions: ConnectionOptions): Dispatcher {
   })
     .compose(interceptors.decompress({ skipErrorResponses: false }))
     .compose(stripDecompressionHeaders());
-  cachedAgents.set(cacheKey, agent);
-  return agent;
+  const entry = { dispatcher: agent, requests: 0, evicted: false };
+  cachedAgents.set(cacheKey, entry);
+  return entry;
 }
 
-function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions): Dispatcher {
+function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions): PooledAgent {
   const concurrency = getConnectionPoolSize();
   const cacheKey = JSON.stringify([proxyUrl, concurrency, isFipsEnabled(), tlsOptions]);
   const existing = cachedProxyAgents.get(cacheKey);
@@ -146,8 +158,9 @@ function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions):
   })
     .compose(interceptors.decompress({ skipErrorResponses: false }))
     .compose(stripDecompressionHeaders());
-  cachedProxyAgents.set(cacheKey, agent);
-  return agent;
+  const entry = { dispatcher: agent, requests: 0, evicted: false };
+  cachedProxyAgents.set(cacheKey, entry);
+  return entry;
 }
 
 /**
@@ -301,49 +314,61 @@ export async function fetchWithProxy(
 
   // Bind the dispatcher per-request to avoid global state races under concurrency.
   // Respect a caller-provided dispatcher (e.g. HTTP provider's custom TLS agent for mTLS).
+  let pooledAgent: PooledAgent | undefined;
   if (!finalOptions.dispatcher) {
     if (proxyUrl) {
       logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
-      finalOptions.dispatcher = getOrCreateProxyAgent(proxyUrl, tlsOptions);
+      pooledAgent = getOrCreateProxyAgent(proxyUrl, tlsOptions);
     } else {
-      finalOptions.dispatcher = getOrCreateAgent(tlsOptions);
+      pooledAgent = getOrCreateAgent(tlsOptions);
     }
+    pooledAgent.requests++;
+    finalOptions.dispatcher = pooledAgent.dispatcher;
   }
 
-  // Transient error retry logic (502/503/504/524 with matching status text).
-  // When a provider sets maxRetries: 0 and the caller did not pass an explicit
-  // disableTransientRetries, honor the provider intent via the retry context.
-  const disableTransientRetries = resolveTransientRetryDisabled(options.disableTransientRetries);
-  const maxTransientRetries = disableTransientRetries ? 0 : 3;
+  try {
+    // Transient error retry logic (502/503/504/524 with matching status text).
+    // When a provider sets maxRetries: 0 and the caller did not pass an explicit
+    // disableTransientRetries, honor the provider intent via the retry context.
+    const disableTransientRetries = resolveTransientRetryDisabled(options.disableTransientRetries);
+    const maxTransientRetries = disableTransientRetries ? 0 : 3;
 
-  for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
-    let attemptOptions = finalOptions;
-    if (getAuthHeaders) {
-      attemptOptions = {
-        ...finalOptions,
-        headers: await resolveAuthenticationHeaders(
-          getAuthHeaders,
-          finalOptions.headers,
-          combinedSignal,
-        ),
-      };
+    for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
+      let attemptOptions = finalOptions;
+      if (getAuthHeaders) {
+        attemptOptions = {
+          ...finalOptions,
+          headers: await resolveAuthenticationHeaders(
+            getAuthHeaders,
+            finalOptions.headers,
+            combinedSignal,
+          ),
+        };
+      }
+      const response = await monkeyPatchFetch(finalUrl, attemptOptions);
+
+      if (!disableTransientRetries && isTransientError(response) && attempt < maxTransientRetries) {
+        const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
+        logger.debug(
+          `Transient error (${response.status} ${response.statusText}), retry ${attempt + 1}/${maxTransientRetries} after ${backoffMs}ms`,
+        );
+        await sleep(backoffMs);
+        continue;
+      }
+
+      return response;
     }
-    const response = await monkeyPatchFetch(finalUrl, attemptOptions);
 
-    if (!disableTransientRetries && isTransientError(response) && attempt < maxTransientRetries) {
-      const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
-      logger.debug(
-        `Transient error (${response.status} ${response.statusText}), retry ${attempt + 1}/${maxTransientRetries} after ${backoffMs}ms`,
-      );
-      await sleep(backoffMs);
-      continue;
+    // This should be unreachable, but TypeScript needs it
+    throw new Error('Unexpected end of transient retry loop');
+  } finally {
+    // Authentication and retry delays can outlive the cache entry. Only close
+    // an evicted pool once every request that acquired it has finished.
+    if (pooledAgent) {
+      pooledAgent.requests--;
+      closeEvictedAgent(pooledAgent);
     }
-
-    return response;
   }
-
-  // This should be unreachable, but TypeScript needs it
-  throw new Error('Unexpected end of transient retry loop');
 }
 
 export function fetchWithTimeout(

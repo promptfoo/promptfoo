@@ -175,4 +175,43 @@ describe('FIPS fetch policy with the real environment parser', () => {
       expect.objectContaining({ connect: { rejectUnauthorized: false } }),
     );
   });
+
+  it.each([false, true])(
+    'keeps an evicted pool open while authentication is pending with proxy=%s',
+    async (proxy) => {
+      if (proxy) {
+        vi.mocked(getProxyForUrl).mockReturnValue('https://proxy.example.test');
+      }
+      mockProcessEnv({ PROMPTFOO_CA_CERT_PATH: '/rotating-ca.pem' });
+      vi.mocked(fs.readFile).mockResolvedValue('CA-first');
+      let resolveCredentials!: (headers: Record<string, string>) => void;
+      const credentials = new Promise<Record<string, string>>((resolve) => {
+        resolveCredentials = resolve;
+      });
+      let signalStarted!: () => void;
+      const started = new Promise<void>((resolve) => {
+        signalStarted = resolve;
+      });
+      const pending = fetchWithProxy('https://example.test', {
+        getAuthHeaders: () => {
+          signalStarted();
+          return credentials;
+        },
+      });
+      await started;
+      const constructor = proxy ? ProxyAgent : Agent;
+      const first = vi.mocked(constructor).mock.results[0].value;
+      try {
+        for (let index = 0; index < 40; index++) {
+          vi.mocked(fs.readFile).mockResolvedValue(`CA-${index}`);
+          await fetchWithProxy('https://example.test');
+        }
+        expect(first.close).not.toHaveBeenCalled();
+      } finally {
+        resolveCredentials({});
+        await pending;
+      }
+      expect(first.close).toHaveBeenCalledOnce();
+    },
+  );
 });
