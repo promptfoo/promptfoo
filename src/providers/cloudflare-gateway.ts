@@ -70,25 +70,21 @@ interface GatewayProviderConfig {
 /**
  * Supported provider configurations for Cloudflare AI Gateway
  *
- * Note: Some providers have special URL requirements:
- * - azure-openai: Requires resourceName and deploymentName in config
- * - workers-ai: Model name is appended to URL path
+ * Only gateway routes that speak the OpenAI Chat Completions or Anthropic Messages
+ * protocol are listed. Routes whose native endpoints reject those payloads
+ * (workers-ai, google-ai-studio, cohere, huggingface, replicate) are deliberately
+ * absent; use Cloudflare's OpenAI-compatible REST API or a custom provider instead.
+ * AWS Bedrock is likewise unsupported because it requires AWS request signing.
  *
- * AWS Bedrock is NOT supported because it requires AWS request signing
- * which is incompatible with the gateway proxy approach.
+ * Note: azure-openai requires resourceName and deploymentName in config.
  */
 const PROVIDER_CONFIGS: Record<string, GatewayProviderConfig> = {
   openai: { apiKeyEnvar: 'OPENAI_API_KEY' },
   anthropic: { apiKeyEnvar: 'ANTHROPIC_API_KEY' },
   groq: { apiKeyEnvar: 'GROQ_API_KEY' },
   'perplexity-ai': { apiKeyEnvar: 'PERPLEXITY_API_KEY' },
-  'google-ai-studio': { apiKeyEnvar: 'GOOGLE_API_KEY' },
   mistral: { apiKeyEnvar: 'MISTRAL_API_KEY' },
-  cohere: { apiKeyEnvar: 'COHERE_API_KEY' },
   'azure-openai': { apiKeyEnvar: 'AZURE_OPENAI_API_KEY' },
-  'workers-ai': { apiKeyEnvar: 'CLOUDFLARE_API_KEY' },
-  huggingface: { apiKeyEnvar: 'HUGGINGFACE_API_KEY' },
-  replicate: { apiKeyEnvar: 'REPLICATE_API_KEY' },
   grok: { apiKeyEnvar: 'XAI_API_KEY' },
 };
 
@@ -193,14 +189,12 @@ function getCfAigToken(config?: CloudflareGatewayConfig, env?: EnvOverrides): st
  *
  * Most providers use: https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/{provider}
  * Azure OpenAI uses: https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/azure-openai/{resource_name}/{deployment_name}
- * Workers AI uses: https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/workers-ai/{model_id}
  */
 function buildGatewayUrl(
   accountId: string,
   gatewayId: string,
   provider: string,
   config?: CloudflareGatewayConfig,
-  modelName?: string,
 ): string {
   const baseUrl = `${CLOUDFLARE_GATEWAY_BASE_URL}/${accountId}/${gatewayId}`;
 
@@ -223,11 +217,6 @@ function buildGatewayUrl(
   // Mistral's native gateway proxy retains the upstream /v1 path.
   if (provider === 'mistral') {
     return `${baseUrl}/mistral/v1`;
-  }
-
-  if (provider === 'workers-ai') {
-    invariant(modelName, 'Workers AI requires a model name (e.g., @cf/meta/llama-3.1-8b-instruct)');
-    return `${baseUrl}/workers-ai/${modelName}`;
   }
 
   return `${baseUrl}/${provider}`;
@@ -289,7 +278,6 @@ export class CloudflareGatewayOpenAiProvider extends OpenAiChatCompletionProvide
       gatewayId,
       underlyingProvider,
       providerOptions.config,
-      modelName,
     );
     const passthrough = getPassthroughConfig(providerOptions.config);
 
