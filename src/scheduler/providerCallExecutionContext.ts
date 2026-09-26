@@ -1,8 +1,12 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
+import cliState from '../cliState';
+import { sleep, sleepWithAbort } from '../util/time';
+
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderResponse,
   RateLimitRegistryRef,
 } from '../types/index';
@@ -83,4 +87,86 @@ export function withProviderCallTracingContext<T>(
   fn: () => Promise<T>,
 ): Promise<T> {
   return providerCallTracingContext.run(tracingContext, fn);
+}
+
+const providerCallQueues = new WeakMap<object, WeakMap<ApiProvider, Promise<void>>>();
+
+function providerAbortError(): DOMException {
+  return new DOMException('Provider call cancelled', 'AbortError');
+}
+
+function waitForProviderCall(
+  result: Promise<ProviderResponse>,
+  signal?: AbortSignal,
+): Promise<ProviderResponse> {
+  if (!signal) {
+    return result;
+  }
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(providerAbortError());
+    if (signal.aborted) {
+      onAbort();
+    } else {
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+    result
+      .then(resolve, (error) => reject(signal.aborted ? providerAbortError() : error))
+      .finally(() => signal.removeEventListener('abort', onAbort));
+  });
+}
+
+/** Invoke a delegated provider with the current tracing, pacing, and cancellation context. */
+export async function callProviderWithContext(
+  provider: ApiProvider,
+  prompt: string,
+  context?: CallApiContextParams,
+  options?: CallApiOptionsParams,
+): Promise<ProviderResponse> {
+  const executionContext = getProviderCallExecutionContext();
+  const signal =
+    options?.abortSignal && executionContext?.abortSignal
+      ? AbortSignal.any([options.abortSignal, executionContext.abortSignal])
+      : (options?.abortSignal ?? executionContext?.abortSignal);
+  const callOptions = signal ? { ...options, abortSignal: signal } : options;
+  const delay = getProviderDelay(provider);
+  const handlesDelay = provider.handlesOwnDelay && provider.delay != null;
+  const invoke = async () => {
+    if (signal?.aborted) {
+      throw providerAbortError();
+    }
+    const tracingContext = getProviderCallTracingContext();
+    const response = tracingContext
+      ? await tracingContext.withProviderSpan(
+          { provider, callContext: context },
+          async (callContext) => provider.callApi(prompt, callContext, callOptions),
+        )
+      : await provider.callApi(prompt, context, callOptions);
+    if (!response.cached && !handlesDelay && delay && delay > 0) {
+      await (signal ? sleepWithAbort(delay, signal) : sleep(delay));
+    }
+    return response;
+  };
+
+  if (!delay || delay <= 0) {
+    return waitForProviderCall(invoke(), signal);
+  }
+
+  const scope = executionContext?.rateLimitRegistry ?? cliState.envScope ?? provider;
+  let queues = providerCallQueues.get(scope);
+  if (!queues) {
+    queues = new WeakMap();
+    providerCallQueues.set(scope, queues);
+  }
+  const result = (queues.get(provider) ?? Promise.resolve()).then(invoke);
+  const tail = result.then(
+    () => {},
+    () => {},
+  );
+  queues.set(provider, tail);
+  void tail.then(() => {
+    if (queues.get(provider) === tail) {
+      queues.delete(provider);
+    }
+  });
+  return waitForProviderCall(result, signal);
 }

@@ -8,7 +8,12 @@ import {
 import { sleep } from '../../../src/util/time';
 import { createDeferred } from '../../util/utils';
 
-import type { ApiProvider, CallApiOptionsParams, ProviderResponse } from '../../../src/types';
+import type {
+  ApiProvider,
+  CallApiOptionsParams,
+  ProviderResponse,
+  RateLimitRegistryRef,
+} from '../../../src/types';
 
 describe('delegated target pacing', () => {
   beforeEach(() => {
@@ -69,6 +74,39 @@ describe('delegated target pacing', () => {
       expect(starts).toEqual([0, 0]);
       await vi.advanceTimersByTimeAsync(100);
       await results;
+    },
+  );
+
+  it.each([false, true])(
+    'keeps pacing bound to the evaluation registry (shared=%s)',
+    async (shared) => {
+      const starts: number[] = [];
+      const provider: ApiProvider = {
+        id: () => 'fixture',
+        delay: 100,
+        callApi: async () => {
+          starts.push(Date.now());
+          return { output: 'ok' };
+        },
+      };
+      const createRegistry = (): RateLimitRegistryRef => ({
+        execute: async (_provider, invoke) => invoke(),
+        dispose: () => {},
+      });
+      const registry = createRegistry();
+      const results = Promise.all(
+        ['first', 'second'].map((prompt) =>
+          withProviderCallExecutionContext(
+            { rateLimitRegistry: shared ? registry : createRegistry() },
+            () => cliState.withEnv({}, () => callTargetProvider(provider, prompt)),
+          ),
+        ),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      expect(starts).toEqual(shared ? [0] : [0, 0]);
+      await vi.advanceTimersByTimeAsync(200);
+      await results;
+      expect(starts).toEqual(shared ? [0, 100] : [0, 0]);
     },
   );
 

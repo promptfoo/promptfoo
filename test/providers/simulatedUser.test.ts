@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SimulatedUser } from '../../src/providers/simulatedUser';
 import { withProviderCallExecutionContext } from '../../src/scheduler/providerCallExecutionContext';
 import * as timeUtils from '../../src/util/time';
@@ -63,6 +63,10 @@ describe('SimulatedUser', () => {
     });
 
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe('id()', () => {
@@ -190,6 +194,7 @@ describe('SimulatedUser', () => {
           '{"role":"user","content":"{\\"reply\\":\\"I like that idea\\",\\"preference\\":\\"outdoor\\"}"}',
         ),
         expect.anything(),
+        undefined,
       );
     });
 
@@ -295,6 +300,7 @@ describe('SimulatedUser', () => {
             instructions: 'test instructions',
           }),
         }),
+        undefined,
       );
     });
 
@@ -340,6 +346,46 @@ describe('SimulatedUser', () => {
       expect(providerWithDelay.callApi).toHaveBeenCalledTimes(2);
       expect(timeUtils.sleep).toHaveBeenCalledWith(100);
     });
+
+    it.each(['cached', 'self-delaying'])(
+      'does not add a target delay for %s responses',
+      async (mode) => {
+        const target: ApiProvider = {
+          id: () => 'offline-target',
+          delay: 100,
+          handlesOwnDelay: mode === 'self-delaying',
+          callApi: vi.fn().mockResolvedValue({ output: 'ok', cached: mode === 'cached' }),
+        };
+        await simulatedUser.callApi('hello', {
+          originalProvider: target,
+          vars: {},
+          prompt: { raw: 'hello', label: 'fixture' },
+        });
+        expect(target.callApi).toHaveBeenCalledTimes(2);
+        expect(timeUtils.sleep).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([false, true])(
+      'forwards call options to every target turn (initial=%s)',
+      async (initial) => {
+        const controller = new AbortController();
+        const options = { abortSignal: controller.signal, includeLogProbs: true };
+        await simulatedUser.callApi(
+          'hello',
+          {
+            originalProvider,
+            vars: initial ? { initialMessages: [{ role: 'user', content: 'hello' }] } : {},
+            prompt: { raw: 'hello', label: 'fixture' },
+          },
+          options,
+        );
+        expect(originalProvider.callApi).toHaveBeenCalledTimes(initial ? 3 : 2);
+        for (const call of vi.mocked(originalProvider.callApi).mock.calls) {
+          expect(call[2]).toEqual(options);
+        }
+      },
+    );
 
     it.each([0, 25])(
       'preserves invocation-local delay %s with an unchanged target',

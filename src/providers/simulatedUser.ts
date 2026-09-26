@@ -1,11 +1,10 @@
 import logger, { isDebugEnabled } from '../logger';
 import { getSessionId } from '../redteam/util';
-import { getProviderDelay } from '../scheduler/providerCallExecutionContext';
+import { callProviderWithContext } from '../scheduler/providerCallExecutionContext';
 import { maybeLoadConfigFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
-import { sleep } from '../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { PromptfooSimulatedUserProvider } from './promptfoo';
 
@@ -248,6 +247,7 @@ export class SimulatedUser implements ApiProvider {
     messages: Message[],
     targetProvider: ApiProvider,
     context: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     invariant(context?.prompt?.raw, 'Expected context.prompt.raw to be set');
 
@@ -271,17 +271,11 @@ export class SimulatedUser implements ApiProvider {
 
     logger.debug(`[SimulatedUser] Sending message to target provider: ${targetPrompt}`);
 
-    const response = await targetProvider.callApi(targetPrompt, context);
+    const response = await callProviderWithContext(targetProvider, targetPrompt, context, options);
 
     if (response.sessionId) {
       context = context ?? { vars: {}, prompt: { raw: '', label: 'target' } };
       context.vars.sessionId = response.sessionId;
-    }
-
-    const delay = getProviderDelay(targetProvider);
-    if (delay) {
-      logger.debug(`[SimulatedUser] Sleeping for ${delay}ms`);
-      await sleep(delay);
     }
 
     if (isDebugEnabled()) {
@@ -293,7 +287,7 @@ export class SimulatedUser implements ApiProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     const targetProvider = context.originalProvider;
@@ -338,7 +332,13 @@ export class SimulatedUser implements ApiProvider {
       logger.debug(
         '[SimulatedUser] Initial messages end with user message, getting agent response first',
       );
-      agentResponse = await this.sendMessageToAgent(prompt, messages, targetProvider, context);
+      agentResponse = await this.sendMessageToAgent(
+        prompt,
+        messages,
+        targetProvider,
+        context,
+        callApiOptions,
+      );
 
       this.accumulateTargetTokenUsage(tokenUsage, agentResponse);
 
@@ -388,6 +388,7 @@ export class SimulatedUser implements ApiProvider {
         messagesToUser,
         targetProvider,
         context,
+        callApiOptions,
       );
 
       this.accumulateTargetTokenUsage(tokenUsage, agentResponse);

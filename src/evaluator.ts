@@ -1089,6 +1089,7 @@ async function callActiveProvider({
     withProviderCallExecutionContext(
       {
         ...getProviderCallExecutionContext(),
+        abortSignal,
         providerDelay: { provider: originalProvider, delay: getProviderDelay(provider) },
       },
       () => {

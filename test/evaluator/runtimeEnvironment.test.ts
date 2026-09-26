@@ -18,11 +18,11 @@ import { ProviderGroupedCallQueue } from '../../src/scheduler/providerCallQueue'
 import { isRateLimitWrapped } from '../../src/scheduler/providerWrapper';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { sleep } from '../../src/util/time';
-import { mockProcessEnv } from '../util/utils';
+import { createDeferred, mockProcessEnv } from '../util/utils';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
-import type { ApiProvider, EnvOverrides, TestSuite } from '../../src/types/index';
+import type { ApiProvider, EnvOverrides, ProviderResponse, TestSuite } from '../../src/types/index';
 
 function createSuite(provider: ApiProvider, env: EnvOverrides = {}): TestSuite {
   return { providers: [provider], prompts: [toPrompt('hello')], tests: [{}], env };
@@ -33,6 +33,48 @@ function createProvider(id = 'offline'): ApiProvider {
 }
 
 describeEvaluator('evaluation environment defaults', () => {
+  it('forwards evaluation cancellation through a provider that delegates without options', async () => {
+    const controller = new AbortController();
+    const started = createDeferred<void>();
+    const pending = createDeferred<ProviderResponse>();
+    let stopped = false;
+    const target: ApiProvider = {
+      id: () => 'offline-target',
+      callApi: async (_prompt, _context, options) => {
+        options?.abortSignal?.addEventListener(
+          'abort',
+          () => {
+            stopped = true;
+            pending.reject(new DOMException('Fixture stopped', 'AbortError'));
+          },
+          { once: true },
+        );
+        started.resolve();
+        return pending.promise;
+      },
+    };
+    const suite = createSuite(target);
+    suite.tests = [
+      {
+        provider: {
+          id: () => 'offline-delegate',
+          callApi: async (_prompt, context) => callTargetProvider(target, 'hello', context),
+        },
+      },
+    ];
+    const result = evaluate(suite, new Eval({}), { abortSignal: controller.signal });
+    const settled = result.catch(() => undefined);
+    try {
+      await started.promise;
+      controller.abort();
+      expect(stopped).toBe(true);
+    } finally {
+      controller.abort();
+      pending.resolve({ output: 'fixture cleanup' });
+      await settled;
+    }
+  });
+
   it('keeps progress callback delays numeric while applying an inherited delay', async () => {
     const progressCallback = vi.fn();
     await evaluate(createSuite(createProvider(), { PROMPTFOO_DELAY_MS: '7' }), new Eval({}), {
