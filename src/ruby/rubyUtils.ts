@@ -3,6 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { promisify } from 'util';
 
+import cliState from '../cliState';
 import { getEnvString, getProcessEnv } from '../envars';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
@@ -14,6 +15,7 @@ import {
 } from '../util/secureTempFiles';
 
 const execFileAsync = promisify(execFile);
+const invocationValidations = new WeakMap<object, Map<string, Promise<string>>>();
 
 function logStderr(stderr: string): void {
   for (const line of stderr.split(/\r?\n/)) {
@@ -230,6 +232,29 @@ export async function tryPath(path: string): Promise<string | null> {
  * @throws {Error} If no valid Ruby executable is found.
  */
 export async function validateRubyPath(rubyPath: string, isExplicit: boolean): Promise<string> {
+  const scope = cliState.envScope;
+  if (!scope) {
+    return validateExecutable(rubyPath, isExplicit);
+  }
+
+  let validations = invocationValidations.get(scope);
+  if (!validations) {
+    validations = new Map();
+    invocationValidations.set(scope, validations);
+  }
+  const key = JSON.stringify([rubyPath, isExplicit]);
+  let validation = validations.get(key);
+  if (!validation) {
+    validation = validateExecutable(rubyPath, isExplicit).catch((error) => {
+      validations.delete(key);
+      throw error;
+    });
+    validations.set(key, validation);
+  }
+  return validation;
+}
+
+async function validateExecutable(rubyPath: string, isExplicit: boolean): Promise<string> {
   const primaryPath = await tryPath(rubyPath);
   if (primaryPath) {
     return primaryPath;

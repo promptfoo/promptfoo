@@ -124,6 +124,8 @@ export const ProviderEnvOverridesSchema = z.object({
   PROMPTFOO_JKS_PASSWORD: z.string().optional(),
   PROMPTFOO_JKS_ALIAS: z.string().optional(),
   PROMPTFOO_INSECURE_SSL: z.string().optional(),
+  PROMPTFOO_PYTHON: z.string().optional(),
+  PROMPTFOO_PYTHON_WORKERS: z.string().optional(),
   QUIVERAI_API_KEY: z.string().optional(),
   QWAK_TOKEN: z.string().optional(),
   REPLICATE_API_KEY: z.string().optional(),
