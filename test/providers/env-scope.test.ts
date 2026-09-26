@@ -48,6 +48,7 @@ import { XAIImageProvider } from '../../src/providers/xai/image';
 import { XAIResponsesProvider } from '../../src/providers/xai/responses';
 import { XAIVideoProvider } from '../../src/providers/xai/video';
 import { XAIVoiceProvider } from '../../src/providers/xai/voice';
+import { ProviderOptionsSchema } from '../../src/validators/providers';
 import { mockProcessEnv } from '../util/utils';
 
 import type { EnvOverrides } from '../../src/types/env';
@@ -326,6 +327,22 @@ describe('provider environment scopes', () => {
       );
     },
   );
+
+  it('parsed provider options retain Foundry and Snowflake endpoints', () => {
+    const snowflake = new SnowflakeCortexProvider(
+      'fixture',
+      ProviderOptionsSchema.parse({ env: { SNOWFLAKE_ACCOUNT_IDENTIFIER: 'provider-account' } }),
+    );
+    expect(snowflake.getApiUrl()).toBe('https://provider-account.snowflakecomputing.com');
+    const foundry = new AzureFoundryAgentProvider(
+      'fixture',
+      ProviderOptionsSchema.parse({
+        config: { apiKey: 'fixture-key' },
+        env: { AZURE_AI_PROJECT_URL: 'https://project.example.invalid' },
+      }),
+    );
+    expect(Reflect.get(foundry, 'projectUrl')).toBe('https://project.example.invalid');
+  });
 
   it('Snowflake rejects a masked account while allowing an explicit endpoint', () => {
     cliState.withEnv({ SNOWFLAKE_ACCOUNT_IDENTIFIER: 'ambient-account' }, () => {
@@ -909,10 +926,13 @@ describe('provider environment scopes', () => {
     ['2', 3, 3],
   ])('resolves direct ChatKit pool env=%s config=%s to %s', (value, poolSize, expected) => {
     cliState.withEnv({ PROMPTFOO_MAX_CONCURRENCY: '7' }, () => {
-      const provider = new OpenAiChatKitProvider('workflow', {
-        env: { PROMPTFOO_MAX_CONCURRENCY: value },
-        config: { poolSize },
-      });
+      const provider = new OpenAiChatKitProvider(
+        'workflow',
+        ProviderOptionsSchema.parse({
+          env: { PROMPTFOO_MAX_CONCURRENCY: value },
+          config: { poolSize },
+        }),
+      );
       expect(Reflect.get(provider, 'chatKitConfig').poolSize).toBe(expected);
     });
   });
