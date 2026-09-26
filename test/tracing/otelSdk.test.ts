@@ -1,4 +1,15 @@
-import { context, createContextKey, propagation, trace } from '@opentelemetry/api';
+import fs from 'node:fs';
+import { createRequire } from 'node:module';
+import os from 'node:os';
+import path from 'node:path';
+
+import {
+  context,
+  createContextKey,
+  ProxyTracerProvider,
+  propagation,
+  trace,
+} from '@opentelemetry/api';
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
 import { ExportResultCode } from '@opentelemetry/core';
 import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
@@ -267,6 +278,44 @@ describe('evaluation-owned OpenTelemetry', () => {
       expect(localSpans.map((span) => span.name)).toEqual(['first eval', 'owned during eval']);
     } finally {
       await host.shutdown();
+    }
+  });
+
+  it('defers cached tracers to a host registered through a distinct API package copy', async () => {
+    const require = createRequire(import.meta.url);
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-otel-api-'));
+    const hostExporter = new InMemorySpanExporter();
+    const host = new NodeTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor(hostExporter)],
+    });
+    try {
+      const apiRoot = path.resolve(path.dirname(require.resolve('@opentelemetry/api')), '../..');
+      const copy = path.join(tempDir, 'api');
+      fs.cpSync(apiRoot, copy, { recursive: true });
+      const foreignApi = require(copy) as typeof import('@opentelemetry/api');
+      const custom = trace.getTracer('cached-before-foreign-host');
+      await runScoped({}, async () => {
+        custom.startSpan('owned first').end();
+      });
+      expect(foreignApi.trace.setGlobalTracerProvider(host)).toBe(true);
+      expect(trace.getTracerProvider()).toBeInstanceOf(foreignApi.ProxyTracerProvider);
+      expect(trace.getTracerProvider()).not.toBeInstanceOf(ProxyTracerProvider);
+      custom.startSpan('foreign host outside').end();
+      await runScoped({}, async () => {
+        custom.startActiveSpan('foreign host during', (span) => span.end());
+        getGenAITracer().startSpan('owned second').end();
+      });
+      trace.getTracer('fresh').startSpan('foreign host after').end();
+      expect(hostExporter.getFinishedSpans().map((span) => span.name)).toEqual([
+        'foreign host outside',
+        'foreign host during',
+        'foreign host after',
+      ]);
+      expect(localSpans.map((span) => span.name)).toEqual(['owned first', 'owned second']);
+    } finally {
+      await host.shutdown();
+      trace.disable();
+      fs.rmSync(tempDir, { recursive: true, force: true });
     }
   });
 

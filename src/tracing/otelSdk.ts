@@ -62,6 +62,19 @@ export function getOtelTracer(name: string, version?: string): Tracer {
   return getOtelScope()?.provider?.getTracer(name, version) ?? trace.getTracer(name, version);
 }
 
+function isProxyTracerProvider(
+  provider: TracerProvider,
+): provider is TracerProvider & Pick<ProxyTracerProvider, 'getDelegate' | 'getDelegateTracer'> {
+  // OTel shares its global registration across installed API copies. Their
+  // public proxy methods are compatible even when class identities differ.
+  return (
+    'getDelegate' in provider &&
+    typeof provider.getDelegate === 'function' &&
+    'getDelegateTracer' in provider &&
+    typeof provider.getDelegateTracer === 'function'
+  );
+}
+
 function createRoutingProvider(): TracerProvider {
   const noopProvider = new ProxyTracerProvider();
   return {
@@ -71,7 +84,7 @@ function createRoutingProvider(): TracerProvider {
       const current = () => {
         const globalProvider = trace.getTracerProvider();
         if (
-          globalProvider instanceof ProxyTracerProvider &&
+          isProxyTracerProvider(globalProvider) &&
           globalProvider.getDelegate() !== routingState.provider
         ) {
           const hostTracer = globalProvider.getDelegateTracer(name, version, options);
@@ -99,10 +112,7 @@ function createRoutingProvider(): TracerProvider {
 function ensureGlobalTracerRouting(): void {
   const globalProvider = trace.getTracerProvider();
   // A host delegate owns global instrumentation, including its own delayed proxy.
-  if (
-    globalProvider instanceof ProxyTracerProvider &&
-    !globalProvider.getDelegateTracer('promptfoo')
-  ) {
+  if (isProxyTracerProvider(globalProvider) && !globalProvider.getDelegateTracer('promptfoo')) {
     trace.setGlobalTracerProvider(routingState.provider);
   }
 }
@@ -112,7 +122,7 @@ function releaseGlobalTracerRouting(provider: NodeTracerProvider): void {
   const globalProvider = trace.getTracerProvider();
   if (
     routingState.owners.size === 0 &&
-    globalProvider instanceof ProxyTracerProvider &&
+    isProxyTracerProvider(globalProvider) &&
     globalProvider.getDelegate() === routingState.provider
   ) {
     // Release only our router so a host can register its SDK after evaluation.
