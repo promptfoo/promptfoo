@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AwsBedrockAgentsProvider } from '../../src/providers/bedrock/agents';
-import { mockProcessEnv } from '../util/utils';
+import { mockProcessEnv, PROXY_ENV_KEYS } from '../util/utils';
 
 // Hoisted mocks for AWS SDK
 const mockSend = vi.hoisted(() => vi.fn());
@@ -59,8 +59,13 @@ vi.mock('../../src/cache', async (importOriginal) => {
 const ORIGINAL_HTTP_PROXY = process.env.HTTP_PROXY;
 const ORIGINAL_HTTPS_PROXY = process.env.HTTPS_PROXY;
 
+let restoreProxyEnv = () => {};
+
 describe('AwsBedrockAgentsProvider', () => {
   beforeEach(() => {
+    restoreProxyEnv = mockProcessEnv(
+      Object.fromEntries(PROXY_ENV_KEYS.map((key) => [key, undefined])),
+    );
     vi.clearAllMocks();
     mockProcessEnv({ HTTP_PROXY: '' });
     mockProcessEnv({ HTTPS_PROXY: '' });
@@ -77,6 +82,7 @@ describe('AwsBedrockAgentsProvider', () => {
     } else {
       mockProcessEnv({ HTTPS_PROXY: ORIGINAL_HTTPS_PROXY });
     }
+    restoreProxyEnv();
   });
 
   describe('constructor', () => {

@@ -70,6 +70,33 @@ describe('looksLikeSecret', () => {
   });
 });
 
+describe('proxy environment redaction', () => {
+  it.each(['HTTP_PROXY', 'http_proxy', 'HTTPS_PROXY', 'https_proxy', 'ALL_PROXY', 'all_proxy'])(
+    'redacts credentials in %s from logs and output',
+    (key) => {
+      for (const proxy of [
+        'http://fixture-user:fixture-password@proxy.example:8080',
+        'fixture-user:fixture-password@proxy.example:8080',
+        'socks5://fixture-user:fixture-password@proxy.example:1080',
+      ]) {
+        const config = { env: { [key]: proxy } };
+        for (const output of [sanitizeObject(config), sanitizeConfigForOutput(config)]) {
+          expect(JSON.stringify(output)).not.toContain('fixture-user');
+          expect(JSON.stringify(output)).not.toContain('fixture-password');
+          expect(output.env[key]).toContain('proxy.example');
+        }
+        expect(config.env[key]).toBe(proxy);
+      }
+    },
+  );
+
+  it('preserves proxy endpoints without credentials and bypass lists', () => {
+    const config = { env: { HTTP_PROXY: 'proxy.example:8080', NO_PROXY: 'localhost,.example' } };
+    expect(sanitizeObject(config)).toEqual(config);
+    expect(sanitizeConfigForOutput(config)).toEqual(config);
+  });
+});
+
 describe('sanitizeConfigForOutput', () => {
   it.each([
     { prompts: 'private literal' },
