@@ -1,5 +1,4 @@
 import { getEnvBool } from '../envars';
-import { isLoggedIntoCloud } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 
@@ -10,14 +9,17 @@ interface RemoteBlobUploadTarget {
   authHeaders: Record<string, string>;
 }
 
-function buildRemoteUploadTarget(): RemoteBlobUploadTarget | null {
+function buildRemoteUploadTarget(
+  requestConfig?: ReturnType<typeof cloudConfig.getRequestConfig>,
+): RemoteBlobUploadTarget | null {
   if (getEnvBool('PROMPTFOO_DISABLE_SHARING')) {
     return null;
   }
 
-  const { apiHost: baseUrl, headers: authHeaders } = cloudConfig.getRequestConfig();
+  const { apiHost: baseUrl, headers: authHeaders } =
+    requestConfig ?? cloudConfig.getRequestConfig();
 
-  if (!baseUrl || !authHeaders || !isLoggedIntoCloud()) {
+  if (!baseUrl || !authHeaders) {
     return null;
   }
 
@@ -47,8 +49,9 @@ export async function uploadBlobRemote(
     location?: string;
     kind?: string;
   },
+  requestConfig?: ReturnType<typeof cloudConfig.getRequestConfig>,
 ): Promise<BlobStoreResult | null> {
-  const target = buildRemoteUploadTarget();
+  const target = buildRemoteUploadTarget(requestConfig);
   if (!target) {
     return null;
   }

@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRemoteBlobUploadCache, uploadBlobRefsForShare } from '../src/blobs/shareUpload';
@@ -170,8 +170,20 @@ describe('stripAuthFromUrl', () => {
 beforeEach(() => {
   vi.mocked(cloudConfig.getRequestConfig).mockImplementation(() => ({
     apiHost: cloudConfig.getApiHost(),
+    appUrl: cloudConfig.getAppUrl(),
+    sessionId: createHash('sha256')
+      .update(
+        JSON.stringify([
+          cloudConfig.isEnabled(),
+          cloudConfig.getApiHost(),
+          cloudConfig.getAuthHeaders(),
+        ]),
+      )
+      .digest('hex'),
     authHeaderName: 'Authorization',
-    headers: cloudConfig.getAuthHeaders(),
+    headers: cloudConfig.isEnabled()
+      ? (cloudConfig.getAuthHeaders() ?? { Authorization: 'Bearer mock-api-key' })
+      : undefined,
     teamId: cloudConfig.getCurrentTeamId(),
   }));
   vi.mocked(resolveCloudTeam).mockImplementation(async (config) => {
@@ -546,6 +558,8 @@ describe('createShareableUrl', () => {
     vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
     vi.mocked(cloudConfig.getRequestConfig).mockReturnValue({
       apiHost: 'https://first.example.com',
+      appUrl: 'https://app.example.com',
+      sessionId: 'first-session',
       authHeaderName: 'X-First-Auth',
       headers: { 'X-First-Auth': 'Bearer first-key' },
       teamId: 'first-team',
@@ -869,6 +883,7 @@ describe('createShareableUrl', () => {
         promptIdx: 2,
         remoteEvalId: 'manual-share-id',
         testIdx: 1,
+        requestConfig: cloudConfig.getRequestConfig(),
       });
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
