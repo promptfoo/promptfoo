@@ -1542,13 +1542,73 @@ describe('cloud utils', () => {
         expect(state.saved).toEqual({ 'org-1': saved });
       });
 
-      it('lets local evaluation continue when team lookup is unavailable and preserves its selection', async () => {
-        mockCheckServerFeatureSupport.mockResolvedValue(true);
+      it.each<Partial<UnifiedConfig>>([
+        { providers: 'echo', sharing: false },
+        { providers: ['echo'] },
+        { providers: [{ id: 'echo' }] },
+        { providers: [{ echo: { config: {} } }] },
+        { providers: ['echo'], metadata: { teamId: 'standalone' } },
+      ])('does not contact Cloud or change the team for a local config: %j', async (config) => {
         const state = mockTeamState('org-1', { 'org-1': 'active-a' }, new Error('Offline'));
 
-        await expect(checkCloudPermissions({ providers: ['echo'] })).resolves.toBeUndefined();
+        await expect(checkCloudPermissions(config)).resolves.toBeUndefined();
 
+        expect(mockCheckServerFeatureSupport).not.toHaveBeenCalled();
+        expect(mockFetchWithProxy).not.toHaveBeenCalled();
         expect(state.saved).toEqual({ 'org-1': 'active-a' });
+      });
+
+      it.each<{ name: string; config: Partial<UnifiedConfig> }>([
+        { name: 'string provider', config: { providers: 'promptfoo://provider/provider-b' } },
+        { name: 'provider array', config: { providers: ['promptfoo://provider/provider-b'] } },
+        {
+          name: 'provider options',
+          config: { providers: [{ id: 'promptfoo://provider/provider-b' }] },
+        },
+        {
+          name: 'provider map with a local ID override',
+          config: { providers: [{ 'promptfoo://provider/provider-b': { id: 'echo' } }] },
+        },
+        {
+          name: 'linked target',
+          config: {
+            providers: [
+              { id: 'echo', config: { linkedTargetId: 'promptfoo://provider/provider-b' } },
+            ],
+          },
+        },
+        {
+          name: 'linked target in a provider map',
+          config: {
+            providers: [
+              { echo: { config: { linkedTargetId: 'promptfoo://provider/provider-b' } } },
+            ],
+          },
+        },
+        {
+          name: 'Cloud config with local providers',
+          config: { providers: ['echo'], metadata: { configId: 'config-1' } },
+        },
+      ])('still checks permissions for a $name when sharing is disabled', async ({ config }) => {
+        mockCheckServerFeatureSupport.mockResolvedValue(true);
+        mockTeamState('org-1', { 'org-1': 'team-b' }, [team('team-b', 'org-1', '2024')]);
+        const directoryResponse = mockFetchWithProxy.getMockImplementation()!;
+        mockFetchWithProxy.mockImplementation(async (url, options) => {
+          if (String(url).endsWith('/permissions/check')) {
+            expect(JSON.parse(options?.body as string).teamId).toBe('team-b');
+            return Response.json({ error: 'Provider access denied' }, { status: 403 });
+          }
+          return directoryResponse(url, options);
+        });
+
+        await expect(checkCloudPermissions({ ...config, sharing: false })).rejects.toThrow(
+          'Permission denied: config unknown: Provider access denied',
+        );
+
+        expect(mockFetchWithProxy).toHaveBeenLastCalledWith(
+          'https://api.example.com/api/v1/permissions/check',
+          expect.any(Object),
+        );
       });
     });
 

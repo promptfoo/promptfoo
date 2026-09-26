@@ -717,6 +717,20 @@ export async function checkCloudPermissions(
     return;
   }
 
+  // Local configs need a destination only when sharing supplies a resolved team.
+  const hasCloudProvider = [config.providers].flat().some((provider) => {
+    const ref = normalizeProviderRef(provider);
+    const linkedTargetId =
+      'loadOptions' in ref ? ref.loadOptions.config?.linkedTargetId : undefined;
+    return (
+      ('loadProviderPath' in ref && isCloudProvider(ref.loadProviderPath)) ||
+      (typeof linkedTargetId === 'string' && isCloudProvider(linkedTargetId))
+    );
+  });
+  if (!team && !config.metadata?.configId && !hasCloudProvider) {
+    return;
+  }
+
   const assertSession = () => {
     if (
       cloudConfig.getRequestConfig().sessionId !== request.sessionId ||
