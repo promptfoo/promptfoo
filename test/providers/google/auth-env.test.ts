@@ -5,8 +5,11 @@ import path from 'node:path';
 import { GoogleAuth } from 'google-auth-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
+import { getEnvString } from '../../../src/envars';
 import { loadApiProvider } from '../../../src/providers';
 import { GoogleAuthManager } from '../../../src/providers/google/auth';
+import { getGoogleAccessToken } from '../../../src/providers/google/util';
+import { providerRegistry } from '../../../src/providers/providerRegistry';
 import { CreateJobRequestSchema } from '../../../src/types/api/eval';
 import { getProviderFromCloud } from '../../../src/util/cloud';
 import { mockProcessEnv } from '../../util/utils';
@@ -53,6 +56,188 @@ afterEach(() => {
 });
 
 describe('Google scoped ADC inputs', () => {
+  it('reuses the Live OAuth client for repeated and concurrent calls within an invocation', async () => {
+    await cliState.withEnv({ GOOGLE_APPLICATION_CREDENTIALS: 'scoped.json' }, async () => {
+      expect(await Promise.all([getGoogleAccessToken(), getGoogleAccessToken()])).toEqual([
+        'scoped.json',
+        'scoped.json',
+      ]);
+      expect(await getGoogleAccessToken()).toBe('scoped.json');
+      expect(GoogleAuth).toHaveBeenCalledOnce();
+    });
+  });
+
+  it('isolates Live OAuth clients across concurrent invocation environments', async () => {
+    const createClient = vi
+      .spyOn(GoogleAuthManager, 'getOAuthClient')
+      .mockImplementation(async (options) => ({
+        client: makeClient(
+          typeof options === 'object'
+            ? (options.env?.GOOGLE_APPLICATION_CREDENTIALS ??
+                getEnvString('GOOGLE_APPLICATION_CREDENTIALS') ??
+                'absent')
+            : 'absent',
+        ),
+        projectId: undefined,
+      }));
+    expect(
+      await Promise.all(
+        ['first.json', 'second.json'].map((filename) =>
+          cliState.withEnv({ GOOGLE_APPLICATION_CREDENTIALS: filename }, async () => [
+            await getGoogleAccessToken(),
+            await getGoogleAccessToken(),
+          ]),
+        ),
+      ),
+    ).toEqual([
+      ['first.json', 'first.json'],
+      ['second.json', 'second.json'],
+    ]);
+    expect(createClient).toHaveBeenCalledTimes(2);
+  });
+
+  it('starts a new Live client for a new resource lifetime under the same environment', async () => {
+    await cliState.withEnv({ GOOGLE_APPLICATION_CREDENTIALS: 'scoped.json' }, async () => {
+      for (let invocation = 0; invocation < 2; invocation++) {
+        await providerRegistry.withScope(async () => {
+          expect(await getGoogleAccessToken()).toBe('scoped.json');
+          expect(await getGoogleAccessToken()).toBe('scoped.json');
+        });
+      }
+      expect(GoogleAuth).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('replaces the Live OAuth client when explicit credentials or retained environment changes', async () => {
+    await cliState.withEnv({}, async () => {
+      expect(
+        await getGoogleAccessToken(undefined, { GOOGLE_APPLICATION_CREDENTIALS: 'first.json' }),
+      ).toBe('first.json');
+      expect(
+        await getGoogleAccessToken(undefined, { GOOGLE_APPLICATION_CREDENTIALS: 'second.json' }),
+      ).toBe('second.json');
+      expect(await getGoogleAccessToken(JSON.stringify({ client_id: 'explicit' }))).toBe(
+        'explicit',
+      );
+      expect(await getGoogleAccessToken(JSON.stringify({ client_id: 'explicit' }))).toBe(
+        'explicit',
+      );
+      expect(GoogleAuth).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  it.each(['GOOGLE_CLOUD_PROJECT', 'GOOGLE_CLOUD_QUOTA_PROJECT'])(
+    'replaces the Live client when %s changes',
+    async (key) => {
+      await cliState.withEnv({}, async () => {
+        await getGoogleAccessToken(undefined, { [key]: 'first' });
+        await getGoogleAccessToken(undefined, { [key]: 'first' });
+        expect(GoogleAuth).toHaveBeenCalledOnce();
+        await getGoogleAccessToken(undefined, { [key]: 'second' });
+        expect(GoogleAuth).toHaveBeenCalledTimes(2);
+        expect(GoogleAuth).toHaveBeenLastCalledWith(
+          expect.objectContaining(
+            key === 'GOOGLE_CLOUD_PROJECT'
+              ? { projectId: 'second' }
+              : { clientOptions: { quotaProjectId: 'second' } },
+          ),
+        );
+      });
+    },
+  );
+
+  it('retries a failed Live OAuth client initialization within the same invocation', async () => {
+    vi.mocked(GoogleAuth).mockImplementationOnce(function () {
+      return {
+        getClient: async () => {
+          throw new Error('temporary credentials failure');
+        },
+      } as unknown as GoogleAuth;
+    });
+    await cliState.withEnv({ GOOGLE_APPLICATION_CREDENTIALS: 'scoped.json' }, async () => {
+      expect(await getGoogleAccessToken()).toBeUndefined();
+      expect(await getGoogleAccessToken()).toBe('scoped.json');
+      expect(await getGoogleAccessToken()).toBe('scoped.json');
+      expect(GoogleAuth).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('does not reuse a previous Live client when ADC is explicitly masked', async () => {
+    await cliState.withEnv({}, async () => {
+      expect(
+        await getGoogleAccessToken(undefined, { GOOGLE_APPLICATION_CREDENTIALS: 'scoped.json' }),
+      ).toBe('scoped.json');
+      expect(
+        await getGoogleAccessToken(undefined, { GOOGLE_APPLICATION_CREDENTIALS: '' }),
+      ).toBeUndefined();
+      expect(GoogleAuth).toHaveBeenCalledOnce();
+    });
+  });
+
+  it('preserves SDK discovery for an empty host ADC variable without weakening scoped masks', async () => {
+    mockProcessEnv({ GOOGLE_APPLICATION_CREDENTIALS: '' });
+    vi.mocked(GoogleAuth).mockImplementation(function () {
+      return { getClient: async () => makeClient('discovered') } as unknown as GoogleAuth;
+    });
+    await cliState.withEnv({}, async () => {
+      expect(await getGoogleAccessToken()).toBe('discovered');
+      expect(
+        await getGoogleAccessToken(undefined, { GOOGLE_APPLICATION_CREDENTIALS: '' }),
+      ).toBeUndefined();
+      expect(GoogleAuth).toHaveBeenCalledOnce();
+    });
+  });
+
+  it('reloads explicit credential files before comparing Live client settings', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-live-oauth-'));
+    const file = path.join(directory, 'credentials.json');
+    try {
+      await cliState.withEnv({}, async () => {
+        fs.writeFileSync(file, JSON.stringify({ client_id: 'first' }));
+        expect(await getGoogleAccessToken(`file://${file}`)).toBe('first');
+        fs.writeFileSync(file, JSON.stringify({ client_id: 'second' }));
+        expect(await getGoogleAccessToken(`file://${file}`)).toBe('second');
+        expect(await getGoogleAccessToken(`file://${file}`)).toBe('second');
+        expect(GoogleAuth).toHaveBeenCalledTimes(2);
+      });
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('allows the SDK to retry a token refresh without discarding the client', async () => {
+    const client = makeClient('refreshed-token');
+    client.getAccessToken.mockRejectedValueOnce(new Error('temporary refresh failure'));
+    vi.mocked(GoogleAuth).mockImplementation(function () {
+      return { getClient: async () => client } as unknown as GoogleAuth;
+    });
+    await cliState.withEnv({}, async () => {
+      expect(await getGoogleAccessToken()).toBeUndefined();
+      expect(await getGoogleAccessToken()).toBe('refreshed-token');
+      expect(GoogleAuth).toHaveBeenCalledOnce();
+    });
+  });
+
+  it('keeps a newer Live client when an earlier initialization fails', async () => {
+    let rejectFirst!: (error: Error) => void;
+    const createClient = vi.spyOn(GoogleAuthManager, 'getOAuthClient');
+    createClient.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectFirst = reject;
+        }),
+    );
+    createClient.mockResolvedValue({ client: makeClient('second'), projectId: undefined });
+    await cliState.withEnv({}, async () => {
+      const first = getGoogleAccessToken('first');
+      expect(await getGoogleAccessToken('second')).toBe('second');
+      rejectFirst(new Error('first failed late'));
+      expect(await first).toBeUndefined();
+      expect(await getGoogleAccessToken('second')).toBe('second');
+      expect(createClient).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it.each([
     ['direct', 'scoped.json'],
     ['file', 'scoped.json'],
