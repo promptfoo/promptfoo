@@ -6,8 +6,8 @@ import {
   type GradingResult,
   isGradingResult,
   type ScoringFunction,
-  setNonstandardScoringBaseline,
-} from '../types/internal';
+} from '../types/index';
+import { setNonstandardScoringBaseline } from '../types/internal';
 
 export const GUARDRAIL_BLOCKED_REASON = 'Content failed guardrail safety checks';
 

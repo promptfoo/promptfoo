@@ -2,21 +2,6 @@ import type { EventSource } from './eventSource';
 import type { EvaluateOptions, GradingResult } from './index';
 import type { TokenUsage } from './shared';
 
-export { isGradingResult, isResultFailureReason, ResultFailureReason } from './index';
-
-export type {
-  ApiProvider,
-  AssertionSet,
-  AtomicTestCase,
-  EvaluateResult,
-  GradingResult,
-  Prompt,
-  PromptMetrics,
-  ProviderOptions,
-  ProviderResponse,
-  ScoringFunction,
-} from './index';
-
 type NonstandardScoringBaseline = { pass: boolean; score: number };
 const NONSTANDARD_SCORING_BASELINE = Symbol('promptfoo.nonstandardScoringBaseline');
 
