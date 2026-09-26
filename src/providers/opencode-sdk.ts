@@ -16,6 +16,13 @@ import {
   initializeAgenticCache,
   resolveAgenticWorkingDir,
 } from './agentic-utils';
+import { classifyProviderSdkRateLimit } from './fetch';
+import {
+  getHeaderCredentialForms,
+  getHeadersCredentialForms,
+  isCredentialName,
+  redactDiagnosticText,
+} from './providerLogging';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -487,6 +494,7 @@ type OpenCodeTokenCache =
 interface OpenCodeAssistantMessage {
   id?: string;
   parentID?: string;
+  error?: unknown;
   tokens?: {
     total?: number;
     input?: number;
@@ -524,7 +532,316 @@ type OpenCodeSdkResult<T> =
   | {
       data?: T;
       error?: unknown;
+      response?: { status?: number; headers?: unknown };
     };
+
+interface OpenCodePromptError {
+  error: unknown;
+  status?: number;
+  headers?: unknown;
+  assistant?: boolean;
+}
+
+/**
+ * The generated SDK resolves HTTP failures as `{ error, response }` instead of throwing, and a
+ * completed prompt reports model-provider failures on the assistant message rather than its parts.
+ */
+function getOpenCodePromptError(
+  response: OpenCodeSdkResult<OpenCodePromptResponse>,
+): OpenCodePromptError | undefined {
+  if (response && typeof response === 'object' && ('error' in response || 'response' in response)) {
+    const { error, response: transport } = response;
+    const status = transport?.status;
+    if (error != null || (typeof status === 'number' && (status < 200 || status >= 300))) {
+      return { error, status, headers: transport?.headers };
+    }
+  }
+  const error = unwrapOpenCodeResult(response)?.info?.error;
+  return error == null ? undefined : { error, assistant: true };
+}
+
+function isOpenCodeContentFilterRefusal(promptError: OpenCodePromptError | undefined): boolean {
+  return (
+    promptError?.assistant === true &&
+    parseOpenCodeError(promptError.error).name === 'ContentFilterError'
+  );
+}
+
+/** OpenCode `NamedError` tags. Any other upstream-controlled name is left out of diagnostics. */
+const OPEN_CODE_ERROR_NAMES = new Set([
+  'APIError',
+  'BadRequest',
+  'ContentFilterError',
+  'ContextOverflowError',
+  'InternalServerError',
+  'InvalidRequestError',
+  'MessageAbortedError',
+  'MessageOutputLengthError',
+  'NotFoundError',
+  'ProviderAuthError',
+  'StructuredOutputError',
+  'UnknownError',
+]);
+
+interface OpenCodeErrorDetails {
+  name?: string;
+  status?: number;
+  message?: string;
+  data?: Record<string, unknown>;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
+}
+
+function toHttpStatus(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 100 && value <= 599
+    ? value
+    : undefined;
+}
+
+function getOpenCodeDiagnosticMessage(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  if (value.length > 4_096) {
+    return 'Upstream diagnostic omitted because it is too large';
+  }
+  return value.trim() ? value : undefined;
+}
+
+/**
+ * Read an OpenCode `NamedError` (`{ name, data: { message, statusCode } }`), an untagged gateway
+ * body, a thrown `Error`, or a string. Response bodies, headers, and causes are never rendered.
+ * The SDK's sibling HTTP status is authoritative, since a gateway body can imitate an SDK tag.
+ */
+function parseOpenCodeError(error: unknown, transportStatus?: number): OpenCodeErrorDetails {
+  if (typeof error === 'string') {
+    return { status: toHttpStatus(transportStatus), message: getOpenCodeDiagnosticMessage(error) };
+  }
+  const item = asRecord(error);
+  const data = asRecord(item?.data);
+  const tag = typeof item?.name === 'string' ? item.name : item?._tag;
+  const name = typeof tag === 'string' && OPEN_CODE_ERROR_NAMES.has(tag) ? tag : undefined;
+  const status =
+    toHttpStatus(transportStatus) ??
+    toHttpStatus(item?.statusCode) ??
+    toHttpStatus(data?.statusCode);
+  const message =
+    getOpenCodeDiagnosticMessage(item?.message) ?? getOpenCodeDiagnosticMessage(data?.message);
+  return { name, status, message, data };
+}
+
+function describeOpenCodeError({ name, status, message }: OpenCodeErrorDetails): string {
+  return (
+    [name, status === undefined ? undefined : `HTTP ${status}`, message]
+      .filter(Boolean)
+      .join(': ') || 'Unknown OpenCode error'
+  );
+}
+
+type OpenCodeRateLimit = ReturnType<typeof classifyProviderSdkRateLimit>;
+
+/**
+ * Classify an HTTP 429 with the shared fetch contract. `APIError` nests the upstream body and
+ * headers; an untagged gateway body is the error itself.
+ */
+function getOpenCodeRateLimit(
+  error: unknown,
+  { status, message, data }: OpenCodeErrorDetails,
+  transportHeaders?: unknown,
+): OpenCodeRateLimit | undefined {
+  if (status !== 429) {
+    return undefined;
+  }
+  let body = data?.responseBody;
+  if (typeof body === 'string') {
+    if (body.length > 32_768) {
+      body = undefined;
+    } else {
+      try {
+        body = JSON.parse(body);
+      } catch {
+        // Plain-text and truncated bodies are scanned for codes as text.
+      }
+    }
+  }
+  const headers: Record<string, string> = {};
+  // The SDK's transport headers may come from a gateway, so upstream values take precedence.
+  for (const source of [transportHeaders, data?.responseHeaders]) {
+    const entries =
+      source instanceof Headers ? source.entries() : Object.entries(asRecord(source) ?? {});
+    for (const [name, value] of entries) {
+      if (typeof value === 'string') {
+        headers[name.toLowerCase()] = value;
+      }
+    }
+  }
+  return classifyProviderSdkRateLimit({
+    records: [body, data, error],
+    texts: [typeof body === 'string' ? body : undefined, message],
+    headers,
+  });
+}
+
+/** Longest upstream retry hint passed to the scheduler, whose shared queue state honors it. */
+const OPEN_CODE_MAX_RETRY_AFTER_MS = 60_000;
+
+function getOpenCodeRateLimitMetadata(rateLimit: OpenCodeRateLimit): Record<string, unknown> {
+  const retryAfterMs =
+    rateLimit.kind === 'rate_limit'
+      ? (rateLimit.retryAfterMs ??
+        (rateLimit.resetAt === undefined ? undefined : Math.max(0, rateLimit.resetAt - Date.now())))
+      : undefined;
+  return {
+    rateLimitKind: rateLimit.kind,
+    http: {
+      status: rateLimit.status,
+      statusText: rateLimit.statusText,
+      // Longer hints still decide the classification above but would stall every queued call.
+      ...(retryAfterMs === undefined || retryAfterMs > OPEN_CODE_MAX_RETRY_AFTER_MS
+        ? {}
+        : { headers: { 'retry-after-ms': String(Math.ceil(retryAfterMs)) } }),
+    },
+  };
+}
+
+function getOpenCodeAccounting(
+  message: OpenCodeAssistantMessage | undefined,
+): Pick<ProviderResponse, 'tokenUsage' | 'cost'> {
+  const isCount = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+  const source = asRecord(message?.tokens);
+  const tokens: NonNullable<OpenCodeAssistantMessage['tokens']> = {};
+  for (const key of ['total', 'input', 'output', 'reasoning'] as const) {
+    const value = source?.[key];
+    if (isCount(value)) {
+      tokens[key] = value;
+    }
+  }
+  const cache = source?.cache;
+  if (isCount(cache)) {
+    tokens.cache = cache;
+  } else {
+    const raw = asRecord(cache);
+    const read = raw?.read;
+    const write = raw?.write;
+    if (isCount(read) || isCount(write)) {
+      tokens.cache = {
+        ...(isCount(read) ? { read } : {}),
+        ...(isCount(write) ? { write } : {}),
+      };
+    }
+  }
+  const tokenUsage = Object.keys(tokens).length ? buildOpenCodeTokenUsage(tokens) : undefined;
+  if (tokenUsage && !isCount(tokenUsage.total)) {
+    delete tokenUsage.total;
+  }
+  const cost = message?.cost;
+  return {
+    ...(tokenUsage ? { tokenUsage } : {}),
+    ...(typeof cost === 'number' && Number.isFinite(cost) && cost >= 0 ? { cost } : {}),
+  };
+}
+
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+/** Endpoint words carry useful diagnostic context; other configured path segments may be tokens. */
+const OPEN_CODE_PUBLIC_PATH_SEGMENT =
+  /^(?:api|connect|events|healthz?|http|https|mcp|openapi|prompts|ready|resources|sessions?|sse|stream|tools|v\d+(?:\.\d+)*|webhook)$/i;
+
+/**
+ * Add a configured URL's userinfo, private path segments, and query and fragment values (split on
+ * `&` and `;`), raw and decoded. A URL that does not parse is split by hand, since OpenCode may
+ * still echo its parts.
+ */
+function addOpenCodeUrlCredentials(value: unknown, add: (value: unknown) => void): void {
+  if (typeof value !== 'string' || !value.includes('://')) {
+    return;
+  }
+  let userinfo: string[];
+  let path: string;
+  let parameters: string;
+  try {
+    const url = new URL(value.replace(/^jdbc:/i, ''));
+    [userinfo, path, parameters] = [
+      [url.username, url.password],
+      url.pathname,
+      url.search + url.hash,
+    ];
+  } catch {
+    const [, rawUserinfo = '', rawPath = '', rawParameters = ''] =
+      value.slice(value.indexOf('://') + 3).match(/^(?:([^@/?#]*)@)?[^/?#]*([^?#]*)(.*)$/s) ?? [];
+    [userinfo, path, parameters] = [rawUserinfo.split(':'), rawPath, rawParameters];
+    add(value);
+  }
+  const pathSegments = path
+    .split('/')
+    .filter((segment) => !OPEN_CODE_PUBLIC_PATH_SEGMENT.test(segment));
+  for (const part of [...userinfo, ...pathSegments]) {
+    add(part);
+    add(safeDecodeURIComponent(part));
+  }
+  for (const parameter of parameters.split(/[?#&;]/).filter((item) => item.includes('='))) {
+    const parameterValue = parameter.slice(parameter.indexOf('=') + 1);
+    add(parameterValue);
+    add(safeDecodeURIComponent(parameterValue.replace(/\+/g, ' ')));
+  }
+}
+
+/**
+ * Add the values an MCP server definition hands to OpenCode. Local environment names are
+ * user-defined and command arguments can embed credentials in shell strings (`sh -c "TOKEN=x"`),
+ * so every value, `name=value` part, and URL credential is treated as secret.
+ */
+function addOpenCodeMcpCredentials(server: unknown, add: (value: unknown) => void): void {
+  const mcp = asRecord(server);
+  if (mcp?.type === 'remote') {
+    addOpenCodeUrlCredentials(mcp.url, add);
+    add(asRecord(mcp.oauth)?.clientSecret);
+    getHeadersCredentialForms(mcp.headers).forEach(add);
+  } else if (mcp?.type === 'local') {
+    const values = [
+      ...Object.values(asRecord(mcp.environment) ?? {}),
+      ...(Array.isArray(mcp.command) ? mcp.command.slice(1) : []),
+    ];
+    for (const value of values.filter((item): item is string => typeof item === 'string')) {
+      add(value);
+      // Flags and shell strings: `--key=x`, `-H "X-Key: x"`, `sh -c "exec mcp --token x"`.
+      for (const part of value.split(/[\s"'`;&|()<>=]+/)) {
+        add(part);
+        if (part.includes('://')) {
+          addOpenCodeUrlCredentials(part, add);
+        } else {
+          part.split(/[:,]/).forEach(add);
+        }
+      }
+    }
+  }
+}
+
+function hasDynamicOpenCodeMcpCommand(server: unknown): boolean {
+  const mcp = asRecord(server);
+  return (
+    mcp?.type === 'local' &&
+    Array.isArray(mcp.command) &&
+    mcp.command
+      .slice(1)
+      .some(
+        (argument) =>
+          typeof argument === 'string' &&
+          /\$(?:[\w{(])|\x60|\b(?:process\.env|(?:Deno|Bun)\.env|os\.environ|ENV\s*[\[.]|\w+\.join\s*\(|\w+\.toString\s*\()|(?:^|\s)(?:\||(?:printf|base64)\b)/.test(
+            argument,
+          ),
+      )
+  );
+}
 
 /**
  * Resolve ESM-only package entry point by reading package.json exports
@@ -850,6 +1167,11 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private client?: OpenCodeClient;
   private clientInitialization?: Promise<void>;
   private server?: OpenCodeServer;
+  // Every configured value an OpenCode diagnostic could echo. Kept for the provider's lifetime:
+  // a reused server keeps the configuration of the call that started it.
+  private readonly knownCredentials = new Set<string>();
+  private readonly shortCredentials = new Set<string>();
+  private withholdMcpDiagnostics = false;
   private sessions: Map<string, OpenCodeSessionHandle> = new Map(); // cacheKey -> session info
   private sessionOrder: string[] = []; // Track insertion order for LRU eviction
   private sessionQueues = new Map<string, Promise<void>>();
@@ -882,7 +1204,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
     }
 
     // Check provider-specific env vars based on provider_id
-    const providerId = config?.provider_id?.toLowerCase();
+    const providerId =
+      typeof config?.provider_id === 'string' ? config.provider_id.toLowerCase() : undefined;
     if (providerId === 'anthropic') {
       return this.env?.ANTHROPIC_API_KEY || getEnvString('ANTHROPIC_API_KEY');
     }
@@ -917,7 +1240,9 @@ export class OpenCodeSDKProvider implements ApiProvider {
       try {
         await this.deleteSession(session);
       } catch (err) {
-        logger.debug(`Failed to delete persistent session ${session.id}: ${err}`);
+        logger.debug(`Failed to delete persistent session ${session.id}`, {
+          error: this.formatCallError(err, this.config),
+        });
       }
     }
     this.sessions.clear();
@@ -929,11 +1254,85 @@ export class OpenCodeSDKProvider implements ApiProvider {
       try {
         this.server.close();
       } catch (err) {
-        logger.debug(`Failed to close OpenCode server: ${err}`);
+        logger.debug('Failed to close OpenCode server', {
+          error: this.formatCallError(err, this.config),
+        });
       }
       this.server = undefined;
     }
     this.client = undefined;
+  }
+
+  /**
+   * Remember the values an OpenCode diagnostic could echo: the provider credentials, the MCP
+   * configuration, and the environment the spawned server inherits. Each value is also kept in its
+   * URL-, form-, and JSON-encoded forms.
+   */
+  private rememberCredentials(config: OpenCodeSDKConfig): void {
+    const add = (value: unknown) => {
+      if (typeof value !== 'string' || !value.trim()) {
+        return;
+      }
+      for (const form of new Set([value, value.trim()])) {
+        this.knownCredentials.add(form);
+        this.knownCredentials.add(JSON.stringify(form).slice(1, -1));
+        this.knownCredentials.add(new URLSearchParams({ form }).toString().slice('form='.length));
+        try {
+          this.knownCredentials.add(encodeURIComponent(form));
+        } catch {
+          // Lone surrogates cannot be URI-encoded; the raw and JSON forms are still covered.
+        }
+      }
+    };
+    const addStrong = (value: unknown) => {
+      add(value);
+      if (typeof value === 'string' && value.length >= 4 && value.length < 8) {
+        this.shortCredentials.add(value);
+      }
+    };
+    addStrong(config.apiKey);
+    addStrong(this.getApiKey(config));
+    addOpenCodeUrlCredentials(config.baseUrl, add);
+    for (const server of Object.values(asRecord(config.mcp) ?? {})) {
+      addOpenCodeMcpCredentials(server, add);
+      this.withholdMcpDiagnostics ||= hasDynamicOpenCodeMcpCommand(server);
+      const mcp = asRecord(server);
+      if (mcp?.type === 'local') {
+        Object.values(asRecord(mcp.environment) ?? {}).forEach(addStrong);
+      } else if (mcp?.type === 'remote') {
+        getHeadersCredentialForms(mcp.headers).forEach(addStrong);
+        addStrong(asRecord(mcp.oauth)?.clientSecret);
+      }
+    }
+    // The SDK client runs in-process; a spawned server also receives invocation env-file values.
+    for (const env of new Set([process.env, getProcessEnv(), this.env ?? {}])) {
+      for (const [name, value] of Object.entries(env)) {
+        if (typeof value === 'string' && isCredentialName(name)) {
+          getHeaderCredentialForms(value).forEach(addStrong);
+        }
+        addOpenCodeUrlCredentials(value, add);
+      }
+    }
+  }
+
+  private formatCallError(
+    error: unknown,
+    config: OpenCodeSDKConfig,
+    transportStatus?: number,
+  ): string {
+    this.rememberCredentials(config);
+    const details = parseOpenCodeError(error, transportStatus);
+    if (this.withholdMcpDiagnostics && details.message) {
+      details.message =
+        'Upstream diagnostic withheld because a local MCP command may transform credentials';
+    }
+    let text = describeOpenCodeError(details);
+    for (const credential of this.shortCredentials) {
+      text = text.split(credential).join('[REDACTED]');
+    }
+    return redactDiagnosticText(text, this.knownCredentials)
+      .replace(/[\r\n]+/g, ' ')
+      .slice(0, 500);
   }
 
   /**
@@ -1229,7 +1628,9 @@ export class OpenCodeSDKProvider implements ApiProvider {
         // Best-effort cleanup of old session
         if (oldSession) {
           this.deleteSession(oldSession).catch((err) => {
-            logger.debug(`Failed to delete evicted session ${oldSession.id}: ${err}`);
+            logger.debug(`Failed to delete evicted session ${oldSession.id}`, {
+              error: this.formatCallError(err, this.config),
+            });
           });
         }
       }
@@ -1628,16 +2029,21 @@ export class OpenCodeSDKProvider implements ApiProvider {
     // concurrent prompt on the same shared session could be included and
     // cause skill-used to pass for the wrong evaluation row.
     const startIndex = messages.findIndex((m) => m.info?.id === parentId);
+    // The anchors are server-controlled, so they go through the same redaction as errors.
+    const redactId = (id: string) =>
+      this.withholdMcpDiagnostics || id.length > 4_096
+        ? '[REDACTED]'
+        : redactDiagnosticText(id, this.knownCredentials);
     if (startIndex === -1) {
       logger.debug(
-        `[OpenCode SDK] Parent message ${parentId} not found in ${messages.length} fetched messages; falling back to final-message parts for skill tracking`,
+        `[OpenCode SDK] Parent message ${redactId(parentId)} not found in ${messages.length} fetched messages; falling back to final-message parts for skill tracking`,
       );
       return [];
     }
     const endIndex = messages.findIndex((m) => m.info?.id === assistantId);
     if (endIndex < startIndex) {
       logger.debug(
-        `[OpenCode SDK] Assistant message ${assistantId} not found after its parent in ${messages.length} fetched messages; falling back to final-message parts for skill tracking`,
+        `[OpenCode SDK] Assistant message ${redactId(assistantId)} not found after its parent in ${messages.length} fetched messages; falling back to final-message parts for skill tracking`,
       );
       return [];
     }
@@ -1789,9 +2195,48 @@ export class OpenCodeSDKProvider implements ApiProvider {
     });
   }
 
-  private handleCallError(error: unknown, callOptions?: CallApiOptionsParams): ProviderResponse {
+  /**
+   * Grade an assistant content-filter failure as a refusal. Filtered text, structured output,
+   * and tool metadata stay private.
+   */
+  private buildRefusalResponse(
+    response: OpenCodeSdkResult<OpenCodePromptResponse>,
+    sessionId: string,
+  ): ProviderResponse {
+    return {
+      output: 'I cannot assist with this request because it was blocked by a content filter.',
+      isRefusal: true,
+      guardrails: { flagged: true, flaggedOutput: true },
+      ...getOpenCodeAccounting(unwrapOpenCodeResult(response)?.info),
+      sessionId,
+    };
+  }
+
+  private buildPromptErrorResponse(
+    config: OpenCodeSDKConfig,
+    response: OpenCodeSdkResult<OpenCodePromptResponse>,
+    { error, status, headers, assistant }: OpenCodePromptError,
+    sessionId: string,
+  ): ProviderResponse {
+    return {
+      ...this.handleCallError(error, config, undefined, { status, headers }),
+      // An assistant failure still used (and billed) the session.
+      ...(assistant
+        ? { ...getOpenCodeAccounting(unwrapOpenCodeResult(response)?.info), sessionId }
+        : {}),
+    };
+  }
+
+  private handleCallError(
+    error: unknown,
+    config: OpenCodeSDKConfig,
+    callOptions?: CallApiOptionsParams,
+    promptError?: { status?: number; headers?: unknown },
+  ): ProviderResponse {
     const isAbort =
-      (error instanceof Error && error.name === 'AbortError') || callOptions?.abortSignal?.aborted;
+      !promptError &&
+      ((error instanceof Error && error.name === 'AbortError') ||
+        callOptions?.abortSignal?.aborted);
 
     if (isAbort) {
       logger.warn('OpenCode SDK call aborted');
@@ -1799,6 +2244,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     }
 
     if (
+      !promptError &&
       error &&
       typeof error === 'object' &&
       'code' in error &&
@@ -1819,10 +2265,18 @@ export class OpenCodeSDKProvider implements ApiProvider {
       return { error: cliError };
     }
 
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.error('Error calling OpenCode SDK', { error });
+    const details = parseOpenCodeError(error, promptError?.status);
+    const description = this.formatCallError(error, config, promptError?.status);
+    const errorMessage = promptError ? `OpenCode SDK prompt error: ${description}` : description;
+    const rateLimit = getOpenCodeRateLimit(error, details, promptError?.headers);
+    logger.error('Error calling OpenCode SDK', { error: errorMessage });
     return {
       error: `Error calling OpenCode SDK: ${errorMessage}`,
+      ...(rateLimit
+        ? { metadata: getOpenCodeRateLimitMetadata(rateLimit) }
+        : details.status === undefined
+          ? {}
+          : { metadata: { http: { status: details.status } } }),
     };
   }
 
@@ -1832,6 +2286,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const { config, isTempDir, workingDir } = this.prepareCall(context);
+    // A server started by this call keeps its configuration after later calls replace it.
+    this.rememberCredentials(config);
     let ephemeralSession: OpenCodeSessionHandle | undefined;
     let abortListener: (() => void) | undefined;
 
@@ -1857,7 +2313,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
           ? { shouldCache: false, shouldReadCache: false, shouldWriteCache: false }
           : await initializeAgenticCache(
               {
-                cacheKeyPrefix: 'opencode:sdk',
+                // The unversioned cache can contain assistant errors or filtered text as successes.
+                cacheKeyPrefix: 'opencode:sdk:response:v2',
                 workingDir: config.working_dir ? workingDir : undefined,
                 bustCache: context?.bustCache,
                 mcp: mcpConfig,
@@ -1913,17 +2370,22 @@ export class OpenCodeSDKProvider implements ApiProvider {
               session.sessionId,
               session.sessionQuery,
             );
-            abortListener = () => {
-              client.session.abort?.(abortParams).catch((err) => {
-                logger.debug(`[OpenCode SDK] Failed to abort session ${session.sessionId}: ${err}`);
+            const logAbortError = (error: unknown) => {
+              logger.debug(`[OpenCode SDK] Failed to abort session ${session.sessionId}`, {
+                error: this.formatCallError(error, config),
               });
+            };
+            abortListener = () => {
+              try {
+                client.session.abort?.(abortParams).catch(logAbortError);
+              } catch (error) {
+                logAbortError(error);
+              }
             };
             abortSignal.addEventListener('abort', abortListener, { once: true });
           }
 
           const response = await client.session.prompt(promptOptions);
-          logger.debug(`OpenCode SDK response received`);
-
           // The prompt has returned, so an abort from here on must not ask the
           // server to kill the session it already answered.
           if (abortListener && abortSignal) {
@@ -1934,6 +2396,13 @@ export class OpenCodeSDKProvider implements ApiProvider {
           if (abortSignal?.aborted) {
             return { error: 'OpenCode SDK call aborted' };
           }
+          const promptError = getOpenCodePromptError(response);
+          if (promptError) {
+            return isOpenCodeContentFilterRefusal(promptError)
+              ? this.buildRefusalResponse(response, session.sessionId)
+              : this.buildPromptErrorResponse(config, response, promptError, session.sessionId);
+          }
+          logger.debug('OpenCode SDK response received');
 
           // Fetch only the parts that belong to the current prompt from the session
           // history so that deriveSkillCalls captures skill calls from intermediate
@@ -1948,10 +2417,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
                 response,
                 abortSignal,
               );
-            } catch (e) {
-              logger.debug(
-                `[OpenCode SDK] Could not fetch session history for skill tracking: ${e}`,
-              );
+            } catch (error) {
+              logger.debug('[OpenCode SDK] Could not fetch session history for skill tracking', {
+                error: this.formatCallError(error, config),
+              });
             }
             if (abortSignal?.aborted) {
               return { error: 'OpenCode SDK call aborted' };
@@ -1970,7 +2439,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
         },
       );
     } catch (error) {
-      return this.handleCallError(error, callOptions);
+      return this.handleCallError(error, config, callOptions);
     } finally {
       if (abortListener && callOptions?.abortSignal) {
         callOptions.abortSignal.removeEventListener('abort', abortListener);
@@ -1979,13 +2448,19 @@ export class OpenCodeSDKProvider implements ApiProvider {
         try {
           await this.deleteSession(ephemeralSession);
         } catch (err) {
-          logger.debug(`Failed to delete non-persistent session ${ephemeralSession.id}: ${err}`);
+          logger.debug(`Failed to delete non-persistent session ${ephemeralSession.id}`, {
+            error: this.formatCallError(err, config),
+          });
         }
       }
 
-      // Clean up temp directory
+      // Clean up temp directory without masking the call result on cleanup failure.
       if (isTempDir && workingDir) {
-        await fsPromises.rm(workingDir, { recursive: true, force: true });
+        try {
+          await fsPromises.rm(workingDir, { recursive: true, force: true });
+        } catch (error) {
+          logger.debug('Failed to remove temp directory for OpenCode', { workingDir, error });
+        }
       }
     }
   }
