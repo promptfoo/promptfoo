@@ -8,10 +8,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetConfigValidation';
 import ProviderConfigEditor from './ProviderConfigEditor';
+import ProviderTypeSelector from './ProviderTypeSelector';
 
 import type { ProviderOptions } from '../../types';
 
 vi.mock('@app/utils/api', () => ({ callApi: vi.fn() }));
+vi.mock('@app/hooks/useTelemetry', () => ({
+  useTelemetry: () => ({ recordEvent: vi.fn() }),
+}));
 
 const mockA2AConfigState = vi.hoisted(() => ({
   advancedConfigError: null as string | null,
@@ -145,6 +149,27 @@ function StatefulCodexSecurityEditor({
       />
       <output data-testid="codex-security-config">{JSON.stringify(provider.config)}</output>
     </>
+  );
+}
+
+function NewCodexSecurityEditor() {
+  const [provider, setProvider] = React.useState<ProviderOptions>();
+  const [providerType, setProviderType] = React.useState<string>();
+
+  return provider ? (
+    <ProviderConfigEditor
+      provider={provider}
+      setProvider={setProvider}
+      providerType={providerType}
+    />
+  ) : (
+    <ProviderTypeSelector
+      provider={provider}
+      setProvider={(selected, type) => {
+        setProvider(selected);
+        setProviderType(type);
+      }}
+    />
   );
 }
 
@@ -858,6 +883,62 @@ describe('ProviderConfigEditor', () => {
     expect(screen.getByLabelText('Scoped paths')).toHaveValue('src');
     expect(screen.getByLabelText('Model')).toHaveValue('gpt-5.6-luna');
   });
+
+  it('checks a saved report directly from the actual provider selector defaults', async () => {
+    const user = userEvent.setup();
+    mockCallApiRoutes([
+      {
+        method: 'POST',
+        path: '/providers/test',
+        response: { testResult: { success: true, message: 'Saved report is readable.' } },
+      },
+    ]);
+    renderWithProviders(<NewCodexSecurityEditor />);
+    await user.click(screen.getByText('Codex Security SDK').closest('[role="button"]')!);
+    expect(screen.getByLabelText('Repository path *')).toHaveValue('');
+    await user.selectOptions(screen.getByLabelText('Result source'), 'saved-report');
+    await user.type(screen.getByLabelText('Report file *'), '/reports/left.json');
+    await user.click(screen.getByRole('button', { name: 'Check setup' }));
+
+    expect(await screen.findByText(/Saved report is readable\./)).toHaveTextContent(
+      'Local setup check passed.',
+    );
+    expect(getCallApiMock()).toHaveBeenCalledTimes(1);
+    const request = getCallApiMock().mock.calls[0][1]!;
+    expect(JSON.parse(request.body as string)).toEqual({
+      providerOptions: {
+        id: 'openai:codex-security:gpt-5.6-luna',
+        label: 'Codex Security SDK',
+        config: {
+          operation: 'security-scan',
+          auth: 'auto',
+          model_reasoning_effort: 'high',
+          max_cost_usd: 1,
+          report_file: '/reports/left.json',
+        },
+      },
+    });
+  });
+
+  it.each([
+    [{ repository: '', working_dir: ' \t ' }, {}],
+    [{ repository: ' \t ', working_dir: '/repos/legacy' }, { working_dir: '/repos/legacy' }],
+    [{ repository: '/repos/service', working_dir: '' }, { repository: '/repos/service' }],
+  ])(
+    'removes only blank repository paths when selecting a saved report',
+    async (paths, expected) => {
+      const user = userEvent.setup();
+      renderWithProviders(<StatefulCodexSecurityEditor initialConfig={paths} />);
+      const initialConfig = JSON.parse(screen.getByTestId('codex-security-config').textContent!);
+      const { repository: _repository, working_dir: _workingDir, ...liveOptions } = initialConfig;
+      await user.selectOptions(screen.getByLabelText('Result source'), 'saved-report');
+      expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toEqual({
+        ...liveOptions,
+        ...expected,
+        report_file: '',
+      });
+    },
+  );
 
   it('checks the selected report path and label without changing the provider ID or saved options', async () => {
     const user = userEvent.setup();

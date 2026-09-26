@@ -99,6 +99,11 @@ export default function CodexSecurityConfiguration({
     const nextConfig = { ...config };
     if (source === 'saved-report') {
       nextConfig.report_file = '';
+      for (const field of ['repository', 'working_dir']) {
+        if (typeof nextConfig[field] === 'string' && nextConfig[field].trim() === '') {
+          delete nextConfig[field];
+        }
+      }
     } else {
       delete nextConfig.report_file;
     }

@@ -24,7 +24,6 @@ import {
   getPrimaryTokenUsageLabel,
   getTokenUsageTotal,
 } from '@app/utils/tokenUsage';
-import { CodexSecurityResultSchema } from '@promptfoo/contracts/codexSecurity';
 import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import {
   type EvalResultsFilterMode,
@@ -1067,13 +1066,39 @@ async function saveManualRating({
   }
 }
 
+function isSavedReportProvider(provider: unknown): boolean {
+  if (provider === null || typeof provider !== 'object' || !('id' in provider)) {
+    return false;
+  }
+  const { id } = provider;
+  const config = 'config' in provider ? provider.config : undefined;
+  return (
+    typeof id === 'string' &&
+    (id === 'openai:codex-security' || id.startsWith('openai:codex-security:')) &&
+    config !== null &&
+    typeof config === 'object' &&
+    'report_file' in config &&
+    typeof config.report_file === 'string' &&
+    config.report_file.trim().length > 0
+  );
+}
+
+function hasReportProviderOverride(test: unknown): boolean {
+  return (
+    test !== null &&
+    typeof test === 'object' &&
+    'provider' in test &&
+    isSavedReportProvider(test.provider)
+  );
+}
+
 function renderPromptMetricDetails({
   metrics,
   filteredMetrics,
   idx,
   isRedteam,
   showStats,
-  isSavedReport,
+  hasReportImports,
   numAsserts,
   numGoodAsserts,
   testCounts,
@@ -1083,7 +1108,7 @@ function renderPromptMetricDetails({
   idx: number;
   isRedteam: boolean;
   showStats: boolean;
-  isSavedReport: boolean;
+  hasReportImports: boolean;
   numAsserts: number[];
   numGoodAsserts: number[];
   testCounts: PromptSummaryMetric[];
@@ -1092,17 +1117,9 @@ function renderPromptMetricDetails({
     return null;
   }
 
-  if (isSavedReport) {
-    return (
-      <div className="prompt-detail collapse-hidden">
-        {renderAssertMetric({ numAsserts, numGoodAsserts, idx })}
-      </div>
-    );
-  }
-
   return (
     <div className="prompt-detail collapse-hidden">
-      {renderRequestMetric({ metrics, isRedteam })}
+      {!hasReportImports && renderRequestMetric({ metrics, isRedteam })}
       {renderAssertMetric({ numAsserts, numGoodAsserts, idx })}
       {renderCostMetric({
         metrics,
@@ -1115,12 +1132,13 @@ function renderPromptMetricDetails({
         isRedteam,
         testCount: testCounts[idx],
       })}
-      {renderLatencyMetric({
-        metrics,
-        filteredMetrics,
-        testCount: testCounts[idx],
-      })}
-      {renderTokensPerSecondMetric(metrics)}
+      {!hasReportImports &&
+        renderLatencyMetric({
+          metrics,
+          filteredMetrics,
+          testCount: testCounts[idx],
+        })}
+      {!hasReportImports && renderTokensPerSecondMetric(metrics)}
     </div>
   );
 }
@@ -1143,7 +1161,7 @@ function PromptColumnHeader({
   failureFilter,
   getMetrics,
   showStats,
-  isSavedReport,
+  hasReportImports,
   isRedteam,
   numAsserts,
   numGoodAsserts,
@@ -1163,7 +1181,7 @@ function PromptColumnHeader({
   failureFilter: { [key: string]: boolean };
   getMetrics: ReturnType<typeof useMetricsGetter>;
   showStats: boolean;
-  isSavedReport: boolean;
+  hasReportImports: boolean;
   isRedteam: boolean;
   numAsserts: number[];
   numGoodAsserts: number[];
@@ -1249,7 +1267,7 @@ function PromptColumnHeader({
         idx,
         isRedteam,
         showStats,
-        isSavedReport,
+        hasReportImports,
         numAsserts,
         numGoodAsserts,
         testCounts,
@@ -1698,36 +1716,35 @@ function ResultsTable({
   invariant(table, 'Table should be defined');
   const { head, body } = table;
 
-  const savedReportColumns = React.useMemo(
-    () =>
-      head.prompts.map((prompt, index) => {
-        if (
-          body.some((row) => {
-            const result = CodexSecurityResultSchema.safeParse(
-              row.outputs[index]?.metadata?.codexSecurity,
-            );
-            return result.success && result.data.source.kind === 'saved-report';
-          })
-        ) {
-          return true;
-        }
+  const columnsWithReportImports = React.useMemo(() => {
+    const hasReportOverride =
+      hasReportProviderOverride(config?.defaultTest) ||
+      (Array.isArray(config?.tests) && config.tests.some(hasReportProviderOverride)) ||
+      config?.scenarios?.some(
+        (scenario) =>
+          typeof scenario === 'object' &&
+          [scenario.config, scenario.tests].some(
+            (tests) => Array.isArray(tests) && tests.some(hasReportProviderOverride),
+          ),
+      );
 
-        // Config covers empty/filtered pages. Require a unique identity match; prompt
-        // positions and duplicate provider IDs cannot establish report provenance.
-        const providers = Array.isArray(config?.providers) ? config.providers : [];
-        const matches = providers
-          .map((provider) => findProviderConfig(formatProviderString(prompt), [provider]).config)
-          .filter((provider) => provider !== undefined);
-        const provider = matches?.length === 1 ? matches[0] : undefined;
-        return (
-          (provider?.id === 'openai:codex-security' ||
-            provider?.id?.startsWith('openai:codex-security:')) &&
-          typeof provider.config?.report_file === 'string' &&
-          provider.config.report_file.trim().length > 0
-        );
-      }),
-    [body, head.prompts, config?.providers],
-  );
+    return head.prompts.map((prompt) => {
+      // Imports can share a column with live provider overrides. Keep actual aggregate
+      // usage, but hide timing that includes file reads. Never classify from one page.
+      if (hasReportOverride) {
+        return true;
+      }
+
+      // Require a unique identity match; positions and duplicate provider IDs cannot
+      // establish report provenance.
+      const providers = Array.isArray(config?.providers) ? config.providers : [];
+      const matches = providers
+        .map((provider) => findProviderConfig(formatProviderString(prompt), [provider]).config)
+        .filter((provider) => provider !== undefined);
+      const provider = matches?.length === 1 ? matches[0] : undefined;
+      return isSavedReportProvider(provider);
+    });
+  }, [head.prompts, config?.providers, config?.defaultTest, config?.tests, config?.scenarios]);
 
   const isRedteam = React.useMemo(() => {
     return config?.redteam !== undefined;
@@ -2218,7 +2235,7 @@ function ResultsTable({
                 failureFilter={failureFilter}
                 getMetrics={getMetrics}
                 showStats={showStats}
-                isSavedReport={savedReportColumns[idx] === true}
+                hasReportImports={columnsWithReportImports[idx] === true}
                 isRedteam={isRedteam}
                 numAsserts={numAsserts}
                 numGoodAsserts={numGoodAsserts}
@@ -2297,7 +2314,7 @@ function ResultsTable({
     onFailureFilterToggle,
     debouncedSearchText,
     showStats,
-    savedReportColumns,
+    columnsWithReportImports,
     filters.appliedCount,
     passRates,
     passingTestCounts,
