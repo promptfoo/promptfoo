@@ -11,6 +11,7 @@ import OpenAI from 'openai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import cliState from '../../../src/cliState';
+import { getEnvString } from '../../../src/envars';
 import { loadApiProvider } from '../../../src/providers/index';
 import { OpenAiAgentsProvider } from '../../../src/providers/openai/agents';
 import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
@@ -133,7 +134,7 @@ describe('Agents SDK scoped client', () => {
   );
 
   it.each(
-    (['suite', 'file'] as const).flatMap((scope) =>
+    (['provider', 'suite', 'file'] as const).flatMap((scope) =>
       [
         ['REQUEST_TIMEOUT_MS', '1234'],
         ['PROMPTFOO_CA_CERT_PATH', '/fixture/ca.pem'],
@@ -145,15 +146,29 @@ describe('Agents SDK scoped client', () => {
       ]),
     ),
   )('uses the shared transport for $scope $name=$value', async ({ scope, name, value }) => {
+    mockProcessEnv({ [name]: 'host-setting' });
     const custom = new OpenAIProvider({ apiKey: 'sdk-key' });
     vi.spyOn(custom, 'getModel').mockRejectedValue(
       new Error('default provider bypassed transport'),
     );
     setDefaultModelProvider(custom);
-    const invoke = () => provider().callApi('hello');
-    const result = await (scope === 'suite'
-      ? cliState.withEnv({ [name]: value }, invoke)
-      : cliState.withEnvFileOverrides({ [name]: value }, invoke));
+    vi.mocked(fetchWithProxy).mockImplementation(async () => {
+      expect(getEnvString(name)).toBe(value);
+      expect(getEnvString('AGENTS_FIXTURE_PRESERVED')).toBe('suite-setting');
+      return Response.json(response);
+    });
+    const invoke = () =>
+      provider({}, scope === 'provider' ? { [name]: value } : {}).callApi('hello');
+    const suiteEnv = {
+      AGENTS_FIXTURE_PRESERVED: 'suite-setting',
+      ...(scope === 'provider' && { [name]: 'suite-setting' }),
+      ...(scope === 'suite' && { [name]: value }),
+    };
+    const result = await cliState.withEnvFileOverrides(
+      scope === 'file' ? { [name]: value } : undefined,
+      () => cliState.withEnv(suiteEnv, invoke),
+    );
+    expect(getEnvString(name)).toBe('host-setting');
     expect(result.output).toBe('ok');
     expect(fetchWithProxy).toHaveBeenCalledOnce();
     expect(request().url).toBe('https://api.openai.com/v1/responses');
@@ -178,17 +193,22 @@ describe('Agents SDK scoped client', () => {
     },
   );
 
-  it('applies a retry budget configured without other connection settings', async () => {
-    const custom = new OpenAIProvider({ apiKey: 'sdk-key' });
-    vi.spyOn(custom, 'getModel').mockRejectedValue(new Error('default provider bypassed retries'));
-    setDefaultModelProvider(custom);
-    vi.mocked(fetchWithProxy).mockResolvedValue(
-      Response.json({ error: 'retry fixture' }, { status: 409 }),
-    );
+  it.each([0, -1])(
+    'applies a retry budget of %s without other connection settings',
+    async (maxRetries) => {
+      const custom = new OpenAIProvider({ apiKey: 'sdk-key' });
+      vi.spyOn(custom, 'getModel').mockRejectedValue(
+        new Error('default provider bypassed retries'),
+      );
+      setDefaultModelProvider(custom);
+      vi.mocked(fetchWithProxy).mockResolvedValue(
+        Response.json({ error: 'retry fixture' }, { status: 409 }),
+      );
 
-    await expect(provider({ maxRetries: 0 }).callApi('hello')).rejects.toThrow('409');
-    expect(fetchWithProxy).toHaveBeenCalledOnce();
-  });
+      await expect(provider({ maxRetries }).callApi('hello')).rejects.toThrow('409');
+      expect(fetchWithProxy).toHaveBeenCalledOnce();
+    },
+  );
 
   it('uses explicit connection config ahead of scoped values', async () => {
     await cliState.withEnv({ OPENAI_API_KEY: 'suite-key' }, () =>

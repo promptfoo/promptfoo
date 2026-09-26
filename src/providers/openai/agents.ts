@@ -38,6 +38,13 @@ import type {
 import type { OpenAiAgentsSessionClientFactory } from './agents-loader';
 import type { OpenAiAgentsOptions, OpenAiAgentsSessionFactory } from './agents-types';
 
+const TRANSPORT_ENV_KEYS = [
+  'REQUEST_TIMEOUT_MS',
+  'PROMPTFOO_CA_CERT_PATH',
+  'PROMPTFOO_INSECURE_SSL',
+  'PROMPTFOO_FETCH_CONNECTIONS',
+] as const;
+
 /**
  * OpenAI Agents Provider
  *
@@ -326,6 +333,12 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
             ),
           ),
     };
+    const transportEnv = Object.fromEntries(
+      TRANSPORT_ENV_KEYS.filter((key) => this.env?.[key] !== undefined).map((key) => [
+        key,
+        this.env?.[key],
+      ]),
+    );
     const organization = this.getOrganization(config);
     const apiUrl = new URL(config.apiBaseUrl);
     const query = apiUrl.search.slice(1);
@@ -335,7 +348,8 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       // The SDK requires a constructor key; the null header keeps it off the wire.
       apiKey: keyless ? 'promptfoo-no-auth' : (apiKey ?? null),
       adminAPIKey: null,
-      maxRetries: this.config.maxRetries,
+      maxRetries:
+        this.config.maxRetries === undefined ? undefined : Math.max(0, this.config.maxRetries),
       baseURL: apiUrl.toString(),
       organization,
       project: overrides.project ?? (separateCredentials ? null : undefined),
@@ -350,10 +364,14 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         if (query) {
           url.search = query + (url.search ? `&${url.search.slice(1)}` : '');
         }
-        return fetchWithProxy(input instanceof Request ? new Request(url, input) : url.href, {
-          ...options,
-          disableTransientRetries: true,
-        });
+        const fetch = () =>
+          fetchWithProxy(input instanceof Request ? new Request(url, input) : url.href, {
+            ...options,
+            disableTransientRetries: true,
+          });
+        return Object.keys(transportEnv).length
+          ? cliState.withEnv({ ...getEnvOverrides(), ...transportEnv }, fetch)
+          : fetch();
       },
     }) as unknown as NonNullable<OpenAIProviderOptions['openAIClient']>;
   }
@@ -387,17 +405,13 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       [this.env, ...invocationEnvs].some((env) =>
         envKeys.some((key) => env?.[key] !== undefined),
       ) ||
-      invocationEnvs.some(
-        (env) =>
-          [
-            'REQUEST_TIMEOUT_MS',
-            'PROMPTFOO_CA_CERT_PATH',
-            'PROMPTFOO_INSECURE_SSL',
-            'PROMPTFOO_FETCH_CONNECTIONS',
-          ].some((key) => env?.[key] !== undefined) ||
-          ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY'].some(
-            (key) => env?.[key] !== undefined || env?.[key.toLowerCase()] !== undefined,
-          ),
+      [this.env, ...invocationEnvs].some((env) =>
+        TRANSPORT_ENV_KEYS.some((key) => env?.[key] !== undefined),
+      ) ||
+      invocationEnvs.some((env) =>
+        ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY'].some(
+          (key) => env?.[key] !== undefined || env?.[key.toLowerCase()] !== undefined,
+        ),
       ) ||
       ['OPENAI_API_HOST', 'OPENAI_API_BASE_URL', 'OPENAI_BASE_URL', 'OPENAI_ORGANIZATION'].some(
         (key) => getEnvString(key) !== undefined,
