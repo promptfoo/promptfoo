@@ -1,15 +1,27 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import { GoogleAuth } from 'google-auth-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
+import { loadApiProvider } from '../../../src/providers';
 import { GoogleAuthManager } from '../../../src/providers/google/auth';
 import { CreateJobRequestSchema } from '../../../src/types/api/eval';
+import { getProviderFromCloud } from '../../../src/util/cloud';
 import { mockProcessEnv } from '../../util/utils';
+
+import type { VertexChatProvider } from '../../../src/providers/google/vertex';
 
 const makeClient = (value: string) => ({
   quotaProjectId: 'host-quota',
   getAccessToken: vi.fn(async () => ({ token: value })),
 });
 vi.mock('google-auth-library', () => ({ GoogleAuth: vi.fn() }));
+vi.mock('../../../src/util/cloud', async (importOriginal) => ({
+  ...(await importOriginal()),
+  getProviderFromCloud: vi.fn(),
+}));
 let restore: () => void;
 beforeEach(() => {
   restore = mockProcessEnv({
@@ -19,6 +31,7 @@ beforeEach(() => {
     GOOGLE_CLOUD_QUOTA_PROJECT: undefined,
   });
   GoogleAuthManager.clearCache();
+  vi.mocked(getProviderFromCloud).mockReset();
   vi.mocked(GoogleAuth).mockReset();
   vi.mocked(GoogleAuth).mockImplementation(function (options) {
     return {
@@ -40,6 +53,63 @@ afterEach(() => {
 });
 
 describe('Google scoped ADC inputs', () => {
+  it.each([
+    ['direct', 'scoped.json'],
+    ['file', 'scoped.json'],
+    ['cloud', 'scoped.json'],
+    ['direct', ''],
+    ['file', ''],
+    ['cloud', ''],
+  ])('retains %s provider ADC %j when express mode is disabled', async (source, adc) => {
+    mockProcessEnv({ GOOGLE_APPLICATION_CREDENTIALS: 'host.json' });
+    const options = {
+      config: { expressMode: false, projectId: 'fixture-project' },
+      env: { GOOGLE_API_KEY: 'provider-key' },
+    };
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-forced-oauth-'));
+    const file = path.join(directory, 'provider.json');
+    const definition = { id: 'vertex:gemini-2.5-flash', ...options };
+    fs.writeFileSync(file, JSON.stringify(definition));
+    vi.mocked(getProviderFromCloud).mockResolvedValue(definition);
+    try {
+      const provider = (await loadApiProvider(
+        source === 'file'
+          ? `file://${file}`
+          : source === 'cloud'
+            ? 'promptfoo://provider/12345678-1234-1234-1234-123456789abc'
+            : 'vertex:gemini-2.5-flash',
+        {
+          env: { GOOGLE_APPLICATION_CREDENTIALS: adc },
+          ...(source === 'direct' ? { options } : {}),
+        },
+      )) as VertexChatProvider;
+
+      // The loader's temporary environment has ended before authentication begins.
+      if (adc === '') {
+        await expect(provider.getClientWithCredentials()).rejects.toThrow(
+          'Scoped GOOGLE_APPLICATION_CREDENTIALS is empty',
+        );
+        expect(GoogleAuth).not.toHaveBeenCalled();
+      } else {
+        await provider.getClientWithCredentials();
+        expect(GoogleAuth).toHaveBeenCalledWith(expect.objectContaining({ keyFilename: adc }));
+      }
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps a higher provider API key in default express mode after loading', async () => {
+    const provider = (await loadApiProvider('vertex:gemini-2.5-flash', {
+      env: { GOOGLE_APPLICATION_CREDENTIALS: 'scoped.json' },
+      options: { env: { GOOGLE_API_KEY: 'provider-key' } },
+    })) as VertexChatProvider;
+    expect(await provider.getAuthHeaders()).toMatchObject({
+      'x-goog-api-key': 'provider-key',
+    });
+    expect(GoogleAuth).not.toHaveBeenCalled();
+  });
+
   it('retains ADC file and quota settings through actual API parsing and forwards them to the SDK', async () => {
     const env = {
       GOOGLE_APPLICATION_CREDENTIALS: 'scoped.json',
