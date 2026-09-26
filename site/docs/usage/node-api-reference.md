@@ -428,10 +428,10 @@ export function isCacheEnabled(): boolean;
 
 ### `clearCache()`
 
-Clear all cached results.
+Clear the default cache and other caches still held by this process. For an eval with a custom `PROMPTFOO_CACHE_PATH`, pass that directory explicitly.
 
 ```typescript
-export async function clearCache(): Promise<void>;
+export async function clearCache(cachePath?: string): Promise<boolean>;
 ```
 
 **Example:**
@@ -442,6 +442,9 @@ import { cache, evaluate } from 'promptfoo';
 // Clear old cache
 await cache.clearCache();
 await evaluate(testSuite); // Will refetch all provider calls
+
+// Clear a custom PROMPTFOO_CACHE_PATH after its eval has finished
+await cache.clearCache('/tmp/my-eval-cache');
 ```
 
 ---
