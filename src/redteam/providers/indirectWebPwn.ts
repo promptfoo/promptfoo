@@ -9,7 +9,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
-import { getRemoteGenerationHeaders } from '../remoteGeneration';
+import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { resolveRemoteGenerationUrl } from '../remoteGenerationRequest';
 import { getTargetResponse } from './shared';
@@ -175,7 +175,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
    * Check if the web page was fetched via the task API.
    */
   private async checkPageFetched(uuid: string, evalId?: string): Promise<WebPageTrackingResponse> {
-    const url = await resolveRemoteGenerationUrl({ targetId: this.config.targetId });
+    const url = getRemoteGenerationUrl();
     logger.debug('[IndirectWebPwn] Checking page fetch status', { url, uuid, evalId });
 
     const response = await fetchWithRetries(

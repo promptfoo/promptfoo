@@ -13,7 +13,9 @@ import { PromptfooSimulatedUserProvider } from '../../src/providers/promptfoo';
 import { PromptfooModelProvider } from '../../src/providers/promptfooModel';
 import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
 import { fetchRemoteGeneration } from '../../src/redteam/extraction/util';
+import IndirectWebPwnProvider from '../../src/redteam/providers/indirectWebPwn';
 import { postRemoteGenerationTask } from '../../src/redteam/remoteGenerationTask';
+import { checkExfilTracking } from '../../src/redteam/strategies/indirectWebPwn';
 import { doRemoteGrading } from '../../src/remoteGrading';
 import { redteamRouter } from '../../src/server/routes/redteam';
 import { getConfigDirectoryPath, setConfigDirectoryPath } from '../../src/util/config/manage';
@@ -80,6 +82,9 @@ beforeEach(() => {
           : Response.json([team('selected-a', 'org-a'), team('selected-b', 'org-b')]);
       }
       if (url.pathname === '/api/v1/task') {
+        if (body.task === 'get-web-page-tracking') {
+          return Response.json({ wasExfiltrated: false, exfilCount: 0, exfilRecords: [] });
+        }
         return Response.json({
           task: body.task,
           result:
@@ -136,6 +141,35 @@ const routeTask = (context: Record<string, unknown> = {}) => {
 };
 
 describe('Cloud task team recovery', () => {
+  it.each(['grader', 'provider'])(
+    'reads existing resource status through the %s without recovery',
+    async (reader) => {
+      failDiscovery = true;
+      const before = readGlobalConfig();
+      const status =
+        reader === 'grader'
+          ? await checkExfilTracking('synthetic-resource', 'synthetic-evaluation')
+          : await new IndirectWebPwnProvider({ injectVar: 'prompt' })['checkPageFetched'](
+              'synthetic-resource',
+              'synthetic-evaluation',
+            );
+
+      expect(status).toMatchObject({ wasExfiltrated: false, exfilCount: 0, exfilRecords: [] });
+      expect(requests).toEqual([
+        expect.objectContaining({
+          path: '/api/v1/task',
+          body: expect.objectContaining({
+            task: 'get-web-page-tracking',
+            uuid: 'synthetic-resource',
+            evalId: 'synthetic-evaluation',
+          }),
+        }),
+      ]);
+      expect(cloudConfig.hasPendingEnvironmentSelection()).toBe(true);
+      expect(readGlobalConfig()).toEqual(before);
+    },
+  );
+
   it.each([
     ['model', model],
     ['grading', grade],

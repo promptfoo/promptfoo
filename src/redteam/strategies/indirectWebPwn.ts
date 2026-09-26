@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { fetchWithRetries } from '../../util/fetch/index';
-import { getRemoteGenerationHeaders } from '../remoteGeneration';
+import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { resolveRemoteGenerationUrl } from '../remoteGenerationRequest';
 
@@ -99,7 +99,7 @@ export async function checkExfilTracking(
   exfilRecords: WebPageTrackingResponse['exfilRecords'];
 } | null> {
   try {
-    const url = await resolveRemoteGenerationUrl();
+    const url = getRemoteGenerationUrl();
     // Strip "eval-" prefix from evalId for consistency with page creation
     const normalizedEvalId = evalId?.replace(/^eval-/, '');
     const response = await fetchWithRetries(
