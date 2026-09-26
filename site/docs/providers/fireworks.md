@@ -26,6 +26,18 @@ The provider keeps Fireworks credentials isolated from OpenAI's: it reads `FIREW
 
 Copy the exact identifier from the model's documentation. Chat models commonly use `accounts/fireworks/models/<model>`; embedding models can use a different namespace, and dedicated deployments use `accounts/<account>/deployments/<deployment>`. Check the [serverless catalogue](https://fireworks.ai/models?deployment=serverless) and your deployment configuration for availability.
 
+Current Chinese model releases use these Fireworks IDs (prefix each with `fireworks:`):
+
+| Model                                                                              | Model ID                                         |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------ |
+| [DeepSeek V4.1 Flash](https://fireworks.ai/models/deepseek-ai/deepseek-v4p1-flash) | `accounts/fireworks/models/deepseek-v4p1-flash`  |
+| [DeepSeek V4 Pro](https://fireworks.ai/models/deepseek-ai/deepseek-v4-pro-0813)    | `accounts/fireworks/models/deepseek-v4-pro-0813` |
+| [GLM-5.3](https://fireworks.ai/models/fireworks/glm-5p3)                           | `accounts/fireworks/models/glm-5p3`              |
+| [GLM-5.3 Flash](https://fireworks.ai/models/fireworks/glm-5p3-flash)               | `accounts/fireworks/models/glm-5p3-flash`        |
+| [Kimi K3](https://fireworks.ai/models/fireworks/kimi-k3)                           | `accounts/fireworks/models/kimi-k3`              |
+| [Qwen3.8 Max](https://fireworks.ai/models/fireworks/qwen3p8-max)                   | `accounts/fireworks/models/qwen3p8-max`          |
+| [MiniMax M3](https://fireworks.ai/models/fireworks/minimax-m3)                     | `accounts/fireworks/models/minimax-m3`           |
+
 ## Example Usage
 
 ```yaml
