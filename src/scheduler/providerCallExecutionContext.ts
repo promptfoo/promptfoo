@@ -22,7 +22,12 @@ import type { ProviderCallQueue } from './providerCallQueue';
 export interface ProviderCallExecutionContext {
   abortSignal?: AbortSignal;
   /** Evaluation-local pacing for this target, without changing a reusable provider. */
-  providerDelay?: { provider: ApiProvider; delay: number | undefined };
+  providerDelay?: {
+    provider: ApiProvider;
+    delay: number | undefined;
+    /** Stable target identity when an invocation uses a temporary provider wrapper. */
+    queueKey?: ApiProvider;
+  };
   providerCallQueue?: ProviderCallQueue;
   rateLimitRegistry?: RateLimitRegistryRef;
 }
@@ -151,21 +156,24 @@ export async function callProviderWithContext(
     return waitForProviderCall(invoke(), signal);
   }
 
-  const scope = executionContext?.rateLimitRegistry ?? cliState.envScope ?? provider;
+  const scopedDelay = executionContext?.providerDelay;
+  const queueKey =
+    scopedDelay?.provider === provider ? (scopedDelay.queueKey ?? provider) : provider;
+  const scope = executionContext?.rateLimitRegistry ?? cliState.envScope ?? queueKey;
   let queues = providerCallQueues.get(scope);
   if (!queues) {
     queues = new WeakMap();
     providerCallQueues.set(scope, queues);
   }
-  const result = (queues.get(provider) ?? Promise.resolve()).then(invoke);
+  const result = (queues.get(queueKey) ?? Promise.resolve()).then(invoke);
   const tail = result.then(
     () => {},
     () => {},
   );
-  queues.set(provider, tail);
+  queues.set(queueKey, tail);
   void tail.then(() => {
-    if (queues.get(provider) === tail) {
-      queues.delete(provider);
+    if (queues.get(queueKey) === tail) {
+      queues.delete(queueKey);
     }
   });
   return waitForProviderCall(result, signal);

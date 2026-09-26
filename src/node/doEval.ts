@@ -281,8 +281,11 @@ export async function doEval(
   defaultConfigPath: string | undefined,
   evaluateOptions: InternalEvaluateOptions,
 ): Promise<Eval> {
-  const envFileOverrides = isCliEventSource(evaluateOptions) ? undefined : {};
+  const envFileOverrides: EnvOverrides = {};
   setupEnv(cmdObj.envPath, { processEnv: envFileOverrides });
+  if (isCliEventSource(evaluateOptions)) {
+    Object.assign(process.env, envFileOverrides);
+  }
   return cliState.withEnvFileOverrides(envFileOverrides, () =>
     doEvalWithEnv(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions, envFileOverrides),
   );
@@ -568,6 +571,9 @@ async function doEvalWithEnv(
     if ((!cmdObj.envPath || cmdObj.envPath.length === 0) && commandLineOptions?.envPath) {
       logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
       setupEnv(commandLineOptions.envPath, { processEnv: envFileOverrides });
+      if (isCliInvocation) {
+        Object.assign(process.env, envFileOverrides);
+      }
     }
 
     warnIfRedteamConfigHasNoTests(config, testSuite);

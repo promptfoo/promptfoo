@@ -110,6 +110,46 @@ describe('delegated target pacing', () => {
     },
   );
 
+  it.each([true, false])(
+    'keys transient wrappers by their underlying target (shared=%s)',
+    async (shared) => {
+      const starts: number[] = [];
+      const makeTarget = (): ApiProvider => ({
+        id: () => 'same-fixture-id',
+        callApi: async () => {
+          starts.push(Date.now());
+          return { output: 'ok' };
+        },
+      });
+      const first = makeTarget();
+      const targets = [first, shared ? first : makeTarget()];
+      const registry: RateLimitRegistryRef = {
+        execute: async (_provider, invoke) => invoke(),
+        dispose: () => {},
+      };
+      const results = Promise.all(
+        targets.map((target) => {
+          const wrapper: ApiProvider = {
+            id: () => target.id(),
+            callApi: (prompt, context, options) => target.callApi(prompt, context, options),
+          };
+          return withProviderCallExecutionContext(
+            {
+              rateLimitRegistry: registry,
+              providerDelay: { provider: wrapper, delay: 100, queueKey: target },
+            },
+            () => callTargetProvider(wrapper, 'hello'),
+          );
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      expect(starts).toEqual(shared ? [0] : [0, 0]);
+      await vi.advanceTimersByTimeAsync(200);
+      await results;
+      expect(starts).toEqual(shared ? [0, 100] : [0, 0]);
+    },
+  );
+
   it('lets cached responses release the next call without a delay', async () => {
     const callApi = vi.fn().mockResolvedValue({ output: 'ok', cached: true });
     const provider: ApiProvider = { id: () => 'fixture', delay: 100, callApi };
