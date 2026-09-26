@@ -281,6 +281,12 @@ describe('Shared Provider Functions', () => {
       expect(cost).toBeCloseTo(0.000005 * 1500);
     });
 
+    it('should price an unknown model when the side without a rate used no tokens', () => {
+      expect(
+        calculateCost('brand-new-embedding-model', { inputCost: 0.000002 }, 1000, 0, models),
+      ).toBeCloseTo(0.000002 * 1000);
+    });
+
     it('should still return undefined for an unknown model with only a partial override', () => {
       // inputCost alone (no outputCost, no flat cost) isn't enough to price the completion side.
       expect(

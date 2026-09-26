@@ -103,10 +103,15 @@ export function calculateCost(
   if (!model || !model.cost) {
     const manualInputCost = config.inputCost ?? config.cost;
     const manualOutputCost = config.outputCost ?? config.cost;
-    if (manualInputCost == null || manualOutputCost == null) {
+    // Like the OpenAI billing fallback: a side with no tokens needs no rate.
+    if (
+      (manualInputCost == null && manualOutputCost == null) ||
+      (promptTokens > 0 && manualInputCost == null) ||
+      (completionTokens > 0 && manualOutputCost == null)
+    ) {
       return undefined;
     }
-    return manualInputCost * promptTokens + manualOutputCost * completionTokens;
+    return (manualInputCost ?? 0) * promptTokens + (manualOutputCost ?? 0) * completionTokens;
   }
 
   const longContextCost =
