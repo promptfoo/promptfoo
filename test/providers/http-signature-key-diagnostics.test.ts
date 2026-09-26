@@ -55,6 +55,8 @@ const baseAuth = {
   signatureAlgorithm: 'SHA256',
 };
 
+const cert = '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n';
+
 describe('diagnosePrivateKeyMaterial', () => {
   it('reports empty material', () => {
     expect(diagnosePrivateKeyMaterial('')).toBe('it is empty');
@@ -73,8 +75,21 @@ describe('diagnosePrivateKeyMaterial', () => {
   });
 
   it('distinguishes a certificate', () => {
-    const cert = '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n';
     expect(diagnosePrivateKeyMaterial(cert)).toBe('it is a certificate, not a private key');
+  });
+
+  it.each([
+    ['key first', () => rsaPrivate + cert],
+    ['certificate first', () => cert + rsaPrivate],
+  ])('accepts a key+certificate bundle (%s), which crypto signs with', (_label, get) => {
+    // `openssl pkcs12 -nodes` and most corporate PKI exports emit both blocks in one file.
+    expect(diagnosePrivateKeyMaterial(get())).toBeUndefined();
+  });
+
+  it('still flags an encrypted key bundled with its certificate', () => {
+    expect(diagnosePrivateKeyMaterial(encryptedPrivate + cert)).toBe(
+      'it is passphrase-protected; decrypt it first or supply an unencrypted key',
+    );
   });
 
   it.each([
@@ -98,6 +113,16 @@ describe('diagnosePrivateKeyMaterial', () => {
 
   it('reports a truncated key', () => {
     expect(diagnosePrivateKeyMaterial(rsaPrivate.slice(0, 120))).toBe(
+      'it is truncated (no "-----END ... PRIVATE KEY-----" line)',
+    );
+  });
+
+  it.each([
+    ['key first', () => rsaPrivate.slice(0, 120) + '\n' + cert],
+    ['certificate first', () => cert + rsaPrivate.slice(0, 120)],
+  ])('reports a truncated key even when a certificate follows it (%s)', (_label, get) => {
+    // The certificate carries its own `-----END`, which must not pass for the key's.
+    expect(diagnosePrivateKeyMaterial(get())).toBe(
       'it is truncated (no "-----END ... PRIVATE KEY-----" line)',
     );
   });
@@ -147,8 +172,12 @@ describe('generateSignature key diagnostics', () => {
     );
   });
 
-  it('still signs successfully with a valid key', async () => {
-    const signature = await generateSignature({ ...baseAuth, privateKey: rsaPrivate }, 1);
+  it.each([
+    ['a valid key', () => rsaPrivate],
+    ['a key+certificate bundle', () => rsaPrivate + cert],
+    ['a certificate+key bundle', () => cert + rsaPrivate],
+  ])('still signs successfully with %s', async (_label, get) => {
+    const signature = await generateSignature({ ...baseAuth, privateKey: get() }, 1);
     expect(signature).toEqual(expect.any(String));
     expect(Buffer.from(signature, 'base64').byteLength).toBeGreaterThan(0);
   });
