@@ -92,9 +92,10 @@ describe('effective proxy environment', () => {
         }
       };
 
-      expect(resolve({ https_proxy: '', HTTPS_PROXY: 'http://proxy.example:8080' })).toBe('');
+      // Windows shell keys are case-insensitive, so assign the lowercase override last.
+      expect(resolve({ HTTPS_PROXY: 'http://proxy.example:8080', https_proxy: '' })).toBe('');
       expect(
-        resolve({ HTTPS_PROXY: 'http://proxy.example:8080', no_proxy: '', NO_PROXY: '*' }),
+        resolve({ HTTPS_PROXY: 'http://proxy.example:8080', NO_PROXY: '*', no_proxy: '' }),
       ).toBe('http://proxy.example:8080');
     },
   );
