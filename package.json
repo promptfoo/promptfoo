@@ -429,7 +429,7 @@
   },
   "homepage": "https://promptfoo.dev",
   "peerDependencies": {
-    "ai": "^6.0.264"
+    "ai": "*"
   },
   "peerDependenciesMeta": {
     "ai": {

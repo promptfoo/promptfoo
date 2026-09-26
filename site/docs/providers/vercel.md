@@ -22,6 +22,8 @@ npx promptfoo eval -c promptfooconfig.yaml
 
 For a global Promptfoo installation, install both packages globally with `npm install -g promptfoo "ai@^6.0.264"`. Installing `ai` in a project does not make it available to a separate global or npx-cached Promptfoo installation.
 
+Other SDK versions can coexist with Promptfoo when the `vercel:` provider is unused. The provider checks for the supported `^6.0.264` range when invoked and reports an installation error for incompatible versions.
+
 1. Enable AI Gateway in your [Vercel Dashboard](https://vercel.com/dashboard)
 2. Get your API key from the AI Gateway settings
 3. Set the `VERCEL_AI_GATEWAY_API_KEY` environment variable or specify `apiKey` in your config

@@ -1,6 +1,7 @@
 import { createHmac } from 'crypto';
 
 import { context as otelContext, propagation, ROOT_CONTEXT, trace } from '@opentelemetry/api';
+import semverSatisfies from 'semver/functions/satisfies.js';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
@@ -96,6 +97,14 @@ function resolveBaseUrl(config: VercelAiConfig, env?: EnvOverrides): string | un
 
 async function loadAiSdk() {
   try {
+    const { default: metadata } = await import('ai/package.json', { with: { type: 'json' } });
+    if (!semverSatisfies(metadata.version, '^6.0.264')) {
+      throw new Error(
+        `The installed ai package (${metadata.version}) is incompatible with the Vercel provider. ` +
+          'Install the supported SDK alongside Promptfoo: npm install promptfoo "ai@^6.0.264". ' +
+          'For a global installation, use npm install -g promptfoo "ai@^6.0.264".',
+      );
+    }
     return await import('ai');
   } catch (error) {
     if (isMissingPackageImportError(error, 'ai')) {
