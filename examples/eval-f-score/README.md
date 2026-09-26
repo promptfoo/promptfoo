@@ -28,7 +28,7 @@ The evaluation uses the IMDB dataset from HuggingFace's datasets library, sample
 - `text`: The movie review content
 - `sentiment`: The label ("positive" or "negative")
 
-To modify the sample size or generate a new dataset, you can use `prepare_data.py`. First, install the Python dependencies:
+To modify the sample size or generate a new dataset, use `prepare_data.py` with Python 3.10 or newer. First, install the Python dependencies:
 
 ```bash
 pip install -r requirements.txt
@@ -39,6 +39,14 @@ Then run the preparation script:
 ```bash
 python prepare_data.py
 ```
+
+Run the offline preparation and dependency regression tests with:
+
+```bash
+python -m unittest discover -s . -p '*_test.py' -v
+```
+
+These tests use local dataset fixtures and require no API keys or dataset downloads.
 
 ## Metrics Overview
 

@@ -1,2 +1,2 @@
-datasets==4.2.0
+datasets==5.0.1
 pandas==2.3.3
