@@ -95,11 +95,32 @@ describe('telemetry test-mode environment restrictions', () => {
     await cliState.withEnv({ IS_TESTING: 'false' }, async () => {
       await telemetry.identify();
       telemetry.record('eval_ran', {});
+      await telemetry.shutdown();
     });
 
+    expect(client.shutdown).toHaveBeenCalledOnce();
     expect(client.identify).not.toHaveBeenCalled();
     expect(client.capture).not.toHaveBeenCalled();
     expect(request).not.toHaveBeenCalled();
+  });
+
+  it('sends the production opt-out acknowledgment after a test scope suppressed it', async () => {
+    const { default: cliState } = await import('../src/cliState');
+    const { Telemetry } = await import('../src/telemetry');
+    const telemetry = new Telemetry(false);
+    await cliState.withEnv({ IS_TESTING: 'true', PROMPTFOO_DISABLE_TELEMETRY: 'true' }, () => {
+      telemetry.record('eval_ran', {});
+    });
+    expect(request).not.toHaveBeenCalled();
+    await cliState.withEnv({ PROMPTFOO_DISABLE_TELEMETRY: 'true' }, () => {
+      telemetry.record('eval_ran', {});
+      telemetry.record('eval_ran', {});
+    });
+    expect(request).toHaveBeenCalledOnce();
+    expect(JSON.parse(request.mock.calls[0][1].body)).toMatchObject({
+      meta: { feature: 'telemetry disabled' },
+    });
+    expect(client.capture).not.toHaveBeenCalled();
   });
 
   it.each(['false', '0', '', undefined])(

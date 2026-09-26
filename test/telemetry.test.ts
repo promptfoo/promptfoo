@@ -314,7 +314,7 @@ describe('Telemetry', () => {
   });
 
   it('should not send user events when telemetry is disabled', async () => {
-    mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '1' });
+    mockProcessEnv({ IS_TESTING: undefined, PROMPTFOO_DISABLE_TELEMETRY: '1' });
 
     resetModulesAndMockFetch();
 
@@ -750,7 +750,7 @@ describe('Telemetry', () => {
     });
 
     it('should record telemetry disabled event only once', () => {
-      mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '1' });
+      mockProcessEnv({ IS_TESTING: undefined, PROMPTFOO_DISABLE_TELEMETRY: '1' });
       const telemetry = new Telemetry();
 
       telemetry.record('eval_ran', { foo: 'bar' });

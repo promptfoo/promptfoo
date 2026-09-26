@@ -117,7 +117,7 @@ export class Telemetry {
   }
 
   private recordTelemetryDisabled() {
-    if (!this.telemetryDisabledRecorded) {
+    if (!this.telemetryDisabledRecorded && !isTestMode()) {
       this.sendEvent('feature_used', { feature: 'telemetry disabled' });
       this.telemetryDisabledRecorded = true;
     }
@@ -193,7 +193,7 @@ export class Telemetry {
       return;
     }
 
-    const client = getPostHogClient();
+    const client = posthogClient;
     if (!client) {
       // No client to shut down - don't set the flag so future shutdowns work
       // if telemetry becomes enabled (e.g., in test harnesses)
