@@ -12,13 +12,22 @@ You need:
 - Docker Compose V2 available as `docker compose`. Inspect validates this with
   `docker compose version --format json`; a standalone `docker-compose` binary
   is not enough unless your `docker` command exposes it as `docker compose`.
-- Python with Inspect's OSWorld dependencies, Promptfoo's Python OpenTelemetry
-  dependencies, and the SDK for whichever model provider you choose. This
-  installs both SDKs used below:
+- Python 3.11 or newer. Install Inspect's OSWorld integration and the SDK for
+  the default OpenAI model:
 
   ```bash
-  pip install 'inspect-evals[osworld]' openai anthropic opentelemetry-sdk opentelemetry-exporter-otlp-proto-http
+  python -m pip install 'inspect-evals[osworld]>=0.21,<0.23' 'openai>=3.19.2,<4'
   ```
+
+- For an Anthropic model, install `anthropic>=1.8,<2` instead of the OpenAI SDK.
+- The traced commands below additionally need the optional tracing packages:
+
+  ```bash
+  python -m pip install 'opentelemetry-sdk>=1.44,<2' 'opentelemetry-exporter-otlp-proto-http>=1.44,<2'
+  ```
+
+  Omit `PROMPTFOO_ENABLE_OTEL=true` when running without Python tracing. These
+  packages are not required to load test cases or invoke Inspect.
 
 - A computer-use-capable model and API key. For the default config, export
   `OPENAI_API_KEY`. To use Anthropic instead, export `ANTHROPIC_API_KEY` and set
