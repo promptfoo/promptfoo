@@ -168,6 +168,8 @@ describe('VertexLiveProvider', () => {
       },
     } as CallApiContextParams);
     expect(mockAuth).toHaveBeenCalledWith({
+      env: undefined,
+      projectId: 'override-project',
       credentials: '{"type":"service_account"}',
       keyFilename: '/test/key.json',
       scopes: ['https://www.googleapis.com/auth/cloud-platform'],

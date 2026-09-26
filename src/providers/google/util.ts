@@ -17,11 +17,12 @@ import {
   parseChatPrompt,
   transformToolChoice,
 } from '../shared';
-import { loadCredentials } from './auth';
+import { GoogleAuthManager } from './auth';
 import { GEMINI_FLASH_MODELS, GOOGLE_MODELS } from './shared';
 import { VALID_SCHEMA_TYPES } from './types';
 import type { AnySchema } from 'ajv';
 
+import type { EnvOverrides } from '../../types/env';
 import type { VarValue } from '../../types/shared';
 import type { CompletionOptions, Content, FunctionCall, Part, Schema, Tool } from './types';
 
@@ -995,49 +996,24 @@ export {
   resolveProjectId,
 } from './auth';
 
-// Separate cached auth client for Generative Language API with specific scopes
-let cachedGenerativeLanguageAuth: InstanceType<
-  typeof import('google-auth-library').GoogleAuth
-> | null = null;
-
-/**
- * Gets an OAuth2 access token for Google APIs.
- * Used by providers that need to authenticate via OAuth2 instead of API keys.
- * @param credentials - Optional credentials JSON string or file:// path
- * @param scopes - Optional scopes to use. Defaults to cloud-platform + generative-language scopes
- * @returns The access token string, or undefined if authentication fails
- */
-export async function getGoogleAccessToken(credentials?: string): Promise<string | undefined> {
+/** Get a token from a fresh scoped client, leaving token caching to that SDK client. */
+export async function getGoogleAccessToken(
+  credentials?: string,
+  env?: EnvOverrides,
+): Promise<string | undefined> {
   try {
-    // Try with generative-language scopes first (required for Live API)
-    if (!cachedGenerativeLanguageAuth) {
-      let GoogleAuth;
-      try {
-        const importedModule = await import('google-auth-library');
-        GoogleAuth = importedModule.GoogleAuth;
-        cachedGenerativeLanguageAuth = new GoogleAuth({
-          scopes: [
-            'https://www.googleapis.com/auth/cloud-platform',
-            'https://www.googleapis.com/auth/generative-language.retriever',
-            'https://www.googleapis.com/auth/generative-language.tuning',
-          ],
-        });
-      } catch {
-        throw new Error(
-          'The google-auth-library package is required as a peer dependency. Please install it in your project or globally.',
-        );
-      }
-    }
-
-    const processedCredentials = loadCredentials(credentials);
-
-    let client;
-    if (processedCredentials) {
-      client = await cachedGenerativeLanguageAuth.fromJSON(JSON.parse(processedCredentials));
-    } else {
-      client = await cachedGenerativeLanguageAuth.getClient();
-    }
-
+    const { client } = await GoogleAuthManager.getOAuthClient(
+      {
+        credentials,
+        env,
+        scopes: [
+          'https://www.googleapis.com/auth/cloud-platform',
+          'https://www.googleapis.com/auth/generative-language.retriever',
+          'https://www.googleapis.com/auth/generative-language.tuning',
+        ],
+      },
+      false,
+    );
     const tokenResponse = await client.getAccessToken();
     return tokenResponse.token || undefined;
   } catch (error) {

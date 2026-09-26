@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../../src/cliState';
 import { GoogleAuthManager } from '../../../src/providers/google/auth';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -527,7 +528,9 @@ describe('GoogleAuthManager', () => {
   });
 
   describe('hasDefaultCredentials', () => {
-    it('should cache successful default credential probes', async () => {
+    const scopedTest = (name: string, action: () => Promise<void>) =>
+      it(name, () => cliState.withEnv({}, action));
+    scopedTest('should cache successful default credential probes', async () => {
       const getOAuthClientSpy = vi
         .spyOn(GoogleAuthManager, 'getOAuthClient')
         .mockResolvedValue({ client: {}, projectId: 'detected-project' });
@@ -539,7 +542,7 @@ describe('GoogleAuthManager', () => {
       getOAuthClientSpy.mockRestore();
     });
 
-    it('should cache failed default credential probes', async () => {
+    scopedTest('should cache failed default credential probes', async () => {
       const getOAuthClientSpy = vi
         .spyOn(GoogleAuthManager, 'getOAuthClient')
         .mockRejectedValue(new Error('no default credentials'));
@@ -551,54 +554,60 @@ describe('GoogleAuthManager', () => {
       getOAuthClientSpy.mockRestore();
     });
 
-    it('should suppress expected metadata lookup warnings during optional probes', async () => {
-      const emitWarningSpy = vi.spyOn(process, 'emitWarning').mockImplementation(() => {});
-      const getOAuthClientSpy = vi
-        .spyOn(GoogleAuthManager, 'getOAuthClient')
-        .mockImplementation(async () => {
-          process.emitWarning(
-            'received unexpected error = All promises were rejected code = UNKNOWN',
-            'MetadataLookupWarning',
-          );
-          throw new Error('no default credentials');
-        });
+    scopedTest(
+      'should suppress expected metadata lookup warnings during optional probes',
+      async () => {
+        const emitWarningSpy = vi.spyOn(process, 'emitWarning').mockImplementation(() => {});
+        const getOAuthClientSpy = vi
+          .spyOn(GoogleAuthManager, 'getOAuthClient')
+          .mockImplementation(async () => {
+            process.emitWarning(
+              'received unexpected error = All promises were rejected code = UNKNOWN',
+              'MetadataLookupWarning',
+            );
+            throw new Error('no default credentials');
+          });
 
-      try {
-        await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(false);
-        expect(emitWarningSpy).not.toHaveBeenCalled();
-      } finally {
-        getOAuthClientSpy.mockRestore();
-        emitWarningSpy.mockRestore();
-      }
-    });
+        try {
+          await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(false);
+          expect(emitWarningSpy).not.toHaveBeenCalled();
+        } finally {
+          getOAuthClientSpy.mockRestore();
+          emitWarningSpy.mockRestore();
+        }
+      },
+    );
 
-    it('should suppress metadata lookup warnings for any unreachable-host error code', async () => {
-      // gcp-metadata interpolates the underlying error + code into the message, so the suffix
-      // varies by failure mode (the codeless `All promises were rejected`/`UNKNOWN` aggregate,
-      // plus non-allowlisted codes like ETIMEDOUT or EAI_AGAIN). All are the same optional probe
-      // failing to reach metadata, so the stable prefix must suppress every variant — and tolerate
-      // a dependency reword of the interpolated suffix.
-      const emitWarningSpy = vi.spyOn(process, 'emitWarning').mockImplementation(() => {});
-      const getOAuthClientSpy = vi
-        .spyOn(GoogleAuthManager, 'getOAuthClient')
-        .mockImplementation(async () => {
-          process.emitWarning(
-            'received unexpected error = connect ETIMEDOUT 169.254.169.254:80 code = ETIMEDOUT',
-            'MetadataLookupWarning',
-          );
-          throw new Error('no default credentials');
-        });
+    scopedTest(
+      'should suppress metadata lookup warnings for any unreachable-host error code',
+      async () => {
+        // gcp-metadata interpolates the underlying error + code into the message, so the suffix
+        // varies by failure mode (the codeless `All promises were rejected`/`UNKNOWN` aggregate,
+        // plus non-allowlisted codes like ETIMEDOUT or EAI_AGAIN). All are the same optional probe
+        // failing to reach metadata, so the stable prefix must suppress every variant — and tolerate
+        // a dependency reword of the interpolated suffix.
+        const emitWarningSpy = vi.spyOn(process, 'emitWarning').mockImplementation(() => {});
+        const getOAuthClientSpy = vi
+          .spyOn(GoogleAuthManager, 'getOAuthClient')
+          .mockImplementation(async () => {
+            process.emitWarning(
+              'received unexpected error = connect ETIMEDOUT 169.254.169.254:80 code = ETIMEDOUT',
+              'MetadataLookupWarning',
+            );
+            throw new Error('no default credentials');
+          });
 
-      try {
-        await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(false);
-        expect(emitWarningSpy).not.toHaveBeenCalled();
-      } finally {
-        getOAuthClientSpy.mockRestore();
-        emitWarningSpy.mockRestore();
-      }
-    });
+        try {
+          await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(false);
+          expect(emitWarningSpy).not.toHaveBeenCalled();
+        } finally {
+          getOAuthClientSpy.mockRestore();
+          emitWarningSpy.mockRestore();
+        }
+      },
+    );
 
-    it('should forward unrelated warnings during optional probes', async () => {
+    scopedTest('should forward unrelated warnings during optional probes', async () => {
       const emitWarningSpy = vi.spyOn(process, 'emitWarning').mockImplementation(() => {});
       const getOAuthClientSpy = vi
         .spyOn(GoogleAuthManager, 'getOAuthClient')
@@ -616,31 +625,34 @@ describe('GoogleAuthManager', () => {
       }
     });
 
-    it('should forward matching metadata warning messages with a different warning type', async () => {
-      const emitWarningSpy = vi.spyOn(process, 'emitWarning').mockImplementation(() => {});
-      const getOAuthClientSpy = vi
-        .spyOn(GoogleAuthManager, 'getOAuthClient')
-        .mockImplementation(async () => {
-          process.emitWarning(
+    scopedTest(
+      'should forward matching metadata warning messages with a different warning type',
+      async () => {
+        const emitWarningSpy = vi.spyOn(process, 'emitWarning').mockImplementation(() => {});
+        const getOAuthClientSpy = vi
+          .spyOn(GoogleAuthManager, 'getOAuthClient')
+          .mockImplementation(async () => {
+            process.emitWarning(
+              'received unexpected error = All promises were rejected code = UNKNOWN',
+              'DeprecationWarning',
+            );
+            throw new Error('no default credentials');
+          });
+
+        try {
+          await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(false);
+          expect(emitWarningSpy).toHaveBeenCalledWith(
             'received unexpected error = All promises were rejected code = UNKNOWN',
             'DeprecationWarning',
           );
-          throw new Error('no default credentials');
-        });
+        } finally {
+          getOAuthClientSpy.mockRestore();
+          emitWarningSpy.mockRestore();
+        }
+      },
+    );
 
-      try {
-        await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(false);
-        expect(emitWarningSpy).toHaveBeenCalledWith(
-          'received unexpected error = All promises were rejected code = UNKNOWN',
-          'DeprecationWarning',
-        );
-      } finally {
-        getOAuthClientSpy.mockRestore();
-        emitWarningSpy.mockRestore();
-      }
-    });
-
-    it('should forward Error instance warnings during optional probes', async () => {
+    scopedTest('should forward Error instance warnings during optional probes', async () => {
       const emitWarningSpy = vi.spyOn(process, 'emitWarning').mockImplementation(() => {});
       const warning = new Error('different warning');
       warning.name = 'MetadataLookupWarning';
@@ -660,7 +672,7 @@ describe('GoogleAuthManager', () => {
       }
     });
 
-    it('should restore process.emitWarning after an optional probe', async () => {
+    scopedTest('should restore process.emitWarning after an optional probe', async () => {
       const originalEmitWarning = process.emitWarning;
       const getOAuthClientSpy = vi
         .spyOn(GoogleAuthManager, 'getOAuthClient')
@@ -674,62 +686,68 @@ describe('GoogleAuthManager', () => {
       }
     });
 
-    it('should preserve a newer process.emitWarning owner after an optional probe', async () => {
-      const originalEmitWarning = process.emitWarning;
-      const replacementEmitWarning = vi.fn() as typeof process.emitWarning;
-      const getOAuthClientSpy = vi
-        .spyOn(GoogleAuthManager, 'getOAuthClient')
-        .mockImplementation(async () => {
-          process.emitWarning = replacementEmitWarning;
-          throw new Error('no default credentials');
+    scopedTest(
+      'should preserve a newer process.emitWarning owner after an optional probe',
+      async () => {
+        const originalEmitWarning = process.emitWarning;
+        const replacementEmitWarning = vi.fn() as typeof process.emitWarning;
+        const getOAuthClientSpy = vi
+          .spyOn(GoogleAuthManager, 'getOAuthClient')
+          .mockImplementation(async () => {
+            process.emitWarning = replacementEmitWarning;
+            throw new Error('no default credentials');
+          });
+
+        try {
+          await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(false);
+          expect(process.emitWarning).toBe(replacementEmitWarning);
+        } finally {
+          process.emitWarning = originalEmitWarning;
+          getOAuthClientSpy.mockRestore();
+        }
+      },
+    );
+
+    scopedTest(
+      'should restore process.emitWarning after overlapping probes settle out of order',
+      async () => {
+        const originalEmitWarning = process.emitWarning;
+        let rejectFirstProbe!: (reason?: unknown) => void;
+        let rejectSecondProbe!: (reason?: unknown) => void;
+        const firstProbeAuthCall = new Promise((_, reject) => {
+          rejectFirstProbe = reject;
         });
+        const secondProbeAuthCall = new Promise((_, reject) => {
+          rejectSecondProbe = reject;
+        });
+        const getOAuthClientSpy = vi.spyOn(GoogleAuthManager, 'getOAuthClient');
+        getOAuthClientSpy
+          .mockImplementationOnce(() => firstProbeAuthCall as Promise<any>)
+          .mockImplementationOnce(() => secondProbeAuthCall as Promise<any>);
 
-      try {
-        await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(false);
-        expect(process.emitWarning).toBe(replacementEmitWarning);
-      } finally {
-        process.emitWarning = originalEmitWarning;
-        getOAuthClientSpy.mockRestore();
-      }
-    });
+        const firstProbe = GoogleAuthManager.hasDefaultCredentials();
+        GoogleAuthManager.clearCache();
+        const secondProbe = GoogleAuthManager.hasDefaultCredentials();
 
-    it('should restore process.emitWarning after overlapping probes settle out of order', async () => {
-      const originalEmitWarning = process.emitWarning;
-      let rejectFirstProbe!: (reason?: unknown) => void;
-      let rejectSecondProbe!: (reason?: unknown) => void;
-      const firstProbeAuthCall = new Promise((_, reject) => {
-        rejectFirstProbe = reject;
-      });
-      const secondProbeAuthCall = new Promise((_, reject) => {
-        rejectSecondProbe = reject;
-      });
-      const getOAuthClientSpy = vi.spyOn(GoogleAuthManager, 'getOAuthClient');
-      getOAuthClientSpy
-        .mockImplementationOnce(() => firstProbeAuthCall as Promise<any>)
-        .mockImplementationOnce(() => secondProbeAuthCall as Promise<any>);
+        try {
+          rejectFirstProbe(new Error('first probe failed'));
+          await expect(firstProbe).resolves.toBe(false);
+          expect(process.emitWarning).not.toBe(originalEmitWarning);
 
-      const firstProbe = GoogleAuthManager.hasDefaultCredentials();
-      GoogleAuthManager.clearCache();
-      const secondProbe = GoogleAuthManager.hasDefaultCredentials();
+          rejectSecondProbe(new Error('second probe failed'));
+          await expect(secondProbe).resolves.toBe(false);
+          expect(process.emitWarning).toBe(originalEmitWarning);
+        } finally {
+          rejectFirstProbe(new Error('cleanup'));
+          rejectSecondProbe(new Error('cleanup'));
+          await Promise.allSettled([firstProbe, secondProbe]);
+          process.emitWarning = originalEmitWarning;
+          getOAuthClientSpy.mockRestore();
+        }
+      },
+    );
 
-      try {
-        rejectFirstProbe(new Error('first probe failed'));
-        await expect(firstProbe).resolves.toBe(false);
-        expect(process.emitWarning).not.toBe(originalEmitWarning);
-
-        rejectSecondProbe(new Error('second probe failed'));
-        await expect(secondProbe).resolves.toBe(false);
-        expect(process.emitWarning).toBe(originalEmitWarning);
-      } finally {
-        rejectFirstProbe(new Error('cleanup'));
-        rejectSecondProbe(new Error('cleanup'));
-        await Promise.allSettled([firstProbe, secondProbe]);
-        process.emitWarning = originalEmitWarning;
-        getOAuthClientSpy.mockRestore();
-      }
-    });
-
-    it('should clear cached default credential probe results', async () => {
+    scopedTest('should clear cached default credential probe results', async () => {
       const getOAuthClientSpy = vi
         .spyOn(GoogleAuthManager, 'getOAuthClient')
         .mockRejectedValue(new Error('no default credentials'));
@@ -742,7 +760,7 @@ describe('GoogleAuthManager', () => {
       getOAuthClientSpy.mockRestore();
     });
 
-    it('should deduplicate concurrent default credential probes', async () => {
+    scopedTest('should deduplicate concurrent default credential probes', async () => {
       const getOAuthClientSpy = vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockImplementation(
         () =>
           new Promise((resolve) => {
@@ -760,7 +778,7 @@ describe('GoogleAuthManager', () => {
       getOAuthClientSpy.mockRestore();
     });
 
-    it('should not allow a stale probe to overwrite cache after clearCache', async () => {
+    scopedTest('should not allow a stale probe to overwrite cache after clearCache', async () => {
       let rejectFirstProbe!: (reason?: unknown) => void;
       const firstProbeAuthCall = new Promise((_, reject) => {
         rejectFirstProbe = reject;

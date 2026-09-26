@@ -967,6 +967,37 @@ describe('AzureFoundryAgentProvider', () => {
       expect(vi.mocked(logger.warn)).toHaveBeenCalledTimes(1);
     });
 
+    it('reuses responses within one SDK owner and isolates another principal at the same project', async () => {
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockResolvedValue(createMessageResponse('fixture response'));
+      const stored = new Map<string, unknown>();
+      const mockCache = {
+        get: vi.fn(async (key: string) => stored.get(key)),
+        set: vi.fn(async (key: string, value: unknown) => {
+          stored.set(key, value);
+        }),
+      };
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue(mockCache as any);
+      const first = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl },
+        env: { AZURE_CLIENT_ID: 'principal-a' },
+      });
+      const second = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl },
+        env: { AZURE_CLIENT_ID: 'principal-b' },
+      });
+      await first.callApi('same prompt');
+      expect(await first.callApi('same prompt')).toMatchObject({
+        output: 'fixture response',
+        cached: true,
+      });
+      expect(mockResponsesCreate).toHaveBeenCalledTimes(1);
+      expect((await second.callApi('same prompt')).cached).not.toBe(true);
+      expect(mockResponsesCreate).toHaveBeenCalledTimes(2);
+      expect(stored.size).toBe(2);
+    });
+
     it('should hash the request body in cache keys', async () => {
       mockGetAgent.mockResolvedValue(mockAgent);
       mockResponsesCreate.mockResolvedValue(createMessageResponse('Test response'));
@@ -986,7 +1017,9 @@ describe('AzureFoundryAgentProvider', () => {
       await provider.callApi(`weather in Paris ${secret}`);
 
       const cacheKey = mockCache.get.mock.calls[0][0] as string;
-      expect(cacheKey).toMatch(/^azure_foundry_agent:weather-agent:[a-f0-9]{64}:[a-f0-9]{64}$/);
+      expect(cacheKey).toMatch(
+        /^azure_foundry_agent:weather-agent:[a-f0-9-]{36}:[a-f0-9]{64}:[a-f0-9]{64}$/,
+      );
       expect(cacheKey).not.toContain(projectUrl);
       expect(cacheKey).not.toContain(secret);
       expect(cacheKey).not.toContain('weather in Paris');
@@ -1017,8 +1050,12 @@ describe('AzureFoundryAgentProvider', () => {
       await providerB.callApi(prompt);
 
       const [cacheKeyA, cacheKeyB] = mockCache.get.mock.calls.map(([key]) => key as string);
-      expect(cacheKeyA).toMatch(/^azure_foundry_agent:weather-agent:[a-f0-9]{64}:[a-f0-9]{64}$/);
-      expect(cacheKeyB).toMatch(/^azure_foundry_agent:weather-agent:[a-f0-9]{64}:[a-f0-9]{64}$/);
+      expect(cacheKeyA).toMatch(
+        /^azure_foundry_agent:weather-agent:[a-f0-9-]{36}:[a-f0-9]{64}:[a-f0-9]{64}$/,
+      );
+      expect(cacheKeyB).toMatch(
+        /^azure_foundry_agent:weather-agent:[a-f0-9-]{36}:[a-f0-9]{64}:[a-f0-9]{64}$/,
+      );
       expect(cacheKeyA).not.toBe(cacheKeyB);
       expect(cacheKeyA).not.toContain(projectUrl);
       expect(cacheKeyB).not.toContain(otherProjectUrl);

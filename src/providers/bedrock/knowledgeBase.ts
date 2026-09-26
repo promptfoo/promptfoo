@@ -122,6 +122,7 @@ export class AwsBedrockKnowledgeBaseProvider
           retryMode: 'adaptive',
           ...(handler ? { requestHandler: handler } : {}),
           ...(credentials ? { credentials } : {}),
+          ...(this.getProfile() ? { profile: this.getProfile() } : {}),
         });
         this.knowledgeBaseClient = client;
       } catch (err) {

@@ -11,7 +11,8 @@
  * 4. GEMINI_API_KEY (secondary)
  */
 
-import { getEnvString } from '../../envars';
+import cliState from '../../cliState';
+import { getEnvOverrides, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import type { GoogleAuthOptions } from 'google-auth-library';
@@ -104,6 +105,8 @@ export interface GoogleAuthConfig {
  * Options for creating OAuth client
  */
 export interface OAuthClientOptions {
+  env?: EnvOverrides;
+  projectId?: string;
   /** Service account credentials (JSON string or file:// path) */
   credentials?: string;
   /** Google auth library options passthrough */
@@ -140,8 +143,10 @@ export interface ApiKeyResult {
  * - Conflict detection and warnings
  */
 export class GoogleAuthManager {
-  private static cachedHasDefaultCredentials: boolean | undefined;
-  private static pendingHasDefaultCredentials: Promise<boolean> | undefined;
+  private static credentialProbes = new WeakMap<
+    object,
+    { settings: string; result: Promise<boolean> }
+  >();
 
   /**
    * Get API key with proper priority order.
@@ -274,7 +279,7 @@ export class GoogleAuthManager {
     // Vertex mode requires either API key or project ID
     if (vertexai && !apiKey && !projectId && !cloudProject && !credentials) {
       const hasAdc = Boolean(
-        env?.GOOGLE_APPLICATION_CREDENTIALS || getEnvString('GOOGLE_APPLICATION_CREDENTIALS'),
+        env?.GOOGLE_APPLICATION_CREDENTIALS ?? getEnvString('GOOGLE_APPLICATION_CREDENTIALS'),
       );
       if (!hasAdc) {
         logger.debug(
@@ -391,11 +396,12 @@ export class GoogleAuthManager {
    */
   static async getOAuthClient(
     options: OAuthClientOptions | string = {},
+    detectProjectId = true,
   ): Promise<{ client: any; projectId: string | undefined }> {
     // Handle backward compatibility: string argument means credentials
     const opts: OAuthClientOptions =
       typeof options === 'string' ? { credentials: options } : options;
-    const { credentials, googleAuthOptions, scopes, keyFilename } = opts;
+    const { credentials, googleAuthOptions, scopes, keyFilename, env } = opts;
 
     // Determine scopes: explicit > googleAuthOptions > default
     const resolvedScopes =
@@ -410,6 +416,36 @@ export class GoogleAuthManager {
     // Handle keyFilename (deprecated but functional)
     if (keyFilename && !authOptions.keyFilename) {
       authOptions.keyFilename = keyFilename;
+    }
+
+    // SDK discovery reads process.env, so forward the effective scoped inputs explicitly.
+    if (
+      !credentials &&
+      !authOptions.credentials &&
+      !authOptions.keyFilename &&
+      !authOptions.keyFile
+    ) {
+      const scopedFilename = [env, getEnvOverrides(), getEnvOverrides('file')]
+        .map((layer) => layer?.GOOGLE_APPLICATION_CREDENTIALS)
+        .find((value) => value !== undefined);
+      if (scopedFilename === '') {
+        throw new Error(
+          '[Google] Scoped GOOGLE_APPLICATION_CREDENTIALS is empty. Supply an ADC filename or remove the scoped override.',
+        );
+      }
+      authOptions.keyFilename = scopedFilename ?? getEnvString('GOOGLE_APPLICATION_CREDENTIALS');
+    }
+    authOptions.projectId =
+      opts.projectId ||
+      authOptions.projectId ||
+      env?.GOOGLE_CLOUD_PROJECT ||
+      getEnvString('GOOGLE_CLOUD_PROJECT');
+    const quotaProjectId =
+      authOptions.clientOptions?.quotaProjectId ??
+      env?.GOOGLE_CLOUD_QUOTA_PROJECT ??
+      getEnvString('GOOGLE_CLOUD_QUOTA_PROJECT');
+    if (quotaProjectId !== undefined) {
+      authOptions.clientOptions = { ...authOptions.clientOptions, quotaProjectId };
     }
 
     // Import google-auth-library
@@ -451,10 +487,16 @@ export class GoogleAuthManager {
       client = await auth.getClient();
     }
 
+    // The SDK reapplies the host quota env after client construction. Restore the
+    // resolved scoped value on this client, without changing global environment.
+    if (quotaProjectId !== undefined) {
+      client.quotaProjectId = quotaProjectId;
+    }
+
     // Try to get project ID from Google Auth Library
     let projectId;
     try {
-      projectId = await auth.getProjectId();
+      projectId = detectProjectId ? await auth.getProjectId() : undefined;
     } catch {
       // If Google Auth Library can't detect project ID,
       // let resolveProjectId handle the fallback logic
@@ -489,6 +531,8 @@ export class GoogleAuthManager {
     env?: EnvOverrides,
   ): Promise<string> {
     const { projectId: authProjectId } = await this.getOAuthClient({
+      env,
+      projectId: config.projectId,
       credentials: config.credentials,
       googleAuthOptions: config.googleAuthOptions,
       keyFilename: config.keyFilename,
@@ -579,45 +623,39 @@ export class GoogleAuthManager {
    *
    * @returns True if ADC is available
    */
-  static async hasDefaultCredentials(): Promise<boolean> {
-    if (this.cachedHasDefaultCredentials !== undefined) {
-      return this.cachedHasDefaultCredentials;
+  static async hasDefaultCredentials(env?: EnvOverrides): Promise<boolean> {
+    const scope = cliState.envScope;
+    const resolvedEnv = {
+      GOOGLE_APPLICATION_CREDENTIALS:
+        env?.GOOGLE_APPLICATION_CREDENTIALS ?? getEnvString('GOOGLE_APPLICATION_CREDENTIALS'),
+      GOOGLE_CLOUD_PROJECT: env?.GOOGLE_CLOUD_PROJECT || getEnvString('GOOGLE_CLOUD_PROJECT'),
+      GOOGLE_CLOUD_QUOTA_PROJECT:
+        env?.GOOGLE_CLOUD_QUOTA_PROJECT ?? getEnvString('GOOGLE_CLOUD_QUOTA_PROJECT'),
+    };
+    const settings = JSON.stringify(resolvedEnv);
+    const cached = scope ? this.credentialProbes.get(scope) : undefined;
+    if (cached?.settings === settings) {
+      return cached.result;
     }
-
-    if (!this.pendingHasDefaultCredentials) {
-      const probe = (async () => {
-        try {
-          await suppressExpectedGcpMetadataLookupWarning(() => this.getOAuthClient());
-          return true;
-        } catch {
-          return false;
-        }
-      })();
-      this.pendingHasDefaultCredentials = probe;
-
-      void probe
-        .then((result) => {
-          if (this.pendingHasDefaultCredentials === probe) {
-            this.cachedHasDefaultCredentials = result;
-          }
-          return result;
-        })
-        .finally(() => {
-          if (this.pendingHasDefaultCredentials === probe) {
-            this.pendingHasDefaultCredentials = undefined;
-          }
-        });
+    const result = (async () => {
+      try {
+        await suppressExpectedGcpMetadataLookupWarning(() =>
+          this.getOAuthClient({ env: resolvedEnv }),
+        );
+        return true;
+      } catch {
+        return false;
+      }
+    })();
+    if (scope) {
+      this.credentialProbes.set(scope, { settings, result });
     }
-
-    return this.pendingHasDefaultCredentials;
+    return result;
   }
 
-  /**
-   * Clear internal auth detection caches (useful for testing).
-   */
+  /** Clear invocation-owned credential discovery results. */
   static clearCache(): void {
-    this.cachedHasDefaultCredentials = undefined;
-    this.pendingHasDefaultCredentials = undefined;
+    this.credentialProbes = new WeakMap();
   }
 }
 

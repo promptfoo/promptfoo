@@ -41,6 +41,8 @@ export class VertexLiveProvider extends GoogleLiveProvider {
     let authProjectId;
     try {
       ({ client, projectId: authProjectId } = await GoogleAuthManager.getOAuthClient({
+        env: this.env,
+        projectId: config.projectId,
         credentials: config.credentials,
         googleAuthOptions: config.googleAuthOptions,
         keyFilename: config.keyFilename,

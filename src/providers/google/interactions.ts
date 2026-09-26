@@ -304,6 +304,8 @@ export class GoogleInteractionsProvider implements ApiProvider {
     if (config.vertexai) {
       try {
         const { client, projectId: authProjectId } = await GoogleAuthManager.getOAuthClient({
+          env: this.env,
+          projectId: config.projectId,
           credentials: config.credentials,
           googleAuthOptions: config.googleAuthOptions,
           keyFilename: config.keyFilename,

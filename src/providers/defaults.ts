@@ -61,7 +61,7 @@ async function getEmbeddingProviderForAzureDefaults(env?: EnvOverrides): Promise
   if (env?.VOYAGE_API_KEY || getEnvString('VOYAGE_API_KEY')) {
     return new VoyageEmbeddingProvider('voyage-3.5', {}, env);
   }
-  if (await hasGoogleDefaultCredentials()) {
+  if (await hasGoogleDefaultCredentials(env)) {
     return getGoogleVertexEmbeddingProvider(env);
   }
   return getOpenAiProviders(env).embeddingProvider;
@@ -116,7 +116,7 @@ async function getDefaultProviderPreferences(
     !hasAnthropicCredentials &&
     !hasGoogleAiStudioCredentials;
   const useGoogleVertexDefaults = shouldUseFallbackDefaults
-    ? await hasGoogleDefaultCredentials()
+    ? await hasGoogleDefaultCredentials(env)
     : false;
   const useNonGoogleFallbackDefaults = shouldUseFallbackDefaults && !useGoogleVertexDefaults;
   const hasCodexCredentials =

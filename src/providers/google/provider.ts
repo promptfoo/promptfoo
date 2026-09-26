@@ -302,6 +302,8 @@ export class GoogleProvider extends GoogleGenericProvider {
   private async getClientWithCredentials() {
     const credentials = loadCredentials(this.config.credentials);
     const { client } = await getGoogleClient({
+      env: this.env,
+      projectId: this.config.projectId,
       credentials,
       googleAuthOptions: this.config.googleAuthOptions,
       scopes: this.config.scopes,

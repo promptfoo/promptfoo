@@ -315,7 +315,7 @@ export class GoogleLiveProvider implements ApiProvider {
    */
   private async getAccessToken(config: CompletionOptions): Promise<string | undefined> {
     const credentials = loadCredentials(config.credentials);
-    return getGoogleAccessToken(credentials);
+    return getGoogleAccessToken(credentials, this.env);
   }
 
   protected async getConnection(config: CompletionOptions): Promise<{

@@ -121,7 +121,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
 
   constructor(modelName: string = 'amazon.nova-sonic-v1:0', options: ProviderOptions = {}) {
     super(modelName, options);
-    this.config = options.config;
+    this.config = options.config ?? {};
     const inference: BedrockAmazonNovaSonicGenerationOptions['interfaceConfig'] =
       this.config?.inferenceConfiguration ??
       this.config?.inferenceConfig ??
@@ -146,9 +146,11 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     try {
       const { BedrockRuntimeClient } = await import('@aws-sdk/client-bedrock-runtime');
       const { NodeHttp2Handler } = await import('@smithy/node-http-handler');
+      const authOptions = await this.getBedrockAuthOptions();
 
       this.bedrockClient = new BedrockRuntimeClient({
         region: this.getRegion(),
+        ...authOptions,
         requestHandler: new NodeHttp2Handler({
           requestTimeout,
           sessionTimeout,

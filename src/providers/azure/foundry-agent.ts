@@ -1,8 +1,9 @@
-import { createHmac } from 'crypto';
+import { createHmac, randomUUID } from 'crypto';
 
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { createAzureCredential } from '../../util/azureCredentials';
 import { rateLimitTimingFromHeaders } from '../../util/fetch';
 import {
   extractRateLimitErrorCode,
@@ -204,8 +205,10 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   private warnedUnsupportedFields = new Set<string>();
 
   override async initialize(): Promise<void> {
-    // Foundry authenticates through DefaultAzureCredential in initializeClient().
+    // Foundry initializes its scoped Azure credential in initializeClient().
   }
+
+  private readonly responseCacheNamespace = randomUUID();
 
   constructor(deploymentName: string, options: AzureAssistantProviderOptions = {}) {
     super(deploymentName, options);
@@ -261,11 +264,10 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
 
     try {
       const { AIProjectClient } = await import('@azure/ai-projects');
-      const { DefaultAzureCredential } = await import('@azure/identity');
 
       const projectClient = new AIProjectClient(
         this.projectUrl,
-        new DefaultAzureCredential(),
+        await createAzureCredential(this.config, this.env),
       ) as AzureAIProjectClient;
       this.projectClient = projectClient;
       logger.debug('Azure AI Project client initialized successfully');
@@ -650,7 +652,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   ): Promise<ProviderResponse> {
     const { body, effectiveConfig } = await this.buildResponsesBody(prompt, context);
     const projectScope = hashFoundryAgentCacheValue(this.projectUrl);
-    const cacheKey = `azure_foundry_agent:${this.deploymentName}:${projectScope}:${hashFoundryAgentCacheValue(body)}`;
+    const cacheKey = `azure_foundry_agent:${this.deploymentName}:${this.responseCacheNamespace}:${projectScope}:${hashFoundryAgentCacheValue(body)}`;
 
     // Client-side tool behavior is absent from the serialized request body.
     // Callback closures cannot be safely represented in a persistent cache key.

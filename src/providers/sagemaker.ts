@@ -6,6 +6,7 @@ import logger from '../logger';
 import telemetry from '../telemetry';
 import { getTransformErrorMessage, TransformInputType, transform } from '../util/transform';
 import { StringOrFunctionSchema } from '../validators/shared';
+import { getScopedAwsCredentialConfig, resolveAwsCredentials } from './awsCredentials';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -90,6 +91,7 @@ interface SageMakerOptions extends ProviderOptions {
  * Base class for SageMaker providers with common functionality
  */
 abstract class SageMakerGenericProvider {
+  protected readonly responseCacheNamespace = crypto.randomUUID();
   env?: EnvOverrides;
 
   protected getNumericEnv(key: string, integer: boolean, defaultValue: number): number {
@@ -144,30 +146,8 @@ abstract class SageMakerGenericProvider {
   /**
    * Get AWS credentials from config or environment
    */
-  async getCredentials(): Promise<any> {
-    if (this.config.accessKeyId && this.config.secretAccessKey) {
-      logger.debug('Using explicit credentials from config');
-      return {
-        accessKeyId: this.config.accessKeyId,
-        secretAccessKey: this.config.secretAccessKey,
-        sessionToken: this.config.sessionToken,
-      };
-    }
-    if (this.config.profile) {
-      logger.debug(`Using AWS profile: ${this.config.profile}`);
-      try {
-        const { fromSSO } = await import('@aws-sdk/credential-provider-sso');
-        return fromSSO({ profile: this.config.profile });
-      } catch {
-        throw new Error(
-          `Failed to load AWS SSO profile. Please install @aws-sdk/credential-provider-sso`,
-        );
-      }
-    }
-
-    // Default credentials will be loaded from environment or instance profile
-    logger.debug('Using default AWS credentials from environment');
-    return undefined;
+  async getCredentials() {
+    return resolveAwsCredentials(this.config, this.env);
   }
 
   /**
@@ -184,6 +164,7 @@ abstract class SageMakerGenericProvider {
       try {
         const { SageMakerRuntimeClient } = await import('@aws-sdk/client-sagemaker-runtime');
         const credentials = await this.getCredentials();
+        const profile = getScopedAwsCredentialConfig(this.config, this.env)?.profile;
 
         const runtimeRegion = region ?? this.getRegion();
         const runtime = new SageMakerRuntimeClient({
@@ -191,6 +172,7 @@ abstract class SageMakerGenericProvider {
           maxAttempts: this.getNumericEnv('AWS_SAGEMAKER_MAX_RETRIES', true, 3),
           retryMode: 'adaptive',
           ...(credentials ? { credentials } : {}),
+          ...(profile ? { profile } : {}),
         });
 
         this.sagemakerRuntime = runtime;
@@ -694,6 +676,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     // Keep request and parsing settings together across cache and network awaits.
     const payload = this.formatPayload(transformedPrompt);
     const request = {
+      cacheNamespace: this.responseCacheNamespace,
       payload,
       endpoint: this.getEndpointName(),
       modelType: this.modelType,
@@ -867,6 +850,7 @@ export class SageMakerEmbeddingProvider
   private getCacheKey(text: string): string {
     // Create a deterministic representation of the request parameters
     const configForKey = {
+      cacheNamespace: this.responseCacheNamespace,
       endpoint: this.getEndpointName(),
       modelType: this.config.modelType,
       contentType: this.getContentType(),
@@ -879,7 +863,7 @@ export class SageMakerEmbeddingProvider
 
     // Generate shorter, more efficient hashed keys
     const textHash = crypto.createHash('sha256').update(text).digest('hex').substring(0, 16);
-    const configHash = crypto.createHash('sha256').update(configStr).digest('hex').substring(0, 8);
+    const configHash = crypto.createHash('sha256').update(configStr).digest('hex');
 
     return `sagemaker:embedding:v1:${this.getEndpointName()}:${textHash}:${configHash}`;
   }

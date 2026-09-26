@@ -235,6 +235,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
           retryMode: 'adaptive',
           ...(handler ? { requestHandler: handler } : {}),
           ...(credentials ? { credentials } : {}),
+          ...(this.getProfile() ? { profile: this.getProfile() } : {}),
         });
       } catch (err) {
         logger.error(`Error creating BedrockAgentRuntimeClient: ${err}`);
