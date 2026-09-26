@@ -1203,7 +1203,9 @@ function sanitizePlainObject(
       );
     } else if (
       typeof value === 'string' &&
-      (key === 'apiHost' || (isEnvMap && key.toUpperCase().endsWith('_HOST')))
+      (key === 'apiHost' ||
+        (isEnvMap && key.toUpperCase().endsWith('_HOST')) ||
+        /^(?:https?|all)_proxy$/i.test(key))
     ) {
       const scheme = /^[a-z][a-z\d+.-]*:\/\//i;
       const hasScheme = scheme.test(value);
