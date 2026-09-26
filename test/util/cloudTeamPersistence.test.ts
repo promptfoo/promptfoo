@@ -5,7 +5,12 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CloudConfig, cloudConfig } from '../../src/globalConfig/cloud';
 import { readGlobalConfig, writeGlobalConfig } from '../../src/globalConfig/globalConfig';
-import { ensureCloudTeamContext, resolveCloudTeam, resolveTeamId } from '../../src/util/cloud';
+import {
+  ensureCloudTeamContext,
+  resolveCloudTeam,
+  resolveTeamFromIdentifier,
+  resolveTeamId,
+} from '../../src/util/cloud';
 import { getConfigDirectoryPath, setConfigDirectoryPath } from '../../src/util/config/manage';
 import { fetchWithProxy } from '../../src/util/fetch/index';
 
@@ -70,6 +75,73 @@ afterEach(() => {
 });
 
 describe('team resolution with persisted preferences and environment credentials', () => {
+  describe.each(['legacy', 'rotated'])('with a %s environment selection', (context) => {
+    it.each(['SHARED', 'shared-slug'])(
+      'resolves ambiguous identifier %s in the token organization',
+      async (identifier) => {
+        writeGlobalConfig(remembered);
+        if (context === 'rotated') {
+          cloudConfig.setCurrentOrganization('org-a');
+        }
+        vi.stubEnv('PROMPTFOO_API_KEY', 'environment-b');
+        const saved = readGlobalConfig();
+        vi.mocked(fetchWithProxy).mockImplementation(async (url) =>
+          Response.json(
+            String(url).endsWith('/users/me')
+              ? { organization: { id: 'org-b' } }
+              : ['a', 'b'].map((suffix) => ({
+                  ...team(`team-${suffix}`, `org-${suffix}`),
+                  name: 'Shared',
+                  slug: 'shared-slug',
+                })),
+          ),
+        );
+
+        await expect(resolveTeamFromIdentifier(identifier)).resolves.toMatchObject({
+          id: 'team-b',
+          organizationId: 'org-b',
+        });
+
+        expect(readGlobalConfig()).toEqual(saved);
+        expect(fetchWithProxy).toHaveBeenCalledTimes(2);
+        for (const [, options] of vi.mocked(fetchWithProxy).mock.calls) {
+          expect(new Headers(options?.headers).get('Authorization')).toBe('Bearer environment-b');
+        }
+      },
+    );
+  });
+
+  it.each(['unavailable identity', 'changed login'])(
+    'preserves configuration when ambiguous resolution encounters %s',
+    async (failure) => {
+      writeGlobalConfig(remembered);
+      let expected = readGlobalConfig();
+      vi.mocked(fetchWithProxy).mockImplementation(async (url) => {
+        if (String(url).endsWith('/users/me')) {
+          if (failure === 'unavailable identity') {
+            return new Response(null, { status: 503 });
+          }
+          cloudConfig.setApiKey('new-key');
+          expected = readGlobalConfig();
+          return Response.json({ organization: { id: 'org-b' } });
+        }
+        return Response.json(
+          ['a', 'b'].map((suffix) => ({
+            ...team(`team-${suffix}`, `org-${suffix}`),
+            name: 'Shared',
+          })),
+        );
+      });
+
+      await expect(resolveTeamFromIdentifier('Shared')).rejects.toThrow(
+        failure === 'unavailable identity'
+          ? 'Could not determine the current organization'
+          : 'Cloud login or team selection changed',
+      );
+      expect(readGlobalConfig()).toEqual(expected);
+    },
+  );
+
   it.each([
     { scenario: 'an accessible unscoped selection', legacy: 'selected-a', expected: 'selected-a' },
     { scenario: 'a revoked unscoped selection', legacy: 'removed', expected: 'oldest-a' },

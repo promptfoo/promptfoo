@@ -1782,7 +1782,21 @@ describe('cloud utils', () => {
         await expect(cloudModule.resolveTeamFromIdentifier(identifier)).resolves.toMatchObject({
           id: expected,
         });
+        expect(mockFetchWithProxy).toHaveBeenCalledOnce();
       });
+
+      it.each(['other-default', 'ELSEWHERE', 'missing'])(
+        'does not require identity discovery for unambiguous identifier %s',
+        async (identifier) => {
+          mockTeamState(undefined, {}, teams, new Error('Identity unavailable'));
+
+          const result = cloudModule.resolveTeamFromIdentifier(identifier);
+          await (identifier === 'missing'
+            ? expect(result).rejects.toThrow("Team 'missing' not found")
+            : expect(result).resolves.toMatchObject({ id: identifier.toLowerCase() }));
+          expect(mockFetchWithProxy).toHaveBeenCalledOnce();
+        },
+      );
     });
   });
 

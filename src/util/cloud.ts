@@ -569,6 +569,20 @@ export async function getTeamById(
   };
 }
 
+async function resolveOrganizationId(selection: ReturnType<typeof cloudConfig.getTeamSelection>) {
+  if (selection.organizationId) {
+    return selection.organizationId;
+  }
+  const response = await makeRequest('/users/me', 'GET', undefined, selection.request);
+  const organizationId = response.ok ? (await response.json())?.organization?.id : undefined;
+  if (typeof organizationId !== 'string' || !organizationId) {
+    throw new Error(
+      "Could not determine the current organization. Run 'promptfoo auth login' to select it.",
+    );
+  }
+  return organizationId;
+}
+
 /**
  * Resolves a team identifier (name, slug, or ID) to a team object. When several
  * organizations share a team name or slug, the current organization's team wins.
@@ -581,7 +595,19 @@ export async function resolveTeamFromIdentifier(
   selection = cloudConfig.getTeamSelection(),
 ): Promise<{ id: string; name: string; organizationId: string; createdAt: string }> {
   const teams = await getUserTeams(undefined, undefined, undefined, selection.request);
-  const team = findTeam(teams, identifier, selection.organizationId);
+  let team = findTeam(teams, identifier, selection.organizationId);
+  // Only ambiguous names and slugs need organization discovery.
+  if (
+    !selection.organizationId &&
+    team &&
+    team.id !== identifier &&
+    findTeam(
+      teams.filter((candidate) => candidate.organizationId !== team?.organizationId),
+      identifier,
+    )
+  ) {
+    team = findTeam(teams, identifier, await resolveOrganizationId(selection));
+  }
   cloudConfig.assertTeamSelection(selection);
 
   if (!team) {
@@ -617,17 +643,7 @@ export async function resolveTeamId(
   }
 
   // 2. Use stored current team preference (scoped to current organization)
-  let currentOrganizationId = selection.organizationId;
-  if (!currentOrganizationId) {
-    const response = await makeRequest('/users/me', 'GET', undefined, selection.request);
-    const organizationId = response.ok ? (await response.json())?.organization?.id : undefined;
-    if (typeof organizationId !== 'string' || !organizationId) {
-      throw new Error(
-        "Could not determine the current organization. Run 'promptfoo auth login' to select it.",
-      );
-    }
-    currentOrganizationId = organizationId;
-  }
+  const currentOrganizationId = await resolveOrganizationId(selection);
   // Validate legacy preferences against the token's organization before migrating them.
   const scopedTeamId = selection.selection.teams?.[currentOrganizationId]?.currentTeamId;
   const currentTeamId = scopedTeamId || selection.selection.currentTeamId;
