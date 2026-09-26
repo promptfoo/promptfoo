@@ -1,6 +1,7 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import { resolveProviderEnv } from './env';
 import { calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
 
 import type { EnvVarKey } from '../envars';
@@ -131,8 +132,7 @@ export class AI21ChatCompletionProvider implements ApiProvider {
   getApiUrl(): string {
     return (
       this.config.apiBaseUrl ||
-      this.env?.AI21_API_BASE_URL ||
-      getEnvString('AI21_API_BASE_URL') ||
+      resolveProviderEnv(this.env, ['AI21_API_BASE_URL'])?.value ||
       this.getApiUrlDefault()
     );
   }

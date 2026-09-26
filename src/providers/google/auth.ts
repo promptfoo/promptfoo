@@ -14,6 +14,7 @@
 import { getEnvOverrides, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { maybeLoadFromExternalFile } from '../../util/file';
+import { resolveProviderEnv } from '../env';
 import type { GoogleAuthOptions } from 'google-auth-library';
 
 import type { EnvOverrides } from '../../types/env';
@@ -488,33 +489,17 @@ export class GoogleAuthManager {
       scopes: config.scopes,
     });
 
-    // Check for non-SDK env vars and warn
-    const vertexProjectId = env?.VERTEX_PROJECT_ID || getEnvString('VERTEX_PROJECT_ID');
-    const googleProjectId = env?.GOOGLE_PROJECT_ID || getEnvString('GOOGLE_PROJECT_ID');
-    const cloudProject = env?.GOOGLE_CLOUD_PROJECT || getEnvString('GOOGLE_CLOUD_PROJECT');
-
-    if (vertexProjectId && !config.projectId) {
+    const project = resolveProviderEnv(env, [
+      'VERTEX_PROJECT_ID',
+      'GOOGLE_PROJECT_ID',
+      'GOOGLE_CLOUD_PROJECT',
+    ]);
+    if (project && project.name !== 'GOOGLE_CLOUD_PROJECT' && !config.projectId) {
       logger.debug(
-        '[Google] VERTEX_PROJECT_ID is not a standard SDK env var. Consider using GOOGLE_CLOUD_PROJECT.',
+        `[Google] ${project.name} is not a standard SDK env var. Consider using GOOGLE_CLOUD_PROJECT.`,
       );
     }
-    if (googleProjectId && !config.projectId && !vertexProjectId) {
-      logger.debug(
-        '[Google] GOOGLE_PROJECT_ID is not a standard SDK env var. Consider using GOOGLE_CLOUD_PROJECT.',
-      );
-    }
-
-    return (
-      config.projectId ||
-      env?.VERTEX_PROJECT_ID ||
-      env?.GOOGLE_PROJECT_ID ||
-      env?.GOOGLE_CLOUD_PROJECT ||
-      vertexProjectId ||
-      googleProjectId ||
-      cloudProject ||
-      authProjectId ||
-      ''
-    );
+    return config.projectId || project?.value || authProjectId || '';
   }
 
   /**
@@ -536,22 +521,13 @@ export class GoogleAuthManager {
     env?: EnvOverrides,
     hasApiKey?: boolean,
   ): string {
-    // Check for non-SDK env vars
-    const vertexRegion = env?.VERTEX_REGION || getEnvString('VERTEX_REGION');
-    const cloudLocation = env?.GOOGLE_CLOUD_LOCATION || getEnvString('GOOGLE_CLOUD_LOCATION');
-
-    if (vertexRegion && !config.region) {
+    const region = resolveProviderEnv(env, ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION']);
+    if (region?.name === 'VERTEX_REGION' && !config.region) {
       logger.debug(
         '[Google] VERTEX_REGION is not a standard SDK env var. Consider using GOOGLE_CLOUD_LOCATION.',
       );
     }
-
-    const configuredRegion =
-      config.region ||
-      env?.VERTEX_REGION ||
-      env?.GOOGLE_CLOUD_LOCATION ||
-      vertexRegion ||
-      cloudLocation;
+    const configuredRegion = config.region || region?.value;
 
     if (configuredRegion) {
       return configuredRegion;

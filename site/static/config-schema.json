@@ -522,6 +522,9 @@
         "PALM_API_KEY": {
           "type": "string"
         },
+        "PORTKEY_API_BASE_URL": {
+          "type": "string"
+        },
         "PORTKEY_API_KEY": {
           "type": "string"
         },

@@ -74,6 +74,7 @@ import { createN8nProvider } from './n8n';
 import { createNovitaProvider } from './novita';
 import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
+import { resolveOpenAiApiUrl } from './openai';
 import { OpenAiAssistantProvider } from './openai/assistant';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
@@ -177,9 +178,33 @@ function getProviderEnvAliasGroups(providerPath: string): readonly (readonly str
       providerPath.split(':')[1] === 'moderation'
         ? ['AZURE_CONTENT_SAFETY_API_KEY', 'AZURE_API_KEY', 'AZURE_OPENAI_API_KEY']
         : ['AZURE_API_KEY', 'AZURE_OPENAI_API_KEY'],
-      ['AZURE_API_HOST', 'AZURE_OPENAI_API_HOST'],
-      ['AZURE_API_BASE_URL', 'AZURE_OPENAI_API_BASE_URL', 'AZURE_OPENAI_BASE_URL'],
+      [
+        'AZURE_API_HOST',
+        'AZURE_OPENAI_API_HOST',
+        'AZURE_API_BASE_URL',
+        'AZURE_OPENAI_API_BASE_URL',
+        'AZURE_OPENAI_BASE_URL',
+      ],
     ];
+  }
+  return [];
+}
+
+function getProviderEndpointAliases(providerPath: string): readonly string[] {
+  if (
+    providerPath.startsWith('openai:') &&
+    !/^openai:(?:codex-sdk|codex)(?::|$)/.test(providerPath)
+  ) {
+    return ['OPENAI_API_HOST', 'OPENAI_API_BASE_URL', 'OPENAI_BASE_URL'];
+  }
+  if (providerPath.startsWith('mistral:')) {
+    return ['MISTRAL_API_HOST', 'MISTRAL_API_BASE_URL'];
+  }
+  if (/^(?:google|palm):/.test(providerPath)) {
+    return ['GOOGLE_API_HOST', 'PALM_API_HOST', 'GOOGLE_API_BASE_URL'];
+  }
+  if (/^(?:openclaw|clawdbot)(?::|$)/.test(providerPath)) {
+    return ['OPENCLAW_GATEWAY_URL', 'CLAWDBOT_GATEWAY_URL'];
   }
   return [];
 }
@@ -189,7 +214,10 @@ export function mergeProviderEnv(
   providerPath: string,
   ...layers: (NonNullable<ProviderOptions['env']> | undefined)[]
 ): NonNullable<ProviderOptions['env']> | undefined {
-  const aliasGroups = getProviderEnvAliasGroups(providerPath);
+  const aliasGroups = [
+    ...getProviderEnvAliasGroups(providerPath),
+    getProviderEndpointAliases(providerPath),
+  ];
   let merged: NonNullable<ProviderOptions['env']> | undefined;
   for (const layer of layers) {
     if (!layer) {
@@ -1128,18 +1156,7 @@ export const providerMap: ProviderFactory[] = [
       const isLiveProvider =
         modelType === 'live' || /^gpt-live-1(?:-\d{4}-\d{2}-\d{2})?$/.test(modelType);
       if (!isLiveProvider && !['agents', 'chatkit', 'assistant'].includes(modelType)) {
-        const apiHost =
-          providerOptions.config?.apiHost ||
-          providerOptions.env?.OPENAI_API_HOST ||
-          getEnvString('OPENAI_API_HOST');
-        const apiUrl = apiHost
-          ? `https://${apiHost}/v1`
-          : providerOptions.config?.apiBaseUrl ||
-            providerOptions.env?.OPENAI_API_BASE_URL ||
-            providerOptions.env?.OPENAI_BASE_URL ||
-            getEnvString('OPENAI_API_BASE_URL') ||
-            getEnvString('OPENAI_BASE_URL') ||
-            'https://api.openai.com/v1';
+        const apiUrl = resolveOpenAiApiUrl(providerOptions.config, providerOptions.env);
         for (const candidate of [requestedApiModel, configuredModel, passthrough?.model]) {
           assertOpenAiApiModel(candidate, apiUrl);
         }

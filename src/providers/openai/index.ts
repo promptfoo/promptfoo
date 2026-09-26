@@ -1,5 +1,6 @@
-import { getEnvOverrides, getEnvString } from '../../envars';
+import { getEnvString } from '../../envars';
 import { resolveProviderApiKey } from '../credentials';
+import { resolveProviderEnv } from '../env';
 import { isGpt6Model } from './gpt6';
 
 import type { EnvOverrides } from '../../types/env';
@@ -28,6 +29,29 @@ export function hasHeaderOverride(
 ): boolean {
   const target = headerName.toLowerCase();
   return Object.keys(customHeaders ?? {}).some((key) => key.toLowerCase() === target);
+}
+
+export function resolveOpenAiApiUrl(
+  config: OpenAiSharedOptions = {},
+  env?: EnvOverrides,
+  defaultUrl = 'https://api.openai.com/v1',
+): string {
+  if (config.apiHost) {
+    return `https://${config.apiHost}/v1`;
+  }
+  if (config.apiBaseUrl) {
+    return config.apiBaseUrl;
+  }
+  const endpoint = resolveProviderEnv(env, [
+    'OPENAI_API_HOST',
+    'OPENAI_API_BASE_URL',
+    'OPENAI_BASE_URL',
+  ]);
+  return endpoint
+    ? endpoint.name === 'OPENAI_API_HOST'
+      ? `https://${endpoint.value}/v1`
+      : endpoint.value
+    : defaultUrl;
 }
 
 export class OpenAiGenericProvider implements ApiProvider {
@@ -110,32 +134,7 @@ export class OpenAiGenericProvider implements ApiProvider {
 
   /** Pass a prompt-merged config to resolve that call's endpoint. */
   getApiUrl(config: OpenAiSharedOptions = this.config): string {
-    if (config.apiHost) {
-      return `https://${config.apiHost}/v1`;
-    }
-    if (config.apiBaseUrl) {
-      return config.apiBaseUrl;
-    }
-    const keys = ['OPENAI_API_HOST', 'OPENAI_API_BASE_URL', 'OPENAI_BASE_URL'] as const;
-    const masked = new Set<string>();
-    for (const env of [
-      this.env,
-      getEnvOverrides(),
-      getEnvOverrides('file'),
-      Object.fromEntries(keys.map((key) => [key, getEnvString(key)])),
-    ]) {
-      for (const key of keys) {
-        const value = env?.[key];
-        if (masked.has(key) || value === undefined) {
-          continue;
-        }
-        masked.add(key);
-        if (value) {
-          return key === 'OPENAI_API_HOST' ? `https://${value}/v1` : value;
-        }
-      }
-    }
-    return this.getApiUrlDefault();
+    return resolveOpenAiApiUrl(config, this.env, this.getApiUrlDefault());
   }
 
   /** Pass a prompt-merged config to resolve that call's credential. */

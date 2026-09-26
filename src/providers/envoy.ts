@@ -1,4 +1,4 @@
-import { getEnvString } from '../envars';
+import { resolveProviderEnv } from './env';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
 import type { EnvOverrides } from '../types/env';
@@ -46,9 +46,13 @@ export function createEnvoyProvider(
 
   const apiBaseUrl =
     configWithoutBasePath.apiBaseUrl ||
-    options.config?.env?.ENVOY_API_BASE_URL ||
-    options.env?.ENVOY_API_BASE_URL ||
-    getEnvString('ENVOY_API_BASE_URL');
+    resolveProviderEnv(
+      {
+        ENVOY_API_BASE_URL:
+          options.config?.env?.ENVOY_API_BASE_URL ?? options.env?.ENVOY_API_BASE_URL,
+      },
+      ['ENVOY_API_BASE_URL'],
+    )?.value;
 
   if (!apiBaseUrl) {
     throw new Error(

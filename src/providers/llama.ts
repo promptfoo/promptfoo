@@ -1,5 +1,5 @@
 import { fetchWithCache } from '../cache';
-import { getEnvString } from '../envars';
+import { resolveProviderEnv } from './env';
 import { getRequestTimeoutMs } from './shared';
 
 import type { EnvOverrides } from '../contracts/env';
@@ -71,8 +71,7 @@ export class LlamaProvider implements ApiProvider {
       logit_bias: this.config?.logit_bias,
     };
 
-    const url =
-      this.env?.LLAMA_BASE_URL || getEnvString('LLAMA_BASE_URL') || 'http://localhost:8080';
+    const url = resolveProviderEnv(this.env, ['LLAMA_BASE_URL'])?.value || 'http://localhost:8080';
 
     interface LlamaCompletionResponse {
       content: string;
