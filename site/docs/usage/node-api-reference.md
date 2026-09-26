@@ -339,8 +339,8 @@ interface GradingResult {
   pass: boolean;
   score: number; // Aggregate score across all assertions
   reason?: string;
-  componentResults?: GradingResult[]; // Per-assertion results
-  namedScores?: Record<string, number>;
+  componentResults?: GradingResult[] | null; // Per-assertion results
+  namedScores?: Record<string, number> | null;
   tokensUsed?: {
     total: number;
     prompt: number;

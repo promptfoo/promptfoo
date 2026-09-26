@@ -112,10 +112,10 @@ score: number;
 reason: string;
 
 // Map of labeled metrics to values
-namedScores?: Record<string, number>;
+namedScores?: Record<string, number> | null;
 
 // Weighted denominator for namedScores when assertion weights are used
-namedScoreWeights?: Record<string, number>;
+namedScoreWeights?: Record<string, number> | null;
 
 // Record of tokens usage for this assertion
 tokensUsed?: Partial<{
@@ -129,7 +129,7 @@ cached?: number;
 metadata?: Record<string, unknown>;
 
 // List of results for each component of the assertion
-componentResults?: GradingResult[];
+componentResults?: GradingResult[] | null;
 
 // The assertion that was evaluated
 assertion?: Assertion;
