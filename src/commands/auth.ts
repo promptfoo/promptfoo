@@ -238,16 +238,13 @@ export function authCommand(program: Command) {
   authCommand
     .command('login')
     .description('Login')
-    .option('-o, --org <orgId>', 'The organization id to login to.')
+    .option('-o, --org <orgId>', 'Organization ID to use with --api-key.')
     .option(
       '-h, --host <host>',
       'The host of the promptfoo instance. This needs to be the url of the API if different from the app url.',
     )
     .option('-k, --api-key <apiKey>', 'Login using an API key.')
-    .option(
-      '-t, --team <team>',
-      'The team to use (name, slug, or ID). Required in CI when multiple teams exist.',
-    )
+    .option('-t, --team <team>', 'Team name, slug, or ID to use with --api-key.')
     .option(
       '--auth-header-name <name>',
       'Cloud auth header (overrides the saved setting and PROMPTFOO_CLOUD_AUTH_HEADER; otherwise defaults to Authorization).',
