@@ -1056,6 +1056,9 @@ export async function clearCache() {
   // Explicit clearing targets the configured backend even when reads/writes are disabled.
   const backend = getCacheBackend(true);
   backend.inflight.clear();
+  for (const instance of backend.instances.values()) {
+    namespacedCacheInstances.delete(instance);
+  }
   const result = await getCacheInstance(backend).clear();
   backend.claims.clear();
   if (backend.filePath) {
