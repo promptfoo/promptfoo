@@ -32,13 +32,18 @@ You can set this in a `.env` file or directly in your environment.
 - The example dependencies installed with `pip install -r requirements.txt`
 
 The AnyIO minimum includes fixes for TLS hostname validation and process-pool
-stderr handling. OpenAI manages its other transitive dependencies.
+stderr handling. Minimum versions of h11, idna, and certifi preserve the HTTP
+parser, hostname, and certificate trust fixes when updating an existing Python
+environment. OpenAI manages the remaining transitive dependencies.
 
 Run the dependency regression check after installation:
 
 ```bash
 python -m unittest discover -s . -p '*_test.py'
 ```
+
+CI runs these checks on Python 3.10 and 3.14, covering both an upgrade from older
+transport packages and a fresh installation.
 
 ## Files
 

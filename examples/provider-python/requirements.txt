@@ -1,3 +1,6 @@
-# Keep the security fixes for TLS hostname validation and process-pool stderr.
+# Keep security minimums even when installing into an existing environment.
 anyio>=4.14.2,<5
+certifi>=2025.10.5
+h11>=0.16.0
+idna>=3.15
 openai==2.3.0

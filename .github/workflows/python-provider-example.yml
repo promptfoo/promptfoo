@@ -40,6 +40,13 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Seed an existing environment with older transport packages
+        if: matrix.python-version == '3.10'
+        run: >-
+          python -m pip install --disable-pip-version-check
+          'openai==2.3.0' 'httpcore==1.0.7' 'h11==0.14.0'
+          'idna==3.6' 'certifi==2023.11.17'
+
       - name: Install example dependencies
         run: python -m pip install --disable-pip-version-check -r examples/provider-python/requirements.txt
 
