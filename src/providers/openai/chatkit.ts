@@ -1064,26 +1064,25 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
         },
       };
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('[ChatKitProvider] Call failed', { error: errorMessage });
+
+      // Read initialization diagnostics before cleanup closes the page.
+      let stateError: unknown;
+      if (this.page) {
+        try {
+          stateError = await this.page.evaluate(() => (window as any).__state?.error);
+        } catch {
+          // Page may be in bad state, continue with general error
+        }
+      }
       if (!this.initialized) {
         await this.cleanup().catch((cleanupError) => {
           logger.debug('[ChatKitProvider] Initialization cleanup failed', { error: cleanupError });
         });
       }
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('[ChatKitProvider] Call failed', { error: errorMessage });
-
-      // Check for ChatKit-specific errors in page state
-      if (this.page) {
-        try {
-          const stateError = await this.page.evaluate(() => (window as any).__state?.error);
-          if (stateError) {
-            return {
-              error: `ChatKit workflow error: ${stateError}`,
-            };
-          }
-        } catch {
-          // Page may be in bad state, continue with general error
-        }
+      if (stateError) {
+        return { error: `ChatKit workflow error: ${stateError}` };
       }
 
       // Provide helpful error messages for common issues
