@@ -61,6 +61,7 @@ function getRuntimeMetadata() {
 
 export class Telemetry {
   private telemetryDisabledRecorded = false;
+  private testMode = false;
   private id: string | null = null;
 
   constructor(initializeImmediately: boolean = true) {
@@ -69,7 +70,9 @@ export class Telemetry {
     }
   }
 
-  initialize(): void {
+  initialize(testMode: boolean = false): void {
+    // CLI env files can overwrite process.env, but cannot remove the host test restriction.
+    this.testMode ||= testMode;
     if (this.id !== null) {
       return;
     }
@@ -91,7 +94,7 @@ export class Telemetry {
   }
 
   async identify() {
-    if (this.disabled || isTestMode()) {
+    if (this.disabled || this.testMode || isTestMode()) {
       return;
     }
 
@@ -117,7 +120,7 @@ export class Telemetry {
   }
 
   private recordTelemetryDisabled() {
-    if (!this.telemetryDisabledRecorded && !isTestMode()) {
+    if (!this.telemetryDisabledRecorded && !this.testMode && !isTestMode()) {
       this.sendEvent('feature_used', { feature: 'telemetry disabled' });
       this.telemetryDisabledRecorded = true;
     }
@@ -133,7 +136,7 @@ export class Telemetry {
   }
 
   private sendEvent(eventName: TelemetryEventTypes, properties: EventProperties): void {
-    if (isTestMode()) {
+    if (this.testMode || isTestMode()) {
       return;
     }
 

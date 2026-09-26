@@ -104,6 +104,20 @@ describe('telemetry test-mode environment restrictions', () => {
     expect(request).not.toHaveBeenCalled();
   });
 
+  it('retains the captured CLI host restriction across later initialization calls', async () => {
+    const { Telemetry } = await import('../src/telemetry');
+    const telemetry = new Telemetry(false);
+    telemetry.initialize(true);
+    telemetry.initialize(false);
+    await telemetry.identify();
+    telemetry.record('eval_ran', {});
+    mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: 'true' });
+    telemetry.record('eval_ran', {});
+    expect(PostHog).not.toHaveBeenCalled();
+    expect(client.capture).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it('sends the production opt-out acknowledgment after a test scope suppressed it', async () => {
     const { default: cliState } = await import('../src/cliState');
     const { Telemetry } = await import('../src/telemetry');
