@@ -14,7 +14,7 @@ import {
   runCompareAssertion,
 } from './assertions/index';
 import { extractAndStoreBinaryData } from './blobs/extractor';
-import { getCache, withCacheNamespace } from './cache';
+import { getCache, isCacheEnabled, withCacheNamespace } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
@@ -1144,6 +1144,16 @@ function buildCallApiContext({
     repeatIndex,
     testIdx: testIndex,
   };
+
+  if (!isCacheEnabled()) {
+    // Cache was disabled for this run (e.g. --no-cache). The flag lives in
+    // this module's cache state, but the provider under test may have been
+    // built from a different copy of the package (an extension hook importing
+    // "promptfoo"), whose cache module never got flipped. bustCache travels
+    // with the call, so every provider honors it regardless of which copy of
+    // the cache module it reads.
+    callApiContext.bustCache = true;
+  }
 
   if (evalId) {
     callApiContext.evaluationId = evalId;
