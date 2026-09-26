@@ -1338,6 +1338,22 @@ describe('cloud utils', () => {
   });
 
   describe('getUserTeams', () => {
+    it('preserves extra team fields and accepts an omitted unused update timestamp', async () => {
+      const teams = [
+        {
+          id: 'team',
+          name: 'Team',
+          slug: 'team',
+          organizationId: 'org',
+          createdAt: '2024-01-01',
+          targetsCount: 3,
+        },
+      ];
+      mockFetchWithProxy.mockResolvedValueOnce(Response.json(teams));
+
+      await expect(cloudModule.getUserTeams()).resolves.toEqual(teams);
+    });
+
     it('should opt out of saved-cloud-auth injection when called with an explicit apiHost/apiKey/authHeaderName', async () => {
       mockFetchWithProxy.mockResolvedValueOnce({
         ok: true,
@@ -1729,7 +1745,15 @@ describe('cloud utils', () => {
         mockFetchWithProxy
           .mockResolvedValueOnce(Response.json({ organization: tokenOrganization }))
           .mockResolvedValueOnce(
-            Response.json([{ id: 'team-id', name: teamName, organizationId: teamOrg }]),
+            Response.json([
+              {
+                id: 'team-id',
+                name: teamName,
+                slug: 'team',
+                organizationId: teamOrg,
+                createdAt: '2024-01-01',
+              },
+            ]),
           );
 
         await expect(cloudModule.getOrgContext()).resolves.toEqual({
@@ -1761,7 +1785,15 @@ describe('cloud utils', () => {
       mockCloudConfig.getCurrentTeamId.mockReturnValue('active-a');
       mockFetchWithProxy
         .mockResolvedValueOnce(
-          Response.json([{ id: 'runtime-b', name: 'Runtime B', organizationId: 'org-1' }]),
+          Response.json([
+            {
+              id: 'runtime-b',
+              name: 'Runtime B',
+              slug: 'runtime-b',
+              organizationId: 'org-1',
+              createdAt: '2024-01-01',
+            },
+          ]),
         )
         .mockResolvedValueOnce(
           Response.json({ organization: { id: 'org-1', name: 'Organization' } }),

@@ -39,6 +39,84 @@ describe('auth command with persisted configuration', () => {
     vi.resetAllMocks();
   });
 
+  describe.each([
+    { scenario: 'a non-array response', teams: { teams: [] } },
+    { scenario: 'a null team', teams: [null] },
+    {
+      scenario: 'a malformed team mixed with valid teams',
+      teams: [
+        {
+          id: 'valid',
+          name: 'Valid',
+          slug: 'valid',
+          organizationId: 'new-org',
+          createdAt: '2024-01-01',
+        },
+        { id: 'invalid', name: null, organizationId: 'new-org' },
+      ],
+    },
+  ])('login with $scenario', ({ teams }) => {
+    it.each([
+      { choice: 'implicit selection', options: [] },
+      { choice: 'an explicit organization', options: ['--org', 'new-org'] },
+      { choice: 'an explicit team', options: ['--team', 'valid'] },
+    ])('preserves saved preferences with $choice', async ({ options }) => {
+      writeGlobalConfig({
+        id: 'installation',
+        account: { email: 'old@example.test', emailValidated: true },
+        cloud: {
+          apiKey: 'old-key',
+          currentOrganizationId: 'old-org',
+          teams: {
+            'old-org': { currentTeamId: 'old-team' },
+            'new-org': { currentTeamId: 'remembered-team' },
+          },
+        },
+      });
+      const saved = readGlobalConfig();
+      vi.mocked(fetchWithProxy).mockImplementation(async (url) =>
+        String(url).endsWith('/users/me')
+          ? Response.json({
+              user: { id: 'new-user', name: 'New user', email: 'new@example.test' },
+              organization: { id: 'new-org', name: 'New organization' },
+              app: { url: 'https://cloud.example.test' },
+            })
+          : Response.json(teams),
+      );
+      const program = new Command();
+      authCommand(program);
+
+      await program.parseAsync([
+        'node',
+        'test',
+        'auth',
+        'login',
+        '--api-key',
+        'new-key',
+        ...options,
+      ]);
+
+      if (options.length) {
+        expect(process.exitCode).toBe(1);
+        expect(readGlobalConfig()).toEqual(saved);
+        expect(logger.info).not.toHaveBeenCalledWith(
+          expect.stringContaining('Successfully logged in'),
+        );
+      } else {
+        expect(process.exitCode).toBeUndefined();
+        expect(readGlobalConfig().cloud).toMatchObject({
+          apiKey: 'new-key',
+          currentOrganizationId: 'new-org',
+          teams: saved.cloud?.teams,
+        });
+        expect(logger.warn).toHaveBeenCalledWith(
+          'Could not refresh team context; keeping the saved team preference.',
+          expect.anything(),
+        );
+      }
+    });
+  });
+
   it('clears the context saved by environment-only whoami after the key is removed', async () => {
     vi.mocked(fetchWithProxy).mockImplementation(async (url) => {
       if (String(url).endsWith('/users/me')) {
@@ -135,7 +213,13 @@ describe('auth command with persisted configuration', () => {
       String(url).endsWith('/users/me')
         ? Response.json({ organization: { id: 'org-a' } })
         : Response.json([
-            { id: 'selected', name: 'Selected', organizationId: 'org-a', createdAt: '2024-01-01' },
+            {
+              id: 'selected',
+              name: 'Selected',
+              slug: 'selected',
+              organizationId: 'org-a',
+              createdAt: '2024-01-01',
+            },
           ]),
     );
     const program = new Command();
@@ -169,7 +253,13 @@ describe('auth command with persisted configuration', () => {
         }
         newer = readGlobalConfig();
         return Response.json([
-          { id: 'chosen', name: 'Chosen', organizationId: 'org-a', createdAt: '2024-01-01' },
+          {
+            id: 'chosen',
+            name: 'Chosen',
+            slug: 'chosen',
+            organizationId: 'org-a',
+            createdAt: '2024-01-01',
+          },
         ]);
       });
       const program = new Command();
@@ -214,7 +304,15 @@ describe('auth command with persisted configuration', () => {
         if (stage === 'teams unavailable') {
           throw new Error('Offline');
         }
-        return Response.json([{ id: 'old-team', name: 'Old team', organizationId: 'old-org' }]);
+        return Response.json([
+          {
+            id: 'old-team',
+            name: 'Old team',
+            slug: 'old-team',
+            organizationId: 'old-org',
+            createdAt: '2024-01-01',
+          },
+        ]);
       });
       const program = new Command();
       authCommand(program);

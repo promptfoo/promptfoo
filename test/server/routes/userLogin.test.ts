@@ -120,7 +120,7 @@ describe('Cloud login route with persisted configuration', () => {
     );
   });
 
-  it.each(['empty', 'unavailable'] as const)(
+  it.each(['empty', 'unavailable', 'non-array', 'malformed team'] as const)(
     'updates team preference only when team discovery is authoritative (%s)',
     async (scenario) => {
       cloudConfig.setCurrentTeamId('stale', 'new-org');
@@ -129,7 +129,9 @@ describe('Cloud login route with persisted configuration', () => {
           ? Response.json(validation)
           : scenario === 'empty'
             ? Response.json([])
-            : new Response(null, { status: 503 }),
+            : scenario === 'unavailable'
+              ? new Response(null, { status: 503 })
+              : Response.json(scenario === 'non-array' ? {} : [null]),
       );
       const response = await api.post('/api/user/login').send({ apiKey: 'new-key' });
       expect(response.status).toBe(200);

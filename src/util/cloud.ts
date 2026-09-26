@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+import { z } from 'zod';
 import { CLOUD_PROVIDER_PREFIX } from '../constants';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
@@ -478,6 +479,17 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
   }
 }
 
+const UserTeamSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string(),
+    slug: z.string(),
+    organizationId: z.string().min(1),
+    createdAt: z.string(),
+    updatedAt: z.string().optional(),
+  })
+  .passthrough();
+
 /**
  * Retrieves all teams for the current user from Promptfoo Cloud.
  * @returns Promise resolving to an array of team objects
@@ -488,16 +500,7 @@ export async function getUserTeams(
   apiKey?: string,
   authHeaderName?: string,
   request?: ReturnType<typeof cloudConfig.getRequestConfig>,
-): Promise<
-  Array<{
-    id: string;
-    name: string;
-    slug: string;
-    organizationId: string;
-    createdAt: string;
-    updatedAt: string;
-  }>
-> {
+): Promise<z.infer<typeof UserTeamSchema>[]> {
   const response =
     apiHost && apiKey
       ? await fetchWithProxy(`${apiHost}/api/v1/users/me/teams`, {
@@ -511,8 +514,11 @@ export async function getUserTeams(
     throw new Error(`Failed to get user teams: ${response.statusText}`);
   }
 
-  const body = await response.json();
-  return body;
+  const result = z.array(UserTeamSchema).safeParse(await response.json());
+  if (!result.success) {
+    throw new Error('Failed to get user teams: invalid response');
+  }
+  return result.data;
 }
 
 /** Returns the oldest team by creation date, which matches the enterprise app's default team. */
