@@ -846,7 +846,9 @@ describe('is-sql parser loading', () => {
         outputString: 'SELECT 1',
         inverse: false,
       } as AssertionParams),
-    ).rejects.toThrow('node-sql-parser is not installed. Please install it first');
+    ).rejects.toThrow(
+      'node-sql-parser is not installed. Install it alongside promptfoo with: npm install promptfoo node-sql-parser',
+    );
   });
 
   it('should report when node-sql-parser has no Parser export', async () => {
@@ -859,6 +861,8 @@ describe('is-sql parser loading', () => {
         outputString: 'SELECT 1',
         inverse: false,
       } as AssertionParams),
-    ).rejects.toThrow('node-sql-parser is not installed. Please install it first');
+    ).rejects.toThrow(
+      'node-sql-parser is not installed. Install it alongside promptfoo with: npm install promptfoo node-sql-parser',
+    );
   });
 });

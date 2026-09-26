@@ -117,16 +117,18 @@ type SqlParserModule = {
 };
 
 async function createSqlParser() {
+  const installMessage =
+    'node-sql-parser is not installed. Install it alongside promptfoo with: npm install promptfoo node-sql-parser (or npm install -g promptfoo node-sql-parser for a global install).';
   let sqlParserModule: SqlParserModule;
   try {
     sqlParserModule = await import('node-sql-parser');
   } catch {
-    throw new Error('node-sql-parser is not installed. Please install it first');
+    throw new Error(installMessage);
   }
 
   const SqlParser = sqlParserModule.Parser ?? sqlParserModule.default?.Parser;
   if (!SqlParser) {
-    throw new Error('node-sql-parser is not installed. Please install it first');
+    throw new Error(installMessage);
   }
   return new SqlParser();
 }

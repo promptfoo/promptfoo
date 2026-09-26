@@ -26,6 +26,7 @@ import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/
 import { renderVarsInObject } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
+import { isMissingPackageImportError } from './util/packageImportErrors';
 import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
 import { loadYaml } from './util/yamlLoad';
@@ -42,8 +43,10 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
     await parser.destroy();
     return result.text.trim();
   } catch (error) {
-    if (error instanceof Error && error.message.includes("Cannot find module 'pdf-parse'")) {
-      throw new Error('pdf-parse is not installed. Please install it with: npm install pdf-parse');
+    if (isMissingPackageImportError(error, 'pdf-parse')) {
+      throw new Error(
+        'pdf-parse is not installed. Install it alongside promptfoo with: npm install promptfoo pdf-parse (or npm install -g promptfoo pdf-parse for a global install).',
+      );
     }
     throw new Error(
       `Failed to extract text from PDF ${pdfPath}: ${error instanceof Error ? error.message : String(error)}`,

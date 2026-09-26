@@ -214,11 +214,21 @@ tests:
       paper: file://pdfs/arxiv_1.pdf
 ```
 
-Note that you must install the `pdf-parse` package to use PDFs as variables:
+PDF text variables require the optional `pdf-parse` package. Install it alongside Promptfoo:
 
+```bash
+npm install promptfoo pdf-parse
+# Or, for a global CLI installation:
+npm install -g promptfoo pdf-parse
 ```
-npm install pdf-parse
+
+For a one-off eval, run this command from an empty directory outside an existing npm project, using an absolute config path:
+
+```bash
+npx --package=promptfoo --package=pdf-parse@^2.4.5 promptfoo eval -c /absolute/path/to/promptfooconfig.yaml
 ```
+
+If either package is already installed in your project, use the local install command above so both packages are available together.
 
 ### Javascript variables
 

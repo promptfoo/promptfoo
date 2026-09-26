@@ -154,15 +154,31 @@ describe('evaluatorHelpers', () => {
       expect(result).toBe(mockPDFText);
     });
 
-    it('should throw error when pdf-parse is not installed', async () => {
+    it.each([
+      "Cannot find module 'pdf-parse'",
+      "Cannot find package 'pdf-parse' imported from /project/dist/evaluatorHelpers.js",
+    ])('should explain how to install pdf-parse for %s', async (message) => {
       vi.spyOn(fs, 'readFileSync').mockReturnValueOnce(Buffer.from('mock pdf content'));
       const pdfParse = await import('pdf-parse');
-      vi.mocked(pdfParse.PDFParse).mockImplementationOnce(() => {
-        throw new Error("Cannot find module 'pdf-parse'");
+      vi.mocked(pdfParse.PDFParse).mockImplementationOnce(function () {
+        throw new Error(message);
       });
 
       await expect(extractTextFromPDF('test.pdf')).rejects.toThrow(
-        'pdf-parse is not installed. Please install it with: npm install pdf-parse',
+        'pdf-parse is not installed. Install it alongside promptfoo with: npm install promptfoo pdf-parse',
+      );
+    });
+
+    it('should preserve errors from missing transitive PDF dependencies', async () => {
+      const pdfParse = await import('pdf-parse');
+      vi.mocked(pdfParse.PDFParse).mockImplementationOnce(function () {
+        throw new Error(
+          "Cannot find package '@napi-rs/canvas' imported from /project/node_modules/pdf-parse/index.js",
+        );
+      });
+
+      await expect(extractTextFromPDF('test.pdf')).rejects.toThrow(
+        "Failed to extract text from PDF test.pdf: Cannot find package '@napi-rs/canvas'",
       );
     });
 

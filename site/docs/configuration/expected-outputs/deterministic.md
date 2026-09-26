@@ -507,11 +507,21 @@ assert:
   - type: is-sql
 ```
 
-To use this assertion, you need to install the `node-sql-parser` package. You can install it using npm:
+SQL assertions require the optional `node-sql-parser` package. Install it alongside Promptfoo:
 
 ```bash
-npm install node-sql-parser
+npm install promptfoo node-sql-parser
+# Or, for a global CLI installation:
+npm install -g promptfoo node-sql-parser
 ```
+
+For a one-off eval, run this command from an empty directory outside an existing npm project, using an absolute config path:
+
+```bash
+npx --package=promptfoo --package=node-sql-parser@^5.4.0 promptfoo eval -c /absolute/path/to/promptfooconfig.yaml
+```
+
+If either package is already installed in your project, use the local install command above so both packages are available together.
 
 You can optionally set a `databaseType` in the `value` to determine the specific database syntax that your LLM output will be validated against. The default database syntax is MySQL. For a complete and up-to-date list of supported database syntaxes, please refer to the [node-sql-parser documentation](https://github.com/taozhi8833998/node-sql-parser?tab=readme-ov-file#supported-database-sql-syntax).  
 The supported database syntax list:
