@@ -61,6 +61,7 @@ export interface RateLimitRegistryRef {
       getHeaders?: (result: T) => Record<string, string> | undefined;
       isRateLimited?: (result: T | undefined, error?: Error) => boolean;
       getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
+      abortSignal?: AbortSignal;
     },
   ) => Promise<T>;
   dispose: () => void;

@@ -4,10 +4,12 @@ import { getEnvBool, getEnvInt } from '../envars';
 import logger from '../logger';
 import { withFetchRetryContext } from '../util/fetch/retryContext';
 import { sanitizeProviderIdForLog } from '../util/provider';
+import { runProviderCallWithAbort } from './providerCallExecutionContext';
 import { type ProviderMetrics, ProviderRateLimitState } from './providerRateLimitState';
 import { getRateLimitKey } from './rateLimitKey';
 
 import type { ApiProvider } from '../types/providers';
+import type { RateLimitExecuteOptions } from './types';
 
 export interface RateLimitRegistryOptions {
   maxConcurrency: number;
@@ -45,11 +47,7 @@ export class RateLimitRegistry extends EventEmitter {
   async execute<T>(
     provider: ApiProvider,
     callFn: () => Promise<T>,
-    options?: {
-      getHeaders?: (result: T) => Record<string, string> | undefined;
-      isRateLimited?: (result: T | undefined, error?: Error) => boolean;
-      getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
-    },
+    options?: RateLimitExecuteOptions<T>,
   ): Promise<T> {
     const providerMaxRetries = getProviderMaxRetries(provider);
 
@@ -57,7 +55,9 @@ export class RateLimitRegistry extends EventEmitter {
     // `fetchWithRetries` picks up the provider's `maxRetries` as its default
     // and `fetchWithProxy` disables transient retries when `maxRetries: 0`.
     if (!this.enabled) {
-      return withFetchRetryContext(providerMaxRetries, callFn);
+      return withFetchRetryContext(providerMaxRetries, () =>
+        runProviderCallWithAbort(callFn, options?.abortSignal),
+      );
     }
 
     const rateLimitKey = getRateLimitKey(provider);
@@ -77,11 +77,14 @@ export class RateLimitRegistry extends EventEmitter {
         getHeaders: options?.getHeaders,
         isRateLimited: options?.isRateLimited,
         getRetryAfter: options?.getRetryAfter,
+        abortSignal: options?.abortSignal,
         maxRetriesOverride: providerMaxRetries,
       });
 
     try {
-      const result = await withFetchRetryContext(providerMaxRetries, run);
+      const result = await withFetchRetryContext(providerMaxRetries, () =>
+        runProviderCallWithAbort(run, options?.abortSignal),
+      );
 
       this.emit('request:completed', {
         rateLimitKey,

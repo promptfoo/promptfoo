@@ -137,6 +137,7 @@ export class ProviderRateLimitState extends EventEmitter {
        * reset them.
        */
       maxRetriesOverride?: number;
+      abortSignal?: AbortSignal;
     },
   ): Promise<T> {
     this.totalRequests++;
@@ -151,7 +152,7 @@ export class ProviderRateLimitState extends EventEmitter {
       // Acquire slot (may wait for rate limit window via queue)
       // Queue timeout failures are counted as failed requests
       try {
-        await this.slotQueue.acquire(`${requestId}-${attempt}`);
+        await this.slotQueue.acquire(`${requestId}-${attempt}`, options.abortSignal);
       } catch (acquireError) {
         // Queue timeout or other acquire failures
         this.failedRequests++;
@@ -164,8 +165,11 @@ export class ProviderRateLimitState extends EventEmitter {
       }
 
       const startTime = Date.now();
+      let retryDelayMs: number;
 
       try {
+        options.abortSignal?.throwIfAborted();
+        // A slot represents a live provider call; let already completed calls retain their result.
         const result = await callFn();
         const latencyMs = Date.now() - startTime;
         this.latencies.push(latencyMs);
@@ -183,26 +187,16 @@ export class ProviderRateLimitState extends EventEmitter {
         // Release slot
         this.slotQueue.release();
 
-        if (isRateLimited) {
-          this.handleRateLimit(retryAfterMs);
+        if (!isRateLimited) {
+          // Success
+          this.handleSuccess();
+          this.completedRequests++;
+          return result;
+        }
 
-          // Check if we should retry
-          if (shouldRetry(attempt, undefined, true, retryPolicy)) {
-            attempt++;
-            this.retriedRequests++;
-            const delay = getRetryDelay(attempt, retryPolicy, retryAfterMs);
+        this.handleRateLimit(retryAfterMs);
 
-            this.emit('request:retrying', {
-              rateLimitKey: this.rateLimitKey,
-              attempt,
-              delayMs: delay,
-              reason: 'ratelimit',
-            });
-
-            await this.sleep(delay);
-            continue;
-          }
-
+        if (!shouldRetry(attempt, undefined, true, retryPolicy)) {
           // Rate limited and no more retries - count as FAILED, throw sentinel error
           // Using sentinel error to prevent catch block from double-releasing/double-counting
           this.failedRequests++;
@@ -211,10 +205,8 @@ export class ProviderRateLimitState extends EventEmitter {
           );
         }
 
-        // Success
-        this.handleSuccess();
-        this.completedRequests++;
-        return result;
+        attempt++;
+        retryDelayMs = this.recordRetry(attempt, retryPolicy, retryAfterMs, 'ratelimit');
       } catch (error) {
         // Re-throw sentinel error immediately to prevent double-release/double-count
         if (error instanceof RateLimitExhaustedError) {
@@ -238,28 +230,48 @@ export class ProviderRateLimitState extends EventEmitter {
           this.handleRateLimit(retryAfterMs);
         }
 
-        // Check if we should retry
-        if (shouldRetry(attempt, lastError, isRateLimited, retryPolicy)) {
-          attempt++;
-          this.retriedRequests++;
-          const delay = getRetryDelay(attempt, retryPolicy, retryAfterMs);
-
-          this.emit('request:retrying', {
-            rateLimitKey: this.rateLimitKey,
-            attempt,
-            delayMs: delay,
-            reason: isRateLimited ? 'ratelimit' : 'error',
-          });
-
-          await this.sleep(delay);
-          continue;
+        // Never retry a call that failed because the caller cancelled it.
+        if (
+          options.abortSignal?.aborted ||
+          !shouldRetry(attempt, lastError, isRateLimited, retryPolicy)
+        ) {
+          this.failedRequests++;
+          throw lastError;
         }
 
-        // No more retries
+        attempt++;
+        retryDelayMs = this.recordRetry(
+          attempt,
+          retryPolicy,
+          retryAfterMs,
+          isRateLimited ? 'ratelimit' : 'error',
+        );
+      }
+
+      try {
+        await this.sleep(retryDelayMs, options.abortSignal);
+      } catch (sleepError) {
         this.failedRequests++;
-        throw lastError;
+        throw sleepError;
       }
     }
+  }
+
+  private recordRetry(
+    attempt: number,
+    retryPolicy: RetryPolicy,
+    retryAfterMs: number | undefined,
+    reason: 'ratelimit' | 'error',
+  ): number {
+    this.retriedRequests++;
+    const delayMs = getRetryDelay(attempt, retryPolicy, retryAfterMs);
+    this.emit('request:retrying', {
+      rateLimitKey: this.rateLimitKey,
+      attempt,
+      delayMs,
+      reason,
+    });
+    return delayMs;
   }
 
   /**
@@ -367,8 +379,19 @@ export class ProviderRateLimitState extends EventEmitter {
     );
   }
 
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  private async sleep(ms: number, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve();
+      }, ms);
+      const onAbort = () => {
+        clearTimeout(timeout);
+        reject(signal?.reason);
+      };
+      signal?.addEventListener('abort', onAbort, { once: true });
+    });
   }
 
   /**

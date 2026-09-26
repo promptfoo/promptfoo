@@ -9,6 +9,7 @@ import type {
   ApiProvider,
   ApiSimilarityProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderClassificationResponse,
   ProviderEmbeddingResponse,
   ProviderOptions,
@@ -389,6 +390,8 @@ type HuggingfaceFeatureExtractionOptions = HuggingfaceProviderOptions & {
 };
 
 export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
+  readonly supportsEmbeddingCancellation = true;
+
   modelName: string;
   config: HuggingfaceFeatureExtractionOptions;
 
@@ -418,7 +421,11 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
     throw new Error('Cannot use a feature extraction provider for text generation');
   }
 
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    text: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
     // https://huggingface.co/docs/api-inference/detailed_parameters#feature-extraction-task
     const params = {
       inputs: text,
@@ -443,6 +450,7 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
             ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
           },
           body: JSON.stringify(params),
+          ...(options?.abortSignal && { signal: options.abortSignal }),
         },
         getRequestTimeoutMs(),
       );
@@ -467,6 +475,7 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
         embedding,
       };
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       return {
         error: `API call error: ${String(err)}. Output:\n${response?.data}`,
       };

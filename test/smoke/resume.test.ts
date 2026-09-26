@@ -322,9 +322,9 @@ describe('Resume E2E Tests', () => {
       // Step 2: Resume the eval
       // Note: --resume reconstructs config from saved eval, so -o from current
       // invocation is NOT applied. We verify via stdout instead.
-      const { exitCode, stdout } = runCli(['eval', '--resume', evalId!, '--no-cache']);
+      const { exitCode, stdout, stderr } = runCli(['eval', '--resume', evalId!, '--no-cache']);
 
-      expect(exitCode).toBe(0);
+      expect(exitCode, `${stdout}\n${stderr}`).toBe(0);
 
       // Should mention resuming and skipping
       expect(stdout).toContain('Resuming');

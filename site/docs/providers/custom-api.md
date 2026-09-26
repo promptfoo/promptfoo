@@ -289,10 +289,15 @@ providers:
 
 ### Embeddings API
 
+To stop embedding grading when an eval is cancelled, set `supportsEmbeddingCancellation` to `true` and pass the third argument's `abortSignal` to your request. Without this flag, promptfoo calls `callEmbeddingApi` with only the input.
+
 ```javascript title="embeddingProvider.js"
-async callEmbeddingApi(text) {
+supportsEmbeddingCancellation = true;
+
+async callEmbeddingApi(text, _context, { abortSignal } = {}) {
   const response = await fetch('https://api.openai.com/v1/embeddings', {
     method: 'POST',
+    signal: abortSignal,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
