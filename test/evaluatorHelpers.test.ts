@@ -96,7 +96,7 @@ vi.mock('pdf-parse', () => ({
 }));
 
 vi.mock('../src/util/packageVersion', () => ({
-  getPackageVersion: vi.fn().mockReturnValue('2.4.5'),
+  getPackageVersion: vi.fn(),
 }));
 
 vi.mock('../src/esm', () => ({
@@ -145,6 +145,7 @@ describe('evaluatorHelpers', () => {
    */
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getPackageVersion).mockReset().mockReturnValue('2.4.5');
     dynamicModuleMocks.clear();
     mockPathResolve.mockReset();
     mockPathResolve.mockImplementation((...paths: string[]) => actualPathResolve(...paths));
