@@ -615,7 +615,8 @@ async function doEvalWithEnv(
           : 1;
       cache = persisted.cache ?? true;
       maxConcurrency = (persisted.maxConcurrency as number | undefined) ?? DEFAULT_MAX_CONCURRENCY;
-      delay = persisted.delay as number | undefined;
+      // Legacy saved runs omitted zero; resume must not adopt a new ambient delay.
+      delay = (persisted.delay as number | undefined) ?? 0;
     } else {
       // Misc settings with proper CLI vs config priority
       // CLI values explicitly provided by user should override config, but defaults should not
