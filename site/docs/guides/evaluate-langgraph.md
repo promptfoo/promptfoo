@@ -49,7 +49,7 @@ npx promptfoo eval
 
 Before starting, make sure you have:
 
-- Python 3.9-3.12 tested
+- Python 3.10-3.12 tested
 - Node.js `>=22.22.0` (Node.js 24 LTS recommended)
 - OpenAI API access (for GPT-5-mini and other OpenAI models)
 - An OpenAI API key
@@ -114,22 +114,21 @@ Now it's time to set up the key Python packages and the promptfoo CLI.
 In your project folder, run:
 
 ```bash
-pip install langgraph langchain langchain-openai python-dotenv
+python -m pip install 'langgraph>=1.2.11,<2' 'langchain-openai>=1.6.2,<2' 'pydantic>=2.13.5,<3'
 npm install -g promptfoo
 ```
 
 What are these?
 
 - `langgraph`: the framework for building multi-agent workflows.
-- `langchain`: the underlying language model toolkit.
-- `langchain-openai`: OpenAI integration for LangChain (v0.3+ compatible).
-- `python-dotenv`: to securely load API keys.
+- `langchain-openai`: OpenAI integration for LangChain.
+- `pydantic`: the state schema used by the graph.
 - `promptfoo`: CLI for testing + red teaming.
 
 Check everything installed:
 
 ```bash
-python3 -c "import langgraph, langchain, dotenv ; print('✅ Python libs ready')"
+python3 -c "import langgraph, langchain_openai, pydantic ; print('✅ Python libs ready')"
 npx promptfoo --version
 ```
 
