@@ -71,7 +71,7 @@ interface GradingResult {
   pass: boolean;
   score: number;
   reason: string;
-  componentResults?: GradingResult[];
+  componentResults?: GradingResult[] | null;
 }
 ```
 
@@ -79,7 +79,7 @@ If `componentResults` is set, a table of assertion details will be shown in the 
 
 Numeric results and the `score`, `namedScores`, and `namedScoreWeights` values in a `GradingResult` must be finite numbers, including in nested `componentResults`. Returning `NaN` or an infinity fails the assertion. Finite scores outside 0–1 are accepted. An empty `reason` does not turn `pass: false` into a passing result.
 
-`componentResults` must contain a valid grading result at every index; sparse arrays are rejected.
+Optional `namedScores`, `namedScoreWeights`, and `componentResults` fields may be `null` to indicate no values. A `componentResults` array must contain a valid grading result at every index; sparse arrays are rejected.
 
 ## Multiline functions
 
