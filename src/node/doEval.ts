@@ -655,17 +655,6 @@ async function doEvalWithEnv(
         commandLineOptions?.maxConcurrency ??
         evaluateOptions.maxConcurrency);
 
-    if (delay !== undefined && delay > 0) {
-      maxConcurrency = 1;
-      // Also limit Python workers to 1 when delay is set (no point having more workers than concurrency)
-      cliState.maxConcurrency = 1;
-      logger.info(
-        `Running at concurrency=1 because ${delay}ms delay was requested between API calls`,
-      );
-    } else if (explicitMaxConcurrency !== undefined) {
-      cliState.maxConcurrency = explicitMaxConcurrency;
-    }
-
     const hasScenarios = Boolean(testSuite.scenarios?.length);
     const canSynthesizeImplicitDefaultTest = testSuite.scenarios === undefined;
     const explicitTestCountBeforeFiltering = testSuite.tests?.length;
@@ -746,6 +735,21 @@ async function doEvalWithEnv(
         testSuite.providers,
         cmdObj.filterProviders || cmdObj.filterTargets,
       );
+    }
+
+    const effectiveDelay = testSuite.providers.reduce(
+      (max, provider) => Math.max(max, provider.delay ?? delay ?? 0),
+      0,
+    );
+    if (effectiveDelay > 0) {
+      maxConcurrency = 1;
+      // Also limit Python workers to 1 when delay is set (no point having more workers than concurrency)
+      cliState.maxConcurrency = 1;
+      logger.info(
+        `Running at concurrency=1 because ${effectiveDelay}ms delay was requested between API calls`,
+      );
+    } else if (explicitMaxConcurrency !== undefined) {
+      cliState.maxConcurrency = explicitMaxConcurrency;
     }
 
     // Check for missing API keys after provider filtering

@@ -341,6 +341,39 @@ describe('evaluateOptions behavior', () => {
   });
 
   describe('Edge cases and interactions', () => {
+    it.each([
+      { delays: [0, 0], expected: 4 },
+      { delays: [0, undefined], expected: 1 },
+      { delays: [3, 0], expected: 1 },
+    ])('uses effective target delays for concurrency: %j', async ({ delays, expected }) => {
+      const configFile = writeTempConfig(tmpDir, 'effective-target-delay.yaml', {
+        env: { PROMPTFOO_DELAY_MS: '7' },
+        providers: delays.map((delay, index) => ({ id: 'echo', label: `target-${index}`, delay })),
+        prompts: ['hello'],
+        tests: [{ vars: {} }],
+      });
+      const options = await runEvalAndGetOptions({ config: [configFile], maxConcurrency: 4 });
+      expect(options.maxConcurrency).toBe(expected);
+    });
+
+    it('ignores delays on filtered-out targets when choosing concurrency', async () => {
+      const configFile = writeTempConfig(tmpDir, 'filtered-target-delay.yaml', {
+        env: { PROMPTFOO_DELAY_MS: '7' },
+        providers: [
+          { id: 'echo', label: 'selected', delay: 0 },
+          { id: 'echo', label: 'excluded', delay: 9 },
+        ],
+        prompts: ['hello'],
+        tests: [{ vars: {} }],
+      });
+      const options = await runEvalAndGetOptions({
+        config: [configFile],
+        maxConcurrency: 4,
+        filterProviders: 'selected',
+      });
+      expect(options.maxConcurrency).toBe(4);
+    });
+
     it('should handle delay >0 forcing concurrency to 1 even with CLI override', async () => {
       const options = await runEvalAndGetOptions({
         config: [configPath],
