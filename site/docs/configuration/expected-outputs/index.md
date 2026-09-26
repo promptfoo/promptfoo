@@ -517,6 +517,8 @@ These metrics will be shown in the UI:
 
 ![llm eval metrics](/img/docs/named-metrics.png)
 
+Named metric percentages in column headers use each column's own graded assertions, including assertion weights. Results that never reach grading, such as provider errors, do not contribute to the metric total. If an older or imported eval has no recorded metric total, its column header shows the aggregate score without a percentage.
+
 See [named metrics example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-named-metrics).
 
 ## Creating derived metrics
