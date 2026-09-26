@@ -12,6 +12,8 @@ export interface GlobalConfig {
     apiKey?: string;
     authHeaderName?: string;
     currentOrganizationId?: string;
+    // Binds an environment-only selection to its credential and API routing, without saving the key.
+    selectionContext?: string;
     sharing?: boolean;
     currentTeamId?: string;
     teams?: {

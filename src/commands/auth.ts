@@ -215,7 +215,7 @@ export function authCommand(program: Command) {
         } catch (teamError) {
           const organizationLabel = getCloudOrganizationLabel(
             organization,
-            cloudConfig.hasSavedApiKey() ? undefined : organization.id,
+            cloudConfig.getCurrentOrganizationId() ?? organization.id,
           );
           logger.info(dedent`
               ${chalk.green.bold('Currently logged in as:')}

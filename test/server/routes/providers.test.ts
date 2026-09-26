@@ -70,6 +70,8 @@ describe('Providers Routes', () => {
     vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.promptfoo.app');
     vi.mocked(cloudConfig.getAuthHeaders).mockReturnValue(undefined);
     vi.mocked(cloudConfig.getRequestConfig).mockReturnValue({
+      appUrl: 'https://app.example.com',
+      sessionId: 'test-session',
       apiHost: 'https://api.promptfoo.app',
       authHeaderName: 'Authorization',
       headers: undefined,
@@ -488,6 +490,8 @@ describe('Providers Routes', () => {
 
     it('should call the configured on-prem cloud host with a bearer token when cloud is enabled', async () => {
       vi.mocked(cloudConfig.getRequestConfig).mockReturnValueOnce({
+        appUrl: 'https://app.example.com',
+        sessionId: 'test-session',
         apiHost: 'https://onprem.example.com/',
         authHeaderName: 'Authorization',
         headers: { Authorization: 'Bearer test-onprem-key' },
@@ -543,6 +547,8 @@ describe('Providers Routes', () => {
 
     it('should send the cloud credential under a configured custom header name', async () => {
       vi.mocked(cloudConfig.getRequestConfig).mockReturnValueOnce({
+        appUrl: 'https://app.example.com',
+        sessionId: 'test-session',
         apiHost: 'https://onprem.example.com/',
         authHeaderName: 'X-Promptfoo-Api-Key',
         headers: { 'X-Promptfoo-Api-Key': 'Bearer test-onprem-key' },

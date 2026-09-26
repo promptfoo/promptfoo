@@ -45,6 +45,8 @@ describe('cloud utils', () => {
     mockCloudConfig.getAuthHeaders.mockReturnValue({ Authorization: 'Bearer test-api-key' });
     mockCloudConfig.getRequestConfig.mockImplementation(() => ({
       apiHost: mockCloudConfig.getApiHost(),
+      appUrl: 'https://www.promptfoo.app',
+      sessionId: 'test-session',
       headers: mockCloudConfig.getAuthHeaders(),
       authHeaderName: mockCloudConfig.getAuthHeaderName(),
       teamId: mockCloudConfig.getCurrentTeamId(),
@@ -76,6 +78,8 @@ describe('cloud utils', () => {
     it('keeps the request host and credentials from the same saved-session snapshot', async () => {
       mockCloudConfig.getRequestConfig.mockReturnValue({
         apiHost: 'https://first.example.com',
+        appUrl: 'https://www.promptfoo.app',
+        sessionId: 'test-session',
         headers: { 'X-First-Auth': 'Bearer first-key' },
         authHeaderName: 'X-First-Auth',
         teamId: 'first-team',
@@ -1421,7 +1425,10 @@ describe('cloud utils', () => {
         const state = mockTeamState('org-1', { 'org-1': 'active-a' }, new Error('Offline'));
         const config = { metadata: { configId: 'config-1', teamId: 'runtime-b' } };
 
-        await expect(cloudModule.resolveCloudTeam(config)).resolves.toEqual({ id: 'runtime-b' });
+        await expect(cloudModule.resolveCloudTeam(config)).resolves.toEqual({
+          id: 'runtime-b',
+          sessionId: 'test-session',
+        });
 
         expect(mockFetchWithProxy).not.toHaveBeenCalled();
         expect(state.saved).toEqual({ 'org-1': 'active-a' });
@@ -1433,7 +1440,7 @@ describe('cloud utils', () => {
 
         await expect(
           cloudModule.resolveCloudTeam({ metadata: { teamId: 'foreign' } }),
-        ).resolves.toEqual(ownTeam);
+        ).resolves.toEqual({ ...ownTeam, sessionId: 'test-session' });
 
         expect(state.saved).toEqual({ 'org-1': 'own' });
       });
@@ -1448,6 +1455,7 @@ describe('cloud utils', () => {
 
       it('does not resolve teams when Cloud is disabled', async () => {
         mockCloudConfig.isEnabled.mockReturnValue(false);
+        mockCloudConfig.getAuthHeaders.mockReturnValue(undefined);
 
         await expect(cloudModule.resolveCloudTeam()).resolves.toBeUndefined();
 

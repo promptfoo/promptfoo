@@ -78,6 +78,8 @@ describe('auth command', () => {
     vi.mocked(cloudConfig.hasSavedApiKey).mockReturnValue(true);
     vi.mocked(cloudConfig.getRequestConfig).mockImplementation(() => ({
       apiHost: cloudConfig.getApiHost(),
+      appUrl: 'https://www.promptfoo.app',
+      sessionId: 'test-session',
       authHeaderName: cloudConfig.getAuthHeaderName(),
       headers:
         cloudConfig.getAuthHeaders() ??
@@ -1199,7 +1201,8 @@ describe('auth command', () => {
       async (teamExists) => {
         vi.mocked(cloudConfig.hasSavedApiKey).mockReturnValue(false);
         vi.mocked(cloudConfig.getApiKey).mockReturnValue('environment-key');
-        vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue('old-org');
+        // CloudConfig suppresses a selection bound to the previous credential.
+        vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue(undefined);
         vi.mocked(fetchWithProxy).mockResolvedValueOnce(
           Response.json({ user: mockCloudUser, organization: mockOrganization }),
         );
@@ -1223,7 +1226,7 @@ describe('auth command', () => {
         if (teamExists) {
           expect(messages).toContain('Current Team: New team');
         } else {
-          expect(cloudConfig.getCurrentOrganizationId()).toBe('old-org');
+          expect(cloudConfig.getCurrentOrganizationId()).toBeUndefined();
           expect(logger.warn).toHaveBeenCalledWith(
             expect.stringContaining('Team lookup unavailable'),
           );
@@ -1257,6 +1260,8 @@ describe('auth command', () => {
     it('uses one request snapshot for the host and credential', async () => {
       vi.mocked(cloudConfig.getRequestConfig).mockReturnValue({
         apiHost: 'https://snapshot.example.com',
+        appUrl: 'https://www.promptfoo.app',
+        sessionId: 'test-session',
         authHeaderName: 'X-Cloud-Key',
         headers: { 'X-Cloud-Key': 'Bearer snapshot-key' },
         teamId: undefined,

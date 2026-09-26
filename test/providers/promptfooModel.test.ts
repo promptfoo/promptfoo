@@ -13,6 +13,8 @@ describe('PromptfooModelProvider', () => {
     mockFetch = vi.fn();
     vi.stubGlobal('fetch', mockFetch);
     mockCloudConfig = vi.spyOn(cloudConfig, 'getRequestConfig').mockReturnValue({
+      appUrl: 'https://app.example.com',
+      sessionId: 'test-session',
       apiHost: 'https://api.promptfoo.app',
       authHeaderName: 'Authorization',
       headers: { Authorization: 'Bearer test-token' },
@@ -68,6 +70,8 @@ describe('PromptfooModelProvider', () => {
 
   it('keeps the host, custom credential, and task team from one captured session', async () => {
     mockCloudConfig.mockReturnValueOnce({
+      appUrl: 'https://app.example.com',
+      sessionId: 'test-session',
       apiHost: 'https://captured.example.com',
       authHeaderName: 'X-Captured-Auth',
       headers: { 'X-Captured-Auth': 'Bearer captured-token' },
@@ -75,6 +79,8 @@ describe('PromptfooModelProvider', () => {
     });
     // Any later saved-session read returns a different host and credential.
     mockCloudConfig.mockReturnValue({
+      appUrl: 'https://app.example.com',
+      sessionId: 'test-session',
       apiHost: 'https://new.example.com',
       authHeaderName: 'X-New-Auth',
       headers: { 'X-New-Auth': 'Bearer new-token' },
@@ -134,6 +140,8 @@ describe('PromptfooModelProvider', () => {
 
   it('should throw error if no auth token', async () => {
     mockCloudConfig.mockReturnValue({
+      appUrl: 'https://app.example.com',
+      sessionId: 'test-session',
       apiHost: 'https://api.promptfoo.app',
       authHeaderName: 'Authorization',
       headers: undefined,

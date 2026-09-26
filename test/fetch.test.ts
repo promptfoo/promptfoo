@@ -164,6 +164,8 @@ beforeEach(() => {
     const authHeaderName = cloudConfig.getAuthHeaderName();
     const token = cloudConfig.getApiKey();
     return {
+      appUrl: 'https://app.example.com',
+      sessionId: 'test-session',
       apiHost: cloudConfig.getApiHost(),
       authHeaderName,
       headers: token ? { [authHeaderName]: `Bearer ${token}` } : undefined,

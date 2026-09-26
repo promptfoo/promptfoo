@@ -22,6 +22,7 @@ describe('auth command with persisted configuration', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    process.exitCode = undefined;
     configDirectory = mkdtempSync(path.join(tmpdir(), 'promptfoo-auth-persistence-'));
     setConfigDirectoryPath(configDirectory);
     restoreEnv = mockProcessEnv({
@@ -31,6 +32,7 @@ describe('auth command with persisted configuration', () => {
   });
 
   afterEach(() => {
+    process.exitCode = undefined;
     setConfigDirectoryPath(undefined);
     rmSync(configDirectory, { recursive: true, force: true });
     restoreEnv();
@@ -66,6 +68,7 @@ describe('auth command with persisted configuration', () => {
     expect(getUserEmail()).toBeNull();
     expect(readGlobalConfig().cloud).toEqual({
       currentOrganizationId: 'env-org',
+      selectionContext: expect.stringMatching(/^[a-f0-9]{64}$/),
       teams: { 'env-org': { currentTeamId: 'env-team' } },
     });
 
@@ -82,5 +85,44 @@ describe('auth command with persisted configuration', () => {
     } finally {
       restoreWithoutKey();
     }
+  });
+
+  it('keeps an explicitly selected team for a multi-organization environment credential', async () => {
+    vi.mocked(fetchWithProxy).mockImplementation(async (url) =>
+      String(url).endsWith('/users/me')
+        ? Response.json({
+            user: { email: 'user@example.test' },
+            organization: { id: 'org-a', name: 'Organization A' },
+          })
+        : Response.json(
+            ['a', 'b'].map((suffix) => ({
+              id: `team-${suffix}`,
+              organizationId: `org-${suffix}`,
+              name: `Team ${suffix.toUpperCase()}`,
+              slug: `team-${suffix}`,
+              createdAt: '2024-01-01',
+            })),
+          ),
+    );
+    const run = async (...args: string[]) => {
+      const program = new Command();
+      authCommand(program);
+      await program.parseAsync(['node', 'test', 'auth', ...args]);
+    };
+
+    await run('teams', 'set', 'team-b');
+    await run('teams', 'current');
+    await run('whoami');
+
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Current team:'));
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Current Team: Team B'));
+    expect(cloudConfig.getCurrentOrganizationId()).toBe('org-b');
+    expect(cloudConfig.getRequestConfig().teamId).toBe('team-b');
+    expect(readGlobalConfig().cloud?.apiKey).toBeUndefined();
+
+    vi.mocked(fetchWithProxy).mockRejectedValue(new Error('Offline'));
+    await run('whoami');
+    expect(cloudConfig.getCurrentOrganizationId()).toBe('org-b');
+    expect(cloudConfig.getRequestConfig().teamId).toBe('team-b');
   });
 });

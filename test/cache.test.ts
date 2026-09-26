@@ -35,6 +35,8 @@ vi.mock('../src/util/config/manage', () => ({
 vi.mock('../src/globalConfig/cloud', () => ({
   cloudConfig: {
     getRequestConfig: vi.fn(() => ({
+      appUrl: 'https://app.example.com',
+      sessionId: 'test-session',
       apiHost: 'https://api.promptfoo.app',
       authHeaderName: 'Authorization',
       headers: process.env.PROMPTFOO_API_KEY
@@ -356,6 +358,8 @@ describe('fetchWithCache', () => {
       const authHeaderName = cloudConfig.getAuthHeaderName();
       const token = cloudConfig.getApiKey();
       return {
+        appUrl: 'https://app.example.com',
+        sessionId: 'test-session',
         apiHost: cloudConfig.getApiHost(),
         authHeaderName,
         headers: token ? { [authHeaderName]: `Bearer ${token}` } : undefined,
@@ -1187,12 +1191,16 @@ describe('fetchWithCache', () => {
     it('keeps cache identity and dispatched headers on the same session across an async cache lookup', async () => {
       const requestUrl = 'https://api.promptfoo.app/api/v1/task';
       const oldSession = {
+        appUrl: 'https://app.example.com',
+        sessionId: 'test-session',
         apiHost: 'https://api.promptfoo.app',
         authHeaderName: 'X-Old-Account',
         headers: { 'X-Old-Account': 'Bearer old' },
         teamId: 'old-team',
       };
       const newSession = {
+        appUrl: 'https://app.example.com',
+        sessionId: 'test-session',
         apiHost: 'https://api.promptfoo.app',
         authHeaderName: 'X-New-Account',
         headers: { 'X-New-Account': 'Bearer new' },

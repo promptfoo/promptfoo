@@ -49,6 +49,8 @@ describe('monkeyPatchFetch', () => {
       const authHeaderName = cloudConfig.getAuthHeaderName();
       const token = cloudConfig.getApiKey();
       return {
+        appUrl: 'https://app.example.com',
+        sessionId: 'test-session',
         apiHost: cloudConfig.getApiHost(),
         authHeaderName,
         headers: token ? { [authHeaderName]: `Bearer ${token}` } : undefined,
@@ -391,6 +393,8 @@ describe('monkeyPatchFetch', () => {
   it('keeps captured credentials and team through asynchronous compression', async () => {
     mockOriginalFetch.mockResolvedValue(createMockResponse({ ok: true, status: 200 }));
     vi.mocked(cloudConfig.getRequestConfig).mockReturnValue({
+      appUrl: 'https://app.example.com',
+      sessionId: 'test-session',
       apiHost: CLOUD_API_HOST,
       authHeaderName: 'X-Old-Account',
       headers: { 'X-Old-Account': 'Bearer old' },
@@ -402,6 +406,8 @@ describe('monkeyPatchFetch', () => {
       compress: true,
     });
     vi.mocked(cloudConfig.getRequestConfig).mockReturnValue({
+      appUrl: 'https://app.example.com',
+      sessionId: 'test-session',
       apiHost: CLOUD_API_HOST,
       authHeaderName: 'X-New-Account',
       headers: { 'X-New-Account': 'Bearer new' },

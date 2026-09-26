@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cloudConfig } from '../../src/globalConfig/cloud';
+import { CloudConfig, cloudConfig } from '../../src/globalConfig/cloud';
 import { readGlobalConfig, writeGlobalConfig } from '../../src/globalConfig/globalConfig';
 import { resolveCloudTeam, resolveTeamId } from '../../src/util/cloud';
 import { getConfigDirectoryPath, setConfigDirectoryPath } from '../../src/util/config/manage';
@@ -73,20 +73,91 @@ describe('team resolution with persisted preferences and environment credentials
   it('follows A → B → A token rotation and remembers each organization’s selected team', async () => {
     await expect(resolveCloudTeam()).resolves.toMatchObject({ id: 'oldest-a' });
     cloudConfig.setCurrentTeamId('selected-a', 'org-a');
+    const originalContext = readGlobalConfig().cloud?.selectionContext;
 
     vi.stubEnv('PROMPTFOO_API_KEY', 'environment-b');
+    expect(cloudConfig.getCurrentOrganizationId()).toBeUndefined();
+    expect(cloudConfig.getRequestConfig().teamId).toBeUndefined();
     await expect(resolveCloudTeam()).resolves.toMatchObject({ id: 'oldest-b' });
     cloudConfig.setCurrentTeamId('selected-b', 'org-b');
 
     vi.stubEnv('PROMPTFOO_API_KEY', 'environment-a');
     await expect(resolveCloudTeam()).resolves.toMatchObject({ id: 'selected-a' });
-    expect(readGlobalConfig()).toEqual(remembered);
+    expect(readGlobalConfig()).toEqual({
+      ...remembered,
+      cloud: { ...remembered.cloud, selectionContext: originalContext },
+    });
     expect(
       vi.mocked(fetchWithProxy).mock.calls.filter(([url]) => String(url).endsWith('/users/me')),
     ).toHaveLength(3);
     const persisted = fs.readFileSync(path.join(directory, 'promptfoo.yaml'), 'utf8');
     expect(persisted).not.toContain('environment-a');
     expect(persisted).not.toContain('environment-b');
+  });
+
+  it('keeps an explicit organization for an unchanged environment credential across instances', async () => {
+    cloudConfig.setCurrentOrganization('org-b');
+    cloudConfig.setCurrentTeamId('selected-b', 'org-b');
+    vi.mocked(fetchWithProxy).mockResolvedValue(
+      Response.json([team('oldest-a', 'org-a'), team('selected-b', 'org-b')]),
+    );
+
+    await expect(resolveCloudTeam()).resolves.toMatchObject({ id: 'selected-b' });
+    expect(new CloudConfig().getCurrentOrganizationId()).toBe('org-b');
+    expect(new CloudConfig().getRequestConfig().teamId).toBe('selected-b');
+    expect(fetchWithProxy).toHaveBeenCalledExactlyOnceWith(
+      'https://cloud.example.com/api/v1/users/me/teams',
+      expect.anything(),
+    );
+    expect(readGlobalConfig().cloud?.apiKey).toBeUndefined();
+    expect(readGlobalConfig().cloud?.selectionContext).toMatch(/^[a-f0-9]{64}$/);
+    expect(fs.readFileSync(path.join(directory, 'promptfoo.yaml'), 'utf8')).not.toContain(
+      'environment-a',
+    );
+  });
+
+  it.each([
+    ['PROMPTFOO_API_KEY', 'environment-b'],
+    ['PROMPTFOO_API_KEY', ''],
+    ['PROMPTFOO_CLOUD_API_URL', 'https://other.example.com'],
+    ['PROMPTFOO_CLOUD_AUTH_HEADER', 'X-Cloud-Key'],
+  ])('does not reuse the active selection after %s changes', (variable, value) => {
+    cloudConfig.setCurrentOrganization('org-a');
+    cloudConfig.setCurrentTeamId('selected-a', 'org-a');
+    const before = fs.readFileSync(path.join(directory, 'promptfoo.yaml'), 'utf8');
+    const sessionId = cloudConfig.getRequestConfig().sessionId;
+
+    vi.stubEnv(variable, value);
+
+    expect(cloudConfig.getCurrentOrganizationId()).toBeUndefined();
+    expect(cloudConfig.getRequestConfig().teamId).toBeUndefined();
+    expect(cloudConfig.getRequestConfig().sessionId).not.toBe(sessionId);
+    expect(fs.readFileSync(path.join(directory, 'promptfoo.yaml'), 'utf8')).toBe(before);
+    expect(fetchWithProxy).not.toHaveBeenCalled();
+  });
+
+  it('preserves an explicit selection during a team lookup outage', async () => {
+    cloudConfig.setCurrentOrganization('org-b');
+    cloudConfig.setCurrentTeamId('selected-b', 'org-b');
+    const before = fs.readFileSync(path.join(directory, 'promptfoo.yaml'), 'utf8');
+    vi.mocked(fetchWithProxy).mockRejectedValue(new Error('Offline'));
+
+    await expect(resolveCloudTeam()).rejects.toThrow('Offline');
+
+    expect(cloudConfig.getCurrentOrganizationId()).toBe('org-b');
+    expect(cloudConfig.getRequestConfig().teamId).toBe('selected-b');
+    expect(fs.readFileSync(path.join(directory, 'promptfoo.yaml'), 'utf8')).toBe(before);
+  });
+
+  it('rejects a team resolved while the effective credential changes', async () => {
+    cloudConfig.setCurrentOrganization('org-a');
+    cloudConfig.setCurrentTeamId('selected-a', 'org-a');
+    vi.mocked(fetchWithProxy).mockImplementation(async () => {
+      vi.stubEnv('PROMPTFOO_API_KEY', 'environment-b');
+      return Response.json([team('selected-a', 'org-a')]);
+    });
+
+    await expect(resolveCloudTeam()).rejects.toThrow('Cloud login changed while selecting a team');
   });
 
   it('uses the actual token organization’s remembered team with fallback disabled', async () => {
@@ -97,7 +168,11 @@ describe('team resolution with persisted preferences and environment credentials
 
     expect(readGlobalConfig()).toEqual({
       ...remembered,
-      cloud: { ...remembered.cloud, currentOrganizationId: 'org-b' },
+      cloud: {
+        ...remembered.cloud,
+        currentOrganizationId: 'org-b',
+        selectionContext: expect.stringMatching(/^[a-f0-9]{64}$/),
+      },
     });
   });
 

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import logger from '../logger';
+import { sha256 } from '../util/createHash';
 import { readGlobalConfig, updateAccountEmail, updateGlobalConfig } from './globalConfig';
 
 import type { GlobalConfig } from '../configTypes';
@@ -130,6 +131,32 @@ export class CloudConfig {
     return config.authHeaderName || process.env.PROMPTFOO_CLOUD_AUTH_HEADER || 'Authorization';
   }
 
+  private getSessionId(config: CloudConfigState): string {
+    return sha256(
+      JSON.stringify([
+        this.resolveApiHost(config),
+        this.resolveAuthHeaderName(config).toLowerCase(),
+        this.resolveApiKey(config),
+      ]),
+    );
+  }
+
+  private getSelectionContext(config: CloudConfigState): string | undefined {
+    return !config.apiKey && process.env.PROMPTFOO_API_KEY ? this.getSessionId(config) : undefined;
+  }
+
+  private isCurrentSelection(config: CloudConfigState): boolean {
+    return !!config.apiKey || config.selectionContext === this.getSelectionContext(config);
+  }
+
+  private bindSelection(config: CloudConfigState): void {
+    if (!this.isCurrentSelection(config)) {
+      delete config.currentOrganizationId;
+      delete config.currentTeamId;
+    }
+    config.selectionContext = this.getSelectionContext(config);
+  }
+
   isEnabled(): boolean {
     return !!this.resolveApiKey();
   }
@@ -183,6 +210,8 @@ export class CloudConfig {
   /** Resolve one request's host, credentials, and active team from the same saved session. */
   getRequestConfig(): {
     apiHost: string;
+    appUrl: string;
+    sessionId: string;
     authHeaderName: string;
     headers: Record<string, string> | undefined;
     teamId: string | undefined;
@@ -192,11 +221,15 @@ export class CloudConfig {
     const authHeaderName = this.resolveAuthHeaderName(config);
     return {
       apiHost: this.resolveApiHost(config),
+      appUrl: config.appUrl || 'https://www.promptfoo.app',
+      sessionId: this.getSessionId(config),
       authHeaderName,
       headers: token ? { [authHeaderName]: `Bearer ${token}` } : undefined,
-      teamId: config.currentOrganizationId
-        ? config.teams?.[config.currentOrganizationId]?.currentTeamId
-        : config.currentTeamId,
+      teamId: this.isCurrentSelection(config)
+        ? config.currentOrganizationId
+          ? config.teams?.[config.currentOrganizationId]?.currentTeamId
+          : config.currentTeamId
+        : undefined,
     };
   }
 
@@ -258,6 +291,7 @@ export class CloudConfig {
       }
       cloud.sharing = !isPublicCloud || hasActiveLicense === true || isGrandfathered;
       cloud.currentOrganizationId = organizationId;
+      delete cloud.selectionContext;
       delete cloud.currentTeamId;
       if (session.teamId) {
         (cloud.teams ??= {})[organizationId] = { currentTeamId: session.teamId };
@@ -303,24 +337,30 @@ export class CloudConfig {
   }
 
   getCurrentOrganizationId(): string | undefined {
-    return this.config.currentOrganizationId;
+    const config = this.config;
+    return this.isCurrentSelection(config) ? config.currentOrganizationId : undefined;
   }
 
   setCurrentOrganization(organizationId: string): void {
     this.update((config) => {
+      this.bindSelection(config);
       config.currentOrganizationId = organizationId;
     });
   }
 
   getCurrentTeamId(organizationId?: string): string | undefined {
+    const config = this.config;
     if (organizationId) {
-      return this.config.teams?.[organizationId]?.currentTeamId;
+      // Keep per-organization preferences so a rotated credential can restore its
+      // organization's team after the server identifies that organization.
+      return config.teams?.[organizationId]?.currentTeamId;
     }
-    return this.config.currentTeamId;
+    return this.isCurrentSelection(config) ? config.currentTeamId : undefined;
   }
 
   setCurrentTeamId(teamId: string, organizationId?: string): void {
     this.update((config) => {
+      this.bindSelection(config);
       if (organizationId) {
         (config.teams ??= {})[organizationId] = { currentTeamId: teamId };
       } else {

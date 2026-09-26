@@ -142,16 +142,21 @@ describe('global configuration persistence', () => {
     second.saveValidatedApiToken(session);
     expect(request).toEqual({
       apiHost: 'https://old.example.com',
+      appUrl: 'https://old-app.example.com',
       authHeaderName: 'Authorization',
       headers: { Authorization: 'Bearer old-token' },
       teamId: 'old-team',
+      sessionId: expect.any(String),
     });
     expect(first.getRequestConfig()).toEqual({
       apiHost: CLOUD_API_HOST,
+      appUrl: 'https://www.promptfoo.app',
       authHeaderName: 'X-Cloud-Key',
       headers: { 'X-Cloud-Key': 'Bearer new-token' },
       teamId: 'new-team',
+      sessionId: expect.any(String),
     });
+    expect(first.getRequestConfig().sessionId).not.toBe(request.sessionId);
   });
 
   it('uses a legacy team only when no organization is selected', () => {

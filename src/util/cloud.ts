@@ -21,22 +21,27 @@ export interface ResolvedCloudTeam {
   id: string;
   name?: string;
   organizationId?: string;
+  sessionId?: string;
 }
 
 /** Resolve an operation's destination without replacing an explicit Cloud-config team. */
 export async function resolveCloudTeam(
   config?: Partial<UnifiedConfig>,
 ): Promise<ResolvedCloudTeam | undefined> {
-  if (!cloudConfig.isEnabled()) {
+  const request = cloudConfig.getRequestConfig();
+  if (!request.headers) {
     return undefined;
   }
   const assignedTeamId = config?.metadata?.configId ? config.metadata.teamId : undefined;
-  if (typeof assignedTeamId === 'string' && assignedTeamId) {
-    // The server authorizes this destination. A display lookup must not change it or
-    // make a server-issued config depend on an additional teams request.
-    return { id: assignedTeamId };
+  // The server authorizes an assigned destination; a display lookup must not change it.
+  const team =
+    typeof assignedTeamId === 'string' && assignedTeamId
+      ? { id: assignedTeamId }
+      : await resolveTeamId();
+  if (cloudConfig.getRequestConfig().sessionId !== request.sessionId) {
+    throw new Error('Cloud login changed while selecting a team. Retry the operation.');
   }
-  return resolveTeamId();
+  return { ...team, sessionId: request.sessionId };
 }
 
 /**
@@ -550,8 +555,8 @@ export async function resolveTeamFromIdentifier(
 }
 
 /**
- * Resolves a team within the saved login's selected organization or the environment
- * credential's organization, preferring that organization's stored team.
+ * Resolves a team within the selected organization, preferring its stored team.
+ * A new environment credential discovers its organization before reusing a preference.
  * @param teamIdentifier - Optional explicit team identifier to use
  * @param fallbackToDefault - Whether to fall back to server default team
  * @returns Promise resolving to an object with team id and name
@@ -569,10 +574,8 @@ export async function resolveTeamId(
 
   // 2. Use stored current team preference (scoped to current organization)
   const configuredOrganizationId = cloudConfig.getCurrentOrganizationId();
-  // Environment credentials can rotate independently of the saved organization.
-  const hasSavedApiKey = cloudConfig.hasSavedApiKey();
   let currentOrganizationId = configuredOrganizationId;
-  if (!hasSavedApiKey || !currentOrganizationId) {
+  if (!currentOrganizationId) {
     const response = await makeRequest('/users/me', 'GET');
     const organizationId = response.ok ? (await response.json())?.organization?.id : undefined;
     if (typeof organizationId !== 'string' || !organizationId) {
@@ -583,7 +586,7 @@ export async function resolveTeamId(
     currentOrganizationId = organizationId;
   }
   // Saved legacy logins still use their unscoped preference until it is migrated.
-  const preferenceOrganizationId = hasSavedApiKey
+  const preferenceOrganizationId = cloudConfig.hasSavedApiKey()
     ? configuredOrganizationId
     : currentOrganizationId;
   const currentTeamId = cloudConfig.getCurrentTeamId(preferenceOrganizationId);

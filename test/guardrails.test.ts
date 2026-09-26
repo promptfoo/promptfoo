@@ -38,6 +38,8 @@ describe('guardrails', () => {
     vi.resetAllMocks();
     vi.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse);
     vi.mocked(cloudConfig.getRequestConfig).mockReturnValue({
+      appUrl: 'https://app.example.com',
+      sessionId: 'test-session',
       apiHost: 'https://api.promptfoo.app',
       authHeaderName: 'Authorization',
       headers: undefined,
@@ -376,6 +378,8 @@ describe('guardrails', () => {
 
     beforeEach(() => {
       vi.mocked(cloudConfig.getRequestConfig).mockReturnValue({
+        appUrl: 'https://app.example.com',
+        sessionId: 'test-session',
         apiHost: ONPREM_HOST,
         authHeaderName: 'Authorization',
         headers: { Authorization: `Bearer ${ONPREM_KEY}` },
@@ -430,6 +434,8 @@ describe('guardrails', () => {
 
     it('strips a trailing slash on the configured host (no //v1)', async () => {
       vi.mocked(cloudConfig.getRequestConfig).mockReturnValue({
+        appUrl: 'https://app.example.com',
+        sessionId: 'test-session',
         apiHost: 'https://onprem.example.com/',
         authHeaderName: 'Authorization',
         headers: { Authorization: `Bearer ${ONPREM_KEY}` },
@@ -444,6 +450,8 @@ describe('guardrails', () => {
 
     it('falls back to the public share host (no auth) when cloud is not enabled', async () => {
       vi.mocked(cloudConfig.getRequestConfig).mockReturnValue({
+        appUrl: 'https://app.example.com',
+        sessionId: 'test-session',
         apiHost: ONPREM_HOST,
         authHeaderName: 'Authorization',
         headers: undefined,
@@ -460,6 +468,8 @@ describe('guardrails', () => {
 
     it('sends the credential under a custom auth header name, without a duplicate Authorization header', async () => {
       vi.mocked(cloudConfig.getRequestConfig).mockReturnValueOnce({
+        appUrl: 'https://app.example.com',
+        sessionId: 'test-session',
         apiHost: 'https://captured.example.com',
         authHeaderName: 'X-Custom-Header',
         headers: { 'X-Custom-Header': `Bearer ${ONPREM_KEY}` },

@@ -75,6 +75,8 @@ vi.mock('../../src/redteam/util', async () => ({
 }));
 
 const cloudRequestConfig = {
+  appUrl: 'https://app.example.com',
+  sessionId: 'test-session',
   apiHost: 'https://cloud.example',
   authHeaderName: 'Authorization',
   headers: { Authorization: 'Bearer test-key' },

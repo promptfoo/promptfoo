@@ -56,6 +56,8 @@ vi.mock('../../src/evaluator', () => ({
 vi.mock('../../src/globalConfig/cloud', () => ({
   cloudConfig: {
     getRequestConfig: vi.fn(() => ({
+      appUrl: 'https://app.example.com',
+      sessionId: 'test-session',
       apiHost: 'https://api.example.com',
       authHeaderName: 'Authorization',
       headers: { Authorization: 'Bearer test-api-key' },
@@ -112,6 +114,8 @@ beforeEach(() => {
   vi.mocked(cloudConfig.getRequestConfig)
     .mockReset()
     .mockReturnValue({
+      appUrl: 'https://app.example.com',
+      sessionId: 'test-session',
       apiHost: 'https://api.example.com',
       authHeaderName: 'Authorization',
       headers: { Authorization: 'Bearer test-api-key' },
@@ -177,6 +181,8 @@ describe('testProviderConnectivity', () => {
 
   it('uses one captured Cloud host and credential for remote analysis', async () => {
     vi.mocked(cloudConfig.getRequestConfig).mockReturnValueOnce({
+      appUrl: 'https://app.example.com',
+      sessionId: 'test-session',
       apiHost: 'https://captured.example.com',
       authHeaderName: 'X-Captured-Auth',
       headers: { 'X-Captured-Auth': 'Bearer captured-token' },
