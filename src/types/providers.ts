@@ -122,6 +122,12 @@ export interface CallApiOptionsParams {
 
 export interface ApiProvider extends MinimalApiProvider {
   callApi: CallApiFunction;
+  /**
+   * Indicates that this provider owns its retry budget. The scheduler still
+   * observes rate-limit responses and adapts concurrency, but must not retry
+   * the complete provider call again.
+   */
+  managesRetries?: boolean;
   callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
   callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
   config?: any;

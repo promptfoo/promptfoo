@@ -265,6 +265,7 @@ describe('RateLimitRegistry', () => {
           isRateLimited: undefined,
           getRetryAfter: undefined,
           maxRetriesOverride: undefined,
+          returnRateLimitedResultWhenExhausted: false,
         },
       );
       expect(result).toBe('state-result');
@@ -290,7 +291,25 @@ describe('RateLimitRegistry', () => {
         isRateLimited,
         getRetryAfter,
         maxRetriesOverride: undefined,
+        returnRateLimitedResultWhenExhausted: false,
       });
+    });
+
+    it('disables outer retries for providers that own their retry budget', async () => {
+      mockState.executeWithRetry.mockResolvedValue('result');
+      const registry = new RateLimitRegistry({ maxConcurrency: 10 });
+      const provider = { ...mockProvider, managesRetries: true } as ApiProvider;
+
+      await registry.execute(provider, vi.fn());
+
+      expect(mockState.executeWithRetry).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.any(Function),
+        expect.objectContaining({
+          maxRetriesOverride: 0,
+          returnRateLimitedResultWhenExhausted: true,
+        }),
+      );
     });
 
     it.each([
