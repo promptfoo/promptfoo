@@ -10,6 +10,12 @@ It demonstrates:
 - workflow agents via `SequentialAgent`
 - trajectory assertions over real ADK tool calls
 
+## Prerequisites
+
+- Python 3.10+
+- Node.js >=22.22.0
+- A Google API key for the default Gemini model
+
 ## Quick Start
 
 ```bash
@@ -18,7 +24,7 @@ cd integration-google-adk
 
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 
 export GOOGLE_API_KEY=your_google_api_key_here
 npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
@@ -26,11 +32,18 @@ npx promptfoo@latest eval -c promptfooconfig.workflow.yaml --no-cache
 npx promptfoo@latest view
 ```
 
-The default model is `gemini-2.5-flash`. To use another ADK-supported model, set `ADK_MODEL` before running the eval. Provider-style model strings such as `openai/gpt-5.4-mini` require the optional ADK extensions:
+The default model is `gemini-2.5-flash`. This example uses ADK 2.9.2 or newer
+within the 2.x release series, with Google GenAI and the three OpenTelemetry
+packages imported directly by the provider. ADK 2 keeps optional integrations
+out of its default installation.
+
+To use ADK's optional OpenAI adapter, install the OpenAI SDK and set an unprefixed
+model ID:
 
 ```bash
-pip install 'google-adk[extensions]>=1.32.0,<2'
-export ADK_MODEL=openai/gpt-5.4-mini
+python -m pip install 'openai>=2.20,<3'
+export OPENAI_API_KEY=your_openai_api_key_here
+export ADK_MODEL=gpt-5.4-mini
 ```
 
 If Promptfoo is launched outside the activated virtual environment, point the Python provider at it explicitly:
@@ -73,7 +86,7 @@ The eval asserts that:
 
 ## How Tracing Works
 
-ADK 1.x already emits OpenTelemetry spans for the important framework steps:
+ADK 2.x emits OpenTelemetry spans for the important framework steps:
 
 - `invocation`
 - `invoke_agent <name>`
