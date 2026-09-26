@@ -1414,7 +1414,7 @@ Ignored per-request settings:
 
 Configure those on the Foundry agent definition itself instead of on the eval request.
 
-Other `retryOptions` fields are unsupported. Promptfoo uses the SDK retry policy with cancellable waits: connection errors, timeouts, HTTP 408/409/429/5xx, and explicit `x-should-retry` hints. Hard-quota failures are never retried, including when a retry hint is present. Server delay hints use `retry-after-ms` or standard integer-seconds/HTTP-date `Retry-After`; otherwise retries use exponential backoff with jitter. The SDK's internal retries are disabled so cancellation can release all retry timers.
+Other `retryOptions` fields are unsupported. Promptfoo uses the SDK retry policy with cancellable waits: connection errors, timeouts, HTTP 408/409/429/5xx, and explicit `x-should-retry` hints. Hard-quota failures are never retried, including when a retry hint is present. Server delay hints use `retry-after-ms` or standard integer-seconds/HTTP-date `Retry-After`; hints up to 60 seconds are honored, and larger hints return the original error immediately without retrying. For these 429 responses, `metadata.rateLimitRetryable: false` prevents scheduler retries and queued-call delays while retaining the original `metadata.http`. Without a valid hint, retries use exponential backoff with jitter. The SDK's internal retries are disabled so cancellation can release all retry timers.
 
 ### Response continuity and accounting
 
@@ -1545,7 +1545,7 @@ tests:
 The Azure Foundry Agent provider includes comprehensive error handling:
 
 - **Content Filter Detection**: Automatically detects and reports content filtering events with guardrails metadata
-- **Rate Limit Handling**: Per-window 429s (`rate_limit_exceeded`) are retried with `Retry-After`-based backoff plus randomized jitter. The error message is `Rate limit exceeded: HTTP 429 Too Many Requests (code: rate_limit_exceeded) [retry after Xs]`.
+- **Rate Limit Handling**: Per-window 429s (`rate_limit_exceeded`) honor `Retry-After` hints up to 60 seconds; larger hints return the original error without provider or scheduler retries. The error message is `Rate limit exceeded: HTTP 429 Too Many Requests (code: rate_limit_exceeded) [retry after Xs]`.
 - **Hard-Quota Fail-Fast**: Billing and contract-level codes (`insufficient_quota`, `billing_hard_limit_reached`, `billing_not_active`, `access_terminated`, `quota_exceeded`) skip retries entirely — retrying these only amplifies load against an exhausted account. The error message is `Quota exceeded: HTTP 429 Too Many Requests (code: insufficient_quota). Retries will not help — check your billing or daily quota.` If the server also sets a small `Retry-After` (≤ 1h), the error is treated as a recoverable rate limit instead, since billing servers do not hint at recovery time.
 - **Service Error Detection**: Detects transient service errors (500, 502, 503, 504)
 - **Timeout Management**: Configurable polling timeout via `maxPollTimeMs`
