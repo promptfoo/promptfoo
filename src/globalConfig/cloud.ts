@@ -1,5 +1,8 @@
+import { z } from 'zod';
 import logger from '../logger';
-import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
+import { readGlobalConfig, updateAccountEmail, updateGlobalConfig } from './globalConfig';
+
+import type { GlobalConfig } from '../configTypes';
 
 export const CLOUD_API_HOST = 'https://api.promptfoo.app';
 
@@ -35,65 +38,32 @@ function warnOnceAboutLegacyApiHost(): void {
   );
 }
 
-interface CloudUser {
-  id: string;
-  name: string;
-  email: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
+const CloudTokenValidationSchema = z.object({
+  user: z
+    .object({
+      id: z.string().min(1),
+      name: z.string(),
+      email: z.email(),
+      createdAt: z.union([z.string(), z.date()]).nullish(),
+    })
+    .passthrough(),
+  organization: z.object({ id: z.string().min(1), name: z.string() }).passthrough(),
+  app: z.object({ url: z.url() }),
+  hasActiveLicense: z.boolean().optional().catch(undefined),
+});
 
-interface CloudOrganization {
-  id: string;
-  name: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
+type CloudTokenValidation = z.infer<typeof CloudTokenValidationSchema>;
+type CloudConfigState = NonNullable<GlobalConfig['cloud']>;
 
-interface CloudTeam {
-  id: string;
-  name: string;
-  slug: string;
-  organizationId: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface CloudApp {
-  url: string;
-}
-
-interface CloudTokenValidation {
-  user: CloudUser;
-  organization: CloudOrganization;
-  app: CloudApp;
-  hasActiveLicense?: boolean;
-}
-
-interface CloudConfigState {
-  appUrl: string;
-  apiHost?: string;
-  apiKey?: string;
-  authHeaderName?: string;
-  sharing?: boolean;
-  currentOrganizationId?: string;
-  currentTeamId?: string;
-  teams?: {
-    [organizationId: string]: {
-      currentTeamId?: string;
-      cache?: Array<{
-        id: string;
-        name: string;
-        slug: string;
-        lastFetched: string;
-      }>;
-    };
-  };
+function parseTokenValidation(response: unknown): CloudTokenValidation {
+  const result = CloudTokenValidationSchema.safeParse(response);
+  if (!result.success) {
+    throw new Error('Invalid Cloud login response');
+  }
+  return result.data;
 }
 
 export class CloudConfig {
-  private configState: CloudConfigState | null = null;
-
   constructor(initializeImmediately: boolean = true) {
     if (initializeImmediately) {
       void this.config;
@@ -101,34 +71,19 @@ export class CloudConfig {
   }
 
   private get config(): CloudConfigState {
-    this.configState ??= this.readConfig();
-    return this.configState;
+    return readGlobalConfig()?.cloud || {};
   }
 
-  private set config(config: CloudConfigState) {
-    this.configState = config;
-  }
-
-  private readConfig(): CloudConfigState {
-    const savedConfig = readGlobalConfig()?.cloud || {};
-    return {
-      appUrl: savedConfig.appUrl || 'https://www.promptfoo.app',
-      apiHost: savedConfig.apiHost,
-      apiKey: savedConfig.apiKey,
-      authHeaderName: savedConfig.authHeaderName,
-      sharing: savedConfig.sharing,
-      currentOrganizationId: savedConfig.currentOrganizationId,
-      currentTeamId: savedConfig.currentTeamId,
-      teams: savedConfig.teams,
-    };
+  private update(update: (config: CloudConfigState) => void): void {
+    updateGlobalConfig((config) => update((config.cloud ??= {})));
   }
 
   /**
    * Returns the API key from config file or PROMPTFOO_API_KEY environment variable.
    * Config file takes precedence over environment variable.
    */
-  private resolveApiKey(): string | undefined {
-    return this.config.apiKey || process.env.PROMPTFOO_API_KEY;
+  private resolveApiKey(config = this.config): string | undefined {
+    return config.apiKey || process.env.PROMPTFOO_API_KEY;
   }
 
   /**
@@ -140,22 +95,22 @@ export class CloudConfig {
    * `${getApiHost()}/api/v1/...`) never produce a double slash. On-prem hosts
    * entered via `promptfoo auth login --host https://host/` commonly include one.
    */
-  private resolveApiHost(): string {
+  private resolveApiHost(config = this.config): string {
     // The generic API_HOST env var is intentionally NOT consulted: the cloud
     // origin decides where monkeyPatchFetch sends the saved bearer token, and
     // env files routinely define API_HOST for the app under test. Self-hosted
-    // deployments must use `promptfoo auth login --api-host <url>` or
+    // deployments must use `promptfoo auth login --host <url>` or
     // PROMPTFOO_CLOUD_API_URL. process.env is read directly (not
     // getEnvString) so an eval config's `env` block can never influence it.
-    const host = this.config.apiHost || process.env.PROMPTFOO_CLOUD_API_URL || CLOUD_API_HOST;
+    const host = config.apiHost || process.env.PROMPTFOO_CLOUD_API_URL || CLOUD_API_HOST;
     // monkeyPatchFetch resolves the host on every request, including evals that
     // never touch Cloud, so only warn when a Cloud credential is actually in
     // play — that's the only case where the legacy variable ever had an effect.
     if (
-      !this.config.apiHost &&
+      !config.apiHost &&
       !process.env.PROMPTFOO_CLOUD_API_URL &&
       process.env.API_HOST &&
-      this.resolveApiKey()
+      (config.apiKey || process.env.PROMPTFOO_API_KEY)
     ) {
       warnOnceAboutLegacyApiHost();
     }
@@ -171,8 +126,8 @@ export class CloudConfig {
    * PROMPTFOO_CLOUD_API_URL: an eval config's `env` block must never be able to
    * influence Cloud auth routing.
    */
-  private resolveAuthHeaderName(): string {
-    return this.config.authHeaderName || process.env.PROMPTFOO_CLOUD_AUTH_HEADER || 'Authorization';
+  private resolveAuthHeaderName(config = this.config): string {
+    return config.authHeaderName || process.env.PROMPTFOO_CLOUD_AUTH_HEADER || 'Authorization';
   }
 
   isEnabled(): boolean {
@@ -182,13 +137,15 @@ export class CloudConfig {
   setApiHost(apiHost: string): void {
     // Persist without a trailing slash so the stored host stays clean regardless of
     // caller (defense in depth alongside the strip in resolveApiHost()).
-    this.config.apiHost = apiHost.replace(/\/+$/, '');
-    this.saveConfig();
+    this.update((config) => {
+      config.apiHost = apiHost.replace(/\/+$/, '');
+    });
   }
 
   setApiKey(apiKey: string): void {
-    this.config.apiKey = apiKey;
-    this.saveConfig();
+    this.update((config) => {
+      config.apiKey = apiKey;
+    });
   }
 
   getApiKey(): string | undefined {
@@ -200,8 +157,9 @@ export class CloudConfig {
   }
 
   setAuthHeaderName(authHeaderName: string): void {
-    this.config.authHeaderName = authHeaderName;
-    this.saveConfig();
+    this.update((config) => {
+      config.authHeaderName = authHeaderName;
+    });
   }
 
   getAuthHeaderName(): string {
@@ -215,20 +173,37 @@ export class CloudConfig {
    * header with a `Bearer undefined` value.
    */
   getAuthHeaders(): Record<string, string> | undefined {
-    const token = this.getApiKey();
-    if (!token) {
-      return undefined;
-    }
-    return { [this.getAuthHeaderName()]: `Bearer ${token}` };
+    return this.getRequestConfig().headers;
+  }
+
+  /** Resolve one request's host, credentials, and active team from the same saved session. */
+  getRequestConfig(): {
+    apiHost: string;
+    authHeaderName: string;
+    headers: Record<string, string> | undefined;
+    teamId: string | undefined;
+  } {
+    const config = this.config;
+    const token = this.resolveApiKey(config);
+    const authHeaderName = this.resolveAuthHeaderName(config);
+    return {
+      apiHost: this.resolveApiHost(config),
+      authHeaderName,
+      headers: token ? { [authHeaderName]: `Bearer ${token}` } : undefined,
+      teamId: config.currentOrganizationId
+        ? config.teams?.[config.currentOrganizationId]?.currentTeamId
+        : config.currentTeamId,
+    };
   }
 
   setAppUrl(appUrl: string): void {
-    this.config.appUrl = appUrl;
-    this.saveConfig();
+    this.update((config) => {
+      config.appUrl = appUrl;
+    });
   }
 
   getAppUrl(): string {
-    return this.config.appUrl;
+    return this.config.appUrl || 'https://www.promptfoo.app';
   }
 
   getSharing(): boolean | undefined {
@@ -237,55 +212,56 @@ export class CloudConfig {
 
   /**
    * Sets the sharing preference. Note: this value is only updated at authentication time
-   * (via `validateAndSetApiToken`) and may become stale if the user's license status
+   * (via `saveValidatedApiToken`) and may become stale if the user's license status
    * changes between re-authentications.
    */
   setSharing(sharing: boolean): void {
-    this.config.sharing = sharing;
-    this.saveConfig();
+    this.update((config) => {
+      config.sharing = sharing;
+    });
   }
 
   delete(): void {
-    writeGlobalConfigPartial({ cloud: {} });
-    this.reload();
+    updateGlobalConfig((config) => {
+      delete config.cloud;
+      updateAccountEmail(config);
+    });
   }
 
-  private saveConfig(): void {
-    writeGlobalConfigPartial({ cloud: this.config });
-    this.reload();
-  }
-
-  private reload(): void {
-    this.config = this.readConfig();
-  }
-
+  /** Commit a validated login only after organization/team selection has completed. */
   saveValidatedApiToken(
-    token: string,
-    apiHost: string,
-    user: CloudUser,
-    app: CloudApp,
-    hasActiveLicense?: boolean,
-    authHeaderName?: string,
+    session: CloudTokenValidation & {
+      token: string;
+      apiHost: string;
+      authHeaderName?: string;
+      organizationId?: string;
+      // Undefined preserves a remembered preference after discovery fails; null clears it.
+      teamId?: string | null;
+    },
   ): void {
-    this.setApiKey(token);
-    this.setApiHost(apiHost);
-    this.setAppUrl(app.url);
-    if (authHeaderName) {
-      this.setAuthHeaderName(authHeaderName);
-    }
-    // On-prem installations are always enterprise deployments. Applying the
-    // public-cloud hasActiveLicense gate to on-prem hosts incorrectly disables
-    // auto-sharing to the on-prem Report Server when the server omits the field
-    // or returns false because it has no licence-check logic. The validated app
-    // URL keeps hosted Cloud behind an API proxy on the public-cloud license gate.
-    const isPublicCloud = isPromptfooCloudHost(apiHost) || isPromptfooCloudHost(app.url);
-    if (!isPublicCloud) {
-      this.setSharing(true);
-    } else if (typeof hasActiveLicense === 'boolean') {
-      const createdAt = user?.createdAt ? new Date(user.createdAt) : null;
-      const isGrandfathered = createdAt != null && createdAt < SHARING_CUTOFF_DATE;
-      this.setSharing(hasActiveLicense || isGrandfathered);
-    }
+    const { user, organization, app, hasActiveLicense } = parseTokenValidation(session);
+    const organizationId = session.organizationId ?? organization.id;
+    const isPublicCloud = isPromptfooCloudHost(session.apiHost) || isPromptfooCloudHost(app.url);
+    const isGrandfathered =
+      user.createdAt != null && new Date(user.createdAt) < SHARING_CUTOFF_DATE;
+    updateGlobalConfig((config) => {
+      const cloud = (config.cloud ??= {});
+      cloud.apiKey = session.token;
+      cloud.apiHost = session.apiHost.replace(/\/+$/, '');
+      cloud.appUrl = app.url;
+      if (session.authHeaderName) {
+        cloud.authHeaderName = session.authHeaderName;
+      }
+      cloud.sharing = !isPublicCloud || hasActiveLicense === true || isGrandfathered;
+      cloud.currentOrganizationId = organizationId;
+      delete cloud.currentTeamId;
+      if (session.teamId) {
+        (cloud.teams ??= {})[organizationId] = { currentTeamId: session.teamId };
+      } else if (session.teamId === null && cloud.teams) {
+        delete cloud.teams[organizationId];
+      }
+      updateAccountEmail(config, user.email);
+    });
   }
 
   async validateApiToken(
@@ -310,14 +286,7 @@ export class CloudConfig {
         throw new Error('Failed to validate API token: ' + response.statusText);
       }
 
-      const { user, organization, app, hasActiveLicense } = await response.json();
-
-      return {
-        user,
-        organization,
-        app,
-        ...(typeof hasActiveLicense === 'boolean' ? { hasActiveLicense } : {}),
-      };
+      return parseTokenValidation(await response.json());
     } catch (err) {
       const error = err as Error & { cause?: string };
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -329,33 +298,14 @@ export class CloudConfig {
     }
   }
 
-  async validateAndSetApiToken(
-    token: string,
-    apiHost: string,
-  ): Promise<CloudTokenValidation & { hasActiveLicense: boolean }> {
-    const authHeaderName = this.getAuthHeaderName();
-    const { user, organization, app, hasActiveLicense } = await this.validateApiToken(
-      token,
-      apiHost,
-      authHeaderName,
-    );
-    this.saveValidatedApiToken(token, apiHost, user, app, hasActiveLicense, authHeaderName);
-
-    return {
-      user,
-      organization,
-      app,
-      hasActiveLicense: typeof hasActiveLicense === 'boolean' ? hasActiveLicense : false,
-    };
-  }
-
   getCurrentOrganizationId(): string | undefined {
     return this.config.currentOrganizationId;
   }
 
   setCurrentOrganization(organizationId: string): void {
-    this.config.currentOrganizationId = organizationId;
-    this.saveConfig();
+    this.update((config) => {
+      config.currentOrganizationId = organizationId;
+    });
   }
 
   getCurrentTeamId(organizationId?: string): string | undefined {
@@ -366,57 +316,25 @@ export class CloudConfig {
   }
 
   setCurrentTeamId(teamId: string, organizationId?: string): void {
-    if (organizationId) {
-      if (!this.config.teams) {
-        this.config.teams = {};
+    this.update((config) => {
+      if (organizationId) {
+        (config.teams ??= {})[organizationId] = { currentTeamId: teamId };
+      } else {
+        config.currentTeamId = teamId;
       }
-      if (!this.config.teams[organizationId]) {
-        this.config.teams[organizationId] = {};
-      }
-      this.config.teams[organizationId].currentTeamId = teamId;
-    } else {
-      this.config.currentTeamId = teamId;
-    }
-    this.saveConfig();
+    });
   }
 
   clearCurrentTeamId(organizationId?: string): void {
-    if (organizationId) {
-      if (this.config.teams?.[organizationId]) {
-        delete this.config.teams[organizationId].currentTeamId;
+    this.update((config) => {
+      if (organizationId) {
+        if (config.teams) {
+          delete config.teams[organizationId];
+        }
+      } else {
+        delete config.currentTeamId;
       }
-    } else {
-      delete this.config.currentTeamId;
-    }
-    this.saveConfig();
-  }
-
-  cacheTeams(teams: CloudTeam[], organizationId?: string): void {
-    if (organizationId) {
-      if (!this.config.teams) {
-        this.config.teams = {};
-      }
-      if (!this.config.teams[organizationId]) {
-        this.config.teams[organizationId] = {};
-      }
-
-      this.config.teams[organizationId].cache = teams.map((t) => ({
-        id: t.id,
-        name: t.name,
-        slug: t.slug,
-        lastFetched: new Date().toISOString(),
-      }));
-    }
-    this.saveConfig();
-  }
-
-  getCachedTeams(
-    organizationId?: string,
-  ): Array<{ id: string; name: string; slug: string }> | undefined {
-    if (organizationId) {
-      return this.config.teams?.[organizationId]?.cache;
-    }
-    return undefined;
+    });
   }
 }
 

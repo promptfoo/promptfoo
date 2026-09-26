@@ -2,18 +2,18 @@ import search from '@inquirer/search';
 import chalk from 'chalk';
 import dedent from 'dedent';
 import { isNonInteractive } from '../envars';
-import { getUserEmail, setUserEmail } from '../globalConfig/accounts';
+import { getUserEmail } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import {
   canCreateTargets,
-  findTeam,
   getCloudOrganizationLabel,
   getOldestTeam,
   getUserTeams,
   resolveTeamFromIdentifier,
   resolveTeamId,
 } from '../util/cloud';
+import { loginWithApiKey } from '../util/cloudLogin';
 import { fetchWithProxy } from '../util/fetch/index';
 import { sanitizeUrlForLogging } from '../util/sanitizer';
 import { BrowserBehavior, openAuthBrowser } from '../util/server';
@@ -29,183 +29,62 @@ type LoginCommandOptions = {
 
 type UserTeam = Awaited<ReturnType<typeof getUserTeams>>[number];
 
-function getOrganizationTeams(
-  teams: UserTeam[],
-  requestedOrganizationId: string | undefined,
-  fallbackOrganizationId: string,
-): { organizationId: string; teams: UserTeam[] } {
-  const organizationId = requestedOrganizationId || fallbackOrganizationId;
-  const organizationTeams = teams.filter((team) => team.organizationId === organizationId);
-  if (organizationTeams.length === 0 && organizationId !== fallbackOrganizationId) {
-    const organizationIds = [
-      ...new Set([fallbackOrganizationId, ...teams.map((team) => team.organizationId)]),
-    ].join(', ');
-    throw new Error(
-      `Organization '${organizationId}' not found in your accessible teams. Available organizations: ${organizationIds}`,
+async function selectLoginTeam(teams: UserTeam[]): Promise<UserTeam> {
+  if (isNonInteractive()) {
+    const selectedTeam = getOldestTeam(teams);
+    logger.warn(
+      chalk.yellow(`\n⚠️  You have access to ${teams.length} teams. Using '${selectedTeam.name}'.`),
     );
-  }
-  return { organizationId, teams: organizationTeams };
-}
-
-function resolveTeamFromOrganizationTeams(
-  teams: UserTeam[],
-  teamIdentifier: string,
-  organizationId: string,
-): UserTeam {
-  const selectedTeam = findTeam(teams, teamIdentifier);
-  if (selectedTeam) {
+    logger.info(chalk.dim(`   Use 'promptfoo auth teams set <team>' to change teams.`));
     return selectedTeam;
   }
 
-  const availableTeams = teams.map((team) => team.name).join(', ');
-  throw new Error(
-    `Team '${teamIdentifier}' not found in organization '${organizationId}'. Available teams: ${availableTeams}`,
-  );
-}
-
-async function setupTeamContext(
-  cmdObj: LoginCommandOptions,
-  organizationId: string,
-  teams?: UserTeam[],
-): Promise<void> {
+  logger.info('');
   try {
-    let organizationTeams = teams;
-
-    if (!organizationTeams) {
-      const allTeams = await getUserTeams();
-      organizationTeams = allTeams.filter((team) => team.organizationId === organizationId);
-      if (organizationTeams.length === 0 && allTeams.length > 0) {
-        logger.warn(
-          `No accessible teams in organization '${organizationId}'. Log in with an API key for the organization you want to use: 'promptfoo auth login --api-key <apiKey>'.`,
-        );
-      }
-    }
-
-    cloudConfig.cacheTeams(organizationTeams, organizationId);
-
-    const savedTeamId = cloudConfig.getCurrentTeamId(organizationId);
-    const savedTeam = organizationTeams.find((team) => team.id === savedTeamId);
-    let selectedTeam;
-    let teamLabelSuffix = '';
-
-    if (cmdObj.team) {
-      selectedTeam = resolveTeamFromOrganizationTeams(
-        organizationTeams,
-        cmdObj.team,
-        organizationId,
-      );
-    } else if (savedTeam) {
-      // Each organization remembers its team selection across logins.
-      selectedTeam = savedTeam;
-    } else if (savedTeamId && organizationTeams.length > 0) {
-      selectedTeam = getOldestTeam(organizationTeams);
-    } else if (organizationTeams.length === 1) {
-      selectedTeam = organizationTeams[0];
-    } else if (organizationTeams.length > 1) {
-      if (isNonInteractive()) {
-        selectedTeam = getOldestTeam(organizationTeams);
-        logger.warn(
-          chalk.yellow(
-            `\n⚠️  You have access to ${organizationTeams.length} teams. Using '${selectedTeam.name}'.`,
-          ),
-        );
-        logger.info(chalk.dim(`   Use 'promptfoo auth teams set <team>' to change teams.`));
-      } else {
-        logger.info('');
-        try {
-          const answer = await search({
-            message: 'Select a team to use:',
-            source: async (input) => {
-              const searchTerm = input?.trim().toLowerCase();
-              const matchingTeams = searchTerm
-                ? organizationTeams.filter(
-                    (team) =>
-                      team.name.toLowerCase().includes(searchTerm) ||
-                      team.slug.toLowerCase().includes(searchTerm),
-                  )
-                : organizationTeams;
-
-              return matchingTeams.map((team) => ({
-                name: team.name,
-                value: team.id,
-                description: team.slug,
-              }));
-            },
-          });
-          selectedTeam = organizationTeams.find((team) => team.id === answer);
-        } catch {
-          selectedTeam = getOldestTeam(organizationTeams);
-          teamLabelSuffix = ` ${chalk.dim('(default)')}`;
-        }
-      }
-    }
-
-    if (selectedTeam) {
-      cloudConfig.setCurrentTeamId(selectedTeam.id, organizationId);
-      logger.info(`Team: ${chalk.cyan(selectedTeam.name)}${teamLabelSuffix}`);
-    }
-  } catch (teamError) {
-    if (cmdObj.org || cmdObj.team) {
-      throw teamError;
-    }
-    logger.warn(
-      `Could not set up team context: ${teamError instanceof Error ? teamError.message : String(teamError)}`,
-    );
+    const answer = await search({
+      message: 'Select a team to use:',
+      source: async (input) => {
+        const searchTerm = input?.trim().toLowerCase();
+        const matchingTeams = searchTerm
+          ? teams.filter(
+              (team) =>
+                team.name.toLowerCase().includes(searchTerm) ||
+                team.slug.toLowerCase().includes(searchTerm),
+            )
+          : teams;
+        return matchingTeams.map((team) => ({
+          name: team.name,
+          value: team.id,
+          description: team.slug,
+        }));
+      },
+    });
+    return teams.find((team) => team.id === answer) ?? getOldestTeam(teams);
+  } catch {
+    return getOldestTeam(teams);
   }
 }
 
-async function loginWithApiKey(cmdObj: LoginCommandOptions, apiHost: string): Promise<void> {
-  const authHeaderName = cmdObj.authHeaderName || cloudConfig.getAuthHeaderName();
-  const { user, organization, app, hasActiveLicense } = await cloudConfig.validateApiToken(
-    cmdObj.apiKey!,
-    apiHost,
-    authHeaderName,
-  );
-
+async function loginFromCommand(cmdObj: LoginCommandOptions, apiHost?: string): Promise<void> {
   const existingEmail = getUserEmail();
-  let organizationId = organization.id;
-  let organizationTeams: UserTeam[] | undefined;
-
-  if (cmdObj.org || cmdObj.team) {
-    const allTeams = await getUserTeams(apiHost, cmdObj.apiKey!, authHeaderName);
-    const resolvedOrganizationTeams = getOrganizationTeams(allTeams, cmdObj.org, organization.id);
-    organizationId = resolvedOrganizationTeams.organizationId;
-    organizationTeams = resolvedOrganizationTeams.teams;
-
-    if (cmdObj.team && !cmdObj.org) {
-      // Prefer the key's organization when several organizations share a team name or slug.
-      const selectedTeam = findTeam(allTeams, cmdObj.team, organizationId);
-      if (!selectedTeam) {
-        const availableTeams = allTeams.map((team) => team.name).join(', ');
-        throw new Error(`Team '${cmdObj.team}' not found. Available teams: ${availableTeams}`);
-      }
-      organizationId = selectedTeam.organizationId;
-      organizationTeams = allTeams.filter((team) => team.organizationId === organizationId);
-    }
-
-    if (cmdObj.team) {
-      resolveTeamFromOrganizationTeams(organizationTeams, cmdObj.team, organizationId);
-    }
-  }
-
-  cloudConfig.saveValidatedApiToken(
+  const { user, organization, organizationId, team } = await loginWithApiKey(
     cmdObj.apiKey!,
     apiHost,
-    user,
-    app,
-    hasActiveLicense,
-    authHeaderName,
+    {
+      authHeaderName: cmdObj.authHeaderName,
+      organizationId: cmdObj.org,
+      teamIdentifier: cmdObj.team,
+      selectTeam: selectLoginTeam,
+    },
   );
   if (existingEmail && existingEmail !== user.email) {
     logger.info(
       chalk.yellow(`Updating local email configuration from ${existingEmail} to ${user.email}`),
     );
   }
-  setUserEmail(user.email);
-  cloudConfig.setCurrentOrganization(organizationId);
-
-  await setupTeamContext(cmdObj, organizationId, organizationTeams);
-
+  if (team) {
+    logger.info(`Team: ${chalk.cyan(team.name)}`);
+  }
   logger.info(chalk.green.bold('Successfully logged in'));
   logger.info(`User: ${chalk.cyan(user.email)}`);
   logger.info(
@@ -221,7 +100,7 @@ async function loginWithBrowser(cmdObj: LoginCommandOptions): Promise<void> {
 
   if (isNonInteractive()) {
     logger.error(
-      'Authentication required. Please set PROMPTFOO_API_KEY environment variable or run `promptfoo auth login` in an interactive environment.',
+      'No API key supplied. Run `promptfoo auth login --api-key <apiKey>` to save a login. For environment-only authentication, set PROMPTFOO_API_KEY and run the desired command directly.',
     );
     logger.info(`Manual login URL: ${chalk.green(authUrl.toString())}`);
     logger.info(`After login, get your API token at: ${chalk.green(welcomeUrl.toString())}`);
@@ -230,6 +109,10 @@ async function loginWithBrowser(cmdObj: LoginCommandOptions): Promise<void> {
   }
 
   await openAuthBrowser(authUrl.toString(), welcomeUrl.toString(), BrowserBehavior.ASK);
+  const hostOption = cmdObj.host ? ' --host <your-api-host>' : '';
+  logger.info(
+    `To finish CLI login, copy your API key and run: promptfoo auth login --api-key <apiKey>${hostOption}`,
+  );
 }
 
 export function authCommand(program: Command) {
@@ -237,7 +120,7 @@ export function authCommand(program: Command) {
 
   authCommand
     .command('login')
-    .description('Login')
+    .description('Save an API key login, or open the browser to obtain a key')
     .option('-o, --org <orgId>', 'Organization ID to use with --api-key.')
     .option(
       '-h, --host <host>',
@@ -250,13 +133,9 @@ export function authCommand(program: Command) {
       'Cloud auth header (overrides the saved setting and PROMPTFOO_CLOUD_AUTH_HEADER; otherwise defaults to Authorization).',
     )
     .action(async (cmdObj: LoginCommandOptions) => {
-      // Strip a trailing slash from the --host flag so the login-time validate /
-      // team-fetch requests don't hit `//api/v1/...` (which some on-prem ingresses 404).
-      const apiHost = (cmdObj.host || cloudConfig.getApiHost())?.replace(/\/+$/, '');
-
       try {
         if (cmdObj.apiKey) {
-          await loginWithApiKey(cmdObj, apiHost);
+          await loginFromCommand(cmdObj, cmdObj.host);
           return;
         }
 
@@ -274,19 +153,25 @@ export function authCommand(program: Command) {
     .command('logout')
     .description('Logout')
     .action(async () => {
-      const email = getUserEmail();
-      const apiKey = cloudConfig.getApiKey();
-
-      if (!email && !apiKey) {
-        logger.info(chalk.yellow("You're already logged out - no active session to terminate"));
-        return;
+      try {
+        const email = getUserEmail();
+        const apiKey = cloudConfig.getApiKey();
+        if (!email && !apiKey) {
+          logger.info(chalk.yellow("You're already logged out - no active session to terminate"));
+          return;
+        }
+        await cloudConfig.delete();
+        if (cloudConfig.isEnabled()) {
+          logger.warn(
+            'Saved credentials cleared. PROMPTFOO_API_KEY still provides authentication; unset it to log out completely.',
+          );
+        } else {
+          logger.info(chalk.green('Successfully logged out'));
+        }
+      } catch (error) {
+        logger.error('Logout failed; saved credentials could not be cleared.', { error });
+        process.exitCode = 1;
       }
-
-      await cloudConfig.delete();
-      // Always unset email on logout
-      setUserEmail('');
-      logger.info(chalk.green('Successfully logged out'));
-      return;
     });
 
   authCommand
@@ -294,21 +179,19 @@ export function authCommand(program: Command) {
     .description('Show current user information')
     .action(async () => {
       try {
-        const email = getUserEmail();
-        const apiKey = cloudConfig.getApiKey();
-
-        const apiHost = cloudConfig.getApiHost();
+        const { apiHost, authHeaderName, headers } = cloudConfig.getRequestConfig();
         logger.info(dedent`
             API URL: ${chalk.cyan(sanitizeUrlForLogging(apiHost))}
-            Auth header: ${chalk.cyan(cloudConfig.getAuthHeaderName())}`);
+            Auth header: ${chalk.cyan(authHeaderName)}`);
 
-        if (!email || !apiKey) {
+        if (!headers) {
           logger.info(`Not logged in. Run ${chalk.bold('promptfoo auth login')} to login.`);
           return;
         }
 
         const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
-          headers: { ...(cloudConfig.getAuthHeaders() ?? {}) },
+          headers,
+          skipCloudAuthInjection: true,
         });
 
         if (!response.ok) {
@@ -399,7 +282,9 @@ export function authCommand(program: Command) {
           const isCurrent = team.id === currentTeamId;
           const marker = isCurrent ? chalk.green('●') : ' ';
           const nameColor = isCurrent ? chalk.green.bold : chalk.white;
-          logger.info(`${marker} ${nameColor(team.name)} ${chalk.dim(`(${team.slug})`)}`);
+          logger.info(
+            `${marker} ${nameColor(team.name)} ${chalk.dim(`(${team.slug})`)}  ID: ${team.id}  Organization: ${team.organizationId}`,
+          );
         });
 
         if (currentTeamId) {

@@ -12,7 +12,8 @@ import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { UserSchemas } from '../../types/api/user';
-import { replyValidationError } from '../utils/errors';
+import { loginWithApiKey } from '../../util/cloudLogin';
+import { replyValidationError, sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 export const userRouter = Router();
@@ -121,27 +122,19 @@ userRouter.post('/login', async (req: Request, res: Response): Promise<void> => 
 
   const { apiKey, apiHost } = bodyResult.data;
   try {
-    const host = apiHost || cloudConfig.getApiHost();
+    const { user, organization, app } = await loginWithApiKey(apiKey, apiHost);
 
-    // Use the same validation logic as CLI
-    const { user, organization, app } = await cloudConfig.validateAndSetApiToken(apiKey, host);
-
-    // Sync email to local config (same as CLI)
-    const existingEmail = getUserEmail();
-    if (existingEmail && existingEmail !== user.email) {
-      logger.info(`Updating local email configuration from ${existingEmail} to ${user.email}`);
+    // Analytics failures must not turn a successfully saved login into an API failure.
+    try {
+      await telemetry.record('webui_api', {
+        event: 'api_key_login',
+        email: user.email,
+        selfHosted: getEnvBool('PROMPTFOO_SELF_HOSTED'),
+      });
+      await telemetry.saveConsent(user.email, { source: 'web_login' });
+    } catch (error) {
+      logger.warn('Could not record login telemetry', { error });
     }
-    setUserEmail(user.email);
-
-    // Record telemetry and consent
-    await telemetry.record('webui_api', {
-      event: 'api_key_login',
-      email: user.email,
-      selfHosted: getEnvBool('PROMPTFOO_SELF_HOSTED'),
-    });
-    await telemetry.saveConsent(user.email, {
-      source: 'web_login',
-    });
 
     res.json(
       UserSchemas.Login.Response.parse({
@@ -161,34 +154,29 @@ userRouter.post('/login', async (req: Request, res: Response): Promise<void> => 
       }),
     );
   } catch (error) {
-    logger.error(
-      `Error during API key login: ${error instanceof Error ? error.message : 'Unknown error'}`,
-    );
-    // Don't expose internal error details to client
-    res.status(401).json({ error: 'Invalid API key or authentication failed' });
+    sendError(res, 401, 'Invalid API key or authentication failed', error);
   }
 });
 
 // Logout endpoint - clears local authentication data
 userRouter.post('/logout', async (_req: Request, res: Response): Promise<void> => {
   try {
-    // Clear stored email and cloud config (same as CLI logout)
-    setUserEmail('');
-    cloudConfig.delete();
+    // Clear stored identity and credentials together (same as CLI logout).
+    await cloudConfig.delete();
 
-    logger.info('User logged out successfully');
+    const message = cloudConfig.isEnabled()
+      ? 'Saved credentials cleared. PROMPTFOO_API_KEY still provides authentication; unset it to log out completely.'
+      : 'Logged out successfully';
+    logger.info(message);
 
     res.json(
       UserSchemas.Logout.Response.parse({
         success: true,
-        message: 'Logged out successfully',
+        message,
       }),
     );
   } catch (error) {
-    logger.error(
-      `Error during logout: ${error instanceof Error ? error.message : 'Unknown error'}`,
-    );
-    res.status(500).json({ error: 'Logout failed' });
+    sendError(res, 500, 'Logout failed', error);
   }
 });
 

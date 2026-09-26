@@ -15,9 +15,12 @@ import {
 } from '../types/email';
 import { fetchWithTimeout } from '../util/fetch/index';
 import { cloudConfig } from './cloud';
-import { readGlobalConfig, writeGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
-
-import type { GlobalConfig } from '../configTypes';
+import {
+  readGlobalConfig,
+  updateAccountEmail,
+  updateGlobalConfig,
+  writeGlobalConfig,
+} from './globalConfig';
 
 const CI_PLACEHOLDER_EMAIL = 'ci-placeholder@promptfoo.dev';
 
@@ -78,19 +81,11 @@ export function getUserEmail(): string | null {
 }
 
 export function setUserEmail(email: string) {
-  const globalConfig = readGlobalConfig();
-  const account = globalConfig?.account ?? {};
-  account.email = email;
-  const config: Partial<GlobalConfig> = { account };
-  writeGlobalConfigPartial(config);
+  updateGlobalConfig((config) => updateAccountEmail(config, email));
 }
 
 export function clearUserEmail() {
-  const globalConfig = readGlobalConfig();
-  const account = globalConfig?.account ?? {};
-  delete account.email;
-  const config: Partial<GlobalConfig> = { account };
-  writeGlobalConfigPartial(config);
+  updateGlobalConfig((config) => updateAccountEmail(config));
 }
 
 export function getUserEmailNeedsValidation(): boolean {
@@ -99,11 +94,9 @@ export function getUserEmailNeedsValidation(): boolean {
 }
 
 export function setUserEmailNeedsValidation(needsValidation: boolean) {
-  const globalConfig = readGlobalConfig();
-  const account = globalConfig?.account ?? {};
-  account.emailNeedsValidation = needsValidation;
-  const config: Partial<GlobalConfig> = { account };
-  writeGlobalConfigPartial(config);
+  updateGlobalConfig((config) => {
+    (config.account ??= {}).emailNeedsValidation = needsValidation;
+  });
 }
 
 export function getUserEmailValidated(): boolean {
@@ -112,11 +105,9 @@ export function getUserEmailValidated(): boolean {
 }
 
 export function setUserEmailValidated(validated: boolean) {
-  const globalConfig = readGlobalConfig();
-  const account = globalConfig?.account ?? {};
-  account.emailValidated = validated;
-  const config: Partial<GlobalConfig> = { account };
-  writeGlobalConfigPartial(config);
+  updateGlobalConfig((config) => {
+    (config.account ??= {}).emailValidated = validated;
+  });
 }
 
 export function getAuthor(override?: string | null): string | null {
@@ -300,8 +291,6 @@ export async function promptForEmailUnverified(): Promise<{ emailNeedsValidation
       throw err;
     }
     setUserEmail(email);
-    setUserEmailNeedsValidation(true);
-    setUserEmailValidated(false);
     emailNeedsValidation = true;
     await telemetry.record('feature_used', {
       feature: 'userCompletedPromptForEmailUnverified',
