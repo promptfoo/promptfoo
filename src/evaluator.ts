@@ -38,6 +38,7 @@ import {
 } from './scheduler';
 import {
   getProviderCallExecutionContext,
+  getProviderDelay,
   withProviderCallExecutionContext,
   withProviderCallTracingContext,
 } from './scheduler/providerCallExecutionContext';
@@ -881,7 +882,6 @@ function tryParseJson(value: string): unknown {
 
 async function callProviderForRunEval({
   abortSignal,
-  delay,
   evalId,
   filters,
   promptForRender,
@@ -897,7 +897,6 @@ async function callProviderForRunEval({
 }: Pick<
   RunEvalOptions,
   | 'abortSignal'
-  | 'delay'
   | 'evalId'
   | 'nunjucksFilters'
   | 'provider'
@@ -929,7 +928,6 @@ async function callProviderForRunEval({
     } else {
       response = await callActiveProvider({
         abortSignal,
-        delay,
         evalId,
         filters,
         onProviderInvoked: () => {
@@ -1042,7 +1040,6 @@ async function collectExternalTraceAfterProviderCall({
 
 async function callActiveProvider({
   abortSignal,
-  delay,
   evalId,
   filters,
   onProviderInvoked,
@@ -1058,14 +1055,7 @@ async function callActiveProvider({
   vars,
 }: Pick<
   RunEvalOptions,
-  | 'abortSignal'
-  | 'delay'
-  | 'evalId'
-  | 'provider'
-  | 'rateLimitRegistry'
-  | 'repeatIndex'
-  | 'test'
-  | 'testSuite'
+  'abortSignal' | 'evalId' | 'provider' | 'rateLimitRegistry' | 'repeatIndex' | 'test' | 'testSuite'
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
   onProviderInvoked: () => void;
@@ -1099,7 +1089,7 @@ async function callActiveProvider({
     withProviderCallExecutionContext(
       {
         ...getProviderCallExecutionContext(),
-        providerDelay: { provider: originalProvider, delay },
+        providerDelay: { provider: originalProvider, delay: getProviderDelay(provider) },
       },
       () => {
         onProviderInvoked();
@@ -1639,9 +1629,13 @@ function runEvalInternal(options: RunEvalOptions): Promise<EvaluateResult[]> {
   );
 }
 
-function resolveInvocationDelay(provider: ApiProvider, delay?: number): number {
-  const effectiveDelay = provider.delay ?? delay ?? getEnvInt('PROMPTFOO_DELAY_MS', 0);
-  invariant(typeof effectiveDelay === 'number', `Invalid delay for ${provider.label}`);
+// Preserve omission so a nested provider can still use its own configured delay.
+function resolveInvocationDelay(provider: ApiProvider, delay?: number): number | undefined {
+  const effectiveDelay = provider.delay ?? delay ?? getEnvInt('PROMPTFOO_DELAY_MS');
+  invariant(
+    effectiveDelay === undefined || typeof effectiveDelay === 'number',
+    `Invalid delay for ${provider.label}`,
+  );
   return effectiveDelay;
 }
 
@@ -1666,7 +1660,7 @@ async function runEvalInContext({
   providerCallQueue,
   rateLimitRegistry,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
-  const effectiveDelay = delay;
+  const effectiveDelay = delay ?? 0;
   const state = createRunEvalState({ provider, prompt, promptIndex, test });
   attachConversationVar({
     conversations,
@@ -1723,7 +1717,6 @@ async function runEvalInContext({
         async () => {
           const providerCall = await callProviderForRunEval({
             abortSignal,
-            delay: effectiveDelay,
             evalId,
             filters,
             promptForRender: {
@@ -2891,7 +2884,7 @@ function createRunEvalOption({
   vars: Vars | undefined;
 }): RunEvalOptions {
   return {
-    delay: options.delay ?? getEnvInt('PROMPTFOO_DELAY_MS', 0),
+    delay: options.delay,
     provider,
     prompt: {
       ...prompt,

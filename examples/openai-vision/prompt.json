@@ -3,14 +3,12 @@
     "role": "user",
     "content": [
       {
-        "type": "text",
+        "type": "input_text",
         "text": "{{question}}"
       },
       {
-        "type": "image_url",
-        "image_url": {
-          "url": "{{url}}"
-        }
+        "type": "input_image",
+        "image_url": "{{url}}"
       }
     ]
   }

@@ -5,7 +5,7 @@ prompts:
 
 providers:
   # GPT-6 models with structured output
-  - id: openai:responses:gpt-6-sol
+  - id: openai:gpt-6-sol
     label: gpt-6-sol-json-schema
     config:
       reasoning:
@@ -34,7 +34,7 @@ providers:
           required: ['event_name', 'date', 'location', 'participants']
           additionalProperties: false
 
-  - id: openai:responses:gpt-6-luna
+  - id: openai:gpt-6-luna
     label: gpt-6-luna-json-schema
     config:
       reasoning:
@@ -64,7 +64,7 @@ providers:
           additionalProperties: false
       store: true
 
-  - id: openai:responses:gpt-6-astra
+  - id: openai:gpt-6-astra
     label: gpt-6-astra-json-schema
     config:
       reasoning:

@@ -5,7 +5,10 @@ You can run this example with:
 ```bash
 npx promptfoo@latest init --example openai-codex-sdk/skill-comparison
 cd openai-codex-sdk/skill-comparison
+npm install @openai/codex-sdk@^0.156.1
 ```
+
+Requires Node.js >=22.22.0 and either `OPENAI_API_KEY`/`CODEX_API_KEY` or a [Codex login](../README.md#setup).
 
 ## Overview
 
@@ -13,13 +16,13 @@ This example compares two versions of the same Codex skill against identical rev
 
 - `fixtures/v1` contains a narrower `review-standards` skill that only calls out weak password hashing.
 - `fixtures/v2` contains a stronger version that also checks timing-safe secret comparison.
-- Both providers share an `output_schema` (declared once via a YAML anchor) so each response is guaranteed to match the review JSON shape.
+- Both providers use the same `output_schema`, declared once with a YAML anchor.
 - The eval verifies `skill-used`, scores issue recall and precision, and uses `max-score` to select the best output for each test case.
 
 Run it from this directory with:
 
 ```bash
-promptfoo eval --no-cache
+npx promptfoo@latest eval --no-cache
 ```
 
 If you run it from another directory, set these environment variables first:

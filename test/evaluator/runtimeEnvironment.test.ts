@@ -13,6 +13,7 @@ import { ProviderGroupedCallQueue } from '../../src/scheduler/providerCallQueue'
 import { isRateLimitWrapped } from '../../src/scheduler/providerWrapper';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { sleep } from '../../src/util/time';
+import { mockProcessEnv } from '../util/utils';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
@@ -177,6 +178,32 @@ describeEvaluator('evaluation environment defaults', () => {
     expect(getProviderDelay(target)).toBeUndefined();
   });
 
+  it.each([1, 2])(
+    'preserves a grader fallback when target pacing is unspecified (concurrency=%s)',
+    async (maxConcurrency) => {
+      const restore = mockProcessEnv({ PROMPTFOO_DELAY_MS: undefined });
+      const target = createProvider();
+      const observed: Array<number | undefined> = [];
+      const grader: ApiProvider = {
+        id: () => 'offline-configured-grader',
+        delay: 50,
+        callApi: async (_prompt, context) => {
+          observed.push(getProviderDelay(context?.originalProvider) ?? grader.delay);
+          return { output: '{"pass":true,"score":1,"reason":"fixture"}' };
+        },
+      };
+      const suite = createSuite(target);
+      suite.tests = [{ assert: [{ type: 'llm-rubric', value: 'fixture', provider: grader }] }];
+      try {
+        await evaluate(suite, new Eval({}), { maxConcurrency });
+        expect(observed).toEqual([50]);
+        expect(target.delay).toBeUndefined();
+      } finally {
+        restore();
+      }
+    },
+  );
+
   it.each([
     { maxConcurrency: 2, delay: undefined, expected: 7 },
     { maxConcurrency: 2, delay: 0, expected: 0 },
@@ -280,10 +307,14 @@ describeEvaluator('evaluation environment defaults', () => {
     'preserves timeout override %s against an environment default',
     async (timeoutMs) => {
       vi.useFakeTimers();
+      let release!: () => void;
+      const responseReady = new Promise<void>((resolve) => {
+        release = resolve;
+      });
       const provider: ApiProvider = {
         id: () => 'offline-delayed',
         callApi: async () => {
-          await new Promise((resolve) => setTimeout(resolve, 10));
+          await responseReady;
           return { output: 'ok' };
         },
       };
@@ -294,6 +325,8 @@ describeEvaluator('evaluation environment defaults', () => {
         { timeoutMs },
       );
       await vi.advanceTimersByTimeAsync(20);
+      release();
+      await vi.advanceTimersByTimeAsync(0);
       await evaluation;
 
       const [result] = await record.getResults();
