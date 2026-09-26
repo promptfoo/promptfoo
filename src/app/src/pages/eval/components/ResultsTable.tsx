@@ -50,7 +50,6 @@ import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useFilterMode } from './FilterModeProvider';
 import { ProviderDisplay } from './ProviderDisplay';
-import { findProviderConfig, type ProviderDef } from './providerConfig';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
 import VariableMarkdownCell from './VariableMarkdownCell';
@@ -63,6 +62,7 @@ import type {
   VisibilityState,
 } from '@tanstack/table-core';
 
+import type { ProviderDef } from './providerConfig';
 import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
 
@@ -1066,32 +1066,6 @@ async function saveManualRating({
   }
 }
 
-function isSavedReportProvider(provider: unknown): boolean {
-  if (provider === null || typeof provider !== 'object' || !('id' in provider)) {
-    return false;
-  }
-  const { id } = provider;
-  const config = 'config' in provider ? provider.config : undefined;
-  return (
-    typeof id === 'string' &&
-    (id === 'openai:codex-security' || id.startsWith('openai:codex-security:')) &&
-    config !== null &&
-    typeof config === 'object' &&
-    'report_file' in config &&
-    typeof config.report_file === 'string' &&
-    config.report_file.trim().length > 0
-  );
-}
-
-function hasReportProviderOverride(test: unknown): boolean {
-  return (
-    test !== null &&
-    typeof test === 'object' &&
-    'provider' in test &&
-    isSavedReportProvider(test.provider)
-  );
-}
-
 function renderPromptMetricDetails({
   metrics,
   filteredMetrics,
@@ -1161,7 +1135,6 @@ function PromptColumnHeader({
   failureFilter,
   getMetrics,
   showStats,
-  hasReportImports,
   isRedteam,
   numAsserts,
   numGoodAsserts,
@@ -1181,7 +1154,6 @@ function PromptColumnHeader({
   failureFilter: { [key: string]: boolean };
   getMetrics: ReturnType<typeof useMetricsGetter>;
   showStats: boolean;
-  hasReportImports: boolean;
   isRedteam: boolean;
   numAsserts: number[];
   numGoodAsserts: number[];
@@ -1267,7 +1239,7 @@ function PromptColumnHeader({
         idx,
         isRedteam,
         showStats,
-        hasReportImports,
+        hasReportImports: prompt.hasSavedReportImports === true,
         numAsserts,
         numGoodAsserts,
         testCounts,
@@ -1715,36 +1687,6 @@ function ResultsTable({
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
-
-  const columnsWithReportImports = React.useMemo(() => {
-    const hasReportOverride =
-      hasReportProviderOverride(config?.defaultTest) ||
-      (Array.isArray(config?.tests) && config.tests.some(hasReportProviderOverride)) ||
-      config?.scenarios?.some(
-        (scenario) =>
-          typeof scenario === 'object' &&
-          [scenario.config, scenario.tests].some(
-            (tests) => Array.isArray(tests) && tests.some(hasReportProviderOverride),
-          ),
-      );
-
-    return head.prompts.map((prompt) => {
-      // Imports can share a column with live provider overrides. Keep actual aggregate
-      // usage, but hide timing that includes file reads. Never classify from one page.
-      if (hasReportOverride) {
-        return true;
-      }
-
-      // Require a unique identity match; positions and duplicate provider IDs cannot
-      // establish report provenance.
-      const providers = Array.isArray(config?.providers) ? config.providers : [];
-      const matches = providers
-        .map((provider) => findProviderConfig(formatProviderString(prompt), [provider]).config)
-        .filter((provider) => provider !== undefined);
-      const provider = matches?.length === 1 ? matches[0] : undefined;
-      return isSavedReportProvider(provider);
-    });
-  }, [head.prompts, config?.providers, config?.defaultTest, config?.tests, config?.scenarios]);
 
   const isRedteam = React.useMemo(() => {
     return config?.redteam !== undefined;
@@ -2235,7 +2177,6 @@ function ResultsTable({
                 failureFilter={failureFilter}
                 getMetrics={getMetrics}
                 showStats={showStats}
-                hasReportImports={columnsWithReportImports[idx] === true}
                 isRedteam={isRedteam}
                 numAsserts={numAsserts}
                 numGoodAsserts={numGoodAsserts}
@@ -2314,7 +2255,6 @@ function ResultsTable({
     onFailureFilterToggle,
     debouncedSearchText,
     showStats,
-    columnsWithReportImports,
     filters.appliedCount,
     passRates,
     passingTestCounts,

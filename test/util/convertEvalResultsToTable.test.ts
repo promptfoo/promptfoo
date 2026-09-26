@@ -1,10 +1,69 @@
 import { describe, expect, it, vi } from 'vitest';
 import { convertResultsToTable } from '../../src/util/convertEvalResultsToTable';
-import { createCompletedPrompt } from '../factories/eval';
+import {
+  createCompletedPrompt,
+  createEvaluateResult,
+  createEvaluateSummaryV2,
+} from '../factories/eval';
 
 import type { EvaluateTable, ResultsFile } from '../../src/types/index';
 
 describe('convertResultsToTable', () => {
+  it('derives import columns from all recorded normalized results without mutating the prompt headers', () => {
+    const prompts = [
+      createCompletedPrompt('Review', { provider: 'same-label', hasSavedReportImports: true }),
+      createCompletedPrompt('Review', { provider: 'same-label' }),
+    ];
+    const resultsFile: ResultsFile = {
+      version: 4,
+      createdAt: '2026-01-01T00:00:00Z',
+      config: {},
+      author: null,
+      prompts,
+      results: createEvaluateSummaryV2({
+        results: [
+          createEvaluateResult({ testIdx: 0, promptIdx: 0 }),
+          createEvaluateResult({ testIdx: 0, promptIdx: 1 }),
+          createEvaluateResult({
+            testIdx: 1,
+            promptIdx: 1,
+            metadata: { codexSecurity: { version: 1, source: { kind: 'saved-report' } } },
+          }),
+        ],
+      }),
+    };
+
+    const table = convertResultsToTable(resultsFile);
+
+    expect(table.head.prompts.map((prompt) => prompt.hasSavedReportImports)).toEqual([
+      undefined,
+      true,
+    ]);
+    expect(prompts.map((prompt) => prompt.hasSavedReportImports)).toEqual([true, undefined]);
+    expect(table.body).toHaveLength(2);
+  });
+
+  it.each([
+    undefined,
+    { codexSecurity: null },
+    { codexSecurity: { version: '1', source: { kind: 'saved-report' } } },
+    { codexSecurity: { version: 2, source: { kind: 'saved-report' } } },
+    { codexSecurity: { version: 1, source: { kind: 'sdk' } } },
+  ])(
+    'clears stale import markers when recorded provenance is absent or invalid: %j',
+    (metadata) => {
+      const table = convertResultsToTable({
+        version: 4,
+        createdAt: '2026-01-01T00:00:00Z',
+        config: {},
+        author: null,
+        prompts: [createCompletedPrompt('Review', { hasSavedReportImports: true })],
+        results: createEvaluateSummaryV2({ results: [createEvaluateResult({ metadata })] }),
+      });
+      expect(table.head.prompts[0].hasSavedReportImports).toBeUndefined();
+    },
+  );
+
   it('should convert results to table format', () => {
     const resultsFile: ResultsFile = {
       version: 4,

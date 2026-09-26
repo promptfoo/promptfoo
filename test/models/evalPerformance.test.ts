@@ -1,13 +1,16 @@
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import {
   clearCountCache,
   getCachedResultsCount,
+  getCachedResultsSummary,
   getTotalResultRowCount,
 } from '../../src/models/evalPerformance';
+import EvalResult from '../../src/models/evalResult';
 import { ResultFailureReason } from '../../src/types/index';
+import { createEvaluateResult } from '../factories/eval';
 
 describe('evalPerformance', () => {
   beforeAll(async () => {
@@ -168,6 +171,63 @@ describe('evalPerformance', () => {
       clearCountCache(eval_.id);
       const count3 = await getTotalResultRowCount(eval_.id);
       expect(count3).toBe(1);
+    });
+  });
+
+  describe('full-eval recorded import provenance', () => {
+    it('shares the count cache and refreshes provenance after inserts and result updates', async () => {
+      const { eval_ } = await createEvalWithResults(1, 1);
+      const db = await getDb();
+      const select = vi.spyOn(db, 'select');
+      try {
+        expect(await getCachedResultsCount(eval_.id)).toBe(1);
+        expect(await getCachedResultsSummary(eval_.id)).toEqual({
+          count: 1,
+          savedReportPromptIndices: [],
+        });
+        expect(select).toHaveBeenCalledTimes(1);
+
+        const result = await EvalResult.createFromEvaluateResult(
+          eval_.id,
+          createEvaluateResult({
+            testIdx: 1,
+            promptIdx: 1,
+            metadata: { codexSecurity: { version: 1, source: { kind: 'saved-report' } } },
+          }),
+        );
+        expect(await getCachedResultsSummary(eval_.id)).toEqual({
+          count: 2,
+          savedReportPromptIndices: [1],
+        });
+        expect(select).toHaveBeenCalledTimes(2);
+
+        result.metadata = { codexSecurity: { version: 1, source: { kind: 'sdk' } } };
+        await result.save();
+        expect(await getCachedResultsSummary(eval_.id)).toEqual({
+          count: 2,
+          savedReportPromptIndices: [],
+        });
+        expect(select).toHaveBeenCalledTimes(3);
+      } finally {
+        select.mockRestore();
+      }
+    });
+
+    it('ignores unknown and malformed provenance without changing result counts', async () => {
+      const { eval_ } = await createEvalWithResults(1, 1);
+      for (const [index, metadata] of [
+        { codexSecurity: { version: 2, source: { kind: 'saved-report' } } },
+        { codexSecurity: { version: '1', source: { kind: 'saved-report' } } },
+        { codexSecurity: { version: 1, source: { kind: 'sdk' } } },
+        { codexSecurity: null },
+        { codexSecurity: 'not an object' },
+      ].entries()) {
+        await eval_.addResult(createEvaluateResult({ testIdx: index + 1, metadata }));
+      }
+      expect(await getCachedResultsSummary(eval_.id)).toEqual({
+        count: 6,
+        savedReportPromptIndices: [],
+      });
     });
   });
 

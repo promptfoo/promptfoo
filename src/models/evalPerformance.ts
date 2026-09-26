@@ -21,8 +21,13 @@ interface CountCacheEntry {
   timestamp: number;
 }
 
+interface ResultsSummary {
+  count: number;
+  savedReportPromptIndices: number[];
+}
+
 // Simple in-memory cache for counts with 5-minute TTL
-const distinctCountCache = new Map<string, CountCacheEntry>();
+const distinctCountCache = new Map<string, CountCacheEntry & ResultsSummary>();
 const totalRowCountCache = new Map<string, CountCacheEntry>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
@@ -34,12 +39,17 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
  * (which may be higher when there are multiple prompts/providers per test case).
  */
 export async function getCachedResultsCount(evalId: string): Promise<number> {
+  return (await getCachedResultsSummary(evalId)).count;
+}
+
+/** Full-eval column provenance shares the count query and its result-mutation invalidation. */
+export async function getCachedResultsSummary(evalId: string): Promise<ResultsSummary> {
   const cacheKey = `distinct:${evalId}`;
   const cached = distinctCountCache.get(cacheKey);
 
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     logger.debug(`Using cached distinct count for eval ${evalId}: ${cached.count}`);
-    return cached.count;
+    return { count: cached.count, savedReportPromptIndices: cached.savedReportPromptIndices };
   }
 
   const db = await getDb();
@@ -47,20 +57,37 @@ export async function getCachedResultsCount(evalId: string): Promise<number> {
 
   // Count distinct test indices (unique test cases) - this is what the UI shows as "results"
   const result = await db
-    .select({ count: sql<number>`COUNT(DISTINCT test_idx)` })
+    .select({
+      count: sql<number>`COUNT(DISTINCT test_idx)`,
+      // Read only the normalized metadata, never the potentially large raw report output.
+      // CASE also protects older rows containing malformed JSON metadata.
+      savedReportPromptIndices: sql<string | null>`GROUP_CONCAT(DISTINCT CASE
+        WHEN json_valid(metadata) THEN CASE
+          WHEN json_extract(metadata, '$.codexSecurity.version') = 1
+            AND json_extract(metadata, '$.codexSecurity.source.kind') = 'saved-report'
+          THEN prompt_idx
+        END
+      END)`,
+    })
     .from(evalResultsTable)
     .where(sql`eval_id = ${evalId}`)
     .all();
 
   const count = Number(result[0]?.count ?? 0);
+  const savedReportPromptIndices = (result[0]?.savedReportPromptIndices ?? '')
+    .split(',')
+    .filter(Boolean)
+    .map(Number)
+    .filter((index) => Number.isInteger(index) && index >= 0);
   const duration = Date.now() - start;
 
   logger.debug(`Distinct count query for eval ${evalId}: ${count} in ${duration}ms`);
 
   // Cache the result
-  distinctCountCache.set(cacheKey, { count, timestamp: Date.now() });
+  const summary = { count, savedReportPromptIndices };
+  distinctCountCache.set(cacheKey, { ...summary, timestamp: Date.now() });
 
-  return count;
+  return summary;
 }
 
 /**

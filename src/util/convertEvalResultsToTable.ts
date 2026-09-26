@@ -1,5 +1,10 @@
 import logger from '../logger';
-import { type EvaluateTable, type EvaluateTableRow, type ResultsFile } from '../types/index';
+import {
+  type CompletedPrompt,
+  type EvaluateTable,
+  type EvaluateTableRow,
+  type ResultsFile,
+} from '../types/index';
 import invariant from '../util/invariant';
 import { getActualPrompt } from '../util/providerResponse';
 
@@ -17,6 +22,9 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     `Prompts are required in this version of the results file, this needs to be results file version >= 4, version: ${eval_.version}`,
   );
   const results = eval_.results;
+  const prompts: CompletedPrompt[] = eval_.prompts.map(
+    ({ hasSavedReportImports: _previous, ...prompt }) => ({ ...prompt }),
+  );
   // Guard against malformed payloads where `vars` is present but not an array
   // (corrupt store, schema skew across server versions). Warn so the bad
   // writer is visible instead of silently rendering an alphabetized fallback.
@@ -36,6 +44,14 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
 
   const rowMap: Record<number, EvaluateTableRow> = {};
   for (const result of results.results) {
+    const securityResult = result.metadata?.codexSecurity;
+    if (
+      securityResult?.version === 1 &&
+      securityResult.source?.kind === 'saved-report' &&
+      prompts[result.promptIdx]
+    ) {
+      prompts[result.promptIdx].hasSavedReportImports = true;
+    }
     // vars
     for (const varName of Object.keys(result.vars || {})) {
       varsForHeader.add(varName);
@@ -204,7 +220,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
 
   return {
     head: {
-      prompts: eval_.prompts,
+      prompts,
       vars: orderedVars,
     },
     body: rows,

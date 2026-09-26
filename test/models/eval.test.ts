@@ -23,7 +23,7 @@ import {
   getStandaloneEvalCacheKey,
   setCachedStandaloneEvals,
 } from '../../src/util/standaloneEvalCache';
-import { createEvaluateResult } from '../factories/eval';
+import { createCompletedPrompt, createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 
 vi.mock('../../src/globalConfig/accounts', async () => {
@@ -1655,6 +1655,46 @@ describe('evaluator', () => {
 
       // Default limit is 50
       expect(result.body.length).toBeLessThanOrEqual(50);
+    });
+
+    it('keeps recorded import provenance across pages, empty filters, reloads, and comparison indices', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      // Equal labels deliberately cannot identify the imported column.
+      await eval_.addPrompts([
+        createCompletedPrompt('Review', { provider: 'same-label', hasSavedReportImports: true }),
+        createCompletedPrompt('Review', { provider: 'same-label' }),
+      ]);
+      await eval_.addResult(createEvaluateResult({ testIdx: 0, promptIdx: 0 }));
+      await eval_.addResult(
+        createEvaluateResult({
+          testIdx: 1,
+          promptIdx: 1,
+          success: false,
+          failureReason: ResultFailureReason.ASSERT,
+          metadata: { codexSecurity: { version: 1, source: { kind: 'saved-report' } } },
+        }),
+      );
+
+      const reloaded = await Eval.findById(eval_.id);
+      expect(reloaded).not.toBeNull();
+      for (const options of [
+        { offset: 0, limit: 1 },
+        { offset: 1, limit: 1 },
+        { offset: 100, limit: 1 },
+        { filterMode: 'passes' as const },
+        { searchQuery: 'no-result-has-this-text' },
+        { testIndices: [0] },
+        { testIndices: [], limit: 0 },
+      ]) {
+        const page = await reloaded!.getTablePage(options);
+        expect(page.head.prompts[0]).not.toHaveProperty('hasSavedReportImports');
+        expect(page.head.prompts[1]).toHaveProperty('hasSavedReportImports', true);
+      }
+      // Computed table headers never mutate persisted prompt definitions.
+      expect(reloaded!.prompts.map((prompt) => prompt.hasSavedReportImports)).toEqual([
+        true,
+        undefined,
+      ]);
     });
 
     it('should respect offset and limit parameters', async () => {
