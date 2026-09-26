@@ -3,6 +3,7 @@ import * as fs from 'node:fs/promises';
 import { Agent, ProxyAgent } from 'undici';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
+import logger from '../../../src/logger';
 import { clearAgentCache, fetchWithProxy } from '../../../src/util/fetch/index';
 import { mockProcessEnv, PROXY_ENV_KEYS } from '../utils';
 
@@ -64,6 +65,42 @@ afterEach(() => {
 });
 
 describe('HTTP agent configuration ownership', () => {
+  it.each(['suite', 'file', 'bypass', 'custom dispatcher'] as const)(
+    'reports only the selected proxy after a connection error (%s)',
+    async (scenario) => {
+      mockProcessEnv({ HTTPS_PROXY: 'http://ambient-proxy.example:8080' });
+      const failure = new TypeError('fetch failed');
+      failure.cause = { stack: 'Error: connect ECONNREFUSED\n    at internalConnectMultiple' };
+      vi.mocked(global.fetch).mockRejectedValueOnce(failure);
+      const env =
+        scenario === 'bypass'
+          ? { NO_PROXY: '*' }
+          : { HTTPS_PROXY: 'http://fixture-user:fixture-password@selected-proxy.example:8080' };
+      const run = () =>
+        fetchWithProxy('https://fixture.example/test', {
+          method: 'GET',
+          ...(scenario === 'custom dispatcher' ? { dispatcher: new Agent() } : {}),
+        });
+
+      await expect(
+        scenario === 'file' ? cliState.withEnvFileOverrides(env, run) : cliState.withEnv(env, run),
+      ).rejects.toBe(failure);
+
+      const message = vi
+        .mocked(logger.debug)
+        .mock.calls.find(([message]) => message.startsWith('Connection error'))?.[0];
+      expect(message).toContain('fixture.example');
+      expect(message).not.toContain('ambient-proxy.example');
+      expect(message).not.toContain('fixture-user');
+      expect(message).not.toContain('fixture-password');
+      if (scenario === 'suite' || scenario === 'file') {
+        expect(message).toContain('selected-proxy.example');
+      } else {
+        expect(message).not.toContain('Proxy:');
+      }
+    },
+  );
+
   it.each(
     [
       { label: 'unset', env: {}, verify: true },
