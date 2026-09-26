@@ -197,8 +197,10 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   assistantConfig: AzureAssistantOptions;
   private loadedFunctionCallbacks: Record<string, Function> = {};
   private processor: ResponsesProcessor;
-  private projectClient: AzureAIProjectClient | null = null;
+  private projectClient?: Promise<AzureAIProjectClient>;
+  private openAIClient?: ReturnType<AzureAIProjectClient['getOpenAIClient']>;
   private projectUrl: string;
+  private agentPromise?: Promise<FoundryAgent>;
   private resolvedAgent: FoundryAgent | null = null;
   private warnedUnsupportedFields = new Set<string>();
 
@@ -249,11 +251,15 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     }
   }
 
-  private async initializeClient(): Promise<AzureAIProjectClient> {
-    if (this.projectClient) {
-      return this.projectClient;
-    }
+  private initializeClient(): Promise<AzureAIProjectClient> {
+    this.projectClient ??= this.createProjectClient().catch((error) => {
+      this.projectClient = undefined;
+      throw error;
+    });
+    return this.projectClient;
+  }
 
+  private async createProjectClient(): Promise<AzureAIProjectClient> {
     try {
       const { AIProjectClient } = await import('@azure/ai-projects');
       const { DefaultAzureCredential } = await import('@azure/identity');
@@ -262,7 +268,6 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         this.projectUrl,
         new DefaultAzureCredential(),
       ) as AzureAIProjectClient;
-      this.projectClient = projectClient;
       logger.debug('Azure AI Project client initialized successfully');
       return projectClient;
     } catch (error) {
@@ -272,15 +277,22 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     }
   }
 
-  private async resolveAgent(client: AzureAIProjectClient): Promise<FoundryAgent> {
-    if (this.resolvedAgent) {
-      return this.resolvedAgent;
-    }
+  private resolveAgent(client: AzureAIProjectClient): Promise<FoundryAgent> {
+    this.agentPromise ??= this.lookupAgent(client)
+      .then((agent) => {
+        this.resolvedAgent = agent;
+        return agent;
+      })
+      .catch((error) => {
+        this.agentPromise = undefined;
+        throw error;
+      });
+    return this.agentPromise;
+  }
 
+  private async lookupAgent(client: AzureAIProjectClient): Promise<FoundryAgent> {
     try {
-      const agent = await client.agents.get(this.deploymentName);
-      this.resolvedAgent = agent;
-      return agent;
+      return await client.agents.get(this.deploymentName);
     } catch (error) {
       logger.debug(
         `[AzureFoundryAgentProvider] Direct agent lookup failed for '${this.deploymentName}', falling back to list lookup`,
@@ -292,7 +304,6 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
 
     for await (const agent of client.agents.list()) {
       if (agent.id === this.deploymentName || agent.name === this.deploymentName) {
-        this.resolvedAgent = agent;
         return agent;
       }
     }
@@ -711,7 +722,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       span.setAttribute(GenAIAttributes.AGENT_ID, agent.id);
       span.setAttribute(GenAIAttributes.AGENT_NAME, agent.name);
       span.updateName(`invoke_agent ${agent.name}`);
-      const openAIClient = client.getOpenAIClient();
+      const openAIClient = (this.openAIClient ??= client.getOpenAIClient());
       const responseOptions = this.getAgentReference(agent);
       const tracer = getGenAITracer();
       let turnCount = 0;
