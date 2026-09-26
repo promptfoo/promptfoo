@@ -620,8 +620,9 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     }
 
     // A batch is atomic: malformed or duplicate calls must not partially execute.
-    const pendingCalls = response.output.filter((item) => item.type === 'function_call');
+    const pendingCalls = response.output.filter((item) => item?.type === 'function_call');
     if (
+      response.output.some((item) => !item || typeof item !== 'object') ||
       functionCalls.length !== pendingCalls.length ||
       new Set(functionCalls.map((call) => call.call_id)).size !== functionCalls.length
     ) {
@@ -783,6 +784,18 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     const completion = count(usage?.output_tokens, true);
     const total = count(usage?.total_tokens) ?? (prompt ?? 0) + (completion ?? 0);
     const cached = count(usage?.input_tokens_details?.cached_tokens);
+    // Pricing also consumes modality counts that are absent from TokenUsage.
+    // Validate supplied values before treating this response's cost as complete.
+    for (const value of [
+      (usage?.input_tokens_details as any)?.audio_tokens,
+      (usage?.output_tokens_details as any)?.audio_tokens,
+      (usage?.input_tokens_details as any)?.image_tokens,
+      (usage?.input_tokens_details as any)?.cached_tokens_details?.audio_tokens,
+      (usage?.input_tokens_details as any)?.cached_tokens_details?.image_tokens,
+      (usage?.output_tokens_details as any)?.image_tokens,
+    ]) {
+      count(value);
+    }
     const details = usage ? getOpenAICompletionTokenDetails(usage) : undefined;
     const completionDetails = Object.fromEntries(
       Object.entries(details ?? {}).flatMap(([key, value]) => {
@@ -1150,7 +1163,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         hadCallableFunctionCalls &&
         !this.responseFailureMessage(response) &&
         outOfBudget() &&
-        response.output?.some((item) => item.type === 'function_call')
+        response.output?.some((item) => item?.type === 'function_call')
       ) {
         return aggregateResult({ error: toolLoopTimeoutError });
       }
