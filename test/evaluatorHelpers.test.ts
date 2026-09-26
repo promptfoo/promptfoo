@@ -526,6 +526,22 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('{{ foo }}\u0000promptfoo-nunjucks-block-0\u0000');
     });
 
+    it('should insert variable values literally, without replacement patterns', () => {
+      expect(resolveVariables({ price: 'costs $& more, $$5', note: 'Note: {{ price }}' })).toEqual({
+        price: 'costs $& more, $$5',
+        note: 'Note: costs $& more, $$5',
+      });
+    });
+
+    it('should resolve variables in large values with many unclosed openers', () => {
+      const value = `${'{{'.repeat(25_000)}{{ foo }} ${'{{ "'.repeat(10_000)}`;
+      const started = performance.now();
+      expect(resolveVariables({ foo: 'FOO', value }).value).toBe(
+        `${'{{'.repeat(25_000)}FOO ${'{{ "'.repeat(10_000)}`,
+      );
+      expect(performance.now() - started).toBeLessThan(1_000);
+    });
+
     it('should preserve quoted variables after expression operators', async () => {
       const renderedPrompt = await renderPrompt(
         toPrompt('{{ template }}'),

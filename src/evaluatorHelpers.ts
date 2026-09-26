@@ -101,8 +101,14 @@ export function resolveVariables(
  * introducing placeholders that could collide with variable contents.
  */
 function maskNunjucksBlocks(value: string): string {
+  // Only raw blocks, comments, and quoted expressions are masked.
+  if (!/['"]|\{[%#]/.test(value)) {
+    return value;
+  }
+  // An expression cannot contain an unquoted `{{`, so a failed match stops at the next one
+  // instead of rescanning the rest of the value.
   const pattern =
-    /\{%-?\s*raw\s*-?%\}[\s\S]*?\{%-?\s*endraw\s*-?%\}|\{#[\s\S]*?#\}|\{\{(?:[^'"]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')*?\}\}/g;
+    /\{%-?\s*raw\s*-?%\}[\s\S]*?\{%-?\s*endraw\s*-?%\}|\{#[\s\S]*?#\}|\{\{(?:[^'"{]|\{(?!\{)|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')*?\}\}/g;
 
   return value.replace(pattern, (block) => {
     // Plain variable references still need resolution. Expressions with quoted
