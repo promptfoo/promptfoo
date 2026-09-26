@@ -597,6 +597,19 @@ function isFiniteNumberRecord(value: unknown): value is Record<string, number> {
   );
 }
 
+function isGradingResultArray(value: unknown): value is GradingResult[] {
+  if (!Array.isArray(value)) {
+    return false;
+  }
+  // Validate the indexed values used by consumers, regardless of a custom iterator.
+  for (let index = 0; index < value.length; index++) {
+    if (!isGradingResult(value[index])) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function isGradingResult(result: any): result is GradingResult {
   return (
     typeof result === 'object' &&
@@ -608,9 +621,7 @@ export function isGradingResult(result: any): result is GradingResult {
     (result.namedScores == null || isFiniteNumberRecord(result.namedScores)) &&
     (result.namedScoreWeights == null || isFiniteNumberRecord(result.namedScoreWeights)) &&
     (typeof result.tokensUsed === 'undefined' || typeof result.tokensUsed === 'object') &&
-    (result.componentResults == null ||
-      (Array.isArray(result.componentResults) &&
-        Array.from(result.componentResults).every(isGradingResult))) &&
+    (result.componentResults == null || isGradingResultArray(result.componentResults)) &&
     (typeof result.assertion === 'undefined' ||
       result.assertion === null ||
       typeof result.assertion === 'object') &&

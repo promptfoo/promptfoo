@@ -927,12 +927,15 @@ describe('JavaScript file references', () => {
     },
   );
 
-  it('rejects sparse nested results before they become null components', async () => {
+  it.each([
+    'new Array(1)',
+    'Object.assign(new Array(1), { [Symbol.iterator]: function* () { yield { pass: true, score: 1, reason: "Iterator result" }; } })',
+  ])('rejects sparse nested results before they become null components: %s', async (components) => {
     const result = await runAssertion({
       prompt: 'Some prompt',
       assertion: {
         type: 'javascript',
-        value: '({ pass: true, score: 1, reason: "", componentResults: new Array(1) })',
+        value: `({ pass: true, score: 1, reason: "", componentResults: ${components} })`,
       },
       test: {},
       providerResponse: { output: 'Test output' },

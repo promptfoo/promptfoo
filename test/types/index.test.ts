@@ -211,6 +211,28 @@ describe('isGradingResult', () => {
     expect(isGradingResult({ ...result, componentResults: [result] })).toBe(false);
   });
 
+  it.each([
+    { componentResults: new Array(1) },
+    { componentResults: [{ pass: true, score: Number.POSITIVE_INFINITY, reason: '' }] },
+  ])(
+    'rejects invalid indexed components hidden by a custom iterator: %j',
+    ({ componentResults }) => {
+      componentResults[Symbol.iterator] = function* () {
+        yield { pass: true, score: 1, reason: 'Iterator result' };
+        return undefined;
+      };
+      expect(isGradingResult({ pass: true, score: 1, reason: '', componentResults })).toBe(false);
+    },
+  );
+
+  it('validates dense indexed components without invoking their custom iterator', () => {
+    const componentResults = [{ pass: true, score: 0.75, reason: 'Indexed result' }];
+    componentResults[Symbol.iterator] = () => {
+      throw new Error('Custom iterator should not run during indexed validation');
+    };
+    expect(isGradingResult({ pass: true, score: 1, reason: '', componentResults })).toBe(true);
+  });
+
   it('supports nullable optional containers in the public grading result type', () => {
     const result: GradingResult = {
       pass: true,
