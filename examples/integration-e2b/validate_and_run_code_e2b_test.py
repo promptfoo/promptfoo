@@ -41,6 +41,22 @@ class SandboxAssertionTest(unittest.TestCase):
         self.sandbox.__exit__.assert_called_once()
         self.metrics.assert_called_once()
 
+    def test_unfenced_function_with_prose_is_executable(self):
+        output = "Here is the requested function:\ndef double(value):\n    return value * 2\n\nThis doubles the value."
+        self.assertTrue(validator.get_assert(output, self.context)["pass"])
+        program = self.sandbox.run_code.call_args.args[0]
+        compile(program, "<generated>", "exec")
+        self.assertNotIn("Here is", program)
+        self.assertNotIn("This doubles", program)
+
+    def test_unfenced_program_preserves_imports_and_blank_lines(self):
+        output = "import math\n\ndef double(value):\n    result = value * 2\n\n    return math.floor(result)"
+        self.assertTrue(validator.get_assert(output, self.context)["pass"])
+        program = self.sandbox.run_code.call_args.args[0]
+        compile(program, "<generated>", "exec")
+        self.assertIn("import math", program)
+        self.assertIn("return math.floor(result)", program)
+
     def test_sdk_error_does_not_retry_without_controls(self):
         self.sandbox.run_code.side_effect = TypeError("unsupported SDK call")
         result = validator.get_assert(self.code, self.context)
