@@ -39,6 +39,8 @@ The `max-score` assertion provides a deterministic way to select the best output
     threshold: 0.7 # Optional minimum score threshold
 ```
 
+To chart named metrics, add `metric` to the underlying assertions. A `metric` field on `max-score` does not create a winner metric.
+
 ### Options
 
 - **method**: How to aggregate scores

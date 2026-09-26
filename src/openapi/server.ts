@@ -579,7 +579,9 @@ export function createServerOpenApiRegistry() {
     path: '/api/eval/{id}/results',
     operationId: 'addEvalResults',
     tags: ['Eval'],
-    summary: 'Append results to an evaluation',
+    summary: 'Upload a chunk of evaluation results',
+    description:
+      'Appends result rows to an existing imported evaluation. Prompt metrics must already describe the complete result set, as in the chunked sharing workflow. This endpoint does not recalculate aggregate scores or pass/fail counts and is not an operation for extending a completed evaluation with newly evaluated tests.',
     request: {
       params: params('AddResultsParams', EvalSchemas.AddResults.Params),
       body: jsonBody('AddResultsRequest', EvalSchemas.AddResults.Request),
