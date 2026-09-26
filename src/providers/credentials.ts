@@ -1,4 +1,4 @@
-import { type EnvVarKey, getEnvString } from '../envars';
+import { type EnvVarKey, getEnvOverrides, getEnvString } from '../envars';
 
 interface CredentialOptions {
   apiKey?: string;
@@ -15,19 +15,22 @@ export function resolveProviderApiKey(
     return config.apiKey;
   }
   const envars = config?.apiKeyEnvar ? [config.apiKeyEnvar] : defaultEnvars;
-  for (const envar of envars) {
-    const value = env?.[envar];
-    if (value) {
-      return value;
-    }
-  }
-  for (const envar of envars) {
-    if (env?.[envar] === '') {
-      continue;
-    }
-    const value = getEnvString(envar as EnvVarKey);
-    if (value) {
-      return value;
+  const masked = new Set<string>();
+  for (const layer of [
+    env,
+    getEnvOverrides(),
+    getEnvOverrides('file'),
+    Object.fromEntries(envars.map((key) => [key, getEnvString(key as EnvVarKey)])),
+  ]) {
+    for (const envar of envars) {
+      const value = layer?.[envar];
+      if (masked.has(envar) || value === undefined) {
+        continue;
+      }
+      masked.add(envar);
+      if (value) {
+        return value;
+      }
     }
   }
   return undefined;

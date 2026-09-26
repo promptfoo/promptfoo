@@ -1,6 +1,6 @@
-import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
+import { resolveProviderApiKey } from '../credentials';
 import {
   buildStructuredImageOutputs,
   callOpenAiImageApi,
@@ -73,10 +73,7 @@ export class XAIImageProvider extends OpenAiImageProvider {
   }
 
   getApiKey(): string | undefined {
-    if (this.config?.apiKey) {
-      return this.config.apiKey;
-    }
-    return this.env?.XAI_API_KEY || getEnvString('XAI_API_KEY');
+    return resolveProviderApiKey(this.config, this.env, ['XAI_API_KEY']);
   }
 
   getApiUrlDefault(): string {

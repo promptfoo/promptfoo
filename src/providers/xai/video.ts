@@ -12,6 +12,7 @@ import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { sleep } from '../../util/time';
+import { resolveProviderApiKey } from '../credentials';
 import {
   buildStorageRefUrl,
   checkVideoCache,
@@ -235,10 +236,7 @@ export class XAIVideoProvider implements ApiProvider {
    * Get API key from config or environment
    */
   getApiKey(): string | undefined {
-    if (this.config?.apiKey) {
-      return this.config.apiKey;
-    }
-    return this.env?.XAI_API_KEY || getEnvString('XAI_API_KEY');
+    return resolveProviderApiKey(this.config, this.env, ['XAI_API_KEY']);
   }
 
   /**

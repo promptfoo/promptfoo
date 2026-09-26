@@ -606,6 +606,7 @@ export class OllamaCompletionProvider implements ApiProvider {
 
     logger.debug('Calling Ollama API', { params });
 
+    const apiKey = this.env?.OLLAMA_API_KEY ?? getEnvString('OLLAMA_API_KEY');
     let response: FetchWithCacheResult<string> | undefined;
     try {
       response = await fetchWithCache<string>(
@@ -614,11 +615,7 @@ export class OllamaCompletionProvider implements ApiProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(this.env?.OLLAMA_API_KEY || getEnvString('OLLAMA_API_KEY')
-              ? {
-                  Authorization: `Bearer ${this.env?.OLLAMA_API_KEY || getEnvString('OLLAMA_API_KEY')}`,
-                }
-              : {}),
+            ...(apiKey && { Authorization: `Bearer ${apiKey}` }),
           },
           body: JSON.stringify(params),
         },
@@ -781,6 +778,7 @@ export class OllamaChatProvider implements ApiProvider {
 
     logger.debug('[Ollama Chat] Calling Ollama API', { params });
 
+    const apiKey = this.env?.OLLAMA_API_KEY ?? getEnvString('OLLAMA_API_KEY');
     let response: FetchWithCacheResult<string> | undefined;
     try {
       response = await fetchWithCache<string>(
@@ -789,11 +787,7 @@ export class OllamaChatProvider implements ApiProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(this.env?.OLLAMA_API_KEY || getEnvString('OLLAMA_API_KEY')
-              ? {
-                  Authorization: `Bearer ${this.env?.OLLAMA_API_KEY || getEnvString('OLLAMA_API_KEY')}`,
-                }
-              : {}),
+            ...(apiKey && { Authorization: `Bearer ${apiKey}` }),
           },
           body: JSON.stringify(params),
         },
@@ -917,6 +911,7 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
       prompt_eval_count?: number;
     }
 
+    const apiKey = this.env?.OLLAMA_API_KEY ?? getEnvString('OLLAMA_API_KEY');
     let response: FetchWithCacheResult<OllamaEmbedResponse>;
     try {
       response = await fetchWithCache<OllamaEmbedResponse>(
@@ -925,11 +920,7 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(this.env?.OLLAMA_API_KEY || getEnvString('OLLAMA_API_KEY')
-              ? {
-                  Authorization: `Bearer ${this.env?.OLLAMA_API_KEY || getEnvString('OLLAMA_API_KEY')}`,
-                }
-              : {}),
+            ...(apiKey && { Authorization: `Bearer ${apiKey}` }),
           },
           body: JSON.stringify(params),
         },
