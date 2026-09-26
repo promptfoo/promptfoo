@@ -1378,24 +1378,27 @@ This provider references an existing Foundry agent. Some settings can still be s
 
 Supported per-request settings:
 
-| Parameter               | Description                                                                         |
-| ----------------------- | ----------------------------------------------------------------------------------- |
-| `projectUrl`            | Azure AI Project URL (required, can also use `AZURE_AI_PROJECT_URL` env var)        |
-| `instructions`          | Additional per-request instructions                                                 |
-| `temperature`           | Controls randomness                                                                 |
-| `top_p`                 | Nucleus sampling parameter                                                          |
-| `max_tokens`            | Mapped to `max_output_tokens` for the Responses API                                 |
-| `max_completion_tokens` | Also mapped to `max_output_tokens`                                                  |
-| `response_format`       | Output format (`json_object` or `json_schema`)                                      |
-| `tools`                 | Tool definitions loaded into the request                                            |
-| `tool_choice`           | Tool selection strategy                                                             |
-| `functionToolCallbacks` | Callback implementations for `function_call` outputs                                |
-| `modelName`             | Optional per-request model override                                                 |
-| `reasoning_effort`      | Sent as `reasoning.effort`                                                          |
-| `verbosity`             | Passed through to the Responses text config                                         |
-| `metadata`              | Request metadata                                                                    |
-| `passthrough`           | Additional raw Responses API fields                                                 |
-| `maxPollTimeMs`         | Maximum time to keep resolving callback loops before timing out (default: `300000`) |
+| Parameter                 | Description                                                                                      |
+| ------------------------- | ------------------------------------------------------------------------------------------------ |
+| `projectUrl`              | Azure AI Project URL (required, can also use `AZURE_AI_PROJECT_URL` env var)                     |
+| `instructions`            | Additional per-request instructions                                                              |
+| `temperature`             | Controls randomness                                                                              |
+| `top_p`                   | Nucleus sampling parameter                                                                       |
+| `max_tokens`              | Mapped to `max_output_tokens` for the Responses API                                              |
+| `max_completion_tokens`   | Also mapped to `max_output_tokens`                                                               |
+| `response_format`         | Output format (`json_object` or `json_schema`)                                                   |
+| `tools`                   | Tool definitions loaded into the request                                                         |
+| `tool_choice`             | Tool selection strategy                                                                          |
+| `functionToolCallbacks`   | Callback implementations for `function_call` outputs                                             |
+| `modelName`               | Optional per-request model override                                                              |
+| `reasoning_effort`        | Sent as `reasoning.effort`                                                                       |
+| `verbosity`               | Passed through to the Responses text config                                                      |
+| `metadata`                | Request metadata                                                                                 |
+| `passthrough`             | Additional raw Responses API fields                                                              |
+| `maxPollTimeMs`           | Cooperative callback-loop budget after the initial response, in milliseconds (default: `300000`) |
+| `timeoutMs`               | Positive SDK timeout for each model HTTP request, in milliseconds (SDK default: `600000`)        |
+| `retryOptions.maxRetries` | Non-negative integer SDK retry count (default: `2`)                                              |
+| `maxToolIterations`       | Maximum callback batches (default: `8`; valid range: `1`–`64`)                                   |
 
 Ignored per-request settings:
 
@@ -1404,10 +1407,10 @@ Ignored per-request settings:
 - `presence_penalty`
 - `seed`
 - `stop`
-- `timeoutMs`
-- `retryOptions`
 
 Configure those on the Foundry agent definition itself instead of on the eval request.
+
+Other `retryOptions` fields are unsupported; retry delays and retryable failures follow the bundled OpenAI SDK.
 
 ### Function Tools with Azure Foundry Agents
 
@@ -1447,9 +1450,19 @@ providers:
 The function callbacks receive two parameters:
 
 - `args`: JSON-encoded function arguments
-- `context`: `{ threadId, runId, assistantId, provider }`
+- `context`: `{ threadId, runId, assistantId, provider, abortSignal? }`
 
 If a callback is missing, promptfoo returns the unresolved function call in the model output instead of trying to fake a tool result.
+
+### Execution Limits and Cancellation
+
+`maxPollTimeMs` checks elapsed time between callback batches and model requests. The initial request is outside this budget. A pending callback or request may finish after the budget; a final model answer is still returned, while another tool batch times out. `timeoutMs` instead limits each model HTTP request, and SDK retries can make the total wait longer. It does not limit credential acquisition or callback execution.
+
+`maxToolIterations` bounds automatic callback batches independently of elapsed time. Parallel function calls in one response count as one batch, and the model's final answer after the last permitted batch is retained. Values from `1` to `64` are rounded down; missing, zero, and invalid values use the default of `8`.
+
+JavaScript API callers can pass `{ abortSignal: controller.signal }` as the third `callApi` argument. Cancellation stops waiting, aborts the SDK request, and prevents further callbacks or requests from starting. A running callback receives `context.abortSignal` and should forward it to `fetch` or other cancellable work. Callbacks and credential operations that ignore the signal may continue in the background; cancellation cannot undo their side effects.
+
+The [Foundry example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/foundry-agent) includes an opt-in live QA command for an existing project and agent. Normal provider tests run offline.
 
 ### Agent-Defined Tools and Resources
 

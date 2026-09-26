@@ -67,6 +67,9 @@ These per-request settings are supported:
 - `metadata`
 - `passthrough`
 - `maxPollTimeMs`
+- `timeoutMs` (SDK timeout for each model HTTP request; does not limit callback execution)
+- `retryOptions.maxRetries` (SDK retries; defaults to 2)
+- `maxToolIterations` (callback batches; defaults to 8, valid range 1–64)
 
 These request-time settings are ignored by the v2 runtime and should be configured on the Foundry agent instead:
 
@@ -75,8 +78,10 @@ These request-time settings are ignored by the v2 runtime and should be configur
 - `presence_penalty`
 - `seed`
 - `stop`
-- `timeoutMs`
-- `retryOptions`
+
+Other `retryOptions` fields are unsupported; the SDK controls retry delays and retryable failures.
+
+`maxPollTimeMs` is a cooperative budget starting after the initial response. It is checked between callback batches and model requests, and preserves a final answer that arrives after the budget. It does not interrupt a pending request or callback. Callers using the JavaScript API can cancel with `callApiOptions.abortSignal`; callbacks receive that signal as `context.abortSignal` and should pass it to their own asynchronous operations. A callback that ignores cancellation can continue after the eval stops waiting.
 
 ## Function Tool Callbacks
 
@@ -118,3 +123,17 @@ The provider includes the same comprehensive error handling as the regular Azure
 - Rate limit handling
 - Service error detection
 - Automatic retries for transient errors
+
+## Opt-in live QA from this repository
+
+Use an existing test project and agent. This harness runs text, structured-output, and benign function-tool evals, with at most nine model requests and SDK/scheduler retries disabled. It does not create agents, deployments, or other Azure infrastructure.
+
+From the repository root, preview the configs without contacting Azure:
+
+```bash
+npx tsx scripts/azureFoundryLiveQa.ts --dry-run \
+  --endpoint https://your-project.services.ai.azure.com/api/projects/your-project \
+  --agent your-existing-agent
+```
+
+After authenticating with `az login` (or another `DefaultAzureCredential` identity), replace `--dry-run` with `--live`. Each run creates a new local directory containing isolated eval storage and traces, sanitized JSON results, callback counts, and commit/SDK-version metadata. The harness uses the local CLI with `--no-cache`; it stops after a provider error so authentication or endpoint failures do not trigger the rest of the matrix. Timing, cancellation, quota, and transport failure cases remain covered by offline fixtures.
