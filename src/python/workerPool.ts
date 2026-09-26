@@ -13,6 +13,7 @@ export class PythonWorkerPool {
   private workers: PythonWorker[] = [];
   private queue: QueuedRequest[] = [];
   private isInitialized: boolean = false;
+  private shuttingDown: boolean = false;
 
   constructor(
     private scriptPath: string,
@@ -23,6 +24,9 @@ export class PythonWorkerPool {
   ) {}
 
   async initialize(): Promise<void> {
+    if (this.shuttingDown) {
+      throw new Error('Worker pool shutting down');
+    }
     if (this.isInitialized) {
       return;
     }
@@ -50,6 +54,9 @@ export class PythonWorkerPool {
       this.pythonPath || 'python',
       typeof this.pythonPath === 'string',
     );
+    if (this.shuttingDown) {
+      throw new Error('Worker pool shutting down');
+    }
 
     // Start all workers in parallel
     const initPromises = [];
@@ -66,6 +73,9 @@ export class PythonWorkerPool {
     }
 
     await Promise.all(initPromises);
+    if (this.shuttingDown) {
+      throw new Error('Worker pool shutting down');
+    }
     this.isInitialized = true;
     logger.debug(`Python worker pool initialized with ${this.workerCount} workers`);
   }
@@ -129,10 +139,12 @@ export class PythonWorkerPool {
   }
 
   async shutdown(): Promise<void> {
+    this.shuttingDown = true;
+    this.isInitialized = false;
     logger.debug(`Shutting down Python worker pool (${this.workers.length} workers)`);
 
     // Reject any queued requests
-    for (const req of this.queue) {
+    for (const req of this.queue.splice(0)) {
       try {
         req.reject(new Error('Worker pool shutting down'));
       } catch {

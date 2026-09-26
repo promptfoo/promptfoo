@@ -1,13 +1,16 @@
+import { setImmediate } from 'node:timers/promises';
 import type { EventEmitter } from 'node:events';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
+import { PythonWorker } from '../../src/python/worker';
 import { PythonWorkerPool } from '../../src/python/workerPool';
 import type { Options } from 'python-shell';
 
-const { execFileAsync, shells } = vi.hoisted(() => ({
+const { execFileAsync, shells, signals } = vi.hoisted(() => ({
   execFileAsync: vi.fn(),
   shells: [] as Array<EventEmitter & { options: Options }>,
+  signals: { autoReady: true },
 }));
 
 vi.mock('child_process', () => ({
@@ -26,7 +29,9 @@ vi.mock('python-shell', async () => {
       ) {
         super();
         shells.push(this);
-        queueMicrotask(() => this.emit('message', 'READY'));
+        if (signals.autoReady) {
+          queueMicrotask(() => this.emit('message', 'READY'));
+        }
       }
       send() {
         queueMicrotask(() => this.emit('close'));
@@ -46,6 +51,7 @@ describe('Python pool executable validation', () => {
     execFileAsync.mockReset();
     execFileAsync.mockResolvedValue({ stdout: 'Python 3.12.0', stderr: '' });
     shells.length = 0;
+    signals.autoReady = true;
   });
 
   afterEach(async () => {
@@ -108,5 +114,62 @@ describe('Python pool executable validation', () => {
     shells[0].emit('close');
     await vi.waitFor(() => expect(shells).toHaveLength(3));
     expect(execFileAsync).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not restart after shutdown while executable validation is pending', async () => {
+    const pool = new PythonWorkerPool('fixture.py', 'call_api', 1, 'fixture-python');
+    pools.push(pool);
+    await pool.initialize();
+    let finishProbe!: (result: { stdout: string; stderr: string }) => void;
+    execFileAsync.mockImplementationOnce(() => new Promise((resolve) => (finishProbe = resolve)));
+    shells[0].emit('close');
+    expect(execFileAsync).toHaveBeenCalledTimes(2);
+
+    await pool.shutdown();
+    finishProbe({ stdout: 'Python 3.12.0', stderr: '' });
+    await setImmediate();
+
+    expect(shells).toHaveLength(1);
+    expect(pool.getWorkerCount()).toBe(0);
+  });
+
+  it('does not start a direct worker when shutdown interrupts its first validation', async () => {
+    const onReady = vi.fn();
+    const worker = new PythonWorker('fixture.py', 'call_api', 'fixture-python', 1000, onReady);
+    let finishProbe!: (result: { stdout: string; stderr: string }) => void;
+    execFileAsync.mockImplementationOnce(() => new Promise((resolve) => (finishProbe = resolve)));
+    const initializing = worker.initialize();
+    const rejected = expect(initializing).rejects.toThrow('Worker shutting down');
+    await worker.shutdown();
+    finishProbe({ stdout: 'Python 3.12.0', stderr: '' });
+    await rejected;
+    expect(shells).toHaveLength(0);
+    expect(onReady).not.toHaveBeenCalled();
+  });
+
+  it('does not start a pool when shutdown interrupts its first validation', async () => {
+    const pool = new PythonWorkerPool('fixture.py', 'call_api', 2, 'fixture-python');
+    pools.push(pool);
+    let finishProbe!: (result: { stdout: string; stderr: string }) => void;
+    execFileAsync.mockImplementationOnce(() => new Promise((resolve) => (finishProbe = resolve)));
+    const initializing = pool.initialize();
+    const rejected = expect(initializing).rejects.toThrow('Worker pool shutting down');
+    await pool.shutdown();
+    finishProbe({ stdout: 'Python 3.12.0', stderr: '' });
+    await rejected;
+    expect(shells).toHaveLength(0);
+    expect(pool.getWorkerCount()).toBe(0);
+  });
+
+  it('settles startup when shutdown closes a worker before its ready signal', async () => {
+    signals.autoReady = false;
+    const onReady = vi.fn();
+    const worker = new PythonWorker('fixture.py', 'call_api', 'fixture-python', 1000, onReady);
+    const initializing = worker.initialize('fixture-python');
+    const rejected = expect(initializing).rejects.toThrow('Worker shutting down');
+    await worker.shutdown();
+    await rejected;
+    expect(worker.isReady()).toBe(false);
+    expect(onReady).not.toHaveBeenCalled();
   });
 });

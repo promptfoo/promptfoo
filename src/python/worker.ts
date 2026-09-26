@@ -52,6 +52,10 @@ export class PythonWorker {
       validatedPythonPath ??
       (await validatePythonPath(this.pythonPath || 'python', typeof this.pythonPath === 'string'));
 
+    if (this.shuttingDown) {
+      throw new Error('Worker shutting down');
+    }
+
     this.process = new PythonShell(wrapperPath, {
       mode: 'text',
       pythonPath: resolvedPythonPath,
@@ -76,6 +80,10 @@ export class PythonWorker {
       this.process!.on('message', (message: string) => {
         if (message.trim() === 'READY') {
           clearTimeout(readyTimeout);
+          if (this.shuttingDown) {
+            reject(new Error('Worker shutting down'));
+            return;
+          }
           this.ready = true;
           logger.debug(`Python worker ready for ${this.scriptPath}`);
           // Notify pool that worker is ready (triggers queue processing)
@@ -95,7 +103,10 @@ export class PythonWorker {
 
       this.process!.on('close', () => {
         this.flushStderr();
-        if (!this.shuttingDown) {
+        if (this.shuttingDown) {
+          clearTimeout(readyTimeout);
+          reject(new Error('Worker shutting down'));
+        } else {
           this.handleCrash();
         }
       });
@@ -257,7 +268,9 @@ export class PythonWorker {
     if (this.crashCount < this.maxCrashes) {
       logger.warn(`Python worker crashed (${this.crashCount}/${this.maxCrashes}), restarting...`);
       this.startWorker().catch((err) => {
-        logger.error(`Failed to restart worker: ${err}`);
+        if (!this.shuttingDown) {
+          logger.error(`Failed to restart worker: ${err}`);
+        }
       });
     } else {
       logger.error(`Python worker crashed ${this.maxCrashes} times, marking as dead`);
@@ -273,13 +286,13 @@ export class PythonWorker {
   }
 
   async shutdown(): Promise<void> {
+    this.shuttingDown = true;
+    this.ready = false;
     if (!this.process) {
       return;
     }
 
     try {
-      this.shuttingDown = true;
-
       // Reject any in-flight request promptly
       if (this.pendingRequest) {
         this.pendingRequest.reject(new Error('Worker shutting down'));
@@ -305,7 +318,6 @@ export class PythonWorker {
       }
       this.ready = false;
       this.busy = false;
-      this.shuttingDown = false;
     }
   }
 }
