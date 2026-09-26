@@ -587,7 +587,13 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     response: FoundryResponse,
     effectiveConfig: EffectiveFoundryConfig,
   ): Promise<ProviderResponse> {
-    const result = await this.processor.processResponseOutput(response, effectiveConfig, false);
+    // Only the timed loop executes callbacks. Unresolved calls must remain data
+    // when a batch cannot be handled (for example, when a callback is missing).
+    const result = await this.processor.processResponseOutput(
+      response,
+      { ...effectiveConfig, functionToolCallbacks: undefined },
+      false,
+    );
     const cachedInputTokens = response.usage?.input_tokens_details?.cached_tokens;
     if (result.tokenUsage && cachedInputTokens !== undefined) {
       result.tokenUsage.cached = cachedInputTokens;
@@ -644,6 +650,13 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const { body, effectiveConfig } = await this.buildResponsesBody(prompt, context);
+    const maxLoopTimeMs =
+      effectiveConfig.maxPollTimeMs === undefined ? 300000 : effectiveConfig.maxPollTimeMs;
+    if (!Number.isFinite(maxLoopTimeMs) || maxLoopTimeMs < 0) {
+      return {
+        error: 'Azure Foundry agent maxPollTimeMs must be a finite, non-negative number.',
+      };
+    }
     const projectScope = hashFoundryAgentCacheValue(this.projectUrl);
     const cacheKey = `azure_foundry_agent:${this.deploymentName}:${projectScope}:${hashFoundryAgentCacheValue(body)}`;
 
@@ -701,7 +714,6 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       span.updateName(`invoke_agent ${agent.name}`);
       const openAIClient = client.getOpenAIClient();
       const responseOptions = this.getAgentReference(agent);
-      const maxLoopTimeMs = effectiveConfig.maxPollTimeMs ?? 300000;
       const tracer = getGenAITracer();
       let turnCount = 0;
 
@@ -750,18 +762,29 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         throw err;
       }
       const startTime = Date.now();
+      // Check the shared budget between turns; pending requests and callbacks
+      // are allowed to finish rather than being interrupted by this limit.
+      const outOfBudget = () => Date.now() - startTime >= maxLoopTimeMs;
+      const toolLoopTimeoutError =
+        `Azure Foundry agent tool-calling loop timed out after ${maxLoopTimeMs}ms. ` +
+        'Increase maxPollTimeMs if this evaluation legitimately needs a longer tool-calling loop.';
       let functionCalls = this.getCallableFunctionCalls(
         response,
         effectiveConfig.functionToolCallbacks,
       );
-      const hasToolCalls = functionCalls.length > 0;
-      while (functionCalls.length > 0 && Date.now() - startTime < maxLoopTimeMs) {
+      const hadCallableFunctionCalls = functionCalls.length > 0;
+      while (functionCalls.length > 0 && !outOfBudget()) {
         const outputs = await this.buildFunctionCallOutputs(
           functionCalls,
           response,
           agent,
           effectiveConfig.functionToolCallbacks,
         );
+        // Callbacks can exhaust the budget on their own. Stop before spending
+        // another round trip on outputs the loop can no longer act on.
+        if (outOfBudget()) {
+          return { error: toolLoopTimeoutError };
+        }
         logger.debug(
           `[AzureFoundryAgentProvider] Submitting ${outputs.length} function_call_output item(s)`,
         );
@@ -785,10 +808,14 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         );
       }
 
-      if (hasToolCalls && Date.now() - startTime >= maxLoopTimeMs) {
-        return {
-          error: `Azure Foundry agent tool-calling loop timed out after ${maxLoopTimeMs}ms.`,
-        };
+      // Check all outstanding calls, including batches with missing callbacks.
+      // A final answer may still be returned when the last request ran over time.
+      if (
+        hadCallableFunctionCalls &&
+        outOfBudget() &&
+        response.output?.some((item) => item.type === 'function_call')
+      ) {
+        return { error: toolLoopTimeoutError };
       }
 
       const result = await this.processResponse(response, effectiveConfig);
