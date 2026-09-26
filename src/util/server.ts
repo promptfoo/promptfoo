@@ -8,9 +8,26 @@ import { getRemoteVersionUrl } from '../redteam/remoteGeneration';
 import { fetchWithProxy } from './fetch/index';
 import { promptYesNo } from './readline';
 
-const launchBrowser = promisify((url: string, callback: (error: Error | null) => void) =>
+const openBrowserProcess = promisify((url: string, callback: (error: Error | null) => void) =>
   opener(url, {}, callback),
 );
+
+async function launchBrowser(url: string, onError: (error: unknown) => void): Promise<void> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      // Keep the handler attached for later failures in a long-running view server too.
+      openBrowserProcess(url).catch(onError),
+      new Promise<void>((resolve) => {
+        // Catch prompt launch failures before CLI shutdown, but do not wait for a browser
+        // to close when xdg-open runs it in the foreground.
+        timeout = setTimeout(resolve, 1000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 export const BrowserBehavior = {
   ASK: 0,
@@ -137,11 +154,9 @@ export async function openBrowser(
 
   const doOpen = async () => {
     logger.info('Press Ctrl+C to stop the server');
-    try {
-      await launchBrowser(url);
-    } catch (err) {
+    await launchBrowser(url, (err) => {
       logger.error(`Failed to open browser: ${String(err)}`);
-    }
+    });
   };
 
   if (browserBehavior === BrowserBehavior.ASK) {
@@ -182,14 +197,12 @@ export async function openAuthBrowser(
 ): Promise<void> {
   const doOpen = async () => {
     logger.info(`Opening ${authUrl} in your browser...`);
-    // Keep instructions visible while waiting for the platform launcher to exit.
+    // Keep instructions visible while checking for immediate launch failures.
     logger.info(`After logging in, get your API token at ${chalk.green(welcomeUrl)}`);
-    try {
-      await launchBrowser(authUrl);
-    } catch (err) {
+    await launchBrowser(authUrl, (err) => {
       logger.error(`Failed to open browser: ${String(err)}`);
       logger.info(`Please visit: ${chalk.green(authUrl)}`);
-    }
+    });
   };
 
   if (browserBehavior === BrowserBehavior.ASK) {

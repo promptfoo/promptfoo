@@ -66,6 +66,57 @@ describe('Server Utilities', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+    vi.useRealTimers();
+  });
+
+  describe('browser launcher lifecycle', () => {
+    it.each(['server', 'auth'])('bounds the wait for a long-lived %s launcher', async (kind) => {
+      vi.useFakeTimers();
+      vi.mocked(opener).mockImplementationOnce(() => new ChildProcess());
+      const opening =
+        kind === 'auth'
+          ? openAuthBrowser(
+              'https://example.test/login',
+              'https://example.test/welcome',
+              BrowserBehavior.OPEN,
+            )
+          : openBrowser(BrowserBehavior.OPEN);
+      let completed = false;
+      void opening.then(() => {
+        completed = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(999);
+      expect(completed).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await opening;
+      expect(completed).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+
+      // A live server still reports a launcher failure after the grace period.
+      vi.mocked(opener).mock.calls[0][2]?.(new Error('late launcher failure'), '', '');
+      await Promise.resolve();
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to open browser: Error: late launcher failure',
+      );
+    });
+
+    it.each(['server', 'auth'])(
+      'clears the grace timer after a successful %s launch',
+      async (kind) => {
+        vi.useFakeTimers();
+        if (kind === 'auth') {
+          await openAuthBrowser(
+            'https://example.test/login',
+            'https://example.test/welcome',
+            BrowserBehavior.OPEN,
+          );
+        } else {
+          await openBrowser(BrowserBehavior.OPEN);
+        }
+        expect(vi.getTimerCount()).toBe(0);
+      },
+    );
   });
 
   describe('checkServerRunning', () => {
