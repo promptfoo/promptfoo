@@ -3,6 +3,9 @@ import crypto from 'crypto';
 import { SageMakerRuntimeClient } from '@aws-sdk/client-sagemaker-runtime';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
+import { withProviderCallExecutionContext } from '../../src/scheduler/providerCallExecutionContext';
+
+import type { ApiProvider, CallApiContextParams } from '../../src/types/index';
 
 // Use vi.hoisted to create mock functions that can be used in vi.mock factories
 const { mockSend, mockCacheGet, mockCacheSet, mockIsCacheEnabled } = vi.hoisted(() => ({
@@ -732,4 +735,75 @@ describe('SageMakerEmbeddingProvider', () => {
       expect(result.latencyMs).toBe(150);
     });
   });
+});
+
+describe('SageMaker invocation-local pacing', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    mockSend.mockReset();
+    mockCacheGet.mockReset();
+    mockCacheSet.mockReset();
+    mockIsCacheEnabled.mockReturnValue(false);
+    mockSend.mockResolvedValue({
+      Body: new TextEncoder().encode(
+        JSON.stringify({
+          choices: [{ text: 'ok' }],
+          data: [{ embedding: [0.1, 0.2] }],
+        }),
+      ),
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    mockSend.mockReset();
+    mockCacheGet.mockReset();
+    mockCacheSet.mockReset();
+    mockIsCacheEnabled.mockReset();
+  });
+
+  it.each([
+    { kind: 'completion', delay: 20, cached: false },
+    { kind: 'completion', delay: 0, cached: false },
+    { kind: 'completion', delay: 20, cached: true },
+    { kind: 'embedding', delay: 20, cached: false },
+    { kind: 'embedding', delay: 0, cached: false },
+    { kind: 'embedding', delay: 20, cached: true },
+  ] as const)(
+    'preserves context delay for $kind (delay=$delay, cached=$cached)',
+    async ({ kind, delay, cached }) => {
+      const target: ApiProvider = {
+        id: () => 'offline-target',
+        callApi: async () => ({ output: 'ok' }),
+      };
+      const context: CallApiContextParams = {
+        originalProvider: target,
+        prompt: { raw: 'hello', label: 'hello' },
+        vars: {},
+      };
+      const options = { delay: 50, config: { region: 'us-east-1', modelType: 'openai' as const } };
+      mockIsCacheEnabled.mockReturnValue(cached);
+      mockCacheGet.mockResolvedValue(JSON.stringify({ output: 'ok', embedding: [0.1, 0.2] }));
+      const provider =
+        kind === 'completion'
+          ? new SageMakerCompletionProvider('offline-endpoint', options)
+          : new SageMakerEmbeddingProvider('offline-endpoint', options);
+      const timeout = vi.spyOn(global, 'setTimeout');
+      const response = withProviderCallExecutionContext(
+        { providerDelay: { provider: target, delay } },
+        () =>
+          provider instanceof SageMakerCompletionProvider
+            ? provider.callApi('hello', context)
+            : provider.callEmbeddingApi('hello', context),
+      );
+      await vi.runAllTimersAsync();
+      expect(await response).not.toHaveProperty('error');
+
+      expect(timeout.mock.calls.map(([, ms]) => ms)).toEqual(delay > 0 && !cached ? [delay] : []);
+      expect(mockSend).toHaveBeenCalledTimes(cached ? 0 : 1);
+      expect(target.delay).toBeUndefined();
+      expect(provider.delay).toBe(50);
+    },
+  );
 });

@@ -1,6 +1,7 @@
 import dedent from 'dedent';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SimulatedUser } from '../../src/providers/simulatedUser';
+import { withProviderCallExecutionContext } from '../../src/scheduler/providerCallExecutionContext';
 import * as timeUtils from '../../src/util/time';
 import {
   createMockProvider,
@@ -339,6 +340,27 @@ describe('SimulatedUser', () => {
       expect(providerWithDelay.callApi).toHaveBeenCalledTimes(2);
       expect(timeUtils.sleep).toHaveBeenCalledWith(100);
     });
+
+    it.each([0, 25])(
+      'preserves invocation-local delay %s with an unchanged target',
+      async (delay) => {
+        const result = await withProviderCallExecutionContext(
+          { providerDelay: { provider: originalProvider, delay } },
+          () =>
+            simulatedUser.callApi('hello', {
+              originalProvider,
+              vars: {},
+              prompt: { raw: 'hello', label: 'hello' },
+            }),
+        );
+        expect(result.error).toBeUndefined();
+        expect(originalProvider.callApi).toHaveBeenCalledTimes(2);
+        expect(vi.mocked(timeUtils.sleep).mock.calls.map(([ms]) => ms)).toEqual(
+          delay ? [delay, delay] : [],
+        );
+        expect(originalProvider.delay).toBeUndefined();
+      },
+    );
 
     it('should include sessionId from agentResponse in metadata', async () => {
       const providerWithSessionId = createMockProvider({

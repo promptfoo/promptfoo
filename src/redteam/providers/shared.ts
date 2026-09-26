@@ -8,7 +8,10 @@ import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
 import { getProviderCallTracingContext, wrapProviderWithRateLimiting } from '../../scheduler';
-import { getProviderCallExecutionContext } from '../../scheduler/providerCallExecutionContext';
+import {
+  getProviderCallExecutionContext,
+  getProviderDelay,
+} from '../../scheduler/providerCallExecutionContext';
 import {
   type ApiProvider,
   type Assertion,
@@ -556,9 +559,10 @@ export async function getTargetResponse(
       },
     };
   }
-  if (!targetRespRaw.cached && targetProvider.delay && targetProvider.delay > 0) {
-    logger.debug(`Sleeping for ${targetProvider.delay}ms`);
-    await sleep(targetProvider.delay);
+  const delay = getProviderDelay(targetProvider);
+  if (!targetRespRaw.cached && delay && delay > 0) {
+    logger.debug(`Sleeping for ${delay}ms`);
+    await sleep(delay);
   }
   const tokenUsage = { numRequests: 1, ...targetRespRaw.tokenUsage };
   const hasOutput = targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'output');

@@ -5,7 +5,9 @@ import cliState from '../../src/cliState';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { EchoProvider } from '../../src/providers/echo';
-import { redteamProviderManager } from '../../src/redteam/providers/shared';
+import * as targetWrapping from '../../src/redteam/mcpTargetProvider';
+import { getTargetResponse, redteamProviderManager } from '../../src/redteam/providers/shared';
+import { getProviderDelay } from '../../src/scheduler/providerCallExecutionContext';
 import { isRateLimitWrapped } from '../../src/scheduler/providerWrapper';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { sleep } from '../../src/util/time';
@@ -65,6 +67,113 @@ describeEvaluator('evaluation environment defaults', () => {
       expect(provider.delay).toBe(delay);
     },
   );
+
+  it.each([
+    { providerDelay: undefined, evalDelay: undefined, expected: 9 },
+    { providerDelay: undefined, evalDelay: 7, expected: 7 },
+    { providerDelay: undefined, evalDelay: 0, expected: 0 },
+    { providerDelay: 3, evalDelay: 7, expected: 3 },
+    { providerDelay: undefined, evalDelay: 7, expected: 7, wrapped: true },
+  ])('preserves pacing inside delegated provider calls: %j', async (testCase) => {
+    const events: string[] = [];
+    const target: ApiProvider = {
+      id: () => 'offline-target',
+      delay: testCase.providerDelay,
+      callApi: async () => {
+        events.push('call');
+        return { output: 'ok' };
+      },
+    };
+    const targetForContext = testCase.wrapped ? { ...target } : target;
+    const wrapper = testCase.wrapped
+      ? vi
+          .spyOn(targetWrapping, 'maybeWrapMcpProviderForRedteam')
+          .mockImplementation((provider) => (provider === target ? targetForContext : provider))
+      : undefined;
+    vi.mocked(sleep).mockImplementation(async (delay) => {
+      events.push(`sleep:${delay}`);
+    });
+    const suite = createSuite(target, { PROMPTFOO_DELAY_MS: '9' });
+    suite.tests = [
+      {
+        provider: {
+          id: () => 'offline-delegate',
+          callApi: async (_prompt, context) => {
+            expect(context?.originalProvider).toBe(targetForContext);
+            expect(getProviderDelay(createProvider('unrelated'))).toBeUndefined();
+            await getTargetResponse(targetForContext, 'hello', context);
+            return getTargetResponse(targetForContext, 'hello again', context);
+          },
+        },
+      },
+    ];
+
+    try {
+      await evaluate(suite, new Eval({}), { delay: testCase.evalDelay });
+    } finally {
+      wrapper?.mockRestore();
+    }
+
+    expect(events).toEqual(
+      testCase.expected > 0
+        ? [
+            'call',
+            `sleep:${testCase.expected}`,
+            'call',
+            `sleep:${testCase.expected}`,
+            `sleep:${testCase.expected}`,
+          ]
+        : ['call', 'call'],
+    );
+    expect(target.delay).toBe(testCase.providerDelay);
+    expect(getProviderDelay(target)).toBe(testCase.providerDelay);
+  });
+
+  it('isolates delegated delays when overlapping evaluations share the target', async () => {
+    let started = 0;
+    let release!: () => void;
+    const bothStarted = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const target = createProvider('shared-offline-target');
+    const observed: number[][] = [];
+    const run = (delay: number) => {
+      const suite = createSuite(target, { PROMPTFOO_DELAY_MS: String(delay) });
+      suite.tests = [
+        {
+          provider: {
+            id: () => 'offline-delegate',
+            callApi: async (_prompt, context) => {
+              if (++started === 2) {
+                release();
+              }
+              await bothStarted;
+              observed.push([delay, getProviderDelay(target)!]);
+              await getTargetResponse(target, 'hello', context);
+              return getTargetResponse(target, 'hello again', context);
+            },
+          },
+        },
+      ];
+      return evaluate(suite, new Eval({}), {});
+    };
+    await Promise.all([run(2), run(4)]);
+
+    expect(observed).toEqual(
+      expect.arrayContaining([
+        [2, 2],
+        [4, 4],
+      ]),
+    );
+    expect(
+      vi
+        .mocked(sleep)
+        .mock.calls.map(([delay]) => delay)
+        .sort(),
+    ).toEqual([2, 2, 2, 4, 4, 4]);
+    expect(target.delay).toBeUndefined();
+    expect(getProviderDelay(target)).toBeUndefined();
+  });
 
   it('isolates concurrent delay defaults on the same provider object', async () => {
     let calls = 0;

@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { z } from 'zod';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
+import { getProviderDelay } from '../scheduler/providerCallExecutionContext';
 import telemetry from '../telemetry';
 import { getTransformErrorMessage, TransformInputType, transform } from '../util/transform';
 import { StringOrFunctionSchema } from '../validators/shared';
@@ -662,7 +663,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     const { isCacheEnabled, getCache } = await import('../cache');
 
     // Get the delay value - the context delay takes precedence over the provider's delay
-    const delayMs = context?.originalProvider?.delay || this.delay;
+    const delayMs = getProviderDelay(context?.originalProvider) ?? this.delay;
 
     const transformResult = await this.runTransformSafely(
       prompt,
@@ -887,7 +888,7 @@ export class SageMakerEmbeddingProvider
     const { isCacheEnabled, getCache } = await import('../cache');
 
     // Get the delay value - the context delay takes precedence over the provider's delay
-    const delayMs = context?.originalProvider?.delay || this.delay;
+    const delayMs = getProviderDelay(context?.originalProvider) ?? this.delay;
 
     const transformResult = await this.runTransformSafely(
       text,

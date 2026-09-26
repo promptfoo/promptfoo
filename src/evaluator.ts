@@ -37,6 +37,7 @@ import {
   type RateLimitRegistry,
 } from './scheduler';
 import {
+  getProviderCallExecutionContext,
   withProviderCallExecutionContext,
   withProviderCallTracingContext,
 } from './scheduler/providerCallExecutionContext';
@@ -880,6 +881,7 @@ function tryParseJson(value: string): unknown {
 
 async function callProviderForRunEval({
   abortSignal,
+  delay,
   evalId,
   filters,
   promptForRender,
@@ -895,6 +897,7 @@ async function callProviderForRunEval({
 }: Pick<
   RunEvalOptions,
   | 'abortSignal'
+  | 'delay'
   | 'evalId'
   | 'nunjucksFilters'
   | 'provider'
@@ -926,6 +929,7 @@ async function callProviderForRunEval({
     } else {
       response = await callActiveProvider({
         abortSignal,
+        delay,
         evalId,
         filters,
         onProviderInvoked: () => {
@@ -1038,6 +1042,7 @@ async function collectExternalTraceAfterProviderCall({
 
 async function callActiveProvider({
   abortSignal,
+  delay,
   evalId,
   filters,
   onProviderInvoked,
@@ -1053,7 +1058,14 @@ async function callActiveProvider({
   vars,
 }: Pick<
   RunEvalOptions,
-  'abortSignal' | 'evalId' | 'provider' | 'rateLimitRegistry' | 'repeatIndex' | 'test' | 'testSuite'
+  | 'abortSignal'
+  | 'delay'
+  | 'evalId'
+  | 'provider'
+  | 'rateLimitRegistry'
+  | 'repeatIndex'
+  | 'test'
+  | 'testSuite'
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
   onProviderInvoked: () => void;
@@ -1083,25 +1095,32 @@ async function callActiveProvider({
   });
   const callApiOptions = abortSignal ? { abortSignal } : undefined;
 
-  const callApi = () => {
-    onProviderInvoked();
-    const invoke = () =>
-      traceContext?.traceparent
-        ? withTracedProviderCall(
-            {
-              provider: activeProvider,
-              callContext: callApiContext,
-              promptLabel: promptForRender.label,
-              evalId: callApiContext.evaluationId,
-              testIndex,
-            },
-            async (context) => activeProvider.callApi(renderedPrompt, context, callApiOptions),
-          )
-        : activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
-    return testSuite?.tracing
-      ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
-      : invoke();
-  };
+  const callApi = () =>
+    withProviderCallExecutionContext(
+      {
+        ...getProviderCallExecutionContext(),
+        providerDelay: { provider: originalProvider, delay },
+      },
+      () => {
+        onProviderInvoked();
+        const invoke = () =>
+          traceContext?.traceparent
+            ? withTracedProviderCall(
+                {
+                  provider: activeProvider,
+                  callContext: callApiContext,
+                  promptLabel: promptForRender.label,
+                  evalId: callApiContext.evaluationId,
+                  testIndex,
+                },
+                async (context) => activeProvider.callApi(renderedPrompt, context, callApiOptions),
+              )
+            : activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
+        return testSuite?.tracing
+          ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
+          : invoke();
+      },
+    );
   const response = rateLimitRegistry
     ? await rateLimitRegistry.execute(activeProvider, callApi, createProviderRateLimitOptions())
     : await callApi();
@@ -1692,6 +1711,7 @@ async function runEvalInternal({
         async () => {
           const providerCall = await callProviderForRunEval({
             abortSignal,
+            delay: effectiveDelay,
             evalId,
             filters,
             promptForRender: {

@@ -17,6 +17,8 @@ import type { ProviderCallQueue } from './providerCallQueue';
  */
 export interface ProviderCallExecutionContext {
   abortSignal?: AbortSignal;
+  /** Evaluation-local pacing for this target, without changing a reusable provider. */
+  providerDelay?: { provider: ApiProvider; delay: number };
   providerCallQueue?: ProviderCallQueue;
   rateLimitRegistry?: RateLimitRegistryRef;
 }
@@ -54,6 +56,15 @@ const providerCallTracingContext = new AsyncLocalStorage<ProviderCallTracingCont
 
 export function getProviderCallExecutionContext(): ProviderCallExecutionContext | undefined {
   return providerCallExecutionContext.getStore();
+}
+
+/** Resolve an explicit provider delay or the delay for its active invocation. */
+export function getProviderDelay(provider?: ApiProvider): number | undefined {
+  if (!provider) {
+    return undefined;
+  }
+  const scopedDelay = getProviderCallExecutionContext()?.providerDelay;
+  return provider.delay ?? (scopedDelay?.provider === provider ? scopedDelay.delay : undefined);
 }
 
 export function withProviderCallExecutionContext<T>(

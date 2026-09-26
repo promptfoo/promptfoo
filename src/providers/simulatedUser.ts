@@ -1,5 +1,6 @@
 import logger, { isDebugEnabled } from '../logger';
 import { getSessionId } from '../redteam/util';
+import { getProviderDelay } from '../scheduler/providerCallExecutionContext';
 import { maybeLoadConfigFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
@@ -277,9 +278,10 @@ export class SimulatedUser implements ApiProvider {
       context.vars.sessionId = response.sessionId;
     }
 
-    if (targetProvider.delay) {
-      logger.debug(`[SimulatedUser] Sleeping for ${targetProvider.delay}ms`);
-      await sleep(targetProvider.delay);
+    const delay = getProviderDelay(targetProvider);
+    if (delay) {
+      logger.debug(`[SimulatedUser] Sleeping for ${delay}ms`);
+      await sleep(delay);
     }
 
     if (isDebugEnabled()) {
