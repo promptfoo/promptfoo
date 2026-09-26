@@ -4,7 +4,7 @@ prompts:
   - 'Find me something fun or positive that happened recently in the news about {{topic}}. I want to hear about developments or stories from the past week. Make sure to cite your sources.'
 
 providers:
-  - id: openai:responses:gpt-5.6-terra
+  - id: openai:responses:gpt-6-sol
     config:
       reasoning:
         effort: none

@@ -1896,6 +1896,72 @@ describe('runAssertion', () => {
     });
   });
 
+  describe.each(['webhook', 'not-webhook'] as const)('%s response validation', (type) => {
+    const checkResponse = (json: string) => {
+      vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+        new Response(json, { headers: { 'Content-Type': 'application/json' } }),
+      );
+      return runAssertion({
+        prompt: 'Some prompt',
+        assertion: { ...webhookAssertion, type },
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Expected output' },
+        provider: createMockProvider(),
+      });
+    };
+
+    it.each([
+      {},
+      { error: 'Grader unavailable' },
+      { pass: 'false' },
+      { pass: 'true' },
+      { pass: 0 },
+      { pass: 1 },
+      { pass: null },
+      { pass: [] },
+      { pass: {} },
+      null,
+      [],
+      true,
+      'false',
+    ])('rejects a response without a boolean pass: %j', async (response) => {
+      await expect(checkResponse(JSON.stringify(response))).resolves.toMatchObject({
+        pass: false,
+        score: 0,
+        reason:
+          'Webhook error: Invariant failed: Webhook response must be a JSON object with a boolean "pass" property',
+      });
+    });
+
+    it.each([
+      [true, undefined, 1],
+      [false, undefined, 0],
+      [true, 0, 0],
+      [true, 0.25, 0.25],
+      [false, 0.25, 0.25],
+      [true, 1, 1],
+    ] as const)('preserves pass %s and score %s', async (pass, score, expectedScore) => {
+      const result = await checkResponse(JSON.stringify({ pass, score, reason: 'Custom grade' }));
+      expect(result).toMatchObject({
+        pass: type === 'webhook' ? pass : !pass,
+        score: type === 'webhook' ? expectedScore : 1 - expectedScore,
+        reason: 'Custom grade',
+      });
+    });
+
+    it.each(['null', '"0.5"', 'false', '-0.1', '1.1', '1e400', '-1e400'])(
+      'rejects an invalid JSON score: %s',
+      async (score) => {
+        await expect(checkResponse(`{"pass":true,"score":${score}}`)).resolves.toMatchObject({
+          pass: false,
+          score: 0,
+          reason:
+            'Webhook error: Invariant failed: Webhook response "score" must be a finite number between 0 and 1',
+        });
+      },
+    );
+  });
+
   it('should fail when the webhook returns an error', async () => {
     const output = 'Expected output';
 

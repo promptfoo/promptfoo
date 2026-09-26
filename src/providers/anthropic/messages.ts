@@ -262,6 +262,14 @@ function getAnthropicCostFromMessage(
   config: AnthropicMessageOptions,
   message: Anthropic.Messages.Message,
 ): number | undefined {
+  // Since September 24, 2026, only these categories bill refusals before any output.
+  if (
+    message.stop_reason === 'refusal' &&
+    message.usage?.output_tokens === 0 &&
+    !['bio', 'frontier_llm', 'reasoning_extraction'].includes(message.stop_details?.category ?? '')
+  ) {
+    return 0;
+  }
   return calculateAnthropicCost(
     modelName,
     config,
@@ -348,20 +356,22 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   }): Promise<{
     error?: string;
     response: Anthropic.Messages.Message;
+    responses: Anthropic.Messages.Message[];
     toolCalls: McpToolCallEntry[];
   }> {
     // Every return below carries `toolCalls`, including the bail-out paths: a run that
     // trips max_tool_calls or mixes MCP and non-MCP blocks is exactly when you want to
     // see which tools did run.
     const toolCalls: McpToolCallEntry[] = [];
+    const responses = [initialResponse];
 
     if (!this.mcpClient) {
-      return { response: initialResponse, toolCalls };
+      return { response: initialResponse, responses, toolCalls };
     }
 
     const mcpToolNames = new Set(this.mcpClient.getAllTools().map((tool) => tool.name));
     if (mcpToolNames.size === 0) {
-      return { response: initialResponse, toolCalls };
+      return { response: initialResponse, responses, toolCalls };
     }
 
     const maxToolCalls = getMaxMcpToolCalls(config);
@@ -369,11 +379,10 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       // max_tool_calls: 0 explicitly disables automatic MCP tool execution.
       // Return the model's initial response (which may contain tool_use
       // blocks) unchanged rather than treating unexecuted tools as an error.
-      return { response: initialResponse, toolCalls };
+      return { response: initialResponse, responses, toolCalls };
     }
 
     let response = initialResponse;
-    const responses = [initialResponse];
     let messages = params.messages;
     let executedMcpToolCalls = 0;
 
@@ -384,19 +393,20 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       const toolUses = responseToolUses.filter((block) => mcpToolNames.has(block.name));
 
       if (toolUses.length === 0) {
-        return { response: withMergedAnthropicUsage(response, responses), toolCalls };
+        return { response: withMergedAnthropicUsage(response, responses), responses, toolCalls };
       }
 
       if (toolUses.length !== responseToolUses.length) {
         logger.warn(
           'Skipping Anthropic MCP continuation because the response mixes MCP and non-MCP tool_use blocks.',
         );
-        return { response: withMergedAnthropicUsage(response, responses), toolCalls };
+        return { response: withMergedAnthropicUsage(response, responses), responses, toolCalls };
       }
 
       if (executedMcpToolCalls + toolUses.length > maxToolCalls) {
         return {
           response: withMergedAnthropicUsage(response, responses),
+          responses,
           error: `Anthropic MCP tool execution exceeded max_tool_calls=${maxToolCalls}. Increase provider config.max_tool_calls if this evaluation legitimately needs more tool calls.`,
           toolCalls,
         };
@@ -455,6 +465,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
     return {
       response: withMergedAnthropicUsage(response, responses),
+      responses,
       toolCalls,
       ...(unresolvedToolUses.length > 0
         ? {
@@ -522,18 +533,28 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     );
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    // Wait for MCP initialization if it's in progress
-    if (this.initializationPromise != null) {
-      await this.initializationPromise;
-    }
-
+  /** Adapters with transport-managed authentication can defer validation to HTTP dispatch. */
+  protected validateAuthentication(): void {
     if (!this.apiKey && !this.usingClaudeCodeOAuth) {
       throw new Error(
         'Anthropic API key is not set. Set the ANTHROPIC_API_KEY environment variable or add `apiKey` to the provider config. ' +
           'Alternatively, if you have an active Claude Code session, set `apiKeyRequired: false` in the provider config to authenticate via Claude Code.',
       );
     }
+  }
+
+  /** Independent of authentication: adapters decide whether their response cache is safe. */
+  protected shouldCacheResponses(): boolean {
+    return true;
+  }
+
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    // Wait for MCP initialization if it's in progress
+    if (this.initializationPromise != null) {
+      await this.initializationPromise;
+    }
+
+    this.validateAuthentication();
 
     // Re-check expiry at request time so we fail with an actionable message
     // ("run `claude /login`") instead of a raw 401 from the SDK. The
@@ -1007,6 +1028,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const shouldUseResponseCache =
       isCacheEnabled() &&
       config.mcp?.enabled !== true &&
+      this.shouldCacheResponses() &&
       !this.hasCustomHeaders() &&
       Object.keys(config.headers ?? {}).length === 0;
 
@@ -1064,6 +1086,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       const {
         error,
         response: resolvedMessage,
+        responses,
         toolCalls,
       } = await this.resolveMcpToolUse({
         config,
@@ -1072,6 +1095,10 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         params,
         shouldStream,
       });
+      const cost = responses.reduce<number | undefined>((total, message) => {
+        const messageCost = getAnthropicCostFromMessage(this.modelName, config, message);
+        return total != null && messageCost != null ? total + messageCost : undefined;
+      }, 0);
 
       // Only attach the key when a tool actually ran: an always-present empty array
       // would break downstream filters that test `metadata?.toolCalls?.length > 0`.
@@ -1084,7 +1111,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         return {
           error,
           tokenUsage: getTokenUsage(resolvedMessage, false),
-          cost: getAnthropicCostFromMessage(this.modelName, config, resolvedMessage),
+          cost,
           ...(mcpMetadata ? { metadata: mcpMetadata } : {}),
         };
       }
@@ -1104,12 +1131,10 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         }
       }
 
-      const response = this.buildMessageResponse(
-        resolvedMessage,
-        config,
-        processedOutputFormat,
-        false,
-      );
+      const response = {
+        ...this.buildMessageResponse(resolvedMessage, config, processedOutputFormat, false),
+        cost,
+      };
       return mcpMetadata
         ? { ...response, metadata: { ...response.metadata, ...mcpMetadata } }
         : response;

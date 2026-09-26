@@ -2,15 +2,16 @@ import dedent from 'dedent';
 import { CLOUD_PROVIDER_PREFIX } from '../constants';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
+import { type UnifiedConfig, UnifiedConfigSchema } from '../types/index';
 import { ProviderOptionsSchema } from '../validators/providers';
 import { fetchWithProxy } from './fetch/index';
 import invariant from './invariant';
+import { normalizeProviderRef } from './providerRef';
 import { checkServerFeatureSupport } from './server';
 import { isUuid } from './uuid';
 
 import type { Plugin, Severity } from '../redteam/constants';
 import type { PoliciesById } from '../redteam/types';
-import type { UnifiedConfig } from '../types/index';
 import type { ProviderOptions } from '../types/providers';
 
 const PERMISSION_CHECK_SERVER_FEATURE_NAME = 'config-permission-check-endpoint';
@@ -120,23 +121,57 @@ function extractEvalConfigPayload(body: unknown): Record<string, unknown> {
 
   const nestedConfig = isRecord(bodyConfig.config) ? bodyConfig.config : undefined;
   if (!nestedConfig) {
-    return {
-      ...bodyConfig,
-      ...(typeof bodyConfig.name !== 'string' && typeof body.name === 'string'
-        ? { name: body.name }
-        : {}),
+    return mergeEvalConfigEnvelope(bodyConfig, body);
+  }
+
+  return mergeEvalConfigEnvelope(nestedConfig, bodyConfig);
+}
+
+function mergeEvalConfigEnvelope(
+  config: Record<string, unknown>,
+  envelope: Record<string, unknown>,
+): Record<string, unknown> {
+  const mergedConfig: Record<string, unknown> = {
+    ...config,
+    ...(typeof config.name !== 'string' && typeof envelope.name === 'string'
+      ? { name: envelope.name }
+      : {}),
+  };
+  const envelopeMetadata = {
+    ...(typeof envelope.teamId === 'string' ? { teamId: envelope.teamId } : {}),
+    ...(typeof envelope.id === 'string' ? { configId: envelope.id } : {}),
+  };
+
+  if (
+    Object.keys(envelopeMetadata).length > 0 &&
+    (mergedConfig.metadata === undefined || isRecord(mergedConfig.metadata))
+  ) {
+    mergedConfig.metadata = {
+      ...(isRecord(mergedConfig.metadata) ? mergedConfig.metadata : {}),
+      ...envelopeMetadata,
     };
   }
 
-  return {
-    ...nestedConfig,
-    ...(typeof nestedConfig.name !== 'string' && typeof bodyConfig.name === 'string'
-      ? { name: bodyConfig.name }
-      : {}),
-  };
+  return mergedConfig;
 }
 
 function normalizeCloudEvalProvider(provider: unknown): unknown {
+  if (isRecord(provider)) {
+    const descriptor = normalizeProviderRef(provider);
+    if (descriptor.kind === 'options' && typeof provider.id === 'string') {
+      const id = normalizeCloudEvalProvider(provider.id);
+      return id === provider.id ? provider : { ...provider, id };
+    }
+    if (descriptor.kind === 'map') {
+      const originalOptions = provider[descriptor.loadProviderPath];
+      const options =
+        isRecord(originalOptions) && typeof originalOptions.id === 'string'
+          ? { ...originalOptions, id: normalizeCloudEvalProvider(originalOptions.id) }
+          : originalOptions;
+      return { [normalizeCloudEvalProvider(descriptor.loadProviderPath) as string]: options };
+    }
+    return provider;
+  }
   if (typeof provider !== 'string') {
     return provider;
   }
@@ -146,53 +181,76 @@ function normalizeCloudEvalProvider(provider: unknown): unknown {
   return `${CLOUD_PROVIDER_PREFIX}${provider}`;
 }
 
-function normalizeCloudEvalPrompt(prompt: unknown): string {
-  if (typeof prompt === 'string') {
+function normalizeCloudEvalProviders(providers: unknown): unknown[] {
+  const providerList = Array.isArray(providers) ? providers : [providers];
+  return providerList.map(normalizeCloudEvalProvider);
+}
+
+function normalizeCloudEvalPrompt(prompt: unknown): unknown {
+  if (!isRecord(prompt)) {
     return prompt;
   }
-  if (isRecord(prompt)) {
-    if (typeof prompt.content === 'string') {
-      return prompt.content;
-    }
-    if (typeof prompt.raw === 'string') {
-      return prompt.raw;
-    }
+
+  if (typeof prompt.raw === 'string') {
+    return typeof prompt.label === 'string' ? prompt : { ...prompt, label: prompt.raw };
   }
-  return String(prompt ?? '');
+  if (typeof prompt.content === 'string') {
+    const { content, ...rest } = prompt;
+    return {
+      ...rest,
+      raw: content,
+      label: typeof prompt.label === 'string' ? prompt.label : content,
+    };
+  }
+  return prompt;
 }
 
 function normalizeEvalConfig(config: Record<string, unknown>): UnifiedConfig {
-  const providers = Array.isArray(config.providers)
-    ? config.providers
-    : Array.isArray(config.providerIds)
-      ? config.providerIds
-      : [];
-  const prompts = Array.isArray(config.prompts) ? config.prompts : [];
-  const tests = Array.isArray(config.tests)
-    ? config.tests
-    : Array.isArray(config.testCases)
-      ? config.testCases
-      : [];
+  const providers =
+    config.providers === undefined
+      ? config.providerIds === undefined
+        ? config.targets === undefined
+          ? []
+          : undefined
+        : normalizeCloudEvalProviders(config.providerIds)
+      : normalizeCloudEvalProviders(config.providers);
+  const targets =
+    config.targets === undefined ? undefined : normalizeCloudEvalProviders(config.targets);
+  const prompts =
+    config.prompts === undefined
+      ? []
+      : Array.isArray(config.prompts)
+        ? config.prompts.map(normalizeCloudEvalPrompt)
+        : config.prompts;
+  const tests =
+    config.tests === undefined
+      ? config.testCases === undefined
+        ? []
+        : config.testCases
+      : config.tests;
 
-  const commandLineOptions = {
-    ...(isRecord(config.commandLineOptions) ? config.commandLineOptions : {}),
+  const legacyCommandLineOptions = {
     ...(config.maxConcurrency == null ? {} : { maxConcurrency: config.maxConcurrency }),
     ...(config.delay == null ? {} : { delay: config.delay }),
     ...(config.verbose == null ? {} : { verbose: config.verbose }),
   };
+  const commandLineOptions =
+    config.commandLineOptions === undefined
+      ? Object.keys(legacyCommandLineOptions).length > 0
+        ? legacyCommandLineOptions
+        : undefined
+      : isRecord(config.commandLineOptions)
+        ? { ...config.commandLineOptions, ...legacyCommandLineOptions }
+        : config.commandLineOptions;
 
   const normalizedConfig: Record<string, unknown> = {
     ...config,
-    providers: providers.map(normalizeCloudEvalProvider),
-    prompts: prompts.map(normalizeCloudEvalPrompt),
+    ...(providers === undefined ? {} : { providers }),
+    ...(targets === undefined ? {} : { targets }),
+    prompts,
     tests,
+    ...(commandLineOptions === undefined ? {} : { commandLineOptions }),
   };
-
-  if (Object.keys(commandLineOptions).length > 0) {
-    normalizedConfig.commandLineOptions = commandLineOptions;
-  } else {
-    delete normalizedConfig.commandLineOptions;
-  }
 
   if (typeof config.description === 'string' && config.description.trim().length > 0) {
     normalizedConfig.description = config.description;
@@ -205,6 +263,15 @@ function normalizeEvalConfig(config: Record<string, unknown>): UnifiedConfig {
   delete normalizedConfig.maxConcurrency;
   delete normalizedConfig.delay;
   delete normalizedConfig.verbose;
+  delete normalizedConfig.name;
+
+  // Validate without replacing the config with Zod's default-injecting output.
+  UnifiedConfigSchema.parse(normalizedConfig);
+
+  if (normalizedConfig.targets !== undefined && normalizedConfig.providers === undefined) {
+    normalizedConfig.providers = normalizedConfig.targets;
+    delete normalizedConfig.targets;
+  }
 
   return normalizedConfig as UnifiedConfig;
 }
@@ -249,13 +316,12 @@ export async function getEvalConfigFromCloud(id: string): Promise<UnifiedConfig>
     );
   }
   try {
-    const body = await fetchCloudConfig(`configs/${id}`);
+    const body = await fetchCloudConfig(`eval/configs/${id}`);
     const config = normalizeEvalConfig(extractEvalConfigPayload(body));
     logger.info(`Eval config fetched from cloud: ${id}`);
     return config;
   } catch (e) {
-    logger.error(`Failed to fetch eval config from cloud: ${id}.`);
-    logger.error(String(e));
+    logger.debug('[Cloud] Failed to fetch eval config', { id, error: e });
     if (e instanceof Error) {
       throw e;
     }
@@ -386,6 +452,30 @@ export async function getUserTeams(
   return body;
 }
 
+/** Returns the oldest team by creation date, which matches the enterprise app's default team. */
+export function getOldestTeam<T extends { createdAt: string }>(teams: T[]): T {
+  return [...teams].sort(
+    (teamA, teamB) => new Date(teamA.createdAt).getTime() - new Date(teamB.createdAt).getTime(),
+  )[0];
+}
+
+/** Finds an exact team ID first; otherwise prefers names and slugs in the selected organization. */
+export function findTeam<
+  T extends { id: string; name: string; slug: string; organizationId: string },
+>(teams: T[], identifier: string, preferredOrganizationId?: string): T | undefined {
+  const name = identifier.toLowerCase();
+  const findByNameOrSlug = (candidates: T[]) =>
+    candidates.find((team) => team.name.toLowerCase() === name) ??
+    candidates.find((team) => team.slug === identifier);
+  return (
+    teams.find((team) => team.id === identifier) ??
+    (preferredOrganizationId
+      ? findByNameOrSlug(teams.filter((team) => team.organizationId === preferredOrganizationId))
+      : undefined) ??
+    findByNameOrSlug(teams)
+  );
+}
+
 /**
  * Retrieves the default team for the current user from Promptfoo Cloud.
  * The default team is determined as the oldest team by creation date.
@@ -404,17 +494,8 @@ export async function getDefaultTeam(): Promise<{
     throw new Error('No teams found for user');
   }
 
-  // get the oldest team -- this matches the logic of the enterprise app
-  const oldestTeam = teams.sort((a, b) => {
-    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-  })[0];
-
-  return {
-    id: oldestTeam.id,
-    name: oldestTeam.name,
-    organizationId: oldestTeam.organizationId,
-    createdAt: oldestTeam.createdAt,
-  };
+  const { id, name, organizationId, createdAt } = getOldestTeam(teams);
+  return { id, name, organizationId, createdAt };
 }
 
 /**
@@ -442,7 +523,8 @@ export async function getTeamById(
 }
 
 /**
- * Resolves a team identifier (name, slug, or ID) to a team object.
+ * Resolves a team identifier (name, slug, or ID) to a team object. When several
+ * organizations share a team name or slug, the current organization's team wins.
  * @param identifier - The team name, slug, or ID
  * @returns Promise resolving to an object with team id, name, organizationId, and createdAt
  * @throws Error if the team is not found
@@ -451,46 +533,24 @@ export async function resolveTeamFromIdentifier(
   identifier: string,
 ): Promise<{ id: string; name: string; organizationId: string; createdAt: string }> {
   const teams = await getUserTeams();
+  const team = findTeam(teams, identifier, cloudConfig.getCurrentOrganizationId());
 
-  // Try exact ID match first
-  let team = teams.find((t) => t.id === identifier);
-  if (team) {
-    return {
-      id: team.id,
-      name: team.name,
-      organizationId: team.organizationId,
-      createdAt: team.createdAt,
-    };
+  if (!team) {
+    const availableTeams = teams.map((t) => t.name).join(', ');
+    throw new Error(`Team '${identifier}' not found. Available teams: ${availableTeams}`);
   }
 
-  // Try name match (case-insensitive)
-  team = teams.find((t) => t.name.toLowerCase() === identifier.toLowerCase());
-  if (team) {
-    return {
-      id: team.id,
-      name: team.name,
-      organizationId: team.organizationId,
-      createdAt: team.createdAt,
-    };
-  }
-
-  // Try slug match
-  team = teams.find((t) => t.slug === identifier);
-  if (team) {
-    return {
-      id: team.id,
-      name: team.name,
-      organizationId: team.organizationId,
-      createdAt: team.createdAt,
-    };
-  }
-
-  const availableTeams = teams.map((t) => t.name).join(', ');
-  throw new Error(`Team '${identifier}' not found. Available teams: ${availableTeams}`);
+  return {
+    id: team.id,
+    name: team.name,
+    organizationId: team.organizationId,
+    createdAt: team.createdAt,
+  };
 }
 
 /**
- * Resolves the current team context, checking stored preferences first.
+ * Resolves the current team context, checking stored preferences first. Never changes the
+ * current organization: the fallback is the oldest team in that organization.
  * @param teamIdentifier - Optional explicit team identifier to use
  * @param fallbackToDefault - Whether to fall back to server default team
  * @returns Promise resolving to an object with team id and name
@@ -507,32 +567,58 @@ export async function resolveTeamId(
   }
 
   // 2. Use stored current team preference (scoped to current organization)
-  const currentOrganizationId = cloudConfig.getCurrentOrganizationId();
+  const configuredOrganizationId = cloudConfig.getCurrentOrganizationId();
+  let currentOrganizationId = configuredOrganizationId;
   const currentTeamId = cloudConfig.getCurrentTeamId(currentOrganizationId);
-  if (currentTeamId) {
-    try {
-      logger.debug(`[Team Resolution] Using stored team ID: ${currentTeamId}`);
-      return await getTeamById(currentTeamId);
-    } catch (_error) {
-      logger.warn(
-        `[Team Resolution] Stored team ${currentTeamId} no longer accessible, falling back`,
+  if (!currentTeamId && !fallbackToDefault) {
+    throw new Error('No team specified and no default available');
+  }
+  if (!currentOrganizationId) {
+    const response = await makeRequest('/users/me', 'GET');
+    const organizationId = response.ok ? (await response.json())?.organization?.id : undefined;
+    if (typeof organizationId !== 'string' || !organizationId) {
+      throw new Error(
+        "Could not determine the current organization. Run 'promptfoo auth login' to select it.",
       );
     }
+    currentOrganizationId = organizationId;
   }
-
-  // 3. Fall back to server default (oldest team)
-  if (fallbackToDefault) {
-    logger.debug(`[Team Resolution] Using server default team`);
-    const defaultTeam = await getDefaultTeam();
-    // Store the default team for future use (scoped to organization)
-    cloudConfig.setCurrentTeamId(defaultTeam.id, defaultTeam.organizationId);
-    logger.info(
-      `Using team: ${defaultTeam.name} (use 'promptfoo auth teams set <name>' to change)`,
+  // Let lookup failures propagate: only a successful lookup proves the stored team is gone.
+  const teams = (await getUserTeams()).filter(
+    (team) => team.organizationId === currentOrganizationId,
+  );
+  const storedTeam = teams.find((team) => team.id === currentTeamId);
+  if (storedTeam) {
+    if (!configuredOrganizationId) {
+      cloudConfig.setCurrentOrganization(currentOrganizationId);
+      cloudConfig.setCurrentTeamId(storedTeam.id, currentOrganizationId);
+    }
+    logger.debug(`[Team Resolution] Using stored team ID: ${currentTeamId}`);
+    return storedTeam;
+  }
+  if (currentTeamId) {
+    logger.warn(
+      `[Team Resolution] Stored team ${currentTeamId} no longer accessible, falling back`,
     );
-    return defaultTeam;
   }
 
-  throw new Error('No team specified and no default available');
+  // 3. Fall back to server default (oldest team in the current organization)
+  if (!fallbackToDefault) {
+    throw new Error('No team specified and no default available');
+  }
+  if (teams.length === 0) {
+    throw new Error(
+      `No accessible teams in organization '${currentOrganizationId}'. Run 'promptfoo auth teams set <team>' to select a team in another organization.`,
+    );
+  }
+  const defaultTeam = getOldestTeam(teams);
+  // Store the default team where the next lookup reads it
+  if (!configuredOrganizationId) {
+    cloudConfig.setCurrentOrganization(currentOrganizationId);
+  }
+  cloudConfig.setCurrentTeamId(defaultTeam.id, currentOrganizationId);
+  logger.info(`Using team: ${defaultTeam.name} (use 'promptfoo auth teams set <name>' to change)`);
+  return defaultTeam;
 }
 
 /**
@@ -844,14 +930,16 @@ export async function getOrgContext(): Promise<{
     }
 
     const { organization } = await response.json();
-    const currentTeamId = cloudConfig.getCurrentTeamId(organization.id);
+    const organizationId = cloudConfig.getCurrentOrganizationId() ?? organization.id;
+    const organizationName = getCloudOrganizationLabel(organization, organizationId);
+    const currentTeamId = cloudConfig.getCurrentTeamId(organizationId);
 
     // Only include team name if it differs from organization name
     let teamName: string | undefined;
     if (currentTeamId) {
       try {
         const team = await getTeamById(currentTeamId);
-        if (team.name !== organization.name) {
+        if (team.organizationId === organizationId && team.name !== organizationName) {
           teamName = team.name;
         }
       } catch {
@@ -860,11 +948,21 @@ export async function getOrgContext(): Promise<{
     }
 
     return {
-      organizationName: organization.name,
+      organizationName,
       teamName,
     };
   } catch {
     // Silently fail and return null
     return null;
   }
+}
+
+/** The token's organization name applies only to that organization; otherwise show the active ID. */
+export function getCloudOrganizationLabel(
+  tokenOrganization: { id: string; name: string },
+  organizationId = cloudConfig.getCurrentOrganizationId(),
+): string {
+  return !organizationId || organizationId === tokenOrganization.id
+    ? tokenOrganization.name
+    : organizationId;
 }
