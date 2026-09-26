@@ -367,11 +367,11 @@ describe('saved login session', () => {
     });
   });
 
-  it('preserves the selected organization preference when team discovery did not complete', () => {
+  it('preserves scoped and legacy preferences when team discovery did not complete', () => {
     new CloudConfig().saveValidatedApiToken({ ...session, teamId: undefined });
     expect(readFile().cloud?.teams?.['new-org']?.currentTeamId).toBe('stale-team');
     expect(readFile().cloud?.currentOrganizationId).toBe('new-org');
-    expect(readFile().cloud?.currentTeamId).toBeUndefined();
+    expect(readFile().cloud?.currentTeamId).toBe('legacy-team');
   });
 
   it('clears active selection after an authoritative empty team lookup and remembers other organizations', () => {
