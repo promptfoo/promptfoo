@@ -309,6 +309,8 @@ When assertions use `weight`, each named score passed into the scoring function 
 
 Custom scoring functions must return finite numbers for `score` and any values in `namedScores` or `namedScoreWeights`, including nested `componentResults`. Nonfinite values such as `NaN` or `Infinity` cause a scoring function error.
 
+Finite inputs can still overflow during aggregation. If the final score or a named score or weight is nonfinite after custom scoring, the test fails with score 0 and an aggregation error. Invalid metric/weight pairs are omitted; valid metrics and component results remain available.
+
 See the [custom assertion scoring example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-assertion-scoring-override) for complete implementations in JavaScript and Python.
 
 ## Load assertions from external file
