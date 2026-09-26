@@ -199,7 +199,9 @@ function responseRetryDelay(
   // The project client bundles its own SDK; root-package instanceof checks differ.
   const ConnectionError = (client.constructor as Function & { APIConnectionError?: typeof Error })
     .APIConnectionError;
-  const connectionError = ConnectionError && error instanceof ConnectionError;
+  const connectionError =
+    (ConnectionError && error instanceof ConnectionError) ||
+    (error instanceof DOMException && error.name === 'TimeoutError');
   const sdkError = error as { status?: number; headers?: unknown };
   const headers = sdkErrorHeaders(sdkError) ?? {};
   if (!connectionError) {
@@ -705,6 +707,16 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       const controller = new AbortController();
       const relayAbort = () => controller.abort();
       signal?.addEventListener('abort', relayAbort, { once: true });
+      let timedOut = false;
+      // The SDK clears its fetch timeout after headers; also bound body reads
+      // and credential acquisition for the complete Responses attempt.
+      const timeout = setTimeout(
+        () => {
+          timedOut = true;
+          controller.abort();
+        },
+        options.timeout ?? client.timeout ?? 600000,
+      );
       let retryDelay: number;
       try {
         return await waitWithAbort(() => {
@@ -715,18 +727,22 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
             ...options,
             signal: controller.signal,
           });
-        }, signal);
+        }, controller.signal);
       } catch (error) {
         throwIfAborted(signal);
+        if (timedOut) {
+          error = new DOMException('Request timed out.', 'TimeoutError');
+        }
         const delay = responseRetryDelay(error, client, attempt);
         if (attempt >= maxRetries || delay === undefined) {
           throw error;
         }
         retryDelay = delay;
       } finally {
+        clearTimeout(timeout);
         signal?.removeEventListener('abort', relayAbort);
-        // The SDK keeps its listener after fetch. Abort this request-local signal
-        // only after its non-streaming response has been fully consumed.
+        // Release the SDK's retained fetch listener after completion, failure,
+        // or when the caller or deadline stops waiting for the response.
         controller.abort();
       }
       await sleepWithAbort(retryDelay, retrySignal);

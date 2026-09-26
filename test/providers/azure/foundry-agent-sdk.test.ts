@@ -40,6 +40,21 @@ describe('Foundry SDK cancellation and retries', () => {
     return instance;
   }
 
+  function stallNextResponse(status: number) {
+    fetchMock.mockImplementationOnce(async (_url, options: RequestInit) => {
+      const body = new ReadableStream({
+        start(stream) {
+          options.signal!.addEventListener(
+            'abort',
+            () => stream.error(new DOMException('Fixture body aborted', 'AbortError')),
+            { once: true },
+          );
+        },
+      });
+      return new Response(body, { status, headers: { 'content-type': 'application/json' } });
+    });
+  }
+
   beforeEach(() => {
     vi.useFakeTimers();
     vi.spyOn(Math, 'random').mockReturnValue(0);
@@ -143,6 +158,126 @@ describe('Foundry SDK cancellation and retries', () => {
       metadata: { transportRetries: 1 },
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([200, 503])(
+    'retries a stalled %s body within the whole attempt deadline',
+    async (status) => {
+      stallNextResponse(status);
+      const controller = new AbortController();
+      let result;
+      const pending = provider({ timeoutMs: 10, retryOptions: { maxRetries: 1 } })
+        .callApi('hello', undefined, { abortSignal: controller.signal })
+        .then((response) => {
+          result = response;
+        });
+      void pending.catch(() => undefined);
+      try {
+        await vi.advanceTimersByTimeAsync(510);
+        expect(result).toMatchObject({
+          output: 'ok',
+          tokenUsage: { total: 15, numRequests: 1 },
+          metadata: { transportRetries: 1, usageIncomplete: true, costIncomplete: true },
+        });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(true);
+        expect(controller.signal.aborted).toBe(false);
+        expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        controller.abort();
+        await pending.catch(() => undefined);
+      }
+    },
+  );
+
+  it.each(['configured', 'client default', 'SDK default'])(
+    'bounds stalled bodies with the %s timeout and zero retries',
+    async (source) => {
+      const sdkClient = client.getOpenAIClient(source === 'SDK default' ? {} : { timeout: 20 });
+      vi.spyOn(client, 'getOpenAIClient').mockReturnValue(sdkClient);
+      const timeout = source === 'configured' ? 10 : sdkClient.timeout;
+      stallNextResponse(503);
+      const controller = new AbortController();
+      let result;
+      const pending = provider({
+        ...(source === 'configured' && { timeoutMs: timeout }),
+        retryOptions: { maxRetries: 0 },
+      })
+        .callApi('hello', undefined, { abortSignal: controller.signal })
+        .then((response) => {
+          result = response;
+        });
+      void pending.catch(() => undefined);
+      try {
+        await vi.advanceTimersByTimeAsync(timeout - 1);
+        expect(result).toBeUndefined();
+        await vi.advanceTimersByTimeAsync(1);
+        expect(result).toMatchObject({
+          error: 'Error in Azure Foundry Agent API call: Request timed out.',
+          tokenUsage: { numRequests: 1 },
+          metadata: { usageIncomplete: true, costIncomplete: true, knownCost: 0 },
+        });
+        expect(fetchMock).toHaveBeenCalledOnce();
+        expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        controller.abort();
+        await pending.catch(() => undefined);
+      }
+    },
+  );
+
+  it('keeps caller cancellation distinct from a stalled body timeout', async () => {
+    stallNextResponse(503);
+    const controller = new AbortController();
+    const pending = provider({ timeoutMs: 10, retryOptions: { maxRetries: 1 } }).callApi(
+      'hello',
+      undefined,
+      { abortSignal: controller.signal },
+    );
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.advanceTimersByTimeAsync(1);
+    controller.abort();
+    await rejected;
+    expect(vi.getTimerCount()).toBe(0);
+    expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('times out credential acquisition without allowing a late token to start HTTP', async () => {
+    let resolveToken!: (token: { token: string; expiresOnTimestamp: number }) => void;
+    const token = new Promise<{ token: string; expiresOnTimestamp: number }>((resolve) => {
+      resolveToken = resolve;
+    });
+    const getToken = vi.fn().mockReturnValue(token);
+    client = new AIProjectClient(projectUrl, { getToken });
+    vi.spyOn(client.agents, 'get').mockResolvedValue(agent as any);
+    const controller = new AbortController();
+    let result;
+    const pending = provider({ timeoutMs: 10, retryOptions: { maxRetries: 0 } })
+      .callApi('hello', undefined, { abortSignal: controller.signal })
+      .then((response) => {
+        result = response;
+      });
+    void pending.catch(() => undefined);
+    try {
+      await vi.advanceTimersByTimeAsync(10);
+      expect(result).toMatchObject({
+        error: 'Error in Azure Foundry Agent API call: Request timed out.',
+      });
+      expect(getToken).toHaveBeenCalledOnce();
+      expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      controller.abort();
+      resolveToken({ token: 'late-fixture-token', expiresOnTimestamp: Date.now() + 86400000 });
+      await pending.catch(() => undefined);
+      await vi.advanceTimersByTimeAsync(0);
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
   });
 
