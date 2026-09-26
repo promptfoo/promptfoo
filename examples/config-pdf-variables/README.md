@@ -9,7 +9,13 @@ cd config-pdf-variables
 
 ## Usage
 
-First, download some PDFs from arxiv.org:
+Install Promptfoo and the PDF parser together in this example directory:
+
+```bash
+npm install promptfoo pdf-parse
+```
+
+Then download some PDFs from arxiv.org:
 
 ```bash
 ./fetch_pdfs.sh
@@ -18,5 +24,5 @@ First, download some PDFs from arxiv.org:
 This example is pre-configured in `promptfooconfig.yaml`. That means you can just run:
 
 ```bash
-promptfoo eval
+npx promptfoo eval
 ```
