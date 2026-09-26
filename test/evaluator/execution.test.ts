@@ -997,13 +997,7 @@ describeEvaluator('evaluator execution control', () => {
       await vi.advanceTimersByTimeAsync(10);
       await evalPromise;
 
-      expect(mockAddResult).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('aborted'),
-          success: false,
-          failureReason: ResultFailureReason.ERROR,
-        }),
-      );
+      expect(mockAddResult).not.toHaveBeenCalled();
     } finally {
       if (longTimer) {
         clearTimeout(longTimer);
@@ -1079,13 +1073,14 @@ describeEvaluator('evaluator execution control', () => {
       await vi.advanceTimersByTimeAsync(100);
       await evalPromise;
 
-      expect(mockAddResult).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('aborted'),
+      expect(mockAddResult).toHaveBeenCalledTimes(2);
+      for (const [result] of mockAddResult.mock.calls) {
+        expect(result).toMatchObject({
+          error: 'Evaluation exceeded max duration of 100ms',
           success: false,
           failureReason: ResultFailureReason.ERROR,
-        }),
-      );
+        });
+      }
     } finally {
       if (longTimer) {
         clearTimeout(longTimer);

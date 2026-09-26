@@ -1750,6 +1750,7 @@ async function runEvalInContext({
             traceContext: executionTraceContext,
             vars: state.vars,
           });
+          abortSignal?.throwIfAborted();
           const response = normalizeCachedTargetResponse(providerCall.response);
           latencyMs = providerCall.latencyMs;
 
@@ -1768,15 +1769,7 @@ async function runEvalInContext({
             `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
           );
 
-          try {
-            await applyProviderDelayIfNeeded(provider, response, effectiveDelay, abortSignal);
-          } catch (error) {
-            if (abortSignal?.aborted) {
-              // Keep interrupted rows incomplete so a paused evaluation can resume them.
-              return [];
-            }
-            throw error;
-          }
+          await applyProviderDelayIfNeeded(provider, response, effectiveDelay, abortSignal);
 
           // The __eval* runtime vars were exposed to prompt/provider rendering above.
           // Build a copy without them for the persisted result, assertions, and
@@ -1849,6 +1842,10 @@ async function runEvalInContext({
         )
       : await runExecution();
   } catch (err) {
+    if (abortSignal?.aborted) {
+      // Interrupted work stays incomplete for resume or the evaluator's timeout result.
+      return [];
+    }
     const { errorWithStack, metadata, logContext } = buildProviderErrorContext({
       error: err,
       provider,

@@ -796,11 +796,9 @@ describe('evaluator trace integration', () => {
         throw new Error('cancelled by user');
       });
 
-      const [result] = await runEval(
-        createRunOptions(provider, { abortSignal: controller.signal }),
-      );
+      const results = await runEval(createRunOptions(provider, { abortSignal: controller.signal }));
 
-      expect(result.error).toContain('cancelled by user');
+      expect(results).toEqual([]);
       expect(mockFetchTraceContext).toHaveBeenCalledWith(
         traceId,
         expect.objectContaining({ abortSignal: controller.signal }),

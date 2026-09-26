@@ -470,6 +470,76 @@ describeEvaluator('evaluation environment defaults', () => {
     });
   });
 
+  it.each(
+    ['provider', 'delegated delay', 'late response'].flatMap((phase) =>
+      ['pause', 'step timeout', 'evaluation timeout'].map((termination) => ({
+        phase,
+        termination,
+      })),
+    ),
+  )('preserves interruption results without grading: %j', async ({ phase, termination }) => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const pending = createDeferred<ProviderResponse>();
+    const started = createDeferred<void>();
+    const grade = vi.fn().mockReturnValue(true);
+    const target = createProvider();
+    const provider: ApiProvider = {
+      id: () => 'offline-cancellation',
+      callApi: async (_prompt, context, options) => {
+        started.resolve();
+        if (phase === 'delegated delay') {
+          return callTargetProvider(target, 'hello', context, options);
+        }
+        if (phase === 'provider') {
+          options?.abortSignal?.addEventListener(
+            'abort',
+            () => {
+              pending.reject(new DOMException('Fixture stopped', 'AbortError'));
+            },
+            { once: true },
+          );
+        }
+        return pending.promise;
+      },
+    };
+    const suite = createSuite(phase === 'delegated delay' ? target : provider);
+    suite.tests = [{ provider, assert: [{ type: 'javascript', value: grade }] }];
+    const record = new Eval({});
+    const evaluation = evaluate(suite, record, {
+      abortSignal: controller.signal,
+      delay: phase === 'delegated delay' ? 1000 : 0,
+      timeoutMs: termination === 'step timeout' ? 10 : 0,
+      maxEvalTimeMs: termination === 'evaluation timeout' ? 10 : 0,
+    });
+    await vi.advanceTimersByTimeAsync(1);
+    await started.promise;
+    if (termination === 'pause') {
+      controller.abort();
+    } else {
+      await vi.advanceTimersByTimeAsync(20);
+    }
+    if (phase === 'late response') {
+      pending.resolve({ output: 'late' });
+    }
+    await vi.advanceTimersByTimeAsync(0);
+    await evaluation;
+    const results = await record.getResults();
+    if (termination === 'pause') {
+      expect(results).toEqual([]);
+    } else {
+      expect(results).toHaveLength(1);
+      expect(results[0].success).toBe(false);
+      expect(results[0].error).toContain(
+        termination === 'step timeout'
+          ? 'Evaluation timed out after 10ms'
+          : 'Evaluation exceeded max duration of 10ms',
+      );
+    }
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(grade).not.toHaveBeenCalled();
+  });
+
   it.each([
     { maxConcurrency: 1, runSerially: false },
     { maxConcurrency: 2, runSerially: false },
