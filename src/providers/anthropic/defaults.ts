@@ -98,10 +98,10 @@ export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
  */
 export function getAnthropicProviders(env?: EnvOverrides): AnthropicProviders {
   // Resolve every construction input before reuse, including partial explicit maps.
-  // Match the provider's existing empty-value behavior for keys, URLs and headers.
+  // Preserve explicit empty credentials and headers when capturing the client inputs.
   const resolvedEnv = {
     ...env,
-    ANTHROPIC_API_KEY: env?.ANTHROPIC_API_KEY || getEnvString('ANTHROPIC_API_KEY'),
+    ANTHROPIC_API_KEY: env?.ANTHROPIC_API_KEY ?? getEnvString('ANTHROPIC_API_KEY'),
     ANTHROPIC_BASE_URL: env?.ANTHROPIC_BASE_URL || getEnvString('ANTHROPIC_BASE_URL'),
     ANTHROPIC_CUSTOM_HEADERS:
       env?.ANTHROPIC_CUSTOM_HEADERS ?? getEnvString('ANTHROPIC_CUSTOM_HEADERS'),

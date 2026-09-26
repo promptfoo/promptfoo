@@ -1304,6 +1304,26 @@ describe('OpenAiAgentsProvider', () => {
     },
   );
 
+  it.each([
+    ['true', 'false', true],
+    ['false', 'true', false],
+    ['', 'true', false],
+  ])(
+    'retains provider tracing=%s over suite tracing=%s',
+    async (providerValue, suiteValue, enabled) => {
+      const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+        config: { agent: { name: 'Scoped Agent', instructions: 'Return a test answer.' } },
+        env: { PROMPTFOO_TRACING_ENABLED: providerValue },
+      });
+      await cliState.withEnv({ PROMPTFOO_TRACING_ENABLED: suiteValue }, () =>
+        provider.callApi('hello'),
+      );
+      expect(logger.debug).toHaveBeenCalledWith(
+        enabled ? '[AgentsProvider] Setting up tracing' : '[AgentsProvider] Tracing not enabled',
+      );
+    },
+  );
+
   it('adds the Promptfoo trace exporter without replacing existing processors', async () => {
     vi.resetModules();
     const { OpenAiAgentsProvider: IsolatedOpenAiAgentsProvider } = await import(

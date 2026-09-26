@@ -68,6 +68,20 @@ describe('default provider environment ownership', () => {
       }
     }
   });
+  it('keeps an empty Anthropic key masked in default and direct clients', () => {
+    mockProcessEnv({ ANTHROPIC_API_KEY: 'host-key' });
+    cliState.withEnv({ ANTHROPIC_API_KEY: 'suite-key' }, () => {
+      const bundle = getAnthropicProviders({ ANTHROPIC_API_KEY: '' });
+      for (const provider of [
+        bundle.gradingProvider,
+        bundle.llmRubricProvider,
+        bundle.webSearchProvider,
+        new AnthropicMessagesProvider('fixture', { env: { ANTHROPIC_API_KEY: '' } }),
+      ]) {
+        expect(clientOptions(provider as AnthropicGenericProvider).apiKey).toBeNull();
+      }
+    });
+  });
   it('isolates overlapping async default selections', async () => {
     const bundles = await Promise.all(
       ['first', 'second'].map((name) =>

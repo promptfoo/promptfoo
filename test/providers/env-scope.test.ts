@@ -487,6 +487,12 @@ describe('provider environment scopes', () => {
     ['huggingface:text-generation:fixture-model', 'HF_TOKEN', 'HF_API_TOKEN'],
     ['hf:text-generation:fixture-model', 'HF_TOKEN', 'HF_API_TOKEN'],
     ['google:live:gemini-fixture', 'GOOGLE_API_KEY', 'GEMINI_API_KEY'],
+    ['google:video:veo-3.0-generate-preview', 'GOOGLE_API_KEY', 'GEMINI_API_KEY'],
+    ['palm:video:veo-3.0-generate-preview', 'GOOGLE_API_KEY', 'PALM_API_KEY'],
+    ['google:gemini-2.5-flash', 'GOOGLE_API_KEY', 'GEMINI_API_KEY'],
+    ['palm:gemini-2.5-flash', 'GOOGLE_API_KEY', 'PALM_API_KEY'],
+    ['vertex:gemini-2.5-flash', 'VERTEX_API_KEY', 'GOOGLE_API_KEY'],
+    ['azure:chat:fixture', 'AZURE_API_KEY', 'AZURE_OPENAI_API_KEY'],
     ['google:gemini-2.5-flash-image', 'GOOGLE_API_KEY', 'GEMINI_API_KEY'],
     ['google:image:imagen-4.0-generate-001', 'GOOGLE_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY'],
   ])('the loader preserves higher-scope aliases for %s', async (id, suiteKey, providerKey) => {
@@ -553,6 +559,33 @@ describe('provider environment scopes', () => {
       const provider = await loadApiProvider(id);
       await expect(provider.callEmbeddingApi!('hello')).rejects.toThrow('API key must be set');
       expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+  });
+  it('keeps Google key aliases scoped after provider construction', async () => {
+    mockProcessEnv({ GOOGLE_API_KEY: 'host-key' });
+    await cliState.withEnv({ GOOGLE_API_KEY: 'suite-key' }, async () => {
+      const provider = await loadApiProvider('google:video:veo-3.0-generate-preview', {
+        options: { env: { GEMINI_API_KEY: 'provider-key' } },
+      });
+      expect(apiKey(provider)).toBe('provider-key');
+    });
+    await cliState.withEnvFileOverrides({ GEMINI_API_KEY: 'file-key' }, async () => {
+      expect(GoogleAuthManager.getApiKey({}).apiKey).toBe('file-key');
+    });
+  });
+  it.each([
+    ['2', undefined, 2],
+    ['', undefined, 4],
+    ['invalid', undefined, 4],
+    [undefined, undefined, 7],
+    ['2', 3, 3],
+  ])('resolves direct ChatKit pool env=%s config=%s to %s', (value, poolSize, expected) => {
+    cliState.withEnv({ PROMPTFOO_MAX_CONCURRENCY: '7' }, () => {
+      const provider = new OpenAiChatKitProvider('workflow', {
+        env: { PROMPTFOO_MAX_CONCURRENCY: value },
+        config: { poolSize },
+      });
+      expect(Reflect.get(provider, 'chatKitConfig').poolSize).toBe(expected);
     });
   });
   it('the loader preserves provider region aliases for SageMaker and Mantle', async () => {
