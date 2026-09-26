@@ -6,22 +6,24 @@ import { loadYaml } from './yamlLoad';
 
 import type { EvaluateResult, ResultFailureReason } from '../types/index';
 
-let ajvInstance: Ajv | null = null;
+const ajvInstances = new Map<boolean, Ajv>();
 
 export function resetAjv(): void {
   if (getEnvString('NODE_ENV') !== 'test') {
     throw new Error('resetAjv can only be called in test environment');
   }
-  ajvInstance = null;
+  ajvInstances.clear();
 }
 
 export function getAjv(): Ajv {
+  const strictSchema = !getEnvBool('PROMPTFOO_DISABLE_AJV_STRICT_MODE');
+  let ajvInstance = ajvInstances.get(strictSchema);
   if (!ajvInstance) {
-    const ajvOptions: ConstructorParameters<typeof Ajv>[0] = {
-      strictSchema: !getEnvBool('PROMPTFOO_DISABLE_AJV_STRICT_MODE'),
-    };
-    ajvInstance = new Ajv(ajvOptions);
+    ajvInstance = new Ajv({ strictSchema });
     addFormats(ajvInstance);
+    // Gemini schemas can reuse this annotation in tool and JSON assertions.
+    ajvInstance.addKeyword({ keyword: 'property_ordering', valid: true });
+    ajvInstances.set(strictSchema, ajvInstance);
   }
   return ajvInstance;
 }

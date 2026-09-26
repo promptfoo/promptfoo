@@ -3,8 +3,9 @@ import path from 'path';
 
 import { getCache, isCacheEnabled } from '../cache';
 import cliState from '../cliState';
+import { getEnvInt } from '../envars';
 import logger from '../logger';
-import { getConfiguredPythonPath, getEnvInt } from '../python/pythonUtils';
+import { getConfiguredPythonPath } from '../python/pythonUtils';
 import { PythonWorkerPool } from '../python/workerPool';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';

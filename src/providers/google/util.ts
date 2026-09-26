@@ -696,10 +696,6 @@ export function calculateGoogleCostFromUsage(
   );
 }
 
-const ajv = getAjv();
-// property_ordering is an optional field sometimes present in gemini tool configs, but ajv doesn't know about it.
-// At the moment we will just ignore it, so the is-valid-function-call won't check property field ordering.
-ajv.addKeyword('property_ordering');
 const clone = Clone();
 
 type Probability = 'NEGLIGIBLE' | 'LOW' | 'MEDIUM' | 'HIGH';
@@ -1860,6 +1856,7 @@ export function validateFunctionCall(
   }
 
   const interpolatedFunctions = loadFile(functions, vars) as Tool[];
+  const ajv = getAjv();
 
   for (const functionCall of functionCalls) {
     // Parse function call and validate it against schema

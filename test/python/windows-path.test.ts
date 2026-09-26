@@ -4,7 +4,6 @@ import * as path from 'path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
-import * as pythonUtils from '../../src/python/pythonUtils';
 import { mockProcessEnv } from '../util/utils';
 
 // Windows CI has severe filesystem delays - allow up to 90s
@@ -33,10 +32,6 @@ describe('PythonProvider Windows Path Handling', () => {
   };
 
   beforeAll(async () => {
-    // Reset Python state
-    pythonUtils.state.cachedPythonPath = null;
-    pythonUtils.state.validationPromise = null;
-
     restoreEnv = mockProcessEnv({ PROMPTFOO_CACHE_ENABLED: 'false' });
 
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-windows-path-test-'));
@@ -120,9 +115,6 @@ def call_api(prompt, options, context):
     if (tempDir && fs.existsSync(tempDir)) {
       fs.rmSync(tempDir, { recursive: true });
     }
-
-    pythonUtils.state.cachedPythonPath = null;
-    pythonUtils.state.validationPromise = null;
 
     restoreEnv();
 

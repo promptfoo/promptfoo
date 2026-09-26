@@ -99,8 +99,7 @@ describe('Python Utils', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockExecFileAsync.mockReset();
-    pythonUtils.state.cachedPythonPath = null;
-    pythonUtils.state.validationPromise = null;
+
     mockPythonShellInstance.stdout.on.mockReset();
     mockPythonShellInstance.stderr.on.mockReset();
     mockPythonShellInstance.end.mockReset();
@@ -173,10 +172,11 @@ describe('Python Utils', () => {
       const result = await pythonUtils.getSysExecutable();
 
       expect(result).toBe('/usr/bin/python3.8');
-      expect(mockExecFileAsync).toHaveBeenCalledWith('python3', [
-        '-c',
-        'import sys; print(sys.executable)',
-      ]);
+      expect(mockExecFileAsync).toHaveBeenCalledWith(
+        'python3',
+        ['-c', 'import sys; print(sys.executable)'],
+        { env: expect.any(Object) },
+      );
 
       // Restore original platform
       Object.defineProperty(process, 'platform', { value: originalPlatform });
@@ -206,9 +206,13 @@ describe('Python Utils', () => {
 
       // Should skip WindowsApps and use the real Python installation
       expect(result).toBe('C:\\Python39\\python.exe');
-      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python']);
+      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python'], {
+        env: expect.any(Object),
+      });
       // Verify that the non-WindowsApps path was validated
-      expect(mockExecFileAsync).toHaveBeenCalledWith('C:\\Python39\\python.exe', ['--version']);
+      expect(mockExecFileAsync).toHaveBeenCalledWith('C:\\Python39\\python.exe', ['--version'], {
+        env: expect.any(Object),
+      });
 
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     });
@@ -232,12 +236,15 @@ describe('Python Utils', () => {
       const result = await pythonUtils.getSysExecutable();
 
       expect(result).toBe('C:\\Python39\\python.exe');
-      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python']);
+      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python'], {
+        env: expect.any(Object),
+      });
       // Verify py launcher fallback was used
-      expect(mockExecFileAsync).toHaveBeenCalledWith('py', [
-        '-c',
-        'import sys; print(sys.executable)',
-      ]);
+      expect(mockExecFileAsync).toHaveBeenCalledWith(
+        'py',
+        ['-c', 'import sys; print(sys.executable)'],
+        { env: expect.any(Object) },
+      );
 
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     });
@@ -261,9 +268,13 @@ describe('Python Utils', () => {
       const result = await pythonUtils.getSysExecutable();
 
       expect(result).toBe('python');
-      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python']);
+      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python'], {
+        env: expect.any(Object),
+      });
       // Verify the final fallback python --version was called
-      expect(mockExecFileAsync).toHaveBeenCalledWith('python', ['--version']);
+      expect(mockExecFileAsync).toHaveBeenCalledWith('python', ['--version'], {
+        env: expect.any(Object),
+      });
 
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     });
@@ -308,12 +319,15 @@ describe('Python Utils', () => {
       const result = await pythonUtils.getSysExecutable();
 
       expect(result).toBe('C:\\Python39\\python.exe');
-      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python']);
+      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python'], {
+        env: expect.any(Object),
+      });
       // Verify py launcher fallback was used when where returned empty
-      expect(mockExecFileAsync).toHaveBeenCalledWith('py', [
-        '-c',
-        'import sys; print(sys.executable)',
-      ]);
+      expect(mockExecFileAsync).toHaveBeenCalledWith(
+        'py',
+        ['-c', 'import sys; print(sys.executable)'],
+        { env: expect.any(Object) },
+      );
 
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     });
@@ -335,7 +349,9 @@ describe('Python Utils', () => {
         const result = await pythonUtils.tryPath('/usr/bin/python3');
 
         expect(result).toBe('/usr/bin/python3');
-        expect(mockExecFileAsync).toHaveBeenCalledWith('/usr/bin/python3', ['--version']);
+        expect(mockExecFileAsync).toHaveBeenCalledWith('/usr/bin/python3', ['--version'], {
+          env: expect.any(Object),
+        });
       });
     });
 
@@ -346,7 +362,9 @@ describe('Python Utils', () => {
         const result = await pythonUtils.tryPath('/usr/bin/nonexistent');
 
         expect(result).toBeNull();
-        expect(mockExecFileAsync).toHaveBeenCalledWith('/usr/bin/nonexistent', ['--version']);
+        expect(mockExecFileAsync).toHaveBeenCalledWith('/usr/bin/nonexistent', ['--version'], {
+          env: expect.any(Object),
+        });
       });
 
       it('should return null if the command times out', async () => {
@@ -361,32 +379,18 @@ describe('Python Utils', () => {
         const result = await resultPromise;
 
         expect(result).toBeNull();
-        expect(mockExecFileAsync).toHaveBeenCalledWith('/usr/bin/python3', ['--version']);
+        expect(mockExecFileAsync).toHaveBeenCalledWith('/usr/bin/python3', ['--version'], {
+          env: expect.any(Object),
+        });
         vi.useRealTimers();
       });
     });
   });
 
   describe('validatePythonPath', () => {
-    describe('caching behavior', () => {
-      it('should validate and cache an existing Python 3 path', async () => {
-        mockExecFileAsync.mockResolvedValue({ stdout: 'Python 3.8.10\n', stderr: '' });
-
-        const result = await pythonUtils.validatePythonPath('python', false);
-
-        expect(result).toBe('python');
-        expect(pythonUtils.state.cachedPythonPath).toBe('python');
-        expect(mockExecFileAsync).toHaveBeenCalledWith('python', ['--version']);
-      });
-
-      it('should return the cached path on subsequent calls', async () => {
-        pythonUtils.state.cachedPythonPath = '/usr/bin/python3';
-
-        const result = await pythonUtils.validatePythonPath('python', false);
-
-        expect(result).toBe('/usr/bin/python3');
-        expect(mockExecFileAsync).not.toHaveBeenCalled();
-      });
+    it('validates an existing Python 3 path', async () => {
+      mockExecFileAsync.mockResolvedValue({ stdout: 'Python 3.8.10\n', stderr: '' });
+      expect(await pythonUtils.validatePythonPath('python', false)).toBe('python');
     });
 
     describe('fallback behavior', () => {
@@ -422,7 +426,9 @@ describe('Python Utils', () => {
         await expect(pythonUtils.validatePythonPath('non_existent_program', true)).rejects.toThrow(
           'Python 3 not found. Tried "non_existent_program"',
         );
-        expect(mockExecFileAsync).toHaveBeenCalledWith('non_existent_program', ['--version']);
+        expect(mockExecFileAsync).toHaveBeenCalledWith('non_existent_program', ['--version'], {
+          env: expect.any(Object),
+        });
       });
 
       it('should throw an error when no valid Python path is found', async () => {
@@ -444,75 +450,9 @@ describe('Python Utils', () => {
         const result = await pythonUtils.validatePythonPath('/custom/python/path', true);
 
         expect(result).toBe('/custom/python/path');
-        expect(mockExecFileAsync).toHaveBeenCalledWith('/custom/python/path', ['--version']);
-      });
-    });
-
-    describe('concurrent validation', () => {
-      it('should share validation promise between concurrent calls', async () => {
-        mockExecFileAsync.mockImplementation(async () => {
-          // Yield control so concurrent callers can register on the shared
-          // validation promise before resolution.
-          await Promise.resolve();
-          return { stdout: 'Python 3.8.10\n', stderr: '' };
+        expect(mockExecFileAsync).toHaveBeenCalledWith('/custom/python/path', ['--version'], {
+          env: expect.any(Object),
         });
-
-        // Start two validations concurrently
-        const [result1, result2] = await Promise.all([
-          pythonUtils.validatePythonPath('python', false),
-          pythonUtils.validatePythonPath('python', false),
-        ]);
-
-        expect(result1).toBe('python');
-        expect(result2).toBe('python');
-
-        // Only one exec call should be made
-        expect(mockExecFileAsync).toHaveBeenCalledTimes(1);
-
-        // After resolution, validation promise should be cleared
-        expect(pythonUtils.state.validationPromise).toBeNull();
-      });
-
-      it('should handle race conditions between concurrent validation attempts', async () => {
-        // Clear cached path first to ensure validation runs
-        pythonUtils.state.cachedPythonPath = null;
-
-        mockExecFileAsync.mockImplementation(async () => {
-          // Yield control so concurrent callers can race onto the shared
-          // validation promise before resolution.
-          await Promise.resolve();
-          return { stdout: 'Python 3.8.10\n', stderr: '' };
-        });
-
-        // Start multiple validations without waiting
-        const promises = [
-          pythonUtils.validatePythonPath('python', false),
-          pythonUtils.validatePythonPath('python', false),
-          pythonUtils.validatePythonPath('python', false),
-        ];
-
-        const results = await Promise.all(promises);
-
-        expect(results).toEqual(['python', 'python', 'python']);
-
-        // Only one exec call should be made
-        expect(mockExecFileAsync).toHaveBeenCalledTimes(1);
-
-        // After resolution, validation promise should be cleared
-        expect(pythonUtils.state.validationPromise).toBeNull();
-      });
-    });
-
-    describe('promise cleanup', () => {
-      it('should clear validation promise after failed validation', async () => {
-        mockExecFileAsync.mockRejectedValue(new Error('Command failed'));
-
-        await expect(pythonUtils.validatePythonPath('python', true)).rejects.toThrow(
-          'Python 3 not found. Tried "python"',
-        );
-
-        // Validation promise should be cleared even after failure
-        expect(pythonUtils.state.validationPromise).toBeNull();
       });
     });
   });
