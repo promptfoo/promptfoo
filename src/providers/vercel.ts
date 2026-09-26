@@ -5,6 +5,7 @@ import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { sha256 } from '../util/createHash';
+import { normalizeFinishReason } from '../util/finishReason';
 import { getRequestTimeoutMs, parseChatPrompt } from './shared';
 import { hasActiveTracingSpan } from './tracing';
 import type { LanguageModelUsage } from 'ai';
@@ -126,6 +127,20 @@ function mapTokenUsage(
     total: usage?.totalTokens ?? (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0),
     numRequests: 1,
   };
+}
+
+/** Normalize fresh and cached responses to the same provider contract. */
+function normalizeResponse(response: ProviderResponse): ProviderResponse {
+  const normalized = {
+    ...response,
+    finishReason: normalizeFinishReason(response.finishReason),
+  };
+  if (normalized.finishReason === 'content_filter') {
+    normalized.output ||= 'Content filtered by provider';
+    normalized.isRefusal = true;
+    normalized.guardrails = { ...normalized.guardrails, flagged: true };
+  }
+  return normalized;
 }
 
 /** Let the AI SDK create its own model, tool, and embedding spans for traced evaluations. */
@@ -360,7 +375,11 @@ export class VercelAiProvider implements ApiProvider {
         finishReason,
       });
 
-      return { output, tokenUsage: mapTokenUsage(usage), finishReason };
+      return {
+        output,
+        tokenUsage: mapTokenUsage(usage),
+        finishReason,
+      };
     } catch (error) {
       return handleApiError(
         streamError ? streamError.error : error,
@@ -368,63 +387,6 @@ export class VercelAiProvider implements ApiProvider {
         'streaming API call',
         abortSignal,
       );
-    } finally {
-      cleanup();
-    }
-  }
-
-  /**
-   * Handles structured output API calls using generateObject().
-   */
-  private async callApiStructured(
-    messages: ChatMessage[],
-    config: VercelAiConfig,
-    context?: CallApiContextParams,
-    abortSignal?: AbortSignal,
-  ): Promise<ProviderResponse> {
-    const timeout = config.timeout ?? getRequestTimeoutMs();
-    const { signal, cleanup } = createTimeoutController(timeout, abortSignal);
-
-    try {
-      const gateway = await createGatewayInstance(config, this.env);
-      const { generateObject, jsonSchema } = await import('ai');
-
-      // OpenAI requires additionalProperties: false for strict mode
-      const schema = jsonSchema<Record<string, unknown>>({
-        ...config.responseSchema,
-        additionalProperties: config.responseSchema?.additionalProperties ?? false,
-      } as Parameters<typeof jsonSchema>[0]);
-
-      logger.debug('Calling Vercel AI Gateway (structured output)', {
-        model: this.modelName,
-        temperature: config.temperature,
-        maxTokens: config.maxTokens,
-      });
-
-      const result = await generateObject({
-        model: gateway(this.modelName),
-        messages,
-        schema,
-        ...pickGenerateOptions(config),
-        ...getSdkTelemetryOptions(this.id(), context),
-        abortSignal: signal,
-      });
-
-      signal.throwIfAborted();
-
-      logger.debug('Vercel AI Gateway structured output response received', {
-        model: this.modelName,
-        usage: result.usage,
-        finishReason: result.finishReason,
-      });
-
-      return {
-        output: result.object,
-        tokenUsage: mapTokenUsage(result.usage),
-        finishReason: result.finishReason,
-      };
-    } catch (error) {
-      return handleApiError(error, timeout, 'structured output API call', abortSignal);
     } finally {
       cleanup();
     }
@@ -450,7 +412,7 @@ export class VercelAiProvider implements ApiProvider {
       if (cachedResponse) {
         logger.debug(`Returning cached response for Vercel AI Gateway: ${this.modelName}`);
         try {
-          const parsed = JSON.parse(cachedResponse) as ProviderResponse;
+          const parsed = normalizeResponse(JSON.parse(cachedResponse) as ProviderResponse);
           // Older streaming responses could cache partial output after an SDK error.
           if (!parsed.error && parsed.finishReason !== 'error') {
             return { ...parsed, cached: true };
@@ -466,18 +428,16 @@ export class VercelAiProvider implements ApiProvider {
     const messages = parseChatPrompt<ChatMessage[]>(prompt, [{ role: 'user', content: prompt }]);
 
     // Dispatch to appropriate method based on config
-    const response = await withSdkTraceContext(context, async () => {
-      if (config.responseSchema) {
-        return this.callApiStructured(messages, config, context, options?.abortSignal);
-      }
-      if (config.streaming) {
-        return this.callApiStreaming(messages, config, context, options?.abortSignal);
-      }
-      return this.callApiNonStreaming(messages, config, context, options?.abortSignal);
-    });
+    const response = normalizeResponse(
+      await withSdkTraceContext(context, () =>
+        config.streaming && !config.responseSchema
+          ? this.callApiStreaming(messages, config, context, options?.abortSignal)
+          : this.callApiNonStreaming(messages, config, context, options?.abortSignal),
+      ),
+    );
 
     // Cache the response if successful
-    if (cacheEnabled && !response.error) {
+    if (cacheEnabled && !response.error && response.finishReason !== 'error') {
       try {
         await cache.set(cacheKey, JSON.stringify(response));
       } catch (err) {
@@ -489,7 +449,7 @@ export class VercelAiProvider implements ApiProvider {
   }
 
   /**
-   * Handles non-streaming API calls using generateText().
+   * Generates text or structured output using generateText().
    */
   private async callApiNonStreaming(
     messages: ChatMessage[],
@@ -499,10 +459,13 @@ export class VercelAiProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     const timeout = config.timeout ?? getRequestTimeoutMs();
     const { signal, cleanup } = createTimeoutController(timeout, abortSignal);
+    let sdk: typeof import('ai') | undefined;
+    let response: ProviderResponse = {};
 
     try {
       const gateway = await createGatewayInstance(config, this.env);
-      const { generateText } = await import('ai');
+      sdk = await import('ai');
+      const { generateText, Output, jsonSchema } = sdk;
 
       logger.debug('Calling Vercel AI Gateway', {
         model: this.modelName,
@@ -516,6 +479,17 @@ export class VercelAiProvider implements ApiProvider {
         ...pickGenerateOptions(config),
         ...getSdkTelemetryOptions(this.id(), context),
         abortSignal: signal,
+        ...(config.responseSchema
+          ? {
+              output: Output.object({
+                schema: jsonSchema<Record<string, unknown>>({
+                  ...config.responseSchema,
+                  // OpenAI requires additionalProperties: false for strict mode.
+                  additionalProperties: config.responseSchema.additionalProperties ?? false,
+                } as Parameters<typeof jsonSchema>[0]),
+              }),
+            }
+          : {}),
       });
 
       signal.throwIfAborted();
@@ -526,13 +500,31 @@ export class VercelAiProvider implements ApiProvider {
         finishReason: result.finishReason,
       });
 
-      return {
-        output: result.text,
+      // Reading structured output can throw even though the SDK returned usage and a finish reason.
+      response = {
         tokenUsage: mapTokenUsage(result.usage),
         finishReason: result.finishReason,
       };
+      return { ...response, output: config.responseSchema ? result.output : result.text };
     } catch (error) {
-      return handleApiError(error, timeout, 'API call', abortSignal);
+      if (signal.aborted) {
+        return handleApiError(signal.reason, timeout, 'API call', abortSignal);
+      }
+      if (sdk?.NoObjectGeneratedError.isInstance(error)) {
+        response = {
+          tokenUsage: error.usage ? mapTokenUsage(error.usage) : undefined,
+          finishReason: error.finishReason,
+        };
+        if (error.finishReason === 'content-filter') {
+          return { ...response, output: error.text };
+        }
+      } else if (
+        sdk?.NoOutputGeneratedError.isInstance(error) &&
+        response.finishReason === 'content-filter'
+      ) {
+        return response;
+      }
+      return { ...response, ...handleApiError(error, timeout, 'API call', abortSignal) };
     } finally {
       cleanup();
     }

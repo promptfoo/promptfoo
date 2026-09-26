@@ -459,7 +459,7 @@ describe('AzureFoundryAgentProvider', () => {
     });
 
     describe.each(['provider', 'prompt'] as const)('%s-level tool timeout validation', (level) => {
-      it.each([NaN, Infinity, -Infinity, -1, '100', '100ms'])(
+      it.each([null, NaN, Infinity, -Infinity, -1, '100', '100ms'])(
         'rejects invalid maxPollTimeMs %s before initializing the client',
         async (maxPollTimeMs) => {
           mockGetAgent.mockResolvedValue(mockAgent);
