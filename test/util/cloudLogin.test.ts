@@ -4,7 +4,12 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CloudSelectionChangedError, cloudConfig } from '../../src/globalConfig/cloud';
-import { readGlobalConfig, updateGlobalConfig } from '../../src/globalConfig/globalConfig';
+import {
+  readGlobalConfig,
+  updateGlobalConfig,
+  writeGlobalConfig,
+} from '../../src/globalConfig/globalConfig';
+import { resolveTeamId } from '../../src/util/cloud';
 import { loginWithApiKey } from '../../src/util/cloudLogin';
 import { getConfigDirectoryPath, setConfigDirectoryPath } from '../../src/util/config/manage';
 import { fetchWithProxy } from '../../src/util/fetch/index';
@@ -153,4 +158,70 @@ describe('Cloud login with persisted configuration', () => {
       cloud: { apiKey: 'candidate-key', currentOrganizationId: 'candidate-org' },
     });
   });
+
+  it.each(['unavailable', 'malformed'])(
+    'preserves a legacy team when discovery is %s, then validates and migrates it',
+    async (failure) => {
+      writeGlobalConfig({
+        id: 'installation',
+        cloud: {
+          apiKey: 'old-key',
+          apiHost: validation.app.url,
+          currentTeamId: 'chosen',
+          teams: { 'other-org': { currentTeamId: 'remembered' } },
+        },
+      });
+      vi.mocked(fetchWithProxy).mockImplementation(async (url) =>
+        String(url).endsWith('/users/me')
+          ? Response.json(validation)
+          : failure === 'unavailable'
+            ? new Response(null, { status: 503 })
+            : Response.json({ teams: [] }),
+      );
+
+      await loginWithApiKey('candidate-key');
+
+      expect(readGlobalConfig().cloud).toMatchObject({
+        apiKey: 'candidate-key',
+        currentOrganizationId: validation.organization.id,
+        currentTeamId: 'chosen',
+        teams: { 'other-org': { currentTeamId: 'remembered' } },
+      });
+      expect(cloudConfig.getRequestConfig().teamId).toBeUndefined();
+
+      vi.mocked(fetchWithProxy).mockResolvedValue(Response.json(teams));
+
+      await expect(resolveTeamId()).resolves.toMatchObject({ id: 'chosen' });
+      expect(readGlobalConfig().cloud?.currentTeamId).toBeUndefined();
+      expect(readGlobalConfig().cloud?.teams).toEqual({
+        'candidate-org': { currentTeamId: 'chosen' },
+        'other-org': { currentTeamId: 'remembered' },
+      });
+    },
+  );
+
+  it.each(['empty', 'selected'])(
+    'clears the legacy slot after authoritative %s discovery',
+    async (result) => {
+      updateGlobalConfig((config) => {
+        config.cloud!.currentTeamId = 'chosen';
+      });
+      vi.mocked(fetchWithProxy).mockImplementation(async (url) =>
+        Response.json(
+          String(url).endsWith('/users/me') ? validation : result === 'empty' ? [] : teams,
+        ),
+      );
+
+      await loginWithApiKey(
+        'candidate-key',
+        undefined,
+        result === 'selected' ? { teamIdentifier: 'chosen' } : {},
+      );
+
+      expect(readGlobalConfig().cloud?.currentTeamId).toBeUndefined();
+      expect(cloudConfig.getCurrentTeamId(validation.organization.id)).toBe(
+        result === 'selected' ? 'chosen' : undefined,
+      );
+    },
+  );
 });

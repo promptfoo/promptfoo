@@ -403,7 +403,9 @@ export class CloudConfig {
       cloud.sharing = !isPublicCloud || hasActiveLicense === true || isGrandfathered;
       cloud.currentOrganizationId = organizationId;
       delete cloud.selectionContext;
-      delete cloud.currentTeamId;
+      if (session.teamId !== undefined) {
+        delete cloud.currentTeamId;
+      }
       if (session.teamId) {
         (cloud.teams ??= {})[organizationId] = { currentTeamId: session.teamId };
       } else if (session.teamId === null && cloud.teams) {
