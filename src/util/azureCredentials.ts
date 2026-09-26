@@ -28,8 +28,13 @@ export async function createAzureCredential(
       tenantId: layer?.AZURE_TENANT_ID,
     })),
   ];
+  const selectedAuthorityHost =
+    config.azureAuthorityHost ?? env?.AZURE_AUTHORITY_HOST ?? getEnvString('AZURE_AUTHORITY_HOST');
+  // Pass the default explicitly so an empty mask cannot trigger SDK host rediscovery.
   const authorityHost =
-    config.azureAuthorityHost || env?.AZURE_AUTHORITY_HOST || getEnvString('AZURE_AUTHORITY_HOST');
+    selectedAuthorityHost === ''
+      ? identity.AzureAuthorityHosts.AzurePublicCloud
+      : selectedAuthorityHost;
   const source = sources.find(({ clientId, clientSecret, tenantId }) =>
     [clientId, clientSecret, tenantId].some((value) => value !== undefined),
   );

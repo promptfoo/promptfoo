@@ -51,7 +51,7 @@ export function resolveBedrockMantleApiKey(
   }
   const scoped = getScopedAwsCredentialConfig({}, env, true);
   if (scoped) {
-    if (scoped.apiKey === '') {
+    if (scoped.apiKey !== undefined && !scoped.apiKey.trim()) {
       throw new Error(
         'Scoped AWS_BEARER_TOKEN_BEDROCK is empty. Supply a token or remove the scoped override.',
       );

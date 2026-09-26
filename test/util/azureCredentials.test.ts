@@ -7,6 +7,7 @@ import { mockProcessEnv } from './utils';
 
 const sdk = vi.hoisted(() => ({ blob: vi.fn() }));
 vi.mock('@azure/identity', () => ({
+  AzureAuthorityHosts: { AzurePublicCloud: 'https://login.microsoftonline.com' },
   ClientSecretCredential: vi.fn(),
   DefaultAzureCredential: vi.fn(),
 }));
@@ -121,6 +122,48 @@ describe('scoped Azure credentials', () => {
       }
       expect(ClientSecretCredential).not.toHaveBeenCalled();
       expect(DefaultAzureCredential).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(
+    (['config', 'provider', 'suite', 'file'] as const).flatMap((scope) =>
+      [false, true].map((servicePrincipal) => ({ scope, servicePrincipal })),
+    ),
+  )(
+    'masks lower Azure authorities with an empty $scope override (principal: $servicePrincipal)',
+    async ({ scope, servicePrincipal }) => {
+      mockProcessEnv({ AZURE_AUTHORITY_HOST: 'https://host.fixture.invalid' });
+      await cliState.withEnvFileOverrides(
+        { AZURE_AUTHORITY_HOST: scope === 'file' ? '' : 'https://file.fixture.invalid' },
+        () =>
+          cliState.withEnv(
+            scope === 'file'
+              ? {}
+              : { AZURE_AUTHORITY_HOST: scope === 'suite' ? '' : 'https://suite.fixture.invalid' },
+            () =>
+              createAzureCredential(scope === 'config' ? { azureAuthorityHost: '' } : {}, {
+                ...(servicePrincipal ? principal('provider') : {}),
+                AZURE_AUTHORITY_HOST:
+                  scope === 'config'
+                    ? 'https://provider.fixture.invalid'
+                    : scope === 'provider'
+                      ? ''
+                      : undefined,
+              }),
+          ),
+      );
+      if (servicePrincipal) {
+        expect(ClientSecretCredential).toHaveBeenCalledWith(
+          'provider-tenant',
+          'provider-client',
+          'provider-secret',
+          { authorityHost: 'https://login.microsoftonline.com' },
+        );
+      } else {
+        expect(DefaultAzureCredential).toHaveBeenCalledWith({
+          authorityHost: 'https://login.microsoftonline.com',
+        });
+      }
     },
   );
 

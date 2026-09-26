@@ -33,9 +33,13 @@ describe('BedrockTokenProvider', () => {
     vi.resetAllMocks();
   });
 
-  it.each(['provider', 'suite', 'file'])(
-    'rejects empty %s credential masks before using lower credentials',
-    async (scope) => {
+  it.each(
+    ['provider', 'suite', 'file'].flatMap((scope) =>
+      ['', ' \t '].map((value) => ({ scope, value })),
+    ),
+  )(
+    'rejects blank $scope credential masks before using lower credentials: $value',
+    async ({ scope, value }) => {
       const restore = mockProcessEnv({
         AWS_BEARER_TOKEN_BEDROCK: 'host-token',
         AWS_ACCESS_KEY_ID: 'host-key',
@@ -43,7 +47,7 @@ describe('BedrockTokenProvider', () => {
       });
       try {
         for (const key of ['AWS_BEARER_TOKEN_BEDROCK', 'AWS_ACCESS_KEY_ID', 'AWS_PROFILE']) {
-          const env = { [key]: '' };
+          const env = { [key]: value };
           await cliState.withEnvFileOverrides(scope === 'file' ? env : {}, () =>
             cliState.withEnv(scope === 'suite' ? env : {}, async () => {
               const provider = new BedrockTokenProvider(

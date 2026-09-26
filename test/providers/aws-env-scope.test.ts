@@ -318,6 +318,24 @@ describe('scoped AWS SDK authentication', () => {
     },
   );
 
+  it.each(['config', 'provider', 'suite', 'file'] as const)(
+    'rejects a whitespace-only native Bedrock bearer from %s',
+    async (scope) => {
+      mockProcessEnv({ ...keys('host'), AWS_BEARER_TOKEN_BEDROCK: 'host-bearer' });
+      const env = { AWS_BEARER_TOKEN_BEDROCK: ' \t ' };
+      await cliState.withEnvFileOverrides(scope === 'file' ? env : {}, () =>
+        cliState.withEnv(scope === 'suite' ? env : {}, async () => {
+          const provider = new AwsBedrockCompletionProvider('anthropic.claude-v2', {
+            config: scope === 'config' ? { apiKey: ' \t ' } : {},
+            env: scope === 'provider' ? env : undefined,
+          });
+          await expect(provider.getCredentials()).rejects.toThrow('empty');
+          await expect(provider.getBedrockInstance()).rejects.toThrow('empty');
+        }),
+      );
+    },
+  );
+
   it('rejects empty file credentials and an empty provider bearer before ambient SDK discovery', async () => {
     mockProcessEnv({ ...keys('host'), AWS_BEARER_TOKEN_BEDROCK: 'host-bearer' });
     await cliState.withEnvFileOverrides(

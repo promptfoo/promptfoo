@@ -138,7 +138,7 @@ export abstract class AwsBedrockGenericProvider {
       ) {
         return undefined;
       }
-      if (source.apiKey !== undefined && !source.apiKey) {
+      if (source.apiKey !== undefined && !source.apiKey.trim()) {
         throw new Error(
           'Scoped AWS_BEARER_TOKEN_BEDROCK is empty. Supply a bearer token or remove the scoped override.',
         );
