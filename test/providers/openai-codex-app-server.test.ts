@@ -1,13 +1,17 @@
 import { EventEmitter } from 'events';
 import { PassThrough } from 'stream';
 
-import { trace } from '@opentelemetry/api';
+import { context as otelContext, propagation, trace } from '@opentelemetry/api';
+import { ExportResultCode } from '@opentelemetry/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import logger from '../../src/logger';
 import { OpenAICodexAppServerProvider } from '../../src/providers/openai/codex-app-server';
 import { providerRegistry } from '../../src/providers/providerRegistry';
+import { LocalSpanExporter } from '../../src/tracing/localSpanExporter';
+import { initializeOtel, shutdownOtel, withOtelContext } from '../../src/tracing/otelSdk';
 import { mockProcessEnv } from '../util/utils';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
 
 const mocks = vi.hoisted(() => ({
   spawn: vi.fn(),
@@ -581,6 +585,73 @@ describe('OpenAICodexAppServerProvider', () => {
         stdio: ['pipe', 'pipe', 'pipe'],
       }),
     );
+  });
+
+  it('retains each evaluation tracer and parent across reused-connection notifications', async () => {
+    const spans: ReadableSpan[] = [];
+    vi.spyOn(LocalSpanExporter.prototype, 'export').mockImplementation((batch, done) => {
+      spans.push(...batch);
+      done({ code: ExportResultCode.SUCCESS });
+    });
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenAICodexAppServerProvider({ config: { thread_cleanup: 'none' } });
+    try {
+      for (const [index, serviceName] of ['app-first', 'app-second'].entries()) {
+        server.writes.length = 0;
+        const result = withOtelContext(async () => {
+          initializeOtel({ enabled: true, localExport: true, debug: false, serviceName });
+          try {
+            return await provider.callApi('hello');
+          } finally {
+            await shutdownOtel();
+          }
+        });
+        // Deliver notifications outside the evaluation async scope, as a persistent transport can.
+        if (index === 0) {
+          const initialize = await waitForMessage(server, (msg) => msg.method === 'initialize');
+          server.send({ id: initialize.id, result: {} });
+        }
+        const threadStart = await waitForMessage(server, (msg) => msg.method === 'thread/start');
+        server.send({ id: threadStart.id, result: { thread: { id: serviceName } } });
+        const turnStart = await waitForMessage(server, (msg) => msg.method === 'turn/start');
+        server.send({
+          id: turnStart.id,
+          result: { turn: { id: serviceName, status: 'inProgress' } },
+        });
+        server.send({
+          method: 'item/completed',
+          params: {
+            threadId: serviceName,
+            turnId: serviceName,
+            item: { type: 'agentMessage', id: 'message', text: 'ok' },
+          },
+        });
+        server.send({
+          method: 'turn/completed',
+          params: {
+            threadId: serviceName,
+            turn: { id: serviceName, status: 'completed', items: [], error: null },
+          },
+        });
+        expect(await result).toMatchObject({ output: 'ok' });
+        const owned = spans.filter(
+          (span) => span.resource.attributes['service.name'] === serviceName,
+        );
+        const root = owned.find((span) => span.name.startsWith('invoke_agent'))!;
+        expect(root).toBeDefined();
+        for (const name of ['gen_ai.turn 1', 'agent response']) {
+          const child = owned.find((span) => span.name === name)!;
+          expect(child).toBeDefined();
+          expect(child.parentSpanContext).toEqual(root.spanContext());
+        }
+      }
+      expect(mocks.spawn).toHaveBeenCalledTimes(1);
+    } finally {
+      trace.disable();
+      otelContext.disable();
+      propagation.disable();
+    }
   });
 
   it('emits a protocol turn span with nested usage when no turn/started notification arrives', async () => {

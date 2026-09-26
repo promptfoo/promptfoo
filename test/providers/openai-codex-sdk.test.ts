@@ -3,6 +3,8 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
+import { context as otelContext, propagation, trace } from '@opentelemetry/api';
+import { ExportResultCode } from '@opentelemetry/core';
 import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
 import cliState from '../../src/cliState';
@@ -11,8 +13,11 @@ import logger from '../../src/logger';
 import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { getTraceparent } from '../../src/tracing/genaiTracer';
+import { LocalSpanExporter } from '../../src/tracing/localSpanExporter';
+import { initializeOtel, shutdownOtel, withOtelContext } from '../../src/tracing/otelSdk';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { createDeferred, mockProcessEnv } from '../util/utils';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
 
 import type { CallApiContextParams } from '../../src/types/index';
 
@@ -3718,6 +3723,54 @@ describe('OpenAICodexSDKProvider', () => {
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toContain('Codex stream ended after error: Stream transport failed');
+      });
+
+      it('exports streamed turn and item spans through each evaluation tracer', async () => {
+        const spans: ReadableSpan[] = [];
+        vi.spyOn(LocalSpanExporter.prototype, 'export').mockImplementation((batch, done) => {
+          spans.push(...batch);
+          done({ code: ExportResultCode.SUCCESS });
+        });
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'fixture-key' },
+        });
+        try {
+          for (const serviceName of ['sdk-first', 'sdk-second']) {
+            mockRunStreamed.mockResolvedValue({
+              events: (async function* () {
+                yield {
+                  type: 'item.completed',
+                  item: { id: 'message', type: 'agent_message', text: 'ok' },
+                };
+                yield { type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1 } };
+              })(),
+            });
+            await withOtelContext(async () => {
+              initializeOtel({ enabled: true, localExport: true, debug: false, serviceName });
+              try {
+                expect(await provider.callApi('hello')).toMatchObject({ output: 'ok' });
+              } finally {
+                await shutdownOtel();
+              }
+            });
+            const owned = spans.filter(
+              (span) => span.resource.attributes['service.name'] === serviceName,
+            );
+            const root = owned.find((span) => span.name.startsWith('invoke_agent'))!;
+            expect(root).toBeDefined();
+            expect(owned.some((span) => span.name === 'gen_ai.turn 1')).toBe(true);
+            const item = owned.find(
+              (span) => span.attributes['codex.item.type'] === 'agent_message',
+            )!;
+            expect(item).toBeDefined();
+            expect(item.parentSpanContext).toEqual(root.spanContext());
+          }
+        } finally {
+          trace.disable();
+          otelContext.disable();
+          propagation.disable();
+        }
       });
 
       it('emits a gen_ai.turn span even when the stream omits turn.started', async () => {
