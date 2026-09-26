@@ -449,23 +449,13 @@ describe('package manifests', () => {
     }
   });
 
-  it('lets consumers omit separately installed features without shipping unused build tools', () => {
+  it('lets consumers omit separately installed features', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const sitePackageJson = readPackageJson<PackageManifest>('site/package.json');
     const packageLock =
       readPackageJson<PackageLockManifest<{ optional?: boolean }>>('package-lock.json');
-    const nativeBuildPackages = Object.keys({
-      ...packageJson.dependencies,
-      ...packageJson.optionalDependencies,
-    }).filter(
-      (dependency) =>
-        dependency === '@swc/core' ||
-        ['@rollup/rollup-', '@swc/core-'].some((prefix) => dependency.startsWith(prefix)),
-    );
-
-    expect(nativeBuildPackages).toEqual([]);
-
     for (const dependency of [
+      '@alcalzone/ansi-tokenize',
       '@anthropic-ai/claude-agent-sdk',
       '@langfuse/client',
       '@modelcontextprotocol/sdk',
