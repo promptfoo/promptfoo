@@ -1801,7 +1801,8 @@ describe('evalCommand', () => {
     loggerErrorSpy.mockRestore();
   });
 
-  it('should resume an existing eval with persisted prompts', async () => {
+  it.each([0, undefined])('resumes saved prompts and no-delay pacing (%s)', async (delay) => {
+    const restore = mockProcessEnv({ PROMPTFOO_DELAY_MS: '1000' });
     const resumeEval = new Eval({ prompts: [] } as UnifiedConfig);
     resumeEval.prompts = [
       { raw: 'saved prompt', label: 'Saved', config: { temperature: 0 } },
@@ -1810,7 +1811,7 @@ describe('evalCommand', () => {
       repeat: 2,
       cache: false,
       maxConcurrency: 2,
-      delay: 0,
+      delay,
       providerFilter: 'selected-target',
     };
     const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValueOnce(resumeEval);
@@ -1832,7 +1833,7 @@ describe('evalCommand', () => {
       expect(testSuite.prompts).toEqual([
         { raw: 'saved prompt', label: 'Saved', config: { temperature: 0 } },
       ]);
-      expect(options).toEqual(expect.objectContaining({ repeat: 2, cache: false }));
+      expect(options).toEqual(expect.objectContaining({ repeat: 2, cache: false, delay: 0 }));
       return evalRecord as Eval;
     });
 
@@ -1852,6 +1853,7 @@ describe('evalCommand', () => {
       );
     } finally {
       findByIdSpy.mockRestore();
+      restore();
     }
   });
 
