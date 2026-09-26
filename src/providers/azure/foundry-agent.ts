@@ -785,8 +785,8 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     if (body.stream || body.background) {
       return 'Azure Foundry agents require non-streaming, foreground Responses requests; stream and background are not supported.';
     }
-    if (body.store !== undefined && typeof body.store !== 'boolean') {
-      return 'Azure Foundry agent store must be a boolean.';
+    if (body.store != null && typeof body.store !== 'boolean') {
+      return 'Azure Foundry agent store must be a boolean or null.';
     }
     if (body.store === false && Object.keys(config.functionToolCallbacks ?? {}).length > 0) {
       return 'Azure Foundry automatic function callbacks require stored responses. Remove store: false or functionToolCallbacks; stateless tool history is not supported by this provider.';
