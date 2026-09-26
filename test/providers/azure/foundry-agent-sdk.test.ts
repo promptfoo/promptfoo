@@ -43,7 +43,7 @@ describe('Foundry SDK cancellation and retries', () => {
     return instance;
   }
 
-  function stallNextResponse(status: number) {
+  function stallNextResponse(status: number, headers: Record<string, string> = {}) {
     fetchMock.mockImplementationOnce(async (_url, options: RequestInit) => {
       const body = new ReadableStream({
         start(stream) {
@@ -54,7 +54,10 @@ describe('Foundry SDK cancellation and retries', () => {
           );
         },
       });
-      return new Response(body, { status, headers: { 'content-type': 'application/json' } });
+      return new Response(body, {
+        status,
+        headers: { 'content-type': 'application/json', ...headers },
+      });
     });
   }
 
@@ -427,6 +430,133 @@ describe('Foundry SDK cancellation and retries', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it.each([429, 503])('honors retry headers when a %s error body stalls', async (status) => {
+    const sdkClient = client.getOpenAIClient();
+    const originalFetch = sdkClient.fetchWithTimeout;
+    vi.spyOn(client, 'getOpenAIClient').mockReturnValue(sdkClient);
+    stallNextResponse(status, { 'retry-after': '2' });
+    const controller = new AbortController();
+    const pending = provider({ timeoutMs: 10, retryOptions: { maxRetries: 1 } }).callApi(
+      'hello',
+      undefined,
+      { abortSignal: controller.signal },
+    );
+    await vi.advanceTimersByTimeAsync(2009);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await pending).toMatchObject({
+      output: 'ok',
+      tokenUsage: { numRequests: 1 },
+      metadata: { transportRetries: 1, usageIncomplete: true, costIncomplete: true },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const [, options] of fetchMock.mock.calls) {
+      expect(JSON.parse(options.body).agent_reference).toEqual({
+        name: 'test-agent',
+        type: 'agent_reference',
+      });
+    }
+    expect(sdkClient.fetchWithTimeout).toBe(originalFetch);
+    expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(
+    [429, 503].flatMap((status) =>
+      Array.of<Record<string, string>>(
+        { 'retry-after': '61' },
+        { 'retry-after-ms': '60001' },
+        { 'retry-after': 'Thu, 01 Jan 2026 00:01:01 GMT' },
+        { 'retry-after': '2', 'x-should-retry': 'false' },
+      ).map((headers) => ({ status, headers })),
+    ),
+  )(
+    'preserves a stalled HTTP $status retry veto without parking the next call ($headers)',
+    async ({ status, headers: retryHeaders }) => {
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER: 'false' });
+      const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 0 });
+      const controller = new AbortController();
+      const headers = {
+        ...retryHeaders,
+        'x-ratelimit-remaining-requests': '0',
+        'x-ratelimit-reset-requests': '120s',
+      };
+      stallNextResponse(status, headers);
+      const instance = provider({ timeoutMs: 10, retryOptions: { maxRetries: 1 } });
+      const firstDone = vi.fn();
+      const nextDone = vi.fn();
+      try {
+        const first = registry
+          .execute(
+            instance,
+            () => instance.callApi('first', undefined, { abortSignal: controller.signal }),
+            createProviderRateLimitOptions(),
+          )
+          .then(firstDone, firstDone);
+        await vi.advanceTimersByTimeAsync(1);
+        const next = registry
+          .execute(instance, () => instance.callApi('next'), createProviderRateLimitOptions())
+          .then(nextDone, nextDone);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(Object.values(registry.getMetrics())[0].queueDepth).toBe(1);
+        await vi.advanceTimersByTimeAsync(8);
+        expect(firstDone).toHaveBeenCalledOnce();
+        expect(nextDone).toHaveBeenCalledOnce();
+        await Promise.all([first, next]);
+        expect(firstDone.mock.calls[0][0]).toMatchObject({
+          error: expect.stringContaining('Request timed out.'),
+          metadata: { rateLimitRetryable: false, http: { status, headers } },
+        });
+        expect(firstDone.mock.calls[0][0].metadata.transportRetries).toBeUndefined();
+        expect(nextDone.mock.calls[0][0]).toMatchObject({ output: 'ok' });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+          activeRequests: 0,
+          queueDepth: 0,
+          rateLimitHits: 0,
+          retriedRequests: 0,
+        });
+        expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        controller.abort();
+        await vi.runAllTimersAsync();
+        registry.dispose();
+        restoreEnv();
+      }
+    },
+  );
+
+  it('does not turn a stalled non-retryable HTTP body into a connection retry', async () => {
+    stallNextResponse(400);
+    const pending = provider({ timeoutMs: 10, retryOptions: { maxRetries: 1 } }).callApi('hello');
+    await vi.runAllTimersAsync();
+    expect(await pending).toMatchObject({
+      error: 'Error in Azure Foundry Agent API call: Request timed out.',
+      metadata: { http: { status: 400 } },
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('keeps observed error headers isolated across concurrent invocations', async () => {
+    stallNextResponse(503, { 'retry-after': '61' });
+    const instance = provider({ timeoutMs: 10, retryOptions: { maxRetries: 1 } });
+    const first = instance.callApi('first');
+    await vi.advanceTimersByTimeAsync(1);
+    const next = instance.callApi('next');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await next).toMatchObject({ output: 'ok' });
+    await vi.advanceTimersByTimeAsync(9);
+    expect(await first).toMatchObject({
+      error: expect.stringContaining('Request timed out.'),
+      metadata: { rateLimitRetryable: false, http: { status: 503 } },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it.each([200, 503])(
     'retries a stalled %s body within the whole attempt deadline',
     async (status) => {
@@ -462,6 +592,7 @@ describe('Foundry SDK cancellation and retries', () => {
     'bounds stalled bodies with the %s timeout and zero retries',
     async (source) => {
       const sdkClient = client.getOpenAIClient(source === 'SDK default' ? {} : { timeout: 20 });
+      const originalFetch = sdkClient.fetchWithTimeout;
       vi.spyOn(client, 'getOpenAIClient').mockReturnValue(sdkClient);
       const timeout = source === 'configured' ? 10 : sdkClient.timeout;
       stallNextResponse(503);
@@ -486,6 +617,7 @@ describe('Foundry SDK cancellation and retries', () => {
           metadata: { usageIncomplete: true, costIncomplete: true, knownCost: 0 },
         });
         expect(fetchMock).toHaveBeenCalledOnce();
+        expect(sdkClient.fetchWithTimeout).toBe(originalFetch);
         expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
         expect(vi.getTimerCount()).toBe(0);
       } finally {
@@ -496,7 +628,10 @@ describe('Foundry SDK cancellation and retries', () => {
   );
 
   it('keeps caller cancellation distinct from a stalled body timeout', async () => {
-    stallNextResponse(503);
+    const sdkClient = client.getOpenAIClient();
+    const originalFetch = sdkClient.fetchWithTimeout;
+    vi.spyOn(client, 'getOpenAIClient').mockReturnValue(sdkClient);
+    stallNextResponse(503, { 'retry-after': '61' });
     const controller = new AbortController();
     const pending = provider({ timeoutMs: 10, retryOptions: { maxRetries: 1 } }).callApi(
       'hello',
@@ -507,6 +642,7 @@ describe('Foundry SDK cancellation and retries', () => {
     await vi.advanceTimersByTimeAsync(1);
     controller.abort();
     await rejected;
+    expect(sdkClient.fetchWithTimeout).toBe(originalFetch);
     expect(vi.getTimerCount()).toBe(0);
     expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
     await vi.advanceTimersByTimeAsync(1000);

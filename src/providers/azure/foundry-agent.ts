@@ -201,10 +201,11 @@ function responseRetryDelay(
   // The project client bundles its own SDK; root-package instanceof checks differ.
   const ConnectionError = (client.constructor as Function & { APIConnectionError?: typeof Error })
     .APIConnectionError;
-  const connectionError =
-    (ConnectionError && error instanceof ConnectionError) ||
-    (error instanceof DOMException && error.name === 'TimeoutError');
   const sdkError = error as { status?: number; headers?: unknown };
+  const connectionError =
+    sdkError.status === undefined &&
+    ((ConnectionError && error instanceof ConnectionError) ||
+      (error instanceof DOMException && error.name === 'TimeoutError'));
   const headers = sdkErrorHeaders(sdkError) ?? {};
   if (!connectionError) {
     if (headers['x-should-retry'] === 'false') {
@@ -239,8 +240,10 @@ function rateLimitResponse(error: HttpRateLimitError, details?: string): Provide
     error: formatRateLimitErrorMessage(error, details),
     metadata: {
       rateLimitKind: error.kind,
-      ...(error.retryAfterMs !== undefined &&
-        error.retryAfterMs > MAX_RETRY_DELAY_MS && { rateLimitRetryable: false }),
+      ...((error.headers?.['x-should-retry'] === 'false' ||
+        (error.retryAfterMs !== undefined && error.retryAfterMs > MAX_RETRY_DELAY_MS)) && {
+        rateLimitRetryable: false,
+      }),
       http: {
         status: error.status,
         statusText: error.statusText,
@@ -715,6 +718,18 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       const relayAbort = () => controller.abort();
       signal?.addEventListener('abort', relayAbort, { once: true });
       let timedOut = false;
+      let receivedError: { status: number; headers: Headers } | undefined;
+      const fetchWithTimeout = client.fetchWithTimeout;
+      // The SDK reads error bodies before exposing the Response or APIError.
+      // Observe its public transport method on this invocation-local client so
+      // deadlines retain headers without replacing Azure's request/tracing wrappers.
+      client.fetchWithTimeout = async (...args) => {
+        const response = await fetchWithTimeout.apply(client, args);
+        if (!response.ok && !controller.signal.aborted) {
+          receivedError = { status: response.status, headers: response.headers };
+        }
+        return response;
+      };
       // The SDK clears its fetch timeout after headers; also bound body reads
       // and credential acquisition for the complete Responses attempt.
       const timeout = setTimeout(
@@ -738,7 +753,10 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       } catch (error) {
         throwIfAborted(signal);
         if (timedOut) {
-          error = new DOMException('Request timed out.', 'TimeoutError');
+          error = Object.assign(
+            new DOMException('Request timed out.', 'TimeoutError'),
+            receivedError,
+          );
         }
         const delay = responseRetryDelay(error, client, attempt);
         if (attempt >= maxRetries || delay === undefined) {
@@ -746,6 +764,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         }
         retryDelay = delay;
       } finally {
+        client.fetchWithTimeout = fetchWithTimeout;
         clearTimeout(timeout);
         signal?.removeEventListener('abort', relayAbort);
         // Release the SDK's retained fetch listener after completion, failure,
@@ -1311,14 +1330,22 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       const sdkError = error as { status?: unknown; response?: { status?: unknown } };
       const headers = sdkErrorHeaders(error);
       const retryAfterMs = headers && rateLimitTimingFromHeaders(headers).retryAfterMs;
-      if (retryAfterMs !== undefined && retryAfterMs > MAX_RETRY_DELAY_MS) {
-        const status =
-          typeof sdkError.status === 'number' ? sdkError.status : sdkError.response?.status;
+      const retryVeto =
+        headers?.['x-should-retry'] === 'false' ||
+        (retryAfterMs !== undefined && retryAfterMs > MAX_RETRY_DELAY_MS);
+      const status =
+        typeof sdkError.status === 'number' ? sdkError.status : sdkError.response?.status;
+      if (
+        retryVeto ||
+        (error instanceof DOMException &&
+          error.name === 'TimeoutError' &&
+          typeof status === 'number')
+      ) {
         // Non-429 messages can also match the scheduler's rate-limit heuristic.
-        // Preserve the delay veto and HTTP evidence through every formatter.
+        // Preserve server vetoes and HTTP evidence, including body-read timeouts.
         result.metadata = {
           ...result.metadata,
-          rateLimitRetryable: false,
+          ...(retryVeto && { rateLimitRetryable: false }),
           ...(typeof status === 'number' && { http: { status, statusText: '', headers } }),
         };
       }
