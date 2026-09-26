@@ -9,6 +9,7 @@ import {
 } from '@openai/agents';
 import { SandboxAgent } from '@openai/agents/sandbox';
 import OpenAI from 'openai';
+import cliState from '../../cliState';
 import { getEnvOverrides, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
@@ -34,6 +35,7 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { OpenAiAgentsSessionClientFactory } from './agents-loader';
 import type { OpenAiAgentsOptions, OpenAiAgentsSessionFactory } from './agents-types';
 
 /**
@@ -45,8 +47,12 @@ import type { OpenAiAgentsOptions, OpenAiAgentsSessionFactory } from './agents-t
 export class OpenAiAgentsProvider extends OpenAiGenericProvider {
   private agentConfig: OpenAiAgentsOptions;
   private agent?: Agent<any, any>;
-  private session?: Session;
-  private sessionInitialization?: Promise<Session>;
+  private readonly defaultSessionState: { session?: Session; initialization?: Promise<Session> } =
+    {};
+  private readonly scopedSessionStates = new WeakMap<
+    object,
+    { session?: Session; initialization?: Promise<Session> }
+  >();
   private sessionQueues = new WeakMap<Session, Promise<void>>();
 
   constructor(
@@ -187,6 +193,14 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     let modelProvider: OpenAIProvider | undefined;
+    let scopedClient: ReturnType<OpenAiAgentsSessionClientFactory> | undefined;
+    const getClient: OpenAiAgentsSessionClientFactory | undefined =
+      this.hasScopedConnectionSettings()
+        ? (overrides) =>
+            Object.values(overrides ?? {}).some((value) => value !== undefined)
+              ? this.createScopedClient(overrides)
+              : (scopedClient ??= this.createScopedClient())
+        : undefined;
     try {
       const maxTurns = this.agentConfig.maxTurns === undefined ? 10 : this.agentConfig.maxTurns;
 
@@ -196,7 +210,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       });
 
       const runOptions: any = {
-        ...(await this.resolveRunOptions(context)),
+        ...(await this.resolveRunOptions(context, getClient)),
         context: context?.vars,
         maxTurns,
         signal: callApiOptions?.abortSignal,
@@ -218,21 +232,13 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       }
 
       const runner = new Runner({
-        ...(this.hasScopedConnectionSettings() && {
+        ...(getClient && {
           modelProvider: {
             getModel: async (name) => {
               // SDK Model objects bypass this factory and retain their own clients.
               // The SDK's nested OpenAI dependency has a nominally distinct client type.
               modelProvider ??= new OpenAIProvider({
-                openAIClient: new OpenAI({
-                  apiKey: this.getApiKey() ?? null,
-                  adminAPIKey: null,
-                  baseURL: this.getApiUrl(),
-                  organization: this.getOrganization(),
-                  defaultHeaders: this.getOpenAiRequestHeaders(),
-                  fetch: (input, options) =>
-                    fetchWithProxy(input instanceof URL ? input.href : input, options),
-                }) as unknown as OpenAIProviderOptions['openAIClient'],
+                openAIClient: getClient(),
               });
               return modelProvider.getModel(name);
             },
@@ -290,10 +296,42 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     }
   }
 
+  private createScopedClient(
+    overrides: Parameters<OpenAiAgentsSessionClientFactory>[0] = {},
+  ): ReturnType<OpenAiAgentsSessionClientFactory> {
+    const apiKey = overrides.apiKey ?? this.getApiKey();
+    const keyless = !apiKey && !this.requiresApiKey();
+    const config = {
+      ...this.config,
+      apiHost: undefined,
+      apiBaseUrl: overrides.baseURL ?? this.getApiUrl(),
+      organization: overrides.organization ?? this.config.organization,
+    };
+    const apiUrl = new URL(config.apiBaseUrl);
+    const defaultQuery = Object.fromEntries(apiUrl.searchParams);
+    apiUrl.search = '';
+    apiUrl.hash = '';
+    return new OpenAI({
+      // The SDK requires a constructor key; the null header keeps it off the wire.
+      apiKey: keyless ? 'promptfoo-no-auth' : (apiKey ?? null),
+      adminAPIKey: null,
+      baseURL: apiUrl.toString(),
+      defaultQuery,
+      organization: this.getOrganization(config),
+      ...(overrides.project !== undefined && { project: overrides.project }),
+      defaultHeaders: {
+        ...(keyless && { Authorization: null }),
+        ...this.getOpenAiRequestHeaders(config.headers, config),
+      },
+      fetch: (input, options) => fetchWithProxy(input instanceof URL ? input.href : input, options),
+    }) as unknown as NonNullable<OpenAIProviderOptions['openAIClient']>;
+  }
+
   private hasScopedConnectionSettings(): boolean {
     const configKeys = [
       'apiKey',
       'apiKeyEnvar',
+      'apiKeyRequired',
       'apiHost',
       'apiBaseUrl',
       'organization',
@@ -461,6 +499,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
 
   private async resolveRunOptions(
     context?: CallApiContextParams,
+    getClient?: OpenAiAgentsSessionClientFactory,
   ): Promise<Record<string, unknown>> {
     const runOptions = { ...(this.agentConfig.runOptions ?? {}) } as Record<string, any>;
     delete runOptions.stream;
@@ -494,9 +533,9 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     }
 
     if (runOptions.session) {
-      runOptions.session = await loadSessionDefinition(runOptions.session, context);
+      runOptions.session = await loadSessionDefinition(runOptions.session, context, getClient);
     } else if (this.agentConfig.session) {
-      runOptions.session = await this.resolveConfiguredSession(context);
+      runOptions.session = await this.resolveConfiguredSession(context, getClient);
     }
 
     if (runOptions.sandbox) {
@@ -508,9 +547,12 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     return runOptions;
   }
 
-  private async resolveConfiguredSession(context?: CallApiContextParams): Promise<Session> {
+  private async resolveConfiguredSession(
+    context?: CallApiContextParams,
+    getClient?: OpenAiAgentsSessionClientFactory,
+  ): Promise<Session> {
     if (typeof this.agentConfig.session === 'function') {
-      const session = await loadSessionDefinition(this.agentConfig.session, context);
+      const session = await loadSessionDefinition(this.agentConfig.session, context, getClient);
       if (!session) {
         throw new Error('Failed to initialize configured session');
       }
@@ -526,6 +568,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         const session = await loadSessionDefinition(
           exportedSession as OpenAiAgentsSessionFactory,
           context,
+          getClient,
         );
         if (!session) {
           throw new Error('Failed to initialize configured session');
@@ -534,23 +577,34 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       }
     }
 
-    if (!this.session) {
-      this.sessionInitialization ??= loadSessionDefinition(this.agentConfig.session, context)
+    const scope = getClient ? cliState.envScope : undefined;
+    let state = scope ? this.scopedSessionStates.get(scope) : this.defaultSessionState;
+    if (!state) {
+      state = {};
+      this.scopedSessionStates.set(scope!, state);
+    }
+    const sessionState = state;
+    if (!sessionState.session) {
+      sessionState.initialization ??= loadSessionDefinition(
+        this.agentConfig.session,
+        context,
+        getClient,
+      )
         .then((session) => {
           if (!session) {
             throw new Error('Failed to initialize configured session');
           }
-          this.session = session;
+          sessionState.session = session;
           return session;
         })
         .catch((error) => {
-          this.sessionInitialization = undefined;
+          sessionState.initialization = undefined;
           throw error;
         });
-      return await this.sessionInitialization;
+      return await sessionState.initialization;
     }
 
-    return this.session;
+    return sessionState.session;
   }
 
   private async withSessionLock<T>(session: Session, callback: () => Promise<T>): Promise<T> {

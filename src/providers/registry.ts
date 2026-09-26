@@ -124,7 +124,13 @@ import type { ProviderFactory, ProviderFamily } from './registryTypes';
 /** Aliases read together by these providers must keep their original scope priority. */
 function getProviderEnvAliasGroups(providerPath: string): readonly (readonly string[])[] {
   if (/^openai:(?:codex-sdk|codex)(?::|$)/.test(providerPath)) {
-    return [['OPENAI_API_KEY', 'CODEX_API_KEY']];
+    return [
+      ['OPENAI_API_KEY', 'CODEX_API_KEY'],
+      ['OPENAI_API_HOST', 'OPENAI_API_BASE_URL', 'OPENAI_BASE_URL'],
+    ];
+  }
+  if (providerPath.startsWith('openai:')) {
+    return [['OPENAI_API_HOST', 'OPENAI_API_BASE_URL', 'OPENAI_BASE_URL']];
   }
   if (providerPath.startsWith('huggingface:') || providerPath.startsWith('hf:')) {
     return [['HF_TOKEN', 'HF_API_TOKEN']];

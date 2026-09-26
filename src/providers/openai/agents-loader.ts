@@ -17,6 +17,7 @@ import { resolveModelSettings } from './agents-model-settings';
 import type {
   Handoff,
   InputGuardrail,
+  OpenAIConversationsSessionOptions,
   Tool as OpenAiTool,
   OutputGuardrail,
   Session,
@@ -179,12 +180,20 @@ export async function loadOutputGuardrails(
   throw new Error('Invalid output guardrails configuration: expected file:// URL or array');
 }
 
+export type OpenAiAgentsSessionClientFactory = (
+  options?: Pick<
+    OpenAIConversationsSessionOptions,
+    'apiKey' | 'baseURL' | 'organization' | 'project'
+  >,
+) => NonNullable<OpenAIConversationsSessionOptions['client']>;
+
 /**
  * Load a persistent conversation session from config, file export, or factory.
  */
 export async function loadSessionDefinition(
   sessionConfig?: OpenAiAgentsSessionConfig,
   context?: any,
+  getClient?: OpenAiAgentsSessionClientFactory,
 ): Promise<Session | undefined> {
   if (!sessionConfig) {
     return undefined;
@@ -196,7 +205,7 @@ export async function loadSessionDefinition(
   }
 
   if (isSessionDefinition(resolved)) {
-    return createSessionFromDefinition(resolved, context);
+    return createSessionFromDefinition(resolved, context, getClient);
   }
 
   throw new Error(
@@ -505,6 +514,7 @@ function isSessionDefinition(value: unknown): value is OpenAiAgentsSessionDefini
 async function createSessionFromDefinition(
   definition: OpenAiAgentsSessionDefinition,
   context?: any,
+  getClient?: OpenAiAgentsSessionClientFactory,
 ): Promise<Session> {
   switch (definition.type) {
     case 'memory': {
@@ -513,13 +523,21 @@ async function createSessionFromDefinition(
     }
     case 'openai-conversations': {
       const { type: _type, ...options } = definition;
-      return new OpenAIConversationsSession(options);
+      return new OpenAIConversationsSession({
+        ...options,
+        client: options.client ?? getClient?.(options),
+      });
     }
     case 'openai-responses-compaction': {
       const { type: _type, underlyingSession, ...options } = definition;
-      const resolvedUnderlyingSession = await loadSessionDefinition(underlyingSession, context);
+      const resolvedUnderlyingSession = await loadSessionDefinition(
+        underlyingSession,
+        context,
+        getClient,
+      );
       return new OpenAIResponsesCompactionSession({
         ...options,
+        client: options.client ?? getClient?.(),
         ...(resolvedUnderlyingSession ? { underlyingSession: resolvedUnderlyingSession } : {}),
       });
     }

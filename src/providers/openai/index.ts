@@ -1,4 +1,4 @@
-import { getEnvString } from '../../envars';
+import { getEnvOverrides, getEnvString } from '../../envars';
 import { resolveProviderApiKey } from '../credentials';
 import { isGpt6Model } from './gpt6';
 
@@ -116,17 +116,26 @@ export class OpenAiGenericProvider implements ApiProvider {
     if (config.apiBaseUrl) {
       return config.apiBaseUrl;
     }
-    const envApiHost = this.env?.OPENAI_API_HOST || getEnvString('OPENAI_API_HOST');
-    if (envApiHost) {
-      return `https://${envApiHost}/v1`;
+    const keys = ['OPENAI_API_HOST', 'OPENAI_API_BASE_URL', 'OPENAI_BASE_URL'] as const;
+    const masked = new Set<string>();
+    for (const env of [
+      this.env,
+      getEnvOverrides(),
+      getEnvOverrides('file'),
+      Object.fromEntries(keys.map((key) => [key, getEnvString(key)])),
+    ]) {
+      for (const key of keys) {
+        const value = env?.[key];
+        if (masked.has(key) || value === undefined) {
+          continue;
+        }
+        masked.add(key);
+        if (value) {
+          return key === 'OPENAI_API_HOST' ? `https://${value}/v1` : value;
+        }
+      }
     }
-    return (
-      this.env?.OPENAI_API_BASE_URL ||
-      this.env?.OPENAI_BASE_URL ||
-      getEnvString('OPENAI_API_BASE_URL') ||
-      getEnvString('OPENAI_BASE_URL') ||
-      this.getApiUrlDefault()
-    );
+    return this.getApiUrlDefault();
   }
 
   /** Pass a prompt-merged config to resolve that call's credential. */
