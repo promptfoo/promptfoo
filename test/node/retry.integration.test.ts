@@ -231,84 +231,100 @@ describe('retry command', () => {
       });
       expect(await getErrorResultIds(evaluation.id)).toEqual([]);
     });
-    it('retains complete legacy metric counts when weights predate the saved evaluation', async () => {
-      const prompt = { raw: 'Hello', label: 'Hello' };
-      const assertion = {
-        type: 'contains' as const,
-        value: 'Hello',
-        metric: 'quality:{{ category | upper }}',
-      };
-      const testCase = { vars: { category: 'example' }, assert: [assertion, assertion] };
-      const metrics = createPromptMetrics({
-        score: 1,
-        testPassCount: 1,
-        testErrorCount: 1,
-        assertPassCount: 2,
-        namedScores: { 'quality:EXAMPLE': 2 },
-        namedScoresCount: { 'quality:EXAMPLE': 2 },
-        namedScoreWeights: undefined,
-      });
-      const evaluation = await Eval.create(
-        { prompts: ['Hello'], providers: ['echo'], tests: [testCase, testCase] },
-        [prompt],
-        {
-          id: uniqueEvalId(),
-          completedPrompts: [
-            {
-              ...prompt,
-              id: generateIdFromPrompt(prompt),
-              provider: 'echo',
-              metrics,
-            },
-          ],
-        },
-      );
-      await evaluation.addResult(
-        createEvaluateResult({
-          prompt,
-          testCase,
-          provider: { id: 'echo' },
-          testIdx: 0,
+    it.each([false, true])(
+      'handles legacy metric counts when weights predate the saved evaluation (derived=%s)',
+      async (withDerivedMetric) => {
+        const prompt = { raw: 'Hello', label: 'Hello' };
+        const assertion = {
+          type: 'contains' as const,
+          value: 'Hello',
+          metric: 'quality:{{ category | upper }}',
+        };
+        const testCase = { vars: { category: 'example' }, assert: [assertion, assertion] };
+        const metrics = createPromptMetrics({
+          score: 1,
+          testPassCount: 1,
+          testErrorCount: 1,
+          assertPassCount: 2,
           namedScores: { 'quality:EXAMPLE': 2 },
-          gradingResult: {
-            pass: true,
-            score: 1,
-            reason: 'passed',
-            componentResults: [assertion, assertion].map((assertion) => ({
+          namedScoresCount: { 'quality:EXAMPLE': 2 },
+          namedScoreWeights: undefined,
+        });
+        const evaluation = await Eval.create(
+          {
+            prompts: ['Hello'],
+            providers: ['echo'],
+            tests: [testCase, testCase],
+            ...(withDerivedMetric ? { derivedMetrics: [{ name: 'constant', value: '1' }] } : {}),
+          },
+          [prompt],
+          {
+            id: uniqueEvalId(),
+            completedPrompts: [
+              {
+                ...prompt,
+                id: generateIdFromPrompt(prompt),
+                provider: 'echo',
+                metrics,
+              },
+            ],
+          },
+        );
+        await evaluation.addResult(
+          createEvaluateResult({
+            prompt,
+            testCase,
+            provider: { id: 'echo' },
+            testIdx: 0,
+            namedScores: { 'quality:EXAMPLE': 2 },
+            gradingResult: {
               pass: true,
               score: 1,
               reason: 'passed',
-              assertion,
-            })),
-          },
-        }),
-      );
-      await evaluation.addResult(
-        createEvaluateResult({
-          prompt,
-          testCase,
-          provider: { id: 'echo' },
-          testIdx: 1,
-          success: false,
-          score: 0,
-          failureReason: ResultFailureReason.ERROR,
-          error: 'Interrupted provider request',
-          namedScores: {},
-          gradingResult: null,
-        }),
-      );
+              componentResults: [assertion, assertion].map((assertion) => ({
+                pass: true,
+                score: 1,
+                reason: 'passed',
+                assertion,
+              })),
+            },
+          }),
+        );
+        await evaluation.addResult(
+          createEvaluateResult({
+            prompt,
+            testCase,
+            provider: { id: 'echo' },
+            testIdx: 1,
+            success: false,
+            score: 0,
+            failureReason: ResultFailureReason.ERROR,
+            error: 'Interrupted provider request',
+            namedScores: {},
+            gradingResult: null,
+          }),
+        );
 
-      const retried = await retryCommand(evaluation.id, { maxConcurrency: 1 });
-      expect(retried.prompts[0].metrics).toMatchObject({
-        testPassCount: 2,
-        testErrorCount: 0,
-        namedScores: { 'quality:EXAMPLE': 4 },
-        namedScoresCount: { 'quality:EXAMPLE': 4 },
-        namedScoreWeights: { 'quality:EXAMPLE': 4 },
-      });
-      const saved = await Eval.findById(evaluation.id);
-      expect(saved?.prompts[0].metrics).toEqual(retried.prompts[0].metrics);
-    });
+        const retried = await retryCommand(evaluation.id, { maxConcurrency: 1 });
+        expect(retried.prompts[0].metrics).toMatchObject({
+          testPassCount: 2,
+          testErrorCount: 0,
+          namedScores: { 'quality:EXAMPLE': 4 },
+          namedScoresCount: withDerivedMetric ? {} : { 'quality:EXAMPLE': 4 },
+          namedScoreWeights: withDerivedMetric ? {} : { 'quality:EXAMPLE': 4 },
+        });
+        if (withDerivedMetric) {
+          expect(retried.prompts[0].metrics?.namedScoresCount).not.toHaveProperty(
+            'quality:EXAMPLE',
+          );
+          expect(retried.prompts[0].metrics?.namedScoreWeights).not.toHaveProperty(
+            'quality:EXAMPLE',
+          );
+        }
+        const saved = await Eval.findById(evaluation.id);
+        expect(saved?.prompts[0].metrics).toEqual(retried.prompts[0].metrics);
+      },
+    );
 
     it('preserves persisted errors when an override config no longer matches the stored provider filter', async () => {
       const artifactId = randomUUID();
@@ -479,9 +495,10 @@ describe('retry command', () => {
           testPassCount: 1,
           testFailCount: 0,
           namedScores: { 'coverage:alpha': 3, 'quality:ALPHA': 3 },
-          namedScoresCount: { 'coverage:alpha': 2, 'quality:ALPHA': 1 },
+          namedScoresCount: {},
           namedScoreWeights: { 'coverage:alpha': 4, 'quality:ALPHA': 4 },
         });
+        expect(passMetrics[0].namedScoresCount).toEqual({});
         expect(passMetrics[0].namedScores).not.toHaveProperty('quality:BETA');
 
         const failureMetrics = await retriedEval.getFilteredMetrics({ filterMode: 'failures' });
@@ -489,9 +506,10 @@ describe('retry command', () => {
           testPassCount: 0,
           testFailCount: 1,
           namedScores: { 'coverage:beta': 3, 'quality:BETA': 3 },
-          namedScoresCount: { 'coverage:beta': 2, 'quality:BETA': 1 },
+          namedScoresCount: {},
           namedScoreWeights: { 'coverage:beta': 4, 'quality:BETA': 4 },
         });
+        expect(failureMetrics[0].namedScoresCount).toEqual({});
         expect(failureMetrics[0].namedScores).not.toHaveProperty('quality:ALPHA');
       } finally {
         fs.rmSync(configPath, { force: true });

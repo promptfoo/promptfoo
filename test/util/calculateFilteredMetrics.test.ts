@@ -1248,7 +1248,7 @@ describe('calculateFilteredMetrics', () => {
       [
         'block',
         'accuracy:\\u007b\\u0025 if suffix \\u0025\\u007dalpha\\u007b\\u0025 endif \\u0025\\u007d',
-        1,
+        undefined,
       ],
     ])(
       'should handle Unicode-escaped weighted %s metric templates without executing stored code',
@@ -1301,7 +1301,7 @@ describe('calculateFilteredMetrics', () => {
       });
 
       expect(metrics[0].namedScores['accuracy:hit']).toBe(3);
-      expect(metrics[0].namedScoresCount['accuracy:hit']).toBe(1);
+      expect(metrics[0].namedScoresCount['accuracy:hit']).toBeUndefined();
       expect(metrics[0].namedScoreWeights?.['accuracy:hit']).toBe(4);
     });
 

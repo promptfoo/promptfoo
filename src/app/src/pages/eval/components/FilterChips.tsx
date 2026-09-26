@@ -19,7 +19,8 @@ const DEFAULT_VISIBLE_COUNT = 8;
  * Shows in the filters section below table actions for red team evaluations.
  */
 export function FilterChips() {
-  const { filters, addFilter, removeFilter, config, table } = useTableStore();
+  const { filters, addFilter, removeFilter, config, table, derivedMetricNamesByPrompt } =
+    useTableStore();
   const policiesById = useCustomPoliciesMap(config?.redteam?.plugins ?? []);
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -31,8 +32,12 @@ export function FilterChips() {
     const metricMap = new Map<string, { score: number; denominator: number | undefined }>();
     const derivedMetricNames = config?.derivedMetrics?.map((metric) => metric.name) ?? [];
 
-    table.head.prompts.forEach((prompt) => {
-      const metrics = mergeFilteredNamedMetrics(prompt.metrics, null, derivedMetricNames);
+    table.head.prompts.forEach((prompt, idx) => {
+      const metrics = mergeFilteredNamedMetrics(
+        prompt.metrics,
+        null,
+        derivedMetricNamesByPrompt?.[idx] ?? derivedMetricNames,
+      );
       if (metrics?.namedScores) {
         Object.entries(metrics.namedScores).forEach(([metric, score]) => {
           if (!Number.isFinite(score)) {
@@ -75,7 +80,7 @@ export function FilterChips() {
           return a.metric.localeCompare(b.metric);
         })
     );
-  }, [config?.derivedMetrics, table]);
+  }, [config?.derivedMetrics, derivedMetricNamesByPrompt, table]);
 
   // Get display name for a metric (handles policy metrics)
   const getDisplayName = (metric: string): string => {

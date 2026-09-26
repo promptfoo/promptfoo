@@ -101,11 +101,13 @@ export function renderPersistedMetricName(
 }
 
 function getContributingAssertionCounts(
+  namedScores: Record<string, unknown>,
   gradingResult: NamedMetricGradingResult | null | undefined,
   testVars: Vars,
   renderComponentMetric: MetricNameRenderer,
-): Map<string, number> {
+): Map<string, number> | undefined {
   const counts = new Map<string, number>();
+  let hasUnresolvedMetric = false;
   const componentResults = Array.isArray(gradingResult?.componentResults)
     ? gradingResult.componentResults
     : [];
@@ -118,11 +120,22 @@ function getContributingAssertionCounts(
         ? componentResult.assertion.metric
         : undefined;
     const renderedMetric = renderComponentMetric(metric, testVars);
+    if (
+      renderComponentMetric === renderPersistedMetricName &&
+      renderedMetric !== undefined &&
+      renderedMetric === metric &&
+      /\{[{%#]/.test(renderedMetric) &&
+      !Object.prototype.hasOwnProperty.call(namedScores, renderedMetric)
+    ) {
+      // This component could contribute to any rendered metric, including one
+      // already matched by another component. Partial counts are not denominators.
+      hasUnresolvedMetric = true;
+    }
     if (renderedMetric !== undefined) {
       counts.set(renderedMetric, (counts.get(renderedMetric) ?? 0) + 1);
     }
   }
-  return counts;
+  return hasUnresolvedMetric ? undefined : counts;
 }
 
 function getOwnFiniteMetricValue(
@@ -139,8 +152,12 @@ function getOwnFiniteMetricValue(
 function setOwnMetricValue(
   record: Record<string, number>,
   metricName: string,
-  value: number,
+  value: number | undefined,
 ): void {
+  if (value === undefined) {
+    delete record[metricName];
+    return;
+  }
   Object.defineProperty(record, metricName, {
     configurable: true,
     enumerable: true,
@@ -188,27 +205,40 @@ export function accumulateNamedMetrics(
     return;
   }
   const assertionCounts = getContributingAssertionCounts(
+    namedScores,
     gradingResult,
     testVars,
     renderComponentMetric,
   );
   for (const [metricName, metricValue] of scores) {
-    const assertionCount = assertionCounts.get(metricName) ?? 1;
+    const assertionCount = assertionCounts ? (assertionCounts.get(metricName) ?? 1) : undefined;
     const storedWeight = getStoredMetricWeight(gradingResult, metricName);
     const weightedScore = storedWeight === undefined ? metricValue : metricValue * storedWeight;
     const useStoredWeight = storedWeight !== undefined && Number.isFinite(weightedScore);
-    const nextScore =
-      (getOwnFiniteMetricValue(accumulator.namedScores, metricName) ?? 0) +
-      (useStoredWeight ? weightedScore : metricValue);
+    const previousScore = getOwnFiniteMetricValue(accumulator.namedScores, metricName);
+    const previousCount = getOwnFiniteMetricValue(accumulator.namedScoresCount, metricName);
+    const nextScore = (previousScore ?? 0) + (useStoredWeight ? weightedScore : metricValue);
+    // Missing denominator keys are sticky after the first contribution. A later
+    // known row cannot make an earlier unknown contribution measurable again.
     const nextCount =
-      (getOwnFiniteMetricValue(accumulator.namedScoresCount, metricName) ?? 0) + assertionCount;
+      assertionCount !== undefined && (previousScore === undefined || previousCount !== undefined)
+        ? (previousCount ?? 0) + assertionCount
+        : undefined;
     accumulator.namedScoreWeights ||= {};
+    const previousWeight =
+      getOwnFiniteMetricValue(accumulator.namedScoreWeights, metricName) ?? previousCount;
+    const weight = useStoredWeight ? storedWeight : assertionCount;
     const nextWeight =
-      (getOwnFiniteMetricValue(accumulator.namedScoreWeights, metricName) ?? 0) +
-      (useStoredWeight ? storedWeight : assertionCount);
+      weight !== undefined && (previousScore === undefined || previousWeight !== undefined)
+        ? (previousWeight ?? 0) + weight
+        : undefined;
 
     // Keep each contribution atomic instead of serializing non-finite totals as JSON null.
-    if (![nextScore, nextCount, nextWeight].every(Number.isFinite)) {
+    if (
+      ![nextScore, nextCount, nextWeight].every(
+        (value) => value === undefined || Number.isFinite(value),
+      )
+    ) {
       continue;
     }
     setOwnMetricValue(accumulator.namedScores, metricName, nextScore);

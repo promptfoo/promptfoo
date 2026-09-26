@@ -9,6 +9,92 @@ import {
 } from '../../src/util/namedMetrics';
 
 describe('accumulateNamedMetrics', () => {
+  const legacyComplexResult = {
+    namedScores: { quality: 2 },
+    testVars: { name: 'quality' },
+    gradingResult: {
+      componentResults: [
+        { assertion: { metric: 'quality' } },
+        { assertion: { metric: '{{ name | lower }}' } },
+      ],
+    },
+  };
+
+  it('retains legacy scores without claiming partially resolved counts as denominators', () => {
+    const metrics: NamedMetricAccumulator = { namedScores: {}, namedScoresCount: {} };
+    accumulateNamedMetrics(metrics, legacyComplexResult);
+    expect(metrics).toEqual({
+      namedScores: { quality: 2 },
+      namedScoresCount: {},
+      namedScoreWeights: {},
+    });
+  });
+
+  it('keeps stored weights authoritative when legacy assertion counts are unavailable', () => {
+    const metrics: NamedMetricAccumulator = { namedScores: {}, namedScoresCount: {} };
+    accumulateNamedMetrics(metrics, {
+      ...legacyComplexResult,
+      namedScores: { quality: 0.75 },
+      gradingResult: { ...legacyComplexResult.gradingResult, namedScoreWeights: { quality: 4 } },
+    });
+    expect(metrics).toEqual({
+      namedScores: { quality: 3 },
+      namedScoresCount: {},
+      namedScoreWeights: { quality: 4 },
+    });
+  });
+
+  it.each([false, true])(
+    'keeps unknown denominators unavailable across row order (legacy first=%s)',
+    (legacyFirst) => {
+      const known = {
+        namedScores: { quality: 1 },
+        gradingResult: {
+          namedScoreWeights: { quality: 2 },
+          componentResults: [
+            { assertion: { metric: 'quality' } },
+            { assertion: { metric: 'quality' } },
+          ],
+        },
+      };
+      const metrics: NamedMetricAccumulator = { namedScores: {}, namedScoresCount: {} };
+      for (const result of legacyFirst
+        ? [legacyComplexResult, known]
+        : [known, legacyComplexResult]) {
+        accumulateNamedMetrics(metrics, result);
+      }
+      expect(metrics).toEqual({
+        namedScores: { quality: 4 },
+        namedScoresCount: {},
+        namedScoreWeights: {},
+      });
+    },
+  );
+
+  it('uses literal template names when they are actual score keys', () => {
+    const metric = '{{ name | lower }}';
+    const metrics: NamedMetricAccumulator = { namedScores: {}, namedScoresCount: {} };
+    accumulateNamedMetrics(metrics, {
+      namedScores: { [metric]: 2 },
+      gradingResult: { componentResults: [{ assertion: { metric } }, { assertion: { metric } }] },
+    });
+    expect(metrics.namedScoresCount).toEqual({ [metric]: 2 });
+    expect(metrics.namedScoreWeights).toEqual({ [metric]: 2 });
+  });
+
+  it('retains known legacy seed counts when the weight map is missing', () => {
+    const metrics: NamedMetricAccumulator = {
+      namedScores: { quality: 2 },
+      namedScoresCount: { quality: 2 },
+    };
+    accumulateNamedMetrics(metrics, { namedScores: { quality: 1 }, gradingResult: undefined });
+    expect(metrics).toEqual({
+      namedScores: { quality: 3 },
+      namedScoresCount: { quality: 3 },
+      namedScoreWeights: { quality: 3 },
+    });
+  });
+
   it('renders each component once when a result contributes to multiple metrics', () => {
     const metrics: NamedMetricAccumulator = { namedScores: {}, namedScoresCount: {} };
     const render = vi.fn((metric) => metric);
