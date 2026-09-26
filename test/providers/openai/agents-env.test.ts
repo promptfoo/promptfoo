@@ -439,44 +439,51 @@ describe('Agents SDK scoped client', () => {
     }
   });
 
-  it('does not copy model credentials into an explicitly configured session client', async () => {
-    const calls: { path: string; headers: Headers }[] = [];
-    vi.mocked(fetchWithProxy).mockImplementation(async (input, options) => {
-      const path = new URL(String(input)).pathname;
-      calls.push({ path, headers: new Headers(options?.headers) });
-      return path.includes('/items')
-        ? Response.json({
-            data: [],
-            object: 'list',
-            first_id: null,
-            last_id: null,
-            has_more: false,
-          })
-        : Response.json(response);
-    });
-    await provider({
-      apiKey: 'model-key',
-      headers: {
-        Authorization: 'Bearer gateway-key',
-        'X-API-Key': 'gateway-key',
-        'OpenAI-Organization': 'gateway-org',
-      },
-      session: {
-        type: 'openai-conversations',
-        conversationId: 'conv_fixture',
-        baseURL: 'https://session.example.invalid/v1',
-        apiKey: 'session-key',
-        organization: 'session-org',
-      },
-    }).callApi('hello');
-    const sessionHeaders = calls.find((call) => call.path.includes('/items'))!.headers;
-    expect(sessionHeaders.get('authorization')).toBe('Bearer session-key');
-    expect(sessionHeaders.get('x-api-key')).toBeNull();
-    expect(sessionHeaders.get('openai-organization')).toBe('session-org');
-    const modelHeaders = calls.find((call) => call.path.endsWith('/responses'))!.headers;
-    expect(modelHeaders.get('authorization')).toBe('Bearer gateway-key');
-    expect(modelHeaders.get('x-api-key')).toBe('gateway-key');
-  });
+  it.each([undefined, 'session-project'])(
+    'isolates an explicit session with project=%s',
+    async (project) => {
+      mockProcessEnv({ OPENAI_PROJECT_ID: 'host-project' });
+      const calls: { path: string; headers: Headers }[] = [];
+      vi.mocked(fetchWithProxy).mockImplementation(async (input, options) => {
+        const path = new URL(String(input)).pathname;
+        calls.push({ path, headers: new Headers(options?.headers) });
+        return path.includes('/items')
+          ? Response.json({
+              data: [],
+              object: 'list',
+              first_id: null,
+              last_id: null,
+              has_more: false,
+            })
+          : Response.json(response);
+      });
+      await provider({
+        apiKey: 'model-key',
+        headers: {
+          Authorization: 'Bearer gateway-key',
+          'X-API-Key': 'gateway-key',
+          'OpenAI-Organization': 'gateway-org',
+        },
+        session: {
+          type: 'openai-conversations',
+          conversationId: 'conv_fixture',
+          baseURL: 'https://session.example.invalid/v1',
+          apiKey: 'session-key',
+          organization: 'session-org',
+          project,
+        },
+      }).callApi('hello');
+      const sessionHeaders = calls.find((call) => call.path.includes('/items'))!.headers;
+      expect(sessionHeaders.get('authorization')).toBe('Bearer session-key');
+      expect(sessionHeaders.get('x-api-key')).toBeNull();
+      expect(sessionHeaders.get('openai-organization')).toBe('session-org');
+      expect(sessionHeaders.get('openai-project')).toBe(project ?? null);
+      const modelHeaders = calls.find((call) => call.path.endsWith('/responses'))!.headers;
+      expect(modelHeaders.get('authorization')).toBe('Bearer gateway-key');
+      expect(modelHeaders.get('x-api-key')).toBe('gateway-key');
+      expect(modelHeaders.get('openai-project')).toBe('host-project');
+    },
+  );
 
   it('preserves an SDK request-specific retry override outside the scheduler', async () => {
     const target = provider({ apiKey: 'fixture-key', maxRetries: 2 });

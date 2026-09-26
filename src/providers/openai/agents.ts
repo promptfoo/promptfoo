@@ -344,7 +344,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       maxRetries: this.config.maxRetries,
       baseURL: apiUrl.toString(),
       organization,
-      ...(overrides.project !== undefined && { project: overrides.project }),
+      project: overrides.project ?? (separateEndpoint ? null : undefined),
       defaultHeaders: {
         ...(keyless && { Authorization: null }),
         ...(organization === '' && { 'OpenAI-Organization': null }),
