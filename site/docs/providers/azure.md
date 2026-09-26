@@ -1400,7 +1400,7 @@ Supported per-request settings:
 | `metadata`                | Request metadata                                                                                 |
 | `passthrough`             | Additional raw Responses API fields                                                              |
 | `maxPollTimeMs`           | Cooperative callback-loop budget after the initial response, in milliseconds (default: `300000`) |
-| `timeoutMs`               | Positive SDK timeout for each model HTTP request, in milliseconds (SDK default: `600000`)        |
+| `timeoutMs`               | Positive deadline for each Responses attempt, in milliseconds (SDK default: `600000`)            |
 | `retryOptions.maxRetries` | Non-negative integer request retry count (default: `2`)                                          |
 | `maxToolIterations`       | Maximum callback batches (default: `8`; valid range: `1`–`64`)                                   |
 
@@ -1472,7 +1472,7 @@ If a callback is missing, promptfoo returns the unresolved function call in the 
 
 ### Execution Limits and Cancellation
 
-`maxPollTimeMs` checks elapsed time between callback batches and model requests. The initial request is outside this budget. A pending callback or request may finish after the budget; a final model answer is still returned, while another tool batch times out. `timeoutMs` instead limits each model HTTP request, and retries can make the total wait longer. It does not limit credential acquisition or callback execution.
+`maxPollTimeMs` checks elapsed time between callback batches and model requests. The initial request is outside this budget. A pending callback or request may finish after the budget; a final model answer is still returned, while another tool batch times out. `timeoutMs` instead bounds each SDK Responses attempt, including its credential wait and response-body reads. Retries and backoff can make the total wait longer. This deadline does not cover shared client initialization, agent lookup, or callback execution.
 
 `maxToolIterations` bounds automatic callback batches independently of elapsed time. Parallel function calls in one response count as one batch, and the model's final answer after the last permitted batch is retained. Values from `1` to `64` are rounded down; missing, zero, and invalid values use the default of `8`.
 
