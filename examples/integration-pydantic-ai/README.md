@@ -13,13 +13,16 @@ cd integration-pydantic-ai
 
 Requires Python 3.10 or later. The requirements use PydanticAI’s
 [slim OpenAI installation](https://pydantic.dev/docs/ai/overview/install/#slim-install),
-which installs the provider used by this example.
+which installs only the model provider used by this example. PydanticAI 2.46 or
+newer manages the OpenAI SDK dependency; Pydantic is listed explicitly because
+the example defines its output schema with `BaseModel`.
 
 ```bash
-cd integration-pydantic-ai
-pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+python -m pip install -r requirements.txt
 export OPENAI_API_KEY=your_openai_api_key_here
-npx promptfoo@latest eval
+npx promptfoo@latest eval --no-cache
 npx promptfoo@latest view
 ```
 
