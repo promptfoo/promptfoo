@@ -6,7 +6,6 @@
 
 import * as core from '@actions/core';
 import * as github from '@actions/github';
-import { Octokit } from '@octokit/rest';
 import {
   clampCommentLines,
   extractValidLineRanges,
@@ -42,8 +41,8 @@ export async function getGitHubContext(token: string): Promise<PullRequestContex
       throw new Error(`Invalid pr_number input: "${prNumberInput}"`);
     }
 
-    const octokit = new Octokit({ auth: token });
-    const { data: pr } = await octokit.pulls.get({
+    const octokit = github.getOctokit(token);
+    const { data: pr } = await octokit.rest.pulls.get({
       owner: context.repo.owner,
       repo: context.repo.repo,
       pull_number: prNumber,
@@ -82,9 +81,9 @@ export async function getPRFiles(
   token: string,
   context: PullRequestContext,
 ): Promise<FileChange[]> {
-  const octokit = new Octokit({ auth: token });
+  const octokit = github.getOctokit(token);
 
-  const { data: files } = await octokit.pulls.listFiles({
+  const { data: files } = await octokit.rest.pulls.listFiles({
     owner: context.owner,
     repo: context.repo,
     pull_number: context.number,
@@ -101,11 +100,11 @@ export async function getPRFiles(
  * This is used to validate and clamp comment line numbers.
  */
 async function getPRDiffRanges(
-  octokit: Octokit,
+  octokit: ReturnType<typeof github.getOctokit>,
   context: PullRequestContext,
 ): Promise<FileLineRanges> {
   try {
-    const { data: diff } = await octokit.pulls.get({
+    const { data: diff } = await octokit.rest.pulls.get({
       owner: context.owner,
       repo: context.repo,
       pull_number: context.number,
@@ -150,7 +149,7 @@ function clampCommentToValidRange(comment: Comment, validRanges: FileLineRanges)
  * Comments that cannot be placed inline are returned separately for general posting.
  */
 async function partitionReviewCommentsWithOctokit(
-  octokit: Octokit,
+  octokit: ReturnType<typeof github.getOctokit>,
   context: PullRequestContext,
   comments: Comment[],
 ): Promise<{
@@ -188,6 +187,6 @@ export async function partitionReviewCommentsByDiff(
   context: PullRequestContext,
   comments: Comment[],
 ) {
-  const octokit = new Octokit({ auth: token });
+  const octokit = github.getOctokit(token);
   return partitionReviewCommentsWithOctokit(octokit, context, comments);
 }

@@ -3,9 +3,12 @@
  */
 
 import * as github from '@actions/github';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getGitHubContext, partitionReviewCommentsByDiff } from '../../code-scan-action/src/github';
-import type { Octokit } from '@octokit/rest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  getGitHubContext,
+  getPRFiles,
+  partitionReviewCommentsByDiff,
+} from '../../code-scan-action/src/github';
 
 const mocks = vi.hoisted(() => {
   // Mock diff that includes src/auth.ts with lines 40-100 in scope
@@ -44,7 +47,9 @@ index abc123..def456 100644
       error: vi.fn(),
     },
     github: {
+      getOctokit: vi.fn(),
       context: {
+        eventName: 'pull_request',
         repo: {
           owner: 'test-owner',
           repo: 'test-repo',
@@ -60,15 +65,10 @@ index abc123..def456 100644
       },
     },
     mockDiff,
-    Octokit: vi.fn().mockImplementation(() => ({
-      pulls: {
-        createReview: vi.fn().mockResolvedValue({}),
-        get: vi.fn().mockResolvedValue({ data: mockDiff }),
-      },
-      issues: {
-        createComment: vi.fn().mockResolvedValue({}),
-      },
-    })),
+    pulls: {
+      get: vi.fn(),
+      listFiles: vi.fn(),
+    },
   };
 });
 
@@ -80,17 +80,12 @@ vi.mock('../../code-scan-action/node_modules/@actions/core/lib/core.js', () => m
 vi.mock('@actions/github', () => mocks.github);
 vi.mock('../../code-scan-action/node_modules/@actions/github/lib/github.js', () => mocks.github);
 
-// Mock Octokit
-vi.mock('@octokit/rest', () => ({ Octokit: mocks.Octokit }));
-vi.mock('../../code-scan-action/node_modules/@octokit/rest/dist-src/index.js', () => ({
-  Octokit: mocks.Octokit,
-}));
-
 const mockDiff = mocks.mockDiff;
 
 describe('GitHub API Client', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    mocks.github.context.eventName = 'pull_request';
     mocks.github.context.repo = {
       owner: 'test-owner',
       repo: 'test-repo',
@@ -103,17 +98,14 @@ describe('GitHub API Client', () => {
         },
       },
     };
-    mocks.Octokit.mockImplementation(function () {
-      return {
-        pulls: {
-          createReview: vi.fn().mockResolvedValue({}),
-          get: vi.fn().mockResolvedValue({ data: mockDiff }),
-        },
-        issues: {
-          createComment: vi.fn().mockResolvedValue({}),
-        },
-      } as unknown as Octokit;
+    mocks.pulls.get.mockResolvedValue({ data: mockDiff });
+    mocks.github.getOctokit.mockReturnValue({
+      rest: { pulls: mocks.pulls },
     });
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   describe('getGitHubContext', () => {
@@ -126,6 +118,34 @@ describe('GitHub API Client', () => {
         number: 123,
         sha: 'abc123',
       });
+      expect(mocks.github.getOctokit).not.toHaveBeenCalled();
+    });
+
+    it('uses the authenticated Actions client for workflow dispatch', async () => {
+      github.context.eventName = 'workflow_dispatch';
+      github.context.payload = { inputs: { pr_number: '456' } };
+      mocks.pulls.get.mockResolvedValue({ data: { number: 456, head: { sha: 'head-sha' } } });
+
+      await expect(getGitHubContext('dispatch-token')).resolves.toEqual({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        number: 456,
+        sha: 'head-sha',
+      });
+      expect(mocks.github.getOctokit).toHaveBeenCalledWith('dispatch-token');
+      expect(mocks.pulls.get).toHaveBeenCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        pull_number: 456,
+      });
+    });
+
+    it('preserves workflow dispatch API failures', async () => {
+      github.context.eventName = 'workflow_dispatch';
+      github.context.payload = { inputs: { pr_number: '456' } };
+      mocks.pulls.get.mockRejectedValue(new Error('Not Found'));
+
+      await expect(getGitHubContext('dispatch-token')).rejects.toThrow('Not Found');
     });
 
     it('should throw error when not in PR context', async () => {
@@ -137,6 +157,31 @@ describe('GitHub API Client', () => {
       );
 
       github.context.payload = originalPayload;
+    });
+  });
+
+  describe('getPRFiles', () => {
+    const context = { owner: 'owner', repo: 'repo', number: 12, sha: 'head-sha' };
+
+    it('maps filenames and statuses from the Actions REST client', async () => {
+      mocks.pulls.listFiles.mockResolvedValue({
+        data: [{ filename: 'src/file with spaces.ts', status: 'modified' }],
+      });
+
+      await expect(getPRFiles('files-token', context)).resolves.toEqual([
+        { path: 'src/file with spaces.ts', status: 'modified' },
+      ]);
+      expect(mocks.github.getOctokit).toHaveBeenCalledWith('files-token');
+      expect(mocks.pulls.listFiles).toHaveBeenCalledWith({
+        owner: 'owner',
+        repo: 'repo',
+        pull_number: 12,
+      });
+    });
+
+    it('preserves list-files API failures', async () => {
+      mocks.pulls.listFiles.mockRejectedValue(new Error('Forbidden'));
+      await expect(getPRFiles('files-token', context)).rejects.toThrow('Forbidden');
     });
   });
 
@@ -175,6 +220,26 @@ describe('GitHub API Client', () => {
           line: 12,
         }),
       ]);
+      expect(mocks.github.getOctokit).toHaveBeenCalledWith('fake-token');
+      expect(mocks.pulls.get).toHaveBeenCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        pull_number: 123,
+        mediaType: { format: 'diff' },
+      });
+    });
+
+    it('falls back to general comments when fetching the diff fails', async () => {
+      mocks.pulls.get.mockRejectedValue(new Error('Unavailable'));
+      const comment = { file: 'src/auth.ts', line: 43, finding: 'Finding' };
+
+      const result = await partitionReviewCommentsByDiff('fake-token', mockContext, [comment]);
+
+      expect(result.lineComments).toEqual([]);
+      expect(result.invalidLineComments).toEqual([comment]);
+      expect(mocks.core.warning).toHaveBeenCalledWith(
+        'Failed to fetch PR diff for line validation: Unavailable',
+      );
     });
   });
 });
