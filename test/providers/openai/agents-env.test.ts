@@ -15,7 +15,9 @@ import { getEnvString } from '../../../src/envars';
 import { loadApiProvider } from '../../../src/providers/index';
 import { OpenAiAgentsProvider } from '../../../src/providers/openai/agents';
 import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
+import { CreateJobRequestSchema } from '../../../src/types/api/eval';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
+import { ProviderOptionsSchema } from '../../../src/validators/providers';
 import { createDeferred, mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/util/fetch/index', () => ({ fetchWithProxy: vi.fn() }));
@@ -120,6 +122,37 @@ describe('Agents SDK scoped client', () => {
     setDefaultModelProvider(custom);
     await provider().callApi('hello');
     expect(request().headers.get('openai-organization')).toBe(organization || null);
+  });
+
+  it.each(
+    (['provider', 'job'] as const).flatMap((scope) =>
+      [
+        ['REQUEST_TIMEOUT_MS', '1234'],
+        ['PROMPTFOO_FETCH_CONNECTIONS', '2'],
+      ].flatMap(([name, value]) => [
+        { scope, name, value },
+        { scope, name, value: '' },
+      ]),
+    ),
+  )('honors validated $scope $name=$value', async ({ scope, name, value }) => {
+    const custom = new OpenAIProvider({ apiKey: 'sdk-key' });
+    vi.spyOn(custom, 'getModel').mockRejectedValue(new Error('validated setting was stripped'));
+    setDefaultModelProvider(custom);
+    vi.mocked(fetchWithProxy).mockImplementation(async () => {
+      expect(getEnvString(name)).toBe(value);
+      return Response.json(response);
+    });
+    const input = { env: { [name]: value } };
+    const env =
+      scope === 'provider'
+        ? ProviderOptionsSchema.parse(input).env
+        : CreateJobRequestSchema.parse({ ...input, providers: ['echo'], prompts: ['hello'] }).env;
+    const result =
+      scope === 'provider'
+        ? await provider({}, env).callApi('hello')
+        : await cliState.withEnv(env, () => provider().callApi('hello'));
+    expect(result.output).toBe('ok');
+    expect(fetchWithProxy).toHaveBeenCalledOnce();
   });
 
   it.each(['suite', 'file'] as const)(
