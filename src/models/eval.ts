@@ -1782,7 +1782,7 @@ export async function getEvalSummaries(
   /**
    * Deserialize the evals. A few things to note:
    *
-   * - Outcome counts come from prompt metrics, including for legacy and partially uploaded evals.
+   * - Outcome counts come from V4 prompt metrics, including partially uploaded evals.
    * - Persisted test indices distinguish test cases from runs across provider/prompt columns.
    */
   return results.map((result) => {
@@ -1805,7 +1805,7 @@ export async function getEvalSummaries(
       );
     }) ?? [0];
 
-    // Legacy evals may have no result rows, and uploads send complete metrics before row chunks.
+    // V4 uploads send complete metrics before result row chunks arrive.
     const testCount = Math.max(result.persistedTestCount, ...testCounts, 0);
     const testRunCount = testCounts.reduce((total, count) => total + count, 0);
 
