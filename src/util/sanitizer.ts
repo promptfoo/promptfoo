@@ -1205,7 +1205,7 @@ function sanitizePlainObject(
       typeof value === 'string' &&
       (key === 'apiHost' ||
         (isEnvMap && key.toUpperCase().endsWith('_HOST')) ||
-        /^(?:https?|wss?|ftp|gopher|all)_proxy$/i.test(key))
+        /^(?:(?:npm_config_)?(?:https?|wss?|ftp|gopher|all)_proxy|npm_config_proxy)$/i.test(key))
     ) {
       const scheme = /^[a-z][a-z\d+.-]*:\/\//i;
       const hasScheme = scheme.test(value);
