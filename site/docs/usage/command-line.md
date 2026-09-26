@@ -750,7 +750,7 @@ promptfoo auth teams set team_12345
 
 Your team selection is remembered across CLI sessions and is the default for evals and sharing. Evals loaded from Cloud use their configuration's assigned team.
 
-If your saved team is no longer accessible, promptfoo falls back to the oldest team in your current organization. It never switches organizations on its own. To use another organization, run `promptfoo auth login --api-key <apiKey>` with a key from that organization.
+If your saved team is no longer accessible, promptfoo falls back to the oldest accessible team in the same organization. With environment-only authentication, changing `PROMPTFOO_API_KEY` selects the new token's organization and uses its remembered team if still accessible. To use another organization with a saved login, run `promptfoo auth login --api-key <apiKey>` with a key from that organization.
 
 #### Team Selection Across Organizations
 
