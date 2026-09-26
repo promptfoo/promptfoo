@@ -1296,17 +1296,33 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       return rateLimitResponse(sdkRateLimit, errorMessage);
     }
 
+    let result: ProviderResponse;
     if (isContentFilterError(errorMessage)) {
-      return formatContentFilterResponse(errorMessage);
+      result = formatContentFilterResponse(errorMessage);
+    } else if (isRateLimitError(errorMessage)) {
+      result = { error: `Rate limit exceeded: ${errorMessage}` };
+    } else if (isServiceError(errorMessage)) {
+      result = { error: `Service error: ${errorMessage}` };
+    } else {
+      result = { error: `Error in Azure Foundry Agent API call: ${errorMessage}` };
     }
 
-    if (isRateLimitError(errorMessage)) {
-      return { error: `Rate limit exceeded: ${errorMessage}` };
+    if (typeof error === 'object' && error !== null) {
+      const sdkError = error as { status?: unknown; response?: { status?: unknown } };
+      const headers = sdkErrorHeaders(error);
+      const retryAfterMs = headers && rateLimitTimingFromHeaders(headers).retryAfterMs;
+      if (retryAfterMs !== undefined && retryAfterMs > MAX_RETRY_DELAY_MS) {
+        const status =
+          typeof sdkError.status === 'number' ? sdkError.status : sdkError.response?.status;
+        // Non-429 messages can also match the scheduler's rate-limit heuristic.
+        // Preserve the delay veto and HTTP evidence through every formatter.
+        result.metadata = {
+          ...result.metadata,
+          rateLimitRetryable: false,
+          ...(typeof status === 'number' && { http: { status, statusText: '', headers } }),
+        };
+      }
     }
-    if (isServiceError(errorMessage)) {
-      return { error: `Service error: ${errorMessage}` };
-    }
-
-    return { error: `Error in Azure Foundry Agent API call: ${errorMessage}` };
+    return result;
   }
 }

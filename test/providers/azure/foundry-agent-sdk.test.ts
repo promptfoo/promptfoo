@@ -159,13 +159,11 @@ describe('Foundry SDK cancellation and retries', () => {
         expect(result.tokenUsage).toMatchObject({ numRequests: 1 });
         expect(result.metadata.transportRetries).toBeUndefined();
         expect(result.metadata).toMatchObject({ usageIncomplete: true, costIncomplete: true });
-        if (status === 429) {
-          expect(result.metadata).toMatchObject({
-            rateLimitKind: 'rate_limit',
-            rateLimitRetryable: false,
-            http: { status: 429, headers },
-          });
-        }
+        expect(result.metadata).toMatchObject({
+          ...(status === 429 && { rateLimitKind: 'rate_limit' }),
+          rateLimitRetryable: false,
+          http: { status, headers },
+        });
         expect(fetchMock).toHaveBeenCalledOnce();
         expect(setTimer.mock.calls.every(([, delay]) => Number(delay) <= 100)).toBe(true);
         expect(vi.getTimerCount()).toBe(0);
@@ -192,25 +190,127 @@ describe('Foundry SDK cancellation and retries', () => {
     });
   });
 
-  it.each<Record<string, string>>([
-    { 'retry-after-ms': '60000' },
-    { 'retry-after': '60' },
-    { 'retry-after': 'Thu, 01 Jan 2026 00:01:00 GMT' },
-  ])('honors the 60-second retry boundary (%j)', async (headers) => {
-    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
-    fetchMock.mockResolvedValueOnce(failure(429, headers, 'rate_limit_exceeded'));
-    const pending = provider({ retryOptions: { maxRetries: 1 } }).callApi('hello');
-    await vi.advanceTimersByTimeAsync(59999);
-    expect(fetchMock).toHaveBeenCalledOnce();
-    await vi.advanceTimersByTimeAsync(1);
-    expect(await pending).toMatchObject({
-      output: 'ok',
-      tokenUsage: { numRequests: 1 },
-      metadata: { transportRetries: 1 },
-    });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(vi.getTimerCount()).toBe(0);
-  });
+  it.each(
+    [429, 503].flatMap((status) =>
+      Array.of<Record<string, string>>(
+        { 'retry-after-ms': '60000' },
+        { 'retry-after': '60' },
+        { 'retry-after': 'Thu, 01 Jan 2026 00:01:00 GMT' },
+      ).map((headers) => ({ status, headers })),
+    ),
+  )(
+    'honors the 60-second retry boundary for HTTP $status ($headers)',
+    async ({ status, headers }) => {
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+      fetchMock.mockResolvedValueOnce(failure(status, headers, 'rate_limit_exceeded'));
+      const pending = provider({ retryOptions: { maxRetries: 1 } }).callApi('hello');
+      await vi.advanceTimersByTimeAsync(59999);
+      expect(fetchMock).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await pending).toMatchObject({
+        output: 'ok',
+        tokenUsage: { numRequests: 1 },
+        metadata: { transportRetries: 1 },
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it.each([
+    ['fixture failure', { error: 'Error in Azure Foundry Agent API call: 503 fixture failure' }],
+    ['Service unavailable', { error: 'Service error: 503 Service unavailable' }],
+    ['Too many requests', { error: 'Rate limit exceeded: 503 Too many requests' }],
+    [
+      'content_filter',
+      {
+        output:
+          "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
+        guardrails: { flagged: true, flaggedInput: false, flaggedOutput: true },
+      },
+    ],
+  ] as const)(
+    'preserves non-429 error formatting with an oversized delay: %s',
+    async (message, expected) => {
+      const headers = { 'retry-after': '61' };
+      fetchMock.mockResolvedValueOnce(
+        Response.json({ error: { message } }, { status: 503, headers }),
+      );
+      const result = await provider().callApi('hello');
+      expect(result).toMatchObject(expected);
+      expect(result.metadata).toMatchObject({
+        rateLimitRetryable: false,
+        http: { status: 503, headers },
+      });
+      expect(result.metadata?.rateLimitKind).toBeUndefined();
+      expect(fetchMock).toHaveBeenCalledOnce();
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it.each(
+    [0, 2].flatMap((maxRetries) =>
+      Array.of<Record<string, string>>(
+        { 'retry-after-ms': '60001' },
+        { 'retry-after': '61' },
+        { 'retry-after': 'Thu, 01 Jan 2026 00:01:01 GMT' },
+      ).map((headers) => ({ maxRetries, headers })),
+    ),
+  )(
+    'keeps a non-429 oversized delay from retrying or parking queued calls ($maxRetries, $headers)',
+    async ({ maxRetries, headers: retryHeaders }) => {
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER: 'false' });
+      const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 0 });
+      try {
+        const fetchResponse = createDeferred<Response>();
+        fetchMock.mockReturnValueOnce(fetchResponse.promise);
+        const instance = provider({ timeoutMs: 100, retryOptions: { maxRetries } });
+        const firstDone = vi.fn();
+        const nextDone = vi.fn();
+        const first = registry
+          .execute(instance, () => instance.callApi('first'), createProviderRateLimitOptions())
+          .then(firstDone, firstDone);
+        await vi.advanceTimersByTimeAsync(1);
+        const next = registry
+          .execute(instance, () => instance.callApi('next'), createProviderRateLimitOptions())
+          .then(nextDone, nextDone);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(fetchMock).toHaveBeenCalledOnce();
+        expect(Object.values(registry.getMetrics())[0].queueDepth).toBe(1);
+        const headers = {
+          ...retryHeaders,
+          'x-ratelimit-remaining-requests': '0',
+          'x-ratelimit-reset-requests': '120s',
+        };
+        fetchResponse.resolve(
+          Response.json({ error: { message: 'Too many requests' } }, { status: 503, headers }),
+        );
+        await vi.advanceTimersByTimeAsync(0);
+        expect(firstDone).toHaveBeenCalledOnce();
+        expect(nextDone).toHaveBeenCalledOnce();
+        await Promise.all([first, next]);
+        expect(firstDone.mock.calls[0][0]).toMatchObject({
+          error: 'Rate limit exceeded: 503 Too many requests',
+          metadata: { rateLimitRetryable: false, http: { status: 503, headers } },
+        });
+        expect(firstDone.mock.calls[0][0].metadata.transportRetries).toBeUndefined();
+        expect(nextDone.mock.calls[0][0]).toMatchObject({ output: 'ok' });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+          activeRequests: 0,
+          queueDepth: 0,
+          rateLimitHits: 0,
+          retriedRequests: 0,
+        });
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        await vi.runAllTimersAsync();
+        registry.dispose();
+        restoreEnv();
+      }
+    },
+  );
 
   it('retains actual prior retry accounting when a later delay is excessive', async () => {
     fetchMock.mockResolvedValueOnce(failure(503, { 'retry-after-ms': '0' }));
