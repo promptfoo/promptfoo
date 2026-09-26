@@ -173,6 +173,24 @@ describe('renderRedteamConfig', () => {
       },
     });
   });
+
+  it('serializes YAML-significant custom provider labels', () => {
+    const renderedConfig = renderRedteamConfig({
+      purpose: 'Test custom provider',
+      numTests: 1,
+      plugins: [],
+      strategies: [],
+      prompts: ['Test'],
+      providers: [{ id: 'custom-provider', label: 'Custom: API #1', config: {} }],
+      descriptions: {},
+    });
+
+    const parsedConfig = yaml.load(renderedConfig) as {
+      targets: Array<{ label: string }>;
+    };
+
+    expect(parsedConfig.targets[0].label).toBe('Custom: API #1');
+  });
 });
 
 describe('redteamInit', () => {
@@ -229,6 +247,22 @@ describe('redteamInit', () => {
         expect.objectContaining({ value: 'vertex:gemini-3.5-flash-lite' }),
       ]),
     );
+  });
+
+  it('writes a syntactically valid Python custom provider template', async () => {
+    vi.mocked(input).mockReset().mockResolvedValueOnce('target').mockResolvedValueOnce('purpose');
+    vi.mocked(select)
+      .mockReset()
+      .mockResolvedValueOnce('agent')
+      .mockResolvedValueOnce('default')
+      .mockResolvedValueOnce('default');
+
+    await redteamInit(undefined);
+
+    const chatProvider = vi
+      .mocked(fs.writeFile)
+      .mock.calls.find(([path]) => path === 'chat.py')?.[1] as string;
+    expect(chatProvider).toContain("urllib.parse.urlparse('https://example.com/api/chat')");
   });
 
   it.each([

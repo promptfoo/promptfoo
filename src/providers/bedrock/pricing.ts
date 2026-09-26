@@ -51,6 +51,7 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   'anthropic.claude-fable-5-1': { input: 10, output: 50 },
   'anthropic.claude-mythos-5-1': { input: 10, output: 50 },
   'anthropic.claude-fable-5': { input: 10, output: 50 },
+  'anthropic.claude-mythos-5': { input: 10, output: 50 },
   // Claude Opus 5.5. Must precede Opus 5: lookup is first-match `includes()`, and
   // `anthropic.claude-opus-5-5` contains `anthropic.claude-opus-5`. Cache reads bill at
   // 0.05x input ($0.20) per the AWS price list (see calculateCacheInputCost).

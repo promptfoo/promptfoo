@@ -1282,6 +1282,20 @@ describe('writeOutput', () => {
     expect(new Set(names).size).toBe(2);
   });
 
+  it('keeps JUnit suite identities distinct for providers with matching labels', async () => {
+    const eval_ = new Eval({});
+    for (const id of ['provider-a', 'provider-b']) {
+      await eval_.addResult(createEvaluateResult({ provider: { id, label: 'my model' } }));
+    }
+
+    const suites: { '@_name': string }[] = new XMLParser({ ignoreAttributes: false }).parse(
+      await createJunitXml(eval_),
+    ).testsuites.testsuite;
+    const names = suites.map((suite) => suite['@_name']);
+    expect(names).toContain('[my model] prompt 1');
+    expect(names).toContainEqual(expect.stringMatching(/^\[my model\] prompt 1 \([a-f0-9]{16}\)$/));
+  });
+
   it('removes forbidden name characters before fallback and length limits', async () => {
     const eval_ = new Eval({});
     const cases = [

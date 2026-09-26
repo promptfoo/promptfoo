@@ -189,6 +189,7 @@ async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
   // the suite display name (and every contained testcase classname) match
   // regardless of which result happened to insert the suite first.
   const promptOrdinalsByProvider = new Map<string, Map<string, number>>();
+  const providerNameOwners = new Map<string, string>();
 
   for await (const result of iterateJunitProjectedResults(evalRecord)) {
     const { provider } = result;
@@ -198,19 +199,23 @@ async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
     let suite = suites.get(key);
     if (!suite) {
       const rawName = provider.label || provider.id || '';
-      // Every forbidden character is erased from the rendered name, wherever it
-      // sits and even when it is whitespace that collapses into a plain space,
-      // so two providers can render identically. Keep them apart with a stable
-      // hash of the provider identity.
-      const suffix =
-        rawName.search(INVALID_XML_CHARACTERS) === -1
-          ? ''
-          : ` (${sha256(providerKey).slice(0, 16)})`;
-      const providerName = normalizeInlineText(
+      const baseProviderName = normalizeInlineText(
         rawName,
         'unknown provider',
-        MAX_JUNIT_NAME_LENGTH - suffix.length,
+        MAX_JUNIT_NAME_LENGTH,
       );
+      const providerNameKey = JSON.stringify([baseProviderName, promptKey]);
+      const existingOwner = providerNameOwners.get(providerNameKey);
+      const hasInvalidXmlChars = rawName.search(INVALID_XML_CHARACTERS) !== -1;
+      const hasDisplayCollision = existingOwner !== undefined && existingOwner !== providerKey;
+      const needsSuffix = hasInvalidXmlChars || hasDisplayCollision;
+      const suffix = needsSuffix ? ` (${sha256(providerKey).slice(0, 16)})` : '';
+      const providerName = needsSuffix
+        ? normalizeInlineText(rawName, 'unknown provider', MAX_JUNIT_NAME_LENGTH - suffix.length)
+        : baseProviderName;
+      if (!hasInvalidXmlChars && existingOwner === undefined) {
+        providerNameOwners.set(providerNameKey, providerKey);
+      }
       const ordinalKey = suffix ? providerKey : JSON.stringify([providerName]);
       let promptOrdinals = promptOrdinalsByProvider.get(ordinalKey);
       if (!promptOrdinals) {
