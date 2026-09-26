@@ -1,8 +1,10 @@
 import { Agent } from '@openai/agents';
+import { lookupCustomerContext, lookupOrder } from '../tools/support-tools';
 
 export default new Agent({
   name: 'Support Agent',
   model: 'gpt-6-luna',
+  tools: [lookupOrder, lookupCustomerContext],
   instructions: `You are a concise support agent.
 
 - Remember short code words the user gives you.

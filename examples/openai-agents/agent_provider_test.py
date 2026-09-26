@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import asyncio
 import importlib.util
 import sys
 import types
@@ -189,8 +190,47 @@ class AgentProviderTests(unittest.TestCase):
         self.assertIsNone(context.seat_number)
         self.assertIsNone(context.verified_confirmation_number)
 
+    def test_update_seat_requires_identity_and_valid_seat(self):
+        context = AGENT_PROVIDER.AirlineContext()
+        wrapper = AGENT_PROVIDER.RunContextWrapper(context)
+
+        AGENT_PROVIDER.lookup_reservation(wrapper, "ABC123")
+        missing_identity = AGENT_PROVIDER.update_seat(wrapper, "ABC123", "16F")
+        invalid_seat = AGENT_PROVIDER.update_seat(wrapper, "ABC123", "FIRST CLASS")
+
+        self.assertIn("passenger identity could not be verified", missing_identity)
+        self.assertIn("valid seat number", invalid_seat)
+        self.assertEqual(context.seat_number, "12A")
+
+    def test_skill_shell_executor_rejects_unapproved_commands(self):
+        request = AGENT_PROVIDER.ShellCommandRequest()
+        request.data = types.SimpleNamespace(
+            action=types.SimpleNamespace(commands=["echo unsafe"], timeout_ms=None)
+        )
+
+        result = asyncio.run(AGENT_PROVIDER.SkillShellExecutor(EXAMPLE_DIR)(request))
+
+        output = result.kwargs["output"][0].kwargs
+        self.assertEqual(output["outcome"].kwargs["exit_code"], 126)
+        self.assertEqual(output["stderr"], "Command is not allowed by this skill")
+
+    def test_skill_shell_executor_allows_required_skill_read(self):
+        request = AGENT_PROVIDER.ShellCommandRequest()
+        request.data = types.SimpleNamespace(
+            action=types.SimpleNamespace(
+                commands=["cat skills/discount-review/SKILL.md"], timeout_ms=None
+            )
+        )
+
+        result = asyncio.run(AGENT_PROVIDER.SkillShellExecutor(EXAMPLE_DIR)(request))
+
+        output = result.kwargs["output"][0].kwargs
+        self.assertEqual(output["outcome"].kwargs["exit_code"], 0)
+        self.assertIn("discount-review", output["stdout"])
+
     def test_lookup_then_update_succeeds(self):
         context = AGENT_PROVIDER.AirlineContext()
+        context.authenticated_passenger_name = "Ada Lovelace"
         wrapper = AGENT_PROVIDER.RunContextWrapper(context)
 
         AGENT_PROVIDER._hydrate_context_from_step(
@@ -386,6 +426,7 @@ class AgentProviderTests(unittest.TestCase):
 
     def test_first_party_claim_after_third_party_refusal_resets_block(self):
         context = AGENT_PROVIDER.AirlineContext()
+        context.authenticated_passenger_name = "Ada Lovelace"
         wrapper = AGENT_PROVIDER.RunContextWrapper(context)
 
         AGENT_PROVIDER._hydrate_context_from_step(
@@ -426,6 +467,7 @@ class AgentProviderTests(unittest.TestCase):
 
     def test_first_party_claim_resets_pending_third_party_intent(self):
         context = AGENT_PROVIDER.AirlineContext()
+        context.authenticated_passenger_name = "Ada Lovelace"
         wrapper = AGENT_PROVIDER.RunContextWrapper(context)
 
         AGENT_PROVIDER._hydrate_context_from_step(
@@ -451,6 +493,7 @@ class AgentProviderTests(unittest.TestCase):
 
     def test_update_seat_refuses_mismatched_claimed_passenger(self):
         context = AGENT_PROVIDER.AirlineContext()
+        context.authenticated_passenger_name = "Mallory Vale"
         wrapper = AGENT_PROVIDER.RunContextWrapper(context)
 
         AGENT_PROVIDER._hydrate_context_from_step(
@@ -466,8 +509,12 @@ class AgentProviderTests(unittest.TestCase):
 
     def test_repeating_same_confirmation_preserves_updated_seat(self):
         context = AGENT_PROVIDER.AirlineContext()
+        context.authenticated_passenger_name = "Ada Lovelace"
         wrapper = AGENT_PROVIDER.RunContextWrapper(context)
 
+        AGENT_PROVIDER._hydrate_context_from_step(
+            "My name is Ada Lovelace and my confirmation number is ABC123.", context
+        )
         AGENT_PROVIDER.lookup_reservation(wrapper, "ABC123")
         AGENT_PROVIDER.update_seat(wrapper, "ABC123", "14D")
         AGENT_PROVIDER._hydrate_context_from_step(

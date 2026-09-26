@@ -100,19 +100,20 @@ async function createGatewayInstance(
   config: VercelAiConfig,
   env?: EnvOverrides,
 ): Promise<ReturnType<typeof import('ai').createGateway>> {
+  let createGateway: typeof import('ai')['createGateway'];
   try {
-    const { createGateway } = await import('ai');
-
-    return createGateway({
-      apiKey: config.apiKey,
-      baseURL: resolveBaseUrl(config, env),
-      headers: config.headers,
-    });
+    ({ createGateway } = await import('ai'));
   } catch (error) {
     throw new Error(
       `Failed to load Vercel AI SDK. Please install it with: npm install ai\n${error instanceof Error ? error.message : String(error)}`,
     );
   }
+
+  return createGateway({
+    apiKey: config.apiKey,
+    baseURL: resolveBaseUrl(config, env),
+    headers: config.headers,
+  });
 }
 
 /**
