@@ -855,6 +855,82 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(result.error).toBeUndefined();
       });
 
+      it('should preserve stream metrics when response processing fails', async () => {
+        const structuredData: Record<string, unknown> = {};
+        structuredData.self = structuredData;
+        const errorSpy = vi.spyOn(logger, 'error').mockImplementation(function () {});
+
+        try {
+          mockQuery.mockReturnValue(
+            createMockQuery([
+              {
+                type: 'assistant',
+                message: createMockBetaMessage([{ type: 'text', text: 'retrying' }]) as any,
+                parent_tool_use_id: null,
+                uuid: '22222222-2222-2222-2222-222222222222',
+                session_id: 'test-session-123',
+                error: 'rate_limit',
+              },
+              {
+                type: 'result',
+                subtype: 'success',
+                session_id: 'test-session-123',
+                uuid: '12345678-1234-1234-1234-123456789abc',
+                result: 'Circular result',
+                structured_output: structuredData,
+                usage: createMockUsage(10, 20),
+                total_cost_usd: 0.002,
+                duration_ms: 1000,
+                duration_api_ms: 800,
+                is_error: false,
+                num_turns: 1,
+                permission_denials: [],
+                api_error_status: 529,
+              },
+            ]),
+          );
+
+          const provider = new ClaudeCodeSDKProvider({
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          const result = await provider.callApi('Test prompt');
+
+          expect(result.error).toContain('Error processing Claude Agent SDK result');
+          expect(result.cost).toBe(0.002);
+          expect(result.sessionId).toBe('test-session-123');
+          expect(result.tokenUsage).toEqual({
+            prompt: 10,
+            completion: 20,
+            total: 30,
+            completionDetails: {
+              reasoning: 0,
+              cacheReadInputTokens: 0,
+              cacheCreationInputTokens: 0,
+            },
+          });
+          expect(result.metadata).toMatchObject({
+            numTurns: 1,
+            durationMs: 1000,
+            durationApiMs: 800,
+            permissionDenials: [],
+            apiErrorStatus: 529,
+            assistantErrors: [
+              {
+                error: 'rate_limit',
+                uuid: '22222222-2222-2222-2222-222222222222',
+                parentToolUseId: null,
+              },
+            ],
+          });
+          expect(result.metadata?.structuredOutput).toBeUndefined();
+          expect(errorSpy).toHaveBeenCalledWith(
+            expect.stringContaining('Error processing Claude Agent SDK result'),
+          );
+        } finally {
+          errorSpy.mockRestore();
+        }
+      });
+
       it('should fall back to text result when no structured output', async () => {
         mockQuery.mockReturnValue(
           createMockResponse('Plain text response', { input_tokens: 10, output_tokens: 20 }),
