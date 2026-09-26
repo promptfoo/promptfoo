@@ -196,10 +196,12 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     let scopedClient: ReturnType<OpenAiAgentsSessionClientFactory> | undefined;
     const getClient: OpenAiAgentsSessionClientFactory | undefined =
       this.hasScopedConnectionSettings()
-        ? (overrides) =>
-            Object.values(overrides ?? {}).some((value) => value !== undefined)
+        ? ({ apiKey, baseURL, organization, project } = {}) => {
+            const overrides = { apiKey, baseURL, organization, project };
+            return Object.values(overrides).some((value) => value !== undefined)
               ? this.createScopedClient(overrides)
-              : (scopedClient ??= this.createScopedClient())
+              : (scopedClient ??= this.createScopedClient());
+          }
         : undefined;
     try {
       const maxTurns = this.agentConfig.maxTurns === undefined ? 10 : this.agentConfig.maxTurns;
@@ -306,24 +308,37 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       apiHost: undefined,
       apiBaseUrl: overrides.baseURL ?? this.getApiUrl(),
       organization: overrides.organization ?? this.config.organization,
+      // Explicit session connection settings must not inherit model gateway credentials.
+      headers: Object.values(overrides).some((value) => value !== undefined)
+        ? {}
+        : this.config.headers,
     };
     const apiUrl = new URL(config.apiBaseUrl);
-    const defaultQuery = Object.fromEntries(apiUrl.searchParams);
+    const query = apiUrl.search.slice(1);
     apiUrl.search = '';
     apiUrl.hash = '';
     return new OpenAI({
       // The SDK requires a constructor key; the null header keeps it off the wire.
       apiKey: keyless ? 'promptfoo-no-auth' : (apiKey ?? null),
       adminAPIKey: null,
+      maxRetries: 0,
       baseURL: apiUrl.toString(),
-      defaultQuery,
       organization: this.getOrganization(config),
       ...(overrides.project !== undefined && { project: overrides.project }),
       defaultHeaders: {
         ...(keyless && { Authorization: null }),
         ...this.getOpenAiRequestHeaders(config.headers, config),
       },
-      fetch: (input, options) => fetchWithProxy(input instanceof URL ? input.href : input, options),
+      fetch: (input, options) => {
+        const url = new URL(input instanceof Request ? input.url : String(input));
+        if (query) {
+          url.search = query + (url.search ? `&${url.search.slice(1)}` : '');
+        }
+        return fetchWithProxy(input instanceof Request ? new Request(url, input) : url.href, {
+          ...options,
+          disableTransientRetries: true,
+        });
+      },
     }) as unknown as NonNullable<OpenAIProviderOptions['openAIClient']>;
   }
 

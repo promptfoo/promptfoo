@@ -215,6 +215,27 @@ describe('Agents SDK scoped client', () => {
     });
   });
 
+  it('preserves repeated and encoded gateway query parameters', async () => {
+    await provider({
+      apiBaseUrl: 'https://gateway.example.invalid/v1?scope=read&scope=write&route=a%20b',
+    }).callApi('hello');
+    expect(new URL(request().url).search).toBe('?scope=read&scope=write&route=a%20b');
+  });
+
+  it('leaves retry ownership with Promptfoo', async () => {
+    vi.mocked(fetchWithProxy).mockImplementation(async () =>
+      Response.json(
+        { error: { message: 'fixture transient' } },
+        { status: 503, headers: { 'retry-after-ms': '0' } },
+      ),
+    );
+    await expect(provider({ apiKey: 'fixture-key' }).callApi('hello')).rejects.toThrow(
+      'fixture transient',
+    );
+    expect(fetchWithProxy).toHaveBeenCalledOnce();
+    expect(vi.mocked(fetchWithProxy).mock.calls[0][1]?.disableTransientRetries).toBe(true);
+  });
+
   it('can omit authentication for an explicitly keyless compatible endpoint', async () => {
     await provider(
       {
@@ -392,6 +413,68 @@ describe('Agents SDK scoped client', () => {
       auth: 'Bearer model-key',
       org: 'model-org',
     });
+  });
+
+  it('shares gateway headers when a session only supplies its conversation ID', async () => {
+    vi.mocked(fetchWithProxy).mockImplementation(async (input) =>
+      String(input).includes('/items')
+        ? Response.json({
+            data: [],
+            object: 'list',
+            first_id: null,
+            last_id: null,
+            has_more: false,
+          })
+        : Response.json(response),
+    );
+    await provider({
+      apiKey: 'fixture-key',
+      headers: { 'X-Gateway-Auth': 'fixture' },
+      session: { type: 'openai-conversations', conversationId: 'conv_fixture' },
+    }).callApi('hello');
+    expect(vi.mocked(fetchWithProxy).mock.calls.length).toBeGreaterThan(1);
+    for (const [, options] of vi.mocked(fetchWithProxy).mock.calls) {
+      expect(new Headers(options?.headers).get('x-gateway-auth')).toBe('fixture');
+    }
+  });
+
+  it('does not copy model credentials into an explicitly configured session client', async () => {
+    const calls: { path: string; headers: Headers }[] = [];
+    vi.mocked(fetchWithProxy).mockImplementation(async (input, options) => {
+      const path = new URL(String(input)).pathname;
+      calls.push({ path, headers: new Headers(options?.headers) });
+      return path.includes('/items')
+        ? Response.json({
+            data: [],
+            object: 'list',
+            first_id: null,
+            last_id: null,
+            has_more: false,
+          })
+        : Response.json(response);
+    });
+    await provider({
+      apiKey: 'model-key',
+      headers: {
+        Authorization: 'Bearer gateway-key',
+        'X-API-Key': 'gateway-key',
+        'OpenAI-Organization': 'gateway-org',
+      },
+      session: {
+        type: 'openai-conversations',
+        conversationId: 'conv_fixture',
+        baseURL: 'https://session.example.invalid/v1',
+        apiKey: 'session-key',
+        organization: 'session-org',
+      },
+    }).callApi('hello');
+    const sessionHeaders = calls.find((call) => call.path.includes('/items'))!.headers;
+    expect(sessionHeaders.get('authorization')).toBe('Bearer session-key');
+    expect(sessionHeaders.get('x-api-key')).toBeNull();
+    expect(sessionHeaders.get('openai-organization')).toBe('session-org');
+    const modelHeaders = calls.find((call) => call.path.endsWith('/responses'))!.headers;
+    expect(modelHeaders.get('authorization')).toBe('Bearer gateway-key');
+    expect(modelHeaders.get('x-api-key')).toBe('gateway-key');
   });
 
   it('rejects an explicitly masked key instead of using host credentials', async () => {
