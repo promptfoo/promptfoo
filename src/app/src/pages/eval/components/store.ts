@@ -654,6 +654,8 @@ export const useTableStore = create<TableState>()(
       set({
         isFetching: skipLoadingState ? get().isFetching : true,
         shouldHighlightSearchText: false,
+        // Clear stale filtered metrics to prevent auto-hide from using outdated data
+        filteredMetrics: null,
         // Clear previous metadata keys to prevent memory accumulation
         metadataKeys: [],
         metadataKeysLoading: false,
