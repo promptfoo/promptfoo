@@ -2446,6 +2446,38 @@ describe('evalCommand', () => {
     },
   );
 
+  it.each([undefined, 'cli'] as const)(
+    'restores concurrency after preflight failure (%s)',
+    async (eventSource) => {
+      const previousConcurrency = cliState.maxConcurrency;
+      const previousExitCode = process.exitCode;
+      const provider = { id: () => 'offline-delayed', delay: 5, callApi: vi.fn() };
+      vi.mocked(resolveConfigs).mockResolvedValueOnce({
+        config: {},
+        testSuite: { prompts: [], providers: [provider] },
+        basePath: '',
+      });
+      vi.mocked(checkProviderApiKeys).mockReturnValueOnce(
+        new Map([['FIXTURE_KEY', [provider.id()]]]),
+      );
+      cliState.maxConcurrency = 9;
+      try {
+        const result = doEval({}, defaultConfig, defaultConfigPath, { eventSource });
+        if (eventSource === 'cli') {
+          await result;
+          expect(process.exitCode).toBe(1);
+        } else {
+          await expect(result).rejects.toThrow('Missing required API keys');
+        }
+        expect(cliState.maxConcurrency).toBe(9);
+        expect(provider.callApi).not.toHaveBeenCalled();
+      } finally {
+        cliState.maxConcurrency = previousConcurrency;
+        process.exitCode = previousExitCode;
+      }
+    },
+  );
+
   it('should handle maxConcurrency option', async () => {
     const cmdObj = { maxConcurrency: 5 };
     await doEval(cmdObj, defaultConfig, defaultConfigPath, {});

@@ -1320,7 +1320,11 @@ async function doEvalWithEnv(
     const runEnv: EnvOverrides = {};
     return cliState.withConfig(undefined, () =>
       cliState.withBasePath(undefined, () =>
-        cliState.withEnv(runEnv, () => runEvaluationWithEnv(runEnv, initialization)),
+        cliState.withEnv(runEnv, () =>
+          cliState.withMaxConcurrency(undefined, () =>
+            runEvaluationWithEnv(runEnv, initialization),
+          ),
+        ),
       ),
     );
   };

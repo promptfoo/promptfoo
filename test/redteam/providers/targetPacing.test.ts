@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import { callTargetProvider, getTargetResponse } from '../../../src/redteam/providers/shared';
-import { withProviderCallExecutionContext } from '../../../src/scheduler/providerCallExecutionContext';
+import {
+  withProviderCallExecutionContext,
+  withProviderCallTracingContext,
+} from '../../../src/scheduler/providerCallExecutionContext';
 import { sleep } from '../../../src/util/time';
 import { createDeferred } from '../../util/utils';
 
-import type { ApiProvider, ProviderResponse } from '../../../src/types';
+import type { ApiProvider, CallApiOptionsParams, ProviderResponse } from '../../../src/types';
 
 describe('delegated target pacing', () => {
   beforeEach(() => {
@@ -137,6 +140,73 @@ describe('delegated target pacing', () => {
       controller.abort();
       await rejected;
       expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it.each([
+    { traced: false, callerSignal: false, cancel: 'evaluation' },
+    { traced: true, callerSignal: false, cancel: 'evaluation' },
+    { traced: false, callerSignal: true, cancel: 'evaluation' },
+    { traced: true, callerSignal: true, cancel: 'evaluation' },
+    { traced: false, callerSignal: true, cancel: 'caller' },
+    { traced: true, callerSignal: true, cancel: 'caller' },
+  ])(
+    'forwards cancellation to an active provider: %j',
+    async ({ traced, callerSignal, cancel }) => {
+      const evaluation = new AbortController();
+      const caller = new AbortController();
+      const started = createDeferred<void>();
+      const pending = createDeferred<ProviderResponse>();
+      let stopped = false;
+      let receivedOptions: CallApiOptionsParams | undefined;
+      const provider: ApiProvider = {
+        id: () => 'fixture',
+        callApi: vi.fn((_prompt, _context, options) => {
+          receivedOptions = options;
+          options?.abortSignal?.addEventListener(
+            'abort',
+            () => {
+              stopped = true;
+              pending.reject(new DOMException('Fixture stopped', 'AbortError'));
+            },
+            { once: true },
+          );
+          started.resolve();
+          return pending.promise;
+        }),
+      };
+      const options: CallApiOptionsParams = {
+        includeLogProbs: true,
+        ...(callerSignal && { abortSignal: caller.signal }),
+      };
+      const invoke = () => callTargetProvider(provider, 'hello', undefined, options);
+      const result = withProviderCallExecutionContext({ abortSignal: evaluation.signal }, () =>
+        traced
+          ? withProviderCallTracingContext(
+              {
+                getActiveTraceparent: () => undefined,
+                withGraderSpan: async (_options, fn) => fn(),
+                withProviderSpan: async ({ callContext }, fn) => fn(callContext),
+              },
+              invoke,
+            )
+          : invoke(),
+      );
+      const rejected = expect(result).rejects.toMatchObject({ name: 'AbortError' });
+      try {
+        await started.promise;
+        (cancel === 'caller' ? caller : evaluation).abort();
+        expect(stopped).toBe(true);
+        await rejected;
+        expect(receivedOptions?.abortSignal?.aborted).toBe(true);
+        expect(receivedOptions?.includeLogProbs).toBe(true);
+        expect(options.abortSignal).toBe(callerSignal ? caller.signal : undefined);
+      } finally {
+        caller.abort();
+        evaluation.abort();
+        pending.resolve({ output: 'fixture cleanup' });
+        await rejected;
+      }
     },
   );
 
