@@ -50,6 +50,27 @@ describe('CLI console configuration after env-file loading', () => {
     vi.resetModules();
   });
 
+  it('treats an empty log level loaded after import as the info default', async () => {
+    const restore = mockProcessEnv({
+      LOG_LEVEL: 'debug',
+      PROMPTFOO_DISABLE_DEBUG_LOG: 'true',
+      PROMPTFOO_DISABLE_ERROR_LOG: 'true',
+    });
+    try {
+      vi.resetModules();
+      const { getLogLevel, initializeRunLogging } = await import('../src/logger');
+      const restoreLateEnv = mockProcessEnv({ LOG_LEVEL: '' });
+      try {
+        expect(() => initializeRunLogging()).not.toThrow();
+        expect(getLogLevel()).toBe('info');
+      } finally {
+        restoreLateEnv();
+      }
+    } finally {
+      restore();
+    }
+  });
+
   it('applies late level/routing settings and does not follow evaluation scopes', async () => {
     const restore = mockProcessEnv({
       LOG_LEVEL: 'info',

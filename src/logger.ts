@@ -278,7 +278,7 @@ export function initializeRunLogging({
 } = {}): void {
   // Console configuration belongs to process startup, after argv env files load.
   // Never refresh the shared transport from individual evaluation env scopes.
-  setLogLevel(structuredOutput ? 'error' : (getEnvString('LOG_LEVEL', 'info') as LogLevel));
+  setLogLevel(structuredOutput ? 'error' : ((getEnvString('LOG_LEVEL') || 'info') as LogLevel));
   Object.assign(winstonLogger.transports[0], {
     stderrLevels:
       structuredOutput || getEnvBool('PROMPTFOO_LOG_TO_STDERR')

@@ -177,6 +177,73 @@ describe('invocation-scoped cache settings', () => {
     },
   );
 
+  it.each(['existing', 'new'])(
+    'shares a writer and claims through %s cache-file symlinks',
+    async (kind) => {
+      const firstPath = path.join(tempDir, 'first');
+      const secondPath = path.join(tempDir, 'second');
+      const sharedFile = path.join(tempDir, 'shared.json');
+      fs.mkdirSync(firstPath);
+      fs.mkdirSync(secondPath);
+      if (kind === 'existing') {
+        fs.writeFileSync(sharedFile, JSON.stringify({ cache: [], lastExpire: 0 }));
+      }
+      fs.symlinkSync(sharedFile, path.join(firstPath, 'cache.json'), 'file');
+      fs.symlinkSync(sharedFile, path.join(secondPath, 'cache.json'), 'file');
+      const first = cliState.withEnv(disk(firstPath), () => cache.getCache());
+      const second = cliState.withEnv(disk(secondPath), () => cache.getCache());
+      await Promise.all([first.set('first', 'one'), second.set('second', 'two')]);
+      expect(first.stores[0]).toBe(second.stores[0]);
+      const persisted = new Keyv({ store: new KeyvFile({ filename: sharedFile }) });
+      expect(await persisted.get('first')).toBe('one');
+      expect(await persisted.get('second')).toBe('two');
+      expect(cliState.withEnv(disk(firstPath), () => cache.claimCacheKeyOnce('usage'))).toBe(true);
+      expect(cliState.withEnv(disk(secondPath), () => cache.claimCacheKeyOnce('usage'))).toBe(
+        false,
+      );
+      await cliState.withEnv(disk(secondPath), () => cache.clearCache());
+      expect(await first.get('first')).toBeUndefined();
+      expect(cliState.withEnv(disk(firstPath), () => cache.claimCacheKeyOnce('usage'))).toBe(true);
+    },
+  );
+
+  it('clears provider-local responses only for the selected backend', async () => {
+    const { AnthropicMessagesProvider } = await import('../src/providers/anthropic/messages');
+    const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
+      config: { apiKey: 'synthetic-fixture-key' },
+    });
+    const create = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+      content: [{ type: 'text', text: 'fixture' }],
+    } as never);
+    await cliState.withEnv(disk(path.join(tempDir, 'provider')), async () => {
+      await provider.callApi('same prompt');
+      await cliState.withEnv(memory, () => cache.clearCache());
+      expect(await provider.callApi('same prompt')).toMatchObject({
+        cached: true,
+        output: 'fixture',
+      });
+      expect(create).toHaveBeenCalledTimes(1);
+      await cache.clearCache();
+      await provider.callApi('same prompt');
+      expect(create).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('binds namespace invalidation to the backend captured by a retained cache', async () => {
+    const firstEnv = disk(path.join(tempDir, 'first'));
+    const secondEnv = disk(path.join(tempDir, 'second'));
+    const first = await cliState.withEnv(firstEnv, () =>
+      cache.withCacheNamespace('same', async () => cache.getCache()),
+    );
+    const generation = (env: typeof firstEnv) =>
+      cliState.withEnv(env, () => cache.getCacheClearGeneration());
+    const firstGeneration = generation(firstEnv);
+    const secondGeneration = generation(secondEnv);
+    await cliState.withEnv(secondEnv, () => first.clear());
+    expect(generation(firstEnv)).not.toBe(firstGeneration);
+    expect(generation(secondEnv)).toBe(secondGeneration);
+  });
+
   it.each(['memory', 'disk'])('keeps concurrent TTL defaults on one %s store', async (type) => {
     // Freeze Date only: disk writes still use their ordinary short debounce timer.
     vi.useFakeTimers({ toFake: ['Date'] });

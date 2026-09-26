@@ -29,7 +29,8 @@ import type { CacheOptions } from './types/cache';
 import type { FetchOptions } from './util/fetch/types';
 
 interface CacheBackend {
-  path?: string;
+  filePath?: string;
+  clearGeneration: number;
   instances: Map<number, Cache>;
   claims: Set<string>;
   inflight: Map<string, Promise<string>>;
@@ -37,7 +38,7 @@ interface CacheBackend {
 
 const cacheBackends = new Map<string, CacheBackend>();
 const namespacedCacheInstances = new WeakMap<Cache, Map<string, Cache>>();
-let cacheClearGeneration = 0;
+let nextCacheClearGeneration = 0;
 
 const cacheNamespaceStorage = new AsyncLocalStorage<{ namespace: string }>();
 const cacheEnabledStorage = new AsyncLocalStorage<{ enabled: boolean }>();
@@ -89,6 +90,15 @@ function resolveCachePath(cachePath: string): string {
         // Preserve the existing disk-store/claim error handling for inaccessible paths.
         return absolutePath;
       }
+      try {
+        // A file or directory alias may point at a cache that has not been created yet.
+        if (fs.lstatSync(ancestor).isSymbolicLink()) {
+          const target = path.resolve(parent, fs.readlinkSync(ancestor));
+          return resolveCachePath(path.join(target, path.relative(ancestor, absolutePath)));
+        }
+      } catch {
+        // Keep walking to the nearest existing parent.
+      }
       // Resolve an existing parent when this invocation has not created its cache yet.
       ancestor = parent;
     }
@@ -99,16 +109,25 @@ function getCacheBackend(cacheEnabled = getEffectiveCacheEnabled()): CacheBacken
   const cacheType =
     getEnvString('PROMPTFOO_CACHE_TYPE') ||
     (getEnvString('NODE_ENV') === 'test' ? 'memory' : 'disk');
-  const cachePath =
+  const filePath =
     cacheType === 'disk' && cacheEnabled
       ? resolveCachePath(
-          getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache'),
+          path.join(
+            getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache'),
+            'cache.json',
+          ),
         )
       : undefined;
-  const identity = JSON.stringify(cachePath ?? null);
+  const identity = JSON.stringify(filePath ?? null);
   let backend = cacheBackends.get(identity);
   if (!backend) {
-    backend = { path: cachePath, instances: new Map(), claims: new Set(), inflight: new Map() };
+    backend = {
+      filePath,
+      clearGeneration: nextCacheClearGeneration++,
+      instances: new Map(),
+      claims: new Set(),
+      inflight: new Map(),
+    };
     cacheBackends.set(identity, backend);
   }
   return backend;
@@ -123,14 +142,15 @@ function getCacheInstance(backend = getCacheBackend()) {
     const existingInstance = backend.instances.values().next().value;
     const stores = existingInstance ? existingInstance.stores : [];
 
-    if (!existingInstance && backend.path) {
-      if (!fs.existsSync(backend.path)) {
-        logger.info(`Creating cache folder at ${backend.path}.`);
-        fs.mkdirSync(backend.path, { recursive: true });
+    if (!existingInstance && backend.filePath) {
+      const directory = path.dirname(backend.filePath);
+      if (!fs.existsSync(directory)) {
+        logger.info(`Creating cache folder at ${directory}.`);
+        fs.mkdirSync(directory, { recursive: true });
       }
 
       try {
-        const store = new KeyvFile({ filename: path.join(backend.path, 'cache.json') });
+        const store = new KeyvFile({ filename: backend.filePath });
         stores.push(new Keyv({ store }));
       } catch (err) {
         logger.warn(
@@ -144,7 +164,7 @@ function getCacheInstance(backend = getCacheBackend()) {
     const clear = cacheInstance.clear.bind(cacheInstance);
     cacheInstance.clear = async () => {
       const result = await clear();
-      cacheClearGeneration += 1;
+      backend.clearGeneration = nextCacheClearGeneration++;
       return result;
     };
     backend.instances.set(ttl, cacheInstance);
@@ -153,7 +173,8 @@ function getCacheInstance(backend = getCacheBackend()) {
 }
 
 function getNamespacedCache(namespace: string) {
-  const cache = getCacheInstance();
+  const backend = getCacheBackend();
+  const cache = getCacheInstance(backend);
   let namespaces = namespacedCacheInstances.get(cache);
   if (!namespaces) {
     namespaces = new Map();
@@ -187,7 +208,7 @@ function getNamespacedCache(namespace: string) {
     },
     mdel: (keys: string[]) => cache.mdel(keys.map((key) => getScopedCacheKey(key, namespace))),
     ttl: (key: string) => cache.ttl(getScopedCacheKey(key, namespace)),
-    clear: () => clearNamespacedCache(cache, namespace),
+    clear: () => clearNamespacedCache(cache, namespace, backend),
     wrap: (...args: Parameters<Cache['wrap']>) =>
       cache.wrap(
         getScopedCacheKey(args[0] as string, namespace),
@@ -222,8 +243,9 @@ export function getScopedCacheKey(cacheKey: string, namespace = getCurrentCacheN
   return namespace ? `${namespace}:${cacheKey}` : cacheKey;
 }
 
+/** Opaque invalidation token for the currently selected backend. */
 export function getCacheClearGeneration() {
-  return cacheClearGeneration;
+  return getCacheBackend().clearGeneration;
 }
 
 function getUnscopedCacheKey(cacheKey: string, namespace: string) {
@@ -231,7 +253,7 @@ function getUnscopedCacheKey(cacheKey: string, namespace: string) {
   return cacheKey.startsWith(namespacePrefix) ? cacheKey.slice(namespacePrefix.length) : cacheKey;
 }
 
-async function clearNamespacedCache(cache: Cache, namespace: string) {
+async function clearNamespacedCache(cache: Cache, namespace: string, backend: CacheBackend) {
   const namespacePrefix = `${namespace}:`;
 
   for (const store of cache.stores) {
@@ -265,7 +287,7 @@ async function clearNamespacedCache(cache: Cache, namespace: string) {
     }
   }
 
-  cacheClearGeneration += 1;
+  backend.clearGeneration = nextCacheClearGeneration++;
   return true;
 }
 
@@ -648,8 +670,8 @@ export function claimCacheKeyOnce(cacheKey: string): boolean {
     return false;
   }
 
-  if (backend.path) {
-    const claimsPath = path.join(backend.path, 'claims');
+  if (backend.filePath) {
+    const claimsPath = getClaimsPath(backend.filePath);
     try {
       fs.mkdirSync(claimsPath, { recursive: true });
       const handle = fs.openSync(path.join(claimsPath, sha256(scopedCacheKey)), 'wx');
@@ -668,6 +690,11 @@ export function claimCacheKeyOnce(cacheKey: string): boolean {
 
   claimedCacheKeys.add(scopedCacheKey);
   return true;
+}
+
+function getClaimsPath(filePath: string): string {
+  const name = path.basename(filePath);
+  return path.join(path.dirname(filePath), name === 'cache.json' ? 'claims' : `${name}.claims`);
 }
 
 function serializeFetchResponse(
@@ -1031,8 +1058,8 @@ export async function clearCache() {
   backend.inflight.clear();
   const result = await getCacheInstance(backend).clear();
   backend.claims.clear();
-  if (backend.path) {
-    fs.rmSync(path.join(backend.path, 'claims'), { force: true, recursive: true });
+  if (backend.filePath) {
+    fs.rmSync(getClaimsPath(backend.filePath), { force: true, recursive: true });
   }
   return result;
 }
