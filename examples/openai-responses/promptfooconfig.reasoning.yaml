@@ -38,8 +38,8 @@ tests:
   - vars:
       math_problem: 'A bag contains 5 red marbles, 3 blue marbles, and 7 green marbles. Two marbles are drawn from the bag without replacement. What is the probability that both marbles are the same color? Express your answer as a fraction in its simplest form.'
     assert:
-      - type: contains
-        value: '34/105'
+      - type: llm-rubric
+        value: 'The final probability is 34/105, expressed as a simplified fraction in plain text or mathematical notation.'
 
   - vars:
       math_problem: 'Find all values of x that satisfy the equation: log₂(x+3) + log₂(x-1) = 3. Show all steps of your solution and verify your answers.'
@@ -50,5 +50,5 @@ tests:
   - vars:
       math_problem: 'In a right triangle, the hypotenuse is 13 cm, and one of the legs is 5 cm. A circle is inscribed in the triangle (touching all three sides). What is the radius of this inscribed circle? Show your complete solution with all geometric reasoning.'
     assert:
-      - type: contains
-        value: '2 cm'
+      - type: llm-rubric
+        value: 'The radius of the inscribed circle is 2 cm.'

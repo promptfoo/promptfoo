@@ -254,7 +254,7 @@ Add complex multi-step scenarios:
 
 ## Tracing and Debugging
 
-Tracing is optional and disabled in the checked-in config. To capture SDK tool
+Promptfoo tracing is optional and disabled in the checked-in config. To capture SDK tool
 calls in Promptfoo, enable the receiver at the top level and tracing on the provider:
 
 ```yaml

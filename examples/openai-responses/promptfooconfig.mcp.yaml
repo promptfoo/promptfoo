@@ -10,24 +10,30 @@ providers:
     config:
       reasoning:
         effort: none
+      tool_choice: required
       tools:
         - type: mcp
           server_label: deepwiki
           server_url: https://mcp.deepwiki.com/mcp
           require_approval: never
-          allowed_tools: ['ask_question']
+          allowed_tools: ['ask_wiki_question']
       max_output_tokens: 1000
   - id: openai:responses:gpt-6-sol
     config:
       reasoning:
         effort: none
+      tool_choice: required
       tools:
         - type: mcp
           server_label: deepwiki
           server_url: https://mcp.deepwiki.com/mcp
           require_approval: never
-          allowed_tools: ['ask_question']
+          allowed_tools: ['ask_wiki_question']
       max_output_tokens: 1000
+
+defaultTest:
+  assert:
+    - type: is-valid-openai-tools-call
 
 tests:
   - vars:

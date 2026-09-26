@@ -17,10 +17,10 @@ tests:
       query: 'I draw my longsword and attack the red dragon!'
     assert:
       - type: llm-rubric
-        value: Response includes dice rolls for attack and damage, describes combat outcome dramatically
+        value: Response shows the attack roll and, if it hits, the damage roll, then describes the combat outcome dramatically
       - type: javascript
         value: |
-          // Should use roll_dice tool and mention dice
+          // Check that the answer shows dice mechanics and the attack outcome.
           return (output.toLowerCase().includes('roll') || output.toLowerCase().includes('d20')) &&
                  (output.toLowerCase().includes('attack') || output.toLowerCase().includes('hit'));
 
@@ -67,7 +67,7 @@ tests:
       query: 'I step on a pressure plate and hear a click. What happens?'
     assert:
       - type: llm-rubric
-        value: Response triggers trap, asks for saving throw, rolls dice, and describes outcome
+        value: Response triggers a trap, identifies the saving throw, shows its dice roll, and describes the outcome
       - type: javascript
         value: |
           // Should mention saving throw or roll
@@ -85,14 +85,14 @@ tests:
       query: 'I attempt to seduce the ancient dragon using interpretive dance'
     assert:
       - type: llm-rubric
-        value: DM responds with humor and wit while keeping the game engaging and asking for appropriate roll
+        value: DM responds with humor and wit, identifies an appropriate ability check, and shows its dice roll and outcome
 
   - description: Request for short rest
     vars:
       query: 'I want to take a short rest to recover'
     assert:
       - type: llm-rubric
-        value: Response explains short rest mechanics and asks what the character does during rest
+        value: Response explains short-rest recovery and asks whether or how many Hit Dice the player wants to spend, without spending them for the player
 
   - description: Mysterious magic item examination
     vars:

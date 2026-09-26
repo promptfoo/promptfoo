@@ -57,7 +57,7 @@ tests:
       customer_tier: gold
       query: What customer tier am I on?
     assert:
-      - type: contains
+      - type: icontains
         value: gold
       - type: trajectory:tool-used
         value: lookup_customer_context

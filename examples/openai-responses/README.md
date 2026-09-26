@@ -98,7 +98,7 @@ Example using Codex models for code generation tasks.
 
 ### MCP (Model Context Protocol) (`promptfooconfig.mcp.yaml`)
 
-Example demonstrating OpenAI's MCP integration with remote MCP servers. This example uses the DeepWiki MCP server to query GitHub repositories.
+Example demonstrating OpenAI's MCP integration with remote MCP servers. It requires a call to DeepWiki's `ask_wiki_question` tool to query public GitHub repositories. Assertions check that the MCP call succeeds and that the answer includes the expected topic.
 
 #### MCP Features Demonstrated:
 
