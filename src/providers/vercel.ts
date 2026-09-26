@@ -1,10 +1,11 @@
 import { createHmac } from 'crypto';
 
-import { context as otelContext, propagation, ROOT_CONTEXT, trace } from '@opentelemetry/api';
+import { context as otelContext, trace } from '@opentelemetry/api';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { getOtelTracer } from '../tracing/otelSdk';
+import { extractTraceparentContext } from '../tracing/spanRoles';
 import { sha256 } from '../util/createHash';
 import { normalizeFinishReason } from '../util/finishReason';
 import { getRequestTimeoutMs, parseChatPrompt } from './shared';
@@ -161,7 +162,7 @@ function withSdkTraceContext<T>(context: CallApiContextParams | undefined, fn: (
     return fn();
   }
 
-  const parentContext = propagation.extract(ROOT_CONTEXT, { traceparent });
+  const parentContext = extractTraceparentContext(traceparent);
   return otelContext.with(parentContext, fn);
 }
 
