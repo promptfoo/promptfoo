@@ -22,7 +22,7 @@ export function getAjv(): Ajv {
     ajvInstance = new Ajv({ strictSchema });
     addFormats(ajvInstance);
     // Gemini schemas can reuse this annotation in tool and JSON assertions.
-    ajvInstance.addKeyword({ keyword: 'property_ordering', valid: true });
+    ajvInstance.addKeyword({ keyword: ['property_ordering', 'propertyOrdering'], valid: true });
     ajvInstances.set(strictSchema, ajvInstance);
   }
   return ajvInstance;
