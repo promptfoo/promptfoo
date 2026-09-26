@@ -478,7 +478,7 @@ In this example, the `containsMentalHealth` assertion template is defined at the
 
 ## Defining named metrics
 
-Each assertion supports a `metric` field that allows you to tag the result however you like. Use this feature to combine related assertions into aggregate metrics.
+Use an assertion’s `metric` field to combine related assertion scores into named metrics. Comparison assertions such as `max-score` and `select-best` run after ordinary grading and do not add a named metric from this field; assign metric names to their underlying assertions instead.
 
 For example, these asserts will aggregate results into two metrics, `Tone` and `Consistency`.
 

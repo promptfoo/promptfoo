@@ -334,6 +334,8 @@ After configuring the CLI, you need to explicitly upload eval results to your se
 2. Run `promptfoo share` to upload the results
 3. Or use `promptfoo eval --share` to do both in one command
 
+Custom upload clients should follow the same import contract: save the eval with complete prompt metrics, then upload result chunks to `POST /api/eval/{id}/results`. Chunk uploads append rows but do not recompute those metrics. Use an eval run to calculate new results rather than treating this endpoint as a way to extend an already summarized eval.
+
 Alternatively, configure these URLs permanently in your `promptfooconfig.yaml`:
 
 ```yaml title="promptfooconfig.yaml"
