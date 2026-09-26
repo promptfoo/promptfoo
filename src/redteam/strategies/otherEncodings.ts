@@ -1,3 +1,5 @@
+import { mapEncodingTestCases } from './encoding';
+
 import type { TestCase } from '../../types/index';
 
 /**
@@ -190,24 +192,9 @@ export function addOtherEncodings(
     }
   })();
 
-  return testCases.map((testCase) => {
-    const originalText = String(testCase.vars![injectVar]);
-    return {
-      ...testCase,
-      assert: testCase.assert?.map((assertion) => ({
-        ...assertion,
-        metric: assertion.metric ? `${assertion.metric}/${encodingName}` : assertion.metric,
-      })),
-      vars: {
-        ...testCase.vars,
-        [injectVar]: transformer(originalText),
-      },
-      metadata: {
-        ...testCase.metadata,
-        strategyId: encodingType,
-        encodingType,
-        originalText,
-      },
-    };
+  return mapEncodingTestCases(testCases, injectVar, {
+    transform: transformer,
+    metricSuffix: encodingName,
+    metadata: { strategyId: encodingType, encodingType },
   });
 }
