@@ -37,7 +37,7 @@ export function getStandaloneEvalCacheKey({
   tag,
   description,
 }: StandaloneEvalCacheKeyOptions = {}): string {
-  return `standalone_evals_${limit}_${tag?.key}_${tag?.value}_${description}`;
+  return JSON.stringify([limit, tag?.key, tag?.value, description]);
 }
 
 export function getCachedStandaloneEvals(cacheKey: string): StandaloneEval[] | undefined {
