@@ -84,7 +84,7 @@ const OpenApiEvalTableJsonResponseSchema = z.union([
   EvalSchemas.Table.JsonExportResponse,
 ]);
 
-export const SERVER_OPENAPI_ROUTE_COUNT = 67;
+export const SERVER_OPENAPI_ROUTE_COUNT = 68;
 
 type OpenApiSchema = NonNullable<ZodMediaTypeObject['schema']>;
 type OpenApiResponse = ResponseConfig & { description: string };
@@ -535,6 +535,22 @@ export function createServerOpenApiRegistry() {
       404: notFound('Evaluation not found'),
       500: serverError(),
       413: errorResponse('Evaluation table is too large'),
+    },
+  });
+
+  register({
+    method: 'get',
+    path: '/api/eval/{id}/failure-summary',
+    operationId: 'getEvalFailureSummary',
+    tags: ['Eval'],
+    summary: 'Group failed evaluation results by error',
+    request: {
+      params: params('GetFailureSummaryParams', EvalSchemas.FailureSummary.Params),
+    },
+    responses: {
+      200: jsonResponse('GetFailureSummaryResponse', EvalSchemas.FailureSummary.Response),
+      400: validationError(),
+      404: notFound('Evaluation not found'),
     },
   });
 
