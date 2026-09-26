@@ -3,6 +3,7 @@ import { getEventListeners } from 'node:events';
 import { AIProjectClient } from '@azure/ai-projects';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AzureFoundryAgentProvider } from '../../../src/providers/azure/foundry-agent';
+import { createDeferred } from '../../util/utils';
 
 vi.mock('../../../src/cache', () => ({ isCacheEnabled: () => false }));
 vi.mock('../../../src/logger');
@@ -91,15 +92,14 @@ describe('Foundry SDK cancellation and retries', () => {
   });
 
   it('accepts the maximum supported timer delay through the real SDK', async () => {
-    fetchMock.mockImplementationOnce(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 5));
-      return response();
-    });
+    const fetchResponse = createDeferred<Response>();
+    fetchMock.mockReturnValueOnce(fetchResponse.promise);
     const setTimer = vi.spyOn(globalThis, 'setTimeout');
     const pending = provider({ timeoutMs: 2_147_483_647, retryOptions: { maxRetries: 0 } }).callApi(
       'hello',
     );
     await vi.advanceTimersByTimeAsync(5);
+    fetchResponse.resolve(response());
     expect(await pending).toMatchObject({ output: 'ok' });
     expect(setTimer.mock.calls.filter(([, delay]) => delay === 2_147_483_647)).toHaveLength(2);
     expect(fetchMock).toHaveBeenCalledOnce();
