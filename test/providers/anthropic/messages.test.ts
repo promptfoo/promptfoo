@@ -8,6 +8,7 @@ import {
   getCache,
   withCacheNamespace,
 } from '../../../src/cache';
+import cliState from '../../../src/cliState';
 import logger from '../../../src/logger';
 import { hashAnthropicCacheValue } from '../../../src/providers/anthropic/generic';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
@@ -3538,6 +3539,26 @@ describe('AnthropicMessagesProvider', () => {
       );
       expect(warnings).toHaveLength(1);
     });
+
+    it.each(['suite', 'file'] as const)(
+      'warns for deprecated sampling supplied by the %s layer',
+      async (layer) => {
+        const provider = createProvider('claude-sonnet-5', { config: {} });
+        const createSpy = vi
+          .spyOn(provider.anthropic.messages, 'create')
+          .mockResolvedValue(mockResp);
+        const warnSpy = vi.spyOn(logger, 'warn');
+        const run =
+          layer === 'suite'
+            ? cliState.withEnv.bind(cliState)
+            : cliState.withEnvFileOverrides.bind(cliState);
+        await run({ ANTHROPIC_TEMPERATURE: '0.3' }, () => provider.callApi('Scoped sampling test'));
+        expect(createSpy.mock.calls[0][0]).not.toHaveProperty('temperature');
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('temperature is deprecated on Claude Sonnet 5'),
+        );
+      },
+    );
 
     it('warns on Opus 4.7 when temperature set via env override', async () => {
       const provider = createProvider('claude-opus-4-7', {

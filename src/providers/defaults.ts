@@ -8,22 +8,9 @@ import { AIStudioEmbeddingProvider, getGoogleAiStudioProviders } from './google/
 import { hasGoogleDefaultCredentials } from './google/util';
 import { getGoogleVertexEmbeddingProvider, getGoogleVertexProviders } from './google/vertex';
 import { MistralEmbeddingProvider as MistralEmbeddingApiProvider } from './mistral';
-import {
-  DefaultEmbeddingProvider as MistralEmbeddingProvider,
-  DefaultGradingJsonProvider as MistralGradingJsonProvider,
-  DefaultGradingProvider as MistralGradingProvider,
-  DefaultSuggestionsProvider as MistralSuggestionsProvider,
-  DefaultSynthesizeProvider as MistralSynthesizeProvider,
-} from './mistral/defaults';
+import { getMistralProviders } from './mistral/defaults';
 import { getCodexDefaultProviders, hasCodexDefaultCredentials } from './openai/codexDefaults';
-import {
-  DefaultEmbeddingProvider as OpenAiEmbeddingProvider,
-  DefaultGradingJsonProvider as OpenAiGradingJsonProvider,
-  DefaultGradingProvider as OpenAiGradingProvider,
-  DefaultModerationProvider as OpenAiModerationProvider,
-  DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
-  DefaultWebSearchProvider as OpenAiWebSearchProvider,
-} from './openai/defaults';
+import { getOpenAiProviders } from './openai/defaults';
 import { VoyageEmbeddingProvider } from './voyage';
 import { getXAIProviders } from './xai/defaults';
 
@@ -49,8 +36,8 @@ async function getEmbeddingProviderForAzureDefaults(env?: EnvOverrides): Promise
   }
 
   const embeddingDeploymentName =
-    getEnvString('AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME') ||
-    env?.AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME;
+    env?.AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME ||
+    getEnvString('AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME');
   if (embeddingDeploymentName) {
     return new AzureEmbeddingProvider(embeddingDeploymentName, { env });
   }
@@ -76,7 +63,7 @@ async function getEmbeddingProviderForAzureDefaults(env?: EnvOverrides): Promise
   if (await hasGoogleDefaultCredentials()) {
     return getGoogleVertexEmbeddingProvider(env);
   }
-  return OpenAiEmbeddingProvider;
+  return getOpenAiProviders(env).embeddingProvider;
 }
 
 interface DefaultProviderPreferences {
@@ -120,7 +107,7 @@ async function getDefaultProviderPreferences(
     !hasOpenAiCredentials &&
       (hasAzureApiKey || hasAzureClientCreds) &&
       (getEnvString('AZURE_DEPLOYMENT_NAME') || env?.AZURE_DEPLOYMENT_NAME) &&
-      (getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') || env?.AZURE_OPENAI_DEPLOYMENT_NAME),
+      (env?.AZURE_OPENAI_DEPLOYMENT_NAME || getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME')),
   );
   const preferAnthropic = !hasOpenAiCredentials && hasAnthropicCredentials;
   const shouldUseFallbackDefaults =
@@ -173,12 +160,15 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     useXAIDefaults,
   } = await getDefaultProviderPreferences(env);
 
+  const openAiProviders = getOpenAiProviders(env);
+  const mistralProviders = getMistralProviders(env);
+
   let providers: Pick<DefaultProviders, keyof DefaultProviders>;
 
   if (preferAzure) {
     logger.debug('Using Azure OpenAI default providers');
     const deploymentName =
-      getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') || env?.AZURE_OPENAI_DEPLOYMENT_NAME;
+      env?.AZURE_OPENAI_DEPLOYMENT_NAME || getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME');
     if (!deploymentName) {
       throw new Error('AZURE_OPENAI_DEPLOYMENT_NAME must be set when using Azure OpenAI');
     }
@@ -189,7 +179,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       embeddingProvider: await getEmbeddingProviderForAzureDefaults(env),
       gradingJsonProvider: azureProvider,
       gradingProvider: azureProvider,
-      moderationProvider: OpenAiModerationProvider,
+      moderationProvider: openAiProviders.moderationProvider,
       suggestionsProvider: azureProvider,
       synthesizeProvider: azureProvider,
       // Azure doesn't have web search by default
@@ -199,11 +189,11 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     const anthropicProviders = getAnthropicProviders(env);
 
     providers = {
-      embeddingProvider: OpenAiEmbeddingProvider, // TODO(ian): Voyager instead?
+      embeddingProvider: openAiProviders.embeddingProvider, // TODO(ian): Voyager instead?
       gradingJsonProvider: anthropicProviders.gradingJsonProvider,
       gradingProvider: anthropicProviders.gradingProvider,
       llmRubricProvider: anthropicProviders.llmRubricProvider,
-      moderationProvider: OpenAiModerationProvider,
+      moderationProvider: openAiProviders.moderationProvider,
       suggestionsProvider: anthropicProviders.suggestionsProvider,
       synthesizeProvider: anthropicProviders.synthesizeProvider,
       webSearchProvider: anthropicProviders.webSearchProvider,
@@ -212,51 +202,51 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     logger.debug('Using Google AI Studio default providers');
     providers = {
       embeddingProvider: getGoogleVertexEmbeddingProvider(env), // AI Studio supports embeddings via google:embedding:*, but Vertex is the richer default
-      moderationProvider: OpenAiModerationProvider,
+      moderationProvider: openAiProviders.moderationProvider,
       ...getGoogleAiStudioProviders(env),
     };
   } else if (useGoogleVertexDefaults) {
     logger.debug('Using Google Vertex default providers');
     providers = {
-      moderationProvider: OpenAiModerationProvider,
+      moderationProvider: openAiProviders.moderationProvider,
       ...getGoogleVertexProviders(env),
     };
   } else if (useMistralDefaults) {
     logger.debug('Using Mistral default providers');
     providers = {
-      embeddingProvider: MistralEmbeddingProvider,
-      gradingJsonProvider: MistralGradingJsonProvider,
-      gradingProvider: MistralGradingProvider,
-      moderationProvider: OpenAiModerationProvider,
-      suggestionsProvider: MistralSuggestionsProvider,
-      synthesizeProvider: MistralSynthesizeProvider,
+      embeddingProvider: mistralProviders.embeddingProvider,
+      gradingJsonProvider: mistralProviders.gradingJsonProvider,
+      gradingProvider: mistralProviders.gradingProvider,
+      moderationProvider: openAiProviders.moderationProvider,
+      suggestionsProvider: mistralProviders.suggestionsProvider,
+      synthesizeProvider: mistralProviders.synthesizeProvider,
       // Mistral doesn't have web search
     };
   } else if (useXAIDefaults) {
     logger.debug('Using xAI default providers');
     providers = {
-      embeddingProvider: OpenAiEmbeddingProvider, // xAI doesn't expose an embeddings API
-      moderationProvider: OpenAiModerationProvider, // xAI doesn't expose a moderation API
+      embeddingProvider: openAiProviders.embeddingProvider, // xAI doesn't expose an embeddings API
+      moderationProvider: openAiProviders.moderationProvider, // xAI doesn't expose a moderation API
       ...getXAIProviders(env),
     };
   } else if (useCodexDefaults) {
     logger.debug('Using Codex SDK default providers from ChatGPT/Codex credentials');
     providers = {
-      embeddingProvider: OpenAiEmbeddingProvider,
-      moderationProvider: OpenAiModerationProvider,
+      embeddingProvider: openAiProviders.embeddingProvider,
+      moderationProvider: openAiProviders.moderationProvider,
       ...getCodexDefaultProviders(env),
     };
   } else {
     logger.debug('Using OpenAI default providers');
 
     providers = {
-      embeddingProvider: OpenAiEmbeddingProvider,
-      gradingJsonProvider: OpenAiGradingJsonProvider,
-      gradingProvider: OpenAiGradingProvider,
-      moderationProvider: OpenAiModerationProvider,
-      suggestionsProvider: OpenAiSuggestionsProvider,
-      synthesizeProvider: OpenAiGradingJsonProvider,
-      webSearchProvider: OpenAiWebSearchProvider,
+      embeddingProvider: openAiProviders.embeddingProvider,
+      gradingJsonProvider: openAiProviders.gradingJsonProvider,
+      gradingProvider: openAiProviders.gradingProvider,
+      moderationProvider: openAiProviders.moderationProvider,
+      suggestionsProvider: openAiProviders.suggestionsProvider,
+      synthesizeProvider: openAiProviders.gradingJsonProvider,
+      webSearchProvider: openAiProviders.webSearchProvider,
     };
   }
 

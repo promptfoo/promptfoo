@@ -24,6 +24,7 @@ import { AzureModerationProvider } from './azure/moderation';
 import { AzureRealtimeProvider } from './azure/realtime';
 import { AzureResponsesProvider } from './azure/responses';
 import { AzureVideoProvider } from './azure/video';
+import { getBedrockTextRoute } from './bedrock/routing';
 import { BrowserProvider } from './browser';
 import { createCerebrasProvider } from './cerebras';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
@@ -120,21 +121,64 @@ import type { LoadApiProviderContext } from '../types/index';
 import type { ProviderOptions } from '../types/providers';
 import type { ProviderFactory, ProviderFamily } from './registryTypes';
 
+/** Aliases read together by these providers must keep their original scope priority. */
+function getProviderEnvAliasGroups(providerPath: string): readonly (readonly string[])[] {
+  if (/^openai:(?:codex-sdk|codex)(?::|$)/.test(providerPath)) {
+    return [['OPENAI_API_KEY', 'CODEX_API_KEY']];
+  }
+  if (providerPath.startsWith('huggingface:')) {
+    return [['HF_TOKEN', 'HF_API_TOKEN']];
+  }
+  if (providerPath.startsWith('sagemaker:')) {
+    return [['AWS_REGION', 'AWS_DEFAULT_REGION']];
+  }
+  if (providerPath.startsWith('bedrock:')) {
+    const mode = getBedrockTextRoute(providerPath)?.apiMode;
+    return mode === 'chat' || mode === 'messages' || mode === 'responses'
+      ? [['AWS_BEDROCK_REGION', 'AWS_REGION', 'AWS_DEFAULT_REGION']]
+      : [];
+  }
+  if (/^(?:google|palm):live:/.test(providerPath)) {
+    return [['GOOGLE_API_KEY', 'GEMINI_API_KEY']];
+  }
+  if (/^(?:google|palm):(?:image:|[^:]*-image)/.test(providerPath)) {
+    return [
+      ['GOOGLE_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY', 'GEMINI_API_KEY'],
+      ['GOOGLE_CLOUD_PROJECT', 'GOOGLE_PROJECT_ID'],
+    ];
+  }
+  if (/^(?:google|palm):video:/.test(providerPath)) {
+    return [['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT']];
+  }
+  if (providerPath.startsWith('vertex:')) {
+    return [
+      ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'],
+      ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION'],
+    ];
+  }
+  return [];
+}
+
 /** Merge low-to-high priority scopes without letting a lower-priority key alias win. */
 export function mergeProviderEnv(
   providerPath: string,
   ...layers: (NonNullable<ProviderOptions['env']> | undefined)[]
 ): NonNullable<ProviderOptions['env']> | undefined {
-  const isCodexSDK = /^openai:(?:codex-sdk|codex)(?::|$)/.test(providerPath);
+  const aliasGroups = getProviderEnvAliasGroups(providerPath);
   let merged: NonNullable<ProviderOptions['env']> | undefined;
   for (const layer of layers) {
     if (!layer) {
       continue;
     }
     merged ??= {};
-    if (isCodexSDK && (layer.OPENAI_API_KEY || layer.CODEX_API_KEY)) {
-      delete merged.OPENAI_API_KEY;
-      delete merged.CODEX_API_KEY;
+    for (const aliases of aliasGroups) {
+      // Empty entries retain their existing per-variable meaning; a non-empty
+      // alias selects this scope without retaining a conflicting lower alias.
+      if (aliases.some((key) => layer[key])) {
+        for (const key of aliases) {
+          delete merged[key];
+        }
+      }
     }
     Object.assign(
       merged,

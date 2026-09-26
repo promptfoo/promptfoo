@@ -29,8 +29,8 @@ function getCloudflareApiConfig(
   const apiTokenCandidate =
     config?.apiKey ||
     (config?.apiKeyEnvar
-      ? getEnvString(config.apiKeyEnvar as EnvVarKey) ||
-        env?.[config.apiKeyEnvar as keyof EnvOverrides]
+      ? env?.[config.apiKeyEnvar as keyof EnvOverrides] ||
+        getEnvString(config.apiKeyEnvar as EnvVarKey)
       : undefined) ||
     env?.CLOUDFLARE_API_KEY ||
     getEnvString('CLOUDFLARE_API_KEY');
@@ -43,8 +43,8 @@ function getCloudflareApiConfig(
   const accountIdCandidate =
     config?.accountId ||
     (config?.accountIdEnvar
-      ? getEnvString(config.accountIdEnvar as EnvVarKey) ||
-        env?.[config.accountIdEnvar as keyof EnvOverrides]
+      ? env?.[config.accountIdEnvar as keyof EnvOverrides] ||
+        getEnvString(config.accountIdEnvar as EnvVarKey)
       : undefined) ||
     env?.CLOUDFLARE_ACCOUNT_ID ||
     getEnvString('CLOUDFLARE_ACCOUNT_ID');

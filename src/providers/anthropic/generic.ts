@@ -18,6 +18,14 @@ import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../
 import type { ClaudeCodeOAuthCredential } from './claudeCodeAuth';
 import type { AnthropicBaseOptions } from './types';
 
+function getScopedCustomHeaders(env?: EnvOverrides): string | undefined {
+  return (
+    env?.ANTHROPIC_CUSTOM_HEADERS ??
+    getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS ??
+    getEnvOverrides('file')?.ANTHROPIC_CUSTOM_HEADERS
+  );
+}
+
 /**
  * Parse ANTHROPIC_CUSTOM_HEADERS the same way the Anthropic SDK does
  * (newline-separated `Name: value` lines) and map each header name to null so
@@ -26,8 +34,7 @@ import type { AnthropicBaseOptions } from './types';
  * gateway/proxy secrets) off foreign hosts.
  */
 export function getAnthropicEnvHeaderSuppressions(env?: EnvOverrides): Record<string, null> {
-  const scopedHeaders =
-    env?.ANTHROPIC_CUSTOM_HEADERS ?? getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS;
+  const scopedHeaders = getScopedCustomHeaders(env);
   return Object.fromEntries(
     Object.keys({
       ...parseAnthropicCustomHeaders(process.env.ANTHROPIC_CUSTOM_HEADERS),
@@ -109,8 +116,7 @@ function setCaseInsensitiveHeaderValue(
 function getAnthropicCustomHeaderOverrides(
   env: EnvOverrides | undefined,
 ): Record<string, string | null> {
-  const customHeaders =
-    env?.ANTHROPIC_CUSTOM_HEADERS ?? getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS;
+  const customHeaders = getScopedCustomHeaders(env);
   if (customHeaders === undefined) {
     return {};
   }
@@ -230,9 +236,7 @@ export class AnthropicGenericProvider implements ApiProvider {
     this.config = config || {};
     this.label = label;
     const customHeaders =
-      this.env?.ANTHROPIC_CUSTOM_HEADERS ??
-      getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS ??
-      process.env.ANTHROPIC_CUSTOM_HEADERS;
+      this.env?.ANTHROPIC_CUSTOM_HEADERS ?? getEnvString('ANTHROPIC_CUSTOM_HEADERS');
     this.clientHasCustomHeaders =
       Object.keys(this.config.headers ?? {}).length > 0 ||
       Object.keys(parseAnthropicCustomHeaders(customHeaders)).length > 0;
@@ -283,8 +287,7 @@ export class AnthropicGenericProvider implements ApiProvider {
       ...getAnthropicCustomHeaderOverrides(this.env),
       ...defaultHeaders,
     };
-    const scopedCustomHeaderValue =
-      this.env?.ANTHROPIC_CUSTOM_HEADERS ?? getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS;
+    const scopedCustomHeaderValue = getScopedCustomHeaders(this.env);
     const scopedCustomHeaders = parseAnthropicCustomHeaders(scopedCustomHeaderValue);
     const scopedAuthHeaders = new Set(
       Object.keys(scopedCustomHeaders).map((name) => name.toLowerCase()),
@@ -370,9 +373,7 @@ export class AnthropicGenericProvider implements ApiProvider {
 
   protected hasCustomHeaders(): boolean {
     const customHeaders =
-      this.env?.ANTHROPIC_CUSTOM_HEADERS ??
-      getEnvOverrides()?.ANTHROPIC_CUSTOM_HEADERS ??
-      process.env.ANTHROPIC_CUSTOM_HEADERS;
+      this.env?.ANTHROPIC_CUSTOM_HEADERS ?? getEnvString('ANTHROPIC_CUSTOM_HEADERS');
     return (
       this.clientHasCustomHeaders ||
       Object.keys(parseAnthropicCustomHeaders(customHeaders)).length > 0

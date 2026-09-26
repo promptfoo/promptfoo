@@ -6,6 +6,7 @@ import { normalizeFinishReason } from '../util/finishReason';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
 import { getRequestTimeoutMs, parseChatPrompt, transformTools } from './shared';
 
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -525,9 +526,14 @@ function applyOllamaThinking(output: unknown, thinking: string, showThinking?: b
 export class OllamaCompletionProvider implements ApiProvider {
   modelName: string;
   config: OllamaCompletionOptions;
+  env?: EnvOverrides;
 
-  constructor(modelName: string, options: { id?: string; config?: OllamaCompletionOptions } = {}) {
-    const { id, config } = options;
+  constructor(
+    modelName: string,
+    options: { id?: string; config?: OllamaCompletionOptions; env?: EnvOverrides } = {},
+  ) {
+    const { id, config, env } = options;
+    this.env = env;
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
     this.config = config || {};
@@ -603,13 +609,15 @@ export class OllamaCompletionProvider implements ApiProvider {
     let response: FetchWithCacheResult<string> | undefined;
     try {
       response = await fetchWithCache<string>(
-        `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/generate`,
+        `${this.env?.OLLAMA_BASE_URL || getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/generate`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(getEnvString('OLLAMA_API_KEY')
-              ? { Authorization: `Bearer ${getEnvString('OLLAMA_API_KEY')}` }
+            ...(this.env?.OLLAMA_API_KEY || getEnvString('OLLAMA_API_KEY')
+              ? {
+                  Authorization: `Bearer ${this.env?.OLLAMA_API_KEY || getEnvString('OLLAMA_API_KEY')}`,
+                }
               : {}),
           },
           body: JSON.stringify(params),
@@ -685,9 +693,14 @@ export class OllamaCompletionProvider implements ApiProvider {
 export class OllamaChatProvider implements ApiProvider {
   modelName: string;
   config: OllamaCompletionOptions;
+  env?: EnvOverrides;
 
-  constructor(modelName: string, options: { id?: string; config?: OllamaCompletionOptions } = {}) {
-    const { id, config } = options;
+  constructor(
+    modelName: string,
+    options: { id?: string; config?: OllamaCompletionOptions; env?: EnvOverrides } = {},
+  ) {
+    const { id, config, env } = options;
+    this.env = env;
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
     this.config = config || {};
@@ -771,13 +784,15 @@ export class OllamaChatProvider implements ApiProvider {
     let response: FetchWithCacheResult<string> | undefined;
     try {
       response = await fetchWithCache<string>(
-        `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/chat`,
+        `${this.env?.OLLAMA_BASE_URL || getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/chat`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(getEnvString('OLLAMA_API_KEY')
-              ? { Authorization: `Bearer ${getEnvString('OLLAMA_API_KEY')}` }
+            ...(this.env?.OLLAMA_API_KEY || getEnvString('OLLAMA_API_KEY')
+              ? {
+                  Authorization: `Bearer ${this.env?.OLLAMA_API_KEY || getEnvString('OLLAMA_API_KEY')}`,
+                }
               : {}),
           },
           body: JSON.stringify(params),
@@ -905,13 +920,15 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
     let response: FetchWithCacheResult<OllamaEmbedResponse>;
     try {
       response = await fetchWithCache<OllamaEmbedResponse>(
-        `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/embed`,
+        `${this.env?.OLLAMA_BASE_URL || getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/embed`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(getEnvString('OLLAMA_API_KEY')
-              ? { Authorization: `Bearer ${getEnvString('OLLAMA_API_KEY')}` }
+            ...(this.env?.OLLAMA_API_KEY || getEnvString('OLLAMA_API_KEY')
+              ? {
+                  Authorization: `Bearer ${this.env?.OLLAMA_API_KEY || getEnvString('OLLAMA_API_KEY')}`,
+                }
               : {}),
           },
           body: JSON.stringify(params),

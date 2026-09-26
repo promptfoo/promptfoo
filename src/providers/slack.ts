@@ -1,4 +1,5 @@
 import { WebAPIPlatformError, WebAPIRateLimitedError, WebClient } from '@slack/web-api';
+import { getEnvString } from '../envars';
 import logger from '../logger';
 import { fetchWithProviderProxy } from './fetch';
 
@@ -52,7 +53,7 @@ export class SlackProvider implements ApiProvider {
     this.options = options;
 
     const token =
-      options.config?.token || options.env?.SLACK_BOT_TOKEN || process.env.SLACK_BOT_TOKEN;
+      options.config?.token || options.env?.SLACK_BOT_TOKEN || getEnvString('SLACK_BOT_TOKEN');
     if (!token) {
       throw new Error(
         'Slack provider requires a token. Set SLACK_BOT_TOKEN or provide it in config.',

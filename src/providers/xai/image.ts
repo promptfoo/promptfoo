@@ -76,7 +76,7 @@ export class XAIImageProvider extends OpenAiImageProvider {
     if (this.config?.apiKey) {
       return this.config.apiKey;
     }
-    return getEnvString('XAI_API_KEY');
+    return this.env?.XAI_API_KEY || getEnvString('XAI_API_KEY');
   }
 
   getApiUrlDefault(): string {

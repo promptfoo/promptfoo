@@ -187,8 +187,8 @@ export class GoogleVideoProvider implements ApiProvider {
   private getLocation(config: GoogleVideoOptions): string {
     return (
       config.region ||
-      getEnvString('GOOGLE_LOCATION') ||
       this.env?.GOOGLE_LOCATION ||
+      getEnvString('GOOGLE_LOCATION') ||
       DEFAULT_LOCATION
     );
   }
@@ -857,10 +857,10 @@ export class GoogleVideoProvider implements ApiProvider {
     if (isVertexMode) {
       let projectId =
         effectiveConfig.projectId ||
-        getEnvString('GOOGLE_CLOUD_PROJECT') ||
-        getEnvString('GOOGLE_PROJECT_ID') ||
         this.env?.GOOGLE_CLOUD_PROJECT ||
-        this.env?.GOOGLE_PROJECT_ID;
+        this.env?.GOOGLE_PROJECT_ID ||
+        getEnvString('GOOGLE_CLOUD_PROJECT') ||
+        getEnvString('GOOGLE_PROJECT_ID');
 
       if (!projectId) {
         try {

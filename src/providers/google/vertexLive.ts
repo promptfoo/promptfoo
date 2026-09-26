@@ -2,17 +2,14 @@ import { getEnvString } from '../../envars';
 import { GoogleAuthManager } from './auth';
 import { GoogleLiveProvider } from './live';
 
-import type { EnvOverrides } from '../../types/env';
 import type { ProviderOptions } from '../../types/providers';
 import type { CompletionOptions } from './types';
 
 export class VertexLiveProvider extends GoogleLiveProvider {
   protected override readonly isVertex = true;
-  private readonly env?: EnvOverrides;
 
   constructor(modelName: string, options: ProviderOptions) {
     super(modelName, options);
-    this.env = options.env;
   }
 
   override id(): string {

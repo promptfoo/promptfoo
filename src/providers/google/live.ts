@@ -243,12 +243,14 @@ export const tryGetThenPost = async <T = unknown>(url: string, data?: unknown): 
 export class GoogleLiveProvider implements ApiProvider {
   config: CompletionOptions;
   modelName: string;
+  protected readonly env?: ProviderOptions['env'];
   protected readonly isVertex: boolean = false;
   private loadedFunctionCallbacks: Record<string, Function> = {};
 
   constructor(modelName: string, options: ProviderOptions) {
     this.modelName = modelName;
     this.config = options.config || {};
+    this.env = options.env;
   }
 
   validateFunctionToolCall(output: string | object, vars?: CallApiContextParams['vars']): void {
@@ -294,7 +296,13 @@ export class GoogleLiveProvider implements ApiProvider {
 
   getApiKey(): string | undefined {
     // Priority aligned with Python SDK: GOOGLE_API_KEY > GEMINI_API_KEY
-    return this.config.apiKey || getEnvString('GOOGLE_API_KEY') || getEnvString('GEMINI_API_KEY');
+    return (
+      this.config.apiKey ||
+      this.env?.GOOGLE_API_KEY ||
+      this.env?.GEMINI_API_KEY ||
+      getEnvString('GOOGLE_API_KEY') ||
+      getEnvString('GEMINI_API_KEY')
+    );
   }
 
   /**

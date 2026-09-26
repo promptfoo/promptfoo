@@ -456,8 +456,8 @@ export class WatsonXProvider implements ApiProvider {
     return (
       this.config.apiKey ||
       (this.config.apiKeyEnvar
-        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
-          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
+        ? this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides] ||
+          getEnvString(this.config.apiKeyEnvar as EnvVarKey)
         : undefined) ||
       this.env?.WATSONX_AI_APIKEY ||
       getEnvString('WATSONX_AI_APIKEY')
@@ -468,8 +468,8 @@ export class WatsonXProvider implements ApiProvider {
     return (
       this.config.apiBearerToken ||
       (this.config.apiBearerTokenEnvar
-        ? getEnvString(this.config.apiBearerTokenEnvar as EnvVarKey) ||
-          this.env?.[this.config.apiBearerTokenEnvar as keyof EnvOverrides]
+        ? this.env?.[this.config.apiBearerTokenEnvar as keyof EnvOverrides] ||
+          getEnvString(this.config.apiBearerTokenEnvar as EnvVarKey)
         : undefined) ||
       this.env?.WATSONX_AI_BEARER_TOKEN ||
       getEnvString('WATSONX_AI_BEARER_TOKEN')
@@ -550,8 +550,8 @@ export class WatsonXProvider implements ApiProvider {
     const projectId =
       this.options.config.projectId ||
       (this.options.config.projectIdEnvar
-        ? getEnvString(this.options.config.projectIdEnvar) ||
-          this.env?.[this.options.config.projectIdEnvar as keyof EnvOverrides]
+        ? this.env?.[this.options.config.projectIdEnvar as keyof EnvOverrides] ||
+          getEnvString(this.options.config.projectIdEnvar)
         : undefined) ||
       this.env?.WATSONX_AI_PROJECT_ID ||
       getEnvString('WATSONX_AI_PROJECT_ID');
