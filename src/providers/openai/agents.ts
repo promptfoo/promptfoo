@@ -13,6 +13,7 @@ import cliState from '../../cliState';
 import { getEnvOverrides, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
+import { isFetchRetryManaged } from '../../util/fetch/retryContext';
 import { getConfiguredTracingExport } from '../tracing';
 import {
   loadAgentDefinition,
@@ -28,6 +29,7 @@ import { resolveModelSettings } from './agents-model-settings';
 import { OTLPTracingExporter } from './agents-tracing';
 import { OpenAiGenericProvider } from './index';
 import type { Agent, AgentInputItem, OpenAIProviderOptions, Session } from '@openai/agents';
+import type { AbstractPage } from 'openai/core/pagination';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -37,6 +39,30 @@ import type {
 } from '../../types/index';
 import type { OpenAiAgentsSessionClientFactory } from './agents-loader';
 import type { OpenAiAgentsOptions, OpenAiAgentsSessionFactory } from './agents-types';
+
+/** Owned session clients can be reused by direct calls and scheduler-managed calls. */
+class AgentsOpenAIClient extends OpenAI {
+  private withRetryPolicy(options: Parameters<OpenAI['request']>[0]) {
+    return Promise.resolve(options).then((resolved) => ({
+      ...resolved,
+      maxRetries: isFetchRetryManaged() ? 0 : (resolved.maxRetries ?? this.maxRetries),
+    }));
+  }
+
+  override request<Rsp>(...args: Parameters<OpenAI['request']>) {
+    return super.request<Rsp>(this.withRetryPolicy(args[0]), args[1]);
+  }
+
+  override requestAPIList<
+    Item = unknown,
+    PageClass extends AbstractPage<Item> = AbstractPage<Item>,
+  >(
+    Page: new (...args: ConstructorParameters<typeof AbstractPage>) => PageClass,
+    options: Parameters<OpenAI['requestAPIList']>[1],
+  ) {
+    return super.requestAPIList<Item, PageClass>(Page, this.withRetryPolicy(options));
+  }
+}
 
 /**
  * OpenAI Agents Provider
@@ -301,32 +327,35 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
   private createScopedClient(
     overrides: Parameters<OpenAiAgentsSessionClientFactory>[0] = {},
   ): ReturnType<OpenAiAgentsSessionClientFactory> {
-    const apiKey = overrides.apiKey ?? this.getApiKey();
+    const separateEndpoint = overrides.baseURL !== undefined;
+    const apiKey = overrides.apiKey ?? (separateEndpoint ? undefined : this.getApiKey());
     const keyless = !apiKey && !this.requiresApiKey();
     const config = {
       ...this.config,
       apiHost: undefined,
       apiBaseUrl: overrides.baseURL ?? this.getApiUrl(),
-      organization: overrides.organization ?? this.config.organization,
+      organization: overrides.organization ?? (separateEndpoint ? '' : this.config.organization),
       // Explicit session connection settings must not inherit model gateway credentials.
       headers: Object.values(overrides).some((value) => value !== undefined)
         ? {}
         : this.config.headers,
     };
+    const organization = this.getOrganization(config);
     const apiUrl = new URL(config.apiBaseUrl);
     const query = apiUrl.search.slice(1);
     apiUrl.search = '';
     apiUrl.hash = '';
-    return new OpenAI({
+    return new AgentsOpenAIClient({
       // The SDK requires a constructor key; the null header keeps it off the wire.
       apiKey: keyless ? 'promptfoo-no-auth' : (apiKey ?? null),
       adminAPIKey: null,
-      maxRetries: 0,
+      maxRetries: this.config.maxRetries,
       baseURL: apiUrl.toString(),
-      organization: this.getOrganization(config),
+      organization,
       ...(overrides.project !== undefined && { project: overrides.project }),
       defaultHeaders: {
         ...(keyless && { Authorization: null }),
+        ...(organization === '' && { 'OpenAI-Organization': null }),
         ...this.getOpenAiRequestHeaders(config.headers, config),
       },
       fetch: (input, options) => {

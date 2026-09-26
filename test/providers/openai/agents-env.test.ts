@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import { loadApiProvider } from '../../../src/providers/index';
 import { OpenAiAgentsProvider } from '../../../src/providers/openai/agents';
+import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 import { createDeferred, mockProcessEnv } from '../../util/utils';
 
@@ -222,17 +223,17 @@ describe('Agents SDK scoped client', () => {
     expect(new URL(request().url).search).toBe('?scope=read&scope=write&route=a%20b');
   });
 
-  it('leaves retry ownership with Promptfoo', async () => {
+  it.each([undefined, 0, 1])('honors direct-call retry budget %s', async (maxRetries) => {
     vi.mocked(fetchWithProxy).mockImplementation(async () =>
       Response.json(
         { error: { message: 'fixture transient' } },
         { status: 503, headers: { 'retry-after-ms': '0' } },
       ),
     );
-    await expect(provider({ apiKey: 'fixture-key' }).callApi('hello')).rejects.toThrow(
+    await expect(provider({ apiKey: 'fixture-key', maxRetries }).callApi('hello')).rejects.toThrow(
       'fixture transient',
     );
-    expect(fetchWithProxy).toHaveBeenCalledOnce();
+    expect(fetchWithProxy).toHaveBeenCalledTimes((maxRetries ?? 2) + 1);
     expect(vi.mocked(fetchWithProxy).mock.calls[0][1]?.disableTransientRetries).toBe(true);
   });
 
@@ -476,6 +477,90 @@ describe('Agents SDK scoped client', () => {
     expect(modelHeaders.get('authorization')).toBe('Bearer gateway-key');
     expect(modelHeaders.get('x-api-key')).toBe('gateway-key');
   });
+
+  it('preserves an SDK request-specific retry override outside the scheduler', async () => {
+    const target = provider({ apiKey: 'fixture-key', maxRetries: 2 });
+    const client = Reflect.get(target, 'createScopedClient').call(target) as OpenAI;
+    vi.mocked(fetchWithProxy).mockResolvedValue(
+      Response.json(
+        { error: { message: 'fixture transient' } },
+        { status: 503, headers: { 'retry-after-ms': '0' } },
+      ),
+    );
+    await expect(
+      client.responses.create({ model: 'fixture', input: 'hello' }, { maxRetries: 0 }),
+    ).rejects.toThrow('fixture transient');
+    expect(fetchWithProxy).toHaveBeenCalledOnce();
+  });
+
+  it('requires credentials for a separate authenticated session endpoint', async () => {
+    await expect(
+      provider({
+        apiKey: 'model-key',
+        session: {
+          type: 'openai-conversations',
+          conversationId: 'conv_fixture',
+          baseURL: 'https://session.example.invalid/v1',
+        },
+      }).callApi('hello'),
+    ).rejects.toThrow(/Missing credentials/);
+    expect(fetchWithProxy).not.toHaveBeenCalled();
+  });
+
+  it.each(['env', 'config'])('preserves an empty %s organization mask', async (source) => {
+    await cliState.withEnv({ OPENAI_ORGANIZATION: 'ambient-org' }, () =>
+      provider(
+        source === 'config' ? { organization: '' } : {},
+        source === 'env' ? { OPENAI_ORGANIZATION: '' } : {},
+      ).callApi('hello'),
+    );
+    expect(request().headers.get('openai-organization')).toBeNull();
+  });
+
+  it.each([false, true])(
+    'keeps cached session retry policy current with scheduler disabled=%s',
+    async (disabled) => {
+      await cliState.withEnv(
+        { PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER: String(disabled) },
+        async () => {
+          const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+          const target = provider({
+            apiKey: 'fixture-key',
+            session: { type: 'openai-conversations', conversationId: 'conv_fixture' },
+          });
+          let fail = false;
+          vi.mocked(fetchWithProxy).mockImplementation(async (input) => {
+            if (fail) {
+              return Response.json(
+                { error: { message: 'fixture terminal', type: 'invalid_request_error' } },
+                { status: 409, headers: { 'retry-after-ms': '0' } },
+              );
+            }
+            return String(input).includes('/items')
+              ? Response.json({ data: [], object: 'list', has_more: false })
+              : Response.json(response);
+          });
+          try {
+            // Create the cached session under a direct call, then reuse it in both contexts.
+            await target.callApi('hello');
+            fail = true;
+            for (const managed of [true, false, true]) {
+              vi.mocked(fetchWithProxy).mockClear();
+              const invoke = () => target.callApi('hello');
+              await expect(
+                managed
+                  ? registry.execute(target, invoke, { isRateLimited: () => false })
+                  : invoke(),
+              ).rejects.toThrow('fixture terminal');
+              expect(fetchWithProxy).toHaveBeenCalledTimes(managed && !disabled ? 1 : 3);
+            }
+          } finally {
+            registry.dispose();
+          }
+        },
+      );
+    },
+  );
 
   it('rejects an explicitly masked key instead of using host credentials', async () => {
     await expect(provider({}, { OPENAI_API_KEY: '' }).callApi('hello')).rejects.toThrow(
