@@ -424,6 +424,7 @@ describe('envars', () => {
       'TRAVIS',
       'CIRCLECI',
       'JENKINS',
+      'JENKINS_URL',
       'GITLAB_CI',
       'APPVEYOR',
       'CODEBUILD_BUILD_ID',
@@ -458,6 +459,16 @@ describe('envars', () => {
     it('should return true if any CI environment variable is set to true', () => {
       mockProcessEnv({ GITHUB_ACTIONS: 'true' });
       mockProcessEnv({ TRAVIS: 'false' });
+      expect(isCI()).toBe(true);
+    });
+
+    it.each([
+      ['CODEBUILD_BUILD_ID', 'fixture-project:12345678-1234-1234-1234-123456789abc'],
+      ['BITBUCKET_COMMIT', '0123456789abcdef0123456789abcdef01234567'],
+      ['TEAMCITY_VERSION', '2026.1.2'],
+      ['JENKINS_URL', 'https://jenkins.example.invalid/'],
+    ])('recognizes the documented %s identifier', (key, value) => {
+      mockProcessEnv({ [key]: value });
       expect(isCI()).toBe(true);
     });
 

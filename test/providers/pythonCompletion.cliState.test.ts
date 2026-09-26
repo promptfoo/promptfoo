@@ -2,14 +2,13 @@
  * Tests for cliState.maxConcurrency propagation to Python worker pool.
  * This is a focused test file to avoid the complex mocking issues in pythonCompletion.test.ts.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
+import { mockProcessEnv } from '../util/utils';
 
 // Mock all dependencies to avoid import chain issues
 vi.mock('../../src/python/pythonUtils', () => ({
-  getEnvInt: vi.fn(),
   getConfiguredPythonPath: vi.fn(),
-  state: { cachedPythonPath: null, validationPromise: null },
 }));
 
 vi.mock('../../src/cache', () => ({
@@ -91,12 +90,17 @@ vi.mock('../../src/python/workerPool', async (importOriginal) => ({
 
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 // Import after mocks are set up
-import { getEnvInt } from '../../src/python/pythonUtils';
 import { PythonWorkerPool } from '../../src/python/workerPool';
+
+const originalWorkerCount = process.env.PROMPTFOO_PYTHON_WORKERS;
+afterEach(() => {
+  mockProcessEnv({ PROMPTFOO_PYTHON_WORKERS: originalWorkerCount });
+  vi.restoreAllMocks();
+});
 
 describe('PythonProvider cliState.maxConcurrency', () => {
   const mockPythonWorkerPool = vi.mocked(PythonWorkerPool);
-  const mockGetEnvInt = vi.mocked(getEnvInt);
+
   const mockPoolInstance = workerPoolMocks.mockPoolInstance;
 
   beforeEach(() => {
@@ -110,9 +114,9 @@ describe('PythonProvider cliState.maxConcurrency', () => {
     // Reset cliState
     cliState.maxConcurrency = undefined;
 
-    // Reset getEnvInt
-    mockGetEnvInt.mockReset();
-    mockGetEnvInt.mockReturnValue(undefined);
+    // Reset the worker-count environment
+
+    mockProcessEnv({ PROMPTFOO_PYTHON_WORKERS: undefined });
   });
 
   it('should use cliState.maxConcurrency when config.workers is not set', async () => {
@@ -152,7 +156,7 @@ describe('PythonProvider cliState.maxConcurrency', () => {
 
   it('should prioritize PROMPTFOO_PYTHON_WORKERS over cliState.maxConcurrency', async () => {
     cliState.maxConcurrency = 12;
-    mockGetEnvInt.mockReturnValue(5);
+    mockProcessEnv({ PROMPTFOO_PYTHON_WORKERS: '5' });
 
     const provider = new PythonProvider('script.py');
     await provider.initialize();
@@ -168,7 +172,7 @@ describe('PythonProvider cliState.maxConcurrency', () => {
 
   it('should fall back to cliState.maxConcurrency when PROMPTFOO_PYTHON_WORKERS is undefined', async () => {
     cliState.maxConcurrency = 6;
-    mockGetEnvInt.mockReturnValue(undefined);
+    mockProcessEnv({ PROMPTFOO_PYTHON_WORKERS: undefined });
 
     const provider = new PythonProvider('script.py');
     await provider.initialize();
@@ -184,7 +188,7 @@ describe('PythonProvider cliState.maxConcurrency', () => {
 
   it('should default to 1 worker when nothing is set', async () => {
     cliState.maxConcurrency = undefined;
-    mockGetEnvInt.mockReturnValue(undefined);
+    mockProcessEnv({ PROMPTFOO_PYTHON_WORKERS: undefined });
 
     const provider = new PythonProvider('script.py');
     await provider.initialize();

@@ -3,7 +3,6 @@ import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
-import * as pythonUtils from '../../src/python/pythonUtils';
 import { runPython } from '../../src/python/pythonUtils';
 import { runPythonCode } from '../../src/python/wrapper';
 
@@ -51,9 +50,6 @@ describe('Python file references', { timeout: 15000 }, () => {
     vi.mocked(path.extname).mockReset();
     vi.mocked(runPythonCode).mockReset();
     vi.mocked(runPython).mockReset();
-    // Reset Python state to avoid test interference
-    pythonUtils.state.cachedPythonPath = null;
-    pythonUtils.state.validationPromise = null;
   };
 
   beforeEach(() => {

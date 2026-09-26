@@ -5,7 +5,6 @@ import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
-import * as pythonUtils from '../../src/python/pythonUtils';
 import { processConfigFileReferences } from '../../src/util/fileReference';
 import { parsePathOrGlob } from '../../src/util/index';
 import type { Logger } from 'winston';
@@ -72,9 +71,6 @@ describe('PythonProvider with file references', () => {
     mockPoolInstance.shutdown.mockResolvedValue(undefined);
     mockPoolInstance.getWorkerCount.mockReset();
     mockPoolInstance.getWorkerCount.mockReturnValue(1);
-    // Reset Python state to avoid test interference
-    pythonUtils.state.cachedPythonPath = null;
-    pythonUtils.state.validationPromise = null;
 
     vi.mocked(logger.debug).mockImplementation(function () {
       return {

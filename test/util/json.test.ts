@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import cliState from '../../src/cliState';
 import { ResultFailureReason } from '../../src/types/index';
 import {
   convertSlashCommentsToHash,
@@ -49,6 +50,33 @@ describe('json utilities', () => {
       const ajv = getAjv();
       expect(ajv.formats).toBeDefined();
       expect(Object.keys(ajv.formats)).not.toHaveLength(0);
+    });
+
+    it('keeps schema strictness and formats isolated across warm concurrent scopes', async () => {
+      const schema = { type: 'string', format: 'email', fixtureKeyword: true };
+      const strict = cliState.withEnv({ PROMPTFOO_DISABLE_AJV_STRICT_MODE: 'false' }, () =>
+        getAjv(),
+      );
+      await Promise.all(
+        ['true', 'false'].map((disabled) =>
+          cliState.withEnv({ PROMPTFOO_DISABLE_AJV_STRICT_MODE: disabled }, async () => {
+            await Promise.resolve();
+            const ajv = getAjv();
+            if (disabled === 'true') {
+              expect(ajv).not.toBe(strict);
+              const validate = ajv.compile(schema);
+              expect(validate('fixture@example.com')).toBe(true);
+              expect(validate('invalid')).toBe(false);
+            } else {
+              expect(ajv).toBe(strict);
+              expect(() => ajv.compile(schema)).toThrow('unknown keyword');
+            }
+          }),
+        ),
+      );
+      expect(cliState.withEnv({ PROMPTFOO_DISABLE_AJV_STRICT_MODE: 'false' }, () => getAjv())).toBe(
+        strict,
+      );
     });
 
     it('should reuse the same instance on subsequent calls', () => {

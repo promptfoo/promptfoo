@@ -54,30 +54,13 @@ function logStderr(stderr: string): void {
 }
 
 /**
- * Global state for Ruby executable path caching.
- * Ensures consistent Ruby executable usage across multiple provider instances.
- */
-export const state: {
-  /** The cached validated Ruby executable path */
-  cachedRubyPath: string | null;
-  /** Promise for in-progress validation to prevent duplicate validation attempts */
-  validationPromise: Promise<string> | null;
-  /** The Ruby path currently being validated to detect path changes */
-  validatingPath: string | null;
-} = {
-  cachedRubyPath: null,
-  validationPromise: null,
-  validatingPath: null,
-};
-
-/**
  * Attempts to find Ruby using Windows 'where' command.
  * Only applicable on Windows platforms.
  * @returns The validated Ruby executable path, or null if not found
  */
 async function tryWindowsWhere(): Promise<string | null> {
   try {
-    const result = await execFileAsync('where', ['ruby']);
+    const result = await execFileAsync('where', ['ruby'], { env: getProcessEnv() });
     const output = result.stdout.trim();
 
     // Handle empty output
@@ -123,7 +106,9 @@ async function tryWindowsWhere(): Promise<string | null> {
 async function tryRubyCommands(commands: string[]): Promise<string | null> {
   for (const cmd of commands) {
     try {
-      const result = await execFileAsync(cmd, ['-e', 'puts RbConfig.ruby']);
+      const result = await execFileAsync(cmd, ['-e', 'puts RbConfig.ruby'], {
+        env: getProcessEnv(),
+      });
       const executablePath = result.stdout.trim();
       if (executablePath && executablePath !== 'None') {
         return executablePath;
@@ -214,7 +199,10 @@ export async function tryPath(path: string): Promise<string | null> {
       timeoutId = setTimeout(() => reject(new Error('Command timed out')), 2500);
     });
 
-    const result = await Promise.race([execFileAsync(path, ['--version']), timeoutPromise]);
+    const result = await Promise.race([
+      execFileAsync(path, ['--version'], { env: getProcessEnv() }),
+      timeoutPromise,
+    ]);
 
     if (timeoutId) {
       clearTimeout(timeoutId);
@@ -234,7 +222,7 @@ export async function tryPath(path: string): Promise<string | null> {
 }
 
 /**
- * Validates and caches the Ruby executable path.
+ * Validates the Ruby executable for the current invocation.
  *
  * @param rubyPath - Path to the Ruby executable.
  * @param isExplicit - If true, only tries the provided path.
@@ -242,67 +230,27 @@ export async function tryPath(path: string): Promise<string | null> {
  * @throws {Error} If no valid Ruby executable is found.
  */
 export async function validateRubyPath(rubyPath: string, isExplicit: boolean): Promise<string> {
-  // Return cached result only if it matches the requested path
-  if (state.cachedRubyPath && state.validatingPath === rubyPath) {
-    return state.cachedRubyPath;
+  const primaryPath = await tryPath(rubyPath);
+  if (primaryPath) {
+    return primaryPath;
   }
 
-  // If validating a different path, clear cache and promise
-  if (state.validatingPath !== rubyPath) {
-    state.cachedRubyPath = null;
-    state.validationPromise = null;
-    state.validatingPath = rubyPath;
+  const guidance =
+    `Please ensure Ruby is installed and set the PROMPTFOO_RUBY environment variable ` +
+    `to your Ruby executable path (e.g., '${process.platform === 'win32' ? 'C:\\Ruby32\\bin\\ruby.exe' : '/usr/bin/ruby'}').`;
+
+  if (isExplicit) {
+    throw new Error(`Ruby not found. Tried "${rubyPath}" ${guidance}`);
   }
 
-  // Create validation promise atomically if it doesn't exist
-  // This prevents race conditions where multiple calls create separate validations
-  if (!state.validationPromise) {
-    state.validationPromise = (async () => {
-      try {
-        const primaryPath = await tryPath(rubyPath);
-        if (primaryPath) {
-          state.cachedRubyPath = primaryPath;
-          state.validationPromise = null;
-          return primaryPath;
-        }
-
-        if (isExplicit) {
-          const error = new Error(
-            `Ruby not found. Tried "${rubyPath}" ` +
-              `Please ensure Ruby is installed and set the PROMPTFOO_RUBY environment variable ` +
-              `to your Ruby executable path (e.g., '${process.platform === 'win32' ? 'C:\\Ruby32\\bin\\ruby.exe' : '/usr/bin/ruby'}').`,
-          );
-          // Clear promise on error to allow retry
-          state.validationPromise = null;
-          throw error;
-        }
-
-        // Try to get Ruby executable using comprehensive detection
-        const detectedPath = await getSysExecutable();
-        if (detectedPath) {
-          state.cachedRubyPath = detectedPath;
-          state.validationPromise = null;
-          return detectedPath;
-        }
-
-        const error = new Error(
-          `Ruby not found. Tried "${rubyPath}", ruby executable detection, and fallback commands. ` +
-            `Please ensure Ruby is installed and set the PROMPTFOO_RUBY environment variable ` +
-            `to your Ruby executable path (e.g., '${process.platform === 'win32' ? 'C:\\Ruby32\\bin\\ruby.exe' : '/usr/bin/ruby'}').`,
-        );
-        // Clear promise on error to allow retry
-        state.validationPromise = null;
-        throw error;
-      } catch (error) {
-        // Ensure promise is cleared on any error
-        state.validationPromise = null;
-        throw error;
-      }
-    })();
+  const detectedPath = await getSysExecutable();
+  if (detectedPath) {
+    return detectedPath;
   }
 
-  // Return the existing or newly-created promise
-  return state.validationPromise;
+  throw new Error(
+    `Ruby not found. Tried "${rubyPath}", ruby executable detection, and fallback commands. ${guidance}`,
+  );
 }
 
 /**
