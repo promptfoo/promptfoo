@@ -519,7 +519,7 @@ These metrics will be shown in the UI:
 
 Named metric percentages use each column's own graded assertions, including assertion weights. Results that never reach grading, such as provider errors, do not contribute to the metric total. Column headers show raw scores for derived metrics and whenever a usable denominator is unavailable. The Custom Metrics dialog shows unavailable percentages as `—`, distinct from a measured 0%.
 
-With filters active, assertion metrics describe matching results across all pages. Derived metrics remain values from the full eval and are labeled `(total)`, including when a derived metric shares a name with an assertion metric. If filtered metrics cannot be calculated, the table labels its fallback to evaluation totals.
+With filters active, assertion metrics describe matching results across all pages. Derived metrics remain values from the full eval and are labeled `(total)` for each prompt column, including when a derived metric shares a name with an assertion metric. If filtered metrics cannot be calculated, the table labels its fallback to evaluation totals.
 
 Older results with complex metric names may lack recoverable assertion counts. Recorded weight totals remain usable; without a reliable denominator, the viewer shows the raw score.
 
