@@ -177,6 +177,8 @@ You can also return nested metrics and assertions via a `GradingResult` object:
     'pass': True,
     'score': 0.75,
     'reason': 'Looks good to me',
+    'named_scores': {'quality': 0.75},
+    'named_score_weights': {'quality': 3},
     'componentResults': [{
         'pass': 'bananas' in output.lower(),
         'score': 0.5,
@@ -189,11 +191,16 @@ You can also return nested metrics and assertions via a `GradingResult` object:
 }
 ```
 
+The `quality` metric contributes `0.75 × 3 = 2.25` to its weighted total, with weight `3`, so it displays as 75%.
+
 ### GradingResult types
 
 Here's a Python type definition you can use for the [`GradingResult`](/docs/configuration/reference/#gradingresult) object:
 
 ```py
+from dataclasses import asdict, dataclass
+from typing import Dict, List, Optional
+
 @dataclass
 class GradingResult:
     pass_: bool  # 'pass' is a reserved keyword in Python
@@ -201,13 +208,17 @@ class GradingResult:
     reason: str
     component_results: Optional[List['GradingResult']] = None
     named_scores: Optional[Dict[str, float]] = None  # Appear as metrics in the UI
+    named_score_weights: Optional[Dict[str, float]] = None  # Total weight per named score
 ```
+
+Convert dataclass instances to dictionaries with `asdict(result)` before returning them from an assertion.
 
 :::tip Snake case support
 Python snake_case fields are automatically mapped to camelCase:
 
 - `pass_` → `pass` (or just use `"pass"` as a dictionary key)
 - `named_scores` → `namedScores`
+- `named_score_weights` → `namedScoreWeights`
 - `component_results` → `componentResults`
 - `tokens_used` → `tokensUsed`
   :::
