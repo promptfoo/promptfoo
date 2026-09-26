@@ -2,7 +2,7 @@ import './setup';
 
 import { expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
-import { evaluate } from '../../src/evaluator';
+import { evaluate, runEval } from '../../src/evaluator';
 import * as comparisonMatchers from '../../src/matchers/comparison';
 import Eval from '../../src/models/eval';
 import { EchoProvider } from '../../src/providers/echo';
@@ -41,6 +41,11 @@ describeEvaluator('evaluation environment defaults', () => {
     expect(progressCallback).toHaveBeenCalled();
     expect(progressCallback.mock.calls.map((call) => call[3].delay)).toEqual([0]);
     expect(sleep).toHaveBeenCalledExactlyOnceWith(7);
+    const step = progressCallback.mock.calls[0][3];
+    expect(step).not.toHaveProperty('delayOmitted');
+    vi.mocked(sleep).mockClear();
+    await runEval({ ...step, delay: 500, abortSignal: undefined });
+    expect(sleep).toHaveBeenCalledExactlyOnceWith(500);
   });
 
   it.each([

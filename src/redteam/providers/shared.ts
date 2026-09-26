@@ -518,7 +518,11 @@ export async function callTargetProvider(
   options?: CallApiOptionsParams,
 ): Promise<ProviderResponse> {
   const executionContext = getProviderCallExecutionContext();
-  const signal = options?.abortSignal ?? executionContext?.abortSignal;
+  const signal =
+    options?.abortSignal && executionContext?.abortSignal
+      ? AbortSignal.any([options.abortSignal, executionContext.abortSignal])
+      : (options?.abortSignal ?? executionContext?.abortSignal);
+  const callOptions = signal ? { ...options, abortSignal: signal } : options;
   const delay = getProviderDelay(targetProvider);
   const handlesDelay = targetProvider.handlesOwnDelay && targetProvider.delay != null;
   const invoke = async () => {
@@ -529,9 +533,9 @@ export async function callTargetProvider(
     const response = tracingContext
       ? await tracingContext.withProviderSpan(
           { provider: targetProvider, callContext: context },
-          async (callContext) => targetProvider.callApi(targetPrompt, callContext, options),
+          async (callContext) => targetProvider.callApi(targetPrompt, callContext, callOptions),
         )
-      : await targetProvider.callApi(targetPrompt, context, options);
+      : await targetProvider.callApi(targetPrompt, context, callOptions);
     if (!response.cached && !handlesDelay && delay && delay > 0) {
       logger.debug(`Sleeping for ${delay}ms`);
       await (signal ? sleepWithAbort(delay, signal) : sleep(delay));

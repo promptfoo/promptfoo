@@ -4947,7 +4947,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     this.options.progressCallback = (completed, total, index, evalStep, metrics) => {
       if (originalProgressCallback) {
-        originalProgressCallback(completed, total, index, evalStep, metrics);
+        const { delayOmitted: _delayOmitted, ...publicStep } = evalStep as InternalRunEvalOptions;
+        originalProgressCallback(completed, total, index, publicStep, metrics);
       }
 
       if (isWebUI) {
