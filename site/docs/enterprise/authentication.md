@@ -51,7 +51,7 @@ If your organization has multiple teams, you can manage which team context you'r
 promptfoo auth teams list
 ```
 
-This shows all available teams with a marker (●) next to your current team.
+This shows the teams accessible to your API key in its organization, with a marker (●) next to your current team.
 
 ### Switching Teams
 
@@ -61,6 +61,8 @@ promptfoo auth teams set "Data Science"
 ```
 
 You can use the team name, slug, or ID. Your selection persists across CLI sessions.
+
+To switch organizations, run `promptfoo auth login --api-key <apiKey>` with a key from the organization you want to use.
 
 ### Checking Current Team
 

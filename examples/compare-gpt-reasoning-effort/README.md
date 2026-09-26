@@ -9,7 +9,7 @@ cd compare-gpt-reasoning-effort
 
 ## Usage
 
-This example compares the same `gpt-5.4-mini` Responses API model with two reasoning settings:
+This example compares GPT-6 Luna with two reasoning settings:
 
 - `none` for low-latency tasks that do not need reasoning tokens
 - `medium` for tasks where extra deliberation may improve reliability
@@ -17,7 +17,7 @@ This example compares the same `gpt-5.4-mini` Responses API model with two reaso
 Set `OPENAI_API_KEY`, then run:
 
 ```bash
-promptfoo eval --no-cache
+npx promptfoo@latest eval --no-cache
 ```
 
 The provider, prompt, verbosity, and output limit are otherwise identical, so the eval table makes it easier to compare output quality, latency, and cost for each reasoning effort.

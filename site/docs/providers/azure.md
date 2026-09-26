@@ -89,17 +89,17 @@ providers:
 
 ## Provider Types
 
-- `azure:chat:<deployment name>` - For chat endpoints (e.g., gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.4, gpt-4o)
+- `azure:chat:<deployment name>` - For chat endpoints (e.g., gpt-6-sol, gpt-6-luna, gpt-5.6-terra, gpt-5.4, gpt-4o)
 - `azure:completion:<deployment name>` - For completion endpoints (e.g., gpt-35-turbo-instruct)
 - `azure:embedding:<deployment name>` - For embedding models (e.g., text-embedding-3-small, text-embedding-3-large)
-- `azure:responses:<deployment name>` - For the Responses API (e.g., gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-4.1)
+- `azure:responses:<deployment name>` - For the Responses API (e.g., gpt-6-astra, gpt-6-sol, gpt-6-luna, gpt-5.6-terra, gpt-4.1)
 - `azure:realtime:<deployment name>` - For GA Realtime API deployments (e.g., gpt-realtime-1.5-2026-02-23)
 - `azure:assistant:<assistant id>` - Legacy Azure OpenAI Assistants (retired August 26, 2026)
 - `azure:foundry-agent:<agent name or id>` - For Azure AI Foundry Agents (using Azure AI Projects SDK)
 - `azure:video:<deployment name>` - For video generation (Sora)
 - `azure:image:<deployment name>` - For Microsoft MAI image generation (e.g., MAI-Image-2.6) — see [Using Microsoft MAI Models](#using-microsoft-mai-models)
 
-Vision-capable GPT-5, GPT-4o, and GPT-4.1 deployments use the standard `azure:chat:` provider type.
+Vision-capable GPT-6, GPT-5, GPT-4o, and GPT-4.1 deployments use the standard `azure:chat:` provider type.
 
 Azure deployment availability changes frequently and varies by region. Check the
 [Azure OpenAI model availability page](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure)
@@ -144,6 +144,8 @@ For the complete list of models with pricing, see the [Microsoft Foundry model c
 ### GPT-6 on Azure
 
 Azure supports `gpt-6-astra`, `gpt-6-sol`, and `gpt-6-luna` through Chat Completions and Responses. Use your deployment name with `azure:chat:` or `azure:responses:`. Check the [Azure model catalog](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure#gpt-6) for availability.
+
+For a deployment name that does not identify its underlying model, set `config.modelName` to `gpt-6-astra`, `gpt-6-sol`, or `gpt-6-luna` so Promptfoo applies the model's request rules. Sol and Luna require `reasoning_effort: none` for Chat function tools; use Responses for tools with reasoning enabled or with Astra.
 
 Microsoft publishes these [Global Standard rates](https://azure.microsoft.com/en-us/blog/gpt-6-astra-sol-and-luna-for-production-agents-in-microsoft-foundry/) in USD per million tokens. Each cell shows short-context / long-context pricing:
 
@@ -208,6 +210,7 @@ does not select the Azure URL or its API-key authentication.
 
 The Responses API supports Azure deployments backed by current Azure OpenAI responses-capable models. Common examples include:
 
+- **GPT-6 Series**: `gpt-6-astra`, `gpt-6-sol`, `gpt-6-luna`
 - **GPT-5 Series**: `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, `gpt-5.5-pro`, `gpt-5.4`, `gpt-5.4-pro`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5.2-pro`, `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5.1`
 - **GPT-4 Series**: `gpt-4o`, `gpt-4o-mini`, `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`
 - **Reasoning Models**: `o1`, `o1-mini`, `o1-pro`, `o3`, `o3-mini`, `o3-pro`, `o4-mini`

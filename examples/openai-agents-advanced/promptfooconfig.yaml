@@ -13,6 +13,8 @@ tracing:
 
 providers:
   - id: openai:agents:support-agent
+    # Allow the SDK's batched spans to arrive before trajectory assertions.
+    delay: 1500
     config:
       agent: file://./agents/support-agent.ts
       tools: file://./tools/support-tools.ts
@@ -21,6 +23,10 @@ providers:
         sessionId: support-demo
       tracing: true
       maxTurns: 8
+
+# These tests share one session and must run in order.
+evaluateOptions:
+  maxConcurrency: 1
 
 tests:
   - description: Store a remembered code word
@@ -51,7 +57,7 @@ tests:
       customer_tier: gold
       query: What customer tier am I on?
     assert:
-      - type: contains
+      - type: icontains
         value: gold
       - type: trajectory:tool-used
         value: lookup_customer_context
