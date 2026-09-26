@@ -30,6 +30,13 @@ function resolveOwnPrimitivePath(
   path: string,
 ): { safe: boolean; value: string } {
   const segments = path.split('.');
+  const root = segments[0];
+  if (root === 'true' || root === 'false' || root === 'none' || root === 'null') {
+    return {
+      safe: segments.length === 1,
+      value: root === 'true' || root === 'false' ? root : '',
+    };
+  }
   if (segments.some((segment) => FORBIDDEN_METRIC_PATH_SEGMENTS.has(segment))) {
     return { safe: false, value: '' };
   }
@@ -65,7 +72,7 @@ function resolveOwnPrimitivePath(
 /**
  * Render persisted metric names without executing stored template code.
  *
- * Only root and dotted own-data primitive placeholders are supported. Complex
+ * Only boolean/null literals and root or dotted own-data primitives are supported. Complex
  * Nunjucks syntax remains literal so imported rows cannot access globals, call
  * methods, invoke functions, or run unbounded template control flow during a
  * read.

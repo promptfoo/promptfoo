@@ -9,6 +9,29 @@ import {
 } from '../../src/util/namedMetrics';
 
 describe('accumulateNamedMetrics', () => {
+  it.each([
+    ['true', 'true'],
+    ['false', 'false'],
+    ['none', ''],
+    ['null', ''],
+  ])('recovers repeated legacy assertions named with the %s literal', (literal, value) => {
+    const metric = `quality:{{ ${literal} }}`;
+    const name = `quality:${value}`;
+    const metrics: NamedMetricAccumulator = { namedScores: {}, namedScoresCount: {} };
+    accumulateNamedMetrics(metrics, {
+      namedScores: { [name]: 2 },
+      testVars: { [literal]: 'shadowed' },
+      gradingResult: {
+        componentResults: [{ assertion: { metric } }, { assertion: { metric } }],
+      },
+    });
+    expect(metrics).toEqual({
+      namedScores: { [name]: 2 },
+      namedScoresCount: { [name]: 2 },
+      namedScoreWeights: { [name]: 2 },
+    });
+  });
+
   const legacyComplexResult = {
     namedScores: { quality: 2 },
     testVars: { name: 'quality' },
@@ -359,6 +382,20 @@ describe('accumulateNamedMetrics', () => {
 });
 
 describe('renderPersistedMetricName', () => {
+  it.each([
+    ['true', 'true'],
+    ['false', 'false'],
+    ['none', ''],
+    ['null', ''],
+  ])('renders the %s literal before looking up variables', (literal, value) => {
+    expect(renderPersistedMetricName(`quality:{{ ${literal} }}`, {})).toBe(`quality:${value}`);
+    expect(renderPersistedMetricName(`quality:{{ ${literal} }}`, { [literal]: 'shadowed' })).toBe(
+      `quality:${value}`,
+    );
+    const dotted = `quality:{{ ${literal}.name }}`;
+    expect(renderPersistedMetricName(dotted, { [literal]: { name: 'shadowed' } })).toBe(dotted);
+  });
+
   it('renders root and dotted own-data primitive placeholders', () => {
     expect(
       renderPersistedMetricName(
