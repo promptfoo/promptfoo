@@ -700,9 +700,8 @@ async function runInstalledCompressionEval(consumerDir: string, configDir: strin
 async function runInstalledCodingSdkEval(consumerDir: string, configDir: string): Promise<void> {
   const fixturesDir = path.join(consumerDir, 'coding-sdks');
   fs.cpSync(path.join(ROOT, 'test/fixtures/coding-sdks'), fixturesDir, { recursive: true });
-  for (const fixture of ['codex.mjs', 'claude.mjs']) {
-    fs.chmodSync(path.join(fixturesDir, fixture), 0o755);
-  }
+  // The Codex SDK sends `exec` as its first argument. Let Node load that script on all platforms.
+  fs.copyFileSync(path.join(fixturesDir, 'codex.mjs'), path.join(consumerDir, 'exec'));
   const scriptPath = path.join(consumerDir, 'coding-sdks.mjs');
   fs.writeFileSync(
     scriptPath,
@@ -724,7 +723,7 @@ const record = await evaluate({
       id: 'openai:codex-sdk',
       config: {
         apiKey: 'test-local-fixture',
-        codex_path_override: fixture('codex.mjs'),
+        codex_path_override: process.execPath,
         working_dir: import.meta.dirname,
         skip_git_repo_check: true,
         persist_threads: false,
