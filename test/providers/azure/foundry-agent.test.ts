@@ -88,6 +88,28 @@ function createFunctionCallResponse() {
   } as any;
 }
 
+function createMixedFunctionCallResponse() {
+  const response = createFunctionCallResponse();
+  return {
+    ...response,
+    id: 'resp_mixed',
+    output: [
+      {
+        ...response.output[0],
+        id: 'fc_weather_next',
+        call_id: 'call_weather_next',
+        arguments: '{"location":"London"}',
+      },
+      {
+        ...response.output[0],
+        id: 'fc_temperature',
+        call_id: 'call_temperature',
+        name: 'get_temperature',
+      },
+    ],
+  };
+}
+
 interface RecordedSpan {
   name: string;
   attributes: Record<string, unknown>;
@@ -436,6 +458,50 @@ describe('AzureFoundryAgentProvider', () => {
       expect(secondOverride).toHaveBeenCalledOnce();
     });
 
+    describe.each(['provider', 'prompt'] as const)('%s-level tool timeout validation', (level) => {
+      it.each([NaN, Infinity, -Infinity, -1, '100', '100ms'])(
+        'rejects invalid maxPollTimeMs %s before initializing the client',
+        async (maxPollTimeMs) => {
+          mockGetAgent.mockResolvedValue(mockAgent);
+          mockResponsesCreate.mockResolvedValue(createMessageResponse('Should not be requested'));
+          const provider = new AzureFoundryAgentProvider('weather-agent', {
+            config: {
+              projectUrl,
+              maxPollTimeMs: level === 'provider' ? (maxPollTimeMs as number) : 1000,
+            },
+          });
+
+          const result = await provider.callApi(
+            'test prompt',
+            level === 'prompt' ? ({ prompt: { config: { maxPollTimeMs } } } as any) : undefined,
+          );
+
+          expect(result).toEqual({
+            error: expect.stringContaining('maxPollTimeMs must be a finite, non-negative number.'),
+          });
+          expect((provider as any).initializeClient).not.toHaveBeenCalled();
+          expect(mockGetAgent).not.toHaveBeenCalled();
+          expect(mockResponsesCreate).not.toHaveBeenCalled();
+        },
+      );
+    });
+
+    it('accepts a valid prompt timeout overriding an invalid provider timeout', async () => {
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockResolvedValue(createMessageResponse('Prompt override accepted'));
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl, maxPollTimeMs: NaN },
+      });
+
+      const result = await provider.callApi('test prompt', {
+        prompt: { config: { maxPollTimeMs: 100 } },
+      } as any);
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Prompt override accepted');
+      expect(mockResponsesCreate).toHaveBeenCalledOnce();
+    });
+
     it.each([0, 100])('uses prompt-level tool timeout %s', async (maxPollTimeMs) => {
       vi.mocked(isCacheEnabled).mockReturnValue(true);
       const cacheGet = vi.fn().mockResolvedValue({ output: 'stale cached response' });
@@ -477,6 +543,31 @@ describe('AzureFoundryAgentProvider', () => {
         await provider.callApi('test prompt', { prompt: { config: { maxPollTimeMs: 0 } } } as any),
       ).toMatchObject({ output: 'direct response' });
     });
+
+    it.each(['no', 'unrelated'] as const)(
+      'returns unresolved calls with a zero tool-loop timeout and %s callbacks',
+      async (callbackConfig) => {
+        mockGetAgent.mockResolvedValue(mockAgent);
+        mockResponsesCreate.mockResolvedValue(createFunctionCallResponse());
+        const callback = vi.fn().mockResolvedValue('Should not run');
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: {
+            projectUrl,
+            maxPollTimeMs: 0,
+            functionToolCallbacks:
+              callbackConfig === 'unrelated' ? { get_temperature: callback } : undefined,
+          },
+        });
+
+        const result = await provider.callApi('test prompt');
+
+        expect(result.error).toBeUndefined();
+        expect(result.output).toContain('"call_id":"call_123"');
+        expect(result.output).toContain('"name":"get_weather"');
+        expect(callback).not.toHaveBeenCalled();
+        expect(mockResponsesCreate).toHaveBeenCalledOnce();
+      },
+    );
 
     it('should execute prompt-level function callbacks and continue with function_call_output items', async () => {
       mockGetAgent.mockResolvedValue(mockAgent);
@@ -894,6 +985,100 @@ describe('AzureFoundryAgentProvider', () => {
       expect(result.output).toContain('"name":"get_weather"');
     });
 
+    it('returns an initial mixed function-call batch without executing configured callbacks', async () => {
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockResolvedValue(createMixedFunctionCallResponse());
+      const callback = vi.fn().mockResolvedValue('sunny');
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: {
+          projectUrl,
+          functionToolCallbacks: { get_weather: callback },
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toContain('"call_id":"call_weather_next"');
+      expect(result.output).toContain('"call_id":"call_temperature"');
+      expect(callback).not.toHaveBeenCalled();
+      expect(mockResponsesCreate).toHaveBeenCalledOnce();
+    });
+
+    it.each([99, 100, 101])(
+      'does not execute callbacks from a mixed batch returned after %sms of a 100ms budget',
+      async (elapsedMs) => {
+        vi.useFakeTimers();
+        mockGetAgent.mockResolvedValue(mockAgent);
+        mockResponsesCreate
+          .mockResolvedValueOnce(createFunctionCallResponse())
+          .mockImplementationOnce(async () => {
+            vi.advanceTimersByTime(elapsedMs);
+            return createMixedFunctionCallResponse();
+          });
+        const callback = vi.fn().mockResolvedValue('sunny');
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: {
+            projectUrl,
+            maxPollTimeMs: 100,
+            functionToolCallbacks: { get_weather: callback },
+          },
+        });
+
+        const result = await provider.callApi('test prompt');
+
+        expect(callback).toHaveBeenCalledOnce();
+        expect(callback).toHaveBeenCalledWith('{"location":"Paris"}', expect.any(Object));
+        expect(mockResponsesCreate).toHaveBeenCalledTimes(2);
+        if (elapsedMs < 100) {
+          expect(result.error).toBeUndefined();
+          expect(result.output).toContain('"call_id":"call_weather_next"');
+          expect(result.output).toContain('"call_id":"call_temperature"');
+        } else {
+          expect(result.error).toContain('tool-calling loop timed out after 100ms');
+          expect(result.output).toBeUndefined();
+        }
+      },
+    );
+
+    it('times out on an unresolved function call without an item ID after the deadline', async () => {
+      vi.useFakeTimers();
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate
+        .mockResolvedValueOnce(createFunctionCallResponse())
+        .mockImplementationOnce(async () => {
+          vi.advanceTimersByTime(101);
+          return {
+            ...createFunctionCallResponse(),
+            id: 'resp_without_item_id',
+            output: [
+              {
+                type: 'function_call',
+                call_id: 'call_without_item_id',
+                name: 'get_weather',
+                arguments: '{"location":"London"}',
+                status: 'completed',
+              },
+            ],
+          };
+        });
+      const callback = vi.fn().mockResolvedValue('sunny');
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: {
+          projectUrl,
+          maxPollTimeMs: 100,
+          functionToolCallbacks: { get_weather: callback },
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toContain('tool-calling loop timed out after 100ms');
+      expect(result.output).toBeUndefined();
+      expect(callback).toHaveBeenCalledOnce();
+      expect(mockResponsesCreate).toHaveBeenCalledTimes(2);
+    });
+
     it('should return error when agent is not found by name or id', async () => {
       mockGetAgent.mockRejectedValue(new Error('not found'));
       mockListAgents.mockReturnValue(createAsyncIterable([]));
@@ -908,30 +1093,33 @@ describe('AzureFoundryAgentProvider', () => {
       expect(result.error).toContain('azure:foundry-agent:<agent-name>');
     });
 
-    it('should return timeout error when callback loop exceeds maxPollTimeMs', async () => {
-      vi.useFakeTimers();
-      mockGetAgent.mockResolvedValue(mockAgent);
-      // Always return function calls so the loop never breaks naturally
-      mockResponsesCreate.mockResolvedValue(createFunctionCallResponse());
+    it.each([100, 101])(
+      'times out when a callback uses %sms of a 100ms budget',
+      async (elapsedMs) => {
+        vi.useFakeTimers();
+        mockGetAgent.mockResolvedValue(mockAgent);
+        // Always return function calls so the loop never breaks naturally
+        mockResponsesCreate.mockResolvedValue(createFunctionCallResponse());
 
-      const provider = new AzureFoundryAgentProvider('weather-agent', {
-        config: {
-          projectUrl,
-          maxPollTimeMs: 100,
-          functionToolCallbacks: {
-            get_weather: vi.fn().mockImplementation(async () => {
-              vi.advanceTimersByTime(101);
-              return 'sunny';
-            }),
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: {
+            projectUrl,
+            maxPollTimeMs: 100,
+            functionToolCallbacks: {
+              get_weather: vi.fn().mockImplementation(async () => {
+                vi.advanceTimersByTime(elapsedMs);
+                return 'sunny';
+              }),
+            },
           },
-        },
-      });
+        });
 
-      const result = await provider.callApi('test prompt');
+        const result = await provider.callApi('test prompt');
 
-      expect(result.error).toContain('tool-calling loop timed out after 100ms');
-      expect(mockResponsesCreate).toHaveBeenCalledTimes(1);
-    });
+        expect(result.error).toContain('tool-calling loop timed out after 100ms');
+        expect(mockResponsesCreate).toHaveBeenCalledTimes(1);
+      },
+    );
 
     it('returns the final response when the last turn finishes past maxPollTimeMs', async () => {
       vi.useFakeTimers();
@@ -941,7 +1129,7 @@ describe('AzureFoundryAgentProvider', () => {
         .mockImplementationOnce(async () => {
           // The follow-up turn spends the rest of the budget but does answer.
           vi.advanceTimersByTime(101);
-          return createMessageResponse('Tool finished');
+          return { ...createMessageResponse('Tool finished'), status: 'completed' };
         });
 
       const provider = new AzureFoundryAgentProvider('weather-agent', {

@@ -168,6 +168,47 @@ describe('AzureGenericProvider', () => {
       expect(JSON.stringify(debugSpy.mock.calls)).not.toMatch(/private-(client|secret|tenant)/);
     });
 
+    it('shares a service principal credential across concurrent requests within each provider', async () => {
+      // Resolve the mocked dynamic import before overlapping credential requests.
+      await import('@azure/identity');
+      await vi.mocked(ClientSecretCredential).withImplementation(
+        function () {
+          // Each construction must return a distinct object so duplicate
+          // initialization cannot pass the credential identity assertions.
+          return Object.assign(Object.create(ClientSecretCredential.prototype), {
+            getToken: vi.fn(async () => ({
+              token: 't',
+              expiresOnTimestamp: Date.now() + 3_600_000,
+            })),
+          });
+        },
+        async () => {
+          const config = {
+            azureClientId: 'private-client',
+            azureClientSecret: 'private-secret',
+            azureTenantId: 'private-tenant',
+          };
+          const providerCredentials = [];
+          for (const deployment of ['first', 'second']) {
+            const provider = new AzureGenericProvider(deployment, { config });
+            const [, ...credentials] = await Promise.all([
+              provider.ensureInitialized(),
+              provider.getAzureTokenCredential(),
+              provider.getAzureTokenCredential(),
+            ]);
+            credentials.push(await provider.getAzureTokenCredential());
+
+            expect(new Set(credentials).size).toBe(1);
+            providerCredentials.push(credentials[0]);
+          }
+
+          expect(providerCredentials[0]).not.toBe(providerCredentials[1]);
+          expect(ClientSecretCredential).toHaveBeenCalledTimes(2);
+          expect(AzureCliCredential).not.toHaveBeenCalled();
+        },
+      );
+    });
+
     it('warns and names the missing fields before falling back to Azure CLI', async () => {
       const warnSpy = vi.spyOn(logger, 'warn');
       const getToken = vi.fn(async () => {
