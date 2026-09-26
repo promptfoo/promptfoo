@@ -1,10 +1,23 @@
-import { context, createContextKey, trace } from '@opentelemetry/api';
+import {
+  context,
+  createContextKey,
+  defaultTextMapGetter,
+  ROOT_CONTEXT,
+  trace,
+} from '@opentelemetry/api';
+import { W3CTraceContextPropagator } from '@opentelemetry/core';
 
 export const SPAN_ROLE_ATTRIBUTE = 'promptfoo.span.role';
 
 export type PromptfooSpanRole = 'test_case' | 'target' | 'grader';
 
 const SPAN_ROLE_CONTEXT_KEY = createContextKey('promptfoo.span.role');
+const traceContextPropagator = new W3CTraceContextPropagator();
+
+/** Explicit traceparent values use W3C format independently of the host's propagator. */
+export function extractTraceparentContext(traceparent: string) {
+  return traceContextPropagator.extract(ROOT_CONTEXT, { traceparent }, defaultTextMapGetter);
+}
 
 /** Keep evaluator-owned grading activity distinct from the target's behavior. */
 export function getActiveSpanRole(): PromptfooSpanRole | undefined {

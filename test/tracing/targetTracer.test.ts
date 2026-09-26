@@ -1,5 +1,5 @@
 import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PromptfooAttributes } from '../../src/tracing/genaiTracer';
 import { TargetAttributes, withTargetSpan } from '../../src/tracing/targetTracer';
 
@@ -12,10 +12,10 @@ const mocks = vi.hoisted(() => {
   };
 
   return {
-    propagationExtract: vi.fn(() => ({ traceId: 'parent' })),
+    extractTraceparentContext: vi.fn(),
     span,
     tracer: {
-      startActiveSpan: vi.fn((_name, _options, _context, fn) => fn(span)),
+      startActiveSpan: vi.fn(),
     },
   };
 });
@@ -25,21 +25,30 @@ vi.mock('@opentelemetry/api', async () => {
 
   return {
     ...actual,
-    propagation: {
-      ...actual.propagation,
-      extract: mocks.propagationExtract,
-    },
     ROOT_CONTEXT: { traceId: 'root' },
     trace: {
       ...actual.trace,
-      getTracer: vi.fn(() => mocks.tracer),
+      getTracer: () => mocks.tracer,
     },
   };
 });
 
+vi.mock('../../src/tracing/spanRoles', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/tracing/spanRoles')>()),
+  extractTraceparentContext: mocks.extractTraceparentContext,
+}));
+
 describe('universal target tracing', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    mocks.extractTraceparentContext.mockReturnValue({ traceId: 'parent' });
+    mocks.tracer.startActiveSpan.mockImplementation((_name, _options, _context, fn) =>
+      fn(mocks.span),
+    );
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   it('records target context and cached responses for custom providers', async () => {
@@ -58,7 +67,7 @@ describe('universal target tracing', () => {
     );
 
     expect(result).toEqual({ cached: true, output: 'ok' });
-    expect(mocks.propagationExtract).toHaveBeenCalledWith({ traceId: 'root' }, { traceparent });
+    expect(mocks.extractTraceparentContext).toHaveBeenCalledWith(traceparent);
     expect(mocks.tracer.startActiveSpan).toHaveBeenCalledWith(
       'Customer provider',
       {

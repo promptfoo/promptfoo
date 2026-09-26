@@ -1,6 +1,5 @@
 import {
   context,
-  propagation,
   ROOT_CONTEXT,
   type Span,
   SpanKind,
@@ -15,6 +14,7 @@ import {
   withGenAISpan,
 } from './genaiTracer';
 import {
+  extractTraceparentContext,
   getActiveTraceparent,
   type PromptfooSpanRole,
   SPAN_ROLE_ATTRIBUTE,
@@ -112,7 +112,7 @@ export async function withTargetSpan<T>(
   const parentContext =
     activeTraceparent?.split('-')[1] === ctx.traceparent.split('-')[1]
       ? context.active()
-      : propagation.extract(ROOT_CONTEXT, { traceparent: ctx.traceparent });
+      : extractTraceparentContext(ctx.traceparent);
   const role = ctx.role ?? 'target';
   const attributes: Record<string, string | number> = {
     [PromptfooAttributes.PROVIDER_ID]: ctx.providerId,
@@ -298,7 +298,7 @@ export async function withGraderSpan<T>(ctx: GraderSpanContext, fn: () => Promis
   const parentContext =
     activeTraceparent?.split('-')[1] === traceparent.split('-')[1]
       ? context.active()
-      : propagation.extract(ROOT_CONTEXT, { traceparent });
+      : extractTraceparentContext(traceparent);
   const attributes: Record<string, string | number> = {
     [GraderAttributes.GRADER_ID]: ctx.graderId,
     [GenAIAttributes.EVALUATION_NAME]: ctx.graderId,

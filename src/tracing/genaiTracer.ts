@@ -1,8 +1,6 @@
 import {
   type Attributes,
   context,
-  propagation,
-  ROOT_CONTEXT,
   type Span,
   SpanKind,
   SpanStatusCode,
@@ -11,7 +9,7 @@ import {
 } from '@opentelemetry/api';
 import logger from '../logger';
 import { getOtelTracer } from './otelSdk';
-import { getActiveSpanRole, SPAN_ROLE_ATTRIBUTE } from './spanRoles';
+import { extractTraceparentContext, getActiveSpanRole, SPAN_ROLE_ATTRIBUTE } from './spanRoles';
 
 import type { CallApiContextParams, ProviderResponse } from '../types/index';
 import type { TokenUsage } from '../types/shared';
@@ -378,8 +376,7 @@ export async function withGenAISpan<T>(
     (activeSpanContext?.traceId.toLowerCase() !== explicitTraceId?.toLowerCase() ||
       activeSpanContext?.spanId.toLowerCase() !== explicitSpanId?.toLowerCase())
   ) {
-    const carrier = { traceparent: ctx.traceparent };
-    parentContext = propagation.extract(ROOT_CONTEXT, carrier);
+    parentContext = extractTraceparentContext(ctx.traceparent);
   }
 
   // Create the span within the parent context

@@ -16,7 +16,7 @@ import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-tr
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
-import { getGenAITracer } from '../../src/tracing/genaiTracer';
+import { getGenAITracer, withGenAISpan } from '../../src/tracing/genaiTracer';
 import { LocalSpanExporter } from '../../src/tracing/localSpanExporter';
 import {
   flushOtel,
@@ -26,6 +26,7 @@ import {
   shutdownOtel,
   withOtelContext,
 } from '../../src/tracing/otelSdk';
+import { withGraderSpan, withTargetSpan } from '../../src/tracing/targetTracer';
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
 
 import type { OtelConfig } from '../../src/tracing/otelConfig';
@@ -97,6 +98,43 @@ afterEach(() => {
 });
 
 describe('evaluation-owned OpenTelemetry', () => {
+  it('links explicit W3C parents while preserving a non-W3C host propagator', async () => {
+    const inject = vi.fn();
+    propagation.setGlobalPropagator({
+      fields: () => ['b3'],
+      inject,
+      extract: (ctx) => ctx,
+    });
+    const traceId = '0123456789abcdef0123456789abcdef';
+    const spanId = '0123456789abcdef';
+    const traceparent = `00-${traceId}-${spanId}-01`;
+    await runScoped({}, async () => {
+      await withTargetSpan(
+        { targetType: 'provider', providerId: 'echo', traceparent },
+        async () => ({ output: 'hello' }),
+      );
+      await withGraderSpan({ graderId: 'fixture', traceparent }, async () => ({ pass: true }));
+      await withGenAISpan(
+        {
+          system: 'fixture',
+          model: 'echo',
+          operationName: 'chat',
+          providerId: 'echo',
+          traceparent,
+        },
+        async () => ({ output: 'hello' }),
+      );
+    });
+    expect(localSpans).toHaveLength(3);
+    for (const span of localSpans) {
+      expect(span.spanContext().traceId).toBe(traceId);
+      expect(span.parentSpanContext?.spanId).toBe(spanId);
+    }
+    expect(propagation.fields()).toEqual(['b3']);
+    propagation.inject(context.active(), {});
+    expect(inject).toHaveBeenCalledOnce();
+  });
+
   it('does not initialize a disabled scope', async () => {
     await runScoped({ enabled: false }, async () => {
       expect(isOtelInitialized()).toBe(false);
