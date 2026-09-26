@@ -267,11 +267,10 @@ You can quickly set up this example by running:
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Automatic response evaluation using LLM rubric scoring
 
-# Load prompts
 prompts:
   - file://prompts.txt
 providers:
-  - openai:gpt-6-sol
+  - openai:chat:gpt-6-sol
 defaultTest:
   assert:
     - type: llm-rubric
@@ -286,30 +285,6 @@ tests:
   - vars:
       name: Jane
       question: Do you have any promotions or discounts currently available?
-  - vars:
-      name: Ben
-      question: Can you check the availability of a product at a specific store location?
-  - vars:
-      name: Dave
-      question: What are your shipping and return policies?
-  - vars:
-      name: Jim
-      question: Can you provide more information about the product specifications or features?
-  - vars:
-      name: Alice
-      question: Can you recommend products that are similar to what I've been looking at?
-  - vars:
-      name: Sophie
-      question: Do you have any recommendations for products that are currently popular or trending?
-  - vars:
-      name: Jessie
-      question: How can I track my order after it has been shipped?
-  - vars:
-      name: Kim
-      question: What payment methods do you accept?
-  - vars:
-      name: Emily
-      question: Can you help me with a problem I'm having with my account or order?
 ```
 
 </details>
@@ -324,7 +299,7 @@ You can also output a [spreadsheet](https://docs.google.com/spreadsheets/d/1nano
 
 ### Model quality
 
-In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-openai-models), we evaluate GPT-6 Luna, GPT-5.6 Terra, GPT-6 Sol, and GPT-6 Astra on the same prompts:
+In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-openai-models), we evaluate GPT-6 Luna, Sol, and Astra on the same prompts:
 
 You can quickly set up this example by running:
 
@@ -358,11 +333,6 @@ prompts:
 
 providers:
   - id: openai:responses:gpt-6-luna
-    config:
-      reasoning:
-        effort: low
-      max_output_tokens: 2048
-  - id: openai:responses:gpt-5.6-terra
     config:
       reasoning:
         effort: low

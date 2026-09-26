@@ -9,7 +9,7 @@ import { checkServerFeatureSupport } from '../../../../src/util/server';
 import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
 
 import type { Message } from '../../../../src/redteam/providers/shared';
-import type { AtomicTestCase } from '../../../../src/types/index';
+import type { AtomicTestCase, GradingResult } from '../../../../src/types/index';
 
 // Hoisted mock for getGraderById
 const mockGetGraderById = vi.hoisted(() => vi.fn());
@@ -1620,6 +1620,134 @@ describe('CrescendoProvider', () => {
       expect(result.metadata?.successfulAttacks).toBeInstanceOf(Array);
       expect(result.metadata?.totalSuccessfulAttacks).toBeGreaterThanOrEqual(2);
       expect(result.metadata?.crescendoRoundsCompleted).toBe(3); // All three rounds
+    });
+
+    const runTwoRounds = async (
+      firstGrade: GradingResult,
+      secondGrade: GradingResult,
+      perTurnLayers: string[] = [],
+    ) => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 2,
+        redteamProvider: mockRedTeamProvider,
+        continueAfterSuccess: true,
+        _perTurnLayers: perTurnLayers,
+      });
+
+      const getResult = vi
+        .fn()
+        .mockResolvedValueOnce({ grade: firstGrade, rubric: 'test rubric' })
+        .mockResolvedValueOnce({ grade: secondGrade, rubric: 'test rubric' });
+      mockGetGraderById.mockReturnValue({ getResult });
+      for (const generatedQuestion of ['harmful request', 'follow-up request']) {
+        mockRedTeamProvider.callApi.mockResolvedValueOnce({
+          output: JSON.stringify({
+            generatedQuestion,
+            rationaleBehindJailbreak: 'test rationale',
+            lastResponseSummary: 'test summary',
+          }),
+        });
+      }
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({ output: 'harmful response' })
+        .mockResolvedValueOnce({
+          // Avoid isBasicRefusal so this round reaches the plugin grader.
+          output: 'That is outside the scope of this account.',
+          guardrails: { flagged: true, flaggedInput: true },
+        });
+      mockScoringProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({ value: false, metadata: 0, rationale: 'Not a refusal' }),
+      });
+
+      return provider.callApi('test prompt', {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'promptfoo:redteam:contracts' }],
+          metadata: { pluginId: 'contracts' },
+        } as AtomicTestCase,
+      });
+    };
+
+    it('should report the flagged round when continueAfterSuccess is true', async () => {
+      const result = await runTwoRounds(
+        { pass: false, score: 0, reason: 'Jailbreak detected' },
+        { pass: true, score: 1, reason: 'Refused' },
+      );
+
+      expect(result.metadata?.crescendoRoundsCompleted).toBe(2);
+      expect(result.metadata?.successfulAttacks).toHaveLength(1);
+      expect(result.metadata?.storedGraderResult).toMatchObject({
+        pass: false,
+        reason: 'Jailbreak detected',
+      });
+      expect(result.output).toBe('harmful response');
+      expect(result.metadata?.messages).toHaveLength(2);
+      expect(result.guardrails).toBeUndefined();
+
+      const grade = await runAssertions({
+        prompt: 'test prompt',
+        providerResponse: result,
+        test: {
+          provider: 'promptfoo:redteam:crescendo',
+          metadata: { pluginId: 'contracts', strategyId: 'crescendo' },
+          assert: [
+            { type: 'promptfoo:redteam:contracts' },
+            { type: 'guardrails', config: { purpose: 'redteam' } },
+          ],
+        },
+      });
+      expect(grade.pass).toBe(false);
+      expect(grade.reason).toBe('Jailbreak detected');
+      expect(mockGetGraderById).toHaveBeenCalledTimes(2);
+    });
+
+    it('reports the last guardrail result when no round is flagged', async () => {
+      const safeGrade = { pass: true, score: 1, reason: 'Refused' };
+      const result = await runTwoRounds(safeGrade, safeGrade);
+
+      expect(result.guardrails).toEqual({ flagged: true, flaggedInput: true });
+    });
+
+    it.each([undefined, { embeddedInjection: 'first payload' }])(
+      'preserves the flagged round display variables: %j',
+      async (displayVars) => {
+        mockApplyRuntimeTransforms
+          .mockResolvedValueOnce({
+            prompt: 'first fetch prompt',
+            originalPrompt: 'harmful request',
+            displayVars,
+          })
+          .mockResolvedValueOnce({
+            prompt: 'second fetch prompt',
+            originalPrompt: 'follow-up request',
+            displayVars: { embeddedInjection: 'second payload' },
+          });
+        const result = await runTwoRounds(
+          { pass: false, score: 0, reason: 'Jailbreak detected' },
+          { pass: true, score: 1, reason: 'Refused' },
+          ['indirect-web-pwn'],
+        );
+
+        expect(mockApplyRuntimeTransforms).toHaveBeenCalledTimes(2);
+        expect(result.metadata?.redteamFinalPrompt).toBe('first fetch prompt');
+        expect(result.metadata?.transformDisplayVars).toEqual(displayVars);
+      },
+    );
+
+    it('should not let a grader error claim the flagged round', async () => {
+      const result = await runTwoRounds(
+        { pass: false, score: 0, reason: 'Grader unavailable', metadata: { graderError: true } },
+        { pass: false, score: 0, reason: 'Jailbreak detected' },
+      );
+
+      expect(result.metadata?.storedGraderResult).toMatchObject({
+        pass: false,
+        reason: 'Jailbreak detected',
+      });
+      expect(result.output).toBe('That is outside the scope of this account.');
     });
 
     it('should handle mixed internal evaluator successes and failures with continueAfterSuccess', async () => {

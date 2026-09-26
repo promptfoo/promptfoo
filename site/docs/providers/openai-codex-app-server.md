@@ -95,7 +95,7 @@ providers:
 
 The same notes as the [Codex SDK Bedrock setup](/docs/providers/openai-codex-sdk/#option-3-run-on-amazon-bedrock) apply: use the `openai.`-prefixed model IDs, request model access in a supported Region (GPT-5.6 Sol: `us-east-1`/`us-east-2`; GPT-5.6 Terra and Luna also support `us-west-2`), forward `AWS_SESSION_TOKEN` as well when using temporary/SSO credentials, and remember that credentials in `cli_env` are exposed to the agent's shell environment.
 
-For GPT-6 Sol and Luna on AWS, use the [direct Promptfoo Bedrock provider](/docs/providers/aws-bedrock/#openai-models); the bundled Codex Bedrock catalog does not yet list them.
+For GPT-6 Sol and Luna on AWS, use the [direct Promptfoo Bedrock provider](/docs/providers/aws-bedrock/#openai-models); the Codex 0.156.1 Bedrock catalog does not list them.
 
 ## Basic Usage
 
@@ -215,7 +215,7 @@ providers:
         mode: plan
         settings:
           model: gpt-6-sol
-          reasoning_effort: none
+          reasoning_effort: low
           developer_instructions: null
 ```
 

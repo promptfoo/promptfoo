@@ -529,7 +529,7 @@ providers:
       region: 'us-east-1'
       apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}'
       reasoning_effort: 'medium'
-      max_output_tokens: 256
+      max_output_tokens: 2048
   - id: bedrock:openai.gpt-oss-120b-1:0
     config:
       region: 'us-west-2'
@@ -1083,8 +1083,8 @@ GPT-6 Sol (`openai.gpt-6-sol`) and Luna (`openai.gpt-6-luna`) use the
 [OpenAI-compatible Responses API on Mantle](https://developers.openai.com/api/docs/guides/amazon-bedrock)
 in `us-east-1`, which promptfoo selects by default for those two IDs. AWS also offers the
 models through Bedrock Runtime with United States and global routing; the bare promptfoo
-selectors use Mantle. To switch an existing OpenAI frontier provider to either model per prompt,
-configure that provider in `us-east-1`; GPT OSS and other provider families need a separate frontier provider. Bedrock does not support Responses reasoning updates; use the request-level effort.
+selectors use Mantle. Bedrock does not support Responses reasoning updates; use the request-level effort.
+
 For region-specific Standard processing, promptfoo estimates
 $2.20 input / $11 output for Sol and $0.11 input / $0.55 output per million tokens. Bedrock Runtime global profiles use the global Standard rates: $2 / $10 for Sol and $0.10 / $0.50 for Luna per million tokens.
 See [OpenAI's Bedrock pricing guidance](https://developers.openai.com/api/docs/guides/amazon-bedrock#pricing)
@@ -1093,8 +1093,8 @@ for regional pricing and AWS billing terms.
 #### Frontier models (GPT-5.x)
 
 - **`openai.gpt-5.6-sol`**: Flagship reasoning tier (`us-east-1`, `us-east-2`)
-- **`openai.gpt-5.6-terra`**: Balanced tier (`us-east-1`, `us-east-2`, `us-west-2`)
-- **`openai.gpt-5.6-luna`**: Fast, cost-efficient tier (`us-east-1`, `us-east-2`, `us-west-2`)
+- **`openai.gpt-5.6-terra`**: Balanced tier (`us-east-1`, `us-east-2`, `us-west-2`, `us-gov-west-1`, `us-gov-east-1`)
+- **`openai.gpt-5.6-luna`**: Fast, cost-efficient tier (`us-east-1`, `us-east-2`, `us-west-2`, `us-gov-west-1`, `us-gov-east-1`)
 - **`openai.gpt-5.5`**: Earlier flagship frontier model (`us-east-1`, `us-east-2`)
 - **`openai.gpt-5.4`**: Earlier frontier model (`us-east-1`, `us-east-2`, `us-west-2`)
 
@@ -1103,8 +1103,11 @@ endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1/responses`) for bar
 GPT-5.6 also supports [Runtime Converse](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-56-sol.html).
 Promptfoo routes the bare
 `bedrock:openai.gpt-5.x` IDs to its OpenAI Responses provider, preserves the Bedrock request
-model ID, and returns the clean final answer. `us-east-2` is the default for these GPT-5
-models when no Region is configured; GPT-5.6 region availability is checked before a request is made.
+model ID, and returns the clean final answer. When no Region is configured, promptfoo uses
+`us-west-2` for `openai.gpt-6-astra`, `us-east-1` for `openai.gpt-6-sol` and `openai.gpt-6-luna`,
+and `us-east-2` for other frontier models. A configured Region is always used; if Mantle does not
+serve the model there, it returns HTTP 404 ("model does not exist") and promptfoo adds the
+Regions that list the model to the error.
 
 Authentication accepts either a pre-generated **Amazon Bedrock API key** or AWS credentials:
 
@@ -1174,7 +1177,8 @@ when inputs or outputs must not be retained; Bedrock otherwise keeps stored resp
 days in the source Region and allows follow-up requests with `previous_response_id`.
 
 GPT-5.6 pricing on Bedrock includes a 10% regional-processing uplift: [Sol](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-56-sol.html) is $4.40 input /
-$22 output, Terra $2.20 / $13.20, and Luna $0.22 / $1.32 per million tokens. Cache reads
+$22 output, Terra $2.20 / $13.20, and Luna $0.22 / $1.32 per million tokens. In AWS GovCloud
+(US), Terra is $2.64 / $15.84 and Luna $0.264 / $1.584 per million tokens. Cache reads
 receive a 90% discount, cache writes cost 1.25x the uncached input rate, and cached prefixes
 remain available for at least 30 minutes. Place
 `prompt_cache_breakpoint: { mode: explicit }` on a stable

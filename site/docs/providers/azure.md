@@ -141,7 +141,21 @@ Azure AI Foundry provides access to models from multiple providers:
 
 For the complete list of models with pricing, see the [Microsoft Foundry model catalog](https://azure.microsoft.com/en-us/products/ai-foundry).
 
-Microsoft [lists GPT-6 Sol and Luna as generally available](https://azure.microsoft.com/en-us/blog/gpt-6-astra-sol-and-luna-for-production-agents-in-microsoft-foundry/); check the [deployment region matrix](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure-region-availability) for your deployment type. Use your Azure deployment name; for an opaque name, set `config.modelName` to `gpt-6-sol` or `gpt-6-luna` so promptfoo applies the model's request rules. Chat function tools require `reasoning_effort: none`; use Responses for tools with reasoning enabled. Promptfoo does not currently estimate Azure-specific costs for these two models. The generic OpenAI Responses provider accepts explicit token rates for an Azure endpoint, but leaves the total cost unset if Azure uses hosted web or file search, Code Interpreter, or image generation. [Azure web search is billed by Bing request count](https://learn.microsoft.com/azure/foundry/openai/how-to/web-search#web-search-usage-and-billing), and [Code Interpreter containers have separate charges](https://learn.microsoft.com/azure/foundry/agents/how-to/tools/code-interpreter).
+### GPT-6 on Azure
+
+Azure supports `gpt-6-astra`, `gpt-6-sol`, and `gpt-6-luna` through Chat Completions and Responses. Use your deployment name with `azure:chat:` or `azure:responses:`. Check the [Azure model catalog](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure#gpt-6) for availability.
+
+For a deployment name that does not identify its underlying model, set `config.modelName` to `gpt-6-astra`, `gpt-6-sol`, or `gpt-6-luna` so Promptfoo applies the model's request rules. Sol and Luna require `reasoning_effort: none` for Chat function tools; use Responses for tools with reasoning enabled or with Astra.
+
+Microsoft publishes these [Global Standard rates](https://azure.microsoft.com/en-us/blog/gpt-6-astra-sol-and-luna-for-production-agents-in-microsoft-foundry/) in USD per million tokens. Each cell shows short-context / long-context pricing:
+
+| Model       | Input         | Cached input  | Cache writes   | Output        |
+| ----------- | ------------- | ------------- | -------------- | ------------- |
+| GPT-6 Astra | $10 / $20     | $1 / $2       | $12.50 / $25   | $50 / $75     |
+| GPT-6 Sol   | $2 / $4       | $0.20 / $0.40 | $2.50 / $5     | $10 / $15     |
+| GPT-6 Luna  | $0.10 / $0.20 | $0.01 / $0.02 | $0.125 / $0.25 | $0.50 / $0.75 |
+
+Promptfoo's Azure providers do not yet estimate GPT-6 costs. Check Azure billing for your deployment; Data Zone, priority, and provisioned rates differ.
 
 ### GPT-5.6 on Azure
 

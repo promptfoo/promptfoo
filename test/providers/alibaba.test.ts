@@ -85,14 +85,30 @@ describe('Alibaba Cloud Provider', () => {
       );
     });
 
-    it.each(['qwen3.6-plus', 'qwen3.5-flash', 'qwen3-coder-next', 'deepseek-v3.2'])(
-      'should recognize refreshed model id %s',
-      (modelName) => {
-        new AlibabaChatCompletionProvider(modelName, {});
+    it.each([
+      'qwen3.8-max',
+      'qwen3.8-max-0902',
+      'qwen3.8-flash',
+      'qwen3.8-omni-flash',
+      'qwen3.7-max-2026-06-08',
+      'qwen3.7-plus',
+      'qwen3.7-plus-2026-05-26',
+      'qwen3.7-flash',
+      'qwen3.7-flash-2026-07-15',
+      'qwen3.6-plus',
+      'qwen3.5-flash',
+      'qwen3-coder-next',
+      'deepseek-v4.1-flash',
+      'deepseek-v4-pro-0813',
+      'deepseek-v3.2',
+      'kimi-k3',
+      'glm-5.2',
+      'ZHIPU/GLM-5.3',
+    ])('should recognize refreshed model id %s', (modelName) => {
+      new AlibabaChatCompletionProvider(modelName, {});
 
-        expect(logger.warn).not.toHaveBeenCalled();
-      },
-    );
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
 
     it('should throw error when no model specified', () => {
       expect(() => new AlibabaChatCompletionProvider('')).toThrow('Alibaba modelName is required');
@@ -146,6 +162,17 @@ describe('Alibaba Cloud Provider', () => {
   });
 
   describe('AlibabaEmbeddingProvider', () => {
+    it('recognizes the Qwen3.7 text embedding model', () => {
+      new AlibabaEmbeddingProvider('qwen3.7-text-embedding');
+      expect(logger.warn).not.toHaveBeenCalled();
+      expect(OpenAiEmbeddingProvider).toHaveBeenCalledWith(
+        'qwen3.7-text-embedding',
+        expect.objectContaining({
+          config: expect.objectContaining({ apiKeyEnvar: 'DASHSCOPE_API_KEY' }),
+        }),
+      );
+    });
+
     it('should create provider for embedding models', () => {
       const provider = new AlibabaEmbeddingProvider('text-embedding-v3', {});
 

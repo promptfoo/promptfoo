@@ -40,7 +40,7 @@ providers:
     config:
       reasoning_effort: none
       temperature: 0.7
-      max_tokens: 1000
+      max_completion_tokens: 1000
 
   - id: openrouter:anthropic/claude-opus-4.7
     config:

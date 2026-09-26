@@ -123,8 +123,8 @@ Notes:
 - **Model ids are Bedrock ids**: use `openai.gpt-5.6-sol`, `openai.gpt-5.6-terra`, or `openai.gpt-5.6-luna`, not a bare `gpt-5.6` alias. The Codex Bedrock provider serves frontier models through Bedrock's OpenAI-compatible Responses endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1/responses`), which is separate from the classic `bedrock-runtime` `InvokeModel` API.
 - **Region matters**: GPT-5.6 Sol is available in `us-east-1` and `us-east-2`; GPT-5.6 Terra and Luna also support `us-west-2`. GPT-5.5 remains available in `us-east-1` and `us-east-2`, and GPT-5.4 in `us-east-1`, `us-east-2`, and `us-west-2`. Request model access first.
 - **Use a current Codex CLI**: GPT-5.6 Bedrock catalog support and `max` reasoning require Codex 0.144.0 or later. Codex `ultra` is a multi-agent mode for supported models, not a Responses API reasoning-effort value.
-- **GPT-6 on Bedrock**: AWS serves Sol and Luna on Mantle in `us-east-1`, but the [bundled Codex Bedrock catalog](https://github.com/openai/codex/blob/rust-v0.156.1/codex-rs/model-provider/src/amazon_bedrock/catalog.rs) does not yet list them. Use the [direct Promptfoo Bedrock provider](/docs/providers/aws-bedrock/#openai-models) for these models.
-- **Credentials must reach the Codex CLI**: the Codex CLI reads AWS credentials from its own environment. Because promptfoo runs the CLI with a minimal environment by default, pass `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` (or `AWS_BEARER_TOKEN_BEDROCK`, or `AWS_PROFILE`) and `AWS_REGION` via `cli_env`, or set `inherit_process_env: true`. If you use **temporary credentials** (SSO, STS, assumed roles, or MFA), also forward `AWS_SESSION_TOKEN` — without it the credentials are incomplete and Codex will fail to authenticate. For direct inference, `bedrock:openai.gpt-5.x` uses a Bedrock API key; the AWS SDK credential chain applies to `InvokeModel` models such as `gpt-oss`.
+- **GPT-6 on Bedrock**: AWS serves Sol and Luna on Mantle in `us-east-1`, but the [Codex 0.156.1 Bedrock catalog](https://github.com/openai/codex/blob/rust-v0.156.1/codex-rs/model-provider/src/amazon_bedrock/catalog.rs) does not list them. Use the [direct Promptfoo Bedrock provider](/docs/providers/aws-bedrock/#openai-models) for these models.
+- **Credentials must reach the Codex CLI**: the Codex CLI reads AWS credentials from its own environment. Because promptfoo runs the CLI with a minimal environment by default, pass `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` (or `AWS_BEARER_TOKEN_BEDROCK`, or `AWS_PROFILE`) and `AWS_REGION` via `cli_env`, or set `inherit_process_env: true`. If you use **temporary credentials** (SSO, STS, assumed roles, or MFA), also forward `AWS_SESSION_TOKEN` — without it the credentials are incomplete and Codex will fail to authenticate. For direct inference, the [Promptfoo Bedrock provider](/docs/providers/aws-bedrock/#openai-models) accepts a Bedrock API key or AWS credentials.
 
 :::warning
 
@@ -152,11 +152,11 @@ The provider creates an ephemeral thread for each eval test case.
 
 ### With Custom Model
 
-Specify a model such as GPT-5.6 Terra to balance capability and cost for code generation:
+Specify a model such as GPT-6 Sol for code generation:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - openai:codex:gpt-5.6-terra
+  - openai:codex:gpt-6-sol
 
 prompts:
   - 'Write a TypeScript function that validates email addresses'
@@ -168,7 +168,7 @@ If you need additional Codex settings, you can still set the model via `config.m
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.6-terra
+      model: gpt-6-sol
 ```
 
 ### With Working Directory
@@ -263,7 +263,7 @@ The `approval_policy` parameter controls when user approval is required:
 
 ## Models
 
-Use `gpt-6-sol` or `gpt-6-luna` with [Codex 0.156.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.156.1) when available to your account. `gpt-6-astra` requires [Codex 0.153.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.153.1) and an account with Astra access. GPT-5.6 tiers remain available during the rollout. Availability depends on the installed Codex runtime and authentication method; consult [OpenAI's Codex model guide](https://learn.chatgpt.com/docs/models).
+Use `gpt-6-sol` or `gpt-6-luna` with [Codex 0.156.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.156.1) when available to your account. `gpt-6-astra` requires [Codex 0.153.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.153.1) and an account with Astra access. Availability depends on the installed Codex runtime and authentication method; consult [OpenAI's Codex model guide](https://learn.chatgpt.com/docs/models).
 
 ```yaml
 providers:
@@ -278,7 +278,6 @@ For new evals, choose from the current models in [OpenAI's Codex model guide](ht
 - **GPT-6 Astra** (`gpt-6-astra`) - Use for the most demanding reasoning and coding tasks, when your account has access.
 - **GPT-6 Sol** (`gpt-6-sol`) - Use for complex professional and coding workflows.
 - **GPT-6 Luna** (`gpt-6-luna`) - Use for cost-sensitive, high-volume evals.
-- **GPT-5.6 Terra** (`gpt-5.6-terra`) - An option for saved GPT-5.6 configurations.
 
 With ChatGPT sign-in, `gpt-5.4` and `gpt-5.4-mini` retired from Codex on August 31, 2026; `gpt-5.2` and `gpt-5.3-codex` are also deprecated for that sign-in method. Use `gpt-6-sol` or `gpt-6-luna` in new saved configurations when available. API-key authentication follows the separate [OpenAI API model lifecycle](https://developers.openai.com/api/docs/deprecations), so this Codex sign-in retirement does not invalidate API-key configurations or Promptfoo's native API grading pins. `gpt-5.3-codex-spark` requires eligible ChatGPT Pro/Codex authentication and is not available through the public Responses API.
 
@@ -598,7 +597,7 @@ Codex gates optional capabilities behind [feature flags](https://developers.open
 
 ```yaml
 providers:
-  - id: openai:codex-sdk:gpt-5.6-terra
+  - id: openai:codex-sdk:gpt-6-sol
     config:
       cli_config:
         features:
@@ -716,7 +715,7 @@ prompts:
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.6-terra
+      model: gpt-6-sol
       working_dir: '{{ env.CODEX_SKILLS_WORKING_DIR | default("./sample-project") }}'
       skip_git_repo_check: true
       enable_streaming: true
@@ -758,7 +757,7 @@ prompts:
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.6-terra
+      model: gpt-6-sol
       working_dir: '{{ env.CODEX_SKILLS_WORKING_DIR | default("./sample-project") }}'
       skip_git_repo_check: true
       enable_streaming: true
