@@ -387,10 +387,17 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       [this.env, ...invocationEnvs].some((env) =>
         envKeys.some((key) => env?.[key] !== undefined),
       ) ||
-      invocationEnvs.some((env) =>
-        ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY'].some(
-          (key) => env?.[key] !== undefined || env?.[key.toLowerCase()] !== undefined,
-        ),
+      invocationEnvs.some(
+        (env) =>
+          [
+            'REQUEST_TIMEOUT_MS',
+            'PROMPTFOO_CA_CERT_PATH',
+            'PROMPTFOO_INSECURE_SSL',
+            'PROMPTFOO_FETCH_CONNECTIONS',
+          ].some((key) => env?.[key] !== undefined) ||
+          ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY'].some(
+            (key) => env?.[key] !== undefined || env?.[key.toLowerCase()] !== undefined,
+          ),
       ) ||
       ['OPENAI_API_HOST', 'OPENAI_API_BASE_URL', 'OPENAI_BASE_URL', 'OPENAI_ORGANIZATION'].some(
         (key) => getEnvString(key) !== undefined,

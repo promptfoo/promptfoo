@@ -132,6 +132,52 @@ describe('Agents SDK scoped client', () => {
     },
   );
 
+  it.each(
+    (['suite', 'file'] as const).flatMap((scope) =>
+      [
+        ['REQUEST_TIMEOUT_MS', '1234'],
+        ['PROMPTFOO_CA_CERT_PATH', '/fixture/ca.pem'],
+        ['PROMPTFOO_INSECURE_SSL', 'false'],
+        ['PROMPTFOO_FETCH_CONNECTIONS', '2'],
+      ].flatMap(([name, value]) => [
+        { scope, name, value },
+        { scope, name, value: '' },
+      ]),
+    ),
+  )('uses the shared transport for $scope $name=$value', async ({ scope, name, value }) => {
+    const custom = new OpenAIProvider({ apiKey: 'sdk-key' });
+    vi.spyOn(custom, 'getModel').mockRejectedValue(
+      new Error('default provider bypassed transport'),
+    );
+    setDefaultModelProvider(custom);
+    const invoke = () => provider().callApi('hello');
+    const result = await (scope === 'suite'
+      ? cliState.withEnv({ [name]: value }, invoke)
+      : cliState.withEnvFileOverrides({ [name]: value }, invoke));
+    expect(result.output).toBe('ok');
+    expect(fetchWithProxy).toHaveBeenCalledOnce();
+    expect(request().url).toBe('https://api.openai.com/v1/responses');
+  });
+
+  it.each(['suite', 'file'] as const)(
+    'preserves the SDK default provider for unrelated %s settings',
+    async (scope) => {
+      const custom = new OpenAIProvider({ apiKey: 'sdk-key' });
+      const getModel = vi
+        .spyOn(custom, 'getModel')
+        .mockRejectedValue(new Error('custom model selected'));
+      setDefaultModelProvider(custom);
+      const invoke = () => provider().callApi('hello');
+      await expect(
+        scope === 'suite'
+          ? cliState.withEnv({ PROMPTFOO_DISABLE_TELEMETRY: 'true' }, invoke)
+          : cliState.withEnvFileOverrides({ PROMPTFOO_DISABLE_TELEMETRY: 'true' }, invoke),
+      ).rejects.toThrow('custom model selected');
+      expect(getModel).toHaveBeenCalledOnce();
+      expect(fetchWithProxy).not.toHaveBeenCalled();
+    },
+  );
+
   it('applies a retry budget configured without other connection settings', async () => {
     const custom = new OpenAIProvider({ apiKey: 'sdk-key' });
     vi.spyOn(custom, 'getModel').mockRejectedValue(new Error('default provider bypassed retries'));
