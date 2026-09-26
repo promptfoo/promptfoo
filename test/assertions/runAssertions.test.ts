@@ -944,6 +944,12 @@ describe('runAssertions with PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', () => {
 
     await expect(peakConcurrency()).resolves.toBe(1);
   });
+
+  it.each(['0', '-2'])('runs assertions one at a time for a limit of %s', async (limit) => {
+    mockProcessEnv({ PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY: limit });
+
+    await expect(peakConcurrency()).resolves.toBe(1);
+  });
 });
 
 describe('renderMetricName', () => {
