@@ -12,7 +12,7 @@ The provider runs Codex with an explicit working directory, sandbox policy, appr
 
 :::note
 
-Promptfoo declares `@openai/codex-sdk` as an optional dependency. If your installation omits optional packages or you are running from a source checkout before `npm ci`, install the SDK package manually.
+The Codex SDK and its native CLI are not included in the default Promptfoo install. Install them explicitly using the instructions below.
 
 :::
 
@@ -41,17 +41,17 @@ You can reference this provider using either base ID, and you can inline the mod
 
 ## Installation
 
-Promptfoo includes the Codex SDK as an optional dependency. If optional dependencies are omitted, install it manually. Use [Codex 0.156.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.156.1) for GPT-6 Sol and Luna; it bundles their model metadata, including Sol's Ultra setting. Astra requires 0.153.1 or later:
+Install Promptfoo and the Codex SDK together in your eval project. Use [Codex 0.156.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.156.1) for GPT-6 Sol and Luna; it bundles their model metadata, including Sol's Ultra setting. Astra requires 0.153.1 or later:
 
 ```bash
-npm install @openai/codex-sdk@^0.156.1
+npm install promptfoo @openai/codex-sdk@^0.156.1
 ```
 
 Use Node.js `>=22.22.0`, which matches promptfoo's repo/runtime requirement and the provider's loader checks.
 
 :::note
 
-This package is optional and only needed for the OpenAI Codex SDK provider. The published `@openai/codex-sdk` and `@openai/codex` packages currently declare the Apache-2.0 license.
+This package is installed separately and only needed for the OpenAI Codex SDK provider. The provider supports version `^0.156.1` and checks compatibility when invoked. The published `@openai/codex-sdk` and `@openai/codex` packages currently declare the Apache-2.0 license.
 
 :::
 
@@ -635,7 +635,7 @@ Promptfoo validates the allowed enum values, but model-specific support is ultim
 `ultra` is Codex-specific and uses subagents; do not send it as a Responses API `reasoning.effort` value. GPT-6 Luna does not support `ultra` in Codex.
 
 :::note GPT-5.6 requires Codex 0.144.0 or later
-Use `@openai/codex-sdk` 0.144.0 or later. If optional dependencies are omitted, install that version explicitly. An older SDK or Codex binary may silently ignore GPT-5.6 reasoning levels. Confirm the effective reasoning with request tracing. For direct `max` reasoning, you can also use `openai:gpt-5.6-sol`.
+Install `@openai/codex-sdk@^0.156.1` using the setup above. An older SDK or Codex binary may silently ignore GPT-5.6 reasoning levels. Confirm the effective reasoning with request tracing. For direct `max` reasoning, you can also use `openai:gpt-5.6-sol`.
 :::
 
 ## Additional Directories

@@ -21,14 +21,14 @@ You can reference this provider using either:
 
 ## Installation
 
-The Claude Agent SDK provider requires the `@anthropic-ai/claude-agent-sdk` package to be installed separately:
+The Claude Agent SDK and its native CLI are not included in the default Promptfoo install. Install them alongside Promptfoo in the project containing your eval config:
 
 ```bash
-npm install @anthropic-ai/claude-agent-sdk
+npm install promptfoo @anthropic-ai/claude-agent-sdk@0.3.273
 ```
 
 :::note
-This is an optional dependency and only needs to be installed if you want to use the Claude Agent SDK provider. Note that Anthropic has released the claude-agent-sdk library with a [proprietary license](https://github.com/anthropics/claude-agent-sdk-typescript/blob/9f51899c3e04f15951949ceac81849265d545579/LICENSE.md).
+This optional peer is only needed for the Claude Agent SDK provider. The provider currently supports exactly version `0.3.273` and checks compatibility when invoked. The provider resolves it from your config directory or its parent directories, so install it there even when invoking a globally installed Promptfoo. Note that Anthropic has released the claude-agent-sdk library with a [proprietary license](https://github.com/anthropics/claude-agent-sdk-typescript/blob/9f51899c3e04f15951949ceac81849265d545579/LICENSE.md).
 :::
 
 ## Setup

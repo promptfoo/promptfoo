@@ -223,19 +223,21 @@
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.273",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
-    "@aws/bedrock-token-generator": "^1.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.1045.0",
     "@aws-sdk/credential-provider-sso": "^3.972.16",
     "@aws-sdk/types": "^3.973.5",
+    "@aws/bedrock-token-generator": "^1.1.0",
     "@azure/identity": "^4.13.0",
     "@azure/openai-assistants": "^1.0.0-beta.6",
     "@biomejs/biome": "2.5.13",
     "@fal-ai/client": "~1.10.1",
     "@ibm-cloud/watsonx-ai": "^1.7.16",
     "@langfuse/client": "^5.11.1",
+    "@openai/codex-sdk": "^0.156.1",
+    "@openai/codex-security": "^0.1.31",
     "@smithy/types": "^4.13.0",
     "@types/async": "^3.2.25",
     "@types/cli-progress": "^3.11.6",
@@ -276,7 +278,6 @@
   },
   "optionalDependencies": {
     "@alcalzone/ansi-tokenize": "0.3.1",
-    "@anthropic-ai/claude-agent-sdk": "0.3.273",
     "@aws/bedrock-token-generator": "^1.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -295,8 +296,6 @@
     "@langfuse/client": "^5.11.1",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@openai/agents": "^0.11.3",
-    "@openai/codex-sdk": "^0.156.1",
-    "@openai/codex-security": "^0.1.28",
     "@opencode-ai/sdk": "^1.18.30",
     "@playwright/browser-chromium": "^1.63.0",
     "@rollup/rollup-linux-x64-gnu": "^4.63.3",
@@ -427,5 +426,21 @@
     ],
     "ignoredBuiltDependencies": []
   },
-  "homepage": "https://promptfoo.dev"
+  "homepage": "https://promptfoo.dev",
+  "peerDependencies": {
+    "@anthropic-ai/claude-agent-sdk": "*",
+    "@openai/codex-sdk": "*",
+    "@openai/codex-security": "*"
+  },
+  "peerDependenciesMeta": {
+    "@anthropic-ai/claude-agent-sdk": {
+      "optional": true
+    },
+    "@openai/codex-sdk": {
+      "optional": true
+    },
+    "@openai/codex-security": {
+      "optional": true
+    }
+  }
 }

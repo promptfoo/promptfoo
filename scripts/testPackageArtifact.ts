@@ -697,6 +697,111 @@ async function runInstalledCompressionEval(consumerDir: string, configDir: strin
   }
 }
 
+async function runInstalledCodingSdkEval(consumerDir: string, configDir: string): Promise<void> {
+  const fixturesDir = path.join(consumerDir, 'coding-sdks');
+  fs.cpSync(path.join(ROOT, 'test/fixtures/coding-sdks'), fixturesDir, { recursive: true });
+  for (const fixture of ['codex.mjs', 'claude.mjs']) {
+    fs.chmodSync(path.join(fixturesDir, fixture), 0o755);
+  }
+  const scriptPath = path.join(consumerDir, 'coding-sdks.mjs');
+  fs.writeFileSync(
+    scriptPath,
+    `import assert from 'node:assert/strict';
+import path from 'node:path';
+import { evaluate } from 'promptfoo';
+
+const installed = process.argv[2] === 'installed';
+if (!installed) {
+  for (const sdk of ['@openai/codex-sdk', '@anthropic-ai/claude-agent-sdk', '@openai/codex-security']) {
+    assert.throws(() => import.meta.resolve(sdk), { code: 'ERR_MODULE_NOT_FOUND' });
+  }
+}
+const fixture = (name) => path.join(import.meta.dirname, 'coding-sdks', name);
+const record = await evaluate({
+  prompts: ['{{input}}'],
+  providers: [
+    {
+      id: 'openai:codex-sdk',
+      config: {
+        apiKey: 'test-local-fixture',
+        codex_path_override: fixture('codex.mjs'),
+        working_dir: import.meta.dirname,
+        skip_git_repo_check: true,
+        persist_threads: false,
+      },
+    },
+    {
+      id: 'anthropic:claude-agent-sdk',
+      config: {
+        apiKey: 'test-local-fixture',
+        path_to_claude_code_executable: fixture('claude.mjs'),
+        working_dir: import.meta.dirname,
+      },
+    },
+  ],
+  tests: (installed ? ['hello fixture', 'fixture error'] : ['hello fixture']).map((input) => ({
+    vars: { input },
+    assert: [{ type: 'equals', value: 'local SDK fixture response' }],
+  })),
+}, { cache: false, maxConcurrency: 1 });
+const { results } = await record.toEvaluateSummary();
+assert.equal(results.length, installed ? 4 : 2);
+for (const result of results) {
+  if (!installed) {
+    assert.equal(result.success, false);
+    assert.match(result.response.error, new RegExp('npm install promptfoo @(openai/codex-sdk|anthropic-ai/claude-agent-sdk)'));
+  } else if (result.vars.input === 'fixture error') {
+    assert.equal(result.success, false);
+    assert.match(result.response.error, /fixture request failed|error_during_execution/);
+  } else {
+    assert.equal(result.success, true);
+    assert.equal(result.score, 1);
+    assert.equal(result.response.output, 'local SDK fixture response');
+    assert.equal(result.response.tokenUsage.prompt, 3);
+    assert.equal(result.response.tokenUsage.completion, 5);
+    assert.match(result.response.sessionId, /^fixture-(thread|session)$/);
+  }
+}
+// Loading the real security SDK must reach its repository validation, without starting a model scan.
+const scan = await evaluate({
+  prompts: ['Inspect this repository'],
+  providers: [{
+    id: 'openai:codex-security',
+    config: { repository: path.join(import.meta.dirname, 'does-not-exist') },
+  }],
+  tests: [{}],
+}, { cache: false, maxConcurrency: 1 });
+const { results: scanResults } = await scan.toEvaluateSummary();
+assert.equal(scanResults.length, 1);
+assert.equal(scanResults[0].success, false);
+assert.ok(scanResults[0].response.error.includes(installed
+  ? 'Repository is not a directory'
+  : 'npm install promptfoo @openai/codex-security@^0.1.31'));
+`,
+  );
+  const env = {
+    PROMPTFOO_CONFIG_DIR: configDir,
+    PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
+    PROMPTFOO_DISABLE_TELEMETRY: '1',
+    PROMPTFOO_DISABLE_UPDATE: 'true',
+  };
+  await runAsync(process.execPath, [scriptPath, 'missing'], consumerDir, env);
+  runNpm(
+    [
+      'install',
+      '--ignore-scripts',
+      '--no-audit',
+      '--no-fund',
+      '--no-package-lock',
+      '@openai/codex-sdk@^0.156.1',
+      '@anthropic-ai/claude-agent-sdk@0.3.273',
+      '@openai/codex-security@^0.1.31',
+    ],
+    consumerDir,
+  );
+  await runAsync(process.execPath, [scriptPath, 'installed'], consumerDir, env);
+}
+
 async function main(): Promise<void> {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-package-artifact-'));
   const artifactsDir = path.join(tempDir, 'artifacts');
@@ -782,6 +887,7 @@ async function main(): Promise<void> {
       );
     }
     await runInstalledCompressionEval(consumerDir, configDir);
+    await runInstalledCodingSdkEval(consumerDir, configDir);
 
     console.log(`Verified installed package artifact: ${packResult.filename}`);
   } finally {

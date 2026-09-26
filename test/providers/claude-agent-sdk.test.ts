@@ -17,6 +17,7 @@ import {
 import { transformMCPConfigToClaudeCode } from '../../src/providers/mcp/transform';
 import * as genaiTracer from '../../src/tracing/genaiTracer';
 import * as traceStore from '../../src/tracing/store';
+import { getPackageVersion } from '../../src/util/packageVersion';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { mockProcessEnv } from '../util/utils';
 import type {
@@ -76,6 +77,7 @@ vi.mock('../../src/esm', async (importOriginal) => {
   };
 });
 vi.mock('../../src/providers/mcp/transform');
+vi.mock('../../src/util/packageVersion', () => ({ getPackageVersion: vi.fn() }));
 vi.mock('node:module', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -288,6 +290,7 @@ describe('ClaudeCodeSDKProvider', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    vi.mocked(getPackageVersion).mockReturnValue('0.3.273');
     mockQuery.mockReset();
     Object.values(fsMocks).forEach((mock) => mock.mockReset());
 
@@ -317,8 +320,22 @@ describe('ClaudeCodeSDKProvider', () => {
     const provider = new ClaudeCodeSDKProvider({ config: { apiKey: 'test-key' } });
     const result = await provider.callApi('Import failure');
     expect(result.error).toContain('Failed to load @anthropic-ai/claude-agent-sdk');
-    expect(result.error).toContain('npm install @anthropic-ai/claude-agent-sdk');
+    expect(result.error).toContain('npm install promptfoo @anthropic-ai/claude-agent-sdk@0.3.273');
   });
+
+  it.each(['0.3.235', '0.3.274', '1.0.0', 'invalid', null])(
+    'rejects incompatible SDK %s before importing it',
+    async (version) => {
+      vi.mocked(getPackageVersion).mockReturnValue(version);
+      const provider = new ClaudeCodeSDKProvider({ config: { apiKey: 'test-key' } });
+      const response = await provider.callApi('test');
+      expect(response.error).toContain('requires @anthropic-ai/claude-agent-sdk@0.3.273');
+      expect(response.error).toContain(
+        'npm install promptfoo @anthropic-ai/claude-agent-sdk@0.3.273',
+      );
+      expect(importModule).not.toHaveBeenCalled();
+    },
+  );
 
   it.each(['', null])(
     'honors empty system prompts while defaulting null (%j)',

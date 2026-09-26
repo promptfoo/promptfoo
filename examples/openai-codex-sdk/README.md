@@ -14,7 +14,7 @@ cd openai-codex-sdk
 Install the OpenAI Codex SDK:
 
 ```bash
-npm install @openai/codex-sdk@^0.156.1
+npm install promptfoo @openai/codex-sdk@^0.156.1
 ```
 
 **Requirements**: Node.js `>=22.22.0` and Codex SDK/CLI `>=0.156.1` for these GPT-6 examples. Codex runs its own agent loop; providers such as `openai:gpt-6-sol` make direct model calls.

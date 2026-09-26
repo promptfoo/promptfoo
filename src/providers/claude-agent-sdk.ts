@@ -20,6 +20,7 @@ import {
   sanitizeBody,
   withGenAISpan,
 } from '../tracing/genaiTracer';
+import { getPackageVersion } from '../util/packageVersion';
 import { safeResolve } from '../util/pathUtils';
 import {
   cacheResponse,
@@ -305,7 +306,7 @@ function deriveSkillCalls(toolCalls: ToolCallEntry[]): SkillCallEntry[] {
  * Claude Agent SDK Provider
  *
  * This provider requires the @anthropic-ai/claude-agent-sdk package to be installed separately:
- *   npm install @anthropic-ai/claude-agent-sdk
+ *   npm install promptfoo @anthropic-ai/claude-agent-sdk@0.3.273
  *
  * Two default configurations:
  * - No working_dir: Runs in temp directory with no tools - behaves like plain chat API
@@ -352,13 +353,20 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
       dedent`The @anthropic-ai/claude-agent-sdk package could not be resolved from ${basePath}.
 
       To use the Claude Agent SDK provider, install it with:
-        npm install @anthropic-ai/claude-agent-sdk
+        npm install promptfoo @anthropic-ai/claude-agent-sdk@0.3.273
 
       If the package is already installed elsewhere, run promptfoo from the
       project root (or point the config at that root) so node_modules is on
       the resolution path.
 
       For more information, see: https://www.promptfoo.dev/docs/providers/claude-agent-sdk/`,
+    );
+  }
+
+  const version = getPackageVersion('@anthropic-ai/claude-agent-sdk', claudeCodePath);
+  if (version !== '0.3.273') {
+    throw new Error(
+      `The Claude Agent SDK provider requires @anthropic-ai/claude-agent-sdk@0.3.273 (found ${version ?? 'unknown'}). Install it with: npm install promptfoo @anthropic-ai/claude-agent-sdk@0.3.273`,
     );
   }
 
@@ -377,7 +385,7 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
       - Corrupted installation
 
       Try reinstalling:
-        npm install @anthropic-ai/claude-agent-sdk
+        npm install promptfoo @anthropic-ai/claude-agent-sdk@0.3.273
 
       For more information, see: https://www.promptfoo.dev/docs/providers/claude-agent-sdk/`,
     );

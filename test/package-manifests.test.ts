@@ -9,6 +9,8 @@ type PackageManifest = {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
   optionalDependencies?: Record<string, string>;
+  peerDependencies?: Record<string, string>;
+  peerDependenciesMeta?: Record<string, { optional?: boolean }>;
 };
 
 type PackageLockManifest<T> = {
@@ -61,6 +63,7 @@ const KNOWN_BAD_RELEASES = new Map([
   ['@hono/node-server', '<1.19.15 || >=2.0.0 <2.0.10'], // GHSA-frvp-7c67-39w9, GHSA-9mqv-5hh9-4cgg
   ['cache-manager', '7.2.10'], // Shai-Hulud compromise (#10301)
   ['cacheable-request', '13.0.20'], // Shai-Hulud compromise (#10301)
+  ['extract-zip', '<=2.0.1'], // GHSA-jmr9-qjv8-65gv, GHSA-7pqw-9j4j-h8q3
   ['hono', '<4.13.7'], // GHSA-hxh3-vqpv-xpqv
   ['js-yaml', '<3.15.2 || >=4.0.0 <4.3.2 || >=5.0.0 <5.2.3'], // #10356, GHSA-2883-xcg3-v3hh
   ['keyv', '6.0.0'], // Shai-Hulud compromise (#10301)
@@ -460,7 +463,9 @@ describe('package manifests', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const sitePackageJson = readPackageJson<PackageManifest>('site/package.json');
     const packageLock =
-      readPackageJson<PackageLockManifest<{ optional?: boolean }>>('package-lock.json');
+      readPackageJson<PackageLockManifest<{ optional?: boolean; devOptional?: boolean }>>(
+        'package-lock.json',
+      );
     const platformBindings = Object.keys({
       ...packageJson.dependencies,
       ...packageJson.optionalDependencies,
@@ -470,10 +475,8 @@ describe('package manifests', () => {
 
     for (const dependency of [
       '@alcalzone/ansi-tokenize',
-      '@anthropic-ai/claude-agent-sdk',
       '@langfuse/client',
       '@modelcontextprotocol/sdk',
-      '@openai/codex-security',
       '@opencode-ai/sdk',
       '@slack/web-api',
       '@swc/core',
@@ -493,13 +496,27 @@ describe('package manifests', () => {
     expect(sitePackageJson.devDependencies).not.toHaveProperty('sharp');
 
     for (const dependency of [
-      '@alcalzone/ansi-tokenize',
+      '@anthropic-ai/claude-agent-sdk',
+      '@openai/codex-sdk',
       '@openai/codex-security',
+    ]) {
+      expect(packageJson.dependencies, dependency).not.toHaveProperty(dependency);
+      expect(packageJson.optionalDependencies, dependency).not.toHaveProperty(dependency);
+      expect(packageJson.devDependencies, dependency).toHaveProperty(dependency);
+      // Runtime loaders validate versions only when the feature is used, so an
+      // unrelated consumer's existing SDK cannot block installing Promptfoo.
+      expect(packageJson.peerDependencies?.[dependency], dependency).toBe('*');
+      expect(packageJson.peerDependenciesMeta?.[dependency]?.optional, dependency).toBe(true);
+    }
+
+    for (const dependency of [
+      '@alcalzone/ansi-tokenize',
       '@opencode-ai/sdk',
       '@rollup/rollup-linux-x64-gnu',
       '@slack/web-api',
     ]) {
-      expect(packageLock.packages[`node_modules/${dependency}`]?.optional, dependency).toBe(true);
+      const entry = packageLock.packages[`node_modules/${dependency}`];
+      expect(entry?.optional || entry?.devOptional, dependency).toBe(true);
     }
   });
 

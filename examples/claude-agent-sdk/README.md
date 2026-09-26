@@ -12,7 +12,7 @@ cd claude-agent-sdk
 Install the Claude Agent SDK:
 
 ```bash
-npm install @anthropic-ai/claude-agent-sdk
+npm install promptfoo @anthropic-ai/claude-agent-sdk@0.3.273
 ```
 
 Export your Anthropic API key as `ANTHROPIC_API_KEY`:

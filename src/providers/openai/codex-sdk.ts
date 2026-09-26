@@ -4,6 +4,7 @@ import path from 'path';
 
 import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import dedent from 'dedent';
+import semverSatisfies from 'semver/functions/satisfies.js';
 import { z } from 'zod';
 import { getEnvString, getProcessEnv } from '../../envars';
 import {
@@ -25,6 +26,7 @@ import {
   isDefinitiveBillingCode,
   isHardQuotaCode,
 } from '../../util/fetch/errors';
+import { getPackageVersion } from '../../util/packageVersion';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
@@ -101,7 +103,7 @@ function isValidTraceparent(traceparent: string | undefined): traceparent is str
  * OpenAI Codex SDK Provider
  *
  * This provider requires the @openai/codex-sdk package to be installed separately:
- *   npm install @openai/codex-sdk
+ *   npm install promptfoo @openai/codex-sdk@^0.156.1
  *
  * Key features:
  * - Supports API key auth or existing Codex/ChatGPT login state
@@ -648,11 +650,18 @@ async function loadCodexSDK(): Promise<any> {
       dedent`The @openai/codex-sdk package is required but not installed.
 
       To use the OpenAI Codex SDK provider, install it with:
-        npm install @openai/codex-sdk
+        npm install promptfoo @openai/codex-sdk@^0.156.1
 
       Requires Node.js >=22.22.0.
 
       For more information, see: https://www.promptfoo.dev/docs/providers/openai-codex-sdk/`,
+    );
+  }
+
+  const version = getPackageVersion('@openai/codex-sdk', codexPath);
+  if (!version || !semverSatisfies(version, '^0.156.1')) {
+    throw new Error(
+      `The OpenAI Codex SDK provider requires @openai/codex-sdk@^0.156.1 (found ${version ?? 'unknown'}). Install it with: npm install promptfoo @openai/codex-sdk@^0.156.1`,
     );
   }
 
@@ -671,7 +680,7 @@ async function loadCodexSDK(): Promise<any> {
       - Corrupted installation
 
       Try reinstalling:
-        npm install @openai/codex-sdk
+        npm install promptfoo @openai/codex-sdk@^0.156.1
 
       For more information, see: https://www.promptfoo.dev/docs/providers/openai-codex-sdk/`,
     );
