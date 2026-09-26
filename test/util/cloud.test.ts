@@ -40,6 +40,7 @@ describe('cloud utils', () => {
 
     mockCloudConfig.getApiHost.mockReturnValue('https://api.example.com');
     mockCloudConfig.getApiKey.mockReturnValue('test-api-key');
+    mockCloudConfig.hasSavedApiKey.mockReturnValue(true);
     mockCloudConfig.getAuthHeaderName.mockReturnValue('Authorization');
     mockCloudConfig.getAuthHeaders.mockReturnValue({ Authorization: 'Bearer test-api-key' });
     mockCloudConfig.getRequestConfig.mockImplementation(() => ({

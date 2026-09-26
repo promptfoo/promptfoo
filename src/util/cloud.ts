@@ -550,8 +550,8 @@ export async function resolveTeamFromIdentifier(
 }
 
 /**
- * Resolves the current team context, checking stored preferences first. Never changes the
- * current organization: the fallback is the oldest team in that organization.
+ * Resolves a team within the saved login's selected organization or the environment
+ * credential's organization, preferring that organization's stored team.
  * @param teamIdentifier - Optional explicit team identifier to use
  * @param fallbackToDefault - Whether to fall back to server default team
  * @returns Promise resolving to an object with team id and name
@@ -569,12 +569,10 @@ export async function resolveTeamId(
 
   // 2. Use stored current team preference (scoped to current organization)
   const configuredOrganizationId = cloudConfig.getCurrentOrganizationId();
+  // Environment credentials can rotate independently of the saved organization.
+  const hasSavedApiKey = cloudConfig.hasSavedApiKey();
   let currentOrganizationId = configuredOrganizationId;
-  const currentTeamId = cloudConfig.getCurrentTeamId(currentOrganizationId);
-  if (!currentTeamId && !fallbackToDefault) {
-    throw new Error('No team specified and no default available');
-  }
-  if (!currentOrganizationId) {
+  if (!hasSavedApiKey || !currentOrganizationId) {
     const response = await makeRequest('/users/me', 'GET');
     const organizationId = response.ok ? (await response.json())?.organization?.id : undefined;
     if (typeof organizationId !== 'string' || !organizationId) {
@@ -584,13 +582,21 @@ export async function resolveTeamId(
     }
     currentOrganizationId = organizationId;
   }
+  // Saved legacy logins still use their unscoped preference until it is migrated.
+  const preferenceOrganizationId = hasSavedApiKey
+    ? configuredOrganizationId
+    : currentOrganizationId;
+  const currentTeamId = cloudConfig.getCurrentTeamId(preferenceOrganizationId);
+  if (!currentTeamId && !fallbackToDefault) {
+    throw new Error('No team specified and no default available');
+  }
   // Let lookup failures propagate: only a successful lookup proves the stored team is gone.
   const teams = (await getUserTeams()).filter(
     (team) => team.organizationId === currentOrganizationId,
   );
   const storedTeam = teams.find((team) => team.id === currentTeamId);
   if (storedTeam) {
-    if (!configuredOrganizationId) {
+    if (configuredOrganizationId !== currentOrganizationId) {
       cloudConfig.setCurrentOrganization(currentOrganizationId);
       cloudConfig.setCurrentTeamId(storedTeam.id, currentOrganizationId);
     }
@@ -602,7 +608,7 @@ export async function resolveTeamId(
       `[Team Resolution] Stored team ${currentTeamId} no longer accessible, falling back`,
     );
     if (teams.length === 0) {
-      cloudConfig.clearCurrentTeamId(configuredOrganizationId);
+      cloudConfig.clearCurrentTeamId(preferenceOrganizationId);
     }
   }
 
@@ -617,7 +623,7 @@ export async function resolveTeamId(
   }
   const defaultTeam = getOldestTeam(teams);
   // Store the default team where the next lookup reads it
-  if (!configuredOrganizationId) {
+  if (configuredOrganizationId !== currentOrganizationId) {
     cloudConfig.setCurrentOrganization(currentOrganizationId);
   }
   cloudConfig.setCurrentTeamId(defaultTeam.id, currentOrganizationId);

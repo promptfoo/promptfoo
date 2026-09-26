@@ -200,10 +200,12 @@ export function authCommand(program: Command) {
         }
 
         const { user, organization } = await response.json();
-        const organizationLabel = getCloudOrganizationLabel(organization);
-
         try {
           const currentTeam = await resolveTeamId();
+          const organizationLabel = getCloudOrganizationLabel(
+            organization,
+            currentTeam.organizationId,
+          );
           logger.info(dedent`
               ${chalk.green.bold('Currently logged in as:')}
               User: ${chalk.cyan(user.email)}
@@ -211,6 +213,10 @@ export function authCommand(program: Command) {
               Current Team: ${chalk.cyan(currentTeam.name)}
               App URL: ${chalk.cyan(cloudConfig.getAppUrl())}`);
         } catch (teamError) {
+          const organizationLabel = getCloudOrganizationLabel(
+            organization,
+            cloudConfig.hasSavedApiKey() ? undefined : organization.id,
+          );
           logger.info(dedent`
               ${chalk.green.bold('Currently logged in as:')}
               User: ${chalk.cyan(user.email)}
@@ -318,8 +324,8 @@ export function authCommand(program: Command) {
           return;
         }
 
-        // Shares the fallback used by whoami and red team generation, which never switches
-        // organizations; a stale team is replaced only after a successful lookup.
+        // Shares the fallback used by whoami and red team generation; a stale team
+        // is replaced only after a successful lookup in the effective organization.
         const team = await resolveTeamId();
         logger.info(`Current team: ${chalk.green(team.name)}`);
       } catch (error) {

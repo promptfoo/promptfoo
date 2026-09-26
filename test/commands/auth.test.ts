@@ -75,6 +75,7 @@ describe('auth command', () => {
     authCommand(program);
 
     vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+    vi.mocked(cloudConfig.hasSavedApiKey).mockReturnValue(true);
     vi.mocked(cloudConfig.getRequestConfig).mockImplementation(() => ({
       apiHost: cloudConfig.getApiHost(),
       authHeaderName: cloudConfig.getAuthHeaderName(),
@@ -1192,6 +1193,43 @@ describe('auth command', () => {
       vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
       vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('Authorization');
     });
+
+    it.each([true, false])(
+      'shows the environment token organization after rotation when team lookup succeeds: %s',
+      async (teamExists) => {
+        vi.mocked(cloudConfig.hasSavedApiKey).mockReturnValue(false);
+        vi.mocked(cloudConfig.getApiKey).mockReturnValue('environment-key');
+        vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue('old-org');
+        vi.mocked(fetchWithProxy).mockResolvedValueOnce(
+          Response.json({ user: mockCloudUser, organization: mockOrganization }),
+        );
+        if (teamExists) {
+          vi.mocked(resolveTeamId).mockImplementation(async () => {
+            vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue(mockOrganization.id);
+            return { id: 'new-team', name: 'New team', organizationId: mockOrganization.id };
+          });
+        } else {
+          vi.mocked(resolveTeamId).mockRejectedValue(new Error('Team lookup unavailable'));
+        }
+
+        await program.parseAsync(['node', 'test', 'auth', 'whoami']);
+
+        const messages = vi
+          .mocked(logger.info)
+          .mock.calls.map(([message]) => stripAnsi(String(message)))
+          .join('\n');
+        expect(messages).toContain(`Organization: ${mockOrganization.name}`);
+        expect(messages).not.toContain('old-org');
+        if (teamExists) {
+          expect(messages).toContain('Current Team: New team');
+        } else {
+          expect(cloudConfig.getCurrentOrganizationId()).toBe('old-org');
+          expect(logger.warn).toHaveBeenCalledWith(
+            expect.stringContaining('Team lookup unavailable'),
+          );
+        }
+      },
+    );
 
     it('queries the effective API key even when there is no saved email', async () => {
       vi.mocked(getUserEmail).mockReturnValue(null);

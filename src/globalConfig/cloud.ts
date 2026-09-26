@@ -134,6 +134,10 @@ export class CloudConfig {
     return !!this.resolveApiKey();
   }
 
+  hasSavedApiKey(): boolean {
+    return !!this.config.apiKey;
+  }
+
   setApiHost(apiHost: string): void {
     // Persist without a trailing slash so the stored host stays clean regardless of
     // caller (defense in depth alongside the strip in resolveApiHost()).
