@@ -13,8 +13,11 @@ import { SlotQueue } from './slotQueue';
  * Sentinel error for rate limit exhaustion.
  * Used to short-circuit the catch block and prevent double-release/double-count.
  */
-class RateLimitExhaustedError extends Error {
-  constructor(message: string) {
+export class RateLimitExhaustedError extends Error {
+  constructor(
+    message: string,
+    readonly result: unknown,
+  ) {
     super(message);
     this.name = 'RateLimitExhaustedError';
   }
@@ -208,6 +211,7 @@ export class ProviderRateLimitState extends EventEmitter {
           this.failedRequests++;
           throw new RateLimitExhaustedError(
             `Rate limit exceeded for ${this.rateLimitKey} after ${attempt + 1} attempts`,
+            result,
           );
         }
 

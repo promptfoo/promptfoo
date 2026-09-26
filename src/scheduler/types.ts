@@ -17,6 +17,8 @@ export interface RateLimitExecuteOptions<T> {
   isRateLimited?: (result: T | undefined, error?: Error) => boolean;
   /** Extract retry-after delay from result or error */
   getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
+  /** Preserve a structured failure result when retries are exhausted. Defaults to throwing. */
+  onRateLimitExhausted?: (result: T, error: Error) => T;
 }
 
 /**
