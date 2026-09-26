@@ -373,6 +373,118 @@ describe('AssertionsResult', () => {
       expect(result.namedScoreWeights).toBeUndefined();
     });
 
+    it.each([
+      { score: Number.MAX_VALUE, weight: 2, count: 1 },
+      { score: -Number.MAX_VALUE, weight: 2, count: 1 },
+      { score: Number.MAX_VALUE, weight: 1, count: 2 },
+    ])(
+      'fails explicitly when finite scores overflow during aggregation: %j',
+      async ({ score, weight, count }) => {
+        const assertionsResult = new AssertionsResult({ threshold: 0 });
+        for (let index = 0; index < count; index++) {
+          assertionsResult.addResult({
+            index,
+            result: { pass: true, score, reason: 'Finite input' },
+            metric: 'overflow',
+            weight,
+          });
+        }
+        assertionsResult.addResult({
+          index: count,
+          result: { pass: true, score: 0.25, reason: 'Valid metric' },
+          metric: 'valid',
+        });
+
+        const result = await assertionsResult.testResult();
+        expect(result).toMatchObject({
+          pass: false,
+          score: 0,
+          reason: 'Assertion aggregation error: scores or weights must remain finite',
+          namedScores: { valid: 0.25 },
+          namedScoreWeights: { valid: 1 },
+        });
+        expect(result.namedScores).not.toHaveProperty('overflow');
+        expect(result.namedScoreWeights).not.toHaveProperty('overflow');
+        expect(result.componentResults?.[0]).toMatchObject({ pass: true, score });
+        expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+      },
+    );
+
+    it.each([
+      { score: Number.MAX_VALUE, weight: 1 },
+      { score: 1, weight: Number.MAX_VALUE },
+    ])('fails when named scores or weights overflow: %j', async ({ score, weight }) => {
+      const assertionsResult = new AssertionsResult();
+      const component = {
+        pass: true,
+        score: 1,
+        reason: 'Finite component',
+        namedScores: { overflow: score, valid: 0.25 },
+        namedScoreWeights: { overflow: weight, valid: 1 },
+      };
+      assertionsResult.addResult({ index: 0, result: component, weight: 2 });
+
+      const result = await assertionsResult.testResult();
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Assertion aggregation error: scores or weights must remain finite',
+        namedScores: { valid: 0.25 },
+        namedScoreWeights: { valid: 2 },
+      });
+      expect(result.namedScores).not.toHaveProperty('overflow');
+      expect(result.namedScoreWeights).not.toHaveProperty('overflow');
+      expect(component.namedScores.overflow).toBe(score);
+      expect(component.namedScoreWeights.overflow).toBe(weight);
+      expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+    });
+
+    it.each([-2, 2, Number.MAX_VALUE])('preserves finite aggregate scores: %s', async (score) => {
+      const assertionsResult = new AssertionsResult();
+      assertionsResult.addResult({
+        index: 0,
+        result: { pass: true, score, reason: '' },
+        metric: 'quality',
+      });
+      expect(await assertionsResult.testResult()).toMatchObject({
+        pass: true,
+        score,
+        namedScores: { quality: score },
+        namedScoreWeights: { quality: 1 },
+      });
+    });
+
+    it('allows a valid custom scoring override to repair an overflow', async () => {
+      const assertionsResult = new AssertionsResult();
+      assertionsResult.addResult({
+        index: 0,
+        result: { pass: true, score: Number.MAX_VALUE, reason: '' },
+        metric: 'quality',
+        weight: 2,
+      });
+      const customResult = {
+        pass: true,
+        score: 2,
+        reason: 'Custom',
+        namedScores: { quality: 0.75 },
+        namedScoreWeights: { quality: 1 },
+      };
+      expect(await assertionsResult.testResult(() => customResult)).toMatchObject(customResult);
+    });
+
+    it('still rejects invalid inherited metrics after a finite score override', async () => {
+      const assertionsResult = new AssertionsResult();
+      assertionsResult.addResult({
+        index: 0,
+        result: { pass: true, score: Number.MAX_VALUE, reason: '' },
+        metric: 'quality',
+        weight: 2,
+      });
+      expect(
+        await assertionsResult.testResult(() => ({ pass: true, score: 2, reason: 'Custom' })),
+      ).toMatchObject({ pass: false, score: 0, namedScores: {}, namedScoreWeights: {} });
+    });
+
     it('should calculate final result with threshold', async () => {
       const assertionsResult = new AssertionsResult({ threshold: 0.7 });
 

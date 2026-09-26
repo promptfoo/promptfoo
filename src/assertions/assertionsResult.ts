@@ -408,6 +408,29 @@ export class AssertionsResult {
       }
     }
 
+    // Finite inputs can overflow when weighted or accumulated. Check the final
+    // output after custom scoring has had an opportunity to replace those values.
+    const invalidMetrics = new Set<string>();
+    for (const field of ['namedScores', 'namedScoreWeights'] as const) {
+      for (const [metric, value] of Object.entries(this.result[field] ?? {})) {
+        if (!Number.isFinite(value)) {
+          invalidMetrics.add(metric);
+        }
+      }
+    }
+    if (!Number.isFinite(this.result.score) || invalidMetrics.size > 0) {
+      this.result.pass = false;
+      this.result.score = 0;
+      this.result.reason = 'Assertion aggregation error: scores or weights must remain finite';
+      for (const field of ['namedScores', 'namedScoreWeights'] as const) {
+        if (this.result[field]) {
+          this.result[field] = Object.fromEntries(
+            Object.entries(this.result[field]).filter(([metric]) => !invalidMetrics.has(metric)),
+          );
+        }
+      }
+    }
+
     return this.result;
   }
 }

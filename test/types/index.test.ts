@@ -197,6 +197,15 @@ describe('isGradingResult', () => {
     },
   );
 
+  it.each([
+    { componentResults: new Array(1) },
+    { componentResults: Object.assign(new Array(2), { 0: { pass: true, score: 1, reason: '' } }) },
+  ])('rejects sparse component-result arrays: %j', ({ componentResults }) => {
+    const result = { pass: true, score: 1, reason: '', componentResults };
+    expect(isGradingResult(result)).toBe(false);
+    expect(isGradingResult({ ...result, componentResults: [result] })).toBe(false);
+  });
+
   it.each([-2, 0, 2])('accepts finite scores outside the usual 0–1 range: %s', (score) => {
     expect(
       isGradingResult({

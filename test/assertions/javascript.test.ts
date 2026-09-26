@@ -900,6 +900,22 @@ describe('JavaScript file references', () => {
     expect(result.namedScoreWeights).toBeUndefined();
   });
 
+  it('rejects sparse nested results before they become null components', async () => {
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: {
+        type: 'javascript',
+        value: '({ pass: true, score: 1, reason: "", componentResults: new Array(1) })',
+      },
+      test: {},
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({ pass: false, score: 0 });
+    expect(result.reason).toContain('Custom function threw error:');
+    expect(result.componentResults).toBeUndefined();
+  });
+
   it('rejects nonfinite metrics from a file assertion', async () => {
     vi.mocked(path.resolve).mockReturnValue('/mocked/path/to/assert.js');
     vi.mocked(path.extname).mockReturnValue('.js');

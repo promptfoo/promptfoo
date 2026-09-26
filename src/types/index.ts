@@ -610,7 +610,8 @@ export function isGradingResult(result: any): result is GradingResult {
       isFiniteNumberRecord(result.namedScoreWeights)) &&
     (typeof result.tokensUsed === 'undefined' || typeof result.tokensUsed === 'object') &&
     (typeof result.componentResults === 'undefined' ||
-      (Array.isArray(result.componentResults) && result.componentResults.every(isGradingResult))) &&
+      (Array.isArray(result.componentResults) &&
+        Array.from(result.componentResults).every(isGradingResult))) &&
     (typeof result.assertion === 'undefined' ||
       result.assertion === null ||
       typeof result.assertion === 'object') &&
