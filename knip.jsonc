@@ -93,7 +93,9 @@
     "go",
     "modelaudit",
     "ruby",
-    "security"
+    "security",
+    // Windows-only process tree kill, execFile'd from src/python/worker.ts.
+    "taskkill"
   ],
   "ignoreExportsUsedInFile": true,
   "ignoreIssues": {

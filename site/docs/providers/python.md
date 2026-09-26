@@ -541,6 +541,14 @@ Or set globally for all providers:
 export REQUEST_TIMEOUT_MS=600000  # 10 minutes
 ```
 
+When a call times out, promptfoo restarts that worker's Python process so later calls don't wait behind the stuck one. Any global state in that worker is lost.
+
+#### Crashes
+
+If a worker's Python process exits unexpectedly, only the call it was running fails and the worker restarts. After three crashes or failed restarts in a row, with no completed call in between, the worker stops restarting. Once every worker for a provider has stopped, remaining calls fail with an error instead of waiting.
+
+A script that fails at import time fails provider startup immediately. The Python traceback is logged from the worker's stderr.
+
 ### Environment Configuration
 
 #### Custom Python Executable
