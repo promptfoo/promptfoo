@@ -19,7 +19,7 @@ describe('validateTransformersDependency', () => {
         '@huggingface/transformers is required for local embedding and text generation providers',
       );
       await expect(validateTransformersDependency(transformersUnavailable)).rejects.toThrow(
-        'npm install @huggingface/transformers',
+        'npm install promptfoo @huggingface/transformers@^4.0.0',
       );
     });
   });

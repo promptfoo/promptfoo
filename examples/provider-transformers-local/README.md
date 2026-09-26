@@ -4,18 +4,15 @@ This example demonstrates a completely local LLM evaluation setup using Transfor
 
 ## Prerequisites
 
-Install the optional Transformers.js dependency:
-
-```bash
-npm install @huggingface/transformers
-```
+The Transformers.js runtime is opt-in. Install it alongside Promptfoo in the example directory:
 
 ## Usage
 
 ```bash
 npx promptfoo@latest init --example provider-transformers-local
 cd provider-transformers-local
-npx promptfoo@latest eval
+npm install promptfoo @huggingface/transformers@^4.0.0
+npx promptfoo eval
 ```
 
 ## What This Example Shows

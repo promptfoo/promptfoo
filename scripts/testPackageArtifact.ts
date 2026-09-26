@@ -697,6 +697,60 @@ async function runInstalledCompressionEval(consumerDir: string, configDir: strin
   }
 }
 
+async function runInstalledTransformersProvider(
+  consumerDir: string,
+  configDir: string,
+): Promise<void> {
+  const scriptPath = path.join(consumerDir, 'transformers.mjs');
+  const modelDir = path.join(consumerDir, 'tiny-bert');
+  fs.cpSync(path.join(ROOT, 'test/fixtures/transformers/tiny-bert'), modelDir, { recursive: true });
+  fs.writeFileSync(
+    scriptPath,
+    `import assert from 'node:assert/strict';
+import { evaluate, loadApiProvider } from 'promptfoo';
+
+const modelDir = ${JSON.stringify(modelDir)};
+const providerId = 'transformers:feature-extraction:' + modelDir;
+if (process.argv[2] === 'absent') {
+  assert.throws(() => import.meta.resolve('@huggingface/transformers'), { code: 'ERR_MODULE_NOT_FOUND' });
+  await assert.rejects(loadApiProvider(providerId), (error) => error.message.includes('npm install promptfoo @huggingface/transformers@^4.0.0'));
+} else {
+  const config = { device: 'cpu', dtype: 'fp32', localFilesOnly: true, normalize: false, cacheDir: modelDir };
+  const provider = await loadApiProvider(providerId, { options: { config } });
+  const embedding = await provider.callEmbeddingApi('hello world');
+  assert.equal(embedding.error, undefined);
+  assert.deepEqual(embedding.embedding, [3.5]);
+  const record = await evaluate({
+    prompts: ['hello world'],
+    providers: ['echo'],
+    tests: [providerId, providerId + '/missing'].map((id) => ({
+      assert: [{ type: 'similar', value: 'hello world', threshold: 0.99, provider: { id, config } }],
+    })),
+  }, { cache: false, maxConcurrency: 1 });
+  const { results } = await record.toEvaluateSummary();
+  assert.equal(results.length, 2);
+  assert.equal(results[0].success, true);
+  assert.equal(results[0].score, 1);
+  assert.equal(results[0].error, undefined);
+  assert.equal(results[1].success, false);
+  assert.match(results[1].gradingResult.reason, /missing|not found|Unable to locate/i);
+}
+`,
+  );
+  const env = {
+    PROMPTFOO_CONFIG_DIR: configDir,
+    PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
+    PROMPTFOO_DISABLE_TELEMETRY: '1',
+    PROMPTFOO_DISABLE_UPDATE: 'true',
+  };
+  await runAsync(process.execPath, [scriptPath, 'absent'], consumerDir, env);
+  runNpm(
+    ['install', '--ignore-scripts', '--no-audit', '--no-fund', '@huggingface/transformers@^4.0.0'],
+    consumerDir,
+  );
+  await runAsync(process.execPath, [scriptPath, 'installed'], consumerDir, env);
+}
+
 async function main(): Promise<void> {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-package-artifact-'));
   const artifactsDir = path.join(tempDir, 'artifacts');
@@ -782,6 +836,7 @@ async function main(): Promise<void> {
       );
     }
     await runInstalledCompressionEval(consumerDir, configDir);
+    await runInstalledTransformersProvider(consumerDir, configDir);
 
     console.log(`Verified installed package artifact: ${packResult.filename}`);
   } finally {

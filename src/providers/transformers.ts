@@ -196,7 +196,7 @@ async function getOrCreatePipeline(
       pipelineFn = transformers.pipeline;
     } catch {
       throw new Error(
-        'Transformers.js is not installed. Install it with: npm install @huggingface/transformers',
+        'Transformers.js is not installed. Install it with: npm install promptfoo @huggingface/transformers@^4.0.0',
       );
     }
 

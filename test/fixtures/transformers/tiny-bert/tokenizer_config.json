@@ -1,0 +1,9 @@
+{
+  "tokenizer_class": "BertTokenizer",
+  "model_max_length": 128,
+  "unk_token": "[UNK]",
+  "sep_token": "[SEP]",
+  "pad_token": "[PAD]",
+  "cls_token": "[CLS]",
+  "mask_token": "[MASK]"
+}

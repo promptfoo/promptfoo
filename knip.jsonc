@@ -37,6 +37,9 @@
         // code-scan-action/package.json rather than the root manifest.
         "@actions/*",
         "@octokit/rest",
+        // Optional peer loaded lazily only by Transformers providers. Consumers opt
+        // in; unit tests mock it and the package artifact test installs the real SDK.
+        "@huggingface/transformers",
         // Install-side-effect git-hook tool; never imported.
         "block-no-verify",
         // Transitive pin for google-auth-library behavior (see comments in

@@ -36,7 +36,7 @@ export async function validateTransformersDependency(
   if (!(await checkTransformers())) {
     throw new Error(
       '@huggingface/transformers is required for local embedding and text generation providers.\n' +
-        'Install it with: npm install @huggingface/transformers',
+        'Install it with: npm install promptfoo @huggingface/transformers@^4.0.0',
     );
   }
 }
