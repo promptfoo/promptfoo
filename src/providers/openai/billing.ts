@@ -1065,6 +1065,31 @@ function calculateModalCost(
   );
 }
 
+function calculateCustomUsageCost(
+  usage: OpenAIBillingUsage,
+  config: OpenAIBillingConfig,
+  cachedResponse: boolean | undefined,
+): number | undefined {
+  const tokenRates = [
+    [Math.max(usage.totalInputTokens - usage.audioInputTokens, 0), config.inputCost ?? config.cost],
+    [
+      Math.max(usage.totalOutputTokens - usage.audioOutputTokens, 0),
+      config.outputCost ?? config.cost,
+    ],
+    [usage.audioInputTokens, config.audioInputCost ?? config.audioCost],
+    [usage.audioOutputTokens, config.audioOutputCost ?? config.audioCost],
+  ] as const;
+  if (
+    tokenRates.every(([, rate]) => rate === undefined) ||
+    tokenRates.some(([tokens, rate]) => tokens > 0 && rate === undefined)
+  ) {
+    return undefined;
+  }
+  return cachedResponse
+    ? 0
+    : tokenRates.reduce((total, [tokens, rate]) => total + tokens * (rate ?? 0), 0);
+}
+
 export function calculateOpenAIUsageCost(
   modelName: string,
   config: OpenAIBillingConfig,
@@ -1104,9 +1129,8 @@ export function calculateOpenAIUsageCost(
   const tier = normalizeServiceTier(options.serviceTier);
   const modelRates = getModelRates(modelName, tier, usage.totalInputTokens);
   if (!modelRates) {
-    return undefined;
+    return calculateCustomUsageCost(usage, config, options.cachedResponse);
   }
-
   const rates = applyRegionalProcessingRates(modelName, modelRates, config, options);
 
   if (options.cachedResponse) {

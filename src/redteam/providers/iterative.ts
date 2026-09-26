@@ -20,7 +20,6 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
-import { withGradingUsage } from '../grading/storedResult';
 import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
@@ -56,6 +55,7 @@ import {
   getGraderAssertionValue,
   getTargetResponse,
   redteamProviderManager,
+  resolveStoredGraderResult,
   runRedteamGrader,
   type TargetResponse,
 } from './shared';
@@ -874,9 +874,7 @@ export async function runRedteamConversation({
       highestScore,
       redteamHistory: previousOutputs,
       redteamFinalPrompt: bestInjectVar ?? lastInjectVar,
-      storedGraderResult: bestGraderResult
-        ? withGradingUsage(bestGraderResult, storedGraderResult?.tokensUsed)
-        : storedGraderResult,
+      storedGraderResult: resolveStoredGraderResult(bestGraderResult, storedGraderResult),
       stopReason: stopReason,
       sessionIds,
       traceSnapshots:
