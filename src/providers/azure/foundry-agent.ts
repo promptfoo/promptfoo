@@ -2,6 +2,7 @@ import { createHmac } from 'crypto';
 
 import { getCache, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
+import { setGenAIResponseAttributes } from '../../tracing/genaiTracer';
 import { rateLimitTimingFromHeaders } from '../../util/fetch';
 import {
   extractRateLimitErrorCode,
@@ -19,9 +20,11 @@ import {
   maybeLoadToolsFromExternalFile,
   renderVarsInObject,
 } from '../../util/index';
+import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { resolveMaxToolIterations } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
+import { getResponsesTokenUsage } from '../responses/processor';
 import {
   buildChatSpanContext,
   emitTurnMarkerSpan,
@@ -46,6 +49,7 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
+  TokenUsage,
 } from '../../types/index';
 import type { CallbackContext, ReasoningEffort } from '../openai/types';
 import type { AzureAssistantOptions, AzureAssistantProviderOptions } from './types';
@@ -108,7 +112,7 @@ async function waitWithAbort<T>(
 
 function hashFoundryAgentCacheValue(value: unknown): string {
   const serialized = typeof value === 'string' ? value : JSON.stringify(value);
-  return createHmac('sha256', 'promptfoo:azure-foundry-agent:cache-key:v1')
+  return createHmac('sha256', 'promptfoo:azure-foundry-agent:cache-key:v2')
     .update(serialized ?? String(value))
     .digest('hex');
 }
@@ -239,8 +243,9 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   assistantConfig: AzureAssistantOptions;
   private loadedFunctionCallbacks: Record<string, Function> = {};
   private processor: ResponsesProcessor;
-  private projectClient: AzureAIProjectClient | null = null;
+  private projectClient?: Promise<AzureAIProjectClient>;
   private projectUrl: string;
+  private agentPromise?: Promise<FoundryAgent>;
   private resolvedAgent: FoundryAgent | null = null;
   private warnedUnsupportedFields = new Set<string>();
 
@@ -263,27 +268,8 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       modelName: this.assistantConfig.modelName || deploymentName,
       providerType: 'azure',
       functionCallbackHandler: new FunctionCallbackHandler(),
-      // calculateAzureCost expects (modelName, config, promptTokens, completionTokens); the Foundry
-      // usage object is Responses-shaped (input_tokens/output_tokens). Pass the token counts so
-      // cost is non-zero (previously `usage` was passed into the ignored config slot).
-      costCalculator: (_modelName: string, usage: any, requestConfig?: any) =>
-        calculateAzureCost(
-          requestConfig?.model || this.assistantConfig.modelName || this.deploymentName,
-          requestConfig,
-          usage?.prompt_tokens ?? usage?.input_tokens,
-          usage?.completion_tokens ?? usage?.output_tokens,
-          usage?.prompt_tokens_details?.cached_tokens ?? usage?.input_tokens_details?.cached_tokens,
-          usage?.prompt_tokens_details?.audio_tokens ?? usage?.input_tokens_details?.audio_tokens,
-          usage?.completion_tokens_details?.audio_tokens ??
-            usage?.output_tokens_details?.audio_tokens,
-          usage?.prompt_tokens_details?.image_tokens ?? usage?.input_tokens_details?.image_tokens,
-          usage?.prompt_tokens_details?.cached_tokens_details?.audio_tokens ??
-            usage?.input_tokens_details?.cached_tokens_details?.audio_tokens,
-          usage?.prompt_tokens_details?.cached_tokens_details?.image_tokens ??
-            usage?.input_tokens_details?.cached_tokens_details?.image_tokens,
-          usage?.completion_tokens_details?.image_tokens ??
-            usage?.output_tokens_details?.image_tokens,
-        ),
+      // Invocation accounting includes every turn, including failed responses.
+      costCalculator: () => undefined,
     });
 
     if (this.assistantConfig.functionToolCallbacks) {
@@ -291,11 +277,15 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     }
   }
 
-  private async initializeClient(): Promise<AzureAIProjectClient> {
-    if (this.projectClient) {
-      return this.projectClient;
-    }
+  private initializeClient(): Promise<AzureAIProjectClient> {
+    this.projectClient ??= this.createProjectClient().catch((error) => {
+      this.projectClient = undefined;
+      throw error;
+    });
+    return this.projectClient;
+  }
 
+  private async createProjectClient(): Promise<AzureAIProjectClient> {
     try {
       const { AIProjectClient } = await import('@azure/ai-projects');
       const { DefaultAzureCredential } = await import('@azure/identity');
@@ -304,7 +294,6 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         this.projectUrl,
         new DefaultAzureCredential(),
       ) as AzureAIProjectClient;
-      this.projectClient = projectClient;
       logger.debug('Azure AI Project client initialized successfully');
       return projectClient;
     } catch (error) {
@@ -314,15 +303,22 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     }
   }
 
-  private async resolveAgent(client: AzureAIProjectClient): Promise<FoundryAgent> {
-    if (this.resolvedAgent) {
-      return this.resolvedAgent;
-    }
+  private resolveAgent(client: AzureAIProjectClient): Promise<FoundryAgent> {
+    this.agentPromise ??= this.lookupAgent(client)
+      .then((agent) => {
+        this.resolvedAgent = agent;
+        return agent;
+      })
+      .catch((error) => {
+        this.agentPromise = undefined;
+        throw error;
+      });
+    return this.agentPromise;
+  }
 
+  private async lookupAgent(client: AzureAIProjectClient): Promise<FoundryAgent> {
     try {
-      const agent = await client.agents.get(this.deploymentName);
-      this.resolvedAgent = agent;
-      return agent;
+      return await client.agents.get(this.deploymentName);
     } catch (error) {
       logger.debug(
         `[AzureFoundryAgentProvider] Direct agent lookup failed for '${this.deploymentName}', falling back to list lookup`,
@@ -334,7 +330,6 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
 
     for await (const agent of client.agents.list()) {
       if (agent.id === this.deploymentName || agent.name === this.deploymentName) {
-        this.resolvedAgent = agent;
         return agent;
       }
     }
@@ -558,9 +553,10 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     return (response.output || []).filter((item): item is ResponseFunctionCallItem => {
       return (
         item?.type === 'function_call' &&
-        typeof item.id === 'string' &&
         typeof item.call_id === 'string' &&
+        item.call_id.length > 0 &&
         typeof item.name === 'string' &&
+        item.name.length > 0 &&
         typeof item.arguments === 'string'
       );
     });
@@ -570,13 +566,27 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     response: FoundryResponse,
     callbacks?: FunctionToolCallbacks,
   ): ResponseFunctionCallItem[] {
+    if (this.responseFailureMessage(response)) {
+      return [];
+    }
     const functionCalls = this.getFunctionCalls(response);
 
     if (functionCalls.length === 0 || !callbacks || Object.keys(callbacks).length === 0) {
       return [];
     }
 
-    const missingCallbacks = functionCalls.filter((call) => !(call.name in callbacks));
+    // A batch is atomic: malformed or duplicate calls must not partially execute.
+    const pendingCalls = response.output.filter((item) => item.type === 'function_call');
+    if (
+      functionCalls.length !== pendingCalls.length ||
+      new Set(functionCalls.map((call) => call.call_id)).size !== functionCalls.length
+    ) {
+      return [];
+    }
+
+    const missingCallbacks = functionCalls.filter(
+      (call) => !Object.prototype.hasOwnProperty.call(callbacks, call.name),
+    );
     if (missingCallbacks.length > 0) {
       logger.debug(
         `[AzureFoundryAgentProvider] Returning unresolved function calls because callbacks are missing for: ${missingCallbacks
@@ -619,11 +629,20 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     );
   }
 
-  private getAgentReference(agent: FoundryAgent): FoundryResponseCreateOptions {
+  private getResponseOptions(
+    agent: FoundryAgent,
+    config: EffectiveFoundryConfig,
+    signal?: AbortSignal,
+  ): FoundryResponseCreateOptions {
     // Azure AI Foundry replaced the top-level `agent` field in the responses
     // create body with `agent_reference`. Sending `agent` returns a 400 similar
     // to: "The 'agent' property is deprecated. Use 'agent_reference' instead."
     return {
+      ...(signal && { signal }),
+      ...(config.timeoutMs === undefined ? {} : { timeout: config.timeoutMs }),
+      ...(config.retryOptions?.maxRetries === undefined
+        ? {}
+        : { maxRetries: config.retryOptions.maxRetries }),
       body: {
         agent_reference: {
           name: agent.name,
@@ -633,39 +652,121 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     };
   }
 
+  private responseFailureMessage(response: FoundryResponse): string | undefined {
+    if (response.error) {
+      return response.error.message || response.error.code || 'Azure Foundry agent response failed';
+    }
+    if (response.status && response.status !== 'completed') {
+      const reason = response.incomplete_details?.reason;
+      return `Azure Foundry agent response status: ${response.status}${reason ? ` (${reason})` : ''}`;
+    }
+    return undefined;
+  }
+
+  private calculateResponseCost(
+    response: FoundryResponse,
+    config: EffectiveFoundryConfig,
+  ): number | undefined {
+    const usage = response.usage;
+    const modelOverride = (config.passthrough as { model?: string } | undefined)?.model;
+    return calculateAzureCost(
+      response.model || modelOverride || config.modelName || this.deploymentName,
+      config,
+      usage?.input_tokens,
+      usage?.output_tokens,
+      usage?.input_tokens_details?.cached_tokens,
+      // Some Foundry models report additional modality-specific usage details.
+      (usage?.input_tokens_details as any)?.audio_tokens,
+      (usage?.output_tokens_details as any)?.audio_tokens,
+      (usage?.input_tokens_details as any)?.image_tokens,
+      (usage?.input_tokens_details as any)?.cached_tokens_details?.audio_tokens,
+      (usage?.input_tokens_details as any)?.cached_tokens_details?.image_tokens,
+      (usage?.output_tokens_details as any)?.image_tokens,
+    );
+  }
+
+  private buildContinuationBody(
+    body: Record<string, any>,
+    response: FoundryResponse,
+    outputs: Array<{ type: 'function_call_output'; call_id: string; output: string }>,
+  ): Record<string, any> {
+    const { input: _input, previous_response_id: _previousId, conversation, ...settings } = body;
+    // Preserve the first turn's forced tool call, then allow a final answer.
+    if (settings.tool_choice === 'required' || settings.tool_choice?.type === 'function') {
+      settings.tool_choice = 'auto';
+    } else if (settings.tool_choice?.type === 'allowed_tools') {
+      settings.tool_choice = { ...settings.tool_choice, mode: 'auto' };
+    }
+    return {
+      ...settings,
+      input: outputs,
+      ...(conversation == null ? { previous_response_id: response.id } : { conversation }),
+    };
+  }
+
+  private validateResponseConfig(
+    body: Record<string, any>,
+    config: EffectiveFoundryConfig,
+  ): string | undefined {
+    const maxLoopTimeMs = config.maxPollTimeMs ?? 300000;
+    if (!Number.isFinite(maxLoopTimeMs) || maxLoopTimeMs < 0) {
+      return 'Azure Foundry agent maxPollTimeMs must be a finite, non-negative number.';
+    }
+    const timeout = config.timeoutMs;
+    if (timeout !== undefined && (!Number.isFinite(timeout) || timeout <= 0)) {
+      return 'Azure Foundry agent timeoutMs must be a finite, positive number.';
+    }
+    const maxRetries = config.retryOptions?.maxRetries;
+    if (maxRetries !== undefined && (!Number.isSafeInteger(maxRetries) || maxRetries < 0)) {
+      return 'Azure Foundry agent retryOptions.maxRetries must be a non-negative integer.';
+    }
+    if (body.conversation != null && body.previous_response_id != null) {
+      return 'Azure Foundry agent conversation and previous_response_id cannot be used together.';
+    }
+    if (body.stream || body.background) {
+      return 'Azure Foundry agents require non-streaming, foreground Responses requests; stream and background are not supported.';
+    }
+    if (body.store !== undefined && typeof body.store !== 'boolean') {
+      return 'Azure Foundry agent store must be a boolean.';
+    }
+    if (body.store === false && Object.keys(config.functionToolCallbacks ?? {}).length > 0) {
+      return 'Azure Foundry automatic function callbacks require stored responses. Remove store: false or functionToolCallbacks; stateless tool history is not supported by this provider.';
+    }
+    return undefined;
+  }
+
   private async processResponse(
     response: FoundryResponse,
     effectiveConfig: EffectiveFoundryConfig,
   ): Promise<ProviderResponse> {
-    // Only the timed loop executes callbacks. Unresolved calls must remain data
-    // when a batch cannot be handled (for example, when a callback is missing).
+    const failure = this.responseFailureMessage(response);
+    // Normalize any partial output without allowing response errors or callbacks
+    // to bypass the invocation's failure and tool-execution policies.
     const result = await this.processor.processResponseOutput(
-      response,
+      response.error ? { ...response, error: null } : response,
       { ...effectiveConfig, functionToolCallbacks: undefined },
       false,
     );
-    const cachedInputTokens = response.usage?.input_tokens_details?.cached_tokens;
-    if (result.tokenUsage && cachedInputTokens !== undefined) {
-      result.tokenUsage.cached = cachedInputTokens;
-    }
-    if (!result.error) {
-      return result;
-    }
-
-    if (response.output_text) {
-      logger.debug(
-        `[AzureFoundryAgentProvider] ResponsesProcessor returned an error, falling back to output_text`,
-        { processorError: result.error },
-      );
+    const metadata = {
+      ...result.metadata,
+      ...(response.status && { responseStatus: response.status }),
+      ...(response.incomplete_details?.reason && {
+        incompleteReason: response.incomplete_details.reason,
+      }),
+    };
+    if (failure) {
       return {
         ...result,
-        error: undefined,
-        output: response.output_text,
+        ...(result.error && response.output_text && { output: response.output_text }),
+        error: failure,
         raw: response,
+        metadata,
       };
     }
-
-    return result;
+    if (result.error && response.output_text) {
+      return { ...result, error: undefined, output: response.output_text, raw: response, metadata };
+    }
+    return { ...result, metadata };
   }
 
   async callApi(
@@ -705,20 +806,9 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       abortSignal,
     );
     const maxLoopTimeMs = effectiveConfig.maxPollTimeMs ?? 300000;
-    if (!Number.isFinite(maxLoopTimeMs) || maxLoopTimeMs < 0) {
-      return {
-        error: 'Azure Foundry agent maxPollTimeMs must be a finite, non-negative number.',
-      };
-    }
-    const timeout = effectiveConfig.timeoutMs;
-    if (timeout !== undefined && (!Number.isFinite(timeout) || timeout <= 0)) {
-      return { error: 'Azure Foundry agent timeoutMs must be a finite, positive number.' };
-    }
-    const maxRetries = effectiveConfig.retryOptions?.maxRetries;
-    if (maxRetries !== undefined && (!Number.isSafeInteger(maxRetries) || maxRetries < 0)) {
-      return {
-        error: 'Azure Foundry agent retryOptions.maxRetries must be a non-negative integer.',
-      };
+    const configError = this.validateResponseConfig(body, effectiveConfig);
+    if (configError) {
+      return { error: configError };
     }
     const maxToolIterations = resolveMaxToolIterations(effectiveConfig.maxToolIterations);
     const projectScope = hashFoundryAgentCacheValue(this.projectUrl);
@@ -729,7 +819,9 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     const useCache =
       isCacheEnabled() &&
       !Object.keys(effectiveConfig.functionToolCallbacks ?? {}).length &&
-      effectiveConfig.maxPollTimeMs === undefined;
+      effectiveConfig.maxPollTimeMs === undefined &&
+      body.conversation == null &&
+      body.previous_response_id == null;
     if (useCache) {
       try {
         const cache = await waitWithAbort(() => getCache(), abortSignal);
@@ -774,6 +866,26 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       }
     }
 
+    const tokenUsage: TokenUsage = { numRequests: 0 };
+    let knownCost = 0;
+    let costComplete = true;
+    let usageComplete = true;
+    const aggregateResult = (result: ProviderResponse): ProviderResponse => {
+      if (!tokenUsage.numRequests) {
+        return result;
+      }
+      return {
+        ...result,
+        tokenUsage,
+        ...(costComplete ? { cost: knownCost } : { cost: undefined }),
+        metadata: {
+          ...result.metadata,
+          ...(!costComplete && { costIncomplete: true, knownCost }),
+          ...(!usageComplete && { usageIncomplete: true }),
+        },
+      };
+    };
+
     try {
       const client = await waitWithAbort(() => this.initializeClient(), abortSignal);
       const agent = await waitWithAbort(() => this.resolveAgent(client), abortSignal);
@@ -781,12 +893,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       span.setAttribute(GenAIAttributes.AGENT_NAME, agent.name);
       span.updateName(`invoke_agent ${agent.name}`);
       const openAIClient = client.getOpenAIClient();
-      const responseOptions: FoundryResponseCreateOptions = {
-        ...this.getAgentReference(agent),
-        ...(abortSignal && { signal: abortSignal }),
-        ...(timeout === undefined ? {} : { timeout }),
-        ...(maxRetries === undefined ? {} : { maxRetries }),
-      };
+      const responseOptions = this.getResponseOptions(agent, effectiveConfig, abortSignal);
       const tracer = getGenAITracer();
       let turnCount = 0;
 
@@ -806,34 +913,45 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         });
       };
 
-      // The Responses API can resolve with a failed/errored response object
-      // instead of throwing. Surface that on the turn marker so a failed model
-      // round is not reported as OK (the parent chat span is already marked
-      // failed downstream via processResponse).
-      const responseFailureMessage = (resp: any): string | undefined => {
-        if (resp?.error) {
-          return typeof resp.error === 'string'
-            ? resp.error
-            : resp.error.message || resp.error.code || 'Response failed';
+      const requestResponse = async (
+        requestBody: Record<string, any>,
+      ): Promise<FoundryResponse> => {
+        throwIfAborted(abortSignal);
+        const turnStartedAt = Date.now();
+        // SDK-level attempts are observable; internal transport retries are not.
+        accumulateTokenUsage(tokenUsage, { numRequests: 1 });
+        try {
+          const response = await waitWithAbort(
+            () =>
+              openAIClient.responses.create(
+                requestBody as FoundryResponseCreateParams,
+                responseOptions,
+              ),
+            abortSignal,
+          );
+          accumulateTokenUsage(tokenUsage, {
+            ...getResponsesTokenUsage(response, false),
+            cached: response.usage?.input_tokens_details?.cached_tokens,
+            numRequests: 0,
+          });
+          usageComplete &&= response.usage != null;
+          const responseCost = this.calculateResponseCost(response, effectiveConfig);
+          if (responseCost === undefined) {
+            costComplete = false;
+          } else {
+            knownCost += responseCost;
+          }
+          emitTurnSpan(turnStartedAt, Date.now(), this.responseFailureMessage(response));
+          return response;
+        } catch (err) {
+          costComplete = false;
+          usageComplete = false;
+          emitTurnSpan(turnStartedAt, Date.now(), err instanceof Error ? err.message : String(err));
+          throw err;
         }
-        if (resp?.status === 'failed') {
-          return resp.incomplete_details?.reason || 'Response status: failed';
-        }
-        return undefined;
       };
 
-      let turnStartedAt = Date.now();
-      let response: FoundryResponse;
-      try {
-        response = await waitWithAbort(
-          () => openAIClient.responses.create(body as FoundryResponseCreateParams, responseOptions),
-          abortSignal,
-        );
-        emitTurnSpan(turnStartedAt, Date.now(), responseFailureMessage(response));
-      } catch (err) {
-        emitTurnSpan(turnStartedAt, Date.now(), err instanceof Error ? err.message : String(err));
-        throw err;
-      }
+      let response = await requestResponse(body);
       const startTime = Date.now();
       // Check the shared budget between turns; pending requests and callbacks
       // are allowed to finish rather than being interrupted by this limit.
@@ -850,9 +968,9 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       while (functionCalls.length > 0 && !outOfBudget()) {
         throwIfAborted(abortSignal);
         if (toolIterations >= maxToolIterations) {
-          return {
+          return aggregateResult({
             error: `Azure Foundry agent tool-calling loop reached maxToolIterations (${maxToolIterations}).`,
-          };
+          });
         }
         toolIterations += 1;
         const outputs = await this.buildFunctionCallOutputs(
@@ -866,29 +984,12 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         // Callbacks can exhaust the budget on their own. Stop before spending
         // another round trip on outputs the loop can no longer act on.
         if (outOfBudget()) {
-          return { error: toolLoopTimeoutError };
+          return aggregateResult({ error: toolLoopTimeoutError });
         }
         logger.debug(
           `[AzureFoundryAgentProvider] Submitting ${outputs.length} function_call_output item(s)`,
         );
-        turnStartedAt = Date.now();
-        try {
-          response = await waitWithAbort(
-            () =>
-              openAIClient.responses.create(
-                {
-                  input: outputs,
-                  previous_response_id: response.id,
-                } as FoundryResponseCreateParams,
-                responseOptions,
-              ),
-            abortSignal,
-          );
-          emitTurnSpan(turnStartedAt, Date.now(), responseFailureMessage(response));
-        } catch (err) {
-          emitTurnSpan(turnStartedAt, Date.now(), err instanceof Error ? err.message : String(err));
-          throw err;
-        }
+        response = await requestResponse(this.buildContinuationBody(body, response, outputs));
         functionCalls = this.getCallableFunctionCalls(
           response,
           effectiveConfig.functionToolCallbacks,
@@ -899,15 +1000,15 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       // A final answer may still be returned when the last request ran over time.
       if (
         hadCallableFunctionCalls &&
+        !this.responseFailureMessage(response) &&
         outOfBudget() &&
         response.output?.some((item) => item.type === 'function_call')
       ) {
-        return { error: toolLoopTimeoutError };
+        return aggregateResult({ error: toolLoopTimeoutError });
       }
 
-      const result = await waitWithAbort(
-        () => this.processResponse(response, effectiveConfig),
-        abortSignal,
+      const result = aggregateResult(
+        await waitWithAbort(() => this.processResponse(response, effectiveConfig), abortSignal),
       );
       if (useCache && !result.error) {
         try {
@@ -927,9 +1028,11 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       }
       return result;
     } catch (error: any) {
+      // Cancellation rejects instead of returning a response; keep completed usage on its span.
+      setGenAIResponseAttributes(span, { tokenUsage });
       throwIfAborted(abortSignal);
       logger.error(`Error in Azure Foundry Agent API call: ${error}`);
-      return this.formatError(error);
+      return aggregateResult(this.formatError(error));
     }
   }
 

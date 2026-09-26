@@ -126,6 +126,7 @@ const cases = [
     prompt: 'Call foundry_qa_weather for Paris, then return your final JSON result.',
     config: {
       instructions: 'In your final JSON result, set status to FOUNDRY_QA_OK.',
+      tool_choice: { type: 'function', name: 'foundry_qa_weather' },
       response_format: responseFormat,
       tools: [
         {

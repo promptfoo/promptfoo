@@ -656,6 +656,8 @@ When client credentials are provided, promptfoo uses the `@azure/identity` libra
 
 If neither an API key nor client credentials are provided, promptfoo falls back to `AzureCliCredential` (i.e., your `az login` session) — see [Option 3](#option-3-azure-cli-authentication).
 
+Each provider instance shares authentication work across concurrent requests and refreshes bearer tokens within five minutes of expiry. A failed authentication or refresh fails the waiting requests; a later request retries. Successfully constructed credentials are reused. Refresh failures do not fall back to an older token. Tokens without expiry information retain the existing behavior of no automatic refresh. API keys take precedence and require no token refresh.
+
 The `azureAuthorityHost` defaults to `https://login.microsoftonline.com` if not specified. The `azureTokenScope` defaults to `https://cognitiveservices.azure.com/.default`, the scope required to authenticate with Azure Cognitive Services. You typically don't need to change these unless you're working with a sovereign cloud (e.g., Azure Government or Azure China).
 
 ## Model-Graded Tests
@@ -1326,6 +1328,8 @@ The [legacy Assistants evaluation guide](/docs/guides/evaluate-openai-assistants
 
 Azure AI Foundry Agents let promptfoo run an existing Foundry agent through the Azure AI Projects SDK (`@azure/ai-projects`) and the v2 agent runtime. Promptfoo resolves the agent from your Azure AI Foundry project, then calls the Responses API with an `agent_reference`.
 
+Each provider instance reuses its project client, credential, and agent lookup across concurrent requests. Failed client initialization or agent lookup can retry on a later request. Each invocation gets its own OpenAI Responses client. Foundry retains the SDK's `DefaultAzureCredential` chain, including environment, workload identity, managed identity, and developer credentials.
+
 ### Key Differences from Standard Azure Assistants
 
 | Feature             | Azure Assistant                              | Azure Foundry Agent                                                                       |
@@ -1411,6 +1415,18 @@ Ignored per-request settings:
 Configure those on the Foundry agent definition itself instead of on the eval request.
 
 Other `retryOptions` fields are unsupported; retry delays and retryable failures follow the bundled OpenAI SDK.
+
+### Response continuity and accounting
+
+The provider resends instructions, tools, response format, model overrides, and generation settings on each tool turn. A forced `tool_choice` (`required` or a named function) applies to the initial request; subsequent turns use `auto` so the agent can return a final answer. An `allowed_tools` restriction remains in place while its mode changes to `auto`.
+
+By default, tool outputs continue the latest response using `previous_response_id`. If `passthrough.conversation` is configured, every turn uses that conversation instead. Do not combine `conversation` and `previous_response_id`. Requests using either explicit linkage field bypass promptfoo's response cache so repeated prompts still reach the conversation.
+
+Foundry supports [stateless responses](https://learn.microsoft.com/en-us/azure/foundry/agents/concepts/runtime-components#generate-a-response-without-storing), but this provider does not yet carry stateless tool history. `passthrough.store: false` works for a single request without local callbacks; combining it with `functionToolCallbacks` returns a configuration error before Azure access. Streaming and background requests are also unsupported by this provider.
+
+Failed, cancelled, incomplete, or still-pending Responses results return an error, preserving any available partial output, raw response, and usage. A completed refusal remains distinguishable through `isRefusal: true`. Partial text never clears a service error.
+
+Usage and cost cover every model turn in the invocation, including work completed before a later timeout or failure. `numRequests` counts SDK request attempts within that provider invocation, excluding local callbacks and retries internal to the SDK. Separate scheduler retries restart the provider invocation; their earlier usage is not aggregated here. Cached and reasoning tokens remain subsets of the total. Cost is calculated separately for each response's model. If usage or pricing is unavailable, metadata includes `usageIncomplete` or `costIncomplete`; incomplete cost is omitted from `cost`, with the known subtotal in `metadata.knownCost`.
 
 ### Function Tools with Azure Foundry Agents
 

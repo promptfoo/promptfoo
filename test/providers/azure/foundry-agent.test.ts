@@ -1297,6 +1297,12 @@ describe('AzureFoundryAgentProvider', () => {
       const result = await provider.callApi('prompt');
 
       expect(result.error).toContain(`reached maxToolIterations (${expected})`);
+      expect(result.tokenUsage).toMatchObject({
+        prompt: ((expected as number) + 1) * 20,
+        completion: ((expected as number) + 1) * 10,
+        total: ((expected as number) + 1) * 30,
+        numRequests: (expected as number) + 1,
+      });
       expect(callback).toHaveBeenCalledTimes(expected as number);
       expect(mockResponsesCreate).toHaveBeenCalledTimes((expected as number) + 1);
       expect(vi.getTimerCount()).toBe(0);
@@ -1341,6 +1347,7 @@ describe('AzureFoundryAgentProvider', () => {
       'cancels a pending %s, removes listeners, and consumes a late rejection',
       async (stage) => {
         vi.useFakeTimers();
+        const spans = installSpanRecorder();
         mockGetAgent.mockResolvedValue(mockAgent);
         const controller = new AbortController();
         const addListener = vi.spyOn(controller.signal, 'addEventListener');
@@ -1373,6 +1380,17 @@ describe('AzureFoundryAgentProvider', () => {
         await vi.advanceTimersByTimeAsync(0);
 
         expect(mockResponsesCreate).toHaveBeenCalledOnce();
+        if (stage === 'callback') {
+          expect(spans.find((span) => span.name === 'invoke_agent weather-agent')).toMatchObject({
+            attributes: {
+              'gen_ai.usage.input_tokens': 20,
+              'gen_ai.usage.output_tokens': 10,
+              'promptfoo.usage.total_tokens': 30,
+              'error.type': 'AbortError',
+            },
+            status: { code: SpanStatusCode.ERROR },
+          });
+        }
         const added = addListener.mock.calls.filter(([event]) => event === 'abort');
         for (const [, listener] of added) {
           expect(removeListener).toHaveBeenCalledWith('abort', listener);
@@ -1380,6 +1398,46 @@ describe('AzureFoundryAgentProvider', () => {
         expect(vi.getTimerCount()).toBe(0);
       },
     );
+
+    it('preserves completed model usage when cancellation interrupts a later request', async () => {
+      vi.useFakeTimers();
+      const spans = installSpanRecorder();
+      const controller = new AbortController();
+      let rejectPending!: (error: Error) => void;
+      const pending = new Promise<never>((_resolve, reject) => {
+        rejectPending = reject;
+      });
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate
+        .mockResolvedValueOnce(createFunctionCallResponse())
+        .mockReturnValueOnce(pending);
+      const callback = vi.fn().mockResolvedValue('sunny');
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl, functionToolCallbacks: { get_weather: callback } },
+      });
+
+      const result = provider.callApi('prompt', undefined, { abortSignal: controller.signal });
+      const rejection = expect(result).rejects.toMatchObject({ name: 'AbortError' });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mockResponsesCreate).toHaveBeenCalledTimes(2);
+      controller.abort();
+      await rejection;
+      rejectPending(new Error('late transport failure'));
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(spans.find((span) => span.name === 'invoke_agent weather-agent')).toMatchObject({
+        attributes: {
+          'gen_ai.usage.input_tokens': 20,
+          'gen_ai.usage.output_tokens': 10,
+          'promptfoo.usage.total_tokens': 30,
+          'error.type': 'AbortError',
+        },
+        status: { code: SpanStatusCode.ERROR },
+      });
+      expect(callback).toHaveBeenCalledOnce();
+      expect(mockResponsesCreate).toHaveBeenCalledTimes(2);
+      expect(vi.getTimerCount()).toBe(0);
+    });
 
     it.each(['cache', 'initialization', 'agent lookup'] as const)(
       'cancels a pending %s without allowing late completion to start a model request',
