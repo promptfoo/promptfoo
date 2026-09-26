@@ -4,6 +4,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import AddProviderDialog from './AddProviderDialog';
+import { normalizeProviders } from './setupReadiness';
 import type { ProviderOptions } from '@app/pages/redteam/setup/types';
 
 vi.mock('@app/pages/redteam/setup/hooks/useRedTeamConfig', () => ({
@@ -94,6 +95,108 @@ const renderDialog = (url: string, body = '{{prompt}}') => {
 };
 
 describe('AddProviderDialog provider validation', () => {
+  it.each([
+    ['string shorthand', ['openai:codex-security']],
+    ['object without config', [{ id: 'openai:codex-security' }]],
+  ] as const)('edits an imported Codex Security %s without crashing', async (_name, providers) => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    render(
+      <TooltipProvider>
+        <AddProviderDialog
+          open
+          onClose={vi.fn()}
+          onSave={onSave}
+          initialProvider={normalizeProviders([...providers])[0]}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Save Changes' })).toBeDisabled();
+    expect(screen.getByLabelText('Reasoning effort')).toHaveValue('');
+    await user.type(screen.getByLabelText(/Repository path/), '/repos/service');
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }));
+
+    expect(onSave).toHaveBeenCalledWith({
+      id: 'openai:codex-security',
+      label: 'openai:codex-security',
+      config: { repository: '/repos/service' },
+    });
+  });
+
+  it('rejects an imported string budget until it is replaced with a number', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    render(
+      <TooltipProvider>
+        <AddProviderDialog
+          open
+          onClose={vi.fn()}
+          onSave={onSave}
+          initialProvider={{
+            id: 'openai:codex-security',
+            config: { repository: '/repos/service', max_cost_usd: '1' },
+          }}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Save Changes' })).toBeDisabled();
+    await user.clear(screen.getByLabelText('Estimated scan budget (USD)'));
+    await user.type(screen.getByLabelText('Estimated scan budget (USD)'), '2');
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }));
+
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: { repository: '/repos/service', max_cost_usd: 2 },
+      }),
+    );
+  });
+
+  it('saves a comparison label and repository variable while preserving advanced YAML settings', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    render(
+      <TooltipProvider>
+        <AddProviderDialog
+          open
+          onClose={vi.fn()}
+          onSave={onSave}
+          initialProvider={{
+            id: 'openai:codex-security',
+            label: 'Existing comparison',
+            config: {
+              operation: 'deep-security-scan',
+              model: 'gpt-5.6-sol',
+              working_dir: '/repos/legacy',
+              reasoning_effort: 'low',
+              workers: 2,
+              max_discovery_runs: 3,
+            },
+          }}
+        />
+      </TooltipProvider>,
+    );
+
+    await user.clear(screen.getByLabelText('Provider label'));
+    await user.type(screen.getByLabelText('Provider label'), 'Deep comparison');
+    await user.click(screen.getByRole('button', { name: 'Use repository from test cases' }));
+    await user.selectOptions(screen.getByLabelText('Reasoning effort'), '');
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }));
+
+    expect(onSave).toHaveBeenCalledWith({
+      id: 'openai:codex-security',
+      label: 'Deep comparison',
+      config: {
+        operation: 'deep-security-scan',
+        model: 'gpt-5.6-sol',
+        repository: '{{repository}}',
+        workers: 2,
+        max_discovery_runs: 3,
+      },
+    });
+  });
+
   it('validates and saves Codex Security through the real provider configuration editor', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();

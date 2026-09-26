@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tab
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import { Check, Copy, X } from 'lucide-react';
 import ChatMessages, { type Message } from './ChatMessages';
+import { CodexSecurityResultSummary } from './CodexSecurityResultSummary';
 import { DebuggingPanel } from './DebuggingPanel';
 import { EvaluationPanel } from './EvaluationPanel';
 import { type ExpandedMetadataState, MetadataPanel } from './MetadataPanel';
@@ -480,6 +481,7 @@ export default function EvalOutputPromptDialog({
                 subtitleTypographyClassName={subtitleTypographyClassName}
                 readOnly={readOnly}
               />
+              <CodexSecurityResultSummary provider={provider} output={output} metadata={metadata} />
               {hasOutputContent && (
                 <OutputsPanel
                   output={output}

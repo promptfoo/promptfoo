@@ -54,6 +54,15 @@ async function testBasicConnectivity(provider: ApiProvider): Promise<{
   logger.info(chalk.dim('─'.repeat(50)));
 
   try {
+    if (provider.checkSetup) {
+      const result = await provider.checkSetup();
+      const log = result.success ? logger.info.bind(logger) : logger.error.bind(logger);
+      const color = result.success ? chalk.green : chalk.red;
+      log(color(`  ${result.success ? '✓' : '✗'} Local setup check`));
+      log(color(`    ${result.message}`));
+      return { success: result.success, ...(result.error ? { error: result.error } : {}) };
+    }
+
     // Make a simple test call
     const result = await provider.callApi('Hello, world!', {
       debug: true,

@@ -83,6 +83,18 @@ export async function testProviderConnectivity({
   /** Input variable definitions for multi-input configurations */
   inputs?: Inputs;
 }): Promise<ProviderTestResult> {
+  // Some providers represent expensive workloads rather than single completions.
+  // Their setup checks must bypass evaluation and remote response analysis entirely.
+  if (provider.checkSetup) {
+    const result = await provider.checkSetup();
+    return {
+      success: result.success,
+      message: result.message,
+      ...(result.error ? { error: result.error } : {}),
+      ...(result.details ? { providerResponse: { metadata: result.details } } : {}),
+    };
+  }
+
   const vars: Record<string, string> = {};
 
   // Generate a session ID for testing (works for both client sessions)

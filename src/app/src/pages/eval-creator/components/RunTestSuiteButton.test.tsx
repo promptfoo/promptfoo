@@ -246,6 +246,63 @@ describe('RunTestSuiteButton', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('HTTP error! status: 500');
   });
 
+  it('shows elapsed time independently of completed cases and stops updating after completion', async () => {
+    let completed = 0;
+    let finished = false;
+    mockCallApiRoutes([
+      { method: 'POST', path: '/eval/job', response: { id: 'long-operation' } },
+      {
+        path: '/eval/job/long-operation/',
+        repeat: true,
+        response: () =>
+          finished
+            ? { status: 'complete', evalId: 'completed-eval' }
+            : { status: 'in-progress', progress: completed, total: 2 },
+      },
+    ]);
+    useStore.getState().updateConfig({
+      prompts: ['Review fixture'],
+      providers: ['openai:codex-security'],
+      tests: [{ vars: { repository: '/repos/fixture' } }],
+    });
+
+    renderWithProvider(<RunTestSuiteButton />);
+    await act(async () => {
+      screen
+        .getByRole('button', { name: 'Run Eval' })
+        .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await timers.advanceByAsync(65000);
+    });
+
+    expect(screen.getByRole('status')).toHaveTextContent('0 of 2 cases completed');
+    expect(screen.getByRole('status')).toHaveTextContent('1m 5s elapsed');
+    expect(screen.queryByText(/% complete/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Running eval' })).toBeDisabled();
+
+    completed = 1;
+    await act(async () => {
+      await timers.advanceByAsync(1000);
+    });
+    expect(screen.getByRole('status')).toHaveTextContent('1 of 2 cases completed');
+    expect(screen.getByRole('status')).toHaveTextContent('1m 6s elapsed');
+
+    finished = true;
+    await act(async () => {
+      await timers.advanceByAsync(1000);
+    });
+    expect(screen.getByRole('button', { name: 'Run Eval' })).toBeEnabled();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    const finishedCallCount = getCallApiMock().mock.calls.length;
+    await act(async () => {
+      await timers.advanceByAsync(5000);
+    });
+    expect(getCallApiMock()).toHaveBeenCalledTimes(finishedCallCount);
+    expect(timers.getTimerCount()).toBe(0);
+  });
+
   it('should revert to non-running state and display an error message when the initial API call fails', async () => {
     const errorMessage = 'Failed to submit test suite';
 

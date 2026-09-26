@@ -24,6 +24,7 @@ vi.mock('../../src/esm', async (importOriginal) => ({
 }));
 
 const mockRun = vi.fn();
+const mockPreflight = vi.fn();
 const mockValidate = vi.fn();
 const mockClose = vi.fn();
 const mockRefs = vi.fn();
@@ -99,6 +100,13 @@ describe('OpenAICodexSecurityProvider', () => {
     );
     vi.mocked(importModule).mockReset();
     vi.mocked(importModule).mockResolvedValue(mockModule);
+    mockPreflight.mockResolvedValue({
+      repository: '/repo',
+      model: 'test-model',
+      reasoningEffort: 'high',
+      authentication: { mode: 'chatgpt' },
+      outputDir: null,
+    });
     mockRun.mockReset();
     mockRun.mockResolvedValue(createScanResult());
     mockValidate.mockReset();
@@ -117,6 +125,7 @@ describe('OpenAICodexSecurityProvider', () => {
     MockCodexSecurity.mockImplementation(function () {
       return {
         run: mockRun,
+        preflight: mockPreflight,
         validate: mockValidate,
         close: mockClose,
       };
@@ -129,7 +138,213 @@ describe('OpenAICodexSecurityProvider', () => {
     vi.restoreAllMocks();
   });
 
+  describe('local setup checks', () => {
+    it('checks SDK paths and options without running workloads or inference', async () => {
+      const provider = new OpenAICodexSecurityProvider({
+        config: { repository: '/repo', model: 'test-model', max_cost_usd: 1 },
+      });
+      const result = await provider.checkSetup();
+      expect(result).toMatchObject({
+        success: true,
+        details: {
+          check: 'local-preflight',
+          repository: '/repo',
+          model: 'test-model',
+          sdkVersion: '0.1.18',
+        },
+      });
+      expect(result.message).toContain('have not been verified');
+      expect(mockPreflight).toHaveBeenCalledWith(
+        '/repo',
+        expect.objectContaining({ target: 'repository', mode: 'standard', maxCostUsd: 1 }),
+      );
+      expect(mockRun).not.toHaveBeenCalled();
+      expect(mockValidate).not.toHaveBeenCalled();
+      expect(mockClose).toHaveBeenCalledOnce();
+    });
+
+    it('reports local failures and closes the SDK without starting an operation', async () => {
+      mockPreflight.mockRejectedValue(new Error('Repository does not exist'));
+      const result = await new OpenAICodexSecurityProvider().checkSetup();
+      expect(result).toMatchObject({
+        success: false,
+        message: expect.stringContaining('Repository does not exist'),
+      });
+      expect(mockRun).not.toHaveBeenCalled();
+      expect(mockValidate).not.toHaveBeenCalled();
+      expect(mockClose).toHaveBeenCalledOnce();
+    });
+
+    it('does not fall back to an operation when an older SDK lacks preflight', async () => {
+      MockCodexSecurity.mockImplementationOnce(function () {
+        return { run: mockRun, validate: mockValidate, close: mockClose };
+      });
+      const result = await new OpenAICodexSecurityProvider().checkSetup();
+      expect(result).toMatchObject({
+        success: false,
+        message: expect.stringContaining('does not support local preflight'),
+      });
+      expect(mockRun).not.toHaveBeenCalled();
+      expect(mockValidate).not.toHaveBeenCalled();
+      expect(mockClose).toHaveBeenCalledOnce();
+    });
+
+    it('does not invent test-row variables during setup', async () => {
+      const result = await new OpenAICodexSecurityProvider({
+        config: { repository: '{{repository}}' },
+      }).checkSetup();
+      expect(result).toMatchObject({
+        success: false,
+        message: expect.stringContaining('concrete configuration'),
+      });
+      expect(MockCodexSecurity).not.toHaveBeenCalled();
+    });
+
+    it('rejects provider-scoped auth without loading the SDK', async () => {
+      const result = await new OpenAICodexSecurityProvider({
+        env: { OPENAI_API_KEY: 'dummy-scoped-setup-key' },
+      }).checkSetup();
+      expect(result).toMatchObject({
+        success: false,
+        message: expect.stringContaining('process environment'),
+      });
+      expect(MockCodexSecurity).not.toHaveBeenCalled();
+    });
+
+    it('rejects incomplete diff configuration before preflight', async () => {
+      const result = await new OpenAICodexSecurityProvider({
+        config: { operation: 'security-diff-scan' },
+      }).checkSetup();
+      expect(result).toMatchObject({
+        success: false,
+        message: expect.stringContaining('requires base_ref'),
+      });
+      expect(mockPreflight).not.toHaveBeenCalled();
+      expect(mockRun).not.toHaveBeenCalled();
+      expect(mockClose).toHaveBeenCalledOnce();
+    });
+
+    it('checks validation finding-file existence without reading or validating the finding', async () => {
+      const stat = vi
+        .spyOn(fs, 'stat')
+        .mockResolvedValue({ isFile: () => true } as Awaited<ReturnType<typeof fs.stat>>);
+      const read = vi.spyOn(fs, 'readFile');
+      const result = await new OpenAICodexSecurityProvider({
+        config: { operation: 'validation', finding_file: '/repo/finding.json', max_cost_usd: 1 },
+      }).checkSetup();
+      expect(result.success).toBe(true);
+      expect(stat).toHaveBeenCalledWith('/repo/finding.json');
+      expect(read).not.toHaveBeenCalled();
+      expect(mockPreflight).toHaveBeenCalledWith(process.cwd(), {});
+      expect(mockRun).not.toHaveBeenCalled();
+      expect(mockValidate).not.toHaveBeenCalled();
+    });
+
+    it('rejects a directory used as a finding file', async () => {
+      vi.spyOn(fs, 'stat').mockResolvedValue({ isFile: () => false } as Awaited<
+        ReturnType<typeof fs.stat>
+      >);
+      const result = await new OpenAICodexSecurityProvider({
+        config: { operation: 'validation', finding_file: '/repo' },
+      }).checkSetup();
+      expect(result).toMatchObject({
+        success: false,
+        message: expect.stringContaining('regular file'),
+      });
+      expect(mockPreflight).not.toHaveBeenCalled();
+      expect(mockValidate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('result accounting', () => {
+    it('retains cost uncertainty without converting unreported cache writes into zero', async () => {
+      const cost = {
+        model: 'test-model',
+        inputTokens: 10,
+        outputTokens: 5,
+        cachedInputTokens: 0,
+        cacheWriteInputTokens: 0,
+        cacheWriteInputTokensReported: false,
+        estimatedUsd: 0.01,
+        estimatedUsdRange: { min: 0.01, max: 0.02, context: 'unknown' },
+      };
+      mockRun.mockResolvedValue(createScanResult({ cost }));
+      const response = await new OpenAICodexSecurityProvider().callApi('Synthetic result');
+      expect(response.metadata).toMatchObject({ providerType: 'codex-security', cost });
+      expect(response.tokenUsage?.completionDetails).not.toHaveProperty('cacheCreationInputTokens');
+    });
+
+    it('omits unreported cache writes when falling back to raw usage without pricing', async () => {
+      mockRun.mockResolvedValue(
+        createScanResult({
+          cost: undefined,
+          turnResult: {
+            usage: {
+              input_tokens: 10,
+              output_tokens: 5,
+              cache_write_input_tokens: 0,
+              cache_write_input_tokens_reported: false,
+            },
+          },
+        }),
+      );
+      const response = await new OpenAICodexSecurityProvider().callApi('Synthetic result');
+      expect(response.cost).toBeUndefined();
+      expect(response.tokenUsage).toMatchObject({ prompt: 10, completion: 5 });
+      expect(response.tokenUsage?.completionDetails).toBeUndefined();
+    });
+
+    it('retains warnings, output directory and cost after SDK failure', async () => {
+      const cost = {
+        model: 'test-model',
+        inputTokens: 10,
+        outputTokens: 5,
+        estimatedUsd: 0.01,
+        estimatedUsdRange: { min: 0.01, max: 0.02, context: 'unknown' },
+      };
+      mockRun.mockImplementation(async (_repository, options) => {
+        options.onOutputDirReady('/tmp/incomplete-output');
+        options.onWarning('Incomplete coverage');
+        options.onProgress({ phase: 'discovery' });
+        options.onCost(cost);
+        throw new Error('Interrupted');
+      });
+      const response = await new OpenAICodexSecurityProvider().callApi('Synthetic result');
+      expect(response.metadata).toMatchObject({
+        providerType: 'codex-security',
+        status: 'error',
+        sdkVersion: '0.1.18',
+        cost,
+        scanDir: '/tmp/incomplete-output',
+        warnings: ['Incomplete coverage'],
+        progress: { phase: 'discovery' },
+      });
+      expect(response.error).toContain('Interrupted');
+    });
+
+    it('identifies validation results with SDK provenance', async () => {
+      const response = await new OpenAICodexSecurityProvider({
+        config: { operation: 'validation' },
+      }).callApi('Synthetic finding');
+      expect(response.metadata).toMatchObject({
+        providerType: 'codex-security',
+        sdkVersion: '0.1.18',
+        operation: 'validation',
+      });
+      expect(response.cost).toBeUndefined();
+      expect(response.tokenUsage).toBeUndefined();
+    });
+  });
+
   describe('configuration', () => {
+    it.each([{ stop_after_no_new: 0 }, { max_time_hours: 97 }])(
+      'rejects values outside SDK bounds: %j',
+      (config) => {
+        expect(() => new OpenAICodexSecurityProvider({ config })).toThrow();
+        expect(MockCodexSecurity).not.toHaveBeenCalled();
+      },
+    );
+
     it('defaults to the Codex Security provider ID and repository scan operation', async () => {
       const provider = new OpenAICodexSecurityProvider();
 
@@ -208,7 +423,7 @@ describe('OpenAICodexSecurityProvider', () => {
       vi.mocked(resolvePackageEntryPoint).mockReturnValue(null);
       const provider = new OpenAICodexSecurityProvider();
 
-      expect(await provider.callApi('Scan')).toEqual({
+      expect(await provider.callApi('Scan')).toMatchObject({
         error: expect.stringContaining('npm install promptfoo @openai/codex-security'),
       });
     });
@@ -755,7 +970,7 @@ describe('OpenAICodexSecurityProvider', () => {
       mockRun.mockRejectedValue(new Error('Trusted Access is required'));
       const provider = new OpenAICodexSecurityProvider();
 
-      expect(await provider.callApi('Scan')).toEqual({
+      expect(await provider.callApi('Scan')).toMatchObject({
         error: 'Codex Security operation failed: Trusted Access is required',
       });
       expect(mockClose).toHaveBeenCalledTimes(1);
@@ -775,7 +990,7 @@ describe('OpenAICodexSecurityProvider', () => {
       });
       const provider = new OpenAICodexSecurityProvider();
 
-      expect(await provider.callApi('Scan')).toEqual({
+      expect(await provider.callApi('Scan')).toMatchObject({
         error: 'Codex Security operation failed: Scan completed without required artifacts',
         cost: 0.08,
         tokenUsage: {

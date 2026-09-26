@@ -374,21 +374,26 @@ function ProviderConfigEditor({
         errors.push('Codex Security provider ID must start with openai:codex-security');
       }
       if (
-        provider.config.operation !== undefined &&
+        structuredProvider.config.operation !== undefined &&
         !CODEX_SECURITY_OPERATION_OPTIONS.some(
-          (option) => option.value === provider.config.operation,
+          (option) => option.value === structuredProvider.config.operation,
         )
       ) {
         errors.push('Unsupported Codex Security operation');
       }
       if (
-        provider.config.auth !== undefined &&
-        !CODEX_SECURITY_AUTH_OPTIONS.some((option) => option.value === provider.config.auth)
+        structuredProvider.config.auth !== undefined &&
+        !CODEX_SECURITY_AUTH_OPTIONS.some(
+          (option) => option.value === structuredProvider.config.auth,
+        )
       ) {
         errors.push('Unsupported Codex Security authentication method');
       }
       if (
-        [provider.config.model_reasoning_effort, provider.config.reasoning_effort].some(
+        [
+          structuredProvider.config.model_reasoning_effort,
+          structuredProvider.config.reasoning_effort,
+        ].some(
           (effort) =>
             effort !== undefined &&
             !CODEX_SECURITY_REASONING_OPTIONS.some((option) => option === effort),
@@ -396,42 +401,50 @@ function ProviderConfigEditor({
       ) {
         errors.push('Unsupported Codex Security reasoning effort');
       }
-      const repository = provider.config.repository ?? provider.config.working_dir;
+      const repository =
+        structuredProvider.config.repository ?? structuredProvider.config.working_dir;
       if (typeof repository !== 'string' || !repository.trim()) {
         errors.push('Repository path is required');
       }
       if (
-        provider.config.operation === 'security-diff-scan' &&
-        !provider.config.base_ref &&
-        !provider.config.working_tree
+        structuredProvider.config.operation === 'security-diff-scan' &&
+        !structuredProvider.config.base_ref &&
+        !structuredProvider.config.working_tree
       ) {
         errors.push('A base Git reference or working tree target is required for diff scans');
       }
-      if (provider.config.working_tree && provider.config.head_ref) {
+      if (structuredProvider.config.working_tree && structuredProvider.config.head_ref) {
         errors.push('Working-tree scans cannot specify a head Git reference');
       }
       if (
-        provider.config.operation !== 'security-diff-scan' &&
-        (provider.config.base_ref || provider.config.head_ref || provider.config.working_tree)
+        structuredProvider.config.operation !== 'security-diff-scan' &&
+        (structuredProvider.config.base_ref ||
+          structuredProvider.config.head_ref ||
+          structuredProvider.config.working_tree)
       ) {
         errors.push('Git diff target options require the diff scan operation');
       }
       if (
-        provider.config.operation === 'security-diff-scan' &&
-        Array.isArray(provider.config.paths) &&
-        provider.config.paths.length > 0
+        structuredProvider.config.operation === 'security-diff-scan' &&
+        Array.isArray(structuredProvider.config.paths) &&
+        structuredProvider.config.paths.length > 0
       ) {
         errors.push('Scoped repository paths cannot be combined with diff scans');
       }
       if (
-        provider.config.model_reasoning_effort &&
-        provider.config.reasoning_effort &&
-        provider.config.model_reasoning_effort !== provider.config.reasoning_effort
+        structuredProvider.config.model_reasoning_effort &&
+        structuredProvider.config.reasoning_effort &&
+        structuredProvider.config.model_reasoning_effort !==
+          structuredProvider.config.reasoning_effort
       ) {
         errors.push('Reasoning effort settings must match');
       }
-      if (provider.config.max_cost_usd !== undefined && provider.config.max_cost_usd <= 0) {
-        errors.push('Maximum scan cost must be greater than 0');
+      const budget = structuredProvider.config.max_cost_usd;
+      if (
+        budget !== undefined &&
+        (typeof budget !== 'number' || !Number.isFinite(budget) || budget <= 0)
+      ) {
+        errors.push('Estimated scan budget must be a finite number greater than 0');
       }
     } else if (
       [
@@ -639,7 +652,7 @@ function ProviderConfigEditor({
 
       {providerType === 'codex-security' && (
         <CodexSecurityConfiguration
-          selectedTarget={provider}
+          selectedTarget={structuredProvider}
           updateCustomTarget={updateCustomTarget}
         />
       )}

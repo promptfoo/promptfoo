@@ -1,9 +1,11 @@
 import { useState } from 'react';
 
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
+import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Info } from 'lucide-react';
+import CodexSecuritySetupCheck from './CodexSecuritySetupCheck';
 
 import type { ProviderOptions } from '../../types';
 
@@ -40,6 +42,12 @@ export const CODEX_SECURITY_AUTH_OPTIONS = [
 const SELECT_CLASS_NAME =
   'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background';
 
+function getBudgetInputValue(value: unknown): string | number {
+  return typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value))
+    ? value
+    : '';
+}
+
 export default function CodexSecurityConfiguration({
   selectedTarget,
   updateCustomTarget,
@@ -66,10 +74,13 @@ export default function CodexSecurityConfiguration({
       : typeof config.working_dir === 'string'
         ? config.working_dir
         : '';
-  const reasoningValue = config.model_reasoning_effort ?? config.reasoning_effort ?? 'high';
-  const reasoning = CODEX_SECURITY_REASONING_OPTIONS.some((option) => option === reasoningValue)
-    ? reasoningValue
-    : '';
+  const reasoningValue = config.model_reasoning_effort ?? config.reasoning_effort;
+  const reasoning =
+    reasoningValue === undefined
+      ? ''
+      : CODEX_SECURITY_REASONING_OPTIONS.some((option) => option === reasoningValue)
+        ? reasoningValue
+        : 'unsupported';
   const configuredAuth = config.auth ?? 'auto';
   const auth = CODEX_SECURITY_AUTH_OPTIONS.some((option) => option.value === configuredAuth)
     ? configuredAuth
@@ -121,6 +132,9 @@ export default function CodexSecurityConfiguration({
 
   const updateCanonicalSetting = (field: string, alias: string, value: unknown) => {
     const nextConfig: ProviderOptions['config'] = { ...config, [field]: value };
+    if (value === undefined) {
+      delete nextConfig[field];
+    }
     delete nextConfig[alias];
     updateCustomTarget('config', nextConfig);
   };
@@ -161,13 +175,31 @@ export default function CodexSecurityConfiguration({
             <p className="mt-1">
               Compare repository scans, finding validation, model reasoning, and estimated cost.
               Install <code>promptfoo</code> and <code>@openai/codex-security@^0.1.18</code>{' '}
-              together, then use an existing Codex login or OpenAI API key.
+              together on the machine running the Promptfoo server.
+            </p>
+            <p className="mt-2">
+              Sign in with Codex on that machine, or set <code>OPENAI_API_KEY</code> or{' '}
+              <code>CODEX_API_KEY</code> in the server process environment before starting it. The
+              Setup page’s API keys dialog and provider-scoped keys do not configure this SDK.
             </p>
           </AlertDescription>
         </AlertContent>
       </Alert>
 
       <div className="grid gap-5 sm:grid-cols-2">
+        <div className="space-y-2 sm:col-span-2">
+          <Label htmlFor="codex-security-label">Provider label</Label>
+          <Input
+            id="codex-security-label"
+            value={selectedTarget.label ?? ''}
+            placeholder="e.g., Standard scan — high reasoning"
+            onChange={(event) => updateCustomTarget('label', event.target.value)}
+          />
+          <p className="text-sm text-muted-foreground">
+            Give each comparison a distinct label to identify its results.
+          </p>
+        </div>
+
         <div className="space-y-2">
           <Label htmlFor="codex-security-operation">Security operation</Label>
           <select
@@ -218,8 +250,18 @@ export default function CodexSecurityConfiguration({
             }
           />
           <p className="text-sm text-muted-foreground">
-            Use the same authorized repository for every model or scan-depth comparison.
+            This path must exist on the machine running the Promptfoo server. Use an absolute path
+            for web evaluations. To compare repositories, set <code>{'{{repository}}'}</code> here
+            and define a <code>repository</code> variable in each test case.
           </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => updateCanonicalSetting('repository', 'working_dir', '{{repository}}')}
+          >
+            Use repository from test cases
+          </Button>
         </div>
 
         {isRepositoryScan && (
@@ -247,12 +289,13 @@ export default function CodexSecurityConfiguration({
               updateCanonicalSetting(
                 'model_reasoning_effort',
                 'reasoning_effort',
-                event.target.value,
+                event.target.value || undefined,
               )
             }
           >
-            {reasoning === '' && (
-              <option value="" disabled>
+            <option value="">SDK default</option>
+            {reasoning === 'unsupported' && (
+              <option value="unsupported" disabled>
                 Unsupported reasoning effort
               </option>
             )}
@@ -287,16 +330,21 @@ export default function CodexSecurityConfiguration({
 
         {isScan && (
           <div className="space-y-2">
-            <Label htmlFor="codex-security-max-cost">Maximum cost (USD)</Label>
+            <Label htmlFor="codex-security-max-cost">Estimated scan budget (USD)</Label>
             <Input
               id="codex-security-max-cost"
               type="number"
               min="0.01"
               step="0.01"
-              value={config.max_cost_usd ?? ''}
+              value={getBudgetInputValue(config.max_cost_usd)}
               placeholder="1"
               onChange={(event) => updateOptionalNumber('max_cost_usd', event.target.value)}
             />
+            <p className="text-sm text-muted-foreground">
+              Applies to each scan. The SDK stops when estimated spend exceeds this amount, so
+              in-flight work can overshoot it. This is not an exact billing cap or a budget for the
+              whole evaluation. Leave blank to use the SDK default.
+            </p>
           </div>
         )}
 
@@ -338,6 +386,10 @@ export default function CodexSecurityConfiguration({
 
         {isFindingOperation && (
           <div className="space-y-2 sm:col-span-2">
+            <p className="text-sm text-muted-foreground">
+              Finding validation does not report reliable token usage or cost. Any saved scan budget
+              does not apply to validation; omit cost assertions for this operation.
+            </p>
             <Label htmlFor="codex-security-finding-file">Finding file</Label>
             <Input
               id="codex-security-finding-file"
@@ -348,6 +400,8 @@ export default function CodexSecurityConfiguration({
           </div>
         )}
       </div>
+
+      <CodexSecuritySetupCheck provider={selectedTarget} />
 
       <p className="text-sm text-muted-foreground">
         Provider ID: <code>{selectedTarget.id}</code>

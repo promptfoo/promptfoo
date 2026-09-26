@@ -56,4 +56,53 @@ describe('ProvidersListSection', () => {
     expect(screen.getByText('Codex Security SDK')).toBeInTheDocument();
     expect(screen.queryByText('OpenAI')).not.toBeInTheDocument();
   });
+
+  it('distinguishes security comparisons with the same model and label', () => {
+    render(
+      <ProvidersListSection
+        providers={[
+          {
+            id: 'openai:codex-security:gpt-5.6-sol',
+            label: 'Codex Security SDK',
+            config: { operation: 'security-scan', model_reasoning_effort: 'high' },
+          },
+          {
+            id: 'openai:codex-security:gpt-5.6-sol',
+            label: 'Codex Security SDK',
+            config: { operation: 'deep-security-scan', model_reasoning_effort: 'max' },
+          },
+        ]}
+        onChange={onChange}
+      />,
+    );
+
+    expect(
+      screen.getByText('Standard security scan · gpt-5.6-sol · high reasoning'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Deep security scan · gpt-5.6-sol · max reasoning'),
+    ).toBeInTheDocument();
+  });
+
+  it('summarizes shorthand defaults and legacy model/reasoning settings accurately', () => {
+    render(
+      <ProvidersListSection
+        providers={[
+          { id: 'openai:codex-security' },
+          {
+            id: 'openai:codex-security',
+            config: { operation: 'validation', model: 'gpt-5.6-sol', reasoning_effort: 'low' },
+          },
+        ]}
+        onChange={onChange}
+      />,
+    );
+
+    expect(
+      screen.getByText('Standard security scan · SDK default model · SDK default reasoning'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Validate a finding · gpt-5.6-sol · low reasoning'),
+    ).toBeInTheDocument();
+  });
 });

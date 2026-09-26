@@ -151,6 +151,28 @@ function createMockProvider(overrides?: Record<string, unknown>): ApiProvider {
 }
 
 describe('testProviderConnectivity', () => {
+  it.each([true, false])(
+    'uses local setup capability without inference or remote analysis (success=%s)',
+    async (success) => {
+      const checkSetup = vi.fn().mockResolvedValue({
+        success,
+        message: 'Local preflight',
+        details: { check: 'local-preflight' },
+      });
+      const provider = createMockProvider({ checkSetup });
+      const result = await testProviderConnectivity({ provider });
+      expect(result).toEqual({
+        success,
+        message: 'Local preflight',
+        providerResponse: { metadata: { check: 'local-preflight' } },
+      });
+      expect(checkSetup).toHaveBeenCalledOnce();
+      expect(provider.callApi).not.toHaveBeenCalled();
+      expect(mockEvaluate).not.toHaveBeenCalled();
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+    },
+  );
+
   it('should return success when provider evaluation succeeds', async () => {
     const provider = createMockProvider();
     const result = await testProviderConnectivity({ provider });

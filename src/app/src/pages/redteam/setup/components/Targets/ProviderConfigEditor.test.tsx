@@ -631,8 +631,12 @@ describe('ProviderConfigEditor', () => {
       },
       {
         config: { operation: 'security-scan', repository: '/repos/service', max_cost_usd: 0 },
-        expectedError: 'Maximum scan cost must be greater than 0',
+        expectedError: 'Estimated scan budget must be a finite number greater than 0',
       },
+      ...['1', 'invalid', Number.NaN, Number.POSITIVE_INFINITY, -1].map((budget) => ({
+        config: { repository: '/repos/service', max_cost_usd: budget },
+        expectedError: 'Estimated scan budget must be a finite number greater than 0',
+      })),
       {
         config: {
           operation: 'security-diff-scan',
@@ -779,8 +783,8 @@ describe('ProviderConfigEditor', () => {
 
     await user.selectOptions(screen.getByLabelText('Reasoning effort'), 'max');
     await user.selectOptions(screen.getByLabelText('Authentication'), 'api-key');
-    await user.clear(screen.getByLabelText('Maximum cost (USD)'));
-    await user.type(screen.getByLabelText('Maximum cost (USD)'), '2');
+    await user.clear(screen.getByLabelText('Estimated scan budget (USD)'));
+    await user.type(screen.getByLabelText('Estimated scan budget (USD)'), '2');
 
     expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
       model_reasoning_effort: 'max',
@@ -822,7 +826,7 @@ describe('ProviderConfigEditor', () => {
 
     const reasoning = screen.getByLabelText('Reasoning effort');
     const auth = screen.getByLabelText('Authentication');
-    expect(reasoning).toHaveValue('');
+    expect(reasoning).toHaveValue('unsupported');
     expect(auth).toHaveValue('');
     expect(screen.getByRole('option', { name: 'Unsupported reasoning effort' })).toBeDisabled();
     expect(
@@ -901,6 +905,28 @@ describe('ProviderConfigEditor', () => {
     expect(config).not.toHaveProperty('reasoning_effort');
   });
 
+  it('shows the SDK default for unset reasoning and removes both overrides when selected', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <StatefulCodexSecurityEditor initialConfig={{ model_reasoning_effort: undefined }} />,
+    );
+
+    const reasoning = screen.getByLabelText('Reasoning effort');
+    expect(reasoning).toHaveValue('');
+    expect(screen.getByRole('option', { name: 'SDK default' })).toBeEnabled();
+
+    await user.selectOptions(reasoning, 'high');
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toHaveProperty(
+      'model_reasoning_effort',
+      'high',
+    );
+    await user.selectOptions(reasoning, '');
+
+    const config = JSON.parse(screen.getByTestId('codex-security-config').textContent!);
+    expect(config).not.toHaveProperty('model_reasoning_effort');
+    expect(config).not.toHaveProperty('reasoning_effort');
+  });
+
   it('trims pasted model names and treats whitespace-only input as an unset model', async () => {
     const user = userEvent.setup();
     renderWithProviders(<StatefulCodexSecurityEditor />);
@@ -974,13 +1000,13 @@ describe('ProviderConfigEditor', () => {
       'paths',
     );
 
-    await user.clear(screen.getByLabelText('Maximum cost (USD)'));
+    await user.clear(screen.getByLabelText('Estimated scan budget (USD)'));
     expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).not.toHaveProperty(
       'max_cost_usd',
     );
 
     await user.selectOptions(screen.getByLabelText('Security operation'), 'validation');
-    expect(screen.queryByLabelText('Maximum cost (USD)')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Estimated scan budget (USD)')).not.toBeInTheDocument();
 
     const findingFile = screen.getByLabelText('Finding file');
     await user.type(findingFile, '/tmp/finding.json');

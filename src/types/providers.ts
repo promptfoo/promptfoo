@@ -122,6 +122,13 @@ export interface CallApiOptionsParams {
 
 export interface ApiProvider extends MinimalApiProvider {
   callApi: CallApiFunction;
+  /** Local setup validation that must not run inference or execute the provider's workload. */
+  checkSetup?: () => Promise<{
+    success: boolean;
+    message: string;
+    error?: string;
+    details?: Record<string, unknown>;
+  }>;
   callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
   callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
   config?: any;

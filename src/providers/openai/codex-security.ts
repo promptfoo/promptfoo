@@ -73,9 +73,9 @@ const CodexSecurityConfigSchema = z
     max_cost_usd: z.number().positive().optional(),
     workers: z.number().int().positive().optional(),
     subagents: z.number().int().nonnegative().optional(),
-    stop_after_no_new: z.number().int().nonnegative().optional(),
+    stop_after_no_new: z.number().int().positive().optional(),
     max_discovery_runs: z.number().int().positive().optional(),
-    max_time_hours: z.number().positive().optional(),
+    max_time_hours: z.number().positive().max(96).optional(),
     auth: z.enum(['auto', 'chatgpt', 'api-key']).optional(),
     plugin_path: z.string().min(1).optional(),
     python_path: z.string().min(1).optional(),
@@ -123,6 +123,7 @@ type CodexSecurityModule = typeof import('@openai/codex-security');
 interface ScanObservers {
   cost?: ScanCost;
   progress?: unknown;
+  outputDir?: string;
   warnings: string[];
 }
 
@@ -231,10 +232,12 @@ function getTokenUsage(result?: ScanResult, observedCost?: ScanCost): TokenUsage
     cost?.cachedInputTokens ??
     (typeof values.cached_input_tokens === 'number' ? values.cached_input_tokens : undefined);
   const cacheWriteTokens =
-    cost?.cacheWriteInputTokens ??
-    (typeof values.cache_write_input_tokens === 'number'
-      ? values.cache_write_input_tokens
-      : undefined);
+    (cost?.cacheWriteInputTokensReported ?? values.cache_write_input_tokens_reported) === false
+      ? undefined
+      : (cost?.cacheWriteInputTokens ??
+        (typeof values.cache_write_input_tokens === 'number'
+          ? values.cache_write_input_tokens
+          : undefined));
   const reasoningTokens =
     typeof values.reasoning_output_tokens === 'number' ? values.reasoning_output_tokens : undefined;
 
@@ -287,6 +290,123 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
     return '[OpenAI Codex Security Provider]';
   }
 
+  private environmentError(): string | undefined {
+    for (const key of ['OPENAI_API_KEY', 'CODEX_API_KEY'] as const) {
+      if (this.env?.[key] && this.env[key] !== process.env[key]) {
+        return `Codex Security does not support provider-scoped ${key}. Set ${key} in the Promptfoo process environment before running the evaluation.`;
+      }
+    }
+    return undefined;
+  }
+
+  private createClient(module: CodexSecurityModule, config: OpenAICodexSecurityConfig) {
+    const effort = config.model_reasoning_effort ?? config.reasoning_effort;
+    const codexOverrides = {
+      ...config.codex_overrides,
+      ...(config.model ? { model: config.model } : {}),
+      ...(config.model_provider ? { model_provider: config.model_provider } : {}),
+      ...(effort ? { model_reasoning_effort: effort } : {}),
+    } as JsonObject;
+    return new module.CodexSecurity({
+      ...(config.plugin_path
+        ? { pluginPath: resolveConfigPath(config.plugin_path, config.basePath) }
+        : {}),
+      ...(config.python_path
+        ? { pythonPath: resolveConfigPath(config.python_path, config.basePath) }
+        : {}),
+      ...(Object.keys(codexOverrides).length > 0 ? { codexOverrides } : {}),
+    });
+  }
+
+  async checkSetup(): Promise<Awaited<ReturnType<NonNullable<ApiProvider['checkSetup']>>>> {
+    let client: CodexSecurity | undefined;
+    try {
+      const config = this.config;
+      const environmentError = this.environmentError();
+      if (environmentError) {
+        return { success: false, message: environmentError, error: environmentError };
+      }
+      // There is no eval row during setup. Never guess values for templated paths.
+      if (/\{[{%]/.test(JSON.stringify(config))) {
+        return {
+          success: false,
+          message:
+            'Use concrete configuration values for a local setup check. Test-case variables are resolved only during evaluation.',
+        };
+      }
+      const operation = config.operation ?? 'security-scan';
+      const repository =
+        resolveConfigPath(config.repository ?? config.working_dir, config.basePath) ??
+        process.cwd();
+      const module = await loadCodexSecurity();
+      client = this.createClient(module, config);
+      this.activeClients.add(client);
+      if (typeof client.preflight !== 'function') {
+        return {
+          success: false,
+          message:
+            'This SDK does not support local preflight. Update @openai/codex-security to check setup without running an operation.',
+        };
+      }
+      const target =
+        operation === 'validation'
+          ? { target: 'repository' as const }
+          : this.getScanTarget(module, operation, config);
+      if ('error' in target) {
+        return { success: false, message: target.error, error: target.error };
+      }
+      if (operation === 'validation' && config.finding_file) {
+        const findingPath = resolveConfigPath(config.finding_file, config.basePath)!;
+        if (!(await fs.stat(findingPath)).isFile()) {
+          return { success: false, message: 'Finding file must be a regular file.' };
+        }
+      }
+      const options =
+        operation === 'validation'
+          ? {
+              ...(config.output_dir
+                ? { outputDir: resolveConfigPath(config.output_dir, config.basePath) }
+                : {}),
+              ...(config.auth ? { auth: config.auth } : {}),
+            }
+          : this.buildScanOptions(
+              '',
+              operation === 'deep-security-scan' ? 'deep' : 'standard',
+              target.target,
+              config,
+              { warnings: [] },
+            );
+      const preflight = await client.preflight(repository, options);
+      return {
+        success: true,
+        message:
+          'Local configuration and paths checked. No scan or model call was run. Python/runtime readiness, credentials, account access, and model availability have not been verified.',
+        details: {
+          check: 'local-preflight',
+          operation,
+          sdkVersion: module.VERSION,
+          repository: preflight.repository,
+          model: preflight.model,
+          reasoningEffort: preflight.reasoningEffort,
+          authentication: preflight.authentication,
+          outputDir: preflight.outputDir,
+        },
+      };
+    } catch (error) {
+      const message = `Local setup check failed: ${error instanceof Error ? error.message : String(error)}`;
+      return { success: false, message, error: message };
+    } finally {
+      if (client) {
+        this.activeClients.delete(client);
+        try {
+          await client.close();
+        } catch (error) {
+          logger.warn('[CodexSecurity] Error while closing setup client', { error });
+        }
+      }
+    }
+  }
+
   async cleanup(): Promise<void> {
     const clients = Array.from(this.activeClients);
     this.activeClients.clear();
@@ -312,6 +432,8 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const observers: ScanObservers = { warnings: [] };
+    let sdkVersion: string | undefined;
+    let operation = this.config.operation ?? 'security-scan';
 
     try {
       const mergedConfig = { ...this.config, ...context?.prompt?.config };
@@ -319,7 +441,7 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
       const config = parseConfig(renderVarsInObject(mergedConfig, context?.vars), {
         stripUnknownKeys: true,
       });
-      const operation = config.operation ?? 'security-scan';
+      operation = config.operation ?? 'security-scan';
       const repositoryVariable = context?.vars?.repository;
       const configuredRepository =
         config.repository ??
@@ -328,42 +450,42 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
       const repository = resolveConfigPath(configuredRepository, config.basePath) ?? process.cwd();
 
       if (callOptions?.abortSignal?.aborted) {
-        return { error: 'Codex Security operation was aborted before it started.' };
+        return {
+          error: 'Codex Security operation was aborted before it started.',
+          metadata: { providerType: 'codex-security', operation, status: 'error' },
+        };
       }
 
-      for (const key of ['OPENAI_API_KEY', 'CODEX_API_KEY'] as const) {
-        if (this.env?.[key] && this.env[key] !== process.env[key]) {
-          return {
-            error: `Codex Security does not support provider-scoped ${key}. Set ${key} in the Promptfoo process environment before running the evaluation.`,
-          };
-        }
+      const environmentError = this.environmentError();
+      if (environmentError) {
+        return {
+          error: environmentError,
+          metadata: { providerType: 'codex-security', operation, status: 'error' },
+        };
       }
 
       const module = await loadCodexSecurity();
-      const effort = config.model_reasoning_effort ?? config.reasoning_effort;
-      const codexOverrides = {
-        ...config.codex_overrides,
-        ...(config.model ? { model: config.model } : {}),
-        ...(config.model_provider ? { model_provider: config.model_provider } : {}),
-        ...(effort ? { model_reasoning_effort: effort } : {}),
-      } as JsonObject;
-      const client = new module.CodexSecurity({
-        ...(config.plugin_path
-          ? { pluginPath: resolveConfigPath(config.plugin_path, config.basePath) }
-          : {}),
-        ...(config.python_path
-          ? { pythonPath: resolveConfigPath(config.python_path, config.basePath) }
-          : {}),
-        ...(Object.keys(codexOverrides).length > 0 ? { codexOverrides } : {}),
-      });
+      sdkVersion = module.VERSION;
+      const client = this.createClient(module, config);
       this.activeClients.add(client);
 
       try {
         if (operation === 'validation') {
-          return await this.runValidation(client, prompt, repository, config, context, callOptions);
+          const result = await this.runValidation(
+            client,
+            prompt,
+            repository,
+            config,
+            context,
+            callOptions,
+          );
+          return {
+            ...result,
+            metadata: { ...result.metadata, providerType: 'codex-security', sdkVersion },
+          };
         }
 
-        return await this.runScan(
+        const result = await this.runScan(
           client,
           module,
           prompt,
@@ -373,6 +495,16 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
           observers,
           callOptions,
         );
+        return {
+          ...result,
+          metadata: {
+            ...result.metadata,
+            providerType: 'codex-security',
+            operation,
+            sdkVersion,
+            ...(result.error ? { status: 'error' } : {}),
+          },
+        };
       } finally {
         this.activeClients.delete(client);
         try {
@@ -389,6 +521,16 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
         error: `Codex Security operation failed: ${error instanceof Error ? error.message : String(error)}`,
         ...(observedCost ? { cost: observedCost.estimatedUsd } : {}),
         ...(tokenUsage ? { tokenUsage } : {}),
+        metadata: {
+          providerType: 'codex-security',
+          operation,
+          status: 'error',
+          ...(sdkVersion ? { sdkVersion } : {}),
+          ...(observedCost ? { cost: observedCost } : {}),
+          ...(observers.outputDir ? { scanDir: observers.outputDir } : {}),
+          ...(observers.progress ? { progress: observers.progress } : {}),
+          ...(observers.warnings.length > 0 ? { warnings: observers.warnings } : {}),
+        },
       };
     }
   }
@@ -501,6 +643,9 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
       onWarning: (warning) => {
         observers.warnings.push(warning);
       },
+      onOutputDirReady: (outputDir) => {
+        observers.outputDir = outputDir;
+      },
     };
   }
 
@@ -565,6 +710,7 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
         ...(result.sarifPath ? { sarifPath: result.sarifPath } : {}),
         pluginVersion: result.pluginVersion,
         sdkVersion: module.VERSION,
+        ...(cost ? { cost } : {}),
         ...(observers.progress ? { progress: observers.progress } : {}),
         ...(observers.warnings.length > 0 ? { warnings: observers.warnings } : {}),
         skillCalls: [{ name: operation }],

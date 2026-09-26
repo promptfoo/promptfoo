@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
+import { CODEX_SECURITY_OPERATION_OPTIONS } from '@app/pages/redteam/setup/components/Targets/CodexSecurityConfiguration';
 import { Plus, Settings, Trash2 } from 'lucide-react';
 import AddProviderDialog from './AddProviderDialog';
 import type { ProviderOptions } from '@promptfoo/types';
@@ -73,6 +74,28 @@ function getProviderType(provider: ProviderOptions): string {
   return 'Custom';
 }
 
+function getCodexSecuritySummary(provider: ProviderOptions): string | undefined {
+  const id = typeof provider.id === 'string' ? provider.id : '';
+  const prefix = 'openai:codex-security';
+  if (id !== prefix && !id.startsWith(`${prefix}:`)) {
+    return undefined;
+  }
+
+  const config = provider.config ?? {};
+  const operation = config.operation ?? 'security-scan';
+  const operationLabel =
+    CODEX_SECURITY_OPERATION_OPTIONS.find((option) => option.value === operation)?.label ??
+    'Unsupported security operation';
+  const model = id.startsWith(`${prefix}:`) ? id.slice(prefix.length + 1) : config.model;
+  const effort = config.model_reasoning_effort ?? config.reasoning_effort;
+
+  return [
+    operationLabel,
+    model || 'SDK default model',
+    effort ? `${effort} reasoning` : 'SDK default reasoning',
+  ].join(' · ');
+}
+
 export function ProvidersListSection({ providers, onChange }: ProvidersListSectionProps) {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -109,6 +132,7 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
           {providers.map((provider, index) => {
             const label = getProviderLabel(provider);
             const type = getProviderType(provider);
+            const securitySummary = getCodexSecuritySummary(provider);
 
             return (
               <Card
@@ -123,6 +147,9 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
                         {type}
                       </Badge>
                     </div>
+                    {securitySummary && (
+                      <p className="text-sm text-muted-foreground break-words">{securitySummary}</p>
+                    )}
                     <p className="text-sm text-muted-foreground font-mono truncate">
                       {typeof provider.id === 'string' ? provider.id : 'custom provider'}
                     </p>

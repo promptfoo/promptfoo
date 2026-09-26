@@ -69,6 +69,25 @@ describe('Validate Command Provider Tests', () => {
   });
 
   describe('Provider testing with -t flag (specific target)', () => {
+    it.each([true, false])(
+      'uses local setup for capable providers without calling the workload (success=%s)',
+      async (success) => {
+        const provider = Object.assign(mockEchoProvider, {
+          checkSetup: vi.fn().mockResolvedValue({ success, message: 'Local setup only' }),
+        });
+        vi.mocked(loadApiProvider).mockResolvedValue(provider);
+        await doValidateTarget({ target: 'openai:codex-security' }, defaultConfig);
+        expect(provider.checkSetup).toHaveBeenCalledOnce();
+        expect(provider.callApi).not.toHaveBeenCalled();
+        expect(testProviderConnectivity).not.toHaveBeenCalled();
+        expect(testProviderSession).not.toHaveBeenCalled();
+        expect(success ? logger.info : logger.error).toHaveBeenCalledWith(
+          expect.stringContaining('Local setup check'),
+        );
+        expect(process.exitCode).toBe(success ? 0 : 1);
+      },
+    );
+
     it('should test HTTP provider with comprehensive tests when -t flag is provided and connectivity passes', async () => {
       vi.mocked(loadApiProvider).mockResolvedValue(mockHttpProvider);
       vi.mocked(testProviderConnectivity).mockResolvedValue({

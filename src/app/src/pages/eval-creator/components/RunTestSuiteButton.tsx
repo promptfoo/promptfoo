@@ -8,6 +8,7 @@ import { useEvalHistoryRefresh } from '@app/hooks/useEvalHistoryRefresh';
 import { useToast } from '@app/hooks/useToast';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
+import { formatDuration } from '@promptfoo/util/formatDuration';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   countTests,
@@ -37,7 +38,8 @@ const RunTestSuiteButton = () => {
     extensions,
   } = config;
   const [isRunning, setIsRunning] = useState(false);
-  const [progressPercent, setProgressPercent] = useState(0);
+  const [caseProgress, setCaseProgress] = useState({ completed: 0, total: 0 });
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [runError, setRunError] = useState<string | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isMountedRef = useRef(true);
@@ -58,6 +60,17 @@ const RunTestSuiteButton = () => {
     };
   }, [clearPollInterval]);
 
+  useEffect(() => {
+    if (!isRunning) {
+      return;
+    }
+    const startedAt = Date.now();
+    const elapsedInterval = setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => clearInterval(elapsedInterval);
+  }, [isRunning]);
+
   const normalizedProviders = normalizeProviders(providers);
   const normalizedPrompts = normalizePrompts(prompts);
   const jobPrompts = normalizePromptsForJob(prompts);
@@ -72,7 +85,8 @@ const RunTestSuiteButton = () => {
   const runTestSuite = async () => {
     setIsRunning(true);
     setRunError(null);
-    setProgressPercent(0);
+    setCaseProgress({ completed: 0, total: 0 });
+    setElapsedSeconds(0);
 
     const sourceEvalId =
       location.state &&
@@ -157,11 +171,7 @@ const RunTestSuiteButton = () => {
             setIsRunning(false);
             throw new Error(progressData.logs?.join('\n') || 'Job failed');
           } else {
-            const percent =
-              progressData.total === 0
-                ? 0
-                : Math.round((progressData.progress / progressData.total) * 100);
-            setProgressPercent(percent);
+            setCaseProgress({ completed: progressData.progress, total: progressData.total });
           }
         } catch (error) {
           clearPollInterval();
@@ -182,14 +192,29 @@ const RunTestSuiteButton = () => {
         className="dark:bg-blue-600 dark:hover:bg-blue-500"
       >
         {isRunning ? (
-          <span className="flex items-center gap-2" role="status" aria-live="polite">
+          <span className="flex items-center gap-2">
             <Spinner className="size-4" />
-            {progressPercent.toFixed(0)}% complete
+            Running eval
           </span>
         ) : (
           'Run Eval'
         )}
       </Button>
+      {isRunning && (
+        <div className="space-y-1 text-sm text-muted-foreground">
+          <p role="status" aria-live="polite">
+            {caseProgress.total > 0
+              ? `${caseProgress.completed} of ${caseProgress.total} cases completed`
+              : 'Waiting for case results'}
+            {' · '}
+            <span aria-live="off">{formatDuration(elapsedSeconds)} elapsed</span>
+          </p>
+          <p>
+            Progress updates when a case completes; an individual operation may take several
+            minutes.
+          </p>
+        </div>
+      )}
       {runError && (
         <Alert variant="destructive">
           <AlertContent>

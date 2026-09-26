@@ -211,6 +211,94 @@ describe('Providers Routes', () => {
       });
     });
 
+    it.each([true, false])(
+      'shuts down a local setup provider after success=%s',
+      async (success) => {
+        const shutdown = vi.fn().mockResolvedValue(undefined);
+        const setupProvider = { ...mockProvider, checkSetup: vi.fn(), shutdown };
+        mockedLoadApiProvider.mockResolvedValue(setupProvider);
+        mockedTestProviderConnectivity.mockResolvedValue({
+          success,
+          message: 'Local setup result',
+        });
+
+        const response = await api.post('/api/providers/test').send({
+          providerOptions: { id: 'openai:codex-security', config: { repository: '/fixture' } },
+        });
+
+        expect(response.status).toBe(200);
+        expect(response.body.testResult).toMatchObject({ success, message: 'Local setup result' });
+        expect(shutdown).toHaveBeenCalledOnce();
+        expect(shutdown.mock.contexts[0]).toBe(setupProvider);
+      },
+    );
+
+    it('shuts down the setup provider even when the check throws', async () => {
+      const shutdown = vi.fn().mockResolvedValue(undefined);
+      const setupProvider = { ...mockProvider, checkSetup: vi.fn(), shutdown };
+      mockedLoadApiProvider.mockResolvedValue(setupProvider);
+      mockedTestProviderConnectivity.mockRejectedValue(new Error('Setup failed'));
+
+      const response = await api.post('/api/providers/test').send({
+        providerOptions: { id: 'openai:codex-security' },
+      });
+
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({ error: 'Failed to test provider' });
+      expect(shutdown).toHaveBeenCalledOnce();
+    });
+
+    it('preserves the setup result when shutdown fails', async () => {
+      const shutdown = vi.fn().mockRejectedValue(new Error('Close failed'));
+      const setupProvider = { ...mockProvider, checkSetup: vi.fn(), shutdown };
+      mockedLoadApiProvider.mockResolvedValue(setupProvider);
+      mockedTestProviderConnectivity.mockResolvedValue({
+        success: true,
+        message: 'Local setup result',
+      });
+
+      const response = await api.post('/api/providers/test').send({
+        providerOptions: { id: 'openai:codex-security' },
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.body.testResult.success).toBe(true);
+      expect(shutdown).toHaveBeenCalledOnce();
+    });
+
+    it('uses the cleanup hook for setup providers without registry shutdown', async () => {
+      const cleanup = vi.fn().mockResolvedValue(undefined);
+      mockedLoadApiProvider.mockResolvedValue({ ...mockProvider, checkSetup: vi.fn(), cleanup });
+      mockedTestProviderConnectivity.mockResolvedValue({
+        success: true,
+        message: 'Local setup result',
+      });
+
+      const response = await api.post('/api/providers/test').send({
+        providerOptions: { id: 'fixture-provider' },
+      });
+
+      expect(response.status).toBe(200);
+      expect(cleanup).toHaveBeenCalledOnce();
+    });
+
+    it('leaves existing connectivity-test lifecycle handling unchanged', async () => {
+      const shutdown = vi.fn().mockResolvedValue(undefined);
+      const providerWithShutdown = { ...mockProvider, shutdown };
+      mockedLoadApiProvider.mockResolvedValue(providerWithShutdown);
+      mockedTestProviderConnectivity.mockResolvedValue({
+        success: true,
+        message: 'Connectivity result',
+      });
+
+      const response = await api.post('/api/providers/test').send({
+        providerOptions: { id: 'fixture-provider' },
+      });
+
+      expect(response.status).toBe(200);
+      expect(shutdown).not.toHaveBeenCalled();
+    });
+
     it('should return 400 for missing providerOptions', async () => {
       const response = await api.post('/api/providers/test').send({
         prompt: 'Test prompt',

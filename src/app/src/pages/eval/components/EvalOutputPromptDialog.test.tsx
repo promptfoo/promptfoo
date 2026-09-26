@@ -186,6 +186,26 @@ describe('EvalOutputPromptDialog', () => {
     });
   });
 
+  it('shows a Codex Security summary even when an operation error has no output', () => {
+    renderWithProviders(
+      <EvalOutputPromptDialog
+        {...defaultProps}
+        provider="security comparison"
+        output={undefined}
+        metadata={{
+          providerType: 'codex-security',
+          operation: 'security-scan',
+          status: 'error',
+          warnings: ['The operation did not finish.'],
+        }}
+      />,
+    );
+    expect(screen.getByRole('region', { name: 'Codex Security summary' })).toBeInTheDocument();
+    expect(screen.getByText('Coverage: Unknown')).toBeInTheDocument();
+    expect(screen.getByText('The operation did not finish.')).toBeInTheDocument();
+    expect(screen.queryByText('Original Output')).not.toBeInTheDocument();
+  });
+
   it('copies assertion value to clipboard when copy button is clicked', async () => {
     const user = userEvent.setup();
     const clipboard = {

@@ -68,11 +68,28 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
 
     // Pass inputs explicitly from providerOptions since loaded provider may not expose config.inputs
     // Check both top-level inputs (from redteam UI) and config.inputs for backwards compatibility
-    const result = await testProviderConnectivity({
-      provider: loadedProvider,
-      prompt: bodyResult.data.prompt,
-      inputs: providerOptions.inputs || providerOptions.config?.inputs,
-    });
+    let result: Awaited<ReturnType<typeof testProviderConnectivity>>;
+    try {
+      result = await testProviderConnectivity({
+        provider: loadedProvider,
+        prompt: bodyResult.data.prompt,
+        inputs: providerOptions.inputs || providerOptions.config?.inputs,
+      });
+    } finally {
+      // Local setup checks bypass evaluator cleanup. Release only this request's
+      // provider; shutting down the registry could interrupt another evaluation.
+      if (loadedProvider.checkSetup) {
+        try {
+          if ('shutdown' in loadedProvider && typeof loadedProvider.shutdown === 'function') {
+            await loadedProvider.shutdown();
+          } else {
+            await loadedProvider.cleanup?.();
+          }
+        } catch (error) {
+          logger.warn('[Providers] Failed to close setup-check provider', { error });
+        }
+      }
+    }
 
     res.status(200).json(
       ProviderSchemas.Test.Response.parse({

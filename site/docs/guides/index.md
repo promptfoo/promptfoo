@@ -16,6 +16,7 @@ Learn how to measure specific aspects of LLM output quality.
 - [Preventing Hallucinations](/docs/guides/prevent-llm-hallucinations) — Measure and reduce hallucination rates with perplexity, RAG, and controlled decoding
 - [Evaluating JSON Outputs](/docs/guides/evaluate-json) — Validate structured LLM outputs against schemas
 - [Evaluating Coding Agents](/docs/guides/evaluate-coding-agents) — Test AI coding assistants
+- [Understanding Codex Security Results](/docs/guides/codex-security-results) — Check findings, coverage, and estimated spend with synthetic data
 - [Evaluating OSWorld with Inspect](/docs/guides/evaluate-osworld-with-inspect) — Run desktop computer-use benchmark tasks through Inspect
 - [Testing Agent Skills](/docs/guides/test-agent-skills) — Compare Claude and Codex skill versions with routing, quality, cost, latency, and trace checks
 - [Evaluating Factuality](/docs/guides/factuality-eval) — Score responses for factual accuracy
