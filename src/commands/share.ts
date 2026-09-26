@@ -16,11 +16,9 @@ import {
   isModelAuditSharingEnabled,
   isSharingEnabled,
 } from '../share';
-import { resolveCloudTeam } from '../util/cloud';
+import { type ResolvedCloudTeam, resolveCloudTeam } from '../util/cloud';
 import { loadDefaultConfig } from '../util/config/default';
 import type { Command } from 'commander';
-
-import type { ResolvedCloudTeam } from '../util/cloud';
 
 // Preserve the established command-module import while the implementation lives in the node layer.
 export { notCloudEnabledShareInstructions };
