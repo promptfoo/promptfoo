@@ -1,3 +1,5 @@
+import { spawnSync } from 'node:child_process';
+
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { runDbMigrations } from '../../src/migrate';
@@ -11,6 +13,7 @@ import {
 import EvalResult from '../../src/models/evalResult';
 import { ResultFailureReason } from '../../src/types/index';
 import { createEvaluateResult } from '../factories/eval';
+import type { Client } from '@libsql/client/node';
 
 describe('evalPerformance', () => {
   beforeAll(async () => {
@@ -175,17 +178,106 @@ describe('evalPerformance', () => {
   });
 
   describe('full-eval recorded import provenance', () => {
+    it('uses index-only counts and a partial-index lookup without parsing metadata on reads', async () => {
+      const { eval_ } = await createEvalWithResults(1, 1);
+      await eval_.addResult(
+        createEvaluateResult({
+          testIdx: 1,
+          metadata: { history: 'ordinary history '.repeat(4096) },
+        }),
+      );
+      const db = await getDb();
+      const client = (db as typeof db & { $client: Client }).$client;
+      const execute = vi.spyOn(client, 'execute');
+      let statements: Array<{ sql: string; args?: Parameters<Client['execute']>[1] }>;
+      try {
+        await getCachedResultsCount(eval_.id);
+        expect(execute).toHaveBeenCalledTimes(1);
+        await getCachedResultsSummary(eval_.id);
+        expect(execute).toHaveBeenCalledTimes(2);
+        statements = execute.mock.calls.map(([statement, args]) =>
+          typeof statement === 'string' ? { sql: statement, args } : statement,
+        );
+      } finally {
+        execute.mockRestore();
+      }
+
+      // Run EXPLAIN in a subprocess: libSQL retains some prepared inspection statements
+      // past close(), which would otherwise lock the shared test schema during teardown.
+      const schema = await client.execute(
+        "SELECT sql FROM sqlite_master WHERE tbl_name = 'eval_results' AND sql IS NOT NULL ORDER BY CASE type WHEN 'table' THEN 0 ELSE 1 END",
+      );
+      const probe = spawnSync(
+        process.execPath,
+        [
+          '--input-type=module',
+          '-e',
+          `
+        import { readFileSync } from 'node:fs';
+        import { createClient } from '@libsql/client/node';
+        const { schema, statements } = JSON.parse(readFileSync(0, 'utf8'));
+        const db = createClient({ url: 'file::memory:?cache=shared' });
+        try {
+          for (const sql of schema) await db.execute(sql);
+          const plans = [];
+          for (const statement of statements) {
+            plans.push({
+              plan: (await db.execute({ ...statement, sql: 'EXPLAIN QUERY PLAN ' + statement.sql })).rows,
+              instructions: (await db.execute({ ...statement, sql: 'EXPLAIN ' + statement.sql })).rows,
+            });
+          }
+          const table = await db.execute("SELECT rootpage FROM sqlite_master WHERE type = 'table' AND name = 'eval_results'");
+          console.log(JSON.stringify({ plans, tableRootPage: table.rows[0].rootpage }));
+        } finally { db.close(); }
+      `,
+        ],
+        {
+          input: JSON.stringify({ schema: schema.rows.map((row) => row.sql), statements }),
+          encoding: 'utf8',
+          timeout: 10_000,
+        },
+      );
+      expect(probe.status, probe.stderr).toBe(0);
+      const { plans, tableRootPage } = JSON.parse(probe.stdout) as {
+        plans: Array<{
+          plan: Array<{ detail: string }>;
+          instructions: Array<{ opcode: string; p1: number; p2: number }>;
+        }>;
+        tableRootPage: number;
+      };
+      expect(statements[0].sql).not.toContain('metadata');
+      expect(
+        plans[0].plan.some((row) => row.detail.includes('COVERING INDEX eval_result_eval_test')),
+      ).toBe(true);
+      expect(plans[1].plan.some((row) => row.detail.includes('eval_result_saved_report_idx'))).toBe(
+        true,
+      );
+      const instructions = plans[1].instructions;
+      expect(instructions.some((row) => /Function|PureFunc/.test(row.opcode))).toBe(false);
+      const tableCursors = instructions
+        .filter((row) => row.opcode === 'OpenRead' && row.p2 === tableRootPage)
+        .map((row) => row.p1);
+      expect(
+        instructions.some((row) => row.opcode === 'Column' && tableCursors.includes(row.p1)),
+      ).toBe(false);
+    });
+
     it('shares the count cache and refreshes provenance after inserts and result updates', async () => {
       const { eval_ } = await createEvalWithResults(1, 1);
       const db = await getDb();
       const select = vi.spyOn(db, 'select');
+      const selectDistinct = vi.spyOn(db, 'selectDistinct');
       try {
         expect(await getCachedResultsCount(eval_.id)).toBe(1);
+        expect(selectDistinct).not.toHaveBeenCalled();
         expect(await getCachedResultsSummary(eval_.id)).toEqual({
           count: 1,
           savedReportPromptIndices: [],
         });
         expect(select).toHaveBeenCalledTimes(1);
+        expect(selectDistinct).toHaveBeenCalledTimes(1);
+        await getCachedResultsSummary(eval_.id);
+        expect(selectDistinct).toHaveBeenCalledTimes(1);
 
         const result = await EvalResult.createFromEvaluateResult(
           eval_.id,
@@ -200,6 +292,7 @@ describe('evalPerformance', () => {
           savedReportPromptIndices: [1],
         });
         expect(select).toHaveBeenCalledTimes(2);
+        expect(selectDistinct).toHaveBeenCalledTimes(2);
 
         result.metadata = { codexSecurity: { version: 1, source: { kind: 'sdk' } } };
         await result.save();
@@ -208,8 +301,10 @@ describe('evalPerformance', () => {
           savedReportPromptIndices: [],
         });
         expect(select).toHaveBeenCalledTimes(3);
+        expect(selectDistinct).toHaveBeenCalledTimes(3);
       } finally {
         select.mockRestore();
+        selectDistinct.mockRestore();
       }
     });
 
@@ -218,6 +313,7 @@ describe('evalPerformance', () => {
       for (const [index, metadata] of [
         { codexSecurity: { version: 2, source: { kind: 'saved-report' } } },
         { codexSecurity: { version: '1', source: { kind: 'saved-report' } } },
+        { codexSecurity: { version: true, source: { kind: 'saved-report' } } },
         { codexSecurity: { version: 1, source: { kind: 'sdk' } } },
         { codexSecurity: null },
         { codexSecurity: 'not an object' },
@@ -225,9 +321,26 @@ describe('evalPerformance', () => {
         await eval_.addResult(createEvaluateResult({ testIdx: index + 1, metadata }));
       }
       expect(await getCachedResultsSummary(eval_.id)).toEqual({
-        count: 6,
+        count: 7,
         savedReportPromptIndices: [],
       });
+    });
+
+    it('indexes bulk-imported provenance by eval and deduplicates prompt columns', async () => {
+      const { eval_ } = await createEvalWithResults(1, 1);
+      const { eval_: other } = await createEvalWithResults(1, 1);
+      const metadata = { codexSecurity: { version: 1, source: { kind: 'saved-report' } } };
+      await EvalResult.createManyFromEvaluateResult(
+        [
+          createEvaluateResult({ testIdx: 1, promptIdx: 3, metadata }),
+          createEvaluateResult({ testIdx: 2, promptIdx: 3, metadata }),
+        ],
+        eval_.id,
+      );
+      await other.addResult(createEvaluateResult({ testIdx: 1, promptIdx: 7, metadata }));
+
+      expect((await getCachedResultsSummary(eval_.id)).savedReportPromptIndices).toEqual([3]);
+      expect((await getCachedResultsSummary(other.id)).savedReportPromptIndices).toEqual([7]);
     });
   });
 

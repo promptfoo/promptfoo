@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { HUMAN_ASSERTION_TYPE } from '../constants';
 import { getDb } from '../database/index';
-import { evalResultsTable } from '../database/tables';
+import { evalResultsTable, savedReportResultPredicate } from '../database/tables';
 import logger from '../logger';
 
 import type { EvalResultsFilterMode } from '../types/index';
@@ -27,8 +27,9 @@ interface ResultsSummary {
 }
 
 // Simple in-memory cache for counts with 5-minute TTL
-const distinctCountCache = new Map<string, CountCacheEntry & ResultsSummary>();
+const distinctCountCache = new Map<string, CountCacheEntry>();
 const totalRowCountCache = new Map<string, CountCacheEntry>();
+const savedReportPromptCache = new Map<string, { indices: number[]; timestamp: number }>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 /**
@@ -39,17 +40,12 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
  * (which may be higher when there are multiple prompts/providers per test case).
  */
 export async function getCachedResultsCount(evalId: string): Promise<number> {
-  return (await getCachedResultsSummary(evalId)).count;
-}
-
-/** Full-eval column provenance shares the count query and its result-mutation invalidation. */
-export async function getCachedResultsSummary(evalId: string): Promise<ResultsSummary> {
   const cacheKey = `distinct:${evalId}`;
   const cached = distinctCountCache.get(cacheKey);
 
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     logger.debug(`Using cached distinct count for eval ${evalId}: ${cached.count}`);
-    return { count: cached.count, savedReportPromptIndices: cached.savedReportPromptIndices };
+    return cached.count;
   }
 
   const db = await getDb();
@@ -57,37 +53,43 @@ export async function getCachedResultsSummary(evalId: string): Promise<ResultsSu
 
   // Count distinct test indices (unique test cases) - this is what the UI shows as "results"
   const result = await db
-    .select({
-      count: sql<number>`COUNT(DISTINCT test_idx)`,
-      // Read only the normalized metadata, never the potentially large raw report output.
-      // CASE also protects older rows containing malformed JSON metadata.
-      savedReportPromptIndices: sql<string | null>`GROUP_CONCAT(DISTINCT CASE
-        WHEN json_valid(metadata) THEN CASE
-          WHEN json_extract(metadata, '$.codexSecurity.version') = 1
-            AND json_extract(metadata, '$.codexSecurity.source.kind') = 'saved-report'
-          THEN prompt_idx
-        END
-      END)`,
-    })
+    .select({ count: sql<number>`COUNT(DISTINCT test_idx)` })
     .from(evalResultsTable)
     .where(sql`eval_id = ${evalId}`)
     .all();
 
   const count = Number(result[0]?.count ?? 0);
-  const savedReportPromptIndices = (result[0]?.savedReportPromptIndices ?? '')
-    .split(',')
-    .filter(Boolean)
-    .map(Number)
-    .filter((index) => Number.isInteger(index) && index >= 0);
   const duration = Date.now() - start;
 
   logger.debug(`Distinct count query for eval ${evalId}: ${count} in ${duration}ms`);
 
   // Cache the result
-  const summary = { count, savedReportPromptIndices };
-  distinctCountCache.set(cacheKey, { ...summary, timestamp: Date.now() });
+  distinctCountCache.set(cacheKey, { count, timestamp: Date.now() });
 
-  return summary;
+  return count;
+}
+
+/** Full-eval column provenance uses a partial index, independently of the count-only path. */
+export async function getCachedResultsSummary(evalId: string): Promise<ResultsSummary> {
+  const count = await getCachedResultsCount(evalId);
+  const cached = savedReportPromptCache.get(evalId);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return { count, savedReportPromptIndices: cached.indices };
+  }
+
+  const db = await getDb();
+  // Matching the index predicate lets SQLite read only indexed prompt positions, without
+  // loading or parsing metadata from ordinary results (which can contain large histories).
+  const rows = await db
+    .selectDistinct({ promptIdx: evalResultsTable.promptIdx })
+    .from(evalResultsTable)
+    .where(sql`${evalResultsTable.evalId} = ${evalId} AND ${savedReportResultPredicate}`)
+    .all();
+  const indices = rows
+    .map((row) => row.promptIdx)
+    .filter((index) => Number.isInteger(index) && index >= 0);
+  savedReportPromptCache.set(evalId, { indices, timestamp: Date.now() });
+  return { count, savedReportPromptIndices: indices };
 }
 
 /**
@@ -131,9 +133,11 @@ export function clearCountCache(evalId?: string) {
   if (evalId) {
     distinctCountCache.delete(`distinct:${evalId}`);
     totalRowCountCache.delete(`total:${evalId}`);
+    savedReportPromptCache.delete(evalId);
   } else {
     distinctCountCache.clear();
     totalRowCountCache.clear();
+    savedReportPromptCache.clear();
   }
 }
 

@@ -47,6 +47,7 @@ describe('convertResultsToTable', () => {
     undefined,
     { codexSecurity: null },
     { codexSecurity: { version: '1', source: { kind: 'saved-report' } } },
+    { codexSecurity: { version: true, source: { kind: 'saved-report' } } },
     { codexSecurity: { version: 2, source: { kind: 'saved-report' } } },
     { codexSecurity: { version: 1, source: { kind: 'sdk' } } },
   ])(
