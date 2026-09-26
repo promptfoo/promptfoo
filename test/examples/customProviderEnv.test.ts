@@ -74,7 +74,10 @@ beforeEach(() => {
   request.mockReset();
   restoreEnv = mockProcessEnv({ OPENAI_API_KEY: 'host' });
 });
-afterEach(() => restoreEnv());
+afterEach(() => {
+  restoreEnv();
+  request.mockReset();
+});
 
 describe.each(formats)('%s environment settings', (file) => {
   it.each([
@@ -85,6 +88,8 @@ describe.each(formats)('%s environment settings', (file) => {
     { options: { env: { OPENAI_API_KEY: 'scoped' } }, expected: 'scoped' },
     { options: {}, expected: 'late-file' },
     { options: {}, expected: undefined },
+    { options: { env: { OPENAI_API_KEY: '' } }, expected: '' },
+    { options: { config: { apiKey: '' }, env: { OPENAI_API_KEY: 'scoped' } }, expected: '' },
   ])('uses $expected in the outgoing request', async ({ options, expected }) => {
     const Provider = loadExample(file);
     const provider = new Provider(options);
@@ -99,7 +104,7 @@ describe.each(formats)('%s environment settings', (file) => {
       }
       expect(request).toHaveBeenCalledOnce();
       const headers = new Headers(request.mock.calls[0][1].headers);
-      expect(headers.get('authorization')).toBe(`Bearer ${expected}`);
+      expect(headers.get('authorization')).toBe(`Bearer ${expected}`.trim());
     } finally {
       restoreLate();
     }
