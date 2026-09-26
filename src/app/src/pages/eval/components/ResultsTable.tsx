@@ -15,7 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
-import { callApi } from '@app/utils/api';
+import { callApi, getApiBaseUrl } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
@@ -34,7 +34,13 @@ import {
   type ProviderOptions,
   type Vars,
 } from '@promptfoo/types';
-import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
+import {
+  EVAL_TABLE_MAX_PAGE_SIZE,
+  type SubmitRatingAction,
+  type SubmitRatingResponse,
+  SubmitRatingResponseSchema,
+  type SubmitRatingUpdate,
+} from '@promptfoo/types/api/eval';
 import invariant from '@promptfoo/util/invariant';
 import {
   createColumnHelper,
@@ -51,7 +57,7 @@ import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useFilterMode } from './FilterModeProvider';
 import { ProviderDisplay } from './ProviderDisplay';
 import { type ProviderDef } from './providerConfig';
-import { useResultsViewSettingsStore, useTableStore } from './store';
+import { type ResultsFilter, useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
 import VariableMarkdownCell from './VariableMarkdownCell';
 import type {
@@ -566,6 +572,24 @@ type ManualRatingUpdate = {
   modifiedComponentResults: boolean;
 };
 
+type PersistedRatingResult = SubmitRatingResponse;
+
+function isAppliedResultFilter(filter: ResultsFilter): boolean {
+  if (filter.type === 'metadata' && filter.operator === 'exists') {
+    return Boolean(filter.field);
+  }
+  if (filter.type === 'metadata') {
+    return Boolean(filter.value && filter.field);
+  }
+  if (filter.type === 'metric' && filter.operator === 'is_defined') {
+    return Boolean(filter.field);
+  }
+  if (filter.type === 'metric') {
+    return Boolean(filter.value && filter.field);
+  }
+  return Boolean(filter.value);
+}
+
 function formatProviderString(prompt: EvaluateTable['head']['prompts'][number]): string {
   if (typeof prompt.provider === 'string') {
     return prompt.provider;
@@ -1029,41 +1053,133 @@ function buildRatingTableUpdate({
   };
 }
 
+function findRatingOutput(table: EvaluateTable, resultId: string) {
+  for (let rowIndex = 0; rowIndex < table.body.length; rowIndex++) {
+    const promptIndex = table.body[rowIndex].outputs.findIndex((output) => output?.id === resultId);
+    if (promptIndex !== -1) {
+      const output = table.body[rowIndex].outputs[promptIndex];
+      if (output) {
+        return { output, promptIndex, rowIndex };
+      }
+    }
+  }
+  return undefined;
+}
+
+function replaceRatingOutput(
+  table: EvaluateTable,
+  resultId: string,
+  output: EvaluateTableOutput,
+): EvaluateTable {
+  const location = findRatingOutput(table, resultId);
+  if (!location) {
+    return table;
+  }
+  const body = [...table.body];
+  const row = { ...body[location.rowIndex] };
+  const outputs = [...row.outputs];
+  outputs[location.promptIndex] = output;
+  row.outputs = outputs;
+  body[location.rowIndex] = row;
+  return { ...table, body };
+}
+
+function applyPersistedRatingResult({
+  table,
+  resultId,
+  result,
+}: {
+  table: EvaluateTable;
+  resultId: string;
+  result: PersistedRatingResult;
+}): EvaluateTable {
+  const location = findRatingOutput(table, resultId);
+  const output = location?.output;
+  invariant(output, 'Cannot apply a rating response to a missing output');
+  return replaceRatingOutput(table, resultId, {
+    ...output,
+    pass: result.success,
+    score: result.score,
+    gradingResult: result.gradingResult,
+    failureReason: result.failureReason,
+  });
+}
+
+class ConfirmedRatingPersistenceError extends Error {}
+
+function getSubmitRatingIntent(
+  isPass?: boolean | null,
+  score?: number,
+): { ratingAction: SubmitRatingAction; ratingUpdate?: SubmitRatingUpdate } {
+  if (isPass === null) {
+    return { ratingAction: 'clear' };
+  }
+  if (typeof isPass === 'boolean') {
+    return { ratingAction: 'rate' };
+  }
+  return { ratingAction: 'update', ratingUpdate: score === undefined ? 'comment' : 'score' };
+}
+
 async function saveManualRating({
+  apiBaseUrl,
   evalId,
   resultId,
   version,
   gradingResult,
+  ratingAction,
+  ratingUpdate,
   table,
 }: {
+  apiBaseUrl: string;
   evalId: string | null;
   resultId: string;
   version: number | null | undefined;
   gradingResult: GradingResult;
+  ratingAction: SubmitRatingAction;
+  ratingUpdate?: SubmitRatingUpdate;
   table: EvaluateTable;
-}): Promise<void> {
+}): Promise<PersistedRatingResult | undefined> {
   invariant(evalId, 'Cannot save manual rating without an evaluation ID');
 
-  const response =
-    version && version >= 4
-      ? await callApi(EVAL_ROUTES.RESULT_RATING(evalId, resultId), {
+  const isVersion4 = Boolean(version && version >= 4);
+  const response = isVersion4
+    ? await callApi(
+        EVAL_ROUTES.RESULT_RATING(evalId, resultId),
+        {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ ...gradingResult }),
-        })
-      : await callApi(EVAL_ROUTES.DETAIL(evalId), {
+          body: JSON.stringify({ ...gradingResult, ratingAction, ratingUpdate }),
+        },
+        apiBaseUrl,
+      )
+    : await callApi(
+        EVAL_ROUTES.DETAIL(evalId),
+        {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ table }),
-        });
+        },
+        apiBaseUrl,
+      );
 
   if (!response.ok) {
-    throw new Error('Network response was not ok');
+    if (
+      response.status >= 400 &&
+      response.status < 500 &&
+      ![408, 425, 429].includes(response.status)
+    ) {
+      throw new ConfirmedRatingPersistenceError('Network response was not ok');
+    }
+    throw new Error(`Ambiguous rating response status: ${response.status}`);
   }
+
+  return isVersion4 && typeof response.json === 'function'
+    ? SubmitRatingResponseSchema.parse(await response.json())
+    : undefined;
 }
 
 function renderPromptMetricDetails({
@@ -1652,6 +1768,10 @@ function ResultsTableHeader({
   );
 }
 
+// Accepted writes must remain ordered across table remounts. Legacy saves replace
+// the whole evaluation, so serialize by eval even when edits affect different cells.
+const pendingRatingRequests = new Map<string, Promise<EvaluateTable | undefined>>();
+
 function ResultsTable({
   maxTextLength,
   columnVisibility,
@@ -1683,6 +1803,19 @@ function ResultsTable({
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
+  const latestTableRef = useRef(table);
+  latestTableRef.current = table;
+  const ratingScopeRef = useRef({ evalId, generation: 0, mounted: false });
+
+  React.useEffect(() => {
+    const generation = ratingScopeRef.current.generation + 1;
+    ratingScopeRef.current = { evalId, generation, mounted: true };
+    return () => {
+      if (ratingScopeRef.current.generation === generation) {
+        ratingScopeRef.current = { evalId, generation: generation + 1, mounted: false };
+      }
+    };
+  }, [evalId]);
 
   const isRedteam = React.useMemo(() => {
     return config?.redteam !== undefined;
@@ -1699,6 +1832,15 @@ function ResultsTable({
     pageIndex: 0,
     pageSize: filteredResultsCount > 10 ? 50 : 10,
   });
+  const currentRatingQuery = {
+    pageIndex: pagination.pageIndex,
+    pageSize: pagination.pageSize,
+    filterMode,
+    searchText: debouncedSearchText,
+    filters: Object.values(filters.values).filter(isAppliedResultFilter),
+  };
+  const latestRatingQueryRef = useRef(currentRatingQuery);
+  latestRatingQueryRef.current = currentRatingQuery;
 
   // Persist column sizing state to prevent header resize flicker during pagination.
   // Without this, column widths reset when columns memo recalculates (due to deps like passRates changing).
@@ -1720,57 +1862,216 @@ function ResultsTable({
     setLightboxOpen(!lightboxOpen);
   };
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleRating = React.useCallback(
     async (
-      rowIndex: number,
-      promptIndex: number,
+      _rowIndex: number,
+      _promptIndex: number,
       resultId: string,
       isPass?: boolean | null,
       score?: number,
       comment?: string,
     ) => {
-      const existingOutput = body[rowIndex].outputs[promptIndex];
-      const ratingUpdate = getManualRatingUpdate({
-        existingOutput,
-        isPass,
-        score,
-        comment,
-      });
-      const gradingResult = buildManualGradingResult({
-        existingOutput,
-        ratingUpdate,
-        isPass,
-        score,
-        comment,
-      });
-      const newTable = buildRatingTableUpdate({
-        head,
-        body,
-        rowIndex,
-        promptIndex,
-        ratingUpdate,
-        gradingResult,
-      });
+      const apiBaseUrl = getApiBaseUrl();
+      const scopeGeneration = ratingScopeRef.current.generation;
+      const isScopeActive = () => {
+        const scope = ratingScopeRef.current;
+        return (
+          scope.mounted &&
+          scope.generation === scopeGeneration &&
+          scope.evalId === evalId &&
+          getApiBaseUrl() === apiBaseUrl
+        );
+      };
+      if (!isScopeActive()) {
+        return;
+      }
+      const queueKey = JSON.stringify([apiBaseUrl, evalId]);
+      const queuedTable = latestTableRef.current;
+      const queuedLocation = findRatingOutput(queuedTable, resultId);
+      if (!queuedLocation) {
+        return;
+      }
+      const queuedOutput = queuedLocation.output;
+      let currentRequest: Promise<EvaluateTable | undefined>;
+      const runRating = async (
+        previousTable?: EvaluateTable,
+      ): Promise<EvaluateTable | undefined> => {
+        // Accepted writes outlive the mounted table. Carry prior queued edits forward
+        // for legacy full-table saves without touching the newly selected eval's state.
+        const currentTable =
+          previousTable && (!isScopeActive() || !version || version < 4)
+            ? previousTable
+            : isScopeActive()
+              ? latestTableRef.current
+              : queuedTable;
+        const currentLocation = findRatingOutput(currentTable, resultId);
+        if (!currentLocation && (!version || version < 4)) {
+          return;
+        }
+        const existingOutput = currentLocation?.output ?? queuedOutput;
+        const ratingUpdate = getManualRatingUpdate({
+          existingOutput,
+          isPass,
+          score,
+          comment,
+        });
+        const gradingResult = buildManualGradingResult({
+          existingOutput,
+          ratingUpdate,
+          isPass,
+          score,
+          comment,
+        });
+        const newTable = currentLocation
+          ? buildRatingTableUpdate({
+              head: currentTable.head,
+              body: currentTable.body,
+              rowIndex: currentLocation.rowIndex,
+              promptIndex: currentLocation.promptIndex,
+              ratingUpdate,
+              gradingResult,
+            })
+          : currentTable;
+        const optimisticOutput = currentLocation
+          ? newTable.body[currentLocation.rowIndex].outputs[currentLocation.promptIndex]
+          : undefined;
 
-      setTable(newTable);
-      if (inComparisonMode) {
-        showToast('Ratings are not saved in comparison mode', 'warning');
-      } else {
+        if (optimisticOutput && isScopeActive()) {
+          latestTableRef.current = newTable;
+          setTable(newTable);
+        }
+        if (inComparisonMode) {
+          showToast('Ratings are not saved in comparison mode', 'warning');
+          return;
+        }
+
+        const refreshCurrentPage = async () => {
+          if (!evalId || !isScopeActive()) {
+            return;
+          }
+          const query = latestRatingQueryRef.current;
+          const refreshed = await fetchEvalData(evalId, {
+            ...query,
+            skipSettingEvalId: true,
+            skipLoadingState: true,
+          });
+          if (isScopeActive() && refreshed?.table) {
+            latestTableRef.current = refreshed.table;
+          }
+        };
+
+        const handlePersistedResult = async (persistedResult?: PersistedRatingResult) => {
+          if (!isScopeActive()) {
+            return;
+          }
+          const latestLocation = findRatingOutput(latestTableRef.current, resultId);
+          const ownsOptimisticOutput =
+            optimisticOutput !== undefined && latestLocation?.output === optimisticOutput;
+          if (persistedResult && ownsOptimisticOutput) {
+            const reconciledTable = applyPersistedRatingResult({
+              table: latestTableRef.current,
+              resultId,
+              result: persistedResult,
+            });
+            latestTableRef.current = reconciledTable;
+            setTable(reconciledTable);
+          }
+          const query = latestRatingQueryRef.current;
+          const stalePersistedResponse = persistedResult && !ownsOptimisticOutput;
+          if (
+            persistedResult &&
+            pendingRatingRequests.get(queueKey) === currentRequest &&
+            (stalePersistedResponse ||
+              query.filterMode !== 'all' ||
+              Boolean(query.searchText) ||
+              query.filters.length > 0)
+          ) {
+            await refreshCurrentPage();
+          }
+        };
+
+        const handlePersistenceError = async (error: unknown) => {
+          console.error('Failed to update table:', error);
+          if (!isScopeActive()) {
+            return;
+          }
+          if (error instanceof ConfirmedRatingPersistenceError) {
+            const latestLocation = findRatingOutput(latestTableRef.current, resultId);
+            if (optimisticOutput && latestLocation?.output === optimisticOutput) {
+              const rolledBackTable = replaceRatingOutput(
+                latestTableRef.current,
+                resultId,
+                existingOutput,
+              );
+              latestTableRef.current = rolledBackTable;
+              setTable(rolledBackTable);
+            } else {
+              await refreshCurrentPage().catch((refreshError) => {
+                console.error('Failed to refresh table after a rejected rating:', refreshError);
+              });
+            }
+            const query = latestRatingQueryRef.current;
+            if (
+              optimisticOutput !== undefined &&
+              latestLocation?.output === optimisticOutput &&
+              pendingRatingRequests.get(queueKey) === currentRequest &&
+              (query.filterMode !== 'all' || Boolean(query.searchText) || query.filters.length > 0)
+            ) {
+              await refreshCurrentPage().catch((refreshError) => {
+                console.error(
+                  'Failed to refresh filtered ratings after a rejection:',
+                  refreshError,
+                );
+              });
+            }
+            return;
+          }
+
+          // The server may have committed before the connection or response parsing failed.
+          // Refetch the current page instead of asserting that the optimistic state is wrong.
+          await refreshCurrentPage().catch((refreshError) => {
+            console.error(
+              'Failed to refresh table after an ambiguous rating response:',
+              refreshError,
+            );
+          });
+        };
+
         try {
-          await saveManualRating({
+          const ratingIntent = getSubmitRatingIntent(isPass, score);
+          const persistedResult = await saveManualRating({
+            apiBaseUrl,
             evalId,
             resultId,
             version,
             gradingResult,
+            ...ratingIntent,
             table: newTable,
           });
+          await handlePersistedResult(persistedResult);
+          return persistedResult && currentLocation
+            ? applyPersistedRatingResult({ table: newTable, resultId, result: persistedResult })
+            : newTable;
         } catch (error) {
-          console.error('Failed to update table:', error);
+          await handlePersistenceError(error);
+          return error instanceof ConfirmedRatingPersistenceError ? currentTable : newTable;
+        }
+      };
+
+      const previousRequest = pendingRatingRequests.get(queueKey);
+      currentRequest = previousRequest
+        ? previousRequest.then(runRating, () => runRating())
+        : runRating();
+      pendingRatingRequests.set(queueKey, currentRequest);
+      try {
+        await currentRequest;
+      } finally {
+        if (pendingRatingRequests.get(queueKey) === currentRequest) {
+          pendingRatingRequests.delete(queueKey);
         }
       }
     },
-    [body, head, setTable, evalId, inComparisonMode, showToast],
+    [evalId, fetchEvalData, inComparisonMode, setTable, showToast, version],
   );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: row positions should stay paired with the loaded body until the next page payload arrives.
@@ -1891,26 +2192,7 @@ function ResultsTable({
   // Create a stable reference for applied filters to avoid unnecessary re-renders
   const appliedFiltersString = React.useMemo(() => {
     const appliedFilters = Object.values(filters.values)
-      .filter((filter) => {
-        // For metadata filters with exists operator, only field is required
-        if (filter.type === 'metadata' && filter.operator === 'exists') {
-          return Boolean(filter.field);
-        }
-        // For other metadata operators, both field and value are required
-        if (filter.type === 'metadata') {
-          return Boolean(filter.value && filter.field);
-        }
-        // For metric filters with is_defined operator, only field is required
-        if (filter.type === 'metric' && filter.operator === 'is_defined') {
-          return Boolean(filter.field);
-        }
-        // For metric filters with comparison operators, both field and value are required
-        if (filter.type === 'metric') {
-          return Boolean(filter.value && filter.field);
-        }
-        // For non-metadata/non-metric filters, value is required
-        return Boolean(filter.value);
-      })
+      .filter(isAppliedResultFilter)
       .sort((a, b) => a.sortIndex - b.sortIndex); // Sort by sortIndex for stability
     // Create a stable string representation of applied filters
     return JSON.stringify(
@@ -1999,21 +2281,7 @@ function ResultsTable({
       // For metric filters with is_defined operator, only field is required.
       // For metric filters with comparison operators, both field and value are required.
       // For non-metadata/non-metric filters, value is required.
-      filters: Object.values(filters.values).filter((filter) => {
-        if (filter.type === 'metadata' && filter.operator === 'exists') {
-          return Boolean(filter.field);
-        }
-        if (filter.type === 'metadata') {
-          return Boolean(filter.value && filter.field);
-        }
-        if (filter.type === 'metric' && filter.operator === 'is_defined') {
-          return Boolean(filter.field);
-        }
-        if (filter.type === 'metric') {
-          return Boolean(filter.value && filter.field);
-        }
-        return Boolean(filter.value);
-      }),
+      filters: Object.values(filters.values).filter(isAppliedResultFilter),
       skipSettingEvalId: true, // Don't change evalId when paginating or filtering
     });
   }, [

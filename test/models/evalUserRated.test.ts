@@ -121,6 +121,43 @@ describe('User-Rated Filter Feature', () => {
       expect(testIndices).toEqual([0, 2, 4]);
     });
 
+    it('includes legacy top-level human ratings in both query paths', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      await eval_.addResult({
+        description: 'legacy-top-level-human',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: {} },
+        promptId: 'test-prompt',
+        provider: { id: 'test-provider', label: 'test-label' },
+        prompt: { raw: 'Test prompt', label: 'Test prompt' },
+        vars: {},
+        response: { output: 'Response' },
+        error: null,
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 1,
+        latencyMs: 100,
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'Legacy manual rating',
+          assertion: { type: HUMAN_ASSERTION_TYPE },
+        },
+        namedScores: {},
+        cost: 0.007,
+        metadata: {},
+      } as EvaluateResult);
+
+      await expect((eval_ as any).queryTestIndices({ filterMode: 'user-rated' })).resolves.toEqual({
+        testIndices: [0],
+        filteredCount: 1,
+      });
+      await expect(
+        queryTestIndicesOptimized(eval_.id, { filterMode: 'user-rated' }),
+      ).resolves.toEqual({ testIndices: [0], filteredCount: 1 });
+    });
+
     it('should handle empty dataset with user-rated filter', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
 

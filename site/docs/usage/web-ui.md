@@ -62,6 +62,8 @@ Hover to reveal actions. Hold `Shift` for more:
 
 Ratings and comments persist and are included in exports—use them to build training datasets.
 
+Click the selected **Pass** or **Fail** action again to clear that override and restore the saved result from before the rating, including its weighted score and threshold outcome. Editing only a score preserves pass/fail status; comments and highlights do not add assertions or change scores. For older or imported ratings without a saved baseline, clearing uses the stored automated grading details, which may not recover an original custom scoring result.
+
 ## Eval Actions
 
 ![Eval actions menu](/img/docs/web-ui-eval-actions.png)
