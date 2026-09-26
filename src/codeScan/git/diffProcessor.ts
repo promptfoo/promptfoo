@@ -200,7 +200,6 @@ async function isBlobText(repoPath: string, sha: string): Promise<boolean> {
     const result = await execa('git', ['cat-file', 'blob', sha], {
       cwd: repoPath,
       encoding: 'buffer',
-      maxBuffer: 4096,
     });
 
     // Convert Uint8Array to Buffer and check if text
