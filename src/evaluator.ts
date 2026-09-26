@@ -17,7 +17,14 @@ import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache, withCacheNamespace } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
-import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
+import {
+  getEnvBool,
+  getEnvInt,
+  getEvalTimeoutMs,
+  getMaxErrors,
+  getMaxEvalTimeMs,
+  isCI,
+} from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
@@ -539,12 +546,14 @@ function shouldDeferGradingForTest(test: AtomicTestCase): boolean {
 function logGroupedGradingStatus({
   concurrency,
   hasEvalStepTimeout,
+  hasMaxErrorsLimit,
   runEvalOptions,
   shouldGroupGradingByProvider,
   usesConversationVar,
 }: {
   concurrency: number;
   hasEvalStepTimeout: boolean;
+  hasMaxErrorsLimit: boolean;
   runEvalOptions: RunEvalOptions[];
   shouldGroupGradingByProvider: boolean;
   usesConversationVar: boolean;
@@ -570,6 +579,9 @@ function logGroupedGradingStatus({
   }
   if (usesConversationVar) {
     reasons.push('conversation variables require per-row ordering');
+  }
+  if (hasMaxErrorsLimit) {
+    reasons.push('max-errors requires row-by-row error accounting');
   }
   if (reasons.length > 0) {
     logger.info(
@@ -3036,7 +3048,11 @@ interface GroupedRows {
 interface EvalProcessingContext {
   assertionTypes: Set<string>;
   concurrency: number;
+  consecutiveErrors: number;
   mathjsModule: typeof import('mathjs') | null;
+  maxErrors: number;
+  maxErrorsAbortController?: AbortController;
+  maxErrorsExceeded: boolean;
   numComplete: number;
   options: InternalEvaluateOptions;
   promptEvalCounts: number[];
@@ -3437,13 +3453,35 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
   }
 
-  private trackRowStats(row: EvaluateResult): void {
+  private resetConsecutiveErrors(context: EvalProcessingContext): void {
+    context.consecutiveErrors = 0;
+  }
+
+  private trackConsecutiveError(context: EvalProcessingContext): void {
+    context.consecutiveErrors++;
+    if (
+      context.maxErrors > 0 &&
+      context.consecutiveErrors >= context.maxErrors &&
+      !context.maxErrorsExceeded
+    ) {
+      context.maxErrorsExceeded = true;
+      logger.error(
+        `Evaluation aborted: ${context.consecutiveErrors} consecutive error(s) reached the --max-errors threshold of ${context.maxErrors}`,
+      );
+      context.maxErrorsAbortController?.abort();
+    }
+  }
+
+  private trackRowStats(row: EvaluateResult, context: EvalProcessingContext): void {
     if (row.success) {
       this.stats.successes++;
+      this.resetConsecutiveErrors(context);
     } else if (row.failureReason === ResultFailureReason.ERROR) {
       this.stats.errors++;
+      this.trackConsecutiveError(context);
     } else {
       this.stats.failures++;
+      this.resetConsecutiveErrors(context);
     }
 
     if (row.tokenUsage) {
@@ -3685,7 +3723,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     for (const varName of Object.keys(row.vars)) {
       context.vars.add(varName);
     }
-    this.trackRowStats(row);
+    this.trackRowStats(row, context);
     trackComparisonRowsForEvalStep(
       evalStep,
       row,
@@ -3799,6 +3837,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     this.trackFinalJsonlResult(timeoutResult);
     await this.store.appendResult(timeoutResult);
     this.stats.errors++;
+    this.trackConsecutiveError(context);
 
     const { metrics } = context.prompts[evalStep.promptIdx];
     if (metrics) {
@@ -3833,6 +3872,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     prompts,
     serialRunEvalOptions,
     shouldGroupGradingByProvider,
+    startTime,
   }: {
     checkAbort: () => void;
     ciProgressReporter: CIProgressReporter | null;
@@ -3850,6 +3890,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     prompts: CompletedPrompt[];
     serialRunEvalOptions: RunEvalOptions[];
     shouldGroupGradingByProvider: boolean;
+    startTime: number;
   }): Promise<TEvaluation | undefined> {
     try {
       if (shouldGroupGradingByProvider) {
@@ -3887,7 +3928,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         throw err;
       }
 
-      if (isEvalTimedOut()) {
+      if (processingContext.maxErrorsExceeded) {
+        logger.warn(
+          `Evaluation stopped after ${processingContext.consecutiveErrors} consecutive error(s) (max-errors: ${processingContext.maxErrors})`,
+        );
+      } else if (isEvalTimedOut()) {
         logger.warn(`Evaluation stopped after reaching max duration (${maxEvalTimeMs}ms)`);
       } else if (!processingContext.targetUnavailable) {
         return this.saveInterruptedEval({
@@ -3896,6 +3941,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           processingContext,
           progressBarManager,
           prompts,
+          startTime,
         });
       }
     }
@@ -4116,12 +4162,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     processingContext,
     progressBarManager,
     prompts,
+    startTime,
   }: {
     ciProgressReporter: CIProgressReporter | null;
     globalTimeout?: NodeJS.Timeout;
     processingContext: EvalProcessingContext;
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
+    startTime: number;
   }) {
     logger.info('Evaluation interrupted, saving progress...');
     if (globalTimeout) {
@@ -4132,6 +4180,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     ciProgressReporter?.finish();
     this.store.setVars(Array.from(processingContext.vars));
     await this.store.appendPrompts(prompts);
+    this.store.setDurationMs(Date.now() - startTime);
+    if (this.store.persisted) {
+      await this.store.save();
+    }
     return this.store.evaluation;
   }
 
@@ -4171,6 +4223,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     rowsWithMaxScoreAssertion,
     rowsWithSelectBestAssertion,
     runEvalOptions,
+    skipBecauseMaxErrors,
   }: {
     ciProgressReporter: CIProgressReporter | null;
     isWebUI: boolean;
@@ -4181,7 +4234,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     rowsWithMaxScoreAssertion: Set<number>;
     rowsWithSelectBestAssertion: Set<number>;
     runEvalOptions: RunEvalOptions[];
+    skipBecauseMaxErrors: boolean;
   }) {
+    if (skipBecauseMaxErrors) {
+      return;
+    }
+
     const compareRowsCount = rowsWithSelectBestAssertion.size + rowsWithMaxScoreAssertion.size;
     updateComparisonReporterTotals({
       ciProgressReporter,
@@ -4753,9 +4811,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     const startTime = Date.now();
     const maxEvalTimeMs = options.maxEvalTimeMs ?? getMaxEvalTimeMs();
+    const maxErrors = options.maxErrors ?? getMaxErrors();
     let evalTimedOut = false;
     let globalTimeout: NodeJS.Timeout | undefined;
     let globalAbortController: AbortController | undefined;
+    let maxErrorsAbortController: AbortController | undefined;
     const processedIndices = new Set<number>();
 
     const targetErrorAbortController = new AbortController();
@@ -4786,6 +4846,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         evalTimedOut = true;
         globalAbortController?.abort();
       }, maxEvalTimeMs);
+    }
+
+    if (maxErrors > 0) {
+      maxErrorsAbortController = new AbortController();
+      providerAbortSignal = providerAbortSignal
+        ? AbortSignal.any([providerAbortSignal, maxErrorsAbortController.signal])
+        : maxErrorsAbortController.signal;
+      combinedAbortSignal = AbortSignal.any([combinedAbortSignal, maxErrorsAbortController.signal]);
     }
 
     const vars = new Set<string>();
@@ -4863,7 +4931,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const processingContext: EvalProcessingContext = {
       assertionTypes,
       concurrency,
+      consecutiveErrors: 0,
       mathjsModule,
+      maxErrors,
+      maxErrorsAbortController,
+      maxErrorsExceeded: false,
       numComplete: 0,
       options,
       promptEvalCounts: createPromptEvalCounts(prompts),
@@ -4937,8 +5009,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       }
     }
     const hasEvalStepTimeout = (options.timeoutMs || getEvalTimeoutMs()) > 0;
+    const hasMaxErrorsLimit = maxErrors > 0;
     const shouldGroupGradingByProvider =
-      concurrency === 1 && !hasEvalStepTimeout && !usesConversationVar;
+      !hasMaxErrorsLimit && concurrency === 1 && !hasEvalStepTimeout && !usesConversationVar;
 
     // Print info messages before starting progress bar
     if (!this.options.silent) {
@@ -4954,6 +5027,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       logGroupedGradingStatus({
         concurrency,
         hasEvalStepTimeout,
+        hasMaxErrorsLimit,
         runEvalOptions,
         shouldGroupGradingByProvider,
         usesConversationVar,
@@ -4983,6 +5057,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       prompts,
       serialRunEvalOptions,
       shouldGroupGradingByProvider,
+      startTime,
     });
     if (interruptedEval) {
       return interruptedEval;
@@ -4998,6 +5073,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       rowsWithMaxScoreAssertion,
       rowsWithSelectBestAssertion,
       runEvalOptions,
+      skipBecauseMaxErrors: processingContext.maxErrorsExceeded,
     });
 
     await this.finalizeEvaluation({

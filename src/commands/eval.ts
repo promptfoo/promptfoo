@@ -154,6 +154,10 @@ export function evalCommand(
     )
     .option('--retry-errors', 'Retry all ERROR results from the latest evaluation')
     .option(
+      '--max-errors <number>',
+      'Maximum number of consecutive errors before the evaluation is aborted (default: 0, no limit)',
+    )
+    .option(
       '--no-write',
       'Do not write results to promptfoo directory',
       defaultConfig?.commandLineOptions?.write,
