@@ -53,8 +53,7 @@
       "entry": ["index.html"],
       "project": ["src/**/*.{js,ts,tsx}"],
       "ignoreDependencies": [
-        // Build-tool/CSS deps invisible to import analysis (Tailwind v4 pipeline).
-        "lightningcss",
+        // Tailwind v4 is loaded through the CSS/PostCSS pipeline.
         "tailwindcss"
       ],
       "paths": {
