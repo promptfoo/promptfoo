@@ -51,9 +51,14 @@ export function createProviderRateLimitOptions(): RateLimitExecuteOptions<Provid
     // park every queued and subsequent call until that reset instead of
     // letting them fail fast.
     getHeaders: (result: ProviderResponse | undefined) =>
-      result?.metadata?.rateLimitKind === 'quota' ? undefined : getProviderResponseHeaders(result),
+      result?.retryable === false || result?.metadata?.rateLimitKind === 'quota'
+        ? undefined
+        : getProviderResponseHeaders(result),
     isRateLimited: isProviderResponseRateLimited,
     getRetryAfter: (result: ProviderResponse | undefined, error: Error | undefined) => {
+      if (result?.retryable === false) {
+        return undefined;
+      }
       const rawHeaders = getProviderResponseHeaders(result);
       if (rawHeaders) {
         // Normalize header keys to lowercase for consistent access

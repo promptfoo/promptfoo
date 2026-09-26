@@ -399,7 +399,7 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
     return {
       error: message,
       cached: false,
-      ...(attempt.importingReport ? { incurredCost: 0 } : {}),
+      ...(attempt.importingReport ? { incurredCost: 0, retryable: false } : {}),
       ...(!attempt.importingReport && observedCost ? { cost: observedCost.estimatedUsd } : {}),
       ...(!attempt.importingReport && tokenUsage ? { tokenUsage } : {}),
       metadata: {
@@ -600,6 +600,7 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
             : {}),
           cached: false,
           incurredCost: 0,
+          retryable: false,
           metadata: {
             codexSecurity: summary,
             codexSecurityReplay: createCodexSecurityReplayHeader(

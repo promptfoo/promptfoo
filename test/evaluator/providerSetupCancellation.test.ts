@@ -77,7 +77,7 @@ describe('provider setup cancellation boundaries', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('bounds a hanging check and reuses its zero-request deadline failure', async () => {
+  it('bounds a hanging check without retaining that failure for later callers', async () => {
     const setup = vi.fn<NonNullable<ApiProvider['checkSetup']>>(() => new Promise(() => {}));
     const provider = providerWithSetup(setup);
     const check = createProviderSetupCheck();
@@ -90,11 +90,12 @@ describe('provider setup cancellation boundaries', () => {
       error: expect.stringContaining('timed out after 1000ms'),
       incurredCost: 0,
       tokenUsage: { numRequests: 0 },
-      metadata: { providerSetup: { workloadStarted: false } },
+      metadata: { providerSetup: { workloadStarted: false, timedOut: true } },
     });
     expect(setup.mock.calls[0][1]?.abortSignal?.aborted).toBe(true);
-    expect(await check(provider, context)).toEqual(response);
-    expect(setup).toHaveBeenCalledOnce();
+    setup.mockResolvedValue({ success: true, message: 'Now ready' });
+    expect(await check(provider, context)).toBeUndefined();
+    expect(setup).toHaveBeenCalledTimes(2);
     expect(provider.callApi).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
   });
@@ -122,7 +123,8 @@ describe('provider setup cancellation boundaries', () => {
 
   it('consumes a late provider rejection without changing the recorded timeout', async () => {
     const late = deferred<SetupResult>();
-    const provider = providerWithSetup(vi.fn(() => late.promise));
+    const setup = vi.fn(() => late.promise);
+    const provider = providerWithSetup(setup);
     const check = createProviderSetupCheck();
     const pending = check(provider, context, { timeoutMs: 1000 });
 
@@ -131,7 +133,10 @@ describe('provider setup cancellation boundaries', () => {
     late.reject(new Error('Late SDK shutdown failure'));
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(await check(provider, context)).toEqual(response);
+    expect((await check(provider, context))?.error).toBe(
+      'Provider local setup check failed. No workload was started.',
+    );
+    expect(setup).toHaveBeenCalledTimes(2);
     expect(response?.error).toContain('timed out after 1000ms');
     expect(vi.getTimerCount()).toBe(0);
   });

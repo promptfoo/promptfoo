@@ -1031,6 +1031,7 @@ function renderResponseAudioPlayer(
 
 function renderOutputActions({
   showExtraActions,
+  showDetails,
   copied,
   linked,
   isHighlighted,
@@ -1059,6 +1060,7 @@ function renderOutputActions({
   setActionsHovered,
 }: {
   showExtraActions: boolean;
+  showDetails: boolean;
   copied: boolean;
   linked: boolean;
   isHighlighted: boolean;
@@ -1212,7 +1214,7 @@ function renderOutputActions({
         </TooltipTrigger>
         <TooltipContent>Edit comment</TooltipContent>
       </Tooltip>
-      {output.prompt && (
+      {showDetails && (
         <>
           <Tooltip disableHoverableContent>
             <TooltipTrigger asChild>
@@ -1658,6 +1660,7 @@ function EvalOutputCell({
       })}
       {renderOutputActions({
         showExtraActions,
+        showDetails: Boolean(output.prompt || securityResult),
         copied,
         linked,
         isHighlighted: commentIsHighlighted,

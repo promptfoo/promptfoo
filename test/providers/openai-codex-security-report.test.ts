@@ -37,6 +37,9 @@ function scanPayload() {
     },
     turn: { model: 'recorded-model' },
     cost: { estimatedUsd: 0.01, inputTokens: 10, outputTokens: 5 },
+    scanDir: '/recorded/scan',
+    reportPath: '/recorded/scan/report.md',
+    sarifPath: '/recorded/scan/findings.sarif',
   };
 }
 
@@ -165,6 +168,59 @@ describe('Codex Security replay evidence validation', () => {
       envelope.result,
     ).payloadSha256;
     await expect(load(envelope)).rejects.toThrow('mismatched scan IDs');
+  });
+
+  it.each(['changed', 'omitted'] as const)(
+    'rejects %s intrinsic artifact paths even with a valid payload hash',
+    async (change) => {
+      const envelope = replay();
+      const report = envelope.result.artifacts.find(({ kind }) => kind === 'reportPath')!;
+      if (change === 'changed') {
+        report.path = '/other/scan/report.md';
+      } else {
+        envelope.result.artifacts = envelope.result.artifacts.filter(
+          ({ kind }) => kind !== 'reportPath',
+        );
+      }
+
+      await expect(load(envelope)).rejects.toThrow('disagrees with its SDK artifact paths');
+    },
+  );
+
+  it('rejects duplicate artifact kinds rather than accepting an ambiguous display path', async () => {
+    const envelope = replay();
+    envelope.result.artifacts.push({ kind: 'reportPath', path: '/other/scan/report.md' });
+
+    await expect(load(envelope)).rejects.toThrow('duplicate artifact kinds');
+  });
+
+  it('accepts reordered artifacts and additional runtime-only kinds', async () => {
+    const envelope = replay();
+    envelope.result.artifacts.reverse();
+    envelope.result.artifacts.push({ kind: 'manifestPath', path: '/recorded/scan/manifest.json' });
+
+    const imported = await load(envelope);
+
+    expect(imported.summary.artifacts).toEqual(envelope.result.artifacts);
+    expect(imported.raw).toEqual(envelope.payload);
+  });
+
+  it('also rejects contradictory validation output directories', async () => {
+    const payload = {
+      disposition: 'deferred',
+      report: 'Recorded validation decision',
+      outputDir: '/recorded/validation',
+    };
+    const result = normalizeCodexSecurityResult(payload, {
+      source: { kind: 'sdk' },
+      operation: 'validation',
+      status: 'completed',
+    });
+    result.artifacts[0].path = '/other/validation';
+
+    await expect(
+      load({ ...createCodexSecurityReplayHeader(payload, result), payload }),
+    ).rejects.toThrow('disagrees with its SDK artifact paths');
   });
 
   it('rejects a replay that removes warnings explicitly reported by the SDK', async () => {

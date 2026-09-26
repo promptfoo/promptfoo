@@ -2581,7 +2581,7 @@ async function prepareProviderSetup(runEvalOptions: RunEvalOptions[], checkAbort
       repeatIndex: step.repeatIndex,
       testIndex: step.testIdx,
     });
-    await providerSetup(
+    const setupFailure = await providerSetup(
       activeProvider,
       {
         vars: { ...step.test.vars, ...step.registers, ...runtimeVars },
@@ -2601,6 +2601,10 @@ async function prepareProviderSetup(runEvalOptions: RunEvalOptions[], checkAbort
         timeoutMs: step.evaluateOptions?.timeoutMs || getEvalTimeoutMs(),
       },
     );
+    if (setupFailure?.metadata?.providerSetup?.timedOut) {
+      // This row already consumed its setup deadline; preserve that outcome without retrying it.
+      step.providerSetup = async () => structuredClone(setupFailure);
+    }
   }
 }
 

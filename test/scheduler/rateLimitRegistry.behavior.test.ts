@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createProviderRateLimitOptions } from '../../src/scheduler/providerWrapper';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { getFetchRetryContextMaxRetries } from '../../src/util/fetch/retryContext';
 
-import type { ApiProvider } from '../../src/types/providers';
+import type { ApiProvider, ProviderResponse } from '../../src/types/providers';
 
 function createProvider(maxRetries?: unknown, id = 'test-provider'): ApiProvider {
   const config = maxRetries === undefined ? {} : { maxRetries };
@@ -37,8 +38,91 @@ async function runRateLimitedCall(maxRetries?: unknown): Promise<number> {
 
 describe('RateLimitRegistry integration - provider maxRetries', () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.resetAllMocks();
     vi.unstubAllEnvs();
+  });
+
+  it.each([false, true])(
+    'preserves opted-out failure evidence without retries or a shared cooldown (scheduler disabled: %s)',
+    async (disabled) => {
+      vi.useFakeTimers();
+      vi.stubEnv('PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER', String(disabled));
+      const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+      const provider = createProvider();
+      const historical: ProviderResponse = {
+        error: 'Recorded 429 rate limit',
+        retryable: false,
+        incurredCost: 0,
+        metadata: {
+          recordedCost: 0.12,
+          rateLimitKind: 'rate_limit',
+          http: {
+            status: 429,
+            statusText: 'Too Many Requests',
+            headers: {
+              'retry-after': '3600',
+              'x-ratelimit-remaining-requests': '0',
+              'x-ratelimit-reset-requests': '3600s',
+            },
+          },
+        },
+      };
+      const call = vi.fn().mockResolvedValue(historical);
+      try {
+        const pending = registry.execute(provider, call, createProviderRateLimitOptions());
+        const preserved = expect(pending).resolves.toBe(historical);
+        await vi.runAllTimersAsync();
+        await preserved;
+        expect(call).toHaveBeenCalledOnce();
+
+        // A replay cannot delay the next request on the same provider's shared rate-limit key.
+        await expect(
+          registry.execute(
+            provider,
+            async () => ({ output: 'Fresh response' }),
+            createProviderRateLimitOptions(),
+          ),
+        ).resolves.toEqual({ output: 'Fresh response' });
+        if (!disabled) {
+          expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+            rateLimitHits: 0,
+            retriedRequests: 0,
+            activeRequests: 0,
+          });
+        }
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        registry.dispose();
+      }
+    },
+  );
+
+  it('still retries a live rate-limit response with ordinary retry detection', async () => {
+    vi.useFakeTimers();
+    vi.stubEnv('PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER', 'false');
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+    const call = vi
+      .fn<() => Promise<ProviderResponse>>()
+      .mockResolvedValueOnce({
+        error: 'HTTP 429 rate limit',
+        retryable: true,
+        metadata: { headers: { 'retry-after': '0' } },
+      })
+      .mockResolvedValue({ output: 'Recovered response' });
+    try {
+      const pending = registry.execute(createProvider(1), call, createProviderRateLimitOptions());
+      await vi.runAllTimersAsync();
+
+      await expect(pending).resolves.toEqual({ output: 'Recovered response' });
+      expect(call).toHaveBeenCalledTimes(2);
+      expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+        rateLimitHits: 1,
+        retriedRequests: 1,
+      });
+    } finally {
+      registry.dispose();
+    }
   });
 
   it('should propagate provider maxRetries into the fetch retry context', async () => {

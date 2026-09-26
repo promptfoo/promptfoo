@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  createProviderRateLimitOptions,
   isRateLimitWrapped,
   wrapProvidersWithRateLimiting,
   wrapProviderWithRateLimiting,
@@ -103,6 +104,30 @@ describe('providerWrapper', () => {
   });
 
   describe('rate limit detection callbacks', () => {
+    it('does not apply historical retry headers or delays to an opted-out response', () => {
+      const options = createProviderRateLimitOptions();
+      const response: ProviderResponse = {
+        error: 'Recorded 429 rate limit',
+        retryable: false,
+        metadata: {
+          rateLimitKind: 'rate_limit',
+          http: {
+            status: 429,
+            statusText: 'Too Many Requests',
+            headers: {
+              'retry-after': '3600',
+              'x-ratelimit-remaining-requests': '0',
+              'x-ratelimit-reset-requests': '3600s',
+            },
+          },
+        },
+      };
+
+      expect(options.isRateLimited?.(response)).toBe(false);
+      expect(options.getHeaders?.(response)).toBeUndefined();
+      expect(options.getRetryAfter?.(response, new Error('retry after 3600'))).toBeUndefined();
+    });
+
     it('should detect rate limit from HTTP 429 status', async () => {
       let capturedOptions: any;
       mockExecute.mockImplementation(async (_provider, callFn, options) => {

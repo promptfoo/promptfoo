@@ -18,10 +18,13 @@ import {
 } from '../../src/providers/openai/codex-security';
 import { readCodexSecurityReport } from '../../src/providers/openai/codex-security-report';
 import { providerRegistry } from '../../src/providers/providerRegistry';
+import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
+import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../src/util/tokenUsageUtils';
+import { mockProcessEnv } from '../util/utils';
 
 import type { CallApiContextParams } from '../../src/types/index';
 
@@ -598,6 +601,7 @@ describe('OpenAICodexSecurityProvider', () => {
         progress: { phase: 'discovery' },
       });
       expect(response.error).toContain('Interrupted');
+      expect(response.retryable).toBeUndefined();
     });
 
     it('identifies validation results with SDK provenance', async () => {
@@ -686,6 +690,7 @@ describe('OpenAICodexSecurityProvider', () => {
         diagnostics: { warningAvailability: 'observed' },
       });
       expect(imported.incurredCost).toBe(0);
+      expect(imported.retryable).toBe(false);
       expect(imported.cost).toBeUndefined();
       expect(imported.tokenUsage).toBeUndefined();
       expect(importModule).not.toHaveBeenCalled();
@@ -738,6 +743,82 @@ describe('OpenAICodexSecurityProvider', () => {
         expect(importModule).not.toHaveBeenCalled();
       },
     );
+
+    it.each(['HTTP 429 from recorded service', 'Recorded rate limit exceeded'])(
+      'preserves a failed replay through the scheduler despite its historical error: %s',
+      async (message) => {
+        vi.mocked(resolvePackageEntryPoint).mockReturnValue(
+          '/packages/@openai/codex-security/dist/index.js',
+        );
+        mockRun.mockImplementation(async (_repository, options) => {
+          options.onCost({ inputTokens: 10, outputTokens: 5, estimatedUsd: 0.01 });
+          options.onWarning('Recorded warning');
+          throw new Error(message);
+        });
+        const native = await new OpenAICodexSecurityProvider().callApi('Unit fixture');
+        const { file } = await saveReport({
+          ...native.metadata?.codexSecurityReplay,
+          payload: null,
+        });
+        vi.mocked(importModule).mockClear();
+        const provider = new OpenAICodexSecurityProvider({
+          // Even maxRetries: 0 previously replaced the evidence with RateLimitExhaustedError.
+          config: { report_file: file, maxRetries: 0 },
+        });
+        const call = vi.spyOn(provider, 'callApi');
+        const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER: 'false' });
+        const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+        try {
+          const imported = await wrapProviderWithRateLimiting(provider, registry).callApi('Replay');
+          expect(imported.error).toBe(native.error);
+          expect(imported.incurredCost).toBe(0);
+          expect(imported.retryable).toBe(false);
+          expect(imported.metadata?.codexSecurity).toEqual({
+            ...native.metadata?.codexSecurity,
+            source: expect.objectContaining({ kind: 'saved-report', file }),
+          });
+          expect(imported.metadata?.codexSecurityReplay).toMatchObject({
+            payloadSha256: null,
+            result: imported.metadata?.codexSecurity,
+          });
+          expect(imported.cost).toBeUndefined();
+          expect(imported.tokenUsage).toBeUndefined();
+          expect(call).toHaveBeenCalledOnce();
+          expect(importModule).not.toHaveBeenCalled();
+          expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+            retriedRequests: 0,
+            rateLimitHits: 0,
+          });
+        } finally {
+          registry.dispose();
+          restoreEnv();
+        }
+      },
+    );
+
+    it('keeps an import-read error terminal even when its filename resembles a rate limit', async () => {
+      const provider = new OpenAICodexSecurityProvider({
+        config: { report_file: path.join(reportDirectory, 'missing-429.json'), maxRetries: 0 },
+      });
+      const open = vi.spyOn(fs, 'open');
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER: 'false' });
+      const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+      try {
+        const response = await wrapProviderWithRateLimiting(provider, registry).callApi('Replay');
+
+        expect(response).toMatchObject({
+          error: expect.stringContaining('missing-429.json'),
+          retryable: false,
+          incurredCost: 0,
+          metadata: { codexSecurity: { source: { kind: 'saved-report' }, status: 'failed' } },
+        });
+        expect(open).toHaveBeenCalledOnce();
+        expect(importModule).not.toHaveBeenCalled();
+      } finally {
+        registry.dispose();
+        restoreEnv();
+      }
+    });
 
     it('checks merged report templates and preserves import provenance on setup failure', async () => {
       const { file } = await saveReport(createScanResult().toJSON());

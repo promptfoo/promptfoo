@@ -42,7 +42,10 @@ async function waitForSetup(
       timer = setTimeout(() => {
         const message = `Provider local setup check timed out after ${timeoutMs}ms. No workload was started.`;
         controller.abort(new Error(message));
-        resolve(blockedResponse(message));
+        resolve({
+          ...blockedResponse(message),
+          metadata: { providerSetup: { workloadStarted: false, timedOut: true } },
+        });
       }, timeoutMs);
     }
   });
@@ -118,6 +121,10 @@ export function createProviderSetupCheck({ cache = true }: { cache?: boolean } =
     providerChecks.set(key, pending);
     try {
       const result = await pending;
+      if (result) {
+        // Earlier workloads can create missing files. Only successful checks remain reusable.
+        providerChecks.delete(key);
+      }
       // Later grading hooks may mutate responses. Each skipped attempt keeps its own evidence.
       return result ? structuredClone(result) : undefined;
     } catch (error) {

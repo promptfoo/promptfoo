@@ -36,6 +36,40 @@ const inMemoryRuntime = {
 };
 
 describeEvaluator('provider batch preflight', () => {
+  it('rechecks an eager failure after an earlier serial workload prepares the file without extensions', async () => {
+    let fileReady = false;
+    const events: string[] = [];
+    const preparer: ApiProvider = {
+      id: () => 'file-preparer',
+      callApi: vi.fn(async () => {
+        fileReady = true;
+        events.push('prepare');
+        return { output: 'file prepared', incurredCost: 0 };
+      }),
+    };
+    const scanner: ApiProvider = {
+      id: () => 'local-scanner',
+      checkSetupOnEval: true,
+      checkSetup: vi.fn(async () => {
+        events.push(`setup:${fileReady}`);
+        return { success: fileReady, message: 'File missing' };
+      }),
+      callApi: vi.fn(async () => {
+        events.push('scan');
+        return { output: 'prepared file' };
+      }),
+    };
+    const suite: TestSuite = {
+      providers: [scanner],
+      prompts: [toPrompt('Review')],
+      tests: [{ provider: preparer }, {}],
+    };
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    await evaluate(suite, record, { maxConcurrency: 1 });
+    expect(events).toEqual(['setup:false', 'prepare', 'setup:true', 'scan']);
+    expect((await record.toEvaluateSummary()).stats.errors).toBe(0);
+  });
+
   it.each(['user cancellation', 'evaluation deadline'])(
     'interrupts a hung setup check on %s',
     async (cause) => {
@@ -75,6 +109,8 @@ describeEvaluator('provider batch preflight', () => {
 
   it('bounds eager setup by the configured test timeout and records no model request', async () => {
     vi.useFakeTimers();
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
     let setupEntered!: () => void;
     const entered = new Promise<void>((resolve) => {
       setupEntered = resolve;
@@ -106,7 +142,13 @@ describeEvaluator('provider batch preflight', () => {
     });
     expect(provider.checkSetup).toHaveBeenCalledTimes(1);
     expect(provider.callApi).not.toHaveBeenCalled();
-    expect(vi.getTimerCount()).toBe(0);
+    for (const duration of [1000, 20_000]) {
+      const deadlineIndex = setTimeoutSpy.mock.calls.findIndex(([, delay]) => delay === duration);
+      expect(deadlineIndex).toBeGreaterThanOrEqual(0);
+      expect(clearTimeoutSpy).toHaveBeenCalledWith(setTimeoutSpy.mock.results[deadlineIndex].value);
+    }
+    setTimeoutSpy.mockRestore();
+    clearTimeoutSpy.mockRestore();
   });
 
   it('checks filesystem preparation after each lifecycle hook without reusing stale failures or successes', async () => {
@@ -194,7 +236,7 @@ describeEvaluator('provider batch preflight', () => {
     }
   });
 
-  it('checks distinct rendered configurations before starting any workload and preserves blocked attempts', async () => {
+  it('checks rendered configurations before workloads and rechecks failed attempts at execution', async () => {
     const events: string[] = [];
     const provider: ApiProvider = {
       id: () => 'local-scanner',
@@ -218,7 +260,14 @@ describeEvaluator('provider batch preflight', () => {
     const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
     await evaluate(suite, record, { maxConcurrency: 1 });
     const summary = await record.toEvaluateSummary();
-    expect(events).toEqual(['setup:bad', 'setup:good', 'workload']);
+    expect(events).toEqual([
+      'setup:bad',
+      'setup:good',
+      'setup:bad',
+      'setup:bad',
+      'workload',
+      'setup:bad',
+    ]);
     expect(summary.results).toHaveLength(3);
     expect(summary.stats.errors).toBe(2);
     expect(summary.stats.tokenUsage.numRequests).toBe(1);

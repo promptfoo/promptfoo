@@ -152,6 +152,10 @@ function assertMatchingEvidence(expected: unknown, actual: unknown): void {
 
 function validateReplay(replay: CodexSecurityReplay): void {
   const { payload, result } = replay;
+  const artifacts = new Map(result.artifacts.map(({ kind, path }) => [kind, path]));
+  if (artifacts.size !== result.artifacts.length) {
+    throw new Error('Codex Security replay metadata contains duplicate artifact kinds.');
+  }
   if (payload === null) {
     if (
       replay.payloadSha256 !== null ||
@@ -189,6 +193,12 @@ function validateReplay(replay: CodexSecurityReplay): void {
     'scope',
   ] as const) {
     assertMatchingEvidence(intrinsic[key], result[key]);
+  }
+  for (const { kind, path } of intrinsic.artifacts) {
+    // SDK serialization omits some runtime paths. Extra kinds are allowed, contradictions are not.
+    if (artifacts.get(kind) !== path) {
+      throw new Error('Codex Security replay metadata disagrees with its SDK artifact paths.');
+    }
   }
   if (
     intrinsic.diagnostics?.warningAvailability === 'observed' &&

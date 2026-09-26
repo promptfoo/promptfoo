@@ -63,6 +63,11 @@ export interface ProviderResponse {
   incurredCost?: number;
   error?: string;
   /**
+   * False prevents scheduler retries and rate-limit state updates for this returned response
+   * (for example, a replayed historical failure). True or absent retains normal detection.
+   */
+  retryable?: boolean;
+  /**
    * Indicates that a remote Promptfoo server already materialized multi-input vars
    * for this response. When true, callers must not re-materialize locally.
    */
