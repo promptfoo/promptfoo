@@ -5,7 +5,7 @@ This example shows how to evaluate the official Python `openai-agents` SDK end t
 It demonstrates:
 
 - a long-horizon task executed as multiple turns over a persistent `SQLiteSession`
-- the SDK 0.14 `SandboxAgent` runtime over a staged Unix-local Python workspace
+- the SDK 0.22 `SandboxAgent` runtime over a staged Unix-local Python workspace
 - a local-shell `discount-review` skill mounted through `ShellTool`
 - specialist handoffs between a triage agent, an FAQ agent, and a seat-booking agent
 - agentic assertions such as `trajectory:tool-used`, `trajectory:tool-args-match`, `trajectory:tool-sequence`, and `trajectory:step-count`
@@ -40,7 +40,7 @@ cd openai-agents
 
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 
 export OPENAI_API_KEY=your_api_key_here
 ```
@@ -57,6 +57,7 @@ Open any result and inspect the **Trace Timeline** tab. You should see agent, ha
 To include a provider-level Python OpenTelemetry span alongside the SDK spans, use this eval command instead:
 
 ```bash
+python -m pip install 'opentelemetry-api>=1.44,<2' 'opentelemetry-sdk>=1.44,<2' 'opentelemetry-exporter-otlp-proto-http>=1.44,<2'
 PROMPTFOO_ENABLE_OTEL=true npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 ```
 
@@ -94,8 +95,8 @@ This sample is intentionally not a production-hardened airline agent. Some gener
 
 ## Notes
 
-- The example uses `openai-agents>=0.14.1,<0.15` and the Python SDK, not the built-in `openai:agents:*` provider. That built-in provider is for the JavaScript `@openai/agents` SDK.
-- `requirements.txt` includes the optional OpenTelemetry Python packages used by Promptfoo's wrapper. Set `PROMPTFOO_ENABLE_OTEL=true` to emit the provider-level Python span in addition to the SDK spans.
+- The example uses `openai-agents>=0.22.3,<0.23` and the Python SDK, not the built-in `openai:agents:*` provider. That built-in provider is for the JavaScript `@openai/agents` SDK.
+- `requirements.txt` contains only the Agents SDK. The custom tracing bridge uses the SDK and Python standard library, so the default eval does not need the optional OpenTelemetry SDK or exporter. Install the wrapper packages with the command above before setting `PROMPTFOO_ENABLE_OTEL=true`.
 - If you do not need SDK spans, remove the `configure_promptfoo_tracing(...)` import and call from `agent_provider.py`. You can then delete `promptfoo_tracing.py`, but you will lose tool-path assertions because Promptfoo will no longer receive the SDK's internal agent spans.
 - `trajectory:goal-success` adds an extra judge-model call. Remove it if you want a cheaper run.
 - The SDK's experimental `codex_tool` is available from `agents.extensions.experimental.codex`. Use it inside a Python provider when a larger agent should delegate a bounded workspace task to Codex. Use Promptfoo's `openai:codex-sdk` or `openai:codex-app-server` providers when Codex itself is the system under test.
