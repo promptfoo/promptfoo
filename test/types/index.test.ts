@@ -233,6 +233,27 @@ describe('isGradingResult', () => {
     expect(isGradingResult({ pass: true, score: 1, reason: '', componentResults })).toBe(true);
   });
 
+  it('rejects direct and indirect component-result cycles', () => {
+    const result: GradingResult = { pass: true, score: 1, reason: '' };
+    result.componentResults = [result];
+    expect(isGradingResult(result)).toBe(false);
+
+    const child: GradingResult = { pass: true, score: 0.5, reason: '', componentResults: [result] };
+    result.componentResults = [child];
+    expect(isGradingResult(result)).toBe(false);
+  });
+
+  it('accepts shared children in acyclic component results', () => {
+    const child: GradingResult = { pass: true, score: 0.5, reason: '' };
+    const result: GradingResult = {
+      pass: true,
+      score: 1,
+      reason: '',
+      componentResults: [child, { ...child, componentResults: [child] }],
+    };
+    expect(isGradingResult(result)).toBe(true);
+  });
+
   it('supports nullable optional containers in the public grading result type', () => {
     const result: GradingResult = {
       pass: true,

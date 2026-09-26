@@ -600,23 +600,28 @@ function isFiniteNumberRecord(value: unknown): value is Record<string, number> {
   );
 }
 
-function isGradingResultArray(value: unknown): value is GradingResult[] {
+function isGradingResultArray(
+  value: unknown,
+  ancestors: WeakSet<object>,
+): value is GradingResult[] {
   if (!Array.isArray(value)) {
     return false;
   }
   // Validate the indexed values used by consumers, regardless of a custom iterator.
   for (let index = 0; index < value.length; index++) {
-    if (!isGradingResult(value[index])) {
+    if (!isGradingResultInternal(value[index], ancestors)) {
       return false;
     }
   }
   return true;
 }
 
-export function isGradingResult(result: any): result is GradingResult {
-  return (
-    typeof result === 'object' &&
-    result !== null &&
+function isGradingResultInternal(result: any, ancestors: WeakSet<object>): result is GradingResult {
+  if (typeof result !== 'object' || result === null || ancestors.has(result)) {
+    return false;
+  }
+  ancestors.add(result);
+  const valid =
     typeof result.pass === 'boolean' &&
     typeof result.score === 'number' &&
     Number.isFinite(result.score) &&
@@ -624,12 +629,17 @@ export function isGradingResult(result: any): result is GradingResult {
     (result.namedScores == null || isFiniteNumberRecord(result.namedScores)) &&
     (result.namedScoreWeights == null || isFiniteNumberRecord(result.namedScoreWeights)) &&
     (typeof result.tokensUsed === 'undefined' || typeof result.tokensUsed === 'object') &&
-    (result.componentResults == null || isGradingResultArray(result.componentResults)) &&
+    (result.componentResults == null || isGradingResultArray(result.componentResults, ancestors)) &&
     (typeof result.assertion === 'undefined' ||
       result.assertion === null ||
       typeof result.assertion === 'object') &&
-    (typeof result.comment === 'undefined' || typeof result.comment === 'string')
-  );
+    (typeof result.comment === 'undefined' || typeof result.comment === 'string');
+  ancestors.delete(result);
+  return valid;
+}
+
+export function isGradingResult(result: any): result is GradingResult {
+  return isGradingResultInternal(result, new WeakSet());
 }
 
 export const BaseAssertionTypesSchema = z.enum([

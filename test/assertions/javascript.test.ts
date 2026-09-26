@@ -970,6 +970,22 @@ describe('JavaScript file references', () => {
     expect(result.componentResults).toBeUndefined();
   });
 
+  it('rejects cyclic component results with the ordinary validation error', async () => {
+    const grade: GradingResult = { pass: true, score: 1, reason: 'Custom grade' };
+    grade.componentResults = [grade];
+
+    const result = await runAssertion({
+      assertion: { type: 'javascript', value: () => grade },
+      test: {},
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({ pass: false, score: 0 });
+    expect(result.reason).toContain('finite scores and weights. Got type object.');
+    expect(result.reason).not.toContain('RangeError');
+    expect(result.componentResults).toBeUndefined();
+  });
+
   it('rejects nonfinite metrics from a file assertion', async () => {
     vi.mocked(path.resolve).mockReturnValue('/mocked/path/to/assert.js');
     vi.mocked(path.extname).mockReturnValue('.js');
