@@ -2,6 +2,8 @@
 
 Check result presentation, coverage assertions, and validation dispositions without model calls or a repository scan. No API keys, Python, or Codex Security SDK installation are needed for this example.
 
+## Run the example
+
 ```bash
 npx promptfoo@latest init --example openai-codex-security-results
 cd openai-codex-security-results
