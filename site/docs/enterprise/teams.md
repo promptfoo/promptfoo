@@ -52,7 +52,7 @@ This displays your current organization and team.
 
 ### Team Isolation
 
-- **API keys are organization-scoped**: Your API key determines which organization you're logged into
+- **Organization selection**: API-key login defaults to the key's organization. Run `promptfoo auth teams set <team>` to select a team in another accessible organization
 - **Team selections are isolated per organization**: If you have access to multiple organizations, each organization remembers its own team selection independently
 - **Resources are team-scoped**: Evaluations, configurations, and results are associated with your active team
 
