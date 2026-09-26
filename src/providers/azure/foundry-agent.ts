@@ -626,15 +626,33 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     const cached = count(usage?.input_tokens_details?.cached_tokens);
     // Pricing also consumes modality counts that are absent from TokenUsage.
     // Validate supplied values before treating this response's cost as complete.
-    for (const value of [
+    const [inputAudio, outputAudio, inputImage, cachedAudio, cachedImage, outputImage] = [
       (usage?.input_tokens_details as any)?.audio_tokens,
       (usage?.output_tokens_details as any)?.audio_tokens,
       (usage?.input_tokens_details as any)?.image_tokens,
       (usage?.input_tokens_details as any)?.cached_tokens_details?.audio_tokens,
       (usage?.input_tokens_details as any)?.cached_tokens_details?.image_tokens,
       (usage?.output_tokens_details as any)?.image_tokens,
+    ].map((value) => count(value));
+    // Audio and image partition a token total; cached tokens overlap those modalities.
+    // Only explicit cached children constrain the remaining cached-token capacity.
+    const explicitUncachedModalities =
+      (inputAudio !== undefined && cachedAudio !== undefined ? inputAudio - cachedAudio : 0) +
+      (inputImage !== undefined && cachedImage !== undefined ? inputImage - cachedImage : 0);
+    const cachedModalities = (cachedAudio ?? 0) + (cachedImage ?? 0);
+    for (const [subtotal, parent] of [
+      [cached, prompt],
+      [(inputAudio ?? cachedAudio ?? 0) + (inputImage ?? cachedImage ?? 0), prompt],
+      [(outputAudio ?? 0) + (outputImage ?? 0), completion],
+      [cachedAudio, inputAudio],
+      [cachedImage, inputImage],
+      [cachedModalities, cached],
+      [cachedModalities, prompt],
+      [cached, prompt === undefined ? undefined : prompt - explicitUncachedModalities],
     ]) {
-      count(value);
+      if (subtotal !== undefined && parent !== undefined && subtotal > parent) {
+        complete = false;
+      }
     }
     const pricingComplete = complete;
     // Totals and reporting details do not affect pricing. Keep their validation
