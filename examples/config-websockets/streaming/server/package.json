@@ -10,7 +10,7 @@
   },
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon --watch server.js server.js",
+    "dev": "node --watch server.js",
     "lint": "echo \"No linter configured\""
   },
   "dependencies": {
@@ -19,8 +19,5 @@
     "express": "^5.2.1",
     "openai": "^7.1.0",
     "ws": "^8.21.3"
-  },
-  "devDependencies": {
-    "nodemon": "^3.1.11"
   }
 }

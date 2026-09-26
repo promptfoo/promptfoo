@@ -21,18 +21,24 @@ To get started, follow these steps:
    npm install
    ```
 
-2. **Run the tests**:
+2. **Set your OpenAI API key** for the embedding and grading requests:
+
+   ```sh
+   export OPENAI_API_KEY=your-api-key
+   ```
+
+3. **Run the tests**:
 
    To run the tests with Jest:
 
    ```sh
-   npx jest
+   npm run test:jest
    ```
 
    Or, to run the tests with Vitest:
 
    ```sh
-   npx vitest
+   npm run test:vitest
    ```
 
 ## Additional Information

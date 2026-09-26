@@ -1,6 +1,7 @@
+import { randomUUID } from 'node:crypto';
+
 import express from 'express';
 import OpenAI from 'openai';
-import { v4 as uuidv4 } from 'uuid';
 
 const app = express();
 const port = 8080;
@@ -16,7 +17,7 @@ const openai = new OpenAI({
 });
 
 app.get('/session', (req, res) => {
-  const sessionId = uuidv4();
+  const sessionId = randomUUID();
   console.log(`Session started: ${sessionId}`);
   conversationHistories.set(sessionId, []);
   res.status(201).send(sessionId);
