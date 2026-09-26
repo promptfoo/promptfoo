@@ -217,7 +217,7 @@ async function getConfigHash(
     Object.keys(filters).length > 0
       ? JSON.stringify({ version: VERSION, content, filters })
       : `${VERSION}:${content}`;
-  return createHash('md5').update(hashInput).digest('hex');
+  return createHash('sha256').update(hashInput).digest('hex');
 }
 
 function createHeaderComments({

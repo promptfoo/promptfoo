@@ -59,6 +59,21 @@ type SynthesizeMockResult = {
 
 const { TEST_PROBE_LIMIT } = vi.hoisted(() => ({ TEST_PROBE_LIMIT: 100_000 }));
 
+// Exercise configuration caching with the same MD5 restriction as FIPS-enabled
+// OpenSSL, without changing the process-wide crypto configuration for the suite.
+vi.mock('crypto', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('crypto')>();
+  return {
+    ...actual,
+    createHash: (...args: Parameters<typeof actual.createHash>) => {
+      if (args[0].toLowerCase() === 'md5') {
+        throw new Error('MD5 is unavailable in FIPS mode');
+      }
+      return actual.createHash(...args);
+    },
+  };
+});
+
 function resetCommonMocks() {
   vi.mocked(extractA2AAgentCardInfo).mockReset().mockResolvedValue('');
   vi.mocked(extractMcpToolsInfo).mockReset().mockResolvedValue('');
@@ -399,6 +414,7 @@ describe('doGenerateRedteam', () => {
   });
 
   it.each([
+    ['adding a filter', {}, { filterProviders: 'team-a' }],
     ['filterProviders value', { filterProviders: 'team-a' }, { filterProviders: 'team-b' }],
     ['filterTargets value', { filterTargets: 'team-a' }, { filterTargets: 'team-b' }],
     ['filter option', { filterProviders: 'team-a' }, { filterTargets: 'team-a' }],
@@ -446,7 +462,7 @@ describe('doGenerateRedteam', () => {
       await doGenerateRedteam(options);
       generatedOutput = vi.mocked(writePromptfooConfig).mock.calls[0][0];
       const firstHash = generatedOutput.metadata?.configHash;
-      expect(firstHash).toEqual(expect.any(String));
+      expect(firstHash).toMatch(/^[a-f0-9]{64}$/);
 
       vi.clearAllMocks();
       await doGenerateRedteam(options);
