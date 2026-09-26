@@ -230,6 +230,32 @@ describe('evalCommand', () => {
     expect(helpText).toContain('display help for command');
   });
 
+  it.each([
+    { configuredWrite: undefined, flags: [], expected: true },
+    { configuredWrite: undefined, flags: ['--no-write'], expected: false },
+    { configuredWrite: undefined, flags: ['--write'], expected: true },
+    { configuredWrite: true, flags: [], expected: true },
+    { configuredWrite: false, flags: [], expected: false },
+    { configuredWrite: false, flags: ['--write'], expected: true },
+    { configuredWrite: true, flags: ['--no-write'], expected: false },
+    { configuredWrite: false, flags: ['--write', '--no-write'], expected: false },
+    { configuredWrite: false, flags: ['--no-write', '--write'], expected: true },
+  ])(
+    'resolves write=$configuredWrite with $flags to $expected',
+    ({ configuredWrite, flags, expected }) => {
+      const cmd = evalCommand(
+        program,
+        { commandLineOptions: { write: configuredWrite } },
+        undefined,
+      );
+
+      cmd.action(() => {});
+      program.parse(['eval', ...flags], { from: 'user' });
+
+      expect(cmd.opts().write).toBe(expected);
+    },
+  );
+
   it('should mention cloud UUID support in --config option help text', () => {
     const cmd = evalCommand(program, defaultConfig, defaultConfigPath);
     const helpText = cmd.helpInformation();

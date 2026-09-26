@@ -1382,24 +1382,27 @@ This provider references an existing Foundry agent. Some settings can still be s
 
 Supported per-request settings:
 
-| Parameter               | Description                                                                         |
-| ----------------------- | ----------------------------------------------------------------------------------- |
-| `projectUrl`            | Azure AI Project URL (required, can also use `AZURE_AI_PROJECT_URL` env var)        |
-| `instructions`          | Additional per-request instructions                                                 |
-| `temperature`           | Controls randomness                                                                 |
-| `top_p`                 | Nucleus sampling parameter                                                          |
-| `max_tokens`            | Mapped to `max_output_tokens` for the Responses API                                 |
-| `max_completion_tokens` | Also mapped to `max_output_tokens`                                                  |
-| `response_format`       | Output format (`json_object` or `json_schema`)                                      |
-| `tools`                 | Tool definitions loaded into the request                                            |
-| `tool_choice`           | Tool selection strategy                                                             |
-| `functionToolCallbacks` | Callback implementations for `function_call` outputs                                |
-| `modelName`             | Optional per-request model override                                                 |
-| `reasoning_effort`      | Sent as `reasoning.effort`                                                          |
-| `verbosity`             | Passed through to the Responses text config                                         |
-| `metadata`              | Request metadata                                                                    |
-| `passthrough`           | Additional raw Responses API fields                                                 |
-| `maxPollTimeMs`         | Maximum time to keep resolving callback loops before timing out (default: `300000`) |
+| Parameter                 | Description                                                                                      |
+| ------------------------- | ------------------------------------------------------------------------------------------------ |
+| `projectUrl`              | Azure AI Project URL (required, can also use `AZURE_AI_PROJECT_URL` env var)                     |
+| `instructions`            | Additional per-request instructions                                                              |
+| `temperature`             | Controls randomness                                                                              |
+| `top_p`                   | Nucleus sampling parameter                                                                       |
+| `max_tokens`              | Mapped to `max_output_tokens` for the Responses API                                              |
+| `max_completion_tokens`   | Also mapped to `max_output_tokens`                                                               |
+| `response_format`         | Output format (`json_object` or `json_schema`)                                                   |
+| `tools`                   | Tool definitions loaded into the request                                                         |
+| `tool_choice`             | Tool selection strategy                                                                          |
+| `functionToolCallbacks`   | Callback implementations for `function_call` outputs                                             |
+| `modelName`               | Optional per-request model override                                                              |
+| `reasoning_effort`        | Sent as `reasoning.effort`                                                                       |
+| `verbosity`               | Passed through to the Responses text config                                                      |
+| `metadata`                | Request metadata                                                                                 |
+| `passthrough`             | Additional raw Responses API fields                                                              |
+| `maxPollTimeMs`           | Cooperative callback-loop budget after the initial response, in milliseconds (default: `300000`) |
+| `timeoutMs`               | Positive deadline for each Responses attempt, at most `2147483647` ms (SDK default: `600000`)    |
+| `retryOptions.maxRetries` | Non-negative integer request retry count (default: `2`)                                          |
+| `maxToolIterations`       | Maximum callback batches (default: `8`; valid range: `1`–`64`)                                   |
 
 Ignored per-request settings:
 
@@ -1408,10 +1411,10 @@ Ignored per-request settings:
 - `presence_penalty`
 - `seed`
 - `stop`
-- `timeoutMs`
-- `retryOptions`
 
 Configure those on the Foundry agent definition itself instead of on the eval request.
+
+Other `retryOptions` fields are unsupported. Promptfoo uses the SDK retry policy with cancellable waits: connection errors, timeouts, HTTP 408/409/429/5xx, and explicit `x-should-retry` hints. Hard-quota failures are never retried, including when a retry hint is present. Server delay hints use `retry-after-ms` or standard integer-seconds/HTTP-date `Retry-After`; hints up to 60 seconds are honored, and larger hints return the original error immediately without retrying. For these 429 responses, `metadata.rateLimitRetryable: false` prevents scheduler retries and queued-call delays while retaining the original `metadata.http`. Without a valid hint, retries use exponential backoff with jitter. The SDK's internal retries are disabled so cancellation can release all retry timers.
 
 ### Response continuity and accounting
 
@@ -1423,7 +1426,7 @@ Foundry supports [stateless responses](https://learn.microsoft.com/en-us/azure/f
 
 Failed, cancelled, incomplete, or still-pending Responses results return an error, preserving any available partial output, raw response, and usage. A completed refusal remains distinguishable through `isRefusal: true`. Partial text never clears a service error.
 
-Usage and cost cover every model turn in the invocation, including work completed before a later timeout or failure. `numRequests` counts SDK request attempts within that provider invocation, excluding local callbacks and retries internal to the SDK. Separate scheduler retries restart the provider invocation; their earlier usage is not aggregated here. Cached and reasoning tokens remain subsets of the total. Cost is calculated separately for each response's model. If usage or pricing is unavailable, metadata includes `usageIncomplete` or `costIncomplete`; incomplete cost is omitted from `cost`, with the known subtotal in `metadata.knownCost`.
+Usage and cost cover every model turn in the invocation, including work completed before a later timeout or failure. `numRequests` counts logical Responses turns within that provider invocation, excluding local callbacks and request retries. `metadata.transportRetries` counts additional transport attempts. Failed attempts may have unreported billable work, so recovered retries mark usage and cost incomplete while retaining the known totals. Separate scheduler retries restart the provider invocation; their earlier usage is not aggregated here. Cached and reasoning tokens remain subsets of the total. Cost is calculated separately for each response's model. If usage or pricing is unavailable, metadata includes `usageIncomplete` or `costIncomplete`; incomplete cost is omitted from `cost`, with the known subtotal in `metadata.knownCost`.
 
 ### Function Tools with Azure Foundry Agents
 
@@ -1463,9 +1466,19 @@ providers:
 The function callbacks receive two parameters:
 
 - `args`: JSON-encoded function arguments
-- `context`: `{ threadId, runId, assistantId, provider }`
+- `context`: `{ threadId, runId, assistantId, provider, abortSignal? }`
 
 If a callback is missing, promptfoo returns the unresolved function call in the model output instead of trying to fake a tool result.
+
+### Execution Limits and Cancellation
+
+`maxPollTimeMs` checks elapsed time between callback batches and model requests. The initial request is outside this budget. A pending callback or request may finish after the budget; a final model answer is still returned, while another tool batch times out. `timeoutMs` instead bounds each SDK Responses attempt, including its credential wait and response-body reads. Retries and backoff can make the total wait longer. This deadline does not cover shared client initialization, agent lookup, or callback execution.
+
+`maxToolIterations` bounds automatic callback batches independently of elapsed time. Parallel function calls in one response count as one batch, and the model's final answer after the last permitted batch is retained. Values from `1` to `64` are rounded down; missing, zero, and invalid values use the default of `8`.
+
+JavaScript API callers can pass `{ abortSignal: controller.signal }` as the third `callApi` argument. Cancellation stops waiting, aborts the SDK request, and prevents further callbacks or Responses requests from starting. A running callback receives `context.abortSignal` and should forward it to `fetch` or other cancellable work. Shared initialization, agent lookup, and callbacks or credential operations that ignore the signal may continue in the background; cancellation cannot undo their side effects.
+
+The [Foundry example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/foundry-agent) includes an opt-in live QA command for an existing project and agent. Normal provider tests run offline.
 
 ### Agent-Defined Tools and Resources
 
@@ -1532,7 +1545,7 @@ tests:
 The Azure Foundry Agent provider includes comprehensive error handling:
 
 - **Content Filter Detection**: Automatically detects and reports content filtering events with guardrails metadata
-- **Rate Limit Handling**: Per-window 429s (`rate_limit_exceeded`) are retried with `Retry-After`-based backoff plus randomized jitter. The error message is `Rate limit exceeded: HTTP 429 Too Many Requests (code: rate_limit_exceeded) [retry after Xs]`.
+- **Rate Limit Handling**: Per-window 429s (`rate_limit_exceeded`) honor `Retry-After` hints up to 60 seconds; larger hints return the original error without provider or scheduler retries. The error message is `Rate limit exceeded: HTTP 429 Too Many Requests (code: rate_limit_exceeded) [retry after Xs]`.
 - **Hard-Quota Fail-Fast**: Billing and contract-level codes (`insufficient_quota`, `billing_hard_limit_reached`, `billing_not_active`, `access_terminated`, `quota_exceeded`) skip retries entirely — retrying these only amplifies load against an exhausted account. The error message is `Quota exceeded: HTTP 429 Too Many Requests (code: insufficient_quota). Retries will not help — check your billing or daily quota.` If the server also sets a small `Retry-After` (≤ 1h), the error is treated as a recoverable rate limit instead, since billing servers do not hint at recovery time.
 - **Service Error Detection**: Detects transient service errors (500, 502, 503, 504)
 - **Timeout Management**: Configurable polling timeout via `maxPollTimeMs`

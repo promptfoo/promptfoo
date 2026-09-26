@@ -67,6 +67,9 @@ These per-request settings are supported:
 - `metadata`
 - `passthrough`
 - `maxPollTimeMs`
+- `timeoutMs` (positive deadline up to `2147483647` ms for each Responses attempt, including credential wait and body reads; excludes shared client initialization, agent lookup, and callbacks)
+- `retryOptions.maxRetries` (request retries; defaults to 2)
+- `maxToolIterations` (callback batches; defaults to 8, valid range 1–64)
 
 These request-time settings are ignored by the v2 runtime and should be configured on the Foundry agent instead:
 
@@ -75,8 +78,10 @@ These request-time settings are ignored by the v2 runtime and should be configur
 - `presence_penalty`
 - `seed`
 - `stop`
-- `timeoutMs`
-- `retryOptions`
+
+Other `retryOptions` fields are unsupported. Promptfoo follows the SDK retry policy with cancellable backoff and standard server delay hints up to 60 seconds; hard-quota failures are not retried. Larger delay hints return the original error immediately instead of retrying. For 429 responses, `metadata.rateLimitRetryable: false` prevents the scheduler from retrying or applying that delay to queued calls while preserving the original HTTP metadata. The SDK's internal retries are disabled. `numRequests` counts logical Responses turns; `metadata.transportRetries` records extra attempts, whose unreported usage and cost are marked incomplete.
+
+`maxPollTimeMs` is a cooperative budget starting after the initial response. It is checked between callback batches and model requests, and preserves a final answer that arrives after the budget. It does not interrupt a pending request or callback. Callers using the JavaScript API can cancel with `callApiOptions.abortSignal`; callbacks receive that signal as `context.abortSignal` and should pass it to their own asynchronous operations. A callback that ignores cancellation can continue after the eval stops waiting.
 
 ## Function Tool Callbacks
 
@@ -118,3 +123,19 @@ The provider includes the same comprehensive error handling as the regular Azure
 - Rate limit handling
 - Service error detection
 - Automatic retries for transient errors
+
+## Opt-in live QA from this repository
+
+Use an existing test project and agent. This harness runs text, structured-output, and benign function-tool evals, with at most nine client Responses requests and request/scheduler retries disabled. Azure may perform additional model calls internally. Each CLI process has a three-minute wall-clock limit. The harness does not create agents, deployments, or other Azure infrastructure.
+
+Copy the project endpoint from your Foundry project overview. The harness accepts only HTTPS URLs on port 443 with the documented `<resource>.services.ai.azure.com` ([commercial Azure](https://learn.microsoft.com/en-us/javascript/api/overview/azure/ai-projects-readme?view=azure-node-latest)) or `<resource>.services.ai.azure.us` ([Azure Government](https://learn.microsoft.com/en-us/azure/foundry/concepts/foundry-azure-government)) hostname and `/api/projects/<project>` path. For Private Link, use the normal resource hostname with [private DNS configured](https://learn.microsoft.com/en-us/azure/foundry/how-to/configure-private-link#apply-dns-changes-for-private-endpoints).
+
+From the repository root, preview the configs without contacting Azure:
+
+```bash
+npx tsx scripts/azureFoundryLiveQa.ts --dry-run \
+  --endpoint https://your-project.services.ai.azure.com/api/projects/your-project \
+  --agent your-existing-agent
+```
+
+After authenticating with `az login` (or another `DefaultAzureCredential` identity), replace `--dry-run` with `--live`. Each run creates a new local directory containing isolated eval storage and traces, sanitized JSON results, callback counts, and commit/SDK-version metadata. The harness uses the local CLI with `--no-cache`; it stops after a provider error so authentication or endpoint failures do not trigger the rest of the matrix. Timing, cancellation, quota, and transport failure cases remain covered by offline fixtures.

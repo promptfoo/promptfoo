@@ -15,6 +15,8 @@ export interface CallbackContext {
   assistantId: string;
   /** The provider type (e.g., 'openai', 'azure') */
   provider: string;
+  /** Caller cancellation signal, when supported by the provider (including Azure Foundry). */
+  abortSignal?: AbortSignal;
 }
 
 /**
