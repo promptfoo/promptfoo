@@ -2,6 +2,7 @@ import * as fsPromises from 'node:fs/promises';
 import path from 'path';
 import type { ConnectionOptions } from 'tls';
 
+import { LRUCache } from 'lru-cache';
 import { getProxyForUrl } from 'proxy-from-env';
 import { Agent, type Dispatcher, interceptors, ProxyAgent } from 'undici';
 import cliState from '../../cliState';
@@ -63,8 +64,22 @@ async function resolveAuthenticationHeaders(
 //
 // Trust settings can vary between concurrent evals. Never share a connection
 // pool across TLS policies, CA contents, or runtime FIPS modes.
-const cachedAgents: Map<string, Dispatcher> = new Map();
-const cachedProxyAgents: Map<string, Dispatcher> = new Map();
+function createAgentCache(): LRUCache<string, Dispatcher> {
+  return new LRUCache<string, Dispatcher>({
+    max: 32,
+    disposeAfter(agent) {
+      // Graceful close lets in-flight requests finish when a policy is evicted.
+      if (typeof agent.close === 'function') {
+        void Promise.resolve(agent.close()).catch((error) => {
+          logger.debug('Failed to close an evicted HTTP dispatcher', { error });
+        });
+      }
+    },
+  });
+}
+
+const cachedAgents = createAgentCache();
+const cachedProxyAgents = createAgentCache();
 
 /**
  * Get the connection pool size for HTTP agents.
@@ -89,17 +104,7 @@ function getConnectionPoolSize(): number {
  * Exported for testing only.
  */
 export function clearAgentCache(): void {
-  for (const agent of cachedAgents.values()) {
-    if (typeof agent.close === 'function') {
-      agent.close();
-    }
-  }
   cachedAgents.clear();
-  for (const agent of cachedProxyAgents.values()) {
-    if (typeof agent.close === 'function') {
-      agent.close();
-    }
-  }
   cachedProxyAgents.clear();
 }
 

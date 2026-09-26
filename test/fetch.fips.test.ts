@@ -143,6 +143,31 @@ describe('FIPS fetch policy with the real environment parser', () => {
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
+  it.each([false, true])('closes evicted TLS pools with proxy=%s', async (proxy) => {
+    if (proxy) {
+      vi.mocked(getProxyForUrl).mockReturnValue('https://proxy.example.test');
+    }
+    mockProcessEnv({ PROMPTFOO_CA_CERT_PATH: '/rotating-ca.pem' });
+    vi.mocked(fs.readFile).mockResolvedValue('CA-first');
+    await fetchWithProxy('https://example.test');
+    const first = lastDispatcher() as { close: ReturnType<typeof vi.fn> };
+    for (let index = 0; index < 40; index++) {
+      vi.mocked(fs.readFile).mockResolvedValue(`CA-${index}`);
+      await fetchWithProxy('https://example.test');
+    }
+    expect(first.close).toHaveBeenCalledOnce();
+    const latest = lastDispatcher() as { close: ReturnType<typeof vi.fn> };
+    expect(latest.close).not.toHaveBeenCalled();
+    await fetchWithProxy('https://example.test');
+    expect(lastDispatcher()).toBe(latest);
+    vi.mocked(fs.readFile).mockResolvedValue('CA-first');
+    await fetchWithProxy('https://example.test');
+    expect(lastDispatcher()).not.toBe(first);
+    clearAgentCache();
+    expect(latest.close).toHaveBeenCalledOnce();
+    expect(first.close).toHaveBeenCalledOnce();
+  });
+
   it('preserves the existing default outside FIPS mode', async () => {
     vi.mocked(fips.isFipsEnabled).mockReturnValue(false);
     await fetchWithProxy('https://example.test');
