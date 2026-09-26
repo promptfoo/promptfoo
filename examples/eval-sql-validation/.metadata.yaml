@@ -1,0 +1,4 @@
+title: 'SQL Output Validation'
+description: 'Validate LLM-generated SQL queries using the is-sql assertion with table and column restrictions'
+tags:
+  - Evaluation

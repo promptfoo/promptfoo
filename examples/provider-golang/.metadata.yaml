@@ -1,0 +1,5 @@
+title: 'Custom Go Provider'
+description: 'Write custom promptfoo providers in Go with shared modules and multiple implementations'
+tags:
+  - Providers
+  - Configuration

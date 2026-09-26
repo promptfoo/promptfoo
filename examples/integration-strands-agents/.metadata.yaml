@@ -1,0 +1,7 @@
+title: 'Strands Agents SDK (AWS)'
+description: 'Evaluate a Strands weather agent with multi-tool chaining and diverse assertion types'
+tags:
+  - Integrations
+  - Agents
+  - Python
+  - Tool Use

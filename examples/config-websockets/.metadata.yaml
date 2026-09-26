@@ -1,0 +1,5 @@
+title: 'WebSocket Provider'
+description: 'Using the WebSocket provider for request-response and streaming evaluation patterns'
+tags:
+  - Providers
+  - Configuration

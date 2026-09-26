@@ -1,0 +1,5 @@
+title: 'Red Team with HTTP Authentication'
+description: 'Configure OAuth, API key, and digital signature authentication for red team evaluations against protected HTTP endpoints'
+tags:
+  - Red Teaming
+  - Configuration

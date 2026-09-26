@@ -1,0 +1,4 @@
+title: 'Content Moderation'
+description: 'Use the moderation assertion type with Llama Guard to detect unsafe content in LLM outputs'
+tags:
+  - Evaluation
