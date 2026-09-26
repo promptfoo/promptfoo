@@ -352,7 +352,7 @@ Choose one of these authentication methods:
 
 #### Option 1: Application Default Credentials (Recommended)
 
-`GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT`, and `GOOGLE_CLOUD_QUOTA_PROJECT` support provider/suite `env` and invocation env files. Explicit `config.credentials`, `keyFilename`, and `googleAuthOptions` take precedence. Empty scoped ADC filenames are rejected instead of falling back to host credentials.
+`GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT`, and `GOOGLE_CLOUD_QUOTA_PROJECT` support provider/suite `env` and invocation env files. Within the same `env` scope, ADC takes precedence over API keys. Explicit `config.credentials`, `keyFilename`, and `googleAuthOptions` take precedence. Empty scoped ADC filenames are rejected instead of falling back to host credentials.
 
 This is the most secure and flexible approach for development and production:
 

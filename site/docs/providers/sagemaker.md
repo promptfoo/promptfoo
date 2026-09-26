@@ -536,7 +536,7 @@ providers:
 When caching is enabled:
 
 - Responses for identical prompts are stored and reused
-- Cached responses are reused only within one provider instance because credential chains and profiles can change identity.
+- Clients and cached responses are isolated by provider instance and invocation environment.
 - Token usage statistics are maintained with a `cached` flag
 - Debug mode will bypass the cache when needed
 
