@@ -7,9 +7,9 @@ import {
   Navigate,
   Outlet,
   Route,
-  RouterProvider,
   useLocation,
-} from 'react-router-dom';
+} from 'react-router';
+import { RouterProvider } from 'react-router/dom';
 import ErrorBoundary from './components/ErrorBoundary';
 import PageShell from './components/PageShell';
 import { TooltipProvider } from './components/ui/tooltip';

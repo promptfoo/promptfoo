@@ -7,7 +7,7 @@ import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import YamlEditorComponent from './YamlEditor';
 
-vi.mock('react-router-dom', () => ({
+vi.mock('react-router', () => ({
   Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
     <a href={to}>{children}</a>
   ),

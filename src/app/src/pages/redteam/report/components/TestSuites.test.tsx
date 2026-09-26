@@ -2,11 +2,11 @@ import { mockObjectUrl, mockWindowLocation } from '@app/tests/browserMocks';
 import { renderWithProviders } from '@app/utils/testutils';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import TestSuites from './TestSuites';
 
-vi.mock('react-router-dom', () => ({
+vi.mock('react-router', () => ({
   useNavigate: vi.fn(),
 }));
 

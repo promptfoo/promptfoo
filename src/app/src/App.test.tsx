@@ -1,11 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
-import {
-  createMemoryRouter,
-  createRoutesFromElements,
-  Navigate,
-  Route,
-  RouterProvider,
-} from 'react-router-dom';
+import { createMemoryRouter, createRoutesFromElements, Navigate, Route } from 'react-router';
+import { RouterProvider } from 'react-router/dom';
 import { describe, expect, it, vi } from 'vitest';
 import PageShell from './components/PageShell';
 import { ToastProvider } from './contexts/ToastContext';
@@ -30,7 +25,7 @@ vi.mock('./pages/model-audit/page', () => ({
 // Mock PageShell to properly render child routes
 vi.mock('./components/PageShell', () => ({
   default: () => {
-    const { Outlet } = require('react-router-dom');
+    const { Outlet } = require('react-router');
     return (
       <div>
         <Outlet />

@@ -4,7 +4,7 @@ import { TooltipProvider } from '@app/components/ui/tooltip';
 import { ToastProvider } from '@app/contexts/ToastContext';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
 import VerticalSuiteCard from './VerticalSuiteCard';

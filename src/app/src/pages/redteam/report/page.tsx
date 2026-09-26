@@ -4,7 +4,7 @@ import { Spinner } from '@app/components/ui/spinner';
 import { UserProvider } from '@app/contexts/UserContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useUserStore } from '@app/stores/userStore';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router';
 import Report from './components/Report';
 import ReportIndex from './components/ReportIndex';
 

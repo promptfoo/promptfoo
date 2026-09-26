@@ -27,7 +27,7 @@ import { useTelemetry } from '@app/hooks/useTelemetry';
 import { getApiBaseUrl } from '@app/utils/api';
 import { downloadFile, generateMediaFilename } from '@app/utils/media';
 import { AlertCircle, ChevronDown, Download, MousePointerClick, RefreshCw, X } from 'lucide-react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { MediaEmptyState } from './components/MediaEmptyState';
 import { MediaErrorBoundary } from './components/MediaErrorBoundary';
 import { MediaFilters } from './components/MediaFilters';

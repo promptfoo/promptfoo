@@ -4,7 +4,7 @@ import { cn } from '@app/lib/utils';
 import { formatASRForDisplay } from '@app/utils/redteam';
 import { riskCategorySeverityMap, Severity } from '@promptfoo/redteam/constants';
 import { CheckCircle, Info, XCircle } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { getPluginDisplayName } from './FrameworkComplianceUtils';
 
 export interface FrameworkPluginResultProps {

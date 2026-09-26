@@ -14,7 +14,7 @@ import {
   riskCategories,
 } from '@promptfoo/redteam/constants';
 import { AlertTriangle, Info } from 'lucide-react';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink } from 'react-router';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { countSelectedCustomIntents, countSelectedCustomPolicies } from '../utils/plugins';
 import CustomPromptsTab from './CustomIntentsTab';

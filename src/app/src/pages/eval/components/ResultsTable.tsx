@@ -43,7 +43,7 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import { ArrowLeft, ArrowRight, ExternalLink, X } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router';
 import CustomMetrics from './CustomMetrics';
 import CustomMetricsDialog from './CustomMetricsDialog';
 import EvalOutputCell from './EvalOutputCell';

@@ -1,7 +1,7 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { callApi } from '@app/utils/api';
 import { act, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useModelAuditConfigStore, useModelAuditHistoryStore } from '../model-audit/stores';
 import ModelAuditSetupPage from './ModelAuditSetupPage';
@@ -52,8 +52,8 @@ vi.mock('../model-audit/components/ScannedFilesDialog', () => ({
 }));
 
 const mockNavigate = vi.fn();
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
+vi.mock('react-router', async () => {
+  const actual = await vi.importActual('react-router');
   return {
     ...actual,
     useNavigate: () => mockNavigate,

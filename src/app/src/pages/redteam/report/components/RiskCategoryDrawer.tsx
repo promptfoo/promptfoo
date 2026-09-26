@@ -13,7 +13,7 @@ import { cn } from '@app/lib/utils';
 import { getActualPrompt } from '@app/utils/providerResponse';
 import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
 import { ChevronDown, Lightbulb } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import ChatMessages, { type Message } from '../../../eval/components/ChatMessages';
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
 import PluginStrategyFlow from './PluginStrategyFlow';

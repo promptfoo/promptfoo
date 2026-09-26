@@ -15,7 +15,7 @@ import {
   DialogTitle,
 } from '@app/components/ui/dialog';
 import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import type { StandaloneEval } from '@promptfoo/util/database';
 import type { ColumnDef } from '@tanstack/react-table';
 

@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react';
 
 import invariant from '@promptfoo/util/invariant';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import type { ZodSchema } from 'zod';
 
 /**

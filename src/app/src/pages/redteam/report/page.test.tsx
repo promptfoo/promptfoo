@@ -2,7 +2,7 @@ import React from 'react';
 
 import { useUserStore } from '@app/stores/userStore';
 import { act, render, screen } from '@testing-library/react';
-import { MemoryRouter, Route, Routes, useNavigate, useSearchParams } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useNavigate, useSearchParams } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ReportPage from './page';
 
@@ -22,8 +22,8 @@ vi.mock('@app/contexts/UserContext', () => ({
   UserProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
+vi.mock('react-router', async () => {
+  const actual = await vi.importActual('react-router');
   return {
     ...actual,
     useNavigate: vi.fn(),
@@ -33,7 +33,7 @@ vi.mock('react-router-dom', async () => {
 /**
  * Helper to render ReportPage with proper routing context.
  * Uses MemoryRouter with initialEntries to set the URL, which is required
- * because the component uses useSearchParams() from react-router-dom.
+ * because the component uses useSearchParams() from react-router.
  */
 function renderWithRouter(initialUrl: string) {
   return render(

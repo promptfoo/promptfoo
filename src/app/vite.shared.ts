@@ -25,7 +25,7 @@ export const browserModuleReplacements = [
 export const vendorCodeSplittingGroups = [
   {
     name: 'vendor-react',
-    test: /[\\/]node_modules[\\/](?:react|react-dom|react-router-dom)[\\/]/,
+    test: /[\\/]node_modules[\\/](?:react|react-dom)[\\/]/,
     priority: 50,
   },
   {

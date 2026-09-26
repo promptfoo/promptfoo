@@ -3,7 +3,7 @@ import { callApi } from '@app/utils/api';
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsView from './ResultsView';
 import { useResultsViewSettingsStore, useTableStore } from './store';
@@ -254,8 +254,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
+vi.mock('react-router', async () => {
+  const actual = await vi.importActual('react-router');
   return {
     ...actual,
     useNavigate: () => mockNavigate,

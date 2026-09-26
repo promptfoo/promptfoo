@@ -46,7 +46,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { requiresPluginConfig } from '../constants';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';

@@ -8,7 +8,7 @@ import {
 import { useTestTimers } from '@app/tests/timers';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LauncherPage from './page';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';

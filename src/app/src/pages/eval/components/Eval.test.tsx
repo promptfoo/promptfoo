@@ -3,7 +3,7 @@ import * as React from 'react';
 import { restoreTestTimers, useTestTimers } from '@app/tests/timers';
 import { callApi } from '@app/utils/api';
 import { act, render } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Eval from './Eval';
 import { useResultsViewSettingsStore, useTableStore } from './store';
@@ -76,8 +76,8 @@ vi.mock('socket.io-client', () => ({
   io: mockIo,
 }));
 
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
+vi.mock('react-router', async () => {
+  const actual = await vi.importActual('react-router');
   return {
     ...actual,
     useNavigate: () => mockNavigate,

@@ -5,7 +5,7 @@ import { Card } from '@app/components/ui/card';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { ClipboardList } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router';
 
 export default function NotFoundPage() {
   const navigate = useNavigate();
