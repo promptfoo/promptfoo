@@ -561,7 +561,7 @@ describe('auth command', () => {
         }
         if (warn) {
           expect(logger.warn).toHaveBeenCalledWith(
-            expect.stringContaining('promptfoo auth teams set <team>'),
+            expect.stringContaining('promptfoo auth login --api-key <apiKey>'),
           );
         } else {
           expect(logger.warn).not.toHaveBeenCalled();
