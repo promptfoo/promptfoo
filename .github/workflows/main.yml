@@ -389,6 +389,7 @@ jobs:
           minimums_file="$RUNNER_TEMP/python-provider-minimums.txt"
           sed -nE 's/^([A-Za-z0-9_-]+)>=([^,[:space:]]+).*$/\1==\2/p' examples/provider-python/requirements.txt > "$minimums_file"
           test -s "$minimums_file"
+          grep -Eq '^anyio==[0-9]' "$minimums_file"
           python -m pip install --disable-pip-version-check -r examples/provider-python/requirements.txt -r "$minimums_file"
 
       - name: Run Python provider dependency regressions
