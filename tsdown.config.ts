@@ -107,6 +107,14 @@ export default defineConfig([
     },
     format: ['cjs'],
     fixedExtension: true, // Use .cjs extension for CJS output
+    deps: {
+      ...sharedBuildOptions.deps,
+      // Chalk is ESM-only; externalizing it breaks default imports in the CJS package.
+      // A `neverBundle` pattern becomes rolldown's `external`, which `alwaysBundle` cannot
+      // override, so chalk has to be excluded from the pattern as well.
+      neverBundle: /^(?!chalk(?:\/|$))[a-z@][^:]*/,
+      alwaysBundle: ['chalk'],
+    },
     define: {
       ...versionDefines,
       BUILD_FORMAT: '"cjs"',
