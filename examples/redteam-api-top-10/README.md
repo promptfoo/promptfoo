@@ -75,6 +75,23 @@ The chatbot connects to three MCP servers:
 - **Filesystem MCP**: Reading policy documents
 - **Fetch MCP**: External API calls (shipping tracking, weather, promotions)
 
+The application uses MCP SDK 2. The archived SQLite reference server still requires
+MCP SDK 1, so its `uvx` environment pins a compatible server release and SDK range:
+
+```bash
+uvx --with 'mcp>=1.30,<2' mcp-server-sqlite==2025.4.25 --db-path data/swag_store.db
+```
+
+The app launches this command automatically. Pydantic is a direct dependency for
+the API models; the HTTPX minimum is retained for the Anthropic transport.
+
+To test tool discovery and queries through the actual SQLite MCP server without
+an API key, run:
+
+```bash
+uv run python -m unittest discover -s tests -v
+```
+
 ## Demo Users
 
 All users have password `password123`:
