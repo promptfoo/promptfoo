@@ -4,10 +4,9 @@ All notable changes to this package will be documented in this file.
 
 ## [0.2.1](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.2.0...code-scan-action-0.2.1) (2026-09-26)
 
-
 ### Bug Fixes
 
-* **deps:** update type definitions ([#11010](https://github.com/promptfoo/promptfoo/issues/11010)) ([8174e60](https://github.com/promptfoo/promptfoo/commit/8174e6017902ffbd5ee8692db8caa24c437864e1))
+- **deps:** update type definitions ([#11010](https://github.com/promptfoo/promptfoo/issues/11010)) ([8174e60](https://github.com/promptfoo/promptfoo/commit/8174e6017902ffbd5ee8692db8caa24c437864e1))
 
 ## [0.2.0](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.1.8...code-scan-action-0.2.0) (2026-08-28)
 
