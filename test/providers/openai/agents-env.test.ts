@@ -46,6 +46,10 @@ beforeEach(() => {
     OPENAI_API_BASE_URL: undefined,
     OPENAI_API_HOST: undefined,
     OPENAI_ORGANIZATION: undefined,
+    REQUEST_TIMEOUT_MS: undefined,
+    PROMPTFOO_CA_CERT_PATH: undefined,
+    PROMPTFOO_INSECURE_SSL: undefined,
+    PROMPTFOO_FETCH_CONNECTIONS: undefined,
   });
   vi.mocked(fetchWithProxy).mockImplementation(async () => Response.json(response));
 });
@@ -134,7 +138,7 @@ describe('Agents SDK scoped client', () => {
   );
 
   it.each(
-    (['provider', 'suite', 'file'] as const).flatMap((scope) =>
+    (['provider', 'suite', 'file', 'process'] as const).flatMap((scope) =>
       [
         ['REQUEST_TIMEOUT_MS', '1234'],
         ['PROMPTFOO_CA_CERT_PATH', '/fixture/ca.pem'],
@@ -146,7 +150,7 @@ describe('Agents SDK scoped client', () => {
       ]),
     ),
   )('uses the shared transport for $scope $name=$value', async ({ scope, name, value }) => {
-    mockProcessEnv({ [name]: 'host-setting' });
+    mockProcessEnv({ [name]: scope === 'process' ? value : 'host-setting' });
     const custom = new OpenAIProvider({ apiKey: 'sdk-key' });
     vi.spyOn(custom, 'getModel').mockRejectedValue(
       new Error('default provider bypassed transport'),
@@ -168,7 +172,7 @@ describe('Agents SDK scoped client', () => {
       scope === 'file' ? { [name]: value } : undefined,
       () => cliState.withEnv(suiteEnv, invoke),
     );
-    expect(getEnvString(name)).toBe('host-setting');
+    expect(getEnvString(name)).toBe(scope === 'process' ? value : 'host-setting');
     expect(result.output).toBe('ok');
     expect(fetchWithProxy).toHaveBeenCalledOnce();
     expect(request().url).toBe('https://api.openai.com/v1/responses');
@@ -217,6 +221,45 @@ describe('Agents SDK scoped client', () => {
     expect(request().headers.get('authorization')).toBe('Bearer config-key');
     expect(request().url).toBe('https://config.example/v1/responses');
   });
+
+  it.each(
+    (['explicit', 'ambient'] as const).flatMap((loading) =>
+      [false, true].map((providerOverride) => ({ loading, providerOverride })),
+    ),
+  )(
+    'retains $loading load-time settings (provider override=$providerOverride)',
+    async ({ loading, providerOverride }) => {
+      const loadedEnv = {
+        OPENAI_API_KEY: 'loaded-key',
+        OPENAI_BASE_URL: 'https://loaded.example/v1',
+        OPENAI_ORGANIZATION: 'loaded-org',
+      };
+      const providerEnv = {
+        OPENAI_API_KEY: 'provider-key',
+        OPENAI_BASE_URL: 'https://provider.example/v1',
+        OPENAI_ORGANIZATION: 'provider-org',
+      };
+      const options = {
+        config: { agent: new Agent({ name: 'fixture', model: 'gpt-4.1-mini' }) },
+        env: providerOverride ? providerEnv : undefined,
+      };
+      const target = await (loading === 'explicit'
+        ? loadApiProvider('openai:agents:fixture', { env: loadedEnv, options })
+        : cliState.withEnv(loadedEnv, () => loadApiProvider('openai:agents:fixture', { options })));
+      await cliState.withEnv(
+        {
+          OPENAI_API_KEY: 'active-key',
+          OPENAI_API_HOST: 'active.example',
+          OPENAI_ORGANIZATION: 'active-org',
+        },
+        () => target.callApi('hello'),
+      );
+      const expected = providerOverride ? providerEnv : loadedEnv;
+      expect(request().url).toBe(`${expected.OPENAI_BASE_URL}/responses`);
+      expect(request().headers.get('authorization')).toBe(`Bearer ${expected.OPENAI_API_KEY}`);
+      expect(request().headers.get('openai-organization')).toBe(expected.OPENAI_ORGANIZATION);
+    },
+  );
 
   it('isolates sequential invocation-file credentials on a reused provider', async () => {
     const target = provider();

@@ -413,9 +413,13 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
           (key) => env?.[key] !== undefined || env?.[key.toLowerCase()] !== undefined,
         ),
       ) ||
-      ['OPENAI_API_HOST', 'OPENAI_API_BASE_URL', 'OPENAI_BASE_URL', 'OPENAI_ORGANIZATION'].some(
-        (key) => getEnvString(key) !== undefined,
-      )
+      [
+        'OPENAI_API_HOST',
+        'OPENAI_API_BASE_URL',
+        'OPENAI_BASE_URL',
+        'OPENAI_ORGANIZATION',
+        ...TRANSPORT_ENV_KEYS,
+      ].some((key) => getEnvString(key) !== undefined)
     );
   }
 
