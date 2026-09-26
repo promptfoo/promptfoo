@@ -58,6 +58,7 @@ type FoundryAgent = Agent;
 type FoundryOpenAIClient = ReturnType<AzureAIProjectClient['getOpenAIClient']>;
 type FoundryResponses = FoundryOpenAIClient['responses'];
 type FoundryResponseCreateParams = Parameters<FoundryResponses['create']>[0] & { stream?: false };
+type FoundryResponseCreateOptions = NonNullable<Parameters<FoundryResponses['create']>[1]>;
 type CachedFoundryAgentResponse = ProviderResponse & {
   __promptfooFoundryAgent?: Pick<FoundryAgent, 'id' | 'name'>;
 };
@@ -119,20 +120,6 @@ function hashFoundryAgentCacheValue(value: unknown): string {
   return createHmac('sha256', 'promptfoo:azure-foundry-agent:cache-key:v2')
     .update(serialized ?? String(value))
     .digest('hex');
-}
-
-interface AgentReferenceOption {
-  name: string;
-  type: 'agent_reference';
-}
-
-interface FoundryResponseCreateOptions {
-  signal?: AbortSignal;
-  timeout?: number;
-  maxRetries?: number;
-  body?: {
-    agent_reference?: AgentReferenceOption;
-  };
 }
 
 /**
@@ -464,7 +451,6 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
           throw new Error(`No callback found for function '${functionName}'`);
         }
 
-        throwIfAborted(context?.abortSignal);
         const result = await waitWithAbort(() => callback!(args, context), context?.abortSignal);
         if (result === undefined || result === null) {
           return '';
@@ -715,9 +701,9 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     for (let attempt = 0; ; attempt += 1) {
       throwIfAborted(signal);
       const controller = new AbortController();
-      const relayAbort = () => controller.abort();
-      signal?.addEventListener('abort', relayAbort, { once: true });
-      let timedOut = false;
+      const attemptSignal = signal
+        ? AbortSignal.any([signal, controller.signal])
+        : controller.signal;
       let receivedError: { status: number; headers: Headers } | undefined;
       const fetchWithTimeout = client.fetchWithTimeout;
       // The SDK reads error bodies before exposing the Response or APIError.
@@ -725,7 +711,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       // deadlines retain headers without replacing Azure's request/tracing wrappers.
       client.fetchWithTimeout = async (...args) => {
         const response = await fetchWithTimeout.apply(client, args);
-        if (!response.ok && !controller.signal.aborted) {
+        if (!response.ok && !attemptSignal.aborted) {
           receivedError = { status: response.status, headers: response.headers };
         }
         return response;
@@ -733,10 +719,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       // The SDK clears its fetch timeout after headers; also bound body reads
       // and credential acquisition for the complete Responses attempt.
       const timeout = setTimeout(
-        () => {
-          timedOut = true;
-          controller.abort();
-        },
+        () => controller.abort(),
         options.timeout ?? client.timeout ?? 600000,
       );
       let retryDelay: number;
@@ -747,12 +730,12 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
           }
           return client.responses.create(body as FoundryResponseCreateParams, {
             ...options,
-            signal: controller.signal,
+            signal: attemptSignal,
           });
-        }, controller.signal);
+        }, attemptSignal);
       } catch (error) {
         throwIfAborted(signal);
-        if (timedOut) {
+        if (controller.signal.aborted) {
           error = Object.assign(
             new DOMException('Request timed out.', 'TimeoutError'),
             receivedError,
@@ -766,7 +749,6 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       } finally {
         client.fetchWithTimeout = fetchWithTimeout;
         clearTimeout(timeout);
-        signal?.removeEventListener('abort', relayAbort);
         // Release the SDK's retained fetch listener after completion, failure,
         // or when the caller or deadline stops waiting for the response.
         controller.abort();

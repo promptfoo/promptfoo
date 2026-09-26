@@ -159,12 +159,52 @@ describe('Azure Foundry live QA', () => {
         expect(mocks.execFile).toHaveBeenCalledTimes(3);
         for (const [, , childOptions] of mocks.execFile.mock.calls) {
           expect(childOptions.env.PROMPTFOO_LOG_DIR).toBe(isolatedLogs);
+          expect(childOptions).toMatchObject({ timeout: 180_000, killSignal: 'SIGKILL' });
         }
       } finally {
         restoreEnv();
       }
     },
   );
+
+  it('retains sanitized provider diagnostics in exported results and the summary', async () => {
+    const metadata = {
+      transportRetries: 1,
+      usageIncomplete: true,
+      costIncomplete: true,
+      knownCost: 0.001,
+      rateLimitKind: 'quota',
+      rateLimitRetryable: false,
+      http: { status: 429, headers: { authorization: 'fixture-secret' } },
+    };
+    const result = {
+      success: false,
+      score: 0,
+      metadata: { source: 'eval metadata' },
+      response: { error: 'Quota exceeded', metadata },
+    };
+    mocks.execFile.mockImplementation((_file, args, _options, callback) => {
+      fs.writeFileSync(
+        args[args.indexOf('-o') + 1],
+        JSON.stringify({ results: { results: [result] } }),
+      );
+      callback(null, '', '');
+    });
+
+    await import('../../scripts/azureFoundryLiveQa');
+
+    const output = path.join(directory, 'output');
+    const exported = JSON.parse(fs.readFileSync(path.join(output, 'text-results.json'), 'utf8'));
+    const summary = JSON.parse(fs.readFileSync(path.join(output, 'summary.json'), 'utf8'));
+    const sanitizedMetadata = {
+      ...metadata,
+      http: { ...metadata.http, headers: { authorization: '[REDACTED]' } },
+    };
+    expect(exported.results.results[0].response.metadata).toEqual(sanitizedMetadata);
+    expect(summary[0].results[0].metadata).toEqual(sanitizedMetadata);
+    expect(process.exitCode).toBe(1);
+    expect(mocks.execFile).toHaveBeenCalledOnce();
+  });
 
   it.each([
     ['truncated JSON', '{"results":', false],

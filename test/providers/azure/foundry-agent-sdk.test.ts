@@ -96,6 +96,49 @@ describe('Foundry SDK cancellation and retries', () => {
     expect(fetchMock.mock.calls.every(([, options]) => options.signal.aborted)).toBe(true);
   });
 
+  it('cancels one concurrent invocation without interrupting another on the same provider', async () => {
+    stallNextResponse(200);
+    const fetchResponse = createDeferred<Response>();
+    fetchMock.mockReturnValueOnce(fetchResponse.promise);
+    const cancelledController = new AbortController();
+    const activeController = new AbortController();
+    const instance = provider({ timeoutMs: 100, retryOptions: { maxRetries: 1 } });
+    const cancelled = instance.callApi('cancelled', undefined, {
+      abortSignal: cancelledController.signal,
+    });
+    const rejected = expect(cancelled).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.advanceTimersByTimeAsync(0);
+    const active = instance.callApi('active', undefined, {
+      abortSignal: activeController.signal,
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      const cancelledSignal = fetchMock.mock.calls[0][1].signal as AbortSignal;
+      const activeSignal = fetchMock.mock.calls[1][1].signal as AbortSignal;
+      expect(cancelledSignal).not.toBe(activeSignal);
+
+      cancelledController.abort(new Error('cancel only this invocation'));
+      await rejected;
+      expect(cancelledSignal.aborted).toBe(true);
+      expect(activeSignal.aborted).toBe(false);
+      expect(activeController.signal.aborted).toBe(false);
+
+      fetchResponse.resolve(response());
+      expect(await active).toMatchObject({ output: 'ok', tokenUsage: { numRequests: 1 } });
+      expect(activeSignal.aborted).toBe(true);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(getEventListeners(cancelledController.signal, 'abort')).toHaveLength(0);
+      expect(getEventListeners(activeController.signal, 'abort')).toHaveLength(0);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      cancelledController.abort();
+      activeController.abort();
+      fetchResponse.resolve(response());
+      await Promise.allSettled([cancelled, active]);
+    }
+  });
+
   it('accepts the maximum supported timer delay through the real SDK', async () => {
     const fetchResponse = createDeferred<Response>();
     fetchMock.mockReturnValueOnce(fetchResponse.promise);

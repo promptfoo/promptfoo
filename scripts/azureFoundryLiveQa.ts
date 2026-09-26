@@ -313,7 +313,7 @@ for (const test of cases) {
       model: result.response?.raw?.model,
       usage: result.response?.tokenUsage,
       cost: result.response?.cost,
-      metadata: result.metadata,
+      metadata: result.response?.metadata,
     })),
   });
   if (
