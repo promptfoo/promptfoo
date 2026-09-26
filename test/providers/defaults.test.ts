@@ -556,6 +556,72 @@ describe('Provider override tests', () => {
   });
 
   describe('Google AI Studio provider selection', () => {
+    it.each(
+      (['provider', 'suite'] as const).flatMap((scope) =>
+        ['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'PALM_API_KEY'].flatMap((maskedKey) =>
+          [false, true].map((azure) => ({ scope, maskedKey, azure })),
+        ),
+      ),
+    )(
+      'selects lower ADC after a $scope $maskedKey mask (Azure=$azure)',
+      async ({ scope, maskedKey, azure }) => {
+        const env = {
+          [maskedKey]: '',
+          ...(azure && {
+            AZURE_API_KEY: 'azure-fixture',
+            AZURE_DEPLOYMENT_NAME: 'chat',
+            AZURE_OPENAI_DEPLOYMENT_NAME: 'chat',
+          }),
+        };
+        await cliState.withEnvFileOverrides(
+          {
+            GOOGLE_APPLICATION_CREDENTIALS: '/fixture/adc.json',
+            GEMINI_API_KEY: 'file-gemini-key',
+            GOOGLE_API_KEY: 'file-google-key',
+          },
+          async () => {
+            const providers =
+              scope === 'suite'
+                ? await cliState.withEnv(env, () => getDefaultProviders())
+                : await getDefaultProviders(env);
+            expect(providers.gradingProvider).toBeInstanceOf(
+              azure ? AzureChatCompletionProvider : VertexChatProvider,
+            );
+            expect(providers.embeddingProvider).toBeInstanceOf(VertexEmbeddingProvider);
+            expect(hasGoogleDefaultCredentials).not.toHaveBeenCalled();
+          },
+        );
+      },
+    );
+
+    it('does not let a masked intermediate API alias hide lower ADC', async () => {
+      await cliState.withEnvFileOverrides(
+        { GOOGLE_APPLICATION_CREDENTIALS: '/fixture/adc.json', GOOGLE_API_KEY: 'file-key' },
+        () =>
+          cliState.withEnv({ GEMINI_API_KEY: 'masked-suite-key' }, async () => {
+            const providers = await getDefaultProviders({ GEMINI_API_KEY: '' });
+            expect(providers.gradingProvider).toBeInstanceOf(VertexChatProvider);
+            expect(providers.embeddingProvider).toBeInstanceOf(VertexEmbeddingProvider);
+            expect(hasGoogleDefaultCredentials).not.toHaveBeenCalled();
+          }),
+      );
+    });
+
+    it('selects a different usable intermediate API alias before lower ADC', async () => {
+      await cliState.withEnvFileOverrides(
+        { GOOGLE_APPLICATION_CREDENTIALS: '/fixture/adc.json' },
+        () =>
+          cliState.withEnv(
+            { GEMINI_API_KEY: 'masked-suite-key', GOOGLE_API_KEY: 'suite-key' },
+            async () => {
+              const providers = await getDefaultProviders({ GEMINI_API_KEY: '' });
+              expect(providers.gradingProvider).toBeInstanceOf(AIStudioChatProvider);
+              expect(hasGoogleDefaultCredentials).not.toHaveBeenCalled();
+            },
+          ),
+      );
+    });
+
     it.each(['provider', 'suite', 'file'])(
       'selects %s ADC before a lower API key',
       async (scope) => {
