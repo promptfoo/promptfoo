@@ -71,6 +71,8 @@ interface GradingResult {
   pass: boolean;
   score: number;
   reason: string;
+  namedScores?: Record<string, number> | null;
+  namedScoreWeights?: Record<string, number> | null;
   componentResults?: GradingResult[] | null;
 }
 ```
@@ -94,6 +96,7 @@ assert:
         return {
           pass: true,
           score: 0.5,
+          reason: 'Output matches the expected value',
         };
       }
       return {
