@@ -45,6 +45,8 @@ See [`promptfoo view`](/docs/usage/command-line#promptfoo-view) for CLI options.
 - **Inference details** - Tokens, latency, cost, tokens/sec
 - **Media** - Image size limits; double-click for lightbox
 
+Pass rates divide passing results by all recorded results, including assertion failures and provider errors. Average tokens, cost, and latency use this same result count.
+
 ## Cell Actions
 
 Hover to reveal actions. Hold `Shift` for more:
