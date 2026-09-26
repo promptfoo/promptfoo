@@ -657,15 +657,17 @@ Manage authentication for cloud features.
 
 Log in to Promptfoo Cloud.
 
+Without `--api-key`, this command opens Cloud in your browser. Get your API key, then run `promptfoo auth login --api-key <key>` to complete CLI login.
+
 Promptfoo Cloud API keys are scoped to one organization. To switch organizations, log in with an API key from the organization you want to use. `--org` and `--team` apply only with `--api-key`.
 
-| Option                      | Description                                                                |
-| --------------------------- | -------------------------------------------------------------------------- |
-| `-o, --org <orgId>`         | The organization ID to log in to                                           |
-| `-h, --host <host>`         | The host of the promptfoo instance (API URL if different from the app URL) |
-| `-k, --api-key <key>`       | Log in using an API key                                                    |
-| `-t, --team <team>`         | Team name, slug, or ID to use after login                                  |
-| `--auth-header-name <name>` | Header carrying the Cloud API token when logging in with `--api-key`       |
+| Option                      | Description                                                          |
+| --------------------------- | -------------------------------------------------------------------- |
+| `-o, --org <orgId>`         | The organization ID to log in to                                     |
+| `-h, --host <host>`         | API URL with `--api-key`; app URL for browser login                  |
+| `-k, --api-key <key>`       | Log in using an API key                                              |
+| `-t, --team <team>`         | Team name, slug, or ID to use after login                            |
+| `--auth-header-name <name>` | Header carrying the Cloud API token when logging in with `--api-key` |
 
 For gateways that reserve `Authorization`, use `--auth-header-name X-Promptfoo-Api-Key` or `PROMPTFOO_CLOUD_AUTH_HEADER`. The value remains `Bearer <token>`. Precedence is the login flag, saved setting, environment variable, then `Authorization`. A successful login saves the header name; changing `--host` does not reset it. Pass `--auth-header-name Authorization` to reset it. See [gateway configuration](/docs/usage/sharing.md#enterprise-sharing).
 
@@ -673,17 +675,17 @@ After login, if you have multiple teams, you can switch between them using the `
 
 ### `promptfoo auth logout`
 
-Logout from the promptfoo cloud.
+Clear saved credentials and team selections. If `PROMPTFOO_API_KEY` is set, unset it to stop authenticating through the environment.
 
 ### `promptfoo auth whoami`
 
-Display current authentication status including user, organization, and active team.
+Display current authentication status including user, organization, and active team. Supports saved credentials and `PROMPTFOO_API_KEY`.
 
 **Output includes:**
 
 - User email
 - Organization name
-- Current team (if logged in to a multi-team organization)
+- Current team (if available)
 - API URL and effective auth header name (shown even without a saved login or if the account lookup fails)
 - App URL
 
@@ -719,7 +721,7 @@ Manage team switching for organizations with multiple teams.
 
 #### `promptfoo auth teams list`
 
-List the teams accessible to your API key.
+List the teams accessible to your API key, including their team and organization IDs.
 
 #### `promptfoo auth teams current`
 
@@ -746,7 +748,7 @@ promptfoo auth teams set engineering
 promptfoo auth teams set team_12345
 ```
 
-Your team selection is remembered across CLI sessions and applies to all promptfoo operations including evals and red team testing.
+Your team selection is remembered across CLI sessions and is the default for evals and sharing. Evals loaded from Cloud use their configuration's assigned team.
 
 If your saved team is no longer accessible, promptfoo falls back to the oldest team in your current organization. It never switches organizations on its own. To use another organization, run `promptfoo auth login --api-key <apiKey>` with a key from that organization.
 
@@ -1080,11 +1082,14 @@ These general-purpose environment variables are supported:
 | Name                                          | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Default                       |
 | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
 | `FORCE_COLOR`                                 | Set to 0 to disable terminal colors for printed outputs                                                                                                                                                                                                                                                                                                                                                                                                                                                          |                               |
+| `PROMPTFOO_API_KEY`                           | Cloud API key. A saved key from `promptfoo auth login` takes precedence.                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY`        | Maximum number of assertions to run at once per test case (minimum 1).                                                                                                                                                                                                                                                                                                                                                                                                                                           | 3                             |
 | `PROMPTFOO_CACHE_ENABLED`                     | Enable LLM request/response caching                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `true`                        |
 | `PROMPTFOO_CACHE_PATH`                        | Directory for the disk cache. Defaults to a `cache` directory under `PROMPTFOO_CONFIG_DIR`                                                                                                                                                                                                                                                                                                                                                                                                                       | `~/.promptfoo/cache`          |
 | `PROMPTFOO_CACHE_TTL`                         | Cache TTL in seconds                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `1209600`                     |
 | `PROMPTFOO_CACHE_TYPE`                        | Cache backend: `disk` or `memory`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `disk`                        |
+| `PROMPTFOO_CLOUD_API_URL`                     | Cloud API URL. A saved API host takes precedence.                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `PROMPTFOO_CLOUD_AUTH_HEADER`                 | Header for the Cloud API key, sent as `Bearer <token>`. Defaults to `Authorization`; a saved header name takes precedence.                                                                                                                                                                                                                                                                                                                                                                                       |
 | `PROMPTFOO_CONFIG_DIR`                        | Directory that stores eval history                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `~/.promptfoo`                |
 | `PROMPTFOO_CSRF_ALLOWED_ORIGINS`              | Comma-separated list of trusted origins allowed to make cross-site requests to the Promptfoo server (e.g., `https://app.example.com,https://admin.example.com`). Not needed for standard localhost or same-origin setups.                                                                                                                                                                                                                                                                                        |                               |
 | `PROMPTFOO_DISABLE_AJV_STRICT_MODE`           | If set, disables AJV strict mode for JSON schema validation                                                                                                                                                                                                                                                                                                                                                                                                                                                      |                               |

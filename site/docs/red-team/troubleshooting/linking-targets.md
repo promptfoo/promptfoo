@@ -87,7 +87,7 @@ linkedTargetId: 'promptfoo://12345678-1234-1234-1234-123456789abc'
 1. **Verify you're logged in:**
 
    ```bash
-   promptfoo auth status
+   promptfoo auth whoami
    ```
 
 2. **Check the target exists:**
