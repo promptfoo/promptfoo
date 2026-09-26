@@ -2,6 +2,7 @@ import { createHmac } from 'crypto';
 
 import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
+import { fingerprintCacheIdentity } from '../cacheFingerprint';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { appendOpenAiApiPath } from './util';
@@ -84,7 +85,7 @@ function hashModerationCacheValue(value: unknown): string {
 }
 
 function getOpenAIModerationAuthCacheNamespace(apiKey: string): string {
-  return createHmac('sha256', apiKey).update(OPENAI_MODERATION_CACHE_HASH_KEY).digest('hex');
+  return fingerprintCacheIdentity(apiKey, OPENAI_MODERATION_CACHE_HASH_KEY);
 }
 
 function fetchOpenAIModerationWithDedupe(

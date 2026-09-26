@@ -7,6 +7,7 @@ import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import invariant from '../util/invariant';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import { fingerprintCacheIdentity } from './cacheFingerprint';
 import { getRequestTimeoutMs, parseChatPrompt } from './shared';
 import type { WatsonXAI as WatsonXAIClient } from '@ibm-cloud/watsonx-ai';
 import type { BearerTokenAuthenticator, IamAuthenticator } from 'ibm-cloud-sdk-core';
@@ -207,10 +208,7 @@ function generatePromptHash(prompt: string): string {
 }
 
 function getWatsonXCredentialFingerprint(type: string, credential: string): string {
-  return crypto
-    .createHmac('sha256', credential)
-    .update(`${WATSONX_CACHE_HASH_KEY}:${type}`)
-    .digest('hex');
+  return fingerprintCacheIdentity(credential, `${WATSONX_CACHE_HASH_KEY}:${type}`);
 }
 
 interface WatsonXModelCost {

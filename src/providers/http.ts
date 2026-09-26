@@ -22,11 +22,13 @@ import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { stripDecompressionHeaders } from '../util/fetch/stripDecompressionHeaders';
+import { assertFipsTlsVerification } from '../util/fetch/tls';
 import {
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
   pathExists,
 } from '../util/file';
+import { isFipsEnabled } from '../util/fips';
 import { loadFunction, parseFileUrl } from '../util/functions/loadFunction';
 import { renderVarsInObject } from '../util/index';
 import invariant from '../util/invariant';
@@ -432,6 +434,11 @@ export async function generateSignature(
         break;
       }
       case 'jks': {
+        if (isFipsEnabled()) {
+          throw new Error(
+            'JKS certificate import is not supported in FIPS mode. Use a PEM private key instead.',
+          );
+        }
         // Check for keystore password in config first, then fallback to environment variable
         const keystorePassword =
           signatureAuth.keystorePassword ||
@@ -511,6 +518,11 @@ export async function generateSignature(
         );
 
         if (hasPfxPath || hasPfxContent) {
+          if (isFipsEnabled()) {
+            throw new Error(
+              'PFX/PKCS12 certificate import is not supported in FIPS mode. Use a PEM private key instead.',
+            );
+          }
           // Check for PFX password in config first, then fallback to environment variable
           const pfxPassword =
             signatureAuth.pfxPassword ||
@@ -1551,9 +1563,27 @@ export function estimateTokenCount(text: string, multiplier: number = 1.3): numb
   return Math.ceil(words.length * multiplier);
 }
 
-/**
- * Creates an HTTPS agent with TLS configuration for secure connections
- */
+function validateFipsTlsConfig(
+  tlsConfig: {
+    rejectUnauthorized?: boolean;
+    pfx?: unknown;
+    pfxPath?: string;
+    jksPath?: string;
+    jksContent?: string;
+  } = {},
+): void {
+  if (!isFipsEnabled()) {
+    return;
+  }
+  assertFipsTlsVerification(tlsConfig.rejectUnauthorized);
+  if (tlsConfig.jksPath || tlsConfig.jksContent || tlsConfig.pfx || tlsConfig.pfxPath) {
+    throw new Error(
+      'JKS and PFX/PKCS12 certificate import is not supported in FIPS mode. Use PEM cert/key and CA certificates instead.',
+    );
+  }
+}
+
+/** Creates an HTTPS agent with TLS configuration for secure connections. */
 async function createHttpsAgent(
   tlsConfig: z.infer<typeof TlsCertificateSchema>,
 ): Promise<Dispatcher> {
@@ -1771,6 +1801,8 @@ export class HttpProvider implements ApiProvider {
   private sessionEndpointParser?: Promise<(data: SessionParserData) => string>;
 
   constructor(url: string, options: ProviderOptions) {
+    // Check raw input before schema parsing can strip legacy TLS fields.
+    validateFipsTlsConfig(options.config?.tls);
     this.config = HttpProviderConfigSchema.parse(options.config);
     validateMultipartConfig(this.config);
     if (!this.config.tokenEstimation && cliState.config?.redteam) {
@@ -2322,6 +2354,7 @@ export class HttpProvider implements ApiProvider {
   }
 
   private async getHttpsAgent(): Promise<Dispatcher | undefined> {
+    validateFipsTlsConfig(this.config.tls);
     if (!this.config.tls) {
       return undefined;
     }

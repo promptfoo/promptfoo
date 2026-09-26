@@ -8,6 +8,7 @@ import {
   VercelAiEmbeddingProvider,
   VercelAiProvider,
 } from '../../src/providers/vercel';
+import * as fips from '../../src/util/fips';
 import { mockProcessEnv } from '../util/utils';
 
 // Mock the cache module
@@ -96,6 +97,30 @@ describe('VercelAiProvider', () => {
     vi.mocked(streamText).mockReset();
     vi.mocked(embed).mockReset();
   });
+
+  it.each([true, false])(
+    'supports short and empty gateway headers in FIPS mode with caching=%s',
+    async (cacheEnabled) => {
+      const mode = vi.spyOn(fips, 'isFipsEnabled').mockReturnValue(true);
+      try {
+        vi.mocked(isCacheEnabled).mockReturnValue(cacheEnabled);
+        const { generateText } = await import('ai');
+        vi.mocked(generateText).mockResolvedValue({ text: 'fixture response', usage: {} } as any);
+        const provider = new VercelAiProvider('openai/gpt-4o-mini', {
+          config: {
+            apiKey: 'fixture-api-key',
+            headers: { 'x-region': 'us', 'x-empty': '' },
+          },
+        });
+        expect(await provider.callApi('fixture prompt')).toMatchObject({
+          output: 'fixture response',
+        });
+        expect(generateText).toHaveBeenCalledOnce();
+      } finally {
+        mode.mockRestore();
+      }
+    },
+  );
 
   describe('constructor', () => {
     it('preserves gateway initialization errors', async () => {

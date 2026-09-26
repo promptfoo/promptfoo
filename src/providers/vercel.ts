@@ -1,11 +1,10 @@
-import { createHmac } from 'crypto';
-
 import { context as otelContext, propagation, ROOT_CONTEXT, trace } from '@opentelemetry/api';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { sha256 } from '../util/createHash';
 import { normalizeFinishReason } from '../util/finishReason';
+import { fingerprintCacheIdentity } from './cacheFingerprint';
 import { getRequestTimeoutMs, parseChatPrompt } from './shared';
 import { hasActiveTracingSpan } from './tracing';
 import type { LanguageModelUsage } from 'ai';
@@ -192,9 +191,7 @@ function pickGenerateOptions(config: VercelAiConfig) {
 }
 
 function fingerprintGatewayIdentity(value: string) {
-  return createHmac('sha256', value)
-    .update('promptfoo:vercel-gateway-cache-identity')
-    .digest('hex');
+  return fingerprintCacheIdentity(value, 'promptfoo:vercel-gateway-cache-identity');
 }
 
 function getGatewayCacheConfig(config: VercelAiConfig, env?: EnvOverrides) {
