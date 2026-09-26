@@ -948,9 +948,9 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     const timeout = config.timeoutMs;
     if (
       timeout !== undefined &&
-      (!Number.isFinite(timeout) || timeout <= 0 || timeout > MAX_REQUEST_TIMEOUT_MS)
+      (!Number.isInteger(timeout) || timeout <= 0 || timeout > MAX_REQUEST_TIMEOUT_MS)
     ) {
-      return `Azure Foundry agent timeoutMs must be a finite, positive number no greater than ${MAX_REQUEST_TIMEOUT_MS}.`;
+      return `Azure Foundry agent timeoutMs must be a positive integer no greater than ${MAX_REQUEST_TIMEOUT_MS}.`;
     }
     const maxRetries = config.retryOptions?.maxRetries;
     if (maxRetries !== undefined && (!Number.isSafeInteger(maxRetries) || maxRetries < 0)) {
