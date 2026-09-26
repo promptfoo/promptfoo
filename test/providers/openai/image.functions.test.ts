@@ -269,8 +269,9 @@ describe('OpenAI Image Provider Functions', () => {
       expect(calculateImageCost('dall-e-3', '1024x1024')).toBe(DALLE3_COSTS['standard_1024x1024']);
     });
 
-    it('should use default cost if model is unknown', () => {
-      expect(calculateImageCost('unknown-model', '1024x1024')).toBe(0.04);
+    it('should report no cost if model is unknown', () => {
+      expect(calculateImageCost('unknown-model', '1024x1024')).toBeUndefined();
+      expect(calculateImageCost('unknown-model', '1024x1024', 'high', 4)).toBeUndefined();
     });
 
     it('should multiply cost by number of images', () => {
@@ -304,9 +305,19 @@ describe('OpenAI Image Provider Functions', () => {
       expect(calculateImageCost('gpt-image-2', '2048x1152', 'high')).toBeUndefined();
     });
 
-    it('should use default cost for models other than DALL-E 2 or 3', () => {
-      expect(calculateImageCost('gpt-4', '1024x1024')).toBe(0.04);
-      expect(calculateImageCost('', '1024x1024')).toBe(0.04);
+    it('should report no cost for models with no per-image rate', () => {
+      expect(calculateImageCost('gpt-4', '1024x1024')).toBeUndefined();
+      expect(calculateImageCost('', '1024x1024')).toBeUndefined();
+    });
+
+    it.each([
+      'gpt-image-2.5-sunburst',
+      'gpt-image-2.5-sunburst-2026-09-08',
+      'gpt-image-2.5-flare',
+      'gpt-image-2.5-flare-2026-09-08',
+    ])('should not reuse GPT Image 2 per-image rates for %s', (model) => {
+      expect(calculateImageCost(model, '1024x1024', 'high')).toBeUndefined();
+      expect(calculateImageCost(model, '1024x1024', 'max')).toBeUndefined();
     });
   });
 
