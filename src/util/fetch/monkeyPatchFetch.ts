@@ -66,46 +66,26 @@ function getSafeProxyForConnectionLog(): string {
  * (returns false) when either URL is unparseable, so a misconfigured host never leaks
  * the token.
  */
-export function isPromptfooCloudApiHost(url: string | URL | Request): boolean {
+export function isPromptfooCloudApiHost(url: string | URL | Request, apiHost?: string): boolean {
   try {
     const targetUrl = url instanceof Request ? url.url : url.toString();
-    return new URL(targetUrl).origin === new URL(cloudConfig.getApiHost()).origin;
+    return new URL(targetUrl).origin === new URL(apiHost ?? cloudConfig.getApiHost()).origin;
   } catch {
     return false;
   }
 }
 
-/**
- * Resolves the header name used to carry the Cloud API credential (defaults to
- * `Authorization`, but may be configured to a different name via
- * `promptfoo auth login --auth-header-name` or `PROMPTFOO_CLOUD_AUTH_HEADER`).
- */
-export function getCloudAuthHeaderName(): string {
-  return cloudConfig.getAuthHeaderName();
-}
-
-/**
- * Resolves the auth header value for a request to the configured Promptfoo
- * Cloud origin, or `undefined` when the request is not cloud-bound or no API key is
- * saved. Centralizing this keeps the live request (`monkeyPatchFetch`) and the cache
- * key (`getHeadersForCacheKey` in cache.ts) in lockstep.
- */
+/** Resolve the current credential for a request to the configured Cloud origin. */
 export function getCloudBearerToken(url: string | URL | Request): string | undefined {
-  if (!isPromptfooCloudApiHost(url)) {
-    return undefined;
-  }
-  const token = cloudConfig.getApiKey();
-  return token ? `Bearer ${token}` : undefined;
+  const config = cloudConfig.getRequestConfig();
+  return isPromptfooCloudApiHost(url, config.apiHost)
+    ? config.headers?.[config.authHeaderName]
+    : undefined;
 }
 
-function isPromptfooCloudTaskUrl(url: string | URL | Request): boolean {
-  if (!isPromptfooCloudApiHost(url)) {
-    return false;
-  }
-
+function isCloudTaskPath(url: string | URL | Request): boolean {
   try {
-    const targetUrl = new URL(getRequestUrlString(url));
-    const pathname = targetUrl.pathname.replace(/\/+$/, '');
+    const pathname = new URL(getRequestUrlString(url)).pathname.replace(/\/+$/, '');
     return pathname.endsWith('/api/v1/task') || pathname.endsWith('/api/v1/task/harmful');
   } catch {
     return false;
@@ -114,15 +94,10 @@ function isPromptfooCloudTaskUrl(url: string | URL | Request): boolean {
 
 /** Returns the persisted CLI team for authenticated Cloud task requests. */
 export function getCloudTaskTeamId(url: string | URL | Request): string | undefined {
-  if (!isPromptfooCloudTaskUrl(url)) {
-    return undefined;
-  }
-  if (!getCloudBearerToken(url)) {
-    return undefined;
-  }
-
-  const organizationId = cloudConfig.getCurrentOrganizationId();
-  return cloudConfig.getCurrentTeamId(organizationId);
+  const config = cloudConfig.getRequestConfig();
+  return config.headers && isPromptfooCloudApiHost(url, config.apiHost) && isCloudTaskPath(url)
+    ? config.teamId
+    : undefined;
 }
 
 /**
@@ -158,52 +133,84 @@ function setHeader(headers: HeadersInit | undefined, name: string, value: string
   return { ...(headers ?? {}), [name]: value };
 }
 
-function usesCustomCloudAuth(
-  url: string | URL | Request,
-  headers: HeadersInit | undefined,
-  explicitCloudAuth = false,
-): boolean {
-  const effectiveHeaders = new Headers(headers);
-  // Explicit validation may use a new token/header before it is saved.
-  if (explicitCloudAuth) {
-    return Array.from(effectiveHeaders).some(
-      ([name, value]) => name !== 'authorization' && /^Bearer\s/i.test(value),
-    );
-  }
-  const headerName = getCloudAuthHeaderName().toLowerCase();
-  if (headerName === 'authorization') {
-    return false;
-  }
-  for (const [name, value] of effectiveHeaders) {
-    if (name === headerName) {
-      // Alternate Cloud endpoints must carry the saved credential.
-      return (
-        /^Bearer\s/i.test(value) &&
-        (isPromptfooCloudApiHost(url) ||
-          value.replace(/^Bearer\s+/i, '') === cloudConfig.getApiKey())
-      );
-    }
-  }
-  // Include the credential that will be injected when the request is dispatched.
-  return Boolean(getCloudBearerToken(url));
-}
-
-/** Capture the Cloud redirect policy before any asynchronous work or retry. */
-export function preserveCloudAuthRedirects(
+/** Capture Cloud authentication once, before cache lookup, asynchronous work, or retries. */
+export function prepareCloudRequest(
   url: string | URL | Request,
   options: FetchOptions = {},
 ): FetchOptions {
-  if (
-    options.restrictCloudAuthRedirects ||
-    !usesCustomCloudAuth(
-      url,
-      getEffectiveHeaders(url, options.headers),
-      options.skipCloudAuthInjection,
-    )
-  ) {
+  if (options.cloudAuthHeaderName !== undefined) {
     return options;
   }
-  return { ...options, restrictCloudAuthRedirects: true };
+
+  const callerHeaders = getEffectiveHeaders(url, options.headers);
+  if (options.skipCloudAuthInjection) {
+    // Candidate credentials can use a header that is not part of the saved session.
+    const customAuth = Array.from(new Headers(callerHeaders)).some(
+      ([name, value]) => name !== 'authorization' && /^Bearer\s/i.test(value),
+    );
+    return {
+      ...options,
+      cloudAuthHeaderName: null,
+      ...(customAuth ? { restrictCloudAuthRedirects: true } : {}),
+    };
+  }
+
+  let headers = callerHeaders;
+  let getAuthHeaders = options.getAuthHeaders;
+  let restrictRedirects = options.restrictCloudAuthRedirects;
+  const config = cloudConfig.getRequestConfig();
+  const isCloud = isPromptfooCloudApiHost(url, config.apiHost);
+  const credential = config.headers?.[config.authHeaderName];
+  let cloudAuthHeaderName = isCloud ? config.authHeaderName.toLowerCase() : null;
+  const defaults: Record<string, string> = {};
+  if (isCloud && credential) {
+    // fetchWithProxy converts URL userinfo into Basic auth; it takes precedence over
+    // automatic Authorization, just like an explicit caller-supplied header.
+    const parsedUrl = new URL(getRequestUrlString(url));
+    const hasUrlAuth = Boolean(parsedUrl.username || parsedUrl.password);
+    if (
+      !hasHeader(headers, config.authHeaderName) &&
+      !(hasUrlAuth && cloudAuthHeaderName === 'authorization')
+    ) {
+      defaults[config.authHeaderName] = credential;
+    }
+    if (isCloudTaskPath(url) && config.teamId && !hasHeader(headers, PROMPTFOO_TEAM_ID_HEADER)) {
+      defaults[PROMPTFOO_TEAM_ID_HEADER] = config.teamId;
+    }
+    for (const [name, value] of Object.entries(defaults)) {
+      headers = setHeader(headers, name, value);
+    }
+    if (getAuthHeaders && Object.keys(defaults).length > 0) {
+      const resolveHeaders = getAuthHeaders;
+      getAuthHeaders = async (signal) => {
+        const resolved = new Headers(defaults);
+        new Headers(await resolveHeaders(signal)).forEach((value, name) =>
+          resolved.set(name, value),
+        );
+        return resolved;
+      };
+    }
+  }
+  const value = new Headers(headers).get(config.authHeaderName);
+  if (
+    config.authHeaderName.toLowerCase() !== 'authorization' &&
+    value &&
+    /^Bearer\s/i.test(value) &&
+    (isCloud || value.replace(/^Bearer\s+/i, '') === credential?.replace(/^Bearer\s+/i, ''))
+  ) {
+    cloudAuthHeaderName = config.authHeaderName.toLowerCase();
+    restrictRedirects = true;
+  }
+
+  // Request-time authentication supplies defaults on each attempt; explicit headers still win.
+  const preparedHeaders = getAuthHeaders ? callerHeaders : headers;
+  return {
+    ...options,
+    ...(preparedHeaders ? { headers: preparedHeaders } : {}),
+    ...(getAuthHeaders ? { getAuthHeaders } : {}),
+    cloudAuthHeaderName,
+    ...(restrictRedirects ? { restrictCloudAuthRedirects: true } : {}),
+  };
 }
 
 /**
@@ -221,15 +228,20 @@ export async function monkeyPatchFetch(
 
   const {
     restrictCloudAuthRedirects: restrictRedirects,
+    cloudAuthHeaderName,
+    skipCloudAuthInjection,
+    disableTransientRetries: _disableTransientRetries,
+    getAuthHeaders: _getAuthHeaders,
+    compress,
     ...opts
   }: FetchOptions & {
     dispatcher?: Pick<Dispatcher, 'dispatch'>;
-  } = preserveCloudAuthRedirects(url, options);
+  } = prepareCloudRequest(url, options);
 
   const originalBody = opts.body;
 
   // Handle compression if requested
-  if (options?.compress && opts.body && typeof opts.body === 'string') {
+  if (compress && opts.body && typeof opts.body === 'string') {
     try {
       const compressed = await gzipAsync(opts.body);
       opts.body = compressed as BodyInit;
@@ -239,32 +251,17 @@ export async function monkeyPatchFetch(
     }
   }
 
-  // Inject only at the configured Cloud origin and preserve caller-supplied credentials.
-  // Validation/rotation opts out because the candidate token/header may differ from the saved one.
-  if (!options?.skipCloudAuthInjection) {
-    const cloudAuth = getCloudBearerToken(url);
-    if (cloudAuth) {
-      const cloudAuthHeaderName = getCloudAuthHeaderName();
-      const effectiveHeaders = getEffectiveHeaders(url, opts.headers);
-      if (!hasHeader(effectiveHeaders, cloudAuthHeaderName)) {
-        opts.headers = setHeader(effectiveHeaders, cloudAuthHeaderName, cloudAuth);
-      }
-    }
-
-    const cloudTaskTeamId = getCloudTaskTeamId(url);
-    const headersWithAuth = getEffectiveHeaders(url, opts.headers);
-    if (cloudTaskTeamId && !hasHeader(headersWithAuth, PROMPTFOO_TEAM_ID_HEADER)) {
-      opts.headers = setHeader(headersWithAuth, PROMPTFOO_TEAM_ID_HEADER, cloudTaskTeamId);
-    }
-  }
-  if (
-    restrictRedirects ||
-    usesCustomCloudAuth(
-      url,
-      getEffectiveHeaders(url, opts.headers),
-      options?.skipCloudAuthInjection,
-    )
-  ) {
+  // Request-time auth may resolve after preparation. Strengthen the policy from final
+  // headers without consulting or injecting credentials from a newer saved session.
+  const finalHeaders = new Headers(getEffectiveHeaders(url, opts.headers));
+  const hasCustomCloudAuth = skipCloudAuthInjection
+    ? Array.from(finalHeaders).some(
+        ([name, value]) => name !== 'authorization' && /^Bearer\s/i.test(value),
+      )
+    : cloudAuthHeaderName &&
+      cloudAuthHeaderName !== 'authorization' &&
+      /^Bearer\s/i.test(finalHeaders.get(cloudAuthHeaderName) ?? '');
+  if (restrictRedirects || hasCustomCloudAuth) {
     opts.dispatcher = restrictCloudAuthRedirects(urlString, opts.dispatcher);
   }
   try {

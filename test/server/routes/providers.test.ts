@@ -19,6 +19,7 @@ vi.mock('../../../src/globalConfig/cloud', () => ({
     isEnabled: vi.fn(),
     getApiHost: vi.fn(),
     getAuthHeaders: vi.fn(),
+    getRequestConfig: vi.fn(),
   },
 }));
 
@@ -68,6 +69,12 @@ describe('Providers Routes', () => {
     vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
     vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.promptfoo.app');
     vi.mocked(cloudConfig.getAuthHeaders).mockReturnValue(undefined);
+    vi.mocked(cloudConfig.getRequestConfig).mockReturnValue({
+      apiHost: 'https://api.promptfoo.app',
+      authHeaderName: 'Authorization',
+      headers: undefined,
+      teamId: undefined,
+    });
   });
 
   afterEach(() => {
@@ -480,10 +487,11 @@ describe('Providers Routes', () => {
     });
 
     it('should call the configured on-prem cloud host with a bearer token when cloud is enabled', async () => {
-      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
-      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://onprem.example.com/');
-      vi.mocked(cloudConfig.getAuthHeaders).mockReturnValue({
-        Authorization: 'Bearer test-onprem-key',
+      vi.mocked(cloudConfig.getRequestConfig).mockReturnValueOnce({
+        apiHost: 'https://onprem.example.com/',
+        authHeaderName: 'Authorization',
+        headers: { Authorization: 'Bearer test-onprem-key' },
+        teamId: undefined,
       });
 
       const generatedConfig = {
@@ -506,6 +514,10 @@ describe('Providers Routes', () => {
       // Trailing slash on the configured host is normalized (no //api/v1).
       expect(calledUrl).toBe('https://onprem.example.com/api/v1/http-provider-generator');
       expect(calledUrl).not.toContain('api.promptfoo.app');
+      expect(calledOpts?.skipCloudAuthInjection).toBe(true);
+      expect(cloudConfig.getRequestConfig).toHaveBeenCalledTimes(1);
+      expect(cloudConfig.getApiHost).not.toHaveBeenCalled();
+      expect(cloudConfig.getAuthHeaders).not.toHaveBeenCalled();
       expect((calledOpts?.headers as Record<string, string>)?.Authorization).toBe(
         'Bearer test-onprem-key',
       );
@@ -530,10 +542,11 @@ describe('Providers Routes', () => {
     });
 
     it('should send the cloud credential under a configured custom header name', async () => {
-      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
-      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://onprem.example.com/');
-      vi.mocked(cloudConfig.getAuthHeaders).mockReturnValue({
-        'X-Promptfoo-Api-Key': 'Bearer test-onprem-key',
+      vi.mocked(cloudConfig.getRequestConfig).mockReturnValueOnce({
+        apiHost: 'https://onprem.example.com/',
+        authHeaderName: 'X-Promptfoo-Api-Key',
+        headers: { 'X-Promptfoo-Api-Key': 'Bearer test-onprem-key' },
+        teamId: undefined,
       });
 
       mockedFetchWithProxy.mockResolvedValue({
@@ -547,7 +560,10 @@ describe('Providers Routes', () => {
         .send({ requestExample: 'curl https://api.example.com/v1/chat' });
 
       expect(response.status).toBe(200);
-      const [, calledOpts] = mockedFetchWithProxy.mock.calls[0];
+      const [url, calledOpts] = mockedFetchWithProxy.mock.calls[0];
+      expect(url).toBe('https://onprem.example.com/api/v1/http-provider-generator');
+      expect(calledOpts?.skipCloudAuthInjection).toBe(true);
+      expect(cloudConfig.getRequestConfig).toHaveBeenCalledTimes(1);
       const headers = calledOpts?.headers as Record<string, string>;
       expect(headers?.['X-Promptfoo-Api-Key']).toBe('Bearer test-onprem-key');
       expect(headers?.Authorization).toBeUndefined();

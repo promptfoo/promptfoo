@@ -33,4 +33,10 @@ export interface FetchOptions extends RequestInit {
    * asynchronous preparation and retries, even if the saved session changes.
    */
   restrictCloudAuthRedirects?: true;
+
+  /**
+   * Internal preparation marker: undefined means not prepared, null means no Cloud
+   * auth header applies, otherwise the captured credential header name (used only for cache hashing).
+   */
+  cloudAuthHeaderName?: string | null;
 }

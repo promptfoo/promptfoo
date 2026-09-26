@@ -58,6 +58,7 @@ vi.mock('../src/logger', () => ({
 
 vi.mock('../src/globalConfig/cloud', () => ({
   cloudConfig: {
+    getRequestConfig: vi.fn(),
     getApiHost: vi.fn(),
     getApiKey: vi.fn(),
     getAuthHeaderName: vi.fn(),
@@ -159,6 +160,16 @@ vi.mock('../src/cliState', () => ({
 }));
 
 beforeEach(() => {
+  vi.mocked(cloudConfig.getRequestConfig).mockImplementation(() => {
+    const authHeaderName = cloudConfig.getAuthHeaderName();
+    const token = cloudConfig.getApiKey();
+    return {
+      apiHost: cloudConfig.getApiHost(),
+      authHeaderName,
+      headers: token ? { [authHeaderName]: `Bearer ${token}` } : undefined,
+      teamId: cloudConfig.getCurrentTeamId(cloudConfig.getCurrentOrganizationId()),
+    };
+  });
   vi.mocked(cloudConfig.getApiHost).mockReset().mockReturnValue('https://api.promptfoo.dev');
   vi.mocked(cloudConfig.getAuthHeaderName).mockReset().mockReturnValue('Authorization');
 });
@@ -410,6 +421,100 @@ describe('fetchWithProxy', () => {
         },
       }),
     );
+  });
+
+  it('preserves URL Basic credentials at the configured Cloud origin', async () => {
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('saved-cloud-token');
+    await fetchWithProxy('https://synthetic:password@api.promptfoo.dev/api/test');
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.promptfoo.dev/api/test',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: `Basic ${Buffer.from('synthetic:password').toString('base64')}`,
+        }),
+      }),
+    );
+    expect(logger.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('URL credentials will be ignored'),
+    );
+  });
+
+  it.each([false, true])(
+    'protects callback Cloud credentials after retries and a session change (explicit opt-out: %s)',
+    async (explicit) => {
+      vi.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
+      vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Configured-Auth');
+      const headerName = explicit ? 'X-Candidate-Auth' : 'X-Configured-Auth';
+      const dispatcher = { dispatch: vi.fn() };
+      vi.mocked(global.fetch)
+        .mockResolvedValueOnce(new Response('', { status: 503, statusText: 'Service Unavailable' }))
+        .mockResolvedValueOnce(new Response('ok'));
+      vi.mocked(sleep).mockImplementationOnce(async () => {
+        vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://new.example.com');
+        vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Replacement-Auth');
+      });
+      const getAuthHeaders = vi.fn().mockResolvedValue({ [headerName]: 'Bearer synthetic' });
+      await fetchWithProxy('https://api.promptfoo.dev/api/test', {
+        getAuthHeaders,
+        skipCloudAuthInjection: explicit,
+        dispatcher,
+      } as Parameters<typeof fetchWithProxy>[1]);
+      expect(getAuthHeaders).toHaveBeenCalledTimes(2);
+      for (const [, options] of vi.mocked(global.fetch).mock.calls) {
+        expect(new Headers(options?.headers).get(headerName)).toBe('Bearer synthetic');
+        const sent = options as RequestInit & { dispatcher: unknown };
+        expect(sent.dispatcher).not.toBe(dispatcher);
+        expect(sent.dispatcher).toEqual(
+          expect.objectContaining({ dispatch: expect.any(Function) }),
+        );
+        expect(options).not.toHaveProperty('cloudAuthHeaderName');
+        expect(options).not.toHaveProperty('restrictCloudAuthRedirects');
+        expect(options).not.toHaveProperty('skipCloudAuthInjection');
+      }
+      expect(cloudConfig.getRequestConfig).toHaveBeenCalledTimes(explicit ? 0 : 1);
+    },
+  );
+
+  it('keeps unrelated dynamic provider headers outside Cloud redirect policy', async () => {
+    vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Cloud-Auth');
+    const dispatcher = { dispatch: vi.fn() };
+    await fetchWithProxy('https://provider.example.com/api/test', {
+      getAuthHeaders: async () => ({ 'X-Provider-Auth': 'Bearer synthetic' }),
+      dispatcher,
+    } as Parameters<typeof fetchWithProxy>[1]);
+    expect(vi.mocked(global.fetch).mock.calls[0][1]).toMatchObject({ dispatcher });
+    expect(
+      (vi.mocked(global.fetch).mock.calls[0][1] as RequestInit & { dispatcher: unknown })
+        .dispatcher,
+    ).toBe(dispatcher);
+  });
+
+  it('keeps Cloud defaults through retries while allowing request-time authentication to override them', async () => {
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('original-cloud-token');
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('original-team');
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(new Response('', { status: 503, statusText: 'Service Unavailable' }))
+      .mockResolvedValueOnce(new Response('ok'));
+    vi.mocked(sleep).mockImplementationOnce(async () => {
+      vi.mocked(cloudConfig.getApiKey).mockReturnValue('replacement-cloud-token');
+      vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('replacement-team');
+    });
+    const getAuthHeaders = vi
+      .fn()
+      .mockResolvedValueOnce({
+        Authorization: 'Bearer dynamic-token',
+        'x-promptfoo-team-id': 'dynamic-team',
+      })
+      .mockResolvedValueOnce({});
+    await fetchWithProxy('https://api.promptfoo.dev/api/v1/task', { getAuthHeaders });
+    expect(getAuthHeaders).toHaveBeenCalledTimes(2);
+    const first = new Headers(vi.mocked(global.fetch).mock.calls[0][1]?.headers);
+    const second = new Headers(vi.mocked(global.fetch).mock.calls[1][1]?.headers);
+    expect(first.get('authorization')).toBe('Bearer dynamic-token');
+    expect(first.get('x-promptfoo-team-id')).toBe('dynamic-team');
+    expect(second.get('authorization')).toBe('Bearer original-cloud-token');
+    expect(second.get('x-promptfoo-team-id')).toBe('original-team');
+    expect(cloudConfig.getRequestConfig).toHaveBeenCalledOnce();
   });
 
   it('should add cloud auth only for the exact Promptfoo cloud origin', async () => {

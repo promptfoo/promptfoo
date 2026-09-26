@@ -11,6 +11,7 @@ import type { FetchOptions } from '../src/util/fetch/types';
 
 vi.mock('../src/globalConfig/cloud', () => ({
   cloudConfig: {
+    getRequestConfig: vi.fn(),
     getApiHost: vi.fn(),
     getApiKey: vi.fn(),
     getAuthHeaderName: vi.fn(),
@@ -50,6 +51,16 @@ describe('Cloud authentication across redirects', () => {
     });
     agent = new MockAgent();
     agent.disableNetConnect();
+    vi.mocked(cloudConfig.getRequestConfig).mockImplementation(() => {
+      const authHeaderName = cloudConfig.getAuthHeaderName();
+      const token = cloudConfig.getApiKey();
+      return {
+        apiHost: cloudConfig.getApiHost(),
+        authHeaderName,
+        headers: token ? { [authHeaderName]: `Bearer ${token}` } : undefined,
+        teamId: cloudConfig.getCurrentTeamId(cloudConfig.getCurrentOrganizationId()),
+      };
+    });
     vi.mocked(cloudConfig.getApiHost).mockReturnValue(origin);
     vi.mocked(cloudConfig.getApiKey).mockReturnValue('synthetic-cloud-key');
     vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue(headerName);

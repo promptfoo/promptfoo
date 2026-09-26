@@ -15,8 +15,7 @@ function buildRemoteUploadTarget(): RemoteBlobUploadTarget | null {
     return null;
   }
 
-  const baseUrl = cloudConfig.getApiHost();
-  const authHeaders = cloudConfig.getAuthHeaders();
+  const { apiHost: baseUrl, headers: authHeaders } = cloudConfig.getRequestConfig();
 
   if (!baseUrl || !authHeaders || !isLoggedIntoCloud()) {
     return null;
@@ -58,6 +57,7 @@ export async function uploadBlobRemote(
     const { fetchWithProxy } = await import('../util/fetch/index');
     const response = await fetchWithProxy(target.url, {
       method: 'POST',
+      skipCloudAuthInjection: true,
       headers: {
         'Content-Type': 'application/json',
         ...target.authHeaders,

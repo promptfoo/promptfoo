@@ -34,6 +34,14 @@ vi.mock('../src/util/config/manage', () => ({
 
 vi.mock('../src/globalConfig/cloud', () => ({
   cloudConfig: {
+    getRequestConfig: vi.fn(() => ({
+      apiHost: 'https://api.promptfoo.app',
+      authHeaderName: 'Authorization',
+      headers: process.env.PROMPTFOO_API_KEY
+        ? { Authorization: `Bearer ${process.env.PROMPTFOO_API_KEY}` }
+        : undefined,
+      teamId: undefined,
+    })),
     getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.app'),
     getApiKey: vi.fn(() => process.env.PROMPTFOO_API_KEY),
     getAuthHeaderName: vi.fn().mockReturnValue('Authorization'),
@@ -344,6 +352,16 @@ describe('fetchWithCache', () => {
   beforeEach(async () => {
     vi.resetModules();
     mockFetchWithRetries.mockReset();
+    vi.mocked(cloudConfig.getRequestConfig).mockImplementation(() => {
+      const authHeaderName = cloudConfig.getAuthHeaderName();
+      const token = cloudConfig.getApiKey();
+      return {
+        apiHost: cloudConfig.getApiHost(),
+        authHeaderName,
+        headers: token ? { [authHeaderName]: `Bearer ${token}` } : undefined,
+        teamId: cloudConfig.getCurrentTeamId(cloudConfig.getCurrentOrganizationId()),
+      };
+    });
     vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue('org-1');
     vi.mocked(cloudConfig.getCurrentTeamId).mockReset().mockReturnValue(undefined);
     vi.mocked(cloudConfig.getAuthHeaderName).mockReset().mockReturnValue('Authorization');
@@ -935,7 +953,12 @@ describe('fetchWithCache', () => {
       expect(firstResult.cached).toBe(false);
       expect(secondResult.cached).toBe(true);
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
-      expect(mockFetchWithRetries).toHaveBeenCalledWith(url, firstOptions, 1000, undefined);
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
+        url,
+        expect.objectContaining(firstOptions),
+        1000,
+        undefined,
+      );
     });
 
     it('should keep authorization and team isolation when trace contexts change', async () => {
@@ -1159,6 +1182,53 @@ describe('fetchWithCache', () => {
         .at(-1);
 
       expect(secondKey).toBe(firstKey);
+    });
+
+    it('keeps cache identity and dispatched headers on the same session across an async cache lookup', async () => {
+      const requestUrl = 'https://api.promptfoo.app/api/v1/task';
+      const oldSession = {
+        apiHost: 'https://api.promptfoo.app',
+        authHeaderName: 'X-Old-Account',
+        headers: { 'X-Old-Account': 'Bearer old' },
+        teamId: 'old-team',
+      };
+      const newSession = {
+        apiHost: 'https://api.promptfoo.app',
+        authHeaderName: 'X-New-Account',
+        headers: { 'X-New-Account': 'Bearer new' },
+        teamId: 'new-team',
+      };
+      vi.mocked(cloudConfig.getRequestConfig).mockReturnValue(oldSession);
+      vi.mocked(getCache().get).mockImplementationOnce(async () => {
+        vi.mocked(cloudConfig.getRequestConfig).mockReturnValue(newSession);
+        return undefined;
+      });
+      mockFetchWithRetries.mockImplementation(async (_url, options) =>
+        mockFetchWithRetriesResponse(true, Object.fromEntries(new Headers(options?.headers))),
+      );
+      const original = await fetchWithCache(requestUrl);
+      expect(original.data).toEqual({
+        'x-old-account': 'Bearer old',
+        'x-promptfoo-team-id': 'old-team',
+      });
+      const prepared = mockFetchWithRetries.mock.calls[0][1]!;
+      const fingerprinted = getHeadersForCacheKey(requestUrl, prepared);
+      expect(fingerprinted).toContainEqual([
+        'x-old-account',
+        { __promptfooSecretFingerprint: expect.any(String) },
+      ]);
+      expect(JSON.stringify(fingerprinted)).not.toContain('Bearer old');
+      const replacement = await fetchWithCache(requestUrl);
+      expect(replacement.cached).toBe(false);
+      expect(replacement.data).toEqual({
+        'x-new-account': 'Bearer new',
+        'x-promptfoo-team-id': 'new-team',
+      });
+      vi.mocked(cloudConfig.getRequestConfig).mockReturnValue(oldSession);
+      const repeated = await fetchWithCache(requestUrl);
+      expect(repeated.cached).toBe(true);
+      expect(repeated.data).toEqual(original.data);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
     });
 
     it('should isolate cloud requests by injected API key without storing the key', async () => {

@@ -20,7 +20,7 @@ import {
   HttpRateLimitError,
   type SystemError,
 } from './errors';
-import { monkeyPatchFetch, preserveCloudAuthRedirects } from './monkeyPatchFetch';
+import { monkeyPatchFetch, prepareCloudRequest } from './monkeyPatchFetch';
 import { getFetchRetryContextMaxRetries } from './retryContext';
 import { stripDecompressionHeaders } from './stripDecompressionHeaders';
 
@@ -209,7 +209,7 @@ export async function fetchWithProxy(
   options: FetchOptions = {},
   abortSignal?: AbortSignal,
 ): Promise<Response> {
-  options = preserveCloudAuthRedirects(url, options);
+  options = prepareCloudRequest(url, options);
   let finalUrl = url;
   let finalUrlString = getFetchUrlString(url);
 
@@ -743,7 +743,7 @@ export async function fetchWithRetries(
   timeout: number,
   maxRetries?: number,
 ): Promise<Response> {
-  options = preserveCloudAuthRedirects(url, options);
+  options = prepareCloudRequest(url, options);
   const contextMaxRetries = getFetchRetryContextMaxRetries();
   maxRetries = Math.max(0, maxRetries ?? contextMaxRetries ?? 4);
 

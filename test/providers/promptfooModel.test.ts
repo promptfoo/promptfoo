@@ -11,13 +11,19 @@ describe('PromptfooModelProvider', () => {
 
   beforeEach(() => {
     mockFetch = vi.fn();
-    global.fetch = mockFetch;
-    mockCloudConfig = vi.spyOn(cloudConfig, 'getApiKey').mockReturnValue('test-token');
+    vi.stubGlobal('fetch', mockFetch);
+    mockCloudConfig = vi.spyOn(cloudConfig, 'getRequestConfig').mockReturnValue({
+      apiHost: 'https://api.promptfoo.app',
+      authHeaderName: 'Authorization',
+      headers: { Authorization: 'Bearer test-token' },
+      teamId: undefined,
+    });
     mockLogger.mockClear();
   });
 
   afterEach(() => {
     vi.resetAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it('should initialize with model name', () => {
@@ -60,6 +66,41 @@ describe('PromptfooModelProvider', () => {
     });
   });
 
+  it('keeps the host, custom credential, and task team from one captured session', async () => {
+    mockCloudConfig.mockReturnValueOnce({
+      apiHost: 'https://captured.example.com',
+      authHeaderName: 'X-Captured-Auth',
+      headers: { 'X-Captured-Auth': 'Bearer captured-token' },
+      teamId: 'captured-team',
+    });
+    // Any later saved-session read returns a different host and credential.
+    mockCloudConfig.mockReturnValue({
+      apiHost: 'https://new.example.com',
+      authHeaderName: 'X-New-Auth',
+      headers: { 'X-New-Auth': 'Bearer new-token' },
+      teamId: 'new-team',
+    });
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ result: { choices: [{ message: { content: 'response' } }] } }),
+    });
+
+    await new PromptfooModelProvider('test-model').callApi('test prompt');
+
+    expect(mockCloudConfig).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://captured.example.com/api/v1/task',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'Content-Type': 'application/json',
+          'X-Captured-Auth': 'Bearer captured-token',
+          'x-promptfoo-team-id': 'captured-team',
+        }),
+      }),
+    );
+    expect(new Headers(mockFetch.mock.calls[0][1].headers).has('X-New-Auth')).toBe(false);
+  });
+
   it('should handle JSON array messages', async () => {
     const provider = new PromptfooModelProvider('test-model');
     const messages = JSON.stringify([
@@ -92,7 +133,12 @@ describe('PromptfooModelProvider', () => {
   });
 
   it('should throw error if no auth token', async () => {
-    mockCloudConfig.mockReturnValue(undefined);
+    mockCloudConfig.mockReturnValue({
+      apiHost: 'https://api.promptfoo.app',
+      authHeaderName: 'Authorization',
+      headers: undefined,
+      teamId: undefined,
+    });
     const provider = new PromptfooModelProvider('test-model');
 
     await expect(provider.callApi('test')).rejects.toThrow('No Promptfoo auth token available');
