@@ -50,6 +50,7 @@ vi.mock('../src/envars', async () => {
   const actual = await vi.importActual<typeof import('../src/envars')>('../src/envars');
   return {
     ...actual,
+    isHostTesting: false,
     getEnvBool: vi.fn().mockImplementation((key) => {
       if (key === 'PROMPTFOO_DISABLE_TELEMETRY') {
         return (process.env as NodeJS.ProcessEnv).PROMPTFOO_DISABLE_TELEMETRY === '1';
@@ -432,6 +433,7 @@ describe('Telemetry', () => {
         const actual = await vi.importActual('../src/envars');
         return {
           ...actual,
+          isHostTesting: false,
           getEnvBool: vi.fn().mockImplementation((key: string) => {
             if (key === 'PROMPTFOO_DISABLE_TELEMETRY') {
               return (process.env as NodeJS.ProcessEnv).PROMPTFOO_DISABLE_TELEMETRY === '1';

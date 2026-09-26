@@ -5,7 +5,6 @@ import { pathToFileURL } from 'node:url';
 
 import { Command } from 'commander';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mockProcessEnv } from './util/utils';
 
 // Hoisted mocks for shutdown tests
 const mockSetupEnv = vi.hoisted(() => vi.fn());
@@ -79,23 +78,6 @@ describe('setupEnvFilesFromArgv', () => {
     await loadMainModule();
     mockSetupEnv.mockReset();
     mockTelemetryInitialize.mockReset();
-  });
-
-  it('captures host test mode before an actual env file overrides process.env', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-test-mode-'));
-    const file = path.join(dir, 'fixture.env');
-    fs.writeFileSync(file, 'IS_TESTING=false\n');
-    const restore = mockProcessEnv({ IS_TESTING: 'true' });
-    const { setupEnv } = await import('../src/util/env');
-    mockSetupEnv.mockImplementation(setupEnv);
-    try {
-      setupEnvFilesFromArgv(['eval', '--env-file', file]);
-      expect(process.env.IS_TESTING).toBe('false');
-      expect(mockTelemetryInitialize).toHaveBeenCalledWith(true);
-    } finally {
-      restore();
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
   });
 
   it('should load env files before command actions run', () => {

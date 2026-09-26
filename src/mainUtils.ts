@@ -5,7 +5,6 @@ import { fileURLToPath } from 'node:url';
 import { getGlobalDispatcher } from 'undici';
 import { requestsStructuredCodeScanOutput } from './codeScan/util/structuredOutputDetect';
 import { closeDbIfOpen } from './database/index';
-import { parseEnvBool } from './envars';
 import logger, { closeLogger, setLogLevel } from './logger';
 import telemetry from './telemetry';
 import { clearAgentCache } from './util/fetch/index';
@@ -67,7 +66,6 @@ function loadEnvPathOnce(
 }
 
 export function setupEnvFilesFromArgv(argv: string[] = process.argv.slice(2)): void {
-  const hostIsTesting = parseEnvBool(process.env.IS_TESTING);
   const envFileValues: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
@@ -100,7 +98,7 @@ export function setupEnvFilesFromArgv(argv: string[] = process.argv.slice(2)): v
     loadEnvPathOnce(envPath, false, true);
   }
 
-  telemetry.initialize(hostIsTesting);
+  telemetry.initialize();
 }
 
 export function shouldSkipDefaultConfigLoading(argv: string[] = process.argv.slice(2)): boolean {

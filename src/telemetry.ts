@@ -1,7 +1,14 @@
 import { PostHog } from 'posthog-node';
 import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, R_ENDPOINT, VERSION } from './constants';
 import { POSTHOG_KEY } from './constants/build';
-import { getEnvBool, getEnvOverrides, getEnvString, isCI, parseEnvBool } from './envars';
+import {
+  getEnvBool,
+  getEnvOverrides,
+  getEnvString,
+  isCI,
+  isHostTesting,
+  parseEnvBool,
+} from './envars';
 import { getUserAuthInfo, getUserId } from './globalConfig/accounts';
 import logger from './logger';
 import { fetchWithProxy, fetchWithTimeout } from './util/fetch/index';
@@ -17,13 +24,10 @@ const CLIENT_OWNERS_KEY = Symbol.for('promptfoo.telemetry.clientOwners');
 const clientOwners = ((process as unknown as Record<symbol, Set<Telemetry>>)[CLIENT_OWNERS_KEY] ??=
   new Set<Telemetry>());
 
-// CLI and library bundles must share the saved restriction from before env-file loading.
-const HOST_TEST_MODE_KEY = Symbol.for('promptfoo.telemetry.hostTestMode');
-
 // An invocation or suite cannot turn off the host's test-mode restriction.
 function isTestMode(): boolean {
   return (
-    Boolean(Reflect.get(process, HOST_TEST_MODE_KEY)) ||
+    isHostTesting ||
     parseEnvBool(process.env.IS_TESTING) ||
     parseEnvBool(getEnvOverrides('file')?.IS_TESTING) ||
     getEnvBool('IS_TESTING')
@@ -46,7 +50,6 @@ export class Telemetry {
   private shutdownPromise: Promise<void> = Promise.resolve();
 
   private telemetryDisabledRecorded = false;
-  private readonly testMode = parseEnvBool(process.env.IS_TESTING);
   private id: string | null = null;
 
   constructor(initializeImmediately: boolean = true) {
@@ -55,12 +58,7 @@ export class Telemetry {
     }
   }
 
-  initialize(hostTestMode: boolean = false): void {
-    // CLI env files can overwrite process.env. Keep the saved host restriction for
-    // every instance, including instances constructed after the file was loaded.
-    if (hostTestMode) {
-      Reflect.set(process, HOST_TEST_MODE_KEY, true);
-    }
+  initialize(): void {
     if (this.id !== null) {
       return;
     }
@@ -107,7 +105,7 @@ export class Telemetry {
   }
 
   async identify() {
-    if (this.disabled || this.testMode || isTestMode()) {
+    if (this.disabled || isTestMode()) {
       return;
     }
 
@@ -133,7 +131,7 @@ export class Telemetry {
   }
 
   private recordTelemetryDisabled() {
-    if (!this.telemetryDisabledRecorded && !this.testMode && !isTestMode()) {
+    if (!this.telemetryDisabledRecorded && !isTestMode()) {
       this.sendEvent('feature_used', { feature: 'telemetry disabled' });
       this.telemetryDisabledRecorded = true;
     }
@@ -149,7 +147,7 @@ export class Telemetry {
   }
 
   private sendEvent(eventName: TelemetryEventTypes, properties: EventProperties): void {
-    if (this.testMode || isTestMode()) {
+    if (isTestMode()) {
       return;
     }
 

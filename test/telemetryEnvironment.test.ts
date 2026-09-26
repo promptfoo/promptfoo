@@ -1,3 +1,8 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+import dotenv from 'dotenv';
 import { PostHog } from 'posthog-node';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDeferred, mockProcessEnv } from './util/utils';
@@ -23,7 +28,7 @@ vi.mock('../src/util/fetch/index', () => ({
 }));
 
 let restoreEnv = () => {};
-const hostTestModeKey = Symbol.for('promptfoo.telemetry.hostTestMode');
+const hostTestModeKey = Symbol.for('promptfoo.envars.isHostTesting');
 let previousHostTestMode: unknown;
 
 beforeEach(() => {
@@ -46,6 +51,7 @@ afterEach(async () => {
   await Promise.allSettled([...(owners ?? [])].map((owner) => owner.shutdown()));
   restoreEnv();
   Reflect.set(process, hostTestModeKey, previousHostTestMode);
+  vi.restoreAllMocks();
   vi.resetAllMocks();
 });
 
@@ -231,7 +237,7 @@ describe('telemetry test-mode environment restrictions', () => {
       const { Telemetry } = await import('../src/telemetry');
       const telemetry = new Telemetry(eager);
       mockProcessEnv({ IS_TESTING: 'false' });
-      telemetry.initialize(false);
+      telemetry.initialize();
       await telemetry.identify();
       telemetry.record('eval_ran', {});
       mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: 'true' });
@@ -247,7 +253,7 @@ describe('telemetry test-mode environment restrictions', () => {
     mockProcessEnv({ IS_TESTING: 'true' });
     const { default: singleton } = await import('../src/telemetry');
     mockProcessEnv({ IS_TESTING: 'false' });
-    singleton.initialize(true);
+    singleton.initialize();
     vi.resetModules();
     const { Telemetry } = await import('../src/telemetry');
     const late = new Telemetry();
@@ -260,19 +266,40 @@ describe('telemetry test-mode environment restrictions', () => {
     expect(request).not.toHaveBeenCalled();
   });
 
-  it('retains the captured CLI host restriction across later initialization calls', async () => {
-    const { Telemetry } = await import('../src/telemetry');
-    const telemetry = new Telemetry(false);
-    telemetry.initialize(true);
-    telemetry.initialize(false);
-    await telemetry.identify();
-    telemetry.record('eval_ran', {});
-    mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: 'true' });
-    telemetry.record('eval_ran', {});
-    expect(PostHog).not.toHaveBeenCalled();
-    expect(client.capture).not.toHaveBeenCalled();
-    expect(request).not.toHaveBeenCalled();
-  });
+  it.each([undefined, 'false'])(
+    'lets an explicit env file override implicit dotenv test mode when the original host flag is %j',
+    async (hostFlag) => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-implicit-test-mode-'));
+      const implicitFile = path.join(dir, '.env');
+      const explicitFile = path.join(dir, 'explicit.env');
+      fs.writeFileSync(implicitFile, 'IS_TESTING=true\n');
+      fs.writeFileSync(explicitFile, 'IS_TESTING=false\n');
+      mockProcessEnv({ IS_TESTING: hostFlag });
+      const config = dotenv.config.bind(dotenv);
+      vi.spyOn(dotenv, 'config').mockImplementation((options) =>
+        config({ ...options, path: options?.path ?? implicitFile }),
+      );
+      try {
+        const { Telemetry } = await import('../src/telemetry');
+        const early = new Telemetry();
+        if (hostFlag === undefined) {
+          expect(PostHog).not.toHaveBeenCalled();
+        }
+        dotenv.config({ path: explicitFile, override: true, quiet: true });
+        vi.resetModules();
+        const { Telemetry: ReloadedTelemetry } = await import('../src/telemetry');
+        const late = new ReloadedTelemetry();
+        early.record('eval_ran', {});
+        late.record('eval_ran', {});
+        expect(process.env.IS_TESTING).toBe('false');
+        expect(PostHog).toHaveBeenCalledTimes(2);
+        expect(client.capture).toHaveBeenCalledTimes(2);
+        await Promise.all([early.shutdown(), late.shutdown()]);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
 
   it('sends the production opt-out acknowledgment after a test scope suppressed it', async () => {
     const { default: cliState } = await import('../src/cliState');
