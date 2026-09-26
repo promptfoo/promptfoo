@@ -367,7 +367,7 @@ Audio and video have opposite generation requirements today: audio requires remo
 ```javascript title="multimodalProvider.js"
 module.exports = class MultimodalProvider {
   constructor(options) {
-    this.apiKey = options.config?.apiKey || options.env?.OPENAI_API_KEY;
+    this.apiKey = options.config?.apiKey ?? options.env?.OPENAI_API_KEY;
   }
 
   id() {
