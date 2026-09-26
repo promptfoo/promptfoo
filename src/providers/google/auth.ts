@@ -11,7 +11,7 @@
  * 4. GEMINI_API_KEY (secondary)
  */
 
-import { getEnvString } from '../../envars';
+import { getEnvOverrides, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import type { GoogleAuthOptions } from 'google-auth-library';
@@ -146,6 +146,7 @@ export class GoogleAuthManager {
   /**
    * Get API key with proper priority order.
    *
+   * Environment scope takes priority; aliases are checked in this order within each scope.
    * Priority (aligned with Python SDK):
    * 1. config.apiKey (explicit)
    * 2. VERTEX_API_KEY (Vertex mode only)
@@ -168,52 +169,44 @@ export class GoogleAuthManager {
       return { apiKey: config.apiKey, source: 'config' };
     }
 
-    // 2. Vertex-specific API key (only in Vertex mode) - deprecated, not in SDK
-    if (isVertexMode) {
-      const vertexKey = env?.VERTEX_API_KEY || getEnvString('VERTEX_API_KEY');
-      if (vertexKey) {
-        logger.warn(
-          '[Google] VERTEX_API_KEY is not a standard SDK env var. Use GOOGLE_API_KEY instead.',
-        );
-        return { apiKey: vertexKey, source: 'VERTEX_API_KEY' };
+    const keys = isVertexMode
+      ? (['VERTEX_API_KEY', 'GOOGLE_API_KEY'] as const)
+      : (['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'PALM_API_KEY'] as const);
+    // Select the scope before the alias; an empty value masks that name in lower scopes.
+    const masked = new Set<string>();
+    for (const layer of [
+      env,
+      getEnvOverrides(),
+      getEnvOverrides('file'),
+      Object.fromEntries(keys.map((key) => [key, getEnvString(key)])),
+    ]) {
+      for (const source of keys) {
+        const apiKey = layer?.[source];
+        if (masked.has(source) || apiKey === undefined) {
+          continue;
+        }
+        masked.add(source);
+        if (!apiKey) {
+          continue;
+        }
+        if (source === 'VERTEX_API_KEY') {
+          logger.warn(
+            '[Google] VERTEX_API_KEY is not a standard SDK env var. Use GOOGLE_API_KEY instead.',
+          );
+        } else if (source === 'PALM_API_KEY') {
+          logger.warn('[Google] PALM_API_KEY is deprecated. Use GOOGLE_API_KEY instead.');
+        } else if (source === 'GEMINI_API_KEY') {
+          logger.debug(
+            '[Google] GEMINI_API_KEY is not a standard SDK env var. Consider using GOOGLE_API_KEY.',
+          );
+        } else if (!isVertexMode && layer?.GEMINI_API_KEY) {
+          logger.debug(
+            '[Google] Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.',
+          );
+        }
+        return { apiKey, source };
       }
     }
-
-    // 3. GOOGLE_API_KEY (primary - SDK aligned)
-    const googleKey = env?.GOOGLE_API_KEY || getEnvString('GOOGLE_API_KEY');
-
-    // 4. GEMINI_API_KEY (secondary, AI Studio only - not in SDK, for backward compatibility)
-    const geminiKey = isVertexMode
-      ? undefined
-      : env?.GEMINI_API_KEY || getEnvString('GEMINI_API_KEY');
-
-    // 5. PALM_API_KEY (legacy, AI Studio only - deprecated)
-    const palmKey = isVertexMode ? undefined : env?.PALM_API_KEY || getEnvString('PALM_API_KEY');
-
-    // SDK alignment: note when both GOOGLE_API_KEY and GEMINI_API_KEY are set
-    // This is not an error - GOOGLE_API_KEY correctly takes precedence (SDK-aligned)
-    if (googleKey && geminiKey) {
-      logger.debug(
-        '[Google] Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.',
-      );
-    }
-
-    if (googleKey) {
-      return { apiKey: googleKey, source: 'GOOGLE_API_KEY' };
-    }
-
-    if (geminiKey) {
-      logger.debug(
-        '[Google] GEMINI_API_KEY is not a standard SDK env var. Consider using GOOGLE_API_KEY.',
-      );
-      return { apiKey: geminiKey, source: 'GEMINI_API_KEY' };
-    }
-
-    if (palmKey) {
-      logger.warn('[Google] PALM_API_KEY is deprecated. Use GOOGLE_API_KEY instead.');
-      return { apiKey: palmKey, source: 'PALM_API_KEY' };
-    }
-
     return { apiKey: undefined, source: 'none' };
   }
 

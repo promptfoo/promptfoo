@@ -752,7 +752,14 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
   ) {
     super(workflowId, options);
     // Default poolSize to PROMPTFOO_MAX_CONCURRENCY env var if set, otherwise DEFAULT_POOL_SIZE
-    const defaultPoolSize = getEnvInt('PROMPTFOO_MAX_CONCURRENCY', DEFAULT_POOL_SIZE);
+    const providerPoolSize = this.env?.PROMPTFOO_MAX_CONCURRENCY;
+    const parsedPoolSize = Number.parseInt(providerPoolSize ?? '', 10);
+    const defaultPoolSize =
+      providerPoolSize === undefined
+        ? getEnvInt('PROMPTFOO_MAX_CONCURRENCY', DEFAULT_POOL_SIZE)
+        : Number.isNaN(parsedPoolSize)
+          ? DEFAULT_POOL_SIZE
+          : parsedPoolSize;
 
     this.chatKitConfig = {
       workflowId: options.config?.workflowId || workflowId,

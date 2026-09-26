@@ -5,6 +5,7 @@ import { mockProcessEnv } from '../../util/utils';
 // Mock dependencies
 vi.mock('../../../src/envars', () => ({
   getEnvString: vi.fn(),
+  getEnvOverrides: vi.fn(),
 }));
 
 vi.mock('../../../src/logger', () => ({

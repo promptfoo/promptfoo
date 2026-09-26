@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'crypto';
 import Anthropic from '@anthropic-ai/sdk';
 import { getEnvOverrides, getEnvString } from '../../envars';
 import logger from '../../logger';
+import { resolveProviderApiKey } from '../credentials';
 import {
   CLAUDE_CODE_OAUTH_BETA_FEATURES,
   CLAUDE_CODE_USER_AGENT,
@@ -356,7 +357,7 @@ export class AnthropicGenericProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return this.config?.apiKey || this.env?.ANTHROPIC_API_KEY || getEnvString('ANTHROPIC_API_KEY');
+    return resolveProviderApiKey(this.config, this.env, ['ANTHROPIC_API_KEY']);
   }
 
   getApiBaseUrl(): string | undefined {
