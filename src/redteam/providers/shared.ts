@@ -43,11 +43,13 @@ import {
 } from '../grading/storedResult';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
+import { isEmptyResponse } from '../util';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 import type { TraceContextData } from '../../tracing/traceContext';
 import type { ProviderOptions } from '../../types/providers';
 import type { TransformContext, TransformFunction } from '../../types/transform';
+import type { RedteamGradingContext } from '../grading/types';
 import type { RedteamHistoryEntry } from '../types';
 
 export const BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP = '2025-06-16T14:49:11-07:00';
@@ -651,7 +653,18 @@ export function runRedteamGrader<TResult, TArgs extends unknown[]>(
   test: AtomicTestCase,
   ...args: TArgs
 ): Promise<TResult> {
-  const invoke = () => grader.getResult(prompt, output, test, ...args);
+  const gradingContextCandidate = args[args.length - 1];
+  const gradingContext =
+    gradingContextCandidate && typeof gradingContextCandidate === 'object'
+      ? (gradingContextCandidate as RedteamGradingContext)
+      : undefined;
+  const imagesForGrading = gradingContext?.imageOutputs ?? gradingContext?.providerResponse?.images;
+  const invoke = async () => {
+    if (!imagesForGrading?.length && isEmptyResponse(output)) {
+      throw new Error('Target provider returned an empty or nullish response');
+    }
+    return grader.getResult(prompt, output, test, ...args);
+  };
   const tracingContext = getProviderCallTracingContext();
   if (!tracingContext) {
     return invoke();

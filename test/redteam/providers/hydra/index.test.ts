@@ -1089,7 +1089,6 @@ describe('HydraProvider', () => {
         vars: { input: 'test goal' },
         prompt: { raw: 'test prompt', label: 'test' },
         test: {
-          assert: [{ type: 'harmful:test' }],
           metadata: { goal: 'test goal', pluginId: 'harmful:test' },
         } as any,
       };
@@ -1100,6 +1099,29 @@ describe('HydraProvider', () => {
       expect(result.metadata?.redteamHistory?.[0].output).toBe(
         '[Target provided empty response - likely refused]',
       );
+    });
+
+    it('should reject empty target responses before grading in Hydra', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+      });
+      mockTargetProvider.callApi.mockResolvedValue({ output: '' });
+
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 1 });
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      await expect(provider.callApi('', context)).rejects.toThrow(
+        'Target provider returned an empty or nullish response',
+      );
+      expect(mockGrader.getResult).not.toHaveBeenCalled();
     });
 
     it('should continue when agent returns missing message', async () => {
