@@ -281,6 +281,25 @@ describe('isGradingResult', () => {
     expect(isGradingResult({ ...result, namedScoreWeights: value })).toBe(false);
   });
 
+  it.each([[], new Date(0), new Map([['quality', 1]]), new Set([1])])(
+    'rejects containers with a custom object tag: %j',
+    (value) => {
+      Object.defineProperty(value, Symbol.toStringTag, { value: 'Object' });
+      const result = { pass: true, score: 1, reason: '' };
+
+      expect(isGradingResult({ ...result, namedScores: value })).toBe(false);
+      expect(isGradingResult({ ...result, namedScoreWeights: value })).toBe(false);
+    },
+  );
+
+  it('rejects metric records with inherited custom object tags', () => {
+    const value = Object.assign(Object.create({ [Symbol.toStringTag]: 'Object' }), { quality: 1 });
+    const result = { pass: true, score: 1, reason: '' };
+
+    expect(isGradingResult({ ...result, namedScores: value })).toBe(false);
+    expect(isGradingResult({ ...result, namedScoreWeights: value })).toBe(false);
+  });
+
   it.each([
     { quality: 2 },
     Object.setPrototypeOf({ quality: -2 }, null),

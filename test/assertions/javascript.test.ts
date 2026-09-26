@@ -886,6 +886,8 @@ describe('JavaScript file references', () => {
     '({ pass: true, score: 1, reason: "Custom", namedScores: new Date(0) })',
     '({ pass: true, score: 1, reason: "Custom", namedScoreWeights: new Map([["quality", 1]]) })',
     '({ pass: true, score: 1, reason: "Custom", namedScores: new Set([1]) })',
+    '({ pass: true, score: 1, reason: "Custom", namedScores: Object.defineProperty([1], Symbol.toStringTag, { value: "Object" }) })',
+    '({ pass: true, score: 1, reason: "Custom", namedScoreWeights: Object.defineProperty(new Map([["quality", 1]]), Symbol.toStringTag, { value: "Object" }) })',
   ])('rejects built-in containers instead of numeric records: %s', async (value) => {
     const result = await runAssertion({
       prompt: 'Some prompt',

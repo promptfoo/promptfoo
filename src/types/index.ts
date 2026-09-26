@@ -592,6 +592,9 @@ function isFiniteNumberRecord(value: unknown): value is Record<string, number> {
   return (
     typeof value === 'object' &&
     value !== null &&
+    !Array.isArray(value) &&
+    // Custom tags can disguise built-in containers as ordinary records.
+    !(Symbol.toStringTag in value) &&
     Object.prototype.toString.call(value) === '[object Object]' &&
     Object.values(value).every((entry) => typeof entry === 'number' && Number.isFinite(entry))
   );
