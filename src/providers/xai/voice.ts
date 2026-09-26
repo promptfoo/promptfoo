@@ -13,6 +13,7 @@ import WebSocket from 'ws';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import { resolveProviderApiKey } from '../credentials';
 import { convertG711ToPcm16, convertPcm16ToWav } from '../openai/audio';
 
 import type { EnvOverrides } from '../../types/env';
@@ -224,7 +225,7 @@ export class XAIVoiceProvider implements ApiProvider {
   }
 
   protected getApiKey(): string | undefined {
-    return this.config.apiKey || this.env?.XAI_API_KEY || getEnvString('XAI_API_KEY');
+    return resolveProviderApiKey(this.config, this.env, ['XAI_API_KEY']);
   }
 
   /**

@@ -64,6 +64,8 @@ The provider returns aggregate token usage with the SDK's real request count, ca
 
 ## What The Eval Asserts
 
+Seat-change cases set `vars.authenticated_passenger_name` as a trusted test fixture. In a real application, supply this identity from the authenticated session, never from user messages or model output. The tools do not treat “My name is …” as authentication.
+
 - the agent used `lookup_reservation`, `update_seat`, and `faq_lookup`
 - the seat update tool received the expected arguments
 - the tools appeared in the expected order across a multi-step task

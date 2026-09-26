@@ -7,6 +7,7 @@ import {
   maybeLoadToolsFromExternalFile,
   renderVarsInObject,
 } from '../../util/index';
+import { resolveProviderApiKey } from '../credentials';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
 import { normalizeResponsesInput } from '../responses/input';
@@ -267,7 +268,7 @@ export class XAIResponsesProvider implements ApiProvider {
   }
 
   protected getApiKey(): string | undefined {
-    return this.config.apiKey || this.env?.XAI_API_KEY || getEnvString('XAI_API_KEY');
+    return resolveProviderApiKey(this.config, this.env, ['XAI_API_KEY']);
   }
 
   protected getApiUrl(): string {

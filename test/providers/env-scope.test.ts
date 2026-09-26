@@ -4,6 +4,7 @@ import cliState from '../../src/cliState';
 import logger from '../../src/logger';
 import { AI21ChatCompletionProvider } from '../../src/providers/ai21';
 import { AzureFoundryAgentProvider } from '../../src/providers/azure/foundry-agent';
+import { AzureGenericProvider } from '../../src/providers/azure/generic';
 import { AzureModerationProvider } from '../../src/providers/azure/moderation';
 import { resolveBedrockMantleRegion } from '../../src/providers/bedrock/mantle';
 import { CloudflareAiChatCompletionProvider } from '../../src/providers/cloudflare-ai';
@@ -41,6 +42,7 @@ import { SnowflakeCortexProvider } from '../../src/providers/snowflake';
 import { VoyageEmbeddingProvider } from '../../src/providers/voyage';
 import { WatsonXProvider } from '../../src/providers/watsonx';
 import { XAIImageProvider } from '../../src/providers/xai/image';
+import { XAIResponsesProvider } from '../../src/providers/xai/responses';
 import { XAIVideoProvider } from '../../src/providers/xai/video';
 import { XAIVoiceProvider } from '../../src/providers/xai/voice';
 import { mockProcessEnv } from '../util/utils';
@@ -164,6 +166,87 @@ describe('provider environment scopes', () => {
       },
     );
   });
+  it.each([
+    ['image', (env: EnvOverrides) => new XAIImageProvider('grok-imagine-image', { env })],
+    ['video', (env: EnvOverrides) => new XAIVideoProvider('grok-imagine-video', { env })],
+    ['voice', (env: EnvOverrides) => new XAIVoiceProvider('grok-voice', { env })],
+    ['responses', (env: EnvOverrides) => new XAIResponsesProvider('grok-4', { env })],
+  ] as const)('xAI %s keeps an empty key masked', (_name, create) => {
+    cliState.withEnv({ XAI_API_KEY: 'ambient-key' }, () => {
+      expect(apiKey(create({ XAI_API_KEY: '' }))).toBeFalsy();
+      expect(apiKey(create({}))).toBe('ambient-key');
+    });
+  });
+
+  it.each([undefined, 'NAMED_VOYAGE_KEY'])('Voyage masks an empty %s credential', (apiKeyEnvar) => {
+    const key = apiKeyEnvar ?? 'VOYAGE_API_KEY';
+    cliState.withEnv({ [key]: 'ambient-key', VOYAGE_API_KEY: 'vendor-key' }, () => {
+      expect(
+        new VoyageEmbeddingProvider('voyage-3.5', { apiKeyEnvar }, { [key]: '' }).getApiKey(),
+      ).toBeFalsy();
+    });
+  });
+
+  it('Azure Content Safety masks an empty named credential', () => {
+    vi.spyOn(AzureGenericProvider.prototype, 'initialize').mockResolvedValue();
+    cliState.withEnv({ SAFETY_KEY: 'ambient-key', AZURE_API_KEY: 'vendor-key' }, () => {
+      const target = new AzureModerationProvider('text-content-safety', {
+        config: { apiKeyEnvar: 'SAFETY_KEY' },
+        env: { SAFETY_KEY: '' },
+      });
+      expect(target.getContentSafetyApiKey()).toBeFalsy();
+    });
+  });
+
+  it.each(namedProviders.filter(([name]) => name !== 'Voyage'))(
+    '%s masks an empty named credential while retaining a missing-name fallback',
+    (_name, create) => {
+      const vendorEnv = {
+        AI21_API_KEY: 'vendor-key',
+        COHERE_API_KEY: 'vendor-key',
+        MISTRAL_API_KEY: 'vendor-key',
+        WATSONX_AI_APIKEY: 'vendor-key',
+      };
+      cliState.withEnv({ ...vendorEnv, AUDIT_NAMED_KEY: 'ambient-key' }, () => {
+        expect(
+          apiKey(
+            create({ config: { apiKeyEnvar: 'AUDIT_NAMED_KEY' }, env: { AUDIT_NAMED_KEY: '' } }),
+          ),
+        ).toBeFalsy();
+        expect(apiKey(create({ config: { apiKeyEnvar: 'MISSING_KEY' }, env: vendorEnv }))).toBe(
+          'vendor-key',
+        );
+      });
+    },
+  );
+
+  it('Cohere chat masks an empty retained credential', () => {
+    cliState.withEnv({ COHERE_API_KEY: 'ambient-key' }, () => {
+      expect(
+        new CohereChatCompletionProvider('command-r', { env: { COHERE_API_KEY: '' } }).getApiKey(),
+      ).toBeFalsy();
+    });
+  });
+
+  it('WatsonX masks named bearer credentials and project selection', () => {
+    cliState.withEnv(
+      {
+        NAMED_BEARER: 'ambient-token',
+        NAMED_PROJECT: 'ambient-project',
+        WATSONX_AI_BEARER_TOKEN: 'vendor-token',
+        WATSONX_AI_PROJECT_ID: 'vendor-project',
+      },
+      () => {
+        const target = new WatsonXProvider('fixture', {
+          config: { apiBearerTokenEnvar: 'NAMED_BEARER', projectIdEnvar: 'NAMED_PROJECT' },
+          env: { NAMED_BEARER: '', NAMED_PROJECT: '' },
+        });
+        expect(Reflect.get(target, 'getAuthSelection').call(target)).toEqual({ type: 'none' });
+        expect(() => target.getProjectId()).toThrow(/project ID is not set/);
+      },
+    );
+  });
+
   it('keeps documented vendor fallback when a named credential is missing', () => {
     const provider = new MistralChatCompletionProvider('mistral-large-latest', {
       config: { apiKeyEnvar: 'MISSING_KEY' },
@@ -332,6 +415,32 @@ describe('provider environment scopes', () => {
       ]);
     },
   );
+  it.each([OllamaCompletionProvider, OllamaChatProvider, OllamaEmbeddingProvider])(
+    'Ollama %s omits an explicitly masked bearer key',
+    async (Provider) => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data:
+          Provider === OllamaEmbeddingProvider
+            ? { embeddings: [[1]] }
+            : JSON.stringify({ response: 'ok', message: { content: 'ok' } }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      await cliState.withEnv({ OLLAMA_API_KEY: 'ambient-key' }, async () => {
+        const target = new Provider('fixture', { env: { OLLAMA_API_KEY: '' } });
+        if (target instanceof OllamaEmbeddingProvider) {
+          await target.callEmbeddingApi('hello');
+        } else {
+          await target.callApi('hello');
+        }
+      });
+      expect(
+        new Headers(vi.mocked(fetchWithCache).mock.calls[0][1]?.headers).has('authorization'),
+      ).toBe(false);
+    },
+  );
+
   it('Llama uses its retained endpoint at request time', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: { content: 'ok' },
