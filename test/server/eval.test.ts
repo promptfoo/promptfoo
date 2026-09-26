@@ -1173,6 +1173,57 @@ describe('eval routes', () => {
     });
 
     it.each([
+      { label: 'comment', comment: 'Legacy annotation', score: 1 },
+      { label: 'highlight', comment: '!highlight', score: 1 },
+      { label: 'score', comment: undefined, score: 0.4 },
+    ])('accepts a legacy $label edit after a minimal clear', async ({ comment, score }) => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const [result] = await eval_.getResults();
+      invariant(result.id, 'Result ID is required');
+      const originalMetrics = structuredClone(eval_.prompts[result.promptIdx].metrics);
+      invariant(originalMetrics, 'Original metrics are required');
+      const route = `/api/eval/${eval_.id}/results/${result.id}/rating`;
+      expect(
+        (await api.post(route).send({ pass: false, score: 0, ratingAction: 'rate' })).status,
+      ).toBe(200);
+      const clearPayload = { pass: false, score: 0, ratingAction: 'clear' };
+      const cleared = await api.post(route).send(clearPayload);
+      expect(cleared.status).toBe(200);
+      expect(cleared.body.score).toBe(1);
+      const legacyUpdate = {
+        ...cleared.body.gradingResult,
+        ...(comment === undefined
+          ? { score, reason: 'Manual result (overrides all other grading results)' }
+          : { comment }),
+      };
+      const updated = await api.post(route).send(legacyUpdate);
+      expect(updated.status).toBe(200);
+      expect(updated.body).toMatchObject({
+        success: true,
+        score,
+        failureReason: ResultFailureReason.NONE,
+        gradingResult: {
+          pass: true,
+          score,
+          componentResults: cleared.body.gradingResult.componentResults,
+        },
+      });
+      expect(updated.body.gradingResult.comment).toBe(comment);
+      vi.mocked(updateSignalFile).mockClear();
+      for (const retry of [legacyUpdate, clearPayload]) {
+        const retried = await api.post(route).send(retry);
+        expect(retried.status).toBe(200);
+        expect(retried.body).toEqual(updated.body);
+      }
+      expect(updateSignalFile).not.toHaveBeenCalled();
+      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toEqual({
+        ...originalMetrics,
+        score: expect.closeTo(originalMetrics.score + score - result.score),
+      });
+    });
+
+    it.each([
       [ResultFailureReason.NONE, false],
       [ResultFailureReason.ASSERT, true],
       [ResultFailureReason.ERROR, true],

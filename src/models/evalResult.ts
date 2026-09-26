@@ -996,23 +996,15 @@ function getRestorableManualRatingState(
 }
 
 function matchesLegacyRepeatedClear(
-  submittedGradingResult: GradingResult,
   existingState: ManualRatingState | undefined,
   legacyClearRequestHash: string | undefined,
   ratingAction: SubmitRatingAction | undefined,
 ): boolean {
-  const storedRequestHashes = [
-    existingState?.clearRequestHash,
-    existingState?.lastLegacyUpdateHash,
-  ].filter((value): value is string => value !== undefined);
   return (
     ratingAction === undefined &&
     legacyClearRequestHash !== undefined &&
-    (storedRequestHashes.length === 0
-      ? existingState !== undefined &&
-        submittedGradingResult.pass === existingState.original.success &&
-        submittedGradingResult.score === existingState.original.score
-      : storedRequestHashes.includes(legacyClearRequestHash))
+    (legacyClearRequestHash === existingState?.clearRequestHash ||
+      legacyClearRequestHash === existingState?.lastLegacyUpdateHash)
   );
 }
 
@@ -1272,7 +1264,6 @@ function resolveRatingTransition(
   const existingState = parseManualRatingState(result.manualRatingState);
   const legacyClearRequestHash = getLegacyClearRequestHash(submittedGradingResult);
   const isLegacyRepeatedClear = matchesLegacyRepeatedClear(
-    submittedGradingResult,
     existingState,
     legacyClearRequestHash,
     ratingAction,
