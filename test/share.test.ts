@@ -1685,6 +1685,59 @@ describe('adaptive chunk retry', () => {
     // 3 calls: initial + one failed chunk + rollback (no retry for 500)
     expect(mockFetch).toHaveBeenCalledTimes(3);
   });
+
+  it('rethrows upload failures after rolling back when throwOnError is set', async () => {
+    const results = [{ id: '1' }] as EvalResult[];
+    mockEval = {
+      ...buildMockEval(),
+      results,
+      getTotalResultRowCount: vi.fn().mockResolvedValue(1),
+      fetchResultsBatched: vi.fn().mockImplementation(async function* () {
+        yield results;
+      }),
+    };
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ id: 'mock-eval-id' }) })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        text: () => Promise.resolve('Server error'),
+      })
+      .mockResolvedValueOnce({ ok: true }); // rollback
+
+    await expect(
+      createShareableUrl(mockEval as Eval, { throwOnError: true }),
+    ).rejects.toMatchObject({ name: 'ShareUploadError', status: 500 });
+    expect(mockFetch).toHaveBeenLastCalledWith(
+      'https://api.example.com/api/v1/results/mock-eval-id',
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+  });
+
+  it('preserves the upstream status when the initial eval upload is rejected', async () => {
+    const results = [{ id: '1' }] as EvalResult[];
+    mockEval = {
+      ...buildMockEval(),
+      results,
+      getTotalResultRowCount: vi.fn().mockResolvedValue(1),
+      fetchResultsBatched: vi.fn().mockImplementation(async function* () {
+        yield results;
+      }),
+    };
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      text: () => Promise.resolve('bad key'),
+    });
+
+    await expect(
+      createShareableUrl(mockEval as Eval, { throwOnError: true }),
+    ).rejects.toMatchObject({ name: 'ShareUploadError', status: 401 });
+    // Nothing was created remotely, so there is nothing to roll back.
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('hasEvalBeenShared', () => {

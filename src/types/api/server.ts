@@ -88,7 +88,7 @@ const ShareRequestSchema = z.object({
 });
 
 const ShareResponseSchema = z.object({
-  url: z.string().nullable().optional(),
+  url: z.string(),
 });
 
 const DatasetGenerateRequestSchema = z.object({
