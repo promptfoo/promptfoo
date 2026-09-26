@@ -1,6 +1,5 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 
-import Cal, { getCalApi } from '@calcom/embed-react';
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import AssessmentIcon from '@mui/icons-material/Assessment';
@@ -14,14 +13,6 @@ import styles from './blackhat-2025.module.css';
 
 export default function BlackHat2025(): React.ReactElement {
   useForcedTheme('dark');
-
-  useEffect(() => {
-    // Cal.com setup
-    (async function () {
-      const cal = await getCalApi({ namespace: 'promptfoo-at-blackhat' });
-      cal('ui', { hideEventTypeDetails: false, layout: 'month_view' });
-    })();
-  }, []);
 
   const handleSmoothScroll = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
     e.preventDefault();
@@ -313,16 +304,13 @@ export default function BlackHat2025(): React.ReactElement {
                 externally linked, so the past-tense framing goes in the copy below it. */}
             <h2 className={styles.sectionTitle}>Meet us at Black Hat</h2>
             <p className={styles.calendarSubtitle}>
-              Black Hat USA 2025 is over, but the demo still stands. Book a 30-minute slot to see
-              Promptfoo in action and how to find and fix vulnerabilities in your LLM applications.
+              Black Hat USA 2025 is over, but the demo still stands. Contact us to see Promptfoo in
+              action and how to find and fix vulnerabilities in your LLM applications.
             </p>
             <div className={styles.calendarWrapper}>
-              <Cal
-                namespace="promptfoo-at-blackhat"
-                calLink="team/promptfoo/promptfoo-at-blackhat"
-                style={{ width: '100%', height: '100%', overflow: 'scroll' }}
-                config={{ layout: 'month_view' }}
-              />
+              <Link to="/contact" className={styles.primaryButton}>
+                Book a demo
+              </Link>
             </div>
           </div>
         </section>
