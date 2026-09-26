@@ -4,6 +4,7 @@ import { Agent, ProxyAgent } from 'undici';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import logger from '../../../src/logger';
+import { CreateJobRequestSchema } from '../../../src/types/api/eval';
 import { clearAgentCache, fetchWithProxy } from '../../../src/util/fetch/index';
 import { mockProcessEnv, PROXY_ENV_KEYS } from '../utils';
 
@@ -158,6 +159,22 @@ describe('HTTP agent configuration ownership', () => {
       );
     },
   );
+
+  it('retains parsed job timeout and connection settings through transport construction', async () => {
+    mockProcessEnv({ REQUEST_TIMEOUT_MS: '9000', PROMPTFOO_FETCH_CONNECTIONS: '9' });
+    const parsed = CreateJobRequestSchema.parse({
+      providers: ['echo'],
+      prompts: ['fixture'],
+      env: { REQUEST_TIMEOUT_MS: '1250', PROMPTFOO_FETCH_CONNECTIONS: '3' },
+    });
+    await cliState.withEnv(parsed.env, request);
+    expect(Agent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        headersTimeout: 1250,
+        connections: 3,
+      }),
+    );
+  });
 
   it('separates request timeouts across simultaneous scopes', async () => {
     await Promise.all(
