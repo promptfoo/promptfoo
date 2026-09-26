@@ -621,6 +621,7 @@ function hasValidGradingResultFields(result: any): boolean {
 
 export function isGradingResult(result: any): result is GradingResult {
   const ancestors = new WeakSet<object>();
+  const validated = new WeakSet<object>();
   const frames = [{ result, nextChild: -1 }];
 
   // Traverse one indexed child at a time without consuming the JavaScript call stack.
@@ -628,6 +629,10 @@ export function isGradingResult(result: any): result is GradingResult {
     const frame = frames[frames.length - 1];
     const current = frame.result;
     if (frame.nextChild === -1) {
+      if (validated.has(current)) {
+        frames.pop();
+        continue;
+      }
       if (!hasValidGradingResultFields(current) || ancestors.has(current)) {
         return false;
       }
@@ -641,6 +646,7 @@ export function isGradingResult(result: any): result is GradingResult {
       frames.push({ result: components[frame.nextChild++], nextChild: -1 });
     } else {
       ancestors.delete(current);
+      validated.add(current);
       frames.pop();
     }
   }

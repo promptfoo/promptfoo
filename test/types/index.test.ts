@@ -4,7 +4,7 @@ import path from 'path';
 import Ajv from 'ajv';
 import { globSync } from 'glob';
 import * as yaml from 'js-yaml';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import {
   AssertionSchema,
@@ -261,6 +261,22 @@ describe('isGradingResult', () => {
       result = { pass: true, score: 1, reason: '', componentResults: [result] };
     }
     expect(isGradingResult(result)).toBe(true);
+    leaf.score = Number.POSITIVE_INFINITY;
+    expect(isGradingResult(result)).toBe(false);
+  });
+
+  it('avoids repeating validation for shared subtrees within a call', () => {
+    const readPass = vi.fn(() => true);
+    const leaf: GradingResult = { pass: true, score: 0.75, reason: '' };
+    // Count visits without changing the value returned by the shared leaf.
+    Object.defineProperty(leaf, 'pass', { get: readPass });
+    let result = leaf;
+    for (let depth = 0; depth < 8; depth++) {
+      result = { pass: true, score: 1, reason: '', componentResults: [result, result] };
+    }
+
+    expect(isGradingResult(result)).toBe(true);
+    expect(readPass).toHaveBeenCalledOnce();
     leaf.score = Number.POSITIVE_INFINITY;
     expect(isGradingResult(result)).toBe(false);
   });
