@@ -142,8 +142,8 @@ Now that you've created an initial configuration, you can update `promptfooconfi
 
    ```yaml
    providers:
-     - openai:responses:gpt-6-sol
-     - openai:responses:gpt-6-luna
+     - openai:gpt-6-sol
+     - openai:gpt-6-luna
    ```
 
    This example uses your OpenAI API key. You can also configure [Anthropic](/docs/providers/anthropic), [Google](/docs/providers/google), local models like [Ollama](/docs/providers/ollama), or custom [Python](/docs/providers/python) and [JavaScript](/docs/providers/custom-api) code. Each provider has its own setup requirements.
@@ -266,7 +266,7 @@ description: Automatic response evaluation using LLM rubric scoring
 prompts:
   - file://prompts.txt
 providers:
-  - openai:responses:gpt-6-sol
+  - openai:gpt-6-sol
 defaultTest:
   assert:
     - type: llm-rubric
@@ -328,17 +328,17 @@ prompts:
   - 'Solve this riddle: {{riddle}}'
 
 providers:
-  - id: openai:responses:gpt-6-luna
+  - id: openai:gpt-6-luna
     config:
       reasoning:
         effort: low
       max_output_tokens: 2048
-  - id: openai:responses:gpt-6-sol
+  - id: openai:gpt-6-sol
     config:
       reasoning:
         effort: low
       max_output_tokens: 2048
-  - id: openai:responses:gpt-6-astra
+  - id: openai:gpt-6-astra
     config:
       reasoning:
         effort: low

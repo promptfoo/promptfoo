@@ -55,7 +55,7 @@ Define your tools once in the nested Chat Completions format and reuse them acro
 
 ```yaml
 providers:
-  - id: openai:responses:gpt-6-luna
+  - id: openai:gpt-6-luna
     config:
       tools: &tools # Anchor: define tools once
         - type: function
@@ -83,7 +83,7 @@ Define tools in the flat Responses format:
 
 ```yaml
 providers:
-  - id: openai:responses:gpt-6-sol
+  - id: openai:gpt-6-sol
     config:
       tools:
         - type: function
@@ -183,7 +183,7 @@ Tool choice controls _when_ and _how_ the model uses the tools you've defined. B
 
 ```yaml
 providers:
-  - id: openai:responses:gpt-6-sol
+  - id: openai:gpt-6-sol
     config:
       tools:
         - type: function
@@ -274,7 +274,7 @@ Tools can be loaded from external files. Use the format expected by your endpoin
 
 ```yaml
 providers:
-  - id: openai:responses:gpt-6-sol
+  - id: openai:gpt-6-sol
     config:
       tools: file://tools/my-tools.json
 ```

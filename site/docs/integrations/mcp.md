@@ -23,6 +23,8 @@ npm install @modelcontextprotocol/sdk
 
 For OpenAI, use an explicit `openai:chat:<model>` provider with `config.mcp` so Promptfoo connects to the MCP server. GPT-6 Sol and Luna require `reasoning_effort: none` for these Chat Completions tool calls. Responses providers use OpenAI's [hosted MCP tools](#openai-responses-api-mcp-integration) instead.
 
+Set `OPENAI_API_KEY` for the OpenAI examples below.
+
 To enable MCP for a provider, add the `mcp` block to your provider's `config` in your `promptfooconfig.yaml`:
 
 ```yaml title="promptfooconfig.yaml"
@@ -66,7 +68,6 @@ providers:
   - id: openai:chat:gpt-6-luna
     config:
       reasoning_effort: none
-      apiKey: <your-api-key>
       mcp:
         enabled: true
         server:
@@ -80,7 +81,6 @@ providers:
   - id: openai:chat:gpt-6-luna
     config:
       reasoning_effort: none
-      apiKey: <your-api-key>
       mcp:
         enabled: true
         server:
@@ -165,7 +165,6 @@ providers:
   - id: openai:chat:gpt-6-luna
     config:
       reasoning_effort: none
-      apiKey: <your-api-key>
       mcp:
         enabled: true
         server:

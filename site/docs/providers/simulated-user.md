@@ -246,7 +246,7 @@ When using promptfoo as a Node library, provide the equivalent configuration:
 
 ```js
 const config = {
-  providers: ['openai:responses:gpt-6-luna'],
+  providers: ['openai:gpt-6-luna'],
   prompts: ['You are a customer support assistant.'],
   defaultTest: {
     provider: {

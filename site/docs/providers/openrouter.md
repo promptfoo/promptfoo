@@ -33,7 +33,9 @@ For the full catalog of 300+ models and current pricing, visit [OpenRouter Model
 
 ## Basic Configuration
 
-The `openrouter:<model>` provider uses Chat Completions. For Responses, use an ID such as `openai:responses:openai/gpt-6-sol` with `apiBaseUrl: https://openrouter.ai/api/v1` and `apiKeyEnvar: OPENROUTER_API_KEY` in its config. OpenRouter Responses is stateless: replay the conversation instead of sending `previous_response_id`.
+The `openrouter:<model>` provider uses Chat Completions.
+
+For Responses, use `openai:responses:openai/gpt-6-sol` with `apiBaseUrl: https://openrouter.ai/api/v1` and `apiKeyEnvar: OPENROUTER_API_KEY` in its config. OpenRouter Responses is stateless: replay the conversation instead of sending `previous_response_id`.
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json

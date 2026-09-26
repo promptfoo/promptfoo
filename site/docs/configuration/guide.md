@@ -30,7 +30,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:responses:gpt-6-luna
+  - openai:gpt-6-luna
   - id: vertex:gemini-3.5-flash
     config:
       region: global
@@ -60,7 +60,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:responses:gpt-6-luna
+  - openai:gpt-6-luna
   - id: vertex:gemini-3.5-flash
     config:
       region: global
@@ -86,7 +86,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:responses:gpt-6-luna
+  - openai:gpt-6-luna
   - id: vertex:gemini-3.5-flash
     config:
       region: global
@@ -128,7 +128,7 @@ providers:
 Where the provider file looks like this:
 
 ```yaml
-id: openai:responses:gpt-6-luna
+id: openai:gpt-6-luna
 label: Foo bar
 config:
   reasoning:
@@ -142,7 +142,7 @@ The `tests` config property takes a list of paths to files or directories. For e
 
 ```yaml
 prompts: file://prompts.txt
-providers: openai:responses:gpt-6-luna
+providers: openai:gpt-6-luna
 
 # Load & runs all test cases matching these filepaths
 tests:
@@ -282,7 +282,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:responses:gpt-6-luna
+  - openai:gpt-6-luna
   - id: vertex:gemini-3.5-flash
     config:
       region: global
@@ -314,7 +314,7 @@ To choose the judge for [model-graded assertions](/docs/configuration/expected-o
 ```yaml
 defaultTest:
   options:
-    provider: openai:responses:gpt-6-luna
+    provider: openai:gpt-6-luna
 ```
 
 Set `options.disableDefaultAsserts: true` on a test case when that test should define its own assertions without inheriting `defaultTest.assert`. Other `defaultTest` fields, such as `vars`, `metadata`, `threshold`, and `options`, still apply:
@@ -369,7 +369,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:responses:gpt-6-luna
+  - openai:gpt-6-luna
   - id: vertex:gemini-3.5-flash
     config:
       region: global
@@ -410,8 +410,8 @@ For example:
 ```yaml
 prompts: file://prompts.txt
 providers:
-  - openai:responses:gpt-6-luna
-  - openai:responses:gpt-6-sol
+  - openai:gpt-6-luna
+  - openai:gpt-6-sol
 tests:
   - vars:
       // highlight-start
@@ -889,7 +889,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:responses:gpt-6-luna
+  - openai:gpt-6-luna
   - id: vertex:gemini-3.5-flash
     config:
       region: global
@@ -904,7 +904,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:responses:gpt-6-luna
+  - openai:gpt-6-luna
   - id: vertex:gemini-3.5-flash
     config:
       region: global

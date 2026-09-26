@@ -39,7 +39,7 @@ This example sends three related prompts and runs assertions on their combined o
 
 ```yaml
 providers:
-  - openai:responses:gpt-6-luna
+  - openai:gpt-6-luna
 
 prompts:
   - '{{prompt}}'

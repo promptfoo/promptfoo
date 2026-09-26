@@ -321,7 +321,7 @@ strategy:
   matrix:
     include:
       - name: gpt-6-sol
-        provider: openai:responses:gpt-6-sol
+        provider: openai:gpt-6-sol
       - name: claude-opus-4-8
         provider: anthropic:messages:claude-opus-4-8
       - name: gemini-3.1-pro-preview

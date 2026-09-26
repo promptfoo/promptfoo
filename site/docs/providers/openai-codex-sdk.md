@@ -635,7 +635,7 @@ Promptfoo validates the allowed enum values, but model-specific support is ultim
 `ultra` is Codex-specific and uses subagents; do not send it as a Responses API `reasoning.effort` value. GPT-6 Luna does not support `ultra` in Codex.
 
 :::note GPT-5.6 requires Codex 0.144.0 or later
-Use `@openai/codex-sdk` 0.144.0 or later. If optional dependencies are omitted, install that version explicitly. An older SDK or Codex binary may silently ignore GPT-5.6 reasoning levels. Confirm the effective reasoning with request tracing. For direct `max` reasoning, you can also use `openai:responses:gpt-5.6-sol`.
+Use `@openai/codex-sdk` 0.144.0 or later. If optional dependencies are omitted, install that version explicitly. An older SDK or Codex binary may silently ignore GPT-5.6 reasoning levels. Confirm the effective reasoning with request tracing. For direct `max` reasoning, you can also use `openai:gpt-5.6-sol`.
 :::
 
 ## Additional Directories
