@@ -54,6 +54,17 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
   }
 
   const { providerOptions } = bodyResult.data;
+  const controller = new AbortController();
+  const onDisconnect = () => {
+    if (!res.writableEnded) {
+      controller.abort();
+    }
+  };
+  req.once('aborted', onDisconnect);
+  res.once('close', onDisconnect);
+  if (req.aborted || res.destroyed) {
+    onDisconnect();
+  }
 
   try {
     const loadedProvider = await loadApiProvider(providerOptions.id, {
@@ -70,10 +81,16 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
     // Check both top-level inputs (from redteam UI) and config.inputs for backwards compatibility
     let result: Awaited<ReturnType<typeof testProviderConnectivity>>;
     try {
+      // Loading can finish after the browser disconnects. Still release this
+      // request's setup provider in finally, without starting its check.
+      if (loadedProvider.checkSetup && controller.signal.aborted) {
+        return;
+      }
       result = await testProviderConnectivity({
         provider: loadedProvider,
         prompt: bodyResult.data.prompt,
         inputs: providerOptions.inputs || providerOptions.config?.inputs,
+        ...(loadedProvider.checkSetup ? { abortSignal: controller.signal } : {}),
       });
     } finally {
       // Local setup checks bypass evaluator cleanup. Release only this request's
@@ -91,6 +108,9 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
       }
     }
 
+    if (controller.signal.aborted) {
+      return;
+    }
     res.status(200).json(
       ProviderSchemas.Test.Response.parse({
         testResult: {
@@ -106,7 +126,12 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
       }),
     );
   } catch (error) {
-    sendError(res, 500, 'Failed to test provider', error);
+    if (!controller.signal.aborted) {
+      sendError(res, 500, 'Failed to test provider', error);
+    }
+  } finally {
+    req.removeListener('aborted', onDisconnect);
+    res.removeListener('close', onDisconnect);
   }
 });
 

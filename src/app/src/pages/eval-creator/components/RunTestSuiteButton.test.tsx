@@ -273,6 +273,7 @@ describe('RunTestSuiteButton', () => {
         .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
       await Promise.resolve();
     });
+    expect(screen.getByRole('status')).toHaveTextContent('0ms elapsed');
     await act(async () => {
       await timers.advanceByAsync(65000);
     });
@@ -333,6 +334,7 @@ describe('RunTestSuiteButton', () => {
     expect(active).toHaveTextContent('Case 1 · Security baseline');
     expect(active).toHaveTextContent('Last reported: setup');
     expect(active).not.toHaveTextContent(/elapsed|estimated cost|warnings/);
+    expect(screen.getByRole('status')).toHaveTextContent('1.0s elapsed');
 
     providerProgress = [
       {
@@ -361,7 +363,7 @@ describe('RunTestSuiteButton', () => {
       'security scan · 1m 5s elapsed · $0.14 estimated cost · 2 warnings reported',
     );
     expect(active).toHaveTextContent('Case 2 · Security candidate');
-    expect(active).toHaveTextContent('0s elapsed · $0.0000 estimated cost · 0 warnings reported');
+    expect(active).toHaveTextContent('0ms elapsed · $0.0000 estimated cost · 0 warnings reported');
     expect(screen.getByRole('status')).toHaveTextContent('0 of 2 cases completed');
     expect(screen.queryByText(/% complete/)).not.toBeInTheDocument();
 

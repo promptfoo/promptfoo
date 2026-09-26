@@ -8,8 +8,8 @@ import { useEvalHistoryRefresh } from '@app/hooks/useEvalHistoryRefresh';
 import { useToast } from '@app/hooks/useToast';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
+import { formatDuration } from '@app/utils/date';
 import { formatCost } from '@app/utils/media';
-import { formatDuration } from '@promptfoo/util/formatDuration';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   countTests,
@@ -212,7 +212,7 @@ const RunTestSuiteButton = () => {
               ? `${caseProgress.completed} of ${caseProgress.total} cases completed`
               : 'Waiting for case results'}
             {' · '}
-            <span aria-live="off">{formatDuration(elapsedSeconds)} elapsed</span>
+            <span aria-live="off">{formatDuration(elapsedSeconds * 1000)} elapsed</span>
           </p>
           {providerProgress.length > 0 && (
             <ul
@@ -228,7 +228,7 @@ const RunTestSuiteButton = () => {
                     Last reported:{' '}
                     <span className="capitalize">{progress.phase.replace(/[_-]+/g, ' ')}</span>
                     {progress.elapsedMs != null &&
-                      ` · ${formatDuration(Math.floor(progress.elapsedMs / 1000))} elapsed`}
+                      ` · ${formatDuration(progress.elapsedMs)} elapsed`}
                     {progress.estimatedCostUsd != null &&
                       ` · ${formatCost(progress.estimatedCostUsd)} estimated cost`}
                     {progress.warningCount != null &&

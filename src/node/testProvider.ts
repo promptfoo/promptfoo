@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { evaluate } from '../evaluator';
+import { waitForProviderSetup } from '../evaluator/providerSetup';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import Eval from '../models/eval';
@@ -75,6 +76,8 @@ export async function testProviderConnectivity({
   provider,
   prompt = 'Hello World!',
   inputs,
+  abortSignal,
+  setupTimeoutMs = 30_000,
 }: {
   /** The provider to test */
   provider: ApiProvider;
@@ -82,11 +85,21 @@ export async function testProviderConnectivity({
   prompt?: string;
   /** Input variable definitions for multi-input configurations */
   inputs?: Inputs;
+  /** Cancels local setup checks without starting an evaluation. */
+  abortSignal?: AbortSignal;
+  /** Local setup deadline; invalid values fall back to 30 seconds. */
+  setupTimeoutMs?: number;
 }): Promise<ProviderTestResult> {
   // Some providers represent expensive workloads rather than single completions.
   // Their setup checks must bypass evaluation and remote response analysis entirely.
   if (provider.checkSetup) {
-    const result = await provider.checkSetup();
+    const timeoutMs =
+      Number.isFinite(setupTimeoutMs) && setupTimeoutMs > 0 ? setupTimeoutMs : 30_000;
+    const result = await waitForProviderSetup(
+      (signal) => provider.checkSetup!(undefined, { abortSignal: signal }),
+      { abortSignal, timeoutMs },
+      (message) => ({ success: false, message, error: message }),
+    );
     return {
       success: result.success,
       message: result.message,

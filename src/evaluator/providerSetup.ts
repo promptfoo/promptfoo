@@ -22,17 +22,18 @@ function blockedResponse(error: string, response?: ProviderResponse): ProviderRe
 }
 
 /** Bound even providers that ignore cancellation; cooperative providers receive the same deadline. */
-async function waitForSetup(
-  operation: (signal: AbortSignal) => Promise<ProviderResponse | undefined>,
+export async function waitForProviderSetup<T>(
+  operation: (signal: AbortSignal) => Promise<T>,
   { abortSignal, timeoutMs }: SetupWaitOptions,
-): Promise<ProviderResponse | undefined> {
+  onTimeout: (message: string) => T,
+): Promise<T> {
   if (abortSignal?.aborted) {
     throw new Error('Operation cancelled');
   }
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let onAbort: () => void = () => {};
-  const interrupted = new Promise<ProviderResponse>((resolve, reject) => {
+  const interrupted = new Promise<T>((resolve, reject) => {
     onAbort = () => {
       controller.abort(abortSignal?.reason);
       reject(new Error('Operation cancelled'));
@@ -42,10 +43,7 @@ async function waitForSetup(
       timer = setTimeout(() => {
         const message = `Provider local setup check timed out after ${timeoutMs}ms. No workload was started.`;
         controller.abort(new Error(message));
-        resolve({
-          ...blockedResponse(message),
-          metadata: { providerSetup: { workloadStarted: false, timedOut: true } },
-        });
+        resolve(onTimeout(message));
       }, timeoutMs);
     }
   });
@@ -64,6 +62,16 @@ async function waitForSetup(
     clearTimeout(timer);
     abortSignal?.removeEventListener('abort', onAbort);
   }
+}
+
+function waitForSetup(
+  operation: (signal: AbortSignal) => Promise<ProviderResponse | undefined>,
+  options: SetupWaitOptions,
+) {
+  return waitForProviderSetup(operation, options, (message) => ({
+    ...blockedResponse(message),
+    metadata: { providerSetup: { workloadStarted: false, timedOut: true } },
+  }));
 }
 
 /** Per-evaluation only: neither configuration keys nor results are written to the disk cache. */

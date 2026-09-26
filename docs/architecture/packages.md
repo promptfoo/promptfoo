@@ -117,6 +117,33 @@ path from the allowlist. Avoid adding paths unless the dependency is
 intentionally browser-safe. Allowlist entries are exact files, not directory
 roots.
 
+### Security results and provider progress
+
+`src/contracts/codexSecurity.ts` owns portable scan results and replay envelopes;
+`src/contracts/providers.ts` owns bounded provider progress. Providers produce
+these contracts, the evaluator and view server validate progress, and the browser
+renders the same observations. The app allowlist admits these two exact files,
+and the view server may depend directly on the contracts layer. Both files remain
+leaf-safe: they use Zod and sibling contracts, with no provider SDK or Node imports.
+
+The associated edge baseline records these intentional consumers:
+
+| Edge                              | Reason                                                                             |
+| --------------------------------- | ---------------------------------------------------------------------------------- |
+| app → contracts                   | Render security results and type live progress, including shared UI fixtures.      |
+| app → legacy-contracts            | Reuse existing evaluation result and job types in the new UI components and tests. |
+| legacy-contracts → contracts      | Describe progress in the evaluation API and callback options.                      |
+| legacy-runtime → contracts        | Validate provider progress and type setup failures.                                |
+| legacy-runtime → legacy-contracts | Use existing provider/context types for preflight.                                 |
+| legacy-runtime → node             | Reuse configuration variable rendering before setup checks.                        |
+| node → legacy-runtime             | Share bounded setup checks between connectivity tests and evaluation.              |
+| providers → contracts             | Normalize and validate security reports and replay evidence.                       |
+| view-server → contracts           | Validate and type bounded progress stored in evaluation jobs.                      |
+
+The progress UI uses the app's existing duration formatter, keeping presentation
+inside the browser layer. These contract dependencies introduce no upward imports
+from the leaf layer and do not increase the allowed dependency cycle size.
+
 ## Dependency Ownership Report
 
 The dependency report groups direct runtime imports by the private layer that
