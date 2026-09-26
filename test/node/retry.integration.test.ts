@@ -231,6 +231,85 @@ describe('retry command', () => {
       });
       expect(await getErrorResultIds(evaluation.id)).toEqual([]);
     });
+    it('retains complete legacy metric counts when weights predate the saved evaluation', async () => {
+      const prompt = { raw: 'Hello', label: 'Hello' };
+      const assertion = {
+        type: 'contains' as const,
+        value: 'Hello',
+        metric: 'quality:{{ category | upper }}',
+      };
+      const testCase = { vars: { category: 'example' }, assert: [assertion, assertion] };
+      const metrics = createPromptMetrics({
+        score: 1,
+        testPassCount: 1,
+        testErrorCount: 1,
+        assertPassCount: 2,
+        namedScores: { 'quality:EXAMPLE': 2 },
+        namedScoresCount: { 'quality:EXAMPLE': 2 },
+        namedScoreWeights: undefined,
+      });
+      const evaluation = await Eval.create(
+        { prompts: ['Hello'], providers: ['echo'], tests: [testCase, testCase] },
+        [prompt],
+        {
+          id: uniqueEvalId(),
+          completedPrompts: [
+            {
+              ...prompt,
+              id: generateIdFromPrompt(prompt),
+              provider: 'echo',
+              metrics,
+            },
+          ],
+        },
+      );
+      await evaluation.addResult(
+        createEvaluateResult({
+          prompt,
+          testCase,
+          provider: { id: 'echo' },
+          testIdx: 0,
+          namedScores: { 'quality:EXAMPLE': 2 },
+          gradingResult: {
+            pass: true,
+            score: 1,
+            reason: 'passed',
+            componentResults: [assertion, assertion].map((assertion) => ({
+              pass: true,
+              score: 1,
+              reason: 'passed',
+              assertion,
+            })),
+          },
+        }),
+      );
+      await evaluation.addResult(
+        createEvaluateResult({
+          prompt,
+          testCase,
+          provider: { id: 'echo' },
+          testIdx: 1,
+          success: false,
+          score: 0,
+          failureReason: ResultFailureReason.ERROR,
+          error: 'Interrupted provider request',
+          namedScores: {},
+          gradingResult: null,
+        }),
+      );
+
+      const retried = await retryCommand(evaluation.id, { maxConcurrency: 1 });
+      expect(retried.prompts[0].metrics).toMatchObject({
+        testPassCount: 2,
+        testErrorCount: 0,
+        namedScores: { 'quality:EXAMPLE': 4 },
+        namedScoresCount: { 'quality:EXAMPLE': 4 },
+        namedScoreWeights: { 'quality:EXAMPLE': 4 },
+      });
+      const saved = await Eval.findById(evaluation.id);
+      expect(saved?.prompts[0].metrics).toEqual(retried.prompts[0].metrics);
+    });
+
     it('preserves persisted errors when an override config no longer matches the stored provider filter', async () => {
       const artifactId = randomUUID();
       const configPath = path.join(os.tmpdir(), `promptfoo-retry-filter-${artifactId}.yaml`);

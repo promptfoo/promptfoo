@@ -30,6 +30,7 @@ const dbMocks = vi.hoisted(() => {
   const errorRowsAll = vi.fn(async () => errorRows);
   const deleteReturning = vi.fn(async () => affectedEvalRows);
   const db = {
+    all: vi.fn(async () => []),
     select: vi.fn(() => ({
       from: vi.fn(() => ({
         where: vi.fn(() => ({
@@ -801,6 +802,24 @@ describe('retryCommand', () => {
 
     await expect(retryCommand(originalEval.id, {})).rejects.toThrow('provider unavailable');
 
+    expect(dbMocks.deleteReturning).not.toHaveBeenCalled();
+    expect(cliState.resume).toBe(false);
+    expect(cliState.retryMode).toBe(false);
+    expect(cliState.maxConcurrency).toBeUndefined();
+  });
+
+  it('preserves error results and clears retry state when checkpoint verification fails', async () => {
+    const originalEval = createEval({ persisted: true });
+    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+    dbMocks.errorRows.push({ id: 'error-result-1' });
+    mockResolvedConfig();
+    dbMocks.db.all.mockRejectedValueOnce(new Error('checkpoint query failed'));
+
+    await expect(retryCommand(originalEval.id, { maxConcurrency: 3 })).rejects.toThrow(
+      'checkpoint query failed',
+    );
+
+    expect(evaluate).not.toHaveBeenCalled();
     expect(dbMocks.deleteReturning).not.toHaveBeenCalled();
     expect(cliState.resume).toBe(false);
     expect(cliState.retryMode).toBe(false);

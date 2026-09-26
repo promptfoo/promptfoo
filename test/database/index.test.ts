@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+import { sql } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import {
@@ -13,13 +14,16 @@ import {
   getDbPath,
   getDbSignalPath,
   isDbOpen,
+  withReadTransaction,
 } from '../../src/database/index';
 import { getEnvBool } from '../../src/envars';
 import logger from '../../src/logger';
 import { getConfigDirectoryPath } from '../../src/util/config/manage';
 import { createDeferred, mockProcessEnv } from '../util/utils';
 
+import type { ReadOnlyDatabase } from '../../src/database/index';
 import type { LockRecoveryProbeResult } from './fixtures/lockRecoveryProbe';
+import type { ReadTransactionProbeResult } from './fixtures/readTransactionProbe';
 import type { ShutdownQueueProbeResult } from './fixtures/shutdownQueueProbe';
 import type { WalCheckpointProbeResult } from './fixtures/walCheckpointProbe';
 
@@ -95,7 +99,11 @@ const execFileAsync = promisify(execFile);
 const DATABASE_PROBE_RESULT_PREFIX = 'PROMPTFOO_DATABASE_PROBE_RESULT=';
 
 async function runDatabaseProbe<T>(
-  fixture: 'walCheckpointProbe' | 'lockRecoveryProbe' | 'shutdownQueueProbe',
+  fixture:
+    | 'walCheckpointProbe'
+    | 'lockRecoveryProbe'
+    | 'shutdownQueueProbe'
+    | 'readTransactionProbe',
   tempConfigDir: string,
   mode: string,
 ): Promise<T> {
@@ -726,6 +734,172 @@ describe('database', () => {
           );
         }),
       ).rejects.toThrow();
+    });
+  });
+
+  describe('withReadTransaction', () => {
+    it('preserves bound parameters and raw all() result types', async () => {
+      const db = await getDb();
+      const query = sql`SELECT ${"O'Reilly"} AS text, ${42} AS number,
+        ${null} AS empty, ${Buffer.from([0, 1, 255])} AS blob`;
+      const expected = await db.all(query);
+
+      await expect(withReadTransaction((reader) => reader.all(query))).resolves.toEqual(expected);
+      expect(expected).toMatchObject([{ text: "O'Reilly", number: 42, empty: null }]);
+    });
+
+    it('keeps the snapshot consistent without blocking an independent WAL writer', async () => {
+      const result = await runDatabaseProbe<ReadTransactionProbeResult>(
+        'readTransactionProbe',
+        tempConfigDir,
+        'snapshot',
+      );
+      expect(result).toEqual({
+        journalMode: 'wal',
+        initialValue: 1,
+        snapshotValueAfterWrite: 1,
+        valueAfterCommit: 2,
+        valueDuringUncommittedWrite: 2,
+        valueAfterRollback: 2,
+      });
+    });
+
+    it('queues same-client writes behind the read callback', async () => {
+      const db = await getDb();
+      await db.run('CREATE TABLE read_queue_test (value INTEGER)');
+      await db.run('INSERT INTO read_queue_test VALUES (1)');
+      const started = createDeferred<void>();
+      const release = createDeferred<void>();
+      const events: string[] = [];
+      const snapshot = withReadTransaction(async (reader) => {
+        await expect(reader.all(sql`SELECT value FROM read_queue_test`)).resolves.toEqual([
+          { value: 1 },
+        ]);
+        started.resolve();
+        await release.promise;
+        await expect(reader.all(sql`SELECT value FROM read_queue_test`)).resolves.toEqual([
+          { value: 1 },
+        ]);
+        events.push('read');
+      });
+      await started.promise;
+      const writer = db
+        .run('UPDATE read_queue_test SET value = 2')
+        .execute()
+        .then(() => {
+          events.push('write');
+        });
+      release.resolve();
+      await Promise.all([snapshot, writer]);
+      expect(events).toEqual(['read', 'write']);
+      await expect(db.all('SELECT value FROM read_queue_test')).resolves.toEqual([{ value: 2 }]);
+    });
+
+    it('reuses nested readers and the active write transaction', async () => {
+      const db = await getDb();
+      await db.run('CREATE TABLE nested_read_test (value INTEGER)');
+      await withReadTransaction(async (reader) => {
+        await withReadTransaction(async (nestedReader) => {
+          expect(nestedReader).toBe(reader);
+          await expect(nestedReader.all(sql`SELECT 1 AS value`)).resolves.toEqual([{ value: 1 }]);
+        });
+      });
+      await expect(
+        db.transaction(async (tx) => {
+          await tx.run('INSERT INTO nested_read_test VALUES (1)');
+          await withReadTransaction(async (reader) => {
+            expect(reader).toBe(tx);
+            await expect(reader.all(sql`SELECT value FROM nested_read_test`)).resolves.toEqual([
+              { value: 1 },
+            ]);
+          });
+          throw new Error('Rollback requested');
+        }),
+      ).rejects.toThrow('Rollback requested');
+      await expect(db.all('SELECT value FROM nested_read_test')).resolves.toEqual([]);
+    });
+
+    it('rejects root calls, write transactions, and close without aborting the reader', async () => {
+      const db = await getDb();
+      await db.run('CREATE TABLE read_only_test (value INTEGER)');
+      await withReadTransaction(async (reader) => {
+        for (const query of [db.all('SELECT 1'), db.run('INSERT INTO read_only_test VALUES (2)')]) {
+          await expect(query).rejects.toMatchObject({
+            cause: expect.objectContaining({
+              message: expect.stringContaining('transaction handle'),
+            }),
+          });
+        }
+        await expect(db.transaction(async () => {})).rejects.toThrow('inside a read transaction');
+        await expect(closeDb()).rejects.toThrow('inside a transaction');
+        await expect(reader.all(sql`SELECT 1 AS value`)).resolves.toEqual([{ value: 1 }]);
+      });
+      await expect(db.all('SELECT value FROM read_only_test')).resolves.toEqual([]);
+    });
+
+    it.each(['callback', 'query'])(
+      'releases the transaction after a %s failure',
+      async (failure) => {
+        const db = await getDb();
+        let capturedReader: ReadOnlyDatabase | undefined;
+        await expect(
+          withReadTransaction(async (reader) => {
+            capturedReader = reader;
+            await reader.all(sql`SELECT 1`);
+            if (failure === 'query') {
+              await reader.all(sql`SELECT value FROM missing_read_table`);
+            }
+            throw new Error('Callback failed');
+          }),
+        ).rejects.toThrow(failure === 'query' ? /missing_read_table/ : 'Callback failed');
+        await expect(capturedReader!.all(sql`SELECT 1`)).rejects.toThrow('no longer active');
+        await db.run('CREATE TABLE read_cleanup_test (value INTEGER)');
+        await db.transaction(async (tx) => {
+          await tx.run('INSERT INTO read_cleanup_test VALUES (1)');
+        });
+        await expect(
+          withReadTransaction((reader) => reader.all(sql`SELECT value FROM read_cleanup_test`)),
+        ).resolves.toEqual([{ value: 1 }]);
+      },
+    );
+
+    it.each(['commit', 'rollback'])('expires inherited read contexts after %s', async (outcome) => {
+      const db = await getDb();
+      await db.run('CREATE TABLE deferred_read_test (value INTEGER)');
+      const release = createDeferred<void>();
+      let followup: Promise<void> | undefined;
+      let capturedReader: ReadOnlyDatabase | undefined;
+      const reading = withReadTransaction(async (reader) => {
+        capturedReader = reader;
+        await reader.all(sql`SELECT 1`);
+        followup = (async () => {
+          await release.promise;
+          await db.run('INSERT INTO deferred_read_test VALUES (1)');
+          await db.transaction(async (tx) => {
+            await tx.run('INSERT INTO deferred_read_test VALUES (2)');
+          });
+          await withReadTransaction(async (laterReader) => {
+            expect(laterReader).not.toBe(reader);
+            await expect(
+              laterReader.all(sql`SELECT value FROM deferred_read_test ORDER BY value`),
+            ).resolves.toEqual([{ value: 1 }, { value: 2 }]);
+          });
+        })();
+        if (outcome === 'rollback') {
+          throw new Error('Rollback requested');
+        }
+      });
+      try {
+        if (outcome === 'rollback') {
+          await expect(reading).rejects.toThrow('Rollback requested');
+        } else {
+          await reading;
+        }
+        await expect(capturedReader!.all(sql`SELECT 1`)).rejects.toThrow('no longer active');
+      } finally {
+        release.resolve();
+      }
+      await expect(followup).resolves.toBeUndefined();
     });
   });
 

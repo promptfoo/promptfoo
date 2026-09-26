@@ -66,7 +66,9 @@ function isFiniteMetricRecord(value: unknown): value is Record<string, number> {
 function isCompleteFiniteNamedMetrics(metrics: PromptMetrics | undefined): boolean {
   const namedScores = metrics?.namedScores;
   const namedScoresCount = metrics?.namedScoresCount;
-  const namedScoreWeights = metrics?.namedScoreWeights;
+  // Older complete checkpoints predate weights; evaluate() backfills them from counts.
+  const namedScoreWeights =
+    metrics?.namedScoreWeights === undefined ? namedScoresCount : metrics.namedScoreWeights;
   if (
     !isFiniteMetricRecord(namedScores) ||
     !isFiniteMetricRecord(namedScoresCount) ||
@@ -550,9 +552,8 @@ async function retryWithConfig(
     eventSource: 'cli',
     showProgressBar: !cmdObj.verbose, // Show progress bar unless verbose mode
   };
-  const canPreserveNamedMetrics = await createNamedMetricsPreservationGuard(originalEval);
-
   try {
+    const canPreserveNamedMetrics = await createNamedMetricsPreservationGuard(originalEval);
     // Run the retry evaluation - this will only run ERROR test cases due to retry mode
     const retriedEval = await evaluate(testSuite, originalEval, evaluateOptions);
     const jsonlOutputPaths = getJsonlOutputPaths(originalEval.config.outputPath);

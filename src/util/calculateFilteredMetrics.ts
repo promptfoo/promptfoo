@@ -10,7 +10,7 @@
  */
 
 import { type SQL, sql } from 'drizzle-orm';
-import { getDb } from '../database/index';
+import { type ReadOnlyDatabase, withReadTransaction } from '../database/index';
 import logger from '../logger';
 import { ResultFailureReason } from '../types/index';
 import { accumulateNamedMetrics } from './namedMetrics';
@@ -223,21 +223,17 @@ function getFilteredTokenUsage(row: FilteredBasicMetricsRow): PromptMetrics['tok
   };
 }
 
-type Database = Awaited<ReturnType<typeof getDb>>;
-type QueryDatabase = Pick<Database, 'all'>;
-
 class FilteredMetricsLimitError extends Error {}
 
 export async function calculateFilteredMetrics(
   opts: FilteredMetricsOptions,
 ): Promise<PromptMetrics[]> {
-  const db = await getDb();
-  return db.transaction((tx) => calculateWithOptimizedQuery(opts, tx));
+  return withReadTransaction((tx) => calculateWithOptimizedQuery(opts, tx));
 }
 
 async function calculateWithOptimizedQuery(
   opts: FilteredMetricsOptions,
-  db: QueryDatabase,
+  db: ReadOnlyDatabase,
 ): Promise<PromptMetrics[]> {
   const { numPrompts, whereSql } = opts;
   const metrics = createEmptyMetricsArray(numPrompts);
@@ -397,7 +393,10 @@ async function calculateWithOptimizedQuery(
   return metrics;
 }
 
-async function getBoundedResultCount(db: QueryDatabase, whereSql: SQL<unknown>): Promise<number> {
+async function getBoundedResultCount(
+  db: ReadOnlyDatabase,
+  whereSql: SQL<unknown>,
+): Promise<number> {
   const rows = (await db.all(sql`
     SELECT COUNT(*) AS count
     FROM (
@@ -493,7 +492,7 @@ function accumulateResultDetails(metrics: PromptMetrics[], row: ResultDetailsRow
 async function aggregateResultDetails(
   metrics: PromptMetrics[],
   whereSql: SQL<unknown>,
-  db: QueryDatabase,
+  db: ReadOnlyDatabase,
 ): Promise<void> {
   const hasNamedScoreEntriesSql = sql`
     eval_results.named_scores IS NOT NULL

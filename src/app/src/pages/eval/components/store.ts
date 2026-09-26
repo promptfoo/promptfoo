@@ -737,7 +737,9 @@ export const useTableStore = create<TableState>()(
             // Legacy comparison responses cannot apply the base config to other evals' columns.
             derivedMetricNamesByPrompt:
               data.derivedMetricNamesByPrompt ??
-              (comparisonEvalIds.length > 0 ? data.table.head.prompts.map(() => []) : null),
+              (url.searchParams.has('comparisonEvalIds')
+                ? data.table.head.prompts.map(() => [])
+                : null),
             // Store evaluation-level stats including durationMs
             stats: data.stats || null,
             filters: {

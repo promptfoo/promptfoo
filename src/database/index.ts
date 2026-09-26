@@ -5,6 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { DefaultLogger, type LogWriter } from 'drizzle-orm/logger';
+import { SQLiteAsyncDialect } from 'drizzle-orm/sqlite-core/dialect';
 import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { getConfigDirectoryPath } from '../util/config/manage';
@@ -14,13 +15,23 @@ import {
   registerTestDatabaseClient,
   unregisterTestDatabaseClient,
 } from './testing';
+import type { SQL } from 'drizzle-orm';
 
 // Lazy types; the runtime modules below are imported inside getDb() so that a
 // missing libsql platform binding (`@libsql/<target>`) surfaces as a catchable
 // error from getDb() rather than crashing module load before any handler can
 // translate it into a friendly message.
 type Client = import('@libsql/client/node').Client;
+type InValue = import('@libsql/client/node').InValue;
 type Drizzle = ReturnType<typeof import('drizzle-orm/libsql/node').drizzle>;
+
+export interface ReadOnlyDatabase {
+  all<T = unknown>(query: SQL): Promise<T[]>;
+}
+
+type ReadTransactionRunner = <T>(callback: (db: ReadOnlyDatabase) => Promise<T>) => Promise<T>;
+
+const readTransactionRunners = new WeakMap<Drizzle, ReadTransactionRunner>();
 
 export class DrizzleLogWriter implements LogWriter {
   write(message: string) {
@@ -291,13 +302,17 @@ function serializeTopLevelOperations(
   type TransactionCallback = Parameters<typeof transaction>[0];
   type TransactionContext = Parameters<TransactionCallback>[0];
 
-  type TransactionScope = { transaction: TransactionContext | undefined };
+  type TransactionScope = {
+    transaction: TransactionContext | undefined;
+    readDatabase?: ReadOnlyDatabase;
+  };
   const activeTransaction = new AsyncLocalStorage<TransactionScope>();
   let operationQueue = Promise.resolve();
   let closing = false;
   executeForClose = rawExecute;
   drainOperations = () => {
-    if (activeTransaction.getStore()?.transaction) {
+    const scope = activeTransaction.getStore();
+    if (scope?.transaction || scope?.readDatabase) {
       throw new Error('Cannot close the database inside a transaction');
     }
     closing = true;
@@ -323,7 +338,8 @@ function serializeTopLevelOperations(
     return (...args: TArgs) => {
       // A root call cannot borrow the transaction's connection. Queueing would
       // deadlock, and reconnecting after a lock error would abort the transaction.
-      if (activeTransaction.getStore()?.transaction) {
+      const scope = activeTransaction.getStore();
+      if (scope?.transaction || scope?.readDatabase) {
         return Promise.reject(
           new Error('Use the transaction handle (tx) for database operations inside a transaction'),
         );
@@ -340,11 +356,17 @@ function serializeTopLevelOperations(
   client.executeMultiple = serializeClientMethod(client.executeMultiple.bind(client), false);
 
   db.transaction = ((callback, config) => {
-    const currentTransaction = activeTransaction.getStore()?.transaction;
+    const scope = activeTransaction.getStore();
+    const currentTransaction = scope?.transaction;
     if (currentTransaction) {
       // Reuse the transaction already owned by this async call chain. Queueing here
       // would deadlock because the outer callback is waiting for the nested promise.
       return callback(currentTransaction);
+    }
+    if (scope?.readDatabase) {
+      return Promise.reject(
+        new Error('Cannot start a write transaction inside a read transaction'),
+      );
     }
 
     return runSerialized(() =>
@@ -367,7 +389,83 @@ function serializeTopLevelOperations(
     );
   }) as typeof db.transaction;
 
+  const readDialect = new SQLiteAsyncDialect();
+  const readLogger = new DefaultLogger({ writer: new DrizzleLogWriter() });
+  readTransactionRunners.set(db, (callback) => {
+    const currentScope = activeTransaction.getStore();
+    if (currentScope?.transaction) {
+      return callback(currentScope.transaction);
+    }
+    if (currentScope?.readDatabase) {
+      return callback(currentScope.readDatabase);
+    }
+
+    return runSerialized(() =>
+      withLockRecovery(async () => {
+        // Drizzle's libSQL transaction wrapper ignores SQLite's behavior option
+        // and always requests a write transaction. Acquire an explicit read handle.
+        const transaction = await client.transaction('read');
+        const scope: TransactionScope = { transaction: undefined };
+        const readDatabase: ReadOnlyDatabase = {
+          async all<T>(query: SQL): Promise<T[]> {
+            if (scope.readDatabase !== readDatabase) {
+              throw new Error('Read transaction is no longer active');
+            }
+            const compiled = readDialect.sqlToQuery(query);
+            readLogger.logQuery(compiled.sql, compiled.params);
+            const result = await transaction.execute({
+              sql: compiled.sql,
+              args: compiled.params as InValue[],
+            });
+            // Match Drizzle's raw all() results: plain objects with named columns.
+            return result.rows.map((row) => ({ ...row })) as T[];
+          },
+        };
+        scope.readDatabase = readDatabase;
+        try {
+          const result = await activeTransaction.run(scope, async () => {
+            try {
+              return await callback(readDatabase);
+            } finally {
+              // As with write transactions, inherited async work must queue normally
+              // after the callback finishes, even while commit is still completing.
+              scope.readDatabase = undefined;
+            }
+          });
+          await transaction.commit();
+          return result;
+        } catch (error) {
+          try {
+            if (!transaction.closed) {
+              await transaction.rollback();
+            }
+          } catch (rollbackError) {
+            logger.warn('Could not roll back read transaction', { error: rollbackError });
+          }
+          throw error;
+        } finally {
+          transaction.close();
+        }
+      }, false),
+    );
+  });
+
   return db;
+}
+
+/**
+ * Run trusted read SQL in one serialized snapshot without reserving a write lock.
+ * The narrow API is a caller contract; libSQL's local read mode does not reject write SQL.
+ */
+export async function withReadTransaction<T>(
+  callback: (db: ReadOnlyDatabase) => Promise<T>,
+): Promise<T> {
+  const db = await getDb();
+  const run = readTransactionRunners.get(db);
+  if (!run) {
+    throw new Error('Database read transactions are not initialized');
+  }
+  return run(callback);
 }
 
 export async function getDb() {
