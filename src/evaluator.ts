@@ -1768,7 +1768,15 @@ async function runEvalInContext({
             `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
           );
 
-          await applyProviderDelayIfNeeded(provider, response, effectiveDelay, abortSignal);
+          try {
+            await applyProviderDelayIfNeeded(provider, response, effectiveDelay, abortSignal);
+          } catch (error) {
+            if (abortSignal?.aborted) {
+              // Keep interrupted rows incomplete so a paused evaluation can resume them.
+              return [];
+            }
+            throw error;
+          }
 
           // The __eval* runtime vars were exposed to prompt/provider rendering above.
           // Build a copy without them for the persisted result, assertions, and
