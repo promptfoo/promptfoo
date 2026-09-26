@@ -41,9 +41,7 @@
         "block-no-verify",
         // Transitive pin for google-auth-library behavior (see comments in
         // src/providers/google/auth.ts); never imported directly.
-        "gcp-metadata",
-        // Transitive pin; never imported directly.
-        "langium"
+        "gcp-metadata"
       ],
       "paths": {
         "@promptfoo/*": ["./src/*"]
@@ -77,9 +75,8 @@
         "@mui/*",
         "@generated/*",
         "@swc/core",
-        // Transitive pins for the Docusaurus build; never imported directly.
-        "dompurify",
-        "langium"
+        // Transitive pin for the Docusaurus build; never imported directly.
+        "dompurify"
       ]
     },
     "code-scan-action": {
