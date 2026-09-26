@@ -521,6 +521,8 @@ Named metric percentages use each column's own graded assertions, including asse
 
 With filters active, assertion metrics describe matching results across all pages. Derived metrics remain values from the full eval and are labeled `(total)`, including when a derived metric shares a name with an assertion metric. If filtered metrics cannot be calculated, the table labels its fallback to evaluation totals.
 
+Older results with complex metric names may lack recoverable assertion counts. Recorded weight totals remain usable; without a reliable denominator, the viewer shows the raw score.
+
 See [named metrics example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-named-metrics).
 
 ## Creating derived metrics
