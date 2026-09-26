@@ -47,8 +47,8 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: ProviderOptions) {
     const accountIdentifier =
       providerOptions.config?.accountIdentifier ||
-      providerOptions.env?.SNOWFLAKE_ACCOUNT_IDENTIFIER ||
-      getEnvString('SNOWFLAKE_ACCOUNT_IDENTIFIER');
+      (providerOptions.env?.SNOWFLAKE_ACCOUNT_IDENTIFIER ??
+        getEnvString('SNOWFLAKE_ACCOUNT_IDENTIFIER'));
 
     if (!accountIdentifier && !providerOptions.config?.apiBaseUrl) {
       throw new Error(

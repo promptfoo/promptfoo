@@ -26,28 +26,24 @@ function getCloudflareApiConfig(
   config?: CloudflareAiConfig,
   env?: EnvOverrides,
 ): { accountId: string; apiToken: string } {
+  const namedApiToken = config?.apiKeyEnvar
+    ? (env?.[config.apiKeyEnvar] ?? getEnvString(config.apiKeyEnvar as EnvVarKey))
+    : undefined;
   const apiTokenCandidate =
     config?.apiKey ||
-    (config?.apiKeyEnvar
-      ? env?.[config.apiKeyEnvar as keyof EnvOverrides] ||
-        getEnvString(config.apiKeyEnvar as EnvVarKey)
-      : undefined) ||
-    env?.CLOUDFLARE_API_KEY ||
-    getEnvString('CLOUDFLARE_API_KEY');
+    (namedApiToken ?? env?.CLOUDFLARE_API_KEY ?? getEnvString('CLOUDFLARE_API_KEY'));
 
   invariant(
     apiTokenCandidate,
     'Cloudflare API token required. Supply it via config apiKey or apiKeyEnvar, or the CLOUDFLARE_API_KEY environment variable',
   );
 
+  const namedAccountId = config?.accountIdEnvar
+    ? (env?.[config.accountIdEnvar] ?? getEnvString(config.accountIdEnvar as EnvVarKey))
+    : undefined;
   const accountIdCandidate =
     config?.accountId ||
-    (config?.accountIdEnvar
-      ? env?.[config.accountIdEnvar as keyof EnvOverrides] ||
-        getEnvString(config.accountIdEnvar as EnvVarKey)
-      : undefined) ||
-    env?.CLOUDFLARE_ACCOUNT_ID ||
-    getEnvString('CLOUDFLARE_ACCOUNT_ID');
+    (namedAccountId ?? env?.CLOUDFLARE_ACCOUNT_ID ?? getEnvString('CLOUDFLARE_ACCOUNT_ID'));
 
   invariant(
     accountIdCandidate,

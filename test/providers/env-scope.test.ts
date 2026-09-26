@@ -3,6 +3,7 @@ import { fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import logger from '../../src/logger';
 import { AI21ChatCompletionProvider } from '../../src/providers/ai21';
+import { getAnthropicProviders } from '../../src/providers/anthropic/defaults';
 import { AzureFoundryAgentProvider } from '../../src/providers/azure/foundry-agent';
 import { AzureGenericProvider } from '../../src/providers/azure/generic';
 import { AzureModerationProvider } from '../../src/providers/azure/moderation';
@@ -13,10 +14,12 @@ import { CohereChatCompletionProvider, CohereEmbeddingProvider } from '../../src
 import { GoogleAuthManager } from '../../src/providers/google/auth';
 import { GeminiImageProvider } from '../../src/providers/google/gemini-image';
 import { GoogleImageProvider } from '../../src/providers/google/image';
+import { GoogleInteractionsProvider } from '../../src/providers/google/interactions';
 import { GoogleLiveProvider } from '../../src/providers/google/live';
 import * as googleUtil from '../../src/providers/google/util';
 import { GoogleVideoProvider } from '../../src/providers/google/video';
 import {
+  HuggingfaceChatCompletionProvider,
   HuggingfaceFeatureExtractionProvider,
   HuggingfaceSentenceSimilarityProvider,
   HuggingfaceTextClassificationProvider,
@@ -79,6 +82,11 @@ describe('provider environment scopes', () => {
   });
 
   const keyProviders: [string, string, (options: ProviderOptions) => object][] = [
+    [
+      'HF chat',
+      'HF_API_TOKEN',
+      (options) => new HuggingfaceChatCompletionProvider('model', options),
+    ],
     ['xAI image', 'XAI_API_KEY', (options) => new XAIImageProvider('grok-imagine-image', options)],
     ['xAI video', 'XAI_API_KEY', (options) => new XAIVideoProvider('grok-imagine-video', options)],
     ['xAI voice', 'XAI_API_KEY', (options) => new XAIVoiceProvider('grok-voice', options)],
@@ -136,6 +144,217 @@ describe('provider environment scopes', () => {
       );
     },
   );
+
+  it.each(keyProviders)('%s keeps an empty key masked', (_name, key, create) => {
+    cliState.withEnv({ [key]: 'ambient-key' }, () => {
+      expect(apiKey(create({ env: { [key]: '' } }))).toBeFalsy();
+    });
+  });
+
+  it.each(keyProviders)('%s prefers a scoped alias to a host alias', (_name, key, create) => {
+    Object.assign(process.env, { GOOGLE_API_KEY: 'host-key', HF_TOKEN: 'host-key' });
+    cliState.withEnvFileOverrides({ [key]: 'file-key' }, () => {
+      expect(apiKey(create({}))).toBe('file-key');
+    });
+  });
+
+  it('Slack rejects an explicitly masked token', () => {
+    cliState.withEnv({ SLACK_BOT_TOKEN: 'ambient-token' }, () => {
+      expect(
+        () => new SlackProvider({ config: { channel: 'C-fixture' }, env: { SLACK_BOT_TOKEN: '' } }),
+      ).toThrow(/requires a token/);
+    });
+  });
+
+  it.each(['CF_KEY', 'CF_ACCOUNT'])(
+    'Cloudflare AI masks named %s without ambient fallback',
+    (key) => {
+      cliState.withEnv(
+        {
+          CF_KEY: 'ambient-key',
+          CF_ACCOUNT: 'ambient-account',
+          CLOUDFLARE_API_KEY: 'vendor-key',
+          CLOUDFLARE_ACCOUNT_ID: 'vendor-account',
+        },
+        () => {
+          expect(
+            () =>
+              new CloudflareAiChatCompletionProvider('fixture', {
+                config: { apiKeyEnvar: 'CF_KEY', accountIdEnvar: 'CF_ACCOUNT' },
+                env: { [key]: '' },
+              }),
+          ).toThrow(/required/);
+        },
+      );
+    },
+  );
+
+  it.each([undefined, 'GATEWAY_TOKEN'])(
+    'Cloudflare Gateway masks %s authentication',
+    (cfAigTokenEnvar) => {
+      const key = cfAigTokenEnvar ?? 'CF_AIG_TOKEN';
+      cliState.withEnv({ [key]: 'ambient-token', CF_AIG_TOKEN: 'vendor-token' }, () => {
+        const target = createCloudflareGatewayProvider('cloudflare-gateway:openai:gpt-4o', {
+          config: {
+            accountId: 'fixture',
+            gatewayId: 'fixture',
+            apiKey: 'model-key',
+            cfAigTokenEnvar,
+          },
+          env: { [key]: '' },
+        });
+        expect(Reflect.get(target, 'config').headers?.['cf-aig-authorization']).toBeUndefined();
+      });
+    },
+  );
+
+  it.each(['CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_GATEWAY_ID'])(
+    'Cloudflare Gateway masks %s',
+    (key) => {
+      cliState.withEnv(
+        { CLOUDFLARE_ACCOUNT_ID: 'ambient-account', CLOUDFLARE_GATEWAY_ID: 'ambient-gateway' },
+        () => {
+          expect(() =>
+            createCloudflareGatewayProvider('cloudflare-gateway:openai:gpt-4o', {
+              env: { [key]: '' },
+            }),
+          ).toThrow(/ID required/);
+        },
+      );
+    },
+  );
+
+  it.each(['accountIdEnvar', 'gatewayIdEnvar'] as const)(
+    'Cloudflare Gateway masks named %s',
+    (setting) => {
+      cliState.withEnv(
+        {
+          CLOUDFLARE_ACCOUNT_ID: 'ambient-account',
+          CLOUDFLARE_GATEWAY_ID: 'ambient-gateway',
+          CUSTOM_ID: 'ambient-custom',
+        },
+        () => {
+          expect(() =>
+            createCloudflareGatewayProvider('cloudflare-gateway:openai:gpt-4o', {
+              config: { [setting]: 'CUSTOM_ID' },
+              env: { CUSTOM_ID: '' },
+            }),
+          ).toThrow(/ID required/);
+        },
+      );
+    },
+  );
+
+  it('Cloudflare retains missing-name fallbacks', () => {
+    cliState.withEnv(
+      {
+        CLOUDFLARE_ACCOUNT_ID: 'vendor-account',
+        CLOUDFLARE_GATEWAY_ID: 'vendor-gateway',
+        CF_AIG_TOKEN: 'vendor-token',
+        CLOUDFLARE_API_KEY: 'vendor-key',
+      },
+      () => {
+        const ai = new CloudflareAiChatCompletionProvider('fixture', {
+          config: { apiKeyEnvar: 'MISSING_KEY', accountIdEnvar: 'MISSING_ACCOUNT' },
+        });
+        expect(ai.getApiKey()).toBe('vendor-key');
+        const gateway = createCloudflareGatewayProvider('cloudflare-gateway:openai:gpt-4o', {
+          config: {
+            accountIdEnvar: 'MISSING_ACCOUNT',
+            gatewayIdEnvar: 'MISSING_GATEWAY',
+            cfAigTokenEnvar: 'MISSING_TOKEN',
+          },
+        });
+        expect(Reflect.get(gateway, 'config').headers['cf-aig-authorization']).toBe(
+          'Bearer vendor-token',
+        );
+        expect(Reflect.get(gateway, 'config').apiBaseUrl).toContain(
+          '/vendor-account/vendor-gateway/',
+        );
+      },
+    );
+  });
+
+  it('Cloudflare Azure gateway masks the provider key', () => {
+    cliState.withEnv({ AZURE_OPENAI_API_KEY: 'ambient-key' }, () => {
+      expect(() =>
+        createCloudflareGatewayProvider('cloudflare-gateway:azure-openai:fixture', {
+          config: {
+            accountId: 'fixture',
+            gatewayId: 'fixture',
+            resourceName: 'fixture',
+            deploymentName: 'fixture',
+          },
+          env: { AZURE_OPENAI_API_KEY: '' },
+        }),
+      ).toThrow(/API key is required/);
+    });
+  });
+
+  it('Google Interactions masks its legacy key alias', async () => {
+    await cliState.withEnv({ GOOGLE_GENERATIVE_AI_API_KEY: 'ambient-key' }, async () => {
+      const target = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+        env: { GOOGLE_GENERATIVE_AI_API_KEY: '' },
+      });
+      expect((await target.callApi('hello')).error).toContain('requires an API key');
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+  });
+
+  it.each(['google', 'palm'])(
+    'the %s Omni loader preserves the provider legacy alias',
+    async (prefix) => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { status: 'completed', steps: [] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = await loadApiProvider(`${prefix}:gemini-omni-flash-preview`, {
+        env: { GOOGLE_API_KEY: 'suite-key' },
+        options: { env: { GOOGLE_GENERATIVE_AI_API_KEY: 'provider-key' } },
+      });
+      await provider.callApi('hello');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({ 'x-goog-api-key': 'provider-key' }),
+        }),
+        expect.any(Number),
+        'json',
+        true,
+      );
+    },
+  );
+
+  it('Snowflake rejects a masked account while allowing an explicit endpoint', () => {
+    cliState.withEnv({ SNOWFLAKE_ACCOUNT_IDENTIFIER: 'ambient-account' }, () => {
+      expect(
+        () => new SnowflakeCortexProvider('fixture', { env: { SNOWFLAKE_ACCOUNT_IDENTIFIER: '' } }),
+      ).toThrow(/requires an account identifier/);
+      const provider = new SnowflakeCortexProvider('fixture', {
+        env: { SNOWFLAKE_ACCOUNT_IDENTIFIER: '' },
+        config: { apiBaseUrl: 'https://fixture.example.invalid' },
+      });
+      expect(provider.getApiUrl()).toBe('https://fixture.example.invalid');
+    });
+  });
+
+  it('default Anthropic clients preserve an empty endpoint mask', () => {
+    cliState.withEnv({ ANTHROPIC_BASE_URL: 'https://ambient.example.invalid' }, () => {
+      const provider = getAnthropicProviders({ ANTHROPIC_BASE_URL: '' }).gradingProvider;
+      expect(Reflect.get(provider, 'anthropic').baseURL).toBe('https://api.anthropic.com');
+    });
+  });
+
+  it('the Azure moderation loader keeps provider credentials ahead of suite aliases', async () => {
+    vi.spyOn(AzureGenericProvider.prototype, 'initialize').mockResolvedValue();
+    const target = await loadApiProvider('azure:moderation:text-content-safety', {
+      env: { AZURE_CONTENT_SAFETY_API_KEY: 'suite-key' },
+      options: { env: { AZURE_API_KEY: 'provider-key' } },
+    });
+    expect((target as AzureModerationProvider).getContentSafetyApiKey()).toBe('provider-key');
+  });
 
   const namedProviders: [string, (options: ProviderOptions) => object][] = [
     ['AI21', (options) => new AI21ChatCompletionProvider('jamba-large', options)],

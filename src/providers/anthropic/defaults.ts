@@ -102,7 +102,7 @@ export function getAnthropicProviders(env?: EnvOverrides): AnthropicProviders {
   const resolvedEnv = {
     ...env,
     ANTHROPIC_API_KEY: env?.ANTHROPIC_API_KEY ?? getEnvString('ANTHROPIC_API_KEY'),
-    ANTHROPIC_BASE_URL: env?.ANTHROPIC_BASE_URL || getEnvString('ANTHROPIC_BASE_URL'),
+    ANTHROPIC_BASE_URL: env?.ANTHROPIC_BASE_URL ?? getEnvString('ANTHROPIC_BASE_URL'),
     ANTHROPIC_CUSTOM_HEADERS:
       env?.ANTHROPIC_CUSTOM_HEADERS ?? getEnvString('ANTHROPIC_CUSTOM_HEADERS'),
   };
