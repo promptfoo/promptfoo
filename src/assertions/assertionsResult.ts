@@ -311,10 +311,15 @@ export class AssertionsResult {
       return this.result;
     }
 
-    const score = this.totalWeight > 0 ? this.totalScore / this.totalWeight : 0;
+    let score = this.totalWeight > 0 ? this.totalScore / this.totalWeight : 0;
+    if (!Number.isFinite(this.totalScore) || !Number.isFinite(this.totalWeight)) {
+      // An infinite denominator can hide overflow behind a finite quotient.
+      score = Number.NaN;
+    }
 
-    let pass = !this.failedReason;
-    let reason = this.failedReason || 'All assertions passed';
+    // An empty explanation still records a failed assertion.
+    let pass = this.failedReason === undefined;
+    let reason = this.failedReason ?? 'All assertions passed';
 
     if (typeof this.threshold === 'number' && !Number.isNaN(this.threshold)) {
       // A numeric test threshold overrides the pass/fail status of individual assertions.
@@ -404,6 +409,29 @@ export class AssertionsResult {
         this.result.pass = false;
         this.result.score = 0;
         this.result.reason = `Scoring function error: ${(err as Error).message}`;
+      }
+    }
+
+    // Finite inputs can overflow when weighted or accumulated. Check the final
+    // output after custom scoring has had an opportunity to replace those values.
+    const invalidMetrics = new Set<string>();
+    for (const field of ['namedScores', 'namedScoreWeights'] as const) {
+      for (const [metric, value] of Object.entries(this.result[field] ?? {})) {
+        if (!Number.isFinite(value)) {
+          invalidMetrics.add(metric);
+        }
+      }
+    }
+    if (!Number.isFinite(this.result.score) || invalidMetrics.size > 0) {
+      this.result.pass = false;
+      this.result.score = 0;
+      this.result.reason = 'Assertion aggregation error: scores or weights must remain finite';
+      for (const field of ['namedScores', 'namedScoreWeights'] as const) {
+        if (this.result[field]) {
+          this.result[field] = Object.fromEntries(
+            Object.entries(this.result[field]).filter(([metric]) => !invalidMetrics.has(metric)),
+          );
+        }
       }
     }
 

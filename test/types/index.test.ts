@@ -24,7 +24,12 @@ import { dereferenceConfig } from '../../src/util/config/load';
 import { PromptConfigSchema } from '../../src/validators/prompts';
 import { createMockProvider } from '../factories/provider';
 
-import type { ScoringFunction, TestSuite, TestSuiteConfig } from '../../src/types/index';
+import type {
+  GradingResult,
+  ScoringFunction,
+  TestSuite,
+  TestSuiteConfig,
+} from '../../src/types/index';
 
 describe('AssertionSchema', () => {
   it('should validate a basic assertion', () => {
@@ -179,6 +184,124 @@ describe('isGradingResult', () => {
 
   it('should return false for null', () => {
     expect(isGradingResult(null)).toBe(false);
+  });
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    'rejects nonfinite scores and metric weights: %s',
+    (value) => {
+      const result = { pass: true, score: 1, reason: '' };
+      expect(isGradingResult({ ...result, score: value })).toBe(false);
+      expect(isGradingResult({ ...result, namedScores: { quality: value } })).toBe(false);
+      expect(isGradingResult({ ...result, namedScoreWeights: { quality: value } })).toBe(false);
+      expect(
+        isGradingResult({
+          ...result,
+          componentResults: [{ ...result, componentResults: [{ ...result, score: value }] }],
+        }),
+      ).toBe(false);
+    },
+  );
+
+  it.each([
+    { componentResults: new Array(1) },
+    { componentResults: Object.assign(new Array(2), { 0: { pass: true, score: 1, reason: '' } }) },
+  ])('rejects sparse component-result arrays: %j', ({ componentResults }) => {
+    const result = { pass: true, score: 1, reason: '', componentResults };
+    expect(isGradingResult(result)).toBe(false);
+    expect(isGradingResult({ ...result, componentResults: [result] })).toBe(false);
+  });
+
+  it.each([
+    { componentResults: new Array(1) },
+    { componentResults: [{ pass: true, score: Number.POSITIVE_INFINITY, reason: '' }] },
+  ])(
+    'rejects invalid indexed components hidden by a custom iterator: %j',
+    ({ componentResults }) => {
+      componentResults[Symbol.iterator] = function* () {
+        yield { pass: true, score: 1, reason: 'Iterator result' };
+        return undefined;
+      };
+      expect(isGradingResult({ pass: true, score: 1, reason: '', componentResults })).toBe(false);
+    },
+  );
+
+  it('validates dense indexed components without invoking their custom iterator', () => {
+    const componentResults = [{ pass: true, score: 0.75, reason: 'Indexed result' }];
+    componentResults[Symbol.iterator] = () => {
+      throw new Error('Custom iterator should not run during indexed validation');
+    };
+    expect(isGradingResult({ pass: true, score: 1, reason: '', componentResults })).toBe(true);
+  });
+
+  it('supports nullable optional containers in the public grading result type', () => {
+    const result: GradingResult = {
+      pass: true,
+      score: 0.75,
+      reason: '',
+      namedScores: null,
+      namedScoreWeights: null,
+      componentResults: null,
+    };
+    expect(isGradingResult(result)).toBe(true);
+  });
+
+  it.each(['namedScores', 'namedScoreWeights', 'componentResults'])(
+    'accepts null %s as absent, including nested results',
+    (field) => {
+      const result = { pass: true, score: 0.75, reason: '', [field]: null };
+      expect(isGradingResult(result)).toBe(true);
+      expect(isGradingResult({ ...result, componentResults: [result] })).toBe(true);
+    },
+  );
+
+  it.each([-2, 0, 2])('accepts finite scores outside the usual 0–1 range: %s', (score) => {
+    expect(
+      isGradingResult({
+        pass: false,
+        score,
+        reason: '',
+        namedScores: { quality: score },
+        namedScoreWeights: { quality: 0 },
+        componentResults: [{ pass: true, score, reason: '' }],
+      }),
+    ).toBe(true);
+  });
+
+  it.each([
+    [],
+    new Date(0),
+    new Map([['quality', 1]]),
+    new Set([1]),
+    { quality: '1' },
+    { quality: null },
+    { quality: undefined },
+  ])('rejects malformed named score and weight records: %j', (value) => {
+    const result = { pass: true, score: 1, reason: '' };
+    expect(isGradingResult({ ...result, namedScores: value })).toBe(false);
+    expect(isGradingResult({ ...result, namedScoreWeights: value })).toBe(false);
+  });
+
+  it.each([
+    { quality: 2 },
+    Object.setPrototypeOf({ quality: -2 }, null),
+    new (class {
+      quality = 0.8;
+    })(),
+  ])('accepts numeric records that serialize to object maps: %j', (value) => {
+    const result = {
+      pass: true,
+      score: 1,
+      reason: '',
+      namedScores: value,
+      namedScoreWeights: value,
+    };
+
+    expect(isGradingResult(result)).toBe(true);
+    expect(JSON.parse(JSON.stringify(result))).toEqual({
+      ...result,
+      namedScores: { quality: value.quality },
+      namedScoreWeights: { quality: value.quality },
+    });
   });
 
   it('should return false for non-object', () => {
