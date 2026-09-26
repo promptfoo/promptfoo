@@ -1688,15 +1688,15 @@ tests:
 
 - **OpenAI and OpenAI-compatible providers** (GPT-3.5, GPT-4, Azure OpenAI, etc.)
 - **Anthropic** (Claude models)
+- **Vercel AI Gateway** (models accessed through the `vercel:` provider)
 
-The assertion automatically normalizes provider-specific values:
+These providers normalize finish reasons before returning their responses. The assertion compares the returned value case-insensitively:
 
-- **OpenAI**: `stop`, `length`, `content_filter`, `tool_calls`, `function_call` (legacy)
+- **OpenAI**: `stop`, `length`, `content_filter`, `tool_calls`; legacy `function_call` → `tool_calls`
 - **Anthropic**: `end_turn` → `stop`, `max_tokens` → `length`, `tool_use` → `tool_calls`, `stop_sequence` → `stop`, `refusal` → `content_filter`
+- **Vercel AI SDK**: `tool-calls` → `tool_calls`, `content-filter` → `content_filter`; `stop`, `length`, `error`, and `other` are unchanged
 
-:::note
-Support for additional providers (Google Vertex AI, AWS Bedrock, etc.) is planned for future releases.
-:::
+Other providers and custom providers can use this assertion when their response includes `finishReason`. Custom providers should return the normalized values above; the assertion does not translate provider-specific aliases.
 
 #### Advanced Usage
 
