@@ -14,7 +14,6 @@ vi.mock('../../../src/globalConfig/cloud', () => ({
     isEnabled: vi.fn(),
     getApiHost: vi.fn(),
     getAppUrl: vi.fn(),
-    validateAndSetApiToken: vi.fn(),
     delete: vi.fn(),
   },
 }));

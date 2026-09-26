@@ -38,7 +38,7 @@ After logging in, set your active team using:
 promptfoo auth teams set "Your Team Name"
 ```
 
-All subsequent CLI operations (evaluations, sharing results, etc.) will use this team context.
+This team is the default for evals and sharing. Evals loaded from Cloud use their configuration's assigned team.
 
 ### Verifying Team Context
 
@@ -54,10 +54,10 @@ This displays your current organization and team.
 
 - **Organization selection**: API keys are scoped to one organization. To switch organizations, run `promptfoo auth login --api-key <apiKey>` with a key from that organization
 - **Team selections are isolated per organization**: If you have access to multiple organizations, each organization remembers its own team selection independently
-- **Resources are team-scoped**: Evaluations, configurations, and results are associated with your active team
+- **Resources are team-scoped**: Evals and results use the selected team, or the team assigned to a Cloud configuration
 
 :::tip
-Always verify your team context with `promptfoo auth whoami` before sharing evaluation results or running scans to ensure they go to the correct team.
+Use `promptfoo auth whoami` to check the default CLI team.
 :::
 
 ## Creating Roles

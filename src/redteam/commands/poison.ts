@@ -12,9 +12,9 @@ import { setupEnv } from '../../util/index';
 import {
   getRemoteGenerationExplicitlyDisabledError,
   getRemoteGenerationHeaders,
-  getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { resolveRemoteGenerationUrl } from '../remoteGenerationRequest';
 import type { Command } from 'commander';
 
 interface PoisonOptions {
@@ -68,7 +68,7 @@ export async function generatePoisonedDocument(
     throw new Error(getRemoteGenerationExplicitlyDisabledError('RAG poisoning'));
   }
 
-  const response = await fetchWithProxy(getRemoteGenerationUrl(), {
+  const response = await fetchWithProxy(await resolveRemoteGenerationUrl(), {
     method: 'POST',
     headers: getRemoteGenerationHeaders(),
     body: JSON.stringify({

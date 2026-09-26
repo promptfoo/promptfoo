@@ -50,26 +50,16 @@ export const useUserStore = create<UserState>((set, getState) => ({
     }
   },
   logout: async () => {
-    try {
-      const response = await callApi('/user/logout', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        set({ email: null, userId: null, isLoading: false });
-      } else {
-        console.error('Logout failed');
-        // Clear local state even if logout API call fails
-        set({ email: null, userId: null, isLoading: false });
-      }
-    } catch (error) {
-      console.error('Error during logout:', error);
-      // Clear local state even if API call fails
-      set({ email: null, userId: null, isLoading: false });
+    const response = await callApi('/user/logout', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    if (!response.ok) {
+      throw new Error('Logout failed. Please try again.');
     }
+    set({ email: null, userId: null, isLoading: false });
   },
   clearUser: () => set({ email: null, userId: null, isLoading: false }),
 }));

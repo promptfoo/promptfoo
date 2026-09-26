@@ -42,6 +42,12 @@ const { actualPathResolve, dynamicModuleMocks, fsMocks, mockDynamicModule, mockP
     return { actualPathResolve, dynamicModuleMocks, fsMocks, mockDynamicModule, mockPathResolve };
   });
 
+// File mocks below describe input fixtures, not the installation's saved account.
+vi.mock('../src/globalConfig/globalConfig', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/globalConfig/globalConfig')>()),
+  readGlobalConfig: vi.fn(() => ({ id: 'test-installation' })),
+}));
+
 vi.mock('path', async () => {
   const actual = await vi.importActual<typeof import('path')>('path');
   return {

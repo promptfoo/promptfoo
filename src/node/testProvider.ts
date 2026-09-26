@@ -150,18 +150,19 @@ export async function testProviderConnectivity({
     }
 
     // Call the agent helper endpoint to evaluate the results (even if there's an error)
-    const HOST = cloudConfig.getApiHost();
+    const { apiHost, headers: authHeaders } = cloudConfig.getRequestConfig();
 
     try {
       logger.debug('[testProviderConnectivity] Calling agent helper', {
         providerId: provider.id,
       });
 
-      const testAnalyzerResponse = await fetchWithProxy(`${HOST}/api/v1/providers/test`, {
+      const testAnalyzerResponse = await fetchWithProxy(`${apiHost}/api/v1/providers/test`, {
         method: 'POST',
+        skipCloudAuthInjection: true,
         headers: {
           'Content-Type': 'application/json',
-          ...(cloudConfig.getAuthHeaders() ?? {}),
+          ...authHeaders,
         },
         body: JSON.stringify({
           config: provider.config,

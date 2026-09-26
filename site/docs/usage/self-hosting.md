@@ -352,12 +352,16 @@ providers:
 
 ### Configuration Priority
 
-promptfoo resolves the sharing target URL in this order (highest priority first):
+promptfoo selects the upload API in this order (highest priority first):
 
-1. Config file (`sharing.apiBaseUrl` and `sharing.appBaseUrl`)
-2. Environment variables (`PROMPTFOO_REMOTE_API_BASE_URL`, `PROMPTFOO_REMOTE_APP_BASE_URL`)
-3. Cloud configuration (set via `promptfoo auth login`)
+1. Cloud API URL, when a saved key or `PROMPTFOO_API_KEY` enables Cloud
+2. Config file (`sharing.apiBaseUrl`)
+3. Environment variable (`PROMPTFOO_REMOTE_API_BASE_URL`)
 4. Default promptfoo cloud URLs
+
+To use the self-hosted upload settings, run `promptfoo auth logout` and unset `PROMPTFOO_API_KEY`.
+
+The returned browser link uses `PROMPTFOO_REMOTE_APP_BASE_URL` when set. Otherwise, it uses the Cloud app URL, `sharing.appBaseUrl`, or the default URL, in that order. The browser-link override does not change where results are uploaded.
 
 ### Expected URL Format
 

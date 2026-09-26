@@ -20,6 +20,7 @@ import {
   checkCloudPermissions,
   getOrgContext,
   makeRequest as makeCloudRequest,
+  resolveCloudTeam,
 } from './util/cloud';
 import { fetchWithProxy } from './util/fetch/index';
 import { createBlobInlineCache, inlineBlobRefsForShare } from './util/inlineBlobsForShare';
@@ -29,9 +30,21 @@ import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
 import type ModelAudit from './models/modelAudit';
 import type { Prompt, TestCase } from './types';
+import type { ResolvedCloudTeam } from './util/cloud';
 
 interface ShareDomainResult {
   domain: string;
+}
+
+type CloudRequestConfig = ReturnType<typeof cloudConfig.getRequestConfig>;
+
+interface ShareDestination {
+  cloud?: CloudRequestConfig;
+  url: string;
+  headers: Record<string, string>;
+  viewBaseUrl: string;
+  useQueryParam: boolean;
+  inlineBlobs: boolean;
 }
 
 export interface ShareOptions {
@@ -39,6 +52,8 @@ export interface ShareOptions {
   silent?: boolean;
   /** Show authentication info in the URL */
   showAuth?: boolean;
+  /** Destination already resolved at the operation boundary. */
+  cloudTeam?: ResolvedCloudTeam;
 }
 
 /** Error types that indicate chunk size issues */
@@ -95,23 +110,30 @@ export function isModelAuditSharingEnabled(): boolean {
   return false;
 }
 
-export function determineShareDomain(eval_: Eval): ShareDomainResult {
+export function determineShareDomain(
+  eval_: Eval,
+  requestConfig = cloudConfig.getRequestConfig(),
+): ShareDomainResult {
   const sharing = eval_.config.sharing;
-  logger.debug(
-    `Share config: isCloudEnabled=${cloudConfig.isEnabled()}, sharing=${JSON.stringify(sharing)}, evalId=${eval_.id}`,
-  );
-
-  const envAppBaseUrl = getEnvString('PROMPTFOO_REMOTE_APP_BASE_URL');
-
-  // Determine domain: cloud config takes priority, then eval config, then env var, then default
-  const domain = cloudConfig.isEnabled()
-    ? cloudConfig.getAppUrl()
+  const domain = requestConfig.headers
+    ? requestConfig.appUrl
     : typeof sharing === 'object' && sharing.appBaseUrl
       ? sharing.appBaseUrl
-      : envAppBaseUrl || getDefaultShareViewBaseUrl();
-
-  logger.debug(`Share domain determined: domain=${domain}`);
+      : getEnvString('PROMPTFOO_REMOTE_APP_BASE_URL') || getDefaultShareViewBaseUrl();
   return { domain };
+}
+
+function assertSameCloudSession(requestConfig: CloudRequestConfig): void {
+  const current = cloudConfig.getRequestConfig();
+  if (current.sessionId !== requestConfig.sessionId || current.appUrl !== requestConfig.appUrl) {
+    throw new Error('Cloud login changed while preparing the share. Retry sharing.');
+  }
+}
+
+function assertTeamSession(team: ResolvedCloudTeam | undefined, request: CloudRequestConfig): void {
+  if (team?.sessionId && team.sessionId !== request.sessionId) {
+    throw new Error('Cloud login changed since the team was selected. Retry sharing.');
+  }
 }
 
 // Helper functions
@@ -126,18 +148,6 @@ function findLargestResultSize(results: EvalResult[], sampleSize: number = 1000)
   const maxSize = Math.max(...sampleSizes);
   // return the largest result size
   return maxSize;
-}
-
-function getEffectiveShareTeamId(eval_: Eval): string | undefined {
-  const unifiedConfigTeamId = eval_.config?.metadata?.configId
-    ? eval_.config.metadata.teamId
-    : undefined;
-  if (unifiedConfigTeamId) {
-    return unifiedConfigTeamId;
-  }
-
-  const currentOrgId = cloudConfig.getCurrentOrganizationId();
-  return cloudConfig.getCurrentTeamId(currentOrgId);
 }
 
 function stripFilePaths<T>(value: T): T {
@@ -225,6 +235,8 @@ async function sendEvalRecord(
   url: string,
   headers: Record<string, string>,
   stripFlags: ReturnType<typeof getStripFlags>,
+  destination: ShareDestination,
+  cloudTeam?: ResolvedCloudTeam,
 ): Promise<string> {
   // Fetch traces for the eval
   const traces = await evalRecord.getTraces();
@@ -273,20 +285,18 @@ async function sendEvalRecord(
     results: [],
     traces: projectTracesForOutput(traces, stripFlags),
   };
-  if (cloudConfig.isEnabled()) {
-    const effectiveTeamId = getEffectiveShareTeamId(evalRecord);
-    if (effectiveTeamId) {
-      evalData = {
-        ...evalData,
-        config: {
-          ...(redactedConfig || {}),
-          metadata: {
-            ...(redactedConfig?.metadata || {}),
-            teamId: effectiveTeamId,
-          },
+  if (destination.cloud) {
+    const { teamId: _ignoredTeamId, ...metadata } = redactedConfig.metadata ?? {};
+    evalData = {
+      ...evalData,
+      config: {
+        ...redactedConfig,
+        metadata: {
+          ...metadata,
+          ...(cloudTeam && { teamId: cloudTeam.id }),
         },
-      };
-    }
+      },
+    };
   }
 
   const jsonData = JSON.stringify(evalData);
@@ -298,6 +308,7 @@ async function sendEvalRecord(
   const response = await fetchWithProxy(url, {
     method: 'POST',
     headers,
+    skipCloudAuthInjection: true,
     body: jsonData,
     compress: true,
   });
@@ -350,6 +361,7 @@ async function sendChunkOfResults(
     const response = await fetchWithProxy(targetUrl, {
       method: 'POST',
       headers,
+      skipCloudAuthInjection: true,
       body: stringifiedChunk,
       compress: true,
     });
@@ -493,7 +505,11 @@ async function rollbackEval(url: string, evalId: string, headers: Record<string,
   const targetUrl = `${url}/${evalId}`;
   logger.debug(`Attempting to roll back eval ${evalId} at ${targetUrl}`);
   try {
-    const response = await fetchWithProxy(targetUrl, { method: 'DELETE', headers });
+    const response = await fetchWithProxy(targetUrl, {
+      method: 'DELETE',
+      headers,
+      skipCloudAuthInjection: true,
+    });
     if (response.ok) {
       logger.debug(`Successfully rolled back eval ${evalId}`);
     } else {
@@ -513,6 +529,7 @@ async function prepareChunkForShare(
   inlineCache: ReturnType<typeof createBlobInlineCache> | null,
   remoteBlobUploadCache: ReturnType<typeof createRemoteBlobUploadCache> | null,
   stripFlags: ReturnType<typeof getStripFlags>,
+  requestConfig?: CloudRequestConfig,
 ): Promise<EvalResult[]> {
   const sharedResults = chunk.map((row) => {
     const result = sanitizeResultForJsonlArtifact(row, stripFlags);
@@ -537,6 +554,7 @@ async function prepareChunkForShare(
           remoteEvalId,
           promptIdx: result.promptIdx,
           testIdx: result.testIdx,
+          requestConfig,
         }),
       ),
     );
@@ -547,23 +565,20 @@ async function prepareChunkForShare(
 
 async function sendChunkedResults(
   evalRecord: Eval,
-  url: string,
+  destination: ShareDestination,
   options: ShareOptions = {},
 ): Promise<string | null> {
   const isVerbose = isDebugEnabled();
-  const { silent = false } = options;
+  const { silent = false, cloudTeam } = options;
+  const { url, headers, inlineBlobs } = destination;
   const stripFlags = getStripFlags(evalRecord.config.env);
   logger.debug(`Starting chunked results upload to ${url}`);
 
-  await checkCloudPermissions(evalRecord.config);
-
   // Cloud shares upload referenced blobs at share time; self-hosted shares inline blob
   // bytes into the payload instead. At most one of these caches is active.
-  const inlineBlobs =
-    isBlobStorageEnabled() && getEnvBool('PROMPTFOO_SHARE_INLINE_BLOBS', !cloudConfig.isEnabled());
   const inlineCache = inlineBlobs ? createBlobInlineCache() : null;
   const remoteBlobUploadCache =
-    cloudConfig.isEnabled() && !inlineBlobs ? createRemoteBlobUploadCache() : null;
+    destination.cloud && !inlineBlobs ? createRemoteBlobUploadCache() : null;
 
   let sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
   sampleResults = sampleResults.map((row) => sanitizeResultForJsonlArtifact(row, stripFlags));
@@ -596,12 +611,6 @@ async function sendChunkedResults(
 
   logger.debug(`Chunk config: ${JSON.stringify(chunkConfig)}`);
 
-  // Prepare headers
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(cloudConfig.isEnabled() ? (cloudConfig.getAuthHeaders() ?? {}) : {}),
-  };
-
   // Use total row count (not distinct test count) since we iterate over all result rows
   const totalResults = await evalRecord.getTotalResultRowCount();
   logger.debug(`Total results to share: ${totalResults}`);
@@ -622,7 +631,7 @@ async function sendChunkedResults(
   let evalId: string | undefined;
   try {
     // Send initial data and get eval ID
-    evalId = await sendEvalRecord(evalRecord, url, headers, stripFlags);
+    evalId = await sendEvalRecord(evalRecord, url, headers, stripFlags, destination, cloudTeam);
     logger.debug(`Initial eval data sent successfully - ${evalId}`);
 
     // Progress callback for adaptive retry
@@ -656,6 +665,7 @@ async function sendChunkedResults(
             inlineCache,
             remoteBlobUploadCache,
             stripFlags,
+            destination.cloud,
           );
 
           await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);
@@ -676,6 +686,7 @@ async function sendChunkedResults(
         inlineCache,
         remoteBlobUploadCache,
         stripFlags,
+        destination.cloud,
       );
 
       await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);
@@ -764,49 +775,37 @@ async function handleEmailCollection(evalRecord: Eval): Promise<void> {
   await evalRecord.save();
 }
 
-async function getApiConfig(evalRecord: Eval): Promise<{
-  url: string;
-}> {
-  if (cloudConfig.isEnabled()) {
-    const apiBaseUrl = cloudConfig.getApiHost();
-    return {
-      url: `${apiBaseUrl}/api/v1/results`,
-    };
-  }
-
+function getShareDestination(
+  evalRecord: Eval,
+  requestConfig = cloudConfig.getRequestConfig(),
+): ShareDestination {
+  const cloud = requestConfig.headers ? requestConfig : undefined;
+  const sharing = evalRecord.config.sharing;
   const apiBaseUrl =
-    typeof evalRecord.config.sharing === 'object'
-      ? evalRecord.config.sharing.apiBaseUrl || getShareApiBaseUrl()
-      : getShareApiBaseUrl();
+    cloud?.apiHost ?? ((typeof sharing === 'object' && sharing.apiBaseUrl) || getShareApiBaseUrl());
+  const customDomain = getEnvString('PROMPTFOO_REMOTE_APP_BASE_URL');
   return {
-    // This is going to a self-hosted instance so the api should match the Open Source API
-    url: `${apiBaseUrl}/api/eval`,
+    cloud,
+    url: `${apiBaseUrl}${cloud ? '/api/v1/results' : '/api/eval'}`,
+    headers: { ...cloud?.headers, 'Content-Type': 'application/json' },
+    viewBaseUrl: customDomain || determineShareDomain(evalRecord, requestConfig).domain,
+    useQueryParam:
+      !cloud && (getShareViewBaseUrl() !== getDefaultShareViewBaseUrl() || !!customDomain),
+    inlineBlobs: isBlobStorageEnabled() && getEnvBool('PROMPTFOO_SHARE_INLINE_BLOBS', !cloud),
   };
 }
 
-/**
- * Constructs the shareable URL for an eval.
- * @param eval_ The eval to get the shareable URL for.
- * @param showAuth Whether to show the authentication information in the URL.
- * @returns The shareable URL for the eval.
- */
+/** Constructs the browser URL using the destination captured for this share. */
 export async function getShareableUrl(
   eval_: Eval,
   remoteEvalId: string,
   showAuth: boolean = false,
+  destination = getShareDestination(eval_),
 ): Promise<string | null> {
-  const { domain } = determineShareDomain(eval_);
-
-  // For custom self-hosted setups, ensure we're using the same domain as the API
-  const customDomain = getEnvString('PROMPTFOO_REMOTE_APP_BASE_URL');
-  const finalDomain = customDomain || domain;
-
-  const fullUrl = cloudConfig.isEnabled()
-    ? `${finalDomain}/eval/${remoteEvalId}`
-    : getShareViewBaseUrl() === getDefaultShareViewBaseUrl() && !customDomain
-      ? `${finalDomain}/eval/${remoteEvalId}`
-      : `${finalDomain}/eval/?evalId=${remoteEvalId}`;
-
+  const { viewBaseUrl, useQueryParam } = destination;
+  const fullUrl = useQueryParam
+    ? `${viewBaseUrl}/eval/?evalId=${remoteEvalId}`
+    : `${viewBaseUrl}/eval/${remoteEvalId}`;
   return showAuth ? fullUrl : stripAuthFromUrl(fullUrl);
 }
 
@@ -828,9 +827,13 @@ export async function createShareableUrl(
     return null;
   }
 
+  const requestConfig = cloudConfig.getRequestConfig();
+  const cloudTeam = options.cloudTeam ?? (await resolveCloudTeam(evalRecord.config));
+  assertTeamSession(cloudTeam, requestConfig);
+
   // Show org/team context before uploading (only when cloud is enabled and not silent)
   if (!silent) {
-    const orgContext = await getOrgContext();
+    const orgContext = await getOrgContext(cloudTeam);
     if (orgContext) {
       const teamSuffix = orgContext.teamName ? ` > ${orgContext.teamName}` : '';
       logger.info(
@@ -842,23 +845,19 @@ export async function createShareableUrl(
   // 1. Handle email collection
   await handleEmailCollection(evalRecord);
 
-  // 2. Get API configuration
-  const { url } = await getApiConfig(evalRecord);
-
-  // 3. Determine if we can use new results format
-  const canUseNewResults = cloudConfig.isEnabled();
-  logger.debug(
-    `Sharing with ${url} canUseNewResults: ${canUseNewResults} Use old results: ${evalRecord.useOldResults()}`,
-  );
-
-  const evalId = await sendChunkedResults(evalRecord, url, { silent });
+  assertSameCloudSession(requestConfig);
+  await checkCloudPermissions(evalRecord.config, cloudTeam, requestConfig);
+  assertSameCloudSession(requestConfig);
+  const destination = getShareDestination(evalRecord, requestConfig);
+  logger.debug(`Sharing with ${destination.url} Use old results: ${evalRecord.useOldResults()}`);
+  const evalId = await sendChunkedResults(evalRecord, destination, { silent, cloudTeam });
 
   if (!evalId) {
     return null;
   }
   logger.debug(`New eval ID on remote instance: ${evalId}`);
 
-  return getShareableUrl(evalRecord, evalId, showAuth);
+  return getShareableUrl(evalRecord, evalId, showAuth, destination);
 }
 
 /**
@@ -866,15 +865,22 @@ export async function createShareableUrl(
  * @param eval_ The eval to check.
  * @returns True if the eval has been shared to the effective team, false otherwise.
  */
-export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
+export async function hasEvalBeenShared(
+  eval_: Eval,
+  cloudTeam?: ResolvedCloudTeam,
+): Promise<boolean> {
   try {
-    const effectiveTeamId = getEffectiveShareTeamId(eval_);
+    const team = cloudTeam ?? (await resolveCloudTeam(eval_.config));
+    const request = cloudConfig.getRequestConfig();
+    assertTeamSession(team, request);
+    const effectiveTeamId = team?.id;
 
     // GET /api/results/:id with optional teamId scope
     const url = effectiveTeamId
       ? `results/${eval_.id}?teamId=${encodeURIComponent(effectiveTeamId)}`
       : `results/${eval_.id}`;
     const res = await makeCloudRequest(url, 'GET');
+    assertSameCloudSession(request);
     switch (res.status) {
       // 200: Eval already exists in the effective team.
       case 200:
@@ -898,14 +904,20 @@ export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
  * @param audit The model audit to check.
  * @returns True if the model audit has been shared, false otherwise.
  */
-export async function hasModelAuditBeenShared(audit: ModelAudit): Promise<boolean> {
+export async function hasModelAuditBeenShared(
+  audit: ModelAudit,
+  cloudTeam?: ResolvedCloudTeam,
+): Promise<boolean> {
   try {
-    const currentOrgId = cloudConfig.getCurrentOrganizationId();
-    const currentTeamId = cloudConfig.getCurrentTeamId(currentOrgId);
+    const team = cloudTeam ?? (await resolveCloudTeam());
+    const request = cloudConfig.getRequestConfig();
+    assertTeamSession(team, request);
+    const currentTeamId = team?.id;
     const url = currentTeamId
       ? `model-audits/${audit.id}?teamId=${currentTeamId}`
       : `model-audits/${audit.id}`;
     const res = await makeCloudRequest(url, 'GET');
+    assertSameCloudSession(request);
     switch (res.status) {
       // 200: Model audit already exists i.e. it has been shared before.
       case 200:
@@ -933,6 +945,7 @@ export async function hasModelAuditBeenShared(audit: ModelAudit): Promise<boolea
 export async function createShareableModelAuditUrl(
   auditRecord: ModelAudit,
   showAuth: boolean = false,
+  cloudTeam?: ResolvedCloudTeam,
 ): Promise<string | null> {
   if (getEnvBool('PROMPTFOO_DISABLE_SHARING')) {
     logger.debug('Skipping model audit share because PROMPTFOO_DISABLE_SHARING is enabled');
@@ -943,11 +956,13 @@ export async function createShareableModelAuditUrl(
   // Model audits use cloud config directly
 
   // 2. Get API configuration
-  const apiBaseUrl = cloudConfig.isEnabled() ? cloudConfig.getApiHost() : getShareApiBaseUrl();
+  const requestConfig = cloudConfig.getRequestConfig();
+  const apiBaseUrl = requestConfig.headers ? requestConfig.apiHost : getShareApiBaseUrl();
+  const appBaseUrl = getModelAuditAppUrl(requestConfig);
 
   const headers = {
     'Content-Type': 'application/json',
-    ...(cloudConfig.isEnabled() ? (cloudConfig.getAuthHeaders() ?? {}) : {}),
+    ...requestConfig?.headers,
   };
 
   const url = `${apiBaseUrl}/api/v1/model-audits/share`;
@@ -956,8 +971,10 @@ export async function createShareableModelAuditUrl(
   logger.debug(`Sharing model audit ${auditRecord.id} to ${url}`);
 
   try {
-    const currentOrgId = cloudConfig.getCurrentOrganizationId();
-    const currentTeamId = cloudConfig.getCurrentTeamId(currentOrgId);
+    const team = cloudTeam ?? (await resolveCloudTeam());
+    assertTeamSession(team, requestConfig);
+    const currentTeamId = team?.id;
+    assertSameCloudSession(requestConfig);
     const payload = {
       scanId: auditRecord.id,
       createdAt: auditRecord.createdAt,
@@ -991,6 +1008,7 @@ export async function createShareableModelAuditUrl(
     const response = await fetchWithProxy(url, {
       method: 'POST',
       headers,
+      skipCloudAuthInjection: true,
       body: JSON.stringify(payload),
     });
 
@@ -1004,7 +1022,7 @@ export async function createShareableModelAuditUrl(
     const { remoteId } = await response.json();
     logger.debug(`Model audit shared successfully. Remote ID: ${remoteId}`);
 
-    return getShareableModelAuditUrl(auditRecord, remoteId || auditRecord.id, showAuth);
+    return getShareableModelAuditUrl(auditRecord, remoteId || auditRecord.id, showAuth, appBaseUrl);
   } catch (error) {
     logger.error(
       `Error sharing model audit: ${error instanceof Error ? error.message : String(error)}`,
@@ -1024,12 +1042,16 @@ export function getShareableModelAuditUrl(
   _audit: ModelAudit,
   remoteAuditId: string,
   showAuth: boolean = false,
+  appBaseUrl = getModelAuditAppUrl(),
 ): string {
-  const appBaseUrl = cloudConfig.isEnabled()
-    ? cloudConfig.getAppUrl()
-    : getShareViewBaseUrl() || getDefaultShareViewBaseUrl();
-
   const fullUrl = `${appBaseUrl}/model-audit/${remoteAuditId}`;
 
   return showAuth ? fullUrl : stripAuthFromUrl(fullUrl);
+}
+
+function getModelAuditAppUrl(request = cloudConfig.getRequestConfig()): string {
+  return (
+    getEnvString('PROMPTFOO_REMOTE_APP_BASE_URL') ||
+    (request.headers ? request.appUrl : getShareViewBaseUrl() || getDefaultShareViewBaseUrl())
+  );
 }

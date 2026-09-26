@@ -12,6 +12,12 @@ import { mockProcessEnv } from '../util/utils';
 
 import type { ProviderOptionsMap } from '../../src/types/index';
 
+// File mocks below describe input fixtures, not the installation's saved account.
+vi.mock('../../src/globalConfig/globalConfig', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/globalConfig/globalConfig')>()),
+  readGlobalConfig: vi.fn(() => ({ id: 'test-installation' })),
+}));
+
 vi.mock('proxy-agent', async (importOriginal) => {
   return {
     ...(await importOriginal()),

@@ -6,6 +6,8 @@ import { getRemoteVersionUrl } from '../redteam/remoteGeneration';
 import { fetchWithProxy } from './fetch/index';
 import { promptYesNo } from './readline';
 
+import type { cloudConfig } from '../globalConfig/cloud';
+
 export const BrowserBehavior = {
   ASK: 0,
   OPEN: 1,
@@ -46,8 +48,10 @@ export function __clearFeatureCache(): void {
 export async function checkServerFeatureSupport(
   featureName: string,
   requiredBuildDate: string,
+  request?: ReturnType<typeof cloudConfig.getRequestConfig>,
 ): Promise<boolean> {
-  const cacheKey = `${featureName}`;
+  const versionUrl = request ? `${request.apiHost}/version` : getRemoteVersionUrl();
+  const cacheKey = JSON.stringify([versionUrl, featureName, requiredBuildDate]);
 
   // Return cached result if available
   if (featureCache.has(cacheKey)) {
@@ -59,12 +63,11 @@ export async function checkServerFeatureSupport(
   try {
     logger.debug(`[Feature Detection] Checking server support for feature: ${featureName}`);
 
-    const versionUrl = getRemoteVersionUrl();
-
     if (versionUrl) {
       const response = await fetchWithProxy(versionUrl, {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...request?.headers, 'Content-Type': 'application/json' },
+        ...(request && { skipCloudAuthInjection: true }),
       });
 
       const data = await response.json();

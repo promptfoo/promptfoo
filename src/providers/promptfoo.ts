@@ -4,12 +4,11 @@ import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import {
   getRemoteGenerationHeaders,
-  getRemoteGenerationUrl,
-  getRemoteGenerationUrlForUnaligned,
   neverGenerateRemote,
   neverGenerateRemoteForRegularEvals,
   providerRemoteGenerationContextPayload,
 } from '../redteam/remoteGeneration';
+import { resolveRemoteGenerationUrl } from '../redteam/remoteGenerationRequest';
 import { getRemoteMaterializationContextFromVars } from '../redteam/remoteMaterialization';
 import { BaseTokenUsageSchema } from '../types/shared';
 import { fetchWithRetries } from '../util/fetch/index';
@@ -98,12 +97,13 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
     };
 
     try {
+      const url = await resolveRemoteGenerationUrl(body, { unaligned: true });
       logger.debug(
-        `[HarmfulCompletionProvider] Calling generate harmful API (${getRemoteGenerationUrlForUnaligned()}) with body: ${JSON.stringify(body)}`,
+        `[HarmfulCompletionProvider] Calling generate harmful API (${url}) with body: ${JSON.stringify(body)}`,
       );
       // We're using the promptfoo API to avoid having users provide their own unaligned model.
       const response = await fetchWithRetries(
-        getRemoteGenerationUrlForUnaligned(),
+        url,
         {
           method: 'POST',
           headers: getRemoteGenerationHeaders(),
@@ -243,8 +243,9 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
     };
 
     try {
+      const url = await resolveRemoteGenerationUrl(body);
       const response = await fetchWithRetries(
-        getRemoteGenerationUrl(),
+        url,
         {
           method: 'POST',
           headers: getRemoteGenerationHeaders(),
@@ -367,8 +368,9 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
     };
 
     try {
+      const url = await resolveRemoteGenerationUrl(body);
       const response = await fetchWithRetries(
-        getRemoteGenerationUrl(),
+        url,
         {
           method: 'POST',
           headers: getRemoteGenerationHeaders(),

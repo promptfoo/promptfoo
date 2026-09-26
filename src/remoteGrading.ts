@@ -2,7 +2,8 @@ import { fetchWithCache } from './cache';
 import { getUserEmail } from './globalConfig/accounts';
 import logger from './logger';
 import { getRequestTimeoutMs } from './providers/shared';
-import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from './redteam/remoteGeneration';
+import { getRemoteGenerationHeaders } from './redteam/remoteGeneration';
+import { resolveRemoteGenerationUrl } from './redteam/remoteGenerationRequest';
 import { getActiveTraceparent } from './tracing/spanRoles';
 
 import type { GradingResult } from './types/index';
@@ -50,12 +51,13 @@ export async function doRemoteGrading(
   payload: RemoteGradingPayload,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   try {
+    const url = await resolveRemoteGenerationUrl(payload);
     payload.email = getUserEmail();
     const body = JSON.stringify(payload);
     const traceparent = getActiveTraceparent();
     logger.debug('Performing remote grading', { body: redactImagePayloads(payload) });
     const { cached, data, status, statusText } = await fetchWithCache(
-      getRemoteGenerationUrl(),
+      url,
       {
         method: 'POST',
         headers: getRemoteGenerationHeaders(traceparent ? { traceparent } : undefined),

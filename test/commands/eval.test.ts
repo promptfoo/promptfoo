@@ -44,6 +44,8 @@ import {
   ConfigPermissionError,
   checkCloudPermissions,
   getEvalConfigFromCloud,
+  getOrgContext,
+  resolveCloudTeam,
 } from '../../src/util/cloud';
 import * as defaultConfigModule from '../../src/util/config/default';
 import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
@@ -84,7 +86,8 @@ vi.mock('../../src/share');
 vi.mock('../../src/table');
 vi.mock('../../src/util/cloud', async () => ({
   ...(await vi.importActual('../../src/util/cloud')),
-  getDefaultTeam: vi.fn().mockResolvedValue({ id: 'test-team-id', name: 'Test Team' }),
+  resolveCloudTeam: vi.fn().mockResolvedValue(undefined),
+  getOrgContext: vi.fn().mockResolvedValue(null),
   checkCloudPermissions: vi.fn().mockResolvedValue(undefined),
   getEvalConfigFromCloud: vi.fn(),
 }));
@@ -193,6 +196,9 @@ describe('evalCommand', () => {
     vi.mocked(cloudConfig.getSharing).mockReset();
     vi.mocked(cloudConfig.getSharing).mockReturnValue(undefined);
     vi.mocked(getEvalConfigFromCloud).mockReset();
+    vi.mocked(checkCloudPermissions).mockReset().mockResolvedValue(undefined);
+    vi.mocked(resolveCloudTeam).mockReset().mockResolvedValue(undefined);
+    vi.mocked(getOrgContext).mockReset().mockResolvedValue(null);
     vi.mocked(generateTable).mockReset();
     vi.mocked(resolveConfigs).mockResolvedValue({
       config: defaultConfig,
@@ -2917,6 +2923,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(resolveCloudTeam).mockResolvedValue(undefined);
 
     // Set up TokenUsageTracker mock - required by generateEvalSummary
     mockTokenUsageTracker = {
@@ -2959,6 +2966,98 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.mocked(checkCloudPermissions).mockReset().mockResolvedValue(undefined);
+    vi.mocked(resolveCloudTeam).mockReset().mockResolvedValue(undefined);
+  });
+
+  it('does not resolve a sharing destination for a local-only eval with Cloud credentials', async () => {
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(resolveCloudTeam).mockRejectedValue(new Error('Cloud unavailable'));
+    const evalRecord = new Eval(defaultConfig);
+    vi.mocked(evaluate).mockResolvedValue(evalRecord);
+
+    await doEval(
+      { share: false, table: false, write: false },
+      defaultConfig,
+      defaultConfigPath,
+      {},
+    );
+
+    expect(evaluate).toHaveBeenCalled();
+    expect(resolveCloudTeam).not.toHaveBeenCalled();
+    expect(createShareableUrl).not.toHaveBeenCalled();
+  });
+
+  it('reuses the preflight destination for auto-share without fetching hidden CI spinner labels', async () => {
+    const cloudTeam = { id: 'runtime-b', name: 'Runtime B', organizationId: 'org-1' };
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(checkCloudPermissions).mockResolvedValue(cloudTeam);
+    const evalRecord = new Eval(defaultConfig);
+    vi.mocked(evaluate).mockResolvedValue(evalRecord);
+    const originalTTY = process.stdout.isTTY;
+    process.stdout.isTTY = false;
+    try {
+      await doEval(
+        { share: true, table: false, write: false },
+        defaultConfig,
+        defaultConfigPath,
+        {},
+      );
+    } finally {
+      process.stdout.isTTY = originalTTY;
+    }
+
+    expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true, cloudTeam });
+    expect(resolveCloudTeam).not.toHaveBeenCalled();
+    expect(getOrgContext).not.toHaveBeenCalled();
+  });
+
+  it('finishes results and exports when team resolution fails while the table is pending', async () => {
+    const config = { ...defaultConfig, outputPath: '/tmp/results.json' };
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: { prompts: [], providers: [] },
+      basePath: '/',
+    });
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(resolveCloudTeam).mockRejectedValue(new Error('Team lookup unavailable'));
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
+    let finishTable!: (table: Awaited<ReturnType<Eval['getTable']>>) => void;
+    const table = new Promise<Awaited<ReturnType<Eval['getTable']>>>((resolve) => {
+      finishTable = resolve;
+    });
+    const tableSpy = vi.spyOn(Eval.prototype, 'getTable').mockReturnValue(table);
+    const debugSpy = vi.spyOn(logger, 'debug');
+    const originalTTY = process.stdout.isTTY;
+    process.stdout.isTTY = false;
+    const evaluation = doEval(
+      { share: true, table: true, write: false },
+      config,
+      defaultConfigPath,
+      {},
+    );
+    try {
+      await vi.waitFor(() => expect(tableSpy).toHaveBeenCalled());
+      // Let Node check for unhandled rejections before the normal share await is reached.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(writeMultipleOutputs).not.toHaveBeenCalled();
+      finishTable({ head: { prompts: [], vars: [] }, body: [] });
+      await evaluation;
+
+      expect(createShareableUrl).not.toHaveBeenCalled();
+      expect(debugSpy).toHaveBeenCalledWith('Share error: Error: Team lookup unavailable');
+      expect(writeMultipleOutputs).toHaveBeenCalledWith(
+        ['/tmp/results.json'],
+        expect.any(Eval),
+        null,
+      );
+    } finally {
+      finishTable({ head: { prompts: [], vars: [] }, body: [] });
+      await evaluation;
+      tableSpy.mockRestore();
+      debugSpy.mockRestore();
+      process.stdout.isTTY = originalTTY;
+    }
   });
 
   describe('Priority 1: Explicit disable (CLI --share=false, --no-share, or env var)', () => {

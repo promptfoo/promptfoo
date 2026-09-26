@@ -1,11 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getAuthor, getUserEmail, setUserEmail } from '../src/globalConfig/accounts';
-import { readGlobalConfig, writeGlobalConfigPartial } from '../src/globalConfig/globalConfig';
+import { getAuthor, getUserEmail } from '../src/globalConfig/accounts';
+import { readGlobalConfig } from '../src/globalConfig/globalConfig';
 
 vi.mock('../src/globalConfig/globalConfig', () => ({
-  writeGlobalConfig: vi.fn(),
   readGlobalConfig: vi.fn(),
-  writeGlobalConfigPartial: vi.fn(),
 }));
 
 describe('accounts module', () => {
@@ -36,14 +34,6 @@ describe('accounts module', () => {
         id: 'test-id',
       });
       expect(getUserEmail()).toBeNull();
-    });
-  });
-
-  describe('setUserEmail', () => {
-    it('should write the email to global config', () => {
-      const writeGlobalConfigSpy = vi.mocked(writeGlobalConfigPartial);
-      setUserEmail('test@example.com');
-      expect(writeGlobalConfigSpy).toHaveBeenCalledWith({ account: { email: 'test@example.com' } });
     });
   });
 

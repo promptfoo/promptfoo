@@ -325,6 +325,51 @@ describe('Server Utilities', () => {
       expect(mockFetchWithProxy).toHaveBeenCalledTimes(2);
     });
 
+    it('checks a captured Cloud deployment with its captured credentials', async () => {
+      const request = {
+        apiHost: 'https://captured.example.com',
+        appUrl: 'https://captured.example.com',
+        sessionId: 'captured-session',
+        authHeaderName: 'X-Cloud-Auth',
+        headers: { 'X-Cloud-Auth': 'Bearer synthetic-key' },
+        teamId: undefined,
+      };
+      mockFetchWithProxy.mockResolvedValueOnce(Response.json({ buildDate: '2025-01-01' }));
+
+      await expect(checkServerFeatureSupport(featureName, '2024-01-01', request)).resolves.toBe(
+        true,
+      );
+
+      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://captured.example.com/version', {
+        method: 'GET',
+        headers: { ...request.headers, 'Content-Type': 'application/json' },
+        skipCloudAuthInjection: true,
+      });
+    });
+
+    it("does not reuse another deployment's feature support", async () => {
+      mockFetchWithProxy
+        .mockResolvedValueOnce(Response.json({ buildDate: '2025-01-01' }))
+        .mockResolvedValueOnce(Response.json({ buildDate: '2023-01-01' }));
+
+      await expect(checkServerFeatureSupport(featureName, '2024-01-01')).resolves.toBe(true);
+      vi.mocked(remoteGeneration.getRemoteVersionUrl).mockReturnValueOnce(
+        'https://older.example.com/version',
+      );
+      await expect(checkServerFeatureSupport(featureName, '2024-01-01')).resolves.toBe(false);
+
+      expect(mockFetchWithProxy).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not reuse a result for a different required build date', async () => {
+      mockFetchWithProxy.mockImplementation(async () => Response.json({ buildDate: '2025-01-01' }));
+
+      await expect(checkServerFeatureSupport(featureName, '2024-01-01')).resolves.toBe(true);
+      await expect(checkServerFeatureSupport(featureName, '2026-01-01')).resolves.toBe(false);
+
+      expect(mockFetchWithProxy).toHaveBeenCalledTimes(2);
+    });
+
     it('should handle timezone differences correctly', async () => {
       const requiredDate = '2024-06-01T00:00:00Z'; // UTC
       const serverBuildDate = '2024-06-01T08:00:00+08:00'; // Same moment in different timezone
