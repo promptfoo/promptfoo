@@ -1970,6 +1970,52 @@ describe('HttpProvider with token estimation', () => {
     expect(result.tokenUsage!.total).toBe(300);
   });
 
+  it('should preserve cache-aware token usage details from transformResponse', async () => {
+    const provider = new HttpProvider('http://test.com', {
+      config: {
+        method: 'POST',
+        body: { prompt: '{{prompt}}' },
+        tokenEstimation: {
+          enabled: true,
+        },
+        transformResponse: () => ({
+          output: 'Test response',
+          tokenUsage: {
+            prompt: 100,
+            completion: 200,
+            cached: 40,
+            total: 300,
+            completionDetails: {
+              cacheReadInputTokens: 40,
+              cacheCreationInputTokens: 15,
+            },
+          },
+        }),
+      },
+    });
+
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: JSON.stringify({ result: 'Hello world' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+
+    const result = await provider.callApi('Test prompt');
+
+    // Token estimation must not rebuild (and thereby drop) provider-reported cache details.
+    expect(result.tokenUsage).toEqual({
+      prompt: 100,
+      completion: 200,
+      cached: 40,
+      total: 300,
+      completionDetails: {
+        cacheReadInputTokens: 40,
+        cacheCreationInputTokens: 15,
+      },
+    });
+  });
+
   it('should work with raw request mode', async () => {
     const provider = new HttpProvider('http://test.com', {
       config: {
