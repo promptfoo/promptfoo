@@ -12,6 +12,7 @@
  * **Provider Mappings:**
  * - OpenAI: `function_call` (legacy) → `tool_calls` (current)
  * - Anthropic: `end_turn` → `stop`, `stop_sequence` → `stop`, `max_tokens` → `length`, `tool_use` → `tool_calls`, `refusal` → `content_filter`, `pause_turn` → `pause_turn`
+ * - Vercel AI SDK: `tool-calls` → `tool_calls`, `content-filter` → `content_filter`
  *
  * @example
  * ```typescript
@@ -41,6 +42,10 @@ export const FINISH_REASON_MAP: Record<string, string> = {
   tool_use: 'tool_calls', // Tool/function was called
   refusal: 'content_filter', // Content filtering / safety refusal
   pause_turn: 'pause_turn', // Long-running turn paused, can be continued
+
+  // Vercel AI SDK - unified values use hyphens
+  'tool-calls': 'tool_calls', // Tool/function was called
+  'content-filter': 'content_filter', // Content filtering triggered
 };
 
 /**
