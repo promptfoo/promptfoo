@@ -1,4 +1,4 @@
-name: Python Provider Example
+name: Python Provider Upgrade
 
 on:
   pull_request:
@@ -22,26 +22,22 @@ concurrency:
 
 jobs:
   dependencies:
-    name: Python provider dependencies (${{ matrix.python-version }})
+    name: Python provider upgrade (3.10)
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ['3.10', '3.14']
     steps:
       - name: Checkout repo
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           persist-credentials: false
 
-      - name: Use Python ${{ matrix.python-version }}
+      # The main CI workflow covers a fresh install on Python 3.14.
+      - name: Use Python 3.10
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: '3.10'
 
       - name: Seed an existing environment with older transport packages
-        if: matrix.python-version == '3.10'
         run: >-
           python -m pip install --disable-pip-version-check
           'openai==2.3.0' 'httpcore==1.0.7' 'h11==0.14.0'
