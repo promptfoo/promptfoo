@@ -146,6 +146,27 @@ describe('useEvalOperations', () => {
       });
     });
 
+    it('should encode reserved characters in the eval ID path segment', async () => {
+      const mockApiResponse = {
+        ok: true,
+        json: async () => ({ traces: [] }),
+      } as Response;
+
+      vi.mocked(callApi).mockResolvedValue(mockApiResponse);
+
+      const { result } = renderHook(() => useEvalOperations());
+      const signal = new AbortController().signal;
+
+      await act(async () => {
+        await result.current.fetchTraces('imported/eval?#1', signal);
+      });
+
+      expect(callApi).toHaveBeenCalledTimes(1);
+      expect(callApi).toHaveBeenCalledWith('/traces/evaluation/imported%2Feval%3F%231', {
+        signal,
+      });
+    });
+
     it('should return an empty array when the API response is successful but does not contain a traces array', async () => {
       const mockApiResponse = {
         ok: true,

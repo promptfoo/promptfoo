@@ -30,6 +30,7 @@ vi.mock('@app/stores/evalConfig', () => ({
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
+  getEvalApiPath: (evalId: string, suffix = '') => `/eval/${encodeURIComponent(evalId)}${suffix}`,
   fetchUserEmail: vi.fn().mockResolvedValue('test@example.com'),
   updateEvalAuthor: vi.fn().mockResolvedValue({}),
 }));

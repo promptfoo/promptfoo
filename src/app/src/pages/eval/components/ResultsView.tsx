@@ -19,7 +19,7 @@ import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
-import { callApi } from '@app/utils/api';
+import { callApi, getEvalApiPath } from '@app/utils/api';
 import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 import invariant from '@promptfoo/util/invariant';
@@ -586,7 +586,7 @@ export default function ResultsView({
         invariant(config, 'Config must be loaded before updating its description');
         const newConfig = { ...config, description: newName };
 
-        const response = await callApi(`/eval/${evalId}`, {
+        const response = await callApi(getEvalApiPath(evalId), {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
@@ -616,7 +616,7 @@ export default function ResultsView({
       try {
         invariant(evalId, 'Eval ID must be set before copying');
 
-        const response = await callApi(`/eval/${evalId}/copy`, {
+        const response = await callApi(getEvalApiPath(evalId, '/copy'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -693,7 +693,7 @@ export default function ResultsView({
     setIsDeleting(true);
 
     try {
-      const response = await callApi(`/eval/${evalId}`, {
+      const response = await callApi(getEvalApiPath(evalId), {
         method: 'DELETE',
       });
 
