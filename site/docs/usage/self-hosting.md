@@ -374,7 +374,7 @@ By default, promptfoo stores its SQLite database (`promptfoo.db`) in `/home/prom
 
 By default, promptfoo externalizes large binary outputs (for example, images/audio) to the local filesystem under `/home/promptfoo/.promptfoo/blobs` and replaces inline base64 with lightweight references. To keep media inline (legacy behavior), set `PROMPTFOO_INLINE_MEDIA=true`. Make sure your volume mapping includes `/home/promptfoo/.promptfoo/blobs` so media persists across restarts.
 
-Set `PROMPTFOO_MEDIA_PATH` before the process first accesses media storage. The selected path (or an installed custom storage provider) stays shared for that process so previously saved media references remain readable; later evaluation environment overrides do not switch storage locations.
+`PROMPTFOO_MEDIA_PATH` applies only to legacy `storageRef` media, which defaults to `/home/promptfoo/.promptfoo/media`; it does not move the `blobs` directory. Set it before media storage is first used: that location stays fixed for the process.
 
 ### Custom Config Directory
 
