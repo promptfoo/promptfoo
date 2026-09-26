@@ -198,7 +198,6 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   private loadedFunctionCallbacks: Record<string, Function> = {};
   private processor: ResponsesProcessor;
   private projectClient?: Promise<AzureAIProjectClient>;
-  private openAIClient?: ReturnType<AzureAIProjectClient['getOpenAIClient']>;
   private projectUrl: string;
   private agentPromise?: Promise<FoundryAgent>;
   private resolvedAgent: FoundryAgent | null = null;
@@ -722,7 +721,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       span.setAttribute(GenAIAttributes.AGENT_ID, agent.id);
       span.setAttribute(GenAIAttributes.AGENT_NAME, agent.name);
       span.updateName(`invoke_agent ${agent.name}`);
-      const openAIClient = (this.openAIClient ??= client.getOpenAIClient());
+      const openAIClient = client.getOpenAIClient();
       const responseOptions = this.getAgentReference(agent);
       const tracer = getGenAITracer();
       let turnCount = 0;
