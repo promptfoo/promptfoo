@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 import logger from '../logger';
 
 /**
@@ -13,6 +15,22 @@ interface CleanupProvider {
 class ProviderRegistry {
   private providers = new Map<CleanupProvider, object | undefined>();
   private shutdownRegistered: boolean = false;
+  private readonly scopeContext = new AsyncLocalStorage<object>();
+
+  get currentScope(): object | undefined {
+    return this.scopeContext.getStore();
+  }
+
+  async withScope<T>(fn: () => Promise<T>): Promise<T> {
+    const scope = {};
+    return this.scopeContext.run(scope, async () => {
+      try {
+        return await fn();
+      } finally {
+        await this.shutdownAll(scope);
+      }
+    });
+  }
 
   register(provider: CleanupProvider, scope?: object): void {
     this.providers.set(provider, scope);

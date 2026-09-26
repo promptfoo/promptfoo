@@ -42,6 +42,78 @@ const providers = [
 ] as const;
 
 describe('SDK client lifecycle', () => {
+  it('closes nested environment clients with their evaluation lifetime', async () => {
+    const provider = new AwsBedrockCompletionProvider('fixture');
+    const destroy = vi.spyOn(BedrockRuntime.prototype, 'destroy');
+    await cliState.withEnvFileOverrides({}, () =>
+      providerRegistry.withScope(async () => {
+        await cliState.withEnv({}, async () => {
+          await provider.getBedrockInstance();
+          await cliState.withEnv({}, () => provider.getBedrockInstance());
+        });
+        expect(destroy).not.toHaveBeenCalled();
+      }),
+    );
+    expect(destroy).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps concurrent cleanup lifetimes separate through nested environments', async () => {
+    const provider = new AwsBedrockCompletionProvider('fixture');
+    const ready = createDeferred<void>();
+    const release = createDeferred<void>();
+    let firstDestroy: ReturnType<typeof vi.spyOn>;
+    const first = providerRegistry.withScope(() =>
+      cliState.withEnv({}, async () => {
+        const client = await cliState.withEnv({}, () => provider.getBedrockInstance());
+        firstDestroy = vi.spyOn(client, 'destroy');
+        ready.resolve();
+        await release.promise;
+        expect(firstDestroy).not.toHaveBeenCalled();
+      }),
+    );
+    const second = (async () => {
+      await ready.promise;
+      let secondDestroy: ReturnType<typeof vi.spyOn>;
+      try {
+        await expect(
+          providerRegistry.withScope(() =>
+            cliState.withEnv({}, async () => {
+              const client = await provider.getBedrockInstance();
+              secondDestroy = vi.spyOn(client, 'destroy');
+              throw new Error('fixture evaluation failure');
+            }),
+          ),
+        ).rejects.toThrow('fixture evaluation failure');
+        expect(secondDestroy!).toHaveBeenCalledOnce();
+        expect(firstDestroy!).not.toHaveBeenCalled();
+      } finally {
+        release.resolve();
+      }
+    })();
+    await Promise.all([first, second]);
+    expect(firstDestroy!).toHaveBeenCalledOnce();
+  });
+
+  it.each([true, false])(
+    'isolates lifetimes sharing the same environment (scoped=%s)',
+    async (scoped) => {
+      const provider = new AwsBedrockCompletionProvider('fixture');
+      const check = async () => {
+        await providerRegistry.withScope(async () => {
+          const first = await provider.getBedrockInstance();
+          const destroy = vi.spyOn(first, 'destroy');
+          await providerRegistry.withScope(async () => {
+            const second = await provider.getBedrockInstance();
+            expect(second).not.toBe(first);
+          });
+          expect(destroy).not.toHaveBeenCalled();
+          expect(await provider.getBedrockInstance()).toBe(first);
+        });
+      };
+      await (scoped ? cliState.withEnv({}, check) : check());
+    },
+  );
+
   it('does not register unused state or close standalone clients during an evaluation', async () => {
     const register = vi.spyOn(providerRegistry, 'register');
     const provider = new AwsBedrockCompletionProvider('fixture');

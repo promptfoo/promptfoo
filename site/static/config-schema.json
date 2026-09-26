@@ -348,9 +348,6 @@
         "GOOGLE_API_HOST": {
           "type": "string"
         },
-        "GOOGLE_APPLICATION_CREDENTIALS": {
-          "type": "string"
-        },
         "GOOGLE_API_BASE_URL": {
           "type": "string"
         },
