@@ -412,11 +412,28 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
 
   async checkSetup(
     context?: CallApiContextParams,
+    callOptions?: Pick<CallApiOptionsParams, 'abortSignal'>,
   ): Promise<Awaited<ReturnType<NonNullable<ApiProvider['checkSetup']>>>> {
     let client: CodexSecurity | undefined;
+    let closePromise: Promise<void> | undefined;
+    const signal = callOptions?.abortSignal;
     const attempt = this.operationContext(context);
     attempt.phase = 'setup';
+    const closeClient = () => {
+      if (client && !closePromise) {
+        this.activeClients.delete(client);
+        closePromise = client.close().catch((error) => {
+          logger.warn('[CodexSecurity] Error while closing setup client', { error });
+        });
+      }
+      return closePromise;
+    };
+    const onAbort = () => {
+      void closeClient();
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
     try {
+      signal?.throwIfAborted();
       // Without a row, never guess values for templated paths.
       if (!context && /\{[{%]/.test(this.config.report_file ?? JSON.stringify(this.config))) {
         throw new Error(
@@ -427,7 +444,7 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
       attempt.operation = config.operation ?? 'security-scan';
       attempt.reportFile = resolveConfigPath(config.report_file, config.basePath);
       if (attempt.reportFile) {
-        const { summary } = await readCodexSecurityReport(attempt.reportFile);
+        const { summary } = await readCodexSecurityReport(attempt.reportFile, signal);
         return {
           success: true,
           message:
@@ -442,6 +459,7 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
       const operation = attempt.operation;
       const repository = this.repository(config, context);
       const module = await loadCodexSecurity();
+      signal?.throwIfAborted();
       attempt.sdkVersion = module.VERSION;
       client = this.createClient(module, config);
       this.activeClients.add(client);
@@ -470,6 +488,7 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
                 ? { outputDir: resolveConfigPath(config.output_dir, config.basePath) }
                 : {}),
               ...(config.auth ? { auth: config.auth } : {}),
+              ...(signal ? { signal } : {}),
             }
           : this.buildScanOptions(
               '',
@@ -477,8 +496,11 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
               target.target,
               config,
               { warnings: [] },
+              callOptions,
             );
+      signal?.throwIfAborted();
       const preflight = await client.preflight(repository, options);
+      signal?.throwIfAborted();
       return {
         success: true,
         message:
@@ -500,17 +522,11 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
         success: false,
         message,
         error: message,
-        response: this.failureResponse(message, attempt),
+        response: this.failureResponse(message, attempt, undefined, signal?.aborted),
       };
     } finally {
-      if (client) {
-        this.activeClients.delete(client);
-        try {
-          await client.close();
-        } catch (error) {
-          logger.warn('[CodexSecurity] Error while closing setup client', { error });
-        }
-      }
+      signal?.removeEventListener('abort', onAbort);
+      await closeClient();
     }
   }
 

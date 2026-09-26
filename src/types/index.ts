@@ -224,6 +224,7 @@ export interface RunEvalOptions {
   providerSetup?: (
     provider: ApiProvider,
     context: CallApiContextParams,
+    options?: { abortSignal?: AbortSignal; timeoutMs?: number },
   ) => Promise<ProviderResponse | undefined>;
   provider: ApiProvider;
   prompt: Prompt;

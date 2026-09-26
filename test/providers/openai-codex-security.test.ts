@@ -184,6 +184,98 @@ describe('OpenAICodexSecurityProvider', () => {
   });
 
   describe('local setup checks', () => {
+    it('skips SDK loading when setup is already canceled', async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      const result = await new OpenAICodexSecurityProvider().checkSetup(undefined, {
+        abortSignal: controller.signal,
+      });
+
+      expect(result).toMatchObject({
+        success: false,
+        response: {
+          metadata: {
+            codexSecurity: { status: 'canceled', diagnostics: { phase: 'setup' } },
+          },
+        },
+      });
+      expect(importModule).not.toHaveBeenCalled();
+      expect(MockCodexSecurity).not.toHaveBeenCalled();
+    });
+
+    it.each(['security-scan', 'validation'] as const)(
+      'forwards setup cancellation and disposes the %s client once',
+      async (operation) => {
+        const controller = new AbortController();
+        const removeListener = vi.spyOn(controller.signal, 'removeEventListener');
+        let entered!: () => void;
+        const started = new Promise<void>((resolve) => {
+          entered = resolve;
+        });
+        mockPreflight.mockImplementation(
+          (_repository: string, options: { signal: AbortSignal }) =>
+            new Promise((_resolve, reject) => {
+              options.signal.addEventListener('abort', () => reject(options.signal.reason), {
+                once: true,
+              });
+              entered();
+            }),
+        );
+        const provider = new OpenAICodexSecurityProvider({ config: { operation } });
+        const pending = provider.checkSetup(undefined, { abortSignal: controller.signal });
+        await started;
+
+        controller.abort(new Error('Setup canceled by caller'));
+        const result = await pending;
+
+        expect(mockPreflight).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.objectContaining({ signal: controller.signal }),
+        );
+        expect(result).toMatchObject({
+          success: false,
+          response: {
+            error: expect.stringContaining('Setup canceled by caller'),
+            metadata: {
+              codexSecurity: { status: 'canceled', diagnostics: { phase: 'setup' } },
+            },
+          },
+        });
+        expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
+        expect(mockClose).toHaveBeenCalledOnce();
+        await provider.cleanup();
+        expect(mockClose).toHaveBeenCalledOnce();
+        expect(mockRun).not.toHaveBeenCalled();
+        expect(mockValidate).not.toHaveBeenCalled();
+      },
+    );
+
+    it('does not allocate a client if cancellation arrives during SDK loading', async () => {
+      const controller = new AbortController();
+      let finishLoading!: (value: typeof mockModule) => void;
+      vi.mocked(importModule).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishLoading = resolve;
+          }),
+      );
+      const pending = new OpenAICodexSecurityProvider().checkSetup(undefined, {
+        abortSignal: controller.signal,
+      });
+      // The module import is entered synchronously before the first await in setup.
+      expect(importModule).toHaveBeenCalledOnce();
+
+      controller.abort();
+      finishLoading(mockModule);
+      const result = await pending;
+
+      expect(result.response?.metadata?.codexSecurity).toMatchObject({ status: 'canceled' });
+      expect(MockCodexSecurity).not.toHaveBeenCalled();
+      expect(mockPreflight).not.toHaveBeenCalled();
+      expect(mockRun).not.toHaveBeenCalled();
+    });
+
     it('checks SDK paths and options without running workloads or inference', async () => {
       const provider = new OpenAICodexSecurityProvider({
         config: { repository: '/repo', model: 'test-model', max_cost_usd: 1 },
@@ -1169,23 +1261,34 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(handle.close).toHaveBeenCalledOnce();
     });
 
-    it('forwards cancellation during a saved report read and closes the handle', async () => {
-      const controller = new AbortController();
-      const handle = mockReportHandle();
-      handle.read.mockImplementation(async (buffer: Buffer) => {
-        controller.abort();
-        return { buffer, bytesRead: 1 };
-      });
+    it.each(['execution', 'setup'] as const)(
+      'forwards cancellation during saved report %s and closes the handle',
+      async (stage) => {
+        const controller = new AbortController();
+        const handle = mockReportHandle();
+        handle.read.mockImplementation(async (buffer: Buffer) => {
+          controller.abort();
+          return { buffer, bytesRead: 1 };
+        });
 
-      const response = await new OpenAICodexSecurityProvider({
-        config: { report_file: path.join(reportDirectory, 'canceled.json') },
-      }).callApi('Compare', undefined, { abortSignal: controller.signal });
+        const provider = new OpenAICodexSecurityProvider({
+          config: { report_file: path.join(reportDirectory, 'canceled.json') },
+        });
+        const response =
+          stage === 'setup'
+            ? (await provider.checkSetup(undefined, { abortSignal: controller.signal })).response!
+            : await provider.callApi('Compare', undefined, { abortSignal: controller.signal });
 
-      expect(response.error).toContain('aborted');
-      expect(handle.read).toHaveBeenCalledOnce();
-      expect(handle.close).toHaveBeenCalledOnce();
-      expect(importModule).not.toHaveBeenCalled();
-    });
+        expect(response.error).toContain('aborted');
+        expect(response.metadata?.codexSecurity).toMatchObject({
+          status: 'canceled',
+          source: { kind: 'saved-report' },
+        });
+        expect(handle.read).toHaveBeenCalledOnce();
+        expect(handle.close).toHaveBeenCalledOnce();
+        expect(importModule).not.toHaveBeenCalled();
+      },
+    );
 
     it('honors cancellation before opening a saved report', async () => {
       const { file } = await saveReport(createScanResult().toJSON());
@@ -1196,8 +1299,15 @@ describe('OpenAICodexSecurityProvider', () => {
       const response = await new OpenAICodexSecurityProvider({
         config: { report_file: file },
       }).callApi('Compare', undefined, { abortSignal: controller.signal });
+      const setup = await new OpenAICodexSecurityProvider({
+        config: { report_file: file },
+      }).checkSetup(undefined, { abortSignal: controller.signal });
 
       expect(response.error).toContain('aborted');
+      expect(setup.response?.metadata?.codexSecurity).toMatchObject({
+        status: 'canceled',
+        source: { kind: 'saved-report' },
+      });
       expect(open).not.toHaveBeenCalled();
       expect(importModule).not.toHaveBeenCalled();
     });

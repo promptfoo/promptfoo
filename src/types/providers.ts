@@ -126,7 +126,10 @@ export interface CallApiOptionsParams {
 export interface ApiProvider extends MinimalApiProvider {
   callApi: CallApiFunction;
   /** Local setup validation that must not run inference or execute the provider's workload. */
-  checkSetup?: (context?: CallApiContextParams) => Promise<{
+  checkSetup?: (
+    context?: CallApiContextParams,
+    options?: Pick<CallApiOptionsParams, 'abortSignal'>,
+  ) => Promise<{
     success: boolean;
     message: string;
     error?: string;

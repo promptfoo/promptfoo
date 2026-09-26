@@ -1108,7 +1108,7 @@ async function callActiveProvider({
   if (abortSignal?.aborted) {
     throw new Error('Operation cancelled');
   }
-  const setupFailure = await providerSetup?.(activeProvider, callApiContext);
+  const setupFailure = await providerSetup?.(activeProvider, callApiContext, { abortSignal });
   if (abortSignal?.aborted) {
     throw new Error('Operation cancelled');
   }
@@ -2564,11 +2564,15 @@ async function applyInputTransform(
 
 async function prepareProviderSetup(runEvalOptions: RunEvalOptions[], checkAbort: () => void) {
   const providerSetup = createProviderSetupCheck();
+  const setupAfterHooks = createProviderSetupCheck({ cache: false });
   for (const step of runEvalOptions) {
     checkAbort();
-    step.providerSetup = providerSetup;
+    // Hooks can create or replace files without changing provider configuration.
+    // Check their resulting state for each row, inside its timeout boundary.
+    const hasExtensions = Boolean(step.testSuite?.extensions?.length);
+    step.providerSetup = hasExtensions ? setupAfterHooks : providerSetup;
     const activeProvider = isApiProvider(step.test.provider) ? step.test.provider : step.provider;
-    if (step.test.providerOutput || !activeProvider.checkSetupOnEval) {
+    if (hasExtensions || step.test.providerOutput || !activeProvider.checkSetupOnEval) {
       continue;
     }
     const runtimeVars = getEvalRuntimeVars({
@@ -2577,19 +2581,26 @@ async function prepareProviderSetup(runEvalOptions: RunEvalOptions[], checkAbort
       repeatIndex: step.repeatIndex,
       testIndex: step.testIdx,
     });
-    await providerSetup(activeProvider, {
-      vars: { ...step.test.vars, ...step.registers, ...runtimeVars },
-      prompt: {
-        ...step.prompt,
-        config: mergeProviderPromptConfig(step.prompt.config, step.test.options),
+    await providerSetup(
+      activeProvider,
+      {
+        vars: { ...step.test.vars, ...step.registers, ...runtimeVars },
+        prompt: {
+          ...step.prompt,
+          config: mergeProviderPromptConfig(step.prompt.config, step.test.options),
+        },
+        test: step.test,
+        originalProvider: step.provider,
+        evaluationId: step.evalId,
+        testIdx: step.testIdx,
+        promptIdx: step.promptIdx,
+        repeatIndex: step.repeatIndex,
       },
-      test: step.test,
-      originalProvider: step.provider,
-      evaluationId: step.evalId,
-      testIdx: step.testIdx,
-      promptIdx: step.promptIdx,
-      repeatIndex: step.repeatIndex,
-    });
+      {
+        abortSignal: step.abortSignal,
+        timeoutMs: step.evaluateOptions?.timeoutMs || getEvalTimeoutMs(),
+      },
+    );
   }
 }
 
