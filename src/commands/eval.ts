@@ -158,6 +158,11 @@ export function evalCommand(
       'Do not write results to promptfoo directory',
       defaultConfig?.commandLineOptions?.write,
     )
+    .option(
+      '--write',
+      'Write results to promptfoo directory, overriding the configuration default',
+      defaultConfig?.commandLineOptions?.write ?? true,
+    )
 
     // Additional features
     .option(

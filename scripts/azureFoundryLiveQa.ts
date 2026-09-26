@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { parseArgs, promisify } from 'node:util';
 
+import { ResultFailureReason } from '../src/types';
 import { sanitizeObject } from '../src/util/sanitizer';
 
 import type { EvaluateResult } from '../src/types';
@@ -161,6 +162,7 @@ const cases = [
 const summaries: unknown[] = [];
 for (const test of cases) {
   const configPath = path.join(output, `${test.name}.json`);
+  const testsPath = path.join(output, `${test.name}-tests.json`);
   const resultPath = path.join(output, `${test.name}-results.json`);
   const config = {
     description: `Opt-in Azure Foundry ${test.name} QA`,
@@ -180,9 +182,10 @@ for (const test of cases) {
     ],
     prompts: [{ raw: test.prompt, label: test.name, config: test.config }],
     tests: [{ assert: [test.assertion] }],
-    evaluateOptions: { maxConcurrency: 1, timeoutMs: 120_000 },
+    evaluateOptions: { maxConcurrency: 1, timeoutMs: 120_000, generateSuggestions: false },
   };
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+  fs.writeFileSync(testsPath, JSON.stringify(config.tests, null, 2));
   if (!values.live) {
     continue;
   }
@@ -198,6 +201,18 @@ for (const test of cases) {
         'eval',
         '-c',
         configPath,
+        // Pin inputs and execution options that the CLI can inherit from the root config.
+        '--tests',
+        testsPath,
+        '--repeat',
+        '1',
+        '--max-concurrency',
+        '1',
+        '--prompt-prefix',
+        '',
+        '--prompt-suffix',
+        '',
+        '--write',
         '--no-cache',
         '--no-share',
         '-o',
@@ -276,8 +291,13 @@ for (const test of cases) {
   ) {
     process.exitCode = 1;
   }
-  // Authentication, reachability and provider errors need attention before more live calls.
-  if (terminalError || results.some((result) => result.response?.error)) {
+  // Execution errors need attention before more live calls; assertion failures can continue.
+  if (
+    terminalError ||
+    results.some(
+      (result) => result.failureReason === ResultFailureReason.ERROR || result.response?.error,
+    )
+  ) {
     break;
   }
 }
