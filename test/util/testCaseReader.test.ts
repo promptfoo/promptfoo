@@ -1740,6 +1740,80 @@ describe('readTests', () => {
     expect(result).toHaveLength(1);
     expect(result[0].vars).toEqual({ input: 'hello', expected: 'world' });
   });
+
+  describe('string glob input', () => {
+    const files: Record<string, string> = {
+      [path.resolve('tests/a.csv')]: 'q\nfrom-a-csv',
+      [path.resolve('tests/b.csv')]: 'q\nfrom-b-csv',
+      [path.resolve('tests/a.json')]: '[{"vars": {"q": "from-a-json"}}]',
+      [path.resolve('tests/cases.yaml')]: '- vars: {q: from-yaml}',
+      [path.resolve('cases[draft].json')]: '[{"vars": {"q": "literal"}}]',
+    };
+
+    beforeEach(() => {
+      vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+        if (!(String(filePath) in files)) {
+          throw new Error(`ENOENT: ${filePath}`);
+        }
+        return files[String(filePath)];
+      });
+      // Match `<dir>/*` and `<dir>/*<ext>` patterns without depending on path separators.
+      vi.mocked(globSync).mockImplementation((pattern) =>
+        Object.keys(files).filter(
+          (file) =>
+            path.dirname(file) === path.dirname(String(pattern)) &&
+            file.endsWith(path.extname(String(pattern))),
+        ),
+      );
+    });
+
+    it('expands a bare * glob like the one-element array form', async () => {
+      const result = await readTests('file://tests/*');
+
+      expect(result.map((test) => test.vars?.q).sort()).toEqual([
+        'from-a-csv',
+        'from-a-json',
+        'from-b-csv',
+        'from-yaml',
+      ]);
+      expect(result).toEqual(await readTests(['file://tests/*']));
+    });
+
+    it('expands a *.csv glob instead of reading it as a literal path', async () => {
+      const result = await readTests('file://tests/*.csv');
+
+      expect(result.map((test) => test.vars?.q).sort()).toEqual(['from-a-csv', 'from-b-csv']);
+    });
+
+    it('warns and adds no rows when the glob matches nothing', async () => {
+      await expect(readTests('file://nomatch/*.csv')).resolves.toEqual([]);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('No test files found for path'),
+      );
+    });
+
+    it('keeps an existing file with glob characters on the standalone loader', async () => {
+      vi.mocked(fs.existsSync).mockImplementation(
+        (filePath) => filePath === path.resolve('cases[draft].json'),
+      );
+
+      const result = await readTests('file://cases[draft].json');
+
+      expect(result).toEqual([{ description: 'Row #1', vars: { q: 'literal' } }]);
+      expect(globSync).not.toHaveBeenCalled();
+    });
+
+    it('still reads a remote URL containing ? as a standalone source', async () => {
+      const url = 'https://docs.google.com/spreadsheets/d/example/edit?gid=0';
+      vi.mocked(fetchCsvFromGoogleSheet).mockResolvedValue([{ q: 'from-sheet' }]);
+
+      const result = await readTests(url);
+
+      expect(fetchCsvFromGoogleSheet).toHaveBeenCalledWith(url);
+      expect(result).toMatchObject([{ description: 'Row #1', vars: { q: 'from-sheet' } }]);
+      expect(globSync).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe('testCaseFromCsvRow', () => {
