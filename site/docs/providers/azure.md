@@ -1409,6 +1409,18 @@ Ignored per-request settings:
 
 Configure those on the Foundry agent definition itself instead of on the eval request.
 
+### Response continuity and accounting
+
+The provider resends instructions, tools, response format, model overrides, and generation settings on each tool turn. A forced `tool_choice` (`required` or a named function) applies to the initial request; subsequent turns use `auto` so the agent can return a final answer. An `allowed_tools` restriction remains in place while its mode changes to `auto`.
+
+By default, tool outputs continue the latest response using `previous_response_id`. If `passthrough.conversation` is configured, every turn uses that conversation instead. Do not combine `conversation` and `previous_response_id`. Requests using either explicit linkage field bypass promptfoo's response cache so repeated prompts still reach the conversation.
+
+Foundry supports [stateless responses](https://learn.microsoft.com/en-us/azure/foundry/agents/concepts/runtime-components#generate-a-response-without-storing), but this provider does not yet carry stateless tool history. `passthrough.store: false` works for a single request without local callbacks; combining it with `functionToolCallbacks` returns a configuration error before Azure access. Streaming and background requests are also unsupported by this provider.
+
+Failed, cancelled, incomplete, or still-pending Responses results return an error, preserving any available partial output, raw response, and usage. A completed refusal remains distinguishable through `isRefusal: true`. Partial text never clears a service error.
+
+Usage and cost cover every model turn in the invocation, including work completed before a later timeout or failure. `numRequests` counts SDK request attempts within that provider invocation, excluding local callbacks and retries internal to the SDK. Separate scheduler retries restart the provider invocation; their earlier usage is not aggregated here. Cached and reasoning tokens remain subsets of the total. Cost is calculated separately for each response's model. If usage or pricing is unavailable, metadata includes `usageIncomplete` or `costIncomplete`; incomplete cost is omitted from `cost`, with the known subtotal in `metadata.knownCost`.
+
 ### Function Tools with Azure Foundry Agents
 
 Promptfoo can handle Responses API `function_call` outputs for Foundry agents. If every requested function has a configured callback, promptfoo executes the callbacks locally and sends `function_call_output` items back with `previous_response_id`.
