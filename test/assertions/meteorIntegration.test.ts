@@ -47,11 +47,11 @@ describe('METEOR assertion', () => {
     expect(result.reason).toBe('METEOR test passed');
   });
 
-  it('should handle errors when natural package is missing', async () => {
-    // Mock handleMeteorAssertion to throw when called (simulates missing 'natural' module)
-    mockHandleMeteorAssertion.mockImplementation(() => {
-      throw new Error("Cannot find module 'natural'");
-    });
+  it.each([
+    "Cannot find module 'natural'",
+    'The "natural" package is required for METEOR assertions. Install it with: npm install natural@^8.1.1',
+  ])('handles asynchronous missing-package errors: %s', async (message) => {
+    mockHandleMeteorAssertion.mockRejectedValue(new Error(message));
 
     const result = await runAssertion({
       prompt: 'Test prompt',
@@ -69,7 +69,7 @@ describe('METEOR assertion', () => {
     expect(result.pass).toBe(false);
     expect(result.score).toBe(0);
     expect(result.reason).toBe(
-      'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.1.0',
+      'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.1.1',
     );
     expect(result.assertion).toEqual({
       type: 'meteor',
@@ -80,9 +80,7 @@ describe('METEOR assertion', () => {
 
   it('should rethrow other errors that are not related to missing module', async () => {
     // Mock handleMeteorAssertion to throw a non-module-related error
-    mockHandleMeteorAssertion.mockImplementation(() => {
-      throw new Error('Some other error');
-    });
+    mockHandleMeteorAssertion.mockRejectedValue(new Error('Some other error'));
 
     // The error should be rethrown since it's not a "Cannot find module" error
     await expect(

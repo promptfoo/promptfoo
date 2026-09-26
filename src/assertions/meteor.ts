@@ -9,11 +9,13 @@ type Stemmer = {
 type DataRecord = {
   synonyms: string[];
 };
+type WordNetInstance = {
+  lookup(word: string, callback: (results: DataRecord[]) => void): void;
+};
 
 // Lazy load natural package to handle optional dependency
 let PorterStemmer: Stemmer | undefined;
-// biome-ignore lint/suspicious/noExplicitAny: FIXME
-let WordNet: (new () => any) | undefined;
+let WordNet: (new () => WordNetInstance) | undefined;
 
 async function ensureNaturalPackage(): Promise<void> {
   if (PorterStemmer && WordNet) {
@@ -21,13 +23,17 @@ async function ensureNaturalPackage(): Promise<void> {
   }
 
   try {
-    // Dynamic import for ESM compatibility
-    const natural = await import('natural');
-    PorterStemmer = natural.PorterStemmer;
-    WordNet = natural.WordNet;
+    // Natural's top-level CommonJS export does not expose named ESM exports.
+    // Load only the components METEOR needs, without unrelated database clients.
+    const [{ PorterStemmer: stemmer }, { WordNet: wordnet }] = await Promise.all([
+      import('natural/lib/natural/stemmers/index.js'),
+      import('natural/lib/natural/wordnet/index.js'),
+    ]);
+    PorterStemmer = stemmer;
+    WordNet = wordnet;
   } catch (_err) {
     throw new Error(
-      'The "natural" package is required for METEOR assertions. Install it with: npm install natural@^8.1.0',
+      'The "natural" package is required for METEOR assertions. Install it with: npm install natural@^8.1.1',
     );
   }
 }
@@ -120,7 +126,7 @@ async function matchStemEnums(
 async function matchSynonymEnums(
   enumCandidateList: WordPair[],
   enumReferenceList: WordPair[],
-  wordnet?: unknown,
+  wordnet?: WordNetInstance,
 ): Promise<[MatchPair[], WordPair[], WordPair[]]> {
   await ensureNaturalPackage();
   invariant(WordNet, 'WordNet should be loaded');

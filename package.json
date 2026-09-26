@@ -259,6 +259,7 @@
     "ibm-cloud-sdk-core": "^5.6.1",
     "knip": "~6.27.0",
     "langium": "4.4.0",
+    "natural": "^8.1.1",
     "node-sql-parser": "^5.4.0",
     "oxc-parser": "^0.150.0",
     "pdf-parse": "^2.4.5",
@@ -312,7 +313,6 @@
     "hono": "^4.13.7",
     "ibm-cloud-sdk-core": "^5.6.1",
     "jks-js": "^1.1.5",
-    "natural": "^8.1.1",
     "node-sql-parser": "^5.4.0",
     "pdf-parse": "^2.4.5",
     "pem": "~1.14.8",
@@ -427,5 +427,13 @@
     ],
     "ignoredBuiltDependencies": []
   },
-  "homepage": "https://promptfoo.dev"
+  "homepage": "https://promptfoo.dev",
+  "peerDependencies": {
+    "natural": "^8.1.1"
+  },
+  "peerDependenciesMeta": {
+    "natural": {
+      "optional": true
+    }
+  }
 }
