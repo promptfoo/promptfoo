@@ -44,6 +44,7 @@ const TRANSPORT_ENV_KEYS = [
   'PROMPTFOO_INSECURE_SSL',
   'PROMPTFOO_FETCH_CONNECTIONS',
 ] as const;
+const PROXY_ENV_KEYS = ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY'] as const;
 
 /**
  * OpenAI Agents Provider
@@ -339,6 +340,15 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         this.env?.[key],
       ]),
     );
+    // Loaded evaluation settings stay bound to the provider. Normalize aliases so
+    // a retained uppercase value also overrides a later lowercase scope value.
+    for (const key of PROXY_ENV_KEYS) {
+      const lower = key.toLowerCase();
+      const value = this.env?.[lower] ?? this.env?.[key];
+      if (value !== undefined) {
+        transportEnv[lower] = value;
+      }
+    }
     const organization = this.getOrganization(config);
     const apiUrl = new URL(config.apiBaseUrl);
     const query = apiUrl.search.slice(1);
@@ -399,17 +409,13 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       'OPENAI_API_BASE_URL',
       'OPENAI_BASE_URL',
       'OPENAI_ORGANIZATION',
+      ...TRANSPORT_ENV_KEYS,
     ] as const;
-    const invocationEnvs = [getEnvOverrides(), getEnvOverrides('file')];
+    const scopedEnvs = [this.env, getEnvOverrides(), getEnvOverrides('file')];
     return (
-      [this.env, ...invocationEnvs].some((env) =>
-        envKeys.some((key) => env?.[key] !== undefined),
-      ) ||
-      [this.env, ...invocationEnvs].some((env) =>
-        TRANSPORT_ENV_KEYS.some((key) => env?.[key] !== undefined),
-      ) ||
-      invocationEnvs.some((env) =>
-        ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY'].some(
+      scopedEnvs.some((env) => envKeys.some((key) => env?.[key] !== undefined)) ||
+      scopedEnvs.some((env) =>
+        PROXY_ENV_KEYS.some(
           (key) => env?.[key] !== undefined || env?.[key.toLowerCase()] !== undefined,
         ),
       ) ||

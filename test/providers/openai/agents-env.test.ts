@@ -17,6 +17,7 @@ import { OpenAiAgentsProvider } from '../../../src/providers/openai/agents';
 import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
 import { CreateJobRequestSchema } from '../../../src/types/api/eval';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
+import { getProxyForUrl } from '../../../src/util/fetch/proxy';
 import { ProviderOptionsSchema } from '../../../src/validators/providers';
 import { createDeferred, mockProcessEnv } from '../../util/utils';
 
@@ -293,6 +294,67 @@ describe('Agents SDK scoped client', () => {
       expect(request().headers.get('openai-organization')).toBe(expected.OPENAI_ORGANIZATION);
     },
   );
+
+  it.each(
+    (['explicit', 'ambient'] as const).flatMap((loading) =>
+      [
+        { env: { NO_PROXY: '*' }, active: undefined, expected: '' },
+        {
+          env: { HTTPS_PROXY: 'http://loaded.example:8080' },
+          active: { https_proxy: 'http://active.example:8080' },
+          expected: 'http://loaded.example:8080',
+        },
+        {
+          env: { https_proxy: '' },
+          active: { HTTPS_PROXY: 'http://active.example:8080' },
+          expected: '',
+        },
+        {
+          env: { HTTPS_PROXY: '' },
+          active: { https_proxy: 'http://active.example:8080' },
+          expected: '',
+        },
+        {
+          env: {
+            HTTPS_PROXY: 'http://upper.example:8080',
+            https_proxy: 'http://lower.example:8080',
+          },
+          active: undefined,
+          expected: 'http://lower.example:8080',
+        },
+        { env: { NO_PROXY: '' }, active: { no_proxy: '*' }, expected: 'http://host.example:8080' },
+        {
+          env: { NO_PROXY: 'other.example' },
+          active: { https_proxy: 'http://active.example:8080' },
+          expected: 'http://active.example:8080',
+        },
+      ].map((testCase) => ({ loading, ...testCase })),
+    ),
+  )('retains $loading loaded proxy policy $env', async ({ loading, env, active, expected }) => {
+    mockProcessEnv({
+      HTTPS_PROXY: 'http://host.example:8080',
+      https_proxy: undefined,
+      ALL_PROXY: undefined,
+      all_proxy: undefined,
+      NO_PROXY: undefined,
+      no_proxy: undefined,
+    });
+    const custom = new OpenAIProvider({ apiKey: 'sdk-key' });
+    vi.spyOn(custom, 'getModel').mockRejectedValue(new Error('loaded proxy policy was ignored'));
+    setDefaultModelProvider(custom);
+    vi.mocked(fetchWithProxy).mockImplementation(async () => {
+      expect(getProxyForUrl('https://api.openai.com/v1/responses')).toBe(expected);
+      return Response.json(response);
+    });
+    const options = { config: { agent: new Agent({ name: 'fixture', model: 'gpt-4.1-mini' }) } };
+    const target = await (loading === 'explicit'
+      ? loadApiProvider('openai:agents:fixture', { env, options })
+      : cliState.withEnv(env, () => loadApiProvider('openai:agents:fixture', { options })));
+    const result = await cliState.withEnv(active, () => target.callApi('hello'));
+    expect(result.output).toBe('ok');
+    expect(fetchWithProxy).toHaveBeenCalledOnce();
+    expect(request().headers.get('authorization')).toBe('Bearer host-key');
+  });
 
   it('isolates sequential invocation-file credentials on a reused provider', async () => {
     const target = provider();
