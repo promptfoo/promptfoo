@@ -254,7 +254,7 @@ providers:
           #   args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp']
         # Optional: only expose specific tools
         tools:
-          - ask_question
+          - ask_wiki_question
       toolChoice: auto
 ```
 
@@ -524,12 +524,12 @@ providers:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
-  - id: bedrock:openai.gpt-5.6-sol # frontier: Responses API, uses a Bedrock key or AWS credentials
+  - id: bedrock:openai.gpt-6-sol # frontier: Responses API, uses a Bedrock key or AWS credentials
     config:
-      region: 'us-east-2'
+      region: 'us-east-1'
       apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}'
       reasoning_effort: 'medium'
-      max_output_tokens: 256
+      max_output_tokens: 2048
   - id: bedrock:openai.gpt-oss-120b-1:0
     config:
       region: 'us-west-2'
@@ -1078,6 +1078,17 @@ requests and return the final assistant message directly.
 
 Amazon Bedrock hosts two families of OpenAI models, and they are served by **different
 APIs**. promptfoo routes each `bedrock:openai.*` id to the correct one automatically.
+
+GPT-6 Sol (`openai.gpt-6-sol`) and Luna (`openai.gpt-6-luna`) use the
+[OpenAI-compatible Responses API on Mantle](https://developers.openai.com/api/docs/guides/amazon-bedrock)
+in `us-east-1`, which promptfoo selects by default for those two IDs. AWS also offers the
+models through Bedrock Runtime with United States and global routing; the bare promptfoo
+selectors use Mantle. Bedrock does not support Responses reasoning updates; use the request-level effort.
+
+For region-specific Standard processing, promptfoo estimates
+$2.20 input / $11 output for Sol and $0.11 input / $0.55 output per million tokens. Bedrock Runtime global profiles use the global Standard rates: $2 / $10 for Sol and $0.10 / $0.50 for Luna per million tokens.
+See [OpenAI's Bedrock pricing guidance](https://developers.openai.com/api/docs/guides/amazon-bedrock#pricing)
+for regional pricing and AWS billing terms.
 
 #### Frontier models (GPT-5.x)
 

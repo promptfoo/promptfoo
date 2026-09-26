@@ -136,7 +136,7 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [contains-sql](/docs/configuration/expected-outputs/deterministic/#contains-sql)                                   | output is valid SQL or contains a valid SQL code block             |
 | [is-xml](/docs/configuration/expected-outputs/deterministic/#is-xml)                                               | output is a supported well-formed XML document                     |
 | [contains-xml](/docs/configuration/expected-outputs/deterministic/#contains-xml)                                   | output contains valid xml fragment(s)                              |
-| [is-refusal](/docs/configuration/expected-outputs/deterministic/#is-refusal)                                       | output indicates the model refused to perform the task             |
+| [is-refusal](/docs/configuration/expected-outputs/deterministic/#is-refusal)                                       | the provider reports a refusal or the output indicates one         |
 | [javascript](/docs/configuration/expected-outputs/javascript)                                                      | provided Javascript function validates the output                  |
 | [python](/docs/configuration/expected-outputs/python)                                                              | provided Python function validates the output                      |
 | [ruby](/docs/configuration/expected-outputs/ruby)                                                                  | provided Ruby function validates the output                        |
@@ -578,15 +578,15 @@ derivedMetrics:
 defaultTest:
   assert:
     - type: javascript
-      value: output.sentiment === 'positive' && context.vars.expected === 'positive' ? 1 : 0
+      value: "output.sentiment === 'positive' && context.vars.expected === 'positive' ? 1 : 0"
       metric: true_positives
       weight: 0
     - type: javascript
-      value: output.sentiment === 'positive' && context.vars.expected === 'negative' ? 1 : 0
+      value: "output.sentiment === 'positive' && context.vars.expected === 'negative' ? 1 : 0"
       metric: false_positives
       weight: 0
     - type: javascript
-      value: output.sentiment === 'negative' && context.vars.expected === 'positive' ? 1 : 0
+      value: "output.sentiment === 'negative' && context.vars.expected === 'positive' ? 1 : 0"
       metric: false_negatives
       weight: 0
 
