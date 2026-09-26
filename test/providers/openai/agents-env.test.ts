@@ -106,6 +106,32 @@ describe('Agents SDK scoped client', () => {
     expect(request().headers.get('authorization')).toBe('Bearer host-key');
   });
 
+  it.each(['host-org', ''])('honors a process-only organization of %j', async (organization) => {
+    mockProcessEnv({ OPENAI_ORGANIZATION: organization, OPENAI_ORG_ID: 'sdk-org' });
+    const custom = new OpenAIProvider({ apiKey: 'sdk-key' });
+    vi.spyOn(custom, 'getModel').mockRejectedValue(
+      new Error('default provider bypassed organization'),
+    );
+    setDefaultModelProvider(custom);
+    await provider().callApi('hello');
+    expect(request().headers.get('openai-organization')).toBe(organization || null);
+  });
+
+  it.each(['suite', 'file'] as const)(
+    'uses the shared transport for a %s-only proxy setting',
+    async (scope) => {
+      const custom = new OpenAIProvider({ apiKey: 'sdk-key' });
+      vi.spyOn(custom, 'getModel').mockRejectedValue(new Error('default provider bypassed proxy'));
+      setDefaultModelProvider(custom);
+      const invoke = () => provider().callApi('hello');
+      await (scope === 'suite'
+        ? cliState.withEnv({ HTTPS_PROXY: 'http://127.0.0.1:19191' }, invoke)
+        : cliState.withEnvFileOverrides({ no_proxy: '*' }, invoke));
+      expect(fetchWithProxy).toHaveBeenCalledOnce();
+      expect(request().url).toBe('https://api.openai.com/v1/responses');
+    },
+  );
+
   it('applies a retry budget configured without other connection settings', async () => {
     const custom = new OpenAIProvider({ apiKey: 'sdk-key' });
     vi.spyOn(custom, 'getModel').mockRejectedValue(new Error('default provider bypassed retries'));
@@ -445,6 +471,44 @@ describe('Agents SDK scoped client', () => {
       org: 'model-org',
     });
   });
+
+  it.each([
+    [{ organization: 'session-org' }, 'session-org', 'model-header-project'],
+    [{ project: 'session-project' }, 'model-header-org', 'session-project'],
+    [{ organization: '', project: '' }, null, null],
+  ] as const)(
+    'preserves gateway headers for metadata-only session settings %j',
+    async (metadata, organization, project) => {
+      const calls: { session: boolean; headers: Headers }[] = [];
+      vi.mocked(fetchWithProxy).mockImplementation(async (input, options) => {
+        const session = String(input).includes('/items');
+        calls.push({ session, headers: new Headers(options?.headers) });
+        return session
+          ? Response.json({ data: [], object: 'list', has_more: false })
+          : Response.json(response);
+      });
+      await provider({
+        apiKey: 'model-key',
+        headers: {
+          'X-Gateway-Auth': 'fixture',
+          'openai-organization': 'model-header-org',
+          'OPENAI-PROJECT': 'model-header-project',
+        },
+        session: { type: 'openai-conversations', conversationId: 'conv_fixture', ...metadata },
+      }).callApi('hello');
+      expect(calls.some((call) => call.session)).toBe(true);
+      for (const call of calls) {
+        expect(call.headers.get('x-gateway-auth')).toBe('fixture');
+        expect(call.headers.get('authorization')).toBe('Bearer model-key');
+        expect(call.headers.get('openai-organization')).toBe(
+          call.session ? organization : 'model-header-org',
+        );
+        expect(call.headers.get('openai-project')).toBe(
+          call.session ? project : 'model-header-project',
+        );
+      }
+    },
+  );
 
   it('shares gateway headers when a session only supplies its conversation ID', async () => {
     vi.mocked(fetchWithProxy).mockImplementation(async (input) =>

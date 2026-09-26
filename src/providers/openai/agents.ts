@@ -314,10 +314,17 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       apiHost: undefined,
       apiBaseUrl: overrides.baseURL ?? this.getApiUrl(),
       organization: overrides.organization ?? (separateCredentials ? '' : this.config.organization),
-      // Explicit session connection settings must not inherit model gateway credentials.
-      headers: Object.values(overrides).some((value) => value !== undefined)
+      // New endpoints/credentials are isolated; metadata-only overrides keep gateway headers.
+      headers: separateCredentials
         ? {}
-        : this.config.headers,
+        : Object.fromEntries(
+            Object.entries(this.config.headers ?? {}).filter(
+              ([name]) =>
+                (overrides.organization === undefined ||
+                  name.toLowerCase() !== 'openai-organization') &&
+                (overrides.project === undefined || name.toLowerCase() !== 'openai-project'),
+            ),
+          ),
     };
     const organization = this.getOrganization(config);
     const apiUrl = new URL(config.apiBaseUrl);
@@ -335,6 +342,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       defaultHeaders: {
         ...(keyless && { Authorization: null }),
         ...(organization === '' && { 'OpenAI-Organization': null }),
+        ...(overrides.project === '' && { 'OpenAI-Project': null }),
         ...this.getOpenAiRequestHeaders(config.headers, config),
       },
       fetch: (input, options) => {
@@ -374,11 +382,17 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       'OPENAI_BASE_URL',
       'OPENAI_ORGANIZATION',
     ] as const;
+    const invocationEnvs = [getEnvOverrides(), getEnvOverrides('file')];
     return (
-      [this.env, getEnvOverrides(), getEnvOverrides('file')].some((env) =>
+      [this.env, ...invocationEnvs].some((env) =>
         envKeys.some((key) => env?.[key] !== undefined),
       ) ||
-      ['OPENAI_API_HOST', 'OPENAI_API_BASE_URL', 'OPENAI_BASE_URL'].some(
+      invocationEnvs.some((env) =>
+        ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY'].some(
+          (key) => env?.[key] !== undefined || env?.[key.toLowerCase()] !== undefined,
+        ),
+      ) ||
+      ['OPENAI_API_HOST', 'OPENAI_API_BASE_URL', 'OPENAI_BASE_URL', 'OPENAI_ORGANIZATION'].some(
         (key) => getEnvString(key) !== undefined,
       )
     );
