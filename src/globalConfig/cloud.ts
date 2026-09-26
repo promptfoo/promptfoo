@@ -174,8 +174,15 @@ export class CloudConfig {
     return !!this.resolveApiKey();
   }
 
-  hasPendingEnvironmentSelection(): boolean {
+  hasPendingTeamSelection(): boolean {
     const config = this.config;
+    if (
+      config.currentOrganizationId &&
+      config.currentTeamId &&
+      !config.teams?.[config.currentOrganizationId]?.currentTeamId
+    ) {
+      return true;
+    }
     return (
       !!this.getSelectionContext(config) &&
       !this.isCurrentSelection(config) &&

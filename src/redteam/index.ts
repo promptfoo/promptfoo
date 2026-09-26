@@ -1328,7 +1328,7 @@ export async function synthesize({
     // once before generation starts using it in Cloud requests.
     if (
       !cloudTargetId &&
-      (cloudConfig.getRequestConfig().teamId || cloudConfig.hasPendingEnvironmentSelection()) &&
+      (cloudConfig.getRequestConfig().teamId || cloudConfig.hasPendingTeamSelection()) &&
       isPromptfooCloudApiHost(getRemoteGenerationUrl())
     ) {
       await resolveCloudTeam();

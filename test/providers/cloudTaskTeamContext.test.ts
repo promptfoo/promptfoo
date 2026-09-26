@@ -18,6 +18,7 @@ import { postRemoteGenerationTask } from '../../src/redteam/remoteGenerationTask
 import { checkExfilTracking } from '../../src/redteam/strategies/indirectWebPwn';
 import { doRemoteGrading } from '../../src/remoteGrading';
 import { redteamRouter } from '../../src/server/routes/redteam';
+import { loginWithApiKey } from '../../src/util/cloudLogin';
 import { getConfigDirectoryPath, setConfigDirectoryPath } from '../../src/util/config/manage';
 import { mockProcessEnv } from '../util/utils';
 
@@ -71,9 +72,12 @@ beforeEach(() => {
       requests.push({ path: url.pathname, team: headers.get('x-promptfoo-team-id'), body });
       if (url.pathname === '/api/v1/users/me') {
         return Response.json({
+          user: { id: 'user', name: 'User', email: 'user@example.test' },
           organization: {
             id: headers.get('Authorization') === 'Bearer environment-b' ? 'org-b' : 'org-a',
+            name: 'Organization',
           },
+          app: { url: apiHost },
         });
       }
       if (url.pathname === '/api/v1/users/me/teams') {
@@ -141,6 +145,102 @@ const routeTask = (context: Record<string, unknown> = {}) => {
 };
 
 describe('Cloud task team recovery', () => {
+  describe('saved legacy preferences', () => {
+    beforeEach(() => {
+      writeGlobalConfig({
+        id: 'legacy-selection',
+        cloud: {
+          apiKey: 'saved-key',
+          apiHost,
+          currentOrganizationId: 'org-a',
+          currentTeamId: 'selected-a',
+        },
+      });
+    });
+
+    it('recovers the retained legacy preference after a login discovery outage', async () => {
+      const config = readGlobalConfig();
+      delete config.cloud!.currentOrganizationId;
+      writeGlobalConfig(config);
+      failDiscovery = true;
+      await loginWithApiKey('saved-key');
+      expect(cloudConfig.getRequestConfig().teamId).toBeUndefined();
+      expect(cloudConfig.hasPendingTeamSelection()).toBe(true);
+
+      requests.length = 0;
+      failDiscovery = false;
+      await model();
+
+      expect(requests.map(({ path, team }) => ({ path, team }))).toEqual([
+        { path: '/api/v1/users/me/teams', team: null },
+        { path: '/api/v1/task', team: 'selected-a' },
+      ]);
+      expect(readGlobalConfig().cloud).toMatchObject({
+        currentOrganizationId: 'org-a',
+        teams: { 'org-a': { currentTeamId: 'selected-a' } },
+      });
+      expect(readGlobalConfig().cloud?.currentTeamId).toBeUndefined();
+      expect(cloudConfig.hasPendingTeamSelection()).toBe(false);
+    });
+
+    it('keeps the legacy preference and sends no task during a persistent outage', async () => {
+      failDiscovery = true;
+      const before = readGlobalConfig();
+      await expect(model()).rejects.toThrow('Failed to get user teams');
+      expect(requests.some((r) => r.path === '/api/v1/task')).toBe(false);
+      expect(readGlobalConfig()).toEqual(before);
+      expect(cloudConfig.hasPendingTeamSelection()).toBe(true);
+    });
+
+    it('uses an existing scoped preference without recovering an obsolete legacy choice', async () => {
+      cloudConfig.setCurrentTeamId('scoped-team', 'org-a');
+      failDiscovery = true;
+      await model();
+      expect(requests).toEqual([
+        expect.objectContaining({ path: '/api/v1/task', team: 'scoped-team' }),
+      ]);
+      expect(cloudConfig.hasPendingTeamSelection()).toBe(false);
+    });
+
+    it('keeps worker selections without an organization usable without discovery', async () => {
+      writeGlobalConfig({ id: 'worker', cloud: { apiKey: 'worker-key', apiHost } });
+      cloudConfig.setCurrentTeamId('worker-team');
+      failDiscovery = true;
+      await model();
+      expect(requests).toEqual([
+        expect.objectContaining({ path: '/api/v1/task', team: 'worker-team' }),
+      ]);
+      expect(cloudConfig.hasPendingTeamSelection()).toBe(false);
+    });
+
+    it.each([
+      [
+        'target',
+        () => new PromptfooSimulatedUserProvider({ targetId: 'target' }, 'tau').callApi('[]'),
+      ],
+      ['team', () => sharedTask({ teamId: 'team' })],
+      ['evaluation', () => sharedTask({ evaluationId: 'evaluation' })],
+      ['job', () => sharedTask({ jobId: 'job' })],
+      ['config', () => sharedTask({ config: { metadata: { teamId: 'team' } } })],
+      ['header', () => sharedTask({}, { 'X-Promptfoo-Team-Id': 'team' })],
+      ['status', () => checkExfilTracking('resource', 'evaluation')],
+      [
+        'custom endpoint',
+        () => {
+          vi.stubEnv('PROMPTFOO_REMOTE_GENERATION_URL', 'https://custom.example.com/api/v1/task');
+          return grade();
+        },
+      ],
+    ] as const)('preserves explicit %s routing without recovery', async (_name, call) => {
+      failDiscovery = true;
+      const before = readGlobalConfig();
+      await call();
+      expect(requests).toHaveLength(1);
+      expect(requests[0].path).toBe('/api/v1/task');
+      expect(readGlobalConfig()).toEqual(before);
+    });
+  });
+
   it.each(['grader', 'provider'])(
     'reads existing resource status through the %s without recovery',
     async (reader) => {
@@ -165,7 +265,7 @@ describe('Cloud task team recovery', () => {
           }),
         }),
       ]);
-      expect(cloudConfig.hasPendingEnvironmentSelection()).toBe(true);
+      expect(cloudConfig.hasPendingTeamSelection()).toBe(true);
       expect(readGlobalConfig()).toEqual(before);
     },
   );
@@ -235,27 +335,39 @@ describe('Cloud task team recovery', () => {
     expect(requests.filter((r) => r.path === '/api/v1/task')[0].team).toBe('selected-a');
   });
 
-  it('keeps a local echo evaluation offline with an unresolved environment preference', async () => {
-    const before = readGlobalConfig();
-    const evalRecord = await evaluate(
-      {
-        prompts: ['Hello'],
-        providers: ['echo'],
-        sharing: false,
-        tests: [{ assert: [{ type: 'equals', value: 'Hello' }] }],
-      },
-      { cache: false },
-    );
-    expect((await evalRecord.toEvaluateSummary()).results[0].success).toBe(true);
-    expect(requests).toEqual([]);
-    expect(readGlobalConfig()).toEqual(before);
-  });
+  it.each(['environment', 'legacy'])(
+    'keeps a local echo evaluation offline with an unresolved %s preference',
+    async (context) => {
+      if (context === 'legacy') {
+        writeGlobalConfig({
+          cloud: {
+            apiKey: 'saved-key',
+            currentOrganizationId: 'org-a',
+            currentTeamId: 'selected-a',
+          },
+        });
+      }
+      const before = readGlobalConfig();
+      const evalRecord = await evaluate(
+        {
+          prompts: ['Hello'],
+          providers: ['echo'],
+          sharing: false,
+          tests: [{ assert: [{ type: 'equals', value: 'Hello' }] }],
+        },
+        { cache: false },
+      );
+      expect((await evalRecord.toEvaluateSummary()).results[0].success).toBe(true);
+      expect(requests).toEqual([]);
+      expect(readGlobalConfig()).toEqual(before);
+    },
+  );
 
   it('does not dispatch a task with the default team when discovery fails', async () => {
     failDiscovery = true;
     await expect(model()).rejects.toThrow('Failed to get user teams');
     expect(requests.some((r) => r.path === '/api/v1/task')).toBe(false);
-    expect(cloudConfig.hasPendingEnvironmentSelection()).toBe(true);
+    expect(cloudConfig.hasPendingTeamSelection()).toBe(true);
     failDiscovery = false;
     await model();
     expect(requests.at(-1)?.team).toBe('selected-a');
@@ -269,14 +381,14 @@ describe('Cloud task team recovery', () => {
         body: expect.objectContaining({ targetId: 'assigned-target' }),
       }),
     ]);
-    expect(cloudConfig.hasPendingEnvironmentSelection()).toBe(true);
+    expect(cloudConfig.hasPendingTeamSelection()).toBe(true);
   });
 
   it('leaves custom task endpoints independent of Cloud team discovery', async () => {
     vi.stubEnv('PROMPTFOO_REMOTE_GENERATION_URL', 'https://custom.example.com/api/v1/task');
     await grade();
     expect(requests).toEqual([expect.objectContaining({ path: '/api/v1/task', team: null })]);
-    expect(cloudConfig.hasPendingEnvironmentSelection()).toBe(true);
+    expect(cloudConfig.hasPendingTeamSelection()).toBe(true);
   });
 
   it('does not introduce discovery when no preference has been saved', async () => {
@@ -302,7 +414,7 @@ describe('Cloud task team recovery', () => {
     for (const sent of requests) {
       expect(sent.body).toMatchObject(context);
     }
-    expect(cloudConfig.hasPendingEnvironmentSelection()).toBe(true);
+    expect(cloudConfig.hasPendingTeamSelection()).toBe(true);
   });
 
   it('preserves a caller-supplied team header without discovery', async () => {
@@ -311,7 +423,7 @@ describe('Cloud task team recovery', () => {
     expect(requests).toEqual([
       expect.objectContaining({ path: '/api/v1/task', team: 'assigned-team' }),
     ]);
-    expect(cloudConfig.hasPendingEnvironmentSelection()).toBe(true);
+    expect(cloudConfig.hasPendingTeamSelection()).toBe(true);
   });
 
   it('recovers the selected team when a task only carries a local evalId', async () => {

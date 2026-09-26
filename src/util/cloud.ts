@@ -28,9 +28,9 @@ export interface ResolvedCloudTeam {
 
 const pendingTeamRecovery = new Map<string, Promise<void>>();
 
-/** Recover a remembered environment selection before an unscoped Cloud task starts. */
+/** Recover a pending team selection before an unscoped Cloud task starts. */
 export async function ensureCloudTeamContext(url?: string, targetId?: string): Promise<void> {
-  if (targetId || !cloudConfig.hasPendingEnvironmentSelection()) {
+  if (targetId || !cloudConfig.hasPendingTeamSelection()) {
     return;
   }
   const request = cloudConfig.getRequestConfig();

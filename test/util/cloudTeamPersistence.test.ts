@@ -320,7 +320,7 @@ describe('team resolution with persisted preferences and environment credentials
 
     expect(fetchWithProxy).toHaveBeenCalledTimes(2);
     expect(cloudConfig.getRequestConfig().teamId).toBe('selected-a');
-    expect(cloudConfig.hasPendingEnvironmentSelection()).toBe(false);
+    expect(cloudConfig.hasPendingTeamSelection()).toBe(false);
   });
 
   it('does not recover teams for a fresh credential, a foreign endpoint, or an explicit target', async () => {
@@ -329,7 +329,7 @@ describe('team resolution with persisted preferences and environment credentials
     await ensureCloudTeamContext('https://other.example.com/api/v1/task');
     await ensureCloudTeamContext('https://cloud.example.com/api/v1/task', 'target-a');
     expect(fetchWithProxy).not.toHaveBeenCalled();
-    expect(cloudConfig.hasPendingEnvironmentSelection()).toBe(true);
+    expect(cloudConfig.hasPendingTeamSelection()).toBe(true);
   });
 
   it('rejects joined recovery callers if the session changes just after resolution', async () => {

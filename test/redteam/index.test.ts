@@ -1985,7 +1985,7 @@ describe('synthesize', () => {
     });
 
     it('resolves an invalidated remembered environment team before Cloud generation', async () => {
-      vi.mocked(cloudConfig.hasPendingEnvironmentSelection).mockReturnValue(true);
+      vi.mocked(cloudConfig.hasPendingTeamSelection).mockReturnValue(true);
       vi.mocked(isPromptfooCloudApiHost).mockReturnValue(true);
       await synthesize({
         numTests: 1,
