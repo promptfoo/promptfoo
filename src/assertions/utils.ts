@@ -7,7 +7,15 @@ import { importModule } from '../esm';
 import { type Assertion, type TestCase } from '../types/index';
 import { loadYaml } from '../util/yamlLoad';
 
-const clone = Clone();
+// `circles: true` is required because `test.assert` can carry an already-resolved,
+// live `ApiProvider` instance (see resolveRuntimeGradingProviderReferences in
+// evaluator.ts, which substitutes a configured provider's live instance in place
+// of an id string whenever an assertion's judge `provider:` matches one of the
+// eval's target provider ids). That instance's lazily-constructed SDK client
+// (e.g. Anthropic's) can contain genuine internal circular references. rfdc's
+// default (non-circular) clone recurses forever on such a structure instead of
+// throwing, crashing the eval with "Maximum call stack size exceeded".
+const clone = Clone({ circles: true });
 
 export function getFinalTest(test: TestCase, assertion: Assertion) {
   // Deep copy
