@@ -204,6 +204,118 @@ describe('global configuration persistence', () => {
     expect(fs.readdirSync(directory)).toEqual(['promptfoo.yaml']);
   });
 
+  it.each(['absolute', 'relative', 'chained', 'dangling'])(
+    'updates the backing file while preserving a %s config symlink',
+    (kind) => {
+      if (process.platform === 'win32') {
+        return;
+      }
+      const backingDirectory = path.join(directory, 'shared');
+      fs.mkdirSync(backingDirectory);
+      const backingPath = path.join(backingDirectory, 'config.yaml');
+      if (kind !== 'dangling') {
+        fs.writeFileSync(backingPath, yaml.dump(oldConfig), { mode: 0o640 });
+        fs.chmodSync(backingPath, 0o640);
+      }
+      const linkTarget = kind === 'absolute' ? backingPath : path.relative(directory, backingPath);
+      if (kind === 'chained') {
+        fs.symlinkSync(linkTarget, path.join(directory, 'intermediate.yaml'));
+        fs.symlinkSync('intermediate.yaml', configPath);
+      } else {
+        fs.symlinkSync(linkTarget, configPath);
+      }
+
+      new CloudConfig(false).setApiKey('replacement-token');
+
+      expect(fs.lstatSync(configPath).isSymbolicLink()).toBe(true);
+      const saved = yaml.load(fs.readFileSync(backingPath, 'utf8')) as GlobalConfig;
+      expect(saved.cloud?.apiKey).toBe('replacement-token');
+      if (kind === 'dangling') {
+        expect(saved.id).toMatch(/^[0-9a-f-]{36}$/);
+        expect(fs.statSync(backingPath).mode & 0o777).toBe(0o600);
+      } else {
+        expect(saved).toEqual({
+          ...oldConfig,
+          cloud: { ...oldConfig.cloud, apiKey: 'replacement-token' },
+        });
+        expect(fs.statSync(backingPath).mode & 0o777).toBe(0o640);
+      }
+      expect(readFile()).toEqual(saved);
+      expect(fs.readdirSync(backingDirectory)).toEqual(['config.yaml']);
+    },
+  );
+
+  it.each(['aliased parent', 'relative target', 'absolute target'])(
+    'follows filesystem directory links in a config symlink with an %s',
+    (kind) => {
+      if (process.platform === 'win32') {
+        return;
+      }
+      const realParent = path.join(directory, 'real');
+      const realDirectory = path.join(realParent, 'config');
+      fs.mkdirSync(realDirectory, { recursive: true });
+      const backingPath = path.join(realParent, 'shared.yaml');
+      const decoyPath = path.join(directory, 'shared.yaml');
+      const decoy = 'id: unrelated-config\n';
+      fs.writeFileSync(backingPath, yaml.dump(oldConfig));
+      fs.writeFileSync(decoyPath, decoy);
+      const directoryLink = path.join(directory, 'alias');
+      fs.symlinkSync(realDirectory, directoryLink);
+
+      if (kind === 'aliased parent') {
+        setConfigDirectoryPath(directoryLink);
+        configPath = path.join(directoryLink, 'promptfoo.yaml');
+        fs.symlinkSync('../shared.yaml', configPath);
+      } else {
+        // The OS traverses alias before '..'; path normalization would reach the decoy.
+        const target =
+          kind === 'relative target' ? 'alias/../shared.yaml' : `${directory}/alias/../shared.yaml`;
+        fs.symlinkSync(target, configPath);
+      }
+
+      new CloudConfig(false).setApiKey('replacement-token');
+
+      expect(fs.lstatSync(configPath).isSymbolicLink()).toBe(true);
+      expect(readFile()).toEqual({
+        ...oldConfig,
+        cloud: { ...oldConfig.cloud, apiKey: 'replacement-token' },
+      });
+      expect(fs.readFileSync(decoyPath, 'utf8')).toBe(decoy);
+      expect(fs.readdirSync(realParent).sort()).toEqual(['config', 'shared.yaml']);
+    },
+  );
+
+  it('preserves the symlink and backing session when replacement fails', () => {
+    if (process.platform === 'win32') {
+      return;
+    }
+    const backingPath = path.join(directory, 'shared.yaml');
+    fs.writeFileSync(backingPath, yaml.dump(oldConfig));
+    fs.symlinkSync('shared.yaml', configPath);
+    vi.mocked(fs.renameSync).mockImplementationOnce(() => {
+      throw new Error('disk unavailable');
+    });
+
+    expect(() => new CloudConfig().delete()).toThrow('disk unavailable');
+
+    expect(fs.lstatSync(configPath).isSymbolicLink()).toBe(true);
+    expect(readFile()).toEqual(oldConfig);
+    expect(fs.readdirSync(directory).sort()).toEqual(['promptfoo.yaml', 'shared.yaml']);
+  });
+
+  it('leaves cyclic config symlinks intact when a write fails', () => {
+    if (process.platform === 'win32') {
+      return;
+    }
+    fs.symlinkSync('other.yaml', configPath);
+    fs.symlinkSync('promptfoo.yaml', path.join(directory, 'other.yaml'));
+
+    expect(() => writeGlobalConfig(oldConfig)).toThrow('too many symbolic links');
+
+    expect(fs.lstatSync(configPath).isSymbolicLink()).toBe(true);
+    expect(fs.readdirSync(directory).sort()).toEqual(['other.yaml', 'promptfoo.yaml']);
+  });
+
   it('cleans up an incomplete write and leaves the saved session intact', () => {
     writeGlobalConfig(oldConfig);
     const write = fs.writeFileSync;

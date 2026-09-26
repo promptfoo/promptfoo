@@ -12,7 +12,23 @@ import { loadYaml } from '../util/yamlLoad';
 import type { GlobalConfig } from '../configTypes';
 
 export function writeGlobalConfig(config: GlobalConfig): void {
-  const configPath = path.join(getConfigDirectoryPath(true), 'promptfoo.yaml');
+  let configPath = path.join(getConfigDirectoryPath(true), 'promptfoo.yaml');
+  // Replace the backing file, preserving relative, chained, and dangling config links.
+  for (
+    let links = 0;
+    fs.lstatSync(configPath, { throwIfNoEntry: false })?.isSymbolicLink();
+    links++
+  ) {
+    if (links === 40) {
+      throw new Error('Cannot write global config: too many symbolic links');
+    }
+    const target = fs.readlinkSync(configPath);
+    // Keep target components intact: a directory symlink followed by '..' must be
+    // traversed by the filesystem, not collapsed by path.resolve or path.join.
+    configPath = path.isAbsolute(target)
+      ? target
+      : `${fs.realpathSync(path.dirname(configPath))}${path.sep}${target}`;
+  }
   const temporaryPath = `${configPath}.${crypto.randomUUID()}.tmp`;
   const mode = fs.existsSync(configPath) ? fs.statSync(configPath).mode & 0o777 : 0o600;
   try {
