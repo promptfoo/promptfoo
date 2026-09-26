@@ -99,7 +99,7 @@ describe('telemetry test-mode environment restrictions', () => {
     expect(client.capture).not.toHaveBeenCalled();
     expect(fetchWithProxy).not.toHaveBeenCalled();
   });
-  it('suppresses an existing client when host test mode is enabled', async () => {
+  it('suppresses an existing client when invocation-file test mode is enabled', async () => {
     const { default: cliState } = await import('../src/cliState');
     const { Telemetry } = await import('../src/telemetry');
     const telemetry = new Telemetry();
@@ -107,11 +107,13 @@ describe('telemetry test-mode environment restrictions', () => {
     vi.clearAllMocks();
     mockProcessEnv({ IS_TESTING: 'true' });
 
-    await cliState.withEnv({ IS_TESTING: 'false' }, async () => {
-      await telemetry.identify();
-      telemetry.record('eval_ran', {});
-      await telemetry.shutdown();
-    });
+    await cliState.withEnvFileOverrides({ IS_TESTING: 'true' }, () =>
+      cliState.withEnv({ IS_TESTING: 'false' }, async () => {
+        await telemetry.identify();
+        telemetry.record('eval_ran', {});
+        await telemetry.shutdown();
+      }),
+    );
 
     expect(client.shutdown).toHaveBeenCalledOnce();
     expect(client.identify).not.toHaveBeenCalled();
@@ -315,6 +317,23 @@ describe('telemetry test-mode environment restrictions', () => {
           await telemetry.shutdown();
         }),
       );
+      expect(process.env.IS_TESTING).toBe('true');
+      expect(client.capture).toHaveBeenCalledOnce();
+      expect(request).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each(['false', '0', ''])(
+    'lets suite test mode %j override an implicit process default',
+    async (suiteFlag) => {
+      const { default: cliState } = await import('../src/cliState');
+      const { Telemetry } = await import('../src/telemetry');
+      mockProcessEnv({ IS_TESTING: 'true' });
+      const telemetry = new Telemetry(false);
+      await cliState.withEnv({ IS_TESTING: suiteFlag }, async () => {
+        telemetry.record('eval_ran', {});
+        await telemetry.shutdown();
+      });
       expect(process.env.IS_TESTING).toBe('true');
       expect(client.capture).toHaveBeenCalledOnce();
       expect(request).toHaveBeenCalledOnce();

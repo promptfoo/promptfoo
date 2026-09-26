@@ -27,9 +27,7 @@ const clientOwners = ((process as unknown as Record<symbol, Set<Telemetry>>)[CLI
 // An invocation or suite cannot turn off the host's test-mode restriction.
 function isTestMode(): boolean {
   return (
-    isHostTesting ||
-    parseEnvBool(getEnvOverrides('file')?.IS_TESTING ?? process.env.IS_TESTING) ||
-    getEnvBool('IS_TESTING')
+    isHostTesting || parseEnvBool(getEnvOverrides('file')?.IS_TESTING) || getEnvBool('IS_TESTING')
   );
 }
 
