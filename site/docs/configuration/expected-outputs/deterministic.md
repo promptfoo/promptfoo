@@ -1449,7 +1449,7 @@ npm install promptfoo natural@^8.1.1
 
 For a global installation, use `npm install -g promptfoo natural@^8.1.1`.
 
-For a one-off eval, run `npx --package=promptfoo --package=natural@^8.1.1 promptfoo eval -c /absolute/path/to/promptfooconfig.yaml` from an empty directory outside an existing npm project, with neither package installed locally. If either package is already installed in your project, use the project installation command above. If `natural` is missing, only METEOR assertions fail with installation instructions; other assertions work normally.
+For a one-off eval, run `npx --package=promptfoo --package=natural@^8.1.1 promptfoo eval -c /absolute/path/to/promptfooconfig.yaml` from an empty directory outside an existing npm project, with neither package installed locally. If either package is already installed in your project, use the project installation command above. If `natural` is missing or outside the supported `^8.1.1` range, only METEOR assertions fail with installation instructions; other assertions work normally.
 :::
 
 #### How METEOR Works

@@ -1,3 +1,4 @@
+import semverSatisfies from 'semver/functions/satisfies.js';
 import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -23,6 +24,14 @@ async function ensureNaturalPackage(): Promise<void> {
   }
 
   try {
+    const { default: metadata } = await import('natural/package.json', { with: { type: 'json' } });
+    if (!semverSatisfies(metadata.version, '^8.1.1')) {
+      throw new Error(
+        `METEOR requires natural@^8.1.1; found ${metadata.version}. ` +
+          'Install it alongside Promptfoo: npm install promptfoo natural@^8.1.1. ' +
+          'For a global installation, use npm install -g promptfoo natural@^8.1.1.',
+      );
+    }
     // Natural's top-level CommonJS export does not expose named ESM exports.
     // Load only the components METEOR needs, without unrelated database clients.
     const [{ PorterStemmer: stemmer }, { WordNet: wordnet }] = await Promise.all([
@@ -31,7 +40,10 @@ async function ensureNaturalPackage(): Promise<void> {
     ]);
     PorterStemmer = stemmer;
     WordNet = wordnet;
-  } catch (_err) {
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('METEOR requires natural@')) {
+      throw error;
+    }
     throw new Error(
       'The "natural" package is required for METEOR assertions. Install it with: npm install natural@^8.1.1',
     );

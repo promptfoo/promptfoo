@@ -272,6 +272,9 @@ const ASSERTION_HANDLERS: Record<
       const { handleMeteorAssertion } = await import('./meteor.js');
       return await handleMeteorAssertion(params);
     } catch (error) {
+      if (error instanceof Error && error.message.startsWith('METEOR requires natural@')) {
+        return { pass: false, score: 0, reason: error.message, assertion: params.assertion };
+      }
       if (
         error instanceof Error &&
         (error.message.includes('Cannot find module') ||

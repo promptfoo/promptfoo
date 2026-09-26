@@ -78,6 +78,21 @@ describe('METEOR assertion', () => {
     });
   });
 
+  it('returns an actionable failure for an incompatible Natural version', async () => {
+    const message =
+      'METEOR requires natural@^8.1.1; found 7.1.0. Install it alongside Promptfoo: npm install promptfoo natural@^8.1.1.';
+    mockHandleMeteorAssertion.mockRejectedValue(new Error(message));
+    const assertion = { type: 'meteor' as const, value: 'expected' };
+    const result = await runAssertion({
+      prompt: 'Test prompt',
+      provider: {} as any,
+      assertion,
+      test: {} as any,
+      providerResponse: { output: 'actual' },
+    });
+    expect(result).toMatchObject({ pass: false, score: 0, reason: message, assertion });
+  });
+
   it('should rethrow other errors that are not related to missing module', async () => {
     // Mock handleMeteorAssertion to throw a non-module-related error
     mockHandleMeteorAssertion.mockRejectedValue(new Error('Some other error'));

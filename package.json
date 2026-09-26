@@ -429,7 +429,7 @@
   },
   "homepage": "https://promptfoo.dev",
   "peerDependencies": {
-    "natural": "^8.1.1"
+    "natural": "*"
   },
   "peerDependenciesMeta": {
     "natural": {
