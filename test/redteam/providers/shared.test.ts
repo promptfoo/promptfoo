@@ -1434,6 +1434,80 @@ describe('shared redteam provider utilities', () => {
   });
 
   describe('callGradingProvider', () => {
+    it.each(
+      [false, true].flatMap((traced) =>
+        ['ambient only', 'ambient with options', 'combined caller', 'combined evaluation'].map(
+          (mode) => ({ traced, mode }),
+        ),
+      ),
+    )('forwards in-flight grader cancellation: %j', async ({ traced, mode }) => {
+      const evaluation = new AbortController();
+      const caller = new AbortController();
+      const options: CallApiOptionsParams | undefined =
+        mode === 'ambient only'
+          ? undefined
+          : mode === 'ambient with options'
+            ? { includeLogProbs: true }
+            : { abortSignal: caller.signal, includeLogProbs: true };
+      let received: CallApiOptionsParams | undefined;
+      const provider = createMockProvider();
+      vi.mocked(provider.callApi).mockImplementation(async (_prompt, _context, callOptions) => {
+        received = callOptions;
+        if (!callOptions?.abortSignal) {
+          return { output: 'missing cancellation' };
+        }
+        return new Promise((_, reject) => {
+          callOptions.abortSignal!.addEventListener(
+            'abort',
+            () => reject(new DOMException('Fixture cancelled', 'AbortError')),
+            { once: true },
+          );
+        });
+      });
+      const invoke = () => callGradingProvider(provider, 'fixture', undefined, options);
+      const result = withProviderCallExecutionContext({ abortSignal: evaluation.signal }, () =>
+        traced
+          ? withProviderCallTracingContext(
+              {
+                getActiveTraceparent: () => undefined,
+                withGraderSpan: async (_context, callback) => callback(),
+                withProviderSpan: async ({ callContext }, callback) => callback(callContext),
+              },
+              invoke,
+            )
+          : invoke(),
+      ).catch((error) => error);
+      try {
+        (mode === 'combined caller' ? caller : evaluation).abort();
+        expect(received?.abortSignal?.aborted).toBe(true);
+        expect(received?.includeLogProbs).toBe(options?.includeLogProbs);
+        const error = await result;
+        expect(error).toBeInstanceOf(DOMException);
+        expect(error.name).toBe('AbortError');
+        expect(options?.abortSignal).toBe(mode.startsWith('combined') ? caller.signal : undefined);
+      } finally {
+        caller.abort();
+        evaluation.abort();
+        await result;
+      }
+    });
+
+    it.each(['evaluation', 'caller'] as const)(
+      'does not invoke a grader when the %s signal is already aborted',
+      async (source) => {
+        const evaluation = new AbortController();
+        const caller = new AbortController();
+        (source === 'evaluation' ? evaluation : caller).abort();
+        const provider = createMockProvider();
+        await expect(
+          withProviderCallExecutionContext({ abortSignal: evaluation.signal }, () =>
+            callGradingProvider(provider, 'fixture', undefined, { abortSignal: caller.signal }),
+          ),
+        ).rejects.toMatchObject({ name: 'AbortError' });
+        expect(provider.callApi).not.toHaveBeenCalled();
+      },
+    );
+
     it('preserves the provider request when tracing is disabled', async () => {
       const response = { output: 'judge response' };
       const provider = createMockProvider({ response });
