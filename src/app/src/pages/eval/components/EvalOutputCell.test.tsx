@@ -294,6 +294,86 @@ describe('EvalOutputCell', () => {
     expect(dialog).toHaveAttribute('data-raw-output', JSON.stringify(raw));
   });
 
+  it.each([
+    {
+      source: 'assertion breakdown before grading-result fallback',
+      assertions: { total: 75, prompt: 60, completion: 15 },
+      tokensUsed: { total: 140, prompt: 100, completion: 40 },
+    },
+    {
+      source: 'grading-result tokens',
+      assertions: undefined,
+      tokensUsed: { total: 75, prompt: 60, completion: 15 },
+    },
+    {
+      source: 'grading-result prompt and completion counts without a total',
+      assertions: undefined,
+      tokensUsed: { prompt: 60, completion: 15 },
+    },
+  ])(
+    'shows separate grading tokens from $source on imported reports',
+    ({ assertions, tokensUsed }) => {
+      renderWithProviders(
+        <EvalOutputCell
+          {...defaultProps}
+          output={{
+            ...defaultProps.output,
+            cost: 99,
+            latencyMs: 3,
+            tokenUsage: { total: 2000075, prompt: 1900060, completion: 100015, assertions },
+            response: { tokenUsage: { total: 2000000, prompt: 1900000, completion: 100000 } },
+            gradingResult: { ...defaultProps.output.gradingResult!, tokensUsed },
+            metadata: {
+              codexSecurity: createCodexSecurityResult({
+                source: { kind: 'saved-report', mocked: false },
+                usage: {
+                  total: 2000000,
+                  input: 1900000,
+                  output: 100000,
+                  cachedInput: null,
+                  cacheWriteInput: null,
+                },
+              }),
+            },
+          }}
+        />,
+      );
+
+      expect(screen.getByText('Recorded tokens').nextElementSibling).toHaveTextContent('2,000,000');
+      expect(screen.getByText('Grading tokens:').parentElement).toHaveTextContent('75 (60+15)');
+      expect(screen.getByText('Grading tokens:').parentElement).not.toHaveTextContent('2,000');
+      expect(screen.queryByText('Tokens:')).not.toBeInTheDocument();
+      expect(screen.queryByText('Latency:')).not.toBeInTheDocument();
+      expect(screen.queryByText('Tokens/Sec:')).not.toBeInTheDocument();
+      expect(screen.queryByText('Cost:')).not.toBeInTheDocument();
+    },
+  );
+
+  it.each([undefined, { total: 0, prompt: 0, completion: 0 }])(
+    'does not invent grading usage when explicit recorded grading tokens are %j',
+    (tokensUsed) => {
+      renderWithProviders(
+        <EvalOutputCell
+          {...defaultProps}
+          output={{
+            ...defaultProps.output,
+            tokenUsage: { total: 2000000, assertions: tokensUsed },
+            gradingResult: { ...defaultProps.output.gradingResult!, tokensUsed },
+            metadata: {
+              codexSecurity: createCodexSecurityResult({
+                source: { kind: 'saved-report', mocked: false },
+              }),
+            },
+          }}
+        />,
+      );
+
+      expect(screen.queryByText('Grading tokens:')).not.toBeInTheDocument();
+      expect(screen.queryByText('Tokens:')).not.toBeInTheDocument();
+      expect(screen.queryByText('Latency:')).not.toBeInTheDocument();
+    },
+  );
+
   it('keeps normal execution statistics for live SDK results', () => {
     renderWithProviders(
       <EvalOutputCell

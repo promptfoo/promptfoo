@@ -12,6 +12,7 @@ import {
   resolveVideoSource,
 } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
+import { getTokenUsageTotal } from '@app/utils/tokenUsage';
 import { CodexSecurityResultSchema } from '@promptfoo/contracts/codexSecurity';
 import {
   type EvaluateTableOutput,
@@ -892,12 +893,14 @@ function renderCommentNode({
 function renderCellDetail({
   showStats,
   tokenUsageDisplay,
+  tokenUsageLabel = 'Tokens',
   latencyDisplay,
   tokPerSecDisplay,
   costDisplay,
 }: {
   showStats: boolean;
   tokenUsageDisplay?: React.ReactNode;
+  tokenUsageLabel?: string;
   latencyDisplay?: React.ReactNode;
   tokPerSecDisplay?: React.ReactNode;
   costDisplay?: React.ReactNode;
@@ -910,7 +913,7 @@ function renderCellDetail({
     <div className="cell-detail">
       {tokenUsageDisplay && (
         <div className="stat-item">
-          <strong>Tokens:</strong> {tokenUsageDisplay}
+          <strong>{tokenUsageLabel}:</strong> {tokenUsageDisplay}
         </div>
       )}
       {latencyDisplay && (
@@ -1585,6 +1588,12 @@ function EvalOutputCell({
   // Check for token usage in both output.tokenUsage and output.response?.tokenUsage.
   const tokenUsage = output.tokenUsage || output.response?.tokenUsage;
   const tokenUsageDisplay = formatTokenUsageDisplay(tokenUsage);
+  // Imported scan usage belongs to the historical summary. Only an explicit grading
+  // breakdown can identify tokens used by assertions evaluating this saved report.
+  const gradingTokenUsage = output.tokenUsage?.assertions ?? output.gradingResult?.tokensUsed;
+  const gradingTokenUsageDisplay = formatTokenUsageDisplay(
+    gradingTokenUsage && { ...gradingTokenUsage, total: getTokenUsageTotal(gradingTokenUsage) },
+  );
   const tokPerSecDisplay = getTokensPerSecondDisplay({
     tokenUsage,
     latencyMs: output.latencyMs,
@@ -1652,11 +1661,10 @@ function EvalOutputCell({
         contentStyle,
       })}
       {renderCellDetail({
-        showStats: showStats && !isSavedReport,
-        tokenUsageDisplay,
-        latencyDisplay,
-        tokPerSecDisplay,
-        costDisplay,
+        showStats: showStats && (!isSavedReport || Boolean(gradingTokenUsageDisplay)),
+        ...(isSavedReport
+          ? { tokenUsageDisplay: gradingTokenUsageDisplay, tokenUsageLabel: 'Grading tokens' }
+          : { tokenUsageDisplay, latencyDisplay, tokPerSecDisplay, costDisplay }),
       })}
       {renderOutputActions({
         showExtraActions,
