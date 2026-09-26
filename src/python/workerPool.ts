@@ -1,4 +1,5 @@
 import logger from '../logger';
+import { validatePythonPath } from './pythonUtils';
 import { PythonWorker } from './worker';
 
 interface QueuedRequest {
@@ -43,6 +44,13 @@ export class PythonWorkerPool {
       `Initializing Python worker pool with ${this.workerCount} workers for ${this.scriptPath}`,
     );
 
+    // Resolve once per pool, before starting workers, without sharing another
+    // invocation's executable or environment. Crash restarts revalidate normally.
+    const pythonPath = await validatePythonPath(
+      this.pythonPath || 'python',
+      typeof this.pythonPath === 'string',
+    );
+
     // Start all workers in parallel
     const initPromises = [];
     for (let i = 0; i < this.workerCount; i++) {
@@ -53,7 +61,7 @@ export class PythonWorkerPool {
         this.timeout,
         () => this.processQueue(), // Resume queue processing when worker becomes ready
       );
-      initPromises.push(worker.initialize());
+      initPromises.push(worker.initialize(pythonPath));
       this.workers.push(worker);
     }
 

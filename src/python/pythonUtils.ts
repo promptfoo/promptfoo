@@ -29,14 +29,14 @@ import type { Options as PythonShellOptions } from 'python-shell';
  * try fallback detection).
  *
  * @param configPath - Explicitly configured Python path from provider config
+ * @param envPath - Provider override, or the current environment when omitted
  * @returns The configured path, or undefined if neither config nor env var is set
  */
-export function getConfiguredPythonPath(configPath?: string): string | undefined {
-  if (configPath) {
-    return configPath;
-  }
-  const envPath = getEnvString('PROMPTFOO_PYTHON');
-  return envPath || undefined;
+export function getConfiguredPythonPath(
+  configPath?: string,
+  envPath = getEnvString('PROMPTFOO_PYTHON'),
+): string | undefined {
+  return configPath || envPath || undefined;
 }
 
 /**

@@ -40,18 +40,17 @@ export class PythonWorker {
     private onReady?: () => void,
   ) {}
 
-  async initialize(): Promise<void> {
-    return this.startWorker();
+  async initialize(validatedPythonPath?: string): Promise<void> {
+    return this.startWorker(validatedPythonPath);
   }
 
-  private async startWorker(): Promise<void> {
+  private async startWorker(validatedPythonPath?: string): Promise<void> {
     const wrapperPath = path.join(getWrapperDir('python'), 'persistent_wrapper.py');
 
     // Validate and resolve Python path using smart detection (tries python3, then python)
-    const resolvedPythonPath = await validatePythonPath(
-      this.pythonPath || 'python',
-      typeof this.pythonPath === 'string',
-    );
+    const resolvedPythonPath =
+      validatedPythonPath ??
+      (await validatePythonPath(this.pythonPath || 'python', typeof this.pythonPath === 'string'));
 
     this.process = new PythonShell(wrapperPath, {
       mode: 'text',

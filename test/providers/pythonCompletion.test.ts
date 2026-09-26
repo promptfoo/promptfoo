@@ -738,7 +738,7 @@ describe('PythonProvider', () => {
       });
       await provider.initialize();
 
-      expect(mockGetConfiguredPythonPath).toHaveBeenCalledWith('/usr/bin/python3');
+      expect(mockGetConfiguredPythonPath).toHaveBeenCalledWith('/usr/bin/python3', undefined);
       expect(mockPythonWorkerPool).toHaveBeenCalledWith(
         expect.stringContaining('script.py'),
         'call_api',
@@ -765,7 +765,7 @@ describe('PythonProvider', () => {
       await provider.initialize();
 
       // getConfiguredPythonPath should be called with undefined (no config)
-      expect(mockGetConfiguredPythonPath).toHaveBeenCalledWith(undefined);
+      expect(mockGetConfiguredPythonPath).toHaveBeenCalledWith(undefined, undefined);
       // Worker pool should receive the env var value from getConfiguredPythonPath
       expect(mockPythonWorkerPool).toHaveBeenCalledWith(
         expect.stringContaining('script.py'),
@@ -793,7 +793,7 @@ describe('PythonProvider', () => {
       await provider.initialize();
 
       // getConfiguredPythonPath should be called with the config value
-      expect(mockGetConfiguredPythonPath).toHaveBeenCalledWith('/config/python3');
+      expect(mockGetConfiguredPythonPath).toHaveBeenCalledWith('/config/python3', undefined);
       // Worker pool should receive the config value
       expect(mockPythonWorkerPool).toHaveBeenCalledWith(
         expect.stringContaining('script.py'),
@@ -819,7 +819,7 @@ describe('PythonProvider', () => {
       });
       await provider.initialize();
 
-      expect(mockGetConfiguredPythonPath).toHaveBeenCalledWith(undefined);
+      expect(mockGetConfiguredPythonPath).toHaveBeenCalledWith(undefined, undefined);
       expect(mockPythonWorkerPool).toHaveBeenCalledWith(
         expect.stringContaining('script.py'),
         'call_api',
