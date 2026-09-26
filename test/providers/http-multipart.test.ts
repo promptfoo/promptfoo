@@ -7,6 +7,7 @@ import path from 'path';
 import { pathToFileURL } from 'url';
 
 import { afterEach, describe, expect, it } from 'vitest';
+import cliState from '../../src/cliState';
 import { HttpProvider } from '../../src/providers/http';
 import { normalizeFilePath, resolvePath } from '../../src/providers/httpMultipart';
 
@@ -480,6 +481,20 @@ describe('HttpProvider structured multipart requests', () => {
       );
     });
 
+    it('keeps an empty-authority UNC file URL usable as a UNC path', () => {
+      // `file:////server/share` is the unambiguous spelling of a UNC share: the authority
+      // is empty, so it does not collide with the relative shorthand. POSIX resolves it
+      // through fileURLToPath(); on Windows that rejects the driveless `//` path and the
+      // decoded fallback returns the same string, which path.win32.isAbsolute() accepts.
+      expect(normalizeFilePath('file:////server/share/report.pdf')).toBe(
+        '//server/share/report.pdf',
+      );
+    });
+
+    it('falls back to the shorthand for a file:// value that is not a parseable URL', () => {
+      expect(normalizeFilePath('file://[')).toBe('[');
+    });
+
     it.each([
       ['two slashes, forward', 'file://C:/Users/name/doc.pdf', 'C:/Users/name/doc.pdf'],
       ['three slashes, forward', 'file:///C:/Users/name/doc.pdf', 'C:/Users/name/doc.pdf'],
@@ -520,5 +535,59 @@ describe('HttpProvider structured multipart requests', () => {
       // returns it without prepending basePath or rewriting separators.
       expect(resolvePath('file:///tmp/report.txt')).toBe('/tmp/report.txt');
     });
+  });
+});
+
+describe('HttpProvider multipart relative file:// sources', () => {
+  const originalBasePath = cliState.basePath;
+
+  afterEach(() => {
+    cliState.basePath = originalBasePath;
+  });
+
+  it('resolves a relative file:// path from the config directory', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-relative-'));
+    tempDirs.push(tempDir);
+    fs.mkdirSync(path.join(tempDir, 'fixtures'));
+    fs.writeFileSync(path.join(tempDir, 'fixtures', 'sample.txt'), 'sample contents');
+    cliState.basePath = tempDir;
+
+    const mockServer = await createMultipartDocumentSummarizerServer();
+    const provider = new HttpProvider('http', {
+      config: {
+        url: mockServer.url,
+        headers: { 'X-API-Key': 'test-api-key' },
+        multipart: {
+          parts: [
+            {
+              kind: 'file',
+              name: 'files',
+              source: { type: 'path', path: 'file://{{documentPath}}' },
+            },
+            {
+              kind: 'field',
+              name: 'documentQuery',
+              value: '{{prompt}}',
+            },
+          ],
+        },
+        transformResponse: 'json.summary',
+      },
+    });
+
+    for (const documentPath of ['./fixtures/sample.txt', 'fixtures/sample.txt']) {
+      const result = await provider.callApi('Summarize local fixture', {
+        prompt: { raw: 'Summarize local fixture', label: 'query' },
+        vars: { documentPath },
+      });
+
+      // The mock server only records the requests it receives, so without this the second
+      // spelling could fail to upload and still match the first iteration's recording.
+      expect(result.error).toBeUndefined();
+      expect(mockServer.getLastRequest()?.files[0]).toMatchObject({
+        filename: 'sample.txt',
+        sizeBytes: Buffer.byteLength('sample contents'),
+      });
+    }
   });
 });
