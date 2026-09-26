@@ -128,3 +128,38 @@ npm run deps:ownership
 
 The report is intentionally descriptive for now. It gives us the evidence needed
 to move dependencies into future packages without guessing at ownership.
+
+## Architecture Measurement Views
+
+The boundary ratchets still count every literal module reference together, including
+explicit type imports, dynamic imports, and `require.resolve`. They exclude the
+public facade as an importer. No existing allowance changes when using a report:
+
+```bash
+npm run architecture:check -- --report
+npx tsx scripts/checkArchitectureBoundaries.ts --json > architecture-report.json
+npx tsx scripts/checkArchitectureBoundaries.ts --json --entrypoint=src/contracts.ts
+```
+
+JSON goes to stdout; check diagnostics go to stderr and failures retain a nonzero
+exit status. Reports include separate explicit-type, value-capable, deferred
+(`import()`), and resolution-only (`require.resolve`) views, layer cycles, and
+file cycles. Mixed imports count once as value-capable; ordinary imports may
+still be erased by TypeScript. CommonJS `require()` is value-capable, even inside
+a function; this analysis does not infer execution timing or scope bindings.
+
+Entrypoint reports include the facade and compare combined, value-capable, and
+value-capable-plus-deferred reach. Lists of external specifiers describe direct
+source references, not their transitive installed dependencies. Unresolved
+internal references (including non-TypeScript assets) and computed loaders retain
+source locations so incomplete reach is visible. References to files outside the
+scanned scope (such as ignored files and declarations) are listed separately. Aliased loader functions and
+arbitrary runtime resolution are outside the scanner's syntax coverage. The
+CommonJS forms recognized here are single-argument `require(target)` and
+`require.resolve(target)`; computed member access and resolution options are not
+modeled.
+
+These are source graphs, not shipped browser bundles or install-size measurements.
+They do not model Vite substitutions, tree shaking, or compiler import elision.
+Layer cycles do not establish file cycles, and back-edges are violations of the
+configured order, not a minimum cut or an estimate of remaining extraction work.
