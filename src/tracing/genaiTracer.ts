@@ -10,6 +10,7 @@ import {
   trace,
 } from '@opentelemetry/api';
 import logger from '../logger';
+import { getOtelTracer } from './otelSdk';
 import { getActiveSpanRole, SPAN_ROLE_ATTRIBUTE } from './spanRoles';
 
 import type { CallApiContextParams, ProviderResponse } from '../types/index';
@@ -212,7 +213,7 @@ export interface GenAIToolSpanContext {
  * Get the tracer instance for GenAI operations.
  */
 export function getGenAITracer(): Tracer {
-  return trace.getTracer(TRACER_NAME, TRACER_VERSION);
+  return getOtelTracer(TRACER_NAME, TRACER_VERSION);
 }
 
 /** Preserve whether provider-created child spans belong to the target or the grader. */

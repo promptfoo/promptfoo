@@ -51,7 +51,7 @@ import {
   stopOtlpReceiverIfNeeded,
 } from './tracing/evaluatorTracing';
 import { getDefaultOtelConfig } from './tracing/otelConfig';
-import { flushOtel, initializeOtel, shutdownOtel } from './tracing/otelSdk';
+import { flushOtel, initializeOtel, shutdownOtel, withOtelContext } from './tracing/otelSdk';
 import { isExternalTraceProvider } from './tracing/providers';
 import { getActiveTraceparent } from './tracing/spanRoles';
 import { withGraderSpan, withTestCaseSpan, withTracedProviderCall } from './tracing/targetTracer';
@@ -5068,7 +5068,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
   async evaluate(): Promise<TEvaluation> {
     return withProviderCallExecutionContext({ rateLimitRegistry: this.rateLimitRegistry }, () =>
-      this.evaluateInContext(),
+      withOtelContext(() => this.evaluateInContext()),
     );
   }
 

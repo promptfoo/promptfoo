@@ -25,7 +25,8 @@ const mockFetchTraceContext = vi.hoisted(() => vi.fn());
 const mockInitializeOtel = vi.hoisted(() => vi.fn());
 const mockShutdownOtel = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
-vi.mock('../../src/tracing/otelSdk', () => ({
+vi.mock('../../src/tracing/otelSdk', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/tracing/otelSdk')>()),
   flushOtel: mockFlushOtel,
   initializeOtel: mockInitializeOtel,
   shutdownOtel: mockShutdownOtel,

@@ -217,6 +217,7 @@ describe('VercelAiProvider', () => {
         expect.objectContaining({
           experimental_telemetry: {
             isEnabled: true,
+            tracer: expect.objectContaining({ startSpan: expect.any(Function) }),
             functionId: 'vercel:openai/gpt-4o-mini',
             recordInputs: false,
             recordOutputs: false,
@@ -506,6 +507,7 @@ describe('VercelAiProvider', () => {
         expect.objectContaining({
           experimental_telemetry: {
             isEnabled: true,
+            tracer: expect.objectContaining({ startSpan: expect.any(Function) }),
             functionId: 'vercel:openai/gpt-4o',
             recordInputs: false,
             recordOutputs: false,
@@ -1308,6 +1310,7 @@ describe('VercelAiProvider', () => {
         expect.objectContaining({
           experimental_telemetry: expect.objectContaining({
             isEnabled: true,
+            tracer: expect.objectContaining({ startSpan: expect.any(Function) }),
             recordInputs: false,
             recordOutputs: false,
           }),
@@ -1539,6 +1542,7 @@ describe('VercelAiEmbeddingProvider', () => {
         expect.objectContaining({
           experimental_telemetry: {
             isEnabled: true,
+            tracer: expect.objectContaining({ startSpan: expect.any(Function) }),
             functionId: 'vercel:embedding:openai/text-embedding-3-small',
             recordInputs: false,
             recordOutputs: false,

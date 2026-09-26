@@ -7,6 +7,8 @@ description: Implement OpenTelemetry tracing in your LLM evaluations to monitor 
 
 Promptfoo uses OpenTelemetry (OTLP) traces to show what your application did behind each response and bring that information into your evals.
 
+Each eval owns its built-in tracer and exporters, so sequential or concurrent Node.js evaluations can use different `PROMPTFOO_OTEL_SERVICE_NAME`, `PROMPTFOO_OTEL_ENDPOINT`, and `PROMPTFOO_OTEL_LOCAL_EXPORT` settings. Completing one eval flushes and shuts down only its own exporters. Promptfoo preserves any global tracer provider installed by your application; custom instrumentation continues to use that provider.
+
 Use traces to check tool calls and execution paths, give graders more context, guide red-team attacks, and explore the full timeline alongside your results.
 
 ![traces in promptfoo](/img/docs/trace.png)

@@ -4,6 +4,7 @@ import { context as otelContext, propagation, ROOT_CONTEXT, trace } from '@opent
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import { getOtelTracer } from '../tracing/otelSdk';
 import { sha256 } from '../util/createHash';
 import { normalizeFinishReason } from '../util/finishReason';
 import { getRequestTimeoutMs, parseChatPrompt } from './shared';
@@ -152,6 +153,7 @@ function getSdkTelemetryOptions(providerId: string, context?: CallApiContextPara
   return {
     experimental_telemetry: {
       isEnabled: true,
+      tracer: getOtelTracer('ai'),
       functionId: providerId,
       recordInputs: false,
       recordOutputs: false,
