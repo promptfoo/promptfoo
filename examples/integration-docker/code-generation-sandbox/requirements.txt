@@ -1,10 +1,7 @@
-certifi==2025.10.5
-charset-normalizer==3.3.2
+# Preserve security minimums when installing into existing environments.
+certifi>=2025.10.5
 docker==7.1.0
-epicbox==1.1.0
-idna==3.15
-python-dateutil==2.9.0.post0
-requests==2.33.0
-six==1.16.0
-structlog==24.2.0
-urllib3==2.7.0
+epicbox @ https://github.com/StepicOrg/epicbox/releases/download/1.1.1/epicbox-1.1.1-py3-none-any.whl#sha256=e5eff2d0ce7bb8695345f8382ff924257dd274737c26abe6dde39879793f8d7d
+idna>=3.15
+requests>=2.33.0
+urllib3>=2.7.0

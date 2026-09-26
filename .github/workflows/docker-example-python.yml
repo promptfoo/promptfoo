@@ -1,0 +1,40 @@
+name: Docker Sandbox Example
+
+on:
+  pull_request:
+    paths:
+      - 'examples/integration-docker/code-generation-sandbox/**'
+      - '.github/workflows/docker-example-python.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'examples/integration-docker/code-generation-sandbox/**'
+      - '.github/workflows/docker-example-python.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  docker-sandbox:
+    name: Docker sandbox on Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.14']
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install sandbox dependencies
+        run: |
+          python -m pip install -r examples/integration-docker/code-generation-sandbox/requirements.txt
+          python -m pip check
+      - name: Pull sandbox image
+        run: docker pull python:3.9-alpine
+      - name: Test real sandbox execution and limits
+        run: python -m unittest discover -s examples/integration-docker/code-generation-sandbox -p 'test_*.py' -v
