@@ -719,7 +719,7 @@ Manage team switching for organizations with multiple teams.
 
 #### `promptfoo auth teams list`
 
-List all teams you have access to in the current organization.
+List all teams you have access to across organizations.
 
 #### `promptfoo auth teams current`
 
