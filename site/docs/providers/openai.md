@@ -699,10 +699,10 @@ providers:
         - type: mcp
           server_label: deepwiki
           server_url: https://mcp.deepwiki.com/mcp
-          allowed_tools: [ask_question]
+          allowed_tools: [ask_wiki_question]
           require_approval:
             never:
-              tool_names: [ask_question]
+              tool_names: [ask_wiki_question]
 ```
 
 Use `headers` inside the MCP tool for authentication, with secret values supplied through environment variables. Approval requests appear in the output; this provider does not interactively approve them. Configure approvals deliberately for automated evals. See [OpenAI's MCP guide](https://developers.openai.com/api/docs/guides/tools-connectors-mcp#approvals) and the [Promptfoo MCP example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-mcp).

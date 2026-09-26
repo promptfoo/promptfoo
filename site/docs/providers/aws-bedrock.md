@@ -254,7 +254,7 @@ providers:
           #   args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp']
         # Optional: only expose specific tools
         tools:
-          - ask_question
+          - ask_wiki_question
       toolChoice: auto
 ```
 
