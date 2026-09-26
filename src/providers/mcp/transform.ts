@@ -1,3 +1,4 @@
+import { type McpConfigParsed, McpConfigSchema } from '../../contracts/providerConfig/mcp';
 import { sanitizeSchemaForGemini } from '../google/util';
 import {
   applyQueryParams,
@@ -17,7 +18,6 @@ import type {
 } from '../google/types';
 import type { OpenAiTool } from '../openai/util';
 import type {
-  MCPConfig,
   MCPOAuthClientCredentialsAuth,
   MCPOAuthPasswordAuth,
   MCPServerConfig,
@@ -116,9 +116,9 @@ export function transformMCPToolsToGoogle(tools: MCPTool[]): GoogleTool[] {
 }
 
 export async function transformMCPConfigToClaudeCode(
-  config: MCPConfig,
+  input: unknown,
 ): Promise<Record<string, ClaudeCodeMcpServerConfig>> {
-  validateMCPConfigForClaudeCode(config);
+  const config = validateMCPConfigForClaudeCode(input);
 
   if (config.enabled === false) {
     return {};
@@ -166,53 +166,14 @@ export async function transformMCPConfigToClaudeCode(
   return Object.fromEntries(entries);
 }
 
-export function validateMCPConfigForClaudeCode(config: MCPConfig): void {
-  if (!config || typeof config !== 'object' || Array.isArray(config)) {
-    throw new Error('Claude Agent SDK MCP configuration must be an object');
+export function validateMCPConfigForClaudeCode(input: unknown): McpConfigParsed {
+  const result = McpConfigSchema.safeParse(input);
+  if (!result.success) {
+    throw new Error(`Claude Agent SDK MCP configuration is malformed: ${result.error.message}`);
   }
-
-  if (config.enabled !== undefined && typeof config.enabled !== 'boolean') {
-    throw new Error('Claude Agent SDK MCP `enabled` must be a boolean');
-  }
-  if (config.enabled === false) {
-    return;
-  }
-
-  const isMalformedServer = (server: unknown) => {
-    if (!server || typeof server !== 'object' || Array.isArray(server)) {
-      return true;
-    }
-    const candidate = server as Record<string, unknown>;
-    if (
-      ['name', 'url', 'command', 'path'].some(
-        (field) => candidate[field] !== undefined && typeof candidate[field] !== 'string',
-      ) ||
-      (candidate.args !== undefined &&
-        (!Array.isArray(candidate.args) ||
-          candidate.args.some((argument) => typeof argument !== 'string'))) ||
-      (candidate.headers !== undefined &&
-        (!candidate.headers ||
-          typeof candidate.headers !== 'object' ||
-          Array.isArray(candidate.headers) ||
-          Object.values(candidate.headers).some((value) => typeof value !== 'string'))) ||
-      (candidate.auth !== undefined &&
-        (!candidate.auth || typeof candidate.auth !== 'object' || Array.isArray(candidate.auth))) ||
-      (candidate.env !== undefined &&
-        (!candidate.env ||
-          typeof candidate.env !== 'object' ||
-          Array.isArray(candidate.env) ||
-          Object.values(candidate.env).some((value) => typeof value !== 'string')))
-    ) {
-      return true;
-    }
-    return false;
-  };
-  if (
-    (config.server !== undefined && isMalformedServer(config.server)) ||
-    (config.servers !== undefined &&
-      (!Array.isArray(config.servers) || config.servers.some(isMalformedServer)))
-  ) {
-    throw new Error('Claude Agent SDK MCP `server`/`servers` configuration is malformed');
+  const config = result.data;
+  if (!config.enabled) {
+    return config;
   }
 
   const hasUnsupportedExclusions =
@@ -223,6 +184,7 @@ export function validateMCPConfigForClaudeCode(config: MCPConfig): void {
       'Claude Agent SDK MCP integration does not support MCP tool allowlists or non-empty exclusions; remove `tools`/`exclude_tools` or disable MCP for this provider.',
     );
   }
+  return config;
 }
 
 async function transformMCPServerConfigToClaudeCode(

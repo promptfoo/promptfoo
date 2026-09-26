@@ -390,7 +390,7 @@ export async function createDummyFiles(
   }
 
   const prompts: string[] = [];
-  const providers: (string | object)[] = [];
+  const providers: (string | ProviderOptions)[] = [];
   let action: string;
   let language: string;
 
@@ -468,15 +468,16 @@ export async function createDummyFiles(
     }
 
     const choices: { name: string; value: (string | ProviderOptions)[] }[] = [
-      { name: `I'll choose later`, value: ['openai:gpt-5-mini', 'openai:gpt-5'] },
+      { name: `I'll choose later`, value: ['openai:gpt-6-luna', 'openai:gpt-6-sol'] },
       {
-        name: '[OpenAI] GPT 5, GPT 4.1, ...',
+        name: action === 'agent' ? '[OpenAI] GPT-6 Sol' : '[OpenAI] GPT-6 Luna and Sol',
         value:
           action === 'agent'
             ? [
                 {
-                  id: 'openai:gpt-5',
+                  id: 'openai:chat:gpt-6-sol',
                   config: {
+                    reasoning_effort: 'none',
                     tools: [
                       {
                         type: 'function',
@@ -499,13 +500,13 @@ export async function createDummyFiles(
                   },
                 },
               ]
-            : ['openai:gpt-5-mini', 'openai:gpt-5'],
+            : ['openai:gpt-6-luna', 'openai:gpt-6-sol'],
       },
       {
         name: '[Anthropic] Claude Fable, Opus, Sonnet, Haiku, ...',
         value: [
           'anthropic:messages:claude-fable-5',
-          'anthropic:messages:claude-opus-5',
+          'anthropic:messages:claude-opus-5-5',
           'anthropic:messages:claude-opus-4-8',
           'anthropic:messages:claude-sonnet-5',
           'anthropic:messages:claude-sonnet-4-6',
@@ -648,8 +649,8 @@ export async function createDummyFiles(
         });
       }
     } else {
-      providers.push('openai:gpt-5-mini');
-      providers.push('openai:gpt-5');
+      providers.push('openai:gpt-6-luna');
+      providers.push('openai:gpt-6-sol');
     }
 
     if (action === 'compare') {
@@ -687,8 +688,8 @@ export async function createDummyFiles(
     language = 'not_sure';
     prompts.push(`Write a tweet about {{topic}}`);
     prompts.push(`Write a concise, funny tweet about {{topic}}`);
-    providers.push('openai:gpt-5-mini');
-    providers.push('openai:gpt-5');
+    providers.push('openai:gpt-6-luna');
+    providers.push('openai:gpt-6-sol');
   }
 
   const nunjucks = getNunjucksEngine();
@@ -713,7 +714,10 @@ export async function createDummyFiles(
 
   return {
     numPrompts: prompts.length,
-    providerPrefixes: providers.map((p) => (typeof p === 'string' ? p.split(':')[0] : 'unknown')),
+    providerPrefixes: providers.map((provider) => {
+      const providerId = typeof provider === 'string' ? provider : provider.id;
+      return providerId?.split(':')[0] ?? 'unknown';
+    }),
     action,
     language,
     outDirectory,

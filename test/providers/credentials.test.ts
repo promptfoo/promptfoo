@@ -14,6 +14,25 @@ afterEach(() => {
 });
 
 describe('provider credential policy', () => {
+  it.each(['OPENAI_API_KEY', 'CUSTOM_API_KEY'])(
+    'honors an explicitly empty override for %s',
+    (name) => {
+      mockProcessEnv({ [name]: 'process-key' });
+      expect(
+        resolveProviderApiKey(
+          name === 'CUSTOM_API_KEY' ? { apiKeyEnvar: name } : {},
+          { [name]: '' },
+          ['OPENAI_API_KEY'],
+        ),
+      ).toBeUndefined();
+    },
+  );
+
+  it('keeps an unmasked alias available when another key is explicitly empty', () => {
+    mockProcessEnv({ AZURE_API_KEY: 'masked-key', AZURE_OPENAI_API_KEY: 'alias-key' });
+    expect(resolveProviderApiKey({}, { AZURE_API_KEY: '' }, defaults)).toBe('alias-key');
+  });
+
   it('prefers explicit keys over provider and process environments', () => {
     mockProcessEnv({ OPENAI_API_KEY: 'process-key' });
     expect(

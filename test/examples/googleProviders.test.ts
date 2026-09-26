@@ -182,6 +182,43 @@ describe('Google example provider contracts', () => {
   }
 
   describe.each([
+    'promptfooconfig.yaml',
+    'promptfooconfig-image.yaml',
+    'promptfooconfig-extension.yaml',
+  ])('Google video example %s', (filename) => {
+    it.each(['video', 'text-only', 'empty', 'wrong-type'])(
+      'grades a %s response with a supported assertion',
+      async (outcome) => {
+        const { test, provider, prompt } = await loadExample('google-video', filename);
+        const grading = await runAssertions({
+          test,
+          provider,
+          prompt,
+          providerResponse: {
+            output: '[Video](promptfoo://blob/example)',
+            ...(outcome === 'text-only'
+              ? {}
+              : {
+                  video: {
+                    id: 'test-operation',
+                    format: 'mp4',
+                    blobRef: {
+                      uri: 'promptfoo://blob/example',
+                      hash: 'example',
+                      provider: 'local',
+                      mimeType: outcome === 'wrong-type' ? 'text/plain' : 'video/mp4',
+                      sizeBytes: outcome === 'empty' ? 0 : 1024,
+                    },
+                  },
+                }),
+          },
+        });
+        expect(grading.pass).toBe(outcome === 'video');
+      },
+    );
+  });
+
+  describe.each([
     { filename: 'promptfooconfig.yaml', vertex: false, imageSize: '1K', grounded: false },
     { filename: 'promptfooconfig-advanced.yaml', vertex: true, imageSize: '2K', grounded: false },
     {
@@ -333,8 +370,8 @@ describe('Google example provider contracts', () => {
       expect(textRequests[1].body.tools ?? []).toEqual([]);
       expect(textRequests[1].url).toBe(
         vertex
-          ? 'https://aiplatform.googleapis.com/v1/projects/example-project/locations/global/publishers/google/models/gemini-3.5-flash:generateContent'
-          : 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+          ? 'https://aiplatform.googleapis.com/v1/projects/example-project/locations/global/publishers/google/models/gemini-3.8-flash:generateContent'
+          : 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent',
       );
       expect(requests.every(({ auth }) => auth === (vertex ? 'oauth' : 'native'))).toBe(true);
     },

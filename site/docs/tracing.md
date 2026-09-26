@@ -137,8 +137,7 @@ Add tracing configuration to your `promptfooconfig.yaml`:
 tracing:
   enabled: true # Required to send OTLP telemetry
   otlp:
-    http:
-      enabled: true # Required to start the built-in OTLP receiver
+    http: {} # Starts the built-in OTLP receiver with the defaults
 ```
 
 ### 2. Instrument Your Provider
@@ -316,7 +315,7 @@ tracing:
   commandToolNames: ['bash']
   otlp:
     http:
-      enabled: true # Required to start the OTLP receiver
+      enabled: true # Defaults to true when an http block is present; false disables the receiver
       # port: 4318   # Optional - defaults to 4318 (standard OTLP HTTP port)
       # host: '127.0.0.1'  # Optional - defaults to loopback
       # acceptFormats: ['json', 'protobuf']  # Optional - defaults to both
@@ -326,6 +325,8 @@ tracing:
     # Remove trace and span records older than this many days
     retentionDays: 30
 ```
+
+Omit `otlp.http` entirely if you do not want to start the built-in receiver. Tracing itself defaults to disabled unless you enable it.
 
 `redactAttributes` is matched case-insensitively as a **substring** of each attribute
 key, so short patterns over-match: `token` also matches `gen_ai.usage.input_tokens`, and
@@ -594,6 +595,8 @@ Click the expand icon on any span to reveal a detailed attributes panel showing:
 This is useful for inspecting the full request/response bodies (`promptfoo.request.body` and `promptfoo.response.body`) and debugging provider behavior.
 
 Trace reads redact credential-like attribute keys such as authorization headers, cookies, API keys, tokens, secrets, and passwords before displaying or exporting spans. GenAI token counters such as `gen_ai.usage.input_tokens` and application token counters such as `llm.usage.prompt_tokens` and `llm.usage.completion_tokens` remain visible. Avoid placing secrets in custom span attributes because raw attributes may still be retained in the local trace store for internal evaluation workflows.
+
+Evaluation result exports and sharing also apply the eval's saved `PROMPTFOO_STRIP_*` settings to trace metadata, test variables, and Promptfoo request/response bodies. These settings do not change locally stored spans.
 
 ### Exporting Traces
 

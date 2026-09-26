@@ -16,6 +16,7 @@ import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderResponse,
   TokenUsage,
 } from '../types/index';
@@ -45,6 +46,7 @@ interface TextGenRequestParams {
   modelId: string;
   projectId: string;
   parameters: TextGenRequestParametersModel;
+  signal?: AbortSignal;
 }
 
 const ConfigSchema = z.object({
@@ -236,12 +238,49 @@ function createWatsonXAuthCacheHash(authSelection: WatsonXAuthSelection): string
   });
 }
 
+function createAbortError(): Error {
+  const error = new Error('Request aborted');
+  error.name = 'AbortError';
+  return error;
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
+}
+
+async function waitWithAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) {
+    return promise;
+  }
+
+  let onAbort: (() => void) | undefined;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    onAbort = () => reject(createAbortError());
+    signal.addEventListener('abort', onAbort, { once: true });
+    if (signal.aborted) {
+      onAbort();
+    }
+  });
+  try {
+    return await Promise.race([promise, aborted]);
+  } catch (error) {
+    throwIfAborted(signal);
+    throw error;
+  } finally {
+    if (onAbort) {
+      signal.removeEventListener('abort', onAbort);
+    }
+  }
+}
+
 // A client binds the service URL, API version and authenticator. Keep metadata
 // in memory per client so different regions/accounts never share model prices.
-let modelSpecsCache = new WeakMap<
-  WatsonXAIClient,
-  Map<string, { expiresAt: number; cost: WatsonXModelCost }>
->();
+type ModelSpecsCacheEntry =
+  | { expiresAt: number; cost: WatsonXModelCost }
+  | { pending: Promise<WatsonXModelCost | undefined> };
+let modelSpecsCache = new WeakMap<WatsonXAIClient, Map<string, ModelSpecsCacheEntry>>();
 const MODEL_SPECS_CACHE_TTL_MS = 5 * 60 * 1000;
 
 function getPricingTierCost(tier: unknown): number | undefined {
@@ -261,11 +300,42 @@ async function getModelCost(
   client: WatsonXAIClient,
   modelId: string,
 ): Promise<WatsonXModelCost | undefined> {
-  const cached = modelSpecsCache.get(client)?.get(modelId);
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.cost;
+  let clientCache = modelSpecsCache.get(client);
+  if (!clientCache) {
+    clientCache = new Map();
+    modelSpecsCache.set(client, clientCache);
+  }
+  const cached = clientCache.get(modelId);
+  if (cached) {
+    if ('pending' in cached) {
+      return cached.pending;
+    }
+    if (cached.expiresAt > Date.now()) {
+      return cached.cost;
+    }
   }
 
+  const pending = fetchModelCost(client, modelId)
+    .then((cost) => {
+      if (cost) {
+        clientCache.set(modelId, { expiresAt: Date.now() + MODEL_SPECS_CACHE_TTL_MS, cost });
+      }
+      return cost;
+    })
+    .finally(() => {
+      if (clientCache.get(modelId) === entry) {
+        clientCache.delete(modelId);
+      }
+    });
+  const entry = { pending };
+  clientCache.set(modelId, entry);
+  return pending;
+}
+
+async function fetchModelCost(
+  client: WatsonXAIClient,
+  modelId: string,
+): Promise<WatsonXModelCost | undefined> {
   const controller = new AbortController();
   let timeout: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_resolve, reject) => {
@@ -291,20 +361,13 @@ async function getModelCost(
     if (!spec) {
       return undefined;
     }
-    const cost = {
+    return {
       input: getPricingTierCost(spec.input_tier),
       output: getPricingTierCost(spec.output_tier),
     };
-    let clientCache = modelSpecsCache.get(client);
-    if (!clientCache) {
-      clientCache = new Map();
-      modelSpecsCache.set(client, clientCache);
-    }
-    clientCache.set(modelId, { expiresAt: Date.now() + MODEL_SPECS_CACHE_TTL_MS, cost });
-    return cost;
   } catch (error) {
     logger.debug('[WatsonX] Model pricing metadata is unavailable', { error });
-    // Do not cache failures: a later response can retry after recovery.
+    // Do not cache failures: a later uncached response can retry after recovery.
     return undefined;
   } finally {
     clearTimeout(timeout);
@@ -317,6 +380,7 @@ async function calculateWatsonXCost(
   config: z.infer<typeof ConfigSchema>,
   promptTokens?: number,
   completionTokens?: number,
+  signal?: AbortSignal,
 ): Promise<number | undefined> {
   if (
     promptTokens == null ||
@@ -332,11 +396,11 @@ async function calculateWatsonXCost(
   const inputOverride = config.inputCost ?? config.cost;
   const outputOverride = config.outputCost ?? config.cost;
   const modelCost =
-    inputOverride == null || outputOverride == null
-      ? await getModelCost(client, modelId)
+    (promptTokens > 0 && inputOverride == null) || (completionTokens > 0 && outputOverride == null)
+      ? await waitWithAbort(getModelCost(client, modelId), signal)
       : undefined;
-  const inputCost = inputOverride ?? modelCost?.input;
-  const outputCost = outputOverride ?? modelCost?.output;
+  const inputCost = promptTokens === 0 ? 0 : (inputOverride ?? modelCost?.input);
+  const outputCost = completionTokens === 0 ? 0 : (outputOverride ?? modelCost?.output);
   if (
     inputCost == null ||
     outputCost == null ||
@@ -357,6 +421,7 @@ export class WatsonXProvider implements ApiProvider {
   client?: WatsonXAIClient;
   config: z.infer<typeof ConfigSchema>;
   private authCacheHash?: string;
+  private clientPromise?: Promise<WatsonXAIClient>;
 
   constructor(modelName: string, options: ProviderOptions) {
     const validationResult = ConfigSchema.safeParse(options.config);
@@ -518,6 +583,15 @@ export class WatsonXProvider implements ApiProvider {
       return this.client;
     }
 
+    if (!this.clientPromise) {
+      this.clientPromise = this.initializeClient().finally(() => {
+        this.clientPromise = undefined;
+      });
+    }
+    return this.clientPromise;
+  }
+
+  private async initializeClient(): Promise<WatsonXAIClient> {
     const authenticator = await this.getAuth();
 
     try {
@@ -536,7 +610,11 @@ export class WatsonXProvider implements ApiProvider {
     }
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     // Set up tracing context
     const spanContext: GenAISpanContext = {
       system: 'watsonx',
@@ -563,14 +641,22 @@ export class WatsonXProvider implements ApiProvider {
       return result;
     };
 
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, context, options),
+      resultExtractor,
+    );
   }
 
   private async callApiInternal(
     prompt: string,
     context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const client = await this.getClient();
+    const signal = options?.abortSignal;
+    throwIfAborted(signal);
+    const client = await waitWithAbort(this.getClient(), signal);
+    throwIfAborted(signal);
 
     // Merge configs: provider config -> prompt-level config
     const config = {
@@ -587,7 +673,8 @@ export class WatsonXProvider implements ApiProvider {
     const cacheKey = `watsonx:${WATSONX_RESPONSE_CACHE_VERSION}:${this.modelName}:${configHash}:${authHash}:${generatePromptHash(prompt)}`;
     const cacheEnabled = isCacheEnabled();
     if (cacheEnabled) {
-      const cachedResponse = await cache.get(cacheKey);
+      const cachedResponse = await waitWithAbort(cache.get(cacheKey), signal);
+      throwIfAborted(signal);
       if (cachedResponse) {
         logger.debug('Watsonx: Returning cached response', {
           model: this.modelName,
@@ -636,9 +723,11 @@ export class WatsonXProvider implements ApiProvider {
         modelId,
         projectId,
         parameters,
+        ...(signal && { signal }),
       };
 
-      const apiResponse = await client.generateText(params);
+      const apiResponse = await waitWithAbort(client.generateText(params), signal);
+      throwIfAborted(signal);
       const parsedResponse = TextGenResponseSchema.safeParse(apiResponse.result);
 
       if (!parsedResponse.success) {
@@ -667,14 +756,18 @@ export class WatsonXProvider implements ApiProvider {
         config,
         textGenResult.input_token_count,
         textGenResult.generated_token_count,
+        signal,
       );
 
+      throwIfAborted(signal);
       if (isCacheEnabled()) {
-        await cache.set(cacheKey, JSON.stringify(providerResponse));
+        await waitWithAbort(cache.set(cacheKey, JSON.stringify(providerResponse)), signal);
+        throwIfAborted(signal);
       }
 
       return providerResponse;
     } catch (err) {
+      throwIfAborted(signal);
       logger.error(`Watsonx: API call error: ${String(err)}`);
 
       return {
@@ -690,8 +783,15 @@ export class WatsonXProvider implements ApiProvider {
  * WatsonX Chat Provider using the textChat API for messages-based interactions.
  */
 export class WatsonXChatProvider extends WatsonXProvider {
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    const client = await this.getClient();
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const signal = options?.abortSignal;
+    throwIfAborted(signal);
+    const client = await waitWithAbort(this.getClient(), signal);
+    throwIfAborted(signal);
 
     // Merge configs: provider config -> prompt-level config
     const config = {
@@ -708,7 +808,8 @@ export class WatsonXChatProvider extends WatsonXProvider {
     const cacheKey = `watsonx:chat:${WATSONX_RESPONSE_CACHE_VERSION}:${this.modelName}:${configHash}:${authHash}:${generatePromptHash(prompt)}`;
     const cacheEnabled = isCacheEnabled();
     if (cacheEnabled) {
-      const cachedResponse = await cache.get(cacheKey);
+      const cachedResponse = await waitWithAbort(cache.get(cacheKey), signal);
+      throwIfAborted(signal);
       if (cachedResponse) {
         logger.debug(
           `Watsonx Chat: Returning cached response for prompt with config "${configHash}"`,
@@ -732,10 +833,12 @@ export class WatsonXChatProvider extends WatsonXProvider {
         ...(config.topP !== undefined && { topP: config.topP }),
         ...(config.stopSequences?.length && { stop: config.stopSequences }),
         ...(config.randomSeed !== undefined && { seed: config.randomSeed }),
+        ...(signal && { signal }),
       };
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const response = await (client as any).textChat(params);
+      const response: any = await waitWithAbort((client as any).textChat(params), signal);
+      throwIfAborted(signal);
       const result = response.result as any;
 
       const providerResponse = this.convertChatResponse(result);
@@ -746,14 +849,18 @@ export class WatsonXChatProvider extends WatsonXProvider {
         config,
         providerResponse.tokenUsage?.prompt,
         providerResponse.tokenUsage?.completion,
+        signal,
       );
 
+      throwIfAborted(signal);
       if (isCacheEnabled()) {
-        await cache.set(cacheKey, JSON.stringify(providerResponse));
+        await waitWithAbort(cache.set(cacheKey, JSON.stringify(providerResponse)), signal);
+        throwIfAborted(signal);
       }
 
       return providerResponse;
     } catch (err) {
+      throwIfAborted(signal);
       logger.error(`Watsonx Chat: API call error: ${String(err)}`);
 
       return {
