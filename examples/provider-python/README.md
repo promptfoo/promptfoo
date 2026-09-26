@@ -28,8 +28,17 @@ You can set this in a `.env` file or directly in your environment.
 
 ## Requirements
 
-- Python 3.9 or later
+- Python 3.10 or later
 - The example dependencies installed with `pip install -r requirements.txt`
+
+The AnyIO minimum includes fixes for TLS hostname validation and process-pool
+stderr handling. OpenAI manages its other transitive dependencies.
+
+Run the dependency regression check after installation:
+
+```bash
+python -m unittest discover -s . -p '*_test.py'
+```
 
 ## Files
 
