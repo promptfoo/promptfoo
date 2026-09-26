@@ -29,7 +29,7 @@ To get started:
 
 1. Enter the environment: `source venv/bin/activate`
 
-1. Install python dependencies: `pip install -r requirements.txt`
+1. Install python dependencies: `python -m pip install -r requirements.txt`
 
 1. Run `ingest.py` to create the vector database: `python ingest.py`
 
@@ -39,7 +39,7 @@ Now we're ready to go.
 - Edit `retrieve.py` to control how context is loaded and questions are answered.
 
 ```bash
-npx promptfoo@latest eval
+npx promptfoo@latest eval --no-cache
 ```
 
 Promptfoo is a Node.js CLI, but the `file://retrieve.py` provider runs inside Python. Keep the virtual environment active when running the eval, or set `PROMPTFOO_PYTHON=./venv/bin/python` so Promptfoo can import the packages from `requirements.txt`.
