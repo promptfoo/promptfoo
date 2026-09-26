@@ -169,6 +169,27 @@ describe('filterTests', () => {
         expect(result[0]?.vars?.var1).toBe('test1');
       });
 
+      it('should filter tests matching ANY metadata condition (OR logic)', async () => {
+        const result = await filterTests(multiMetadataTestSuite, {
+          metadataAny: ['type=unit', 'priority=high'],
+        });
+        expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test2', 'test3']);
+      });
+
+      it('should combine AND and OR metadata filters', async () => {
+        const result = await filterTests(multiMetadataTestSuite, {
+          metadata: 'env=dev',
+          metadataAny: ['type=unit', 'priority=medium'],
+        });
+        expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1']);
+      });
+
+      it('should throw error if an OR filter is invalid', async () => {
+        await expect(
+          filterTests(multiMetadataTestSuite, { metadataAny: ['type=unit', 'invalid'] }),
+        ).rejects.toThrow('--filter-metadata-any must be specified in key=value format');
+      });
+
       it('should return empty when no tests match all conditions', async () => {
         const result = await filterTests(multiMetadataTestSuite, {
           metadata: ['type=unit', 'env=staging'],

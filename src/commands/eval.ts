@@ -137,6 +137,13 @@ export function evalCommand(
         return previous ? [...previous, value] : [value];
       },
     )
+    .option(
+      '--filter-metadata-any <key=value>',
+      'Only run tests matching at least one metadata key=value pair. Can be specified multiple times for OR logic',
+      (value: string, previous: string[] | undefined) => {
+        return previous ? [...previous, value] : [value];
+      },
+    )
 
     // Output configuration
     .option(
