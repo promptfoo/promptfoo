@@ -156,7 +156,9 @@ Use `openai:responses:gpt-6-sol` for complex tasks or `openai:responses:gpt-6-lu
 
 Sampling and log-probability options are supported only with reasoning effort `none`. With other efforts, Promptfoo removes them. See the [Sol](https://developers.openai.com/api/docs/models/gpt-6-sol) and [Luna](https://developers.openai.com/api/docs/models/gpt-6-luna) model guides.
 
-In standard, single-agent Responses requests, a [`configuration_update`](https://developers.openai.com/api/docs/guides/reasoning#change-reasoning-mid-conversation) input can change the effort used for sampling. When the effort depends on stored conversation history, Promptfoo forwards explicit sampling options for the API to validate. Pro and multi-agent modes use the request-level effort. When the effective effort is known to be `none`, Promptfoo defaults `temperature` to `0` unless `omitDefaults: true`.
+When reasoning effort is known to be `none`, Promptfoo defaults `temperature` to `0` unless `omitDefaults: true`.
+
+For advanced Responses conversations, a [`configuration_update`](https://developers.openai.com/api/docs/guides/reasoning#change-reasoning-mid-conversation) input can change the effort mid-conversation. Promptfoo accounts for these updates in standard, single-agent requests; Pro and multi-agent modes use the request-level effort. If stored conversation history makes the effort unknown, Promptfoo forwards explicit sampling options for the API to validate.
 
 ### Fine-tuned models {#fine-tuned-and-legacy-completion-models}
 
@@ -432,7 +434,7 @@ tests:
         value: output.category === 'billing'
 ```
 
-Promptfoo parses valid JSON schema output into an object, so the assertion can read `output.category` directly. Refusals, incomplete responses, or invalid JSON may still produce a different output; check errors and failed assertions. For JSON mode without a schema, use `type: json_object` and explicitly ask for JSON in the prompt.
+The Responses provider parses valid JSON schema output into an object, so the assertion can read `output.category` directly. Refusals, incomplete responses, or invalid JSON may still produce a different output; check errors and failed assertions. For JSON mode without a schema, use `type: json_object` and explicitly ask for JSON in the prompt.
 
 ### External file references
 

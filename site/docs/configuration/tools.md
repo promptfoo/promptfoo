@@ -37,26 +37,26 @@ There are two parts to configuring tool calling:
 
 2. **Tool choice** - Control _when_ the model uses tools: let it decide automatically, force it to use a specific tool, or disable tools entirely.
 
-While many providers have standardized around OpenAI's tool format, some maintain their own syntax:
+Tool definitions use different shapes depending on the provider and endpoint:
 
-| Provider                 | Native Format                                          |
-| ------------------------ | ------------------------------------------------------ |
-| OpenAI/Azure/Groq/Ollama | `{ type: 'function', function: { name, parameters } }` |
-| Anthropic                | `{ name, input_schema }`                               |
-| AWS Bedrock              | `{ toolSpec: { name, inputSchema: { json } } }`        |
-| Google                   | `{ functionDeclarations: [{ name, parameters }] }`     |
+| Provider                        | Native Format                                          |
+| ------------------------------- | ------------------------------------------------------ |
+| OpenAI/Azure Responses          | `{ type: 'function', name, parameters }`               |
+| OpenAI/Azure Chat, Groq, Ollama | `{ type: 'function', function: { name, parameters } }` |
+| Anthropic                       | `{ name, input_schema }`                               |
+| AWS Bedrock Converse            | `{ toolSpec: { name, inputSchema: { json } } }`        |
+| Google                          | `{ functionDeclarations: [{ name, parameters }] }`     |
 
-Promptfoo uses OpenAI's tool format as the standard. For built-in providers (OpenAI, Anthropic, Bedrock, Google, etc.), promptfoo automatically converts tool definitions to the required native format. For the [HTTP provider](/docs/providers/http), set `transformToolsFormat` to tell promptfoo what format the target API expects.
+Use the flat Responses format for OpenAI Responses requests. For tools shared across providers, Promptfoo accepts the nested Chat Completions format and converts it for Responses, Anthropic, Bedrock, and Google. For the [HTTP provider](/docs/providers/http), set `transformToolsFormat` to select a supported target format.
 
 ### Reusing tools between providers
 
-Define your tools once in OpenAI format and reuse them across all providers using [YAML anchors and aliases](https://yaml.org/spec/1.2.2/#3222-anchors-and-aliases). An anchor (`&tools`) saves a value, and an alias (`*tools`) references it elsewhere:
+Define your tools once in the nested Chat Completions format and reuse them across supported providers using [YAML anchors and aliases](https://yaml.org/spec/1.2.2/#3222-anchors-and-aliases). An anchor (`&tools`) saves a value, and an alias (`*tools`) references it elsewhere:
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-6-luna
+  - id: openai:responses:gpt-6-luna
     config:
-      reasoning_effort: none
       tools: &tools # Anchor: define tools once
         - type: function
           function:
@@ -79,75 +79,76 @@ providers:
 
 ## Defining Tools
 
-Define tools in OpenAI format:
+Define tools in the flat Responses format:
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-6-sol
+  - id: openai:responses:gpt-6-sol
     config:
-      reasoning_effort: none
       tools:
         - type: function
-          function:
-            name: get_weather
-            description: Get the current weather for a location
-            parameters:
-              type: object
-              properties:
-                location:
-                  type: string
-                  description: City name (e.g., "San Francisco, CA")
-                unit:
-                  type: string
-                  enum: [celsius, fahrenheit]
-                  description: Temperature unit
-              required:
-                - location
+          name: get_weather
+          description: Get the current weather for a location
+          strict: false # Keep unit optional
+          parameters:
+            type: object
+            properties:
+              location:
+                type: string
+                description: City name (e.g., "San Francisco, CA")
+              unit:
+                type: string
+                enum: [celsius, fahrenheit]
+                description: Temperature unit
+            required:
+              - location
 ```
+
+The `strict: false` setting preserves optional fields instead of letting Responses [normalize the schema into strict mode](https://developers.openai.com/api/docs/guides/function-calling#strict-mode). See [Strict Mode](#strict-mode) for an enforced schema.
 
 ### Fields
 
-| Field                  | Type    | Required | Description                                             |
-| ---------------------- | ------- | -------- | ------------------------------------------------------- |
-| `type`                 | string  | Yes      | Must be `'function'`                                    |
-| `function.name`        | string  | Yes      | The function name (used by the model to call it)        |
-| `function.description` | string  | No       | Description of what the function does                   |
-| `function.parameters`  | object  | No       | JSON Schema defining the function's parameters          |
-| `function.strict`      | boolean | No       | Enable strict schema validation (OpenAI/Anthropic only) |
+| Field         | Type    | Required | Description                                      |
+| ------------- | ------- | -------- | ------------------------------------------------ |
+| `type`        | string  | Yes      | Must be `'function'`                             |
+| `name`        | string  | Yes      | The function name (used by the model to call it) |
+| `description` | string  | No       | Description of what the function does            |
+| `parameters`  | object  | No       | JSON Schema defining the function's parameters   |
+| `strict`      | boolean | No       | Enable strict schema validation                  |
 
 ### Full JSON Schema Support
 
-The `parameters` field supports full JSON Schema draft-07, including:
+The `parameters` field contains a JSON Schema. Supported keywords depend on the provider and model; this example uses a reusable object definition:
 
 ```yaml
 tools:
   - type: function
-    function:
-      name: complex_function
-      parameters:
-        type: object
-        properties:
-          coordinates:
-            $ref: '#/$defs/coordinate'
-          tags:
-            type: array
-            items:
-              type: string
-            minItems: 1
-        required: [coordinates]
-        $defs:
-          coordinate:
-            type: object
-            properties:
-              lat:
-                type: number
-                minimum: -90
-                maximum: 90
-              lon:
-                type: number
-                minimum: -180
-                maximum: 180
-            required: [lat, lon]
+    name: complex_function
+    strict: false # Keep tags optional
+    parameters:
+      type: object
+      properties:
+        coordinates:
+          $ref: '#/$defs/coordinate'
+        tags:
+          type: array
+          items:
+            type: string
+          minItems: 1
+      required: [coordinates]
+      $defs:
+        coordinate:
+          type: object
+          properties:
+            lat:
+              type: number
+              minimum: -90
+              maximum: 90
+            lon:
+              type: number
+              minimum: -180
+              maximum: 180
+          required: [lat, lon]
 ```
 
 ### Strict Mode
@@ -157,25 +158,24 @@ Enable strict schema validation for providers that support it:
 ```yaml
 tools:
   - type: function
-    function:
-      name: get_weather
-      strict: true # Guarantees output matches schema exactly
-      parameters:
-        type: object
-        properties:
-          location:
-            type: string
-        required: [location]
-        additionalProperties: false # Required for strict mode
+    name: get_weather
+    strict: true # Require function arguments to match the schema
+    parameters:
+      type: object
+      properties:
+        location:
+          type: string
+      required: [location]
+      additionalProperties: false # Required for strict mode
 ```
 
-**Strict mode provider support:**
+**Native strict mode support:**
 
-| Provider       | Support                                         |
-| -------------- | ----------------------------------------------- |
-| OpenAI         | Full support — guarantees output matches schema |
-| Anthropic      | Enables structured outputs beta feature         |
-| Bedrock/Google | Ignored (not supported)                         |
+| Provider                | Support                                            |
+| ----------------------- | -------------------------------------------------- |
+| OpenAI                  | Full support — function arguments match the schema |
+| Anthropic               | Set `strict` in Anthropic's native tool format     |
+| Bedrock Converse/Google | Ignored (not supported)                            |
 
 ## Tool Choice
 
@@ -183,27 +183,30 @@ Tool choice controls _when_ and _how_ the model uses the tools you've defined. B
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-6-sol
+  - id: openai:responses:gpt-6-sol
     config:
-      reasoning_effort: none
       tools:
         - type: function
-          function:
-            name: get_weather
-            parameters: { ... }
+          name: get_weather
+          parameters:
+            type: object
+            properties:
+              location: { type: string }
+            required: [location]
+            additionalProperties: false
       tool_choice: required # Model must call a tool
 ```
 
 ### Modes
 
-Tool choice uses OpenAI's native format:
+These examples use the Responses format:
 
-| Value                                                 | Description                                                                                                      |
-| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `auto`                                                | Model decides whether to call a tool based on the prompt (default)                                               |
-| `none`                                                | Model cannot call any tools, even if they are defined — useful for A/B testing tool use vs. plain text responses |
-| `required`                                            | Model must call at least one tool — useful when you always expect a structured tool response                     |
-| `{ type: function, function: { name: get_weather } }` | Model must call the specified tool — useful for testing a particular function                                    |
+| Value                                   | Description                                                                                                      |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `auto`                                  | Model decides whether to call a tool based on the prompt (default)                                               |
+| `none`                                  | Model cannot call any tools, even if they are defined — useful for A/B testing tool use vs. plain text responses |
+| `required`                              | Model must call at least one tool — useful when you always expect a structured tool response                     |
+| `{ type: function, name: get_weather }` | Model must call the specified tool — useful for testing a particular function                                    |
 
 ### Examples
 
@@ -217,8 +220,7 @@ tool_choice: required
 # Force a specific tool
 tool_choice:
   type: function
-  function:
-    name: get_weather
+  name: get_weather
 
 # Disable tools for this request
 tool_choice: none
@@ -228,9 +230,9 @@ tool_choice: none
 
 ### Tool Definition Mappings
 
-For built-in providers, tool definitions in OpenAI format are automatically converted to the provider's native format. For the [HTTP provider](/docs/providers/http), set `transformToolsFormat` to specify the target format. If you pass tool definitions that don't match OpenAI format, they are passed through directly without transformation.
+For built-in providers, tool definitions in the nested Chat Completions format are automatically converted to the provider's native format. For the [HTTP provider](/docs/providers/http), set `transformToolsFormat` to specify the target format. Definitions in other formats pass through without transformation.
 
-| OpenAI Field           | Anthropic      | Bedrock                     | Google                               |
+| Chat Completions Field | Anthropic      | Bedrock Converse            | Google                               |
 | ---------------------- | -------------- | --------------------------- | ------------------------------------ |
 | `function.name`        | `name`         | `toolSpec.name`             | `functionDeclarations[].name`        |
 | `function.description` | `description`  | `toolSpec.description`      | `functionDeclarations[].description` |
@@ -239,10 +241,10 @@ For built-in providers, tool definitions in OpenAI format are automatically conv
 
 ### Tool Choice Mappings
 
-| OpenAI (default)                           | Anthropic                | Bedrock              | Google                                                                    |
+| Chat Completions                           | Anthropic                | Bedrock Converse     | Google                                                                    |
 | ------------------------------------------ | ------------------------ | -------------------- | ------------------------------------------------------------------------- |
 | `'auto'`                                   | `{ type: 'auto' }`       | `{ auto: {} }`       | `{ functionCallingConfig: { mode: 'AUTO' } }`                             |
-| `'none'`                                   | `{ type: 'auto' }`       | _(omitted)_          | `{ functionCallingConfig: { mode: 'NONE' } }`                             |
+| `'none'`                                   | `{ type: 'none' }`       | _(omitted)_          | `{ functionCallingConfig: { mode: 'NONE' } }`                             |
 | `'required'`                               | `{ type: 'any' }`        | `{ any: {} }`        | `{ functionCallingConfig: { mode: 'ANY' } }`                              |
 | `{ type: 'function', function: { name } }` | `{ type: 'tool', name }` | `{ tool: { name } }` | `{ functionCallingConfig: { mode: 'ANY', allowedFunctionNames: [...] } }` |
 
@@ -268,13 +270,12 @@ Promptfoo auto-detects the format. If tools are in OpenAI format (`type: 'functi
 
 ## Loading Tools from Files
 
-Tools can be loaded from external files:
+Tools can be loaded from external files. Use the format expected by your endpoint:
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-6-sol
+  - id: openai:responses:gpt-6-sol
     config:
-      reasoning_effort: none
       tools: file://tools/my-tools.json
 ```
 
@@ -284,14 +285,12 @@ providers:
 [
   {
     "type": "function",
-    "function": {
-      "name": "get_weather",
-      "description": "Get current weather",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "location": { "type": "string" }
-        }
+    "name": "get_weather",
+    "description": "Get current weather",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "location": { "type": "string" }
       }
     }
   }
@@ -303,6 +302,8 @@ providers:
 For custom HTTP endpoints, use the `transformToolsFormat` option to automatically convert OpenAI-format tools to the format your endpoint expects.
 
 ### OpenAI-Compatible Endpoints
+
+This example targets Chat Completions, so it uses nested function definitions. GPT-6 Sol and Luna require `reasoning_effort: none` for Chat function calls; use Responses for tool calls with reasoning.
 
 ```yaml
 providers:

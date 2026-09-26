@@ -578,15 +578,15 @@ derivedMetrics:
 defaultTest:
   assert:
     - type: javascript
-      value: output.sentiment === 'positive' && context.vars.expected === 'positive' ? 1 : 0
+      value: "output.sentiment === 'positive' && context.vars.expected === 'positive' ? 1 : 0"
       metric: true_positives
       weight: 0
     - type: javascript
-      value: output.sentiment === 'positive' && context.vars.expected === 'negative' ? 1 : 0
+      value: "output.sentiment === 'positive' && context.vars.expected === 'negative' ? 1 : 0"
       metric: false_positives
       weight: 0
     - type: javascript
-      value: output.sentiment === 'negative' && context.vars.expected === 'positive' ? 1 : 0
+      value: "output.sentiment === 'negative' && context.vars.expected === 'positive' ? 1 : 0"
       metric: false_negatives
       weight: 0
 

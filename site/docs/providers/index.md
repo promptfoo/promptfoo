@@ -26,7 +26,7 @@ providers:
 
 | API Providers                                           | Description                                                      | Syntax & Example                                                                                                      |
 | ------------------------------------------------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| [OpenAI](./openai.md)                                   | GPT-6 Luna, Sol, Astra, and other OpenAI models                  | `openai:gpt-6-luna` or `openai:gpt-6-sol`                                                                             |
+| [OpenAI](./openai.md)                                   | GPT-6 Luna, Sol, Astra, and other OpenAI models                  | `openai:responses:gpt-6-luna` or `openai:responses:gpt-6-sol`                                                         |
 | [Anthropic](./anthropic.md)                             | Claude models                                                    | `anthropic:messages:claude-opus-4-6`                                                                                  |
 | [Claude Agent SDK](./claude-agent-sdk.md)               | Claude Agent SDK                                                 | `anthropic:claude-agent-sdk`                                                                                          |
 | [HTTP](./http.md)                                       | Generic HTTP-based providers                                     | `https://api.example.com/v1/chat/completions`                                                                         |

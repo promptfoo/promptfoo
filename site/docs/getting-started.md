@@ -142,15 +142,11 @@ Now that you've created an initial configuration, you can update `promptfooconfi
 
    ```yaml
    providers:
-     - openai:gpt-6-sol
-     - openai:gpt-6-luna
-     - anthropic:messages:claude-opus-4-6
-     - google:gemini-3.8-flash
-     # Or use your own custom provider
-     - file://path/to/custom/provider.py
+     - openai:responses:gpt-6-sol
+     - openai:responses:gpt-6-luna
    ```
 
-   This includes cloud APIs, local models like [Ollama](/docs/providers/ollama), and custom [Python](/docs/providers/python) or [JavaScript](/docs/providers/custom-api) code.
+   This example uses your OpenAI API key. You can also configure [Anthropic](/docs/providers/anthropic), [Google](/docs/providers/google), local models like [Ollama](/docs/providers/ollama), or custom [Python](/docs/providers/python) and [JavaScript](/docs/providers/custom-api) code. Each provider has its own setup requirements.
 
    [&raquo; See all providers](/docs/providers)
 
@@ -270,7 +266,7 @@ description: Automatic response evaluation using LLM rubric scoring
 prompts:
   - file://prompts.txt
 providers:
-  - openai:chat:gpt-6-sol
+  - openai:responses:gpt-6-sol
 defaultTest:
   assert:
     - type: llm-rubric
@@ -299,7 +295,7 @@ You can also output a [spreadsheet](https://docs.google.com/spreadsheets/d/1nano
 
 ### Model quality
 
-In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-openai-models), we evaluate GPT-6 Luna, Sol, and Astra on the same prompts:
+In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-openai-models), we evaluate GPT-6 Luna, Sol, and Astra on the same prompts. The full run makes 45 model calls plus grading calls. Cost and latency assertions check completed responses; they do not cap spending or stop slow requests.
 
 You can quickly set up this example by running:
 
@@ -350,10 +346,10 @@ providers:
 
 defaultTest:
   assert:
-    # Example per-response budget (USD)
+    # Example per-response cost threshold (USD)
     - type: cost
       threshold: 0.15
-    # Example per-response latency budget (milliseconds)
+    # Example per-response latency threshold (milliseconds)
     - type: latency
       threshold: 60000
 

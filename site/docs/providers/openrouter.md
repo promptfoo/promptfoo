@@ -33,6 +33,8 @@ For the full catalog of 300+ models and current pricing, visit [OpenRouter Model
 
 ## Basic Configuration
 
+The `openrouter:<model>` provider uses Chat Completions. For Responses, use an ID such as `openai:responses:openai/gpt-6-sol` with `apiBaseUrl: https://openrouter.ai/api/v1` and `apiKeyEnvar: OPENROUTER_API_KEY` in its config. OpenRouter Responses is stateless: replay the conversation instead of sending `previous_response_id`.
+
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
@@ -86,6 +88,10 @@ Missing or invalid amounts are omitted. These fields appear in response details 
 
 Cache replays retain logical cost and billing metadata. The evaluator records zero additional incurred cost for cached responses with a known cost.
 
+## Provider errors
+
+OpenRouter can report a [provider error alongside partial output](https://openrouter.ai/docs/api/reference/errors-and-debugging). If OpenRouter explicitly marks the error as a refusal or a content-policy block, promptfoo preserves available output from Chat or Responses and records the refusal for the [`is-refusal` assertion](/docs/configuration/expected-outputs/deterministic/#is-refusal). Provider access errors and other generation errors remain evaluation errors; Chat also retains any partial output in the raw response.
+
 ## Features
 
 - Access to 300+ models through a single API
@@ -96,9 +102,9 @@ Cache replays retain logical cost and billing metadata. The evaluator records ze
 
 ## Thinking/Reasoning Models
 
-For GPT-6 Sol and Luna, set `reasoning_effort` or use `passthrough.reasoning`. A named effort and `passthrough.reasoning.max_tokens` are alternative controls. OpenRouter also supports changing reasoning effort through a [`configuration_update` on an empty system or developer message](https://openrouter.ai/docs/cookbook/evaluate-and-optimize/model-migrations/gpt-6#chat-completions-api). That message extension applies only to OpenRouter, not to native OpenAI Chat Completions. OpenRouter Responses is stateless: replay the conversation instead of sending `previous_response_id`.
+For GPT-6 Sol and Luna, set `reasoning_effort` or `passthrough.reasoning`. Choose either a named effort or a token budget (`passthrough.reasoning.max_tokens`).
 
-OpenRouter can report a [provider error alongside partial output](https://openrouter.ai/docs/api/reference/errors-and-debugging). If OpenRouter explicitly marks the error as a refusal or a content-policy block, promptfoo preserves available output from Chat or Responses and records the refusal for the [`is-refusal` assertion](/docs/configuration/expected-outputs/deterministic/#is-refusal). Provider access errors and other generation errors remain evaluation errors; Chat also retains any partial output in the raw response.
+For multi-turn Chat requests, OpenRouter supports changing effort through a [`configuration_update` on an empty system or developer message](https://openrouter.ai/docs/cookbook/evaluate-and-optimize/model-migrations/gpt-6#chat-completions-api). This is an OpenRouter extension; native OpenAI Chat Completions does not support it.
 
 Some models like Gemini 2.5 Pro include thinking tokens in their responses. You can control whether these are shown using the `showThinking` parameter:
 

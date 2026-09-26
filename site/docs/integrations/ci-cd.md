@@ -313,19 +313,25 @@ CMD ["npx", "promptfoo@latest", "eval"]
 
 ### 2. Parallel Testing
 
-Test multiple models or configurations in parallel:
+Test multiple models in parallel by overriding the provider ID. Configure credentials for each provider in your workflow:
 
 ```yaml
 # GitHub Actions example
 strategy:
   matrix:
-    model: [gpt-6-sol, claude-opus-4-8, gemini-3.1-pro-preview]
+    include:
+      - name: gpt-6-sol
+        provider: openai:responses:gpt-6-sol
+      - name: claude-opus-4-8
+        provider: anthropic:messages:claude-opus-4-8
+      - name: gemini-3.1-pro-preview
+        provider: google:gemini-3.1-pro-preview
 steps:
-  - name: Test ${{ matrix.model }}
+  - name: Test ${{ matrix.name }}
     run: |
       npx promptfoo@latest eval \
-        --providers.0.config.model=${{ matrix.model }} \
-        -o results-${{ matrix.model }}.json
+        --providers "${{ matrix.provider }}" \
+        -o "results-${{ matrix.name }}.json"
 ```
 
 ### 3. Scheduled Security Scans

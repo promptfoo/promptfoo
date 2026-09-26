@@ -123,7 +123,7 @@ Notes:
 - **Model ids are Bedrock ids**: use `openai.gpt-5.6-sol`, `openai.gpt-5.6-terra`, or `openai.gpt-5.6-luna`, not a bare `gpt-5.6` alias. The Codex Bedrock provider serves frontier models through Bedrock's OpenAI-compatible Responses endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1/responses`), which is separate from the classic `bedrock-runtime` `InvokeModel` API.
 - **Region matters**: GPT-5.6 Sol is available in `us-east-1` and `us-east-2`; GPT-5.6 Terra and Luna also support `us-west-2`. GPT-5.5 remains available in `us-east-1` and `us-east-2`, and GPT-5.4 in `us-east-1`, `us-east-2`, and `us-west-2`. Request model access first.
 - **Use a current Codex CLI**: GPT-5.6 Bedrock catalog support and `max` reasoning require Codex 0.144.0 or later. Codex `ultra` is a multi-agent mode for supported models, not a Responses API reasoning-effort value.
-- **GPT-6 on Bedrock**: AWS serves Sol and Luna on Mantle in `us-east-1`, but the [Codex 0.156.1 Bedrock catalog](https://github.com/openai/codex/blob/rust-v0.156.1/codex-rs/model-provider/src/amazon_bedrock/catalog.rs) does not list them. Use the [direct Promptfoo Bedrock provider](/docs/providers/aws-bedrock/#openai-models) for these models.
+- **GPT-6 on Bedrock**: AWS serves Sol and Luna on Mantle in `us-east-1`, but the [Codex 0.156.1 Bedrock catalog](https://github.com/openai/codex/blob/rust-v0.156.1/codex-rs/model-provider/src/amazon_bedrock/catalog.rs) does not list them. Use the [direct Promptfoo Bedrock provider](/docs/providers/aws-bedrock/#openai-models) to evaluate these models without the Codex agent runtime.
 - **Credentials must reach the Codex CLI**: the Codex CLI reads AWS credentials from its own environment. Because promptfoo runs the CLI with a minimal environment by default, pass `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` (or `AWS_BEARER_TOKEN_BEDROCK`, or `AWS_PROFILE`) and `AWS_REGION` via `cli_env`, or set `inherit_process_env: true`. If you use **temporary credentials** (SSO, STS, assumed roles, or MFA), also forward `AWS_SESSION_TOKEN` — without it the credentials are incomplete and Codex will fail to authenticate. For direct inference, the [Promptfoo Bedrock provider](/docs/providers/aws-bedrock/#openai-models) accepts a Bedrock API key or AWS credentials.
 
 :::warning
@@ -263,7 +263,7 @@ The `approval_policy` parameter controls when user approval is required:
 
 ## Models
 
-Use `gpt-6-sol` or `gpt-6-luna` with [Codex 0.156.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.156.1) when available to your account. `gpt-6-astra` requires [Codex 0.153.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.153.1) and an account with Astra access. Availability depends on the installed Codex runtime and authentication method; consult [OpenAI's Codex model guide](https://learn.chatgpt.com/docs/models).
+Select a model available to your account and sign-in method. See [installation](#installation) for the required Codex version and [OpenAI's Codex model guide](https://learn.chatgpt.com/docs/models) for availability.
 
 ```yaml
 providers:
@@ -273,7 +273,7 @@ providers:
       model_reasoning_effort: max
 ```
 
-For new evals, choose from the current models in [OpenAI's Codex model guide](https://learn.chatgpt.com/docs/models). Availability depends on the sign-in method and account:
+Choose a model based on your eval's needs:
 
 - **GPT-6 Astra** (`gpt-6-astra`) - Use for the most demanding reasoning and coding tasks, when your account has access.
 - **GPT-6 Sol** (`gpt-6-sol`) - Use for complex professional and coding workflows.

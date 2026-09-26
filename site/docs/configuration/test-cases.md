@@ -85,9 +85,9 @@ Control which providers run specific tests using the `providers` field. This all
 
 ```yaml
 providers:
-  - id: openai:gpt-6-luna
+  - id: openai:responses:gpt-6-luna
     label: fast-model
-  - id: openai:gpt-6-sol
+  - id: openai:responses:gpt-6-sol
     label: smart-model
 
 tests:
@@ -112,12 +112,12 @@ tests:
 
 **Matching syntax:**
 
-| Pattern            | Matches                                                               |
-| ------------------ | --------------------------------------------------------------------- |
-| `fast-model`       | Exact label match                                                     |
-| `openai:gpt-6-sol` | Exact provider ID match                                               |
-| `openai:*`         | Wildcard - any provider starting with `openai:`                       |
-| `openai`           | Legacy prefix - matches `openai:gpt-6-sol`, `openai:gpt-6-luna`, etc. |
+| Pattern                      | Matches                                                                                   |
+| ---------------------------- | ----------------------------------------------------------------------------------------- |
+| `fast-model`                 | Exact label match                                                                         |
+| `openai:responses:gpt-6-sol` | Exact provider ID match                                                                   |
+| `openai:*`                   | Wildcard - any provider starting with `openai:`                                           |
+| `openai`                     | Legacy prefix - matches `openai:responses:gpt-6-sol`, `openai:responses:gpt-6-luna`, etc. |
 
 **Apply to all tests using `defaultTest`:**
 
@@ -156,7 +156,7 @@ prompts:
     raw: 'You are a creative writer. Answer: {{question}}'
 
 providers:
-  - openai:gpt-6-luna
+  - openai:responses:gpt-6-luna
 
 tests:
   # This test only runs with the Factual Assistant prompt
