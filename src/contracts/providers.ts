@@ -1,4 +1,5 @@
 import type { BlobRef } from './blobs.js';
+import type { CodexSecurityResult } from './codexSecurity.js';
 import type { TokenUsage, VarValue } from './shared.js';
 
 /**
@@ -62,6 +63,7 @@ export interface ProviderResponse {
   logProbs?: number[];
   latencyMs?: number;
   metadata?: {
+    codexSecurity?: CodexSecurityResult;
     redteamFinalPrompt?: string;
     http?: {
       status: number;

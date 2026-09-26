@@ -1,4 +1,5 @@
 import { mockClipboard } from '@app/tests/browserMocks';
+import { createCodexSecurityResult } from '@app/tests/fixtures/codexSecurity';
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
 import { renderWithProviders as baseRender } from '@app/utils/testutils';
 import {
@@ -6,7 +7,7 @@ import {
   type EvaluateTableOutput,
   ResultFailureReason,
 } from '@promptfoo/types';
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
@@ -16,11 +17,13 @@ import type { EvalOutputCellProps } from './EvalOutputCell';
 
 // Mock the EvalOutputPromptDialog component to check what props are passed to it
 vi.mock('./EvalOutputPromptDialog', () => ({
-  default: vi.fn(({ gradingResults, metadata, onClose }) => (
+  default: vi.fn(({ gradingResults, metadata, output, rawOutput, onClose }) => (
     <div
       data-testid="dialog-component"
       data-grading-results={JSON.stringify(gradingResults)}
       data-metadata={JSON.stringify(metadata)}
+      data-output={output}
+      data-raw-output={JSON.stringify(rawOutput)}
     >
       Mocked Dialog Component
       <button type="button" onClick={onClose}>
@@ -225,6 +228,168 @@ describe('EvalOutputCell', () => {
     // Check that metadata is passed correctly
     const passedMetadata = JSON.parse(dialogComponent.getAttribute('data-metadata') || '{}');
     expect(passedMetadata.testKey).toBe('testValue');
+  });
+
+  it('shows recorded report metrics and retains raw output only in details', async () => {
+    const user = userEvent.setup();
+    const rawOutput = '{"rawSdkMarker":"full report"}';
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        output={{
+          ...defaultProps.output,
+          text: rawOutput,
+          latencyMs: 3,
+          cost: 99,
+          tokenUsage: { total: 999, prompt: 900, completion: 99 },
+          metadata: {
+            codexSecurity: createCodexSecurityResult({
+              source: { kind: 'saved-report', mocked: false },
+              elapsedMs: 65000,
+              cost: { baselineUsd: 0.35, range: null, pricing: null },
+              usage: {
+                input: 120,
+                output: 80,
+                total: 200,
+                cachedInput: null,
+                cacheWriteInput: null,
+              },
+            }),
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getByText('Recorded duration').nextElementSibling).toHaveTextContent('1m 5s');
+    expect(screen.getByText('Recorded tokens').nextElementSibling).toHaveTextContent('200');
+    expect(screen.getByText('Estimated cost').nextElementSibling).toHaveTextContent('$0.35');
+    expect(screen.queryByText(/rawSdkMarker/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Latency:')).not.toBeInTheDocument();
+    expect(screen.queryByText('Tokens:')).not.toBeInTheDocument();
+    expect(screen.queryByText('Tokens/Sec:')).not.toBeInTheDocument();
+    expect(screen.queryByText('Cost:')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
+    expect(screen.getByTestId('dialog-component')).toHaveAttribute('data-output', rawOutput);
+  });
+
+  it('passes preserved SDK evidence to details after an output transform', async () => {
+    const user = userEvent.setup();
+    const raw = { reportMarker: 'preserved SDK evidence' };
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        output={{
+          ...defaultProps.output,
+          text: 'Transformed assertion input',
+          response: { raw, output: 'Transformed assertion input' },
+          metadata: { codexSecurity: createCodexSecurityResult() },
+        }}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
+    const dialog = screen.getByTestId('dialog-component');
+    expect(dialog).toHaveAttribute('data-output', 'Transformed assertion input');
+    expect(dialog).toHaveAttribute('data-raw-output', JSON.stringify(raw));
+  });
+
+  it('keeps normal execution statistics for live SDK results', () => {
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        output={{
+          ...defaultProps.output,
+          cost: 0.35,
+          tokenUsage: { total: 200, prompt: 120, completion: 80 },
+          metadata: { codexSecurity: createCodexSecurityResult() },
+        }}
+      />,
+    );
+    expect(screen.getByRole('region', { name: 'Codex Security result' })).toBeInTheDocument();
+    expect(screen.getByText('Latency:')).toBeInTheDocument();
+    expect(screen.getByText('Tokens:')).toBeInTheDocument();
+    expect(screen.getByText('Cost:')).toBeInTheDocument();
+  });
+
+  it.each([undefined, { version: 1 }, createCodexSecurityResult({ elapsedMs: -1 })])(
+    'falls back to ordinary output for missing or invalid normalized metadata',
+    (codexSecurity) => {
+      renderWithProviders(
+        <EvalOutputCell
+          {...defaultProps}
+          output={{
+            ...defaultProps.output,
+            provider: 'openai:codex-security',
+            metadata: { providerType: 'codex-security', operation: 'security-scan', codexSecurity },
+          }}
+        />,
+      );
+      expect(
+        screen.queryByRole('region', { name: 'Codex Security result' }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByText('Test output text')).toBeInTheDocument();
+      expect(screen.getByText('Latency:')).toBeInTheDocument();
+    },
+  );
+
+  it('keeps two report summaries independent when displayed side by side', () => {
+    const results = [
+      createCodexSecurityResult({
+        source: { kind: 'saved-report', mocked: false },
+        findings: {
+          total: 1,
+          bySeverity: { critical: 0, high: 1, medium: 0, low: 0, informational: 0, unknown: 0 },
+        },
+      }),
+      createCodexSecurityResult({
+        source: { kind: 'saved-report', mocked: false },
+        status: 'failed',
+        error: 'Report contains incomplete findings.',
+      }),
+    ];
+    renderWithProviders(
+      <div>
+        {results.map((codexSecurity, index) => (
+          <section key={index} aria-label={index === 0 ? 'Left report' : 'Right report'}>
+            <EvalOutputCell
+              {...defaultProps}
+              promptIndex={index}
+              output={{
+                ...defaultProps.output,
+                id: `report-${index}`,
+                error: codexSecurity.error ?? undefined,
+                failureReason: codexSecurity.error
+                  ? ResultFailureReason.ERROR
+                  : ResultFailureReason.NONE,
+                metadata: { codexSecurity },
+              }}
+            />
+          </section>
+        ))}
+      </div>,
+    );
+    expect(
+      within(screen.getByRole('region', { name: 'Left report' })).getByText('Findings')
+        .nextElementSibling,
+    ).toHaveTextContent('1 (1 high)');
+    const right = within(screen.getByRole('region', { name: 'Right report' }));
+    expect(right.getByText('Findings').nextElementSibling).toHaveTextContent('Unknown');
+    expect(right.getAllByText('Report contains incomplete findings.')).toHaveLength(1);
+    expect(right.getByText('Standard security scan · Failed')).toBeInTheDocument();
+  });
+
+  it('preserves the explicit raw differences view for normalized results', () => {
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        showDiffs
+        output={{
+          ...defaultProps.output,
+          metadata: { codexSecurity: createCodexSecurityResult() },
+        }}
+      />,
+    );
+    expect(screen.queryByRole('region', { name: 'Codex Security result' })).not.toBeInTheDocument();
+    expect(screen.getByText('Test output text')).toBeInTheDocument();
   });
 
   it('passes the top-level grading result to the dialog when component results are absent', async () => {

@@ -1,99 +1,166 @@
 ---
-title: Understand Codex Security results
-sidebar_label: Codex Security Results
+title: Evaluate a vulnerability-finding harness
+sidebar_label: Codex Security Report Comparisons
 sidebar_position: 65
-description: Learn to read Codex Security findings, coverage, validation outcomes, and estimated costs in Promptfoo using portable synthetic fixtures without model calls.
+description: Compare existing Codex Security reports in Promptfoo using source provenance, curated expected findings, coverage, and recorded scan cost and duration metrics.
 ---
 
-# Understand Codex Security results
+# Evaluate a vulnerability-finding harness
 
-Use this guide to check how Promptfoo presents Codex Security results and to decide what your assertions should measure. The walkthrough uses synthetic responses: it needs no model credentials, Codex Security SDK, Python, or target repository.
+Compare the evidence produced by two completed Codex Security runs in Promptfoo. Each column imports an existing report, so the comparison can use real findings without repeating the original operation. You supply the reports and ground truth; this guide includes no prewritten findings or claimed benchmark results.
 
-For native provider installation and configuration, see the [Codex Security provider reference](/docs/providers/openai-codex-security).
+Use this workflow to answer a specific question about two runs on the same source, such as which report contains more of your independently confirmed expected findings. Report import and contract checks alone do not measure detection quality.
 
-## Understand the mapping
+## Prepare comparable reports
 
-The native provider wraps a whole security operation in each provider call. A provider column represents one model/configuration, a test row supplies an input such as a repository or candidate finding, and the prompt provides additional instructions. Each prompt/provider/test/repeat combination starts a separate operation.
+Use the full JSON returned by SDK `ScanResult.toJSON()`, including its manifest, findings, and coverage. Keep the original files unchanged. Before interpreting differences, check:
 
-Promptfoo maps standard, deep, Git diff, and finding-validation operations. Other SDK and plugin workflows, such as remediation and fix verification, are separate. Assertions decide whether an eval passes; a completed operation does not automatically establish that its repository is secure.
+| Evidence        | What to compare                                                                                                                    |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Source identity | Repository plus exact revision, diff base/head, or snapshot digest; the same Git commit alone is insufficient for dirty worktrees. |
+| Scope           | Included/excluded paths, assumptions, and expected findings applicable to that scope.                                              |
+| Run identity    | Scan ID, report file hash, recorded model/settings, and available SDK/plugin versions.                                             |
+| Completion      | Scan status, coverage completeness, deferred surfaces, and warnings.                                                               |
+| Measurement     | Source and definition of recorded duration and estimated cost.                                                                     |
 
-## Run the synthetic example
+If revision or scope differs, explain that difference before scoring; it may account for a missing finding. Missing provenance remains unknown. Loading a report does not independently verify that it came from the claimed source.
 
-Install the example and export its results:
+### Using existing Juice Shop reports
+
+[OWASP Juice Shop](https://owasp.org/projects/juice-shop) is an intentionally insecure application used for training and security-tool assessment. For this comparison, use reports already produced against the same pinned commit of the [official repository](https://github.com/juice-shop/juice-shop), with matching source snapshots, configuration, and review scope.
+
+Build a curated expected set for that revision from independently reviewed evidence. The official [challenge declaration reference](https://pwning.owasp-juice.shop/companion-guide/latest/part4/integration.html#challenge-declaration-file) documents challenge keys and environment-dependent availability. A challenge key can be an evidence reference; it is not automatically one source-code finding or a suitable recall denominator. Record the affected source locations, applicability, and matching criteria for each expected ID. Preserve the revision-specific references rather than relying on a changing challenge count or treating scoreboard completion as source-review recall.
+
+## Import two reports
+
+Initialize the consolidated example:
 
 ```bash
-npx promptfoo@latest init --example openai-codex-security-results
-cd openai-codex-security-results
-npx promptfoo@latest eval --no-cache -o results.json
+npx promptfoo@latest init --example openai-codex-security
+cd openai-codex-security
 ```
 
-The [example files](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-security-results) contain a custom provider and four hand-authored responses. The provider returns minimal result shapes without loading the native SDK. They are presentation fixtures, not sealed scan artifacts, and none of the findings describes a real vulnerability.
-
-The run deliberately includes assertion failures and a provider error. A nonzero exit status is expected under the default pass threshold. Open `results.json` and inspect each row's `success`, `score`, `error`, and `response.metadata`:
-
-| Synthetic case                  | Expected outcome  | What it demonstrates                                                                |
-| ------------------------------- | ----------------- | ----------------------------------------------------------------------------------- |
-| Complete coverage               | Pass              | A passing coverage assertion can coexist with an informational placeholder finding. |
-| Partial coverage, zero findings | Assertion failure | No findings is insufficient when review coverage is incomplete.                     |
-| Deferred validation             | Assertion failure | A completed validation can still lack enough evidence to report a finding.          |
-| Execution error                 | Provider error    | An unsuccessful operation must remain distinguishable from a completed result.      |
-
-The coverage cases use these assertions:
+Set `CODEX_SECURITY_BASELINE_REPORT` and `CODEX_SECURITY_CANDIDATE_REPORT` in the process environment to the absolute paths of your existing JSON reports. The example's two provider columns are:
 
 ```yaml
-assert:
-  - type: is-json
-  - type: javascript
-    metric: CompleteCoverage
-    value: JSON.parse(output).coverage.completeness === 'complete'
+providers:
+  - id: openai:codex-security
+    label: Baseline report
+    config:
+      report_file: '{{env.CODEX_SECURITY_BASELINE_REPORT}}'
+  - id: openai:codex-security
+    label: Candidate report
+    config:
+      report_file: '{{env.CODEX_SECURITY_CANDIDATE_REPORT}}'
 ```
 
-The validation case checks `JSON.parse(output).disposition === 'reportable'`. Its synthetic `deferred` response intentionally fails that rule. Neither assertion measures vulnerability detection quality.
-
-## Inspect results in the web UI
-
-Open the viewer after the eval:
+Then import and evaluate the files:
 
 ```bash
+npx promptfoo@latest eval --no-cache -o comparison.json
 npx promptfoo@latest view
 ```
 
-Choose the eval named **Synthetic Codex Security result presentation** and expand a result. The Codex Security summary shows coverage or validation disposition, current findings, warnings, and estimated spend before the raw output. These fixtures are marked as synthetic. Their SDK/plugin versions and artifact paths are absent because no SDK execution or artifact generation occurred.
+`report_file` reads a saved report without starting a scan or making model calls. Missing files and invalid reports produce errors rather than triggering a native operation. The [example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-security) supplies two checks: **CompletedScan** requires normalized `status === 'completed'`, and **CompleteCoverage** requires `coverage.completeness === 'complete'`. The provider already validates the report structure.
 
-Inspect the partial case alongside the complete case. It has zero current findings but incomplete coverage and a warning. Then inspect deferred validation: its cost is unreported. The scan fixtures contain synthetic zero-cost estimates; neither those values nor replay latency represents a real operation.
+Those checks give you a starting comparison table; add the curated-recall assertion below after preparing adjudications. Inspect each row's exported `success`, `score`, `error`, and `response.metadata`; a successful process exit does not replace per-result review.
 
-Use the raw output and metadata for the complete structured response. For real results, artifact paths refer to the machine that ran the operation; copying a path does not download its contents.
+## Define ground truth before measuring quality
 
-## Read coverage and findings separately
+Create a curated set of independently confirmed findings that apply to the chosen revision and scope. Give each an expected finding ID, affected source location, matching criteria, and an evidence reference. These benchmark IDs should be stable across runs; do not assume the scanner's finding or occurrence IDs will be identical in both reports.
 
-`findings.findings` contains findings from the current scan. `repositoryFindings`, when present, can also include earlier open findings. Counting both as fresh discoveries can distort a comparison.
+Review the current findings in each report and record a mapping from report finding IDs to expected IDs. Label additional reported findings as confirmed, false positive, duplicate, or unreviewed based on evidence. An unmatched finding may be a valid discovery missing from your benchmark; it is not automatically a false positive. Title-keyword matches alone are insufficient adjudication.
 
-Coverage completeness is `complete`, `partial`, or `unknown`. Read deferred work, exclusions, and open questions as well as the label. Complete coverage does not establish the absence of vulnerabilities. In a synthetic fixture, the label makes no claim about source review at all.
+After those labels exist, distinguish the metrics you intend to compare:
 
-Validation returns `reportable`, `suppressed`, `not_applicable`, or `deferred`. Keep those distinctions in your assertions and review the accompanying report. In particular, `deferred` is not a conclusion that the candidate is harmless.
+| Metric             | Definition and limits                                                                                                                                                                                        |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Curated-set recall | Unique expected IDs found / all known in-scope expected IDs. This measures recall on your curated set, not all vulnerabilities in the repository.                                                            |
+| Reviewed precision | True positives / (true positives + false positives), after applying a consistent duplicate policy. Report the unreviewed count alongside it; omitting unresolved findings can make this estimate optimistic. |
+| Duplicates         | Separately count repeated reports of the same underlying issue; repeated matches must not increase recall.                                                                                                   |
+| Coverage           | Record complete, partial, or unknown, together with deferred work and exclusions.                                                                                                                            |
 
-SDK `failure_severity` records a policy threshold; it does not create a Promptfoo assertion. Decide whether the eval is testing expected finding recall, checking a severity gate, or validating a presentation contract, then author the appropriate assertions. These have different pass conditions.
+Keep missing expected findings in the recall denominator when coverage is partial; otherwise, a smaller review scope could misleadingly improve the score. Display the coverage limitation alongside the misses. If ground truth, revision, or scope is not established, leave the quality comparison unscored rather than inventing a denominator. A zero denominator is undefined, not a perfect score.
 
-The provider reference includes a keyword-matching example for finding recall. Treat it as a starter heuristic: title wording can vary, and a passing mention can match a keyword. A detection-quality benchmark needs curated expected cases, structured matching criteria, false-positive review, coverage accounting, and repeated runs. This synthetic walkthrough measures none of those qualities.
+The included configuration checks completion and coverage. SDK `failure_severity` records a threshold; it does not create a Promptfoo assertion or establish recall/precision.
 
-## Interpret estimated spend
+### Add a curated-recall assertion
 
-The native provider's `cost` is the SDK's short-context baseline estimate. When available, `metadata.cost` and the raw scan result also contain `estimatedUsdRange` and pricing provenance. An unavailable range maximum means the SDK cannot provide an upper estimate, not that the maximum is zero.
+For repository reports with a recorded revision and scope, put a `benchmark` object in the common test row's `vars`. Supply real adjudications for both imported file hashes:
 
-`max_cost_usd` is an estimated stopping threshold for each scan. In-flight requests may finish above it, and post-scan prompts run after cost tracking ends, outside that limit. Multiplying providers, rows, prompts, or repeats also multiplies the operations receiving that budget. These are API-equivalent model-spend estimates, not a guarantee about subscription billing. See the [SDK cost documentation](https://learn.chatgpt.com/docs/security/sdk#set-a-scan-budget).
+| Field           | Required value                                                                                                                                                                                                 |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `revision`      | The exact revision reviewed when curating the expected set. Confirm source identity and a clean snapshot separately.                                                                                           |
+| `scope`         | An object with known `includePaths` and `excludePaths` arrays of unique, nonempty strings, including explicit empty arrays. Review narrative assumptions and limitations separately.                           |
+| `expectedIds`   | A nonempty array of unique, stable curated IDs. Keep their source/evidence references with the benchmark.                                                                                                      |
+| `adjudications` | An object keyed by imported report SHA-256, then current SDK `findingId`. Each entry is `{ expectedIds: string[], evidence: string }`. An empty ID array means reviewed with no curated match, not unreviewed. |
 
-Finding validation does not currently report reliable token or cost totals. Leave these unknown; a cost assertion requires a reported estimate. Similarly, `cacheWriteInputTokensReported: false` means a numeric cache-write subtotal is incomplete, even if it is zero.
+Append this [JavaScript assertion](/docs/configuration/expected-outputs/javascript#using-test-context) to the row's `assert` list. It uses `context.vars.benchmark` and `context.metadata.codexSecurity`. Keep the original JSON output without an output transform for this assertion:
 
-## Check native setup separately
+```yaml
+- type: javascript
+  metric: CuratedRecall
+  value: |
+    const result = context.metadata?.codexSecurity;
+    const benchmark = context.vars.benchmark;
+    const requireEvidence = (condition, reason) => {
+      if (!condition) throw new Error(`Recall not computed: ${reason}`);
+    };
+    const uniqueIds = (ids) => Array.isArray(ids)
+      && ids.every(id => typeof id === 'string' && id.trim().length > 0)
+      && new Set(ids).size === ids.length;
+    const scopeKey = (scope) => JSON.stringify([
+      [...scope.includePaths].sort(), [...scope.excludePaths].sort(),
+    ]);
+    requireEvidence(result?.version === 1 && result.source.kind === 'saved-report'
+      && !result.source.mocked && result.status === 'completed', 'need a completed saved scan');
+    requireEvidence(typeof benchmark?.revision === 'string' && benchmark.revision.length > 0
+      && result.target?.revision === benchmark.revision, 'revision missing or mismatched');
+    requireEvidence([benchmark.scope, result.scope].every(scope => scope
+      && uniqueIds(scope.includePaths) && uniqueIds(scope.excludePaths))
+      && scopeKey(benchmark.scope) === scopeKey(result.scope), 'scope missing or mismatched');
+    requireEvidence(uniqueIds(benchmark.expectedIds) && benchmark.expectedIds.length > 0,
+      'expected IDs must be unique and nonempty; zero denominator is undefined');
+    const expected = new Set(benchmark.expectedIds);
+    const findings = JSON.parse(output).findings?.findings;
+    const reportIds = findings?.map(finding => finding.findingId);
+    requireEvidence(uniqueIds(reportIds), 'current finding IDs missing or duplicated');
+    const review = benchmark.adjudications?.[result.source.sha256];
+    requireEvidence(review && typeof review === 'object' && !Array.isArray(review)
+      && Object.keys(review).length === reportIds.length
+      && reportIds.every(id => Object.hasOwn(review, id)), 'adjudicate every current finding');
+    const matched = new Set();
+    for (const id of reportIds) {
+      const item = review[id];
+      requireEvidence(uniqueIds(item?.expectedIds)
+        && item.expectedIds.every(expectedId => expected.has(expectedId))
+        && typeof item.evidence === 'string' && item.evidence.trim().length > 0,
+        `invalid or unsupported adjudication for ${id}`);
+      item.expectedIds.forEach(expectedId => matched.add(expectedId));
+    }
+    return {
+      pass: matched.size === expected.size,
+      score: matched.size / expected.size,
+      reason: `${matched.size}/${expected.size} curated IDs found; coverage ${result.coverage.completeness}`,
+    };
+```
 
-Synthetic replay checks presentation, assertions, and result persistence. It does not verify authentication, model access, runtime startup, native operation behavior, or detection accuracy.
+The pass condition requires every expected ID; the score is curated-set recall. Repeated matches count once, and partial coverage does not shrink the denominator. Scope comparison ignores path ordering and narrative wording. Review summaries, assumptions, and limitations separately to establish comparability; this check does not authenticate the source or a reviewer’s judgment. Missing revision/scope, incomplete adjudication, invalid IDs, or an empty expected set fail with **Recall not computed**. Promptfoo assigns thrown assertion errors a score of zero; exclude these precondition failures from recall summaries rather than interpreting that failure score as measured recall. This assertion does not calculate precision or verify a reviewer's evidence automatically.
 
-For native operation setup, install Promptfoo and the SDK together and satisfy both Node and Python requirements in the [provider reference](/docs/providers/openai-codex-security#installation-and-authentication). Repository and artifact paths belong to the server's filesystem. Credentials must be available to the server/CLI process; the generic Setup API keys dialog cannot override the native provider's credentials.
+## Inspect findings and coverage in Promptfoo
 
-**Check setup** in the provider form uses SDK preflight without starting a scan or grading results remotely. It checks concrete paths and configuration. It does not establish that Python/runtime startup, credentials, account permissions, or model access will work. Validation setup checks directories and any finding file's presence, not whether the finding is valid. Supply concrete values when configuration normally comes from row variables.
+Open **Compare existing Codex Security reports** in the results list and expand each column's output. The Codex Security summary marks imported reports and shows current finding counts, coverage, warnings, and available provenance before the raw report. The same versioned data is available in `response.metadata.codexSecurity`, including `source.kind: saved-report`, the file hash, target, scope, and observed versions.
 
-## Keep comparisons reproducible
+Use `findings.findings` for the current run. `repositoryFindings`, when present, can also include earlier open findings; do not count all of them as fresh discoveries. Review locations and evidence for disagreements. Zero findings with partial or unknown coverage does not establish that the source is free of vulnerabilities, and complete coverage does not prove their absence either.
 
-Record the source revision, operation, explicit model/effort/settings, SDK and plugin versions, initial SDK history state, assertions, and exported per-row results. Give provider configurations descriptive labels so same-model comparisons remain distinguishable.
+Keep source and report references with your adjudications so another reviewer can check the mapping. Artifact paths refer to the original host and may no longer exist; importing JSON does not copy those artifacts.
 
-For repeatable QA, retain fixtures for complete, partial, unknown, deferred, and failed outcomes. Keep synthetic identifiers visible, use `--no-cache` for fresh provider execution, and separate synthetic results from real scan evidence. Review source-bearing findings and artifacts before sharing them.
+## Separate original measurements from import overhead
+
+Saved-report cost and duration are historical measurements from the original operation. Importing files incurs no new model usage. Generic file-loading latency is not scanner latency and should not be used to compare the harnesses.
+
+Compare recorded durations only when their definitions match. The summary's `elapsedMs` comes from valid manifest start/end timestamps; it does not substitute a model-turn duration, which may cover different work. Preserve the measurement source and leave missing timestamps or usage unknown.
+
+The SDK's `estimatedUsd` is a short-context baseline; use the recorded estimated range and pricing provenance when available. An unknown range maximum is not zero. These are API-equivalent estimates, not billing guarantees. Original scan budgets can be exceeded by in-flight requests, and post-scan work is outside scan cost tracking. See the [provider cost reference](/docs/providers/openai-codex-security#results-cost-and-assertions).
+
+For repeated runs, retain every original report and apply the same adjudication policy. Keep source/settings differences visible, report unresolved cases, and avoid presenting a single pair of reports as a statistically reliable estimate of overall scanner quality.

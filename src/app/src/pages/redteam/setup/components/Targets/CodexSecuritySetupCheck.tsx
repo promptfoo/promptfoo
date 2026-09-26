@@ -16,6 +16,7 @@ export default function CodexSecuritySetupCheck({ provider }: { provider: Provid
   const [result, setResult] = useState<SetupResult>();
   const request = useRef<AbortController | undefined>(undefined);
   const configuration = JSON.stringify(provider);
+  const isSavedReport = Object.prototype.hasOwnProperty.call(provider.config ?? {}, 'report_file');
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: configuration changes invalidate the previous check and abort its request
   useEffect(() => {
@@ -80,9 +81,9 @@ export default function CodexSecuritySetupCheck({ provider }: { provider: Provid
         {pending ? 'Checking setup…' : 'Check setup'}
       </Button>
       <p className="text-sm text-muted-foreground">
-        Checks local configuration and paths on the server. No scan or model call is run. Runtime,
-        credentials, account access, and model availability are not verified. Use concrete paths;
-        test-case variables are not resolved here.
+        {isSavedReport
+          ? 'Checks the saved report on the server. No SDK operation is run. Use a concrete path; test-case variables are not resolved here.'
+          : 'Checks local configuration and paths on the server. No scan or model call is run. Runtime, credentials, account access, and model availability are not verified. Use concrete paths; test-case variables are not resolved here.'}
       </p>
       {result && (
         <p role={result.success ? 'status' : 'alert'} className="text-sm">

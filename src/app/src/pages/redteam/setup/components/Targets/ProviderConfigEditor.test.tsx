@@ -1,5 +1,6 @@
 import React from 'react';
 
+import { getCallApiMock, mockCallApiRoutes, resetCallApiMock } from '@app/tests/apiMocks';
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -9,6 +10,8 @@ import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetCo
 import ProviderConfigEditor from './ProviderConfigEditor';
 
 import type { ProviderOptions } from '../../types';
+
+vi.mock('@app/utils/api', () => ({ callApi: vi.fn() }));
 
 const mockA2AConfigState = vi.hoisted(() => ({
   advancedConfigError: null as string | null,
@@ -147,6 +150,7 @@ function StatefulCodexSecurityEditor({
 
 describe('ProviderConfigEditor', () => {
   beforeEach(() => {
+    resetCallApiMock();
     mockA2AConfigState.advancedConfigError = null;
     useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
   });
@@ -758,6 +762,136 @@ describe('ProviderConfigEditor', () => {
       await waitFor(() => {
         expect(mockSetError).toHaveBeenCalledWith('Repository path is required');
       });
+    });
+  });
+
+  it.each([
+    { report_file: '/reports/scan.json' },
+    {
+      report_file: '/reports/scan.json',
+      operation: 'security-diff-scan',
+      working_tree: true,
+      head_ref: 'feature',
+      paths: ['src'],
+      model_reasoning_effort: 'high',
+      reasoning_effort: 'low',
+    },
+  ])('accepts a saved report without requiring live operation options: %j', (config) => {
+    const setError = vi.fn();
+    let validate: (() => boolean) | undefined;
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={{ id: 'openai:codex-security', config }}
+        providerType="codex-security"
+        setProvider={vi.fn()}
+        setError={setError}
+        onValidationRequest={(validator) => {
+          validate = validator;
+        }}
+      />,
+    );
+
+    expect(validate?.()).toBe(true);
+    expect(setError).toHaveBeenLastCalledWith(null);
+    expect(screen.getByLabelText('Result source')).toHaveValue('saved-report');
+    expect(screen.getByLabelText('Report file *')).toHaveValue('/reports/scan.json');
+    expect(screen.getByLabelText('Provider label')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Repository path *')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Security operation')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Model')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Reasoning effort')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Authentication')).not.toBeInTheDocument();
+    expect(screen.queryByText('Codex Security SDK')).not.toBeInTheDocument();
+    expect(screen.queryByText(/credentials, account access/)).not.toBeInTheDocument();
+  });
+
+  it.each(['', '   ', undefined, null, 42])(
+    'requires a saved report path for %j',
+    (report_file) => {
+      const setError = vi.fn();
+      let validate: (() => boolean) | undefined;
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: 'openai:codex-security', config: { report_file } }}
+          providerType="codex-security"
+          setProvider={vi.fn()}
+          setError={setError}
+          onValidationRequest={(validator) => {
+            validate = validator;
+          }}
+        />,
+      );
+
+      expect(screen.getByLabelText('Result source')).toHaveValue('saved-report');
+      expect(validate?.()).toBe(false);
+      expect(setError).toHaveBeenLastCalledWith('Report file path is required');
+    },
+  );
+
+  it('preserves live options and label while switching between SDK and report sources', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <StatefulCodexSecurityEditor
+        initialConfig={{ operation: 'deep-security-scan', paths: ['src'], workers: 3 }}
+      />,
+    );
+    const initialConfig = JSON.parse(screen.getByTestId('codex-security-config').textContent!);
+    expect(screen.getByLabelText('Result source')).toHaveValue('sdk');
+
+    await user.selectOptions(screen.getByLabelText('Result source'), 'saved-report');
+    expect(screen.getByLabelText('Report file *')).toHaveValue('');
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toEqual({
+      ...initialConfig,
+      report_file: '',
+    });
+    await user.type(screen.getByLabelText('Report file *'), '/reports/left.json');
+    await user.type(screen.getByLabelText('Provider label'), 'Left report');
+    expect(screen.queryByLabelText('Scoped paths')).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText('Result source'), 'sdk');
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toEqual(
+      initialConfig,
+    );
+    expect(screen.getByLabelText('Provider label')).toHaveValue('Left report');
+    expect(screen.getByLabelText('Security operation')).toHaveValue('deep-security-scan');
+    expect(screen.getByLabelText('Repository path *')).toHaveValue('/repos/service');
+    expect(screen.getByLabelText('Scoped paths')).toHaveValue('src');
+    expect(screen.getByLabelText('Model')).toHaveValue('gpt-5.6-luna');
+  });
+
+  it('checks the selected report path and label without changing the provider ID or saved options', async () => {
+    const user = userEvent.setup();
+    mockCallApiRoutes([
+      {
+        method: 'POST',
+        path: '/providers/test',
+        response: { testResult: { success: true, message: 'Saved report is readable.' } },
+      },
+    ]);
+    renderWithProviders(<StatefulCodexSecurityEditor />);
+    await user.selectOptions(screen.getByLabelText('Result source'), 'saved-report');
+    await user.type(screen.getByLabelText('Report file *'), '/reports/left.json');
+    await user.type(screen.getByLabelText('Provider label'), 'Left report');
+    await user.click(screen.getByRole('button', { name: 'Check setup' }));
+
+    expect(await screen.findByText(/Saved report is readable\./)).toHaveTextContent(
+      'Local setup check passed.',
+    );
+    expect(getCallApiMock()).toHaveBeenCalledTimes(1);
+    const request = getCallApiMock().mock.calls[0][1]!;
+    expect(JSON.parse(request.body as string)).toEqual({
+      providerOptions: {
+        id: 'openai:codex-security:gpt-5.6-luna',
+        label: 'Left report',
+        config: {
+          operation: 'security-scan',
+          repository: '/repos/service',
+          auth: 'chatgpt',
+          model_reasoning_effort: 'high',
+          max_cost_usd: 1,
+          report_file: '/reports/left.json',
+        },
+      },
     });
   });
 

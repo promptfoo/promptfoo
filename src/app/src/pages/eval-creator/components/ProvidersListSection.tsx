@@ -82,6 +82,11 @@ function getCodexSecuritySummary(provider: ProviderOptions): string | undefined 
   }
 
   const config = provider.config ?? {};
+  if (Object.prototype.hasOwnProperty.call(config, 'report_file')) {
+    return typeof config.report_file === 'string' && config.report_file.trim()
+      ? `Saved report · ${config.report_file}`
+      : 'Saved report · Select a report file';
+  }
   const operation = config.operation ?? 'security-scan';
   const operationLabel =
     CODEX_SECURITY_OPERATION_OPTIONS.find((option) => option.value === operation)?.label ??

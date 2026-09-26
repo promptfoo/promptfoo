@@ -1,14 +1,19 @@
+import { createHash } from 'crypto';
+import { constants } from 'fs';
 import fs from 'fs/promises';
+import os from 'os';
 import path from 'path';
 
 import { satisfies, validRange } from 'semver';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
+import { CodexSecurityResultSchema } from '../../src/contracts/codexSecurity';
 import { getDirectory, importModule, resolvePackageEntryPoint } from '../../src/esm';
 import {
   CODEX_SECURITY_OPERATIONS,
   OpenAICodexSecurityProvider,
 } from '../../src/providers/openai/codex-security';
+import { readCodexSecurityReport } from '../../src/providers/openai/codex-security-report';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import {
   accumulateResponseTokenUsage,
@@ -44,12 +49,38 @@ const incompatibleSdkVersions = ['0.1.8', '0.1.10'] as const;
 
 function createScanResult(overrides: Record<string, unknown> = {}) {
   const findings = {
-    findings: [{ findingId: 'finding-1', title: 'SQL injection', severity: { level: 'high' } }],
+    documentType: 'codex-security.findings',
+    schemaVersion: '1.0',
+    scanId: 'scan-123',
+    findings: [{ findingId: 'finding-1', title: 'Recorded finding', severity: { level: 'high' } }],
   };
   const result = {
-    manifest: { scanId: 'scan-123' },
+    manifest: {
+      documentType: 'codex-security.scan-manifest',
+      schemaVersion: '1.0',
+      scan: {
+        id: 'scan-123',
+        producer: { name: 'codex-security', version: '0.1.22' },
+        status: 'completed',
+        startedAt: '2026-01-01T12:00:00Z',
+        completedAt: '2026-01-01T12:00:05Z',
+        target: { kind: 'git_revision', targetId: 'target-123', revision: 'recorded-revision' },
+        scope: { includePaths: [], excludePaths: [], limitations: [] },
+      },
+    },
     findings,
-    coverage: { filesTotal: 8, filesReviewed: 8 },
+    coverage: {
+      documentType: 'codex-security.coverage',
+      schemaVersion: '1.0',
+      scanId: 'scan-123',
+      mode: 'repository',
+      completeness: 'complete',
+      includePaths: [],
+      excludePaths: [],
+      surfaces: [],
+      explicitExclusions: [],
+      deferred: [],
+    },
     scanDir: '/tmp/security-scan',
     threadId: 'thread-123',
     turnResult: {
@@ -83,7 +114,18 @@ function createScanResult(overrides: Record<string, unknown> = {}) {
 
   return {
     ...result,
-    toJSON: () => ({ manifest: result.manifest, findings: result.findings }),
+    toJSON: () => ({
+      manifest: result.manifest,
+      findings: result.findings,
+      coverage: result.coverage,
+      scanDir: result.scanDir,
+      threadId: result.threadId,
+      reportPath: result.reportPath,
+      artifactsDir: result.artifactsDir,
+      sarifPath: result.sarifPath,
+      cost: result.cost,
+      turn: result.turnResult,
+    }),
   };
 }
 
@@ -270,7 +312,10 @@ describe('OpenAICodexSecurityProvider', () => {
       };
       mockRun.mockResolvedValue(createScanResult({ cost }));
       const response = await new OpenAICodexSecurityProvider().callApi('Synthetic result');
-      expect(response.metadata).toMatchObject({ providerType: 'codex-security', cost });
+      expect(response.metadata?.codexSecurity).toMatchObject({
+        cost: { baselineUsd: 0.01, range: { minUsd: 0.01, maxUsd: 0.02 } },
+        usage: { cacheWriteInput: null },
+      });
       expect(response.tokenUsage?.completionDetails).not.toHaveProperty('cacheCreationInputTokens');
     });
 
@@ -311,12 +356,14 @@ describe('OpenAICodexSecurityProvider', () => {
       });
       const response = await new OpenAICodexSecurityProvider().callApi('Synthetic result');
       expect(response.metadata).toMatchObject({
-        providerType: 'codex-security',
-        status: 'error',
-        sdkVersion: '0.1.18',
-        cost,
-        scanDir: '/tmp/incomplete-output',
-        warnings: ['Incomplete coverage'],
+        codexSecurity: {
+          source: { kind: 'sdk' },
+          status: 'failed',
+          versions: { sdk: '0.1.18' },
+          cost: { baselineUsd: 0.01, range: { minUsd: 0.01, maxUsd: 0.02 } },
+          artifacts: [{ kind: 'scanDir', path: '/tmp/incomplete-output' }],
+          warnings: ['Incomplete coverage'],
+        },
         progress: { phase: 'discovery' },
       });
       expect(response.error).toContain('Interrupted');
@@ -327,12 +374,453 @@ describe('OpenAICodexSecurityProvider', () => {
         config: { operation: 'validation' },
       }).callApi('Synthetic finding');
       expect(response.metadata).toMatchObject({
-        providerType: 'codex-security',
-        sdkVersion: '0.1.18',
-        operation: 'validation',
+        codexSecurity: {
+          source: { kind: 'sdk' },
+          versions: { sdk: '0.1.18' },
+          operation: 'validation',
+        },
       });
       expect(response.cost).toBeUndefined();
       expect(response.tokenUsage).toBeUndefined();
+    });
+  });
+
+  describe('saved report files', () => {
+    let reportDirectory: string;
+
+    beforeEach(async () => {
+      reportDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-security-report-'));
+      // A saved report must work even when neither the SDK nor scoped auth is available.
+      vi.mocked(resolvePackageEntryPoint).mockReturnValue(null);
+    });
+
+    afterEach(async () => {
+      await fs.rm(reportDirectory, { recursive: true, force: true });
+    });
+
+    async function saveReport(data: unknown, filename = 'report.json') {
+      const file = path.join(reportDirectory, filename);
+      const contents = JSON.stringify(data);
+      await fs.writeFile(file, contents);
+      return { file, contents };
+    }
+
+    function mockReportHandle() {
+      const handle = {
+        stat: vi.fn().mockResolvedValue({ size: 0, isFile: () => true }),
+        read: vi.fn(),
+        close: vi.fn().mockResolvedValue(undefined),
+      };
+      vi.spyOn(fs, 'open').mockResolvedValue(
+        handle as unknown as Awaited<ReturnType<typeof fs.open>>,
+      );
+      return handle;
+    }
+
+    it('loads original evidence and provenance without new inference or scan accounting', async () => {
+      const raw = createScanResult().toJSON();
+      const { file, contents } = await saveReport(raw);
+      const provider = new OpenAICodexSecurityProvider({
+        config: { report_file: file },
+        env: { OPENAI_API_KEY: 'unused-scoped-key' },
+      });
+
+      const response = await provider.callApi('Compare existing evidence');
+
+      expect(response.error).toBeUndefined();
+      expect(JSON.parse(response.output)).toEqual(raw);
+      expect(response.raw).toEqual(raw);
+      expect(response).toMatchObject({ format: 'json', incurredCost: 0 });
+      expect(response.cost).toBeUndefined();
+      expect(response.tokenUsage).toBeUndefined();
+      expect(response.latencyMs).toBeUndefined();
+      expect(response.metadata?.codexSecurity).toMatchObject({
+        source: {
+          kind: 'saved-report',
+          file,
+          sha256: createHash('sha256').update(contents).digest('hex'),
+          mocked: false,
+        },
+        scanId: 'scan-123',
+        status: 'completed',
+        versions: { sdk: null, plugin: '0.1.22' },
+        findings: { total: 1, bySeverity: { high: 1 } },
+        coverage: { completeness: 'complete' },
+        cost: { baselineUsd: 0.012 },
+        usage: { input: 100, output: 40, total: 140 },
+        elapsedMs: 5000,
+        target: { revision: 'recorded-revision' },
+      });
+      expect(CodexSecurityResultSchema.safeParse(response.metadata?.codexSecurity).success).toBe(
+        true,
+      );
+      expect(resolvePackageEntryPoint).not.toHaveBeenCalled();
+      expect(importModule).not.toHaveBeenCalled();
+      expect(MockCodexSecurity).not.toHaveBeenCalled();
+      expect(mockRun).not.toHaveBeenCalled();
+      expect(mockValidate).not.toHaveBeenCalled();
+      expect(mockPreflight).not.toHaveBeenCalled();
+    });
+
+    it('resolves relative files against the explicit provider base path', async () => {
+      const { file } = await saveReport(createScanResult().toJSON());
+      cliState.basePath = path.join(reportDirectory, 'unrelated');
+      const response = await new OpenAICodexSecurityProvider({
+        config: { basePath: reportDirectory, report_file: './report.json' },
+      }).callApi('Compare');
+
+      expect(response.error).toBeUndefined();
+      expect(response.metadata?.codexSecurity?.source.file).toBe(file);
+    });
+
+    it('resolves relative files against the configuration directory and renders row variables', async () => {
+      const { file } = await saveReport(createScanResult().toJSON());
+      cliState.basePath = reportDirectory;
+      const response = await new OpenAICodexSecurityProvider({
+        config: { report_file: '{{reportName}}' },
+      }).callApi('Compare', {
+        prompt: { raw: 'Compare', label: 'Compare' },
+        vars: { reportName: 'report.json' },
+      });
+
+      expect(response.error).toBeUndefined();
+      expect(response.metadata?.codexSecurity?.source.file).toBe(file);
+      expect(mockRun).not.toHaveBeenCalled();
+    });
+
+    it('checks a saved report without loading the SDK or checking authentication', async () => {
+      const { file } = await saveReport(createScanResult().toJSON());
+      const response = await new OpenAICodexSecurityProvider({
+        config: { report_file: file },
+        env: { OPENAI_API_KEY: 'unused-scoped-key' },
+      }).checkSetup();
+
+      expect(response.success).toBe(true);
+      expect(importModule).not.toHaveBeenCalled();
+      expect(mockPreflight).not.toHaveBeenCalled();
+      expect(mockRun).not.toHaveBeenCalled();
+      expect(mockValidate).not.toHaveBeenCalled();
+    });
+
+    it('preserves unknown historical metrics instead of inferring them from provider configuration', async () => {
+      const raw = createScanResult({ cost: null, turnResult: {} }).toJSON();
+      const { startedAt: _start, completedAt: _end, ...scan } = raw.manifest.scan;
+      const { file } = await saveReport({ ...raw, manifest: { ...raw.manifest, scan } });
+      const response = await new OpenAICodexSecurityProvider({
+        config: { report_file: file, model: 'configured-but-unobserved' },
+      }).callApi('Compare');
+
+      expect(response.error).toBeUndefined();
+      expect(response.metadata?.codexSecurity).toMatchObject({
+        model: null,
+        versions: { sdk: null },
+        cost: null,
+        usage: null,
+        elapsedMs: null,
+      });
+      expect(response.cost).toBeUndefined();
+      expect(response.tokenUsage).toBeUndefined();
+      expect(response.latencyMs).toBeUndefined();
+    });
+
+    it('retains a recorded failed scan and partial coverage as historical evidence', async () => {
+      const raw = createScanResult().toJSON();
+      const { file } = await saveReport({
+        ...raw,
+        manifest: { ...raw.manifest, scan: { ...raw.manifest.scan, status: 'failed' } },
+        coverage: { ...raw.coverage, completeness: 'partial' },
+      });
+      const response = await new OpenAICodexSecurityProvider({
+        config: { report_file: file },
+      }).callApi('Compare');
+
+      // Loading completed successfully; the recorded scan outcome remains visible independently.
+      expect(response.error).toBeUndefined();
+      expect(response.metadata?.codexSecurity).toMatchObject({
+        status: 'failed',
+        coverage: { completeness: 'partial' },
+      });
+    });
+
+    it('keeps the operation unknown for scoped deep evidence while preserving its coverage mode', async () => {
+      const raw = createScanResult().toJSON();
+      const { file } = await saveReport({
+        ...raw,
+        coverage: { ...raw.coverage, mode: 'scoped_path' },
+        findings: {
+          ...raw.findings,
+          findings: [
+            {
+              ...raw.findings.findings[0],
+              extensions: { candidateId: 'recorded-deep-candidate' },
+            },
+          ],
+        },
+      });
+      const response = await new OpenAICodexSecurityProvider({
+        config: { report_file: file, operation: 'security-scan' },
+      }).callApi('Compare');
+
+      expect(response.error).toBeUndefined();
+      expect(response.metadata?.codexSecurity).toMatchObject({
+        operation: null,
+        coverage: { mode: 'scoped_path' },
+        findings: { total: 1 },
+      });
+    });
+
+    it('loads a saved validation result without assigning unreported usage or SDK versions', async () => {
+      const raw = {
+        disposition: 'deferred',
+        report: 'The recorded review needs more evidence.',
+        outputDir: '/original-host/validation',
+        threadId: 'recorded-thread',
+      };
+      const { file } = await saveReport(raw);
+      const response = await new OpenAICodexSecurityProvider({
+        config: { report_file: file },
+      }).callApi('Compare');
+
+      expect(response.error).toBeUndefined();
+      expect(JSON.parse(response.output)).toEqual(raw);
+      expect(response.metadata?.codexSecurity).toMatchObject({
+        source: { kind: 'saved-report' },
+        operation: 'validation',
+        validation: { disposition: 'deferred' },
+        cost: null,
+        usage: null,
+        elapsedMs: null,
+        versions: { sdk: null, plugin: null },
+      });
+      expect(mockValidate).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['non-object JSON', () => []],
+      ['unrecognized JSON', () => ({ unrelated: true })],
+      [
+        'wrong document type',
+        () => {
+          const raw = createScanResult().toJSON();
+          return { ...raw, manifest: { ...raw.manifest, documentType: 'other' } };
+        },
+      ],
+      [
+        'unsupported schema version',
+        () => {
+          const raw = createScanResult().toJSON();
+          return { ...raw, coverage: { ...raw.coverage, schemaVersion: '2.0' } };
+        },
+      ],
+      [
+        'mismatched scan identity',
+        () => {
+          const raw = createScanResult().toJSON();
+          return { ...raw, findings: { ...raw.findings, scanId: 'different-scan' } };
+        },
+      ],
+      [
+        'missing findings array',
+        () => {
+          const raw = createScanResult().toJSON();
+          return { ...raw, findings: { ...raw.findings, findings: null } };
+        },
+      ],
+      ['validation without a report', () => ({ disposition: 'deferred' })],
+      [
+        'explicitly mocked evidence',
+        () => {
+          const raw = createScanResult().toJSON();
+          return { ...raw, turn: { ...raw.turn, mock: true } };
+        },
+      ],
+    ])('rejects %s without falling back to a native operation', async (_name, makeReport) => {
+      const { file } = await saveReport(makeReport());
+      const response = await new OpenAICodexSecurityProvider({
+        config: { report_file: file },
+      }).callApi('Compare');
+
+      expect(response.error).toBeTruthy();
+      expect(response.output).toBeUndefined();
+      expect(response.metadata?.codexSecurity).toMatchObject({
+        source: { kind: 'saved-report', file },
+        status: 'failed',
+      });
+      expect(importModule).not.toHaveBeenCalled();
+      expect(mockRun).not.toHaveBeenCalled();
+      expect(mockValidate).not.toHaveBeenCalled();
+    });
+
+    it('reports invalid JSON without falling back to an SDK call', async () => {
+      const file = path.join(reportDirectory, 'broken.json');
+      await fs.writeFile(file, '{broken');
+      const response = await new OpenAICodexSecurityProvider({
+        config: { report_file: file },
+      }).callApi('Compare');
+
+      expect(response.error).toBeTruthy();
+      expect(response.metadata?.codexSecurity?.source.kind).toBe('saved-report');
+      expect(mockRun).not.toHaveBeenCalled();
+      expect(importModule).not.toHaveBeenCalled();
+    });
+
+    it.each(['mock', 'synthetic', 'extensions', 'runtimeStatus'])(
+      'rejects the explicit %s marker on otherwise valid saved evidence',
+      async (marker) => {
+        const raw = createScanResult().toJSON();
+        const scan = raw.manifest.scan;
+        const marked =
+          marker === 'extensions'
+            ? {
+                ...raw,
+                manifest: { ...raw.manifest, scan: { ...scan, extensions: { mock: true } } },
+              }
+            : marker === 'runtimeStatus'
+              ? {
+                  ...raw,
+                  manifest: {
+                    ...raw.manifest,
+                    scan: { ...scan, scope: { ...scan.scope, runtimeStatus: 'mock' } },
+                  },
+                }
+              : { ...raw, [marker]: true };
+        const { file } = await saveReport(marked);
+        const response = await new OpenAICodexSecurityProvider({
+          config: { report_file: file },
+        }).callApi('Compare');
+
+        expect(response.error).toContain('mock');
+        expect(response.output).toBeUndefined();
+        expect(mockRun).not.toHaveBeenCalled();
+        expect(importModule).not.toHaveBeenCalled();
+      },
+    );
+
+    it('reports missing files and directory paths without any operation', async () => {
+      for (const file of [path.join(reportDirectory, 'missing.json'), reportDirectory]) {
+        const response = await new OpenAICodexSecurityProvider({
+          config: { report_file: file },
+        }).callApi('Compare');
+        expect(response.error).toBeTruthy();
+        expect(response.metadata?.codexSecurity).toMatchObject({
+          source: { kind: 'saved-report', file },
+          status: 'failed',
+        });
+      }
+      expect(mockRun).not.toHaveBeenCalled();
+      expect(importModule).not.toHaveBeenCalled();
+    });
+
+    it('reads multiple bounded chunks from the same regular-file handle and closes it', async () => {
+      const raw = { disposition: 'deferred', report: 'Recorded review. '.repeat(5000) };
+      const { file, contents } = await saveReport(raw);
+      const handle = await fs.open(file, 'r');
+      const open = vi.spyOn(fs, 'open').mockResolvedValue(handle);
+      const stat = vi.spyOn(handle, 'stat');
+      const read = vi.spyOn(handle, 'read');
+      const close = vi.spyOn(handle, 'close');
+      const pathStat = vi.spyOn(fs, 'stat');
+      const readFile = vi.spyOn(fs, 'readFile');
+
+      const result = await readCodexSecurityReport(file);
+
+      expect(result.raw).toEqual(raw);
+      expect(result.summary.source.sha256).toBe(
+        createHash('sha256').update(contents).digest('hex'),
+      );
+      expect(open).toHaveBeenCalledExactlyOnceWith(file, constants.O_RDONLY | constants.O_NONBLOCK);
+      expect(stat).toHaveBeenCalledOnce();
+      expect(read.mock.calls.length).toBeGreaterThan(2);
+      expect(close).toHaveBeenCalledOnce();
+      expect(pathStat).not.toHaveBeenCalled();
+      expect(readFile).not.toHaveBeenCalled();
+    });
+
+    it('rejects an oversized sparse file before reading contents and closes its handle', async () => {
+      const file = path.join(reportDirectory, 'oversized.json');
+      const handle = await fs.open(file, 'w+');
+      // Extending a sparse file exercises the size check without allocating report contents.
+      await handle.truncate(64 * 1024 * 1024 + 1);
+      vi.spyOn(fs, 'open').mockResolvedValue(handle);
+      const read = vi.spyOn(handle, 'read');
+      const close = vi.spyOn(handle, 'close');
+
+      const response = await new OpenAICodexSecurityProvider({
+        config: { report_file: file },
+      }).callApi('Compare');
+
+      expect(response.error).toContain('64 MiB maximum');
+      expect(read).not.toHaveBeenCalled();
+      expect(close).toHaveBeenCalledOnce();
+      expect(importModule).not.toHaveBeenCalled();
+    });
+
+    it('enforces the byte cap if a file grows after the handle size check', async () => {
+      const handle = mockReportHandle();
+      handle.read.mockImplementation(async (buffer: Buffer, _offset: number, length: number) => ({
+        buffer,
+        bytesRead: length,
+      }));
+
+      await expect(readCodexSecurityReport('growing.json')).rejects.toThrow('64 MiB maximum');
+
+      expect(handle.read).toHaveBeenCalledTimes(1025);
+      expect(handle.read).toHaveBeenLastCalledWith(expect.any(Buffer), 0, 1, null);
+      expect(handle.close).toHaveBeenCalledOnce();
+    });
+
+    it('rejects a non-regular opened file without reading and closes the handle', async () => {
+      const handle = mockReportHandle();
+      handle.stat.mockResolvedValue({ size: 0, isFile: () => false });
+
+      await expect(readCodexSecurityReport('nonregular.json')).rejects.toThrow('regular JSON file');
+
+      expect(handle.read).not.toHaveBeenCalled();
+      expect(handle.close).toHaveBeenCalledOnce();
+    });
+
+    it.each(['stat', 'read'] as const)('closes the opened handle when %s fails', async (method) => {
+      const handle = mockReportHandle();
+      handle[method].mockRejectedValue(new Error('File operation failed'));
+
+      await expect(readCodexSecurityReport('unreadable.json')).rejects.toThrow(
+        'File operation failed',
+      );
+
+      expect(handle.close).toHaveBeenCalledOnce();
+    });
+
+    it('forwards cancellation during a saved report read and closes the handle', async () => {
+      const controller = new AbortController();
+      const handle = mockReportHandle();
+      handle.read.mockImplementation(async (buffer: Buffer) => {
+        controller.abort();
+        return { buffer, bytesRead: 1 };
+      });
+
+      const response = await new OpenAICodexSecurityProvider({
+        config: { report_file: path.join(reportDirectory, 'canceled.json') },
+      }).callApi('Compare', undefined, { abortSignal: controller.signal });
+
+      expect(response.error).toContain('aborted');
+      expect(handle.read).toHaveBeenCalledOnce();
+      expect(handle.close).toHaveBeenCalledOnce();
+      expect(importModule).not.toHaveBeenCalled();
+    });
+
+    it('honors cancellation before opening a saved report', async () => {
+      const { file } = await saveReport(createScanResult().toJSON());
+      const controller = new AbortController();
+      controller.abort();
+      const open = vi.spyOn(fs, 'open');
+      await expect(readCodexSecurityReport(file, controller.signal)).rejects.toThrow('aborted');
+      const response = await new OpenAICodexSecurityProvider({
+        config: { report_file: file },
+      }).callApi('Compare', undefined, { abortSignal: controller.signal });
+
+      expect(response.error).toContain('aborted');
+      expect(open).not.toHaveBeenCalled();
+      expect(importModule).not.toHaveBeenCalled();
     });
   });
 
@@ -351,9 +839,9 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(provider.id()).toBe('openai:codex-security');
       expect(provider.requiresApiKey()).toBe(false);
       expect(provider.toString()).toBe('[OpenAI Codex Security Provider]');
-      expect((await provider.callApi('Audit this repository')).metadata?.operation).toBe(
-        'security-scan',
-      );
+      expect(
+        (await provider.callApi('Audit this repository')).metadata?.codexSecurity?.operation,
+      ).toBe('security-scan');
     });
 
     it('exposes only operations implemented natively by the Codex Security SDK', () => {
@@ -455,7 +943,7 @@ describe('OpenAICodexSecurityProvider', () => {
 
       const response = await provider.callApi('Scan');
 
-      expect(response.metadata?.sdkVersion).toBe(mockModule.VERSION);
+      expect(response.metadata?.codexSecurity?.versions.sdk).toBe(mockModule.VERSION);
       expect(importModule).toHaveBeenCalledWith('/legacy/@openai/codex-security/dist/index.js');
       expect(importModule).toHaveBeenCalledWith('/promptfoo/@openai/codex-security/dist/index.js');
     });
@@ -477,7 +965,7 @@ describe('OpenAICodexSecurityProvider', () => {
 
       const response = await provider.callApi('Scan');
 
-      expect(response.metadata?.sdkVersion).toBe(mockModule.VERSION);
+      expect(response.metadata?.codexSecurity?.versions.sdk).toBe(mockModule.VERSION);
       expect(importModule).toHaveBeenCalledWith('/broken/@openai/codex-security/dist/index.js');
       expect(importModule).toHaveBeenCalledWith('/promptfoo/@openai/codex-security/dist/index.js');
     });
@@ -495,7 +983,7 @@ describe('OpenAICodexSecurityProvider', () => {
 
       const response = await provider.callApi('Scan the adversarial checkout');
 
-      expect(response.metadata?.sdkVersion).toBe(mockModule.VERSION);
+      expect(response.metadata?.codexSecurity?.versions.sdk).toBe(mockModule.VERSION);
       expect(resolvePackageEntryPoint).not.toHaveBeenCalledWith(
         '@openai/codex-security',
         '/adversarial/repository',
@@ -623,13 +1111,17 @@ describe('OpenAICodexSecurityProvider', () => {
           },
         },
         metadata: {
-          operation: 'security-scan',
-          mode: 'standard',
-          model: 'gpt-5.6-sol',
-          reasoningEffort: 'high',
-          findingsCount: 1,
-          pluginVersion: result.pluginVersion,
-          sdkVersion: mockModule.VERSION,
+          codexSecurity: {
+            version: 1,
+            source: { kind: 'sdk', mocked: false },
+            operation: 'security-scan',
+            status: 'completed',
+            model: 'gpt-5.6-sol',
+            findings: { total: 1, bySeverity: { high: 1 } },
+            coverage: { completeness: 'complete' },
+            versions: { plugin: result.pluginVersion, sdk: mockModule.VERSION },
+            elapsedMs: 5000,
+          },
           skillCalls: [{ name: 'security-scan' }],
         },
       });
@@ -666,7 +1158,7 @@ describe('OpenAICodexSecurityProvider', () => {
           maxTimeHours: 0.5,
         }),
       );
-      expect(response.metadata).toMatchObject({ operation: 'deep-security-scan', mode: 'deep' });
+      expect(response.metadata?.codexSecurity).toMatchObject({ operation: 'deep-security-scan' });
     });
 
     it('allows explicitly disabling deep-scan subagents', async () => {
@@ -850,7 +1342,10 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(response.tokenUsage).toMatchObject({ prompt: 90, completion: 30, total: 120 });
       expect(response.metadata).toMatchObject({
         progress: { phase: 'validation', completed: 4 },
-        warnings: ['One generated proof of concept was skipped.'],
+        codexSecurity: {
+          warnings: ['One generated proof of concept was skipped.'],
+          cost: { baselineUsd: 0.004 },
+        },
       });
     });
 
@@ -876,8 +1371,10 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(response.error).toBeUndefined();
       expect(response.tokenUsage).toBeUndefined();
       expect(response.cost).toBeUndefined();
-      expect(response.metadata).toMatchObject({ findingsCount: 1, repository: expect.any(String) });
-      expect(response.metadata?.model).toBeUndefined();
+      expect(response.metadata?.codexSecurity).toMatchObject({
+        findings: { total: 1 },
+        model: null,
+      });
     });
 
     it('renders provider configuration variables for each eval row', async () => {
@@ -1075,7 +1572,7 @@ describe('OpenAICodexSecurityProvider', () => {
       const response = await provider.callApi('Scan');
 
       expect(response.error).toBeUndefined();
-      expect(response.metadata?.operation).toBe('security-scan');
+      expect(response.metadata?.codexSecurity?.operation).toBe('security-scan');
       expect(mockClose).toHaveBeenCalledTimes(1);
     });
   });
@@ -1152,7 +1649,9 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(response).toMatchObject({
         format: 'json',
         sessionId: 'validation-thread',
-        metadata: { operation: 'validation', disposition: 'reportable' },
+        metadata: {
+          codexSecurity: { operation: 'validation', validation: { disposition: 'reportable' } },
+        },
       });
       expect(JSON.parse(response.output)).toMatchObject({ disposition: 'reportable' });
       expect(response.cost).toBeUndefined();
@@ -1242,7 +1741,7 @@ describe('OpenAICodexSecurityProvider', () => {
       const response = await provider.callApi('Validate this finding');
 
       expect(response.error).toBeUndefined();
-      expect(response.metadata?.disposition).toBe('reportable');
+      expect(response.metadata?.codexSecurity?.validation?.disposition).toBe('reportable');
     });
   });
 

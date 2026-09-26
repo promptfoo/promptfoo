@@ -24,6 +24,7 @@ import {
   getPrimaryTokenUsageLabel,
   getTokenUsageTotal,
 } from '@app/utils/tokenUsage';
+import { CodexSecurityResultSchema } from '@promptfoo/contracts/codexSecurity';
 import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import {
   type EvalResultsFilterMode,
@@ -50,7 +51,7 @@ import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useFilterMode } from './FilterModeProvider';
 import { ProviderDisplay } from './ProviderDisplay';
-import { type ProviderDef } from './providerConfig';
+import { findProviderConfig, type ProviderDef } from './providerConfig';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
 import VariableMarkdownCell from './VariableMarkdownCell';
@@ -1072,6 +1073,7 @@ function renderPromptMetricDetails({
   idx,
   isRedteam,
   showStats,
+  isSavedReport,
   numAsserts,
   numGoodAsserts,
   testCounts,
@@ -1081,12 +1083,21 @@ function renderPromptMetricDetails({
   idx: number;
   isRedteam: boolean;
   showStats: boolean;
+  isSavedReport: boolean;
   numAsserts: number[];
   numGoodAsserts: number[];
   testCounts: PromptSummaryMetric[];
 }): React.ReactNode {
   if (!showStats) {
     return null;
+  }
+
+  if (isSavedReport) {
+    return (
+      <div className="prompt-detail collapse-hidden">
+        {renderAssertMetric({ numAsserts, numGoodAsserts, idx })}
+      </div>
+    );
   }
 
   return (
@@ -1132,6 +1143,7 @@ function PromptColumnHeader({
   failureFilter,
   getMetrics,
   showStats,
+  isSavedReport,
   isRedteam,
   numAsserts,
   numGoodAsserts,
@@ -1151,6 +1163,7 @@ function PromptColumnHeader({
   failureFilter: { [key: string]: boolean };
   getMetrics: ReturnType<typeof useMetricsGetter>;
   showStats: boolean;
+  isSavedReport: boolean;
   isRedteam: boolean;
   numAsserts: number[];
   numGoodAsserts: number[];
@@ -1236,6 +1249,7 @@ function PromptColumnHeader({
         idx,
         isRedteam,
         showStats,
+        isSavedReport,
         numAsserts,
         numGoodAsserts,
         testCounts,
@@ -1683,6 +1697,37 @@ function ResultsTable({
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
+
+  const savedReportColumns = React.useMemo(
+    () =>
+      head.prompts.map((prompt, index) => {
+        if (
+          body.some((row) => {
+            const result = CodexSecurityResultSchema.safeParse(
+              row.outputs[index]?.metadata?.codexSecurity,
+            );
+            return result.success && result.data.source.kind === 'saved-report';
+          })
+        ) {
+          return true;
+        }
+
+        // Config covers empty/filtered pages. Require a unique identity match; prompt
+        // positions and duplicate provider IDs cannot establish report provenance.
+        const providers = Array.isArray(config?.providers) ? config.providers : [];
+        const matches = providers
+          .map((provider) => findProviderConfig(formatProviderString(prompt), [provider]).config)
+          .filter((provider) => provider !== undefined);
+        const provider = matches?.length === 1 ? matches[0] : undefined;
+        return (
+          (provider?.id === 'openai:codex-security' ||
+            provider?.id?.startsWith('openai:codex-security:')) &&
+          typeof provider.config?.report_file === 'string' &&
+          provider.config.report_file.trim().length > 0
+        );
+      }),
+    [body, head.prompts, config?.providers],
+  );
 
   const isRedteam = React.useMemo(() => {
     return config?.redteam !== undefined;
@@ -2173,6 +2218,7 @@ function ResultsTable({
                 failureFilter={failureFilter}
                 getMetrics={getMetrics}
                 showStats={showStats}
+                isSavedReport={savedReportColumns[idx] === true}
                 isRedteam={isRedteam}
                 numAsserts={numAsserts}
                 numGoodAsserts={numGoodAsserts}
@@ -2251,6 +2297,7 @@ function ResultsTable({
     onFailureFilterToggle,
     debouncedSearchText,
     showStats,
+    savedReportColumns,
     filters.appliedCount,
     passRates,
     passingTestCounts,

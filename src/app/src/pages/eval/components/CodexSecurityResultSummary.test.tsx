@@ -1,4 +1,5 @@
 import { mockClipboard, restoreBrowserMocks } from '@app/tests/browserMocks';
+import { createCodexSecurityResult } from '@app/tests/fixtures/codexSecurity';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -11,159 +12,205 @@ afterEach(() => {
 });
 
 describe('CodexSecurityResultSummary', () => {
-  it('shows this scan rather than historical findings, coverage, versions, and cost bounds', () => {
+  it('displays normalized findings, coverage and a reported cost range without zero badges', () => {
     render(
       <CodexSecurityResultSummary
-        provider="standard-comparison"
-        metadata={{
-          providerType: 'codex-security',
-          operation: 'security-scan',
-          sdkVersion: 'fixture-sdk',
-          pluginVersion: 'fixture-plugin',
-        }}
-        output={JSON.stringify({
-          coverage: { completeness: 'complete' },
-          findings: { findings: [{ severity: { level: 'high' } }, { severity: { level: 'low' } }] },
-          repositoryFindings: [{ severity: { level: 'critical' } }],
-          cost: { estimatedUsd: 0.1, estimatedUsdRange: { min: 0.1, max: 0.25 } },
+        result={createCodexSecurityResult({
+          status: 'completed',
+          coverage: { completeness: 'partial', mode: 'standard' },
+          findings: {
+            total: 2,
+            bySeverity: { critical: 0, high: 1, medium: 0, low: 1, informational: 0, unknown: 0 },
+          },
+          cost: { baselineUsd: 0.1, range: { minUsd: 0.1, maxUsd: 0.25 }, pricing: null },
         })}
       />,
     );
 
-    expect(screen.getByText('Coverage: Complete')).toBeInTheDocument();
-    expect(screen.getByText('Current findings: 2')).toBeInTheDocument();
-    const severities = screen.getByRole('list', { name: 'Current findings by severity' });
-    expect(within(severities).getByText('critical: 0')).toBeInTheDocument();
-    expect(within(severities).getByText('high: 1')).toBeInTheDocument();
-    expect(within(severities).getByText('low: 1')).toBeInTheDocument();
-    expect(screen.getByText('Baseline: $0.10')).toBeInTheDocument();
-    expect(screen.getByText('Range: $0.10–$0.25')).toBeInTheDocument();
-    expect(screen.getByText('SDK: fixture-sdk · Plugin: fixture-plugin')).toBeInTheDocument();
+    expect(screen.getByText('Standard security scan · Completed')).toBeInTheDocument();
+    expect(screen.getByText('Findings').nextElementSibling).toHaveTextContent('2 (1 high, 1 low)');
+    expect(screen.getByText('Coverage').nextElementSibling).toHaveTextContent('partial');
+    expect(screen.getByText('Estimated cost').nextElementSibling).toHaveTextContent('$0.10–$0.25');
+    expect(screen.queryByText(/critical/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Baseline:/)).not.toBeInTheDocument();
   });
 
-  it('preserves metadata-only error context and distinguishes unknown values from zero', () => {
+  it('keeps missing findings, cost and duration distinct from recorded zero', () => {
+    const { rerender } = render(
+      <CodexSecurityResultSummary result={createCodexSecurityResult()} />,
+    );
+    expect(screen.getByText('Findings').nextElementSibling).toHaveTextContent('Unknown');
+    expect(screen.getByText('Estimated cost').nextElementSibling).toHaveTextContent('Unknown');
+    expect(screen.queryByText('Recorded duration')).not.toBeInTheDocument();
+    expect(screen.queryByText('Recorded tokens')).not.toBeInTheDocument();
+
+    rerender(
+      <CodexSecurityResultSummary
+        result={createCodexSecurityResult({
+          findings: {
+            total: 0,
+            bySeverity: { critical: 0, high: 0, medium: 0, low: 0, informational: 0, unknown: 0 },
+          },
+          cost: { baselineUsd: 0, range: null, pricing: null },
+          elapsedMs: 0,
+          usage: { input: 0, output: 0, total: 0, cachedInput: null, cacheWriteInput: null },
+        })}
+      />,
+    );
+    expect(screen.getByText('Findings').nextElementSibling).toHaveTextContent(/^0$/);
+    expect(screen.getByText('Estimated cost').nextElementSibling).toHaveTextContent('$0.0000');
+    expect(screen.getByText('Recorded duration').nextElementSibling).toHaveTextContent('0ms');
+    expect(screen.getByText('Recorded tokens').nextElementSibling).toHaveTextContent(/^0$/);
+  });
+
+  it('shows validation disposition without scan fields', () => {
     render(
       <CodexSecurityResultSummary
-        provider="custom label"
-        output="Operation interrupted"
-        metadata={{
-          providerType: 'codex-security',
+        result={createCodexSecurityResult({
+          operation: 'validation',
+          validation: { disposition: 'not_applicable' },
+        })}
+      />,
+    );
+    expect(screen.getByText('Disposition').nextElementSibling).toHaveTextContent('Not applicable');
+    expect(screen.queryByText('Findings')).not.toBeInTheDocument();
+    expect(screen.queryByText('Coverage')).not.toBeInTheDocument();
+    expect(screen.getByText('Estimated cost').nextElementSibling).toHaveTextContent('Unknown');
+  });
+
+  it('does not infer a scan from an unknown operation', () => {
+    render(<CodexSecurityResultSummary result={createCodexSecurityResult({ operation: null })} />);
+    expect(screen.getByText('Security operation · Status unknown')).toBeInTheDocument();
+    expect(screen.queryByText('Findings')).not.toBeInTheDocument();
+    expect(screen.queryByText('Disposition')).not.toBeInTheDocument();
+  });
+
+  it('retains actual errors, warnings and a reported cost lower bound', () => {
+    render(
+      <CodexSecurityResultSummary
+        result={createCodexSecurityResult({
           operation: 'deep-security-scan',
-          status: 'error',
-          coverage: { completeness: 'partial' },
-          warnings: ['One review is unfinished.', null, { text: 'bad shape' }],
-          cost: { estimatedUsd: 0.1, estimatedUsdRange: { min: 0.1, max: null } },
-          scanDir: '/tmp/fixture-results',
-        }}
-      />,
-    );
-
-    expect(screen.getByText('Deep security scan · Status: error')).toBeInTheDocument();
-    expect(screen.getByText('Coverage: Partial')).toBeInTheDocument();
-    expect(screen.getByText('Current findings: Unknown')).toBeInTheDocument();
-    expect(screen.getByText('Severity counts unavailable.')).toBeInTheDocument();
-    expect(screen.getByText('One review is unfinished.')).toBeInTheDocument();
-    expect(screen.getByText('Range: $0.10 minimum; upper estimate unknown')).toBeInTheDocument();
-    expect(screen.getByText('/tmp/fixture-results')).toBeInTheDocument();
-  });
-
-  it('identifies legacy labeled validation responses without presenting scan coverage', () => {
-    render(
-      <CodexSecurityResultSummary
-        provider="validation comparison"
-        metadata={{ operation: 'validation', sdkVersion: 'fixture-sdk' }}
-        output={JSON.stringify({
-          disposition: 'not_applicable',
-          outputDir: '/tmp/validation-fixture',
+          status: 'interrupted',
+          error: 'Operation interrupted by the caller.',
+          warnings: ['One review is unfinished.'],
+          cost: { baselineUsd: null, range: { minUsd: 0.1, maxUsd: null }, pricing: null },
         })}
       />,
     );
-
-    expect(screen.getByText('Validation disposition: Not applicable')).toBeInTheDocument();
-    expect(screen.queryByText(/Coverage:/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Current findings:/)).not.toBeInTheDocument();
-    expect(screen.getByText('Baseline: Unknown')).toBeInTheDocument();
-    expect(screen.getByText('Range: Unknown')).toBeInTheDocument();
+    expect(screen.getByText('Deep security scan · Interrupted')).toBeInTheDocument();
+    expect(screen.getByText('Operation interrupted by the caller.')).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('list', { name: 'Warnings' })).getByText('One review is unfinished.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('$0.10 minimum; upper estimate unknown')).toBeInTheDocument();
   });
 
-  it.each([undefined, '{invalid', 'null', '[]', '42', { findings: { findings: 'invalid' } }])(
-    'tolerates malformed or absent output %j without inferring a clean scan',
-    (output) => {
-      render(
-        <CodexSecurityResultSummary
-          provider="openai:codex-security:fixture-model"
-          output={output}
-        />,
-      );
-      expect(screen.getByText('Coverage: Unknown')).toBeInTheDocument();
-      expect(screen.getByText('Current findings: Unknown')).toBeInTheDocument();
-      expect(screen.getByText('Baseline: Unknown')).toBeInTheDocument();
-    },
-  );
-
-  it('does not classify unrelated providers by an operation name or a similar prefix', () => {
-    const { container } = render(
+  it('keeps compact results small and marks recorded mock evidence', () => {
+    render(
       <CodexSecurityResultSummary
-        provider="openai:codex-security-other"
-        metadata={{ operation: 'validation' }}
-        output={JSON.stringify({ disposition: 'reportable' })}
+        compact
+        result={createCodexSecurityResult({
+          source: { kind: 'saved-report', mocked: true, file: '/local/report.json' },
+          status: 'failed',
+          error: 'The report could not be read.',
+          model: 'recorded-model',
+          elapsedMs: 125000,
+          warnings: ['Recorded warning.'],
+          artifacts: [{ kind: 'reportPath', path: '/local/report.md' }],
+        })}
       />,
     );
-    expect(container).toBeEmptyDOMElement();
+    expect(screen.getByText('recorded-model · Saved report')).toBeInTheDocument();
+    expect(screen.getByText('Standard security scan · Failed')).toBeInTheDocument();
+    expect(screen.queryByText('The report could not be read.')).not.toBeInTheDocument();
+    expect(screen.getByText('This result is marked as mocked.')).toBeInTheDocument();
+    expect(screen.getByText('Recorded duration').nextElementSibling).toHaveTextContent('2m 5s');
+    expect(screen.getByText('1 warning')).toBeInTheDocument();
+    expect(screen.queryByText('Recorded warning.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Report details')).not.toBeInTheDocument();
+    expect(screen.queryByText('/local/report.md')).not.toBeInTheDocument();
   });
 
-  it('renders warnings as text and copies artifact paths without links or file access', async () => {
+  it('keeps recorded scope, target and pricing provenance in report details', async () => {
+    const user = userEvent.setup();
+    render(
+      <CodexSecurityResultSummary
+        result={createCodexSecurityResult({
+          operation: null,
+          coverage: { completeness: 'partial', mode: 'scoped_path' },
+          target: {
+            kind: 'repository',
+            id: 'recorded-id',
+            displayName: '/recorded/repo',
+            revision: 'recorded-revision',
+            baseRevision: 'recorded-base',
+            headRevision: 'recorded-head',
+            snapshotDigest: 'recorded-digest',
+          },
+          scope: {
+            includePaths: ['src/auth'],
+            excludePaths: [],
+            summary: 'Recorded scope',
+            limitations: ['Review was limited to selected paths.'],
+          },
+          cost: {
+            baselineUsd: 0.1,
+            range: { minUsd: 0.1, maxUsd: 0.2 },
+            pricing: {
+              source: 'recorded-prices',
+              asOf: '2026-09-01',
+              serviceTier: 'standard',
+              context: 'mixed',
+            },
+          },
+        })}
+      />,
+    );
+    expect(screen.queryByText(/Standard security scan/)).not.toBeInTheDocument();
+    await user.click(screen.getByText('Report details'));
+    for (const value of [
+      'scoped_path',
+      'recorded-id',
+      'recorded-base',
+      'recorded-head',
+      'recorded-digest',
+      'src/auth',
+      'Review was limited to selected paths.',
+      'recorded-prices',
+      '2026-09-01',
+      'mixed',
+      'standard',
+    ]) {
+      expect(screen.getByText(value)).toBeVisible();
+    }
+    expect(screen.getByText('Excluded paths').nextElementSibling).toHaveTextContent(
+      'None reported',
+    );
+    expect(screen.getByText('Short-context baseline').nextElementSibling).toHaveTextContent(
+      '$0.10',
+    );
+  });
+
+  it('shows recorded provenance in a disclosure and copies host artifact paths as text', async () => {
     const user = userEvent.setup();
     const clipboard = mockClipboard();
     const { container } = render(
       <CodexSecurityResultSummary
-        provider="openai:codex-security"
-        metadata={{ warnings: ['<em>Fixture warning</em>'], reportPath: '/tmp/fixture/report.md' }}
+        result={createCodexSecurityResult({
+          versions: { sdk: 'recorded-sdk', plugin: 'recorded-plugin' },
+          warnings: ['<em>Recorded warning</em>'],
+          artifacts: [{ kind: 'reportPath', path: '/local/report.md' }],
+        })}
       />,
     );
-
-    expect(screen.getByText('<em>Fixture warning</em>')).toBeInTheDocument();
+    expect(screen.getByText('<em>Recorded warning</em>')).toBeInTheDocument();
     expect(container.querySelector('em')).toBeNull();
+    expect(container.querySelector('details')).not.toHaveAttribute('open');
+    await user.click(screen.getByText('Report details'));
+    expect(screen.getByText('recorded-sdk')).toBeVisible();
+    expect(screen.getByText('recorded-plugin')).toBeVisible();
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Copy report path' }));
-    expect(clipboard.writeText).toHaveBeenCalledExactlyOnceWith('/tmp/fixture/report.md');
-  });
-
-  it('labels native mock results and explicit canned fixtures as synthetic', () => {
-    const { rerender } = render(
-      <CodexSecurityResultSummary
-        provider="openai:codex-security"
-        output={{ turn: { mock: true }, findings: { findings: [] } }}
-      />,
-    );
-    expect(
-      screen.getByText('Synthetic test data. No security analysis was performed.'),
-    ).toBeInTheDocument();
-    expect(screen.getByText('Current findings: 0')).toBeInTheDocument();
-    rerender(
-      <CodexSecurityResultSummary metadata={{ providerType: 'codex-security', synthetic: true }} />,
-    );
-    expect(
-      screen.getByText('Synthetic test data. No security analysis was performed.'),
-    ).toBeInTheDocument();
-  });
-
-  it('uses current metadata cost and treats invalid financial or severity data as unknown', () => {
-    render(
-      <CodexSecurityResultSummary
-        metadata={{
-          providerType: 'codex-security',
-          cost: { estimatedUsd: Number.NaN, estimatedUsdRange: { min: 0.5, max: 0.1 } },
-        }}
-        output={{
-          findings: { findings: [null, { severity: { level: 'unexpected' } }] },
-          cost: { estimatedUsd: 100 },
-        }}
-      />,
-    );
-    expect(screen.getByText('Baseline: Unknown')).toBeInTheDocument();
-    expect(screen.getByText('Range: $0.50 minimum; upper estimate unknown')).toBeInTheDocument();
-    expect(screen.getByText('Current findings: 2')).toBeInTheDocument();
-    expect(screen.getByText('unknown: 2')).toBeInTheDocument();
+    expect(clipboard.writeText).toHaveBeenCalledExactlyOnceWith('/local/report.md');
   });
 });

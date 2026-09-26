@@ -2,6 +2,7 @@
 export * from './api/common.js';
 export * from './api/user.js';
 export * from './blobs.js';
+export { type CodexSecurityResult, CodexSecurityResultSchema } from './codexSecurity.js';
 export * from './env.js';
 export * from './prompts.js';
 export {

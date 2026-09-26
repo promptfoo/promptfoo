@@ -1,6 +1,7 @@
 import * as ReactDOM from 'react-dom/client';
 
 import { mockClipboard } from '@app/tests/browserMocks';
+import { createCodexSecurityResult } from '@app/tests/fixtures/codexSecurity';
 import { useTestTimers } from '@app/tests/timers';
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, render, screen, waitFor } from '@testing-library/react';
@@ -193,17 +194,90 @@ describe('EvalOutputPromptDialog', () => {
         provider="security comparison"
         output={undefined}
         metadata={{
-          providerType: 'codex-security',
-          operation: 'security-scan',
-          status: 'error',
-          warnings: ['The operation did not finish.'],
+          codexSecurity: createCodexSecurityResult({
+            status: 'failed',
+            error: 'The operation did not finish.',
+          }),
         }}
       />,
     );
-    expect(screen.getByRole('region', { name: 'Codex Security summary' })).toBeInTheDocument();
-    expect(screen.getByText('Coverage: Unknown')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Codex Security result' })).toBeInTheDocument();
+    expect(screen.getByText('Coverage').nextElementSibling).toHaveTextContent('unknown');
     expect(screen.getByText('The operation did not finish.')).toBeInTheDocument();
     expect(screen.queryByText('Original Output')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    undefined,
+    { version: 1 },
+    createCodexSecurityResult({ cost: { baselineUsd: -1, range: null, pricing: null } }),
+  ])(
+    'keeps ordinary raw output when the normalized contract is missing or invalid',
+    (codexSecurity) => {
+      renderWithProviders(
+        <EvalOutputPromptDialog
+          {...defaultProps}
+          provider="openai:codex-security"
+          output={'{"findings":{"findings":[]},"coverage":{"completeness":"complete"}}'}
+          metadata={{
+            providerType: 'codex-security',
+            operation: 'security-scan',
+            sdkVersion: 'legacy-sdk',
+            codexSecurity,
+          }}
+        />,
+      );
+      expect(
+        screen.queryByRole('region', { name: 'Codex Security result' }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByText('Original Output')).toBeInTheDocument();
+      expect(screen.queryByText('Findings')).not.toBeInTheDocument();
+    },
+  );
+
+  it('preserves and copies the SDK report separately from transformed output', async () => {
+    const user = userEvent.setup();
+    const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) };
+    mockClipboard({ writeText: clipboard.writeText as Clipboard['writeText'] });
+    const raw = { reportMarker: 'preserved SDK evidence' };
+    renderWithProviders(
+      <EvalOutputPromptDialog
+        {...defaultProps}
+        output="Transformed assertion input"
+        rawOutput={raw}
+        metadata={{ codexSecurity: createCodexSecurityResult() }}
+      />,
+    );
+    expect(screen.getByText('Transformed assertion input')).toBeInTheDocument();
+    expect(screen.getByText('Original Output')).toBeInTheDocument();
+    expect(screen.getByText('SDK report')).toBeInTheDocument();
+    const report = screen.getByText(JSON.stringify(raw));
+    await user.hover(report.closest('.relative')!);
+    await user.click(screen.getByRole('button', { name: 'Copy sdk report' }));
+    expect(clipboard.writeText).toHaveBeenCalledWith(JSON.stringify(raw));
+  });
+
+  it.each([undefined, '{"report":true}', { report: true }])(
+    'does not duplicate the SDK report when raw data is absent or already displayed',
+    (rawOutput) => {
+      renderWithProviders(
+        <EvalOutputPromptDialog
+          {...defaultProps}
+          output={'{"report":true}'}
+          rawOutput={rawOutput}
+          metadata={{ codexSecurity: createCodexSecurityResult() }}
+        />,
+      );
+      expect(screen.getByText('Original Output')).toBeInTheDocument();
+      expect(screen.queryByText('SDK report')).not.toBeInTheDocument();
+    },
+  );
+
+  it('does not add the SDK report panel to unrelated provider output', () => {
+    renderWithProviders(
+      <EvalOutputPromptDialog {...defaultProps} rawOutput={{ unprocessed: 'provider payload' }} />,
+    );
+    expect(screen.queryByText('SDK report')).not.toBeInTheDocument();
   });
 
   it('copies assertion value to clipboard when copy button is clicked', async () => {

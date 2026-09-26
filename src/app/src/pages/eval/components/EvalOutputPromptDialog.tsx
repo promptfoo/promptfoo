@@ -10,6 +10,7 @@ import {
 } from '@app/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
+import { CodexSecurityResultSchema } from '@promptfoo/contracts/codexSecurity';
 import { Check, Copy, X } from 'lucide-react';
 import ChatMessages, { type Message } from './ChatMessages';
 import { CodexSecurityResultSummary } from './CodexSecurityResultSummary';
@@ -139,12 +140,25 @@ export interface FilterConfig {
   field?: string;
 }
 
+function getSdkReportText(
+  rawOutput: unknown,
+  output: string | undefined,
+  hasSecurityResult: boolean,
+): string | undefined {
+  if (!hasSecurityResult || rawOutput == null) {
+    return undefined;
+  }
+  const text = typeof rawOutput === 'string' ? rawOutput : JSON.stringify(rawOutput);
+  return text === output ? undefined : text;
+}
+
 interface EvalOutputPromptDialogProps {
   open: boolean;
   onClose: () => void;
   prompt: string;
   provider?: string;
   output?: string;
+  rawOutput?: unknown;
   gradingResults?: GradingResult[];
   metadata?: Record<string, unknown>;
   /**
@@ -171,6 +185,7 @@ export default function EvalOutputPromptDialog({
   prompt,
   provider,
   output,
+  rawOutput,
   gradingResults,
   metadata,
   providerPrompt,
@@ -186,6 +201,8 @@ export default function EvalOutputPromptDialog({
   cloudConfig,
   readOnly = false,
 }: EvalOutputPromptDialogProps) {
+  const securityResult = CodexSecurityResultSchema.safeParse(metadata?.codexSecurity);
+  const sdkReport = getSdkReportText(rawOutput, output, securityResult.success);
   const [activeTab, setActiveTab] = useState('prompt-output');
   const [copied, setCopied] = useState(false);
   const [copiedFields, setCopiedFields] = useState<{ [key: string]: boolean }>({});
@@ -334,7 +351,7 @@ export default function EvalOutputPromptDialog({
   const citationsData = metadata?.citations as Citation | Citation[] | undefined;
 
   const hasOutputContent = Boolean(
-    output || replayOutput || metadata?.redteamFinalPrompt || citationsData,
+    output || replayOutput || metadata?.redteamFinalPrompt || citationsData || sdkReport,
   );
 
   const redteamHistoryRaw = (metadata?.redteamHistory || metadata?.redteamTreeHistory || []) as
@@ -481,7 +498,11 @@ export default function EvalOutputPromptDialog({
                 subtitleTypographyClassName={subtitleTypographyClassName}
                 readOnly={readOnly}
               />
-              <CodexSecurityResultSummary provider={provider} output={output} metadata={metadata} />
+              {securityResult.success && (
+                <div className="mb-4">
+                  <CodexSecurityResultSummary result={securityResult.data} />
+                </div>
+              )}
               {hasOutputContent && (
                 <OutputsPanel
                   output={output}
@@ -499,6 +520,15 @@ export default function EvalOutputPromptDialog({
                   onMouseLeave={() => setHoveredElement(null)}
                   CodeDisplay={CodeDisplay}
                   citations={citationsData}
+                />
+              )}
+              {sdkReport !== undefined && (
+                <CodeDisplay
+                  content={sdkReport}
+                  title="SDK report"
+                  onCopy={() => copyFieldToClipboard('sdkReport', sdkReport)}
+                  copied={copiedFields.sdkReport === true}
+                  showCopyButton
                 />
               )}
             </TabsContent>

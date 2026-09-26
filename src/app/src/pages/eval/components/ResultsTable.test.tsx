@@ -1,5 +1,6 @@
 import { act, StrictMode } from 'react';
 
+import { createCodexSecurityResult } from '@app/tests/fixtures/codexSecurity';
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
 import { renderWithProviders } from '@app/utils/testutils';
 import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
@@ -175,6 +176,107 @@ describe('ResultsTable Metrics Display', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
     expect(screen.getByText('Total Cost:')).toBeInTheDocument();
     expect(screen.getByText('$1.23')).toBeInTheDocument();
+  });
+
+  it('hides imported-report metric totals while retaining live SDK column statistics', () => {
+    const table = {
+      ...mockTable,
+      head: {
+        ...mockTable.head,
+        prompts: [
+          { ...mockTable.head.prompts[0], provider: 'Imported report' },
+          { ...mockTable.head.prompts[0], provider: 'Live SDK' },
+        ],
+      },
+      body: mockTable.body.map((row) => ({
+        ...row,
+        outputs: [
+          {
+            ...row.outputs[0],
+            metadata: {
+              codexSecurity: createCodexSecurityResult({
+                source: { kind: 'saved-report', mocked: false },
+              }),
+            },
+          },
+          {
+            ...row.outputs[0],
+            metadata: { codexSecurity: createCodexSecurityResult() },
+          },
+        ],
+      })),
+    };
+    const state = useTableStore();
+    vi.mocked(useTableStore).mockImplementation(() => ({ ...state, table }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    const imported = within(screen.getByText('Imported report').closest('th')!);
+    const live = within(screen.getByText('Live SDK').closest('th')!);
+    expect(imported.queryByText('Total Cost:')).not.toBeInTheDocument();
+    expect(imported.queryByText('Total Tokens:')).not.toBeInTheDocument();
+    expect(imported.queryByText('Avg Tokens:')).not.toBeInTheDocument();
+    expect(imported.queryByText('Avg Latency:')).not.toBeInTheDocument();
+    expect(imported.queryByText('Tokens/Sec:')).not.toBeInTheDocument();
+    expect(live.getByText('Total Cost:')).toBeInTheDocument();
+    expect(live.getByText('Total Tokens:')).toBeInTheDocument();
+    expect(live.getByText('Avg Latency:')).toBeInTheDocument();
+    expect(live.getByText('Tokens/Sec:')).toBeInTheDocument();
+  });
+
+  it('uses explicit report config to hide ingestion metrics on an empty result page', () => {
+    const state = useTableStore();
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      ...state,
+      config: {
+        providers: [
+          {
+            id: 'openai:codex-security',
+            label: 'Imported report',
+            config: { report_file: '/local/report.json' },
+          },
+        ],
+      },
+      table: {
+        ...mockTable,
+        body: [],
+        head: {
+          ...mockTable.head,
+          prompts: [{ ...mockTable.head.prompts[0], provider: 'Imported report' }],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.queryByText('Total Cost:')).not.toBeInTheDocument();
+    expect(screen.queryByText('Total Tokens:')).not.toBeInTheDocument();
+    expect(screen.queryByText('Avg Tokens:')).not.toBeInTheDocument();
+  });
+
+  it('does not guess report provenance from duplicate IDs', () => {
+    const state = useTableStore();
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      ...state,
+      config: {
+        providers: [
+          { id: 'openai:codex-security', config: { report_file: '/local/report.json' } },
+          { id: 'openai:codex-security', config: { repository: '/local/repository' } },
+        ],
+      },
+      table: {
+        ...mockTable,
+        head: {
+          ...mockTable.head,
+          prompts: [{ ...mockTable.head.prompts[0], provider: 'openai:codex-security' }],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByText('Total Cost:')).toBeInTheDocument();
+    expect(screen.getByText('Total Tokens:')).toBeInTheDocument();
   });
 
   it('displays total tokens with correct formatting', () => {

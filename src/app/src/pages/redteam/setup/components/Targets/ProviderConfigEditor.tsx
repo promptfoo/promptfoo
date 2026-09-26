@@ -401,43 +401,56 @@ function ProviderConfigEditor({
       ) {
         errors.push('Unsupported Codex Security reasoning effort');
       }
-      const repository =
-        structuredProvider.config.repository ?? structuredProvider.config.working_dir;
-      if (typeof repository !== 'string' || !repository.trim()) {
-        errors.push('Repository path is required');
-      }
-      if (
-        structuredProvider.config.operation === 'security-diff-scan' &&
-        !structuredProvider.config.base_ref &&
-        !structuredProvider.config.working_tree
-      ) {
-        errors.push('A base Git reference or working tree target is required for diff scans');
-      }
-      if (structuredProvider.config.working_tree && structuredProvider.config.head_ref) {
-        errors.push('Working-tree scans cannot specify a head Git reference');
-      }
-      if (
-        structuredProvider.config.operation !== 'security-diff-scan' &&
-        (structuredProvider.config.base_ref ||
-          structuredProvider.config.head_ref ||
-          structuredProvider.config.working_tree)
-      ) {
-        errors.push('Git diff target options require the diff scan operation');
-      }
-      if (
-        structuredProvider.config.operation === 'security-diff-scan' &&
-        Array.isArray(structuredProvider.config.paths) &&
-        structuredProvider.config.paths.length > 0
-      ) {
-        errors.push('Scoped repository paths cannot be combined with diff scans');
-      }
-      if (
-        structuredProvider.config.model_reasoning_effort &&
-        structuredProvider.config.reasoning_effort &&
-        structuredProvider.config.model_reasoning_effort !==
-          structuredProvider.config.reasoning_effort
-      ) {
-        errors.push('Reasoning effort settings must match');
+      const isSavedReport = Object.prototype.hasOwnProperty.call(
+        structuredProvider.config,
+        'report_file',
+      );
+      if (isSavedReport) {
+        if (
+          typeof structuredProvider.config.report_file !== 'string' ||
+          !structuredProvider.config.report_file.trim()
+        ) {
+          errors.push('Report file path is required');
+        }
+      } else {
+        const repository =
+          structuredProvider.config.repository ?? structuredProvider.config.working_dir;
+        if (typeof repository !== 'string' || !repository.trim()) {
+          errors.push('Repository path is required');
+        }
+        if (
+          structuredProvider.config.operation === 'security-diff-scan' &&
+          !structuredProvider.config.base_ref &&
+          !structuredProvider.config.working_tree
+        ) {
+          errors.push('A base Git reference or working tree target is required for diff scans');
+        }
+        if (structuredProvider.config.working_tree && structuredProvider.config.head_ref) {
+          errors.push('Working-tree scans cannot specify a head Git reference');
+        }
+        if (
+          structuredProvider.config.operation !== 'security-diff-scan' &&
+          (structuredProvider.config.base_ref ||
+            structuredProvider.config.head_ref ||
+            structuredProvider.config.working_tree)
+        ) {
+          errors.push('Git diff target options require the diff scan operation');
+        }
+        if (
+          structuredProvider.config.operation === 'security-diff-scan' &&
+          Array.isArray(structuredProvider.config.paths) &&
+          structuredProvider.config.paths.length > 0
+        ) {
+          errors.push('Scoped repository paths cannot be combined with diff scans');
+        }
+        if (
+          structuredProvider.config.model_reasoning_effort &&
+          structuredProvider.config.reasoning_effort &&
+          structuredProvider.config.model_reasoning_effort !==
+            structuredProvider.config.reasoning_effort
+        ) {
+          errors.push('Reasoning effort settings must match');
+        }
       }
       const budget = structuredProvider.config.max_cost_usd;
       if (

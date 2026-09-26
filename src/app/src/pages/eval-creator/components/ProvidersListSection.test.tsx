@@ -57,6 +57,30 @@ describe('ProvidersListSection', () => {
     expect(screen.queryByText('OpenAI')).not.toBeInTheDocument();
   });
 
+  it('identifies saved reports without presenting retained SDK settings as report facts', () => {
+    render(
+      <ProvidersListSection
+        providers={[
+          {
+            id: 'openai:codex-security:gpt-5.6-sol',
+            label: 'Left report',
+            config: {
+              report_file: '/reports/left.json',
+              operation: 'deep-security-scan',
+              model_reasoning_effort: 'high',
+            },
+          },
+          { id: 'openai:codex-security', config: { report_file: '' } },
+        ]}
+        onChange={onChange}
+      />,
+    );
+    expect(screen.getByText('Saved report · /reports/left.json')).toBeInTheDocument();
+    expect(screen.getByText('Saved report · Select a report file')).toBeInTheDocument();
+    expect(screen.queryByText(/Deep security scan/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/high reasoning/)).not.toBeInTheDocument();
+  });
+
   it('distinguishes security comparisons with the same model and label', () => {
     render(
       <ProvidersListSection

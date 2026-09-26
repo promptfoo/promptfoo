@@ -12,6 +12,7 @@ import {
   resolveVideoSource,
 } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
+import { CodexSecurityResultSchema } from '@promptfoo/contracts/codexSecurity';
 import {
   type EvaluateTableOutput,
   type GradingResult,
@@ -33,6 +34,7 @@ import {
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import logger from '../../../../../logger';
+import { CodexSecurityResultSummary } from './CodexSecurityResultSummary';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { stringifyAssertionValue } from './EvaluationPanel';
@@ -1232,6 +1234,7 @@ function renderOutputActions({
               provider={output.provider}
               gradingResults={getDialogGradingResults(output)}
               output={text}
+              rawOutput={output.response?.raw}
               metadata={output.metadata}
               providerPrompt={getActualPrompt(output.response, { formatted: true })}
               evaluationId={evaluationId}
@@ -1427,6 +1430,9 @@ function EvalOutputCell({
   };
 
   const text = stringifyOutputText(output.text);
+  const parsedSecurityResult = CodexSecurityResultSchema.safeParse(output.metadata?.codexSecurity);
+  const securityResult = parsedSecurityResult.success ? parsedSecurityResult.data : undefined;
+  const isSavedReport = securityResult?.source.kind === 'saved-report';
   const normalizedText = normalizeMediaText(text);
   const inlineImageSrc = resolveImageSource(text);
   const primaryRenderedImageSrc = getPrimaryRenderedImageSrc(text, inlineImageSrc);
@@ -1441,21 +1447,24 @@ function EvalOutputCell({
     | undefined;
   const responseAudioSource = resolveAudioSource(responseAudio);
 
-  const node = renderOutputNode({
-    output,
-    firstOutput,
-    showDiffs,
-    searchText,
-    shouldHighlightSearchText,
-    text,
-    normalizedText,
-    renderMarkdown,
-    prettifyJson,
-    markdownComponents,
-    toggleLightbox,
-    outputAudioSource,
-    primaryRenderedImageSrc,
-  });
+  const node =
+    securityResult && !showDiffs
+      ? undefined
+      : renderOutputNode({
+          output,
+          firstOutput,
+          showDiffs,
+          searchText,
+          shouldHighlightSearchText,
+          text,
+          normalizedText,
+          renderMarkdown,
+          prettifyJson,
+          markdownComponents,
+          toggleLightbox,
+          outputAudioSource,
+          primaryRenderedImageSrc,
+        });
 
   const handleRating = (isPass: boolean) => {
     const newRating = activeRating === isPass ? null : isPass;
@@ -1617,14 +1626,19 @@ function EvalOutputCell({
         className={!showPassFail && !showPrompts ? 'content-needs-action-clearance' : undefined}
         style={contentStyle}
       >
-        <TruncatedText
-          text={node || normalizedText}
-          maxLength={
-            renderMarkdown && (isImageProvider(output.provider) || isVideoProvider(output.provider))
-              ? 0
-              : maxTextLength
-          }
-        />
+        {securityResult && !showDiffs ? (
+          <CodexSecurityResultSummary result={securityResult} compact />
+        ) : (
+          <TruncatedText
+            text={node || normalizedText}
+            maxLength={
+              renderMarkdown &&
+              (isImageProvider(output.provider) || isVideoProvider(output.provider))
+                ? 0
+                : maxTextLength
+            }
+          />
+        )}
       </div>
       {renderCommentNode({
         commentTextToDisplay,
@@ -1632,7 +1646,7 @@ function EvalOutputCell({
         contentStyle,
       })}
       {renderCellDetail({
-        showStats,
+        showStats: showStats && !isSavedReport,
         tokenUsageDisplay,
         latencyDisplay,
         tokPerSecDisplay,

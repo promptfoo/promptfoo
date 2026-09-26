@@ -1,31 +1,32 @@
-# openai-codex-security (OpenAI Codex Security Scan Comparison)
+# openai-codex-security (Compare Existing Codex Security Reports)
 
-Compare Codex Security standard and deep scans across models and reasoning settings using the same intentionally vulnerable repository fixture.
+Compare two existing Codex Security reports in Promptfoo. Each provider column imports one report through `report_file`; this example does not start a scan or call a model. Supply your own reports: no findings or benchmark outcomes are bundled.
 
 ## Setup
 
 ```bash
 npx promptfoo@latest init --example openai-codex-security
 cd openai-codex-security
-npm install promptfoo @openai/codex-security@^0.1.18
 ```
 
-Use Node.js `^22.22.0`, `^24.0.0`, or `^26.0.0`. Installing both packages together ensures Promptfoo can load the SDK from its own installation. Authenticate with an existing Codex login or set `OPENAI_API_KEY` or `CODEX_API_KEY` before running the local CLI:
+Set these environment variables to actual report files on the machine running Promptfoo:
+
+| Variable                          | Required input                                                     |
+| --------------------------------- | ------------------------------------------------------------------ |
+| `CODEX_SECURITY_BASELINE_REPORT`  | Absolute path to the baseline SDK `ScanResult.toJSON()` JSON file  |
+| `CODEX_SECURITY_CANDIDATE_REPORT` | Absolute path to the candidate SDK `ScanResult.toJSON()` JSON file |
+
+Use reports for the same repository revision or snapshot and the same scope. Preserve their original manifests, findings, and coverage. A bare findings array is insufficient. Missing or invalid files produce provider errors; there is no fallback scan.
+
+## Compare
 
 ```bash
-npx promptfoo eval --no-cache
+npx promptfoo@latest eval --no-cache -o comparison.json
+npx promptfoo@latest view
 ```
 
-## Evaluate scan models and depth
+The provider validates report structure. The configuration checks whether the recorded scan completed and coverage is complete. These checks do not compute finding recall or precision, and a pass does not mean that a repository is secure. Inspect each result's findings, coverage, warnings, and provenance before comparing quality.
 
-The example compares:
+Recorded scan cost and duration describe the original operation. Reading an existing file incurs no new model usage; file-loading time is not scan latency. Keep missing historical measurements unknown.
 
-- `security-scan` using `gpt-5.6-terra` with medium reasoning.
-- `security-scan` using `gpt-5.6-sol` with high reasoning.
-- `deep-security-scan` using `gpt-5.6-sol` with high reasoning and two workers.
-
-Each provider returns structured findings, repository coverage, token usage, and SDK-estimated cost when available. The fixture intentionally trusts a client-controlled administrator header, creating an authorization bypass; do not deploy or expose it.
-
-To compare your own repository, change each provider's `repository` setting. Managed security scans require an authorized repository and may require Trusted Access.
-
-See the [Codex Security SDK provider documentation](https://www.promptfoo.dev/docs/providers/openai-codex-security/) for supported native operations, model and reasoning options, finding assertions, and cost accounting.
+The [guide](https://www.promptfoo.dev/docs/guides/codex-security-results/) includes a curated-recall assertion and explains how to establish expected finding IDs, adjudicate unmatched findings, and compare coverage and historical spend. See the [provider reference](https://www.promptfoo.dev/docs/providers/openai-codex-security/) for native operations and configuration.
