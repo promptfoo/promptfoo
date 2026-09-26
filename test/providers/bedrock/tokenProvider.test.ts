@@ -136,7 +136,18 @@ describe('BedrockTokenProvider', () => {
         },
       );
 
-      it.each([undefined, '', '   ', '{{ env.MISSING }}'])(
+      it.each(['accessKeyId', 'secretAccessKey', 'sessionToken', 'profile'])(
+        'rejects explicitly empty or whitespace %s before selecting a lower token',
+        async (key) => {
+          for (const value of ['', '   ']) {
+            const provider = new BedrockTokenProvider({ [key]: value }, env, 'us-east-1');
+            await expect(provider.getToken()).rejects.toThrow(/empty|incomplete/);
+          }
+          expect(getTokenProvider).not.toHaveBeenCalled();
+        },
+      );
+
+      it.each([undefined, '{{ env.MISSING }}'])(
         'keeps environment fallback for unconfigured AWS fields (%s)',
         async (value) => {
           const provider = new BedrockTokenProvider(

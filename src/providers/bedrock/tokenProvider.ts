@@ -142,7 +142,7 @@ export class BedrockTokenProvider {
     // to another account's explicit keys. Within each source, explicit keys precede a profile.
     const config = Object.fromEntries(
       Object.entries(this.config).filter(
-        ([, value]) => typeof value === 'string' && value.trim() && !value.includes('{{'),
+        ([, value]) => typeof value === 'string' && !value.includes('{{'),
       ),
     ) as Record<string, string>;
     const scoped = getScopedAwsCredentialConfig(config, this.env);
