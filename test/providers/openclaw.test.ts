@@ -3846,4 +3846,13 @@ describe('OpenClaw Provider', () => {
       expect(readSpy).toHaveBeenCalledTimes(2);
     });
   });
+  it.each([
+    ['openclaw:responses:team:research', 'openclaw:responses:team:research'],
+    ['openclaw:embedding:team:research', 'openclaw:embedding:team:research'],
+    ['openclaw:embeddings:team:research', 'openclaw:embedding:team:research'],
+    ['openclaw:agent:team:research', 'openclaw:agent:team:research'],
+  ])('preserves a colon in the agent ID for %s', (providerPath, expectedId) => {
+    const provider = createOpenClawProvider(providerPath);
+    expect(provider.id()).toBe(expectedId);
+  });
 });

@@ -200,7 +200,7 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      const modelName = providerPath.split(':')[1];
+      const modelName = providerPath.split(':').slice(1).join(':');
       return new AI21ChatCompletionProvider(modelName, providerOptions);
     },
   },
@@ -300,7 +300,7 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
-      const modelName = splits[2];
+      const modelName = splits.slice(2).join(':');
 
       if (modelType === 'messages') {
         return new AnthropicMessagesProvider(modelName, providerOptions);
@@ -308,18 +308,19 @@ export const providerMap: ProviderFactory[] = [
       if (modelType === 'completion') {
         return new AnthropicCompletionProvider(modelName, providerOptions);
       }
-      if (AnthropicCompletionProvider.ANTHROPIC_COMPLETION_MODELS.includes(modelType)) {
-        return new AnthropicCompletionProvider(modelType, providerOptions);
+      const shorthandModel = splits.slice(1).join(':');
+      if (AnthropicCompletionProvider.ANTHROPIC_COMPLETION_MODELS.includes(shorthandModel)) {
+        return new AnthropicCompletionProvider(shorthandModel, providerOptions);
       }
 
-      // The second part is a model name: route it to the Messages API. Catalogued ids
+      // The rest of the path is a model name: route it to the Messages API. Catalogued ids
       // always resolve; so does anything else shaped like a Claude id, so a model
       // released after this build works without waiting for a catalog entry. The
       // provider still logs `Using unknown Anthropic model`, and Anthropic returns
       // not_found_error if the id is not real.
       const modelIds = ANTHROPIC_MODELS.map((model) => model.id);
-      if (modelIds.includes(modelType) || looksLikeClaudeModelId(modelType)) {
-        return new AnthropicMessagesProvider(modelType, providerOptions);
+      if (modelIds.includes(shorthandModel) || looksLikeClaudeModelId(shorthandModel)) {
+        return new AnthropicMessagesProvider(shorthandModel, providerOptions);
       }
 
       throw new Error(
@@ -353,7 +354,7 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
-      const deploymentName = splits[2];
+      const deploymentName = splits.slice(2).join(':');
 
       // Azure model types that have no sensible default deployment must name one in
       // the provider path (`azure:<type>:<name>`). Without this, the registry would
@@ -697,7 +698,9 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      const [_, modelType, modelName] = providerPath.split(':');
+      const splits = providerPath.split(':');
+      const modelType = splits[1];
+      const modelName = splits.slice(2).join(':');
       if (modelType === 'image') {
         return new FalImageGenerationProvider(modelName, providerOptions);
       }
@@ -1628,7 +1631,7 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      const modelName = providerPath.split(':')[2];
+      const modelName = providerPath.split(':').slice(2).join(':');
       return new PromptfooModelProvider(modelName, {
         ...providerOptions,
         model: modelName,
