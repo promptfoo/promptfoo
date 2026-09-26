@@ -1,5 +1,7 @@
 // Example from @Codeshark-NET https://github.com/promptfoo/promptfoo/issues/922
 // @ts-check
+import { createHash } from 'node:crypto';
+
 import { anthropic } from '@ai-sdk/anthropic';
 import { generateText, jsonSchema, Output } from 'ai';
 import { cache as promptfooCache } from 'promptfoo';
@@ -24,7 +26,8 @@ class CustomProvider {
   async callApi(prompt) {
     const cache = await promptfooCache.getCache();
 
-    const cacheKey = `vercel-ai-sdk:v6:${this.providerId}:${prompt}`;
+    const promptHash = createHash('sha256').update(String(prompt)).digest('hex');
+    const cacheKey = `vercel-ai-sdk:v6:${this.providerId}:${promptHash}`;
 
     // Check if the response is already cached
     const cachedResponse = promptfooCache.isCacheEnabled() && (await cache.get(cacheKey));

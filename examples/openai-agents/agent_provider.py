@@ -14,6 +14,8 @@ import asyncio
 import json
 import os
 import re
+import shlex
+import sys
 import traceback
 from pathlib import Path
 from typing import Any, Iterable
@@ -46,6 +48,14 @@ DEFAULT_MODEL = os.getenv("OPENAI_AGENT_MODEL", "gpt-6-luna")
 SESSION_DB_PATH = Path(__file__).with_name(".promptfoo-openai-agents.sqlite3")
 EXAMPLE_DIR = Path(__file__).resolve().parent
 DISCOUNT_REVIEW_SKILL_DIR = EXAMPLE_DIR / "skills" / "discount-review"
+ALLOWED_SKILL_COMMANDS = {
+    (
+        "python3",
+        "skills/discount-review/scripts/analyze_discount_policy.py",
+        "skill_fixture/repo",
+    ),
+    ("cat", "skill_fixture/repo/src/discount_policy.py"),
+}
 
 RESERVATIONS: dict[str, dict[str, str]] = {
     "ABC123": {
@@ -147,10 +157,38 @@ class SkillShellExecutor:
     async def __call__(self, request: ShellCommandRequest) -> ShellResult:
         outputs: list[ShellCommandOutput] = []
         for command in request.data.action.commands:
-            proc = await asyncio.create_subprocess_shell(
-                command,
+            try:
+                parts = shlex.split(command)
+            except ValueError as exc:
+                outputs.append(
+                    ShellCommandOutput(
+                        command=command,
+                        stdout="",
+                        stderr=f"Invalid command syntax: {exc}",
+                        outcome=ShellCallOutcome(type="exit", exit_code=2),
+                    )
+                )
+                continue
+
+            if tuple(parts) not in ALLOWED_SKILL_COMMANDS:
+                outputs.append(
+                    ShellCommandOutput(
+                        command=command,
+                        stdout="",
+                        stderr="Command is not allowed by this skill",
+                        outcome=ShellCallOutcome(type="exit", exit_code=126),
+                    )
+                )
+                continue
+
+            proc = await asyncio.create_subprocess_exec(
+                parts[0],
+                *parts[1:],
                 cwd=self.cwd,
-                env=os.environ.copy(),
+                env={
+                    "PATH": f"{Path(sys.executable).parent}{os.pathsep}{os.defpath}",
+                    "PYTHONPATH": "",
+                },
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -448,14 +486,24 @@ def update_seat(
         context.context, normalized_confirmation_number
     )
     normalized_seat = new_seat.strip().upper()
+    if not re.fullmatch(r"[1-9]\d*[A-F]", normalized_seat):
+        return (
+            "Unable to update seat because the requested seat must be a valid "
+            "seat number (for example, 12A)."
+        )
     if reservation is None:
         return (
             f"Unable to update seat because {normalized_confirmation_number} "
             "was not found."
         )
-    if context.context.user_passenger_name and _normalize_name(
-        context.context.user_passenger_name
-    ) != _normalize_name(reservation["passenger_name"]):
+    if not context.context.user_passenger_name or not context.context.user_passenger_name.strip():
+        return (
+            "Unable to update the seat because passenger identity could not be "
+            "verified. The passenger must authenticate before requesting changes."
+        )
+    if _normalize_name(context.context.user_passenger_name) != _normalize_name(
+        reservation["passenger_name"]
+    ):
         return (
             "Unable to update a reservation for a different passenger. The passenger "
             "must contact support directly."
