@@ -20,7 +20,7 @@ This example demonstrates how to:
 
 ## Prerequisites
 
-Ensure you have Python 3 and Node.js installed on your system.
+Ensure you have Python 3.10 or later and Node.js installed on your system.
 
 1. **Install Node.js dependencies**:
 
@@ -35,6 +35,9 @@ pip install -r requirements.txt
 ```
 
 That's it! No additional setup scripts or configuration needed.
+
+The demo application uses Gradio 6. Browser automation uses the Node.js Playwright
+packages installed above; the Python Playwright package is not needed.
 
 ## Running the Example
 
