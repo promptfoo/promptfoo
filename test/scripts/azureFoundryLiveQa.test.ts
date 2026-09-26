@@ -28,7 +28,7 @@ describe('Azure Foundry live QA', () => {
       'azureFoundryLiveQa.ts',
       '--live',
       '--endpoint',
-      'https://fixture.invalid/api/projects/test',
+      'https://fixture.services.ai.azure.com/api/projects/test',
       '--agent',
       'fixture-agent',
       '--output',
@@ -42,6 +42,56 @@ describe('Azure Foundry live QA', () => {
     process.exitCode = originalExitCode;
     vi.restoreAllMocks();
     fs.rmSync(directory, { recursive: true, force: true });
+  });
+
+  it.each([
+    'https://fixture.invalid/api/projects/test',
+    'https://fixture.services.ai.azure.com.invalid/api/projects/test',
+    'https://fixture-services.ai.azure.com/api/projects/test',
+    'https://services.ai.azure.com/api/projects/test',
+    'https://nested.fixture.services.ai.azure.com/api/projects/test',
+    'https://localhost/api/projects/test',
+    'https://127.0.0.1/api/projects/test',
+    'https://[::1]/api/projects/test',
+    'https://fixture.services.ai.azure.com:8443/api/projects/test',
+    'http://fixture.services.ai.azure.com/api/projects/test',
+    'https://user:password@fixture.services.ai.azure.com/api/projects/test',
+    'https://fixture.services.ai.azure.com/api/projects/test?extra=value',
+    'https://fixture.services.ai.azure.com/api/projects/test#fragment',
+    'https://fixture.services.ai.azure.com/api/projects/test/extra',
+  ])(
+    'rejects an unsupported endpoint before files or SDK-capable child execution: %s',
+    async (url) => {
+      process.argv[process.argv.indexOf('--endpoint') + 1] = url;
+      mocks.execFile.mockImplementation(() => {
+        throw new Error('Unexpected SDK-capable eval subprocess');
+      });
+      await expect(import('../../scripts/azureFoundryLiveQa')).rejects.toThrow(
+        'Use an HTTPS Foundry project endpoint',
+      );
+      expect(mocks.execFile).not.toHaveBeenCalled();
+      expect(fs.existsSync(path.join(directory, 'output'))).toBe(false);
+    },
+  );
+
+  it.each([
+    'https://fixture.services.ai.azure.com/api/projects/test',
+    'https://fixture.services.ai.azure.us/api/projects/test',
+    'https://FIXTURE.services.ai.azure.com/api/projects/test',
+    'https://fixture.services.ai.azure.com:443/api/projects/test',
+    'https://fixture.services.ai.azure.us/api/projects/test/',
+  ])('accepts a documented project endpoint without SDK calls in dry-run mode: %s', async (url) => {
+    process.argv[process.argv.indexOf('--endpoint') + 1] = url;
+    process.argv[process.argv.indexOf('--live')] = '--dry-run';
+    await import('../../scripts/azureFoundryLiveQa');
+    expect(mocks.execFile).not.toHaveBeenCalled();
+    const output = path.join(directory, 'output');
+    const metadata = JSON.parse(fs.readFileSync(path.join(output, 'metadata.json'), 'utf8'));
+    expect(metadata.endpoint).toBe(new URL(url).toString());
+    expect(metadata.live).toBe(false);
+    for (const name of ['text', 'structured', 'tool']) {
+      expect(fs.existsSync(path.join(output, `${name}.json`))).toBe(true);
+    }
   });
 
   it.each(['inherited environment', '.env'])(

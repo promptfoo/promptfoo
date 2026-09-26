@@ -128,6 +128,8 @@ The provider includes the same comprehensive error handling as the regular Azure
 
 Use an existing test project and agent. This harness runs text, structured-output, and benign function-tool evals, with at most nine client Responses requests and request/scheduler retries disabled. Azure may perform additional model calls internally. Each CLI process has a three-minute wall-clock limit. The harness does not create agents, deployments, or other Azure infrastructure.
 
+Copy the project endpoint from your Foundry project overview. The harness accepts only HTTPS URLs on port 443 with the documented `<resource>.services.ai.azure.com` ([commercial Azure](https://learn.microsoft.com/en-us/javascript/api/overview/azure/ai-projects-readme?view=azure-node-latest)) or `<resource>.services.ai.azure.us` ([Azure Government](https://learn.microsoft.com/en-us/azure/foundry/concepts/foundry-azure-government)) hostname and `/api/projects/<project>` path. For Private Link, use the normal resource hostname with [private DNS configured](https://learn.microsoft.com/en-us/azure/foundry/how-to/configure-private-link#apply-dns-changes-for-private-endpoints).
+
 From the repository root, preview the configs without contacting Azure:
 
 ```bash

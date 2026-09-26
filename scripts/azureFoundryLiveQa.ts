@@ -40,6 +40,8 @@ if (!values.endpoint || !values.agent || Boolean(values.live) === Boolean(values
 const endpoint = new URL(values.endpoint);
 if (
   endpoint.protocol !== 'https:' ||
+  !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.services\.ai\.azure\.(?:com|us)$/.test(endpoint.hostname) ||
+  endpoint.port ||
   endpoint.username ||
   endpoint.password ||
   endpoint.search ||
@@ -47,7 +49,7 @@ if (
   !/^\/api\/projects\/[^/]+\/?$/.test(endpoint.pathname)
 ) {
   throw new Error(
-    'Use an HTTPS Foundry project endpoint without credentials, query parameters, or fragments.',
+    'Use an HTTPS Foundry project endpoint on <resource>.services.ai.azure.com or <resource>.services.ai.azure.us with the default port and without credentials, query parameters, or fragments.',
   );
 }
 
