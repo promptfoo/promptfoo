@@ -3512,6 +3512,89 @@ describe('ResultsTable Pass Rate Display', () => {
   });
 });
 
+describe('ResultsTable Named Metric Totals', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  // An errored row is never graded, so that column's named metric count is lower than the others.
+  const columnMetrics = (graded: number) => ({
+    testPassCount: graded,
+    testFailCount: 0,
+    testErrorCount: 5 - graded,
+    namedScores: { 'has-hello': graded },
+    namedScoresCount: { 'has-hello': graded },
+  });
+
+  const mockTableStore = (gradedPerColumn: number[]) => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: {
+        body: Array(5).fill({
+          outputs: gradedPerColumn.map(() => ({ pass: true, score: 1, text: 'test output' })),
+          test: { assert: [{ type: 'contains', value: 'Hello', metric: 'has-hello' }] },
+          vars: [],
+        }),
+        head: {
+          prompts: gradedPerColumn.map((graded, idx) => ({
+            metrics: columnMetrics(graded),
+            provider: `provider-${idx + 1}`,
+          })),
+          vars: [],
+        },
+      },
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+  };
+
+  const metricValueTexts = () =>
+    screen.getAllByTestId('metric-value-has-hello').map((el) => el.textContent);
+
+  it('uses each column’s own named metric count when the first column errored', () => {
+    mockTableStore([4, 5, 5]);
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(metricValueTexts()).toEqual([
+      '100.00% (4.00/4.00)',
+      '100.00% (5.00/5.00)',
+      '100.00% (5.00/5.00)',
+    ]);
+  });
+
+  it('uses each column’s own named metric count when a later column errored', () => {
+    mockTableStore([5, 4]);
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(metricValueTexts()).toEqual(['100.00% (5.00/5.00)', '100.00% (4.00/4.00)']);
+  });
+});
+
 describe('ResultsTable Pass Rate Highlighting', () => {
   const mockTable = {
     body: Array(10).fill({

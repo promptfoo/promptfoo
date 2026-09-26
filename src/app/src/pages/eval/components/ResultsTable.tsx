@@ -1137,7 +1137,7 @@ function PromptColumnHeader({
   numGoodAsserts,
   testCounts,
   passingTestCounts,
-  metricTotals,
+  assertionMetricTotals,
   config,
   filterMode,
   headPromptCount,
@@ -1157,7 +1157,7 @@ function PromptColumnHeader({
   numGoodAsserts: number[];
   testCounts: PromptSummaryMetric[];
   passingTestCounts: PromptSummaryMetric[];
-  metricTotals: Record<string, number>;
+  assertionMetricTotals: Record<string, number>;
   config: ReturnType<typeof useTableStore.getState>['config'];
   filterMode: EvalResultsFilterMode;
   headPromptCount: number;
@@ -1168,6 +1168,7 @@ function PromptColumnHeader({
 }) {
   const columnId = `Prompt ${idx + 1}`;
   const { total: metrics, filtered: filteredMetrics } = getMetrics(idx);
+  const namedMetricTotals = getNamedMetricTotals(metrics);
 
   return (
     <div className="output-header">
@@ -1219,8 +1220,8 @@ function PromptColumnHeader({
           <div className="collapse-hidden">
             <CustomMetrics
               lookup={metrics.namedScores}
-              counts={getNamedMetricTotals(metrics)}
-              metricTotals={metricTotals}
+              counts={namedMetricTotals}
+              metricTotals={namedMetricTotals ?? assertionMetricTotals}
               onShowMore={() => setCustomMetricsDialogOpen(true)}
             />
           </div>
@@ -2159,15 +2160,9 @@ function ResultsTable({
     [tableBody],
   );
 
-  const metricTotals = React.useMemo(() => {
-    // Use the backend's already-correct metric totals instead of recalculating
-    const firstProvider = table?.head?.prompts?.[0];
-    const backendTotals = getNamedMetricTotals(firstProvider?.metrics);
-
-    if (backendTotals) {
-      return backendTotals;
-    }
-
+  // Fallback for evals without backend named metric totals. Columns with backend totals use
+  // their own (see PromptColumnHeader), since errored rows make the totals differ per column.
+  const assertionMetricTotals = React.useMemo(() => {
     const totals: Record<string, number> = {};
     table?.body.forEach((row) => {
       row.test.assert?.forEach((assertion) => {
@@ -2185,7 +2180,7 @@ function ResultsTable({
       });
     });
     return totals;
-  }, [table?.head?.prompts, table?.body]);
+  }, [table?.body]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const promptColumns = React.useMemo(() => {
@@ -2209,7 +2204,7 @@ function ResultsTable({
                 numGoodAsserts={numGoodAsserts}
                 testCounts={testCounts}
                 passingTestCounts={passingTestCounts}
-                metricTotals={metricTotals}
+                assertionMetricTotals={assertionMetricTotals}
                 config={config}
                 filterMode={filterMode}
                 headPromptCount={head.prompts.length}
@@ -2278,7 +2273,7 @@ function ResultsTable({
     head.prompts,
     isRedteam,
     maxTextLength,
-    metricTotals,
+    assertionMetricTotals,
     numAsserts,
     numGoodAsserts,
     onFailureFilterToggle,
