@@ -5,6 +5,7 @@ import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { sha256 } from '../util/createHash';
+import { normalizeFinishReason } from '../util/finishReason';
 import { getRequestTimeoutMs, parseChatPrompt } from './shared';
 import { hasActiveTracingSpan } from './tracing';
 import type { LanguageModelUsage } from 'ai';
@@ -360,7 +361,11 @@ export class VercelAiProvider implements ApiProvider {
         finishReason,
       });
 
-      return { output, tokenUsage: mapTokenUsage(usage), finishReason };
+      return {
+        output,
+        tokenUsage: mapTokenUsage(usage),
+        finishReason: normalizeFinishReason(finishReason),
+      };
     } catch (error) {
       return handleApiError(
         streamError ? streamError.error : error,
@@ -421,7 +426,7 @@ export class VercelAiProvider implements ApiProvider {
       return {
         output: result.object,
         tokenUsage: mapTokenUsage(result.usage),
-        finishReason: result.finishReason,
+        finishReason: normalizeFinishReason(result.finishReason),
       };
     } catch (error) {
       return handleApiError(error, timeout, 'structured output API call', abortSignal);
@@ -529,7 +534,7 @@ export class VercelAiProvider implements ApiProvider {
       return {
         output: result.text,
         tokenUsage: mapTokenUsage(result.usage),
-        finishReason: result.finishReason,
+        finishReason: normalizeFinishReason(result.finishReason),
       };
     } catch (error) {
       return handleApiError(error, timeout, 'API call', abortSignal);
