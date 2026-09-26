@@ -6,11 +6,8 @@ import {
   type MultiTurnStrategy,
   type Plugin,
 } from '../../redteam/constants';
-import {
-  getRemoteGenerationHeaders,
-  getRemoteGenerationUrl,
-  neverGenerateRemote,
-} from '../../redteam/remoteGeneration';
+import { getRemoteGenerationHeaders, neverGenerateRemote } from '../../redteam/remoteGeneration';
+import { resolveRemoteGenerationUrl } from '../../redteam/remoteGenerationRequest';
 import { sha256 } from '../../util/createHash';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { extractFirstJsonObject } from '../../util/json';
@@ -265,7 +262,7 @@ async function handleGoatStrategy(
   };
 
   const response = await fetchWithRetries(
-    getRemoteGenerationUrl(),
+    await resolveRemoteGenerationUrl(goatBody),
     {
       method: 'POST',
       headers: getRemoteGenerationHeaders(),
@@ -319,7 +316,7 @@ async function handleMischievousUserStrategy(
   };
 
   const response = await fetchWithRetries(
-    getRemoteGenerationUrl(),
+    await resolveRemoteGenerationUrl(mischievousBody),
     {
       method: 'POST',
       headers: getRemoteGenerationHeaders(),
@@ -459,7 +456,7 @@ async function handleHydraLikeStrategy(
   };
 
   const response = await fetchWithRetries(
-    getRemoteGenerationUrl(),
+    await resolveRemoteGenerationUrl(requestBody),
     {
       method: 'POST',
       headers: getRemoteGenerationHeaders(),
@@ -546,7 +543,7 @@ async function handleCrescendoLikeStrategy(
   };
 
   const response = await fetchWithRetries(
-    getRemoteGenerationUrl(),
+    await resolveRemoteGenerationUrl(providerRequest),
     {
       method: 'POST',
       headers: getRemoteGenerationHeaders(),

@@ -3,8 +3,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { fetchWithRetries } from '../../util/fetch/index';
-import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
+import { getRemoteGenerationHeaders } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { resolveRemoteGenerationUrl } from '../remoteGenerationRequest';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 import type {
@@ -98,7 +99,7 @@ export async function checkExfilTracking(
   exfilRecords: WebPageTrackingResponse['exfilRecords'];
 } | null> {
   try {
-    const url = getRemoteGenerationUrl();
+    const url = await resolveRemoteGenerationUrl();
     // Strip "eval-" prefix from evalId for consistency with page creation
     const normalizedEvalId = evalId?.replace(/^eval-/, '');
     const response = await fetchWithRetries(
@@ -209,7 +210,7 @@ async function createWebPage(
   preferSmallModel?: boolean,
   targetId?: string,
 ): Promise<CreateWebPageResponse> {
-  const url = getRemoteGenerationUrl();
+  const url = await resolveRemoteGenerationUrl({ targetId });
   logger.debug('[IndirectWebPwn] Creating web page via task API', {
     url,
     testCaseId,
@@ -266,7 +267,7 @@ async function updateWebPage(
   preferSmallModel?: boolean,
   targetId?: string,
 ): Promise<UpdateWebPageResponse> {
-  const url = getRemoteGenerationUrl();
+  const url = await resolveRemoteGenerationUrl({ targetId });
   logger.debug('[IndirectWebPwn] Updating web page via task API', {
     url,
     uuid,

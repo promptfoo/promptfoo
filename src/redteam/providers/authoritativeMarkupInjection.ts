@@ -16,6 +16,7 @@ import {
   neverGenerateRemote,
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { resolveRemoteGenerationUrl } from '../remoteGenerationRequest';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { callTargetProvider } from './shared';
 
@@ -90,7 +91,7 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
     );
 
     const response = await fetchWithProxy(
-      getRemoteGenerationUrl(),
+      await resolveRemoteGenerationUrl({ targetId: this.config.targetId }),
       {
         body,
         headers: getRemoteGenerationHeaders(),

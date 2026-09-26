@@ -5,7 +5,8 @@ import {
   recordFailedGenerationTokenUsage,
   recordGenerationTokenUsage,
 } from './generationTokenUsage';
-import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from './remoteGeneration';
+import { getRemoteGenerationHeaders } from './remoteGeneration';
+import { resolveRemoteGenerationUrl } from './remoteGenerationRequest';
 
 import type { StrategyRuntimeContext } from './strategies/types';
 
@@ -30,6 +31,7 @@ export async function postRemoteGenerationTask<T>(
   let responseRecorded = false;
 
   try {
+    const url = await resolveRemoteGenerationUrl(payload, { headers: options?.headers });
     const request = {
       method: 'POST',
       headers: getRemoteGenerationHeaders(options?.headers),
@@ -39,14 +41,8 @@ export async function postRemoteGenerationTask<T>(
       }),
     };
     const response = options?.bustCache
-      ? await fetchWithCache<T>(
-          getRemoteGenerationUrl(),
-          request,
-          getRequestTimeoutMs(),
-          'json',
-          true,
-        )
-      : await fetchWithCache<T>(getRemoteGenerationUrl(), request, getRequestTimeoutMs());
+      ? await fetchWithCache<T>(url, request, getRequestTimeoutMs(), 'json', true)
+      : await fetchWithCache<T>(url, request, getRequestTimeoutMs());
     const data = response.data as
       | { tokenUsage?: Parameters<typeof recordGenerationTokenUsage>[1]['tokenUsage'] }
       | undefined;

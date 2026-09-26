@@ -4,15 +4,13 @@ import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import {
   getRemoteGenerationHeaders,
-  getRemoteGenerationUrl,
-  getRemoteGenerationUrlForUnaligned,
   neverGenerateRemote,
   neverGenerateRemoteForRegularEvals,
   providerRemoteGenerationContextPayload,
 } from '../redteam/remoteGeneration';
+import { resolveRemoteGenerationUrl } from '../redteam/remoteGenerationRequest';
 import { getRemoteMaterializationContextFromVars } from '../redteam/remoteMaterialization';
 import { BaseTokenUsageSchema } from '../types/shared';
-import { ensureCloudTeamContext } from '../util/cloud';
 import { fetchWithRetries } from '../util/fetch/index';
 import { getRequestTimeoutMs } from './shared';
 
@@ -99,8 +97,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
     };
 
     try {
-      await ensureCloudTeamContext(getRemoteGenerationUrlForUnaligned(), body.targetId);
-      const url = getRemoteGenerationUrlForUnaligned();
+      const url = await resolveRemoteGenerationUrl(body, { unaligned: true });
       logger.debug(
         `[HarmfulCompletionProvider] Calling generate harmful API (${url}) with body: ${JSON.stringify(body)}`,
       );
@@ -246,8 +243,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
     };
 
     try {
-      await ensureCloudTeamContext(getRemoteGenerationUrl(), body.targetId);
-      const url = getRemoteGenerationUrl();
+      const url = await resolveRemoteGenerationUrl(body);
       const response = await fetchWithRetries(
         url,
         {
@@ -372,8 +368,7 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
     };
 
     try {
-      await ensureCloudTeamContext(getRemoteGenerationUrl(), body.targetId);
-      const url = getRemoteGenerationUrl();
+      const url = await resolveRemoteGenerationUrl(body);
       const response = await fetchWithRetries(
         url,
         {

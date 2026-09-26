@@ -9,10 +9,10 @@ import invariant from '../../util/invariant';
 import {
   getRemoteGenerationExplicitlyDisabledError,
   getRemoteGenerationHeaders,
-  getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { resolveRemoteGenerationUrl } from '../remoteGenerationRequest';
 
 import type { TestCase } from '../../types/index';
 
@@ -58,7 +58,7 @@ export async function textToAudio(
     }
 
     const { data } = await fetchWithCache<AudioGenerationResponse>(
-      getRemoteGenerationUrl(),
+      await resolveRemoteGenerationUrl(payload),
       {
         method: 'POST',
         headers: getRemoteGenerationHeaders(),

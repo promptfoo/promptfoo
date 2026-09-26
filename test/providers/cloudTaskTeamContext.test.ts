@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import express from 'express';
+import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { withCacheEnabled } from '../../src/cache';
 import { cloudConfig } from '../../src/globalConfig/cloud';
@@ -9,7 +11,11 @@ import { readGlobalConfig, writeGlobalConfig } from '../../src/globalConfig/glob
 import { evaluate } from '../../src/index';
 import { PromptfooSimulatedUserProvider } from '../../src/providers/promptfoo';
 import { PromptfooModelProvider } from '../../src/providers/promptfooModel';
+import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
+import { fetchRemoteGeneration } from '../../src/redteam/extraction/util';
+import { postRemoteGenerationTask } from '../../src/redteam/remoteGenerationTask';
 import { doRemoteGrading } from '../../src/remoteGrading';
+import { redteamRouter } from '../../src/server/routes/redteam';
 import { getConfigDirectoryPath, setConfigDirectoryPath } from '../../src/util/config/manage';
 import { mockProcessEnv } from '../util/utils';
 
@@ -75,6 +81,7 @@ beforeEach(() => {
       }
       if (url.pathname === '/api/v1/task') {
         return Response.json({
+          task: body.task,
           result:
             body.task === 'promptfoo:model'
               ? { choices: [{ message: { content: 'Hello QA' } }] }
@@ -104,12 +111,38 @@ const grade = () =>
   );
 const simulate = () =>
   new PromptfooSimulatedUserProvider({ instructions: 'Say hello' }, 'tau').callApi('[]');
+const purpose = () =>
+  withCacheEnabled(false, () =>
+    extractSystemPurpose(
+      { id: () => 'local', callApi: vi.fn(async () => ({ output: 'Unused' })) },
+      ['You are a friendly assistant.'],
+    ),
+  );
+const sharedTask = (context: Record<string, unknown> = {}, headers?: HeadersInit) =>
+  withCacheEnabled(false, () =>
+    postRemoteGenerationTask(
+      { task: 'purpose', prompts: ['You are a friendly assistant.'], ...context },
+      undefined,
+      { headers: headers ? Object.fromEntries(new Headers(headers)) : undefined },
+    ),
+  );
+const routeTask = (context: Record<string, unknown> = {}) => {
+  const app = express();
+  app.use(express.json());
+  app.use('/api/redteam', redteamRouter);
+  return request(app)
+    .post('/api/redteam/purpose')
+    .send({ prompts: ['You are a friendly assistant.'], ...context });
+};
 
 describe('Cloud task team recovery', () => {
   it.each([
     ['model', model],
     ['grading', grade],
     ['simulated user', simulate],
+    ['public purpose extraction', purpose],
+    ['shared task helper', sharedTask],
+    ['task route', routeTask],
   ] as const)('restores the selected team before a direct %s request', async (_name, call) => {
     await call();
     expect(requests.filter((r) => r.path === '/api/v1/task')).toEqual([
@@ -216,5 +249,80 @@ describe('Cloud task team recovery', () => {
     writeGlobalConfig({ id: 'fresh-installation' });
     await model();
     expect(requests).toEqual([expect.objectContaining({ path: '/api/v1/task', team: null })]);
+  });
+
+  it.each([
+    { targetId: 'assigned-target' },
+    { evaluationId: 'assigned-evaluation' },
+    { jobId: 'assigned-job' },
+    { teamId: 'assigned-team' },
+    { config: { metadata: { teamId: 'assigned-team' } } },
+  ])('preserves explicit task context %j without discovery', async (context) => {
+    failDiscovery = true;
+    await sharedTask(context);
+    const response = await routeTask(context);
+    expect(response.status).toBe(200);
+    expect(requests).toHaveLength(2);
+    expect(requests.every((r) => r.path === '/api/v1/task')).toBe(true);
+    expect(requests.every((r) => r.team === null)).toBe(true);
+    for (const sent of requests) {
+      expect(sent.body).toMatchObject(context);
+    }
+    expect(cloudConfig.hasPendingEnvironmentSelection()).toBe(true);
+  });
+
+  it('preserves a caller-supplied team header without discovery', async () => {
+    failDiscovery = true;
+    await sharedTask({}, { 'X-Promptfoo-Team-Id': 'assigned-team' });
+    expect(requests).toEqual([
+      expect.objectContaining({ path: '/api/v1/task', team: 'assigned-team' }),
+    ]);
+    expect(cloudConfig.hasPendingEnvironmentSelection()).toBe(true);
+  });
+
+  it('recovers the selected team when a task only carries a local evalId', async () => {
+    await sharedTask({ evalId: 'local-evaluation' });
+    expect(requests.at(-1)).toMatchObject({ path: '/api/v1/task', team: 'selected-a' });
+  });
+
+  it('blocks extraction and routing when team recovery fails', async () => {
+    failDiscovery = true;
+    await expect(purpose()).resolves.toBe('');
+    expect((await routeTask()).status).toBe(500);
+    expect(requests.some((r) => r.path === '/api/v1/task')).toBe(false);
+  });
+
+  it('leaves custom extraction and routing endpoints independent of team discovery', async () => {
+    vi.stubEnv('PROMPTFOO_REMOTE_GENERATION_URL', 'https://custom.example.com/api/v1/task');
+    failDiscovery = true;
+    await purpose();
+    expect((await routeTask()).status).toBe(200);
+    expect(requests).toHaveLength(2);
+    expect(requests.every((r) => r.path === '/api/v1/task' && r.team === null)).toBe(true);
+  });
+
+  it('keeps disabled extraction and routing offline', async () => {
+    vi.stubEnv('PROMPTFOO_DISABLE_REMOTE_GENERATION', 'true');
+    const provider = {
+      id: () => 'local',
+      callApi: vi.fn().mockResolvedValue({ output: '<Purpose>Say hello</Purpose>' }),
+    };
+    await expect(extractSystemPurpose(provider, ['A friendly assistant'])).resolves.toBe(
+      'Say hello',
+    );
+    expect((await routeTask()).status).toBe(400);
+    expect(requests).toEqual([]);
+  });
+
+  it('recovers before cache lookup after environment key rotation', async () => {
+    await withCacheEnabled(true, async () => {
+      await fetchRemoteGeneration('purpose', ['A unique cached purpose']);
+      vi.stubEnv('PROMPTFOO_API_KEY', 'environment-b');
+      await fetchRemoteGeneration('purpose', ['A unique cached purpose']);
+    });
+    expect(requests.filter((r) => r.path === '/api/v1/task').map((r) => r.team)).toEqual([
+      'selected-a',
+      'selected-b',
+    ]);
   });
 });

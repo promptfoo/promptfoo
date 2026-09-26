@@ -2,9 +2,9 @@ import { fetchWithCache } from './cache';
 import { getUserEmail } from './globalConfig/accounts';
 import logger from './logger';
 import { getRequestTimeoutMs } from './providers/shared';
-import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from './redteam/remoteGeneration';
+import { getRemoteGenerationHeaders } from './redteam/remoteGeneration';
+import { resolveRemoteGenerationUrl } from './redteam/remoteGenerationRequest';
 import { getActiveTraceparent } from './tracing/spanRoles';
-import { ensureCloudTeamContext } from './util/cloud';
 
 import type { GradingResult } from './types/index';
 
@@ -51,11 +51,7 @@ export async function doRemoteGrading(
   payload: RemoteGradingPayload,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   try {
-    await ensureCloudTeamContext(
-      getRemoteGenerationUrl(),
-      typeof payload.targetId === 'string' ? payload.targetId : undefined,
-    );
-    const url = getRemoteGenerationUrl();
+    const url = await resolveRemoteGenerationUrl(payload);
     payload.email = getUserEmail();
     const body = JSON.stringify(payload);
     const traceparent = getActiveTraceparent();
