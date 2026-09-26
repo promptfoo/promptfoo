@@ -1,6 +1,6 @@
 import { act } from 'react';
 
-import { callApi } from '@app/utils/api';
+import { mockCallApiRoutes } from '@app/tests/apiMocks';
 import { renderWithProviders } from '@app/utils/testutils';
 import { screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -51,27 +51,28 @@ beforeEach(() => {
 });
 
 it('keeps the eval visible when a child filter request supersedes the parent load', async () => {
-  const pending: Array<(response: Response) => void> = [];
-  vi.mocked(callApi).mockImplementation(async (url) => {
-    if (url.startsWith('/results')) {
-      return { ok: true, json: async () => ({ data: [{ evalId: 'eval-id' }] }) } as Response;
-    }
-    return new Promise<Response>((resolve) => pending.push(resolve));
-  });
+  const pending: Array<(body: unknown) => void> = [];
+  mockCallApiRoutes([
+    {
+      path: /^\/(?:results(?:\?|$)|eval\/eval-id\/table(?:\?|$))/,
+      repeat: true,
+      response: (url: string) =>
+        url.startsWith('/results')
+          ? { data: [{ evalId: 'eval-id' }] }
+          : new Promise((resolve) => pending.push(resolve)),
+    },
+  ]);
   const resolveTableRequests = async () => {
     while (pending.length > 0) {
       await act(async () => {
         for (const resolve of pending.splice(0)) {
           resolve({
-            ok: true,
-            json: async () => ({
-              table: { head: { prompts: [], vars: [] }, body: [] },
-              config: {},
-              version: 4,
-              totalCount: 0,
-              filteredCount: 0,
-            }),
-          } as Response);
+            table: { head: { prompts: [], vars: [] }, body: [] },
+            config: {},
+            version: 4,
+            totalCount: 0,
+            filteredCount: 0,
+          });
         }
       });
     }
