@@ -352,7 +352,7 @@ Choose one of these authentication methods:
 
 #### Option 1: Application Default Credentials (Recommended)
 
-`GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT`, and `GOOGLE_CLOUD_QUOTA_PROJECT` support provider/suite `env` and invocation env files. Explicit `config.credentials`, `keyFilename`, and `googleAuthOptions` take precedence. ADC availability is checked separately for each invocation, including Google Live authentication. Empty scoped ADC filenames are rejected instead of falling back to host credentials. Vertex chat response caches reuse results within a provider and invocation; separate scopes use opaque namespaces to keep credential contexts isolated.
+`GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT`, and `GOOGLE_CLOUD_QUOTA_PROJECT` support provider/suite `env` and invocation env files. Explicit `config.credentials`, `keyFilename`, and `googleAuthOptions` take precedence. Empty scoped ADC filenames are rejected instead of falling back to host credentials.
 
 This is the most secure and flexible approach for development and production:
 
@@ -1148,6 +1148,8 @@ providers:
 | Gemini 3.5 Flash-Lite        | Priority   |      $0.54 |                     $4.50 |            $0.054 |
 
 Gemini 3.8, 3.7, and 3.6 Flash rates above include introductory pricing through December 31, 2026; those rates double on January 1, 2027. Promptfoo applies that scheduled change automatically. All rates above are for `global`; multiply them by 1.1 for `us` or `eu`. Cache-storage and grounding-query charges are separate. See [Vertex AI pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing).
+
+Promptfoo's local response cache reuses Vertex chat responses only within the same provider instance and eval.
 
 Promptfoo can reference an existing explicit Vertex cache with `passthrough`; cache creation and lifecycle management remain outside the provider:
 

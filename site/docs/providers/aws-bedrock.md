@@ -304,7 +304,7 @@ environment and the AWS default credential chain. Credential tuples are kept tog
 an explicit profile overrides ambient access keys. See [OpenAI Models](#openai-models)
 for the refresh behavior. Native InvokeModel, Converse, and Nova Sonic also accept scoped `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` tuples, `AWS_SESSION_TOKEN`, `AWS_PROFILE`, and `AWS_BEARER_TOKEN_BEDROCK`. Keep a credential tuple in one scope; empty or incomplete tuples are rejected. Explicit config precedes provider `env`, suite `env`, invocation env files, and ambient SDK discovery.
 
-Native response caches reuse results within a provider instance. Separate instances use opaque namespaces because profiles and credential chains can change identity; they do not share persisted responses.
+Native Bedrock response caching is limited to one provider instance because SDK credential chains and profiles can change identity.
 
 ### Authentication Options
 

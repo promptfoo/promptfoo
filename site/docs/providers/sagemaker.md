@@ -536,7 +536,7 @@ providers:
 When caching is enabled:
 
 - Responses for identical prompts are stored and reused
-- Responses are reused within a provider instance. Separate SDK owners use opaque cache namespaces because profiles and credential chains can change identity.
+- Cached responses are reused only within one provider instance because credential chains and profiles can change identity.
 - Token usage statistics are maintained with a `cached` flag
 - Debug mode will bypass the cache when needed
 

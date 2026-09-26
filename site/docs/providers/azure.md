@@ -1526,7 +1526,7 @@ The Azure Foundry Agent provider includes comprehensive error handling:
 
 ### Caching
 
-The provider reuses cached responses within a provider instance. Separate SDK owners use opaque namespaces so responses are not reused across credential contexts. Results are cached based on:
+Cached responses are reused only within one provider instance to keep credential contexts separate. Results are cached based on:
 
 - Request configuration (instructions, model override, temperature, etc.)
 - Tool definitions
