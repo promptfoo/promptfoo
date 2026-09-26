@@ -1,20 +1,24 @@
-# OpenTelemetry Tracing Example Configuration
-# This config tests multiple providers to verify tracing instrumentation
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
 description: OTEL Tracing Validation
 
+tracing:
+  enabled: true
+
 prompts:
-  - 'What is 2 + 2? Answer with just the number.'
+  - label: math-prompt
+    raw: 'What is 2 + 2? Answer with just the number.'
   - label: reasoning-prompt
     raw: 'Explain why the sky is blue in one sentence.'
 
 providers:
   # OpenAI (Category A - Direct instrumentation)
-  - id: openai:chat:gpt-6-luna
+  - id: openai:responses:gpt-6-luna
     config:
-      reasoning_effort: none
+      reasoning:
+        effort: none
       temperature: 0.1
-      max_completion_tokens: 50
+      max_output_tokens: 50
 
   # Anthropic (Category A - Direct instrumentation)
   - id: anthropic:claude-haiku-4-5-20251001
@@ -43,17 +47,17 @@ providers:
   #     temperature: 0.1
 
 tests:
-  - vars:
-      topic: mathematics
+  - description: Arithmetic answer
+    prompts: [math-prompt]
     assert:
       - type: contains
         value: '4'
 
-  - vars:
-      topic: science
+  - description: Light scattering explanation
+    prompts: [reasoning-prompt]
     assert:
-      - type: llm-rubric
-        value: The response should mention light scattering or wavelengths
+      - type: icontains-any
+        value: [scatter, wavelength]
 
 # Evaluation settings
 evaluateOptions:

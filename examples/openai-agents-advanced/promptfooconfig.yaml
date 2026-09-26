@@ -22,6 +22,10 @@ providers:
       tracing: true
       maxTurns: 8
 
+# These tests share one session and must run in order.
+evaluateOptions:
+  maxConcurrency: 1
+
 tests:
   - description: Store a remembered code word
     vars:

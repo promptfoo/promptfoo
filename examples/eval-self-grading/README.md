@@ -1,26 +1,16 @@
 # eval-self-grading (Self Grading)
 
-You can run this example with:
+This example compares two customer-support prompts using GPT-6 Sol through the Responses API. A separate model-graded rubric checks that responses do not mention being an AI, and a JavaScript assertion gives shorter responses a higher score.
 
 ```bash
 npx promptfoo@latest init --example eval-self-grading
 cd eval-self-grading
+export OPENAI_API_KEY=your-key-here
+npx promptfoo@latest eval --no-cache
 ```
 
-## Usage
-
-This example shows how you can have an LLM grade its own output according to predefined expectations.
-
-The configuration is provided in `promptfooconfig.yaml`.
-
-Run:
+The prompts are in `prompts.txt`, and the tests and assertions are in `promptfooconfig.yaml`. To load the test inputs from CSV instead:
 
 ```bash
-promptfoo eval
-```
-
-You can also define the tests in a CSV file:
-
-```bash
-promptfoo eval --tests tests.csv
+npx promptfoo@latest eval --tests tests.csv --no-cache
 ```

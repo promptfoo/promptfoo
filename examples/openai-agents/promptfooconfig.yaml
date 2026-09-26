@@ -98,7 +98,7 @@ tests:
         value:
           max_count: 0
       - type: trajectory:goal-success
-        provider: openai:chat:gpt-6-luna
+        provider: openai:responses:gpt-6-luna
         value: Move the passenger with confirmation ABC123 to seat 14C and answer the baggage policy question correctly.
 
   - description: FAQ-only request should not change the booking

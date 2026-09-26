@@ -4,11 +4,11 @@ These examples evaluate Codex through the experimental `codex app-server` protoc
 
 ## Setup
 
-Install and sign in to Codex:
+Install Codex CLI 0.156.1 or newer for these GPT-6 examples, then sign in:
 
 ```bash
-npm i -g @openai/codex
-codex
+npm install -g @openai/codex@^0.156.1
+codex login
 ```
 
 You can also use an API key:
@@ -52,6 +52,8 @@ The skills config expects `CODEX_SKILL_CREATOR_PATH` to point at a local
 
 ## Notes
 
+Codex runs its own agent loop; the `openai:responses:*` provider is for direct model calls.
+
 The provider starts its own `codex app-server` process. It does not attach to an already-running Codex Desktop app process.
 
 The default examples use:
@@ -61,4 +63,4 @@ The default examples use:
 - `skip_git_repo_check: true`
 - `thread_cleanup: unsubscribe`
 
-See [OpenAI Codex App Server Provider Documentation](/docs/providers/openai-codex-app-server/) for full configuration details.
+See [OpenAI Codex App Server Provider Documentation](https://www.promptfoo.dev/docs/providers/openai-codex-app-server/) for full configuration details.

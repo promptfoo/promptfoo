@@ -1,19 +1,19 @@
 # openai-agents-basic (D&D Adventure with AI Dungeon Master)
 
-This example demonstrates how to use the OpenAI Agents SDK with promptfoo to create an interactive D&D adventure game powered by an AI Dungeon Master.
+This example evaluates a D&D-themed agent built with the OpenAI Agents SDK. The agent uses dice tools and sample character data to respond to player actions.
 
 ## What This Example Shows
 
-- **Multi-turn D&D Adventures**: Agent manages ongoing campaigns across multiple turns
-- **Rich Tool Usage**: Agent uses `roll_dice`, `check_inventory`, `describe_scene`, and `check_character_stats` tools
-- **D&D 5e Mechanics**: Proper attack rolls, saving throws, ability checks, and combat
-- **Dynamic Storytelling**: Agent responds creatively to player actions with atmospheric narration
+- **Independent D&D scenarios**: Each test starts a fresh agent run; conversation history is not shared between tests
+- **Tool calls**: Agent uses `roll_dice`, `check_inventory`, `describe_scene`, and `check_character_stats` tools
 - **File-based Configuration**: Agent and tools organized in separate TypeScript files
-- **Comprehensive Testing**: Test cases verify narrative quality, dice mechanics, and edge cases
+- **Scenario checks**: Rubric and content assertions evaluate selected player actions
+
+The agents use `gpt-6-luna` through the SDK’s default Responses API.
 
 ## Prerequisites
 
-- Node.js >=22.22.0 (Node.js 24 LTS recommended); use `nvm use` to align with `.nvmrc`
+- Node.js >=22.22.0 (Node.js 24 LTS recommended)
 - OpenAI API key
 - The `@openai/agents` SDK (installed via npm)
 
@@ -23,7 +23,7 @@ This example requires:
 
 - `OPENAI_API_KEY` - Your OpenAI API key
 
-You can set it in a `.env` file or directly in your environment:
+Export the key before running the eval, or pass `--env-file .env` if you store it in a file:
 
 ```bash
 export OPENAI_API_KEY=sk-...
@@ -36,6 +36,7 @@ You can run this example with:
 ```bash
 npx promptfoo@latest init --example openai-agents-basic
 cd openai-agents-basic
+npm install
 ```
 
 Or if you've cloned the repo:
@@ -50,7 +51,7 @@ npm install
 ### Evaluate the Dungeon Master
 
 ```bash
-npx promptfoo eval
+npx promptfoo@latest eval --no-cache
 ```
 
 This runs test cases simulating player actions and validates the DM's responses.
@@ -58,7 +59,7 @@ This runs test cases simulating player actions and validates the DM's responses.
 ### View Results
 
 ```bash
-npx promptfoo view
+npx promptfoo@latest view
 ```
 
 Opens the evaluation results in a web interface showing how the DM handled different scenarios.
@@ -94,7 +95,7 @@ openai-agents-basic/
 
 ### Dungeon Master Agent (`agents/dungeon-master-agent.ts`)
 
-The DM agent orchestrates D&D adventures using proper game mechanics:
+The agent is instructed to use the game tools when responding to player actions:
 
 ```typescript
 export default new Agent({
@@ -114,7 +115,7 @@ export default new Agent({
 
 ### Game Tools (`tools/game-tools.ts`)
 
-Four core tools power the D&D mechanics:
+The example provides four tools:
 
 **1. roll_dice** - Simulates D&D dice rolls with modifiers and critical hit detection:
 
@@ -124,9 +125,9 @@ export const rollDice = tool({
   description: 'Roll dice for D&D mechanics: attack rolls, damage, saving throws, ability checks',
   parameters: z.object({
     sides: z.number(),
-    count: z.number().default(1),
-    modifier: z.number().default(0),
-    purpose: z.string().default(''),
+    count: z.number().prefault(1),
+    modifier: z.number().prefault(0),
+    purpose: z.string().prefault(''),
   }),
   execute: async ({ sides, count, modifier, purpose }) => {
     // Returns rolls, total, notation, and detects natural 20/1 for crits
@@ -134,14 +135,14 @@ export const rollDice = tool({
 });
 ```
 
-**2. check_inventory** - Manages equipped weapons, armor, and carried items:
+**2. check_inventory** - Returns sample weapons, armor, and carried items:
 
 ```typescript
 export const checkInventory = tool({
   name: 'check_inventory',
   description: 'Check what items, equipment, and gold the player character has',
   parameters: z.object({
-    playerId: z.string().default('player1'),
+    playerId: z.string().prefault('player1'),
   }),
   execute: async ({ playerId }) => {
     // Returns equipped weapon, armor, inventory items, and currency
@@ -149,7 +150,7 @@ export const checkInventory = tool({
 });
 ```
 
-**3. describe_scene** - Generates atmospheric D&D location descriptions:
+**3. describe_scene** - Returns a fixture scene description:
 
 ```typescript
 export const describeScene = tool({
@@ -165,14 +166,14 @@ export const describeScene = tool({
 });
 ```
 
-**4. check_character_stats** - Displays full D&D 5e character sheet:
+**4. check_character_stats** - Returns sample character stats:
 
 ```typescript
 export const checkCharacterStats = tool({
   name: 'check_character_stats',
   description: 'View player character stats, abilities, HP, AC, and other D&D 5e attributes',
   parameters: z.object({
-    playerId: z.string().default('player1'),
+    playerId: z.string().prefault('player1'),
   }),
   execute: async ({ playerId }) => {
     // Returns complete character: ability scores, HP, AC, skills, features
@@ -253,36 +254,27 @@ Add complex multi-step scenarios:
 
 ## Tracing and Debugging
 
-Tracing is enabled in the configuration to capture agent execution details:
+Tracing is optional and disabled in the checked-in config. To capture SDK tool
+calls in Promptfoo, enable the receiver at the top level and tracing on the provider:
 
 ```yaml
-config:
-  tracing: true # Attempts to export traces via OTLP to http://localhost:4318
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+
+providers:
+  - id: openai:agents:dungeon-master
+    config:
+      agent: file://./agents/dungeon-master-agent.ts
+      tracing: true
+      maxTurns: 20
 ```
 
-The agent will attempt to export OpenTelemetry traces showing:
-
-- Which tools the DM used (roll_dice, check_inventory, etc.)
-- Dice roll results (including natural 20s and 1s)
-- Decision-making flow across multiple turns
-- Token usage per interaction
-
-### Viewing Traces
-
-To view traces, you'll need an OTLP-compatible collector running on `http://localhost:4318`. Popular options:
-
-**Quick Setup with Jaeger:**
-
-```bash
-docker run -d --name jaeger \
-  -p 16686:16686 \
-  -p 4318:4318 \
-  jaegertracing/all-in-one:latest
-```
-
-Then visit `http://localhost:16686` to view traces.
-
-**Note:** If no trace collector is running, the agent will log warnings but continue working normally. Tracing failures don't affect evaluation results.
+Run the eval, then open a result’s **Trace Timeline** to inspect tool calls and
+model turns. See the [tracing guide](https://www.promptfoo.dev/docs/tracing/).
 
 ## Example Interactions
 

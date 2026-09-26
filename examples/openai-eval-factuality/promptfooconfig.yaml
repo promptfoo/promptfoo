@@ -5,10 +5,10 @@ prompts:
   - file://prompts/name_capitals_concise.txt
   - file://prompts/name_capitals_verbose.txt
 providers:
-  - openai:chat:gpt-6-luna
+  - openai:responses:gpt-6-luna
 tests:
   - vars:
-      location: Sacramento
+      location: California
 
     assert:
       # Ensure the answer agrees with the provided facts

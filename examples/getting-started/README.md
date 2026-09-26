@@ -17,12 +17,12 @@ This is a simple example that demonstrates the basic functionality of promptfoo.
 export OPENAI_API_KEY=your-key-here
 ```
 
-_Tip: you can also put this key in a `.env` file. Be sure not to commit it to git._
+To load the key from a `.env` file instead, add `--env-file .env` to the evaluation command. Do not commit the file.
 
 2. Run the evaluation:
 
 ```bash
-promptfoo eval
+npx promptfoo@latest eval --no-cache
 ```
 
 ## What's happening?

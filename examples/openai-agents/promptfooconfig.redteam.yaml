@@ -36,7 +36,7 @@ defaultTest:
       value: faq_lookup
 
 redteam:
-  provider: openai:chat:gpt-6-luna
+  provider: openai:responses:gpt-6-luna
   injectVar: prompt
   numTests: 1
   maxConcurrency: 1

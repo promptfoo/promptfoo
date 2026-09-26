@@ -30,7 +30,7 @@ This example compares inline vs. external file approach:
 
 ### Function Calling (`promptfooconfig.function-call.yaml`)
 
-Example demonstrating function calling capabilities with the Responses API.
+Checks that the response contains a `get_current_weather` function call. This example uses the Responses API function-tool format; it does not execute the weather function.
 
 ### Function Callbacks (`promptfooconfig.function-callback.yaml`)
 
@@ -48,7 +48,7 @@ Key differences from regular function calling:
 
 ### Reasoning Models (`promptfooconfig.reasoning.yaml`)
 
-Compare GPT-6 Sol, Luna, and Astra using explicit reasoning budgets.
+Compare GPT-6 Sol, Luna, and Astra using explicit reasoning effort settings.
 
 ### GPT-5.1 (`promptfooconfig.gpt-5.1.yaml`)
 
@@ -65,7 +65,7 @@ Example comparing GPT-5.2 with different reasoning effort levels:
 
 - **none**: No reasoning tokens for fastest responses
 - **medium**: Balanced reasoning for most tasks
-- **high**: Maximum reasoning for complex problem-solving
+- **high**: More reasoning for complex problem-solving
 
 ### GPT-5.5 (`promptfooconfig.gpt-5.5.yaml`)
 
@@ -105,7 +105,6 @@ Example demonstrating OpenAI's MCP integration with remote MCP servers. This exa
 - Remote MCP server integration
 - Tool filtering with `allowed_tools`
 - Approval settings configuration
-- Authentication headers (when needed)
 
 ## Running the Examples
 
@@ -113,46 +112,53 @@ To run any of these examples:
 
 ```bash
 # Basic Responses API example
-npx promptfoo eval -c promptfooconfig.yaml
+npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 
 # External response format example
-npx promptfoo eval -c promptfooconfig.external-format.yaml
+npx promptfoo@latest eval -c promptfooconfig.external-format.yaml --no-cache
 
 # MCP example
-npx promptfoo eval -c promptfooconfig.mcp.yaml
+npx promptfoo@latest eval -c promptfooconfig.mcp.yaml --no-cache
 
 # Function calling example
-npx promptfoo eval -c promptfooconfig.function-call.yaml
+npx promptfoo@latest eval -c promptfooconfig.function-call.yaml --no-cache
 
 # Function callbacks example
-npx promptfoo eval -c promptfooconfig.function-callback.yaml
+npx promptfoo@latest eval -c promptfooconfig.function-callback.yaml --no-cache
 
 # Reasoning models example
-npx promptfoo eval -c promptfooconfig.reasoning.yaml
+npx promptfoo@latest eval -c promptfooconfig.reasoning.yaml --no-cache
 
 # GPT-5.1 example
-npx promptfoo eval -c promptfooconfig.gpt-5.1.yaml
+npx promptfoo@latest eval -c promptfooconfig.gpt-5.1.yaml --no-cache
 
 # GPT-5.2 example
-npx promptfoo eval -c promptfooconfig.gpt-5.2.yaml
+npx promptfoo@latest eval -c promptfooconfig.gpt-5.2.yaml --no-cache
 
 # GPT-5.5 example
-npx promptfoo eval -c promptfooconfig.gpt-5.5.yaml
+npx promptfoo@latest eval -c promptfooconfig.gpt-5.5.yaml --no-cache
 
 # GPT-5.6 example
-npx promptfoo eval -c promptfooconfig.gpt-5.6.yaml
+npx promptfoo@latest eval -c promptfooconfig.gpt-5.6.yaml --no-cache
 
 # GPT-6 Astra example
-npx promptfoo eval -c promptfooconfig.gpt-6-astra.yaml --no-cache
+npx promptfoo@latest eval -c promptfooconfig.gpt-6-astra.yaml --no-cache
+
+# Image input example
+npx promptfoo@latest eval -c promptfooconfig.image.yaml --no-cache
+
+# Web search example
+npx promptfoo@latest eval -c promptfooconfig.web-search.yaml --no-cache
 
 # Prompt caching example
-npx promptfoo eval -c promptfooconfig.prompt-cache.yaml
+npx promptfoo@latest eval -c promptfooconfig.prompt-cache.yaml --no-cache
 
 ```
 
 ## Prerequisites
 
-- OpenAI API key set in `OPENAI_API_KEY` environment variable
+- OpenAI API key set in the `OPENAI_API_KEY` environment variable
+- Model access for every configured provider; the basic, function-calling, and reasoning examples include GPT-6 Astra
 - For MCP examples: Access to remote MCP servers (some may require authentication)
 
 ## Notes

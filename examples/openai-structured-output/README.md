@@ -1,45 +1,28 @@
 # openai-structured-output (OpenAI Structured Output Example)
 
-This example demonstrates how to define JSON schemas for OpenAI's Structured Output feature in two different ways:
-
-1. **Inline schema definition** - defined directly in the config file
-2. **External schema file** - stored in a separate JSON or YAML file and referenced with `file://`
-
-## Usage
-
-You can run this example with:
+These examples define JSON schemas inline, in external JSON or YAML files, and per test. Use the Responses API configuration for new workflows; the Chat Completions configuration demonstrates that API's schema format for comparison.
 
 ```bash
 npx promptfoo@latest init --example openai-structured-output
 cd openai-structured-output
+export OPENAI_API_KEY=your-key-here
 ```
 
-## Environment Variables
+| File                             | Description                                          |
+| -------------------------------- | ---------------------------------------------------- |
+| `promptfooconfig.responses.yaml` | Responses API with inline and external schemas       |
+| `promptfooconfig.chat.yaml`      | Chat Completions with inline and external schemas    |
+| `per-test-schema.yaml`           | Responses API with a different schema for each test  |
+| `schema.responses.yaml`          | External Responses API schema                        |
+| `schema.chat.json`               | External Chat Completions schema                     |
+| `schemas/`                       | Math and comparison schemas for the per-test example |
 
-This example requires:
-
-- `OPENAI_API_KEY` - Your OpenAI API key
-
-## Example Structure
-
-This example includes several files that demonstrate different approaches:
-
-| File                             | Description                                                 |
-| -------------------------------- | ----------------------------------------------------------- |
-| `promptfooconfig.chat.yaml`      | Chat API config using both inline and external schemas      |
-| `promptfooconfig.responses.yaml` | Responses API config using both inline and external schemas |
-| `schema.responses.yaml`          | External schema file for Responses API                      |
-| `schema.chat.json`               | External schema file for Chat API                           |
-
-## Running the Example
+Run a configuration:
 
 ```bash
-cd openai-structured-output
-promptfoo eval -c promptfooconfig.chat.yaml
-promptfoo eval -c promptfooconfig.responses.yaml
+npx promptfoo@latest eval -c promptfooconfig.responses.yaml --no-cache
+npx promptfoo@latest eval -c promptfooconfig.chat.yaml --no-cache
+npx promptfoo@latest eval -c per-test-schema.yaml --no-cache
 ```
 
-## Additional Resources
-
-- [OpenAI Structured Output Announcement](https://openai.com/index/introducing-structured-outputs-in-the-api/)
-- [promptfoo Documentation](https://promptfoo.dev)
+The Responses provider parses structured output into an object. The per-test example checks its properties with JavaScript assertions. See the [structured output documentation](https://www.promptfoo.dev/docs/providers/openai/#using-response_format) for provider configuration details.

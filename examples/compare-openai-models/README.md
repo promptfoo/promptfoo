@@ -1,62 +1,20 @@
 # compare-openai-models (OpenAI Model Comparison)
 
-This example compares `gpt-6-luna`, `gpt-6-sol`, and `gpt-6-astra` on riddles with the same `low` reasoning effort. Astra requires model access on your OpenAI account.
-
-You can run this example with:
+This example compares `gpt-6-luna`, `gpt-6-sol`, and `gpt-6-astra` on riddles through the Responses API, with the same `low` reasoning effort. Astra requires model access on your OpenAI account.
 
 ```bash
 npx promptfoo@latest init --example compare-openai-models
 cd compare-openai-models
+export OPENAI_API_KEY=your-key-here
+npx promptfoo@latest eval --no-cache
 ```
 
-## Quick Start
+To load the key from a `.env` file instead, add `--env-file .env` to the evaluation command.
 
-1. Initialize this example by running:
+The tests use content checks and model-graded rubrics, plus per-response cost and latency thresholds. The [latency assertion](https://www.promptfoo.dev/docs/configuration/expected-outputs/deterministic/#latency) requires uncached responses. These example thresholds are checked after each response; they do not cap spending or cancel slow requests. Configure them in `defaultTest`.
 
-   ```bash
-   npx promptfoo@latest init --example compare-openai-models
-   ```
+View the model responses, scores, costs, and latency side by side:
 
-2. Navigate to the newly created `compare-openai-models` directory:
-
-   ```bash
-   cd compare-openai-models
-   ```
-
-3. Set an OpenAI API key directly in your environment:
-
-   ```bash
-   export OPENAI_API_KEY="your_openai_api_key"
-   ```
-
-   Alternatively, you can set the API key in a `.env` file:
-
-   ```bash
-   OPENAI_API_KEY=your_openai_api_key
-   ```
-
-4. Run the evaluation with:
-
-   ```bash
-   npx promptfoo@latest eval --no-cache
-   ```
-
-   Note: the `--no-cache` flag is required because the example uses a [latency assertion](https://www.promptfoo.dev/docs/configuration/expected-outputs/deterministic/#latency) which does not support caching.
-
-5. View the results:
-
-   ```bash
-   npx promptfoo@latest view
-   ```
-
-   The expected output will include the responses from all three models for the provided riddles, allowing you to compare their performance side by side.
-
-## What this example demonstrates
-
-This example compares Luna, Sol, and Astra across various riddles and puzzles. It demonstrates:
-
-- **Model comparison**: Side-by-side evaluation of Luna, Sol, and Astra
-- **Cost and latency assertions**: Ensuring responses meet performance thresholds
-- **Content validation**: Using `contains` assertions to verify specific answers
-- **LLM-based grading**: Using `llm-rubric` assertions for nuanced evaluation criteria
-- **Diverse test cases**: A variety of riddles testing different reasoning capabilities
+```bash
+npx promptfoo@latest view
+```

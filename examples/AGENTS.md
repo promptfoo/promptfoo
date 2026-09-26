@@ -60,6 +60,8 @@ Use current model identifiers (see `site/docs/providers/` for full list):
 - Anthropic: `anthropic:messages:claude-sonnet-4-6`, `anthropic:messages:claude-haiku-4-5-20251001`
 - Google: `google:gemini-3.1-pro-preview`, `google:gemini-2.5-flash`
 
+Prefer explicit `openai:responses:<model>` IDs for new general-purpose OpenAI examples. Keep Chat Completions when the example teaches Chat-specific request formats, assertions, or integrations, and explain that choice. Match reasoning, tools, structured output, and image inputs to the selected endpoint.
+
 ## Guidelines
 
 - Keep examples simple while demonstrating the concept

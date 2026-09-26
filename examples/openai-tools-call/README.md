@@ -1,57 +1,16 @@
 # openai-tools-call (OpenAI Tools Call Example)
 
-This example demonstrates how to use promptfoo to evaluate OpenAI's tools calling capabilities. It shows how to define and test tool usage with the Chat Completions API.
-
-## Features Demonstrated
-
-- Defining tools for AI models to use
-- Testing tool call outputs
-- Validating AI-generated function arguments
-- Transforming outputs for assertions
-
-## Environment Variables
-
-This example requires the following environment variables:
-
-- `OPENAI_API_KEY` - Your OpenAI API key
-
-You can set this in a `.env` file or directly in your environment.
-
-## Running the Example
-
-You can run this example with:
+This example validates function names and arguments returned by the Chat Completions `tools` API. It does not call a weather service.
 
 ```bash
 npx promptfoo@latest init --example openai-tools-call
-# and then
 cd openai-tools-call
-
-# Run the evaluation
-npx promptfoo eval
-
-# View the results
-npx promptfoo view
+export OPENAI_API_KEY=your-key-here
+npx promptfoo@latest eval --no-cache
 ```
 
-## What This Example Does
+To load the key from a `.env` file instead, add `--env-file .env` to the evaluation command.
 
-The configuration defines a custom tool for getting weather information. It then tests the model's ability to:
+The configuration defines a `get_current_weather` tool and tests several locations. Assertions validate the Chat tool-call structure, check arguments, and transform outputs to compare individual fields.
 
-1. Correctly call the weather function when asked about weather
-2. Pass the correct location parameter based on the city mentioned
-3. Handle various cities, including international ones
-4. Format responses consistently
-
-## Key Features
-
-- Uses `is-valid-openai-tools-call` assertion to validate the function call structure
-- Demonstrates output transformation to isolate and test specific parts of the response
-- Shows how to use JavaScript assertions for detailed validation
-- Tests with a variety of locations to ensure robust behavior
-
-## Documentation
-
-For more details, see:
-
-- [OpenAI Tools documentation](https://platform.openai.com/docs/guides/function-calling)
-- [promptfoo OpenAI Provider documentation](https://promptfoo.dev/docs/providers/openai#using-tools-and-functions)
+For new workflows, use the [Responses API function-calling example](../openai-responses/README.md#function-calling-promptfooconfigfunction-callyaml). See the [OpenAI provider documentation](https://www.promptfoo.dev/docs/providers/openai/#using-tools) for configuration details.

@@ -14,35 +14,36 @@ This example demonstrates promptfoo's built-in OpenTelemetry tracing for LLM pro
 1. **Set up environment variables:**
 
 ```bash
-# Required for the providers you want to test
+# Both providers are enabled in the example.
 export OPENAI_API_KEY=sk-...
 export ANTHROPIC_API_KEY=sk-ant-...
-# Add other provider keys as needed
 ```
+
+To run only OpenAI, add `--filter-providers gpt-6-luna` to the eval command. The OpenAI provider uses Responses; each test runs only against its matching prompt.
 
 2. **Run the evaluation:**
 
 ```bash
-npx promptfoo eval -c promptfooconfig.yaml
+npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache -o results.json
 ```
 
 3. **View traces in the UI:**
 
 ```bash
-npx promptfoo view
+npx promptfoo@latest view
 ```
 
 Navigate to the Traces tab to see detailed span information.
 
 ## Configuration
 
-Tracing is enabled by default. Configure via environment variables:
+This example enables tracing with `tracing.enabled: true`. For configurations without that setting, enable it with `PROMPTFOO_TRACING_ENABLED=true`.
 
 | Variable                      | Default     | Description                            |
 | ----------------------------- | ----------- | -------------------------------------- |
-| `PROMPTFOO_DISABLE_TRACING`   | `false`     | Set to `true` to disable tracing       |
+| `PROMPTFOO_TRACING_ENABLED`   | `false`     | Enable tracing without a YAML setting  |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | -           | Export traces to external OTLP backend |
-| `OTEL_SERVICE_NAME`           | `promptfoo` | Service name in traces                 |
+| `PROMPTFOO_OTEL_SERVICE_NAME` | `promptfoo` | Service name in traces                 |
 
 ## Viewing Traces Externally
 
@@ -61,7 +62,7 @@ docker run -d --name jaeger \
 2. Run eval with OTLP export:
 
 ```bash
-OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 npx promptfoo eval
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318/v1/traces npx promptfoo@latest eval --no-cache
 ```
 
 3. View at http://localhost:16686
@@ -69,9 +70,9 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 npx promptfoo eval
 ### With Honeycomb
 
 ```bash
-OTEL_EXPORTER_OTLP_ENDPOINT=https://api.honeycomb.io \
+OTEL_EXPORTER_OTLP_ENDPOINT=https://api.honeycomb.io/v1/traces \
 OTEL_EXPORTER_OTLP_HEADERS="x-honeycomb-team=YOUR_API_KEY" \
-npx promptfoo eval
+npx promptfoo@latest eval --no-cache
 ```
 
 ## Trace Attributes

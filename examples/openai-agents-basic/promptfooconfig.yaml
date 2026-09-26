@@ -8,7 +8,6 @@ providers:
   - id: openai:agents:dungeon-master
     config:
       agent: file://./agents/dungeon-master-agent.ts
-      tools: file://./tools/game-tools.ts
       maxTurns: 20
       # tracing: true  # Enable when OTLP collector is running
 

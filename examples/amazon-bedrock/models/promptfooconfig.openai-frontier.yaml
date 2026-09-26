@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Compare OpenAI frontier models on Amazon Bedrock'
+description: 'OpenAI frontier model features on Amazon Bedrock'
 
 # Frontier models use Bedrock's OpenAI-compatible Responses API.
 # Authentication: use an Amazon Bedrock API key OR standard AWS credentials.
@@ -32,7 +32,8 @@ providers:
     label: GPT-6 Sol (max reasoning)
     config:
       region: us-east-1
-      reasoning_effort: max
+      reasoning:
+        effort: max
       verbosity: low
       max_output_tokens: 2048
       store: false
@@ -45,7 +46,8 @@ providers:
     label: GPT-5.6 Terra (medium reasoning)
     config:
       region: us-west-2
-      reasoning_effort: medium
+      reasoning:
+        effort: medium
       max_output_tokens: 1024
       store: false
       prompt_cache_key: bedrock-frontier-example-v1
@@ -56,7 +58,8 @@ providers:
     label: GPT-6 Luna (low reasoning, streaming)
     config:
       region: us-east-1
-      reasoning_effort: low
+      reasoning:
+        effort: low
       max_output_tokens: 1024
       store: false
       stream: true

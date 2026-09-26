@@ -23,10 +23,10 @@ providers:
 
 defaultTest:
   assert:
-    # Example per-response budget (USD)
+    # Example per-response cost threshold (USD)
     - type: cost
       threshold: 0.15
-    # Example per-response latency budget (milliseconds)
+    # Example per-response latency threshold (milliseconds)
     - type: latency
       threshold: 60000
 

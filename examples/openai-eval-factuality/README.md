@@ -1,18 +1,12 @@
-# openai-eval-factuality (Openai Eval Factuality)
+# openai-eval-factuality (OpenAI Factuality Evaluation)
 
-You can run this example with:
+This example compares concise and verbose answers about California's capital using GPT-6 Luna through the Responses API. The `factuality` assertion compares each answer with a reference answer, while `model-graded-closedqa` checks that it does not add unrelated facts. Both assertions make separate grading calls.
 
 ```bash
 npx promptfoo@latest init --example openai-eval-factuality
 cd openai-eval-factuality
+export OPENAI_API_KEY=your-key-here
+npx promptfoo@latest eval --no-cache
 ```
 
-## Usage
-
-This example uses the factuality and closed QA evaluation method from OpenAI.
-
-It is pre-configured in `promptfooconfig.yaml`. That means you can just run:
-
-```bash
-promptfoo eval
-```
+The verbose prompt may fail the second assertion even when its answer is factually correct. Edit the prompts in `prompts/` or the criteria in `promptfooconfig.yaml` to explore the difference.

@@ -17,7 +17,7 @@ This example compares the same `gpt-6-luna` Responses API model with two reasoni
 Set `OPENAI_API_KEY`, then run:
 
 ```bash
-promptfoo eval --no-cache
+npx promptfoo@latest eval --no-cache
 ```
 
 The provider, prompt, verbosity, and output limit are otherwise identical, so the eval table makes it easier to compare output quality, latency, and cost for each reasoning effort.

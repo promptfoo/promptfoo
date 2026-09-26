@@ -11,14 +11,10 @@ cd compare-gpt-temperature
 
 ## Usage
 
-To get started, set the OPENAI_API_KEY environment variable.
-
-Next, edit promptfooconfig.yaml.
-
-Then run:
+Set `OPENAI_API_KEY`, then run:
 
 ```bash
-promptfoo eval
+npx promptfoo@latest eval --no-cache
 ```
 
-Afterwards, you can view the results by running `promptfoo view`
+Afterwards, you can view the results by running `npx promptfoo@latest view`

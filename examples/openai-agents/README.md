@@ -13,7 +13,7 @@ It demonstrates:
 
 The tracing path is important: the example installs a custom OpenAI Agents tracing processor that exports the SDK's spans to Promptfoo's built-in OTLP receiver. That is what makes the trajectory assertions and trace visualization work inside Promptfoo. The bridge maps SDK custom spans, including `sandbox.*` lifecycle spans and experimental Codex command spans, into normal OTLP attributes, and Promptfoo normalizes OpenAI Agents `exec_command` tool spans as command trajectory steps. The config accepts both OTLP JSON and protobuf because the SDK bridge emits JSON while the optional Python wrapper span uses protobuf by default.
 
-The example uses `gpt-6-luna`. Set `config.model` to `gpt-6-sol` or `gpt-6-astra` to compare other models your OpenAI account can access. `OPENAI_AGENT_MODEL` supplies the default when `config.model` is omitted.
+The example uses `gpt-6-luna` through the SDK’s default Responses API. Set `config.model` to `gpt-6-sol` or `gpt-6-astra` to compare other models your OpenAI account can access. `OPENAI_AGENT_MODEL` supplies the default when `config.model` is omitted.
 
 ## Files
 
@@ -49,13 +49,16 @@ export OPENAI_API_KEY=your_api_key_here
 
 ```bash
 npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
-PROMPTFOO_ENABLE_OTEL=true npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 npx promptfoo@latest view
 ```
 
 Open any result and inspect the **Trace Timeline** tab. You should see agent, handoff, generation, and tool spans from the OpenAI Agents SDK.
 
-If you also want a provider-level Python OpenTelemetry span alongside the SDK spans, run the eval with `PROMPTFOO_ENABLE_OTEL=true`.
+To include a provider-level Python OpenTelemetry span alongside the SDK spans, use this eval command instead:
+
+```bash
+PROMPTFOO_ENABLE_OTEL=true npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
+```
 
 The provider returns aggregate token usage with the SDK's real request count, cached-input tokens, and reasoning-token detail. It intentionally does not return a dollar cost: a generic Python agent graph can mix models and hosted tools, so exact spend should be returned only by provider code that can account for every billed step.
 

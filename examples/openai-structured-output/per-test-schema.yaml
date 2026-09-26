@@ -13,15 +13,12 @@ prompts:
   - 'Answer this question: {{question}}'
 
 providers:
-  - id: openai:chat:gpt-6-luna
+  - id: openai:responses:gpt-6-luna
     config:
-      reasoning_effort: none
+      reasoning:
+        effort: none
 
-# Parse JSON output so assertions can access properties directly
-defaultTest:
-  options:
-    transform: JSON.parse(output)
-
+# Responses structured output is parsed into an object for assertions.
 tests:
   # Test 1: Math problem - expects structured math response
   - vars:
