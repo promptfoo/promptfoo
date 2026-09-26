@@ -1,0 +1,296 @@
+{
+  "schemaVersion": 1,
+  "recordedOn": "2026-09-26",
+  "testedPromptfooCommit": "39cb61ac2314eb389251124a046c5df17a2d970c",
+  "source": {
+    "repository": "https://github.com/juice-shop/juice-shop",
+    "tag": "v19.0.0",
+    "revision": "36870cbbdfe7864698e1adf644c7bf772f67ebb7",
+    "snapshotDigest": "codex-security-snapshot/v1:sha256:1d74df0bc5da366ec7aad16a4841552de3d91d1cb5319d4e849096130ccb54eb",
+    "snapshotEvidence": "SDK workbench target metadata; the raw manifests record the Git revision.",
+    "includePaths": ["routes/basket.ts", "routes/delivery.ts", "routes/orderHistory.ts"],
+    "excludePaths": [],
+    "scopedSourceLines": 123,
+    "reviewedSourceSha256": {
+      "routes/basket.ts": "e0e9bb40759d618fcbc434bb7a613379654186785473b2dc708cfd2240d7aca6",
+      "routes/delivery.ts": "12d0d210d70008aaaca4b9c2b801d863ea8d8ae73f509d4df9510bb23f023117",
+      "routes/orderHistory.ts": "b7d7a7cecb3b36ecfb7b3928fa7b193789f27f83283ad77a3f0221d9a94cc862",
+      "routes/order.ts": "51e224e617e11eaa505e4973ba6ae4cd1ddd07fad7974b9d9afde33ceadff84f",
+      "models/user.ts": "48720eefc299710e3ea84d3da80f796efb03b2e728c6e3ccbc123c76db43600b",
+      "server.ts": "b9221b1a9664444a4a8ca07e590bae657c093150f1438c1a644e1fd7398bd732"
+    }
+  },
+  "controls": {
+    "operation": "security-scan",
+    "workflow": "standard",
+    "promptSha256": "6d11547acec936e45e35626f6df9640c75f278b15d278525b72185d2bfffc944",
+    "promptHashEncoding": "UTF-8 bytes of the rendered prompt, without a trailing newline",
+    "freshSdkStatePerRun": true,
+    "maxConcurrentThreadsPerSession": 3,
+    "maxCostUsdPerScan": 3,
+    "auth": "chatgpt",
+    "approvalPolicy": "never",
+    "targetExecution": "Source inspection only; no target execution or runtime reproduction",
+    "schedule": "Luna runs overlapped; Terra ran afterward. Timing is descriptive, not an isolated latency benchmark."
+  },
+  "groundTruth": {
+    "preparedAt": "2026-09-26T09:09:07.904230+00:00",
+    "method": "Independent source review before the measured runs; no runtime reproduction or independent severity scoring.",
+    "expectedFindings": [
+      {
+        "id": "basket-owner-isolation",
+        "securityProperty": "An authenticated account can read only baskets it owns.",
+        "source": ["routes/basket.ts:17", "routes/basket.ts:18", "server.ts:350", "server.ts:393"]
+      },
+      {
+        "id": "order-owner-identity",
+        "securityProperty": "Order history is selected by a unique account identity rather than a lossy presentation value.",
+        "source": [
+          "routes/orderHistory.ts:13",
+          "routes/orderHistory.ts:16",
+          "routes/order.ts:160",
+          "models/user.ts:57"
+        ]
+      }
+    ],
+    "negativeControls": [
+      {
+        "scope": "routes/delivery.ts",
+        "note": "Reading public delivery methods alone is not an authorization failure."
+      },
+      {
+        "scope": "routes/orderHistory.ts:25-39",
+        "note": "Administrative handlers must be assessed with the isAccounting middleware at server.ts:617-618."
+      }
+    ],
+    "additionalFindingPolicy": "Source-supported additional findings count toward reviewed precision but do not change the frozen curated-recall denominator."
+  },
+  "runs": [
+    {
+      "id": "low-v2",
+      "label": "Luna low",
+      "requested": {
+        "model": "gpt-5.6-luna",
+        "reasoningEffort": "low"
+      },
+      "verifiedExecution": {
+        "model": "gpt-5.6-luna",
+        "reasoningEffort": "low",
+        "evidence": "SDK workbench recipe and every recorded session turn_context",
+        "sessionsChecked": 2,
+        "sessionUsageMatchesSdk": true
+      },
+      "versions": {
+        "sdk": "0.1.31",
+        "plugin": "0.1.95",
+        "codexCli": "0.156.1"
+      },
+      "scanId": "444fa7bd-6648-4957-83c7-3698dd71223e",
+      "reportSha256": "8b1f0d90683fe966da88e4093fe6e26a5c74d93cb16e6252c15118eb3fb1ba39",
+      "evalExportSha256": "b53a5a78064f19bf918d65c10797e01699a61a39b25b479d679b12eeba2bbdef",
+      "adjudicationSha256": "03d9d8f65ff20911e6defbaf0d3ba691df74b438719b8f3cfe9a3a13b523f433",
+      "status": "completed",
+      "coverage": "partial",
+      "warningCount": 2,
+      "warnings": [
+        "Recovered coverage surface 2: the review disposition could not be verified.",
+        "Skipped malformed deferred coverage item 1: coverage.deferred[0].id: missing required schema property."
+      ],
+      "adjudication": {
+        "currentFindings": 3,
+        "supported": 1,
+        "falsePositivesAgainstFullApplication": 2,
+        "duplicates": 0,
+        "unreviewed": 0,
+        "matchedExpectedIds": ["basket-owner-isolation"],
+        "missedExpectedIds": ["order-owner-identity"],
+        "additionalSupportedIds": [],
+        "curatedRecall": {
+          "numerator": 1,
+          "denominator": 2
+        },
+        "reviewedPrecision": {
+          "numerator": 1,
+          "denominator": 3
+        }
+      },
+      "elapsedMs": 69547,
+      "durationSource": "SDK manifest completedAt minus startedAt",
+      "usage": {
+        "input_tokens": 636355,
+        "cached_input_tokens": 564224,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 5899,
+        "reasoning_output_tokens": 760,
+        "total_tokens": 642254
+      },
+      "estimatedCost": {
+        "baselineUsd": 0.03278948,
+        "range": {
+          "minUsd": 0.03278948,
+          "maxUsd": 0.06203956
+        },
+        "pricing": {
+          "source": "https://developers.openai.com/api/docs/pricing",
+          "asOf": "2026-09-14",
+          "serviceTier": "standard",
+          "context": "short"
+        }
+      }
+    },
+    {
+      "id": "medium-v2",
+      "label": "Luna medium",
+      "requested": {
+        "model": "gpt-5.6-luna",
+        "reasoningEffort": "medium"
+      },
+      "verifiedExecution": {
+        "model": "gpt-5.6-luna",
+        "reasoningEffort": "medium",
+        "evidence": "SDK workbench recipe and every recorded session turn_context",
+        "sessionsChecked": 2,
+        "sessionUsageMatchesSdk": true
+      },
+      "versions": {
+        "sdk": "0.1.31",
+        "plugin": "0.1.95",
+        "codexCli": "0.156.1"
+      },
+      "scanId": "db725a63-c4c9-46bc-99a3-8b2f91a3be8e",
+      "reportSha256": "88aba3f667025fe7093c1fc776a28847bd16a8f37eadc5f055f3b2a06c71e0f5",
+      "evalExportSha256": "7b4c3050f2fc0c4b6beb7b4dc24f2ed3736dc63d372dfed61f2c051c2946091d",
+      "adjudicationSha256": "480daf65826e7577572def82bcfeb6d8367a75ec6ec3037811cf7396ee4a4630",
+      "status": "completed",
+      "coverage": "partial",
+      "warningCount": 5,
+      "warnings": [
+        "Skipped malformed receipt references for coverage surface 1: expected an array.",
+        "Recovered coverage surface 2: the review disposition could not be verified.",
+        "Skipped malformed receipt references for coverage surface 2: expected an array.",
+        "Recovered coverage surface 3: the review disposition could not be verified.",
+        "Skipped malformed receipt references for coverage surface 3: expected an array."
+      ],
+      "adjudication": {
+        "currentFindings": 1,
+        "supported": 1,
+        "falsePositivesAgainstFullApplication": 0,
+        "duplicates": 0,
+        "unreviewed": 0,
+        "matchedExpectedIds": ["basket-owner-isolation"],
+        "missedExpectedIds": ["order-owner-identity"],
+        "additionalSupportedIds": [],
+        "curatedRecall": {
+          "numerator": 1,
+          "denominator": 2
+        },
+        "reviewedPrecision": {
+          "numerator": 1,
+          "denominator": 1
+        }
+      },
+      "elapsedMs": 134792,
+      "durationSource": "SDK manifest completedAt minus startedAt",
+      "usage": {
+        "input_tokens": 1360264,
+        "cached_input_tokens": 1260288,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 8670,
+        "reasoning_output_tokens": 1570,
+        "total_tokens": 1368934
+      },
+      "estimatedCost": {
+        "baselineUsd": 0.05560496,
+        "range": {
+          "minUsd": 0.05560496,
+          "maxUsd": 0.10600792
+        },
+        "pricing": {
+          "source": "https://developers.openai.com/api/docs/pricing",
+          "asOf": "2026-09-14",
+          "serviceTier": "standard",
+          "context": "short"
+        }
+      }
+    },
+    {
+      "id": "terra-medium",
+      "label": "Terra medium",
+      "requested": {
+        "model": "gpt-5.6-terra",
+        "reasoningEffort": "medium"
+      },
+      "verifiedExecution": {
+        "model": "gpt-5.6-terra",
+        "reasoningEffort": "medium",
+        "evidence": "SDK workbench recipe and every recorded session turn_context",
+        "sessionsChecked": 3,
+        "sessionUsageMatchesSdk": true
+      },
+      "versions": {
+        "sdk": "0.1.31",
+        "plugin": "0.1.95",
+        "codexCli": "0.156.1"
+      },
+      "scanId": "0d3c6e16-cafb-4cc8-8d20-ea8ed1d7eece",
+      "reportSha256": "5b448d0df5b242735d52e494132a7b0639c97931caf85294c5fd86f115425234",
+      "evalExportSha256": "d7b1ec668f6b78c021033e535fd69a75dd76fd0441853eecf0cbf890fa06f545",
+      "adjudicationSha256": "c6dacb2bce0a3de3b361baa31d24cd7ea25af6ab18bab98d5d8be8fe0d82e54b",
+      "status": "completed",
+      "coverage": "complete",
+      "warningCount": 0,
+      "warnings": [],
+      "adjudication": {
+        "currentFindings": 2,
+        "supported": 2,
+        "falsePositivesAgainstFullApplication": 0,
+        "duplicates": 0,
+        "unreviewed": 0,
+        "matchedExpectedIds": ["basket-owner-isolation"],
+        "missedExpectedIds": ["order-owner-identity"],
+        "additionalSupportedIds": ["order-history-token-expiry"],
+        "curatedRecall": {
+          "numerator": 1,
+          "denominator": 2
+        },
+        "reviewedPrecision": {
+          "numerator": 2,
+          "denominator": 2
+        }
+      },
+      "elapsedMs": 166533,
+      "durationSource": "SDK manifest completedAt minus startedAt",
+      "usage": {
+        "input_tokens": 1407386,
+        "cached_input_tokens": 1227776,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 16451,
+        "reasoning_output_tokens": 3664,
+        "total_tokens": 1423837
+      },
+      "estimatedCost": {
+        "baselineUsd": 0.8021872,
+        "range": {
+          "minUsd": 0.8021872,
+          "maxUsd": 1.5056684
+        },
+        "pricing": {
+          "source": "https://developers.openai.com/api/docs/pricing",
+          "asOf": "2026-09-14",
+          "serviceTier": "standard",
+          "context": "short"
+        }
+      }
+    }
+  ],
+  "initialPromptLesson": "An earlier completed pair lacked explicit intentional-vulnerability benchmark framing: one malformed finding was discarded, and another run excluded a documented challenge. Those attempts are not measurements in this table.",
+  "limitations": [
+    "One measured run per configuration on 123 scoped source lines; no general model-quality ranking or statistical performance claim.",
+    "Curated ground truth has two expected issues and is not exhaustive. Full source context and negative controls were used to adjudicate reported findings.",
+    "Both Luna coverage records are partial with SDK schema-recovery warnings; this does not itself show that the selected files were unread.",
+    "Runtime session records establish observed model and effort settings, not server-side model attestation. Raw SDK reports have no structured effort field.",
+    "Usage includes repeated context and cached input across recorded sessions; it is not a count of distinct source tokens. A Promptfoo provider request is not an individual model request.",
+    "Cost ranges are SDK API-equivalent standard-rate estimates, not measured ChatGPT subscription charges or billing guarantees.",
+    "Raw reports, traces, and local paths are not bundled. Report hashes identify preserved bytes but do not authenticate the producer."
+  ]
+}

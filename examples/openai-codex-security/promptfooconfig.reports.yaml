@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare existing Codex Security reports
+prompts:
+  - Compare the saved report against the configured assertions.
+providers:
+  - id: openai:codex-security
+    label: Baseline report
+    config:
+      report_file: '{{env.CODEX_SECURITY_BASELINE_REPORT}}'
+  - id: openai:codex-security
+    label: Candidate report
+    config:
+      report_file: '{{env.CODEX_SECURITY_CANDIDATE_REPORT}}'
+defaultTest:
+  assert:
+    - type: javascript
+      metric: CompletedScan
+      value: context.metadata?.codexSecurity?.status === 'completed'
+    - type: javascript
+      metric: CompleteCoverage
+      value: context.metadata?.codexSecurity?.coverage?.completeness === 'complete'
+tests:
+  - description: Check imported scan completion and coverage
+    vars: {}

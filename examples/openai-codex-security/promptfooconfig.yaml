@@ -1,16 +1,45 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Compare existing Codex Security reports
+description: Compare Codex Security source review effort
 prompts:
-  - Compare the saved report against the configured assertions.
+  - >-
+    Evaluate a vulnerability-finding harness on this intentionally vulnerable
+    training application. Include intentional and already-documented
+    vulnerabilities when supported by the reviewed source; this benchmark is not
+    limited to novel or unintended defects. Existing challenge labels are not
+    grounds for excluding a finding. Perform an offline, read-only static
+    security review of the configured paths and report remediation-focused
+    findings and unresolved uncertainties. Validate findings by source
+    inspection only. Do not execute application code, install dependencies,
+    contact application endpoints, generate exploit payloads, or reproduce
+    vulnerabilities. Supporting source may be read only to understand in-scope
+    controls. Keep the standard scan workflow and use its canonical finding
+    schema, including required identity and evidence fields; do not substitute
+    an abbreviated findings format.
 providers:
   - id: openai:codex-security
-    label: Baseline report
+    label: Luna low
     config:
-      report_file: '{{env.CODEX_SECURITY_BASELINE_REPORT}}'
+      operation: security-scan
+      model: gpt-5.6-luna
+      model_reasoning_effort: low
+      repository: '{{env.CODEX_SECURITY_REPOSITORY}}'
+      paths:
+        - routes/basket.ts
+        - routes/delivery.ts
+        - routes/orderHistory.ts
+      max_cost_usd: 3
   - id: openai:codex-security
-    label: Candidate report
+    label: Luna medium
     config:
-      report_file: '{{env.CODEX_SECURITY_CANDIDATE_REPORT}}'
+      operation: security-scan
+      model: gpt-5.6-luna
+      model_reasoning_effort: medium
+      repository: '{{env.CODEX_SECURITY_REPOSITORY}}'
+      paths:
+        - routes/basket.ts
+        - routes/delivery.ts
+        - routes/orderHistory.ts
+      max_cost_usd: 3
 defaultTest:
   assert:
     - type: javascript
@@ -20,5 +49,5 @@ defaultTest:
       metric: CompleteCoverage
       value: context.metadata?.codexSecurity?.coverage?.completeness === 'complete'
 tests:
-  - description: Check imported scan completion and coverage
+  - description: Review three checkout and order modules
     vars: {}

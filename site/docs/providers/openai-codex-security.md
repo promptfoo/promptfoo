@@ -100,11 +100,11 @@ npx promptfoo eval -c promptfooconfig.yaml --no-cache
 npx promptfoo view
 ```
 
-The [included example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-security) compares two reports you supply through `report_file`. It imports existing evidence and does not launch the operations shown above.
+The [included example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-security) compares low and medium reasoning effort on pinned Juice Shop source. Its separate `promptfooconfig.reports.yaml` imports two existing reports without launching a new operation.
 
 ## Import existing reports
 
-Set `report_file` to an existing regular JSON file no larger than 64 MiB containing SDK `ScanResult.toJSON()` output or a direct finding-validation result. Scan imports require manifest, findings, and coverage documents with matching scan IDs. Entire Promptfoo eval exports and standalone `findings.json` files are not accepted. The [consolidated example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-security) imports baseline and candidate reports into separate columns. It requires reports you supply; no sample findings are bundled.
+Set `report_file` to an existing regular JSON file no larger than 64 MiB containing SDK `ScanResult.toJSON()` output or a direct finding-validation result. Scan imports require manifest, findings, and coverage documents with matching scan IDs. Entire Promptfoo eval exports and standalone `findings.json` files are not accepted. The consolidated example's [saved-report config](https://github.com/promptfoo/promptfoo/blob/main/examples/openai-codex-security/promptfooconfig.reports.yaml) imports baseline and candidate reports into separate columns. It requires reports you supply; no sample findings are bundled.
 
 Import reads saved evidence without starting a scan or calling a model, and requires no SDK installation, Python, or model credentials. `report_file` takes precedence over live-operation options; those options are unused during import, but the provider configuration must still be schema-valid. Relative report paths resolve from the config file directory. Path templates resolve during evaluation; **Check setup** requires a concrete report path. Missing or invalid reports and explicit mock markers produce provider errors, not a fallback scan. Check repository revision, scope, and original provenance before treating two reports as comparable; importing a file does not authenticate its contents.
 
