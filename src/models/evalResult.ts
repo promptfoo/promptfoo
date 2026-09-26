@@ -708,6 +708,8 @@ function getLegacyClearRequestHash(gradingResult: GradingResult): string | undef
     JSON.stringify([
       gradingResult.pass,
       gradingResult.score,
+      // Old UI score edits use a manual reason; clears use the automated reason.
+      gradingResult.reason,
       hasOwn(gradingResult, 'comment'),
       gradingResult.comment,
     ]),
@@ -1331,7 +1333,14 @@ function resolveRatingTransition(
       : normalized.gradingResult;
   const serverOwnedClearGradingResult =
     result.gradingResult && isClearingManualRating
-      ? buildServerOwnedClearGradingResult(result, result.gradingResult, normalized.gradingResult)
+      ? buildServerOwnedClearGradingResult(
+          // Edits normalize the category; legacy clear still needs its retained provenance.
+          existingState?.status === 'legacy-active'
+            ? { ...result, failureReason: existingState.original.failureReason }
+            : result,
+          result.gradingResult,
+          normalized.gradingResult,
+        )
       : normalized.gradingResult;
 
   if (isRepeatedClear) {

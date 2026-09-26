@@ -15,7 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
-import { callApi } from '@app/utils/api';
+import { callApi, getApiBaseUrl } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
@@ -1121,6 +1121,7 @@ function getSubmitRatingIntent(
 }
 
 async function saveManualRating({
+  apiBaseUrl,
   evalId,
   resultId,
   version,
@@ -1129,6 +1130,7 @@ async function saveManualRating({
   ratingUpdate,
   table,
 }: {
+  apiBaseUrl: string;
   evalId: string | null;
   resultId: string;
   version: number | null | undefined;
@@ -1141,20 +1143,28 @@ async function saveManualRating({
 
   const isVersion4 = Boolean(version && version >= 4);
   const response = isVersion4
-    ? await callApi(EVAL_ROUTES.RESULT_RATING(evalId, resultId), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+    ? await callApi(
+        EVAL_ROUTES.RESULT_RATING(evalId, resultId),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ ...gradingResult, ratingAction, ratingUpdate }),
         },
-        body: JSON.stringify({ ...gradingResult, ratingAction, ratingUpdate }),
-      })
-    : await callApi(EVAL_ROUTES.DETAIL(evalId), {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
+        apiBaseUrl,
+      )
+    : await callApi(
+        EVAL_ROUTES.DETAIL(evalId),
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ table }),
         },
-        body: JSON.stringify({ table }),
-      });
+        apiBaseUrl,
+      );
 
   if (!response.ok) {
     if (
@@ -1861,15 +1871,21 @@ function ResultsTable({
       score?: number,
       comment?: string,
     ) => {
+      const apiBaseUrl = getApiBaseUrl();
       const scopeGeneration = ratingScopeRef.current.generation;
       const isScopeActive = () => {
         const scope = ratingScopeRef.current;
-        return scope.mounted && scope.generation === scopeGeneration && scope.evalId === evalId;
+        return (
+          scope.mounted &&
+          scope.generation === scopeGeneration &&
+          scope.evalId === evalId &&
+          getApiBaseUrl() === apiBaseUrl
+        );
       };
       if (!isScopeActive()) {
         return;
       }
-      const queueKey = evalId ?? '';
+      const queueKey = JSON.stringify([apiBaseUrl, evalId]);
       const queuedTable = latestTableRef.current;
       const queuedLocation = findRatingOutput(queuedTable, resultId);
       if (!queuedLocation) {
@@ -2024,6 +2040,7 @@ function ResultsTable({
         try {
           const ratingIntent = getSubmitRatingIntent(isPass, score);
           const persistedResult = await saveManualRating({
+            apiBaseUrl,
             evalId,
             resultId,
             version,
@@ -2032,7 +2049,7 @@ function ResultsTable({
             table: newTable,
           });
           await handlePersistedResult(persistedResult);
-          return persistedResult
+          return persistedResult && currentLocation
             ? applyPersistedRatingResult({ table: newTable, resultId, result: persistedResult })
             : newTable;
         } catch (error) {

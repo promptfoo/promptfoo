@@ -11,8 +11,12 @@ export function getApiBaseUrl(): string {
   return import.meta.env.VITE_PUBLIC_BASENAME || '';
 }
 
-export async function callApi(path: string, options: RequestInit = {}): Promise<Response> {
-  return fetch(`${getApiBaseUrl()}/api${path}`, options);
+export async function callApi(
+  path: string,
+  options: RequestInit = {},
+  apiBaseUrl = getApiBaseUrl(),
+): Promise<Response> {
+  return fetch(`${apiBaseUrl}/api${path}`, options);
 }
 
 export async function fetchUserEmail(): Promise<string | null> {

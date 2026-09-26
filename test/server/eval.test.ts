@@ -1134,6 +1134,114 @@ describe('eval routes', () => {
       expect(persistedEval?.prompts[result.promptIdx].metrics?.score).toBeCloseTo(0.4);
     });
 
+    it('lets an old client restore the cleared score while retaining clear retry protection', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const [result] = await eval_.getResults();
+      invariant(result.id, 'Result ID is required');
+      const route = `/api/eval/${eval_.id}/results/${result.id}/rating`;
+      expect((await api.post(route).send(createManualRatingPayload(result, false))).status).toBe(
+        200,
+      );
+      const manuallyRated = await EvalResult.findById(result.id);
+      invariant(manuallyRated, 'Manually rated result is required');
+      const clearPayload = createClearManualRatingPayload(manuallyRated);
+      const cleared = await api.post(route).send(clearPayload);
+      expect(cleared.body.score).toBe(1);
+      const oldClientScore = (score: number) => ({
+        ...cleared.body.gradingResult,
+        score,
+        reason: 'Manual result (overrides all other grading results)',
+      });
+      expect((await api.post(route).send(oldClientScore(0.4))).body.score).toBe(0.4);
+      expect((await api.post(route).send(oldClientScore(1))).body.score).toBe(1);
+      const updated = await api.post(route).send(oldClientScore(0.6));
+      expect(updated.body.score).toBe(0.6);
+      const annotated = await api.post(route).send({
+        ...updated.body.gradingResult,
+        comment: 'Newer annotation',
+      });
+      expect(annotated.body.gradingResult.comment).toBe('Newer annotation');
+      vi.mocked(updateSignalFile).mockClear();
+      const retried = await api.post(route).send(clearPayload);
+      expect(retried.body.score).toBe(0.6);
+      expect(retried.body.gradingResult.comment).toBe('Newer annotation');
+      expect(updateSignalFile).not.toHaveBeenCalled();
+      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics?.score).toBeCloseTo(
+        0.6,
+      );
+    });
+
+    it.each([
+      [ResultFailureReason.NONE, false],
+      [ResultFailureReason.ASSERT, true],
+      [ResultFailureReason.ERROR, true],
+    ])(
+      'preserves legacy category %s after annotations and score edits before clearing',
+      async (failureReason, manualPass) => {
+        const eval_ = await EvalFactory.create();
+        testEvalIds.add(eval_.id);
+        const [result] = await eval_.getResults();
+        invariant(result instanceof EvalResult && result.id, 'Result is required');
+        result.success = manualPass;
+        result.score = manualPass ? 1 : 0;
+        result.failureReason = failureReason;
+        result.gradingResult = {
+          pass: manualPass,
+          score: result.score,
+          reason: 'Manual result (overrides all other grading results)',
+          componentResults: [
+            {
+              pass: manualPass,
+              score: result.score,
+              reason: 'Manual result (overrides all other grading results)',
+              assertion: { type: 'human' },
+            },
+          ],
+        };
+        await result.save();
+        const route = `/api/eval/${eval_.id}/results/${result.id}/rating`;
+        const originalGrade = structuredClone(result.gradingResult);
+        const directClear = await api
+          .post(route)
+          .send({ pass: false, score: 0, ratingAction: 'clear' });
+        expect(directClear.status).toBe(200);
+        // Restore the pre-upgrade row shape; the second clear must reconstruct the same outcome.
+        result.gradingResult = originalGrade;
+        await result.save();
+        const db = await getDb();
+        await db
+          .update(evalResultsTable)
+          .set({ manualRatingState: null })
+          .where(eq(evalResultsTable.id, result.id));
+        const commentResponse = await api.post(route).send({
+          pass: manualPass,
+          score: result.score,
+          comment: 'Keep this annotation',
+          ratingAction: 'update',
+          ratingUpdate: 'comment',
+        });
+        expect(commentResponse.status).toBe(200);
+        const scoreResponse = await api.post(route).send({
+          pass: manualPass,
+          score: 0.4,
+          ratingAction: 'update',
+          ratingUpdate: 'score',
+        });
+        expect(scoreResponse.status).toBe(200);
+        const afterEdits = await api
+          .post(route)
+          .send({ pass: false, score: 0, ratingAction: 'clear' });
+        expect(afterEdits.status).toBe(200);
+        expect(afterEdits.body).toMatchObject({
+          success: directClear.body.success,
+          score: directClear.body.score,
+          failureReason: directClear.body.failureReason,
+          gradingResult: { comment: 'Keep this annotation' },
+        });
+      },
+    );
+
     it('preserves a recoverable ERROR category when clearing a legacy rating', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);

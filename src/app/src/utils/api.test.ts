@@ -95,6 +95,18 @@ describe('callApi', () => {
     expect(mockFetch).toHaveBeenCalledWith('https://api.example.com/api/users', options);
   });
 
+  it('uses a captured API base after the configured server changes', async () => {
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://first.example.test/'));
+    const originalBase = getApiBaseUrl();
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://second.example.test'));
+
+    await callApi('/users', { method: 'POST' }, originalBase);
+
+    expect(mockFetch).toHaveBeenCalledWith('https://first.example.test/api/users', {
+      method: 'POST',
+    });
+  });
+
   it('returns the fetch response', async () => {
     const mockResponse = new Response(JSON.stringify({ id: '123' }), { status: 200 });
     mockFetch.mockResolvedValue(mockResponse);

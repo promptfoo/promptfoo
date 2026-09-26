@@ -13,7 +13,7 @@ const { filterMode, showToast } = vi.hoisted(() => ({
   showToast: vi.fn(),
 }));
 
-vi.mock('@app/utils/api', () => ({ callApi: vi.fn() }));
+vi.mock('@app/utils/api', () => ({ callApi: vi.fn(), getApiBaseUrl: vi.fn(() => '') }));
 vi.mock('@app/hooks/useToast', () => ({ useToast: () => ({ showToast }) }));
 vi.mock('@app/stores/apiConfig', () => ({ default: () => ({ apiBaseUrl: '' }) }));
 vi.mock('socket.io-client', () => ({

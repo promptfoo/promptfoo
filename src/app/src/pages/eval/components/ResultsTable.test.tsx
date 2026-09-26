@@ -48,6 +48,7 @@ vi.mock('@app/hooks/useShiftKey', () => {
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(() => Promise.resolve({ ok: true })),
+  getApiBaseUrl: vi.fn(() => ''),
 }));
 
 const mockNavigate = vi.fn();
@@ -1669,6 +1670,7 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
     mockSetTable = vi.fn();
     // Dynamically import and mock callApi
     const apiModule = await import('@app/utils/api');
+    vi.mocked(apiModule.getApiBaseUrl).mockReset().mockReturnValue('');
     mockCallApi = vi.mocked(apiModule.callApi);
     mockCallApi.mockResolvedValue({ ok: true });
   });
@@ -4406,6 +4408,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     vi.clearAllMocks();
     mockSetTable = vi.fn();
     const apiModule = await import('@app/utils/api');
+    vi.mocked(apiModule.getApiBaseUrl).mockReset().mockReturnValue('');
     mockCallApi = vi.mocked(apiModule.callApi);
     mockCallApi.mockResolvedValue({ ok: true });
   });
@@ -4491,6 +4494,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
       expect(mockCallApi).toHaveBeenCalledWith(
         '/eval/123/results/test-output-1/rating',
         expect.objectContaining({ method: 'POST' }),
+        '',
       );
     });
 
@@ -4832,7 +4836,59 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     await waitFor(() => expect(mockCallApi).toHaveBeenCalledTimes(2));
   });
 
+  it.each([3, 4])('keeps queued v%i ratings on their accepted API server', async (version) => {
+    const user = userEvent.setup();
+    const apiModule = await import('@app/utils/api');
+    const getApiBaseUrl = vi.mocked(apiModule.getApiBaseUrl);
+    getApiBaseUrl.mockReturnValue('https://first.example.test');
+    let currentTable = createMockTableWithHumanAssertion();
+    const mockFetchEvalData = vi.fn();
+    let resolveFirst!: (response: any) => void;
+    const firstResponse = new Promise<any>((resolve) => {
+      resolveFirst = resolve;
+    });
+    mockCallApi.mockReturnValueOnce(firstResponse).mockResolvedValue({ ok: true });
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: mockSetTable,
+      table: currentTable,
+      version,
+      fetchEvalData: mockFetchEvalData,
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+    }));
+
+    const rendered = renderWithProviders(<ResultsTable {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: 'Clear rating' }));
+    await user.click(screen.getByRole('button', { name: /^Rate$/ }));
+    expect(mockCallApi).toHaveBeenCalledTimes(1);
+
+    getApiBaseUrl.mockReturnValue('https://second.example.test');
+    currentTable = createMockTableWithHumanAssertion();
+    rendered.rerender(<ResultsTable {...defaultProps} zoom={1.01} />);
+    await user.click(screen.getByRole('button', { name: 'Update score' }));
+    await waitFor(() => expect(mockCallApi).toHaveBeenCalledTimes(2));
+    expect(mockSetTable).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      resolveFirst({ ok: true });
+      await firstResponse;
+    });
+    await waitFor(() => expect(mockCallApi).toHaveBeenCalledTimes(3));
+    expect(mockCallApi.mock.calls.map((call: unknown[]) => call[2])).toEqual([
+      'https://first.example.test',
+      'https://second.example.test',
+      'https://first.example.test',
+    ]);
+    // Completion of the first server's writes must not replace the second server's table.
+    expect(mockSetTable).toHaveBeenCalledTimes(2);
+    expect(mockFetchEvalData).not.toHaveBeenCalled();
+  });
+
   it('persists a queued v4 rating when its result leaves the current page', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     const user = userEvent.setup();
     let currentTable = createMockTableWithHumanAssertion();
     const mockFetchEvalData = vi.fn().mockResolvedValue(null);
@@ -4895,6 +4951,9 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
         mockCallApi.mock.calls.filter(([url]: [string]) => url.includes('/results/')).length,
       ).toBe(2),
     );
+    await waitFor(() => expect(mockFetchEvalData).toHaveBeenCalledTimes(1));
+    expect(consoleError).not.toHaveBeenCalled();
+    consoleError.mockRestore();
   });
 
   it('does not update the global table after unmounting with a rating in flight', async () => {
