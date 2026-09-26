@@ -100,7 +100,7 @@ function providerAbortError(): DOMException {
   return new DOMException('Provider call cancelled', 'AbortError');
 }
 
-function waitForProviderCall(
+export function waitForProviderCall(
   result: Promise<ProviderResponse>,
   signal?: AbortSignal,
 ): Promise<ProviderResponse> {

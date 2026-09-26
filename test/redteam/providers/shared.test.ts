@@ -1,3 +1,5 @@
+import { getEventListeners } from 'node:events';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import { PromptfooChatCompletionProvider } from '../../../src/providers/promptfoo';
@@ -1434,6 +1436,73 @@ describe('shared redteam provider utilities', () => {
   });
 
   describe('callGradingProvider', () => {
+    it.each(
+      [false, true].flatMap((traced) => ['resolve', 'reject'].map((late) => ({ traced, late }))),
+    )(
+      'stops waiting for an uncooperative grader and removes its listener: %j',
+      async ({ traced, late }) => {
+        const controller = new AbortController();
+        let finish!: () => void;
+        const pending = new Promise<{ output: string }>((resolve, reject) => {
+          finish = () =>
+            late === 'resolve'
+              ? resolve({ output: 'late grading' })
+              : reject(new Error('late failure'));
+        });
+        const provider = createMockProvider();
+        vi.mocked(provider.callApi).mockReturnValue(pending);
+        const invoke = () => callGradingProvider(provider, 'fixture');
+        const result = withProviderCallExecutionContext({ abortSignal: controller.signal }, () =>
+          traced
+            ? withProviderCallTracingContext(
+                {
+                  getActiveTraceparent: () => undefined,
+                  withGraderSpan: async (_context, callback) => callback(),
+                  withProviderSpan: async ({ callContext }, callback) => callback(callContext),
+                },
+                invoke,
+              )
+            : invoke(),
+        ).then(
+          () => 'resolved',
+          (error) => error.name,
+        );
+        try {
+          expect(provider.callApi).toHaveBeenCalledOnce();
+          controller.abort();
+          const outcome = await Promise.race([
+            result,
+            new Promise((resolve) => setImmediate(() => resolve('still waiting'))),
+          ]);
+          expect(outcome).toBe('AbortError');
+          expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
+        } finally {
+          finish();
+          await result;
+        }
+      },
+    );
+
+    it.each(['resolve', 'reject'])(
+      'removes the cancellation listener after normal %s',
+      async (outcome) => {
+        const controller = new AbortController();
+        const provider = createMockProvider();
+        if (outcome === 'reject') {
+          vi.mocked(provider.callApi).mockRejectedValue(new Error('ordinary grader failure'));
+        }
+        const result = withProviderCallExecutionContext({ abortSignal: controller.signal }, () =>
+          callGradingProvider(provider, 'fixture'),
+        );
+        if (outcome === 'reject') {
+          await expect(result).rejects.toThrow('ordinary grader failure');
+        } else {
+          await expect(result).resolves.toHaveProperty('output');
+        }
+        expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
+      },
+    );
+
     it.each(
       [false, true].flatMap((traced) =>
         ['ambient only', 'ambient with options', 'combined caller', 'combined evaluation'].map(
