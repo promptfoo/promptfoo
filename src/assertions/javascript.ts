@@ -193,7 +193,9 @@ function normalizeJavascriptAssertionResult(
         ? result.reason
         : pass
           ? 'Assertion passed'
-          : `Custom function returned ${result.pass ? 'true' : 'false'}`,
+          : // Inverted failure: keep the caller's reason, falling back to the
+            // raw outcome only when they gave none.
+            (result.reason ?? `Custom function returned ${result.pass ? 'true' : 'false'}`),
     assertion: normalizeResultAssertion(result.assertion, assertion),
   };
 }
