@@ -90,17 +90,23 @@ The provider treats three states differently:
 
 ## Prerequisites
 
+Use Python 3.11 or newer. For Anthropic models, install `anthropic>=1.8,<2`
+instead of the OpenAI SDK. Python OpenTelemetry packages are optional unless
+`PROMPTFOO_ENABLE_OTEL=true` is enabled.
+
 You need Docker because OSWorld runs a desktop environment:
 
 - Docker Engine 24.0.6 or newer
 - Docker Compose V2 available as `docker compose`
-- Python with Inspect OSWorld and OpenTelemetry dependencies
+- Python with Inspect OSWorld dependencies; OpenTelemetry for tracing
 - The SDK and API key for the model provider you choose
 
 Install the Python dependencies:
 
 ```bash
-pip install 'inspect-evals[osworld]' openai anthropic opentelemetry-sdk opentelemetry-exporter-otlp-proto-http
+python -m pip install 'inspect-evals[osworld]>=0.21,<0.23' 'openai>=3.19.2,<4'
+# Optional, for the traced commands in this guide:
+python -m pip install 'opentelemetry-sdk>=1.44,<2' 'opentelemetry-exporter-otlp-proto-http>=1.44,<2'
 ```
 
 For the default config, export `OPENAI_API_KEY`. To use Anthropic instead, export `ANTHROPIC_API_KEY` and override the model in the test vars or provider config.
