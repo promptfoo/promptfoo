@@ -312,7 +312,9 @@ describe('cache configuration', () => {
     mockProcessEnv({ NODE_ENV: 'production' });
     const cacheModule = await import('../src/cache');
     cacheModule.getCache();
-    expect(fs.mkdirSync).toHaveBeenCalledWith('/custom/cache/path', { recursive: true });
+    expect(fs.mkdirSync).toHaveBeenCalledWith(path.resolve('/custom/cache/path'), {
+      recursive: true,
+    });
   });
 
   it('should respect cache configuration from environment', async () => {
