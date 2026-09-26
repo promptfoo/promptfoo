@@ -1,6 +1,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AwsBedrockAgentsProvider } from '../../../src/providers/bedrock/agents';
 import { sha256 } from '../../../src/util/createHash';
+import { mockProcessEnv, PROXY_ENV_KEYS } from '../../util/utils';
 
 const mockSend = vi.fn();
 const mockBedrockClient = {
@@ -122,6 +123,8 @@ function makeCompletionResponse(output: string) {
   };
 }
 
+let restoreProxyEnv = () => {};
+
 describe('AwsBedrockAgentsProvider', () => {
   beforeAll(async () => {
     const bedrockModule = await import('@aws-sdk/client-bedrock-agent-runtime');
@@ -129,6 +132,9 @@ describe('AwsBedrockAgentsProvider', () => {
   });
 
   beforeEach(() => {
+    restoreProxyEnv = mockProcessEnv(
+      Object.fromEntries(PROXY_ENV_KEYS.map((key) => [key, undefined])),
+    );
     vi.clearAllMocks();
     mockSend.mockReset();
     mockGet.mockReset();
@@ -150,6 +156,7 @@ describe('AwsBedrockAgentsProvider', () => {
   afterEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
+    restoreProxyEnv();
   });
 
   it('places knowledge-base retrieval overrides in sessionState without explicit session attributes', async () => {

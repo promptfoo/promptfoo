@@ -99,6 +99,7 @@ vi.mock('undici', () => {
 
 vi.mock('../src/envars', () => {
   return {
+    getEnvOverrides: vi.fn(),
     getEnvString: vi.fn().mockImplementation((key: string, defaultValue: string = '') => {
       if (key === 'HTTPS_PROXY' && process.env.HTTPS_PROXY) {
         return process.env.HTTPS_PROXY;
