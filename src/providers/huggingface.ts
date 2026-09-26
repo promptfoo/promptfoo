@@ -1,7 +1,7 @@
 import { type FetchWithCacheResult, fetchWithCache } from '../cache';
-import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import { resolveProviderApiKey } from './credentials';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { getRequestTimeoutMs } from './shared';
 
@@ -118,14 +118,10 @@ export class HuggingfaceChatCompletionProvider extends OpenAiChatCompletionProvi
   }
 
   getApiKey(): string | undefined {
-    return (
-      this.config.apiKey ||
-      this.env?.HF_TOKEN ||
-      this.env?.HF_API_TOKEN ||
-      getEnvString('HF_TOKEN') ||
-      getEnvString('HF_API_TOKEN') ||
-      undefined
-    );
+    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+      'HF_TOKEN',
+      'HF_API_TOKEN',
+    ]);
   }
 }
 
@@ -161,13 +157,10 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return (
-      this.config.apiKey ||
-      this.env?.HF_TOKEN ||
-      this.env?.HF_API_TOKEN ||
-      getEnvString('HF_TOKEN') ||
-      getEnvString('HF_API_TOKEN')
-    );
+    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+      'HF_TOKEN',
+      'HF_API_TOKEN',
+    ]);
   }
 
   getConfig() {
@@ -329,13 +322,10 @@ export class HuggingfaceTextClassificationProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return (
-      this.config.apiKey ||
-      this.env?.HF_TOKEN ||
-      this.env?.HF_API_TOKEN ||
-      getEnvString('HF_TOKEN') ||
-      getEnvString('HF_API_TOKEN')
-    );
+    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+      'HF_TOKEN',
+      'HF_API_TOKEN',
+    ]);
   }
 
   async callClassificationApi(prompt: string): Promise<ProviderClassificationResponse> {
@@ -438,13 +428,10 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return (
-      this.config.apiKey ||
-      this.env?.HF_TOKEN ||
-      this.env?.HF_API_TOKEN ||
-      getEnvString('HF_TOKEN') ||
-      getEnvString('HF_API_TOKEN')
-    );
+    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+      'HF_TOKEN',
+      'HF_API_TOKEN',
+    ]);
   }
 
   async callApi(): Promise<ProviderResponse> {
@@ -537,13 +524,10 @@ export class HuggingfaceSentenceSimilarityProvider implements ApiSimilarityProvi
   }
 
   getApiKey(): string | undefined {
-    return (
-      this.config.apiKey ||
-      this.env?.HF_TOKEN ||
-      this.env?.HF_API_TOKEN ||
-      getEnvString('HF_TOKEN') ||
-      getEnvString('HF_API_TOKEN')
-    );
+    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+      'HF_TOKEN',
+      'HF_API_TOKEN',
+    ]);
   }
 
   toString(): string {
@@ -645,13 +629,10 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return (
-      this.config.apiKey ||
-      this.env?.HF_TOKEN ||
-      this.env?.HF_API_TOKEN ||
-      getEnvString('HF_TOKEN') ||
-      getEnvString('HF_API_TOKEN')
-    );
+    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
+      'HF_TOKEN',
+      'HF_API_TOKEN',
+    ]);
   }
 
   async callClassificationApi(input: string): Promise<ProviderClassificationResponse> {

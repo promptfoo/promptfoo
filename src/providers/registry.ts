@@ -160,12 +160,17 @@ function getProviderEnvAliasGroups(providerPath: string): readonly (readonly str
       ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION'],
     ];
   }
+  if (/^(?:google|palm):gemini-omni-/.test(providerPath)) {
+    return [['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'PALM_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY']];
+  }
   if (/^(?:google|palm):/.test(providerPath)) {
     return [['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'PALM_API_KEY']];
   }
   if (/^(?:azure|azureopenai):/.test(providerPath)) {
     return [
-      ['AZURE_API_KEY', 'AZURE_OPENAI_API_KEY'],
+      providerPath.split(':')[1] === 'moderation'
+        ? ['AZURE_CONTENT_SAFETY_API_KEY', 'AZURE_API_KEY', 'AZURE_OPENAI_API_KEY']
+        : ['AZURE_API_KEY', 'AZURE_OPENAI_API_KEY'],
       ['AZURE_API_HOST', 'AZURE_OPENAI_API_HOST'],
       ['AZURE_API_BASE_URL', 'AZURE_OPENAI_API_BASE_URL', 'AZURE_OPENAI_BASE_URL'],
     ];
