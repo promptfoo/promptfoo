@@ -1,4 +1,3 @@
 openai==2.38.0
 pydantic==2.13.4
-pydantic-ai==1.106.0
-python-dotenv==1.2.2
+pydantic-ai-slim[openai]==1.106.0

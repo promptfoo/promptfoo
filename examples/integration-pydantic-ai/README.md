@@ -11,6 +11,10 @@ cd integration-pydantic-ai
 
 ## Quick Start
 
+Requires Python 3.10 or later. The requirements use PydanticAI’s
+[slim OpenAI installation](https://pydantic.dev/docs/ai/overview/install/#slim-install),
+which installs the provider used by this example.
+
 ```bash
 cd integration-pydantic-ai
 pip install -r requirements.txt
