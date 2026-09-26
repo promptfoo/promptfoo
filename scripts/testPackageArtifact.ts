@@ -701,19 +701,32 @@ async function runInstalledTransformersProvider(
   consumerDir: string,
   configDir: string,
 ): Promise<void> {
-  const scriptPath = path.join(consumerDir, 'transformers.mjs');
   const modelDir = path.join(consumerDir, 'tiny-bert');
   fs.cpSync(path.join(ROOT, 'test/fixtures/transformers/tiny-bert'), modelDir, { recursive: true });
-  fs.writeFileSync(
-    scriptPath,
-    `import assert from 'node:assert/strict';
-import { evaluate, loadApiProvider } from 'promptfoo';
-
-const modelDir = ${JSON.stringify(modelDir)};
+  const script = `const modelDir = ${JSON.stringify(modelDir)};
 const providerId = 'transformers:feature-extraction:' + modelDir;
-if (process.argv[2] === 'absent') {
-  assert.throws(() => import.meta.resolve('@huggingface/transformers'), { code: 'ERR_MODULE_NOT_FOUND' });
-  await assert.rejects(loadApiProvider(providerId), (error) => error.message.includes('npm install promptfoo @huggingface/transformers@^4.0.0'));
+const mode = process.argv[2];
+// An unrelated local SDK version must not prevent ordinary evaluations.
+const ordinary = await evaluate({
+  prompts: ['hello world'],
+  providers: ['echo'],
+  tests: [{ vars: {}, assert: [{ type: 'equals', value: 'hello world' }] }],
+}, { cache: false, maxConcurrency: 1 });
+const { results: ordinaryResults } = await ordinary.toEvaluateSummary();
+assert.equal(ordinaryResults.length, 1);
+assert.equal(ordinaryResults[0].success, true);
+assert.equal(ordinaryResults[0].score, 1);
+if (mode !== 'installed') {
+  if (mode === 'absent') {
+    assert.throws(() => require.resolve('@huggingface/transformers'), { code: 'MODULE_NOT_FOUND' });
+  } else {
+    assert.doesNotThrow(() => require.resolve('@huggingface/transformers'));
+  }
+  await assert.rejects(loadApiProvider(providerId), (error) => {
+    assert.ok(error.message.includes('npm install promptfoo @huggingface/transformers@^4.0.0'));
+    if (mode === 'incompatible') { assert.match(error.message, /found 3\\.8\\.1/); }
+    return true;
+  });
 } else {
   const config = { device: 'cpu', dtype: 'fp32', localFilesOnly: true, normalize: false, cacheDir: modelDir };
   const provider = await loadApiProvider(providerId, { options: { config } });
@@ -735,6 +748,25 @@ if (process.argv[2] === 'absent') {
   assert.equal(results[1].success, false);
   assert.match(results[1].gradingResult.reason, /missing|not found|Unable to locate/i);
 }
+`;
+  const scriptPaths = ['transformers.mjs', 'transformers.cjs'].map((name) =>
+    path.join(consumerDir, name),
+  );
+  fs.writeFileSync(
+    scriptPaths[0],
+    `import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { evaluate, loadApiProvider } from 'promptfoo';
+const require = createRequire(import.meta.url);
+${script}`,
+  );
+  fs.writeFileSync(
+    scriptPaths[1],
+    `const assert = require('node:assert/strict');
+const { evaluate, loadApiProvider } = require('promptfoo');
+(async () => {
+${script}
+})().catch((error) => { console.error(error); process.exitCode = 1; });
 `,
   );
   const env = {
@@ -743,12 +775,22 @@ if (process.argv[2] === 'absent') {
     PROMPTFOO_DISABLE_TELEMETRY: '1',
     PROMPTFOO_DISABLE_UPDATE: 'true',
   };
-  await runAsync(process.execPath, [scriptPath, 'absent'], consumerDir, env);
+  const runMode = async (mode: string) => {
+    for (const scriptPath of scriptPaths) {
+      await runAsync(process.execPath, [scriptPath, mode], consumerDir, env);
+    }
+  };
+  await runMode('absent');
+  runNpm(
+    ['install', '--ignore-scripts', '--no-audit', '--no-fund', '@huggingface/transformers@3.8.1'],
+    consumerDir,
+  );
+  await runMode('incompatible');
   runNpm(
     ['install', '--ignore-scripts', '--no-audit', '--no-fund', '@huggingface/transformers@^4.0.0'],
     consumerDir,
   );
-  await runAsync(process.execPath, [scriptPath, 'installed'], consumerDir, env);
+  await runMode('installed');
 }
 
 async function main(): Promise<void> {

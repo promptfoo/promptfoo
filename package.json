@@ -428,7 +428,7 @@
   },
   "homepage": "https://promptfoo.dev",
   "peerDependencies": {
-    "@huggingface/transformers": "^4.0.0"
+    "@huggingface/transformers": "*"
   },
   "peerDependenciesMeta": {
     "@huggingface/transformers": {

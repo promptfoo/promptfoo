@@ -1,42 +1,29 @@
-/**
- * Utility for checking @huggingface/transformers availability.
- *
- * This module provides lazy checking of the optional @huggingface/transformers dependency
- * with caching to avoid repeated import attempts.
- */
+import { createRequire } from 'node:module';
 
-let transformersAvailableCache: boolean | null = null;
+import semverSatisfies from 'semver/functions/satisfies.js';
+import { getPackageVersion } from '../util/packageVersion';
 
-/**
- * Checks if the @huggingface/transformers library is available.
- * Result is cached after first call for efficiency.
- */
-export async function isTransformersAvailable(): Promise<boolean> {
-  if (transformersAvailableCache !== null) {
-    return transformersAvailableCache;
+/** Load the optional SDK only after checking its runtime compatibility. */
+export async function loadTransformers(): Promise<typeof import('@huggingface/transformers')> {
+  let version: string | null;
+  try {
+    const entryPoint = createRequire(import.meta.url).resolve('@huggingface/transformers');
+    version = getPackageVersion('@huggingface/transformers', entryPoint);
+  } catch {
+    throw new Error(
+      'Transformers.js is not installed. Install it with: npm install promptfoo @huggingface/transformers@^4.0.0',
+    );
+  }
+  if (!version || !semverSatisfies(version, '^4.0.0')) {
+    throw new Error(
+      `Local Transformers providers require @huggingface/transformers@^4.0.0 (found ${version ?? 'unknown'}). Install it with: npm install promptfoo @huggingface/transformers@^4.0.0`,
+    );
   }
   try {
-    await import('@huggingface/transformers');
-    transformersAvailableCache = true;
+    return await import('@huggingface/transformers');
   } catch {
-    transformersAvailableCache = false;
-  }
-  return transformersAvailableCache;
-}
-
-/**
- * Validates that the @huggingface/transformers library is installed.
- * Throws an error with installation instructions if not available.
- *
- * Call this early (before pipeline creation) to fail fast with a helpful message.
- */
-export async function validateTransformersDependency(
-  checkTransformers: () => Promise<boolean> = isTransformersAvailable,
-): Promise<void> {
-  if (!(await checkTransformers())) {
     throw new Error(
-      '@huggingface/transformers is required for local embedding and text generation providers.\n' +
-        'Install it with: npm install promptfoo @huggingface/transformers@^4.0.0',
+      'Transformers.js could not be loaded. Install it with: npm install promptfoo @huggingface/transformers@^4.0.0',
     );
   }
 }
