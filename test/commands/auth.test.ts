@@ -735,7 +735,9 @@ describe('auth command', () => {
       expect(logger.warn).toHaveBeenCalledWith(
         expect.stringContaining('You have access to 2 teams'),
       );
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('--team flag'));
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('promptfoo auth teams set <team>'),
+      );
     });
 
     it("restores the organization's saved team instead of prompting or picking the oldest", async () => {
