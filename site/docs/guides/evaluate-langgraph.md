@@ -188,7 +188,7 @@ def get_research_agent(model="gpt-4o"):
     def summarize_info(state: ResearchState) -> ResearchState:
         prompt = f"Summarize the following:\n{state.raw_info}"
         response = llm.invoke(prompt)  # Call the LLM to get the summary
-        return ResearchState(query=state.query, raw_info=state.raw_info, summary=response.content)
+        return ResearchState(query=state.query, raw_info=state.raw_info, summary=response.text)
 
     # Node 3: Format the final summary for output
     def output_summary(state: ResearchState) -> ResearchState:
