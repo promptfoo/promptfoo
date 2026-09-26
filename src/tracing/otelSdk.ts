@@ -6,6 +6,7 @@ import {
   DiagConsoleLogger,
   DiagLogLevel,
   diag,
+  ProxyTracerProvider,
   propagation,
   trace,
 } from '@opentelemetry/api';
@@ -18,7 +19,7 @@ import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic
 import logger from '../logger';
 import { VERSION } from '../version';
 import { LocalSpanExporter } from './localSpanExporter';
-import type { Tracer } from '@opentelemetry/api';
+import type { Tracer, TracerProvider } from '@opentelemetry/api';
 import type { SpanProcessor } from '@opentelemetry/sdk-trace-base';
 
 import type { OtelConfig } from './otelConfig';
@@ -30,8 +31,20 @@ interface OtelScope {
 // Custom providers can load the public package alongside the CLI bundle. Share the
 // storage object, never a current provider, so both observe the same async scope.
 const OTEL_SCOPE_KEY = Symbol.for('promptfoo.otelScope');
-const globalScopes = globalThis as { [OTEL_SCOPE_KEY]?: AsyncLocalStorage<OtelScope> };
+const OTEL_ROUTING_KEY = Symbol.for('promptfoo.otelRouting');
+interface OtelRoutingState {
+  provider: TracerProvider;
+  owners: Set<NodeTracerProvider>;
+}
+const globalScopes = globalThis as {
+  [OTEL_SCOPE_KEY]?: AsyncLocalStorage<OtelScope>;
+  [OTEL_ROUTING_KEY]?: OtelRoutingState;
+};
 const otelScope = (globalScopes[OTEL_SCOPE_KEY] ??= new AsyncLocalStorage<OtelScope>());
+const routingState = (globalScopes[OTEL_ROUTING_KEY] ??= {
+  provider: createRoutingProvider(),
+  owners: new Set<NodeTracerProvider>(),
+});
 const ownedProviders = new Set<NodeTracerProvider>();
 const contextProbeKey = createContextKey('promptfoo.contextProbe');
 
@@ -47,6 +60,65 @@ function getOtelScope(): OtelScope | undefined {
 /** Use the evaluation's provider without replacing a host application's global provider. */
 export function getOtelTracer(name: string, version?: string): Tracer {
   return getOtelScope()?.provider?.getTracer(name, version) ?? trace.getTracer(name, version);
+}
+
+function createRoutingProvider(): TracerProvider {
+  const noopProvider = new ProxyTracerProvider();
+  return {
+    getTracer(name, version, options) {
+      // A custom provider can cache this tracer before the first evaluation.
+      // Resolve both evaluation ownership and a later host SDK for each span.
+      const current = () => {
+        const globalProvider = trace.getTracerProvider();
+        if (
+          globalProvider instanceof ProxyTracerProvider &&
+          globalProvider.getDelegate() !== routingState.provider
+        ) {
+          const hostTracer = globalProvider.getDelegateTracer(name, version, options);
+          if (hostTracer) {
+            return hostTracer;
+          }
+        }
+        return (
+          getOtelScope()?.provider?.getTracer(name, version, options) ??
+          noopProvider.getTracer(name, version, options)
+        );
+      };
+      return {
+        startSpan: (spanName, spanOptions, parentContext) =>
+          current().startSpan(spanName, spanOptions, parentContext),
+        startActiveSpan(...args: unknown[]) {
+          const tracer = current();
+          return Reflect.apply(tracer.startActiveSpan, tracer, args);
+        },
+      };
+    },
+  };
+}
+
+function ensureGlobalTracerRouting(): void {
+  const globalProvider = trace.getTracerProvider();
+  // A host delegate owns global instrumentation, including its own delayed proxy.
+  if (
+    globalProvider instanceof ProxyTracerProvider &&
+    !globalProvider.getDelegateTracer('promptfoo')
+  ) {
+    trace.setGlobalTracerProvider(routingState.provider);
+  }
+}
+
+function releaseGlobalTracerRouting(provider: NodeTracerProvider): void {
+  routingState.owners.delete(provider);
+  const globalProvider = trace.getTracerProvider();
+  if (
+    routingState.owners.size === 0 &&
+    globalProvider instanceof ProxyTracerProvider &&
+    globalProvider.getDelegate() === routingState.provider
+  ) {
+    // Release only our router so a host can register its SDK after evaluation.
+    // Cached tracers still route through the same shared state on later calls.
+    trace.disable();
+  }
 }
 
 function ensureContextManager(): void {
@@ -131,6 +203,8 @@ export function initializeOtel(config: OtelConfig): void {
   // Create trace provider with resource and span processors
   scope.provider = new NodeTracerProvider({ resource, spanProcessors });
   ownedProviders.add(scope.provider);
+  routingState.owners.add(scope.provider);
+  ensureGlobalTracerRouting();
   logger.info('[OtelSdk] OpenTelemetry SDK initialized successfully');
 
   // Set up graceful shutdown
@@ -158,6 +232,7 @@ async function shutdownProvider(provider: NodeTracerProvider): Promise<void> {
     logger.error('[OtelSdk] Error shutting down OpenTelemetry SDK', { error });
   } finally {
     ownedProviders.delete(provider);
+    releaseGlobalTracerRouting(provider);
     if (ownedProviders.size === 0) {
       cleanupShutdownHandlers();
     }

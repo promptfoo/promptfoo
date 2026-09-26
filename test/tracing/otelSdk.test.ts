@@ -168,6 +168,50 @@ describe('evaluation-owned OpenTelemetry', () => {
     );
   });
 
+  it('routes a cached global tracer through sequential, overlapping, and disabled scopes', async () => {
+    const custom = trace.getTracer('custom-provider-before-initialization');
+    custom.startSpan('outside before').end();
+    const entered = deferred();
+    const release = deferred();
+    const first = runScoped({ serviceName: 'first' }, async () => {
+      await custom.startActiveSpan('first parent', async (parent) => {
+        custom.startSpan('first child').end();
+        entered.resolve();
+        await release.promise;
+        parent.end();
+      });
+    });
+    await entered.promise;
+    try {
+      await runScoped({ serviceName: 'second' }, async () => {
+        custom.startSpan('second').end();
+        await withOtelContext(async () => {
+          custom.startSpan('disabled nested').end();
+        });
+      });
+    } finally {
+      release.resolve();
+      await first;
+    }
+    await runScoped({ serviceName: 'third' }, async () => {
+      custom.startActiveSpan('third', {}, (span) => span.end());
+    });
+    custom.startSpan('outside after').end();
+    expect(localSpans.map((span) => [span.name, span.resource.attributes['service.name']])).toEqual(
+      expect.arrayContaining([
+        ['first parent', 'first'],
+        ['first child', 'first'],
+        ['second', 'second'],
+        ['third', 'third'],
+      ]),
+    );
+    expect(localSpans).toHaveLength(4);
+    const parent = localSpans.find((span) => span.name === 'first parent')!;
+    expect(localSpans.find((span) => span.name === 'first child')!.parentSpanContext).toEqual(
+      parent.spanContext(),
+    );
+  });
+
   it('does not let a nested untraced scope inherit its parent provider', async () => {
     await runScoped({}, async () => {
       getGenAITracer().startSpan('traced before').end();
@@ -194,6 +238,49 @@ describe('evaluation-owned OpenTelemetry', () => {
     const parent = localSpans.find((span) => span.name === 'parent')!;
     const child = localSpans.find((span) => span.name === 'child')!;
     expect(child.parentSpanContext).toEqual(parent.spanContext());
+  });
+
+  it('lets a host register after evaluation and routes previously cached tracers to it', async () => {
+    const custom = trace.getTracer('cached-custom');
+    await runScoped({}, async () => {
+      custom.startSpan('first eval').end();
+    });
+    const hostExporter = new InMemorySpanExporter();
+    const host = new NodeTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor(hostExporter)],
+    });
+    expect(trace.setGlobalTracerProvider(host)).toBe(true);
+    const globalProvider = trace.getTracerProvider();
+    const shutdown = vi.spyOn(host, 'shutdown');
+    try {
+      custom.startSpan('host after eval').end();
+      await runScoped({}, async () => {
+        custom.startActiveSpan('host during eval', (span) => span.end());
+        getGenAITracer().startSpan('owned during eval').end();
+      });
+      expect(trace.getTracerProvider()).toBe(globalProvider);
+      expect(shutdown).not.toHaveBeenCalled();
+      expect(hostExporter.getFinishedSpans().map((span) => span.name)).toEqual([
+        'host after eval',
+        'host during eval',
+      ]);
+      expect(localSpans.map((span) => span.name)).toEqual(['first eval', 'owned during eval']);
+    } finally {
+      await host.shutdown();
+    }
+  });
+
+  it('keeps global routing registered while another bundle owns an active evaluation', async () => {
+    vi.resetModules();
+    const other = await import('../../src/tracing/otelSdk');
+    await runScoped({}, async () => {
+      await other.withOtelContext(async () => {
+        other.initializeOtel({ ...config, serviceName: 'other' });
+        await other.shutdownOtel();
+      });
+      trace.getTracer('new after peer shutdown').startSpan('remaining eval').end();
+    });
+    expect(localSpans.map((span) => span.name)).toEqual(['remaining eval']);
   });
 
   it('preserves a host tracer, context manager, and custom propagator', async () => {

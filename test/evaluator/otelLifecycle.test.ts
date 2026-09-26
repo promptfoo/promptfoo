@@ -141,6 +141,26 @@ describe('real evaluation tracing lifecycle', () => {
     expect(firstSpans.every((span) => span.attributes?.['service.name'] === 'traced')).toBe(true);
   });
 
+  it('persists custom global-API instrumentation without a host SDK', async () => {
+    const custom = trace.getTracer('custom-provider');
+    const provider: ApiProvider = {
+      id: () => 'custom-global-tracer',
+      callApi: async () =>
+        custom.startActiveSpan('custom operation', (span) => {
+          span.end();
+          return { output: 'ok' };
+        }),
+    };
+    for (const service of ['custom-first', 'custom-second']) {
+      const spans = await run(service, provider);
+      const customSpan = spans.find((span) => span.name === 'custom operation')!;
+      expect(customSpan).toBeDefined();
+      expect(customSpan.attributes?.['service.name']).toBe(service);
+      expect(spans.some((span) => span.spanId === customSpan.parentSpanId)).toBe(true);
+    }
+    expect(await run('custom-disabled', provider, false)).toEqual([]);
+  });
+
   it('passes each evaluation tracer into Vercel SDK telemetry and preserves its parent', async () => {
     const entered = deferred();
     const release = deferred();
