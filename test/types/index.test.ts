@@ -254,6 +254,17 @@ describe('isGradingResult', () => {
     expect(isGradingResult(result)).toBe(true);
   });
 
+  it('validates nested components with an iterative traversal', () => {
+    const leaf: GradingResult = { pass: true, score: 0.75, reason: '' };
+    let result = leaf;
+    for (let depth = 0; depth < 200; depth++) {
+      result = { pass: true, score: 1, reason: '', componentResults: [result] };
+    }
+    expect(isGradingResult(result)).toBe(true);
+    leaf.score = Number.POSITIVE_INFINITY;
+    expect(isGradingResult(result)).toBe(false);
+  });
+
   it('supports nullable optional containers in the public grading result type', () => {
     const result: GradingResult = {
       pass: true,

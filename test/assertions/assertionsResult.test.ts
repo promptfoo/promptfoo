@@ -505,6 +505,87 @@ describe('AssertionsResult', () => {
       });
     });
 
+    it.each([
+      { scores: [Number.MAX_VALUE, -Number.MAX_VALUE, 1], weights: [2, 2, 1] },
+      { scores: [Number.MAX_VALUE, Number.MAX_VALUE], weights: [2, -2] },
+      { scores: [Number.MAX_VALUE, Number.MAX_VALUE], weights: [2, -3] },
+      { scores: [0, 0, 1], weights: [Number.MAX_VALUE, -Number.MAX_VALUE, 1] },
+    ])('retains intermediate named metric overflow: %j', async ({ scores, weights }) => {
+      const assertionsResult = new AssertionsResult();
+      scores.forEach((score, index) => {
+        assertionsResult.addResult({
+          index,
+          weight: 2,
+          result: {
+            pass: true,
+            score: 1,
+            reason: 'Finite component',
+            namedScores: { quality: score, valid: 0.25 },
+            namedScoreWeights: { quality: weights[index], valid: 1 },
+          },
+        });
+      });
+
+      const result = await assertionsResult.testResult();
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Assertion aggregation error: scores or weights must remain finite',
+        namedScores: { valid: 0.25 },
+        namedScoreWeights: { valid: scores.length * 2 },
+      });
+      expect(result.namedScores).not.toHaveProperty('quality');
+      expect(result.namedScoreWeights).not.toHaveProperty('quality');
+      expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+    });
+
+    it.each([0, -1])(
+      'preserves finite named metrics with nonpositive weight %s',
+      async (weight) => {
+        const assertionsResult = new AssertionsResult();
+        assertionsResult.addResult({
+          index: 0,
+          result: {
+            pass: true,
+            score: 1,
+            reason: '',
+            namedScores: { quality: 0.75 },
+            namedScoreWeights: { quality: weight },
+          },
+        });
+        expect(await assertionsResult.testResult()).toMatchObject({
+          pass: true,
+          score: 1,
+          namedScores: { quality: 0 },
+          namedScoreWeights: { quality: weight },
+        });
+      },
+    );
+
+    it('allows custom scoring to replace an intermediate named metric overflow', async () => {
+      const assertionsResult = new AssertionsResult();
+      [Number.MAX_VALUE, -Number.MAX_VALUE, 1].forEach((score, index) => {
+        assertionsResult.addResult({
+          index,
+          result: {
+            pass: true,
+            score: 1,
+            reason: '',
+            namedScores: { quality: score },
+            namedScoreWeights: { quality: 2 },
+          },
+        });
+      });
+      const customResult = {
+        pass: true,
+        score: 0.75,
+        reason: 'Custom',
+        namedScores: { quality: 0.75 },
+        namedScoreWeights: { quality: 1 },
+      };
+      expect(await assertionsResult.testResult(() => customResult)).toMatchObject(customResult);
+    });
+
     it('allows a valid custom scoring override to repair an overflow', async () => {
       const assertionsResult = new AssertionsResult();
       assertionsResult.addResult({

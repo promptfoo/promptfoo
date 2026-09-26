@@ -600,28 +600,10 @@ function isFiniteNumberRecord(value: unknown): value is Record<string, number> {
   );
 }
 
-function isGradingResultArray(
-  value: unknown,
-  ancestors: WeakSet<object>,
-): value is GradingResult[] {
-  if (!Array.isArray(value)) {
-    return false;
-  }
-  // Validate the indexed values used by consumers, regardless of a custom iterator.
-  for (let index = 0; index < value.length; index++) {
-    if (!isGradingResultInternal(value[index], ancestors)) {
-      return false;
-    }
-  }
-  return true;
-}
-
-function isGradingResultInternal(result: any, ancestors: WeakSet<object>): result is GradingResult {
-  if (typeof result !== 'object' || result === null || ancestors.has(result)) {
-    return false;
-  }
-  ancestors.add(result);
-  const valid =
+function hasValidGradingResultFields(result: any): boolean {
+  return (
+    typeof result === 'object' &&
+    result !== null &&
     typeof result.pass === 'boolean' &&
     typeof result.score === 'number' &&
     Number.isFinite(result.score) &&
@@ -629,17 +611,40 @@ function isGradingResultInternal(result: any, ancestors: WeakSet<object>): resul
     (result.namedScores == null || isFiniteNumberRecord(result.namedScores)) &&
     (result.namedScoreWeights == null || isFiniteNumberRecord(result.namedScoreWeights)) &&
     (typeof result.tokensUsed === 'undefined' || typeof result.tokensUsed === 'object') &&
-    (result.componentResults == null || isGradingResultArray(result.componentResults, ancestors)) &&
+    (result.componentResults == null || Array.isArray(result.componentResults)) &&
     (typeof result.assertion === 'undefined' ||
       result.assertion === null ||
       typeof result.assertion === 'object') &&
-    (typeof result.comment === 'undefined' || typeof result.comment === 'string');
-  ancestors.delete(result);
-  return valid;
+    (typeof result.comment === 'undefined' || typeof result.comment === 'string')
+  );
 }
 
 export function isGradingResult(result: any): result is GradingResult {
-  return isGradingResultInternal(result, new WeakSet());
+  const ancestors = new WeakSet<object>();
+  const frames = [{ result, nextChild: -1 }];
+
+  // Traverse one indexed child at a time without consuming the JavaScript call stack.
+  while (frames.length > 0) {
+    const frame = frames[frames.length - 1];
+    const current = frame.result;
+    if (frame.nextChild === -1) {
+      if (!hasValidGradingResultFields(current) || ancestors.has(current)) {
+        return false;
+      }
+      ancestors.add(current);
+      frame.nextChild = 0;
+    }
+
+    const components = current.componentResults;
+    if (components != null && frame.nextChild < components.length) {
+      // Ignore custom iterators and reject a sparse entry as soon as it is visited.
+      frames.push({ result: components[frame.nextChild++], nextChild: -1 });
+    } else {
+      ancestors.delete(current);
+      frames.pop();
+    }
+  }
+  return true;
 }
 
 export const BaseAssertionTypesSchema = z.enum([

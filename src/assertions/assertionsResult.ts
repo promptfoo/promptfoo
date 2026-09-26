@@ -273,8 +273,8 @@ export class AssertionsResult {
     }
 
     if (metric) {
-      this.namedScores[metric] = (this.namedScores[metric] || 0) + result.score * weight;
-      this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] || 0) + weight;
+      this.namedScores[metric] = (this.namedScores[metric] ?? 0) + result.score * weight;
+      this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] ?? 0) + weight;
     }
 
     if (result.namedScores) {
@@ -283,9 +283,9 @@ export class AssertionsResult {
           const incomingWeight = result.namedScoreWeights?.[metricName] ?? 1;
           const weightedIncomingWeight = incomingWeight * weight;
           this.namedScores[metricName] =
-            (this.namedScores[metricName] || 0) + score * weightedIncomingWeight;
+            (this.namedScores[metricName] ?? 0) + score * weightedIncomingWeight;
           this.namedScoreWeights[metricName] =
-            (this.namedScoreWeights[metricName] || 0) + weightedIncomingWeight;
+            (this.namedScoreWeights[metricName] ?? 0) + weightedIncomingWeight;
         }
       });
     }
@@ -356,7 +356,12 @@ export class AssertionsResult {
     const normalizedNamedScores: Record<string, number> = {};
     for (const [key, value] of Object.entries(this.namedScores)) {
       const totalWeight = this.namedScoreWeights[key] ?? 0;
-      normalizedNamedScores[key] = totalWeight > 0 ? value / totalWeight : 0;
+      normalizedNamedScores[key] =
+        !Number.isFinite(value) || !Number.isFinite(totalWeight)
+          ? Number.NaN
+          : totalWeight > 0
+            ? value / totalWeight
+            : 0;
     }
 
     const hasNamedScoreWeights = Object.keys(this.namedScoreWeights).length > 0;
