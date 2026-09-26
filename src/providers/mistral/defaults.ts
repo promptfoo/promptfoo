@@ -1,6 +1,6 @@
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from '../mistral';
 
-import type { EnvOverrides } from '../../types/env';
+import type { EnvOverrides } from '../../contracts/env';
 
 export const DefaultEmbeddingProvider = new MistralEmbeddingProvider();
 export const DefaultGradingProvider = new MistralChatCompletionProvider('mistral-large-latest');

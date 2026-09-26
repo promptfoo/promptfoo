@@ -3,7 +3,7 @@ import { OpenAiEmbeddingProvider } from './embedding';
 import { OpenAiModerationProvider } from './moderation';
 import { OpenAiResponsesProvider } from './responses';
 
-import type { EnvOverrides } from '../../types/env';
+import type { EnvOverrides } from '../../contracts/env';
 
 const DEFAULT_OPENAI_MODEL = 'gpt-6-sol';
 

@@ -5,7 +5,7 @@ import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../t
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { getRequestTimeoutMs } from './shared';
 
-import type { EnvOverrides } from '../types/env';
+import type { EnvOverrides } from '../contracts/env';
 import type {
   ApiProvider,
   ApiSimilarityProvider,

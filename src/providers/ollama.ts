@@ -6,7 +6,7 @@ import { normalizeFinishReason } from '../util/finishReason';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
 import { getRequestTimeoutMs, parseChatPrompt, transformTools } from './shared';
 
-import type { EnvOverrides } from '../types/env';
+import type { EnvOverrides } from '../contracts/env';
 import type {
   ApiProvider,
   CallApiContextParams,
