@@ -1,7 +1,7 @@
 import { PostHog } from 'posthog-node';
 import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, R_ENDPOINT, VERSION } from './constants';
 import { POSTHOG_KEY } from './constants/build';
-import { getEnvBool, getEnvString, isCI } from './envars';
+import { getEnvBool, getEnvOverrides, getEnvString, isCI, parseEnvBool } from './envars';
 import { getUserAuthInfo, getUserId } from './globalConfig/accounts';
 import logger from './logger';
 import { fetchWithProxy, fetchWithTimeout } from './util/fetch/index';
@@ -15,8 +15,17 @@ export type { EventProperties, TelemetryEventTypes } from './telemetryEvents';
 let posthogClient: PostHog | null = null;
 let isShuttingDown = false;
 
+// An invocation or suite cannot turn off the host's test-mode restriction.
+function isTestMode(): boolean {
+  return (
+    parseEnvBool(process.env.IS_TESTING) ||
+    parseEnvBool(getEnvOverrides('file')?.IS_TESTING) ||
+    getEnvBool('IS_TESTING')
+  );
+}
+
 function getPostHogClient(): PostHog | null {
-  if (getEnvBool('PROMPTFOO_DISABLE_TELEMETRY') || getEnvBool('IS_TESTING')) {
+  if (getEnvBool('PROMPTFOO_DISABLE_TELEMETRY') || isTestMode()) {
     return null;
   }
 
@@ -82,7 +91,7 @@ export class Telemetry {
   }
 
   async identify() {
-    if (this.disabled || getEnvBool('IS_TESTING')) {
+    if (this.disabled || isTestMode()) {
       return;
     }
 
@@ -124,7 +133,7 @@ export class Telemetry {
   }
 
   private sendEvent(eventName: TelemetryEventTypes, properties: EventProperties): void {
-    if (getEnvBool('IS_TESTING')) {
+    if (isTestMode()) {
       return;
     }
 
