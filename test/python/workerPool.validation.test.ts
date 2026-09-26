@@ -57,6 +57,7 @@ describe('Python pool executable validation', () => {
   afterEach(async () => {
     await Promise.all(pools.splice(0).map((pool) => pool.shutdown()));
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   it('probes once before starting all workers in a pool', async () => {
@@ -114,6 +115,101 @@ describe('Python pool executable validation', () => {
     shells[0].emit('close');
     await vi.waitFor(() => expect(shells).toHaveLength(3));
     expect(execFileAsync).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects queued and new calls when restart validation fails', async () => {
+    const pool = new PythonWorkerPool('fixture.py', 'call_api', 1, 'fixture-python');
+    pools.push(pool);
+    await pool.initialize();
+    execFileAsync.mockRejectedValueOnce(new Error('fixture missing'));
+    shells[0].emit('close');
+    const queued = pool.execute('call_api', []).catch((error) => error);
+    await setImmediate();
+    const outcome = await Promise.race([queued, Promise.resolve('still queued')]);
+    expect(outcome).toEqual(new Error('Python worker pool has no usable workers'));
+    await expect(pool.execute('call_api', [])).rejects.toThrow('no usable workers');
+    expect(shells).toHaveLength(1);
+  });
+
+  it('rejects queued calls after the crash limit is reached', async () => {
+    const pool = new PythonWorkerPool('fixture.py', 'call_api', 1, 'fixture-python');
+    pools.push(pool);
+    await pool.initialize();
+    for (let crash = 0; crash < 2; crash++) {
+      shells[crash].emit('close');
+      await setImmediate();
+    }
+    signals.autoReady = false;
+    shells[2].emit('close');
+    const queued = pool.execute('call_api', []).catch((error) => error);
+    await setImmediate();
+    expect(await Promise.race([queued, Promise.resolve('still queued')])).toEqual(
+      new Error('Python worker pool has no usable workers'),
+    );
+    expect(execFileAsync).toHaveBeenCalledTimes(3);
+    expect(shells).toHaveLength(3);
+  });
+
+  it.each(['close', 'timeout'] as const)(
+    'rejects queued calls when replacement startup fails by %s',
+    async (failure) => {
+      const pool = new PythonWorkerPool('fixture.py', 'call_api', 1, 'fixture-python');
+      pools.push(pool);
+      await pool.initialize();
+      vi.useFakeTimers();
+      signals.autoReady = false;
+      shells[0].emit('close');
+      await setImmediate();
+      const queued = pool.execute('call_api', []).catch((error) => error);
+      if (failure === 'close') {
+        shells[1].emit('close');
+      } else {
+        await vi.advanceTimersByTimeAsync(30000);
+      }
+      await setImmediate();
+      expect(await Promise.race([queued, Promise.resolve('still queued')])).toEqual(
+        new Error('Python worker pool has no usable workers'),
+      );
+      expect(vi.getTimerCount()).toBe(0);
+      expect(shells).toHaveLength(2);
+    },
+  );
+
+  it('drains queued calls after a successful restart', async () => {
+    const pool = new PythonWorkerPool('fixture.py', 'call_api', 1, 'fixture-python');
+    pools.push(pool);
+    await pool.initialize();
+    vi.spyOn(PythonWorker.prototype, 'call').mockResolvedValue({ output: 'recovered' });
+    shells[0].emit('close');
+    await expect(pool.execute('call_api', [])).resolves.toEqual({ output: 'recovered' });
+    expect(shells).toHaveLength(2);
+  });
+
+  it('keeps serving queued calls with a healthy peer after one worker fails', async () => {
+    const pool = new PythonWorkerPool('fixture.py', 'call_api', 2, 'fixture-python');
+    pools.push(pool);
+    await pool.initialize();
+    let finishHealthyCall!: (value: unknown) => void;
+    const call = vi.spyOn(PythonWorker.prototype, 'call');
+    call.mockImplementationOnce(function (this: PythonWorker) {
+      const busy = vi.spyOn(this, 'isBusy').mockReturnValue(true);
+      return new Promise((resolve) => {
+        finishHealthyCall = (value) => {
+          busy.mockRestore();
+          resolve(value);
+        };
+      });
+    });
+    call.mockResolvedValue({ output: 'healthy' });
+    execFileAsync.mockRejectedValueOnce(new Error('fixture missing'));
+    shells[0].emit('close');
+    const active = pool.execute('call_api', []);
+    const queued = pool.execute('call_api', []);
+    await setImmediate();
+    finishHealthyCall({ output: 'active' });
+    await expect(active).resolves.toEqual({ output: 'active' });
+    await expect(queued).resolves.toEqual({ output: 'healthy' });
+    await expect(pool.execute('call_api', [])).resolves.toEqual({ output: 'healthy' });
   });
 
   it('does not restart after shutdown while executable validation is pending', async () => {

@@ -21,6 +21,7 @@ export class PythonWorker {
   private process: PythonShell | null = null;
   private ready: boolean = false;
   private busy: boolean = false;
+  private failed: boolean = false;
   private shuttingDown: boolean = false;
   private crashCount: number = 0;
   private stderrLogger = new PythonStderrLogger('Python worker stderr: ');
@@ -37,7 +38,7 @@ export class PythonWorker {
     private functionName: string,
     private pythonPath?: string,
     private timeout: number = getRequestTimeoutMs(),
-    private onReady?: () => void,
+    private onStateChange?: () => void,
   ) {}
 
   async initialize(validatedPythonPath?: string): Promise<void> {
@@ -45,6 +46,9 @@ export class PythonWorker {
   }
 
   private async startWorker(validatedPythonPath?: string): Promise<void> {
+    if (this.failed) {
+      throw new Error('Worker has failed');
+    }
     const wrapperPath = path.join(getWrapperDir('python'), 'persistent_wrapper.py');
 
     // Validate and resolve Python path using smart detection (tries python3, then python)
@@ -56,7 +60,7 @@ export class PythonWorker {
       throw new Error('Worker shutting down');
     }
 
-    this.process = new PythonShell(wrapperPath, {
+    const workerProcess = new PythonShell(wrapperPath, {
       mode: 'text',
       pythonPath: resolvedPythonPath,
       env: getProcessEnv(),
@@ -64,54 +68,60 @@ export class PythonWorker {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
+    this.process = workerProcess;
+
     // Listen for READY signal
     return new Promise((resolve, reject) => {
+      let becameReady = false;
       const readyTimeout = setTimeout(() => {
-        // Kill the process to prevent orphaned Python processes
-        // and avoid triggering handleCrash() which would retry
-        this.shuttingDown = true;
-        if (this.process) {
-          this.process.kill('SIGTERM');
+        // This startup failed; its close event must not start another worker.
+        if (this.process === workerProcess) {
           this.process = null;
         }
+        workerProcess.kill('SIGTERM');
         reject(new Error('Worker failed to become ready within timeout'));
       }, 30000);
 
-      this.process!.on('message', (message: string) => {
+      workerProcess.on('message', (message: string) => {
         if (message.trim() === 'READY') {
           clearTimeout(readyTimeout);
-          if (this.shuttingDown) {
+          if (this.shuttingDown || this.process !== workerProcess) {
             reject(new Error('Worker shutting down'));
             return;
           }
+          becameReady = true;
           this.ready = true;
           logger.debug(`Python worker ready for ${this.scriptPath}`);
           // Notify pool that worker is ready (triggers queue processing)
-          if (this.onReady) {
-            this.onReady();
-          }
+          this.onStateChange?.();
           resolve();
         } else if (message.startsWith('DONE|')) {
           this.handleDone(message.slice('DONE|'.length));
         }
       });
 
-      this.process!.on('error', (err) => {
+      workerProcess.on('error', (err) => {
         clearTimeout(readyTimeout);
         reject(err);
       });
 
-      this.process!.on('close', () => {
+      workerProcess.on('close', () => {
+        clearTimeout(readyTimeout);
         this.flushStderr();
+        if (this.process !== workerProcess) {
+          return;
+        }
+        this.process = null;
         if (this.shuttingDown) {
-          clearTimeout(readyTimeout);
           reject(new Error('Worker shutting down'));
-        } else {
+        } else if (becameReady) {
           this.handleCrash();
+        } else {
+          reject(new Error('Worker exited before becoming ready'));
         }
       });
 
-      this.process!.stderr?.on('data', (data) => {
+      workerProcess.stderr?.on('data', (data) => {
         this.handleStderr(data);
       });
     });
@@ -269,12 +279,28 @@ export class PythonWorker {
       logger.warn(`Python worker crashed (${this.crashCount}/${this.maxCrashes}), restarting...`);
       this.startWorker().catch((err) => {
         if (!this.shuttingDown) {
-          logger.error(`Failed to restart worker: ${err}`);
+          this.markFailed(err);
         }
       });
     } else {
-      logger.error(`Python worker crashed ${this.maxCrashes} times, marking as dead`);
+      this.markFailed(new Error(`Python worker crashed ${this.maxCrashes} times`));
     }
+  }
+
+  private markFailed(error: unknown): void {
+    this.failed = true;
+    this.ready = false;
+    if (this.process) {
+      const workerProcess = this.process;
+      this.process = null;
+      workerProcess.kill('SIGTERM');
+    }
+    logger.error(`Python worker cannot restart: ${error}`);
+    this.onStateChange?.();
+  }
+
+  hasFailed(): boolean {
+    return this.failed;
   }
 
   isReady(): boolean {

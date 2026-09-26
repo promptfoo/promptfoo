@@ -66,7 +66,7 @@ export class PythonWorkerPool {
         this.functionName,
         this.pythonPath,
         this.timeout,
-        () => this.processQueue(), // Resume queue processing when worker becomes ready
+        () => this.processQueue(), // Resume or reject queued work when availability changes
       );
       initPromises.push(worker.initialize(pythonPath));
       this.workers.push(worker);
@@ -93,10 +93,11 @@ export class PythonWorkerPool {
       // Worker available, execute immediately and trigger queue processing when done
       return worker.call(functionName, args).finally(() => this.processQueue());
     } else {
-      // All workers busy, queue the request
+      // Busy or restarting workers can serve this request once they become ready.
       return new Promise<unknown>((resolve, reject) => {
         this.queue.push({ functionName, args, resolve, reject });
         logger.debug(`Request queued (queue size: ${this.queue.length})`);
+        this.processQueue();
       });
     }
   }
@@ -111,6 +112,13 @@ export class PythonWorkerPool {
   }
 
   private processQueue(): void {
+    if (this.workers.length > 0 && this.workers.every((worker) => worker.hasFailed())) {
+      for (const request of this.queue.splice(0)) {
+        request.reject(new Error('Python worker pool has no usable workers'));
+      }
+      return;
+    }
+
     // Drain the entire queue - process all waiting requests with available workers
     while (this.queue.length > 0) {
       const worker = this.getAvailableWorker();
