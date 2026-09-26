@@ -28,17 +28,22 @@ import type { Cache } from 'cache-manager';
 import type { CacheOptions } from './types/cache';
 import type { FetchOptions } from './util/fetch/types';
 
-let cacheInstance: Cache | undefined;
-const namespacedCacheInstances = new Map<string, Cache>();
+interface CacheBackend {
+  path?: string;
+  instances: Map<number, Cache>;
+  claims: Set<string>;
+  inflight: Map<string, Promise<string>>;
+}
+
+const cacheBackends = new Map<string, CacheBackend>();
+const namespacedCacheInstances = new WeakMap<Cache, Map<string, Cache>>();
 let cacheClearGeneration = 0;
 
 const cacheNamespaceStorage = new AsyncLocalStorage<{ namespace: string }>();
 const cacheEnabledStorage = new AsyncLocalStorage<{ enabled: boolean }>();
 
-let enabled = getEnvBool('PROMPTFOO_CACHE_ENABLED', true);
-
-const cacheType =
-  getEnvString('PROMPTFOO_CACHE_TYPE') || (getEnvString('NODE_ENV') === 'test' ? 'memory' : 'disk');
+// Explicit API overrides remain process-wide; environment defaults are invocation-scoped.
+let enabled: boolean | undefined;
 
 /** Default cache TTL: 14 days in seconds */
 const DEFAULT_CACHE_TTL_SECONDS = 60 * 60 * 24 * 14;
@@ -72,65 +77,75 @@ export function getCache() {
   return getCacheInstance();
 }
 
-function getCacheInstance() {
+function getCacheBackend(): CacheBackend {
+  const cacheType =
+    getEnvString('PROMPTFOO_CACHE_TYPE') ||
+    (getEnvString('NODE_ENV') === 'test' ? 'memory' : 'disk');
+  const cachePath =
+    cacheType === 'disk' && getEffectiveCacheEnabled()
+      ? path.resolve(
+          getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache'),
+        )
+      : undefined;
+  const identity = JSON.stringify(cachePath ?? null);
+  let backend = cacheBackends.get(identity);
+  if (!backend) {
+    backend = { path: cachePath, instances: new Map(), claims: new Set(), inflight: new Map() };
+    cacheBackends.set(identity, backend);
+  }
+  return backend;
+}
+
+function getCacheInstance(backend = getCacheBackend()) {
+  const ttl = getCacheTtlMs();
+  let cacheInstance = backend.instances.get(ttl);
   if (!cacheInstance) {
-    let cachePath = '';
-    const stores = [];
+    // Different TTL defaults must share one store, especially for disk caches: two
+    // KeyvFile instances for the same file can overwrite each other's contents.
+    const existingInstance = backend.instances.values().next().value;
+    const stores = existingInstance ? existingInstance.stores : [];
 
-    if (cacheType === 'disk' && enabled) {
-      cachePath =
-        getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache');
-
-      if (!fs.existsSync(cachePath)) {
-        logger.info(`Creating cache folder at ${cachePath}.`);
-        fs.mkdirSync(cachePath, { recursive: true });
+    if (!existingInstance && backend.path) {
+      if (!fs.existsSync(backend.path)) {
+        logger.info(`Creating cache folder at ${backend.path}.`);
+        fs.mkdirSync(backend.path, { recursive: true });
       }
 
-      const newCacheFile = path.join(cachePath, 'cache.json');
-
       try {
-        const store = new KeyvFile({
-          filename: newCacheFile,
-        });
-
-        const keyv = new Keyv({
-          store,
-          ttl: getCacheTtlMs(),
-        });
-
-        stores.push(keyv);
+        const store = new KeyvFile({ filename: path.join(backend.path, 'cache.json') });
+        stores.push(new Keyv({ store }));
       } catch (err) {
         logger.warn(
           `[Cache] Failed to initialize disk cache: ${(err as Error).message}. ` +
             `Using memory cache instead.`,
         );
-        // Falls through to memory cache
       }
     }
 
-    // Initialize cache (disk if stores array has items, memory otherwise)
-    cacheInstance = createCache({
-      stores,
-      ttl: getCacheTtlMs(),
-      refreshThreshold: 0, // Disable background refresh
-    });
+    cacheInstance = createCache({ stores, ttl, refreshThreshold: 0 });
     const clear = cacheInstance.clear.bind(cacheInstance);
     cacheInstance.clear = async () => {
       const result = await clear();
       cacheClearGeneration += 1;
       return result;
     };
+    backend.instances.set(ttl, cacheInstance);
   }
   return cacheInstance;
 }
 
 function getNamespacedCache(namespace: string) {
-  const cachedNamespaceInstance = namespacedCacheInstances.get(namespace);
+  const cache = getCacheInstance();
+  let namespaces = namespacedCacheInstances.get(cache);
+  if (!namespaces) {
+    namespaces = new Map();
+    namespacedCacheInstances.set(cache, namespaces);
+  }
+  const cachedNamespaceInstance = namespaces.get(namespace);
   if (cachedNamespaceInstance) {
     return cachedNamespaceInstance;
   }
 
-  const cache = getCacheInstance();
   const namespacedCache = {
     ...cache,
     get: (key: string) => cache.get(getScopedCacheKey(key, namespace)),
@@ -164,7 +179,7 @@ function getNamespacedCache(namespace: string) {
       ),
   } as Cache;
 
-  namespacedCacheInstances.set(namespace, namespacedCache);
+  namespaces.set(namespace, namespacedCache);
   return namespacedCache;
 }
 
@@ -284,7 +299,11 @@ export function withCacheEnabled<T>(enabledOverride: boolean | undefined, fn: ()
 }
 
 function getEffectiveCacheEnabled() {
-  return cacheEnabledStorage.getStore()?.enabled ?? enabled;
+  return (
+    cacheEnabledStorage.getStore()?.enabled ??
+    enabled ??
+    getEnvBool('PROMPTFOO_CACHE_ENABLED', true)
+  );
 }
 
 export type FetchWithCacheResult<T> = {
@@ -312,8 +331,6 @@ type PreparedFetchResponse = {
   cacheable: boolean;
 };
 
-const inflightFetchResponses = new Map<string, Promise<SerializedFetchResponse>>();
-const claimedCacheKeys = new Set<string>();
 const IGNORED_FETCH_CACHE_OPTION_KEYS = new Set(['method', 'signal']);
 const IGNORED_FETCH_CACHE_HEADERS = new Set(['traceparent', 'tracestate']);
 const FETCH_CACHE_SECRET_HMAC_CONTEXT = 'promptfoo:fetch-cache-secret-key';
@@ -606,15 +623,15 @@ function getInflightFetchCacheKey(cacheKey: string, url: RequestInfo, options: R
  * separate eval processes cannot both attribute the same background response's usage.
  */
 export function claimCacheKeyOnce(cacheKey: string): boolean {
+  const backend = getCacheBackend();
+  const claimedCacheKeys = backend.claims;
   const scopedCacheKey = getScopedCacheKey(cacheKey);
   if (claimedCacheKeys.has(scopedCacheKey)) {
     return false;
   }
 
-  if (cacheType === 'disk' && getEffectiveCacheEnabled()) {
-    const cachePath =
-      getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache');
-    const claimsPath = path.join(cachePath, 'claims');
+  if (backend.path) {
+    const claimsPath = path.join(backend.path, 'claims');
     try {
       fs.mkdirSync(claimsPath, { recursive: true });
       const handle = fs.openSync(path.join(claimsPath, sha256(scopedCacheKey)), 'wx');
@@ -906,7 +923,9 @@ export async function fetchWithCache<T = unknown>(
     }
   }
 
-  const cache = getCacheInstance();
+  const backend = getCacheBackend();
+  const cache = getCacheInstance(backend);
+  const inflightFetchResponses = backend.inflight;
 
   const cachedResponse = await cache.get<SerializedFetchResponse>(cacheKey);
   if (cachedResponse != null) {
@@ -976,7 +995,7 @@ export function disableCache() {
 }
 
 /**
- * Clear all cached results.
+ * Clear all cached results in the currently configured backend.
  *
  * Removes all cached provider responses. The cache will refetch on next access.
  *
@@ -989,14 +1008,12 @@ export function disableCache() {
  * ```
  */
 export async function clearCache() {
-  inflightFetchResponses.clear();
-  namespacedCacheInstances.clear();
-  const result = await getCacheInstance().clear();
-  claimedCacheKeys.clear();
-  if (cacheType === 'disk') {
-    const cachePath =
-      getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache');
-    fs.rmSync(path.join(cachePath, 'claims'), { force: true, recursive: true });
+  const backend = getCacheBackend();
+  backend.inflight.clear();
+  const result = await getCacheInstance(backend).clear();
+  backend.claims.clear();
+  if (backend.path) {
+    fs.rmSync(path.join(backend.path, 'claims'), { force: true, recursive: true });
   }
   return result;
 }

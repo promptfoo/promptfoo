@@ -8,7 +8,16 @@ import type { ConfidentialClientApplication } from '@azure/msal-node';
 
 import type { CsvRow } from './types/index';
 
-let cca: ConfidentialClientApplication | null = null;
+// Retain at most one authentication context. Each caller keeps its own selected
+// client, so overlapping configurations never mutate another request's identity.
+let cachedClient:
+  | {
+      clientId: string;
+      tenantId: string;
+      pemContent: string;
+      client: ConfidentialClientApplication;
+    }
+  | undefined;
 
 /**
  * Fetches CSV data from a SharePoint file using certificate-based authentication.
@@ -65,80 +74,82 @@ export async function fetchCsvFromSharepoint(url: string): Promise<CsvRow[]> {
 }
 
 async function getConfidentialClient(): Promise<ConfidentialClientApplication> {
-  if (!cca) {
-    const { ConfidentialClientApplication: MsalClient } = await import('@azure/msal-node');
+  const clientId = getEnvString('SHAREPOINT_CLIENT_ID');
+  const tenantId = getEnvString('SHAREPOINT_TENANT_ID');
+  const certPath = getEnvString('SHAREPOINT_CERT_PATH');
 
-    const clientId = getEnvString('SHAREPOINT_CLIENT_ID');
-    const tenantId = getEnvString('SHAREPOINT_TENANT_ID');
-    const certPath = getEnvString('SHAREPOINT_CERT_PATH');
-
-    if (!clientId) {
-      throw new Error(
-        'SHAREPOINT_CLIENT_ID environment variable is required. Please set it to your Azure AD application client ID.',
-      );
-    }
-
-    if (!tenantId) {
-      throw new Error(
-        'SHAREPOINT_TENANT_ID environment variable is required. Please set it to your Azure AD tenant ID.',
-      );
-    }
-
-    if (!certPath) {
-      throw new Error(
-        'SHAREPOINT_CERT_PATH environment variable is required. Please set it to the path of your certificate PEM file.',
-      );
-    }
-
-    let pemContent: string;
-    try {
-      pemContent = await fs.readFile(certPath, 'utf8');
-    } catch (error) {
-      throw new Error(`Failed to read certificate from path: ${certPath}. Error: ${error}`);
-    }
-
-    // Extract private key
-    const privateKeyMatch = pemContent.match(
-      /-----BEGIN PRIVATE KEY-----[\s\S]+?-----END PRIVATE KEY-----/,
+  if (!clientId) {
+    throw new Error(
+      'SHAREPOINT_CLIENT_ID environment variable is required. Please set it to your Azure AD application client ID.',
     );
-    const privateKey = privateKeyMatch ? privateKeyMatch[0] : pemContent;
-
-    // Extract certificate for thumbprint calculation
-    const certMatch = pemContent.match(
-      /-----BEGIN CERTIFICATE-----\n([\s\S]+?)\n-----END CERTIFICATE-----/,
-    );
-    if (!certMatch) {
-      throw new Error(
-        `Certificate not found in PEM file at ${certPath}. The PEM file must contain both private key and certificate.`,
-      );
-    }
-
-    // Calculate SHA-256 thumbprint from the certificate
-    const certDer = Buffer.from(certMatch[1].replace(/\s/g, ''), 'base64');
-    const thumbprintSha256 = crypto
-      .createHash('sha256')
-      .update(certDer)
-      .digest('hex')
-      .toUpperCase();
-
-    const msalConfig = {
-      auth: {
-        clientId,
-        authority: `https://login.microsoftonline.com/${tenantId}`,
-        clientCertificate: {
-          thumbprintSha256,
-          privateKey,
-        },
-      },
-    };
-
-    cca = new MsalClient(msalConfig);
   }
-  return cca;
+
+  if (!tenantId) {
+    throw new Error(
+      'SHAREPOINT_TENANT_ID environment variable is required. Please set it to your Azure AD tenant ID.',
+    );
+  }
+
+  if (!certPath) {
+    throw new Error(
+      'SHAREPOINT_CERT_PATH environment variable is required. Please set it to the path of your certificate PEM file.',
+    );
+  }
+
+  let pemContent: string;
+  try {
+    pemContent = await fs.readFile(certPath, 'utf8');
+  } catch (error) {
+    throw new Error(`Failed to read certificate from path: ${certPath}. Error: ${error}`);
+  }
+
+  // Extract private key
+  const privateKeyMatch = pemContent.match(
+    /-----BEGIN PRIVATE KEY-----[\s\S]+?-----END PRIVATE KEY-----/,
+  );
+  const privateKey = privateKeyMatch ? privateKeyMatch[0] : pemContent;
+
+  // Extract certificate for thumbprint calculation
+  const certMatch = pemContent.match(
+    /-----BEGIN CERTIFICATE-----\n([\s\S]+?)\n-----END CERTIFICATE-----/,
+  );
+  if (!certMatch) {
+    throw new Error(
+      `Certificate not found in PEM file at ${certPath}. The PEM file must contain both private key and certificate.`,
+    );
+  }
+
+  // Calculate SHA-256 thumbprint from the certificate
+  const certDer = Buffer.from(certMatch[1].replace(/\s/g, ''), 'base64');
+  const thumbprintSha256 = crypto.createHash('sha256').update(certDer).digest('hex').toUpperCase();
+
+  const msalConfig = {
+    auth: {
+      clientId,
+      authority: `https://login.microsoftonline.com/${tenantId}`,
+      clientCertificate: {
+        thumbprintSha256,
+        privateKey,
+      },
+    },
+  };
+
+  const { ConfidentialClientApplication: MsalClient } = await import('@azure/msal-node');
+  // Check after asynchronous work so simultaneous callers with the same
+  // credentials can reuse the client; failed initialization is never cached.
+  if (
+    cachedClient?.clientId === clientId &&
+    cachedClient.tenantId === tenantId &&
+    cachedClient.pemContent === pemContent
+  ) {
+    return cachedClient.client;
+  }
+  const client = new MsalClient(msalConfig);
+  cachedClient = { clientId, tenantId, pemContent, client };
+  return client;
 }
 
 export async function getSharePointAccessToken() {
-  const client = await getConfidentialClient();
   const baseUrl = getEnvString('SHAREPOINT_BASE_URL');
 
   if (!baseUrl) {
@@ -147,6 +158,7 @@ export async function getSharePointAccessToken() {
     );
   }
 
+  const client = await getConfidentialClient();
   const tokenResult = await client.acquireTokenByClientCredential({
     scopes: [`${baseUrl}/.default`],
   });

@@ -43,3 +43,62 @@ describe('PROMPTFOO_LOG_TO_STDERR', () => {
     }
   });
 });
+
+describe('CLI console configuration after env-file loading', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  it('applies late level/routing settings and does not follow evaluation scopes', async () => {
+    const restore = mockProcessEnv({
+      LOG_LEVEL: 'info',
+      PROMPTFOO_LOG_TO_STDERR: undefined,
+      PROMPTFOO_DISABLE_DEBUG_LOG: 'true',
+      PROMPTFOO_DISABLE_ERROR_LOG: 'true',
+    });
+    try {
+      vi.resetModules();
+      const { getLogLevel, initializeRunLogging, winstonLogger } = await import('../src/logger');
+      const cliState = (await import('../src/cliState')).default;
+      const restoreLateEnv = mockProcessEnv({ LOG_LEVEL: 'warn', PROMPTFOO_LOG_TO_STDERR: 'true' });
+      try {
+        initializeRunLogging();
+        expect(getLogLevel()).toBe('warn');
+        expect(
+          (winstonLogger.transports[0] as ConsoleTransportWithStderrLevels).stderrLevels,
+        ).toEqual({ error: true, warn: true, info: true, debug: true });
+        await cliState.withEnv(
+          { LOG_LEVEL: 'debug', PROMPTFOO_LOG_TO_STDERR: 'false' },
+          async () => {
+            expect(getLogLevel()).toBe('warn');
+          },
+        );
+      } finally {
+        restoreLateEnv();
+      }
+    } finally {
+      restore();
+    }
+  });
+
+  it('preserves structured-output protection even when the env file requests stdout logging', async () => {
+    const restore = mockProcessEnv({
+      LOG_LEVEL: 'debug',
+      PROMPTFOO_LOG_TO_STDERR: 'false',
+      PROMPTFOO_DISABLE_DEBUG_LOG: 'true',
+      PROMPTFOO_DISABLE_ERROR_LOG: 'true',
+    });
+    try {
+      vi.resetModules();
+      const { getLogLevel, initializeRunLogging, winstonLogger } = await import('../src/logger');
+      initializeRunLogging({ structuredOutput: true });
+      expect(getLogLevel()).toBe('error');
+      expect(
+        (winstonLogger.transports[0] as ConsoleTransportWithStderrLevels).stderrLevels,
+      ).toEqual({ error: true, warn: true, info: true, debug: true });
+    } finally {
+      restore();
+    }
+  });
+});

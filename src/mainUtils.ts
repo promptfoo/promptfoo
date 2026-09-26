@@ -53,7 +53,7 @@ function loadEnvPathOnce(
   }
 
   if (refreshConfigDirectory) {
-    setupEnv(envPath, { refreshConfigDirectory: true });
+    setupEnv(envPath, { refreshConfigDirectory: true, quiet: !shouldLog });
   } else {
     setupEnv(envPath);
   }
