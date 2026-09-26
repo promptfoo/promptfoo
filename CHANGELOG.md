@@ -4,6 +4,53 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.123.2](https://github.com/promptfoo/promptfoo/compare/0.123.1...0.123.2) (2026-09-26)
+
+### Features
+
+- **providers:** add Claude Opus 5.5 support ([#11037](https://github.com/promptfoo/promptfoo/issues/11037)) ([ae2aded](https://github.com/promptfoo/promptfoo/commit/ae2adedd9e7a5c170728f5777f9694cb9a2c863a))
+- **providers:** add GPT-6 Sol and Luna ([#11043](https://github.com/promptfoo/promptfoo/issues/11043)) ([92dd929](https://github.com/promptfoo/promptfoo/commit/92dd929548c0949faf86b38df807810a7be37346))
+- **providers:** add Grok 4.7 support ([#11046](https://github.com/promptfoo/promptfoo/issues/11046)) ([4f7c400](https://github.com/promptfoo/promptfoo/commit/4f7c400e4e54374b86eebca6e125ef5e9108d4e3))
+- **providers:** update current model support ([#11065](https://github.com/promptfoo/promptfoo/issues/11065)) ([37fc270](https://github.com/promptfoo/promptfoo/commit/37fc270c0db70bb1006d7347336541eab8d84f34))
+
+### Bug Fixes
+
+- **cli:** correct Cloud organization guidance ([#11078](https://github.com/promptfoo/promptfoo/issues/11078)) ([de8a542](https://github.com/promptfoo/promptfoo/commit/de8a542aff080eb1413640ec3b7883672ff9c63c))
+- **cli:** keep Cloud login in the token organization ([#11026](https://github.com/promptfoo/promptfoo/issues/11026)) ([b85c2f1](https://github.com/promptfoo/promptfoo/commit/b85c2f151ea9f03d6073d0aca079ca7b684d4b8c))
+- **cli:** preserve Cloud team selection ([#11018](https://github.com/promptfoo/promptfoo/issues/11018)) ([3379c9e](https://github.com/promptfoo/promptfoo/commit/3379c9ee2dd79934f04e88c853c26e96239e29b5))
+- **config:** isolate evaluation context and preserve replay state ([#10893](https://github.com/promptfoo/promptfoo/issues/10893)) ([8d5e81e](https://github.com/promptfoo/promptfoo/commit/8d5e81e9f69dff49cca76cbf3b04accddbfd5c19))
+- **deps:** pin ansi-tokenize to 0.3.0 ([#10990](https://github.com/promptfoo/promptfoo/issues/10990)) ([a89e3cc](https://github.com/promptfoo/promptfoo/commit/a89e3cc42eba5fbc43050959bb81581ef0f89d07))
+- **deps:** update anthropic packages ([#11009](https://github.com/promptfoo/promptfoo/issues/11009)) ([a33f261](https://github.com/promptfoo/promptfoo/commit/a33f26160e26106256590c53ef45297b34cf1f28))
+- **deps:** update anthropic packages ([#11073](https://github.com/promptfoo/promptfoo/issues/11073)) ([9d24937](https://github.com/promptfoo/promptfoo/commit/9d24937976cc74d19ee7c7b54ea7776c6c0bb7ac))
+- **deps:** update dependency js-yaml to v5.4.2 ([#11038](https://github.com/promptfoo/promptfoo/issues/11038)) ([d59f045](https://github.com/promptfoo/promptfoo/commit/d59f045c4cda1193574380aae639d84380dbf5f2))
+- **deps:** update dependency zod to v4.6.1 ([#11000](https://github.com/promptfoo/promptfoo/issues/11000)) ([dd144d5](https://github.com/promptfoo/promptfoo/commit/dd144d594be023cf8245e3ff1939265ce811c8e2))
+- **deps:** update ibm-cloud-sdk-core to v5.6.1 ([#10986](https://github.com/promptfoo/promptfoo/issues/10986)) ([17b5a0a](https://github.com/promptfoo/promptfoo/commit/17b5a0a6a6640e968380b4db50c7cb09bd3cd1f7))
+- **deps:** update ip-address to v10.7.1 ([#11064](https://github.com/promptfoo/promptfoo/issues/11064)) ([7110bef](https://github.com/promptfoo/promptfoo/commit/7110bef84da9bb48ae0d516ef5f4455b23cff82c))
+- **deps:** update type definitions ([#11010](https://github.com/promptfoo/promptfoo/issues/11010)) ([8174e60](https://github.com/promptfoo/promptfoo/commit/8174e6017902ffbd5ee8692db8caa24c437864e1))
+- **env:** honor --env-file and config env for prompt separator and assertion concurrency ([#11059](https://github.com/promptfoo/promptfoo/issues/11059)) ([851641e](https://github.com/promptfoo/promptfoo/commit/851641eb978043f2c80a47c713662ee7fec1535c))
+- **eval:** sanitize invalid XML characters in JUnit reports ([#10994](https://github.com/promptfoo/promptfoo/issues/10994)) ([5502626](https://github.com/promptfoo/promptfoo/commit/5502626c3e0db3af896672192692bd69c5df1a8c))
+- harden AI finding edge cases ([#10997](https://github.com/promptfoo/promptfoo/issues/10997)) ([757ff56](https://github.com/promptfoo/promptfoo/commit/757ff56a508b5959050c98dda5e40c4a55e0aeca))
+- isolate HTTP signing and validate webhook scores ([#10976](https://github.com/promptfoo/promptfoo/issues/10976)) ([27c866b](https://github.com/promptfoo/promptfoo/commit/27c866b456654f0889ad54370b05ebfb0c60afe3))
+- **output:** preserve JUnit sanitized name identities ([#11033](https://github.com/promptfoo/promptfoo/issues/11033)) ([d833727](https://github.com/promptfoo/promptfoo/commit/d833727ce8387eb96dc67e82dfa7972cd2b07a14))
+- **providers:** accept Ollama tool calls back in a multi-turn conversation ([#10980](https://github.com/promptfoo/promptfoo/issues/10980)) ([27ad4b9](https://github.com/promptfoo/promptfoo/commit/27ad4b9505a98dc733d2f4abd49b887d3c9f408d))
+- **providers:** address review findings from [#10635](https://github.com/promptfoo/promptfoo/issues/10635) and [#10632](https://github.com/promptfoo/promptfoo/issues/10632) ([#10637](https://github.com/promptfoo/promptfoo/issues/10637)) ([d1aa582](https://github.com/promptfoo/promptfoo/commit/d1aa582c9d799d4c04c32ad4dd3e35effbbd2114))
+- **providers:** avoid duplicate Azure fallback warnings ([#11029](https://github.com/promptfoo/promptfoo/issues/11029)) ([e5d3386](https://github.com/promptfoo/promptfoo/commit/e5d3386071e85e5c2585e20a031ee7477d1e7116))
+- **providers:** deduplicate Google tool declarations ([#10982](https://github.com/promptfoo/promptfoo/issues/10982)) ([b3f6587](https://github.com/promptfoo/promptfoo/commit/b3f6587bae3c1fbc39d29b6572883b581f63b0cd))
+- **providers:** degrade gracefully on malformed Ollama responses ([#10984](https://github.com/promptfoo/promptfoo/issues/10984)) ([d536238](https://github.com/promptfoo/promptfoo/commit/d53623875190336fa85c383698693a06f928ad7b))
+- **providers:** honor Bedrock region overrides ([#11052](https://github.com/promptfoo/promptfoo/issues/11052)) ([2b0d41a](https://github.com/promptfoo/promptfoo/commit/2b0d41a3410101359a4b0edddb7e1671693c2abf))
+- **providers:** honor bustCache in the Ollama completion provider ([#10979](https://github.com/promptfoo/promptfoo/issues/10979)) ([c0ba816](https://github.com/promptfoo/promptfoo/commit/c0ba816679f226093f4ecedeb0ed61102765a23c))
+- **providers:** normalize missing Ollama tool arguments ([#11005](https://github.com/promptfoo/promptfoo/issues/11005)) ([74d8f90](https://github.com/promptfoo/promptfoo/commit/74d8f903f373c451563b6f17647475df07df68d9))
+- **providers:** normalize Vercel finish reasons ([#11076](https://github.com/promptfoo/promptfoo/issues/11076)) ([103b24f](https://github.com/promptfoo/promptfoo/commit/103b24f0aaffc60165b8b5afb5fc0453d1f386bc))
+- **providers:** repair provider config bugs found in the docs audit ([#10989](https://github.com/promptfoo/promptfoo/issues/10989)) ([455b702](https://github.com/promptfoo/promptfoo/commit/455b7026f17099b3f0ce089a95abc31c54d82d3e))
+- **providers:** simplify Vercel response handling ([#11077](https://github.com/promptfoo/promptfoo/issues/11077)) ([67cdd30](https://github.com/promptfoo/promptfoo/commit/67cdd30f10dcbe1ed86a30c596d277f79ea08204))
+- **providers:** treat Bedrock GPT-6 Sol and Luna as reasoning models ([#11040](https://github.com/promptfoo/promptfoo/issues/11040)) ([e576652](https://github.com/promptfoo/promptfoo/commit/e57665279d131834e611e8e901441b0cd675990e))
+- **providers:** treat null Ollama tool arguments as empty ([#11023](https://github.com/promptfoo/promptfoo/issues/11023)) ([ccf5d68](https://github.com/promptfoo/promptfoo/commit/ccf5d6803534a528dbf85573d6bb2a2e5c573c24))
+- **providers:** validate OpenAI Agents token counts ([#11019](https://github.com/promptfoo/promptfoo/issues/11019)) ([a1cb8af](https://github.com/promptfoo/promptfoo/commit/a1cb8af548e45a3961116d95d3c422df8a6fa05e))
+- **providers:** warn on partial Azure service principal config ([#11003](https://github.com/promptfoo/promptfoo/issues/11003)) ([90df930](https://github.com/promptfoo/promptfoo/commit/90df93056d6447007a5c81517f180ffaaf71764a))
+- **redteam:** honor explicit redteamProvider in iterative, crescendo and iterative:tree ([#11004](https://github.com/promptfoo/promptfoo/issues/11004)) ([4edf6b8](https://github.com/promptfoo/promptfoo/commit/4edf6b84b8814b4185be1c1ad8ca0031db63bfea))
+- **redteam:** report the turn the grader flagged ([#11032](https://github.com/promptfoo/promptfoo/issues/11032)) ([30ca142](https://github.com/promptfoo/promptfoo/commit/30ca142721ac3c5bfd190149d6b49b8f86078adb))
+- **webui:** use per-column named metric totals in column headers ([#11075](https://github.com/promptfoo/promptfoo/issues/11075)) ([9770bd6](https://github.com/promptfoo/promptfoo/commit/9770bd6e533c8cbf41e6cdaca2f38b96266a4475))
+
 ## [0.123.1](https://github.com/promptfoo/promptfoo/compare/0.123.0...0.123.1) (2026-09-18)
 
 ### Features
