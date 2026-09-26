@@ -764,9 +764,11 @@ describe('SageMaker invocation-local pacing', () => {
   });
 
   it.each([
+    { kind: 'completion', delay: undefined, cached: false },
     { kind: 'completion', delay: 20, cached: false },
     { kind: 'completion', delay: 0, cached: false },
     { kind: 'completion', delay: 20, cached: true },
+    { kind: 'embedding', delay: undefined, cached: false },
     { kind: 'embedding', delay: 20, cached: false },
     { kind: 'embedding', delay: 0, cached: false },
     { kind: 'embedding', delay: 20, cached: true },
@@ -800,7 +802,10 @@ describe('SageMaker invocation-local pacing', () => {
       await vi.runAllTimersAsync();
       expect(await response).not.toHaveProperty('error');
 
-      expect(timeout.mock.calls.map(([, ms]) => ms)).toEqual(delay > 0 && !cached ? [delay] : []);
+      const expectedDelay = delay ?? 50;
+      expect(timeout.mock.calls.map(([, ms]) => ms)).toEqual(
+        expectedDelay > 0 && !cached ? [expectedDelay] : [],
+      );
       expect(mockSend).toHaveBeenCalledTimes(cached ? 0 : 1);
       expect(target.delay).toBeUndefined();
       expect(provider.delay).toBe(50);

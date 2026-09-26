@@ -18,7 +18,7 @@ import type { ProviderCallQueue } from './providerCallQueue';
 export interface ProviderCallExecutionContext {
   abortSignal?: AbortSignal;
   /** Evaluation-local pacing for this target, without changing a reusable provider. */
-  providerDelay?: { provider: ApiProvider; delay: number };
+  providerDelay?: { provider: ApiProvider; delay: number | undefined };
   providerCallQueue?: ProviderCallQueue;
   rateLimitRegistry?: RateLimitRegistryRef;
 }

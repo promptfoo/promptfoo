@@ -111,7 +111,7 @@ export const CommandLineOptionsSchema = z.object({
   // Shared with EvaluateOptions
   maxConcurrency: z.coerce.number().int().positive().optional(),
   repeat: z.coerce.number().int().positive().optional(),
-  delay: z.coerce.number().int().nonnegative().prefault(0),
+  delay: z.coerce.number().int().nonnegative().optional(),
 
   // Command line only
   vars: z.string().optional(),
@@ -220,7 +220,7 @@ export type EvalRegisters = Record<string, VarValue>;
 export interface RunEvalOptions {
   provider: ApiProvider;
   prompt: Prompt;
-  delay: number;
+  delay?: number;
 
   test: AtomicTestCase;
   testSuite?: TestSuite;

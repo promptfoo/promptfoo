@@ -77,8 +77,6 @@ import type { InternalEvaluateOptions } from '../types/internal';
 import type { FilterOptions } from '../util/eval/filterTests';
 
 export const EvalCommandSchema = CommandLineOptionsSchema.extend({
-  // Preserve omission so evaluation/environment defaults can still apply.
-  delay: z.coerce.number().int().nonnegative().optional(),
   help: z.boolean().optional(),
   interactiveProviders: z.boolean().optional(),
   remote: z.boolean().optional(),
@@ -606,7 +604,7 @@ async function doEvalWithEnv(
     let repeat: number;
     let cache: boolean | undefined;
     let maxConcurrency: number;
-    let delay: number;
+    let delay: number | undefined;
     if (resumeRaw) {
       const persisted = (resumeEval?.runtimeOptions ||
         config.evaluateOptions ||
@@ -617,7 +615,7 @@ async function doEvalWithEnv(
           : 1;
       cache = persisted.cache ?? true;
       maxConcurrency = (persisted.maxConcurrency as number | undefined) ?? DEFAULT_MAX_CONCURRENCY;
-      delay = (persisted.delay as number | undefined) ?? 0;
+      delay = persisted.delay as number | undefined;
     } else {
       // Misc settings with proper CLI vs config priority
       // CLI values explicitly provided by user should override config, but defaults should not
@@ -634,7 +632,7 @@ async function doEvalWithEnv(
         cmdObj.delay ??
         commandLineOptions?.delay ??
         evaluateOptions.delay ??
-        getEnvInt('PROMPTFOO_DELAY_MS', 0);
+        getEnvInt('PROMPTFOO_DELAY_MS');
     }
 
     if (cache === false) {
@@ -655,7 +653,7 @@ async function doEvalWithEnv(
         commandLineOptions?.maxConcurrency ??
         evaluateOptions.maxConcurrency);
 
-    if (delay > 0) {
+    if (delay !== undefined && delay > 0) {
       maxConcurrency = 1;
       // Also limit Python workers to 1 when delay is set (no point having more workers than concurrency)
       cliState.maxConcurrency = 1;

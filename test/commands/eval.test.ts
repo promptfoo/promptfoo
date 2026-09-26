@@ -2407,6 +2407,20 @@ describe('evalCommand', () => {
     expect(EvalCommandSchema.parse({ delay: '0' }).delay).toBe(0);
   });
 
+  it('preserves an unspecified delay for grading-provider fallbacks', async () => {
+    const restore = mockProcessEnv({ PROMPTFOO_DELAY_MS: undefined });
+    try {
+      await doEval({}, defaultConfig, defaultConfigPath, {});
+      expect(evaluate).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ delay: undefined }),
+      );
+    } finally {
+      restore();
+    }
+  });
+
   it.each([undefined, 0])(
     'resolves environment delay while preserving explicit zero (%s)',
     async (delay) => {

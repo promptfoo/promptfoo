@@ -383,7 +383,7 @@ describe('evaluateOptions behavior', () => {
         // maxConcurrency not set, should use config value
       });
 
-      expect(options.delay).toBeUndefined(); // CLI delay 0 should result in undefined
+      expect(options.delay).toBe(0); // Explicit zero overrides the configured delay.
       expect(options.repeat).toBe(1); // CLI override
       expect(options.maxConcurrency).toBe(9); // From config
     });
