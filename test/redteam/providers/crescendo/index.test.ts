@@ -87,6 +87,7 @@ vi.mock('../../../../src/evaluatorHelpers', async () => ({
 }));
 
 beforeEach(() => {
+  mockGetGraderById.mockReset();
   vi.mocked(shouldGenerateRemote).mockReturnValue(false);
   mockApplyRuntimeTransforms.mockReset().mockImplementation(async ({ prompt }) => ({
     transformedPrompt: prompt,
@@ -182,7 +183,6 @@ describe('CrescendoProvider', () => {
     vi.mocked(checkServerFeatureSupport).mockResolvedValue(true);
 
     // Set up default getGraderById mock
-    mockGetGraderById.mockReset();
     mockGetGraderById.mockImplementation(function () {
       return {
         getResult: vi.fn(async () => ({
