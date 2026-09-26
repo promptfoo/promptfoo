@@ -172,6 +172,33 @@ describe('Mistral', () => {
       });
     });
 
+    it('should include HTTP response headers in metadata when available', async () => {
+      const mockResponse = {
+        choices: [{ message: { content: 'Header test output' } }],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+      };
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          'x-ratelimit-remaining-tokens-minute': '450000',
+          'x-ratelimit-limit-tokens-minute': '500000',
+          'x-ratelimit-reset-tokens-minute': '30',
+        },
+      });
+
+      const result = await provider.callApi('Test with headers');
+
+      expect(result.metadata?.http?.headers).toEqual({
+        'x-ratelimit-remaining-tokens-minute': '450000',
+        'x-ratelimit-limit-tokens-minute': '500000',
+        'x-ratelimit-reset-tokens-minute': '30',
+      });
+      expect(result.metadata?.http?.status).toBe(200);
+    });
+
     it('should preserve explicit zero for top_p, random_seed, and max_tokens', async () => {
       const zeroProvider = new MistralChatCompletionProvider('mistral-tiny', {
         config: { top_p: 0, random_seed: 0, max_tokens: 0 },

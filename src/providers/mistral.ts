@@ -280,7 +280,13 @@ interface MistralChatCompletionOptions {
 const MISTRAL_CACHE_HASH_KEY = 'promptfoo:mistral:cache-key:v1';
 const MISTRAL_INFLIGHT_REQUESTS = new Map<string, Promise<MistralFetchResult>>();
 
-type MistralFetchResult = { data: any; cached: boolean };
+type MistralFetchResult = {
+  data: any;
+  cached: boolean;
+  headers?: Record<string, string>;
+  status?: number;
+  statusText?: string;
+};
 
 function hashMistralCacheValue(value: unknown): string {
   const serialized = typeof value === 'string' ? value : JSON.stringify(value);
@@ -665,26 +671,32 @@ export class MistralChatCompletionProvider implements ApiProvider {
     });
 
     let data,
-      cached = false;
+      cached = false,
+      headers: Record<string, string> | undefined,
+      status: number | undefined,
+      statusText: string | undefined;
 
     try {
-      ({ data, cached } = await fetchMistralWithDedupe(cacheKey, async () => {
-        return (await fetchWithCache(
-          url,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-promptfoo-silent': 'true',
-              Authorization: `Bearer ${apiKey}`,
+      ({ data, cached, headers, status, statusText } = await fetchMistralWithDedupe(
+        cacheKey,
+        async () => {
+          return (await fetchWithCache(
+            url,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-promptfoo-silent': 'true',
+                Authorization: `Bearer ${apiKey}`,
+              },
+              body: JSON.stringify(params),
             },
-            body: JSON.stringify(params),
-          },
-          getRequestTimeoutMs(),
-          'json',
-          true,
-        )) as unknown as MistralFetchResult;
-      }));
+            getRequestTimeoutMs(),
+            'json',
+            true,
+          )) as unknown as MistralFetchResult;
+        },
+      ));
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
@@ -725,11 +737,23 @@ export class MistralChatCompletionProvider implements ApiProvider {
         data.usage?.prompt_tokens,
         data.usage?.completion_tokens,
       ),
-      ...(data.choices.length > 1 && {
-        metadata: {
-          choices: data.choices,
-        },
-      }),
+      ...(data.choices.length > 1 || (headers && status !== undefined)
+        ? {
+            metadata: {
+              ...(data.choices.length > 1 && {
+                choices: data.choices,
+              }),
+              ...(headers &&
+                status !== undefined && {
+                  http: {
+                    headers,
+                    status,
+                    statusText: statusText ?? 'OK',
+                  },
+                }),
+            },
+          }
+        : {}),
     };
 
     if (isCacheEnabled()) {
