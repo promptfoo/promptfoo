@@ -76,7 +76,7 @@ async function setupTeamContext(
       organizationTeams = allTeams.filter((team) => team.organizationId === organizationId);
       if (organizationTeams.length === 0 && allTeams.length > 0) {
         logger.warn(
-          `No accessible teams in organization '${organizationId}'. Run 'promptfoo auth teams set <team>' to select a team in another organization.`,
+          `No accessible teams in organization '${organizationId}'. Log in with an API key for the organization you want to use: 'promptfoo auth login --api-key <apiKey>'.`,
         );
       }
     }
