@@ -383,9 +383,12 @@ jobs:
         run: |
           python -m unittest discover -s src/python -p '*_test.py'
 
-      - name: Install Python provider example dependencies
+      - name: Install Python provider example dependencies at the AnyIO minimum
         if: matrix.python-version == '3.14'
-        run: python -m pip install --disable-pip-version-check -r examples/provider-python/requirements.txt
+        run: |
+          anyio_floor=$(sed -nE 's/^anyio>=([^,[:space:]]+).*$/\1/p' examples/provider-python/requirements.txt)
+          test -n "$anyio_floor"
+          python -m pip install --disable-pip-version-check -r examples/provider-python/requirements.txt "anyio==$anyio_floor"
 
       - name: Run Python provider dependency regressions
         if: matrix.python-version == '3.14'
