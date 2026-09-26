@@ -3,9 +3,12 @@ import crypto from 'crypto';
 import { z } from 'zod';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
-import { getProviderDelay } from '../scheduler/providerCallExecutionContext';
+import {
+  getProviderCallExecutionContext,
+  getProviderDelay,
+} from '../scheduler/providerCallExecutionContext';
 import telemetry from '../telemetry';
-import { sleep } from '../util/time';
+import { sleep, sleepWithAbort } from '../util/time';
 import { getTransformErrorMessage, TransformInputType, transform } from '../util/transform';
 import { StringOrFunctionSchema } from '../validators/shared';
 
@@ -652,8 +655,15 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _options?: CallApiOptionsParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const evaluationSignal = getProviderCallExecutionContext()?.abortSignal;
+    const abortSignal =
+      options?.abortSignal && evaluationSignal
+        ? AbortSignal.any([options.abortSignal, evaluationSignal])
+        : (options?.abortSignal ?? evaluationSignal);
+    abortSignal?.throwIfAborted();
+
     // Import cache functions dynamically to avoid circular dependencies
     const { isCacheEnabled, getCache } = await import('../cache');
 
@@ -707,6 +717,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
 
       // Try to get from cache
       const cachedResult = await cache.get<string>(getCacheKey());
+      abortSignal?.throwIfAborted();
       if (cachedResult) {
         logger.debug(`Using cached SageMaker response for ${request.endpoint}`);
 
@@ -738,7 +749,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       logger.debug(
         `Applying delay of ${delayMs}ms before calling SageMaker endpoint ${request.endpoint}`,
       );
-      await sleep(delayMs);
+      await (abortSignal ? sleepWithAbort(delayMs, abortSignal) : sleep(delayMs));
     }
 
     // Not in cache or cache disabled, make the actual API call
@@ -760,7 +771,10 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       });
 
       const startTime = Date.now();
-      const response = await runtime.send(command);
+      abortSignal?.throwIfAborted();
+      const response = abortSignal
+        ? await runtime.send(command, { abortSignal })
+        : await runtime.send(command);
       const endTime = Date.now();
       const _latency = endTime - startTime;
 
@@ -830,6 +844,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
 
       return result;
     } catch (error: any) {
+      abortSignal?.throwIfAborted();
       logger.error(`SageMaker API error: ${error}`);
       return {
         error: `SageMaker API error: ${error.message || String(error)}`,
@@ -881,7 +896,15 @@ export class SageMakerEmbeddingProvider
   async callEmbeddingApi(
     text: string,
     context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
+    const evaluationSignal = getProviderCallExecutionContext()?.abortSignal;
+    const abortSignal =
+      options?.abortSignal && evaluationSignal
+        ? AbortSignal.any([options.abortSignal, evaluationSignal])
+        : (options?.abortSignal ?? evaluationSignal);
+    abortSignal?.throwIfAborted();
+
     // Import cache functions dynamically to avoid circular dependencies
     const { isCacheEnabled, getCache } = await import('../cache');
 
@@ -920,6 +943,7 @@ export class SageMakerEmbeddingProvider
 
       // Try to get from cache
       const cachedResult = await cache.get<string>(cacheKey);
+      abortSignal?.throwIfAborted();
       if (cachedResult) {
         logger.debug(`Using cached SageMaker embedding response for ${this.getEndpointName()}`);
 
@@ -945,7 +969,7 @@ export class SageMakerEmbeddingProvider
       logger.debug(
         `Applying delay of ${delayMs}ms before calling SageMaker embedding endpoint ${this.getEndpointName()}`,
       );
-      await sleep(delayMs);
+      await (abortSignal ? sleepWithAbort(delayMs, abortSignal) : sleep(delayMs));
     }
 
     // Not in cache or cache disabled, make the actual API call
@@ -995,7 +1019,10 @@ export class SageMakerEmbeddingProvider
       });
 
       const startTime = Date.now();
-      const response = await runtime.send(command);
+      abortSignal?.throwIfAborted();
+      const response = abortSignal
+        ? await runtime.send(command, { abortSignal })
+        : await runtime.send(command);
       const endTime = Date.now();
       const _latency = endTime - startTime;
 
@@ -1104,6 +1131,7 @@ export class SageMakerEmbeddingProvider
 
       return result;
     } catch (error: any) {
+      abortSignal?.throwIfAborted();
       logger.error(`SageMaker embedding API error: ${error}`);
       return {
         error: `SageMaker embedding API error: ${error.message || String(error)}`,
