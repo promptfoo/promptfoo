@@ -5,6 +5,7 @@ import path from 'path';
 import JSON5 from 'json5';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { resolveProviderEnv } from '../env';
 
 import type { CallApiContextParams, ProviderOptions } from '../../types/providers';
 import type { OpenClawConfig, OpenClawGatewayConfig } from './types';
@@ -254,11 +255,7 @@ function resolveGatewayTransportUrl(
   }
 
   // 2. Per-provider env overrides, then process environment variable
-  const envUrl =
-    env?.OPENCLAW_GATEWAY_URL ||
-    getEnvString('OPENCLAW_GATEWAY_URL') ||
-    env?.CLAWDBOT_GATEWAY_URL ||
-    getEnvString('CLAWDBOT_GATEWAY_URL');
+  const envUrl = resolveProviderEnv(env, ['OPENCLAW_GATEWAY_URL', 'CLAWDBOT_GATEWAY_URL'])?.value;
   const trimmedEnvUrl = envUrl?.trim();
   if (trimmedEnvUrl) {
     return normalizeGatewayUrl(trimmedEnvUrl, transport) || trimmedEnvUrl;

@@ -1,3 +1,4 @@
+import { resolveProviderEnv } from '../env';
 /**
  * xAI Voice Agent API Provider
  *
@@ -10,7 +11,6 @@
  */
 
 import WebSocket from 'ws';
-import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { resolveProviderApiKey } from '../credentials';
@@ -239,7 +239,7 @@ export class XAIVoiceProvider implements ApiProvider {
     if (this.config.apiBaseUrl) {
       return this.config.apiBaseUrl;
     }
-    const envApiBaseUrl = this.env?.XAI_API_BASE_URL || getEnvString('XAI_API_BASE_URL');
+    const envApiBaseUrl = resolveProviderEnv(this.env, ['XAI_API_BASE_URL'])?.value;
     if (envApiBaseUrl) {
       return envApiBaseUrl;
     }

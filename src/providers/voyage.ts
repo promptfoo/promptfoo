@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../cache';
-import { getEnvString } from '../envars';
 import logger from '../logger';
 import { resolveProviderApiKey } from './credentials';
+import { resolveProviderEnv } from './env';
 import { getRequestTimeoutMs } from './shared';
 
 import type {
@@ -49,8 +49,7 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
   getApiUrl(): string {
     return (
       this.config.apiBaseUrl ||
-      this.env?.VOYAGE_API_BASE_URL ||
-      getEnvString('VOYAGE_API_BASE_URL') ||
+      resolveProviderEnv(this.env, ['VOYAGE_API_BASE_URL'])?.value ||
       'https://api.voyageai.com/v1'
     );
   }

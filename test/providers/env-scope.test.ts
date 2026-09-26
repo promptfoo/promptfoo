@@ -37,7 +37,9 @@ import {
   OllamaCompletionProvider,
   OllamaEmbeddingProvider,
 } from '../../src/providers/ollama';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiChatKitProvider } from '../../src/providers/openai/chatkit';
+import { resolveGatewayUrl, resolveGatewayWsUrl } from '../../src/providers/openclaw/shared';
 import { mergeProviderEnv } from '../../src/providers/registry';
 import { SageMakerCompletionProvider } from '../../src/providers/sagemaker';
 import { SlackProvider } from '../../src/providers/slack';
@@ -80,6 +82,296 @@ describe('provider environment scopes', () => {
   afterEach(() => {
     restoreEnv();
     vi.restoreAllMocks();
+  });
+
+  const endpointProviders = [
+    [
+      'openai:chat:gpt-4.1-mini',
+      'OPENAI_API_HOST',
+      'OPENAI_API_BASE_URL',
+      (options: ProviderOptions) => new OpenAiChatCompletionProvider('gpt-4.1-mini', options),
+      '/v1',
+    ],
+    [
+      'openai:chat:gpt-4.1-mini',
+      'OPENAI_API_HOST',
+      'OPENAI_BASE_URL',
+      (options: ProviderOptions) => new OpenAiChatCompletionProvider('gpt-4.1-mini', options),
+      '/v1',
+    ],
+    [
+      'mistral:chat:mistral-large-latest',
+      'MISTRAL_API_HOST',
+      'MISTRAL_API_BASE_URL',
+      (options: ProviderOptions) =>
+        new MistralChatCompletionProvider('mistral-large-latest', options),
+      '/v1',
+    ],
+    [
+      'mistral:embedding:mistral-embed',
+      'MISTRAL_API_HOST',
+      'MISTRAL_API_BASE_URL',
+      (options: ProviderOptions) => new MistralEmbeddingProvider(options),
+      '/v1',
+    ],
+    ...['azure', 'azureopenai'].flatMap((prefix) =>
+      ['AZURE_API_HOST', 'AZURE_OPENAI_API_HOST'].flatMap((host) =>
+        ['AZURE_API_BASE_URL', 'AZURE_OPENAI_API_BASE_URL', 'AZURE_OPENAI_BASE_URL'].map(
+          (base) =>
+            [
+              `${prefix}:chat:deployment`,
+              host,
+              base,
+              (options: ProviderOptions) => new AzureGenericProvider('deployment', options),
+              '',
+            ] as const,
+        ),
+      ),
+    ),
+  ] as const;
+  const endpoint = (target: object): string | undefined => {
+    const getter = Reflect.get(target, 'getApiUrl') ?? Reflect.get(target, 'getApiBaseUrl');
+    return getter.call(target);
+  };
+
+  it.each(endpointProviders)(
+    '%s resolves provider base %s/%s before suite host',
+    async (_route, host, base, create) => {
+      await cliState.withEnv({ [host]: 'suite.example.invalid' }, async () => {
+        const target = create({
+          env: { [base]: 'https://provider.example.invalid/custom' },
+          config: { apiKey: 'fixture' },
+        });
+        expect(endpoint(target)).toBe('https://provider.example.invalid/custom');
+      });
+    },
+  );
+  it.each(endpointProviders)(
+    '%s resolves provider host %s/%s before suite base',
+    (_route, host, base, create, suffix) => {
+      cliState.withEnv({ [base]: 'https://suite.example.invalid/custom' }, () => {
+        const target = create({
+          env: { [host]: 'provider.example.invalid' },
+          config: { apiKey: 'fixture' },
+        });
+        expect(endpoint(target)).toBe(`https://provider.example.invalid${suffix}`);
+      });
+    },
+  );
+  it.each(endpointProviders)(
+    '%s resolves suite/file bases before lower host aliases (%s/%s)',
+    (_route, host, base, create) => {
+      mockProcessEnv({ [host]: 'host.example.invalid' });
+      cliState.withEnvFileOverrides(
+        { [base]: 'https://file.example.invalid/custom', [host]: 'file-host.example.invalid' },
+        () =>
+          cliState.withEnv({ [base]: 'https://suite.example.invalid/custom' }, () => {
+            expect(endpoint(create({ config: { apiKey: 'fixture' } }))).toBe(
+              'https://suite.example.invalid/custom',
+            );
+          }),
+      );
+      cliState.withEnvFileOverrides({ [base]: 'https://file.example.invalid/custom' }, () => {
+        expect(endpoint(create({ config: { apiKey: 'fixture' } }))).toBe(
+          'https://file.example.invalid/custom',
+        );
+      });
+    },
+  );
+  it.each(endpointProviders)(
+    '%s keeps an empty %s masked while using another %s alias',
+    (_route, host, base, create) => {
+      cliState.withEnv(
+        { [host]: 'masked.example.invalid', [base]: 'https://fallback.example.invalid/custom' },
+        () => {
+          expect(endpoint(create({ env: { [host]: '' }, config: { apiKey: 'fixture' } }))).toBe(
+            'https://fallback.example.invalid/custom',
+          );
+        },
+      );
+    },
+  );
+  it.each(endpointProviders)(
+    '%s loader preserves provider endpoint %s/%s priority',
+    async (route, host, base, _create, suffix) => {
+      for (const useHost of [false, true]) {
+        const target = await loadApiProvider(route, {
+          env: useHost
+            ? { [base]: 'https://suite.example.invalid/custom' }
+            : { [host]: 'suite.example.invalid' },
+          options: {
+            env: useHost
+              ? { [host]: 'provider.example.invalid' }
+              : { [base]: 'https://provider.example.invalid/custom' },
+            config: { apiKey: 'fixture' },
+          },
+        });
+        expect(endpoint(target)).toBe(
+          useHost
+            ? `https://provider.example.invalid${suffix}`
+            : 'https://provider.example.invalid/custom',
+        );
+      }
+    },
+  );
+  it.each(endpointProviders)(
+    '%s keeps explicit config above %s/%s',
+    (_route, host, base, create) => {
+      const target = create({
+        env: { [host]: 'provider.example.invalid', [base]: 'https://provider.example.invalid' },
+        config: { apiKey: 'fixture', apiBaseUrl: 'https://config.example.invalid/custom' },
+      });
+      expect(endpoint(target)).toBe('https://config.example.invalid/custom');
+    },
+  );
+  it.each(endpointProviders)(
+    '%s keeps masked %s/%s from returning to ambient endpoints',
+    (route, host, base, create) => {
+      cliState.withEnv(
+        { [host]: 'masked-host.example.invalid', [base]: 'https://masked-base.example.invalid' },
+        () => {
+          const target = create({ env: { [host]: '', [base]: '' }, config: { apiKey: 'fixture' } });
+          expect(endpoint(target)).toBe(
+            route.startsWith('openai:')
+              ? 'https://api.openai.com/v1'
+              : route.startsWith('mistral:')
+                ? 'https://api.mistral.ai/v1'
+                : undefined,
+          );
+        },
+      );
+      cliState.withEnv(
+        { [host]: 'fallback.example.invalid', [base]: 'https://masked-base.example.invalid' },
+        () => {
+          const target = create({ env: { [base]: '' }, config: { apiKey: 'fixture' } });
+          expect(endpoint(target)).toBe(
+            `https://fallback.example.invalid${route.startsWith('azure') ? '' : '/v1'}`,
+          );
+        },
+      );
+    },
+  );
+  it.each([resolveGatewayUrl, resolveGatewayWsUrl])(
+    'resolves OpenClaw endpoint aliases within scopes',
+    (resolve) => {
+      const expected = resolve({ gateway_url: 'https://provider.example.invalid/path' });
+      cliState.withEnv({ OPENCLAW_GATEWAY_URL: 'https://suite.example.invalid' }, () => {
+        expect(
+          resolve(undefined, { CLAWDBOT_GATEWAY_URL: 'https://provider.example.invalid/path' }),
+        ).toBe(expected);
+        expect(
+          resolve(undefined, {
+            OPENCLAW_GATEWAY_URL: '',
+            CLAWDBOT_GATEWAY_URL: 'https://provider.example.invalid/path',
+          }),
+        ).toBe(expected);
+        const merged = mergeProviderEnv(
+          'openclaw',
+          { OPENCLAW_GATEWAY_URL: 'https://suite.example.invalid' },
+          { CLAWDBOT_GATEWAY_URL: 'https://provider.example.invalid/path' },
+        );
+        expect(resolve(undefined, merged)).toBe(expected);
+      });
+      cliState.withEnvFileOverrides({ OPENCLAW_GATEWAY_URL: 'https://file.example.invalid' }, () =>
+        cliState.withEnv({ CLAWDBOT_GATEWAY_URL: 'https://provider.example.invalid/path' }, () => {
+          expect(resolve()).toBe(expected);
+        }),
+      );
+    },
+  );
+
+  it('validates OpenAI model routing using the selected provider endpoint', async () => {
+    const target = await loadApiProvider('openai:chat:gpt-5.3-codex-spark', {
+      env: { OPENAI_API_HOST: 'api.openai.com' },
+      options: {
+        env: { OPENAI_API_BASE_URL: 'https://gateway.example.invalid/v1' },
+        config: { apiKey: 'fixture' },
+      },
+    });
+    expect(endpoint(target)).toBe('https://gateway.example.invalid/v1');
+  });
+  it.each(['vertex:gemini-omni-flash-preview', 'vertex:live:gemini-live'])(
+    '%s keeps routing selector aliases in their selected scope',
+    (route) => {
+      const merged = mergeProviderEnv(
+        route,
+        { VERTEX_PROJECT_ID: 'suite-project', VERTEX_REGION: 'suite-region' },
+        { GOOGLE_CLOUD_PROJECT: 'provider-project', GOOGLE_CLOUD_LOCATION: 'provider-region' },
+      );
+      expect(merged).toEqual({
+        GOOGLE_CLOUD_PROJECT: 'provider-project',
+        GOOGLE_CLOUD_LOCATION: 'provider-region',
+      });
+    },
+  );
+
+  it('keeps an empty Imagen project masked when selecting the API mode', async () => {
+    const target = new GoogleImageProvider('imagen-4.0-generate-001', {
+      config: { apiKey: 'fixture' },
+      env: { GOOGLE_CLOUD_PROJECT: '' },
+    });
+    const gemini = vi
+      .spyOn(
+        target as unknown as { callGeminiApi: (prompt: string) => Promise<{ output: string }> },
+        'callGeminiApi',
+      )
+      .mockResolvedValue({ output: 'gemini' });
+    const vertex = vi
+      .spyOn(
+        target as unknown as { callVertexApi: (prompt: string) => Promise<{ output: string }> },
+        'callVertexApi',
+      )
+      .mockResolvedValue({ output: 'vertex' });
+    await cliState.withEnv({ GOOGLE_CLOUD_PROJECT: 'masked-project' }, async () => {
+      expect(await target.callApi('fixture')).toEqual({ output: 'gemini' });
+    });
+    expect(gemini).toHaveBeenCalledOnce();
+    expect(vertex).not.toHaveBeenCalled();
+  });
+  it('keeps an empty Imagen location masked in its request', async () => {
+    const request = vi.fn().mockResolvedValue({ data: { predictions: [] } });
+    vi.mocked(googleUtil.getGoogleClient).mockResolvedValue({
+      client: { request },
+      projectId: 'fixture',
+    } as unknown as Awaited<ReturnType<typeof googleUtil.getGoogleClient>>);
+    vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValue({
+      projectId: 'fixture',
+    } as Awaited<ReturnType<typeof GoogleAuthManager.getOAuthClient>>);
+    const target = new GoogleImageProvider('imagen-4.0-generate-001', {
+      config: { projectId: 'fixture' },
+      env: { GOOGLE_LOCATION: '' },
+    });
+    await cliState.withEnv({ GOOGLE_LOCATION: 'masked-region' }, () => target.callApi('fixture'));
+    expect(request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: expect.stringContaining(
+          'https://us-central1-aiplatform.googleapis.com/v1/projects/fixture/locations/us-central1/',
+        ),
+      }),
+    );
+  });
+  it('keeps an empty Google Video location masked in its endpoint', async () => {
+    const target = new GoogleVideoProvider('veo-fixture', {
+      config: { projectId: 'fixture' },
+      env: { GOOGLE_LOCATION: '' },
+    });
+    const getEndpoint = Reflect.get(target, 'getVertexEndpoint').bind(target);
+    const expected = await getEndpoint(target.config, 'predict');
+    await cliState.withEnv({ GOOGLE_LOCATION: 'masked-region' }, async () => {
+      expect(await getEndpoint(target.config, 'predict')).toBe(expected);
+    });
+  });
+
+  it('rejects an explicitly masked Foundry project endpoint', () => {
+    cliState.withEnv({ AZURE_AI_PROJECT_URL: 'https://ambient.example.invalid' }, () => {
+      expect(
+        () =>
+          new AzureFoundryAgentProvider('agent', {
+            env: { AZURE_AI_PROJECT_URL: '' },
+            config: { apiKey: 'fixture' },
+          }),
+      ).toThrow('Azure AI Project URL must be provided');
+    });
   });
 
   const keyProviders: [string, string, (options: ProviderOptions) => object][] = [

@@ -187,8 +187,7 @@ export class GoogleVideoProvider implements ApiProvider {
   private getLocation(config: GoogleVideoOptions): string {
     return (
       config.region ||
-      this.env?.GOOGLE_LOCATION ||
-      getEnvString('GOOGLE_LOCATION') ||
+      (this.env?.GOOGLE_LOCATION ?? getEnvString('GOOGLE_LOCATION')) ||
       DEFAULT_LOCATION
     );
   }

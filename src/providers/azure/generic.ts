@@ -1,6 +1,7 @@
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { resolveProviderApiKey } from '../credentials';
+import { resolveProviderEnv } from '../env';
 import { throwConfigurationError } from './util';
 import type { TokenCredential } from '@azure/identity';
 
@@ -39,21 +40,24 @@ export class AzureGenericProvider implements ApiProvider {
 
     this.deploymentName = deploymentName;
 
-    this.apiHost =
-      config?.apiHost ||
-      // These and similar OPENAI envars: Backwards compatibility for Azure rename 2024-11-09 / 0.96.0
-      env?.AZURE_API_HOST ||
-      env?.AZURE_OPENAI_API_HOST ||
-      getEnvString('AZURE_API_HOST') ||
-      getEnvString('AZURE_OPENAI_API_HOST');
-    this.apiBaseUrl =
-      config?.apiBaseUrl ||
-      env?.AZURE_API_BASE_URL ||
-      env?.AZURE_OPENAI_API_BASE_URL ||
-      env?.AZURE_OPENAI_BASE_URL ||
-      getEnvString('AZURE_API_BASE_URL') ||
-      getEnvString('AZURE_OPENAI_API_BASE_URL') ||
-      getEnvString('AZURE_OPENAI_BASE_URL');
+    if (config?.apiBaseUrl || config?.apiHost) {
+      this.apiBaseUrl = config.apiBaseUrl;
+      this.apiHost = config.apiHost;
+    } else {
+      // Keep the legacy Azure aliases within the scope that selected the endpoint.
+      const endpoint = resolveProviderEnv(env, [
+        'AZURE_API_BASE_URL',
+        'AZURE_OPENAI_API_BASE_URL',
+        'AZURE_OPENAI_BASE_URL',
+        'AZURE_API_HOST',
+        'AZURE_OPENAI_API_HOST',
+      ]);
+      if (endpoint?.name.endsWith('_HOST')) {
+        this.apiHost = endpoint.value;
+      } else {
+        this.apiBaseUrl = endpoint?.value;
+      }
+    }
 
     this.config = config || {};
     this.id = id ? () => id : this.id;

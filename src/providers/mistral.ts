@@ -5,6 +5,7 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../util';
+import { resolveProviderEnv } from './env';
 import { calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
 
 import type { EnvVarKey } from '../envars';
@@ -16,6 +17,25 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types/index';
+
+function getMistralApiUrl(
+  config: { apiHost?: string; apiBaseUrl?: string },
+  env: EnvOverrides | undefined,
+  defaultUrl: string,
+): string {
+  if (config.apiHost) {
+    return `https://${config.apiHost}/v1`;
+  }
+  if (config.apiBaseUrl) {
+    return config.apiBaseUrl;
+  }
+  const endpoint = resolveProviderEnv(env, ['MISTRAL_API_HOST', 'MISTRAL_API_BASE_URL']);
+  return endpoint
+    ? endpoint.name === 'MISTRAL_API_HOST'
+      ? `https://${endpoint.value}/v1`
+      : endpoint.value
+    : defaultUrl;
+}
 
 const MISTRAL_CHAT_MODELS = [
   ...['open-mistral-7b', 'mistral-tiny', 'mistral-tiny-2312'].map((id) => ({
@@ -540,17 +560,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
   }
 
   getApiUrl(): string {
-    const apiHost =
-      this.config.apiHost || this.env?.MISTRAL_API_HOST || getEnvString('MISTRAL_API_HOST');
-    if (apiHost) {
-      return `https://${apiHost}/v1`;
-    }
-    return (
-      this.config.apiBaseUrl ||
-      this.env?.MISTRAL_API_BASE_URL ||
-      getEnvString('MISTRAL_API_BASE_URL') ||
-      this.getApiUrlDefault()
-    );
+    return getMistralApiUrl(this.config, this.env, this.getApiUrlDefault());
   }
 
   requiresApiKey(): boolean {
@@ -778,17 +788,7 @@ export class MistralEmbeddingProvider implements ApiProvider {
   }
 
   getApiUrl(): string {
-    const apiHost =
-      this.config.apiHost || this.env?.MISTRAL_API_HOST || getEnvString('MISTRAL_API_HOST');
-    if (apiHost) {
-      return `https://${apiHost}/v1`;
-    }
-    return (
-      this.config.apiBaseUrl ||
-      this.env?.MISTRAL_API_BASE_URL ||
-      getEnvString('MISTRAL_API_BASE_URL') ||
-      this.getApiUrlDefault()
-    );
+    return getMistralApiUrl(this.config, this.env, this.getApiUrlDefault());
   }
 
   requiresApiKey(): boolean {

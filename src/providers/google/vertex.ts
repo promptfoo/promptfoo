@@ -24,6 +24,7 @@ import {
   outputFromMessage,
   parseMessages,
 } from '../anthropic/util';
+import { resolveProviderEnv } from '../env';
 import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { getVertexApiHostForRegion } from './shared';
@@ -141,8 +142,7 @@ function getVertexApiHost(
 ): string {
   return (
     configApiHost ||
-    envOverrides?.VERTEX_API_HOST ||
-    getEnvString('VERTEX_API_HOST') ||
+    resolveProviderEnv(envOverrides, ['VERTEX_API_HOST'])?.value ||
     getVertexApiHostForRegion(region)
   );
 }
