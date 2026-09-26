@@ -270,14 +270,16 @@ describe('AzureFoundryAgentProvider', () => {
           temperature: 0.2,
           top_p: 0.8,
         }),
-        {
+        expect.objectContaining({
           body: {
             agent_reference: {
               name: 'weather-agent',
               type: 'agent_reference',
             },
           },
-        },
+          maxRetries: 0,
+          signal: expect.any(AbortSignal),
+        }),
       );
       // Guard against regressing to the deprecated `agent` key, which the
       // Foundry Responses API now rejects with a 400.
@@ -365,14 +367,17 @@ describe('AzureFoundryAgentProvider', () => {
 
       expect(mockGetAgent).toHaveBeenCalledWith('asst_legacy');
       expect(mockListAgents).toHaveBeenCalledTimes(1);
-      expect(mockResponsesCreate).toHaveBeenCalledWith(expect.any(Object), {
-        body: {
-          agent_reference: {
-            name: 'weather-agent',
-            type: 'agent_reference',
+      expect(mockResponsesCreate).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({
+          body: {
+            agent_reference: {
+              name: 'weather-agent',
+              type: 'agent_reference',
+            },
           },
-        },
-      });
+        }),
+      );
       expect(result.output).toBe('Listed response');
     });
 
@@ -614,6 +619,8 @@ describe('AzureFoundryAgentProvider', () => {
           previous_response_id: 'resp_tool',
         },
         {
+          maxRetries: 0,
+          signal: expect.any(AbortSignal),
           body: {
             agent_reference: {
               name: 'weather-agent',
@@ -1182,7 +1189,7 @@ describe('AzureFoundryAgentProvider', () => {
       expect(vi.mocked(logger.warn)).toHaveBeenCalledTimes(1);
     });
 
-    it('forwards effective timeout, retry, and cancellation options on every model request', async () => {
+    it('uses effective timeout with request-local SDK signals and disabled internal retries', async () => {
       mockGetAgent.mockResolvedValue(mockAgent);
       mockResponsesCreate
         .mockResolvedValueOnce(createFunctionCallResponse())
@@ -1210,9 +1217,14 @@ describe('AzureFoundryAgentProvider', () => {
           body: { agent_reference: { name: 'weather-agent', type: 'agent_reference' } },
           timeout: 250,
           maxRetries: 0,
-          signal: controller.signal,
+          signal: expect.any(AbortSignal),
         });
+        expect(options.signal).not.toBe(controller.signal);
+        expect(options.signal.aborted).toBe(true);
       }
+      expect(mockResponsesCreate.mock.calls[0][1].signal).not.toBe(
+        mockResponsesCreate.mock.calls[1][1].signal,
+      );
       expect(logger.warn).not.toHaveBeenCalled();
     });
 
@@ -1670,7 +1682,7 @@ describe('AzureFoundryAgentProvider', () => {
         mockGetAgent.mockResolvedValue(mockAgent);
         mockResponsesCreate.mockRejectedValue(makeSdkError(429, 'insufficient_quota'));
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         expect(result.error).toContain('Quota exceeded');
@@ -1687,7 +1699,7 @@ describe('AzureFoundryAgentProvider', () => {
           }),
         );
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         expect(result.error).toContain('Quota exceeded');
@@ -1705,7 +1717,7 @@ describe('AzureFoundryAgentProvider', () => {
           }),
         );
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         expect(result.error).toContain('Rate limit exceeded');
@@ -1725,7 +1737,7 @@ describe('AzureFoundryAgentProvider', () => {
             }),
           );
           const provider = new AzureFoundryAgentProvider('weather-agent', {
-            config: { projectUrl },
+            config: { projectUrl, retryOptions: { maxRetries: 0 } },
           });
 
           const result = await provider.callApi('test prompt');
@@ -1746,7 +1758,7 @@ describe('AzureFoundryAgentProvider', () => {
           }),
         );
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         expect(result.metadata).toMatchObject({
@@ -1765,7 +1777,7 @@ describe('AzureFoundryAgentProvider', () => {
           }),
         );
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         expect(result.error).toContain('Rate limit exceeded');
@@ -1795,7 +1807,7 @@ describe('AzureFoundryAgentProvider', () => {
           }),
         );
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         // An ambiguous quota code next to a short Retry-After is a deployment
@@ -1820,7 +1832,7 @@ describe('AzureFoundryAgentProvider', () => {
           }),
         );
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         expect(
@@ -1839,7 +1851,7 @@ describe('AzureFoundryAgentProvider', () => {
           }),
         );
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         expect(result.metadata).toMatchObject({
@@ -1851,7 +1863,7 @@ describe('AzureFoundryAgentProvider', () => {
         mockGetAgent.mockResolvedValue(mockAgent);
         mockResponsesCreate.mockRejectedValue(makeSdkError(429, 'rate_limit_exceeded'));
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         expect(result.error).toContain('Rate limit exceeded');
@@ -1863,7 +1875,7 @@ describe('AzureFoundryAgentProvider', () => {
         mockGetAgent.mockResolvedValue(mockAgent);
         mockResponsesCreate.mockRejectedValue(makeSdkError(429));
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         expect(result.error).toContain('Rate limit exceeded');
@@ -1875,7 +1887,7 @@ describe('AzureFoundryAgentProvider', () => {
         // 500 with the same code shouldn't trigger the rate-limit branch
         mockResponsesCreate.mockRejectedValue(makeSdkError(500, 'insufficient_quota'));
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         expect(result.error).not.toContain('Quota exceeded');
@@ -1886,7 +1898,7 @@ describe('AzureFoundryAgentProvider', () => {
         mockGetAgent.mockResolvedValue(mockAgent);
         mockResponsesCreate.mockRejectedValue('string error');
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         expect(result.error).toContain('Error in Azure Foundry Agent API call');
@@ -1901,7 +1913,7 @@ describe('AzureFoundryAgentProvider', () => {
         });
         mockResponsesCreate.mockRejectedValue(sdkErr);
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         expect(result.error).toContain('Rate limit exceeded');
@@ -1919,7 +1931,7 @@ describe('AzureFoundryAgentProvider', () => {
         });
         mockResponsesCreate.mockRejectedValue(sdkErr);
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         expect(result.error).toContain('Rate limit exceeded');
@@ -1930,7 +1942,7 @@ describe('AzureFoundryAgentProvider', () => {
         mockGetAgent.mockResolvedValue(mockAgent);
         mockResponsesCreate.mockRejectedValue(makeSdkError(429, 'insufficient_quota'));
         const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl },
+          config: { projectUrl, retryOptions: { maxRetries: 0 } },
         });
         const result = await provider.callApi('test prompt');
         expect(result.metadata?.rateLimitKind).toBe('quota');

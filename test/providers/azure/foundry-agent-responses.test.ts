@@ -367,7 +367,7 @@ describe('Foundry Responses conversation and accounting', () => {
         headers: { 'retry-after': '3' },
       }),
     );
-    const result = await provider().callApi('weather?');
+    const result = await provider({ retryOptions: { maxRetries: 0 } }).callApi('weather?');
     expect(result.error).toContain('Rate limit');
     expect(result.tokenUsage).toMatchObject({ total: 15, numRequests: 2 });
     expect(result.metadata).toMatchObject({

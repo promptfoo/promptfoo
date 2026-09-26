@@ -242,6 +242,8 @@ for (const test of cases) {
   }
   const exported = sanitizeObject(JSON.parse(fs.readFileSync(resultPath, 'utf8')), {
     sanitizeUrls: true,
+    maxDepth: Number.POSITIVE_INFINITY,
+    throwOnError: true,
   });
   fs.writeFileSync(resultPath, JSON.stringify(exported, null, 2));
   const callbackCount = fs

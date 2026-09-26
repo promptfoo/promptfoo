@@ -20,6 +20,7 @@ import {
   maybeLoadToolsFromExternalFile,
   renderVarsInObject,
 } from '../../util/index';
+import { sleepWithAbort } from '../../util/time';
 import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { resolveMaxToolIterations } from '../openai/util';
@@ -55,7 +56,8 @@ import type { CallbackContext, ReasoningEffort } from '../openai/types';
 import type { AzureAssistantOptions, AzureAssistantProviderOptions } from './types';
 
 type FoundryAgent = Agent;
-type FoundryResponses = ReturnType<AzureAIProjectClient['getOpenAIClient']>['responses'];
+type FoundryOpenAIClient = ReturnType<AzureAIProjectClient['getOpenAIClient']>;
+type FoundryResponses = FoundryOpenAIClient['responses'];
 type FoundryResponseCreateParams = Parameters<FoundryResponses['create']>[0] & { stream?: false };
 type CachedFoundryAgentResponse = ProviderResponse & {
   __promptfooFoundryAgent?: Pick<FoundryAgent, 'id' | 'name'>;
@@ -179,6 +181,46 @@ function sdkErrorHeaders(err: {
     }
   }
   return Object.keys(headers).length > 0 ? headers : undefined;
+}
+
+/** Match the SDK's retry policy without its non-cancellable retry timer. */
+function responseRetryDelay(
+  error: unknown,
+  client: FoundryOpenAIClient,
+  attempt: number,
+): number | undefined {
+  if (typeof error !== 'object' || error === null) {
+    return undefined;
+  }
+  // Hard billing/quota failures take precedence over an explicit retry hint.
+  if (rateLimitFromSdkError(error)?.kind === 'quota') {
+    return undefined;
+  }
+  // The project client bundles its own SDK; root-package instanceof checks differ.
+  const ConnectionError = (client.constructor as Function & { APIConnectionError?: typeof Error })
+    .APIConnectionError;
+  const connectionError = ConnectionError && error instanceof ConnectionError;
+  const sdkError = error as { status?: number; headers?: unknown };
+  const headers = sdkErrorHeaders(sdkError) ?? {};
+  if (!connectionError) {
+    if (headers['x-should-retry'] === 'false') {
+      return undefined;
+    }
+    const status = sdkError.status ?? 0;
+    if (
+      headers['x-should-retry'] !== 'true' &&
+      status !== 408 &&
+      status !== 409 &&
+      status !== 429 &&
+      status < 500
+    ) {
+      return undefined;
+    }
+  }
+  return (
+    rateLimitTimingFromHeaders(headers).retryAfterMs ??
+    Math.min(500 * 2 ** attempt, 8000) * (1 - Math.random() * 0.25)
+  );
 }
 
 /**
@@ -632,17 +674,14 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   private getResponseOptions(
     agent: FoundryAgent,
     config: EffectiveFoundryConfig,
-    signal?: AbortSignal,
   ): FoundryResponseCreateOptions {
     // Azure AI Foundry replaced the top-level `agent` field in the responses
     // create body with `agent_reference`. Sending `agent` returns a 400 similar
     // to: "The 'agent' property is deprecated. Use 'agent_reference' instead."
     return {
-      ...(signal && { signal }),
       ...(config.timeoutMs === undefined ? {} : { timeout: config.timeoutMs }),
-      ...(config.retryOptions?.maxRetries === undefined
-        ? {}
-        : { maxRetries: config.retryOptions.maxRetries }),
+      // Own retry waits until the bundled SDK supports cancellable backoff.
+      maxRetries: 0,
       body: {
         agent_reference: {
           name: agent.name,
@@ -650,6 +689,48 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         },
       },
     };
+  }
+
+  private async createResponseWithRetries(
+    client: FoundryOpenAIClient,
+    body: Record<string, any>,
+    options: FoundryResponseCreateOptions,
+    maxRetries: number,
+    onRetry: () => void,
+    signal?: AbortSignal,
+  ): Promise<FoundryResponse> {
+    const retrySignal = signal ?? new AbortController().signal;
+    for (let attempt = 0; ; attempt += 1) {
+      throwIfAborted(signal);
+      const controller = new AbortController();
+      const relayAbort = () => controller.abort();
+      signal?.addEventListener('abort', relayAbort, { once: true });
+      let retryDelay: number;
+      try {
+        return await waitWithAbort(() => {
+          if (attempt > 0) {
+            onRetry();
+          }
+          return client.responses.create(body as FoundryResponseCreateParams, {
+            ...options,
+            signal: controller.signal,
+          });
+        }, signal);
+      } catch (error) {
+        throwIfAborted(signal);
+        const delay = responseRetryDelay(error, client, attempt);
+        if (attempt >= maxRetries || delay === undefined) {
+          throw error;
+        }
+        retryDelay = delay;
+      } finally {
+        signal?.removeEventListener('abort', relayAbort);
+        // The SDK keeps its listener after fetch. Abort this request-local signal
+        // only after its non-streaming response has been fully consumed.
+        controller.abort();
+      }
+      await sleepWithAbort(retryDelay, retrySignal);
+    }
   }
 
   private responseFailureMessage(response: FoundryResponse): string | undefined {
@@ -868,6 +949,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
 
     const tokenUsage: TokenUsage = { numRequests: 0 };
     let knownCost = 0;
+    let transportRetries = 0;
     let costComplete = true;
     let usageComplete = true;
     const aggregateResult = (result: ProviderResponse): ProviderResponse => {
@@ -882,6 +964,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
           ...result.metadata,
           ...(!costComplete && { costIncomplete: true, knownCost }),
           ...(!usageComplete && { usageIncomplete: true }),
+          ...(transportRetries > 0 && { transportRetries }),
         },
       };
     };
@@ -893,7 +976,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       span.setAttribute(GenAIAttributes.AGENT_NAME, agent.name);
       span.updateName(`invoke_agent ${agent.name}`);
       const openAIClient = client.getOpenAIClient();
-      const responseOptions = this.getResponseOptions(agent, effectiveConfig, abortSignal);
+      const responseOptions = this.getResponseOptions(agent, effectiveConfig);
       const tracer = getGenAITracer();
       let turnCount = 0;
 
@@ -918,15 +1001,19 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       ): Promise<FoundryResponse> => {
         throwIfAborted(abortSignal);
         const turnStartedAt = Date.now();
-        // SDK-level attempts are observable; internal transport retries are not.
+        // Count logical Responses turns; transport retries do not add another turn.
         accumulateTokenUsage(tokenUsage, { numRequests: 1 });
         try {
-          const response = await waitWithAbort(
-            () =>
-              openAIClient.responses.create(
-                requestBody as FoundryResponseCreateParams,
-                responseOptions,
-              ),
+          const response = await this.createResponseWithRetries(
+            openAIClient,
+            requestBody,
+            responseOptions,
+            effectiveConfig.retryOptions?.maxRetries ?? openAIClient.maxRetries ?? 2,
+            () => {
+              transportRetries += 1;
+              usageComplete = false;
+              costComplete = false;
+            },
             abortSignal,
           );
           accumulateTokenUsage(tokenUsage, {
