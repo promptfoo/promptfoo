@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare two AISIX model aliases
+
+prompts:
+  - |-
+    Classify the support request as billing or technical.
+    Reply with exactly one lowercase word: billing or technical.
+    Request: {{ticket}}
+
+providers:
+  - id: openai:chat:eval-stable
+    label: AISIX stable alias
+    config:
+      apiBaseUrl: '{{env.AISIX_BASE_URL}}/v1'
+      apiKeyEnvar: PROMPTFOO_CALLER_KEY
+      omitDefaults: true
+  - id: openai:chat:eval-candidate
+    label: AISIX candidate alias
+    config:
+      apiBaseUrl: '{{env.AISIX_BASE_URL}}/v1'
+      apiKeyEnvar: PROMPTFOO_CALLER_KEY
+      omitDefaults: true
+
+tests:
+  - description: Classify a duplicate charge
+    vars:
+      ticket: I was charged twice for the same invoice.
+    assert:
+      - type: equals
+        value: billing
+  - description: Classify an API timeout
+    vars:
+      ticket: The API request times out after thirty seconds.
+    assert:
+      - type: equals
+        value: technical
