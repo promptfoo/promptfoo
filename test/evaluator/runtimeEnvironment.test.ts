@@ -422,6 +422,32 @@ describeEvaluator('evaluation environment defaults', () => {
     expect(provider.delay).toBeUndefined();
   });
 
+  it.each([1, 2])(
+    'leaves an interrupted delay incomplete at concurrency %s',
+    async (maxConcurrency) => {
+      vi.useFakeTimers();
+      const controller = new AbortController();
+      const grade = vi.fn().mockReturnValue(true);
+      const provider = createProvider();
+      const suite = createSuite(provider, { PROMPTFOO_DELAY_MS: '1000' });
+      suite.tests = [{ assert: [{ type: 'javascript', value: grade }] }];
+      const record = new Eval({});
+      const evaluation = evaluate(suite, record, {
+        abortSignal: controller.signal,
+        maxConcurrency,
+      });
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(provider.callApi).toHaveBeenCalledOnce();
+      controller.abort();
+      await vi.advanceTimersByTimeAsync(0);
+      await evaluation;
+      expect(await record.getResults()).toEqual([]);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(grade).not.toHaveBeenCalled();
+    },
+  );
+
   it('cancels the post-response delay before a timed-out step can grade', async () => {
     vi.useFakeTimers();
     const actualTime =
