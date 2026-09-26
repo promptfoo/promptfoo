@@ -31,7 +31,9 @@ npm install playwright @playwright/browser-chromium playwright-extra puppeteer-e
 2. **Install Python dependencies** (for the demo application):
 
 ```bash
-pip install -r requirements.txt
+python -m venv .venv
+source .venv/bin/activate # Windows: .venv\Scripts\activate
+python -m pip install -r requirements.txt
 ```
 
 That's it! No additional setup scripts or configuration needed.
@@ -86,19 +88,19 @@ The main configuration (`promptfooconfig.yaml`) tests a chatbot interface with a
 
 ### Calculator Example
 
-The `calculator-example.yaml` demonstrates form interactions with a 100% pass rate:
+The `calculator-example.yaml` reads the result textbox and checks the calculated
+value: `10 + 5 = 15` and `20 × 4 = 80`. An empty or incorrect result fails, even
+when the form's static "Result" label is present.
 
 ```text
 ┌───────────────────┬───────────────────┬───────────────────┬───────────────────┬───────────────────┐
 │ num1              │ num2              │ operation         │ operationSelector │ [browser-provider]│
 ├───────────────────┼───────────────────┼───────────────────┼───────────────────┼───────────────────┤
-│ 10                │ 5                 │ Add               │ #operation        │ [PASS] Calculator │
-│                   │                   │                   │ label:nth-child(1)│ interaction       │
-│                   │                   │                   │                   │ successful        │
+│ 10                │ 5                 │ Add               │ #operation        │ [PASS] 15         │
+│                   │                   │                   │ label:nth-child(1)│                   │
 ├───────────────────┼───────────────────┼───────────────────┼───────────────────┼───────────────────┤
-│ 20                │ 4                 │ Multiply          │ #operation        │ [PASS] Calculator │
-│                   │                   │                   │ label:nth-child(3)│ interaction       │
-│                   │                   │                   │                   │ successful        │
+│ 20                │ 4                 │ Multiply          │ #operation        │ [PASS] 80         │
+│                   │                   │                   │ label:nth-child(3)│                   │
 └───────────────────┴───────────────────┴───────────────────┴───────────────────┴───────────────────┘
 ```
 
