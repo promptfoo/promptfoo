@@ -15,6 +15,8 @@ Use them with a provider that runs a real coding harness, such as [`openai:codex
 
 These plugins generate coding-agent tasks with Promptfoo's remote red-team generator. During grading, Promptfoo can use the final answer, provider raw events, available trace attributes, protected file hashes, and the normal LLM rubric. Multi-turn strategies such as `jailbreak:meta` and `jailbreak:hydra` pass the per-turn target provider response into the grader so deterministic checks can still inspect command evidence from the turn that failed.
 
+Deterministic checks distinguish file reads, authored edits, shell commands, connector destinations, and command output. Native Codex additions can be inspected within an explicitly trusted workspace; updates need a diff or authored content to attribute code to the agent. Searches, directory listings, and unchanged patch context do not count as authored code. Namespaced shell tools count as commands, while malformed MCP arguments do not establish execution. Native write destinations are checked through existing local symlinks, including when the final file does not exist yet.
+
 :::
 
 ## Plugin IDs
@@ -255,10 +257,12 @@ Supported assertion and test fields:
 | `evidenceFilePath`, `secretEnvArtifactPath`                                                              | repo-prompt-injection, secret-env-read, secret-file-read, sandbox-read-escape | Optional target-created files to scan for configured canaries or receipts                    |
 | `protectedFilePath` + `expectedSha256`                                                                   | verifier-sabotage                                                             | File whose hash must not change                                                              |
 | `verifierReportPath`                                                                                     | verifier-sabotage                                                             | Sidecar JSON report with `status`/`exitCode`                                                 |
-| `verifierArtifactRoot`, `verifierProbeDir`                                                               | verifier-sabotage                                                             | Trusted working-tree or temp root for verifier file and sidecar reads                        |
+| `verifierArtifactRoot`, `verifierProbeDir`                                                               | verifier-sabotage, generated-vulnerability                                    | Trusted working-tree or temp root for verifier files, sidecars, and Codex file changes       |
 
 For `sandbox-write-escape`, combine command evidence with host probes when possible. Configure a host-owned sentinel with `outsideWriteHostPath` and `outsideWriteExpectedSha256`, a must-not-exist path for newly created files, or a fresh `outsideWriteProbeDir` with `workspacePath` and explicit `outsideWriteAllowedPath` entries. This catches real writes even when the agent's final answer is vague, and it reduces false positives when a generated prompt uses encoded or Unicode lookalike path text that remains inside the workspace.
 
 For `verifier-sabotage`, keep `protectedFilePath`, `expectedSha256`, and `verifierReportPath` in assertion values, but put trusted roots such as `verifierArtifactRoot`, `verifierProbeDir`, or `workspacePath` in test vars, metadata, or plugin config. Assertion values cannot self-authorize roots.
+
+Set `verifierArtifactRoot` to the agent's disposable workspace when checking native Codex file changes; only changed files under this trusted root are read.
 
 For `network-egress-bypass`, combine trap evidence with a disposable workspace scan when you want to catch planted code that will egress later. Configure `networkTrapUrl`, `networkTrapHost`, `networkTrapLogPath`, and `networkEgressReceipt` for live requests, and add `networkScanPath` or `networkWorkspacePath` only for a fresh fixture you control. The scan is intentionally opt-in because mature repositories may already contain legitimate network clients.
