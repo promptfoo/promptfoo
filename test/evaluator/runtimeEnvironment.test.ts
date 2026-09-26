@@ -178,9 +178,18 @@ describeEvaluator('evaluation environment defaults', () => {
     expect(getProviderDelay(target)).toBeUndefined();
   });
 
-  it.each([1, 2])(
-    'preserves a grader fallback when target pacing is unspecified (concurrency=%s)',
-    async (maxConcurrency) => {
+  it.each([
+    { maxConcurrency: 1, delay: undefined, delayResolved: false, expected: 50 },
+    { maxConcurrency: 2, delay: undefined, delayResolved: false, expected: 50 },
+    { maxConcurrency: 1, delay: undefined, delayResolved: true, expected: 50 },
+    { maxConcurrency: 2, delay: undefined, delayResolved: true, expected: 50 },
+    { maxConcurrency: 1, delay: 0, delayResolved: true, expected: 0 },
+    { maxConcurrency: 2, delay: 0, delayResolved: true, expected: 0 },
+    { maxConcurrency: 1, delay: 15, delayResolved: true, expected: 15 },
+    { maxConcurrency: 2, delay: 15, delayResolved: true, expected: 15 },
+  ])(
+    'preserves resolved pacing and grader fallbacks: %j',
+    async ({ maxConcurrency, delay, delayResolved, expected }) => {
       const restore = mockProcessEnv({ PROMPTFOO_DELAY_MS: undefined });
       const target = createProvider();
       const observed: Array<number | undefined> = [];
@@ -192,11 +201,11 @@ describeEvaluator('evaluation environment defaults', () => {
           return { output: '{"pass":true,"score":1,"reason":"fixture"}' };
         },
       };
-      const suite = createSuite(target);
+      const suite = createSuite(target, delayResolved ? { PROMPTFOO_DELAY_MS: '1000' } : undefined);
       suite.tests = [{ assert: [{ type: 'llm-rubric', value: 'fixture', provider: grader }] }];
       try {
-        await evaluate(suite, new Eval({}), { maxConcurrency });
-        expect(observed).toEqual([50]);
+        await evaluate(suite, new Eval({}), { maxConcurrency, delay, delayResolved });
+        expect(observed).toEqual([expected]);
         expect(target.delay).toBeUndefined();
       } finally {
         restore();
@@ -240,9 +249,15 @@ describeEvaluator('evaluation environment defaults', () => {
     },
   );
 
-  it.each([undefined, 0])(
-    'preserves invocation delay for comparison grading with override %s',
-    async (delay) => {
+  it.each([
+    { delay: undefined, delayResolved: false, expected: 7 },
+    { delay: 0, delayResolved: false, expected: 0 },
+    { delay: undefined, delayResolved: true, expected: undefined },
+    { delay: 0, delayResolved: true, expected: 0 },
+    { delay: 15, delayResolved: true, expected: 15 },
+  ])(
+    'preserves invocation delay for comparison grading: %j',
+    async ({ delay, delayResolved, expected }) => {
       const target = createProvider();
       const observed: Array<number | undefined> = [];
       const grader: ApiProvider = {
@@ -263,8 +278,8 @@ describeEvaluator('evaluation environment defaults', () => {
         });
       const record = new Eval({});
       try {
-        await evaluate(suite, record, { delay });
-        expect(observed).toEqual([delay ?? 7]);
+        await evaluate(suite, record, { delay, delayResolved });
+        expect(observed).toEqual([expected]);
         expect(target.delay).toBeUndefined();
         expect((await record.getResults()).every((result) => result.success)).toBe(true);
       } finally {

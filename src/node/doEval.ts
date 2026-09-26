@@ -615,8 +615,7 @@ async function doEvalWithEnv(
           : 1;
       cache = persisted.cache ?? true;
       maxConcurrency = (persisted.maxConcurrency as number | undefined) ?? DEFAULT_MAX_CONCURRENCY;
-      // Legacy saved runs omitted zero; resume must not adopt a new ambient delay.
-      delay = (persisted.delay as number | undefined) ?? 0;
+      delay = persisted.delay as number | undefined;
     } else {
       // Misc settings with proper CLI vs config priority
       // CLI values explicitly provided by user should override config, but defaults should not
@@ -949,6 +948,8 @@ async function doEvalWithEnv(
     try {
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
+        // Keep a saved omission distinct from zero without adopting a new env default.
+        delayResolved: true,
         filterRange: hasScenarios || resumeEval ? filterRange : undefined,
         abortSignal: evaluateOptions.abortSignal,
         isRedteam: Boolean(config.redteam),

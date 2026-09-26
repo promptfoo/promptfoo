@@ -1801,61 +1801,67 @@ describe('evalCommand', () => {
     loggerErrorSpy.mockRestore();
   });
 
-  it.each([0, undefined])('resumes saved prompts and no-delay pacing (%s)', async (delay) => {
-    const restore = mockProcessEnv({ PROMPTFOO_DELAY_MS: '1000' });
-    const resumeEval = new Eval({ prompts: [] } as UnifiedConfig);
-    resumeEval.prompts = [
-      { raw: 'saved prompt', label: 'Saved', config: { temperature: 0 } },
-    ] as any;
-    resumeEval.runtimeOptions = {
-      repeat: 2,
-      cache: false,
-      maxConcurrency: 2,
-      delay,
-      providerFilter: 'selected-target',
-    };
-    const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValueOnce(resumeEval);
-    vi.mocked(resolveConfigs).mockResolvedValueOnce({
-      config: {} as UnifiedConfig,
-      testSuite: {
-        prompts: [],
-        providers: [
-          {
-            id: () => 'echo',
-            label: 'selected-target',
-            callApi: vi.fn(),
-          } as ApiProvider,
-        ],
-      },
-      basePath: path.resolve('/'),
-    });
-    vi.mocked(evaluate).mockImplementationOnce(async (testSuite, evalRecord, options) => {
-      expect(testSuite.prompts).toEqual([
+  it.each([undefined, 0, 15])(
+    'resumes saved prompts and pacing without a fresh env default (%s)',
+    async (delay) => {
+      const restore = mockProcessEnv({ PROMPTFOO_DELAY_MS: '1000' });
+      const resumeEval = new Eval({ prompts: [] } as UnifiedConfig);
+      resumeEval.prompts = [
         { raw: 'saved prompt', label: 'Saved', config: { temperature: 0 } },
-      ]);
-      expect(options).toEqual(expect.objectContaining({ repeat: 2, cache: false, delay: 0 }));
-      return evalRecord as Eval;
-    });
+      ] as any;
+      resumeEval.runtimeOptions = {
+        repeat: 2,
+        cache: false,
+        maxConcurrency: 2,
+        delay,
+        providerFilter: 'selected-target',
+      };
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValueOnce(resumeEval);
+      vi.mocked(resolveConfigs).mockResolvedValueOnce({
+        config: {} as UnifiedConfig,
+        testSuite: {
+          prompts: [],
+          providers: [
+            {
+              id: () => 'echo',
+              label: 'selected-target',
+              callApi: vi.fn(),
+            } as ApiProvider,
+          ],
+        },
+        basePath: path.resolve('/'),
+      });
+      vi.mocked(evaluate).mockImplementationOnce(async (testSuite, evalRecord, options) => {
+        expect(testSuite.prompts).toEqual([
+          { raw: 'saved prompt', label: 'Saved', config: { temperature: 0 } },
+        ]);
+        expect(options).toEqual(
+          expect.objectContaining({ repeat: 2, cache: false, delay, delayResolved: true }),
+        );
+        return evalRecord as Eval;
+      });
 
-    try {
-      const result = await doEval(
-        { resume: 'eval-123' } as Parameters<typeof doEval>[0],
-        defaultConfig,
-        defaultConfigPath,
-        {},
-      );
+      try {
+        const result = await doEval(
+          { resume: 'eval-123' } as Parameters<typeof doEval>[0],
+          defaultConfig,
+          defaultConfigPath,
+          {},
+        );
 
-      expect(result).toBe(resumeEval);
-      expect(findByIdSpy).toHaveBeenCalledWith('eval-123');
-      expect(resolveConfigs).toHaveBeenCalledWith(
-        { filterProviders: 'selected-target' },
-        resumeEval.config,
-      );
-    } finally {
-      findByIdSpy.mockRestore();
-      restore();
-    }
-  });
+        expect(result).toBe(resumeEval);
+        expect(result.runtimeOptions).not.toHaveProperty('delayResolved');
+        expect(findByIdSpy).toHaveBeenCalledWith('eval-123');
+        expect(resolveConfigs).toHaveBeenCalledWith(
+          { filterProviders: 'selected-target' },
+          resumeEval.config,
+        );
+      } finally {
+        findByIdSpy.mockRestore();
+        restore();
+      }
+    },
+  );
 
   it('should retry error results from the latest eval and clean up after success', async () => {
     const latestEval = new Eval({ prompts: [] } as UnifiedConfig);
@@ -2416,7 +2422,7 @@ describe('evalCommand', () => {
       expect(evaluate).toHaveBeenCalledWith(
         expect.anything(),
         expect.anything(),
-        expect.objectContaining({ delay: undefined }),
+        expect.objectContaining({ delay: undefined, delayResolved: true }),
       );
     } finally {
       restore();
@@ -2432,7 +2438,7 @@ describe('evalCommand', () => {
         expect(evaluate).toHaveBeenCalledWith(
           expect.anything(),
           expect.anything(),
-          expect.objectContaining({ delay: delay ?? 13 }),
+          expect.objectContaining({ delay: delay ?? 13, delayResolved: true }),
         );
       } finally {
         restoreEnv();

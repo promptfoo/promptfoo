@@ -1622,7 +1622,7 @@ export async function runEval(options: RunEvalOptions): Promise<EvaluateResult[]
 }
 
 function runEvalInternal(options: RunEvalOptions): Promise<EvaluateResult[]> {
-  const delay = resolveInvocationDelay(options.provider, options.delay);
+  const delay = resolveInvocationDelay(options.provider, options.delay, options.evaluateOptions);
   return withProviderCallExecutionContext(
     { ...getProviderCallExecutionContext(), providerDelay: { provider: options.provider, delay } },
     () => runEvalInContext({ ...options, delay }),
@@ -1630,8 +1630,15 @@ function runEvalInternal(options: RunEvalOptions): Promise<EvaluateResult[]> {
 }
 
 // Preserve omission so a nested provider can still use its own configured delay.
-function resolveInvocationDelay(provider: ApiProvider, delay?: number): number | undefined {
-  const effectiveDelay = provider.delay ?? delay ?? getEnvInt('PROMPTFOO_DELAY_MS');
+function resolveInvocationDelay(
+  provider: ApiProvider,
+  delay?: number,
+  evaluateOptions?: InternalEvaluateOptions,
+): number | undefined {
+  const effectiveDelay =
+    provider.delay ??
+    delay ??
+    (evaluateOptions?.delayResolved ? undefined : getEnvInt('PROMPTFOO_DELAY_MS'));
   invariant(
     effectiveDelay === undefined || typeof effectiveDelay === 'number',
     `Invalid delay for ${provider.label}`,
@@ -4338,7 +4345,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
             providerDelay: originalProvider
               ? {
                   provider: originalProvider,
-                  delay: resolveInvocationDelay(originalProvider, this.options.delay),
+                  delay: resolveInvocationDelay(originalProvider, this.options.delay, this.options),
                 }
               : undefined,
           },
