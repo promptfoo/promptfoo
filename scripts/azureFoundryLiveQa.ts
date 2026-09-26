@@ -255,11 +255,41 @@ for (const test of cases) {
     process.exitCode = 1;
     break;
   }
-  const exported = sanitizeObject(JSON.parse(fs.readFileSync(resultPath, 'utf8')), {
-    sanitizeUrls: true,
-    maxDepth: Number.POSITIVE_INFINITY,
-    throwOnError: true,
-  });
+  let exported: { results: { results: EvaluateResult[] } };
+  try {
+    const parsed = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
+    const rows = parsed?.results?.results;
+    if (
+      !Array.isArray(rows) ||
+      rows.some(
+        (row) =>
+          row === null ||
+          typeof row !== 'object' ||
+          Array.isArray(row) ||
+          typeof row.success !== 'boolean' ||
+          !Number.isFinite(row.score) ||
+          (row.response !== undefined &&
+            (row.response === null ||
+              typeof row.response !== 'object' ||
+              Array.isArray(row.response))),
+      )
+    ) {
+      throw new Error('Invalid eval result shape');
+    }
+    exported = sanitizeObject(parsed, {
+      sanitizeUrls: true,
+      maxDepth: Number.POSITIVE_INFINITY,
+      throwOnError: true,
+    });
+  } catch {
+    summaries.push({
+      case: test.name,
+      exitCode,
+      error: `${terminalError ? `${terminalError} ` : ''}CLI exported invalid or incomplete results; inspect ${test.name}-results.json and the isolated promptfoo/logs directory.`,
+    });
+    process.exitCode = 1;
+    break;
+  }
   fs.writeFileSync(resultPath, JSON.stringify(exported, null, 2));
   const callbackCount = fs
     .readFileSync(callbackLog, 'utf8')
