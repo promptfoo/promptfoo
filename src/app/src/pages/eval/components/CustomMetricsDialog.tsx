@@ -25,7 +25,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 
 type MetricScore = {
   score: number;
-  total: number;
+  total: number | undefined;
   hasScore: boolean;
 };
 
@@ -37,13 +37,12 @@ interface MetricRow {
 
 type PromptHeader = EvaluateTable['head']['prompts'][number];
 
-function hasValidDenominator({ hasScore, total }: MetricScore): boolean {
-  return hasScore && Number.isFinite(total) && total !== 0;
-}
-
-function getMetricPercentage(metricScore: MetricScore): number {
-  const { score, total } = metricScore;
-  return hasValidDenominator(metricScore) ? (score / total) * 100 : 0;
+function getMetricPercentage({ hasScore, score, total }: MetricScore): number | null {
+  if (!hasScore || total === undefined || total === 0) {
+    return null;
+  }
+  const percentage = (score / total) * 100;
+  return Number.isFinite(percentage) ? percentage : null;
 }
 
 function getPromptMetricScores(row: MetricRow): MetricScore[] {
@@ -58,25 +57,22 @@ function formatCompactMetricNumber(value: number): string {
   }).format(value);
 }
 
-function getAveragePassRate(row: MetricRow): number {
-  const promptScores = getPromptMetricScores(row);
-  let promptCount = 0;
-  let totalPassRate = 0;
-
-  promptScores.forEach((metricScore) => {
-    if (hasValidDenominator(metricScore)) {
-      promptCount++;
-      totalPassRate += getMetricPercentage(metricScore);
-    }
+function getAvailablePercentages(row: MetricRow): number[] {
+  return getPromptMetricScores(row).flatMap((metricScore) => {
+    const percentage = getMetricPercentage(metricScore);
+    return percentage === null ? [] : [percentage];
   });
+}
 
-  return promptCount > 0 ? totalPassRate / promptCount : 0;
+function getAveragePassRate(row: MetricRow): number | null {
+  const percentages = getAvailablePercentages(row);
+  return percentages.length > 0
+    ? percentages.reduce((sum, value) => sum + value, 0) / percentages.length
+    : null;
 }
 
 function getPassRateSpread(row: MetricRow): number | null {
-  const validPassRates = getPromptMetricScores(row)
-    .filter(hasValidDenominator)
-    .map((metricScore) => getMetricPercentage(metricScore));
+  const validPassRates = getAvailablePercentages(row);
 
   if (validPassRates.length < 2) {
     return null;
@@ -195,7 +191,16 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
   }, []);
 
   const renderPercentageValue = React.useCallback(
-    (percentage: number) => {
+    (percentage: number | null) => {
+      if (percentage === null) {
+        return (
+          <div className="flex h-full items-center justify-end">
+            <span className="text-sm text-muted-foreground" title="Percentage unavailable">
+              —
+            </span>
+          </div>
+        );
+      }
       const classes = getPercentageTextClasses(percentage);
 
       return (
@@ -231,20 +236,14 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
       return names;
     }
     for (const metricName of derivedMetricNames) {
-      table.head.prompts.forEach((prompt, idx) => {
-        if (
-          Object.prototype.hasOwnProperty.call(prompt.metrics?.namedScores ?? {}, metricName) &&
-          !Object.prototype.hasOwnProperty.call(
-            filteredMetrics?.[idx]?.namedScores ?? {},
-            metricName,
-          )
-        ) {
+      table.head.prompts.forEach((prompt) => {
+        if (Object.prototype.hasOwnProperty.call(prompt.metrics?.namedScores ?? {}, metricName)) {
           names.add(metricName);
         }
       });
     }
     return names;
-  }, [derivedMetricNames, filteredMetrics, hasCompleteFilteredMetrics, table.head.prompts]);
+  }, [derivedMetricNames, hasCompleteFilteredMetrics, table.head.prompts]);
   const displayMetrics = React.useMemo(
     () =>
       table.head.prompts.map((prompt, idx) =>
@@ -285,10 +284,9 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
           if (isPolicyMetric(value)) {
             const policyId = deserializePolicyIdFromMetric(value);
             const policy = policiesById[policyId];
-            if (!policy) {
-              return value;
+            if (policy) {
+              displayValue = formatPolicyIdentifierAsMetric(policy.name ?? policy.id, value);
             }
-            displayValue = formatPolicyIdentifierAsMetric(policy.name ?? policy.id, value);
           }
           if (totalMetricNames.has(value)) {
             return (
@@ -338,9 +336,9 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
             cell: ({ row }) => {
               const metricScore = row.original[columnId] as MetricScore;
               const { hasScore, score } = metricScore;
-              const displayValue = hasScore ? formatCompactMetricNumber(score) : '0';
+              const displayValue = hasScore ? formatCompactMetricNumber(score) : '—';
               return (
-                <span className="text-sm" title={hasScore ? String(score) : '0'}>
+                <span className="text-sm" title={hasScore ? String(score) : 'Score unavailable'}>
                   {displayValue}
                 </span>
               );
@@ -359,7 +357,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
             cell: ({ row }) => {
               const metricScore = row.original[columnId] as MetricScore;
               const { total } = metricScore;
-              return <span className="text-sm">{total}</span>;
+              return <span className="text-sm">{total ?? '—'}</span>;
             },
           },
         ],
@@ -477,7 +475,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
 
         row[`prompt_${idx}`] = {
           score: score ?? 0,
-          total: total ?? 0,
+          total,
           hasScore,
         };
       });

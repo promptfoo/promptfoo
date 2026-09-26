@@ -86,22 +86,6 @@ describe('CustomMetrics', () => {
     expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('20.75');
   });
 
-  it('displays metrics with counts', () => {
-    const lookup = {
-      metric1: 30,
-      metric2: 40,
-    };
-    const counts = {
-      metric1: 60,
-      metric2: 80,
-    };
-
-    renderWithProviders(<CustomMetrics lookup={lookup} counts={counts} />);
-
-    expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('0.50 (30.00/60.00)');
-    expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('0.50 (40.00/80.00)');
-  });
-
   it('displays metrics with totals as percentages', () => {
     const lookup = {
       metric1: 30,
@@ -118,41 +102,13 @@ describe('CustomMetrics', () => {
     expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('50.00% (40.00/80.00)');
   });
 
-  it('handles zero values correctly', () => {
-    const lookup = {
-      metric1: 0,
-      metric2: 0,
-    };
-
-    const { rerender } = renderWithProviders(<CustomMetrics lookup={lookup} />);
-    expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('0.00');
-    expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('0.00');
-
-    rerender(
-      <CustomMetrics
-        lookup={lookup}
-        counts={{
-          metric1: 0,
-          metric2: 0,
-        }}
-      />,
+  it('distinguishes a zero score from an unavailable percentage', () => {
+    const { rerender } = renderWithProviders(
+      <CustomMetrics lookup={{ metric: 0 }} metricTotals={{ metric: 2 }} />,
     );
-
-    expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('0');
-    expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('0');
-
-    rerender(
-      <CustomMetrics
-        lookup={lookup}
-        metricTotals={{
-          metric1: 0,
-          metric2: 0,
-        }}
-      />,
-    );
-
-    expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('0%');
-    expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('0%');
+    expect(screen.getByTestId('metric-value-metric')).toHaveTextContent('0.00% (0.00/2.00)');
+    rerender(<CustomMetrics lookup={{ metric: 0 }} metricTotals={{ metric: 0 }} />);
+    expect(screen.getByTestId('metric-value-metric')).toHaveTextContent(/^0\.00$/);
   });
 
   it('handles undefined or null scores correctly', () => {
@@ -167,7 +123,7 @@ describe('CustomMetrics', () => {
     expect(screen.getByTestId('metric-value-metric3')).toHaveTextContent('0.00');
 
     expect(screen.queryByTestId('metric-value-metric1')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('metric-value-metric2')).toHaveTextContent('0');
+    expect(screen.queryByTestId('metric-value-metric2')).toHaveTextContent('—');
   });
 
   it('displays metric names correctly', () => {
@@ -289,21 +245,12 @@ describe('CustomMetrics', () => {
     ]);
   });
 
-  it('handles missing metrics in counts/totals objects', () => {
-    const lookup = { metric1: 10, metric2: 20 };
-    const counts = { metric1: 20 };
-    const metricTotals = { metric2: 40 };
-
+  it('shows the raw score when a metric has no recorded denominator', () => {
     renderWithProviders(
-      <CustomMetrics lookup={lookup} counts={counts} metricTotals={metricTotals} />,
+      <CustomMetrics lookup={{ legacy: 100, current: 20 }} metricTotals={{ current: 40 }} />,
     );
-
-    expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('0.50 (10.00/20.00)');
-    expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('50.00% (20.00/40.00)');
-  });
-
-  it('should include a comment to fix the missing key prop warning', () => {
-    expect(true).toBe(true);
+    expect(screen.getByTestId('metric-value-legacy')).toHaveTextContent(/^100\.00$/);
+    expect(screen.getByTestId('metric-value-current')).toHaveTextContent('50.00% (20.00/40.00)');
   });
 
   it('correctly handles undefined metric values in lookup', () => {
@@ -359,34 +306,24 @@ describe('CustomMetrics', () => {
     expect(onShowMore).toHaveBeenCalled();
   });
 
-  it('displays 0 when counts contains a zero value for a metric', () => {
-    const lookup = { metric1: 10 };
-    const counts = { metric1: 0 };
-
-    renderWithProviders(<CustomMetrics lookup={lookup} counts={counts} />);
-
-    expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('0');
-  });
+  it.each([0, Number.NaN, Number.POSITIVE_INFINITY])(
+    'shows the raw score when the denominator is %s',
+    (denominator) => {
+      renderWithProviders(
+        <CustomMetrics lookup={{ metric: 10 }} metricTotals={{ metric: denominator }} />,
+      );
+      expect(screen.getByTestId('metric-value-metric')).toHaveTextContent(/^10\.00$/);
+    },
+  );
 
   it('preserves finite negative denominators for backward compatibility', () => {
-    const { rerender } = renderWithProviders(
-      <CustomMetrics lookup={{ metric1: -1 }} counts={{ metric1: -2 }} />,
-    );
-
-    expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('0.50 (-1.00/-2.00)');
-
-    rerender(<CustomMetrics lookup={{ metric1: -1 }} metricTotals={{ metric1: -2 }} />);
+    renderWithProviders(<CustomMetrics lookup={{ metric1: -1 }} metricTotals={{ metric1: -2 }} />);
     expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('50.00% (-1.00/-2.00)');
   });
 
   it('ignores inherited denominator properties', () => {
-    const counts = Object.create({ metric1: 2 }) as Record<string, number>;
     const metricTotals = Object.create({ metric1: 4 }) as Record<string, number>;
-
-    renderWithProviders(
-      <CustomMetrics lookup={{ metric1: 10 }} counts={counts} metricTotals={metricTotals} />,
-    );
-
-    expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent('10.00');
+    renderWithProviders(<CustomMetrics lookup={{ metric1: 10 }} metricTotals={metricTotals} />);
+    expect(screen.getByTestId('metric-value-metric1')).toHaveTextContent(/^10\.00$/);
   });
 });

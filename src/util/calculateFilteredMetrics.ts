@@ -251,15 +251,7 @@ async function withReadSnapshot<T>(callback: (db: QueryDatabase) => Promise<T>):
 export async function calculateFilteredMetrics(
   opts: FilteredMetricsOptions,
 ): Promise<PromptMetrics[]> {
-  try {
-    return await withReadSnapshot((db) => calculateWithOptimizedQuery(opts, db));
-  } catch (error) {
-    if (error instanceof FilteredMetricsLimitError) {
-      throw error;
-    }
-    logger.error('Failed to calculate filtered metrics with optimized query', { error });
-    return createEmptyMetricsArray(opts.numPrompts);
-  }
+  return withReadSnapshot((db) => calculateWithOptimizedQuery(opts, db));
 }
 
 async function calculateWithOptimizedQuery(

@@ -3341,8 +3341,8 @@ describe('ResultsTable Filtered Metrics Display', () => {
       },
       filteredMetrics: [
         {
-          namedScores: { accuracy: 1.5 },
-          namedScoreWeights: { accuracy: 2 },
+          namedScores: { accuracy: 1.5, f1: 1.5 },
+          namedScoreWeights: { accuracy: 2, f1: 2 },
         },
         {
           namedScores: { accuracy: 0.5 },
@@ -3415,6 +3415,10 @@ describe('ResultsTable Filtered Metrics Display', () => {
     } as any);
 
     renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Filtered named metrics are unavailable. Named metrics show evaluation totals.',
+    );
 
     expect(
       screen.getAllByTestId('metric-value-accuracy').map((element) => element.textContent),

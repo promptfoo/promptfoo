@@ -188,6 +188,55 @@ describe('MetricsTable', () => {
     );
   });
 
+  it.each([true, false])(
+    'displays a derived collision as a raw value with filtered=%s',
+    (filtered) => {
+      vi.mocked(useTableStore).mockReturnValue({
+        table: mockTableData,
+        filteredMetrics: filtered
+          ? [{ namedScores: { 'another-metric': 5 }, namedScoresCount: { 'another-metric': 10 } }]
+          : null,
+        config: { derivedMetrics: [{ name: 'another-metric', value: 'accuracy' }] },
+        addFilter: mockAddFilter,
+        filters: { values: {}, appliedCount: filtered ? 1 : 0 },
+      } as any);
+      render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+      const row = screen
+        .getByText(filtered ? 'another-metric (total)' : 'another-metric')
+        .closest('tr')!;
+      expect(
+        within(row)
+          .getAllByRole('cell')
+          .map((cell) => cell.textContent),
+      ).toEqual([filtered ? 'another-metric (total)' : 'another-metric', '—', '0.8', '—', '']);
+    },
+  );
+
+  it('does not report missing denominators or scores as zero percentages', () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      table: {
+        head: {
+          vars: [],
+          prompts: [
+            { provider: 'Legacy', metrics: { namedScores: { accuracy: 100 } } },
+            { provider: 'Missing', metrics: { namedScores: {} } },
+          ],
+        },
+        body: [],
+      },
+      config: {},
+      addFilter: mockAddFilter,
+      filters: { values: {}, appliedCount: 0 },
+    } as any);
+    render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+    const row = screen.getByText('accuracy').closest('tr')!;
+    expect(
+      within(row)
+        .getAllByRole('cell')
+        .map((cell) => cell.textContent),
+    ).toEqual(['accuracy', '—', '100', '—', '—', '—', '—', '—', '--', '']);
+  });
+
   it('preserves finite negative denominators and guards zero denominators', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       table: {
@@ -221,7 +270,8 @@ describe('MetricsTable', () => {
     const negativeRow = (await screen.findByText('negative')).closest('tr');
     const zeroRow = screen.getByText('zero').closest('tr');
     expect(within(negativeRow as HTMLElement).getByText('50.00%')).toBeInTheDocument();
-    expect(within(zeroRow as HTMLElement).getByText('0.00%')).toBeInTheDocument();
+    expect(within(zeroRow as HTMLElement).getByText('—')).toBeInTheDocument();
+    expect(within(zeroRow as HTMLElement).getByText('0')).toBeInTheDocument();
   });
 
   it('ignores inherited scores for prototype-colliding metric names', async () => {

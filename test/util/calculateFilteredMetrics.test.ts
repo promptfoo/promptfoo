@@ -1713,7 +1713,7 @@ describe('calculateFilteredMetrics', () => {
   });
 
   describe('error handling', () => {
-    it('should return empty metrics array on database error', async () => {
+    it('should return empty metrics when no evaluation results match', async () => {
       // Invalid eval ID
       const metrics = await calculateFilteredMetrics({
         evalId: 'nonexistent-eval-id',
@@ -1743,7 +1743,7 @@ describe('calculateFilteredMetrics', () => {
       });
     });
 
-    it('should handle invalid WHERE SQL gracefully', async () => {
+    it('should propagate database errors instead of returning zero metrics', async () => {
       const eval_ = await EvalFactory.create({
         numResults: 10,
         resultTypes: ['success'],
@@ -1754,15 +1754,13 @@ describe('calculateFilteredMetrics', () => {
       // but we test the error handling path
       const whereSql = sql`INVALID SQL SYNTAX HERE`;
 
-      const metrics = await calculateFilteredMetrics({
-        evalId: eval_.id,
-        numPrompts: 1,
-        whereSql,
-      });
-
-      // Should fallback to empty metrics
-      expect(metrics).toHaveLength(1);
-      expect(metrics[0].testPassCount).toBe(0);
+      await expect(
+        calculateFilteredMetrics({
+          evalId: eval_.id,
+          numPrompts: 1,
+          whereSql,
+        }),
+      ).rejects.toThrow();
     });
   });
 

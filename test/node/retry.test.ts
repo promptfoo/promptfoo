@@ -245,6 +245,29 @@ describe('retryCommand', () => {
     );
   });
 
+  it('rebuilds named metrics when seeded columns have duplicate identities or change order', () => {
+    const makePrompt = (provider: string, id: string, score: number) => ({
+      provider,
+      id,
+      metrics: markNamedMetricsSeededFromPreviousRun({
+        namedScores: { quality: score },
+        namedScoresCount: { quality: 2 },
+        namedScoreWeights: { quality: 2 },
+      }),
+    });
+    const first = makePrompt('echo', 'prompt', 1);
+    const duplicate = makePrompt('echo', 'prompt', 2);
+    const original = createEval({ prompts: [first, duplicate] as any });
+    const wronglySeeded = createEval({ prompts: [duplicate, duplicate] as any });
+    expect(createNamedMetricsPreservationGuard(original)(wronglySeeded, undefined)).toBe(false);
+
+    const second = makePrompt('other', 'prompt', 2);
+    const unique = createEval({ prompts: [first, second] as any });
+    const canPreserve = createNamedMetricsPreservationGuard(unique);
+    expect(canPreserve(unique, undefined)).toBe(true);
+    expect(canPreserve(createEval({ prompts: [second, first] as any }), undefined)).toBe(false);
+  });
+
   it('skips database work when there are no error result ids to delete', async () => {
     await deleteErrorResults([]);
 

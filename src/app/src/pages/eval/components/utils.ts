@@ -187,14 +187,22 @@ export function mergeFilteredNamedMetrics(
   filteredMetrics: PromptMetrics | null | undefined,
   derivedMetricNames: readonly string[],
 ): PromptMetrics | null | undefined {
-  if (!filteredMetrics || !totalMetrics?.namedScores || derivedMetricNames.length === 0) {
-    return filteredMetrics ?? totalMetrics;
+  const source = filteredMetrics ?? totalMetrics;
+  if (!source || derivedMetricNames.length === 0) {
+    return source;
   }
 
-  const namedScores = { ...(filteredMetrics.namedScores ?? {}) };
+  const namedScores = { ...source.namedScores };
+  const namedScoresCount = { ...source.namedScoresCount };
+  const namedScoreWeights = { ...source.namedScoreWeights };
   for (const metricName of derivedMetricNames) {
+    // Derived values describe the whole eval, even when an assertion uses the
+    // same name. Assertion denominators do not apply to the derived formula.
+    delete namedScores[metricName];
+    delete namedScoresCount[metricName];
+    delete namedScoreWeights[metricName];
     if (
-      !Object.prototype.hasOwnProperty.call(namedScores, metricName) &&
+      totalMetrics?.namedScores &&
       Object.prototype.hasOwnProperty.call(totalMetrics.namedScores, metricName)
     ) {
       Object.defineProperty(namedScores, metricName, {
@@ -206,13 +214,13 @@ export function mergeFilteredNamedMetrics(
     }
   }
 
-  return { ...filteredMetrics, namedScores };
+  return { ...source, namedScores, namedScoresCount, namedScoreWeights };
 }
 
 export function getNamedMetricTotal(
   metrics: NamedMetricTotalsSource | null | undefined,
   metric: string,
-): number {
+): number | undefined {
   const weights = metrics?.namedScoreWeights;
   if (weights && Object.prototype.hasOwnProperty.call(weights, metric)) {
     const weight = weights[metric];
@@ -223,9 +231,9 @@ export function getNamedMetricTotal(
   const counts = metrics?.namedScoresCount;
   if (counts && Object.prototype.hasOwnProperty.call(counts, metric)) {
     const count = counts[metric];
-    return typeof count === 'number' && Number.isFinite(count) ? count : 0;
+    return typeof count === 'number' && Number.isFinite(count) ? count : undefined;
   }
-  return 0;
+  return undefined;
 }
 
 export function getNamedMetricTotals(
@@ -239,7 +247,9 @@ export function getNamedMetricTotals(
     ...Object.keys(metrics.namedScoresCount ?? {}),
     ...Object.keys(metrics.namedScoreWeights ?? {}),
   ]);
-  return Object.fromEntries(
-    Array.from(metricNames, (metric) => [metric, getNamedMetricTotal(metrics, metric)]),
-  );
+  const totals = Array.from(metricNames).flatMap((metric) => {
+    const total = getNamedMetricTotal(metrics, metric);
+    return total === undefined ? [] : [[metric, total] as const];
+  });
+  return totals.length > 0 ? Object.fromEntries(totals) : undefined;
 }

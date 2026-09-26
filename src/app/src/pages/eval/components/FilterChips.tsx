@@ -10,7 +10,7 @@ import {
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { CheckCircle, ChevronDown, ChevronUp, XCircle } from 'lucide-react';
 import { useTableStore } from './store';
-import { getNamedMetricTotal } from './utils';
+import { getNamedMetricTotal, mergeFilteredNamedMetrics } from './utils';
 
 const DEFAULT_VISIBLE_COUNT = 8;
 
@@ -28,17 +28,24 @@ export function FilterChips() {
     if (!table?.head?.prompts) {
       return [];
     }
-    const metricMap = new Map<string, { passCount: number; testCount: number }>();
+    const metricMap = new Map<string, { score: number; denominator: number | undefined }>();
+    const derivedMetricNames = config?.derivedMetrics?.map((metric) => metric.name) ?? [];
 
     table.head.prompts.forEach((prompt) => {
-      if (prompt.metrics?.namedScores) {
-        Object.keys(prompt.metrics.namedScores).forEach((metric) => {
-          const existing = metricMap.get(metric) || { passCount: 0, testCount: 0 };
-          const score = prompt.metrics?.namedScores?.[metric] ?? 0;
-          const count = getNamedMetricTotal(prompt.metrics, metric);
+      const metrics = mergeFilteredNamedMetrics(prompt.metrics, null, derivedMetricNames);
+      if (metrics?.namedScores) {
+        Object.entries(metrics.namedScores).forEach(([metric, score]) => {
+          if (!Number.isFinite(score)) {
+            return;
+          }
+          const existing = metricMap.get(metric) ?? { score: 0, denominator: 0 };
+          const denominator = getNamedMetricTotal(metrics, metric);
           metricMap.set(metric, {
-            passCount: existing.passCount + score,
-            testCount: existing.testCount + count,
+            score: existing.score + score,
+            denominator:
+              existing.denominator === undefined || denominator === undefined
+                ? undefined
+                : existing.denominator + denominator,
           });
         });
       }
@@ -46,18 +53,29 @@ export function FilterChips() {
 
     return (
       Array.from(metricMap.entries())
-        .map(([metric, counts]) => ({ metric, ...counts }))
+        .map(([metric, { score, denominator }]) => ({
+          metric,
+          score,
+          denominator,
+          percentage:
+            denominator !== undefined &&
+            Number.isFinite(denominator) &&
+            denominator !== 0 &&
+            Number.isFinite((score / denominator) * 100)
+              ? (score / denominator) * 100
+              : undefined,
+        }))
         // Sort by pass rate (lowest first) so most concerning metrics appear first when collapsed
         .sort((a, b) => {
-          const rateA = a.testCount > 0 ? a.passCount / a.testCount : 1;
-          const rateB = b.testCount > 0 ? b.passCount / b.testCount : 1;
+          const rateA = a.percentage ?? Number.POSITIVE_INFINITY;
+          const rateB = b.percentage ?? Number.POSITIVE_INFINITY;
           if (rateA !== rateB) {
             return rateA - rateB;
           }
           return a.metric.localeCompare(b.metric);
         })
     );
-  }, [table]);
+  }, [config?.derivedMetrics, table]);
 
   // Get display name for a metric (handles policy metrics)
   const getDisplayName = (metric: string): string => {
@@ -89,10 +107,6 @@ export function FilterChips() {
       return 'bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-950/40 dark:border-blue-700 dark:text-blue-300';
     }
     return 'bg-background text-muted-foreground border-border hover:bg-muted hover:text-foreground';
-  };
-
-  const hasFailures = (passCount: number, testCount: number): boolean => {
-    return testCount > 0 && passCount < testCount;
   };
 
   // Only show for red team evals
@@ -131,9 +145,8 @@ export function FilterChips() {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <span className="text-xs font-medium text-muted-foreground">Filter by metric:</span>
-      {visibleMetrics.map(({ metric, passCount, testCount }) => {
+      {visibleMetrics.map(({ metric, score, denominator, percentage }) => {
         const isActive = getActiveFilterId(metric) !== null;
-        const passRate = testCount > 0 ? Math.round((passCount / testCount) * 100) : 0;
         return (
           <Tooltip key={`metric-${metric}`}>
             <TooltipTrigger asChild>
@@ -145,20 +158,24 @@ export function FilterChips() {
                   getChipStyles(isActive),
                 )}
               >
-                {testCount > 0 &&
-                  (hasFailures(passCount, testCount) ? (
+                {percentage !== undefined &&
+                  (percentage < 100 ? (
                     <XCircle className="size-3 text-red-500 dark:text-red-400" />
                   ) : (
                     <CheckCircle className="size-3 text-emerald-500 dark:text-emerald-400" />
                   ))}
                 {getDisplayName(metric)}
                 <span className="opacity-70">
-                  ({passCount}/{testCount})
+                  ({score}/{denominator ?? '—'})
                 </span>
               </button>
             </TooltipTrigger>
             <TooltipContent>
-              {isActive ? 'Click to remove filter' : `${passRate}% pass rate — Click to filter`}
+              {isActive
+                ? 'Click to remove filter'
+                : percentage === undefined
+                  ? 'Percentage unavailable — Click to filter'
+                  : `${Math.round(percentage)}% pass rate — Click to filter`}
             </TooltipContent>
           </Tooltip>
         );

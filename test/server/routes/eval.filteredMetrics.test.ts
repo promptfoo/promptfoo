@@ -15,6 +15,7 @@ import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../../src/database/index';
 import { runDbMigrations } from '../../../src/migrate';
+import Eval from '../../../src/models/eval';
 import { createApp } from '../../../src/server/server';
 import { ResultFailureReason } from '../../../src/types/index';
 import EvalFactory from '../../factories/evalFactory';
@@ -306,6 +307,24 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
   });
 
   describe('Error handling', () => {
+    it('keeps visible results and reports unavailable metrics when aggregation fails', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 3, resultTypes: ['failure'] });
+      const aggregation = vi
+        .spyOn(Eval.prototype, 'getFilteredMetrics')
+        .mockRejectedValue(new Error('Database aggregation failed'));
+      try {
+        const response = await api
+          .get(`/api/eval/${eval_.id}/table`)
+          .query({ filterMode: 'failures' });
+        expect(response.status).toBe(200);
+        expect(response.body.table.body).toHaveLength(3);
+        expect(response.body.filteredCount).toBe(3);
+        expect(response.body.filteredMetrics).toBeNull();
+      } finally {
+        aggregation.mockRestore();
+      }
+    });
+
     it('should handle nonexistent eval gracefully', async () => {
       const response = await api
         .get('/api/eval/nonexistent-id/table')

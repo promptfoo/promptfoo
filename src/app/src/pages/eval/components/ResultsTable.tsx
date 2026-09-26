@@ -1177,10 +1177,8 @@ function PromptColumnHeader({
   );
   const totalMetricNames =
     hasCompleteFilteredMetrics && filteredMetrics
-      ? derivedMetricNames.filter(
-          (metricName) =>
-            Object.prototype.hasOwnProperty.call(metrics?.namedScores ?? {}, metricName) &&
-            !Object.prototype.hasOwnProperty.call(filteredMetrics.namedScores ?? {}, metricName),
+      ? derivedMetricNames.filter((metricName) =>
+          Object.prototype.hasOwnProperty.call(metrics?.namedScores ?? {}, metricName),
         )
       : [];
   const metricTotals = getNamedMetricTotals(displayMetrics);
@@ -2509,6 +2507,11 @@ function ResultsTable({
     // of this component. This ensures that the pagination footer is always pinned to the bottom
     // of the viewport (because the parent container is a flexbox).
     <>
+      {isFilteringActive && !hasCompleteFilteredMetrics && !isFetching && (
+        <p className="text-sm text-muted-foreground" role="status">
+          Filtered named metrics are unavailable. Named metrics show evaluation totals.
+        </p>
+      )}
       {filteredResultsCount === 0 && !isFetching && isFilteringActive && (
         <div className="p-5 text-center bg-black/[0.03] dark:bg-white/[0.03] rounded my-5">
           <p>No results found for the current filters.</p>

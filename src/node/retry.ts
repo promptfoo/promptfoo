@@ -85,23 +85,30 @@ function isCompleteFiniteNamedMetrics(metrics: PromptMetrics | undefined): boole
  * carried those totals forward.
  *
  * `evaluate()` seeds each column from the stored prompt's metrics, but it clones them, so the
- * carry-over cannot be detected by comparing object identity. `buildCompletedPrompts` marks the
- * seeded clones instead, and the marker survives cloning because it lives in a WeakSet rather
- * than in the metrics payload.
+ * carry-over cannot be detected by comparing object identity. `buildCompletedPrompts` marks each
+ * seeded clone in a WeakSet without adding metadata to the persisted metrics payload.
  */
 export function createNamedMetricsPreservationGuard(evalRecord: Eval) {
   const originalHasDerivedMetrics = Boolean(evalRecord.config.derivedMetrics?.length);
   const completeSnapshots = evalRecord.prompts.map(({ metrics }) =>
     isCompleteFiniteNamedMetrics(metrics),
   );
+  // The evaluator seeds by provider/prompt identity. Duplicate identities can select another
+  // column's totals, so those evaluations must rebuild named metrics from their stored rows.
+  const columnKeys = evalRecord.prompts.map(({ provider, id }) => `${provider}:${id}`);
+  const hasUniqueColumns = new Set(columnKeys).size === columnKeys.length;
 
   return (retriedEval: Eval, derivedMetrics: TestSuite['derivedMetrics']): boolean =>
+    hasUniqueColumns &&
     !originalHasDerivedMetrics &&
     !derivedMetrics?.length &&
     completeSnapshots.length === retriedEval.prompts.length &&
     completeSnapshots.every(
       (complete, index) =>
-        complete && wereNamedMetricsSeededFromPreviousRun(retriedEval.prompts[index]?.metrics),
+        complete &&
+        columnKeys[index] ===
+          `${retriedEval.prompts[index]?.provider}:${retriedEval.prompts[index]?.id}` &&
+        wereNamedMetricsSeededFromPreviousRun(retriedEval.prompts[index]?.metrics),
     );
 }
 
