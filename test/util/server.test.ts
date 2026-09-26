@@ -1,5 +1,8 @@
+import { ChildProcess } from 'node:child_process';
+
+import chalk from 'chalk';
 import opener from 'opener';
-import { beforeEach, describe, expect, it, type MockedFunction, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type MockedFunction, vi } from 'vitest';
 import { getDefaultPort, VERSION } from '../../src/constants';
 import logger from '../../src/logger';
 import * as remoteGeneration from '../../src/redteam/remoteGeneration';
@@ -10,6 +13,7 @@ import {
   BrowserBehavior,
   checkServerFeatureSupport,
   checkServerRunning,
+  openAuthBrowser,
   openBrowser,
 } from '../../src/util/server';
 
@@ -52,6 +56,16 @@ const mockFetchWithProxy = fetchModule.fetchWithProxy as MockedFunction<
 describe('Server Utilities', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(opener).mockReset();
+    vi.mocked(opener).mockImplementation((_url, _options, callback) => {
+      callback?.(null as unknown as Error, '', '');
+      return new ChildProcess();
+    });
+    vi.mocked(readlineUtils.promptYesNo).mockReset();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   describe('checkServerRunning', () => {
@@ -124,26 +138,42 @@ describe('Server Utilities', () => {
     it('should open browser with default URL when BrowserBehavior.OPEN', async () => {
       await openBrowser(BrowserBehavior.OPEN);
 
-      expect(opener).toHaveBeenCalledWith(`http://localhost:${getDefaultPort()}`);
+      expect(opener).toHaveBeenCalledWith(
+        `http://localhost:${getDefaultPort()}`,
+        {},
+        expect.any(Function),
+      );
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Press Ctrl+C'));
     });
 
     it('should open browser with report URL when BrowserBehavior.OPEN_TO_REPORT', async () => {
       await openBrowser(BrowserBehavior.OPEN_TO_REPORT);
 
-      expect(opener).toHaveBeenCalledWith(`http://localhost:${getDefaultPort()}/report`);
+      expect(opener).toHaveBeenCalledWith(
+        `http://localhost:${getDefaultPort()}/report`,
+        {},
+        expect.any(Function),
+      );
     });
 
     it('should open browser with redteam setup URL when BrowserBehavior.OPEN_TO_REDTEAM_CREATE', async () => {
       await openBrowser(BrowserBehavior.OPEN_TO_REDTEAM_CREATE);
 
-      expect(opener).toHaveBeenCalledWith(`http://localhost:${getDefaultPort()}/redteam/setup`);
+      expect(opener).toHaveBeenCalledWith(
+        `http://localhost:${getDefaultPort()}/redteam/setup`,
+        {},
+        expect.any(Function),
+      );
     });
 
     it('should open browser with eval setup URL when BrowserBehavior.OPEN_TO_EVAL_SETUP', async () => {
       await openBrowser(BrowserBehavior.OPEN_TO_EVAL_SETUP);
 
-      expect(opener).toHaveBeenCalledWith(`http://localhost:${getDefaultPort()}/setup`);
+      expect(opener).toHaveBeenCalledWith(
+        `http://localhost:${getDefaultPort()}/setup`,
+        {},
+        expect.any(Function),
+      );
     });
 
     it('should not open browser when BrowserBehavior.SKIP', async () => {
@@ -163,6 +193,20 @@ describe('Server Utilities', () => {
       expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to open browser'));
     });
 
+    it('reports asynchronous launcher failures', async () => {
+      vi.mocked(opener).mockImplementationOnce(() => new ChildProcess());
+      const opening = openBrowser(BrowserBehavior.OPEN);
+      const callback = vi.mocked(opener).mock.calls[0][2];
+      expect(logger.error).not.toHaveBeenCalled();
+
+      callback?.(new Error('xdg-open exited with code 3'), '', 'No browser found');
+      await opening;
+
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to open browser: Error: xdg-open exited with code 3',
+      );
+    });
+
     it('should ask user before opening browser when BrowserBehavior.ASK', async () => {
       // Mock promptYesNo to return true
       vi.mocked(readlineUtils.promptYesNo).mockResolvedValueOnce(true);
@@ -170,7 +214,11 @@ describe('Server Utilities', () => {
       await openBrowser(BrowserBehavior.ASK);
 
       expect(readlineUtils.promptYesNo).toHaveBeenCalledWith('Open URL in browser?', false);
-      expect(opener).toHaveBeenCalledWith(`http://localhost:${getDefaultPort()}`);
+      expect(opener).toHaveBeenCalledWith(
+        `http://localhost:${getDefaultPort()}`,
+        {},
+        expect.any(Function),
+      );
     });
 
     it('should not open browser when user answers no to ASK prompt', async () => {
@@ -187,7 +235,74 @@ describe('Server Utilities', () => {
       const customPort = 5000;
       await openBrowser(BrowserBehavior.OPEN, customPort);
 
-      expect(opener).toHaveBeenCalledWith(`http://localhost:${customPort}`);
+      expect(opener).toHaveBeenCalledWith(
+        `http://localhost:${customPort}`,
+        {},
+        expect.any(Function),
+      );
+    });
+  });
+
+  describe('openAuthBrowser', () => {
+    const authUrl = 'https://promptfoo.app/login?next=%2Fwelcome&source=cli';
+    const welcomeUrl = 'https://promptfoo.app/welcome';
+
+    it('prints token instructions without waiting for the launcher to exit', async () => {
+      vi.mocked(opener).mockImplementationOnce(() => new ChildProcess());
+      const opening = openAuthBrowser(authUrl, welcomeUrl, BrowserBehavior.OPEN);
+
+      expect(opener).toHaveBeenCalledWith(authUrl, {}, expect.any(Function));
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining(welcomeUrl));
+      expect(logger.error).not.toHaveBeenCalled();
+      vi.mocked(opener).mock.calls[0][2]?.(null as unknown as Error, '', '');
+      await opening;
+    });
+
+    it('shows the login URL when a launcher fails asynchronously', async () => {
+      vi.mocked(opener).mockImplementationOnce(() => new ChildProcess());
+      const opening = openAuthBrowser(authUrl, welcomeUrl, BrowserBehavior.OPEN);
+      const callback = vi.mocked(opener).mock.calls[0][2];
+      callback?.(new Error('spawn xdg-open ENOENT'), '', '');
+      await opening;
+
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to open browser: Error: spawn xdg-open ENOENT',
+      );
+      expect(logger.info).toHaveBeenCalledWith(`Please visit: ${chalk.green(authUrl)}`);
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining(welcomeUrl));
+    });
+
+    it('shows manual instructions when the launcher throws synchronously', async () => {
+      vi.mocked(opener).mockImplementationOnce(() => {
+        throw new Error('Invalid launch options');
+      });
+      await openAuthBrowser(authUrl, welcomeUrl, BrowserBehavior.OPEN);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to open browser: Error: Invalid launch options',
+      );
+      expect(logger.info).toHaveBeenCalledWith(`Please visit: ${chalk.green(authUrl)}`);
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining(welcomeUrl));
+    });
+
+    it.each([BrowserBehavior.SKIP, BrowserBehavior.ASK])(
+      'prints manual instructions when browser behavior %s does not launch',
+      async (behavior) => {
+        vi.mocked(readlineUtils.promptYesNo).mockResolvedValueOnce(false);
+        await openAuthBrowser(authUrl, welcomeUrl, behavior);
+
+        expect(opener).not.toHaveBeenCalled();
+        expect(logger.info).toHaveBeenCalledWith(`Please visit: ${chalk.green(authUrl)}`);
+        expect(logger.info).toHaveBeenCalledWith(expect.stringContaining(welcomeUrl));
+      },
+    );
+
+    it('launches when the login prompt is accepted', async () => {
+      vi.mocked(readlineUtils.promptYesNo).mockResolvedValueOnce(true);
+      await openAuthBrowser(authUrl, welcomeUrl, BrowserBehavior.ASK);
+
+      expect(readlineUtils.promptYesNo).toHaveBeenCalledWith('Open login page in browser?', true);
+      expect(opener).toHaveBeenCalledWith(authUrl, {}, expect.any(Function));
     });
   });
 

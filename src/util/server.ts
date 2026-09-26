@@ -1,3 +1,5 @@
+import { promisify } from 'node:util';
+
 import chalk from 'chalk';
 import opener from 'opener';
 import { getDefaultPort, VERSION } from '../constants';
@@ -5,6 +7,10 @@ import logger from '../logger';
 import { getRemoteVersionUrl } from '../redteam/remoteGeneration';
 import { fetchWithProxy } from './fetch/index';
 import { promptYesNo } from './readline';
+
+const launchBrowser = promisify((url: string, callback: (error: Error | null) => void) =>
+  opener(url, {}, callback),
+);
 
 export const BrowserBehavior = {
   ASK: 0,
@@ -130,9 +136,9 @@ export async function openBrowser(
   }
 
   const doOpen = async () => {
+    logger.info('Press Ctrl+C to stop the server');
     try {
-      logger.info('Press Ctrl+C to stop the server');
-      await opener(url);
+      await launchBrowser(url);
     } catch (err) {
       logger.error(`Failed to open browser: ${String(err)}`);
     }
@@ -175,15 +181,14 @@ export async function openAuthBrowser(
   browserBehavior: BrowserBehavior,
 ): Promise<void> {
   const doOpen = async () => {
+    logger.info(`Opening ${authUrl} in your browser...`);
+    // Keep instructions visible while waiting for the platform launcher to exit.
+    logger.info(`After logging in, get your API token at ${chalk.green(welcomeUrl)}`);
     try {
-      logger.info(`Opening ${authUrl} in your browser...`);
-      await opener(authUrl);
-      logger.info(`After logging in, get your API token at ${chalk.green(welcomeUrl)}`);
+      await launchBrowser(authUrl);
     } catch (err) {
       logger.error(`Failed to open browser: ${String(err)}`);
-      // Fallback to showing URLs manually
       logger.info(`Please visit: ${chalk.green(authUrl)}`);
-      logger.info(`After logging in, get your API token at ${chalk.green(welcomeUrl)}`);
     }
   };
 
