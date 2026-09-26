@@ -1158,6 +1158,85 @@ describe('useTableStore', () => {
       expect(useTableStore.getState().table).toEqual({ head: { prompts: [] }, body: [] });
     });
 
+    it.each([
+      ['foreground-first', 'old search'],
+      ['background-first', 'old search'],
+      ['foreground-first', undefined],
+      ['background-first', undefined],
+    ])(
+      'refreshes the latest query when a stale background refresh starts (%s, %s)',
+      async (completionOrder, staleSearch) => {
+        let resolveForeground!: (response: Response) => void;
+        let resolveBackground!: (response: Response) => void;
+        vi.mocked(callApi)
+          .mockReturnValueOnce(
+            new Promise((resolve) => {
+              resolveForeground = resolve;
+            }),
+          )
+          .mockReturnValueOnce(
+            new Promise((resolve) => {
+              resolveBackground = resolve;
+            }),
+          );
+        const currentQuery = {
+          pageIndex: 2,
+          pageSize: 10,
+          searchText: 'new search',
+          filterMode: 'failures' as const,
+          skipSettingEvalId: true,
+        };
+        act(() => {
+          useTableStore.getState().setEvalId('current-eval');
+        });
+        let foregroundFetch!: Promise<EvalTableDTO | null>;
+        let backgroundFetch!: Promise<EvalTableDTO | null>;
+        act(() => {
+          foregroundFetch = useTableStore.getState().fetchEvalData('current-eval', currentQuery);
+          backgroundFetch = useTableStore.getState().fetchEvalData('current-eval', {
+            searchText: staleSearch,
+            skipLoadingState: true,
+            skipSettingEvalId: true,
+          });
+        });
+        expect(vi.mocked(callApi).mock.calls[1][0]).toBe(vi.mocked(callApi).mock.calls[0][0]);
+        expect(vi.mocked(callApi).mock.calls[1][0]).toContain('offset=20&limit=10');
+        expect(vi.mocked(callApi).mock.calls[1][0]).toContain('search=new+search');
+
+        const response = (totalCount: number) =>
+          ({
+            ok: true,
+            json: async () => ({
+              table: { head: { prompts: [] }, body: [] },
+              totalCount,
+              filteredCount: 1,
+            }),
+          }) as Response;
+        if (completionOrder === 'foreground-first') {
+          resolveForeground(response(1));
+          await act(async () => {
+            await foregroundFetch;
+          });
+          resolveBackground(response(2));
+          await act(async () => {
+            await backgroundFetch;
+          });
+        } else {
+          resolveBackground(response(2));
+          await act(async () => {
+            await backgroundFetch;
+          });
+          resolveForeground(response(1));
+          await act(async () => {
+            await foregroundFetch;
+          });
+        }
+        expect(useTableStore.getState().totalResultsCount).toBe(2);
+        expect(useTableStore.getState().shouldHighlightSearchText).toBe(true);
+        expect(useTableStore.getState().isFetching).toBe(false);
+      },
+    );
+
     it('keeps loading active when a stale foreground request fails before the latest request', async () => {
       let resolveFirst!: (response: Response) => void;
       let resolveSecond!: (response: Response) => void;

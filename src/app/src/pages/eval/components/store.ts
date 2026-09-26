@@ -301,6 +301,7 @@ interface TableState {
    */
   stats: EvaluateStats | null;
 
+  tableQuery: { evalId: string; url: string } | null;
   tableRequestGeneration: number;
   tableLoadingRequestGeneration: number | null;
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
@@ -623,6 +624,7 @@ export const useTableStore = create<TableState>()(
       set(() => ({ filteredMetrics: metrics })),
 
     stats: null,
+    tableQuery: null,
     tableRequestGeneration: 0,
     tableLoadingRequestGeneration: null,
 
@@ -654,6 +656,44 @@ export const useTableStore = create<TableState>()(
       if (skipSettingEvalId && currentState.evalId !== id) {
         return null;
       }
+      let url = new URL(
+        `/eval/${id}/table`,
+        // URL constructor expects a valid url
+        window.location.origin,
+      );
+
+      url.searchParams.set('offset', (pageIndex * pageSize).toString());
+      url.searchParams.set('limit', pageSize.toString());
+      url.searchParams.set('filterMode', filterMode);
+
+      comparisonEvalIds.forEach((evalId) => {
+        url.searchParams.append('comparisonEvalIds', evalId);
+      });
+
+      if (searchText) {
+        url.searchParams.set('search', searchText);
+      }
+
+      filters.forEach((filter) => {
+        url.searchParams.append(
+          'filter',
+          JSON.stringify({
+            logicOperator: filter.logicOperator,
+            type: filter.type,
+            operator: filter.operator,
+            value: filter.value,
+            field: filter.field,
+          }),
+        );
+      });
+
+      // Background refreshes update the active result set. Their caller may have captured
+      // an older search or page, or (for realtime updates) omitted those options entirely.
+      if (skipLoadingState && skipSettingEvalId && currentState.tableQuery?.evalId === id) {
+        url = new URL(currentState.tableQuery.url, window.location.origin);
+      }
+      const tableQuery = { evalId: id, url: url.pathname + url.search };
+
       const requestGeneration = currentState.tableRequestGeneration + 1;
       const ownsLoadingRequest = () =>
         !skipLoadingState && get().tableLoadingRequestGeneration === requestGeneration;
@@ -675,6 +715,8 @@ export const useTableStore = create<TableState>()(
       }
 
       set({
+        tableQuery:
+          !skipLoadingState || currentState.evalId === id ? tableQuery : currentState.tableQuery,
         tableRequestGeneration: requestGeneration,
         tableLoadingRequestGeneration: skipLoadingState
           ? currentState.tableLoadingRequestGeneration
@@ -694,40 +736,7 @@ export const useTableStore = create<TableState>()(
 
       try {
         logger.debug('[EvalStore] Fetching eval table data', { evalId: id, options });
-
-        const url = new URL(
-          `/eval/${id}/table`,
-          // URL constructor expects a valid url
-          window.location.origin,
-        );
-
-        url.searchParams.set('offset', (pageIndex * pageSize).toString());
-        url.searchParams.set('limit', pageSize.toString());
-        url.searchParams.set('filterMode', filterMode);
-
-        comparisonEvalIds.forEach((evalId) => {
-          url.searchParams.append('comparisonEvalIds', evalId);
-        });
-
-        if (searchText) {
-          url.searchParams.set('search', searchText);
-        }
-
-        filters.forEach((filter) => {
-          url.searchParams.append(
-            'filter',
-            JSON.stringify({
-              logicOperator: filter.logicOperator,
-              type: filter.type,
-              operator: filter.operator,
-              value: filter.value,
-              field: filter.field,
-            }),
-          );
-        });
-
-        // Remove the origin as it was only added to satisfy the URL constructor.
-        const resp = await callApi(url.toString().replace(window.location.origin, ''));
+        const resp = await callApi(tableQuery.url);
 
         if (resp.ok) {
           const data = (await resp.json()) as EvalTableDTO;
@@ -753,6 +762,7 @@ export const useTableStore = create<TableState>()(
               !skipLoadingState || prevState.tableLoadingRequestGeneration !== null;
             return {
               table: data.table,
+              tableQuery,
               filteredResultsCount: data.filteredCount,
               totalResultsCount: data.totalCount,
               highlightedResultsCount: computeHighlightCount(data.table),
@@ -765,7 +775,7 @@ export const useTableStore = create<TableState>()(
               tableLoadingRequestGeneration: shouldClearLoading
                 ? null
                 : prevState.tableLoadingRequestGeneration,
-              shouldHighlightSearchText: searchText !== '',
+              shouldHighlightSearchText: url.searchParams.has('search'),
               // Store filtered metrics from backend (null when no filters or feature disabled)
               filteredMetrics: data.filteredMetrics || null,
               // Store evaluation-level stats including durationMs
