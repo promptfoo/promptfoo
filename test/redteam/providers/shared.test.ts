@@ -4,7 +4,7 @@ import { PromptfooChatCompletionProvider } from '../../../src/providers/promptfo
 import {
   ATTACKER_MODEL,
   ATTACKER_MODEL_SMALL,
-  TEMPERATURE,
+  DEFAULT_TEMPERATURE,
 } from '../../../src/redteam/providers/constants';
 import {
   accumulateGraderResult,
@@ -26,7 +26,10 @@ import {
   tryUnblocking,
 } from '../../../src/redteam/providers/shared';
 import { isRateLimitWrapped, RateLimitRegistry } from '../../../src/scheduler';
-import { withProviderCallTracingContext } from '../../../src/scheduler/providerCallExecutionContext';
+import {
+  withProviderCallExecutionContext,
+  withProviderCallTracingContext,
+} from '../../../src/scheduler/providerCallExecutionContext';
 import { sleep } from '../../../src/util/time';
 import { createMockProvider } from '../../factories/provider';
 import { mockProcessEnv } from '../../util/utils';
@@ -181,9 +184,6 @@ describe('shared redteam provider utilities', () => {
 
     // Clear the redteam provider manager cache
     redteamProviderManager.clearProvider();
-    // clearProvider() intentionally keeps the rate limit registry, so reset it
-    // here to keep provider-wrapping state from leaking across shuffled tests.
-    redteamProviderManager.setRateLimitRegistry(undefined);
     resetRedteamProviderLoader();
 
     // Reset cliState to default
@@ -204,7 +204,7 @@ describe('shared redteam provider utilities', () => {
       expect(mockOpenAiInstances.length).toBe(1);
       expect(result.id()).toBe(`openai:${ATTACKER_MODEL}`);
       expect(mockOpenAiInstances[0].config).toEqual({
-        temperature: TEMPERATURE,
+        temperature: DEFAULT_TEMPERATURE,
         response_format: undefined,
       });
     });
@@ -321,7 +321,7 @@ describe('shared redteam provider utilities', () => {
       expect(mockOpenAiInstances.length).toBe(1);
       expect(result.id()).toBe(`openai:${ATTACKER_MODEL_SMALL}`);
       expect(mockOpenAiInstances[0].config).toEqual({
-        temperature: TEMPERATURE,
+        temperature: DEFAULT_TEMPERATURE,
         response_format: undefined,
       });
     });
@@ -333,7 +333,7 @@ describe('shared redteam provider utilities', () => {
       expect(mockOpenAiInstances.length).toBe(1);
       expect(result.id()).toBe(`openai:${ATTACKER_MODEL}`);
       expect(mockOpenAiInstances[0].config).toEqual({
-        temperature: TEMPERATURE,
+        temperature: DEFAULT_TEMPERATURE,
         response_format: { type: 'json_object' },
       });
     });
@@ -666,7 +666,6 @@ describe('shared redteam provider utilities', () => {
         mockedLoadApiProviders.mockResolvedValue([mockProvider]);
 
         const registry = new RateLimitRegistry({ maxConcurrency: 1 });
-        redteamProviderManager.setRateLimitRegistry(registry);
 
         setCliStateConfig({
           redteam: {
@@ -679,7 +678,10 @@ describe('shared redteam provider utilities', () => {
           },
         });
 
-        const got = await redteamProviderManager.getProvider({});
+        const got = await withProviderCallExecutionContext({ rateLimitRegistry: registry }, () =>
+          redteamProviderManager.getProvider({}),
+        );
+        registry.dispose();
 
         // The defaultTest fallback path must apply rate limiting like every other return path.
         expect(isRateLimitWrapped(got)).toBe(true);
@@ -755,7 +757,7 @@ describe('shared redteam provider utilities', () => {
         // Check that an instance was created with json_object response_format
         expect(mockOpenAiInstances.length).toBe(1);
         expect(mockOpenAiInstances[0].config).toEqual({
-          temperature: TEMPERATURE,
+          temperature: DEFAULT_TEMPERATURE,
           response_format: { type: 'json_object' },
         });
       });

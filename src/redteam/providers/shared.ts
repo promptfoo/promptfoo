@@ -3,15 +3,12 @@ import { randomUUID } from 'crypto';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../../blobs/extractor';
 import { shouldAttemptRemoteBlobUpload } from '../../blobs/remoteUpload';
 import cliState from '../../cliState';
-import { getEnvBool } from '../../envars';
+import { getEnvBool, getEnvFloat } from '../../envars';
 import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import {
-  getProviderCallTracingContext,
-  type RateLimitRegistry,
-  wrapProviderWithRateLimiting,
-} from '../../scheduler';
+import { getProviderCallTracingContext, wrapProviderWithRateLimiting } from '../../scheduler';
+import { getProviderCallExecutionContext } from '../../scheduler/providerCallExecutionContext';
 import {
   type ApiProvider,
   type Assertion,
@@ -43,7 +40,7 @@ import {
 } from '../grading/storedResult';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
-import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
+import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, DEFAULT_TEMPERATURE } from './constants';
 
 import type { TraceContextData } from '../../tracing/traceContext';
 import type { ProviderOptions } from '../../types/providers';
@@ -151,7 +148,7 @@ async function loadRedteamProvider({
     logger.debug(`Using default ${purpose} provider: ${defaultModel}`);
     ret = new OpenAiChatCompletionProvider(defaultModel, {
       config: {
-        temperature: TEMPERATURE,
+        temperature: getEnvFloat('PROMPTFOO_JAILBREAK_TEMPERATURE', DEFAULT_TEMPERATURE),
         response_format: jsonOnly ? { type: 'json_object' } : undefined,
       },
     });
@@ -166,23 +163,14 @@ class RedteamProviderManager {
   private multilingualProvider: ApiProvider | undefined;
   private gradingProvider: ApiProvider | undefined;
   private gradingJsonOnlyProvider: ApiProvider | undefined;
-  private rateLimitRegistry: RateLimitRegistry | undefined;
-
-  /**
-   * Set the rate limit registry to use for wrapping providers.
-   * When set, all providers returned by this manager will be wrapped
-   * with rate limiting.
-   */
-  setRateLimitRegistry(registry: RateLimitRegistry | undefined) {
-    this.rateLimitRegistry = registry;
-  }
 
   /**
    * Wrap a provider with rate limiting if a registry is configured.
    */
   private wrapProvider(provider: ApiProvider): ApiProvider {
-    if (this.rateLimitRegistry) {
-      return wrapProviderWithRateLimiting(provider, this.rateLimitRegistry);
+    const registry = getProviderCallExecutionContext()?.rateLimitRegistry;
+    if (registry) {
+      return wrapProviderWithRateLimiting(provider, registry);
     }
     return provider;
   }
@@ -194,8 +182,6 @@ class RedteamProviderManager {
     this.multilingualProvider = undefined;
     this.gradingProvider = undefined;
     this.gradingJsonOnlyProvider = undefined;
-    // Note: rateLimitRegistry is intentionally NOT cleared here
-    // as it's managed by the evaluator lifecycle
   }
 
   async setProvider(provider: RedteamFileConfig['provider']) {

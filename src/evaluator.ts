@@ -29,7 +29,6 @@ import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
 import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
-import { redteamProviderManager } from './redteam/providers/shared';
 import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
 import { getSessionId } from './redteam/util';
 import {
@@ -1200,10 +1199,16 @@ function getConversationLastInput(renderedJson: unknown) {
   return lastElt?.content || lastElt;
 }
 
-async function applyProviderDelayIfNeeded(provider: ApiProvider, response: ProviderResponse) {
-  if (!response.cached && !provider.handlesOwnDelay && provider.delay && provider.delay > 0) {
-    logger.debug(`Sleeping for ${provider.delay}ms`);
-    await sleep(provider.delay);
+async function applyProviderDelayIfNeeded(
+  provider: ApiProvider,
+  response: ProviderResponse,
+  delay: number,
+) {
+  // A provider only handles a delay that it owns. Evaluation defaults stay local.
+  const handlesDelay = provider.handlesOwnDelay && provider.delay != null;
+  if (!response.cached && !handlesDelay && delay > 0) {
+    logger.debug(`Sleeping for ${delay}ms`);
+    await sleep(delay);
   } else if (response.cached) {
     logger.debug(`Skipping delay because response is cached`);
   }
@@ -1628,11 +1633,8 @@ async function runEvalInternal({
   providerCallQueue,
   rateLimitRegistry,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
-  provider.delay ??= delay ?? getEnvInt('PROMPTFOO_DELAY_MS', 0);
-  invariant(
-    typeof provider.delay === 'number',
-    `Provider delay should be set for ${provider.label}`,
-  );
+  const effectiveDelay = provider.delay ?? delay ?? getEnvInt('PROMPTFOO_DELAY_MS', 0);
+  invariant(typeof effectiveDelay === 'number', `Invalid delay for ${provider.label}`);
 
   const state = createRunEvalState({ provider, prompt, promptIndex, test });
   attachConversationVar({
@@ -1724,7 +1726,7 @@ async function runEvalInternal({
             `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
           );
 
-          await applyProviderDelayIfNeeded(provider, response);
+          await applyProviderDelayIfNeeded(provider, response, effectiveDelay);
 
           // The __eval* runtime vars were exposed to prompt/provider rendering above.
           // Build a copy without them for the persisted result, assertions, and
@@ -2857,7 +2859,7 @@ function createRunEvalOption({
   vars: Vars | undefined;
 }): RunEvalOptions {
   return {
-    delay: options.delay || 0,
+    delay: options.delay ?? getEnvInt('PROMPTFOO_DELAY_MS', 0),
     provider,
     prompt: {
       ...prompt,
@@ -3396,10 +3398,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         current: data.current,
       });
     });
-
-    // Share rate limit registry with redteam provider manager
-    // This ensures redteam internal providers also benefit from rate limiting
-    redteamProviderManager.setRateLimitRegistry(this.rateLimitRegistry);
   }
 
   /**
@@ -3721,7 +3719,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     context: EvalProcessingContext,
   ) {
     const { deferGrading = false, providerCallQueue } = processOptions;
-    const timeoutMs = context.options.timeoutMs || getEvalTimeoutMs();
+    const timeoutMs = context.options.timeoutMs ?? getEvalTimeoutMs();
 
     if (timeoutMs <= 0) {
       return await this.processEvalStep(
@@ -4936,7 +4934,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         concurrentRunEvalOptions.push(evalOption);
       }
     }
-    const hasEvalStepTimeout = (options.timeoutMs || getEvalTimeoutMs()) > 0;
+    const hasEvalStepTimeout = (options.timeoutMs ?? getEvalTimeoutMs()) > 0;
     const shouldGroupGradingByProvider =
       concurrency === 1 && !hasEvalStepTimeout && !usesConversationVar;
 
@@ -5023,6 +5021,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   async evaluate(): Promise<TEvaluation> {
+    return withProviderCallExecutionContext({ rateLimitRegistry: this.rateLimitRegistry }, () =>
+      this.evaluateInContext(),
+    );
+  }
+
+  private async evaluateInContext(): Promise<TEvaluation> {
     // Initialize OTEL SDK if tracing is enabled
     // Check env flag, test suite level, and default test metadata
     const tracingEnabled =
@@ -5100,9 +5104,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
         // Clean up rate limit registry resources
         this.rateLimitRegistry?.dispose();
-
-        // Clear registry from redteam provider manager
-        redteamProviderManager.setRateLimitRegistry(undefined);
 
         // Reset cliState.maxConcurrency to prevent stale state between evaluations
         cliState.maxConcurrency = undefined;

@@ -77,6 +77,8 @@ import type { InternalEvaluateOptions } from '../types/internal';
 import type { FilterOptions } from '../util/eval/filterTests';
 
 export const EvalCommandSchema = CommandLineOptionsSchema.extend({
+  // Preserve omission so evaluation/environment defaults can still apply.
+  delay: z.coerce.number().int().nonnegative().optional(),
   help: z.boolean().optional(),
   interactiveProviders: z.boolean().optional(),
   remote: z.boolean().optional(),
@@ -628,7 +630,11 @@ async function doEvalWithEnv(
         commandLineOptions?.maxConcurrency ??
         evaluateOptions.maxConcurrency ??
         DEFAULT_MAX_CONCURRENCY;
-      delay = cmdObj.delay ?? commandLineOptions?.delay ?? evaluateOptions.delay ?? 0;
+      delay =
+        cmdObj.delay ??
+        commandLineOptions?.delay ??
+        evaluateOptions.delay ??
+        getEnvInt('PROMPTFOO_DELAY_MS', 0);
     }
 
     if (cache === false) {
@@ -783,7 +789,7 @@ async function doEvalWithEnv(
               : evaluateOptions.showProgressBar
             : cmdObj.progressBar !== false,
       repeat,
-      delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
+      delay: delay !== undefined && Number.isFinite(delay) && delay >= 0 ? delay : undefined,
       filterRange,
       maxConcurrency,
       cache,

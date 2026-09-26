@@ -2402,6 +2402,28 @@ describe('evalCommand', () => {
     );
   });
 
+  it('distinguishes an omitted CLI delay from explicit zero', () => {
+    expect(EvalCommandSchema.parse({}).delay).toBeUndefined();
+    expect(EvalCommandSchema.parse({ delay: '0' }).delay).toBe(0);
+  });
+
+  it.each([undefined, 0])(
+    'resolves environment delay while preserving explicit zero (%s)',
+    async (delay) => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_DELAY_MS: '13' });
+      try {
+        await doEval({ delay }, defaultConfig, defaultConfigPath, {});
+        expect(evaluate).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.anything(),
+          expect.objectContaining({ delay: delay ?? 13 }),
+        );
+      } finally {
+        restoreEnv();
+      }
+    },
+  );
+
   it('should handle maxConcurrency option', async () => {
     const cmdObj = { maxConcurrency: 5 };
     await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
