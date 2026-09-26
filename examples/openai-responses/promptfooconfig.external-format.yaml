@@ -4,7 +4,7 @@ prompts:
   - 'Extract information about the event: {{event}}'
 
 providers:
-  - id: openai:responses:gpt-5.6-terra
+  - id: openai:responses:gpt-6-sol
     label: inline-json-schema
     config:
       reasoning:
@@ -36,7 +36,7 @@ providers:
           required: ['event_name', 'date', 'location', 'participants', 'description']
           additionalProperties: false
 
-  - id: openai:responses:gpt-5.6-terra
+  - id: openai:responses:gpt-6-sol
     label: external-file-format
     config:
       reasoning:
@@ -44,7 +44,7 @@ providers:
       instructions: 'You are a helpful AI assistant. Extract key details about the event.'
       response_format: file://response_format.json
 
-  - id: openai:responses:gpt-5.6-terra
+  - id: openai:responses:gpt-6-sol
     label: nested-file-reference
     config:
       reasoning:
