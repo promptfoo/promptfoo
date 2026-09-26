@@ -900,6 +900,33 @@ describe('JavaScript file references', () => {
     expect(result.namedScoreWeights).toBeUndefined();
   });
 
+  it.each(['namedScores', 'namedScoreWeights', 'componentResults'])(
+    'accepts nullable %s on JavaScript results and nested components',
+    async (field) => {
+      const result = await runAssertion({
+        prompt: 'Some prompt',
+        assertion: {
+          type: 'javascript',
+          value: `(${JSON.stringify({
+            pass: true,
+            score: 0.75,
+            reason: 'Custom',
+            [field]: null,
+            componentResults: [{ pass: true, score: 0.5, reason: 'Nested', [field]: null }],
+          })})`,
+        },
+        test: {},
+        providerResponse: { output: 'Test output' },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        score: 0.75,
+        componentResults: [{ pass: true, score: 0.5, [field]: null }],
+      });
+    },
+  );
+
   it('rejects sparse nested results before they become null components', async () => {
     const result = await runAssertion({
       prompt: 'Some prompt',

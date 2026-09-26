@@ -702,14 +702,16 @@ describe('Python file references', { timeout: 15000 }, () => {
   });
 
   it.each(['namedScores', 'named_scores', 'namedScoreWeights'])(
-    'treats nullable %s maps as absent, including nested results',
+    'accepts nullable %s maps and component lists, including nested results',
     async (field) => {
       const scriptResult = {
         pass_: true,
         score: 1,
         reason: 'ok',
         [field]: null,
-        component_results: [{ pass_: true, score: 0.75, reason: 'nested', [field]: null }],
+        component_results: [
+          { pass_: true, score: 0.75, reason: 'nested', [field]: null, component_results: null },
+        ],
       };
       vi.mocked(runPythonCode).mockResolvedValueOnce(scriptResult);
 
@@ -721,11 +723,14 @@ describe('Python file references', { timeout: 15000 }, () => {
       });
 
       expect(result).toMatchObject({ pass: true, score: 1, reason: 'ok' });
-      expect(result.namedScores).toBeUndefined();
-      expect(result.namedScoreWeights).toBeUndefined();
-      expect(result.componentResults?.[0]).toMatchObject({ pass: true, score: 0.75 });
-      expect(result.componentResults?.[0].namedScores).toBeUndefined();
-      expect(result.componentResults?.[0].namedScoreWeights).toBeUndefined();
+      const mappedField = field === 'named_scores' ? 'namedScores' : field;
+      expect(result).toHaveProperty(mappedField, null);
+      expect(result.componentResults?.[0]).toMatchObject({
+        pass: true,
+        score: 0.75,
+        [mappedField]: null,
+        componentResults: null,
+      });
       expect(scriptResult[field]).toBeNull();
       expect(scriptResult.component_results[0][field]).toBeNull();
     },

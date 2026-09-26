@@ -354,6 +354,17 @@ describe('AssertionsResult', () => {
       ).toMatchObject({ pass: true, score: 2, reason: 'Custom' });
     });
 
+    it.each(['namedScores', 'namedScoreWeights', 'componentResults'])(
+      'preserves nullable %s returned by custom scoring',
+      async (field) => {
+        const assertionsResult = new AssertionsResult();
+        const scoringResult = { pass: true, score: 0.75, reason: 'Custom', [field]: null };
+
+        expect(await assertionsResult.testResult(() => scoringResult)).toMatchObject(scoringResult);
+        expect(scoringResult[field]).toBeNull();
+      },
+    );
+
     it.each([
       { score: Number.POSITIVE_INFINITY },
       { namedScores: { quality: Number.NaN } },

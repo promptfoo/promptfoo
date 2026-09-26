@@ -605,11 +605,10 @@ export function isGradingResult(result: any): result is GradingResult {
     typeof result.score === 'number' &&
     Number.isFinite(result.score) &&
     typeof result.reason === 'string' &&
-    (typeof result.namedScores === 'undefined' || isFiniteNumberRecord(result.namedScores)) &&
-    (typeof result.namedScoreWeights === 'undefined' ||
-      isFiniteNumberRecord(result.namedScoreWeights)) &&
+    (result.namedScores == null || isFiniteNumberRecord(result.namedScores)) &&
+    (result.namedScoreWeights == null || isFiniteNumberRecord(result.namedScoreWeights)) &&
     (typeof result.tokensUsed === 'undefined' || typeof result.tokensUsed === 'object') &&
-    (typeof result.componentResults === 'undefined' ||
+    (result.componentResults == null ||
       (Array.isArray(result.componentResults) &&
         Array.from(result.componentResults).every(isGradingResult))) &&
     (typeof result.assertion === 'undefined' ||

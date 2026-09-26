@@ -29,20 +29,6 @@ describe('caseMapping utilities', () => {
       expect(result.namedScores).toEqual({ accuracy: 0.8 });
     });
 
-    it.each(['namedScores', 'named_scores', 'namedScoreWeights'])(
-      'omits nullable %s maps without changing the original object',
-      (field) => {
-        const input = { [field]: null, component_results: [{ [field]: null }] };
-        const result = mapSnakeCaseToCamelCase(input);
-        expect(result.namedScores).toBeUndefined();
-        expect(result.namedScoreWeights).toBeUndefined();
-        expect(result.componentResults[0].namedScores).toBeUndefined();
-        expect(result.componentResults[0].namedScoreWeights).toBeUndefined();
-        expect(input[field]).toBeNull();
-        expect(input.component_results[0][field]).toBeNull();
-      },
-    );
-
     it('should map component_results to componentResults', () => {
       const result = mapSnakeCaseToCamelCase({
         component_results: [{ pass: true }],

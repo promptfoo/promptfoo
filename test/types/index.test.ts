@@ -206,6 +206,15 @@ describe('isGradingResult', () => {
     expect(isGradingResult({ ...result, componentResults: [result] })).toBe(false);
   });
 
+  it.each(['namedScores', 'namedScoreWeights', 'componentResults'])(
+    'accepts null %s as absent, including nested results',
+    (field) => {
+      const result = { pass: true, score: 0.75, reason: '', [field]: null };
+      expect(isGradingResult(result)).toBe(true);
+      expect(isGradingResult({ ...result, componentResults: [result] })).toBe(true);
+    },
+  );
+
   it.each([-2, 0, 2])('accepts finite scores outside the usual 0–1 range: %s', (score) => {
     expect(
       isGradingResult({
@@ -220,7 +229,6 @@ describe('isGradingResult', () => {
   });
 
   it.each([
-    null,
     [],
     new Date(0),
     new Map([['quality', 1]]),
