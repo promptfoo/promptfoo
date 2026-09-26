@@ -31,7 +31,6 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
   config: ElevenLabsAgentsConfig;
   private env?: EnvOverrides;
   private ephemeralAgentId: string | null = null;
-  private initPromise: Promise<void> | null = null;
 
   constructor(
     modelName: string,
@@ -71,9 +70,6 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
     if (id) {
       this.id = () => id;
     }
-
-    // Initialize advanced features asynchronously
-    this.initPromise = this.initializeAdvancedFeatures();
   }
 
   id(): string {
@@ -84,38 +80,7 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
     return `[ElevenLabs Agents Provider] ${this.config.agentId || 'Ephemeral Agent'}`;
   }
 
-  /**
-   * Initialize advanced features
-   */
-  private async initializeAdvancedFeatures(): Promise<void> {
-    try {
-      // Validate configurations
-      this.validateConfigurations();
-
-      // No initialization needed yet - will be done per-agent during callApi
-    } catch (error) {
-      logger.error('[ElevenLabs Agents] Advanced features initialization failed', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      // Don't throw - fall back to basic agent functionality
-    }
-  }
-
-  /**
-   * Validate all advanced feature configurations
-   */
-  private validateConfigurations(): void {
-    // No advanced feature validations needed currently
-    // Future advanced features will be validated here
-  }
-
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    // Wait for initialization
-    if (this.initPromise != null) {
-      await this.initPromise;
-      this.initPromise = null;
-    }
-
     const startTime = Date.now();
 
     try {
