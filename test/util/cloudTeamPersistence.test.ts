@@ -71,6 +71,83 @@ afterEach(() => {
 
 describe('team resolution with persisted preferences and environment credentials', () => {
   it.each([
+    { scenario: 'an accessible unscoped selection', legacy: 'selected-a', expected: 'selected-a' },
+    { scenario: 'a revoked unscoped selection', legacy: 'removed', expected: 'oldest-a' },
+    {
+      scenario: 'an unscoped selection in another organization',
+      legacy: 'foreign',
+      expected: 'oldest-a',
+    },
+    {
+      scenario: 'a scoped selection before a legacy selection',
+      legacy: 'oldest-a',
+      scoped: 'selected-a',
+      expected: 'selected-a',
+    },
+    {
+      scenario: 'a revoked scoped selection before a legacy selection',
+      legacy: 'selected-a',
+      scoped: 'removed',
+      expected: 'oldest-a',
+    },
+  ])('migrates $scenario within the current organization', async ({ legacy, scoped, expected }) => {
+    writeGlobalConfig({
+      id: 'installation',
+      cloud: {
+        currentTeamId: legacy,
+        teams: {
+          ...(scoped ? { 'org-a': { currentTeamId: scoped } } : {}),
+          'org-b': { currentTeamId: 'remembered-b' },
+        },
+      },
+    });
+    vi.mocked(fetchWithProxy)
+      .mockResolvedValueOnce(Response.json({ organization: { id: 'org-a' } }))
+      .mockResolvedValueOnce(
+        Response.json([
+          team('foreign', 'org-b', '2020-01-01'),
+          team('oldest-a', 'org-a', '2023-01-01'),
+          team('selected-a', 'org-a'),
+        ]),
+      );
+
+    await expect(resolveTeamId()).resolves.toMatchObject({ id: expected, organizationId: 'org-a' });
+
+    expect(readGlobalConfig().cloud).toEqual({
+      currentOrganizationId: 'org-a',
+      selectionContext: expect.stringMatching(/^[a-f0-9]{64}$/),
+      teams: {
+        'org-a': { currentTeamId: expected },
+        'org-b': { currentTeamId: 'remembered-b' },
+      },
+    });
+    expect(fs.readFileSync(path.join(directory, 'promptfoo.yaml'), 'utf8')).not.toContain(
+      'environment-a',
+    );
+  });
+
+  it('preserves a legacy environment selection during an outage, then clears it after an authoritative empty lookup', async () => {
+    const legacy: GlobalConfig = {
+      id: 'installation',
+      cloud: { currentTeamId: 'selected-a', teams: { 'org-b': { currentTeamId: 'remembered-b' } } },
+    };
+    writeGlobalConfig(legacy);
+    vi.mocked(fetchWithProxy)
+      .mockResolvedValueOnce(Response.json({ organization: { id: 'org-a' } }))
+      .mockResolvedValueOnce(new Response(null, { status: 503 }));
+
+    await expect(resolveTeamId()).rejects.toThrow('Failed to get user teams');
+    expect(readGlobalConfig()).toEqual(legacy);
+
+    vi.mocked(fetchWithProxy)
+      .mockResolvedValueOnce(Response.json({ organization: { id: 'org-a' } }))
+      .mockResolvedValueOnce(Response.json([team('foreign', 'org-b')]));
+
+    await expect(resolveTeamId()).rejects.toThrow("No accessible teams in organization 'org-a'");
+    expect(readGlobalConfig().cloud).toEqual({ teams: legacy.cloud?.teams });
+  });
+
+  it.each([
     ['fallback', [team('replacement', 'org-a')]],
     ['empty', []],
   ] as const)(

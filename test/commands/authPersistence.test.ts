@@ -204,33 +204,47 @@ describe('auth command with persisted configuration', () => {
     expect(cloudConfig.getRequestConfig().teamId).toBe('team-b');
   });
 
-  it('recovers a legacy environment selection when showing the current team', async () => {
-    writeGlobalConfig({
-      id: 'installation',
-      cloud: { currentOrganizationId: 'org-a', teams: { 'org-a': { currentTeamId: 'selected' } } },
-    });
-    vi.mocked(fetchWithProxy).mockImplementation(async (url) =>
-      String(url).endsWith('/users/me')
-        ? Response.json({ organization: { id: 'org-a' } })
-        : Response.json([
-            {
-              id: 'selected',
-              name: 'Selected',
-              slug: 'selected',
-              organizationId: 'org-a',
-              createdAt: '2024-01-01',
-            },
-          ]),
-    );
-    const program = new Command();
-    authCommand(program);
+  it.each(['scoped', 'unscoped'])(
+    'recovers a legacy %s environment selection when showing the current team',
+    async (scope) => {
+      writeGlobalConfig({
+        id: 'installation',
+        cloud:
+          scope === 'scoped'
+            ? { currentOrganizationId: 'org-a', teams: { 'org-a': { currentTeamId: 'selected' } } }
+            : { currentTeamId: 'selected' },
+      });
+      vi.mocked(fetchWithProxy).mockImplementation(async (url) =>
+        String(url).endsWith('/users/me')
+          ? Response.json({ organization: { id: 'org-a' } })
+          : Response.json([
+              {
+                id: 'oldest',
+                name: 'Oldest',
+                slug: 'oldest',
+                organizationId: 'org-a',
+                createdAt: '2020-01-01',
+              },
+              {
+                id: 'selected',
+                name: 'Selected',
+                slug: 'selected',
+                organizationId: 'org-a',
+                createdAt: '2024-01-01',
+              },
+            ]),
+      );
+      const program = new Command();
+      authCommand(program);
 
-    await program.parseAsync(['node', 'test', 'auth', 'teams', 'current']);
+      await program.parseAsync(['node', 'test', 'auth', 'teams', 'current']);
 
-    expect(logger.info).toHaveBeenCalledWith('Current team: Selected');
-    expect(cloudConfig.getRequestConfig().teamId).toBe('selected');
-    expect(readGlobalConfig().cloud?.apiKey).toBeUndefined();
-  });
+      expect(logger.info).toHaveBeenCalledWith('Current team: Selected');
+      expect(cloudConfig.getRequestConfig().teamId).toBe('selected');
+      expect(readGlobalConfig().cloud?.apiKey).toBeUndefined();
+      expect(readGlobalConfig().cloud?.currentTeamId).toBeUndefined();
+    },
+  );
 
   it.each(['login', 'selection'])(
     'does not overwrite a newer %s after looking up an explicit team',

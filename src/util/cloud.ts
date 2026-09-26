@@ -617,8 +617,7 @@ export async function resolveTeamId(
   }
 
   // 2. Use stored current team preference (scoped to current organization)
-  const configuredOrganizationId = selection.organizationId;
-  let currentOrganizationId = configuredOrganizationId;
+  let currentOrganizationId = selection.organizationId;
   if (!currentOrganizationId) {
     const response = await makeRequest('/users/me', 'GET', undefined, selection.request);
     const organizationId = response.ok ? (await response.json())?.organization?.id : undefined;
@@ -629,13 +628,9 @@ export async function resolveTeamId(
     }
     currentOrganizationId = organizationId;
   }
-  // Saved legacy logins still use their unscoped preference until it is migrated.
-  const preferenceOrganizationId = selection.hasSavedApiKey
-    ? configuredOrganizationId
-    : currentOrganizationId;
-  const currentTeamId = preferenceOrganizationId
-    ? selection.selection.teams?.[preferenceOrganizationId]?.currentTeamId
-    : selection.selection.currentTeamId;
+  // Validate legacy preferences against the token's organization before migrating them.
+  const scopedTeamId = selection.selection.teams?.[currentOrganizationId]?.currentTeamId;
+  const currentTeamId = scopedTeamId || selection.selection.currentTeamId;
   if (!currentTeamId && !fallbackToDefault) {
     throw new Error('No team specified and no default available');
   }
@@ -654,7 +649,11 @@ export async function resolveTeamId(
       `[Team Resolution] Stored team ${currentTeamId} no longer accessible, falling back`,
     );
     if (teams.length === 0) {
-      cloudConfig.saveTeamSelection(selection, preferenceOrganizationId, null);
+      cloudConfig.saveTeamSelection(
+        selection,
+        scopedTeamId ? currentOrganizationId : undefined,
+        null,
+      );
     }
   }
 
