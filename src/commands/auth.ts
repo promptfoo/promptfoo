@@ -76,7 +76,7 @@ async function setupTeamContext(
       organizationTeams = allTeams.filter((team) => team.organizationId === organizationId);
       if (organizationTeams.length === 0 && allTeams.length > 0) {
         logger.warn(
-          `No accessible teams in organization '${organizationId}'. Use 'promptfoo auth login --org <orgId> --api-key <apiKey>' to select another organization.`,
+          `No accessible teams in organization '${organizationId}'. Run 'promptfoo auth teams set <team>' to select a team in another organization.`,
         );
       }
     }
@@ -109,7 +109,7 @@ async function setupTeamContext(
             `\n⚠️  You have access to ${organizationTeams.length} teams. Using '${selectedTeam.name}'.`,
           ),
         );
-        logger.info(chalk.dim(`   Use --team flag to specify: promptfoo auth login --team <name>`));
+        logger.info(chalk.dim(`   Use 'promptfoo auth teams set <team>' to change teams.`));
       } else {
         logger.info('');
         try {

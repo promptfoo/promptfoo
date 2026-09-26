@@ -1510,7 +1510,7 @@ describe('cloud utils', () => {
           saved: { 'org-1': 'removed', 'org-2': 'kept' },
           teams: [team('kept', 'org-2', '2021'), team('oldest', 'org-2', '2020')],
           expected: {
-            error: "No accessible teams in organization 'org-1'. Run 'promptfoo auth login --org",
+            error: "No accessible teams in organization 'org-1'. Run 'promptfoo auth teams set",
             saved: { 'org-1': 'removed', 'org-2': 'kept' },
           },
         },
