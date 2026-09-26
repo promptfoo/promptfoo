@@ -102,19 +102,19 @@ async function createApiProvider(
 
   // Merge environment overrides: context.env (test suite level) is base,
   // options.env (provider-specific) takes precedence for per-provider customization
-  const renderedProviderPath = renderEnvOnlyInObject(
-    providerPath,
-    mergeProviderEnv('', env, options.env),
-  );
+  // Explicit templates address named variables, so they need the complete map.
+  // Alias precedence is only for implicit provider environment lookup.
+  const templateEnv = mergeProviderEnv('', env, options.env);
+  const renderedProviderPath = renderEnvOnlyInObject(providerPath, templateEnv);
   const mergedEnv = mergeProviderEnv(renderedProviderPath, env, options.env);
 
   // Render ONLY environment variable templates at load time (e.g., {{ env.AZURE_ENDPOINT }})
   // This allows constructors to access real env values while preserving runtime templates
   // like {{ vars.* }} for per-test customization at callApi() time
   const renderedConfig = options.config
-    ? renderEnvOnlyInObject(options.config, mergedEnv)
+    ? renderEnvOnlyInObject(options.config, templateEnv)
     : undefined;
-  const renderedId = options.id ? renderEnvOnlyInObject(options.id, mergedEnv) : undefined;
+  const renderedId = options.id ? renderEnvOnlyInObject(options.id, templateEnv) : undefined;
 
   const providerOptions: ProviderOptions = {
     id: renderedId,
@@ -140,21 +140,22 @@ async function createApiProvider(
       );
     }
 
-    const resolvedCloudPath = renderEnvOnlyInObject(
-      cloudProvider.id,
-      mergeProviderEnv('', env, cloudProvider.env, options.env),
-    );
+    const cloudTemplateEnv = mergeProviderEnv('', env, cloudProvider.env, options.env);
+    const resolvedCloudPath = renderEnvOnlyInObject(cloudProvider.id, cloudTemplateEnv);
 
     // Merge local config overrides with cloud provider config
     // Local config takes precedence to allow per-eval customization
     const mergedOptions: ProviderOptions = {
       ...cloudProvider,
-      config: {
-        ...cloudProvider.config,
-        ...options.config,
-      },
+      config: renderEnvOnlyInObject(
+        {
+          ...cloudProvider.config,
+          ...options.config,
+        },
+        cloudTemplateEnv,
+      ),
       // Allow local overrides for these fields
-      label: options.label ?? cloudProvider.label,
+      label: renderEnvOnlyInObject(options.label ?? cloudProvider.label, cloudTemplateEnv),
       transform: options.transform ?? cloudProvider.transform,
       delay: options.delay ?? cloudProvider.delay,
       prompts: options.prompts ?? cloudProvider.prompts,
@@ -201,10 +202,8 @@ async function createApiProvider(
       providerId: fileContent.id,
     });
 
-    const resolvedFilePath = renderEnvOnlyInObject(
-      fileContent.id,
-      mergeProviderEnv('', env, fileContent.env, options.env),
-    );
+    const fileTemplateEnv = mergeProviderEnv('', env, fileContent.env, options.env);
+    const resolvedFilePath = renderEnvOnlyInObject(fileContent.id, fileTemplateEnv);
     // Provider files own their defaults; Codex SDK explicitly gives suite key aliases precedence.
     const mergedFileEnv = mergeProviderEnv(resolvedFilePath, env, fileContent.env, options.env);
     if (mergedFileEnv && /^openai:(?:codex-sdk|codex)(?::|$)/.test(resolvedFilePath)) {
@@ -221,6 +220,8 @@ async function createApiProvider(
       basePath,
       options: {
         ...fileContent,
+        config: renderEnvOnlyInObject(fileContent.config, fileTemplateEnv),
+        label: renderEnvOnlyInObject(fileContent.label, fileTemplateEnv),
         env: mergedFileEnv,
       },
     });
@@ -234,7 +235,7 @@ async function createApiProvider(
       ret.transform = options.transform;
       ret.delay = options.delay;
       ret.inputs = options.inputs;
-      ret.label ||= renderEnvOnlyInObject(options.label || '', mergedEnv);
+      ret.label ||= renderEnvOnlyInObject(options.label || '', templateEnv);
       return ret;
     }
   }
