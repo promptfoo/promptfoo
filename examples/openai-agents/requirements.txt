@@ -1,4 +1,6 @@
 openai-agents>=0.14.1,<0.15
+# Agents SDK 0.14 omits cache_write_tokens, which OpenAI 2.45+ requires in usage objects.
+openai>=2.26.0,<2.45.0
 opentelemetry-api>=1,<2
 opentelemetry-sdk>=1,<2
 opentelemetry-exporter-otlp-proto-http>=1,<2
