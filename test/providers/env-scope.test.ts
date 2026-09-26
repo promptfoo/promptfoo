@@ -505,13 +505,43 @@ describe('provider environment scopes', () => {
       options: { env: { AWS_DEFAULT_REGION: 'us-west-2' } },
     });
     expect(Reflect.get(sage, 'getRegion').call(sage)).toBe('us-west-2');
-    for (const id of ['bedrock:responses:openai.gpt-oss-120b', 'bedrock:mantle:openai.gpt-oss-120b']) {
+    for (const id of [
+      'bedrock:responses:openai.gpt-oss-120b',
+      'bedrock:mantle:openai.gpt-oss-120b',
+    ]) {
       const mantle = await loadApiProvider(id, {
         env: { AWS_BEDROCK_REGION: 'us-east-1' },
-        options: { config: { apiKey: 'synthetic-token' }, env: { AWS_DEFAULT_REGION: 'us-east-2' } },
+        options: {
+          config: { apiKey: 'synthetic-token' },
+          env: { AWS_DEFAULT_REGION: 'us-east-2' },
+        },
       });
       expect(Reflect.get(mantle, 'getApiUrl').call(mantle)).toContain('us-east-2');
     }
+  });
+  it('the loader retains Google Cloud locations for Vertex Interactions requests', async () => {
+    vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValue({
+      client: { getAccessToken: vi.fn().mockResolvedValue({ token: 'fixture' }) },
+      projectId: 'fixture-project',
+    });
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: 'fixture' }] }],
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = await loadApiProvider('vertex:gemini-omni-flash-preview', {
+      env: { VERTEX_REGION: 'us-central1' },
+      options: { env: { GOOGLE_CLOUD_LOCATION: 'europe-west4' } },
+    });
+    await provider.callApi('fixture');
+    expect(fetchWithCache).toHaveBeenCalledOnce();
+    expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toContain(
+      '/locations/europe-west4/interactions',
+    );
   });
   it('keeps alias order within a scope, empty entries, and unrelated variables', () => {
     expect(

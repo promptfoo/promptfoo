@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { clearCache, withCacheEnabled } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { getAnthropicProviders } from '../../src/providers/anthropic/defaults';
 import {
@@ -80,6 +81,75 @@ describe('default provider environment ownership', () => {
     );
     expect(clientOptions(bundles[1].gradingProvider as AnthropicGenericProvider).apiKey).toBe(
       'second-key',
+    );
+  });
+  it('reuses Anthropic default responses within one scope without sharing reused env maps across scopes', async () => {
+    const env = { ANTHROPIC_API_KEY: 'synthetic-key', PROMPTFOO_CACHE_TYPE: 'memory' };
+    const create = vi.fn().mockResolvedValue({
+      id: 'fixture',
+      type: 'message',
+      role: 'assistant',
+      model: 'claude-sonnet-5',
+      content: [{ type: 'text', text: 'fixture answer' }],
+      stop_reason: 'end_turn',
+      usage: { input_tokens: 3, output_tokens: 2 },
+    });
+    const scopeProviders: AnthropicMessagesProvider[] = [];
+    for (let scope = 0; scope < 2; scope++) {
+      await cliState.withEnv(env, () =>
+        withCacheEnabled(true, async () => {
+          for (let call = 0; call < 2; call++) {
+            const provider = (await getDefaultProviders())
+              .gradingProvider as AnthropicMessagesProvider;
+            vi.spyOn(provider.anthropic.messages, 'create').mockImplementation(create);
+            const response = await provider.callApi('identical grading fixture');
+            expect(response.error).toBeUndefined();
+            expect(response.output).toBe('fixture answer');
+            expect(Boolean(response.cached)).toBe(call === 1);
+            if (call === 0) {
+              scopeProviders.push(provider);
+            }
+          }
+          const provider = (await getDefaultProviders()).gradingProvider;
+          const uncached = await withCacheEnabled(false, () =>
+            provider.callApi('identical grading fixture'),
+          );
+          expect(Boolean(uncached.cached)).toBe(false);
+          await clearCache();
+          const cleared = await provider.callApi('identical grading fixture');
+          expect(Boolean(cleared.cached)).toBe(false);
+        }),
+      );
+    }
+    expect(create).toHaveBeenCalledTimes(6);
+    expect(scopeProviders[0]).not.toBe(scopeProviders[1]);
+  });
+  it('refreshes the same-scope Anthropic bundle when explicit construction settings change', () => {
+    cliState.withEnv({ ANTHROPIC_API_KEY: 'ambient-key' }, () => {
+      const first = getAnthropicProviders({ ANTHROPIC_CUSTOM_HEADERS: 'X-Scope: first' });
+      const repeated = getAnthropicProviders({ ANTHROPIC_CUSTOM_HEADERS: 'X-Scope: first' });
+      const changed = getAnthropicProviders({ ANTHROPIC_CUSTOM_HEADERS: 'X-Scope: second' });
+      expect(repeated.gradingProvider).toBe(first.gradingProvider);
+      expect(changed.gradingProvider).not.toBe(first.gradingProvider);
+      expect(
+        clientOptions(changed.gradingProvider as AnthropicGenericProvider).defaultHeaders[
+          'X-Scope'
+        ],
+      ).toBe('second');
+    });
+  });
+  it('does not select OpenAI or Azure defaults from explicitly masked ambient keys', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: 'shell-key', AZURE_API_KEY: 'shell-azure-key' });
+    const providers = await getDefaultProviders({
+      OPENAI_API_KEY: '',
+      AZURE_API_KEY: '',
+      ANTHROPIC_API_KEY: 'synthetic-anthropic-key',
+      AZURE_DEPLOYMENT_NAME: 'azure-chat',
+      AZURE_OPENAI_DEPLOYMENT_NAME: 'azure-chat',
+    });
+    expect(providers.gradingProvider).toBeInstanceOf(AnthropicMessagesProvider);
+    expect(clientOptions(providers.gradingProvider as AnthropicGenericProvider).apiKey).toBe(
+      'synthetic-anthropic-key',
     );
   });
   it.each(['OPENAI_API_KEY', 'MISTRAL_API_KEY'])(

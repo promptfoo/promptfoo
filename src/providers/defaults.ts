@@ -4,6 +4,7 @@ import { getAnthropicProviders } from './anthropic/defaults';
 import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureModerationProvider } from './azure/moderation';
+import { resolveProviderApiKey } from './credentials';
 import { AIStudioEmbeddingProvider, getGoogleAiStudioProviders } from './google/ai.studio';
 import { hasGoogleDefaultCredentials } from './google/util';
 import { getGoogleVertexEmbeddingProvider, getGoogleVertexProviders } from './google/vertex';
@@ -82,7 +83,7 @@ async function getDefaultProviderPreferences(
   const hasAnthropicCredentials = Boolean(
     getEnvString('ANTHROPIC_API_KEY') || env?.ANTHROPIC_API_KEY,
   );
-  const hasOpenAiCredentials = Boolean(getEnvString('OPENAI_API_KEY') || env?.OPENAI_API_KEY);
+  const hasOpenAiCredentials = Boolean(resolveProviderApiKey(undefined, env, ['OPENAI_API_KEY']));
   const hasGoogleAiStudioCredentials = Boolean(
     getEnvString('GEMINI_API_KEY') ||
       env?.GEMINI_API_KEY ||
@@ -91,11 +92,10 @@ async function getDefaultProviderPreferences(
       getEnvString('PALM_API_KEY') ||
       env?.PALM_API_KEY,
   );
-  const hasAzureApiKey =
-    getEnvString('AZURE_OPENAI_API_KEY') ||
-    env?.AZURE_OPENAI_API_KEY ||
-    getEnvString('AZURE_API_KEY') ||
-    env?.AZURE_API_KEY;
+  const hasAzureApiKey = resolveProviderApiKey(undefined, env, [
+    'AZURE_API_KEY',
+    'AZURE_OPENAI_API_KEY',
+  ]);
   const hasAzureClientCreds =
     (getEnvString('AZURE_CLIENT_ID') || env?.AZURE_CLIENT_ID) &&
     (getEnvString('AZURE_CLIENT_SECRET') || env?.AZURE_CLIENT_SECRET) &&

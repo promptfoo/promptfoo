@@ -1,3 +1,5 @@
+import cliState from '../../cliState';
+import { getEnvString } from '../../envars';
 import { AnthropicMessagesProvider } from './messages';
 
 import type { EnvOverrides } from '../../types/env';
@@ -5,6 +7,20 @@ import type { DefaultProviders, ProviderResponse } from '../../types/index';
 
 // Default model to use for all default providers
 export const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-5';
+
+type AnthropicProviders = Pick<
+  DefaultProviders,
+  | 'gradingJsonProvider'
+  | 'gradingProvider'
+  | 'llmRubricProvider'
+  | 'suggestionsProvider'
+  | 'synthesizeProvider'
+  | 'webSearchProvider'
+>;
+
+// A scope owns at most one bundle. Weak ownership allows its clients and ephemeral
+// response caches to be collected after the invocation, without credential fingerprints.
+const scopedProviders = new WeakMap<object, { env: EnvOverrides; providers: AnthropicProviders }>();
 
 // LLM Rubric Provider
 export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
@@ -80,29 +96,34 @@ export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
  * @param env - Optional environment overrides
  * @returns Anthropic provider implementations for various functions
  */
-export function getAnthropicProviders(
-  env?: EnvOverrides,
-): Pick<
-  DefaultProviders,
-  | 'gradingJsonProvider'
-  | 'gradingProvider'
-  | 'llmRubricProvider'
-  | 'suggestionsProvider'
-  | 'synthesizeProvider'
-  | 'webSearchProvider'
-> {
-  // SDK clients capture credentials and headers at construction. Each bundle belongs
-  // to its caller's environment, including when explicit overrides are omitted.
-  const gradingProvider = new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL, { env });
-  const llmRubricProvider = new AnthropicLlmRubricProvider(DEFAULT_ANTHROPIC_MODEL, { env });
+export function getAnthropicProviders(env?: EnvOverrides): AnthropicProviders {
+  // Resolve every construction input before reuse, including partial explicit maps.
+  // Match the provider's existing empty-value behavior for keys, URLs and headers.
+  const resolvedEnv = {
+    ANTHROPIC_API_KEY: env?.ANTHROPIC_API_KEY || getEnvString('ANTHROPIC_API_KEY'),
+    ANTHROPIC_BASE_URL: env?.ANTHROPIC_BASE_URL || getEnvString('ANTHROPIC_BASE_URL'),
+    ANTHROPIC_CUSTOM_HEADERS:
+      env?.ANTHROPIC_CUSTOM_HEADERS ?? getEnvString('ANTHROPIC_CUSTOM_HEADERS'),
+  };
+  const scope = cliState.envScope;
+  const cached = scope ? scopedProviders.get(scope) : undefined;
+  if (cached && Object.entries(resolvedEnv).every(([key, value]) => cached.env[key] === value)) {
+    return cached.providers;
+  }
+  const gradingProvider = new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL, {
+    env: resolvedEnv,
+  });
+  const llmRubricProvider = new AnthropicLlmRubricProvider(DEFAULT_ANTHROPIC_MODEL, {
+    env: resolvedEnv,
+  });
   const webSearchProvider = new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL, {
-    env,
+    env: resolvedEnv,
     config: {
       tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 } as any],
     },
   });
 
-  return {
+  const providers = {
     gradingJsonProvider: gradingProvider,
     gradingProvider,
     llmRubricProvider,
@@ -110,4 +131,8 @@ export function getAnthropicProviders(
     synthesizeProvider: gradingProvider,
     webSearchProvider,
   };
+  if (scope) {
+    scopedProviders.set(scope, { env: resolvedEnv, providers });
+  }
+  return providers;
 }

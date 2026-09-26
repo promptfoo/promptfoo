@@ -228,6 +228,7 @@ function getVertexInteractionsEndpoint(
   const region =
     config.region ||
     env?.VERTEX_REGION ||
+    env?.GOOGLE_CLOUD_LOCATION ||
     getEnvString('VERTEX_REGION') ||
     getEnvString('GOOGLE_CLOUD_LOCATION') ||
     'global';
