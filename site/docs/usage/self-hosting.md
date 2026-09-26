@@ -37,11 +37,13 @@ The self-hosted app is an Express server serving the web UI and API.
 
 When Node reports `crypto.getFips() === 1`, including in a FIPS-enabled hardened image, Promptfoo automatically applies its FIPS runtime policy. There is no eval configuration flag to disable this policy. The standard Docker image does not enable FIPS; using this policy does not certify the entire application or its provider SDKs.
 
-- Shared HTTP requests and the HTTP provider require TLS certificate verification. `PROMPTFOO_INSECURE_SSL=true`, `NODE_TLS_REJECT_UNAUTHORIZED=0`, and `tls.rejectUnauthorized: false` are rejected. For private endpoints, configure `PROMPTFOO_CA_CERT_PATH` or the HTTP provider's `tls.ca`/`tls.caPath`; an unreadable CA file is an error.
+- Promptfoo-managed HTTP connections require TLS certificate verification. `PROMPTFOO_INSECURE_SSL=true`, `NODE_TLS_REJECT_UNAUTHORIZED=0`, and `tls.rejectUnauthorized: false` are rejected. For private endpoints, configure `PROMPTFOO_CA_CERT_PATH` or the HTTP provider's `tls.ca`/`tls.caPath`; an unreadable CA file is an error when preparing a request.
 - HTTP signature authentication and mutual TLS accept PEM keys/certificates. JKS and PFX/PKCS12 imports are rejected before conversion. Provision PEM credentials through your organization's approved process; legacy PFX configuration that already supplies separate PEM cert/key files remains supported.
 - Bedrock, Vercel AI Gateway, OpenAI moderation, Mistral, WatsonX, fal, and Replicate use a random process-local key for sensitive cache fingerprints. Short profile names and header values are supported. These cache namespaces remain stable within a process but change on restart and differ between workers, so affected entries cannot be reused across processes. Standard-mode cache fingerprints remain unchanged.
 
-The image must enable and enforce FIPS at Node startup (for example, with a qualified FIPS runtime and `--force-fips`). This policy does not enable FIPS itself or control cryptography in external provider SDKs, custom code, or subprocesses.
+A response-cache hit may skip the network request and CA-file checks. Use `--no-cache` when qualifying a deployment; cached results are not evidence of a new verified TLS connection.
+
+The image must enable and enforce FIPS at Node startup (for example, with a qualified FIPS runtime and `--force-fips`). This policy does not enable FIPS itself or control cryptography in external provider SDKs, custom code (including caller-supplied HTTP dispatchers), or subprocesses.
 
 :::warning
 **Self-hosting is not recommended for production use cases.**
