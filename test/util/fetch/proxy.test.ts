@@ -73,6 +73,32 @@ describe('effective proxy environment', () => {
     });
   });
 
+  it.each(['suite', 'file', 'shell'])(
+    'preserves empty lowercase aliases alongside uppercase values in the %s layer',
+    (layer) => {
+      const resolve = (env: Record<string, string>) => {
+        const read = () => getProxyForUrl('https://example.com');
+        if (layer === 'suite') {
+          return cliState.withEnv(env, read);
+        }
+        if (layer === 'file') {
+          return cliState.withEnvFileOverrides(env, read);
+        }
+        const restoreShell = mockProcessEnv(env);
+        try {
+          return read();
+        } finally {
+          restoreShell();
+        }
+      };
+
+      expect(resolve({ https_proxy: '', HTTPS_PROXY: 'http://proxy.example:8080' })).toBe('');
+      expect(
+        resolve({ HTTPS_PROXY: 'http://proxy.example:8080', no_proxy: '', NO_PROXY: '*' }),
+      ).toBe('http://proxy.example:8080');
+    },
+  );
+
   it('keeps captured SDK proxy settings stable after leaving their scope', () => {
     const env = cliState.withEnvFileOverrides(
       { ALL_PROXY: 'http://file.example:8080', NO_PROXY: 'internal.example' },
