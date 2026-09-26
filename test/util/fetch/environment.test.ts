@@ -64,6 +64,34 @@ afterEach(() => {
 });
 
 describe('HTTP agent configuration ownership', () => {
+  it.each(
+    [
+      { label: 'unset', env: {}, verify: true },
+      { label: 'false', env: { PROMPTFOO_INSECURE_SSL: 'false' }, verify: true },
+      { label: 'zero', env: { PROMPTFOO_INSECURE_SSL: '0' }, verify: true },
+      { label: 'empty', env: { PROMPTFOO_INSECURE_SSL: '' }, verify: true },
+      { label: 'true', env: { PROMPTFOO_INSECURE_SSL: 'true' }, verify: false },
+      { label: 'one', env: { PROMPTFOO_INSECURE_SSL: '1' }, verify: false },
+      { label: 'custom CA', env: { PROMPTFOO_CA_CERT_PATH: '/fixture/ca.pem' }, verify: true },
+    ].flatMap((scenario) => [false, true].map((proxy) => ({ ...scenario, proxy }))),
+  )(
+    'verifies certificates unless explicitly disabled ($label, proxy=$proxy)',
+    async ({ env, verify, proxy }) => {
+      vi.mocked(fs.readFile).mockResolvedValue('fixture CA');
+      await cliState.withEnvFileOverrides(
+        proxy ? { HTTPS_PROXY: 'http://proxy.example:8080' } : {},
+        () => cliState.withEnv(env, request),
+      );
+      const tls = {
+        rejectUnauthorized: verify,
+        ...(env.PROMPTFOO_CA_CERT_PATH ? { ca: 'fixture CA' } : {}),
+      };
+      expect(proxy ? ProxyAgent : Agent).toHaveBeenCalledWith(
+        expect.objectContaining(proxy ? { requestTls: tls, proxyTls: tls } : { connect: tls }),
+      );
+    },
+  );
+
   it.each([false, true])(
     'separates TLS settings and reuses equal settings (proxy=%s)',
     async (proxy) => {

@@ -957,10 +957,10 @@ describe('fetchWithProxy', () => {
       expect(ProxyAgent).toHaveBeenCalledWith({
         uri: testCase.expected.url,
         proxyTls: {
-          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
+          rejectUnauthorized: true,
         },
         requestTls: {
-          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
+          rejectUnauthorized: true,
         },
         headersTimeout: getRequestTimeoutMs(),
         keepAliveTimeout: 30_000,
@@ -997,10 +997,10 @@ describe('fetchWithProxy', () => {
       expect(ProxyAgent).toHaveBeenCalledWith({
         uri: testCase.expected.url,
         proxyTls: {
-          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
+          rejectUnauthorized: true,
         },
         requestTls: {
-          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
+          rejectUnauthorized: true,
         },
         headersTimeout: getRequestTimeoutMs(),
         keepAliveTimeout: 30_000,
