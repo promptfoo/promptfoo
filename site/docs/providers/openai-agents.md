@@ -369,6 +369,8 @@ For `SandboxAgent` workflows, use the SDK's sandbox capability helpers in the ex
 
 ## Retry Policies
 
+For Promptfoo-created clients, `config.maxRetries` sets the OpenAI client's HTTP retry limit (default: 2). Promptfoo does not restart a failed agent run, which could repeat tools that already completed.
+
 OpenAI Agents SDK v0.7 added opt-in retry settings on `modelSettings.retry`. Promptfoo supports YAML-friendly retry policy presets and passes them to the SDK as runtime callbacks.
 
 ```yaml
