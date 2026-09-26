@@ -545,6 +545,54 @@ describe('XAIResponsesProvider', () => {
     expect(result.cost).toBe(0);
   });
 
+  it('reports billed cost for invalid prompt refusals', async () => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        error: { code: 'invalid_prompt' },
+        usage: {
+          input_tokens: 10,
+          output_tokens: 5,
+          total_tokens: 15,
+          cost_in_usd_ticks: 12_500_000_000,
+        },
+      },
+      cached: false,
+      status: 400,
+      statusText: 'Bad Request',
+    });
+
+    const provider = new XAIResponsesProvider('grok-4.3', {
+      config: { apiKey: 'test-key' },
+    });
+    const result = await provider.callApi('blocked prompt');
+
+    expect(result).toMatchObject({
+      isRefusal: true,
+      cost: 1.25,
+      tokenUsage: { prompt: 10, completion: 5, total: 15 },
+    });
+  });
+
+  it('keeps invalid prompt refusals free when served from the cache', async () => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        error: { code: 'invalid_prompt' },
+        usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15, cost_in_usd_ticks: 1 },
+      },
+      cached: true,
+      status: 400,
+      statusText: 'Bad Request',
+    });
+
+    const provider = new XAIResponsesProvider('grok-4.3', {
+      config: { apiKey: 'test-key' },
+    });
+    const result = await provider.callApi('blocked prompt');
+
+    expect(result).toMatchObject({ isRefusal: true, cost: 0 });
+    expect(result.tokenUsage).toEqual({ cached: 15, total: 15 });
+  });
+
   it('leaves cost unknown when neither usage ticks nor fallback token counts are available', async () => {
     mockFetchWithCache.mockResolvedValueOnce({
       data: {

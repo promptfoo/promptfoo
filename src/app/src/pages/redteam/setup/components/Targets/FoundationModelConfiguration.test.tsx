@@ -594,6 +594,24 @@ describe('FoundationModelConfiguration', () => {
     expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('id', expectedId);
   });
 
+  it('validates recognized GPT shorthand as the canonical OpenAI model', async () => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{ id: 'bedrock:responses:openai.gpt-5.5', config: {} }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+
+    const input = screen.getByLabelText(/Model ID/i);
+    await user.clear(input);
+    await user.paste('gpt-5.6-sol');
+
+    expect(input).toHaveAttribute('aria-invalid', 'false');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('should preserve the Responses prefix and use Responses-specific settings', async () => {
     const user = userEvent.setup();
     render(
@@ -798,6 +816,24 @@ describe('FoundationModelConfiguration', () => {
       expect(screen.getByLabelText(/Model ID/i)).toHaveAttribute('aria-invalid', 'true');
     },
   );
+
+  it('validates the current Bedrock model draft before the parent echoes it', async () => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{ id: 'bedrock:responses:openai.gpt-5.5', config: {} }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+
+    const input = screen.getByLabelText(/Model ID/i);
+    await user.clear(input);
+    await user.paste('amazon.nova-pro-v1:0');
+
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByRole('alert')).toHaveTextContent('Responses requires');
+  });
 
   it('keeps native Bedrock settings separate from HTTP endpoint overrides', async () => {
     const user = userEvent.setup();
