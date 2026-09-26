@@ -429,9 +429,9 @@ export class GoogleAuthManager {
       authOptions.keyFilename = scopedFilename ?? getEnvString('GOOGLE_APPLICATION_CREDENTIALS');
     }
     authOptions.projectId =
-      opts.projectId ||
-      authOptions.projectId ||
-      env?.GOOGLE_CLOUD_PROJECT ||
+      opts.projectId ??
+      authOptions.projectId ??
+      env?.GOOGLE_CLOUD_PROJECT ??
       getEnvString('GOOGLE_CLOUD_PROJECT');
     const quotaProjectId =
       authOptions.clientOptions?.quotaProjectId ??
@@ -489,7 +489,13 @@ export class GoogleAuthManager {
     // Try to get project ID from Google Auth Library
     let projectId;
     try {
-      projectId = detectProjectId ? await auth.getProjectId() : undefined;
+      // An empty scoped project must not be rediscovered from the host environment.
+      // The selected credential file may still provide its own project ID.
+      projectId = detectProjectId
+        ? authOptions.projectId === ''
+          ? client.projectId || undefined
+          : await auth.getProjectId()
+        : undefined;
     } catch {
       // If Google Auth Library can't detect project ID,
       // let resolveProjectId handle the fallback logic

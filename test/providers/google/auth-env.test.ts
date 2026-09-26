@@ -58,6 +58,54 @@ describe('Google scoped ADC inputs', () => {
     expect(client.quotaProjectId).toBe('scoped-quota');
   });
 
+  it.each(['provider', 'suite', 'file'] as const)(
+    'does not rediscover a masked host project through the SDK (%s)',
+    async (scope) => {
+      mockProcessEnv({ GOOGLE_CLOUD_PROJECT: 'host-project' });
+      const detectedProject = vi.fn(async () => 'host-project');
+      const client = makeClient('fixture');
+      vi.mocked(GoogleAuth).mockImplementation(function () {
+        return {
+          getClient: async () => client,
+          getProjectId: detectedProject,
+        } as unknown as GoogleAuth;
+      });
+      const env = { GOOGLE_CLOUD_PROJECT: '' };
+      const load = () => GoogleAuthManager.getOAuthClient(scope === 'provider' ? { env } : {});
+      const result = await (scope === 'provider'
+        ? load()
+        : scope === 'suite'
+          ? cliState.withEnv(env, load)
+          : cliState.withEnvFileOverrides(env, load));
+      expect(result.projectId).toBeUndefined();
+      expect(detectedProject).not.toHaveBeenCalled();
+      expect(process.env.GOOGLE_CLOUD_PROJECT).toBe('host-project');
+    },
+  );
+
+  it('retains credential-file projects and explicit project options when a host project is masked', async () => {
+    mockProcessEnv({ GOOGLE_CLOUD_PROJECT: 'host-project' });
+    vi.mocked(GoogleAuth).mockImplementation(function (options) {
+      return {
+        getClient: async () => ({ ...makeClient('fixture'), projectId: 'credential-project' }),
+        getProjectId: async () => options?.projectId || 'host-project',
+      } as unknown as GoogleAuth;
+    });
+    const env = { GOOGLE_CLOUD_PROJECT: '' };
+    expect((await GoogleAuthManager.getOAuthClient({ env })).projectId).toBe('credential-project');
+    expect(
+      (await GoogleAuthManager.getOAuthClient({ env, projectId: 'explicit-project' })).projectId,
+    ).toBe('explicit-project');
+    expect(
+      (
+        await GoogleAuthManager.getOAuthClient({
+          env,
+          googleAuthOptions: { projectId: 'auth-option-project' },
+        })
+      ).projectId,
+    ).toBe('auth-option-project');
+  });
+
   it('prefers explicit auth options to scoped ADC and passes provider env above suite and file', async () => {
     await cliState.withEnvFileOverrides({ GOOGLE_APPLICATION_CREDENTIALS: 'file.json' }, () =>
       cliState.withEnv({ GOOGLE_APPLICATION_CREDENTIALS: 'suite.json' }, async () => {
