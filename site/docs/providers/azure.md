@@ -1400,7 +1400,7 @@ Supported per-request settings:
 | `metadata`                | Request metadata                                                                                 |
 | `passthrough`             | Additional raw Responses API fields                                                              |
 | `maxPollTimeMs`           | Cooperative callback-loop budget after the initial response, in milliseconds (default: `300000`) |
-| `timeoutMs`               | Positive deadline for each Responses attempt, in milliseconds (SDK default: `600000`)            |
+| `timeoutMs`               | Positive deadline for each Responses attempt, at most `2147483647` ms (SDK default: `600000`)    |
 | `retryOptions.maxRetries` | Non-negative integer request retry count (default: `2`)                                          |
 | `maxToolIterations`       | Maximum callback batches (default: `8`; valid range: `1`–`64`)                                   |
 
