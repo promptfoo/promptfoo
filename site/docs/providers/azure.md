@@ -1401,7 +1401,7 @@ Supported per-request settings:
 | `passthrough`             | Additional raw Responses API fields                                                              |
 | `maxPollTimeMs`           | Cooperative callback-loop budget after the initial response, in milliseconds (default: `300000`) |
 | `timeoutMs`               | Positive SDK timeout for each model HTTP request, in milliseconds (SDK default: `600000`)        |
-| `retryOptions.maxRetries` | Non-negative integer SDK retry count (default: `2`)                                              |
+| `retryOptions.maxRetries` | Non-negative integer request retry count (default: `2`)                                          |
 | `maxToolIterations`       | Maximum callback batches (default: `8`; valid range: `1`–`64`)                                   |
 
 Ignored per-request settings:
@@ -1414,7 +1414,7 @@ Ignored per-request settings:
 
 Configure those on the Foundry agent definition itself instead of on the eval request.
 
-Other `retryOptions` fields are unsupported; retry delays and retryable failures follow the bundled OpenAI SDK.
+Other `retryOptions` fields are unsupported. Promptfoo uses the SDK retry policy with cancellable waits: connection errors, timeouts, HTTP 408/409/429/5xx, and explicit `x-should-retry` hints. Hard-quota failures are never retried, including when a retry hint is present. Server delay hints use `retry-after-ms` or standard integer-seconds/HTTP-date `Retry-After`; otherwise retries use exponential backoff with jitter. The SDK's internal retries are disabled so cancellation can release all retry timers.
 
 ### Response continuity and accounting
 
@@ -1426,7 +1426,7 @@ Foundry supports [stateless responses](https://learn.microsoft.com/en-us/azure/f
 
 Failed, cancelled, incomplete, or still-pending Responses results return an error, preserving any available partial output, raw response, and usage. A completed refusal remains distinguishable through `isRefusal: true`. Partial text never clears a service error.
 
-Usage and cost cover every model turn in the invocation, including work completed before a later timeout or failure. `numRequests` counts SDK request attempts within that provider invocation, excluding local callbacks and retries internal to the SDK. Separate scheduler retries restart the provider invocation; their earlier usage is not aggregated here. Cached and reasoning tokens remain subsets of the total. Cost is calculated separately for each response's model. If usage or pricing is unavailable, metadata includes `usageIncomplete` or `costIncomplete`; incomplete cost is omitted from `cost`, with the known subtotal in `metadata.knownCost`.
+Usage and cost cover every model turn in the invocation, including work completed before a later timeout or failure. `numRequests` counts logical Responses turns within that provider invocation, excluding local callbacks and request retries. `metadata.transportRetries` counts additional transport attempts. Failed attempts may have unreported billable work, so recovered retries mark usage and cost incomplete while retaining the known totals. Separate scheduler retries restart the provider invocation; their earlier usage is not aggregated here. Cached and reasoning tokens remain subsets of the total. Cost is calculated separately for each response's model. If usage or pricing is unavailable, metadata includes `usageIncomplete` or `costIncomplete`; incomplete cost is omitted from `cost`, with the known subtotal in `metadata.knownCost`.
 
 ### Function Tools with Azure Foundry Agents
 
@@ -1472,11 +1472,11 @@ If a callback is missing, promptfoo returns the unresolved function call in the 
 
 ### Execution Limits and Cancellation
 
-`maxPollTimeMs` checks elapsed time between callback batches and model requests. The initial request is outside this budget. A pending callback or request may finish after the budget; a final model answer is still returned, while another tool batch times out. `timeoutMs` instead limits each model HTTP request, and SDK retries can make the total wait longer. It does not limit credential acquisition or callback execution.
+`maxPollTimeMs` checks elapsed time between callback batches and model requests. The initial request is outside this budget. A pending callback or request may finish after the budget; a final model answer is still returned, while another tool batch times out. `timeoutMs` instead limits each model HTTP request, and retries can make the total wait longer. It does not limit credential acquisition or callback execution.
 
 `maxToolIterations` bounds automatic callback batches independently of elapsed time. Parallel function calls in one response count as one batch, and the model's final answer after the last permitted batch is retained. Values from `1` to `64` are rounded down; missing, zero, and invalid values use the default of `8`.
 
-JavaScript API callers can pass `{ abortSignal: controller.signal }` as the third `callApi` argument. Cancellation stops waiting, aborts the SDK request, and prevents further callbacks or requests from starting. A running callback receives `context.abortSignal` and should forward it to `fetch` or other cancellable work. Callbacks and credential operations that ignore the signal may continue in the background; cancellation cannot undo their side effects.
+JavaScript API callers can pass `{ abortSignal: controller.signal }` as the third `callApi` argument. Cancellation stops waiting, aborts the SDK request, and prevents further callbacks or Responses requests from starting. A running callback receives `context.abortSignal` and should forward it to `fetch` or other cancellable work. Shared initialization, agent lookup, and callbacks or credential operations that ignore the signal may continue in the background; cancellation cannot undo their side effects.
 
 The [Foundry example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/foundry-agent) includes an opt-in live QA command for an existing project and agent. Normal provider tests run offline.
 
