@@ -650,23 +650,73 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       [cachedModalities, prompt],
       [cached, prompt === undefined ? undefined : prompt - explicitUncachedModalities],
     ]) {
-      if (subtotal !== undefined && parent !== undefined && subtotal > parent) {
+      // A positive child makes an omitted pricing parent material.
+      if (subtotal !== undefined && subtotal > (parent ?? 0)) {
         complete = false;
       }
+    }
+    // Pricing can infer a missing cached breakdown for a single input modality.
+    // Otherwise every cached token must fit the reported text/modality capacities.
+    const canInferCachedModality =
+      cachedModalities === 0 && ((inputAudio ?? 0) === 0 || (inputImage ?? 0) === 0);
+    if (
+      !canInferCachedModality &&
+      cached !== undefined &&
+      prompt !== undefined &&
+      cached > prompt - (inputAudio ?? 0) - (inputImage ?? 0) + cachedModalities
+    ) {
+      complete = false;
     }
     const pricingComplete = complete;
     // Totals and reporting details do not affect pricing. Keep their validation
     // separate so malformed reporting fields do not discard calculable cost.
-    const total = count(usage?.total_tokens) ?? (prompt ?? 0) + (completion ?? 0);
+    const knownTotal = (prompt ?? 0) + (completion ?? 0);
+    let total = count(usage?.total_tokens);
+    if (
+      total !== undefined &&
+      (total < knownTotal ||
+        (prompt !== undefined && completion !== undefined && total !== knownTotal))
+    ) {
+      complete = false;
+      total = undefined;
+    }
+    total ??= knownTotal;
     // The shared detail helper drops malformed cache-write values before normalization.
     count((usage?.input_tokens_details as any)?.cache_write_tokens);
     const details = usage ? getOpenAICompletionTokenDetails(usage) : undefined;
     const completionDetails = Object.fromEntries(
       Object.entries(details ?? {}).flatMap(([key, value]) => {
         const validCount = count(value);
+        const parent =
+          key === 'cacheReadInputTokens' || key === 'cacheCreationInputTokens'
+            ? prompt
+            : completion;
+        if (validCount !== undefined && parent !== undefined && validCount > parent) {
+          complete = false;
+          return [];
+        }
         return validCount === undefined ? [] : [[key, validCount]];
       }),
     );
+    if (
+      completion !== undefined &&
+      (completionDetails.acceptedPrediction ?? 0) + (completionDetails.rejectedPrediction ?? 0) >
+        completion
+    ) {
+      complete = false;
+      delete completionDetails.acceptedPrediction;
+      delete completionDetails.rejectedPrediction;
+    }
+    // Responses cache reads and writes are separate parts of input_tokens.
+    if (
+      prompt !== undefined &&
+      (completionDetails.cacheReadInputTokens ?? 0) +
+        (completionDetails.cacheCreationInputTokens ?? 0) >
+        prompt
+    ) {
+      complete = false;
+      delete completionDetails.cacheCreationInputTokens;
+    }
     return {
       tokenUsage: {
         prompt,

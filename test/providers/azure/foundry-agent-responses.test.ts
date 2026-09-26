@@ -516,7 +516,7 @@ describe('Foundry Responses conversation and accounting', () => {
       field: 'cache write',
       details: (value: unknown) => ({ input_tokens_details: { cache_write_tokens: value } }),
     },
-  ])('$field reporting-only usage validation', ({ details }) => {
+  ])('$field reporting-only usage validation', ({ field, details }) => {
     it.each([null, '2', NaN, Infinity, -1])(
       'retains both turns cost and incomplete usage for an invalid count %s',
       async (value) => {
@@ -562,18 +562,219 @@ describe('Foundry Responses conversation and accounting', () => {
     });
 
     it.each([undefined, 0])('keeps usage and cost complete for count %s', async (value) => {
+      const counts = field === 'total' ? { input_tokens: 0, output_tokens: 0 } : usage;
       create.mockResolvedValue(
-        reply('first', [text('done')], { usage: { ...usage, ...details(value) } }),
+        reply('first', [text('done')], { usage: { ...counts, ...details(value) } }),
       );
 
       const result = await provider().callApi('weather?');
 
-      expect(result.tokenUsage).toMatchObject({ prompt: 10, completion: 5, numRequests: 1 });
+      expect(result.tokenUsage).toMatchObject({
+        prompt: counts.input_tokens,
+        completion: counts.output_tokens,
+        numRequests: 1,
+      });
       expect(result.metadata?.usageIncomplete).toBeUndefined();
       expect(result.metadata?.costIncomplete).toBeUndefined();
-      expect(result.cost).toBe(calculateAzureCost('gpt-4.1', {}, 10, 5));
+      expect(result.cost).toBe(
+        calculateAzureCost('gpt-4.1', {}, counts.input_tokens, counts.output_tokens),
+      );
     });
   });
+
+  it.each([0, 14, 16, 99])(
+    'derives a contradictory reported total %s without losing cost',
+    async (total) => {
+      create
+        .mockResolvedValueOnce(
+          reply('first', [tool()], { usage: { ...usage, total_tokens: total } }),
+        )
+        .mockResolvedValueOnce(reply('last', [text('done')]));
+      const result = await provider().callApi('weather?');
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 20,
+        completion: 10,
+        total: 30,
+        numRequests: 2,
+      });
+      expect(result.metadata?.usageIncomplete).toBe(true);
+      expect(result.metadata?.costIncomplete).toBeUndefined();
+      expect(result.cost).toBeCloseTo(2 * calculateAzureCost('gpt-4.1', {}, 10, 5)!, 12);
+    },
+  );
+
+  it('does not report a total below the known subtotal when a parent is missing', async () => {
+    create.mockResolvedValue(
+      reply('first', [text('done')], { usage: { input_tokens: 10, total_tokens: 4 } }),
+    );
+    const result = await provider().callApi('weather?');
+    expect(result.tokenUsage).toMatchObject({ prompt: 10, completion: 0, total: 10 });
+    expect(result.metadata).toMatchObject({ usageIncomplete: true, costIncomplete: true });
+  });
+
+  it.each([
+    {
+      key: 'reasoning',
+      parent: 5,
+      details: (value: number) => ({ output_tokens_details: { reasoning_tokens: value } }),
+    },
+    {
+      key: 'acceptedPrediction',
+      parent: 5,
+      details: (value: number) => ({
+        output_tokens_details: { accepted_prediction_tokens: value },
+      }),
+    },
+    {
+      key: 'rejectedPrediction',
+      parent: 5,
+      details: (value: number) => ({
+        output_tokens_details: { rejected_prediction_tokens: value },
+      }),
+    },
+    {
+      key: 'cacheCreationInputTokens',
+      parent: 10,
+      details: (value: number) => ({ input_tokens_details: { cache_write_tokens: value } }),
+    },
+  ])(
+    'excludes $key above its parent but retains later valid details and both costs',
+    async ({ key, parent, details }) => {
+      create
+        .mockResolvedValueOnce(
+          reply('first', [tool()], { usage: { ...usage, ...details(parent + 1) } }),
+        )
+        .mockResolvedValueOnce(
+          reply('last', [text('done')], { usage: { ...usage, ...details(2) } }),
+        );
+      const result = await provider().callApi('weather?');
+      expect(result.tokenUsage?.completionDetails).toMatchObject({ [key]: 2 });
+      expect(result.metadata?.usageIncomplete).toBe(true);
+      expect(result.metadata?.costIncomplete).toBeUndefined();
+      expect(result.cost).toBeCloseTo(2 * calculateAzureCost('gpt-4.1', {}, 10, 5)!, 12);
+    },
+  );
+
+  it('excludes contradictory prediction partitions without discarding reasoning or cost', async () => {
+    create.mockResolvedValue(
+      reply('first', [text('done')], {
+        usage: {
+          ...usage,
+          output_tokens_details: {
+            reasoning_tokens: 2,
+            accepted_prediction_tokens: 3,
+            rejected_prediction_tokens: 3,
+          },
+        },
+      }),
+    );
+    const result = await provider().callApi('weather?');
+    expect(result.tokenUsage?.completionDetails).toMatchObject({ reasoning: 2 });
+    expect(result.tokenUsage?.completionDetails?.acceptedPrediction).toBe(0);
+    expect(result.tokenUsage?.completionDetails?.rejectedPrediction).toBe(0);
+    expect(result.metadata?.usageIncomplete).toBe(true);
+    expect(result.metadata?.costIncomplete).toBeUndefined();
+    expect(result.cost).toBe(calculateAzureCost('gpt-4.1', {}, 10, 5));
+  });
+
+  it('excludes cache writes that overlap the reported cache-read partition', async () => {
+    create.mockResolvedValue(
+      reply('first', [text('done')], {
+        usage: { ...usage, input_tokens_details: { cached_tokens: 6, cache_write_tokens: 5 } },
+      }),
+    );
+    const result = await provider().callApi('weather?');
+    expect(result.tokenUsage?.completionDetails?.cacheReadInputTokens).toBe(6);
+    expect(result.tokenUsage?.completionDetails?.cacheCreationInputTokens).toBe(0);
+    expect(result.metadata?.usageIncomplete).toBe(true);
+    expect(result.metadata?.costIncomplete).toBeUndefined();
+    expect(result.cost).toBe(calculateAzureCost('gpt-4.1', {}, 10, 5, 6));
+  });
+
+  it('keeps valid reporting boundaries without assuming reasoning and prediction are disjoint', async () => {
+    create.mockResolvedValue(
+      reply('first', [text('done')], {
+        usage: {
+          ...usage,
+          input_tokens_details: { cached_tokens: 6, cache_write_tokens: 4 },
+          output_tokens_details: {
+            reasoning_tokens: 5,
+            accepted_prediction_tokens: 3,
+            rejected_prediction_tokens: 2,
+          },
+        },
+      }),
+    );
+    const result = await provider().callApi('weather?');
+    expect(result.tokenUsage?.completionDetails).toMatchObject({
+      cacheReadInputTokens: 6,
+      cacheCreationInputTokens: 4,
+      reasoning: 5,
+      acceptedPrediction: 3,
+      rejectedPrediction: 2,
+    });
+    expect(result.metadata?.usageIncomplete).toBeUndefined();
+    expect(result.metadata?.costIncomplete).toBeUndefined();
+    expect(result.cost).toBe(calculateAzureCost('gpt-4.1', {}, 10, 5, 6));
+  });
+
+  describe.each(['audio_tokens', 'image_tokens'] as const)('%s cached parents', (field) => {
+    it.each(['cached', 'modality', 'both'])(
+      'marks a positive child incomplete when %s is omitted',
+      async (missing) => {
+        create
+          .mockResolvedValueOnce(
+            reply('first', [tool()], {
+              usage: {
+                ...usage,
+                input_tokens_details: {
+                  ...(missing !== 'cached' && missing !== 'both' && { cached_tokens: 2 }),
+                  ...(missing !== 'modality' && missing !== 'both' && { [field]: 2 }),
+                  cached_tokens_details: { [field]: 2 },
+                },
+              },
+            }),
+          )
+          .mockResolvedValueOnce(reply('last', [text('done')]));
+        const result = await provider().callApi('weather?');
+        expect(result.metadata).toMatchObject({
+          usageIncomplete: true,
+          costIncomplete: true,
+          knownCost: calculateAzureCost('gpt-4.1', {}, 10, 5),
+        });
+        expect(result.cost).toBeUndefined();
+        expect(result.tokenUsage).toMatchObject({ total: 30, numRequests: 2 });
+      },
+    );
+  });
+
+  it.each([undefined, { audio_tokens: 1 }, { image_tokens: 1 }])(
+    'marks an insufficient mixed cached breakdown incomplete: %j',
+    async (cachedDetails) => {
+      create
+        .mockResolvedValueOnce(
+          reply('first', [tool()], {
+            usage: {
+              ...usage,
+              input_tokens_details: {
+                cached_tokens: 5,
+                audio_tokens: 4,
+                image_tokens: 4,
+                cached_tokens_details: cachedDetails,
+              },
+            },
+          }),
+        )
+        .mockResolvedValueOnce(reply('last', [text('done')]));
+      const result = await provider().callApi('weather?');
+      expect(result.metadata).toMatchObject({
+        usageIncomplete: true,
+        costIncomplete: true,
+        knownCost: calculateAzureCost('gpt-4.1', {}, 10, 5),
+      });
+      expect(result.cost).toBeUndefined();
+    },
+  );
 
   it.each([null, '2', NaN, Infinity, -1])(
     'excludes cost for an invalid cached input count %s while retaining later known cost',
@@ -700,13 +901,21 @@ describe('Foundry Responses conversation and accounting', () => {
     {
       field: 'cached input audio',
       details: (value: unknown) => ({
-        input_tokens_details: { cached_tokens_details: { audio_tokens: value } },
+        input_tokens_details: {
+          cached_tokens: 4,
+          audio_tokens: 4,
+          cached_tokens_details: { audio_tokens: value },
+        },
       }),
     },
     {
       field: 'cached input image',
       details: (value: unknown) => ({
-        input_tokens_details: { cached_tokens_details: { image_tokens: value } },
+        input_tokens_details: {
+          cached_tokens: 4,
+          image_tokens: 4,
+          cached_tokens_details: { image_tokens: value },
+        },
       }),
     },
   ])('$field modality usage validation', ({ details }) => {
@@ -907,20 +1116,22 @@ describe('Foundry Responses conversation and accounting', () => {
   it.each([
     ['cached input equals input', { input_tokens_details: { cached_tokens: 10 } }],
     [
-      'cached image implies a possible input partition at the boundary',
+      'cached image and its parents meet the input partition boundary',
       {
         input_tokens_details: {
           cached_tokens: 5,
+          image_tokens: 5,
           audio_tokens: 5,
           cached_tokens_details: { image_tokens: 5 },
         },
       },
     ],
     [
-      'cached audio implies a possible input partition at the boundary',
+      'cached audio and its parents meet the input partition boundary',
       {
         input_tokens_details: {
           cached_tokens: 5,
+          audio_tokens: 5,
           image_tokens: 5,
           cached_tokens_details: { audio_tokens: 5 },
         },
@@ -947,10 +1158,10 @@ describe('Foundry Responses conversation and accounting', () => {
       { input_tokens_details: { cached_tokens: 5, image_tokens: 8 } },
     ],
     [
-      'a partially reported cached modality partition stays possible',
+      'a partial cached breakdown fits the known text and audio capacity',
       {
         input_tokens_details: {
-          cached_tokens: 5,
+          cached_tokens: 3,
           audio_tokens: 4,
           image_tokens: 4,
           cached_tokens_details: { audio_tokens: 1 },
@@ -979,8 +1190,8 @@ describe('Foundry Responses conversation and accounting', () => {
       },
     ],
     [
-      'omitted cached and modality parents remain optional',
-      { input_tokens_details: { cached_tokens_details: { audio_tokens: 2, image_tokens: 2 } } },
+      'zero cached modalities do not require omitted parents',
+      { input_tokens_details: { cached_tokens_details: { audio_tokens: 0, image_tokens: 0 } } },
     ],
     [
       'explicit zero parents and subtotals remain valid',
