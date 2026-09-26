@@ -284,7 +284,7 @@ const ASSERTION_HANDLERS: Record<
           pass: false,
           score: 0,
           reason:
-            'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.1.1',
+            'METEOR assertion requires the natural package. Install it alongside Promptfoo: npm install promptfoo natural@^8.1.1. For a global installation, use npm install -g promptfoo natural@^8.1.1.',
           assertion: params.assertion,
         };
       }

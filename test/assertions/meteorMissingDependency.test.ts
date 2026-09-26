@@ -28,7 +28,7 @@ describe('METEOR optional dependency', () => {
         inverse: false,
       } as AssertionParams),
     ).rejects.toThrow(
-      'The "natural" package is required for METEOR assertions. Install it with: npm install natural@^8.1.1',
+      'The "natural" package is required for METEOR assertions. Install it alongside Promptfoo: npm install promptfoo natural@^8.1.1. For a global installation, use npm install -g promptfoo natural@^8.1.1.',
     );
   });
 });

@@ -69,7 +69,7 @@ describe('METEOR assertion', () => {
     expect(result.pass).toBe(false);
     expect(result.score).toBe(0);
     expect(result.reason).toBe(
-      'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.1.1',
+      'METEOR assertion requires the natural package. Install it alongside Promptfoo: npm install promptfoo natural@^8.1.1. For a global installation, use npm install -g promptfoo natural@^8.1.1.',
     );
     expect(result.assertion).toEqual({
       type: 'meteor',

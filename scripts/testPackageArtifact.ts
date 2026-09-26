@@ -737,7 +737,8 @@ for (const [index, score] of [[1, 0.9814814814814815], [2, 0.9976851851851852]])
   if (installed) {
     assert.equal(results[index].score, score);
   } else {
-    assert.match(results[index].gradingResult.reason, /npm install (?:promptfoo )?natural/);
+    assert.match(results[index].gradingResult.reason, /npm install promptfoo natural/);
+    assert.match(results[index].gradingResult.reason, /npm install -g promptfoo natural/);
     if (process.argv[2] === 'incompatible') {
       assert.match(results[index].gradingResult.reason, /found 7.1.0/);
     }
