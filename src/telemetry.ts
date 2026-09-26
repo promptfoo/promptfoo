@@ -17,9 +17,13 @@ const CLIENT_OWNERS_KEY = Symbol.for('promptfoo.telemetry.clientOwners');
 const clientOwners = ((process as unknown as Record<symbol, Set<Telemetry>>)[CLIENT_OWNERS_KEY] ??=
   new Set<Telemetry>());
 
+// CLI and library bundles must share the saved restriction from before env-file loading.
+const HOST_TEST_MODE_KEY = Symbol.for('promptfoo.telemetry.hostTestMode');
+
 // An invocation or suite cannot turn off the host's test-mode restriction.
 function isTestMode(): boolean {
   return (
+    Boolean(Reflect.get(process, HOST_TEST_MODE_KEY)) ||
     parseEnvBool(process.env.IS_TESTING) ||
     parseEnvBool(getEnvOverrides('file')?.IS_TESTING) ||
     getEnvBool('IS_TESTING')
@@ -42,7 +46,7 @@ export class Telemetry {
   private shutdownPromise: Promise<void> = Promise.resolve();
 
   private telemetryDisabledRecorded = false;
-  private testMode = parseEnvBool(process.env.IS_TESTING);
+  private readonly testMode = parseEnvBool(process.env.IS_TESTING);
   private id: string | null = null;
 
   constructor(initializeImmediately: boolean = true) {
@@ -51,9 +55,12 @@ export class Telemetry {
     }
   }
 
-  initialize(testMode: boolean = false): void {
-    // CLI env files can overwrite process.env, but cannot remove the host test restriction.
-    this.testMode ||= testMode;
+  initialize(hostTestMode: boolean = false): void {
+    // CLI env files can overwrite process.env. Keep the saved host restriction for
+    // every instance, including instances constructed after the file was loaded.
+    if (hostTestMode) {
+      Reflect.set(process, HOST_TEST_MODE_KEY, true);
+    }
     if (this.id !== null) {
       return;
     }

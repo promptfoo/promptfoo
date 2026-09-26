@@ -23,8 +23,12 @@ vi.mock('../src/util/fetch/index', () => ({
 }));
 
 let restoreEnv = () => {};
+const hostTestModeKey = Symbol.for('promptfoo.telemetry.hostTestMode');
+let previousHostTestMode: unknown;
 
 beforeEach(() => {
+  previousHostTestMode = Reflect.get(process, hostTestModeKey);
+  Reflect.deleteProperty(process, hostTestModeKey);
   vi.resetModules();
   vi.mocked(PostHog).mockImplementation(function () {
     return client as unknown as PostHog;
@@ -41,6 +45,7 @@ afterEach(async () => {
     | undefined;
   await Promise.allSettled([...(owners ?? [])].map((owner) => owner.shutdown()));
   restoreEnv();
+  Reflect.set(process, hostTestModeKey, previousHostTestMode);
   vi.resetAllMocks();
 });
 
@@ -237,6 +242,23 @@ describe('telemetry test-mode environment restrictions', () => {
       expect(request).not.toHaveBeenCalled();
     },
   );
+
+  it('applies the saved CLI host restriction to instances created after env-file loading', async () => {
+    mockProcessEnv({ IS_TESTING: 'true' });
+    const { default: singleton } = await import('../src/telemetry');
+    mockProcessEnv({ IS_TESTING: 'false' });
+    singleton.initialize(true);
+    vi.resetModules();
+    const { Telemetry } = await import('../src/telemetry');
+    const late = new Telemetry();
+    await late.identify();
+    late.record('eval_ran', {});
+    mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: 'true' });
+    late.record('eval_ran', {});
+    await late.shutdown();
+    expect(PostHog).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
+  });
 
   it('retains the captured CLI host restriction across later initialization calls', async () => {
     const { Telemetry } = await import('../src/telemetry');
