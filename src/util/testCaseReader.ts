@@ -764,6 +764,12 @@ async function readTestsWithEnv(
     if (tests.endsWith('yaml') || tests.endsWith('yml')) {
       return loadTestsFromGlobWithEnv(tests, basePath, env, loadProviders);
     }
+    // Expand other globs like `tests: [glob]`. An existing file whose name contains glob
+    // characters stays on the standalone loader, as `loadTestsFromGlobWithEnv` does.
+    const withoutScheme = tests.replace(/^file:\/\//, '');
+    if (hasGlobMagic(withoutScheme) && !fs.existsSync(path.resolve(basePath, withoutScheme))) {
+      return readTestsWithEnv([tests], basePath, env, loadProviders);
+    }
     // Points to a tests.{csv,json,yaml,yml,py,js,ts,mjs} or Google Sheet
     return loadStandalone(tests);
   } else if (
