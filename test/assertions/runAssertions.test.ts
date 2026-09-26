@@ -945,6 +945,40 @@ describe('runAssertions with PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', () => {
     await expect(peakConcurrency()).resolves.toBe(1);
   });
 
+  it('prefers suite env over invocation file env over process env and restores outer limits', async () => {
+    mockProcessEnv({ PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY: '4' });
+
+    await cliState.withEnvFileOverrides({ PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY: '2' }, async () => {
+      await expect(peakConcurrency()).resolves.toBe(2);
+      await expect(
+        cliState.withEnv({ PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY: '1' }, peakConcurrency),
+      ).resolves.toBe(1);
+      await expect(peakConcurrency()).resolves.toBe(2);
+    });
+
+    await expect(peakConcurrency()).resolves.toBe(4);
+  });
+
+  it('keeps concurrent invocation file and suite limits isolated across async work', async () => {
+    const runAfterYield = async () => {
+      // Establish all invocation scopes before any assertion batch reads its limit.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      return peakConcurrency();
+    };
+
+    await expect(
+      Promise.all([
+        cliState.withEnvFileOverrides({ PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY: '2' }, () =>
+          cliState.withEnv({ PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY: '1' }, runAfterYield),
+        ),
+        cliState.withEnvFileOverrides({ PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY: '4' }, runAfterYield),
+        cliState.withEnvFileOverrides({ PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY: '2' }, runAfterYield),
+      ]),
+    ).resolves.toEqual([1, 4, 2]);
+
+    await expect(peakConcurrency()).resolves.toBe(3);
+  });
+
   it.each(['0', '-2'])('runs assertions one at a time for a limit of %s', async (limit) => {
     mockProcessEnv({ PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY: limit });
 

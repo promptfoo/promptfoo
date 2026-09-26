@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 
-import { getPromptDelimiter } from '../constants';
+import { getEnvString } from '../../envars';
 
 import type { Prompt } from '../../types/index';
 
@@ -29,7 +29,8 @@ export function processTxtFile(filePath: string, { label }: Partial<Prompt>): Pr
     buffer = [];
   };
 
-  const delimiter = getPromptDelimiter();
+  // Resolve after --env-file and the config's env block have been applied.
+  const delimiter = getEnvString('PROMPTFOO_PROMPT_SEPARATOR') || '---';
   for (const line of lines) {
     if (line.trim() === delimiter) {
       flush();
