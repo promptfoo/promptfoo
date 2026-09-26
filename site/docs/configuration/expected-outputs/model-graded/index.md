@@ -13,7 +13,7 @@ Output-based:
 - [`agent-rubric`](/docs/configuration/expected-outputs/model-graded/agent-rubric) - Like `llm-rubric`, but uses a coding-agent grader that can inspect configured workspace and tool evidence.
 - [`search-rubric`](/docs/configuration/expected-outputs/model-graded/search-rubric) - Like `llm-rubric` but with web search capabilities for verifying current information.
 - [`model-graded-closedqa`](/docs/configuration/expected-outputs/model-graded/model-graded-closedqa) - Checks if LLM answers meet specific requirements using OpenAI's public evals prompts.
-- [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality) - Evaluates factual consistency between LLM output and a reference statement. Uses OpenAI's public evals prompt to determine if the output is factually consistent with the reference.
+- [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality) (alias: `model-graded-factuality`) - Evaluates factual consistency between LLM output and a reference statement. Uses OpenAI's public evals prompt to determine if the output is factually consistent with the reference.
 - [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval) - Uses chain-of-thought prompting to evaluate outputs against custom criteria following the G-Eval framework.
 - [`answer-relevance`](/docs/configuration/expected-outputs/model-graded/answer-relevance) - Evaluates whether LLM output is directly related to the original query. Defaults to threshold `0.5`.
 - [`similar`](/docs/configuration/expected-outputs/similar) - Checks semantic similarity between output and expected value using embedding models.
@@ -505,13 +505,13 @@ assert:
     threshold: 0.8
 ```
 
-The `contextTransform` property accepts a stringified Javascript expression which itself accepts two arguments: `output` and `context`, and **must return a non-empty string.**
+The `contextTransform` property accepts a stringified JavaScript expression which itself accepts two arguments: `output` and `context`, and **must return a non-empty string, or an array of non-empty strings.**
 
 ```typescript
 /**
  * The context transform function signature.
  */
-type ContextTransform = (output: Output, context: Context) => string;
+type ContextTransform = (output: Output, context: Context) => string | string[];
 
 /**
  * The provider's response output.
@@ -580,7 +580,13 @@ contextTransform: 'JSON.stringify(output, null, 2)'
 
 ### Examples
 
-Context-based metrics require a `query` and context. Scores are normalized between 0 and 1; when `threshold` is omitted, `answer-relevance`, `context-recall`, `context-relevance`, and `context-faithfulness` default to `0.5`.
+What each metric needs:
+
+- `context-relevance` and `context-faithfulness`: a `query` variable and context.
+- `context-recall`: context, plus the fact to look for in `value`. Falls back to the prompt as context.
+- `answer-relevance`: no context. Uses the `query` variable if set, otherwise the prompt.
+
+Scores are normalized between 0 and 1; when `threshold` is omitted, `answer-relevance`, `context-recall`, `context-relevance`, and `context-faithfulness` default to `0.5`.
 
 Here's an example config using statically-defined (`test.vars.context`) context:
 

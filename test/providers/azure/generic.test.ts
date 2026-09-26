@@ -146,20 +146,37 @@ describe('AzureGenericProvider', () => {
 
     it('uses a service principal when client id, secret, and tenant are all set', async () => {
       const warnSpy = vi.spyOn(logger, 'warn');
+      const debugSpy = vi.spyOn(logger, 'debug');
       const provider = new AzureGenericProvider('d', {
-        config: { azureClientId: 'client', azureClientSecret: 'secret', azureTenantId: 'tenant' },
+        config: {
+          azureClientId: 'private-client',
+          azureClientSecret: 'private-secret',
+          azureTenantId: 'private-tenant',
+        },
       });
       await provider.ensureInitialized();
 
-      expect(ClientSecretCredential).toHaveBeenCalledWith('tenant', 'client', 'secret', {
-        authorityHost: 'https://login.microsoftonline.com',
-      });
+      expect(ClientSecretCredential).toHaveBeenCalledWith(
+        'private-tenant',
+        'private-client',
+        'private-secret',
+        { authorityHost: 'https://login.microsoftonline.com' },
+      );
       expect(AzureCliCredential).not.toHaveBeenCalled();
       expect(warnSpy).not.toHaveBeenCalled();
+      expect(debugSpy).toHaveBeenCalledWith('[Azure] Using service principal credentials');
+      expect(JSON.stringify(debugSpy.mock.calls)).not.toMatch(/private-(client|secret|tenant)/);
     });
 
     it('warns and names the missing fields before falling back to Azure CLI', async () => {
       const warnSpy = vi.spyOn(logger, 'warn');
+      const getToken = vi.fn(async () => {
+        expect(warnSpy).toHaveBeenCalledOnce();
+        return { token: 't', expiresOnTimestamp: Date.now() + 3_600_000 };
+      });
+      vi.mocked(AzureCliCredential).mockImplementationOnce(function () {
+        return Object.assign(Object.create(AzureCliCredential.prototype), { getToken });
+      });
       const provider = new AzureGenericProvider('d', {
         config: { azureClientId: 'client', azureTenantId: 'tenant' },
       });
@@ -172,6 +189,38 @@ describe('AzureGenericProvider', () => {
       expect(message).toContain('azureClientSecret');
       expect(message).not.toContain('azureClientId');
       expect(message).not.toContain('azureTenantId');
+      expect(getToken).toHaveBeenCalledOnce();
+    });
+
+    it('warns once per instance when initialization overlaps direct credential requests', async () => {
+      const warn = vi.spyOn(logger, 'warn');
+      const config = { azureClientSecret: 'private-secret' };
+      for (const count of [1, 2]) {
+        const provider = new AzureGenericProvider('d', { config });
+        await Promise.all([
+          provider.ensureInitialized(),
+          provider.getAzureTokenCredential(),
+          provider.getAzureTokenCredential(),
+        ]);
+        await provider.getAzureTokenCredential();
+        expect(warn).toHaveBeenCalledTimes(count);
+      }
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('Falling back to Azure CLI'), {
+        missing: ['azureClientId (AZURE_CLIENT_ID)', 'azureTenantId (AZURE_TENANT_ID)'],
+      });
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('private-secret');
+      expect(ClientSecretCredential).not.toHaveBeenCalled();
+    });
+
+    it('does not warn when an API key takes precedence over a partial service principal', async () => {
+      const warn = vi.spyOn(logger, 'warn');
+      const provider = new AzureGenericProvider('d', {
+        config: { apiKey: 'configured-key', azureClientId: 'private-client' },
+      });
+      await provider.ensureInitialized();
+      expect(provider.authHeaders).toEqual({ 'api-key': 'configured-key' });
+      expect(AzureCliCredential).not.toHaveBeenCalled();
+      expect(warn).not.toHaveBeenCalled();
     });
 
     it('falls back to Azure CLI silently when no service principal fields are set', async () => {

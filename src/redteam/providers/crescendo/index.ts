@@ -51,6 +51,7 @@ import {
   accumulateUnblockingTokenUsage,
   buildGraderResultAssertion,
   callGradingProvider,
+  captureFlaggedTurn,
   externalizeResponseForRedteamHistory,
   formatRedteamHistoryAsTranscript,
   getGraderAssertionValue,
@@ -61,6 +62,7 @@ import {
   messagesToRedteamHistory,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
+  resolveStoredGraderResult,
   runRedteamGrader,
   type TargetResponse,
   tryUnblocking,
@@ -89,7 +91,7 @@ import type {
 } from '../../../types/index';
 import type { RedteamGradingContext } from '../../grading/types';
 import type { BaseRedteamMetadata } from '../../types';
-import type { Message } from '../shared';
+import type { FlaggedTurn, Message } from '../shared';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
@@ -111,6 +113,7 @@ interface CrescendoMetadata extends BaseRedteamMetadata {
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
   traceSnapshots?: Record<string, unknown>[];
+  transformDisplayVars?: Record<string, string>;
 }
 
 /**
@@ -227,9 +230,15 @@ export class CrescendoProvider implements ApiProvider {
     logger.debug('[Crescendo] CrescendoProvider initialized with config', { config });
   }
 
+  private attackerUsesRemoteProvider(): boolean {
+    // Remote task handlers only know the built-in default. An explicit
+    // redteamProvider must stay local.
+    return shouldGenerateRemote() && !this.config.redteamProvider;
+  }
+
   private async getRedTeamProvider(): Promise<ApiProvider> {
     if (!this.redTeamProvider) {
-      if (shouldGenerateRemote()) {
+      if (this.attackerUsesRemoteProvider()) {
         this.redTeamProvider = new PromptfooChatCompletionProvider({
           task: 'crescendo',
           jsonOnly: true,
@@ -251,7 +260,7 @@ export class CrescendoProvider implements ApiProvider {
 
   private async getScoringProvider(): Promise<ApiProvider> {
     if (!this.scoringProvider) {
-      if (shouldGenerateRemote()) {
+      if (this.attackerUsesRemoteProvider()) {
         this.scoringProvider = new PromptfooChatCompletionProvider({
           task: 'crescendo',
           jsonOnly: false,
@@ -332,7 +341,8 @@ export class CrescendoProvider implements ApiProvider {
     let evalPercentage: number | null = null;
 
     let objectiveScore: { value: number; rationale: string } | undefined;
-    let storedGraderResult: any = undefined;
+    let storedGraderResult: GradingResult | undefined;
+    let flaggedRound: FlaggedTurn | undefined;
 
     let exitReason: RoundBacktrackingStopReason = 'Max rounds reached';
 
@@ -706,12 +716,20 @@ export class CrescendoProvider implements ApiProvider {
               ),
             };
 
-            const { grade, rubric } = await runRedteamGrader(
-              grader,
-              lastFinalAttackPrompt ||
+            const gradedTurn = {
+              prompt:
+                lastFinalAttackPrompt ||
                 getLastMessageContent(lastResponseMessages, 'user') ||
                 attackPrompt,
-              lastResponse.output,
+              output: lastResponse.output,
+              messages: lastResponseMessages,
+              guardrails: lastResponse.guardrails,
+              transformDisplayVars: lastTransformDisplayVars,
+            };
+            const { grade, rubric } = await runRedteamGrader(
+              grader,
+              gradedTurn.prompt,
+              gradedTurn.output,
               test,
               provider,
               getGraderAssertionValue(assertToUse),
@@ -728,19 +746,12 @@ export class CrescendoProvider implements ApiProvider {
                 assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
               },
               {
-                prompt:
-                  lastFinalAttackPrompt ||
-                  getLastMessageContent(
-                    this.memory.getConversation(this.targetConversationId),
-                    'user',
-                  ) ||
-                  attackPrompt,
-                output: lastResponse.output,
-                messages: lastResponseMessages,
+                ...gradedTurn,
                 pluginId: test.metadata?.pluginId,
                 assertion: assertToUse,
               },
             );
+            flaggedRound ??= captureFlaggedTurn(storedGraderResult, gradedTurn);
           }
         }
 
@@ -832,21 +843,26 @@ export class CrescendoProvider implements ApiProvider {
       // exitReason is already properly set - either from early break or 'Max rounds reached'
     }
 
-    const messages = lastResponseMessages;
-    const finalPrompt = getLastMessageContent(messages, 'user');
-    return {
+    const reported = flaggedRound ?? {
       output: lastResponse.output,
-      ...(lastResponse.error
-        ? { error: lastResponse.error }
-        : hasTargetResponse
-          ? {}
-          : { error: lastAttemptError || 'No target request was completed.' }),
+      prompt: lastFinalAttackPrompt || getLastMessageContent(lastResponseMessages, 'user'),
+      messages: lastResponseMessages,
+      guardrails: lastResponse.guardrails,
+      transformDisplayVars: lastTransformDisplayVars,
+    };
+    const finalPrompt = getLastMessageContent(reported.messages, 'user');
+    const error =
+      lastResponse.error ||
+      (hasTargetResponse ? undefined : lastAttemptError || 'No target request was completed.');
+    return {
+      output: reported.output,
+      ...(!flaggedRound && error ? { error } : {}),
       prompt: finalPrompt,
       metadata: {
         sessionId: getSessionId(lastResponse, context),
         // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
-        redteamFinalPrompt: lastFinalAttackPrompt || finalPrompt,
-        messages: messages as Record<string, any>[],
+        redteamFinalPrompt: reported.prompt,
+        messages: reported.messages as Record<string, any>[],
         crescendoRoundsCompleted: roundNum,
         crescendoBacktrackCount: backtrackCount,
         crescendoResult: evalFlag,
@@ -855,15 +871,20 @@ export class CrescendoProvider implements ApiProvider {
         redteamHistory,
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,
-        storedGraderResult,
+        storedGraderResult: resolveStoredGraderResult(
+          flaggedRound?.graderResult,
+          storedGraderResult,
+        ),
         traceSnapshots:
           traceSnapshots.length > 0
             ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
             : undefined,
-        ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+        ...(reported.transformDisplayVars && {
+          transformDisplayVars: reported.transformDisplayVars,
+        }),
       },
       tokenUsage: totalTokenUsage,
-      guardrails: lastResponse?.guardrails,
+      guardrails: reported.guardrails,
     };
   }
 
@@ -929,7 +950,7 @@ export class CrescendoProvider implements ApiProvider {
           raw: JSON.stringify(redTeamingHistory),
           label: 'history',
         },
-        vars: shouldGenerateRemote()
+        vars: this.attackerUsesRemoteProvider()
           ? buildRemoteMaterializationContextVars({
               injectVar: this.config.injectVar,
               inputs: this.config.inputs,
@@ -1054,7 +1075,7 @@ export class CrescendoProvider implements ApiProvider {
     }
 
     // Extract input vars from the processed prompt for multi-input mode
-    if (this.config.inputs && shouldGenerateRemote()) {
+    if (this.config.inputs && this.attackerUsesRemoteProvider()) {
       assertRemoteMaterializationHandled(remoteMaterialization, 'Crescendo multi-input generation');
     }
     const currentInputVars = extractInputVarsFromPrompt(processedPrompt, this.config.inputs);
@@ -1063,14 +1084,14 @@ export class CrescendoProvider implements ApiProvider {
       | undefined;
     if (
       this.config.inputs &&
-      shouldGenerateRemote() &&
+      this.attackerUsesRemoteProvider() &&
       !currentInputVars &&
       !remoteMaterialization?.materializedVars
     ) {
       throw new Error('Crescendo remote multi-input generation returned an invalid prompt format');
     }
     if ((currentInputVars || remoteMaterialization?.materializedVars) && this.config.inputs) {
-      if (shouldGenerateRemote()) {
+      if (this.attackerUsesRemoteProvider()) {
         materializedInputVars = buildRemoteMaterializedInputVariables(
           remoteMaterialization ?? {},
           currentInputVars ?? {},

@@ -1,6 +1,6 @@
 # compare-openai-models (OpenAI Model Comparison)
 
-This example compares `gpt-5.6-luna`, `gpt-5.6-terra`, `gpt-5.6-sol`, and `gpt-6-astra` on riddles with the same `low` reasoning effort. Astra requires model access on your OpenAI account.
+This example compares `gpt-6-luna`, `gpt-6-sol`, and `gpt-6-astra` on riddles with the same `low` reasoning effort. Astra requires model access on your OpenAI account.
 
 You can run this example with:
 
@@ -49,13 +49,13 @@ cd compare-openai-models
    npx promptfoo@latest view
    ```
 
-   The expected output will include the responses from all four models for the provided riddles, allowing you to compare their performance side by side.
+   The expected output will include the responses from all three models for the provided riddles, allowing you to compare their performance side by side.
 
 ## What this example demonstrates
 
-This example compares Luna, Terra, Sol, and Astra across various riddles and puzzles. It demonstrates:
+This example compares Luna, Sol, and Astra across various riddles and puzzles. It demonstrates:
 
-- **Model comparison**: Side-by-side evaluation of Luna, Terra, Sol, and Astra
+- **Model comparison**: Side-by-side evaluation of Luna, Sol, and Astra
 - **Cost and latency assertions**: Ensuring responses meet performance thresholds
 - **Content validation**: Using `contains` assertions to verify specific answers
 - **LLM-based grading**: Using `llm-rubric` assertions for nuanced evaluation criteria

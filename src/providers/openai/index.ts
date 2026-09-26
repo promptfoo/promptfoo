@@ -1,6 +1,6 @@
 import { getEnvString } from '../../envars';
 import { resolveProviderApiKey } from '../credentials';
-import { isGpt6AstraModel } from './gpt6';
+import { isGpt6Model } from './gpt6';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -175,7 +175,7 @@ export class OpenAiGenericProvider implements ApiProvider {
       model.includes('/o4') ||
       /(^|\/)gpt-daybreak-(?:blue|red)-latest$/.test(model) ||
       this.isGPT5Model(model) ||
-      isGpt6AstraModel(model)
+      isGpt6Model(model)
     );
   }
 

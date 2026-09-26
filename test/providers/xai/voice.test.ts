@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import WebSocket from 'ws';
 import {
   calculateXAIVoiceCost,
   createXAIVoiceProvider,
@@ -8,11 +9,13 @@ import {
   XAI_VOICE_DEFAULT_WS_URL,
   XAI_VOICE_DEFAULTS,
   type XAIFunctionCallOutput,
+  type XAIVoiceOptions,
   XAIVoiceProvider,
 } from '../../../src/providers/xai/voice';
 import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/logger');
+vi.mock('ws');
 
 describe('XAI Voice Provider', () => {
   const mockApiKey = 'test-api-key';
@@ -38,7 +41,7 @@ describe('XAI Voice Provider', () => {
 
     it('uses default model when none specified via factory', () => {
       const provider = createXAIVoiceProvider('xai:voice:');
-      expect(provider.id()).toBe('xai:voice:grok-voice-think-fast-1.0');
+      expect(provider.id()).toBe('xai:voice:grok-voice-think-fast-2.0');
     });
 
     it('parses model name correctly from provider path', () => {
@@ -82,11 +85,11 @@ describe('XAI Voice Provider', () => {
     });
 
     it('has the current default voice model', () => {
-      expect(XAI_VOICE_DEFAULT_MODEL).toBe('grok-voice-think-fast-1.0');
+      expect(XAI_VOICE_DEFAULT_MODEL).toBe('grok-voice-think-fast-2.0');
     });
 
     it('has correct default voice', () => {
-      expect(XAI_VOICE_DEFAULTS.voice).toBe('Ara');
+      expect(XAI_VOICE_DEFAULTS.voice).toBe('ara');
     });
 
     it('has correct default sample rate', () => {
@@ -107,34 +110,224 @@ describe('XAI Voice Provider', () => {
   // ============================================================================
 
   describe('Cost calculation', () => {
-    it('calculates cost correctly for 1 minute', () => {
-      const cost = calculateXAIVoiceCost(60000);
-      expect(cost).toBe(0.05);
+    it.each(['grok-voice-think-fast-2.0', 'grok-voice-latest'])(
+      'bills %s by audio duration plus the text-input fee',
+      (model) => {
+        expect(calculateXAIVoiceCost(0, model)).toBe(0.004);
+        expect(calculateXAIVoiceCost(30_000, model)).toBeCloseTo(0.044);
+        expect(calculateXAIVoiceCost(60_000, model)).toBeCloseTo(0.084);
+      },
+    );
+
+    it.each([
+      [0, 0],
+      [30_000, 0.025],
+      [60_000, 0.05],
+      [90_000, 0.075],
+      [120_000, 0.1],
+      [600_000, 0.5],
+    ])('bills %s ms of Voice 1.0 at $%s', (durationMs, expected) => {
+      expect(calculateXAIVoiceCost(durationMs, 'grok-voice-think-fast-1.0')).toBeCloseTo(
+        expected,
+        8,
+      );
+    });
+  });
+
+  describe('WebSocket requests', () => {
+    let handlers: Record<string, (...args: unknown[]) => unknown>;
+    let restoreEnv: () => void;
+    const send = vi.fn();
+    const close = vi.fn();
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(0);
+      restoreEnv = mockProcessEnv({ XAI_API_BASE_URL: undefined });
+      handlers = {};
+      send.mockReset();
+      close.mockReset();
+      vi.mocked(WebSocket).mockImplementation(function () {
+        return {
+          on: (event: string, handler: (...args: unknown[]) => unknown) => {
+            handlers[event] = handler;
+          },
+          send,
+          close,
+        } as unknown as WebSocket;
+      });
     });
 
-    it('calculates cost correctly for 2 minutes', () => {
-      const cost = calculateXAIVoiceCost(120000);
-      expect(cost).toBe(0.1);
+    afterEach(() => {
+      restoreEnv();
+      vi.useRealTimers();
     });
 
-    it('calculates cost correctly for 30 seconds', () => {
-      const cost = calculateXAIVoiceCost(30000);
-      expect(cost).toBe(0.025);
+    const receive = async (event: Record<string, unknown>) => {
+      await handlers.message(Buffer.from(JSON.stringify(event)));
+    };
+    const sentEvents = () => send.mock.calls.map(([event]) => JSON.parse(event));
+    const start = async (config: XAIVoiceOptions = {}, model = XAI_VOICE_DEFAULT_MODEL) => {
+      const provider = createXAIVoiceProvider(`xai:voice:${model}`, {
+        config: { apiKey: mockApiKey, ...config },
+      });
+      const response = provider.callApi('Hello');
+      await handlers.open();
+      return { response };
+    };
+
+    it('sends the current default model, session settings, and text input', async () => {
+      const { response } = await start({}, '');
+
+      expect(WebSocket).toHaveBeenCalledWith(
+        'wss://api.x.ai/v1/realtime?model=grok-voice-think-fast-2.0',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: `Bearer ${mockApiKey}` }),
+        }),
+      );
+      expect(sentEvents()).toEqual([
+        expect.objectContaining({
+          type: 'session.update',
+          session: expect.objectContaining({
+            voice: 'ara',
+            turn_detection: { type: 'server_vad' },
+          }),
+        }),
+        expect.objectContaining({
+          type: 'conversation.item.create',
+          item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Hello' }] },
+        }),
+        expect.objectContaining({ type: 'response.create' }),
+      ]);
+      await receive({ type: 'response.output_audio_transcript.delta', delta: 'Hello back' });
+      await receive({ type: 'response.done' });
+      expect(await response).toMatchObject({ output: 'Hello back', cost: 0.004 });
+      expect(close).toHaveBeenCalledOnce();
     });
 
-    it('calculates cost correctly for 0 duration', () => {
-      const cost = calculateXAIVoiceCost(0);
-      expect(cost).toBe(0);
+    it.each(['response.output_audio', 'response.audio'])(
+      'preserves the transcript for %s events',
+      async (eventPrefix) => {
+        const { response } = await start();
+        await receive({
+          type: `${eventPrefix}.delta`,
+          delta: Buffer.alloc(48000).toString('base64'),
+        });
+        await receive({ type: `${eventPrefix}_transcript.delta`, delta: 'Hello ' });
+        await receive({ type: `${eventPrefix}_transcript.delta`, delta: 'back' });
+        await receive({ type: `${eventPrefix}_transcript.done`, transcript: 'Hello back' });
+        await receive({ type: `${eventPrefix}.done` });
+        await receive({ type: 'response.done' });
+
+        expect(await response).toMatchObject({
+          output: 'Hello back',
+          audio: { transcript: 'Hello back', format: 'wav' },
+        });
+      },
+    );
+
+    it.each([
+      ['Rex', 'rex'],
+      ['rex', 'rex'],
+      ['voice_custom_123', 'voice_custom_123'],
+    ])('sends voice %s, reasoning, and manual turn detection', async (voice, expected) => {
+      const { response } = await start({
+        voice,
+        reasoning: { effort: 'high' },
+        turn_detection: null,
+      });
+      expect(sentEvents()[0].session).toMatchObject({
+        voice: expected,
+        reasoning: { effort: 'high' },
+        turn_detection: null,
+      });
+      await receive({ type: 'response.done' });
+      await response;
     });
 
-    it('calculates cost correctly for fractional minutes', () => {
-      const cost = calculateXAIVoiceCost(90000);
-      expect(cost).toBeCloseTo(0.075, 4);
+    it.each([
+      { format: undefined, bytes: 48000 },
+      { format: { type: 'audio/pcm' as const, rate: 16000 as const }, bytes: 32000 },
+      { format: { type: 'audio/pcmu' as const }, bytes: 8000 },
+      { format: { type: 'audio/pcma' as const }, bytes: 8000 },
+    ])('bills generated audio duration for $format', async ({ format, bytes }) => {
+      const { response } = await start(format ? { audio: { output: { format } } } : {});
+      vi.setSystemTime(20000);
+      for (const type of ['response.output_audio.delta', 'response.audio.delta']) {
+        await receive({ type, delta: Buffer.alloc(bytes / 2).toString('base64') });
+      }
+      await receive({ type: 'response.done' });
+
+      const result = await response;
+      expect(result.cost).toBeCloseTo(0.004 + 0.08 / 60, 8);
+      expect(result.metadata).toMatchObject({ durationMs: 20000, hasAudio: true });
     });
 
-    it('calculates cost correctly for 10 minutes', () => {
-      const cost = calculateXAIVoiceCost(600000);
-      expect(cost).toBe(0.5);
+    it.each([
+      { type: 'audio/pcmu' as const, samples: [-32124, 32124] },
+      { type: 'audio/pcma' as const, samples: [-5504, 5504] },
+    ])('returns playable PCM WAV from $type output', async ({ type, samples }) => {
+      const { response } = await start({ audio: { output: { format: { type } } } });
+      await receive({
+        type: 'response.audio.delta',
+        delta: Buffer.from([0, 128]).toString('base64'),
+      });
+      await receive({ type: 'response.done' });
+
+      const result = await response;
+      expect(result.audio?.format).toBe('wav');
+      const wav = Buffer.from(result.audio!.data!, 'base64');
+      expect(wav.toString('ascii', 0, 4)).toBe('RIFF');
+      expect(wav.readUInt16LE(20)).toBe(1);
+      expect(wav.readUInt32LE(24)).toBe(8000);
+      expect(wav.readUInt16LE(34)).toBe(16);
+      expect(wav.readUInt32LE(40)).toBe(4);
+      expect([wav.readInt16LE(44), wav.readInt16LE(46)]).toEqual(samples);
+    });
+
+    it('retains connection-duration pricing for Voice 1.0', async () => {
+      const { response } = await start({}, 'grok-voice-think-fast-1.0');
+      vi.setSystemTime(15000);
+      await receive({ type: 'response.done' });
+
+      expect((await response).cost).toBeCloseTo(0.0125, 8);
+    });
+
+    it('does not charge a second text fee for a tool result', async () => {
+      const handler = vi.fn().mockResolvedValue('Sunny');
+      const { response } = await start({ functionCallHandler: handler });
+      await receive({
+        type: 'response.function_call_arguments.done',
+        name: 'weather',
+        call_id: 'call-1',
+        arguments: '{"city":"Paris"}',
+      });
+      await receive({ type: 'response.done' });
+      expect(handler).toHaveBeenCalledWith('weather', '{"city":"Paris"}');
+      expect(sentEvents()).toContainEqual(
+        expect.objectContaining({
+          type: 'conversation.item.create',
+          item: { type: 'function_call_output', call_id: 'call-1', output: 'Sunny' },
+        }),
+      );
+      await receive({ type: 'response.output_audio_transcript.delta', delta: 'It is sunny.' });
+      await receive({ type: 'response.done' });
+
+      expect(await response).toMatchObject({
+        output: {
+          text: 'It is sunny.',
+          functionCalls: [{ name: 'weather', arguments: { city: 'Paris' }, result: 'Sunny' }],
+        },
+        cost: 0.004,
+      });
+    });
+
+    it('returns provider errors without an estimated cost', async () => {
+      const { response } = await start();
+      await receive({ type: 'error', error: { message: 'Unsupported reasoning effort' } });
+
+      expect(await response).toEqual({ error: 'xAI Voice error: Unsupported reasoning effort' });
+      expect(close).toHaveBeenCalledOnce();
     });
   });
 
@@ -326,7 +519,7 @@ describe('XAI Voice Provider', () => {
 
     it('uses default model when not specified', () => {
       const provider = createXAIVoiceProvider('xai:voice:');
-      expect(provider.id()).toBe('xai:voice:grok-voice-think-fast-1.0');
+      expect(provider.id()).toBe('xai:voice:grok-voice-think-fast-2.0');
     });
 
     it('passes through options correctly', () => {
