@@ -57,6 +57,13 @@ describe('real cloud SDK credential construction without authentication calls', 
     'vertex:embedding:fixture',
     'vertex:embeddings:fixture',
     'vertex:video:fixture',
+    'vertex:claude-sonnet-4-5',
+    'vertex:chat:claude-sonnet-4-5',
+    'vertex:llama-3.3-70b-instruct-maas',
+    'vertex:chat-bison',
+    'vertex:unknown-model',
+    'vertex:gemini-omni-flash-preview',
+    'vertex:chat:gemini-omni-1.1-flash-preview',
   ])('retains suite ADC when an unrelated provider API key is present on %s', async (id) => {
     const dir = fs.mkdtempSync(path.join(fixtureTempRoot, 'promptfoo-oauth-route-'));
     const file = path.join(dir, 'adc.json');
@@ -91,7 +98,9 @@ describe('real cloud SDK credential construction without authentication calls', 
           headers: { authorization: 'Bearer fixture' },
         });
       } else {
-        const client = await Reflect.get(provider, 'getClientWithCredentials').call(provider, {});
+        const client = id.includes('gemini-omni')
+          ? (await GoogleAuthManager.getOAuthClient({ env: Reflect.get(provider, 'env') })).client
+          : await Reflect.get(provider, 'getClientWithCredentials').call(provider, {});
         expect(client).toBeInstanceOf(UserRefreshClient);
         expect(Reflect.get(client, '_clientId')).toBe('suite-id');
       }
@@ -99,6 +108,20 @@ describe('real cloud SDK credential construction without authentication calls', 
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it.each(['vertex:gemini-3.8-flash', 'vertex:chat:gemini-3.8-flash'])(
+    'keeps higher API keys preferred to lower ADC on express-capable %s',
+    async (id) => {
+      const provider = await loadApiProvider(id, {
+        env: { GOOGLE_APPLICATION_CREDENTIALS: 'lower-adc.json' },
+        options: { env: { GOOGLE_API_KEY: 'provider-key' } },
+      });
+      expect(Reflect.get(provider, 'env').GOOGLE_APPLICATION_CREDENTIALS).toBeUndefined();
+      expect(await Reflect.get(provider, 'getAuthHeaders').call(provider)).toMatchObject({
+        'x-goog-api-key': 'provider-key',
+      });
+    },
+  );
 
   it('constructs an explicit Azure service principal and preserves the default chain fallback', async () => {
     const credential = await createAzureCredential(

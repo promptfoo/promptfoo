@@ -146,6 +146,19 @@ describe('Google scoped ADC inputs', () => {
     });
     expect(GoogleAuth).toHaveBeenCalledTimes(2);
   });
+  it('keeps an empty provider project in the default-credential probe', async () => {
+    mockProcessEnv({ GOOGLE_CLOUD_PROJECT: 'host-project' });
+    await expect(
+      GoogleAuthManager.hasDefaultCredentials({
+        GOOGLE_APPLICATION_CREDENTIALS: 'scoped.json',
+        GOOGLE_CLOUD_PROJECT: '',
+      }),
+    ).resolves.toBe(true);
+    expect(GoogleAuth).toHaveBeenCalledWith(
+      expect.objectContaining({ keyFilename: 'scoped.json', projectId: '' }),
+    );
+  });
+
   it('rejects empty scoped ADC filenames before the SDK can discover lower credentials', async () => {
     mockProcessEnv({ GOOGLE_APPLICATION_CREDENTIALS: 'host.json' });
     await cliState.withEnv({ GOOGLE_APPLICATION_CREDENTIALS: 'suite.json' }, async () => {

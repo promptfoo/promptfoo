@@ -171,11 +171,17 @@ function getProviderEnvAliasGroups(providerPath: string): readonly (readonly str
     ];
   }
   if (providerPath.startsWith('vertex:')) {
+    const modelName = providerPath.replace(/^vertex:(?:chat:)?/, '');
+    const supportsApiKey =
+      !/^(?:live|embeddings?|video):/.test(modelName) &&
+      !modelName.includes('claude') &&
+      modelName.includes('gemini') &&
+      !['gemini-omni-flash-preview', 'gemini-omni-1.1-flash-preview'].includes(modelName);
     return [
-      // OAuth-only routes ignore API keys, so those keys must not discard ADC.
-      /^vertex:(?:live|embeddings?|video):/.test(providerPath)
-        ? ['GOOGLE_APPLICATION_CREDENTIALS']
-        : ['VERTEX_API_KEY', 'GOOGLE_API_KEY', 'GOOGLE_APPLICATION_CREDENTIALS'],
+      // Only Gemini chat supports express API keys; all other routes require OAuth.
+      supportsApiKey
+        ? ['VERTEX_API_KEY', 'GOOGLE_API_KEY', 'GOOGLE_APPLICATION_CREDENTIALS']
+        : ['GOOGLE_APPLICATION_CREDENTIALS'],
       ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'],
       ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION'],
     ];
