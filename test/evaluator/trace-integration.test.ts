@@ -783,7 +783,10 @@ describe('evaluator trace integration', () => {
         },
       });
 
-      await runEval(createRunOptions(provider, { abortSignal: controller.signal }));
+      // A canceled step now propagates the abort instead of recording an error row.
+      await expect(
+        runEval(createRunOptions(provider, { abortSignal: controller.signal })),
+      ).rejects.toThrow(/abort/i);
 
       expect(mockFetchTraceContext).not.toHaveBeenCalled();
     });
