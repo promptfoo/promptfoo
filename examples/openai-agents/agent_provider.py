@@ -54,6 +54,7 @@ ALLOWED_SKILL_COMMANDS = {
         "skills/discount-review/scripts/analyze_discount_policy.py",
         "skill_fixture/repo",
     ),
+    ("cat", "skills/discount-review/SKILL.md"),
     ("cat", "skill_fixture/repo/src/discount_policy.py"),
 }
 
@@ -119,6 +120,7 @@ class AirlineContext:
         flight_number: str | None = None,
         verified_confirmation_number: str | None = None,
         user_passenger_name: str | None = None,
+        authenticated_passenger_name: str | None = None,
         third_party_confirmation_number: str | None = None,
         pending_third_party_booking_change: bool = False,
     ) -> None:
@@ -129,6 +131,7 @@ class AirlineContext:
         self.flight_number = flight_number
         self.verified_confirmation_number = verified_confirmation_number
         self.user_passenger_name = user_passenger_name
+        self.authenticated_passenger_name = authenticated_passenger_name
         self.third_party_confirmation_number = third_party_confirmation_number
         self.pending_third_party_booking_change = pending_third_party_booking_change
 
@@ -141,6 +144,7 @@ class AirlineContext:
             "flight_number": self.flight_number,
             "verified_confirmation_number": self.verified_confirmation_number,
             "user_passenger_name": self.user_passenger_name,
+            "authenticated_passenger_name": self.authenticated_passenger_name,
             "third_party_confirmation_number": self.third_party_confirmation_number,
             "pending_third_party_booking_change": (
                 self.pending_third_party_booking_change
@@ -497,14 +501,14 @@ def update_seat(
             "was not found."
         )
     if (
-        not context.context.user_passenger_name
-        or not context.context.user_passenger_name.strip()
+        not context.context.authenticated_passenger_name
+        or not context.context.authenticated_passenger_name.strip()
     ):
         return (
             "Unable to update the seat because passenger identity could not be "
             "verified. The passenger must authenticate before requesting changes."
         )
-    if _normalize_name(context.context.user_passenger_name) != _normalize_name(
+    if _normalize_name(context.context.authenticated_passenger_name) != _normalize_name(
         reservation["passenger_name"]
     ):
         return (
@@ -783,6 +787,7 @@ def _build_context(vars_dict: dict[str, Any]) -> AirlineContext:
         flight_number=vars_dict.get("flight_number"),
         user_passenger_name=vars_dict.get("user_passenger_name")
         or vars_dict.get("passenger_name"),
+        authenticated_passenger_name=vars_dict.get("authenticated_passenger_name"),
         third_party_confirmation_number=vars_dict.get(
             "third_party_confirmation_number"
         ),
