@@ -181,6 +181,44 @@ describe('isGradingResult', () => {
     expect(isGradingResult(null)).toBe(false);
   });
 
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    'rejects nonfinite scores and metric weights: %s',
+    (value) => {
+      const result = { pass: true, score: 1, reason: '' };
+      expect(isGradingResult({ ...result, score: value })).toBe(false);
+      expect(isGradingResult({ ...result, namedScores: { quality: value } })).toBe(false);
+      expect(isGradingResult({ ...result, namedScoreWeights: { quality: value } })).toBe(false);
+      expect(
+        isGradingResult({
+          ...result,
+          componentResults: [{ ...result, componentResults: [{ ...result, score: value }] }],
+        }),
+      ).toBe(false);
+    },
+  );
+
+  it.each([-2, 0, 2])('accepts finite scores outside the usual 0–1 range: %s', (score) => {
+    expect(
+      isGradingResult({
+        pass: false,
+        score,
+        reason: '',
+        namedScores: { quality: score },
+        namedScoreWeights: { quality: 0 },
+        componentResults: [{ pass: true, score, reason: '' }],
+      }),
+    ).toBe(true);
+  });
+
+  it.each([null, [], { quality: '1' }, { quality: null }, { quality: undefined }])(
+    'rejects malformed named score and weight records: %j',
+    (value) => {
+      const result = { pass: true, score: 1, reason: '' };
+      expect(isGradingResult({ ...result, namedScores: value })).toBe(false);
+      expect(isGradingResult({ ...result, namedScoreWeights: value })).toBe(false);
+    },
+  );
+
   it('should return false for non-object', () => {
     expect(isGradingResult('not an object')).toBe(false);
     expect(isGradingResult(123)).toBe(false);

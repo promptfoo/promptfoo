@@ -846,6 +846,73 @@ describe('JavaScript file references', () => {
     },
   );
 
+  it.each([
+    '1 / 0',
+    '-1 / 0',
+    '0 / 0',
+    '({ pass: true, score: Infinity, reason: "Custom" })',
+    '({ pass: true, score: 1, reason: "Custom", namedScores: { quality: NaN } })',
+    '({ pass: true, score: 1, reason: "Custom", namedScoreWeights: { quality: Infinity } })',
+    '({ pass: true, score: 1, reason: "Custom", componentResults: [{ pass: true, score: Infinity, reason: "Nested" }] })',
+  ])('rejects nonfinite inline results: %s', async (value) => {
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: { type: 'javascript', value },
+      test: {},
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({ pass: false, score: 0 });
+    expect(result.reason).toContain('Custom function threw error:');
+    expect(result.reason).toContain('finite');
+    expect(result.namedScores).toBeUndefined();
+    expect(result.namedScoreWeights).toBeUndefined();
+    expect(result.componentResults).toBeUndefined();
+  });
+
+  it('rejects a nonfinite async function result before applying inverse logic', async () => {
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: { type: 'not-javascript', value: async () => Number.NaN },
+      test: {},
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({ pass: false, score: 0 });
+    expect(result.reason).toContain('finite');
+  });
+
+  it('rejects nonfinite metrics from a file assertion', async () => {
+    vi.mocked(path.resolve).mockReturnValue('/mocked/path/to/assert.js');
+    vi.mocked(path.extname).mockReturnValue('.js');
+    vi.mocked(isPackagePath).mockReturnValue(false);
+    vi.mocked(importModule).mockResolvedValue(
+      vi.fn(() => ({ pass: true, score: 1, reason: '', namedScores: { quality: Infinity } })),
+    );
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: { type: 'javascript', value: 'file:///path/to/assert.js' },
+      test: {},
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({ pass: false, score: 0 });
+    expect(result.reason).toContain('finite');
+    expect(result.namedScores).toBeUndefined();
+  });
+
+  it.each([-2, 2])('preserves finite numeric scores outside 0–1: %s', async (score) => {
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: { type: 'javascript', value: () => score },
+      test: {},
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({ pass: score > 0, score });
+  });
+
   it('should honor threshold when a direct function-valued javascript assertion returns a number', async () => {
     const output = 'Expected output';
     const assertion: Assertion = {

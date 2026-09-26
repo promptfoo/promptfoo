@@ -148,6 +148,24 @@ describe('runAssertions', () => {
     });
   });
 
+  it.each([false, true])(
+    'preserves empty-reason failures in assertion sets: %s',
+    async (nested) => {
+      const assertion = {
+        type: 'javascript' as const,
+        value: '({ pass: false, score: 0, reason: "" })',
+      };
+      const result = await runAssertions({
+        prompt: 'Some prompt',
+        test: { assert: nested ? [{ type: 'assert-set', assert: [assertion] }] : [assertion] },
+        providerResponse: { output: 'Test output' },
+      });
+
+      expect(result).toMatchObject({ pass: false, score: 0, reason: '' });
+      expect(result.componentResults?.every((component) => component.pass === false)).toBe(true);
+    },
+  );
+
   it('should handle output as an object', async () => {
     const output = { key: 'value' };
 

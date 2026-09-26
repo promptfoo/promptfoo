@@ -313,8 +313,9 @@ export class AssertionsResult {
 
     const score = this.totalWeight > 0 ? this.totalScore / this.totalWeight : 0;
 
-    let pass = !this.failedReason;
-    let reason = this.failedReason || 'All assertions passed';
+    // An empty explanation still records a failed assertion.
+    let pass = this.failedReason === undefined;
+    let reason = this.failedReason ?? 'All assertions passed';
 
     if (typeof this.threshold === 'number' && !Number.isNaN(this.threshold)) {
       // A numeric test threshold overrides the pass/fail status of individual assertions.

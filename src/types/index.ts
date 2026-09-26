@@ -588,18 +588,29 @@ export interface GradingResult {
   };
 }
 
+function isFiniteNumberRecord(value: unknown): value is Record<string, number> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.values(value).every((entry) => typeof entry === 'number' && Number.isFinite(entry))
+  );
+}
+
 export function isGradingResult(result: any): result is GradingResult {
   return (
     typeof result === 'object' &&
     result !== null &&
     typeof result.pass === 'boolean' &&
     typeof result.score === 'number' &&
+    Number.isFinite(result.score) &&
     typeof result.reason === 'string' &&
-    (typeof result.namedScores === 'undefined' || typeof result.namedScores === 'object') &&
+    (typeof result.namedScores === 'undefined' || isFiniteNumberRecord(result.namedScores)) &&
     (typeof result.namedScoreWeights === 'undefined' ||
-      typeof result.namedScoreWeights === 'object') &&
+      isFiniteNumberRecord(result.namedScoreWeights)) &&
     (typeof result.tokensUsed === 'undefined' || typeof result.tokensUsed === 'object') &&
-    (typeof result.componentResults === 'undefined' || Array.isArray(result.componentResults)) &&
+    (typeof result.componentResults === 'undefined' ||
+      (Array.isArray(result.componentResults) && result.componentResults.every(isGradingResult))) &&
     (typeof result.assertion === 'undefined' ||
       result.assertion === null ||
       typeof result.assertion === 'object') &&

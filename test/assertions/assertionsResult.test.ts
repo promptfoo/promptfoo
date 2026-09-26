@@ -315,6 +315,64 @@ describe('AssertionsResult', () => {
       });
     });
 
+    it.each([[''], ['Explained failure', ''], ['', 'Explained failure']])(
+      'fails regardless of the failure explanations: %j',
+      async (...reasons) => {
+        const assertionsResult = new AssertionsResult();
+        reasons.forEach((reason, index) => {
+          assertionsResult.addResult({ index, result: { pass: false, score: 0, reason } });
+        });
+        assertionsResult.addResult({
+          index: reasons.length,
+          result: { pass: true, score: 1, reason: 'Passed' },
+        });
+
+        expect(await assertionsResult.testResult()).toMatchObject({
+          pass: false,
+          reason: reasons.at(-1),
+        });
+      },
+    );
+
+    it('allows a threshold to override a failure with an empty explanation', async () => {
+      const assertionsResult = new AssertionsResult({ threshold: 0 });
+      assertionsResult.addResult({ index: 0, result: { pass: false, score: 0, reason: '' } });
+
+      expect(await assertionsResult.testResult()).toMatchObject({
+        pass: true,
+        score: 0,
+        reason: 'Aggregate score 0.00 ≥ 0 threshold',
+      });
+    });
+
+    it('allows custom scoring to override a failure with an empty explanation', async () => {
+      const assertionsResult = new AssertionsResult();
+      assertionsResult.addResult({ index: 0, result: { pass: false, score: 0, reason: '' } });
+
+      expect(
+        await assertionsResult.testResult(() => ({ pass: true, score: 2, reason: 'Custom' })),
+      ).toMatchObject({ pass: true, score: 2, reason: 'Custom' });
+    });
+
+    it.each([
+      { score: Number.POSITIVE_INFINITY },
+      { namedScores: { quality: Number.NaN } },
+      { namedScoreWeights: { quality: Number.NEGATIVE_INFINITY } },
+    ])('rejects nonfinite custom scoring results: %j', async (invalidFields) => {
+      const assertionsResult = new AssertionsResult();
+      const result = await assertionsResult.testResult(() => ({
+        pass: true,
+        score: 1,
+        reason: 'Custom',
+        ...invalidFields,
+      }));
+
+      expect(result).toMatchObject({ pass: false, score: 0 });
+      expect(result.reason).toContain('Scoring function error:');
+      expect(result.namedScores).toEqual({});
+      expect(result.namedScoreWeights).toBeUndefined();
+    });
+
     it('should calculate final result with threshold', async () => {
       const assertionsResult = new AssertionsResult({ threshold: 0.7 });
 
@@ -736,30 +794,33 @@ describe('AssertionsResult', () => {
       expect(result.reason).toBe('Scoring function error: Scoring failed');
     });
 
-    it('should handle failed content safety checks', async () => {
-      const assertionsResult = new AssertionsResult({});
+    it.each(['Failed safety check', ''])(
+      'should handle failed content safety checks: %j',
+      async (reason) => {
+        const assertionsResult = new AssertionsResult({});
 
-      assertionsResult.addResult({
-        index: 0,
-        result: {
-          pass: false,
-          score: 0,
-          reason: 'Failed safety check',
-          assertion: {
-            type: 'guardrails',
-            config: {
-              purpose: 'redteam',
+        assertionsResult.addResult({
+          index: 0,
+          result: {
+            pass: false,
+            score: 0,
+            reason,
+            assertion: {
+              type: 'guardrails',
+              config: {
+                purpose: 'redteam',
+              },
             },
+            tokensUsed: DEFAULT_TOKENS_USED,
           },
-          tokensUsed: DEFAULT_TOKENS_USED,
-        },
-      });
+        });
 
-      const result = await assertionsResult.testResult();
+        const result = await assertionsResult.testResult();
 
-      expect(result.pass).toBe(true);
-      expect(result.reason).toBe(GUARDRAIL_BLOCKED_REASON);
-    });
+        expect(result.pass).toBe(true);
+        expect(result.reason).toBe(GUARDRAIL_BLOCKED_REASON);
+      },
+    );
   });
 
   describe('namedScores weight normalization', () => {

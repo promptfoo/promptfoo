@@ -104,11 +104,15 @@ export function buildFunctionBody(code: string): string {
 
 const validateResult = async (result: unknown): Promise<boolean | number | GradingResult> => {
   result = await Promise.resolve(result);
-  if (typeof result === 'boolean' || typeof result === 'number' || isGradingResult(result)) {
+  if (
+    typeof result === 'boolean' ||
+    (typeof result === 'number' && Number.isFinite(result)) ||
+    isGradingResult(result)
+  ) {
     return result;
   } else {
     throw new Error(
-      `Custom function must return a boolean, number, or GradingResult object. Got type ${typeof result}: ${JSON.stringify(
+      `Custom function must return a boolean, a finite number, or a GradingResult object with finite scores and weights. Got type ${typeof result}: ${JSON.stringify(
         result,
       )}`,
     );
