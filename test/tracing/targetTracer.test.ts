@@ -33,8 +33,8 @@ vi.mock('@opentelemetry/api', async () => {
   };
 });
 
-vi.mock('../../src/tracing/spanRoles', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../src/tracing/spanRoles')>()),
+vi.mock('../../src/tracing/otelSdk', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/tracing/otelSdk')>()),
   extractTraceparentContext: mocks.extractTraceparentContext,
 }));
 

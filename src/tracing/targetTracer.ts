@@ -13,8 +13,8 @@ import {
   sanitizeBody,
   withGenAISpan,
 } from './genaiTracer';
+import { extractTraceparentContext } from './otelSdk';
 import {
-  extractTraceparentContext,
   getActiveTraceparent,
   type PromptfooSpanRole,
   SPAN_ROLE_ATTRIBUTE,

@@ -8,8 +8,8 @@ import {
   trace,
 } from '@opentelemetry/api';
 import logger from '../logger';
-import { getOtelTracer } from './otelSdk';
-import { extractTraceparentContext, getActiveSpanRole, SPAN_ROLE_ATTRIBUTE } from './spanRoles';
+import { extractTraceparentContext, getOtelTracer } from './otelSdk';
+import { getActiveSpanRole, SPAN_ROLE_ATTRIBUTE } from './spanRoles';
 
 import type { CallApiContextParams, ProviderResponse } from '../types/index';
 import type { TokenUsage } from '../types/shared';

@@ -5,9 +5,11 @@ import {
   createContextKey,
   DiagConsoleLogger,
   DiagLogLevel,
+  defaultTextMapGetter,
   diag,
   ProxyTracerProvider,
   propagation,
+  ROOT_CONTEXT,
   trace,
 } from '@opentelemetry/api';
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
@@ -23,6 +25,13 @@ import type { Tracer, TracerProvider } from '@opentelemetry/api';
 import type { SpanProcessor } from '@opentelemetry/sdk-trace-base';
 
 import type { OtelConfig } from './otelConfig';
+
+const traceContextPropagator = new W3CTraceContextPropagator();
+
+/** Explicit traceparent values use W3C format independently of the host's propagator. */
+export function extractTraceparentContext(traceparent: string) {
+  return traceContextPropagator.extract(ROOT_CONTEXT, { traceparent }, defaultTextMapGetter);
+}
 
 interface OtelScope {
   provider?: NodeTracerProvider;
