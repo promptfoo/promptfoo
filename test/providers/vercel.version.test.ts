@@ -13,7 +13,7 @@ vi.mock('ai', () => ({ createGateway }));
 vi.mock('../../src/cache', () => ({ getCache: vi.fn(), isCacheEnabled: () => false }));
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  createGateway.mockReset();
 });
 afterEach(() => {
   metadata.version = '6.0.277';
