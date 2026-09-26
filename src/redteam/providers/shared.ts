@@ -29,7 +29,7 @@ import {
 } from '../../types/index';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
-import { sleep } from '../../util/time';
+import { sleep, sleepWithAbort } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import {
   accumulateGradingResponseTokenUsage,
@@ -484,27 +484,83 @@ function getTargetPromptMaxCharsPerMessage(context?: CallApiContextParams): numb
   return configuredLimit;
 }
 
-/** Invoke a red-team target with the same tracing behavior across every strategy. */
+const targetCallQueues = new WeakMap<object, WeakMap<ApiProvider, Promise<void>>>();
+
+function targetAbortError(): DOMException {
+  return new DOMException('Target call cancelled', 'AbortError');
+}
+
+function waitForTargetCall(
+  result: Promise<ProviderResponse>,
+  signal?: AbortSignal,
+): Promise<ProviderResponse> {
+  if (!signal) {
+    return result;
+  }
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(targetAbortError());
+    if (signal.aborted) {
+      onAbort();
+    } else {
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+    result
+      .then(resolve, (error) => reject(signal.aborted ? targetAbortError() : error))
+      .finally(() => signal.removeEventListener('abort', onAbort));
+  });
+}
+
+/** Invoke a red-team target with shared tracing, pacing, and cancellation behavior. */
 export async function callTargetProvider(
   targetProvider: ApiProvider,
   targetPrompt: string,
   context?: CallApiContextParams,
   options?: CallApiOptionsParams,
 ): Promise<ProviderResponse> {
-  const tracingContext = getProviderCallTracingContext();
-  const response = tracingContext
-    ? await tracingContext.withProviderSpan(
-        { provider: targetProvider, callContext: context },
-        async (callContext) => targetProvider.callApi(targetPrompt, callContext, options),
-      )
-    : await targetProvider.callApi(targetPrompt, context, options);
+  const executionContext = getProviderCallExecutionContext();
+  const signal = options?.abortSignal ?? executionContext?.abortSignal;
   const delay = getProviderDelay(targetProvider);
   const handlesDelay = targetProvider.handlesOwnDelay && targetProvider.delay != null;
-  if (!response.cached && !handlesDelay && delay && delay > 0) {
-    logger.debug(`Sleeping for ${delay}ms`);
-    await sleep(delay);
+  const invoke = async () => {
+    if (signal?.aborted) {
+      throw targetAbortError();
+    }
+    const tracingContext = getProviderCallTracingContext();
+    const response = tracingContext
+      ? await tracingContext.withProviderSpan(
+          { provider: targetProvider, callContext: context },
+          async (callContext) => targetProvider.callApi(targetPrompt, callContext, options),
+        )
+      : await targetProvider.callApi(targetPrompt, context, options);
+    if (!response.cached && !handlesDelay && delay && delay > 0) {
+      logger.debug(`Sleeping for ${delay}ms`);
+      await (signal ? sleepWithAbort(delay, signal) : sleep(delay));
+    }
+    return response;
+  };
+
+  if (!delay || delay <= 0) {
+    return waitForTargetCall(invoke(), signal);
   }
-  return response;
+
+  const scope = cliState.envScope ?? executionContext?.rateLimitRegistry ?? targetProvider;
+  let queues = targetCallQueues.get(scope);
+  if (!queues) {
+    queues = new WeakMap();
+    targetCallQueues.set(scope, queues);
+  }
+  const result = (queues.get(targetProvider) ?? Promise.resolve()).then(invoke);
+  const tail = result.then(
+    () => {},
+    () => {},
+  );
+  queues.set(targetProvider, tail);
+  void tail.then(() => {
+    if (queues.get(targetProvider) === tail) {
+      queues.delete(targetProvider);
+    }
+  });
+  return waitForTargetCall(result, signal);
 }
 
 /** Keep strategy judge calls beneath grader-owned spans without changing their requests. */
