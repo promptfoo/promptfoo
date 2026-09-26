@@ -1179,7 +1179,7 @@ describe('auth command', () => {
         ?.commands.find((cmd) => cmd.name() === 'logout');
       await logoutCmd?.parseAsync(['node', 'test']);
 
-      expect(cloudConfig.delete).not.toHaveBeenCalled();
+      expect(cloudConfig.delete).toHaveBeenCalledOnce();
       expect(setUserEmail).not.toHaveBeenCalled();
       expect(logger.info).toHaveBeenCalledWith(
         expect.stringContaining("You're already logged out"),

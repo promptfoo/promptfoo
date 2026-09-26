@@ -156,11 +156,12 @@ export function authCommand(program: Command) {
       try {
         const email = getUserEmail();
         const apiKey = cloudConfig.getApiKey();
+        // Clear remembered context even if an environment credential was already removed.
+        await cloudConfig.delete();
         if (!email && !apiKey) {
           logger.info(chalk.yellow("You're already logged out - no active session to terminate"));
           return;
         }
-        await cloudConfig.delete();
         if (cloudConfig.isEnabled()) {
           logger.warn(
             'Saved credentials cleared. PROMPTFOO_API_KEY still provides authentication; unset it to log out completely.',
