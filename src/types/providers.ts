@@ -128,6 +128,8 @@ export interface ApiProvider extends MinimalApiProvider {
   delay?: number;
   /** True when callApi applies delay itself and the evaluator should not wait again. */
   handlesOwnDelay?: boolean;
+  /** Retry individual requests internally; the scheduler must not replay the whole call. */
+  handlesOwnRetries?: boolean;
   getSessionId?: () => string;
   /** Native audio input content format accepted by this provider and its configured model. */
   getAudioInputFormat?: () => 'openai' | 'google' | undefined;

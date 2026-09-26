@@ -77,11 +77,11 @@ export class RateLimitRegistry extends EventEmitter {
         getHeaders: options?.getHeaders,
         isRateLimited: options?.isRateLimited,
         getRetryAfter: options?.getRetryAfter,
-        maxRetriesOverride: providerMaxRetries,
+        maxRetriesOverride: provider.handlesOwnRetries ? 0 : providerMaxRetries,
       });
 
     try {
-      const result = await withFetchRetryContext(providerMaxRetries, run, true);
+      const result = await withFetchRetryContext(providerMaxRetries, run);
 
       this.emit('request:completed', {
         rateLimitKey,

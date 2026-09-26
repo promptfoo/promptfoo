@@ -13,7 +13,6 @@ import cliState from '../../cliState';
 import { getEnvOverrides, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { isFetchRetryManaged } from '../../util/fetch/retryContext';
 import { getConfiguredTracingExport } from '../tracing';
 import {
   loadAgentDefinition,
@@ -39,23 +38,6 @@ import type {
 import type { OpenAiAgentsSessionClientFactory } from './agents-loader';
 import type { OpenAiAgentsOptions, OpenAiAgentsSessionFactory } from './agents-types';
 
-/** Owned session clients can be reused by direct calls and scheduler-managed calls. */
-class AgentsOpenAIClient extends OpenAI {
-  private withRetryPolicy(options: Parameters<OpenAI['request']>[0]) {
-    return Promise.resolve(options).then((resolved) => ({
-      ...resolved,
-      maxRetries: isFetchRetryManaged() ? 0 : (resolved.maxRetries ?? this.maxRetries),
-    }));
-  }
-
-  override request<Rsp>(...args: Parameters<OpenAI['request']>) {
-    return super.request<Rsp>(this.withRetryPolicy(args[0]), args[1]);
-  }
-
-  override requestAPIList: OpenAI['requestAPIList'] = (Page, options) =>
-    super.requestAPIList(Page, this.withRetryPolicy(options));
-}
-
 /**
  * OpenAI Agents Provider
  *
@@ -63,6 +45,7 @@ class AgentsOpenAIClient extends OpenAI {
  * Supports multi-turn agent workflows with tools, handoffs, and tracing.
  */
 export class OpenAiAgentsProvider extends OpenAiGenericProvider {
+  readonly handlesOwnRetries = true;
   private agentConfig: OpenAiAgentsOptions;
   private agent?: Agent<any, any>;
   private readonly defaultSessionState: { session?: Session; initialization?: Promise<Session> } =
@@ -212,15 +195,18 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
   ): Promise<ProviderResponse> {
     let modelProvider: OpenAIProvider | undefined;
     let scopedClient: ReturnType<OpenAiAgentsSessionClientFactory> | undefined;
-    const getClient: OpenAiAgentsSessionClientFactory | undefined =
-      this.hasScopedConnectionSettings()
-        ? ({ apiKey, baseURL, organization, project } = {}) => {
-            const overrides = { apiKey, baseURL, organization, project };
-            return Object.values(overrides).some((value) => value !== undefined)
-              ? this.createScopedClient(overrides)
-              : (scopedClient ??= this.createScopedClient());
-          }
-        : undefined;
+    const useScopedModel = this.hasScopedConnectionSettings();
+    const getClient: OpenAiAgentsSessionClientFactory = ({
+      apiKey,
+      baseURL,
+      organization,
+      project,
+    } = {}) => {
+      const overrides = { apiKey, baseURL, organization, project };
+      return Object.values(overrides).some((value) => value !== undefined)
+        ? this.createScopedClient(overrides)
+        : (scopedClient ??= this.createScopedClient());
+    };
     try {
       const maxTurns = this.agentConfig.maxTurns === undefined ? 10 : this.agentConfig.maxTurns;
 
@@ -252,7 +238,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       }
 
       const runner = new Runner({
-        ...(getClient && {
+        ...(useScopedModel && {
           modelProvider: {
             getModel: async (name) => {
               // SDK Model objects bypass this factory and retain their own clients.
@@ -320,13 +306,14 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     overrides: Parameters<OpenAiAgentsSessionClientFactory>[0] = {},
   ): ReturnType<OpenAiAgentsSessionClientFactory> {
     const separateEndpoint = overrides.baseURL !== undefined;
+    const separateCredentials = separateEndpoint || overrides.apiKey !== undefined;
     const apiKey = overrides.apiKey ?? (separateEndpoint ? undefined : this.getApiKey());
     const keyless = !separateEndpoint && !apiKey && !this.requiresApiKey();
     const config = {
       ...this.config,
       apiHost: undefined,
       apiBaseUrl: overrides.baseURL ?? this.getApiUrl(),
-      organization: overrides.organization ?? (separateEndpoint ? '' : this.config.organization),
+      organization: overrides.organization ?? (separateCredentials ? '' : this.config.organization),
       // Explicit session connection settings must not inherit model gateway credentials.
       headers: Object.values(overrides).some((value) => value !== undefined)
         ? {}
@@ -337,14 +324,14 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     const query = apiUrl.search.slice(1);
     apiUrl.search = '';
     apiUrl.hash = '';
-    return new AgentsOpenAIClient({
+    return new OpenAI({
       // The SDK requires a constructor key; the null header keeps it off the wire.
       apiKey: keyless ? 'promptfoo-no-auth' : (apiKey ?? null),
       adminAPIKey: null,
       maxRetries: this.config.maxRetries,
       baseURL: apiUrl.toString(),
       organization,
-      project: overrides.project ?? (separateEndpoint ? null : undefined),
+      project: overrides.project ?? (separateCredentials ? null : undefined),
       defaultHeaders: {
         ...(keyless && { Authorization: null }),
         ...(organization === '' && { 'OpenAI-Organization': null }),

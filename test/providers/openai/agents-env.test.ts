@@ -4,10 +4,12 @@ import {
   OpenAIProvider,
   setDefaultModelProvider,
   setTracingDisabled,
+  tool,
   Usage,
 } from '@openai/agents';
 import OpenAI from 'openai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import cliState from '../../../src/cliState';
 import { loadApiProvider } from '../../../src/providers/index';
 import { OpenAiAgentsProvider } from '../../../src/providers/openai/agents';
@@ -48,6 +50,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   restoreEnv();
+  vi.unstubAllGlobals();
   setDefaultModelProvider(new OpenAIProvider());
   vi.restoreAllMocks();
   vi.resetAllMocks();
@@ -512,6 +515,128 @@ describe('Agents SDK scoped client', () => {
     },
   );
 
+  it('isolates metadata when a session supplies only its own key', async () => {
+    mockProcessEnv({ OPENAI_PROJECT_ID: 'host-project', OPENAI_ORGANIZATION: 'host-org' });
+    const calls: { url: string; headers: Headers }[] = [];
+    vi.mocked(fetchWithProxy).mockImplementation(async (input, options) => {
+      calls.push({ url: String(input), headers: new Headers(options?.headers) });
+      return String(input).includes('/items')
+        ? Response.json({ data: [], object: 'list', has_more: false })
+        : Response.json(response);
+    });
+    await provider({
+      apiKey: 'model-key',
+      organization: 'model-org',
+      session: {
+        type: 'openai-conversations',
+        conversationId: 'conv_fixture',
+        apiKey: 'session-key',
+      },
+    }).callApi('hello');
+    const headers = calls.find((call) => call.url.includes('/items'))!.headers;
+    expect(headers.get('authorization')).toBe('Bearer session-key');
+    expect(headers.get('openai-organization')).toBeNull();
+    expect(headers.get('openai-project')).toBeNull();
+    expect(
+      calls.find((call) => call.url.endsWith('/responses'))!.headers.get('openai-organization'),
+    ).toBe('model-org');
+  });
+
+  it('routes session-only settings through Promptfoo without replacing the default model', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Unscoped session request')));
+    const custom = new OpenAIProvider({ apiKey: 'sdk-model-key' });
+    const getResponse = vi.fn(async () => ({
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          status: 'completed',
+          content: [{ type: 'output_text', text: 'custom model' }],
+        },
+      ],
+      usage: new Usage(),
+      responseId: 'resp_custom',
+    }));
+    vi.spyOn(custom, 'getModel').mockResolvedValue({
+      getResponse,
+      getStreamedResponse: vi.fn(),
+    } as unknown as Model);
+    setDefaultModelProvider(custom);
+    vi.mocked(fetchWithProxy).mockImplementation(async () =>
+      Response.json({ data: [], object: 'list', has_more: false }),
+    );
+    const result = await provider({
+      session: {
+        type: 'openai-conversations',
+        conversationId: 'conv_fixture',
+        apiKey: 'session-key',
+        baseURL: 'https://session.example.invalid/v1',
+      },
+    }).callApi('hello');
+    expect(result.output).toBe('custom model');
+    expect(getResponse).toHaveBeenCalledOnce();
+    expect(fetchWithProxy).toHaveBeenCalled();
+    for (const [url, options] of vi.mocked(fetchWithProxy).mock.calls) {
+      expect(String(url)).toContain('https://session.example.invalid/v1/conversations/');
+      expect(new Headers(options?.headers).get('authorization')).toBe('Bearer session-key');
+    }
+    vi.unstubAllGlobals();
+  });
+
+  it('retries a failed model request without replaying completed tool work', async () => {
+    const execute = vi.fn(async () => 'recorded');
+    const agent = new Agent({
+      name: 'fixture',
+      model: 'gpt-4.1-mini',
+      tools: [
+        tool({
+          name: 'record',
+          description: 'Record a fixture counter',
+          parameters: z.object({}),
+          execute,
+        }),
+      ],
+    });
+    const target = provider({ agent, apiKey: 'fixture-key', maxRetries: 1 });
+    const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+    vi.mocked(fetchWithProxy).mockImplementation(async (_input, options) => {
+      const body = JSON.parse(options?.body as string);
+      const hasToolResult = body.input.some(
+        (item: { type: string }) => item.type === 'function_call_output',
+      );
+      return hasToolResult
+        ? Response.json(
+            { error: { message: 'fixture transient' } },
+            { status: 503, headers: { 'retry-after-ms': '1' } },
+          )
+        : Response.json({
+            ...response,
+            output: [
+              {
+                type: 'function_call',
+                id: 'fc_fixture',
+                call_id: 'call_fixture',
+                name: 'record',
+                arguments: '{}',
+                status: 'completed',
+              },
+            ],
+          });
+    });
+    try {
+      await expect(
+        registry.execute(target, () => target.callApi('hello'), {
+          isRateLimited: (_result, error) => !!error,
+          getRetryAfter: () => 1,
+        }),
+      ).rejects.toThrow('fixture transient');
+      expect(execute).toHaveBeenCalledOnce();
+      expect(fetchWithProxy).toHaveBeenCalledTimes(3);
+    } finally {
+      registry.dispose();
+    }
+  });
+
   it('preserves an SDK request-specific retry override outside the scheduler', async () => {
     const target = provider({ apiKey: 'fixture-key', maxRetries: 2 });
     const client = Reflect.get(target, 'createScopedClient').call(target) as OpenAI;
@@ -566,7 +691,7 @@ describe('Agents SDK scoped client', () => {
   });
 
   it.each([false, true])(
-    'keeps cached session retry policy current with scheduler disabled=%s',
+    'retries cached session requests individually with scheduler disabled=%s',
     async (disabled) => {
       await cliState.withEnv(
         { PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER: String(disabled) },
@@ -600,7 +725,7 @@ describe('Agents SDK scoped client', () => {
                   ? registry.execute(target, invoke, { isRateLimited: () => false })
                   : invoke(),
               ).rejects.toThrow('fixture terminal');
-              expect(fetchWithProxy).toHaveBeenCalledTimes(managed && !disabled ? 1 : 3);
+              expect(fetchWithProxy).toHaveBeenCalledTimes(3);
             }
           } finally {
             registry.dispose();
