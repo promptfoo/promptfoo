@@ -217,7 +217,7 @@ describe('invocation-scoped cache settings', () => {
     } as never);
     await cliState.withEnv(disk(path.join(tempDir, 'provider')), async () => {
       await provider.callApi('same prompt');
-      await cliState.withEnv(memory, () => cache.clearCache());
+      await cliState.withEnv(memory, () => cache.getCache().clear());
       expect(await provider.callApi('same prompt')).toMatchObject({
         cached: true,
         output: 'fixture',
@@ -301,7 +301,7 @@ describe('invocation-scoped cache settings', () => {
         expect(cache.claimCacheKeyOnce('usage')).toBe(true);
       });
     }
-    await cliState.withEnv(disk(paths[0]), () => cache.clearCache());
+    await cliState.withEnv(disk(paths[0]), () => cache.getCache().clear());
     await cliState.withEnv(disk(paths[0]), async () => {
       expect(await cache.getCache().get('key')).toBeUndefined();
       expect(cache.claimCacheKeyOnce('usage')).toBe(true);
@@ -312,7 +312,56 @@ describe('invocation-scoped cache settings', () => {
     });
   });
 
-  it('releases namespace wrappers for every TTL of only the cleared backend', async () => {
+  it('clears completed invocation caches through the public API', async () => {
+    const paths = [path.join(tempDir, 'first'), path.join(tempDir, 'second')];
+    for (const cachePath of paths) {
+      await cliState.withEnv(disk(cachePath), async () => {
+        await cache.getCache().set('key', cachePath);
+        expect(cache.claimCacheKeyOnce('usage')).toBe(true);
+      });
+    }
+    await cache.clearCache();
+    for (const cachePath of paths) {
+      await cliState.withEnv(disk(cachePath), async () => {
+        expect(await cache.getCache().get('key')).toBeUndefined();
+        expect(cache.claimCacheKeyOnce('usage')).toBe(true);
+      });
+    }
+  });
+
+  it('targets a custom cache path without relying on an active invocation', async () => {
+    const firstPath = path.join(tempDir, 'first');
+    const secondPath = path.join(tempDir, 'second');
+    for (const cachePath of [firstPath, secondPath]) {
+      await cliState.withEnv(disk(cachePath), () => cache.getCache().set('key', cachePath));
+    }
+    await cache.clearCache(firstPath);
+    expect(
+      await cliState.withEnv(disk(firstPath), () => cache.getCache().get('key')),
+    ).toBeUndefined();
+    expect(await cliState.withEnv(disk(secondPath), () => cache.getCache().get('key'))).toBe(
+      secondPath,
+    );
+  });
+
+  it('keeps retained disk writers shared after backend and TTL eviction', async () => {
+    const selected = disk(path.join(tempDir, 'retained'));
+    const retained = cliState.withEnv(selected, () => cache.getCache());
+    for (let index = 1; index <= 40; index++) {
+      cliState.withEnv({ ...selected, PROMPTFOO_CACHE_TTL: String(index) }, () => cache.getCache());
+      cliState.withEnv(disk(path.join(tempDir, `other-${index}`)), () => cache.getCache());
+    }
+    const returned = cliState.withEnv(selected, () => cache.getCache());
+    expect(returned.stores[0]).toBe(retained.stores[0]);
+    await Promise.all([retained.set('first', 'one'), returned.set('second', 'two')]);
+    const persisted = new Keyv({
+      store: new KeyvFile({ filename: path.join(selected.PROMPTFOO_CACHE_PATH, 'cache.json') }),
+    });
+    expect(await persisted.get('first')).toBe('one');
+    expect(await persisted.get('second')).toBe('two');
+  });
+
+  it('clears every TTL wrapper of the selected backend while preserving other stores', async () => {
     const firstEnv = disk(path.join(tempDir, 'first'));
     const secondEnv = disk(path.join(tempDir, 'second'));
     const namespaced = (env: typeof firstEnv, ttl: string) =>
@@ -325,11 +374,9 @@ describe('invocation-scoped cache settings', () => {
     await short.set('key', 'stale');
     await other.set('key', 'other backend');
 
-    await cliState.withEnv(firstEnv, () => cache.clearCache());
+    await cliState.withEnv(firstEnv, () => cache.getCache().clear());
 
-    expect(await namespaced(firstEnv, '1')).not.toBe(short);
-    expect(await namespaced(firstEnv, '10')).not.toBe(long);
-    expect(await namespaced(secondEnv, '1')).toBe(other);
+    expect(await long.get('key')).toBeUndefined();
     expect(await other.get('key')).toBe('other backend');
     // Existing callers can retain a wrapper and continue using the same store.
     expect(await short.get('key')).toBeUndefined();

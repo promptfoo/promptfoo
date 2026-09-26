@@ -64,6 +64,7 @@ vi.mock('cache-manager', () => ({
     const expiresAt = new Map<string, number>();
     const inflight = new Map<string, Promise<unknown>>();
     const memoryStore = {
+      opts: { store: cache },
       iterator: vi.fn().mockImplementation(async function* (namespace?: string) {
         const prefix = namespace ? `${namespace}:` : undefined;
         for (const [key, value] of cache.entries()) {
@@ -176,7 +177,9 @@ vi.mock('cache-manager', () => ({
 // Mock keyv and keyv-file with proper class constructors
 vi.mock('keyv', () => {
   return {
-    Keyv: class MockKeyv {},
+    Keyv: class MockKeyv {
+      constructor(public opts: { store?: object } = {}) {}
+    },
   };
 });
 

@@ -6,6 +6,7 @@ import path from 'path';
 import { createCache } from 'cache-manager';
 import { Keyv } from 'keyv';
 import { KeyvFile } from 'keyv-file';
+import { LRUCache } from 'lru-cache';
 import { getEnvBool, getEnvInt, getEnvString } from './envars';
 import logger from './logger';
 import { getRequestTimeoutMs } from './providers/shared';
@@ -31,13 +32,53 @@ import type { FetchOptions } from './util/fetch/types';
 interface CacheBackend {
   filePath?: string;
   clearGeneration: number;
-  instances: Map<number, Cache>;
+  instances: CacheRegistry<number, Cache>;
   claims: Set<string>;
   inflight: Map<string, Promise<string>>;
 }
 
-const cacheBackends = new Map<string, CacheBackend>();
-const namespacedCacheInstances = new WeakMap<Cache, Map<string, Cache>>();
+// Bound idle retention while preserving identity for callers that still hold a
+// cache. In particular, eviction must not create competing writers for one file.
+class CacheRegistry<Key extends string | number, Value extends object> {
+  private readonly retained: LRUCache<Key, Value>;
+  private readonly references = new Map<Key, WeakRef<Value>>();
+  private readonly finalizer = new FinalizationRegistry<Key>((key) => {
+    if (!this.references.get(key)?.deref()) {
+      this.references.delete(key);
+    }
+  });
+
+  constructor(max: number) {
+    this.retained = new LRUCache({ max });
+  }
+
+  get(key: Key): Value | undefined {
+    const value = this.retained.get(key) ?? this.references.get(key)?.deref();
+    if (value) {
+      this.retained.set(key, value);
+    }
+    return value;
+  }
+
+  set(key: Key, value: Value): void {
+    this.retained.set(key, value);
+    this.references.set(key, new WeakRef(value));
+    this.finalizer.register(value, key);
+  }
+
+  *values(): IterableIterator<Value> {
+    for (const reference of this.references.values()) {
+      const value = reference.deref();
+      if (value) {
+        yield value;
+      }
+    }
+  }
+}
+
+const cacheBackends = new CacheRegistry<string, CacheBackend>(32);
+// Pending store operations can outlive a temporary cache-manager handle.
+const storeOwners = new WeakMap<object, CacheBackend>();
 let nextCacheClearGeneration = 0;
 
 const cacheNamespaceStorage = new AsyncLocalStorage<{ namespace: string }>();
@@ -105,15 +146,20 @@ function resolveCachePath(cachePath: string): string {
   }
 }
 
-function getCacheBackend(cacheEnabled = getEffectiveCacheEnabled()): CacheBackend {
+function getCacheBackend(
+  cacheEnabled = getEffectiveCacheEnabled(),
+  cachePath?: string,
+): CacheBackend {
   const cacheType =
     getEnvString('PROMPTFOO_CACHE_TYPE') ||
     (getEnvString('NODE_ENV') === 'test' ? 'memory' : 'disk');
   const filePath =
-    cacheType === 'disk' && cacheEnabled
+    cachePath !== undefined || (cacheType === 'disk' && cacheEnabled)
       ? resolveCachePath(
           path.join(
-            getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache'),
+            cachePath ??
+              (getEnvString('PROMPTFOO_CACHE_PATH') ||
+                path.join(getConfigDirectoryPath(), 'cache')),
             'cache.json',
           ),
         )
@@ -124,7 +170,7 @@ function getCacheBackend(cacheEnabled = getEffectiveCacheEnabled()): CacheBacken
     backend = {
       filePath,
       clearGeneration: nextCacheClearGeneration++,
-      instances: new Map(),
+      instances: new CacheRegistry<number, Cache>(16),
       claims: new Set(),
       inflight: new Map(),
     };
@@ -161,10 +207,21 @@ function getCacheInstance(backend = getCacheBackend()) {
     }
 
     cacheInstance = createCache({ stores, ttl, refreshThreshold: 0 });
+    for (const store of cacheInstance.stores) {
+      storeOwners.set(store, backend);
+      if (store.opts.store) {
+        storeOwners.set(store.opts.store, backend);
+      }
+    }
     const clear = cacheInstance.clear.bind(cacheInstance);
     cacheInstance.clear = async () => {
+      backend.inflight.clear();
       const result = await clear();
       backend.clearGeneration = nextCacheClearGeneration++;
+      backend.claims.clear();
+      if (backend.filePath) {
+        fs.rmSync(getClaimsPath(backend.filePath), { force: true, recursive: true });
+      }
       return result;
     };
     backend.instances.set(ttl, cacheInstance);
@@ -175,16 +232,6 @@ function getCacheInstance(backend = getCacheBackend()) {
 function getNamespacedCache(namespace: string) {
   const backend = getCacheBackend();
   const cache = getCacheInstance(backend);
-  let namespaces = namespacedCacheInstances.get(cache);
-  if (!namespaces) {
-    namespaces = new Map();
-    namespacedCacheInstances.set(cache, namespaces);
-  }
-  const cachedNamespaceInstance = namespaces.get(namespace);
-  if (cachedNamespaceInstance) {
-    return cachedNamespaceInstance;
-  }
-
   const namespacedCache = {
     ...cache,
     get: (key: string) => cache.get(getScopedCacheKey(key, namespace)),
@@ -218,7 +265,6 @@ function getNamespacedCache(namespace: string) {
       ),
   } as Cache;
 
-  namespaces.set(namespace, namespacedCache);
   return namespacedCache;
 }
 
@@ -1040,9 +1086,10 @@ export function disableCache() {
 }
 
 /**
- * Clear all cached results in the currently configured backend.
+ * Clear the configured default and all retained cache backends.
+ * Pass a cache directory to target it, including after its invocation has ended.
  *
- * Removes all cached provider responses. The cache will refetch on next access.
+ * The next request to a cleared cache refetches its response.
  *
  * @example
  * ```typescript
@@ -1052,19 +1099,12 @@ export function disableCache() {
  * const results = await evaluate(testSuite);  // Refetches all
  * ```
  */
-export async function clearCache() {
-  // Explicit clearing targets the configured backend even when reads/writes are disabled.
-  const backend = getCacheBackend(true);
-  backend.inflight.clear();
-  for (const instance of backend.instances.values()) {
-    namespacedCacheInstances.delete(instance);
-  }
-  const result = await getCacheInstance(backend).clear();
-  backend.claims.clear();
-  if (backend.filePath) {
-    fs.rmSync(getClaimsPath(backend.filePath), { force: true, recursive: true });
-  }
-  return result;
+export async function clearCache(cachePath?: string) {
+  // Explicit clearing works even when reads/writes are disabled.
+  const configured = getCacheBackend(true, cachePath);
+  const backends = cachePath === undefined ? [...cacheBackends.values()] : [configured];
+  await Promise.all(backends.map((backend) => getCacheInstance(backend).clear()));
+  return true;
 }
 
 /**
