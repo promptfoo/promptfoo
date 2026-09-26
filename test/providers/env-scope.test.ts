@@ -485,6 +485,7 @@ describe('provider environment scopes', () => {
   });
   it.each([
     ['huggingface:text-generation:fixture-model', 'HF_TOKEN', 'HF_API_TOKEN'],
+    ['hf:text-generation:fixture-model', 'HF_TOKEN', 'HF_API_TOKEN'],
     ['google:live:gemini-fixture', 'GOOGLE_API_KEY', 'GEMINI_API_KEY'],
     ['google:gemini-2.5-flash-image', 'GOOGLE_API_KEY', 'GEMINI_API_KEY'],
     ['google:image:imagen-4.0-generate-001', 'GOOGLE_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY'],
@@ -497,6 +498,61 @@ describe('provider environment scopes', () => {
     await cliState.withEnv(suite, async () => {
       await Promise.resolve();
       expect(apiKey(provider)).toBe('provider-key');
+    });
+  });
+  describe.each([
+    ['cohere:embedding:fixture-model', 'COHERE_API_KEY', '/embed'],
+    ['cohere:embeddings:fixture-model', 'COHERE_API_KEY', '/embed'],
+    ['voyage:fixture-model', 'VOYAGE_API_KEY', '/embeddings'],
+  ])('embedding loader for %s', (id, key, route) => {
+    it.each(['config', 'named', 'standard'])(
+      'retains %s credentials and request configuration',
+      async (credentialSource) => {
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          data: { embeddings: [[0.25, 0.75]], data: [{ embedding: [0.25, 0.75] }] },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        const provider = await loadApiProvider(id, {
+          env: { [key]: 'suite-key', FIXTURE_KEY: 'suite-named-key' },
+          options: {
+            config: {
+              apiBaseUrl: 'https://provider.example.invalid/v1',
+              ...(credentialSource === 'config' && { apiKey: 'config-key' }),
+              ...(credentialSource === 'named' && { apiKeyEnvar: 'FIXTURE_KEY' }),
+            },
+            env: {
+              [key]: 'provider-key',
+              FIXTURE_KEY: 'provider-named-key',
+              COHERE_CLIENT_NAME: 'provider-client',
+            },
+          },
+        });
+        const response = await provider.callEmbeddingApi!('hello');
+        expect(response.embedding).toEqual([0.25, 0.75]);
+        const expectedKey =
+          credentialSource === 'config'
+            ? 'config-key'
+            : credentialSource === 'named'
+              ? 'provider-named-key'
+              : 'provider-key';
+        expect(fetchWithCache).toHaveBeenCalledExactlyOnceWith(
+          `https://provider.example.invalid/v1${route}`,
+          expect.objectContaining({
+            headers: expect.objectContaining({
+              Authorization: `Bearer ${expectedKey}`,
+              ...(route === '/embed' && { 'X-Client-Name': 'provider-client' }),
+            }),
+          }),
+          expect.any(Number),
+        );
+      },
+    );
+    it('rejects a missing key before dispatching a request', async () => {
+      const provider = await loadApiProvider(id);
+      await expect(provider.callEmbeddingApi!('hello')).rejects.toThrow('API key must be set');
+      expect(fetchWithCache).not.toHaveBeenCalled();
     });
   });
   it('the loader preserves provider region aliases for SageMaker and Mantle', async () => {
