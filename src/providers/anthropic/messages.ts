@@ -884,7 +884,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       config.top_p != null ||
       config.top_k != null ||
       parseEnvFloat(this.env?.ANTHROPIC_TEMPERATURE) != null ||
-      parseEnvFloat(process.env.ANTHROPIC_TEMPERATURE) != null;
+      getEnvFloat('ANTHROPIC_TEMPERATURE') != null;
     if (
       samplingParamsDeprecated &&
       explicitSamplingParam &&

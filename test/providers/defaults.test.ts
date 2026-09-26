@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureEmbeddingProvider } from '../../src/providers/azure/embedding';
 import { AzureModerationProvider } from '../../src/providers/azure/moderation';
@@ -12,7 +13,7 @@ import {
   AIStudioEmbeddingProvider,
 } from '../../src/providers/google/ai.studio';
 import { hasGoogleDefaultCredentials } from '../../src/providers/google/util';
-import { VertexEmbeddingProvider } from '../../src/providers/google/vertex';
+import { VertexChatProvider, VertexEmbeddingProvider } from '../../src/providers/google/vertex';
 import {
   DefaultEmbeddingProvider as MistralEmbeddingProvider,
   DefaultGradingJsonProvider as MistralGradingJsonProvider,
@@ -110,10 +111,10 @@ describe('Provider override tests', () => {
       const providers = await getDefaultProviders(
         source === 'scoped' ? { GITHUB_TOKEN: 'fixture-github-token' } : undefined,
       );
-      expect(providers.gradingProvider).toBe(baseline.gradingProvider);
-      expect(providers.gradingJsonProvider).toBe(baseline.gradingJsonProvider);
-      expect(providers.suggestionsProvider).toBe(baseline.suggestionsProvider);
-      expect(providers.synthesizeProvider).toBe(baseline.synthesizeProvider);
+      expect(providers.gradingProvider.id()).toBe(baseline.gradingProvider.id());
+      expect(providers.gradingJsonProvider.id()).toBe(baseline.gradingJsonProvider.id());
+      expect(providers.suggestionsProvider.id()).toBe(baseline.suggestionsProvider.id());
+      expect(providers.synthesizeProvider.id()).toBe(baseline.synthesizeProvider.id());
     },
   );
 
@@ -210,6 +211,43 @@ describe('Provider override tests', () => {
     expect(moderationProvider.modelName).toBe('text-content-safety');
     expect(moderationProvider.endpoint).toBe('https://test-endpoint.com');
     expect(moderationProvider.apiVersion).toBe('2024-01-01');
+  });
+
+  it.each([
+    'ANTHROPIC_API_KEY',
+    'GOOGLE_API_KEY',
+    'GEMINI_API_KEY',
+    'PALM_API_KEY',
+    'MISTRAL_API_KEY',
+    'XAI_API_KEY',
+  ] as const)('ignores a masked %s when selecting defaults', async (key) => {
+    const fallback =
+      key === 'MISTRAL_API_KEY' || key === 'XAI_API_KEY' ? {} : { MISTRAL_API_KEY: 'scoped-key' };
+    const expected = await getDefaultProviders(fallback);
+    mockProcessEnv({ [key]: 'ambient-key' });
+    const providers = await getDefaultProviders({ ...fallback, [key]: '' });
+    expect(providers.gradingProvider.id()).toBe(expected.gradingProvider.id());
+  });
+
+  it('does not select Azure when a service principal credential is masked', async () => {
+    mockProcessEnv({
+      AZURE_CLIENT_ID: 'ambient-client',
+      AZURE_CLIENT_SECRET: 'ambient-secret',
+      AZURE_TENANT_ID: 'ambient-tenant',
+      AZURE_DEPLOYMENT_NAME: 'chat',
+      AZURE_OPENAI_DEPLOYMENT_NAME: 'chat',
+    });
+    const providers = await getDefaultProviders({
+      AZURE_CLIENT_SECRET: '',
+      MISTRAL_API_KEY: 'scoped-key',
+    });
+    expect(providers.gradingProvider.id()).toContain('mistral:');
+  });
+
+  it('does not select a masked Azure moderation endpoint', async () => {
+    mockProcessEnv({ AZURE_CONTENT_SAFETY_ENDPOINT: 'https://ambient.example.invalid' });
+    const providers = await getDefaultProviders({ AZURE_CONTENT_SAFETY_ENDPOINT: '' });
+    expect(providers.moderationProvider.id()).toBe(DefaultModerationProvider.id());
   });
 
   it('should use Mistral providers when MISTRAL_API_KEY is set', async () => {
@@ -330,13 +368,13 @@ describe('Provider override tests', () => {
       },
     );
 
-    it('preserves process precedence for the Azure embedding deployment', async () => {
+    it('prefers the explicit Azure embedding deployment over the process value', async () => {
       mockProcessEnv({ AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: 'process-vectors' });
       const providers = await getDefaultProviders({
         ...azureEnv,
         AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: 'scoped-vectors',
       });
-      expect(providers.embeddingProvider).toHaveProperty('deploymentName', 'process-vectors');
+      expect(providers.embeddingProvider).toHaveProperty('deploymentName', 'scoped-vectors');
     });
 
     it.each([
@@ -367,6 +405,35 @@ describe('Provider override tests', () => {
       }
     });
 
+    it.each(['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'PALM_API_KEY', 'MISTRAL_API_KEY'] as const)(
+      'skips masked %s when choosing an Azure embedding fallback',
+      async (key) => {
+        mockProcessEnv({ [key]: 'ambient-key' });
+        const providers = await getDefaultProviders({
+          ...azureEnv,
+          [key]: '',
+          VOYAGE_API_KEY: 'scoped-key',
+        });
+        expect(providers.embeddingProvider.id()).toBe('voyage:voyage-3.5');
+      },
+    );
+
+    it('skips a masked Azure embedding deployment', async () => {
+      mockProcessEnv({ AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: 'ambient-vectors' });
+      const providers = await getDefaultProviders({
+        ...azureEnv,
+        AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: '',
+        VOYAGE_API_KEY: 'scoped-key',
+      });
+      expect(providers.embeddingProvider.id()).toBe('voyage:voyage-3.5');
+    });
+
+    it('skips a masked Voyage embedding key', async () => {
+      mockProcessEnv({ VOYAGE_API_KEY: 'ambient-key' });
+      const providers = await getDefaultProviders({ ...azureEnv, VOYAGE_API_KEY: '' });
+      expect(providers.embeddingProvider.id()).toBe(OpenAiEmbeddingProvider.id());
+    });
+
     it('uses process embedding credentials without reusing the chat deployment', async () => {
       mockProcessEnv({ ...azureEnv, MISTRAL_API_KEY: 'fixture-mistral-key' });
       const providers = await getDefaultProviders();
@@ -386,10 +453,12 @@ describe('Provider override tests', () => {
 
     it('keeps the existing OpenAI fallback when no embedding credentials are available', async () => {
       const providers = await getDefaultProviders(azureEnv);
-      expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider);
+      expect(providers.embeddingProvider).toBeInstanceOf(OpenAiEmbeddingProvider.constructor);
       expect(providers.embeddingProvider).not.toBeInstanceOf(AzureEmbeddingProvider);
       expect(hasGoogleDefaultCredentials).toHaveBeenCalledTimes(1);
-      const response = await OpenAiEmbeddingProvider.callEmbeddingApi('hello');
+      const response = await (
+        providers.embeddingProvider as typeof OpenAiEmbeddingProvider
+      ).callEmbeddingApi('hello');
       expect(response.error).toMatch(/API key/i);
       expect(response.embedding).toBeUndefined();
     });
@@ -421,11 +490,16 @@ describe('Provider override tests', () => {
 
     const providers = await getDefaultProviders(envOverrides);
 
-    expect(providers.embeddingProvider).toBe(MistralEmbeddingProvider);
-    expect(providers.gradingJsonProvider).toBe(MistralGradingJsonProvider);
-    expect(providers.gradingProvider).toBe(MistralGradingProvider);
-    expect(providers.suggestionsProvider).toBe(MistralSuggestionsProvider);
-    expect(providers.synthesizeProvider).toBe(MistralSynthesizeProvider);
+    expect(providers.embeddingProvider.id()).toBe(MistralEmbeddingProvider.id());
+    expect(providers.embeddingProvider).toHaveProperty('env', envOverrides);
+    expect(providers.gradingJsonProvider.id()).toBe(MistralGradingJsonProvider.id());
+    expect(providers.gradingJsonProvider).toHaveProperty('env', envOverrides);
+    expect(providers.gradingProvider.id()).toBe(MistralGradingProvider.id());
+    expect(providers.gradingProvider).toHaveProperty('env', envOverrides);
+    expect(providers.suggestionsProvider.id()).toBe(MistralSuggestionsProvider.id());
+    expect(providers.suggestionsProvider).toHaveProperty('env', envOverrides);
+    expect(providers.synthesizeProvider.id()).toBe(MistralSynthesizeProvider.id());
+    expect(providers.synthesizeProvider).toHaveProperty('env', envOverrides);
   });
 
   it('should use xAI providers when provided via env overrides', async () => {
@@ -435,7 +509,8 @@ describe('Provider override tests', () => {
 
     const providers = await getDefaultProviders(envOverrides);
 
-    expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider);
+    expect(providers.embeddingProvider.id()).toBe(OpenAiEmbeddingProvider.id());
+    expect(providers.embeddingProvider).toHaveProperty('env', envOverrides);
     expect(providers.gradingJsonProvider.id()).toBe('xai:grok-4.3');
     expect(providers.gradingProvider.id()).toBe('xai:grok-4.3');
     expect(providers.suggestionsProvider.id()).toBe('xai:grok-4.3');
@@ -481,6 +556,55 @@ describe('Provider override tests', () => {
   });
 
   describe('Google AI Studio provider selection', () => {
+    it.each(['provider', 'suite', 'file'])(
+      'selects %s ADC before a lower API key',
+      async (scope) => {
+        mockProcessEnv({ GOOGLE_API_KEY: 'host-key' });
+        const env = { GOOGLE_APPLICATION_CREDENTIALS: '/fixture/adc.json' };
+        const run = () => getDefaultProviders(scope === 'provider' ? env : undefined);
+        const providers =
+          scope === 'suite'
+            ? await cliState.withEnv(env, run)
+            : scope === 'file'
+              ? await cliState.withEnvFileOverrides(env, run)
+              : await run();
+        expect(providers.gradingProvider).toBeInstanceOf(VertexChatProvider);
+        expect(providers.embeddingProvider).toBeInstanceOf(VertexEmbeddingProvider);
+        expect(hasGoogleDefaultCredentials).not.toHaveBeenCalled();
+      },
+    );
+
+    it('selects a higher API key before lower ADC', async () => {
+      await cliState.withEnvFileOverrides(
+        { GOOGLE_APPLICATION_CREDENTIALS: '/fixture/adc.json' },
+        async () => {
+          const providers = await getDefaultProviders({ GOOGLE_API_KEY: 'provider-key' });
+          expect(providers.gradingProvider).toBeInstanceOf(AIStudioChatProvider);
+          expect(hasGoogleDefaultCredentials).not.toHaveBeenCalled();
+        },
+      );
+    });
+
+    it('keeps explicitly empty scoped ADC on the ADC path', async () => {
+      mockProcessEnv({ GOOGLE_API_KEY: 'host-key' });
+      const providers = await getDefaultProviders({ GOOGLE_APPLICATION_CREDENTIALS: '' });
+      expect(providers.gradingProvider).toBeInstanceOf(VertexChatProvider);
+      expect(hasGoogleDefaultCredentials).not.toHaveBeenCalled();
+    });
+
+    it('uses scoped ADC for Azure embeddings before a lower Google API key', async () => {
+      mockProcessEnv({ GOOGLE_API_KEY: 'host-key' });
+      const providers = await getDefaultProviders({
+        AZURE_API_KEY: 'azure-fixture',
+        AZURE_DEPLOYMENT_NAME: 'chat',
+        AZURE_OPENAI_DEPLOYMENT_NAME: 'chat',
+        GOOGLE_APPLICATION_CREDENTIALS: '/fixture/adc.json',
+      });
+      expect(providers.gradingProvider).toBeInstanceOf(AzureChatCompletionProvider);
+      expect(providers.embeddingProvider).toBeInstanceOf(VertexEmbeddingProvider);
+      expect(hasGoogleDefaultCredentials).not.toHaveBeenCalled();
+    });
+
     it('should use Google AI Studio providers when GEMINI_API_KEY is set', async () => {
       mockProcessEnv({ GEMINI_API_KEY: 'test-key' });
 

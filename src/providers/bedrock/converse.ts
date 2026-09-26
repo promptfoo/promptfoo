@@ -1195,6 +1195,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     const cache = await getCache();
     const region = this.getRegion();
     const cacheKey = `bedrock:converse:${this.modelName}:${region}:${createBedrockCacheKeyHash({
+      cacheNamespace: this.responseCacheNamespace,
       config: this.config,
       params: converseInput,
       region,

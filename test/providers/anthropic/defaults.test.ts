@@ -37,18 +37,17 @@ describe('Anthropic Default Providers', () => {
       }
     });
 
-    it('should return the same instances on repeated calls', () => {
+    it('should create independent clients on repeated calls', () => {
       const providers1 = getAnthropicProviders();
       const providers2 = getAnthropicProviders();
 
-      expect(providers1.gradingProvider).toBe(providers2.gradingProvider);
-      expect(providers1.gradingJsonProvider).toBe(providers2.gradingJsonProvider);
-      expect(providers1.llmRubricProvider).toBe(providers2.llmRubricProvider);
+      expect(providers1.gradingProvider).not.toBe(providers2.gradingProvider);
+      expect(providers1.gradingJsonProvider).not.toBe(providers2.gradingJsonProvider);
+      expect(providers1.llmRubricProvider).not.toBe(providers2.llmRubricProvider);
     });
 
-    it('should initialize providers lazily', () => {
+    it('should share the grading instance only within a bundle', () => {
       const providers = getAnthropicProviders();
-      // Accessing one provider should not initialize others
       const gradingProvider = providers.gradingProvider;
       expect(gradingProvider).toBeInstanceOf(AnthropicMessagesProvider);
 

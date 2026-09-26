@@ -1,6 +1,7 @@
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { resolveProviderApiKey } from '../credentials';
+import { resolveProviderEnv } from '../env';
 import { throwConfigurationError } from './util';
 import type { TokenCredential } from '@azure/identity';
 
@@ -25,8 +26,12 @@ export class AzureGenericProvider implements ApiProvider {
 
   protected initializationPromise: Promise<void> | null = null;
 
-  /** Cached Entra ID credential; reused so @azure/identity can manage its own token cache. */
-  private cachedCredential?: TokenCredential;
+  /**
+   * Cached Entra ID credential initialization. Held as a promise so concurrent
+   * requests share one credential and @azure/identity can manage its own token
+   * cache; a failed initialization is evicted so the next request can retry.
+   */
+  private cachedCredential?: Promise<TokenCredential>;
   #warnedPartialServicePrincipal = false;
   /** Expiry of the currently cached Entra ID bearer token (ms epoch), if token auth is in use. */
   private authTokenExpiresOnTimestamp?: number;
@@ -39,21 +44,24 @@ export class AzureGenericProvider implements ApiProvider {
 
     this.deploymentName = deploymentName;
 
-    this.apiHost =
-      config?.apiHost ||
-      // These and similar OPENAI envars: Backwards compatibility for Azure rename 2024-11-09 / 0.96.0
-      env?.AZURE_API_HOST ||
-      env?.AZURE_OPENAI_API_HOST ||
-      getEnvString('AZURE_API_HOST') ||
-      getEnvString('AZURE_OPENAI_API_HOST');
-    this.apiBaseUrl =
-      config?.apiBaseUrl ||
-      env?.AZURE_API_BASE_URL ||
-      env?.AZURE_OPENAI_API_BASE_URL ||
-      env?.AZURE_OPENAI_BASE_URL ||
-      getEnvString('AZURE_API_BASE_URL') ||
-      getEnvString('AZURE_OPENAI_API_BASE_URL') ||
-      getEnvString('AZURE_OPENAI_BASE_URL');
+    if (config?.apiBaseUrl || config?.apiHost) {
+      this.apiBaseUrl = config.apiBaseUrl;
+      this.apiHost = config.apiHost;
+    } else {
+      // Keep the legacy Azure aliases within the scope that selected the endpoint.
+      const endpoint = resolveProviderEnv(env, [
+        'AZURE_API_BASE_URL',
+        'AZURE_OPENAI_API_BASE_URL',
+        'AZURE_OPENAI_BASE_URL',
+        'AZURE_API_HOST',
+        'AZURE_OPENAI_API_HOST',
+      ]);
+      if (endpoint?.name.endsWith('_HOST')) {
+        this.apiHost = endpoint.value;
+      } else {
+        this.apiBaseUrl = endpoint?.value;
+      }
+    }
 
     this.config = config || {};
     this.id = id ? () => id : this.id;
@@ -104,33 +112,34 @@ export class AzureGenericProvider implements ApiProvider {
     return apiKey;
   }
 
-  async getAzureTokenCredential(): Promise<TokenCredential> {
+  getAzureTokenCredential(): Promise<TokenCredential> {
+    this.cachedCredential ??= this.createTokenCredential().catch((err) => {
+      this.cachedCredential = undefined;
+      throw err;
+    });
+    return this.cachedCredential;
+  }
+
+  private async createTokenCredential(): Promise<TokenCredential> {
     const clientSecret =
       this.config?.azureClientSecret ||
-      this.env?.AZURE_CLIENT_SECRET ||
-      getEnvString('AZURE_CLIENT_SECRET');
+      (this.env?.AZURE_CLIENT_SECRET ?? getEnvString('AZURE_CLIENT_SECRET'));
     const clientId =
-      this.config?.azureClientId || this.env?.AZURE_CLIENT_ID || getEnvString('AZURE_CLIENT_ID');
+      this.config?.azureClientId || (this.env?.AZURE_CLIENT_ID ?? getEnvString('AZURE_CLIENT_ID'));
     const tenantId =
-      this.config?.azureTenantId || this.env?.AZURE_TENANT_ID || getEnvString('AZURE_TENANT_ID');
+      this.config?.azureTenantId || (this.env?.AZURE_TENANT_ID ?? getEnvString('AZURE_TENANT_ID'));
     const authorityHost =
       this.config?.azureAuthorityHost ||
-      this.env?.AZURE_AUTHORITY_HOST ||
-      getEnvString('AZURE_AUTHORITY_HOST');
-
-    if (this.cachedCredential) {
-      return this.cachedCredential;
-    }
+      (this.env?.AZURE_AUTHORITY_HOST ?? getEnvString('AZURE_AUTHORITY_HOST'));
 
     try {
       const { ClientSecretCredential, AzureCliCredential } = await import('@azure/identity');
 
       if (clientSecret && clientId && tenantId) {
         logger.debug('[Azure] Using service principal credentials');
-        this.cachedCredential = new ClientSecretCredential(tenantId, clientId, clientSecret, {
+        return new ClientSecretCredential(tenantId, clientId, clientSecret, {
           authorityHost: authorityHost || 'https://login.microsoftonline.com',
         });
-        return this.cachedCredential;
       }
 
       if (!clientId && !clientSecret && !tenantId) {
@@ -148,8 +157,7 @@ export class AzureGenericProvider implements ApiProvider {
         );
       }
 
-      this.cachedCredential = new AzureCliCredential();
-      return this.cachedCredential;
+      return new AzureCliCredential();
     } catch (err) {
       logger.error(`Error loading @azure/identity: ${err}`);
       throw new Error(
@@ -162,8 +170,7 @@ export class AzureGenericProvider implements ApiProvider {
     const credential = await this.getAzureTokenCredential();
     const tokenScope =
       this.config?.azureTokenScope ||
-      this.env?.AZURE_TOKEN_SCOPE ||
-      getEnvString('AZURE_TOKEN_SCOPE');
+      (this.env?.AZURE_TOKEN_SCOPE ?? getEnvString('AZURE_TOKEN_SCOPE'));
     const tokenResponse = await credential.getToken(
       tokenScope || 'https://cognitiveservices.azure.com/.default',
     );

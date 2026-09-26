@@ -8,10 +8,11 @@
  *
  * API Documentation: https://docs.x.ai/docs/guides/video-generations-and-edits
  */
-import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { sleep } from '../../util/time';
+import { resolveProviderApiKey } from '../credentials';
+import { resolveProviderEnv } from '../env';
 import {
   buildStorageRefUrl,
   checkVideoCache,
@@ -235,10 +236,7 @@ export class XAIVideoProvider implements ApiProvider {
    * Get API key from config or environment
    */
   getApiKey(): string | undefined {
-    if (this.config?.apiKey) {
-      return this.config.apiKey;
-    }
-    return getEnvString('XAI_API_KEY');
+    return resolveProviderApiKey(this.config, this.env, ['XAI_API_KEY']);
   }
 
   /**
@@ -249,7 +247,7 @@ export class XAIVideoProvider implements ApiProvider {
     if (this.config.apiBaseUrl) {
       return this.config.apiBaseUrl;
     }
-    const envApiBaseUrl = getEnvString('XAI_API_BASE_URL');
+    const envApiBaseUrl = resolveProviderEnv(this.env, ['XAI_API_BASE_URL'])?.value;
     if (envApiBaseUrl) {
       return envApiBaseUrl;
     }

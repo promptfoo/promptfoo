@@ -49,6 +49,7 @@ interface CohereChatOptions {
 }
 
 export class CohereChatCompletionProvider implements ApiProvider {
+  env?: EnvOverrides;
   static COHERE_CHAT_MODELS = [
     'command-a-03-2025',
     'command-r7b-12-2024',
@@ -80,7 +81,8 @@ export class CohereChatCompletionProvider implements ApiProvider {
     options: { config?: CohereChatOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     const { config, id, env } = options;
-    this.apiKey = config?.apiKey || env?.COHERE_API_KEY || getEnvString('COHERE_API_KEY') || '';
+    this.env = env;
+    this.apiKey = config?.apiKey || (env?.COHERE_API_KEY ?? getEnvString('COHERE_API_KEY') ?? '');
     this.modelName = modelName;
     if (!CohereChatCompletionProvider.COHERE_CHAT_MODELS.includes(this.modelName)) {
       logger.warn(`Using unknown Cohere chat model: ${this.modelName}`);
@@ -192,7 +194,8 @@ export class CohereChatCompletionProvider implements ApiProvider {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.apiKey}`,
-            'X-Client-Name': getEnvString('COHERE_CLIENT_NAME') || 'promptfoo',
+            'X-Client-Name':
+              (this.env?.COHERE_CLIENT_NAME ?? getEnvString('COHERE_CLIENT_NAME')) || 'promptfoo',
           },
           body: JSON.stringify(body),
         },
@@ -254,14 +257,11 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
   }
 
   getApiKey(): string | undefined {
+    const namedKey = this.config.apiKeyEnvar
+      ? (this.env?.[this.config.apiKeyEnvar] ?? getEnvString(this.config.apiKeyEnvar))
+      : undefined;
     return (
-      this.config.apiKey ||
-      (this.config?.apiKeyEnvar
-        ? getEnvString(this.config.apiKeyEnvar) ||
-          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
-        : undefined) ||
-      this.env?.COHERE_API_KEY ||
-      getEnvString('COHERE_API_KEY')
+      this.config.apiKey || (namedKey ?? this.env?.COHERE_API_KEY ?? getEnvString('COHERE_API_KEY'))
     );
   }
 
@@ -294,7 +294,8 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.getApiKey()}`,
-            'X-Client-Name': getEnvString('COHERE_CLIENT_NAME') || 'promptfoo',
+            'X-Client-Name':
+              (this.env?.COHERE_CLIENT_NAME ?? getEnvString('COHERE_CLIENT_NAME')) || 'promptfoo',
           },
           body: JSON.stringify(body),
         },
