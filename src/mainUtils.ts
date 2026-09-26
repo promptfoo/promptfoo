@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { getGlobalDispatcher } from 'undici';
 import { requestsStructuredCodeScanOutput } from './codeScan/util/structuredOutputDetect';
 import { closeDbIfOpen } from './database/index';
-import logger, { closeLogger, setLogLevel } from './logger';
+import logger, { closeLogger, initializeRunLogging, setLogLevel } from './logger';
 import telemetry from './telemetry';
 import { clearAgentCache } from './util/fetch/index';
 import { setupEnv } from './util/index';
@@ -99,6 +99,10 @@ export function setupEnvFilesFromArgv(argv: string[] = process.argv.slice(2)): v
   }
 
   telemetry.initialize();
+}
+
+export function initializeCliLogging(argv: string[]): void {
+  initializeRunLogging({ structuredOutput: requestsStructuredCodeScanOutput(argv) });
 }
 
 export function shouldSkipDefaultConfigLoading(argv: string[] = process.argv.slice(2)): boolean {

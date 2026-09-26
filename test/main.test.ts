@@ -9,6 +9,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 // Hoisted mocks for shutdown tests
 const mockSetupEnv = vi.hoisted(() => vi.fn());
 const mockSetLogLevel = vi.hoisted(() => vi.fn());
+const mockInitializeRunLogging = vi.hoisted(() => vi.fn());
 const mockTelemetryRecord = vi.hoisted(() => vi.fn());
 const mockTelemetryInitialize = vi.hoisted(() => vi.fn());
 const mockTelemetryShutdown = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
@@ -30,6 +31,7 @@ vi.mock('../src/logger', () => ({
   __esModule: true,
   default: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), info: vi.fn() },
   setLogLevel: mockSetLogLevel,
+  initializeRunLogging: mockInitializeRunLogging,
   closeLogger: mockCloseLogger,
 }));
 
@@ -57,6 +59,7 @@ vi.mock('../src/codeScan', () => ({
 }));
 
 let addCommonOptionsRecursively: typeof import('../src/mainUtils').addCommonOptionsRecursively;
+let initializeCliLogging: typeof import('../src/mainUtils').initializeCliLogging;
 let isMainModule: typeof import('../src/mainUtils').isMainModule;
 let shouldSkipDefaultConfigLoading: typeof import('../src/mainUtils').shouldSkipDefaultConfigLoading;
 let setupEnvFilesFromArgv: typeof import('../src/mainUtils').setupEnvFilesFromArgv;
@@ -66,6 +69,7 @@ async function loadMainModule() {
   vi.resetModules();
   ({
     addCommonOptionsRecursively,
+    initializeCliLogging,
     isMainModule,
     shouldSkipDefaultConfigLoading,
     setupEnvFilesFromArgv,
@@ -131,6 +135,24 @@ describe('setupEnvFilesFromArgv', () => {
     setupEnvFilesFromArgv(['eval', '--env-file', '--verbose']);
 
     expect(mockSetupEnv).not.toHaveBeenCalled();
+  });
+});
+
+describe('initializeCliLogging', () => {
+  beforeEach(async () => {
+    await loadMainModule();
+    mockInitializeRunLogging.mockReset();
+  });
+
+  afterEach(() => mockInitializeRunLogging.mockReset());
+
+  it.each([
+    { argv: ['eval', '--verbose'], structuredOutput: false },
+    { argv: ['code-scans', 'run', '--json'], structuredOutput: true },
+    { argv: ['code-scans', 'run', '--format', 'sarif'], structuredOutput: true },
+  ])('preserves console routing for $argv', ({ argv, structuredOutput }) => {
+    initializeCliLogging(argv);
+    expect(mockInitializeRunLogging).toHaveBeenCalledExactlyOnceWith({ structuredOutput });
   });
 });
 

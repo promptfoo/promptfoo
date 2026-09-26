@@ -1,7 +1,6 @@
 import { Command } from 'commander';
 import cliState from './cliState';
 import { codeScansCommand } from './codeScan/index';
-import { requestsStructuredCodeScanOutput } from './codeScan/util/structuredOutputDetect';
 import { authCommand } from './commands/auth';
 import { cacheCommand } from './commands/cache';
 import { configCommand } from './commands/config';
@@ -29,9 +28,10 @@ import { showCommand } from './commands/show';
 import { validateCommand } from './commands/validate';
 import { viewCommand } from './commands/view';
 import { EmailValidationError } from './globalConfig/accounts';
-import logger, { initializeRunLogging } from './logger';
+import logger from './logger';
 import {
   addCommonOptionsRecursively,
+  initializeCliLogging,
   isMainModule,
   setupEnvFilesFromArgv,
   shouldSkipDefaultConfigLoading,
@@ -54,7 +54,7 @@ import { VERSION } from './version';
 async function main() {
   const argv = process.argv.slice(2);
   setupEnvFilesFromArgv(argv);
-  initializeRunLogging({ structuredOutput: requestsStructuredCodeScanOutput(argv) });
+  initializeCliLogging(argv);
 
   // Set PROMPTFOO_DISABLE_UPDATE=true in CI to prevent hanging on network requests
   if (!process.env.PROMPTFOO_DISABLE_UPDATE && typeof process.env.CI !== 'undefined') {
