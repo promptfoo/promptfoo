@@ -500,10 +500,18 @@ export function callGradingProvider(
   callContext?: CallApiContextParams,
   options?: CallApiOptionsParams,
 ): Promise<ProviderResponse> {
-  const invoke = (context?: CallApiContextParams) =>
-    options === undefined
+  const evaluationSignal = getProviderCallExecutionContext()?.abortSignal;
+  const signal =
+    options?.abortSignal && evaluationSignal
+      ? AbortSignal.any([options.abortSignal, evaluationSignal])
+      : (options?.abortSignal ?? evaluationSignal);
+  const callOptions = signal ? { ...options, abortSignal: signal } : options;
+  const invoke = async (context?: CallApiContextParams) => {
+    signal?.throwIfAborted();
+    return callOptions === undefined
       ? provider.callApi(prompt, context)
-      : provider.callApi(prompt, context, options);
+      : provider.callApi(prompt, context, callOptions);
+  };
   const tracingContext = getProviderCallTracingContext();
   if (!tracingContext) {
     return invoke(callContext);
