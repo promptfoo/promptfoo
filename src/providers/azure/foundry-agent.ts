@@ -772,7 +772,8 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const { body, effectiveConfig } = await this.buildResponsesBody(prompt, context);
-    const maxLoopTimeMs = effectiveConfig.maxPollTimeMs ?? 300000;
+    const maxLoopTimeMs =
+      effectiveConfig.maxPollTimeMs === undefined ? 300000 : effectiveConfig.maxPollTimeMs;
     const configError = this.validateResponseConfig(body, effectiveConfig);
     if (configError) {
       return { error: configError };
