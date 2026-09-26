@@ -1,7 +1,7 @@
 import { getEnvOverrides, getEnvString } from '../envars';
 import type { TokenCredential } from '@azure/identity';
 
-import type { EnvOverrides } from '../contracts/env';
+import type { EnvOverrides } from '../types/env';
 
 interface AzureCredentialConfig {
   azureClientId?: string;

@@ -17,7 +17,7 @@ import logger from '../../logger';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import type { GoogleAuthOptions } from 'google-auth-library';
 
-import type { EnvOverrides } from '../../types/env';
+import type { EnvOverrides } from '../../contracts/env';
 import type { CompletionOptions } from './types';
 
 // gcp-metadata (8.x) emits a `MetadataLookupWarning` of the form
