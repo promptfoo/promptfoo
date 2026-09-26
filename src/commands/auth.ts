@@ -34,45 +34,17 @@ function getOrganizationTeams(
   requestedOrganizationId: string | undefined,
   fallbackOrganizationId: string,
 ): { organizationId: string; teams: UserTeam[] } {
-  if (requestedOrganizationId) {
-    const organizationTeams = teams.filter(
-      (team) => team.organizationId === requestedOrganizationId,
-    );
-
-    if (
-      organizationTeams.length > 0 ||
-      (teams.length === 0 && requestedOrganizationId === fallbackOrganizationId)
-    ) {
-      return {
-        organizationId: requestedOrganizationId,
-        teams: organizationTeams,
-      };
-    }
-
+  const organizationId = requestedOrganizationId || fallbackOrganizationId;
+  const organizationTeams = teams.filter((team) => team.organizationId === organizationId);
+  if (organizationTeams.length === 0 && organizationId !== fallbackOrganizationId) {
     const organizationIds = [
       ...new Set([fallbackOrganizationId, ...teams.map((team) => team.organizationId)]),
     ].join(', ');
     throw new Error(
-      `Organization '${requestedOrganizationId}' not found in your accessible teams. Available organizations: ${organizationIds}`,
+      `Organization '${organizationId}' not found in your accessible teams. Available organizations: ${organizationIds}`,
     );
   }
-
-  const fallbackOrganizationTeams = teams.filter(
-    (team) => team.organizationId === fallbackOrganizationId,
-  );
-
-  if (fallbackOrganizationTeams.length > 0 || teams.length === 0) {
-    return {
-      organizationId: fallbackOrganizationId,
-      teams: fallbackOrganizationTeams,
-    };
-  }
-
-  const defaultTeam = getOldestTeam(teams);
-  return {
-    organizationId: defaultTeam.organizationId,
-    teams: teams.filter((team) => team.organizationId === defaultTeam.organizationId),
-  };
+  return { organizationId, teams: organizationTeams };
 }
 
 function resolveTeamFromOrganizationTeams(
@@ -95,25 +67,23 @@ async function setupTeamContext(
   cmdObj: LoginCommandOptions,
   organizationId: string,
   teams?: UserTeam[],
-): Promise<string> {
+): Promise<void> {
   try {
-    let currentOrganizationId = organizationId;
     let organizationTeams = teams;
 
     if (!organizationTeams) {
-      const resolvedOrganizationTeams = getOrganizationTeams(
-        await getUserTeams(),
-        undefined,
-        organizationId,
-      );
-      currentOrganizationId = resolvedOrganizationTeams.organizationId;
-      organizationTeams = resolvedOrganizationTeams.teams;
+      const allTeams = await getUserTeams();
+      organizationTeams = allTeams.filter((team) => team.organizationId === organizationId);
+      if (organizationTeams.length === 0 && allTeams.length > 0) {
+        logger.warn(
+          `No accessible teams in organization '${organizationId}'. Run 'promptfoo auth teams set <team>' to select a team in another organization.`,
+        );
+      }
     }
 
-    cloudConfig.setCurrentOrganization(currentOrganizationId);
-    cloudConfig.cacheTeams(organizationTeams, currentOrganizationId);
+    cloudConfig.cacheTeams(organizationTeams, organizationId);
 
-    const savedTeamId = cloudConfig.getCurrentTeamId(currentOrganizationId);
+    const savedTeamId = cloudConfig.getCurrentTeamId(organizationId);
     const savedTeam = organizationTeams.find((team) => team.id === savedTeamId);
     let selectedTeam;
     let teamLabelSuffix = '';
@@ -122,7 +92,7 @@ async function setupTeamContext(
       selectedTeam = resolveTeamFromOrganizationTeams(
         organizationTeams,
         cmdObj.team,
-        currentOrganizationId,
+        organizationId,
       );
     } else if (savedTeam) {
       // Each organization remembers its team selection across logins.
@@ -139,7 +109,7 @@ async function setupTeamContext(
             `\n⚠️  You have access to ${organizationTeams.length} teams. Using '${selectedTeam.name}'.`,
           ),
         );
-        logger.info(chalk.dim(`   Use --team flag to specify: promptfoo auth login --team <name>`));
+        logger.info(chalk.dim(`   Use 'promptfoo auth teams set <team>' to change teams.`));
       } else {
         logger.info('');
         try {
@@ -171,11 +141,9 @@ async function setupTeamContext(
     }
 
     if (selectedTeam) {
-      cloudConfig.setCurrentTeamId(selectedTeam.id, currentOrganizationId);
+      cloudConfig.setCurrentTeamId(selectedTeam.id, organizationId);
       logger.info(`Team: ${chalk.cyan(selectedTeam.name)}${teamLabelSuffix}`);
     }
-
-    return currentOrganizationId;
   } catch (teamError) {
     if (cmdObj.org || cmdObj.team) {
       throw teamError;
@@ -183,7 +151,6 @@ async function setupTeamContext(
     logger.warn(
       `Could not set up team context: ${teamError instanceof Error ? teamError.message : String(teamError)}`,
     );
-    return organizationId;
   }
 }
 
@@ -237,7 +204,7 @@ async function loginWithApiKey(cmdObj: LoginCommandOptions, apiHost: string): Pr
   setUserEmail(user.email);
   cloudConfig.setCurrentOrganization(organizationId);
 
-  organizationId = await setupTeamContext(cmdObj, organizationId, organizationTeams);
+  await setupTeamContext(cmdObj, organizationId, organizationTeams);
 
   logger.info(chalk.green.bold('Successfully logged in'));
   logger.info(`User: ${chalk.cyan(user.email)}`);
@@ -271,16 +238,13 @@ export function authCommand(program: Command) {
   authCommand
     .command('login')
     .description('Login')
-    .option('-o, --org <orgId>', 'The organization id to login to.')
+    .option('-o, --org <orgId>', 'Organization ID to use with --api-key.')
     .option(
       '-h, --host <host>',
       'The host of the promptfoo instance. This needs to be the url of the API if different from the app url.',
     )
     .option('-k, --api-key <apiKey>', 'Login using an API key.')
-    .option(
-      '-t, --team <team>',
-      'The team to use (name, slug, or ID). Required in CI when multiple teams exist.',
-    )
+    .option('-t, --team <team>', 'Team name, slug, or ID to use with --api-key.')
     .option(
       '--auth-header-name <name>',
       'Cloud auth header (overrides the saved setting and PROMPTFOO_CLOUD_AUTH_HEADER; otherwise defaults to Authorization).',
