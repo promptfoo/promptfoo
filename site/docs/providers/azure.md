@@ -1215,13 +1215,7 @@ The following setup and examples are archival references for pre-retirement conf
 
 1. An Azure OpenAI deployment
 2. An assistant created in the Azure web UI
-3. The `@azure/openai-assistants` package:
-
-```sh
-npm i @azure/openai-assistants
-```
-
-4. A provider configuration referencing the assistant ID:
+3. A provider configuration referencing the assistant ID:
 
 ```yaml
 providers:
