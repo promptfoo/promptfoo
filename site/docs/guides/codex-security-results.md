@@ -37,6 +37,8 @@ This starts two real SDK operations. The prompt limits the requested work to sou
 
 Preserve the config, original SDK reports, and evidence of the actual source snapshot. Labels and configured effort record intent; check the observed model, effective settings when available, SDK/plugin versions, and reported usage before attributing a difference to effort. The normalized summary does not supply a verified reasoning-effort field. Missing observations remain unknown. To revisit results without rerunning the operations, extract each SDK report into an individual JSON file and use the saved-report config below. Exported `response.raw` may be a JSON string or an object; the [README extraction snippet](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-security#compare-saved-reports) handles both forms and checks the manifest document type before saving.
 
+Keep the full native eval export alongside the extracted SDK reports. In SDK 0.1.31, `ScanResult.toJSON()` omits runtime operation and recovery warnings, so imports can show partial coverage with no warnings and an unknown operation. The case-study warning counts come from native eval metadata.
+
 ## Prepare comparable reports
 
 Use the full JSON returned by SDK `ScanResult.toJSON()`, including its manifest, findings, and coverage. Keep the original files unchanged. Before interpreting differences, check:
@@ -105,7 +107,7 @@ The two expected issues were independently reviewed before these measured runs: 
 
 All three found the basket ownership issue and missed the curated order-identity issue. Luna low's two additional findings were conditional concerns about missing inline authorization; reviewing the accounting middleware resolved those concerns against the full application. Terra's additional session-expiration finding was source-supported, but it is a different issue from the missing order-identity finding. It counts toward precision without changing the frozen recall denominator. No current findings remained unreviewed or were classified as duplicates.
 
-Both Luna reports retained findings but marked coverage partial with SDK schema-recovery warnings. Those warnings do not by themselves establish that selected files went unread, and the **CompleteCoverage** assertion still fails. Terra's complete coverage likewise did not prevent a miss against the curated set.
+Both native Luna runs retained findings but reported partial coverage with SDK schema-recovery warnings. Those warnings do not by themselves establish that selected files went unread, and the **CompleteCoverage** assertion still fails. Terra's complete coverage likewise did not prevent a miss against the curated set.
 
 | Run          | Recorded scan duration | Reported total tokens | Estimated USD range     |
 | ------------ | ---------------------- | --------------------- | ----------------------- |

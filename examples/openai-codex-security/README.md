@@ -37,7 +37,7 @@ The assertions check scan completion and coverage, not recall or precision. Pres
 
 ## Recorded case study
 
-The [guide's recorded comparison](https://www.promptfoo.dev/docs/guides/codex-security-results/#recorded-juice-shop-comparison) covers one run each of Luna low, Luna medium, and a Terra medium reference configuration. All three found one of two independently curated issues; Terra also reported a separately supported issue outside that expected set. Both Luna reports retained partial-coverage warnings. These observations do not establish a general model ranking.
+The [guide's recorded comparison](https://www.promptfoo.dev/docs/guides/codex-security-results/#recorded-juice-shop-comparison) covers one run each of Luna low, Luna medium, and a Terra medium reference configuration. All three found one of two independently curated issues; Terra also reported a separately supported issue outside that expected set. Both native Luna runs reported partial coverage with SDK recovery warnings. These observations do not establish a general model ranking.
 
 [benchmark-results.json](benchmark-results.json) records exact report hashes, source and prompt identity, requested and separately observed settings, adjudication counts, usage, and estimated cost. Recorded runs used SDK 0.1.31/plugin 0.1.95, fresh SDK state per run, saved ChatGPT authentication, and a three-thread limit. The portable config above leaves authentication and thread limits at SDK defaults; the recorded Luna runs also overlapped, while the example command runs sequentially. Consult the receipt before treating a new run as an exact replication.
 
@@ -52,7 +52,9 @@ Use `promptfooconfig.reports.yaml` to import existing SDK `ScanResult.toJSON()` 
 
 Use reports for the same source snapshot and scope. Keep their original manifest, findings, and coverage together; a bare findings array or entire Promptfoo eval export is insufficient. Missing or invalid files produce errors without a fallback scan.
 
-To extract both reports from `comparison-live.json`, run the following in the example directory. Exported `response.raw` can be a JSON string or an object; the snippet also accepts an untransformed `response.output` if raw data is absent. It checks the manifest document type and refuses to overwrite existing report files. The provider performs full report validation during import.
+Keep the full native eval export alongside the extracted SDK reports. In SDK 0.1.31, `ScanResult.toJSON()` omits runtime operation and recovery warnings, so imports can show partial coverage with no warnings and an unknown operation. The case-study warning counts come from native eval metadata.
+
+To extract both reports from the eval export generated above, run the following in the example directory. Exported `response.raw` can be a JSON string or an object; the snippet also accepts an untransformed `response.output` if raw data is absent. It checks the manifest document type and refuses to overwrite existing report files. The provider performs full report validation during import.
 
 ```bash
 node --input-type=module <<'JS'
