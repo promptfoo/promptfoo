@@ -9,11 +9,13 @@ The Transformers.js provider runs ONNX models locally in Node.js using [Transfor
 
 ## Installation
 
-Transformers.js is an optional dependency (~200MB for ONNX runtime):
+Transformers.js and its ONNX runtimes are not included in the default install. Install the runtime alongside Promptfoo in your project:
 
 ```bash
-npm install @huggingface/transformers
+npm install promptfoo @huggingface/transformers@^4.0.0
 ```
+
+For a global installation, use `npm install -g promptfoo @huggingface/transformers@^4.0.0`. For a one-off eval, use `npx --package=promptfoo --package=@huggingface/transformers@^4.0.0 promptfoo eval -c promptfooconfig.yaml`. Model files are downloaded separately on first use.
 
 ## Quick Start
 
