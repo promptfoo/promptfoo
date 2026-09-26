@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import { NodeHttpHandler } from '@smithy/node-http-handler';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, withCacheEnabled } from '../../src/cache';
 import cliState from '../../src/cliState';
@@ -132,6 +133,75 @@ describe('scoped AWS SDK authentication', () => {
       ).rejects.toThrow('Bedrock Agents do not support bearer');
     },
   );
+
+  it.each(['config', 'provider', 'suite', 'file'] as const)(
+    'rejects Knowledge Base %s bearer authentication before SDK credential discovery or transport',
+    async (scope) => {
+      const handle = vi
+        .spyOn(NodeHttpHandler.prototype, 'handle')
+        .mockRejectedValue(new Error('Unexpected transport'));
+      const env = { AWS_BEARER_TOKEN_BEDROCK: 'selected-bearer' };
+      for (const ambient of [false, true]) {
+        const restoreHost = mockProcessEnv(
+          ambient
+            ? keys('host')
+            : { AWS_ACCESS_KEY_ID: undefined, AWS_SECRET_ACCESS_KEY: undefined },
+        );
+        const provider = new AwsBedrockKnowledgeBaseProvider('fixture', {
+          config: {
+            knowledgeBaseId: 'fixture-kb',
+            region: 'us-east-1',
+            ...(scope === 'config' ? { apiKey: 'selected-bearer' } : {}),
+          },
+          env: scope === 'provider' ? env : undefined,
+        });
+        const credentials = vi.spyOn(provider, 'getCredentials');
+        const run = () => withCacheEnabled(false, () => provider.callApi('fixture'));
+        try {
+          await expect(
+            scope === 'suite'
+              ? cliState.withEnv(env, run)
+              : scope === 'file'
+                ? cliState.withEnvFileOverrides(env, run)
+                : run(),
+          ).rejects.toThrow('Knowledge Bases do not support bearer');
+          expect(credentials).not.toHaveBeenCalled();
+          expect(handle).not.toHaveBeenCalled();
+        } finally {
+          provider.knowledgeBaseClient?.destroy();
+          restoreHost();
+        }
+      }
+    },
+  );
+
+  it('signs a Knowledge Base request with scoped AWS credentials ahead of an ambient bearer', async () => {
+    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'host-bearer' });
+    const provider = new AwsBedrockKnowledgeBaseProvider('fixture', {
+      config: { knowledgeBaseId: 'fixture-kb', region: 'us-east-1' },
+      env: keys('selected'),
+    });
+    const client = await provider.getKnowledgeBaseClient();
+    const handle = vi.spyOn(client.config.requestHandler, 'handle').mockResolvedValue({
+      response: {
+        statusCode: 200,
+        headers: {},
+        body: new TextEncoder().encode(JSON.stringify({ output: { text: 'fixture' } })),
+      },
+    });
+    try {
+      expect(await withCacheEnabled(false, () => provider.callApi('fixture'))).toMatchObject({
+        output: 'fixture',
+      });
+      expect(handle).toHaveBeenCalledOnce();
+      expect(handle.mock.calls[0][0].headers.authorization).toContain(
+        'Credential=selected-access/',
+      );
+      expect(handle.mock.calls[0][0].headers.authorization).not.toContain('host-bearer');
+    } finally {
+      client.destroy();
+    }
+  });
 
   it.each(['bedrock:video:amazon.nova-reel-v1:0', 'bedrock:video:luma.ray-v2:0'])(
     'rejects bearer-only video authentication for %s before starting a job',

@@ -1891,6 +1891,8 @@ If you see this error, the cause depends on which model provider you're using:
 
 AWS Bedrock Knowledge Bases provide Retrieval Augmented Generation (RAG) functionality, allowing you to query a knowledge base with natural language and get responses based on your data.
 
+Knowledge Bases require AWS credentials or a profile; Bedrock API keys are not supported.
+
 ### Prerequisites
 
 To use the Knowledge Base provider, you need:
