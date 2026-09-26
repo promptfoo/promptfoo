@@ -187,7 +187,7 @@ describe('Telemetry', () => {
   });
 
   it('should include version in telemetry events', () => {
-    mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '0' });
+    mockProcessEnv({ IS_TESTING: undefined, PROMPTFOO_DISABLE_TELEMETRY: '0' });
     const telemetry = new Telemetry();
     telemetry.record('eval_ran', { foo: 'bar' });
 
@@ -720,6 +720,35 @@ describe('Telemetry', () => {
   });
 
   describe('telemetry disabled recording', () => {
+    it.each([false, true])('suppresses fallback events in test mode (opt-out=%s)', (disabled) => {
+      mockProcessEnv({
+        IS_TESTING: 'true',
+        PROMPTFOO_DISABLE_TELEMETRY: disabled ? '1' : undefined,
+      });
+      const telemetry = new Telemetry(false);
+      vi.mocked(getUserAuthInfo).mockClear();
+
+      telemetry.record('eval_ran', {});
+      telemetry.record('command_used', { name: 'eval' });
+
+      expect(fetchWithProxySpy).not.toHaveBeenCalled();
+      expect(getUserAuthInfo).not.toHaveBeenCalled();
+    });
+
+    it('preserves one documented opt-out acknowledgment outside test mode', () => {
+      mockProcessEnv({ IS_TESTING: undefined, PROMPTFOO_DISABLE_TELEMETRY: '1' });
+      const telemetry = new Telemetry(false);
+      telemetry.record('eval_ran', {});
+      telemetry.record('command_used', { name: 'eval' });
+
+      expect(fetchWithProxySpy).toHaveBeenCalledOnce();
+      const options = fetchWithProxySpy.mock.calls[0][1];
+      expect(JSON.parse(options!.body as string)).toMatchObject({
+        event: 'feature_used',
+        meta: { feature: 'telemetry disabled' },
+      });
+    });
+
     it('should record telemetry disabled event only once', () => {
       mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '1' });
       const telemetry = new Telemetry();

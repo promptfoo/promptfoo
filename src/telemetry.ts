@@ -124,6 +124,10 @@ export class Telemetry {
   }
 
   private sendEvent(eventName: TelemetryEventTypes, properties: EventProperties): void {
+    if (getEnvBool('IS_TESTING')) {
+      return;
+    }
+
     const ciFlag = isCI();
     const personProperties = this.getPersonProperties(ciFlag);
     const propertiesWithMetadata = {
@@ -134,7 +138,7 @@ export class Telemetry {
     };
 
     const client = getPostHogClient();
-    if (client && !getEnvBool('IS_TESTING')) {
+    if (client) {
       try {
         client.capture({
           distinctId: this.getId(),
