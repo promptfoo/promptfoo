@@ -20,11 +20,17 @@ In this tutorial, we'll use promptfoo to set up an automated pipeline for genera
 Make sure you have the following installed:
 
 - Node.js and npm
-- Python 3.9+
+- Python 3.10+
 - Docker
 - promptfoo (`npm install -g promptfoo`)
-- epicbox (`pip install epicbox`)
-- urllib3 < 2 (`pip install 'urllib3<2'`)
+
+Install the [example's Python requirements](https://github.com/promptfoo/promptfoo/blob/main/examples/integration-docker/code-generation-sandbox/requirements.txt):
+
+```bash
+python -m pip install -r https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-docker/code-generation-sandbox/requirements.txt
+```
+
+These use the official Epicbox 1.1.1 GitHub release, verified by a SHA-256 hash, and retain transport security minimums. Epicbox 1.1.0 on PyPI is incompatible with urllib3 2.
 
 Pull the Docker image you want to use so it is available locally. In this tutorial, we'll use a generic Python image, but you can use a custom one if you want:
 
