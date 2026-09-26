@@ -4,7 +4,7 @@ description: OpenAI vision model image analysis and evaluation
 prompts:
   - file://prompt.json
 providers:
-  - openai:responses:gpt-6-sol
+  - openai:gpt-6-sol
 
 tests:
   - vars:

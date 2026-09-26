@@ -1,6 +1,6 @@
 # openai-multiline-yaml (OpenAI Multiline YAML)
 
-This example stores a travel assistant's system and user messages in `prompt.yaml`. YAML's `|` syntax keeps the multiline system prompt readable. The messages are sent to GPT-6 Luna through the Responses API.
+This example uses GPT-6 Luna with a travel assistant's system and user messages in `prompt.yaml`. YAML's `|` syntax keeps the multiline system prompt readable.
 
 ## Usage
 

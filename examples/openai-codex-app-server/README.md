@@ -52,7 +52,7 @@ The skills config expects `CODEX_SKILL_CREATOR_PATH` to point at a local
 
 ## Notes
 
-Codex runs its own agent loop; the `openai:responses:*` provider is for direct model calls.
+Codex runs its own agent loop; providers such as `openai:gpt-6-sol` make direct model calls.
 
 The provider starts its own `codex app-server` process. It does not attach to an already-running Codex Desktop app process.
 

@@ -13,7 +13,7 @@ prompts:
 
 providers:
   # OpenAI (Category A - Direct instrumentation)
-  - id: openai:responses:gpt-6-luna
+  - id: openai:gpt-6-luna
     config:
       reasoning:
         effort: none

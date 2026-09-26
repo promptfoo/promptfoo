@@ -1,6 +1,6 @@
 # eval-self-grading (Self Grading)
 
-This example compares two customer-support prompts using GPT-6 Sol through the Responses API. A separate model-graded rubric checks that responses do not mention being an AI, and a JavaScript assertion gives shorter responses a higher score.
+This example compares two customer-support prompts using GPT-6 Sol. A separate model-graded rubric checks that responses do not mention being an AI, and a JavaScript assertion gives shorter responses a higher score.
 
 ## Usage
 

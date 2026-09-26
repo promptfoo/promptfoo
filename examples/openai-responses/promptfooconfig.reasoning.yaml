@@ -6,7 +6,7 @@ prompts:
     {{math_problem}}
 
 providers:
-  - id: openai:responses:gpt-6-sol
+  - id: openai:gpt-6-sol
     label: gpt-6-sol-high-reasoning
     config:
       max_output_tokens: 4096
@@ -14,20 +14,20 @@ providers:
         effort: 'high'
       user: 'math-student-001'
 
-  - id: openai:responses:gpt-6-astra
+  - id: openai:gpt-6-astra
     label: gpt-6-astra-reasoning
     config:
       max_output_tokens: 8192
       reasoning:
         effort: 'high'
 
-  - id: openai:responses:gpt-6-sol
+  - id: openai:gpt-6-sol
     label: gpt-6-sol-medium-reasoning
     config:
       max_output_tokens: 4096
       reasoning:
         effort: 'medium'
-  - id: openai:responses:gpt-6-luna
+  - id: openai:gpt-6-luna
     label: gpt-6-luna-none-reasoning
     config:
       max_output_tokens: 4096

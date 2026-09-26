@@ -1,6 +1,6 @@
 # compare-openai-models (OpenAI Model Comparison)
 
-This example compares `gpt-6-luna`, `gpt-6-sol`, and `gpt-6-astra` on riddles through the Responses API, with the same `low` reasoning effort. Astra requires model access on your OpenAI account.
+This example compares `gpt-6-luna`, `gpt-6-sol`, and `gpt-6-astra` on riddles with the same `low` reasoning effort. Astra requires model access on your OpenAI account.
 
 ## Usage
 

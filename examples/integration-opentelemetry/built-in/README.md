@@ -19,7 +19,7 @@ export OPENAI_API_KEY=sk-...
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-To run only OpenAI, add `--filter-providers gpt-6-luna` to the eval command. The OpenAI provider uses Responses; each test runs only against its matching prompt.
+To run only OpenAI, add `--filter-providers gpt-6-luna` to the eval command. Each test runs only against its matching prompt.
 
 2. **Run the evaluation:**
 

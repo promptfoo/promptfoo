@@ -1,6 +1,6 @@
 # openai-vision (OpenAI Vision Model Example)
 
-This example sends text and a local image to GPT-6 Sol through the Responses API, then checks whether the description identifies Earth.
+This example sends text and a local image to GPT-6 Sol, then checks whether the description identifies Earth.
 
 ## Usage
 

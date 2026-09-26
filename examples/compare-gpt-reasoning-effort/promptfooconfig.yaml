@@ -8,14 +8,14 @@ prompts:
     Task: {{task}}
 
 providers:
-  - id: openai:responses:gpt-6-luna
+  - id: openai:gpt-6-luna
     label: gpt-6-luna-no-reasoning
     config:
       reasoning:
         effort: none
       verbosity: low
       max_output_tokens: 512
-  - id: openai:responses:gpt-6-luna
+  - id: openai:gpt-6-luna
     label: gpt-6-luna-medium-reasoning
     config:
       reasoning:

@@ -1,6 +1,6 @@
 # openai-responses (OpenAI Responses API Examples)
 
-This directory contains examples for testing OpenAI's Responses API with promptfoo.
+These examples use OpenAI's Responses API. GPT-6 provider IDs such as `openai:gpt-6-sol` select Responses by default.
 
 You can run this example with:
 
@@ -17,16 +17,7 @@ Basic example showing how to use the Responses API with GPT-6 Sol, Luna, and Ast
 
 ### External Response Format (`promptfooconfig.external-format.yaml`)
 
-Example demonstrating how to load `response_format` configuration from external files. This is useful for:
-
-- Reusing complex JSON schemas across multiple configurations
-- Managing large schemas in separate files for better organization
-- Version controlling schemas independently
-
-This example compares inline vs. external file approach:
-
-- **Inline**: JSON schema defined directly in the config
-- **External**: JSON schema loaded from `response_format.json` using `file://` syntax
+Compares inline JSON schemas with schemas loaded from `response_format.json` using `file://`. External files let you reuse a schema across configurations.
 
 ### Function Calling (`promptfooconfig.function-call.yaml`)
 
@@ -34,17 +25,7 @@ Checks that the response contains a `get_current_weather` function call. This ex
 
 ### Function Callbacks (`promptfooconfig.function-callback.yaml`)
 
-Example showing how to use function callbacks to execute functions locally instead of just returning the function call. This allows you to:
-
-- Execute custom logic when the model calls a function
-- Return the result directly to the test assertions
-- Test end-to-end workflows including function execution
-
-Key differences from regular function calling:
-
-- Uses `functionToolCallbacks` to define JavaScript functions
-- Functions are executed locally and results are returned
-- Perfect for testing tool-using AI agents
+Uses `functionToolCallbacks` to run an `addNumbers` function locally when the model calls it. Assertions check the callback result.
 
 ### Reasoning Models (`promptfooconfig.reasoning.yaml`)
 

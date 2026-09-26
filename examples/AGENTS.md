@@ -56,11 +56,11 @@ Note: Quotes around `'{{env.VAR}}'` are required in YAML to prevent parsing issu
 
 Use current model identifiers (see `site/docs/providers/` for full list):
 
-- OpenAI: `openai:responses:gpt-6-sol`, `openai:responses:gpt-6-luna`, `openai:responses:gpt-6-astra`, `openai:chat:gpt-6-luna`
+- OpenAI: `openai:gpt-6-sol`, `openai:gpt-6-luna`, `openai:gpt-6-astra`
 - Anthropic: `anthropic:messages:claude-sonnet-4-6`, `anthropic:messages:claude-haiku-4-5-20251001`
 - Google: `google:gemini-3.1-pro-preview`, `google:gemini-2.5-flash`
 
-Prefer explicit `openai:responses:<model>` IDs for new general-purpose OpenAI examples. Keep Chat Completions when the example teaches Chat-specific request formats, assertions, or integrations, and explain that choice. Match reasoning, tools, structured output, and image inputs to the selected endpoint.
+Prefer short IDs such as `openai:gpt-6-sol` for general-purpose examples; GPT-6 IDs default to Responses. Use explicit `openai:responses:<model>` or `openai:chat:<model>` IDs when selecting a different endpoint or comparing APIs. Match reasoning, tools, structured output, and image inputs to the selected endpoint.
 
 ## Guidelines
 

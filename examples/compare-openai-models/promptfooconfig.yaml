@@ -5,17 +5,17 @@ prompts:
   - 'Solve this riddle: {{riddle}}'
 
 providers:
-  - id: openai:responses:gpt-6-luna
+  - id: openai:gpt-6-luna
     config:
       reasoning:
         effort: low
       max_output_tokens: 2048
-  - id: openai:responses:gpt-6-sol
+  - id: openai:gpt-6-sol
     config:
       reasoning:
         effort: low
       max_output_tokens: 2048
-  - id: openai:responses:gpt-6-astra
+  - id: openai:gpt-6-astra
     config:
       reasoning:
         effort: low

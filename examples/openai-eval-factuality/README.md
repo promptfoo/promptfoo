@@ -1,6 +1,6 @@
 # openai-eval-factuality (OpenAI Factuality Evaluation)
 
-This example compares concise and verbose answers about California's capital using GPT-6 Luna through the Responses API. The `factuality` assertion compares each answer with a reference answer, while `model-graded-closedqa` checks that it does not add unrelated facts. Both assertions make separate grading calls.
+This example compares concise and verbose answers about California's capital using GPT-6 Luna. The `factuality` assertion compares each answer with a reference answer, while `model-graded-closedqa` checks that it does not add unrelated facts. Both assertions make separate grading calls.
 
 ## Usage
 
