@@ -164,12 +164,26 @@ function getProviderEnvAliasGroups(providerPath: string): readonly (readonly str
     ];
   }
   if (/^(?:google|palm):video:/.test(providerPath)) {
-    return [['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT']];
+    return [
+      ['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'PALM_API_KEY', 'VERTEX_API_KEY'],
+      ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'],
+    ];
   }
   if (providerPath.startsWith('vertex:')) {
     return [
+      ['VERTEX_API_KEY', 'GOOGLE_API_KEY'],
       ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'],
       ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION'],
+    ];
+  }
+  if (/^(?:google|palm):/.test(providerPath)) {
+    return [['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'PALM_API_KEY']];
+  }
+  if (/^(?:azure|azureopenai):/.test(providerPath)) {
+    return [
+      ['AZURE_API_KEY', 'AZURE_OPENAI_API_KEY'],
+      ['AZURE_API_HOST', 'AZURE_OPENAI_API_HOST'],
+      ['AZURE_API_BASE_URL', 'AZURE_OPENAI_API_BASE_URL', 'AZURE_OPENAI_BASE_URL'],
     ];
   }
   return [];
