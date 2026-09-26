@@ -3878,6 +3878,16 @@ describe('ResultsTable Named Metric Totals', () => {
     vi.mocked(useResultsViewSettingsStore).mockReset();
   });
 
+  it('counts a failed provider attempt as one case and retains its error indicator', () => {
+    mockTableStore([columnMetrics(0, 1)], { pageSize: 1 });
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByText(/0\/1 cases/)).toHaveTextContent('0.00% passing (0/1 cases)');
+    expect(screen.getByRole('button', { name: /Errors: 1/ })).toBeInTheDocument();
+    expect(screen.queryByText(/0\/0 cases/)).not.toBeInTheDocument();
+  });
+
   it('uses each column’s own named metric count when the first column errored', () => {
     mockTableStore([columnMetrics(4), columnMetrics(5), columnMetrics(5)]);
 

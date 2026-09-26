@@ -1,6 +1,6 @@
-# openai-codex-security (Compare Source Review and Saved Reports)
+# openai-codex-security (Compare Source Reviews and Saved Reports)
 
-Compare Codex Security's standard source review at low and medium reasoning effort, using `gpt-5.6-luna` on the same pinned OWASP Juice Shop source. A separate config compares existing genuine reports without repeating a scan. A recorded case study is summarized in [benchmark-results.json](benchmark-results.json); raw reports are not bundled.
+Compare Luna and Terra at medium reasoning effort on the same pinned OWASP Juice Shop source. Import saved results to review and grade them without repeating scans. [benchmark-results.json](benchmark-results.json) records a real six-attempt comparison; original reports and private SDK state are not bundled.
 
 ## Setup
 
@@ -10,9 +10,9 @@ cd openai-codex-security
 npm install promptfoo @openai/codex-security@^0.1.31
 ```
 
-Native operations require a supported Node.js version, Python 3.10+, and Codex Security account/model access. Use a saved Codex login or API credentials in the process running Promptfoo; see the [installation and authentication reference](https://www.promptfoo.dev/docs/providers/openai-codex-security/#installation-and-authentication). With the default `auth: auto`, an environment API key takes precedence over a saved login. Set `auth: chatgpt` on both providers if you intend to use the saved login.
+Native operations require supported Node.js, Python 3.10+, and Codex Security account/model access. The example uses a saved Codex login (`auth: chatgpt`); change both providers to `auth: api-key` to use process-environment API credentials. See [installation and authentication](https://www.promptfoo.dev/docs/providers/openai-codex-security/#installation-and-authentication).
 
-Prepare a clean source checkout; there is no need to install or run Juice Shop:
+Prepare clean source without installing or running Juice Shop:
 
 ```bash
 git clone --branch v19.0.0 --single-branch https://github.com/juice-shop/juice-shop.git juice-shop-v19
@@ -20,7 +20,7 @@ git -C juice-shop-v19 checkout --detach 36870cbbdfe7864698e1adf644c7bf772f67ebb7
 export CODEX_SECURITY_REPOSITORY="$PWD/juice-shop-v19"
 ```
 
-The default config reviews `routes/basket.ts`, `routes/delivery.ts`, and `routes/orderHistory.ts`: 123 source lines at this revision. Both columns use the same prompt, paths, model, and $3 estimated scan-spend threshold; only the requested reasoning effort differs. The threshold is per scan, can be exceeded by in-flight work, and is not a billing cap.
+The config selects 14 files / 1,621 source lines at this revision. Both providers use the same prompt, medium effort, three-thread limit, and $5 estimated scan-spend threshold. That threshold is per operation, can be exceeded by in-flight work, and is not a billing cap.
 
 ## Compare source reviews
 
@@ -29,61 +29,84 @@ npx promptfoo@latest eval --max-concurrency 1 --no-cache -o comparison-live.json
 npx promptfoo@latest view
 ```
 
-This command starts two real SDK operations. The prompt requests source inspection only, including validation of findings against source; it does not request application execution or vulnerability reproduction. These instructions are not an enforced execution sandbox. Use the SDK in an environment suitable for reviewing untrusted source.
+This starts two real SDK operations. [prompt.txt](prompt.txt) requests source inspection and source-based validation only, without running the target or reproducing vulnerabilities. It includes intentional flaws but excludes challenge catalogs, codefixes, tests, solutions, previous reports, and benchmark answers. These are prompt instructions, not filesystem enforcement; review recorded tool use before accepting protocol compliance. Inline annotations remain visible in this known public repository.
 
-The benchmark prompt includes intentional and documented flaws: a known challenge label is not a reason to exclude a source-supported finding. State this scope explicitly when evaluating an intentionally vulnerable application.
-
-The assertions check scan completion and coverage, not recall or precision. Preserve the eval config and original SDK reports (`response.raw` in the exported results). Provider labels and configured effort describe the request; compare recorded model, effective settings when available, SDK/plugin versions, usage, warnings, and source provenance before attributing differences to reasoning effort. Missing observations remain unknown. A completed source review does not establish runtime exploitability or that the repository is secure.
+The two assertions check completion and coverage, not detection quality. Keep the config, full native eval export, source hashes, and independently reviewed evidence. Labels describe requested settings; actual session observations, versions and usage are needed to support attribution. A source-supported finding does not establish runtime exploitability.
 
 ## Recorded case study
 
-The [guide's recorded comparison](https://www.promptfoo.dev/docs/guides/codex-security-results/#recorded-juice-shop-comparison) covers one run each of Luna low, Luna medium, and a Terra medium reference configuration. All three found one of two independently curated issues; Terra also reported a separately supported issue outside that expected set. Both native Luna runs reported partial coverage with SDK recovery warnings. These observations do not establish a general model ranking.
+The [guide](https://www.promptfoo.dev/docs/guides/codex-security-results/#recorded-juice-shop-comparison) describes three planned repeats per model against 11 frozen, independently source-reviewed causes. Both configurations delivered 12 expected-cause matches across 33 planned opportunities (36.36%). Each had two eligible reports, with mean curated recall 54.55% among those reports. One attempt failed publication; another violated the excluded-answer reading policy. Their recall is **not scored**, and their delivery contribution is zero. All attempts retain resource use.
 
-[benchmark-results.json](benchmark-results.json) records exact report hashes, source and prompt identity, requested and separately observed settings, adjudication counts, usage, and estimated cost. Recorded runs used SDK 0.1.31/plugin 0.1.95, fresh SDK state per run, saved ChatGPT authentication, and a three-thread limit. The portable config above leaves authentication and thread limits at SDK defaults; the recorded Luna runs also overlapped, while the example command runs sequentially. Consult the receipt before treating a new run as an exact replication.
+The receipt records hashes, source files, requested and observed settings, eligibility, findings, warnings, adjudication counts, usage and estimated cost. The recorded protocol used fresh SDK state for each attempt, sequential counterbalanced order, SDK 0.1.31/plugin 0.1.95 and CLI 0.156.1. The portable config runs one pair; it does not reproduce the three-repeat schedule or automatically reset SDK state. Three planned repeats do not establish a general model ranking.
 
 ## Compare saved reports
 
-Use `promptfooconfig.reports.yaml` to import existing SDK `ScanResult.toJSON()` files. This mode requires no SDK, Python, or model credentials. Set these variables in the process running Promptfoo:
+`promptfooconfig.reports.yaml` imports two local files using the native provider. Import requires no SDK, Python, or model credentials. Prefer Promptfoo replay files to preserve normalized native diagnostics, warnings, operation and historical usage. Direct SDK `ScanResult.toJSON()` files are also supported, but SDK 0.1.31 omits runtime operation and recovery warnings.
 
-| Variable                          | Required input                                                     |
-| --------------------------------- | ------------------------------------------------------------------ |
-| `CODEX_SECURITY_BASELINE_REPORT`  | Absolute path to the baseline SDK `ScanResult.toJSON()` JSON file  |
-| `CODEX_SECURITY_CANDIDATE_REPORT` | Absolute path to the candidate SDK `ScanResult.toJSON()` JSON file |
-
-Use reports for the same source snapshot and scope. Keep their original manifest, findings, and coverage together; a bare findings array or entire Promptfoo eval export is insufficient. Missing or invalid files produce errors without a fallback scan.
-
-Keep the full native eval export alongside the extracted SDK reports. In SDK 0.1.31, `ScanResult.toJSON()` omits runtime operation and recovery warnings, so imports can show partial coverage with no warnings and an unknown operation. The case-study warning counts come from native eval metadata.
-
-To extract both reports from the eval export generated above, run the following in the example directory. Exported `response.raw` can be a JSON string or an object; the snippet also accepts an untransformed `response.output` if raw data is absent. It checks the manifest document type and refuses to overwrite existing report files. The provider performs full report validation during import.
+Keep the full native eval export. To extract portable replay files from a new export, run this in the example directory:
 
 ```bash
 node --input-type=module <<'JS'
 import { readFileSync, writeFileSync } from 'node:fs';
 const exported = JSON.parse(readFileSync('comparison-live.json', 'utf8'));
 for (const [label, file] of [
-  ['Luna low', 'report-low.json'],
-  ['Luna medium', 'report-medium.json'],
+  ['Luna medium', 'report-luna.json'],
+  ['Terra medium', 'report-terra.json'],
 ]) {
   const rows = exported.results.results.filter(row => row.provider?.label === label);
   if (rows.length !== 1) throw new Error(`Expected one result for ${label}`);
   const { response } = rows[0];
-  const value = response.raw ?? response.output;
-  const report = typeof value === 'string' ? JSON.parse(value) : value;
-  if (report?.manifest?.documentType !== 'codex-security.scan-manifest') {
-    throw new Error(`Missing scan report for ${label}`);
-  }
-  writeFileSync(file, JSON.stringify(report, null, 2) + '\n', { flag: 'wx' });
+  const replay = response.metadata?.codexSecurityReplay;
+  if (!replay) throw new Error(`Export lacks replay metadata for ${label}`);
+  const value = response.raw ?? null;
+  const payload = typeof value === 'string' ? JSON.parse(value) : value;
+  writeFileSync(file, JSON.stringify({ ...replay, payload }, null, 2) + '\n', { flag: 'wx' });
 }
 JS
-export CODEX_SECURITY_BASELINE_REPORT="$PWD/report-low.json"
-export CODEX_SECURITY_CANDIDATE_REPORT="$PWD/report-medium.json"
-```
-
-```bash
+export CODEX_SECURITY_BASELINE_REPORT="$PWD/report-luna.json"
+export CODEX_SECURITY_CANDIDATE_REPORT="$PWD/report-terra.json"
 npx promptfoo@latest eval -c promptfooconfig.reports.yaml --no-cache -o comparison-reports.json
 npx promptfoo@latest view
 ```
 
-Import incurs no new model usage. Recorded cost and duration describe the original operation; file-loading time is not scan latency. Keep missing historical measurements unknown.
+Extraction refuses to overwrite files. The provider validates the replay envelope and payload hash on import; a hash binds content, not the producer's identity. Failed replay records retain failure diagnostics and may have no canonical payload. Entire eval exports and bare findings arrays are not report inputs. Missing or invalid files never trigger a fallback scan. Import incurs no new model usage; recorded scan cost and duration are historical.
 
-The [guide](https://www.promptfoo.dev/docs/guides/codex-security-results/) explains independent ground-truth curation, includes an assertion for curated-set recall on saved reports, and distinguishes coverage, precision, and recorded spend. See the [provider reference](https://www.promptfoo.dev/docs/providers/openai-codex-security/) for configuration details.
+## Grade independently reviewed findings
+
+[grade-benchmark.mjs](grade-benchmark.mjs) exports `completedScan`, `completeCoverage`, `gradeBenchmark` and `evidenceHash`. The quality helper consumes the provider's normalized metadata and original SDK-shaped output; it does not normalize reports or discover/adjudicate findings.
+
+After reviewing your reports, add this assertion to the saved-report config. **Do not add `metric:` to the quality assertion**: it emits named metrics only when their evidence is valid.
+
+```yaml
+defaultTest:
+  assert:
+    - type: javascript
+      metric: CompletedScan
+      value: file://grade-benchmark.mjs:completedScan
+    - type: javascript
+      metric: CompleteCoverage
+      value: file://grade-benchmark.mjs:completeCoverage
+    - type: javascript
+      value: file://grade-benchmark.mjs:gradeBenchmark
+      config:
+        benchmark: file://benchmark.json
+```
+
+The helper resolves relative `file://` benchmark paths from its own directory; absolute paths also work. It loads this data for grading only, without adding it to the scan prompt. Create the benchmark data file from actual independent reviews:
+
+| Field                        | Meaning                                                                                                                                                                                                                                                                                                         |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `definition`                 | `{ revision, sourceSnapshotSha256, groundTruthSha256, scope: { includePaths, excludePaths }, expectedIds }`. Freeze the curated definition before examining outputs. Path arrays and expected IDs must be unique; expected IDs cannot be empty.                                                                 |
+| `definitionSha256`           | `evidenceHash(definition)`. Source snapshot/ground-truth hashes identify independently preserved evidence; verify that evidence separately.                                                                                                                                                                     |
+| `reports`                    | Object keyed by the SHA-256 of the exact imported file bytes (raw SDK file or replay file). Repackaging a report changes this identity.                                                                                                                                                                         |
+| `reports[hash].review`       | `{ definitionSha256, protocolValid, provenanceValid, findings }`; both validity flags must be explicitly `true` for quality scoring. Optional `ineligibleReason` explains exclusion.                                                                                                                            |
+| `review.findings`            | Every current SDK finding ID mapped to one or more independently reviewed claims. Each claim is `{ rootCauseId, verdict, inScope, expectedIds, evidence }`. Verdict is `supported`, `refuted` or `unresolved`. Use stable root-cause IDs to deduplicate; only supported in-scope claims may match expected IDs. |
+| `reports[hash].reviewSha256` | `evidenceHash(review)`; freeze after adjudication. Preserve original review evidence and its file hashes separately.                                                                                                                                                                                            |
+
+`evidenceHash` hashes UTF-8 JSON with recursively sorted object keys; array order is retained. It detects changes to the supplied definition/review, not a dishonest reviewer or incorrect source identity. Scope comparison ignores path order and narrative wording; review assumptions and dirty-worktree identity separately. Keep original SDK output for grading; transformed output that drops finding IDs cannot be scored.
+
+An eligible empty report measures zero curated recall. Missing review, invalid protocol, mismatched source/hash, incomplete finding adjudication or an empty expected set instead returns **Not scored**, null quality metadata and no quality named metrics. Promptfoo still records an overall failed evidence check with numeric score zero; use `CuratedRecall`, not overall score, for recall averages.
+
+`CuratedRecall` counts unique matched expected IDs. `PrecisionLower` is supported / (supported + refuted + unresolved); `PrecisionUpper` includes unresolved claims in its numerator. These are adjudication bounds, not confidence intervals. Empty claim denominators remain undefined. Resolved-only precision and counts are retained in `gradingResult.componentResults[].metadata.quality`. Review valid extras independently; an unmatched finding is not automatically false positive. Partial coverage keeps the full expected denominator.
+
+Keep an all-planned-attempt ledger alongside eligible report grades. Delivery yield is eligible delivered matches / (planned attempts × expected count), assigning zero delivery to failed or invalid attempts while leaving their recall unscored. Include their duration and cost. See the [guide](https://www.promptfoo.dev/docs/guides/codex-security-results/) for the recorded comparison and limits.

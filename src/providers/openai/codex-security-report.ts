@@ -3,7 +3,10 @@ import { constants } from 'node:fs';
 import fs from 'node:fs/promises';
 
 import { z } from 'zod';
+import { CodexSecurityReplaySchema } from '../../contracts/codexSecurity';
 import { normalizeCodexSecurityResult } from './codex-security-result';
+
+import type { CodexSecurityReplay, CodexSecurityResult } from '../../contracts/codexSecurity';
 
 const ScanReportSchema = z.object({
   manifest: z.object({
@@ -91,17 +94,7 @@ async function readReportFile(file: string, signal?: AbortSignal): Promise<Buffe
   }
 }
 
-/** Read one serialized SDK result, at most 64 MiB. Referenced artifacts are never opened. */
-export async function readCodexSecurityReport(file: string, signal?: AbortSignal) {
-  const contents = await readReportFile(file, signal);
-  throwIfAborted(signal);
-  let raw: unknown;
-  try {
-    raw = JSON.parse(contents.toString('utf8'));
-  } catch {
-    // JSON parser messages can include excerpts of private report contents.
-    throw new Error('Codex Security report_file is not valid JSON.');
-  }
+function payloadSummary(raw: unknown, source: CodexSecurityResult['source']) {
   const isScan = raw !== null && typeof raw === 'object' && 'manifest' in raw;
   const scan = isScan ? ScanReportSchema.safeParse(raw) : null;
   const validation = isScan ? null : ValidationReportSchema.safeParse(raw);
@@ -118,15 +111,138 @@ export async function readCodexSecurityReport(file: string, signal?: AbortSignal
     throw new Error('Codex Security report_file contains mismatched scan IDs.');
   }
   const summary = normalizeCodexSecurityResult(raw, {
-    source: {
-      kind: 'saved-report',
-      file,
-      sha256: createHash('sha256').update(contents).digest('hex'),
-    },
+    source,
     // Coverage describes the target, not the operation that produced it. For example,
     // both standard and deep scans can produce scoped_path coverage.
     ...(validation?.success ? { operation: 'validation', status: 'completed' } : {}),
   });
+  return summary;
+}
+
+/** Pair this compact header with response.raw as payload for offline replay. */
+export function createCodexSecurityReplayHeader(
+  payload: Record<string, unknown> | null,
+  result: CodexSecurityResult,
+): Omit<CodexSecurityReplay, 'payload'> {
+  return {
+    documentType: 'promptfoo.codex-security-replay',
+    schemaVersion: 1,
+    payloadSha256:
+      payload === null ? null : createHash('sha256').update(JSON.stringify(payload)).digest('hex'),
+    result,
+  };
+}
+
+// Recorded metadata may fill absent SDK fields, but may never contradict reported evidence.
+function assertMatchingEvidence(expected: unknown, actual: unknown): void {
+  if (expected === null || expected === undefined) {
+    return;
+  }
+  if (typeof expected === 'object' && !Array.isArray(expected)) {
+    if (actual === null || typeof actual !== 'object' || Array.isArray(actual)) {
+      throw new Error('Codex Security replay metadata disagrees with its SDK payload.');
+    }
+    for (const [key, value] of Object.entries(expected)) {
+      assertMatchingEvidence(value, (actual as Record<string, unknown>)[key]);
+    }
+  } else if (JSON.stringify(expected) !== JSON.stringify(actual)) {
+    throw new Error('Codex Security replay metadata disagrees with its SDK payload.');
+  }
+}
+
+function validateReplay(replay: CodexSecurityReplay): void {
+  const { payload, result } = replay;
+  if (payload === null) {
+    if (
+      replay.payloadSha256 !== null ||
+      !['failed', 'canceled', 'interrupted'].includes(result.status) ||
+      !result.error ||
+      result.findings !== null ||
+      result.validation !== null
+    ) {
+      throw new Error('Codex Security replay without an SDK payload must record a failed outcome.');
+    }
+    return;
+  }
+  if (createCodexSecurityReplayHeader(payload, result).payloadSha256 !== replay.payloadSha256) {
+    throw new Error('Codex Security replay SDK payload hash does not match.');
+  }
+  const intrinsic = payloadSummary(payload, { kind: 'saved-report', mocked: false });
+  if (intrinsic.source.mocked || result.source.mocked) {
+    throw new Error('Codex Security report_file is marked as a mock result.');
+  }
+  // Required scan fields and derived finding counts must match exactly, including unknowns.
+  for (const key of ['scanId', 'status', 'findings', 'coverage', 'validation'] as const) {
+    if (JSON.stringify(intrinsic[key]) !== JSON.stringify(result[key])) {
+      throw new Error('Codex Security replay metadata disagrees with its SDK payload.');
+    }
+  }
+  for (const key of [
+    'operation',
+    'error',
+    'model',
+    'versions',
+    'cost',
+    'elapsedMs',
+    'usage',
+    'target',
+    'scope',
+  ] as const) {
+    assertMatchingEvidence(intrinsic[key], result[key]);
+  }
+  if (
+    intrinsic.diagnostics?.warningAvailability === 'observed' &&
+    result.diagnostics?.warningAvailability !== 'observed'
+  ) {
+    throw new Error('Codex Security replay metadata omits recorded warning availability.');
+  }
+  if (intrinsic.warnings.some((warning) => !result.warnings.includes(warning))) {
+    throw new Error('Codex Security replay metadata omits recorded SDK warnings.');
+  }
+  if (result.status === 'completed' && result.error !== null) {
+    throw new Error('Codex Security replay completed outcome cannot contain an error.');
+  }
+}
+
+/** Read a bounded SDK result or replay envelope. Referenced artifacts are never opened. */
+export async function readCodexSecurityReport(file: string, signal?: AbortSignal) {
+  const contents = await readReportFile(file, signal);
+  throwIfAborted(signal);
+  let raw: unknown;
+  try {
+    raw = JSON.parse(contents.toString('utf8'));
+  } catch {
+    // JSON parser messages can include excerpts of private report contents.
+    throw new Error('Codex Security report_file is not valid JSON.');
+  }
+  const source = {
+    kind: 'saved-report' as const,
+    file,
+    sha256: createHash('sha256').update(contents).digest('hex'),
+    mocked: false,
+  };
+  let summary: CodexSecurityResult;
+  if (
+    raw !== null &&
+    typeof raw === 'object' &&
+    'documentType' in raw &&
+    raw.documentType === 'promptfoo.codex-security-replay'
+  ) {
+    const parsed = CodexSecurityReplaySchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new Error(
+        'Codex Security report_file contains an invalid or unsupported replay envelope.',
+      );
+    }
+    validateReplay(parsed.data);
+    summary = {
+      ...parsed.data.result,
+      source: { ...source, mocked: parsed.data.result.source.mocked },
+    };
+    raw = parsed.data.payload;
+  } else {
+    summary = payloadSummary(raw, source);
+  }
   if (summary.source.mocked) {
     throw new Error(
       'Codex Security report_file is marked as a mock result. Supply an authentic SDK report.',

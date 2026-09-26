@@ -306,6 +306,39 @@ describe('normalizeCodexSecurityResult', () => {
     expect(result.warnings).toEqual(['<b>Recorded warning</b>']);
   });
 
+  it('distinguishes unknown warning availability from explicitly observed evidence', () => {
+    expect(normalizeCodexSecurityResult({}, sdkContext).diagnostics).toEqual({
+      phase: null,
+      warningAvailability: 'unknown',
+    });
+    expect(
+      normalizeCodexSecurityResult({}, { ...sdkContext, warnings: [] }).diagnostics
+        ?.warningAvailability,
+    ).toBe('unknown');
+    expect(
+      normalizeCodexSecurityResult({ warnings: [] }, sdkContext).diagnostics?.warningAvailability,
+    ).toBe('observed');
+    expect(
+      normalizeCodexSecurityResult({}, { ...sdkContext, warnings: ['Recorded warning'] })
+        .diagnostics?.warningAvailability,
+    ).toBe('observed');
+  });
+
+  it.each(['canceled', 'interrupted'] as const)(
+    'preserves %s with an explanatory error',
+    (status) => {
+      const result = normalizeCodexSecurityResult(undefined, {
+        ...sdkContext,
+        status,
+        error: 'Operation stopped',
+        diagnostics: { phase: 'scan', warningAvailability: 'unknown' },
+      });
+      expect(result.status).toBe(status);
+      expect(result.error).toBe('Operation stopped');
+      expect(result.diagnostics?.phase).toBe('scan');
+    },
+  );
+
   it('rejects unsupported or invalid normalized contracts at the portable boundary', () => {
     const normalized = normalizeCodexSecurityResult({}, sdkContext);
     expect(CodexSecurityResultSchema.safeParse({ ...normalized, version: 2 }).success).toBe(false);

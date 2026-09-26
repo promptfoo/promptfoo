@@ -5,6 +5,7 @@ import type {
   ProviderClassificationResponse,
   ProviderEmbeddingResponse,
   ProviderModerationResponse,
+  ProviderProgress,
   ProviderResponse,
   ProviderSimilarityResponse,
 } from '../contracts/providers';
@@ -113,6 +114,8 @@ export interface CallApiContextParams {
 }
 
 export interface CallApiOptionsParams {
+  /** Optional live operational updates. Observers must not affect provider execution. */
+  onProgress?: (progress: ProviderProgress) => void;
   includeLogProbs?: boolean;
   /**
    * Signal that can be used to abort the request
@@ -123,12 +126,17 @@ export interface CallApiOptionsParams {
 export interface ApiProvider extends MinimalApiProvider {
   callApi: CallApiFunction;
   /** Local setup validation that must not run inference or execute the provider's workload. */
-  checkSetup?: () => Promise<{
+  checkSetup?: (context?: CallApiContextParams) => Promise<{
     success: boolean;
     message: string;
     error?: string;
     details?: Record<string, unknown>;
+    response?: ProviderResponse;
   }>;
+  /** Opt in to local setup checks before evaluation workloads are queued. */
+  checkSetupOnEval?: boolean;
+  /** Emits bounded operational updates through callApi's onProgress observer. */
+  supportsProgress?: boolean;
   callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
   callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
   config?: any;

@@ -1,6 +1,26 @@
+import { z } from 'zod';
+
 import type { BlobRef } from './blobs.js';
 import type { CodexSecurityResult } from './codexSecurity.js';
 import type { TokenUsage, VarValue } from './shared.js';
+
+/** Bounded operational updates; never include prompts, tool output, or credentials. */
+export const ProviderProgressSchema = z.object({
+  phase: z.string().trim().min(1).max(80),
+  elapsedMs: z.number().finite().nonnegative().optional(),
+  estimatedCostUsd: z.number().finite().nonnegative().optional(),
+  warningCount: z.number().int().nonnegative().optional(),
+});
+
+export type ProviderProgress = z.infer<typeof ProviderProgressSchema>;
+
+export const EvalProviderProgressSchema = ProviderProgressSchema.extend({
+  provider: z.string().max(200),
+  testIdx: z.number().int().nonnegative(),
+  promptIdx: z.number().int().nonnegative(),
+});
+
+export type EvalProviderProgress = z.infer<typeof EvalProviderProgressSchema>;
 
 /**
  * Chat message type for provider-reported prompts and other multi-turn interactions.

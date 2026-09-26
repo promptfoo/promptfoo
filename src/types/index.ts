@@ -19,6 +19,8 @@ import {
   normalizeConfigProviderAlias,
 } from './configAliases';
 
+import type { EvalProviderProgress } from '../contracts/providers';
+
 export { ProvidersSchema };
 
 import { RedteamConfigSchema } from '../validators/redteam';
@@ -218,6 +220,11 @@ export type EvalConversations = Record<
 export type EvalRegisters = Record<string, VarValue>;
 
 export interface RunEvalOptions {
+  /** Evaluation-local setup cache, shared with the preflight pass. */
+  providerSetup?: (
+    provider: ApiProvider,
+    context: CallApiContextParams,
+  ) => Promise<ProviderResponse | undefined>;
   provider: ApiProvider;
   prompt: Prompt;
   delay: number;
@@ -289,6 +296,11 @@ export const EvaluateOptionsSchema = z.object({
         metrics: PromptMetrics,
       ) => void
     >((v) => typeof v === 'function')
+    .optional(),
+  providerProgressCallback: z
+    .custom<(progress: EvalProviderProgress, completed: boolean) => void>(
+      (value) => typeof value === 'function',
+    )
     .optional(),
   repeat: z.number().optional(),
   showProgressBar: z.boolean().optional(),
@@ -1535,6 +1547,7 @@ export interface OutputFile {
 
 // Live eval job state
 export interface Job {
+  providerProgress?: EvalProviderProgress[];
   evalId: string | null;
   status: 'in-progress' | 'complete' | 'error';
   progress: number;

@@ -27,7 +27,8 @@ describe('CodexSecurityResultSummary', () => {
       />,
     );
 
-    expect(screen.getByText('Standard security scan · Completed')).toBeInTheDocument();
+    expect(screen.getByText('Standard security scan')).toBeInTheDocument();
+    expect(screen.getByText('Execution').nextElementSibling).toHaveTextContent('Completed');
     expect(screen.getByText('Findings').nextElementSibling).toHaveTextContent('2 (1 high, 1 low)');
     expect(screen.getByText('Coverage').nextElementSibling).toHaveTextContent('partial');
     expect(screen.getByText('Estimated cost').nextElementSibling).toHaveTextContent('$0.10–$0.25');
@@ -78,9 +79,74 @@ describe('CodexSecurityResultSummary', () => {
     expect(screen.getByText('Estimated cost').nextElementSibling).toHaveTextContent('Unknown');
   });
 
+  it('distinguishes unavailable warning evidence from an observed empty warning list', () => {
+    const { rerender } = render(
+      <CodexSecurityResultSummary compact result={createCodexSecurityResult()} />,
+    );
+    expect(screen.getByText('Warning evidence unavailable')).toBeInTheDocument();
+    expect(screen.queryByText('No warnings reported')).not.toBeInTheDocument();
+
+    rerender(
+      <CodexSecurityResultSummary
+        compact
+        result={createCodexSecurityResult({
+          diagnostics: { phase: null, warningAvailability: 'observed' },
+        })}
+      />,
+    );
+    expect(screen.getByText('No warnings reported')).toBeInTheDocument();
+    expect(screen.queryByText('Warning evidence unavailable')).not.toBeInTheDocument();
+  });
+
+  it('preserves failed replay resources without inventing findings or quality scores', () => {
+    render(
+      <CodexSecurityResultSummary
+        result={createCodexSecurityResult({
+          source: { kind: 'saved-report', mocked: false },
+          status: 'failed',
+          diagnostics: { phase: 'scan', warningAvailability: 'unknown' },
+          elapsedMs: 125000,
+          cost: { baselineUsd: 0.137, range: null, pricing: null },
+          usage: { input: 3500, output: 25, cachedInput: 3000, cacheWriteInput: null, total: 3525 },
+        })}
+      />,
+    );
+    expect(screen.getByText('Execution').nextElementSibling).toHaveTextContent('Failed');
+    expect(screen.getByText('Failure phase').nextElementSibling).toHaveTextContent('Scan');
+    expect(screen.getByText('Findings').nextElementSibling).toHaveTextContent('Unknown');
+    expect(screen.getByText('Coverage').nextElementSibling).toHaveTextContent('unknown');
+    expect(screen.getByText('Recorded cost estimate').nextElementSibling).toHaveTextContent(
+      '$0.14',
+    );
+    expect(screen.getByText('Recorded duration').nextElementSibling).toHaveTextContent('2m 5s');
+    expect(screen.getByText('Recorded tokens').nextElementSibling).toHaveTextContent('3,525');
+    expect(screen.getByText('Warning evidence unavailable')).toBeInTheDocument();
+    expect(
+      screen.getByText('Execution status and coverage do not establish finding accuracy.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/recall|precision/i)).not.toBeInTheDocument();
+  });
+
+  it('does not guess a failure phase and identifies an observed cancellation phase', () => {
+    const { rerender } = render(
+      <CodexSecurityResultSummary result={createCodexSecurityResult({ status: 'failed' })} />,
+    );
+    expect(screen.queryByText('Failure phase')).not.toBeInTheDocument();
+    rerender(
+      <CodexSecurityResultSummary
+        result={createCodexSecurityResult({
+          status: 'canceled',
+          diagnostics: { phase: 'setup', warningAvailability: 'observed' },
+        })}
+      />,
+    );
+    expect(screen.getByText('Stopped during').nextElementSibling).toHaveTextContent('Setup');
+  });
+
   it('does not infer a scan from an unknown operation', () => {
     render(<CodexSecurityResultSummary result={createCodexSecurityResult({ operation: null })} />);
-    expect(screen.getByText('Security operation · Status unknown')).toBeInTheDocument();
+    expect(screen.getByText('Security operation')).toBeInTheDocument();
+    expect(screen.getByText('Execution').nextElementSibling).toHaveTextContent('Unknown');
     expect(screen.queryByText('Findings')).not.toBeInTheDocument();
     expect(screen.queryByText('Disposition')).not.toBeInTheDocument();
   });
@@ -97,7 +163,8 @@ describe('CodexSecurityResultSummary', () => {
         })}
       />,
     );
-    expect(screen.getByText('Deep security scan · Interrupted')).toBeInTheDocument();
+    expect(screen.getByText('Deep security scan')).toBeInTheDocument();
+    expect(screen.getByText('Execution').nextElementSibling).toHaveTextContent('Interrupted');
     expect(screen.getByText('Operation interrupted by the caller.')).toBeInTheDocument();
     expect(
       within(screen.getByRole('list', { name: 'Warnings' })).getByText('One review is unfinished.'),
@@ -121,7 +188,7 @@ describe('CodexSecurityResultSummary', () => {
       />,
     );
     expect(screen.getByText('recorded-model · Saved report')).toBeInTheDocument();
-    expect(screen.getByText('Standard security scan · Failed')).toBeInTheDocument();
+    expect(screen.getByText('Execution').nextElementSibling).toHaveTextContent('Failed');
     expect(screen.queryByText('The report could not be read.')).not.toBeInTheDocument();
     expect(screen.getByText('This result is marked as mocked.')).toBeInTheDocument();
     expect(screen.getByText('Recorded duration').nextElementSibling).toHaveTextContent('2m 5s');

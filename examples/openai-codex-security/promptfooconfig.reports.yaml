@@ -15,10 +15,10 @@ defaultTest:
   assert:
     - type: javascript
       metric: CompletedScan
-      value: context.metadata?.codexSecurity?.status === 'completed'
+      value: file://grade-benchmark.mjs:completedScan
     - type: javascript
       metric: CompleteCoverage
-      value: context.metadata?.codexSecurity?.coverage?.completeness === 'complete'
+      value: file://grade-benchmark.mjs:completeCoverage
 tests:
   - description: Check imported scan completion and coverage
     vars: {}

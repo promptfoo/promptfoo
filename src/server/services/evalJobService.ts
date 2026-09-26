@@ -1,3 +1,6 @@
+import { EvalProviderProgressSchema } from '../../contracts/providers';
+
+import type { EvalProviderProgress } from '../../contracts/providers';
 import type { Job } from '../../types/index';
 
 function createInitialJob(): Job {
@@ -37,6 +40,9 @@ function cloneJob(job: Job): Job {
     ...job,
     result: job.result === null ? null : cloneResult(job.result),
     logs: [...job.logs],
+    ...(job.providerProgress && {
+      providerProgress: job.providerProgress.map((progress) => ({ ...progress })),
+    }),
   };
 }
 
@@ -61,9 +67,29 @@ export class EvalJobService {
     });
   }
 
+  setProviderProgress(id: string, progress: EvalProviderProgress, completed = false): boolean {
+    const parsed = EvalProviderProgressSchema.safeParse(progress);
+    if (!parsed.success) {
+      return false;
+    }
+    return this.update(id, (job) => {
+      if (job.status !== 'in-progress') {
+        return;
+      }
+      const active = (job.providerProgress ?? []).filter(
+        (entry) => entry.testIdx !== progress.testIdx || entry.promptIdx !== progress.promptIdx,
+      );
+      if (!completed) {
+        active.push(parsed.data);
+      }
+      job.providerProgress = active.slice(-100);
+    });
+  }
+
   complete(id: string, result: Job['result'], evalId: string | null): boolean {
     return this.update(id, (job) => {
       job.status = 'complete';
+      delete job.providerProgress;
       job.result = result === null ? null : cloneResult(result);
       job.evalId = evalId;
     });
@@ -76,6 +102,7 @@ export class EvalJobService {
   ): boolean {
     return this.update(id, (job) => {
       job.status = 'error';
+      delete job.providerProgress;
       if (resetResult) {
         job.result = null;
         job.evalId = null;

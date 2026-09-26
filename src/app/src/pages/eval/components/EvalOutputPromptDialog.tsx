@@ -13,6 +13,7 @@ import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import { CodexSecurityResultSchema } from '@promptfoo/contracts/codexSecurity';
 import { Check, Copy, X } from 'lucide-react';
 import ChatMessages, { type Message } from './ChatMessages';
+import { CodexSecurityQualityStatus } from './CodexSecurityQualityStatus';
 import { CodexSecurityResultSummary } from './CodexSecurityResultSummary';
 import { DebuggingPanel } from './DebuggingPanel';
 import { EvaluationPanel } from './EvaluationPanel';
@@ -500,6 +501,7 @@ export default function EvalOutputPromptDialog({
               />
               {securityResult.success && (
                 <div className="mb-4">
+                  <CodexSecurityQualityStatus gradingResults={gradingResults} />
                   <CodexSecurityResultSummary result={securityResult.data} />
                 </div>
               )}

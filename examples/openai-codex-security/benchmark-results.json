@@ -1,296 +1,916 @@
 {
-  "schemaVersion": 1,
-  "recordedOn": "2026-09-26",
-  "testedPromptfooCommit": "39cb61ac2314eb389251124a046c5df17a2d970c",
+  "schemaVersion": 2,
+  "recordedAt": "2026-09-26",
+  "description": "Six planned source-only Codex Security attempts on annotated OWASP Juice Shop; four eligible delivered reports. Descriptive observations, not a model ranking.",
   "source": {
     "repository": "https://github.com/juice-shop/juice-shop",
-    "tag": "v19.0.0",
     "revision": "36870cbbdfe7864698e1adf644c7bf772f67ebb7",
-    "snapshotDigest": "codex-security-snapshot/v1:sha256:1d74df0bc5da366ec7aad16a4841552de3d91d1cb5319d4e849096130ccb54eb",
-    "snapshotEvidence": "SDK workbench target metadata; the raw manifests record the Git revision.",
-    "includePaths": ["routes/basket.ts", "routes/delivery.ts", "routes/orderHistory.ts"],
-    "excludePaths": [],
-    "scopedSourceLines": 123,
-    "reviewedSourceSha256": {
-      "routes/basket.ts": "e0e9bb40759d618fcbc434bb7a613379654186785473b2dc708cfd2240d7aca6",
-      "routes/delivery.ts": "12d0d210d70008aaaca4b9c2b801d863ea8d8ae73f509d4df9510bb23f023117",
-      "routes/orderHistory.ts": "b7d7a7cecb3b36ecfb7b3928fa7b193789f27f83283ad77a3f0221d9a94cc862",
-      "routes/order.ts": "51e224e617e11eaa505e4973ba6ae4cd1ddd07fad7974b9d9afde33ceadff84f",
-      "models/user.ts": "48720eefc299710e3ea84d3da80f796efb03b2e728c6e3ccbc123c76db43600b",
-      "server.ts": "b9221b1a9664444a4a8ca07e590bae657c093150f1438c1a644e1fd7398bd732"
-    }
+    "tag": "v19.0.0",
+    "altered": false
   },
+  "scope": {
+    "includePaths": [
+      "data/mongodb.ts",
+      "lib/insecurity.ts",
+      "models/user.ts",
+      "routes/basket.ts",
+      "routes/changePassword.ts",
+      "routes/delivery.ts",
+      "routes/fileServer.ts",
+      "routes/login.ts",
+      "routes/orderHistory.ts",
+      "routes/profileImageUrlUpload.ts",
+      "routes/redirect.ts",
+      "routes/search.ts",
+      "routes/updateProductReviews.ts",
+      "server.ts"
+    ],
+    "excludePaths": [],
+    "sourceFiles": [
+      {
+        "path": "data/mongodb.ts",
+        "lineCount": 10,
+        "sha256": "e2feea6c76bad3164668d321d01a5eef2b4fca9c4ba385289acb36aae288e32b"
+      },
+      {
+        "path": "lib/insecurity.ts",
+        "lineCount": 201,
+        "sha256": "1a8111e28939c6451c9511dbed80431ad517fb945b32b4ba10e060c3e8bd84f9"
+      },
+      {
+        "path": "models/user.ts",
+        "lineCount": 144,
+        "sha256": "48720eefc299710e3ea84d3da80f796efb03b2e728c6e3ccbc123c76db43600b"
+      },
+      {
+        "path": "routes/basket.ts",
+        "lineCount": 36,
+        "sha256": "e0e9bb40759d618fcbc434bb7a613379654186785473b2dc708cfd2240d7aca6"
+      },
+      {
+        "path": "routes/changePassword.ts",
+        "lineCount": 61,
+        "sha256": "b0e88892af36a1a302e30bf3dc487d7929242c2df0e7d40899001af8b376f8cc"
+      },
+      {
+        "path": "routes/delivery.ts",
+        "lineCount": 48,
+        "sha256": "12d0d210d70008aaaca4b9c2b801d863ea8d8ae73f509d4df9510bb23f023117"
+      },
+      {
+        "path": "routes/fileServer.ts",
+        "lineCount": 55,
+        "sha256": "71420878b020a0cb3fc99aa6b74e043362d179dd6fdf93278c95e5892f7e3f45"
+      },
+      {
+        "path": "routes/login.ts",
+        "lineCount": 84,
+        "sha256": "929c7d7fee1e7f5bdf2df9728e4e5eb99966d2b85b108c2859b7b9186266a10b"
+      },
+      {
+        "path": "routes/orderHistory.ts",
+        "lineCount": 39,
+        "sha256": "b7d7a7cecb3b36ecfb7b3928fa7b193789f27f83283ad77a3f0221d9a94cc862"
+      },
+      {
+        "path": "routes/profileImageUrlUpload.ts",
+        "lineCount": 50,
+        "sha256": "1637a526c2d903a9c83be19875e196e24023db0ec526e8f54c1a3a21c088b416"
+      },
+      {
+        "path": "routes/redirect.ts",
+        "lineCount": 33,
+        "sha256": "ebdc1ba471d241a6b375069688f9f0ed56897e930056bfe636a3ce2f377d7176"
+      },
+      {
+        "path": "routes/search.ts",
+        "lineCount": 74,
+        "sha256": "e2fb4e762404cb16268ebe745fe7137f261074fcd59eb8207a2b23554c4c6fe9"
+      },
+      {
+        "path": "routes/updateProductReviews.ts",
+        "lineCount": 31,
+        "sha256": "4c5d340b2bcd85ac6cb931dabb39ee3e6b44b86be12ad62b0db5f8fd19285f8e"
+      },
+      {
+        "path": "server.ts",
+        "lineCount": 755,
+        "sha256": "b9221b1a9664444a4a8ca07e590bae657c093150f1438c1a644e1fd7398bd732"
+      }
+    ],
+    "sourceFileCount": 14,
+    "sourceLineCount": 1621
+  },
+  "frozenEvidence": {
+    "protocolSha256": "e9097109d24ff16fae84bee6c3054cebe240e268dc2e1e7a5d9f5915e3c54818",
+    "groundTruthSha256": "0f4ccbd6330b018fd724d1b2a4106aee2ea77feacc6eb3f4cf3ef2a19c5fdc26",
+    "independentReviewSha256": "8178642cfb6a8c225270e60ba0815969e4f81d758307ddb320f6e4dfcfe47fbb",
+    "freezeReceiptSha256": "5d3e6904667ac7230fd5848d8833108475c178c6c74ae46b4e9359e1eaa114ef",
+    "promptSha256": "f7875cd785a292a040a33383be34cbfd16ca1f422a151b2e08b6ec1722a1c16d",
+    "scoredComparisonSha256": "aa011ebf6c47227b39157fd0a268839c7533d0fba392723a466bcb281d551765",
+    "reconciledReviewSha256": "2a4db7b4a836d133247f304e136da7d8110fabec716e4eef41199728f57b3cc5"
+  },
+  "implementationCommit": "071c4561c8524eca739c63a4c20bd1ea7d2d0035",
   "controls": {
     "operation": "security-scan",
-    "workflow": "standard",
-    "promptSha256": "6d11547acec936e45e35626f6df9640c75f278b15d278525b72185d2bfffc944",
-    "promptHashEncoding": "UTF-8 bytes of the rendered prompt, without a trailing newline",
-    "freshSdkStatePerRun": true,
-    "maxConcurrentThreadsPerSession": 3,
-    "maxCostUsdPerScan": 3,
     "auth": "chatgpt",
+    "maxCostUsd": 5,
+    "maxConcurrentThreadsPerSession": 3,
     "approvalPolicy": "never",
-    "targetExecution": "Source inspection only; no target execution or runtime reproduction",
-    "schedule": "Luna runs overlapped; Terra ran afterward. Timing is descriptive, not an isolated latency benchmark."
+    "cache": false,
+    "freshSdkStatePerAttempt": true,
+    "scanConcurrency": 1,
+    "operatorWallClockDeadline": null,
+    "automaticModelRetries": 0,
+    "outputDirectoryMode": "0700",
+    "runnerUmask": "0077"
   },
-  "groundTruth": {
-    "preparedAt": "2026-09-26T09:09:07.904230+00:00",
-    "method": "Independent source review before the measured runs; no runtime reproduction or independent severity scoring.",
-    "expectedFindings": [
+  "plannedOrder": {
+    "design": "Randomized counterbalanced blocks; both configurations in each block. One has two first positions, chosen before execution.",
+    "seed": 20260926,
+    "schedule": [
       {
-        "id": "basket-owner-isolation",
-        "securityProperty": "An authenticated account can read only baskets it owns.",
-        "source": ["routes/basket.ts:17", "routes/basket.ts:18", "server.ts:350", "server.ts:393"]
+        "position": 1,
+        "block": 1,
+        "configuration": "terra-medium",
+        "runId": "terra-medium-r1"
       },
       {
-        "id": "order-owner-identity",
-        "securityProperty": "Order history is selected by a unique account identity rather than a lossy presentation value.",
-        "source": [
-          "routes/orderHistory.ts:13",
-          "routes/orderHistory.ts:16",
-          "routes/order.ts:160",
-          "models/user.ts:57"
-        ]
-      }
-    ],
-    "negativeControls": [
-      {
-        "scope": "routes/delivery.ts",
-        "note": "Reading public delivery methods alone is not an authorization failure."
+        "position": 2,
+        "block": 1,
+        "configuration": "luna-medium",
+        "runId": "luna-medium-r1"
       },
       {
-        "scope": "routes/orderHistory.ts:25-39",
-        "note": "Administrative handlers must be assessed with the isAccounting middleware at server.ts:617-618."
+        "position": 3,
+        "block": 2,
+        "configuration": "luna-medium",
+        "runId": "luna-medium-r2"
+      },
+      {
+        "position": 4,
+        "block": 2,
+        "configuration": "terra-medium",
+        "runId": "terra-medium-r2"
+      },
+      {
+        "position": 5,
+        "block": 3,
+        "configuration": "luna-medium",
+        "runId": "luna-medium-r3"
+      },
+      {
+        "position": 6,
+        "block": 3,
+        "configuration": "terra-medium",
+        "runId": "terra-medium-r3"
       }
-    ],
-    "additionalFindingPolicy": "Source-supported additional findings count toward reviewed precision but do not change the frozen curated-recall denominator."
+    ]
   },
-  "runs": [
+  "expectedIds": [
+    "login-sql-interpolation",
+    "search-sql-interpolation",
+    "basket-owner-isolation",
+    "password-change-missing-reauth",
+    "review-selector-operator-injection",
+    "review-update-owner-isolation",
+    "redirect-substring-allowlist",
+    "profile-image-url-ssrf",
+    "ftp-extension-before-normalization",
+    "registration-role-mass-assignment",
+    "product-update-missing-authorization"
+  ],
+  "negativeControlCount": 4,
+  "attempts": [
     {
-      "id": "low-v2",
-      "label": "Luna low",
-      "requested": {
-        "model": "gpt-5.6-luna",
-        "reasoningEffort": "low"
-      },
-      "verifiedExecution": {
-        "model": "gpt-5.6-luna",
-        "reasoningEffort": "low",
-        "evidence": "SDK workbench recipe and every recorded session turn_context",
-        "sessionsChecked": 2,
-        "sessionUsageMatchesSdk": true
-      },
-      "versions": {
-        "sdk": "0.1.31",
-        "plugin": "0.1.95",
-        "codexCli": "0.156.1"
-      },
-      "scanId": "444fa7bd-6648-4957-83c7-3698dd71223e",
-      "reportSha256": "8b1f0d90683fe966da88e4093fe6e26a5c74d93cb16e6252c15118eb3fb1ba39",
-      "evalExportSha256": "b53a5a78064f19bf918d65c10797e01699a61a39b25b479d679b12eeba2bbdef",
-      "adjudicationSha256": "03d9d8f65ff20911e6defbaf0d3ba691df74b438719b8f3cfe9a3a13b523f433",
-      "status": "completed",
-      "coverage": "partial",
-      "warningCount": 2,
-      "warnings": [
-        "Recovered coverage surface 2: the review disposition could not be verified.",
-        "Skipped malformed deferred coverage item 1: coverage.deferred[0].id: missing required schema property."
-      ],
-      "adjudication": {
-        "currentFindings": 3,
-        "supported": 1,
-        "falsePositivesAgainstFullApplication": 2,
-        "duplicates": 0,
-        "unreviewed": 0,
-        "matchedExpectedIds": ["basket-owner-isolation"],
-        "missedExpectedIds": ["order-owner-identity"],
-        "additionalSupportedIds": [],
-        "curatedRecall": {
-          "numerator": 1,
-          "denominator": 2
-        },
-        "reviewedPrecision": {
-          "numerator": 1,
-          "denominator": 3
-        }
-      },
-      "elapsedMs": 69547,
-      "durationSource": "SDK manifest completedAt minus startedAt",
-      "usage": {
-        "input_tokens": 636355,
-        "cached_input_tokens": 564224,
-        "cache_write_input_tokens": 0,
-        "output_tokens": 5899,
-        "reasoning_output_tokens": 760,
-        "total_tokens": 642254
-      },
-      "estimatedCost": {
-        "baselineUsd": 0.03278948,
-        "range": {
-          "minUsd": 0.03278948,
-          "maxUsd": 0.06203956
-        },
-        "pricing": {
-          "source": "https://developers.openai.com/api/docs/pricing",
-          "asOf": "2026-09-14",
-          "serviceTier": "standard",
-          "context": "short"
-        }
-      }
-    },
-    {
-      "id": "medium-v2",
-      "label": "Luna medium",
+      "runId": "luna-medium-r1",
+      "configurationId": "luna-medium",
+      "repetition": 1,
       "requested": {
         "model": "gpt-5.6-luna",
         "reasoningEffort": "medium"
       },
-      "verifiedExecution": {
-        "model": "gpt-5.6-luna",
-        "reasoningEffort": "medium",
-        "evidence": "SDK workbench recipe and every recorded session turn_context",
-        "sessionsChecked": 2,
+      "observed": {
+        "settingsMatchRequested": true,
+        "allSessionsHaveSettings": true,
+        "sessionCount": 2,
+        "versions": {
+          "sdk": "0.1.31",
+          "plugin": "0.1.95"
+        },
+        "cliVersions": ["0.156.1"],
         "sessionUsageMatchesSdk": true
       },
-      "versions": {
-        "sdk": "0.1.31",
-        "plugin": "0.1.95",
-        "codexCli": "0.156.1"
-      },
-      "scanId": "db725a63-c4c9-46bc-99a3-8b2f91a3be8e",
-      "reportSha256": "88aba3f667025fe7093c1fc776a28847bd16a8f37eadc5f055f3b2a06c71e0f5",
-      "evalExportSha256": "7b4c3050f2fc0c4b6beb7b4dc24f2ed3736dc63d372dfed61f2c051c2946091d",
-      "adjudicationSha256": "480daf65826e7577572def82bcfeb6d8367a75ec6ec3037811cf7396ee4a4630",
+      "evalExportSha256": "d60bc9710f1f20547bc42dc59dfa3ec485f2c6c1ef74ea729b89b33e25347fd0",
+      "reportSha256": "43fff639a14ddfbdf4ac0e774895386cb803ce08ad78dd5f15d32f9c8514ba35",
+      "scanId": "8f356f8c-915c-47a5-9abf-2af49dea5ea4",
       "status": "completed",
-      "coverage": "partial",
-      "warningCount": 5,
-      "warnings": [
-        "Skipped malformed receipt references for coverage surface 1: expected an array.",
-        "Recovered coverage surface 2: the review disposition could not be verified.",
-        "Skipped malformed receipt references for coverage surface 2: expected an array.",
-        "Recovered coverage surface 3: the review disposition could not be verified.",
-        "Skipped malformed receipt references for coverage surface 3: expected an array."
+      "eligible": true,
+      "curatedRecall": 0.5454545454545454,
+      "eligibleMatchedExpectedIds": [
+        "basket-owner-isolation",
+        "login-sql-interpolation",
+        "profile-image-url-ssrf",
+        "redirect-substring-allowlist",
+        "review-update-owner-isolation",
+        "search-sql-interpolation"
       ],
-      "adjudication": {
-        "currentFindings": 1,
-        "supported": 1,
-        "falsePositivesAgainstFullApplication": 0,
-        "duplicates": 0,
-        "unreviewed": 0,
-        "matchedExpectedIds": ["basket-owner-isolation"],
-        "missedExpectedIds": ["order-owner-identity"],
-        "additionalSupportedIds": [],
-        "curatedRecall": {
-          "numerator": 1,
-          "denominator": 2
-        },
-        "reviewedPrecision": {
-          "numerator": 1,
-          "denominator": 1
+      "adjudicatedContent": {
+        "findingCount": 11,
+        "atomicClaimCount": 11,
+        "uniqueInScopeGroups": 11,
+        "duplicateInScopeClaimOccurrences": 0,
+        "matchedExpectedIds": [
+          "basket-owner-isolation",
+          "login-sql-interpolation",
+          "profile-image-url-ssrf",
+          "redirect-substring-allowlist",
+          "review-update-owner-isolation",
+          "search-sql-interpolation"
+        ],
+        "supported": 10,
+        "refuted": 0,
+        "unresolved": 1,
+        "rootCausePrecision": 1.0,
+        "precisionBounds": {
+          "lower": 0.9090909090909091,
+          "upper": 1.0
         }
       },
-      "elapsedMs": 134792,
-      "durationSource": "SDK manifest completedAt minus startedAt",
-      "usage": {
-        "input_tokens": 1360264,
-        "cached_input_tokens": 1260288,
-        "cache_write_input_tokens": 0,
-        "output_tokens": 8670,
-        "reasoning_output_tokens": 1570,
-        "total_tokens": 1368934
-      },
-      "estimatedCost": {
-        "baselineUsd": 0.05560496,
-        "range": {
-          "minUsd": 0.05560496,
-          "maxUsd": 0.10600792
+      "reliability": {
+        "launched": true,
+        "completed": true,
+        "usable": true,
+        "provenanceValid": true,
+        "protocolValid": true,
+        "coverage": {
+          "completeness": "complete",
+          "mode": "scoped_path"
         },
-        "pricing": {
-          "source": "https://developers.openai.com/api/docs/pricing",
-          "asOf": "2026-09-14",
-          "serviceTier": "standard",
-          "context": "short"
-        }
+        "runtimeWarnings": [],
+        "deferredWork": [],
+        "stopReason": null,
+        "unusableReason": null
+      },
+      "resources": {
+        "manifestDurationMs": 211486,
+        "outerCliWallSeconds": 222.71067692304496,
+        "sdkUsage": {
+          "input_tokens": 2203707,
+          "cached_input_tokens": 2024192,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 16137,
+          "reasoning_output_tokens": 2185,
+          "total_tokens": 2219844
+        },
+        "sdkEstimatedCost": {
+          "baselineUsd": 0.09575124,
+          "range": {
+            "minUsd": 0.09575124,
+            "maxUsd": 0.18182028
+          },
+          "pricing": {
+            "source": "https://developers.openai.com/api/docs/pricing",
+            "asOf": "2026-09-14",
+            "serviceTier": "standard",
+            "context": "short"
+          }
+        },
+        "costInterpretation": "SDK API-equivalent estimate under ChatGPT authentication; not an invoice or hard billing cap. Manifest scan duration excludes outer CLI overhead."
       }
     },
     {
-      "id": "terra-medium",
-      "label": "Terra medium",
+      "runId": "luna-medium-r2",
+      "configurationId": "luna-medium",
+      "repetition": 2,
+      "requested": {
+        "model": "gpt-5.6-luna",
+        "reasoningEffort": "medium"
+      },
+      "observed": {
+        "settingsMatchRequested": true,
+        "allSessionsHaveSettings": true,
+        "sessionCount": 2,
+        "versions": {
+          "sdk": "0.1.31",
+          "plugin": null
+        },
+        "cliVersions": ["0.156.1"],
+        "sessionUsageMatchesSdk": null
+      },
+      "evalExportSha256": "4795f67f38099039c527888eb934f5373e3c356c4ffcd6a139601c4456388e73",
+      "reportSha256": null,
+      "scanId": null,
+      "status": "failed",
+      "eligible": false,
+      "curatedRecall": null,
+      "eligibleMatchedExpectedIds": [],
+      "adjudicatedContent": null,
+      "reliability": {
+        "launched": true,
+        "completed": false,
+        "usable": false,
+        "provenanceValid": true,
+        "protocolValid": true,
+        "coverage": {
+          "completeness": "unknown",
+          "mode": null
+        },
+        "runtimeWarnings": [],
+        "deferredWork": null,
+        "stopReason": "Codex Security operation failed: Could not save the Codex Security scan: scan-manifest.schema.scan.threatModel: expected schema type object",
+        "unusableReason": null
+      },
+      "resources": {
+        "manifestDurationMs": null,
+        "workbenchDurationMs": 294319.92100000003,
+        "outerCliWallSeconds": 303.1894588639261,
+        "sessionUsage": {
+          "input_tokens": 3489917,
+          "cached_input_tokens": 3276544,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 23731,
+          "reasoning_output_tokens": 2858,
+          "total_tokens": 3513648
+        },
+        "nativeRecordedUsage": {
+          "input": 3489917,
+          "output": 23731,
+          "cachedInput": 3276544,
+          "cacheWriteInput": 0,
+          "total": 3513648
+        },
+        "sdkEstimatedCost": {
+          "baselineUsd": 0.13668268,
+          "range": {
+            "minUsd": 0.13668268,
+            "maxUsd": 0.25912676
+          },
+          "pricing": {
+            "source": "https://developers.openai.com/api/docs/pricing",
+            "asOf": "2026-09-14",
+            "serviceTier": "standard",
+            "context": "short"
+          }
+        },
+        "costInterpretation": "Failure still consumed recorded usage. API-equivalent SDK estimate under ChatGPT auth, not billing. No successful manifest duration is available."
+      }
+    },
+    {
+      "runId": "luna-medium-r3",
+      "configurationId": "luna-medium",
+      "repetition": 3,
+      "requested": {
+        "model": "gpt-5.6-luna",
+        "reasoningEffort": "medium"
+      },
+      "observed": {
+        "settingsMatchRequested": true,
+        "allSessionsHaveSettings": true,
+        "sessionCount": 2,
+        "versions": {
+          "sdk": "0.1.31",
+          "plugin": "0.1.95"
+        },
+        "cliVersions": ["0.156.1"],
+        "sessionUsageMatchesSdk": true
+      },
+      "evalExportSha256": "60ebd7d9fd1286c076bd426d735a97eb23811dc3d7096085d39426d9a69c6e0b",
+      "reportSha256": "1ddb87ffecfb28fc12ffe188eb6513f5aef873e7008f082459970a540f88f575",
+      "scanId": "6e58b822-e8cb-4dc8-9986-2dd05a562cf2",
+      "status": "completed",
+      "eligible": true,
+      "curatedRecall": 0.5454545454545454,
+      "eligibleMatchedExpectedIds": [
+        "basket-owner-isolation",
+        "login-sql-interpolation",
+        "profile-image-url-ssrf",
+        "redirect-substring-allowlist",
+        "review-update-owner-isolation",
+        "search-sql-interpolation"
+      ],
+      "adjudicatedContent": {
+        "findingCount": 7,
+        "atomicClaimCount": 8,
+        "uniqueInScopeGroups": 8,
+        "duplicateInScopeClaimOccurrences": 0,
+        "matchedExpectedIds": [
+          "basket-owner-isolation",
+          "login-sql-interpolation",
+          "profile-image-url-ssrf",
+          "redirect-substring-allowlist",
+          "review-update-owner-isolation",
+          "search-sql-interpolation"
+        ],
+        "supported": 8,
+        "refuted": 0,
+        "unresolved": 0,
+        "rootCausePrecision": 1.0,
+        "precisionBounds": {
+          "lower": 1.0,
+          "upper": 1.0
+        }
+      },
+      "reliability": {
+        "launched": true,
+        "completed": true,
+        "usable": true,
+        "provenanceValid": true,
+        "protocolValid": true,
+        "coverage": {
+          "completeness": "partial",
+          "mode": "scoped_path"
+        },
+        "runtimeWarnings": [
+          "Skipped malformed coverage surface 1: coverage.surfaces[0].notes: expected schema type string.",
+          "Skipped malformed coverage surface 2: coverage.surfaces[1].notes: expected schema type string.",
+          "Skipped malformed coverage surface 3: coverage.surfaces[2].notes: expected schema type string.",
+          "Skipped malformed coverage surface 4: coverage.surfaces[3].notes: expected schema type string.",
+          "Recovered coverage surface 5: the review disposition could not be verified.",
+          "Skipped malformed coverage surface 5: coverage.surfaces[4].notes: expected schema type string.",
+          "Skipped malformed coverage exclusion 1: coverage.explicitExclusions[0]: expected an object.",
+          "Skipped malformed coverage exclusion 2: coverage.explicitExclusions[1]: expected an object.",
+          "Skipped malformed coverage exclusion 3: coverage.explicitExclusions[2]: expected an object.",
+          "Skipped malformed coverage exclusion 4: coverage.explicitExclusions[3]: expected an object.",
+          "Skipped malformed coverage exclusion 5: coverage.explicitExclusions[4]: expected an object.",
+          "Skipped malformed coverage exclusion 6: coverage.explicitExclusions[5]: expected an object."
+        ],
+        "deferredWork": [],
+        "stopReason": null,
+        "unusableReason": null
+      },
+      "resources": {
+        "manifestDurationMs": 155229,
+        "outerCliWallSeconds": 163.67795144196134,
+        "sdkUsage": {
+          "input_tokens": 2220549,
+          "cached_input_tokens": 2068736,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 17123,
+          "reasoning_output_tokens": 2762,
+          "total_tokens": 2237672
+        },
+        "sdkEstimatedCost": {
+          "baselineUsd": 0.09228492,
+          "range": {
+            "minUsd": 0.09228492,
+            "maxUsd": 0.17429604
+          },
+          "pricing": {
+            "source": "https://developers.openai.com/api/docs/pricing",
+            "asOf": "2026-09-14",
+            "serviceTier": "standard",
+            "context": "short"
+          }
+        },
+        "costInterpretation": "SDK API-equivalent estimate under ChatGPT authentication; not an invoice or hard billing cap. Manifest scan duration excludes outer CLI overhead."
+      }
+    },
+    {
+      "runId": "terra-medium-r1",
+      "configurationId": "terra-medium",
+      "repetition": 1,
       "requested": {
         "model": "gpt-5.6-terra",
         "reasoningEffort": "medium"
       },
-      "verifiedExecution": {
-        "model": "gpt-5.6-terra",
-        "reasoningEffort": "medium",
-        "evidence": "SDK workbench recipe and every recorded session turn_context",
-        "sessionsChecked": 3,
+      "observed": {
+        "settingsMatchRequested": true,
+        "allSessionsHaveSettings": true,
+        "sessionCount": 3,
+        "versions": {
+          "sdk": "0.1.31",
+          "plugin": "0.1.95"
+        },
+        "cliVersions": ["0.156.1"],
         "sessionUsageMatchesSdk": true
       },
-      "versions": {
-        "sdk": "0.1.31",
-        "plugin": "0.1.95",
-        "codexCli": "0.156.1"
-      },
-      "scanId": "0d3c6e16-cafb-4cc8-8d20-ea8ed1d7eece",
-      "reportSha256": "5b448d0df5b242735d52e494132a7b0639c97931caf85294c5fd86f115425234",
-      "evalExportSha256": "d7b1ec668f6b78c021033e535fd69a75dd76fd0441853eecf0cbf890fa06f545",
-      "adjudicationSha256": "c6dacb2bce0a3de3b361baa31d24cd7ea25af6ab18bab98d5d8be8fe0d82e54b",
+      "evalExportSha256": "62658d38db930b14256a7948066e04235a4f38c3fee5b9d4750ce0ad82e861fb",
+      "reportSha256": "d57acfa79cc5f7d927842b1543e6c604157d7bc740d84b1591197ec54dbf6434",
+      "scanId": "812dc126-8f9a-4d55-9c12-06a6a0c79b6f",
       "status": "completed",
-      "coverage": "complete",
-      "warningCount": 0,
-      "warnings": [],
-      "adjudication": {
-        "currentFindings": 2,
-        "supported": 2,
-        "falsePositivesAgainstFullApplication": 0,
-        "duplicates": 0,
-        "unreviewed": 0,
-        "matchedExpectedIds": ["basket-owner-isolation"],
-        "missedExpectedIds": ["order-owner-identity"],
-        "additionalSupportedIds": ["order-history-token-expiry"],
-        "curatedRecall": {
-          "numerator": 1,
-          "denominator": 2
-        },
-        "reviewedPrecision": {
-          "numerator": 2,
-          "denominator": 2
+      "eligible": true,
+      "curatedRecall": 0.36363636363636365,
+      "eligibleMatchedExpectedIds": [
+        "basket-owner-isolation",
+        "login-sql-interpolation",
+        "profile-image-url-ssrf",
+        "search-sql-interpolation"
+      ],
+      "adjudicatedContent": {
+        "findingCount": 4,
+        "atomicClaimCount": 4,
+        "uniqueInScopeGroups": 4,
+        "duplicateInScopeClaimOccurrences": 0,
+        "matchedExpectedIds": [
+          "basket-owner-isolation",
+          "login-sql-interpolation",
+          "profile-image-url-ssrf",
+          "search-sql-interpolation"
+        ],
+        "supported": 4,
+        "refuted": 0,
+        "unresolved": 0,
+        "rootCausePrecision": 1.0,
+        "precisionBounds": {
+          "lower": 1.0,
+          "upper": 1.0
         }
       },
-      "elapsedMs": 166533,
-      "durationSource": "SDK manifest completedAt minus startedAt",
-      "usage": {
-        "input_tokens": 1407386,
-        "cached_input_tokens": 1227776,
-        "cache_write_input_tokens": 0,
-        "output_tokens": 16451,
-        "reasoning_output_tokens": 3664,
-        "total_tokens": 1423837
-      },
-      "estimatedCost": {
-        "baselineUsd": 0.8021872,
-        "range": {
-          "minUsd": 0.8021872,
-          "maxUsd": 1.5056684
+      "reliability": {
+        "launched": true,
+        "completed": true,
+        "usable": true,
+        "provenanceValid": true,
+        "protocolValid": true,
+        "coverage": {
+          "completeness": "complete",
+          "mode": "scoped_path"
         },
-        "pricing": {
-          "source": "https://developers.openai.com/api/docs/pricing",
-          "asOf": "2026-09-14",
-          "serviceTier": "standard",
-          "context": "short"
+        "runtimeWarnings": [],
+        "deferredWork": [],
+        "stopReason": null,
+        "unusableReason": null
+      },
+      "resources": {
+        "manifestDurationMs": 295797,
+        "outerCliWallSeconds": 304.9498200590024,
+        "sdkUsage": {
+          "input_tokens": 4439605,
+          "cached_input_tokens": 4186112,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 36761,
+          "reasoning_output_tokens": 9034,
+          "total_tokens": 4476366
+        },
+        "sdkEstimatedCost": {
+          "baselineUsd": 1.7853404,
+          "range": {
+            "minUsd": 1.7853404,
+            "maxUsd": 3.3501148
+          },
+          "pricing": {
+            "source": "https://developers.openai.com/api/docs/pricing",
+            "asOf": "2026-09-14",
+            "serviceTier": "standard",
+            "context": "short"
+          }
+        },
+        "costInterpretation": "SDK API-equivalent estimate under ChatGPT authentication; not an invoice or hard billing cap. Manifest scan duration excludes outer CLI overhead."
+      }
+    },
+    {
+      "runId": "terra-medium-r2",
+      "configurationId": "terra-medium",
+      "repetition": 2,
+      "requested": {
+        "model": "gpt-5.6-terra",
+        "reasoningEffort": "medium"
+      },
+      "observed": {
+        "settingsMatchRequested": true,
+        "allSessionsHaveSettings": true,
+        "sessionCount": 3,
+        "versions": {
+          "sdk": "0.1.31",
+          "plugin": "0.1.95"
+        },
+        "cliVersions": ["0.156.1"],
+        "sessionUsageMatchesSdk": true
+      },
+      "evalExportSha256": "2ac8036af2fd1d8a5591c5babdafbf077dcab8ef4176d0f5d3876b19dec52035",
+      "reportSha256": "6b3c45e254cf70f2a4ceec19c5abcd81f8f8f7428b6d6ba598be6b76c48a4783",
+      "scanId": "fd72325e-dc1b-458c-859c-280abcef162f",
+      "status": "completed",
+      "eligible": false,
+      "curatedRecall": null,
+      "eligibleMatchedExpectedIds": [],
+      "adjudicatedContent": {
+        "findingCount": 11,
+        "atomicClaimCount": 12,
+        "uniqueInScopeGroups": 12,
+        "duplicateInScopeClaimOccurrences": 0,
+        "matchedExpectedIds": [
+          "basket-owner-isolation",
+          "profile-image-url-ssrf",
+          "redirect-substring-allowlist",
+          "registration-role-mass-assignment",
+          "review-selector-operator-injection",
+          "review-update-owner-isolation",
+          "search-sql-interpolation"
+        ],
+        "supported": 12,
+        "refuted": 0,
+        "unresolved": 0,
+        "rootCausePrecision": 1.0,
+        "precisionBounds": {
+          "lower": 1.0,
+          "upper": 1.0
+        }
+      },
+      "reliability": {
+        "launched": true,
+        "completed": true,
+        "usable": true,
+        "provenanceValid": true,
+        "protocolValid": false,
+        "coverage": {
+          "completeness": "complete",
+          "mode": "scoped_path"
+        },
+        "runtimeWarnings": [],
+        "deferredWork": [],
+        "stopReason": null,
+        "unusableReason": null
+      },
+      "resources": {
+        "manifestDurationMs": 183847,
+        "outerCliWallSeconds": 196.9936083649518,
+        "sdkUsage": {
+          "input_tokens": 1532694,
+          "cached_input_tokens": 1347840,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 23501,
+          "reasoning_output_tokens": 6574,
+          "total_tokens": 1556195
+        },
+        "sdkEstimatedCost": {
+          "baselineUsd": 0.921288,
+          "range": {
+            "minUsd": 0.921288,
+            "maxUsd": 1.70157
+          },
+          "pricing": {
+            "source": "https://developers.openai.com/api/docs/pricing",
+            "asOf": "2026-09-14",
+            "serviceTier": "standard",
+            "context": "short"
+          }
+        },
+        "costInterpretation": "SDK API-equivalent estimate under ChatGPT authentication; not an invoice or hard billing cap. Manifest scan duration excludes outer CLI overhead."
+      }
+    },
+    {
+      "runId": "terra-medium-r3",
+      "configurationId": "terra-medium",
+      "repetition": 3,
+      "requested": {
+        "model": "gpt-5.6-terra",
+        "reasoningEffort": "medium"
+      },
+      "observed": {
+        "settingsMatchRequested": true,
+        "allSessionsHaveSettings": true,
+        "sessionCount": 2,
+        "versions": {
+          "sdk": "0.1.31",
+          "plugin": "0.1.95"
+        },
+        "cliVersions": ["0.156.1"],
+        "sessionUsageMatchesSdk": true
+      },
+      "evalExportSha256": "7b0cbf962dfefd184f82d3785dac40717de7e0aa92a8b7bfb1c5ccb0ea883109",
+      "reportSha256": "f65c94348100db2185035ddcf0c4a97a7fa044dc35d3ab93493da7ef61deb4bb",
+      "scanId": "5168835e-b613-4c50-bfc1-0c620c23c2ba",
+      "status": "completed",
+      "eligible": true,
+      "curatedRecall": 0.7272727272727273,
+      "eligibleMatchedExpectedIds": [
+        "basket-owner-isolation",
+        "login-sql-interpolation",
+        "profile-image-url-ssrf",
+        "redirect-substring-allowlist",
+        "registration-role-mass-assignment",
+        "review-selector-operator-injection",
+        "review-update-owner-isolation",
+        "search-sql-interpolation"
+      ],
+      "adjudicatedContent": {
+        "findingCount": 12,
+        "atomicClaimCount": 12,
+        "uniqueInScopeGroups": 12,
+        "duplicateInScopeClaimOccurrences": 0,
+        "matchedExpectedIds": [
+          "basket-owner-isolation",
+          "login-sql-interpolation",
+          "profile-image-url-ssrf",
+          "redirect-substring-allowlist",
+          "registration-role-mass-assignment",
+          "review-selector-operator-injection",
+          "review-update-owner-isolation",
+          "search-sql-interpolation"
+        ],
+        "supported": 12,
+        "refuted": 0,
+        "unresolved": 0,
+        "rootCausePrecision": 1.0,
+        "precisionBounds": {
+          "lower": 1.0,
+          "upper": 1.0
+        }
+      },
+      "reliability": {
+        "launched": true,
+        "completed": true,
+        "usable": true,
+        "provenanceValid": true,
+        "protocolValid": true,
+        "coverage": {
+          "completeness": "complete",
+          "mode": "scoped_path"
+        },
+        "runtimeWarnings": [],
+        "deferredWork": [],
+        "stopReason": null,
+        "unusableReason": null
+      },
+      "resources": {
+        "manifestDurationMs": 207475,
+        "outerCliWallSeconds": 217.25091592397075,
+        "sdkUsage": {
+          "input_tokens": 1769005,
+          "cached_input_tokens": 1608448,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 22790,
+          "reasoning_output_tokens": 4009,
+          "total_tokens": 1791795
+        },
+        "sdkEstimatedCost": {
+          "baselineUsd": 0.9162836,
+          "range": {
+            "minUsd": 0.9162836,
+            "maxUsd": 1.6958272
+          },
+          "pricing": {
+            "source": "https://developers.openai.com/api/docs/pricing",
+            "asOf": "2026-09-14",
+            "serviceTier": "standard",
+            "context": "short"
+          }
+        },
+        "costInterpretation": "SDK API-equivalent estimate under ChatGPT authentication; not an invoice or hard billing cap. Manifest scan duration excludes outer CLI overhead."
+      }
+    }
+  ],
+  "configurations": [
+    {
+      "configurationId": "luna-medium",
+      "plannedAttempts": 3,
+      "reliabilityCounts": {
+        "launched": 3,
+        "completed": 2,
+        "usable": 2,
+        "provenanceValid": 3,
+        "protocolValid": 3
+      },
+      "eligibleReports": 2,
+      "recurrence": {
+        "basket-owner-isolation": 2,
+        "ftp-extension-before-normalization": 0,
+        "login-sql-interpolation": 2,
+        "password-change-missing-reauth": 0,
+        "product-update-missing-authorization": 0,
+        "profile-image-url-ssrf": 2,
+        "redirect-substring-allowlist": 2,
+        "registration-role-mass-assignment": 0,
+        "review-selector-operator-injection": 0,
+        "review-update-owner-isolation": 2,
+        "search-sql-interpolation": 2
+      },
+      "eligibleDeliveredMatches": 12,
+      "attemptYield": 0.36363636363636365,
+      "meanEligibleCuratedRecall": 0.5454545454545454,
+      "pooledEligibleReportGroupPrecision": {
+        "supported": 18,
+        "refuted": 0,
+        "unresolved": 1,
+        "rootCausePrecision": 1.0,
+        "precisionBounds": {
+          "lower": 0.9473684210526315,
+          "upper": 1.0
+        }
+      }
+    },
+    {
+      "configurationId": "terra-medium",
+      "plannedAttempts": 3,
+      "reliabilityCounts": {
+        "launched": 3,
+        "completed": 3,
+        "usable": 3,
+        "provenanceValid": 3,
+        "protocolValid": 2
+      },
+      "eligibleReports": 2,
+      "recurrence": {
+        "basket-owner-isolation": 2,
+        "ftp-extension-before-normalization": 0,
+        "login-sql-interpolation": 2,
+        "password-change-missing-reauth": 0,
+        "product-update-missing-authorization": 0,
+        "profile-image-url-ssrf": 2,
+        "redirect-substring-allowlist": 1,
+        "registration-role-mass-assignment": 1,
+        "review-selector-operator-injection": 1,
+        "review-update-owner-isolation": 1,
+        "search-sql-interpolation": 2
+      },
+      "eligibleDeliveredMatches": 12,
+      "attemptYield": 0.36363636363636365,
+      "meanEligibleCuratedRecall": 0.5454545454545454,
+      "pooledEligibleReportGroupPrecision": {
+        "supported": 16,
+        "refuted": 0,
+        "unresolved": 0,
+        "rootCausePrecision": 1.0,
+        "precisionBounds": {
+          "lower": 1.0,
+          "upper": 1.0
         }
       }
     }
   ],
-  "initialPromptLesson": "An earlier completed pair lacked explicit intentional-vulnerability benchmark framing: one malformed finding was discarded, and another run excluded a documented challenge. Those attempts are not measurements in this table.",
+  "allAttemptResources": {
+    "luna-medium": {
+      "launched": 3,
+      "completed": 2,
+      "provenanceValid": 3,
+      "protocolValid": 3,
+      "completedAndProvenancePolicyEligible": 2,
+      "coverageCounts": {
+        "complete": 1,
+        "unknown": 1,
+        "partial": 1
+      },
+      "sessionCount": 6,
+      "commandCount": 99,
+      "usageTotals": {
+        "input_tokens": 7914173,
+        "cached_input_tokens": 7369472,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 56991,
+        "reasoning_output_tokens": 7805,
+        "total_tokens": 7971164
+      },
+      "estimatedCostRangeUsd": {
+        "min": 0.32471884,
+        "max": 0.61524308
+      },
+      "outerCliWallSecondsTotal": 689.5780872289324,
+      "successfulManifestDurationMsTotal": 366715,
+      "successfulManifestDurationCount": 2,
+      "nativeWarningsTotal": 12,
+      "workbenchOnlyWarningCount": 1
+    },
+    "terra-medium": {
+      "launched": 3,
+      "completed": 3,
+      "provenanceValid": 3,
+      "protocolValid": 2,
+      "completedAndProvenancePolicyEligible": 2,
+      "coverageCounts": {
+        "complete": 3
+      },
+      "sessionCount": 8,
+      "commandCount": 77,
+      "usageTotals": {
+        "input_tokens": 7741304,
+        "cached_input_tokens": 7142400,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 83052,
+        "reasoning_output_tokens": 19617,
+        "total_tokens": 7824356
+      },
+      "estimatedCostRangeUsd": {
+        "min": 3.622912,
+        "max": 6.747512
+      },
+      "outerCliWallSecondsTotal": 719.1943443479249,
+      "successfulManifestDurationMsTotal": 687119,
+      "successfulManifestDurationCount": 3,
+      "nativeWarningsTotal": 0,
+      "workbenchOnlyWarningCount": 0
+    }
+  },
   "limitations": [
-    "One measured run per configuration on 123 scoped source lines; no general model-quality ranking or statistical performance claim.",
-    "Curated ground truth has two expected issues and is not exhaustive. Full source context and negative controls were used to adjudicate reported findings.",
-    "Both Luna coverage records are partial with SDK schema-recovery warnings; this does not itself show that the selected files were unread.",
-    "Runtime session records establish observed model and effort settings, not server-side model attestation. Raw SDK reports have no structured effort field.",
-    "Usage includes repeated context and cached input across recorded sessions; it is not a count of distinct source tokens. A Promptfoo provider request is not an individual model request.",
-    "Cost ranges are SDK API-equivalent standard-rate estimates, not measured ChatGPT subscription charges or billing guarantees.",
-    "Raw reports, traces, and local paths are not bundled. Report hashes identify preserved bytes but do not authenticate the producer."
-  ]
+    "Curated 11-cause set, not all vulnerabilities or 110 hacking challenges / 31 two-phase coding exercises at this revision.",
+    "Known public source with inline vulnerability annotations; training exposure unknown.",
+    "Independent AI source review, not human or runtime validation; one reviewer received Terra repetition 1 model/count metadata during review. Timing batches also limited blinding.",
+    "Prompt-only reading restrictions; Terra repetition 2 returned excluded codefix/test content and is ineligible.",
+    "Luna repetition 2 failed canonical publication; draft findings are unscored.",
+    "Three planned repeats and two eligible reports per configuration; no significance or winner claim.",
+    "Six earlier prerequisite failures had no model sessions and belong to the separately preserved operational-setup cohort.",
+    "SDK API-equivalent cost estimates under ChatGPT authentication, not invoices. Includes failed and invalid attempt resources.",
+    "Hashes identify retained bytes; raw reports, private traces and SDK state are not published here."
+  ],
+  "catalogContext": {
+    "hackingChallengeRecords": 110,
+    "codingChallengeKeys": 31,
+    "codingPhases": 62,
+    "combinedScoreboardTasks": 172,
+    "uniqueSecurityRootCauses": null,
+    "catalogSha256": "5a55cf5299c775ce8bc6dc6cd1b6dcccb3309d25a126b13419e0c9819601cdfa",
+    "countingEvidenceSha256": "c009afdc2d63cc38f9a4f3c965d6cc06367c81d47e95beaec9f8c4bb8299a58c",
+    "countsAreRecallDenominator": false
+  }
 }

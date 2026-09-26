@@ -42,6 +42,8 @@ For **SDK operation**, choose a security operation, repository path, model, reas
 
 For native operations, **Check setup** uses SDK preflight without starting an operation or sending results to a remote grader. It checks concrete configuration and paths, but does not verify Python/runtime startup, credentials, account permissions, or model availability. For validation, it checks directories and any finding file's presence, not the candidate's validity. Resolve row-variable templates to concrete values before checking setup. Older SDK releases without preflight support report that limitation.
 
+Before an eval operation, Promptfoo runs the same local check using resolved row and prompt settings. A failed check records a setup error with `metadata.providerSetup.workloadStarted: false`, zero incurred provider cost and zero provider model requests; it does not start the workload. Checks are reused only within that eval for matching settings. This remains a local configuration/path check, not credential or runtime verification.
+
 For native execution, each prompt/provider/test/repeat combination runs a whole operation. Use descriptive provider labels when comparing settings, and account for that multiplication when planning runtime and spend. To compare existing reports without repeating their original operations, see [Evaluate a vulnerability-finding harness](/docs/guides/codex-security-results).
 
 ## Compare scan depth, models, and reasoning
@@ -100,13 +102,15 @@ npx promptfoo eval -c promptfooconfig.yaml --no-cache
 npx promptfoo view
 ```
 
-The [included example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-security) compares low and medium reasoning effort on pinned Juice Shop source. Its separate `promptfooconfig.reports.yaml` imports two existing reports without launching a new operation.
+The [included example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-security) compares Luna and Terra at medium reasoning effort on pinned Juice Shop source. Its separate `promptfooconfig.reports.yaml` imports two existing reports without launching a new operation.
 
 ## Import existing reports
 
-Set `report_file` to an existing regular JSON file no larger than 64 MiB containing SDK `ScanResult.toJSON()` output or a direct finding-validation result. Scan imports require manifest, findings, and coverage documents with matching scan IDs. Entire Promptfoo eval exports and standalone `findings.json` files are not accepted. The consolidated example's [saved-report config](https://github.com/promptfoo/promptfoo/blob/main/examples/openai-codex-security/promptfooconfig.reports.yaml) imports baseline and candidate reports into separate columns. It requires reports you supply; no sample findings are bundled.
+Set `report_file` to an existing regular JSON file no larger than 64 MiB containing a Promptfoo replay envelope, SDK `ScanResult.toJSON()` output, or a direct finding-validation result. Scan imports require manifest, findings, and coverage documents with matching scan IDs. Entire Promptfoo eval exports and standalone `findings.json` files are not accepted. The consolidated example's [saved-report config](https://github.com/promptfoo/promptfoo/blob/main/examples/openai-codex-security/promptfooconfig.reports.yaml) imports baseline and candidate reports into separate columns. It requires reports you supply; no sample findings are bundled.
 
 Import reads saved evidence without starting a scan or calling a model, and requires no SDK installation, Python, or model credentials. `report_file` takes precedence over live-operation options; those options are unused during import, but the provider configuration must still be schema-valid. Relative report paths resolve from the config file directory. Path templates resolve during evaluation; **Check setup** requires a concrete report path. Missing or invalid reports and explicit mock markers produce provider errors, not a fallback scan. Check repository revision, scope, and original provenance before treating two reports as comparable; importing a file does not authenticate its contents.
+
+Prefer a Promptfoo replay file when preserving native execution evidence. Combine `response.metadata.codexSecurityReplay` with the parsed `response.raw` as `payload`; the [example extraction snippet](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-security#compare-saved-reports) handles exported strings and objects. The versioned envelope binds its canonical SDK payload with a SHA-256 and retains normalized warnings, operation, failure diagnostics and historical resources. Failed operations can have a null payload. Keep the full native eval export; the replay is not a signed provenance attestation. SDK 0.1.31's direct serialization omits runtime operation and recovery warnings, which cannot be reconstructed from coverage alone.
 
 The summary marks saved-report results and presents their original cost and duration as historical measurements. Those values are not new model usage or file-import latency. Imported scan operations remain unknown unless the report records `operation`; coverage mode alone does not establish which operation ran. See [Evaluate a vulnerability-finding harness](/docs/guides/codex-security-results) for curated expected IDs and the distinction between coverage checks and finding-quality metrics.
 
@@ -177,7 +181,7 @@ Managed Codex Security scans run with the access required by the security SDK. R
 
 | Setting                                         | Applies to                | Description                                                                               |
 | ----------------------------------------------- | ------------------------- | ----------------------------------------------------------------------------------------- |
-| `report_file`                                   | Saved reports             | Existing SDK scan or validation JSON; imports evidence instead of starting an operation.  |
+| `report_file`                                   | Saved reports             | Promptfoo replay or SDK scan/validation JSON; imports existing evidence.                  |
 | `operation`                                     | All operations            | Exact Codex Security skill name. Defaults to `security-scan`.                             |
 | `model`                                         | All operations            | Codex model; can also be provided in the provider ID.                                     |
 | `model_reasoning_effort` / `reasoning_effort`   | All operations            | Model reasoning effort. If both are set, they must match.                                 |
@@ -216,6 +220,7 @@ Native repository scans return `ScanResult.toJSON()` in `output`, including `man
 | `status`, `coverage`, `findings`, `validation` | Execution status, coverage, current finding counts, or validation disposition. Missing findings remain unknown rather than becoming zero. |
 | `cost`, `usage`                                | Recorded cost baseline/range/pricing context and token usage; missing values remain `null`.                                               |
 | `elapsedMs`                                    | Duration from valid manifest start/end timestamps; never a substituted model-turn or file-read duration.                                  |
+| `diagnostics`                                  | Observed failure phase and warning availability; unknown diagnostics do not establish that no warnings occurred.                          |
 | `warnings`, `artifacts`                        | Observed warnings and references to files on the original host.                                                                           |
 
 Saved-report cost, token usage, and elapsed time describe the original operation. Import incurs no new model usage (`incurredCost: 0`); its historical measurements remain in `metadata.codexSecurity`. Generic import cost/latency must not be interpreted as scan measurements. The result summary relies on this normalized metadata, while the raw output remains available for evidence inspection.

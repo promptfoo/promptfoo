@@ -7,7 +7,7 @@ description: Compare Codex Security source reviews in Promptfoo using pinned sou
 
 # Evaluate a vulnerability-finding harness
 
-Compare two Codex Security configurations on the same pinned source, then review their findings against independently curated ground truth. The consolidated example runs a standard source review at low and medium reasoning effort; a separate config imports genuine saved reports without repeating the operation. The example includes a recorded aggregate case study; supply your own reports when running import.
+Compare two Codex Security configurations on the same pinned source, then review their findings against independently curated ground truth. The consolidated example runs a standard source review with Luna and Terra at medium reasoning effort; a separate config imports genuine saved reports without repeating the operation. The example includes a recorded aggregate case study; supply your own reports when running import.
 
 Use this workflow to answer a specific question, such as which run identifies more of your independently confirmed expected findings. Completion and coverage checks alone do not measure detection quality.
 
@@ -24,7 +24,7 @@ git -C juice-shop-v19 checkout --detach 36870cbbdfe7864698e1adf644c7bf772f67ebb7
 export CODEX_SECURITY_REPOSITORY="$PWD/juice-shop-v19"
 ```
 
-Keep this checkout clean; do not install or run Juice Shop. The config scopes both columns to `routes/basket.ts`, `routes/delivery.ts`, and `routes/orderHistory.ts`, totaling 123 source lines at this revision. Both use `security-scan`, `gpt-5.6-luna`, the same prompt, and a $3 estimated spend threshold per scan. The requested reasoning effort is `low` in one column and `medium` in the other. This threshold is not a hard billing cap.
+Keep this checkout clean; do not install or run Juice Shop. The config selects 14 files / 1,621 source lines at this revision. Both columns use `security-scan`, medium reasoning, the same prompt, a three-thread limit and a $5 estimated spend threshold per operation. The models are `gpt-5.6-luna` and `gpt-5.6-terra`. The threshold is not a hard billing cap.
 
 The benchmark prompt explicitly includes intentional and documented vulnerabilities. Existing challenge labels are not grounds for excluding source-supported findings. Without this instruction, a reviewer may interpret deliberately vulnerable training code as outside the review's purpose.
 
@@ -35,13 +35,13 @@ npx promptfoo@latest view
 
 This starts two real SDK operations. The prompt limits the requested work to source inspection, including validation against source, with no application execution, exploit generation, or vulnerability reproduction. Prompt instructions do not enforce an execution sandbox. A source-supported finding is not proof of runtime exploitability.
 
-Preserve the config, original SDK reports, and evidence of the actual source snapshot. Labels and configured effort record intent; check the observed model, effective settings when available, SDK/plugin versions, and reported usage before attributing a difference to effort. The normalized summary does not supply a verified reasoning-effort field. Missing observations remain unknown. To revisit results without rerunning the operations, extract each SDK report into an individual JSON file and use the saved-report config below. Exported `response.raw` may be a JSON string or an object; the [README extraction snippet](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-security#compare-saved-reports) handles both forms and checks the manifest document type before saving.
+Preserve the config, full native eval export and source snapshot evidence. Labels and configured effort record intent; actual session settings, SDK/plugin versions and usage support attribution. Missing observations remain unknown. The example runs one pair; repeated experiments also need a frozen run schedule and fresh-state policy.
 
-Keep the full native eval export alongside the extracted SDK reports. In SDK 0.1.31, `ScanResult.toJSON()` omits runtime operation and recovery warnings, so imports can show partial coverage with no warnings and an unknown operation. The case-study warning counts come from native eval metadata.
+To revisit results without rerunning operations, use the [README extraction snippet](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-security#compare-saved-reports) to combine `response.metadata.codexSecurityReplay` with the original `response.raw` payload. Exported raw data can be a JSON string or object. Replay files preserve native normalized diagnostics and historical resources, including failures without a canonical report. Keep the full export as primary evidence. Direct SDK `ScanResult.toJSON()` files remain accepted, but SDK 0.1.31 omits runtime operation and recovery warnings.
 
 ## Prepare comparable reports
 
-Use the full JSON returned by SDK `ScanResult.toJSON()`, including its manifest, findings, and coverage. Keep the original files unchanged. Before interpreting differences, check:
+Use a Promptfoo replay file or the full JSON returned by SDK `ScanResult.toJSON()`, including its manifest, findings, and coverage. Keep the original files unchanged. Before interpreting differences, check:
 
 | Evidence        | What to compare                                                                                                                    |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
@@ -95,31 +95,41 @@ Those checks give you a starting comparison table; add the curated-recall assert
 
 ## Recorded Juice Shop comparison
 
-On September 26, 2026, three standard source reviews used the pinned revision and 123-line scope above: `gpt-5.6-luna` at low and medium effort, plus `gpt-5.6-terra` at medium effort as a reference. The [aggregate receipt](https://github.com/promptfoo/promptfoo/blob/main/examples/openai-codex-security/benchmark-results.json) contains exact report hashes, source snapshot and prompt hashes, versions, and measurements. Raw reports and traces are not bundled; hashes identify the preserved report bytes, not their authenticity.
+On September 26, 2026, six planned standard source reviews compared Luna medium and Terra medium, three repeats each, on the pinned 14-file scope. The [aggregate receipt](https://github.com/promptfoo/promptfoo/blob/main/examples/openai-codex-security/benchmark-results.json) contains source-file and prompt hashes, frozen protocol/review identities, exact report hashes, settings and measurements. Raw reports and private SDK state are not bundled. Hashes identify preserved bytes, not an authenticated producer.
 
-The two expected issues were independently reviewed before these measured runs: basket ownership isolation and an order-history ownership key based on a lossy email representation. Supporting routing and authentication code supplied negative controls: public delivery-method reads are not private order access, and accounting handlers must be assessed with their role middleware. Findings were adjudicated by source inspection, without runtime reproduction or independent severity scoring.
+Independent AI source reviews froze **11 distinct applicable root causes** and four narrow negative controls before new outputs. This curated set is incomplete. At the pinned v19 revision, the catalog has 110 hacking challenges and 31 two-phase coding exercises (172 scoreboard tasks); those tasks are not a unique-vulnerability denominator. The [official coding-exercise documentation](https://help.owasp-juice.shop/appendix/code-snippets.html) explains the phases and source annotations. Valid extra findings can affect precision without enlarging the frozen recall denominator.
 
-| Run          | Supported / refuted findings | Curated recall | Reviewed precision | Coverage (SDK warnings) |
-| ------------ | ---------------------------- | -------------- | ------------------ | ----------------------- |
-| Luna low     | 1 / 2                        | 1/2            | 1/3                | Partial (2)             |
-| Luna medium  | 1 / 0                        | 1/2            | 1/1                | Partial (5)             |
-| Terra medium | 2 / 0                        | 1/2            | 2/2                | Complete (0)            |
+| Model / repeat | Delivered findings | Primary curated recall | Coverage / native warnings | Eligibility                       |
+| -------------- | -----------------: | ---------------------- | -------------------------- | --------------------------------- |
+| Luna / 1       |                 11 | 6/11                   | Complete / 0               | Eligible                          |
+| Luna / 2       |        Unavailable | Not scored             | Unknown / 0                | Canonical publication failed      |
+| Luna / 3       |                  7 | 6/11                   | Partial / 12               | Eligible                          |
+| Terra / 1      |                  4 | 4/11                   | Complete / 0               | Eligible                          |
+| Terra / 2      |                 11 | Not scored             | Complete / 0               | Excluded answer-file content read |
+| Terra / 3      |                 12 | 8/11                   | Complete / 0               | Eligible                          |
 
-All three found the basket ownership issue and missed the curated order-identity issue. Luna low's two additional findings were conditional concerns about missing inline authorization; reviewing the accounting middleware resolved those concerns against the full application. Terra's additional session-expiration finding was source-supported, but it is a different issue from the missing order-identity finding. It counts toward precision without changing the frozen recall denominator. No current findings remained unreviewed or were classified as duplicates.
+The failed Luna attempt produced an invalid manifest and no canonical report. Its drafts do not count as delivered findings. The invalid Terra attempt exposed codefix/test content through broad searches; it receives no primary recall despite a separately retained content review. Both have zero delivery contribution, with time and cost retained. **Not scored is not measured zero recall.**
 
-Both native Luna runs retained findings but reported partial coverage with SDK schema-recovery warnings. Those warnings do not by themselves establish that selected files went unread, and the **CompleteCoverage** assertion still fails. Terra's complete coverage likewise did not prevent a miss against the curated set.
+| Metric                                                      |             Luna medium |            Terra medium |
+| ----------------------------------------------------------- | ----------------------: | ----------------------: |
+| Eligible reports / planned attempts                         |                     2/3 |                     2/3 |
+| Mean curated recall among eligible reports                  |                  54.55% |                  54.55% |
+| Delivery yield over all planned attempts                    |          12/33 (36.36%) |          12/33 (36.36%) |
+| Supported / refuted / unresolved eligible root-cause claims |              18 / 0 / 1 |              16 / 0 / 0 |
+| Pooled eligible precision bounds                            |             94.74%–100% |               100%–100% |
+| Total reported tokens, all attempts                         |               7,971,164 |               7,824,356 |
+| Estimated USD range, all attempts                           | $0.32471884–$0.61524308 | $3.62291200–$6.74751200 |
+| Mean outer CLI duration, all attempts                       |                229.86 s |                239.73 s |
 
-| Run          | Recorded scan duration | Reported total tokens | Estimated USD range     |
-| ------------ | ---------------------- | --------------------- | ----------------------- |
-| Luna low     | 69.547 s               | 642,254               | $0.03278948–$0.06203956 |
-| Luna medium  | 134.792 s              | 1,368,934             | $0.05560496–$0.10600792 |
-| Terra medium | 166.533 s              | 1,423,837             | $0.80218720–$1.50566840 |
+The precision bounds include unresolved claims; they are not confidence intervals. Counts deduplicate control claims within each report, then pool across eligible repeats. One finding can contain multiple claims. The mean of per-report precision bounds differs from pooled precision: Luna's lower bound is 95.45% when averaged per report and 94.74% when pooling its 19 claims. No refuted core claim does not establish that every impact or precondition statement was correct.
 
-These runs used SDK 0.1.31/plugin 0.1.95, separate fresh SDK state, saved ChatGPT authentication, a three-thread limit, and a $3 estimated threshold per scan. Workbench recipes and every recorded session's settings agreed on model and effort; session token totals matched SDK usage. These records establish execution settings, not server-side model attestation. Raw SDK reports lack a structured effort field. Duration comes from manifest timestamps; tokens include repeated context and cached input. Costs are API-equivalent SDK estimates, not measured subscription charges.
+Coverage and delivered artifacts exposed harness failures. Terra repeat 1's model repairs reduced malformed drafts to four canonical findings while broader coverage prose still said other surfaces were reported; SDK export and Promptfoo agreed on four. Luna repeat 3 retained seven findings with twelve schema-recovery warnings and partial coverage. Its expected denominator stayed 11. Complete coverage likewise did not guarantee full recall.
 
-The Luna runs overlapped and Terra ran afterward. The portable example's command instead runs sequentially and leaves authentication/thread limits at SDK defaults. One run per configuration cannot establish a reliable model ranking or isolate cache and concurrency effects.
+The frozen protocol used SDK 0.1.31/plugin 0.1.95, CLI 0.156.1, saved ChatGPT authentication, fresh state, sequential counterbalanced order, a three-thread cap and $5 estimated threshold per scan. All observed root/worker model and effort settings matched the request; this is trace evidence, not server-side model attestation. Tokens include repeated context and cached input. Costs are API-equivalent estimates, not subscription invoices; equal spend limits are not equal compute. The table's duration includes outer CLI overhead and is distinct from manifest scan duration.
 
-An earlier completed pair lacked explicit intentional-vulnerability benchmark framing: one malformed finding was discarded, and another run excluded a documented challenge. The measured prompt explicitly includes intentional flaws and requests the canonical finding schema. Keep unsuccessful attempts as harness QA evidence; do not mix that earlier prompt into the table above.
+This is known public code with inline vulnerability annotations, not an unseen-code benchmark. The reading restrictions were prompt instructions, not filesystem isolation; a trace audit determined the excluded attempt's invalidity. Two AI agents reviewed anonymous finding packets, but timing batches and accidental disclosure of Terra repeat 1 model/count metadata to one reviewer limited blinding. This was source review, not human validation or runtime reproduction. Three planned repeats and two eligible reports per model support descriptive observations, not a statistically established winner.
+
+Six earlier setup failures occurred before any model session because of output-directory permissions. They remain a separate operational cohort. An earlier three-file pilot also showed why the prompt must explicitly include intentional flaws and require canonical finding schemas. Neither earlier cohort is pooled into these six model-backed attempts; no failed or invalid attempt was replaced to improve this table.
 
 ## Define ground truth before measuring quality
 
@@ -142,70 +152,38 @@ The included configuration checks completion and coverage. SDK `failure_severity
 
 ### Add a curated-recall assertion
 
-This assertion is for the saved-report config, after independent adjudication; it does not score live calls directly. For repository reports with a recorded revision and scope, put a `benchmark` object in the common test row's `vars`. Supply real adjudications for both imported file hashes. If a report records only a snapshot digest, this revision-based assertion cannot score it; retain the digest and establish matching source identity before adapting the check:
+The portable [example helper](https://github.com/promptfoo/promptfoo/blob/main/examples/openai-codex-security/grade-benchmark.mjs) replaces inline graders. It consumes `context.config.benchmark`, normalized provider metadata and original SDK-shaped output. It does not discover findings or make adjudication decisions.
 
-| Field           | Required value                                                                                                                                                                                                 |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `revision`      | The exact revision reviewed when curating the expected set. Confirm source identity and a clean snapshot separately.                                                                                           |
-| `scope`         | An object with known `includePaths` and `excludePaths` arrays of unique, nonempty strings, including explicit empty arrays. Review narrative assumptions and limitations separately.                           |
-| `expectedIds`   | A nonempty array of unique, stable curated IDs. Keep their source/evidence references with the benchmark.                                                                                                      |
-| `adjudications` | An object keyed by imported report SHA-256, then current SDK `findingId`. Each entry is `{ expectedIds: string[], evidence: string }`. An empty ID array means reviewed with no curated match, not unreviewed. |
+Prepare independently reviewed `benchmark.json` using the [README contract](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-security#grade-independently-reviewed-findings). The frozen definition records revision, source snapshot and ground-truth hashes, included/excluded paths and unique expected IDs. Each imported file SHA maps to a hash-bound review of every current finding ID, with explicit protocol/provenance validity and source-evidenced claims. Stable root-cause IDs deduplicate repeated claims; report IDs are local identities, not benchmark labels. The helper's `evidenceHash` binds definition/review content, but cannot authenticate the reviewer or source.
 
-Append this [JavaScript assertion](/docs/configuration/expected-outputs/javascript#using-test-context) to the row's `assert` list. It uses `context.vars.benchmark` and `context.metadata.codexSecurity`. Keep the original JSON output without an output transform for this assertion:
+Add the file assertion to the saved-report config:
 
 ```yaml
-- type: javascript
-  metric: CuratedRecall
-  value: |
-    const result = context.metadata?.codexSecurity;
-    const benchmark = context.vars.benchmark;
-    const requireEvidence = (condition, reason) => {
-      if (!condition) throw new Error(`Recall not computed: ${reason}`);
-    };
-    const uniqueIds = (ids) => Array.isArray(ids)
-      && ids.every(id => typeof id === 'string' && id.trim().length > 0)
-      && new Set(ids).size === ids.length;
-    const scopeKey = (scope) => JSON.stringify([
-      [...scope.includePaths].sort(), [...scope.excludePaths].sort(),
-    ]);
-    requireEvidence(result?.version === 1 && result.source.kind === 'saved-report'
-      && !result.source.mocked && result.status === 'completed', 'need a completed saved scan');
-    requireEvidence(typeof benchmark?.revision === 'string' && benchmark.revision.length > 0
-      && result.target?.revision === benchmark.revision, 'revision missing or mismatched');
-    requireEvidence([benchmark.scope, result.scope].every(scope => scope
-      && uniqueIds(scope.includePaths) && uniqueIds(scope.excludePaths))
-      && scopeKey(benchmark.scope) === scopeKey(result.scope), 'scope missing or mismatched');
-    requireEvidence(uniqueIds(benchmark.expectedIds) && benchmark.expectedIds.length > 0,
-      'expected IDs must be unique and nonempty; zero denominator is undefined');
-    const expected = new Set(benchmark.expectedIds);
-    const findings = JSON.parse(output).findings?.findings;
-    const reportIds = findings?.map(finding => finding.findingId);
-    requireEvidence(uniqueIds(reportIds), 'current finding IDs missing or duplicated');
-    const review = benchmark.adjudications?.[result.source.sha256];
-    requireEvidence(review && typeof review === 'object' && !Array.isArray(review)
-      && Object.keys(review).length === reportIds.length
-      && reportIds.every(id => Object.hasOwn(review, id)), 'adjudicate every current finding');
-    const matched = new Set();
-    for (const id of reportIds) {
-      const item = review[id];
-      requireEvidence(uniqueIds(item?.expectedIds)
-        && item.expectedIds.every(expectedId => expected.has(expectedId))
-        && typeof item.evidence === 'string' && item.evidence.trim().length > 0,
-        `invalid or unsupported adjudication for ${id}`);
-      item.expectedIds.forEach(expectedId => matched.add(expectedId));
-    }
-    return {
-      pass: matched.size === expected.size,
-      score: matched.size / expected.size,
-      reason: `${matched.size}/${expected.size} curated IDs found; coverage ${result.coverage.completeness}`,
-    };
+defaultTest:
+  assert:
+    - type: javascript
+      metric: CompletedScan
+      value: file://grade-benchmark.mjs:completedScan
+    - type: javascript
+      metric: CompleteCoverage
+      value: file://grade-benchmark.mjs:completeCoverage
+    - type: javascript
+      value: file://grade-benchmark.mjs:gradeBenchmark
+      config:
+        benchmark: file://benchmark.json
 ```
 
-The pass condition requires every expected ID; the score is curated-set recall. Repeated matches count once, and partial coverage does not shrink the denominator. Scope comparison ignores path ordering and narrative wording. Review summaries, assumptions, and limitations separately to establish comparability; this check does not authenticate the source or a reviewer’s judgment. Missing revision/scope, incomplete adjudication, invalid IDs, or an empty expected set fail with **Recall not computed**. Promptfoo assigns thrown assertion errors a score of zero; exclude these precondition failures from recall summaries rather than interpreting that failure score as measured recall. This assertion does not calculate precision or verify a reviewer's evidence automatically.
+The helper resolves relative benchmark file paths from its own directory; use an absolute path for evidence elsewhere. These reviews are grading inputs, not scan prompts. Do **not** set `metric:` on `gradeBenchmark`. It emits `CuratedRecall`, `PrecisionLower` and `PrecisionUpper` only when defined. Eligible zero-finding reports score zero recall; empty precision denominators remain undefined. Partial coverage keeps the full recall denominator. Missing/changed hashes, revision/scope mismatch, invalid protocol, unreviewed findings or an empty expected set return **Not scored**, null quality metadata and no quality named metrics. Promptfoo still records an overall failed evidence check with numeric score zero; that value is not a recall observation.
+
+The helper's quality assertion passes only at full curated recall and a precision lower bound of one. The complete-coverage assertion is separate. Inspect `gradingResult.componentResults[].metadata.quality` for the eligibility reason, counts, matched IDs and precision bounds; use named metrics instead of the aggregate case score. Scope equality ignores path order and narrative wording; reviewers must still establish comparable assumptions and actual source snapshots.
+
+For unique in-scope claims, let `S`, `F`, and `U` be supported, refuted and unresolved counts. Resolved-only precision is `S/(S+F)`; report uncertainty as `[S/(S+F+U), (S+U)/(S+F+U)]`. These are adjudication bounds. An unmatched but supported extra finding contributes to precision, not curated recall. Keep duplicates and unresolved cases visible.
+
+Maintain a separate ledger of every planned attempt. **Eligible recall** averages only valid delivered reports. **All-planned delivery yield** is eligible delivered matches divided by `(planned attempts × expected count)`: failed/invalid attempts contribute zero delivery, while their recall stays unscored. Unlaunched planned attempts also stay in this denominator. Include failed and invalid effort in resource totals. A UI filtered to eligible imports cannot supply the all-attempt denominator.
 
 ## Inspect findings and coverage in Promptfoo
 
-Open **Compare Codex Security source review effort** for the live config, or **Compare existing Codex Security reports** for the import config, and expand each column's output. The Codex Security summary marks imported reports and shows current finding counts, coverage, warnings, and available provenance before the raw report. The same versioned data is available in `response.metadata.codexSecurity`, including target, scope, and observed versions. Native runs have `source.kind: sdk`; imported reports have `source.kind: saved-report` and a file hash.
+Open **Compare Codex Security source reviews** for the live config, or **Compare existing Codex Security reports** for the import config, and expand each column's output. The Codex Security summary marks imported reports and shows current finding counts, coverage, warnings, and available provenance before the raw report. The same versioned data is available in `response.metadata.codexSecurity`, including target, scope, and observed versions. Native runs have `source.kind: sdk`; imported reports have `source.kind: saved-report` and a file hash.
 
 Use `findings.findings` for the current run. `repositoryFindings`, when present, can also include earlier open findings; do not count all of them as fresh discoveries. Review locations and evidence for disagreements. Zero findings with partial or unknown coverage does not establish that the source is free of vulnerabilities, and complete coverage does not prove their absence either.
 

@@ -12,6 +12,7 @@ export interface CodexSecurityResultContext {
   observedCost?: unknown;
   warnings?: unknown;
   artifactPaths?: Partial<Record<ArtifactKind, unknown>>;
+  diagnostics?: CodexSecurityResult['diagnostics'];
 }
 
 const ARTIFACT_KINDS: ArtifactKind[] = [
@@ -212,6 +213,7 @@ export function normalizeCodexSecurityResult(
     const path = text(context.artifactPaths?.[kind]) ?? text(raw[kind]);
     return path === null ? [] : [{ kind, path }];
   });
+  const recordedStatus = status(context.status ?? scan.status ?? turn.status);
 
   return {
     version: 1,
@@ -227,7 +229,12 @@ export function normalizeCodexSecurityResult(
         record(scan.scope).runtimeStatus === 'mock',
     },
     operation: operation(context.operation) ?? operation(raw.operation),
-    status: error ? 'failed' : status(context.status ?? scan.status ?? turn.status),
+    status:
+      recordedStatus === 'canceled' || recordedStatus === 'interrupted'
+        ? recordedStatus
+        : error
+          ? 'failed'
+          : recordedStatus,
     error,
     scanId: text(scan.id),
     model: text(turn.model) ?? text(rawCost.model) ?? text(observedCost.model),
@@ -252,6 +259,15 @@ export function normalizeCodexSecurityResult(
     warnings: [
       ...new Set([...(strings(raw.warnings) ?? []), ...(strings(context.warnings) ?? [])]),
     ],
+    diagnostics: {
+      phase: context.diagnostics?.phase ?? null,
+      warningAvailability:
+        context.diagnostics?.warningAvailability === 'observed' ||
+        Array.isArray(raw.warnings) ||
+        (strings(context.warnings)?.length ?? 0) > 0
+          ? 'observed'
+          : 'unknown',
+    },
     artifacts,
   };
 }

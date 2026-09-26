@@ -92,6 +92,13 @@ export const CodexSecurityResultSchema = z.object({
     })
     .nullable(),
   warnings: z.array(Text),
+  // Optional for older saved results. Observed never means a complete SDK warning stream.
+  diagnostics: z
+    .object({
+      phase: z.enum(['configuration', 'setup', 'scan', 'validation', 'import']).nullable(),
+      warningAvailability: z.enum(['unknown', 'observed']),
+    })
+    .optional(),
   artifacts: z.array(
     z.object({
       kind: z.enum([
@@ -110,3 +117,20 @@ export const CodexSecurityResultSchema = z.object({
 });
 
 export type CodexSecurityResult = z.infer<typeof CodexSecurityResultSchema>;
+
+/** Portable replay evidence; payload binding identifies contents, not authenticity. */
+export const CodexSecurityReplaySchema = z
+  .object({
+    documentType: z.literal('promptfoo.codex-security-replay'),
+    schemaVersion: z.literal(1),
+    payload: z.record(z.string(), z.unknown()).nullable(),
+    // SHA-256 of UTF-8 JSON.stringify(payload), or null when publication failed.
+    payloadSha256: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .nullable(),
+    result: CodexSecurityResultSchema,
+  })
+  .strict();
+
+export type CodexSecurityReplay = z.infer<typeof CodexSecurityReplaySchema>;

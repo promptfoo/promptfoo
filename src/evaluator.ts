@@ -18,6 +18,8 @@ import { getCache, withCacheNamespace } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
+import { createProviderProgressReporter } from './evaluator/providerProgress';
+import { createProviderSetupCheck } from './evaluator/providerSetup';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
@@ -882,6 +884,9 @@ function tryParseJson(value: string): unknown {
 async function callProviderForRunEval({
   abortSignal,
   evalId,
+  evaluateOptions,
+  providerSetup,
+  promptIdx,
   filters,
   promptForRender,
   provider,
@@ -897,6 +902,9 @@ async function callProviderForRunEval({
   RunEvalOptions,
   | 'abortSignal'
   | 'evalId'
+  | 'evaluateOptions'
+  | 'providerSetup'
+  | 'promptIdx'
   | 'nunjucksFilters'
   | 'provider'
   | 'rateLimitRegistry'
@@ -928,6 +936,9 @@ async function callProviderForRunEval({
       response = await callActiveProvider({
         abortSignal,
         evalId,
+        evaluateOptions,
+        providerSetup,
+        promptIdx,
         filters,
         onProviderInvoked: () => {
           providerInvoked = true;
@@ -1040,6 +1051,9 @@ async function collectExternalTraceAfterProviderCall({
 async function callActiveProvider({
   abortSignal,
   evalId,
+  evaluateOptions,
+  providerSetup,
+  promptIdx,
   filters,
   onProviderInvoked,
   promptForRender,
@@ -1054,7 +1068,16 @@ async function callActiveProvider({
   vars,
 }: Pick<
   RunEvalOptions,
-  'abortSignal' | 'evalId' | 'provider' | 'rateLimitRegistry' | 'repeatIndex' | 'test' | 'testSuite'
+  | 'abortSignal'
+  | 'evalId'
+  | 'evaluateOptions'
+  | 'providerSetup'
+  | 'promptIdx'
+  | 'provider'
+  | 'rateLimitRegistry'
+  | 'repeatIndex'
+  | 'test'
+  | 'testSuite'
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
   onProviderInvoked: () => void;
@@ -1082,7 +1105,30 @@ async function callActiveProvider({
     traceContext,
     vars,
   });
-  const callApiOptions = abortSignal ? { abortSignal } : undefined;
+  if (abortSignal?.aborted) {
+    throw new Error('Operation cancelled');
+  }
+  const setupFailure = await providerSetup?.(activeProvider, callApiContext);
+  if (abortSignal?.aborted) {
+    throw new Error('Operation cancelled');
+  }
+  if (setupFailure) {
+    return setupFailure;
+  }
+  const progress = createProviderProgressReporter({
+    provider: sanitizeProviderIdForLog(activeProvider.label || activeProvider.id()),
+    testIdx: testIndex,
+    promptIdx,
+    callback: evaluateOptions?.providerProgressCallback,
+    silent: evaluateOptions?.silent,
+  });
+  const reportsProgress =
+    activeProvider.supportsProgress || evaluateOptions?.providerProgressCallback;
+  const callApiOptions = reportsProgress
+    ? { ...(abortSignal ? { abortSignal } : {}), onProgress: progress.update }
+    : abortSignal
+      ? { abortSignal }
+      : undefined;
 
   const callApi = () => {
     onProviderInvoked();
@@ -1103,13 +1149,17 @@ async function callActiveProvider({
       ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
       : invoke();
   };
-  const response = rateLimitRegistry
-    ? await rateLimitRegistry.execute(activeProvider, callApi, createProviderRateLimitOptions())
-    : await callApi();
+  try {
+    const response = rateLimitRegistry
+      ? await rateLimitRegistry.execute(activeProvider, callApi, createProviderRateLimitOptions())
+      : await callApi();
 
-  logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
-  logger.debug(`Provider response cached property explicitly: ${response.cached}`);
-  return response;
+    logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
+    logger.debug(`Provider response cached property explicitly: ${response.cached}`);
+    return response;
+  } finally {
+    progress.close();
+  }
 }
 
 function buildCallApiContext({
@@ -1627,6 +1677,7 @@ async function runEvalInternal({
   evalId,
   providerCallQueue,
   rateLimitRegistry,
+  providerSetup,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
   provider.delay ??= delay ?? getEnvInt('PROMPTFOO_DELAY_MS', 0);
   invariant(
@@ -1691,6 +1742,9 @@ async function runEvalInternal({
           const providerCall = await callProviderForRunEval({
             abortSignal,
             evalId,
+            evaluateOptions,
+            providerSetup,
+            promptIdx: promptIndex,
             filters,
             promptForRender: {
               ...state.promptForRender,
@@ -2506,6 +2560,37 @@ async function applyInputTransform(
     'Transform function did not return a valid object',
   );
   testCase.vars = { ...testCase.vars, ...transformedVars };
+}
+
+async function prepareProviderSetup(runEvalOptions: RunEvalOptions[], checkAbort: () => void) {
+  const providerSetup = createProviderSetupCheck();
+  for (const step of runEvalOptions) {
+    checkAbort();
+    step.providerSetup = providerSetup;
+    const activeProvider = isApiProvider(step.test.provider) ? step.test.provider : step.provider;
+    if (step.test.providerOutput || !activeProvider.checkSetupOnEval) {
+      continue;
+    }
+    const runtimeVars = getEvalRuntimeVars({
+      evalId: step.evalId,
+      promptIndex: step.promptIdx,
+      repeatIndex: step.repeatIndex,
+      testIndex: step.testIdx,
+    });
+    await providerSetup(activeProvider, {
+      vars: { ...step.test.vars, ...step.registers, ...runtimeVars },
+      prompt: {
+        ...step.prompt,
+        config: mergeProviderPromptConfig(step.prompt.config, step.test.options),
+      },
+      test: step.test,
+      originalProvider: step.provider,
+      evaluationId: step.evalId,
+      testIdx: step.testIdx,
+      promptIdx: step.promptIdx,
+      repeatIndex: step.repeatIndex,
+    });
+  }
 }
 
 async function buildRunEvalOptions({
@@ -4846,6 +4931,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     markComparisonRows(runEvalOptions, rowsWithSelectBestAssertion, rowsWithMaxScoreAssertion);
     const repeatCacheContextByTestIdx = buildRepeatCacheContextByTestIdx(runEvalOptions);
     await filterCompletedResumeSteps(runEvalOptions, this.store);
+
+    await prepareProviderSetup(runEvalOptions, checkAbort).catch((error) => {
+      clearTimeout(globalTimeout);
+      throw error;
+    });
 
     const concurrencySettings = adjustConcurrencyForSerialFeatures({
       concurrency,

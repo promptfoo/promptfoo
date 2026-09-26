@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import logger from '../../../../../logger';
+import { CodexSecurityQualityStatus } from './CodexSecurityQualityStatus';
 import { CodexSecurityResultSummary } from './CodexSecurityResultSummary';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
@@ -1627,7 +1628,10 @@ function EvalOutputCell({
         style={contentStyle}
       >
         {securityResult && !showDiffs ? (
-          <CodexSecurityResultSummary result={securityResult} compact />
+          <>
+            <CodexSecurityQualityStatus gradingResults={getDialogGradingResults(output)} compact />
+            <CodexSecurityResultSummary result={securityResult} compact />
+          </>
         ) : (
           <TruncatedText
             text={node || normalizedText}

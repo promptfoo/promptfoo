@@ -262,7 +262,9 @@ describe('EvalOutputCell', () => {
 
     expect(screen.getByText('Recorded duration').nextElementSibling).toHaveTextContent('1m 5s');
     expect(screen.getByText('Recorded tokens').nextElementSibling).toHaveTextContent('200');
-    expect(screen.getByText('Estimated cost').nextElementSibling).toHaveTextContent('$0.35');
+    expect(screen.getByText('Recorded cost estimate').nextElementSibling).toHaveTextContent(
+      '$0.35',
+    );
     expect(screen.queryByText(/rawSdkMarker/)).not.toBeInTheDocument();
     expect(screen.queryByText('Latency:')).not.toBeInTheDocument();
     expect(screen.queryByText('Tokens:')).not.toBeInTheDocument();
@@ -374,7 +376,48 @@ describe('EvalOutputCell', () => {
     const right = within(screen.getByRole('region', { name: 'Right report' }));
     expect(right.getByText('Findings').nextElementSibling).toHaveTextContent('Unknown');
     expect(right.getAllByText('Report contains incomplete findings.')).toHaveLength(1);
-    expect(right.getByText('Standard security scan · Failed')).toBeInTheDocument();
+    expect(right.getByText('Execution').nextElementSibling).toHaveTextContent('Failed');
+  });
+
+  it('separates an explicit unscored quality assessment from the failed evidence check', () => {
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        output={{
+          ...defaultProps.output,
+          pass: false,
+          score: 0,
+          gradingResult: {
+            pass: false,
+            score: 0,
+            reason: 'Not scored: Required review evidence is missing.',
+            componentResults: [
+              {
+                pass: false,
+                score: 0,
+                reason: 'Not scored: Required review evidence is missing.',
+                metadata: {
+                  quality: {
+                    status: 'not-scored',
+                    reason: 'Required review evidence is missing.',
+                    curatedRecall: null,
+                    precision: null,
+                  },
+                },
+              },
+            ],
+          },
+          metadata: { codexSecurity: createCodexSecurityResult({ status: 'failed' }) },
+        }}
+      />,
+    );
+    expect(screen.getByText('Quality: Not scored')).toBeInTheDocument();
+    expect(
+      screen.getByText('Not scored: Required review evidence is missing.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Required review evidence is missing.')).not.toBeInTheDocument();
+    expect(screen.getByText('Execution').nextElementSibling).toHaveTextContent('Failed');
+    expect(screen.queryByText(/recall.*0|precision.*0/i)).not.toBeInTheDocument();
   });
 
   it('preserves the explicit raw differences view for normalized results', () => {

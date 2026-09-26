@@ -303,6 +303,79 @@ describe('RunTestSuiteButton', () => {
     expect(timers.getTimerCount()).toBe(0);
   });
 
+  it('shows latest provider phases and observed resources without treating them as case completion', async () => {
+    let providerProgress: Array<Record<string, unknown>> = [
+      { provider: 'Security baseline', testIdx: 0, promptIdx: 0, phase: 'setup' },
+    ];
+    mockCallApiRoutes([
+      { method: 'POST', path: '/eval/job', response: { id: 'progress-job' } },
+      {
+        path: '/eval/job/progress-job/',
+        repeat: true,
+        response: () => ({ status: 'in-progress', progress: 0, total: 2, providerProgress }),
+      },
+    ]);
+    useStore.getState().updateConfig({
+      prompts: ['Review fixture'],
+      providers: ['openai:codex-security'],
+      tests: [{ vars: { repository: '/repos/fixture' } }],
+    });
+
+    const { unmount } = renderWithProvider(<RunTestSuiteButton />);
+    await act(async () => {
+      screen.getByRole('button', { name: 'Run Eval' }).click();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await timers.advanceByAsync(1000);
+    });
+    const active = screen.getByRole('list', { name: 'Active provider operations' });
+    expect(active).toHaveTextContent('Case 1 · Security baseline');
+    expect(active).toHaveTextContent('Last reported: setup');
+    expect(active).not.toHaveTextContent(/elapsed|estimated cost|warnings/);
+
+    providerProgress = [
+      {
+        provider: 'Security baseline',
+        testIdx: 0,
+        promptIdx: 0,
+        phase: 'security-scan',
+        elapsedMs: 65000,
+        estimatedCostUsd: 0.137,
+        warningCount: 2,
+      },
+      {
+        provider: 'Security candidate',
+        testIdx: 1,
+        promptIdx: 1,
+        phase: 'setup',
+        elapsedMs: 0,
+        estimatedCostUsd: 0,
+        warningCount: 0,
+      },
+    ];
+    await act(async () => {
+      await timers.advanceByAsync(1000);
+    });
+    expect(active).toHaveTextContent(
+      'security scan · 1m 5s elapsed · $0.14 estimated cost · 2 warnings reported',
+    );
+    expect(active).toHaveTextContent('Case 2 · Security candidate');
+    expect(active).toHaveTextContent('0s elapsed · $0.0000 estimated cost · 0 warnings reported');
+    expect(screen.getByRole('status')).toHaveTextContent('0 of 2 cases completed');
+    expect(screen.queryByText(/% complete/)).not.toBeInTheDocument();
+
+    providerProgress = [];
+    await act(async () => {
+      await timers.advanceByAsync(1000);
+    });
+    expect(
+      screen.queryByRole('list', { name: 'Active provider operations' }),
+    ).not.toBeInTheDocument();
+    unmount();
+    expect(timers.getTimerCount()).toBe(0);
+  });
+
   it('should revert to non-running state and display an error message when the initial API call fails', async () => {
     const errorMessage = 'Failed to submit test suite';
 

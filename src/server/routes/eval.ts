@@ -180,6 +180,9 @@ evalRouter.post('/job', async (req: Request, res: Response): Promise<void> => {
     {
       ...evaluateOptions,
       eventSource: 'web',
+      providerProgressCallback: (progress, completed) => {
+        evalJobService.setProviderProgress(id, progress, completed);
+      },
       progressCallback: (progress: number, total: number) => {
         invariant(evalJobService.setProgress(id, progress, total), 'Job not found');
         console.log(`[${id}] ${progress}/${total}`);
@@ -239,6 +242,7 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
         status: 'in-progress',
         progress: job.progress,
         total: job.total,
+        ...(job.providerProgress && { providerProgress: job.providerProgress }),
         logs: job.logs,
       }),
     );

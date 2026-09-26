@@ -14,7 +14,14 @@ const STATUS_LABELS = {
   failed: 'Failed',
   canceled: 'Canceled',
   interrupted: 'Interrupted',
-  unknown: 'Status unknown',
+  unknown: 'Unknown',
+};
+const PHASE_LABELS = {
+  configuration: 'Configuration',
+  setup: 'Setup',
+  scan: 'Scan',
+  validation: 'Validation',
+  import: 'Import',
 };
 const DISPOSITION_LABELS = {
   reportable: 'Reportable',
@@ -44,6 +51,43 @@ function estimatedCost(cost: CodexSecurityResult['cost']): string {
 
 function recordedList(values: string[] | null | undefined): string | undefined {
   return values ? values.join(', ') || 'None reported' : undefined;
+}
+
+function ReportWarnings({
+  warnings,
+  observed,
+  compact,
+}: {
+  warnings: string[];
+  observed: boolean;
+  compact: boolean;
+}) {
+  return (
+    <>
+      {warnings.length === 0 && (
+        <p className="text-muted-foreground">
+          {observed ? 'No warnings reported' : 'Warning evidence unavailable'}
+        </p>
+      )}
+      {warnings.length > 0 &&
+        (compact ? (
+          <p className="text-amber-700 dark:text-amber-300">
+            {warnings.length} {warnings.length === 1 ? 'warning' : 'warnings'}
+          </p>
+        ) : (
+          <ul
+            aria-label="Warnings"
+            className="list-disc space-y-1 pl-5 text-amber-700 dark:text-amber-300"
+          >
+            {warnings.map((warning, index) => (
+              <li key={index} className="break-words">
+                {warning}
+              </li>
+            ))}
+          </ul>
+        ))}
+    </>
+  );
 }
 
 export function CodexSecurityResultSummary({
@@ -87,16 +131,19 @@ export function CodexSecurityResultSummary({
     ],
     ['SDK', result.versions.sdk],
     ['Plugin', result.versions.plugin],
+    ['Recorded input tokens', result.usage?.input?.toLocaleString()],
+    ['Recorded output tokens', result.usage?.output?.toLocaleString()],
+    ['Recorded cached input tokens', result.usage?.cachedInput?.toLocaleString()],
+    ['Recorded cache write tokens', result.usage?.cacheWriteInput?.toLocaleString()],
   ].filter(([, value]) => value != null);
   const showFindings =
     result.findings !== null || (result.operation !== null && result.operation !== 'validation');
+  const stopped = ['failed', 'canceled', 'interrupted'].includes(result.status);
 
   return (
     <section aria-label="Codex Security result" className="space-y-2 text-sm">
       <p className="font-medium">
         {result.operation ? OPERATION_LABELS[result.operation] : 'Security operation'}
-        {' · '}
-        {STATUS_LABELS[result.status]}
       </p>
       {(result.model || result.source.kind === 'saved-report') && (
         <p className="text-muted-foreground">
@@ -112,6 +159,16 @@ export function CodexSecurityResultSummary({
       )}
       {!compact && result.error && <p className="break-words text-destructive">{result.error}</p>}
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+        <dt className="text-muted-foreground">Execution</dt>
+        <dd>{STATUS_LABELS[result.status]}</dd>
+        {stopped && result.diagnostics?.phase && (
+          <>
+            <dt className="text-muted-foreground">
+              {result.status === 'failed' ? 'Failure phase' : 'Stopped during'}
+            </dt>
+            <dd>{PHASE_LABELS[result.diagnostics.phase]}</dd>
+          </>
+        )}
         {result.operation === 'validation' ? (
           <>
             <dt className="text-muted-foreground">Disposition</dt>
@@ -130,7 +187,9 @@ export function CodexSecurityResultSummary({
             <dd className="capitalize">{result.coverage.completeness}</dd>
           </>
         ) : null}
-        <dt className="text-muted-foreground">Estimated cost</dt>
+        <dt className="text-muted-foreground">
+          {result.source.kind === 'saved-report' ? 'Recorded cost estimate' : 'Estimated cost'}
+        </dt>
         <dd>{estimatedCost(result.cost)}</dd>
         {result.elapsedMs !== null && (
           <>
@@ -145,23 +204,16 @@ export function CodexSecurityResultSummary({
           </>
         )}
       </dl>
-      {result.warnings.length > 0 &&
-        (compact ? (
-          <p className="text-amber-700 dark:text-amber-300">
-            {result.warnings.length} {result.warnings.length === 1 ? 'warning' : 'warnings'}
-          </p>
-        ) : (
-          <ul
-            aria-label="Warnings"
-            className="list-disc space-y-1 pl-5 text-amber-700 dark:text-amber-300"
-          >
-            {result.warnings.map((warning, index) => (
-              <li key={index} className="break-words">
-                {warning}
-              </li>
-            ))}
-          </ul>
-        ))}
+      {!compact && showFindings && (
+        <p className="text-xs text-muted-foreground">
+          Execution status and coverage do not establish finding accuracy.
+        </p>
+      )}
+      <ReportWarnings
+        warnings={result.warnings}
+        observed={result.diagnostics?.warningAvailability === 'observed'}
+        compact={compact}
+      />
       {!compact && (details.length > 0 || result.artifacts.length > 0) && (
         <details className="text-muted-foreground">
           <summary className="cursor-pointer">Report details</summary>

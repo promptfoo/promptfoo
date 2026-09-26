@@ -235,6 +235,35 @@ describe('EvalOutputPromptDialog', () => {
     },
   );
 
+  it('keeps explicit unscored quality visible beside execution details', () => {
+    renderWithProviders(
+      <EvalOutputPromptDialog
+        {...defaultProps}
+        metadata={{ codexSecurity: createCodexSecurityResult({ status: 'completed' }) }}
+        gradingResults={[
+          {
+            pass: false,
+            score: 0,
+            reason: 'Not scored: The report does not match the reviewed findings.',
+            metadata: {
+              quality: {
+                status: 'not-scored',
+                reason: 'The report does not match the reviewed findings.',
+                curatedRecall: null,
+                precision: null,
+              },
+            },
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByText('Quality: Not scored')).toBeInTheDocument();
+    expect(
+      screen.getByText('The report does not match the reviewed findings.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Execution').nextElementSibling).toHaveTextContent('Completed');
+  });
+
   it('preserves and copies the SDK report separately from transformed output', async () => {
     const user = userEvent.setup();
     const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) };

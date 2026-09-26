@@ -8,6 +8,7 @@ import { useEvalHistoryRefresh } from '@app/hooks/useEvalHistoryRefresh';
 import { useToast } from '@app/hooks/useToast';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
+import { formatCost } from '@app/utils/media';
 import { formatDuration } from '@promptfoo/util/formatDuration';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -16,6 +17,7 @@ import {
   normalizePromptsForJob,
   normalizeProviders,
 } from './setupReadiness';
+import type { EvalProviderProgress } from '@promptfoo/contracts/providers';
 import type { CreateJobResponse, GetJobResponse } from '@promptfoo/types/api/eval';
 
 const RunTestSuiteButton = () => {
@@ -39,6 +41,7 @@ const RunTestSuiteButton = () => {
   } = config;
   const [isRunning, setIsRunning] = useState(false);
   const [caseProgress, setCaseProgress] = useState({ completed: 0, total: 0 });
+  const [providerProgress, setProviderProgress] = useState<EvalProviderProgress[]>([]);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [runError, setRunError] = useState<string | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -86,6 +89,7 @@ const RunTestSuiteButton = () => {
     setIsRunning(true);
     setRunError(null);
     setCaseProgress({ completed: 0, total: 0 });
+    setProviderProgress([]);
     setElapsedSeconds(0);
 
     const sourceEvalId =
@@ -172,6 +176,7 @@ const RunTestSuiteButton = () => {
             throw new Error(progressData.logs?.join('\n') || 'Job failed');
           } else {
             setCaseProgress({ completed: progressData.progress, total: progressData.total });
+            setProviderProgress(progressData.providerProgress ?? []);
           }
         } catch (error) {
           clearPollInterval();
@@ -209,8 +214,32 @@ const RunTestSuiteButton = () => {
             {' · '}
             <span aria-live="off">{formatDuration(elapsedSeconds)} elapsed</span>
           </p>
+          {providerProgress.length > 0 && (
+            <ul
+              aria-label="Active provider operations"
+              className="max-h-64 space-y-2 overflow-auto"
+            >
+              {providerProgress.map((progress) => (
+                <li key={`${progress.testIdx}-${progress.promptIdx}`} className="break-words">
+                  <p className="font-medium text-foreground">
+                    Case {progress.testIdx + 1} · {progress.provider}
+                  </p>
+                  <p>
+                    Last reported:{' '}
+                    <span className="capitalize">{progress.phase.replace(/[_-]+/g, ' ')}</span>
+                    {progress.elapsedMs != null &&
+                      ` · ${formatDuration(Math.floor(progress.elapsedMs / 1000))} elapsed`}
+                    {progress.estimatedCostUsd != null &&
+                      ` · ${formatCost(progress.estimatedCostUsd)} estimated cost`}
+                    {progress.warningCount != null &&
+                      ` · ${progress.warningCount} ${progress.warningCount === 1 ? 'warning' : 'warnings'} reported`}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
           <p>
-            Progress updates when a case completes; an individual operation may take several
+            Case counts update when a case completes; an individual operation may take several
             minutes.
           </p>
         </div>
