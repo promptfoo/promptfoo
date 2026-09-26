@@ -122,9 +122,11 @@ import type { LoadApiProviderContext } from '../types/index';
 import type { ProviderOptions } from '../types/providers';
 import type { ProviderFactory, ProviderFamily } from './registryTypes';
 
+const CODEX_CLI_PROVIDER_PATH = /^openai:(?:codex|codex-sdk|codex-app-server|codex-desktop)(?::|$)/;
+
 /** Aliases read together by these providers must keep their original scope priority. */
 function getProviderEnvAliasGroups(providerPath: string): readonly (readonly string[])[] {
-  if (/^openai:(?:codex-sdk|codex)(?::|$)/.test(providerPath)) {
+  if (CODEX_CLI_PROVIDER_PATH.test(providerPath)) {
     return [['OPENAI_API_KEY', 'CODEX_API_KEY']];
   }
   if (/^azure(?:openai)?:foundry-agent:/.test(providerPath)) {
@@ -220,10 +222,7 @@ function getProviderEnvAliasGroups(providerPath: string): readonly (readonly str
 }
 
 function getProviderEndpointAliases(providerPath: string): readonly string[] {
-  if (
-    providerPath.startsWith('openai:') &&
-    !/^openai:(?:codex-sdk|codex)(?::|$)/.test(providerPath)
-  ) {
+  if (providerPath.startsWith('openai:') && !CODEX_CLI_PROVIDER_PATH.test(providerPath)) {
     return ['OPENAI_API_HOST', 'OPENAI_API_BASE_URL', 'OPENAI_BASE_URL'];
   }
   if (providerPath.startsWith('mistral:')) {
@@ -1147,10 +1146,7 @@ export const providerMap: ProviderFactory[] = [
                 model: codexModel,
               }
             : providerOptions.config,
-          env: {
-            ...context.env,
-            ...providerOptions.env,
-          },
+          env: mergeProviderEnv(providerPath, context.env, providerOptions.env),
         });
       }
 
