@@ -230,8 +230,8 @@ export class AssertionsResult {
   private totalWeight: number = 0;
   private failedReason: string | undefined;
   private componentResults: GradingResult[] = [];
-  private namedScores: Record<string, number> = {};
-  private namedScoreWeights: Record<string, number> = {};
+  private namedScores: Record<string, number> = Object.create(null);
+  private namedScoreWeights: Record<string, number> = Object.create(null);
   private result: GradingResult | null = null;
   private failedContentSafetyChecks: boolean = false;
 
@@ -280,7 +280,11 @@ export class AssertionsResult {
     if (result.namedScores) {
       Object.entries(result.namedScores).forEach(([metricName, score]) => {
         if (metricName !== metric) {
-          const incomingWeight = result.namedScoreWeights?.[metricName] ?? 1;
+          const incomingWeight =
+            result.namedScoreWeights &&
+            Object.prototype.hasOwnProperty.call(result.namedScoreWeights, metricName)
+              ? (result.namedScoreWeights[metricName] ?? 1)
+              : 1;
           const weightedIncomingWeight = incomingWeight * weight;
           this.namedScores[metricName] =
             (this.namedScores[metricName] ?? 0) + score * weightedIncomingWeight;
@@ -353,16 +357,19 @@ export class AssertionsResult {
       }
     });
 
-    const normalizedNamedScores: Record<string, number> = {};
-    for (const [key, value] of Object.entries(this.namedScores)) {
-      const totalWeight = this.namedScoreWeights[key] ?? 0;
-      normalizedNamedScores[key] =
-        !Number.isFinite(value) || !Number.isFinite(totalWeight)
-          ? Number.NaN
-          : totalWeight > 0
-            ? value / totalWeight
-            : 0;
-    }
+    const normalizedNamedScores: Record<string, number> = Object.fromEntries(
+      Object.entries(this.namedScores).map(([key, value]) => {
+        const totalWeight = this.namedScoreWeights[key] ?? 0;
+        return [
+          key,
+          !Number.isFinite(value) || !Number.isFinite(totalWeight)
+            ? Number.NaN
+            : totalWeight > 0
+              ? value / totalWeight
+              : 0,
+        ];
+      }),
+    );
 
     const hasNamedScoreWeights = Object.keys(this.namedScoreWeights).length > 0;
     const cachedResponse =
@@ -374,7 +381,7 @@ export class AssertionsResult {
       score,
       reason,
       namedScores: normalizedNamedScores,
-      ...(hasNamedScoreWeights && { namedScoreWeights: this.namedScoreWeights }),
+      ...(hasNamedScoreWeights && { namedScoreWeights: { ...this.namedScoreWeights } }),
       tokensUsed: this.tokensUsed,
       componentResults: flattenedComponentResults,
       ...((this._parentAssertionSet || cachedResponse) && {
@@ -419,9 +426,24 @@ export class AssertionsResult {
 
     // Finite inputs can overflow when weighted or accumulated. Check the final
     // output after custom scoring has had an opportunity to replace those values.
+    let metricEntries: Record<'namedScores' | 'namedScoreWeights', [string, number][]>;
+    try {
+      metricEntries = {
+        namedScores: Object.entries(this.result.namedScores ?? {}),
+        namedScoreWeights: Object.entries(this.result.namedScoreWeights ?? {}),
+      };
+    } catch {
+      this.result.pass = false;
+      this.result.score = 0;
+      this.result.reason = 'Assertion aggregation error: unable to read scores or weights';
+      this.result.namedScores = {};
+      this.result.namedScoreWeights = {};
+      return this.result;
+    }
+
     const invalidMetrics = new Set<string>();
     for (const field of ['namedScores', 'namedScoreWeights'] as const) {
-      for (const [metric, value] of Object.entries(this.result[field] ?? {})) {
+      for (const [metric, value] of metricEntries[field]) {
         if (!Number.isFinite(value)) {
           invalidMetrics.add(metric);
         }
@@ -434,7 +456,7 @@ export class AssertionsResult {
       for (const field of ['namedScores', 'namedScoreWeights'] as const) {
         if (this.result[field]) {
           this.result[field] = Object.fromEntries(
-            Object.entries(this.result[field]).filter(([metric]) => !invalidMetrics.has(metric)),
+            metricEntries[field].filter(([metric]) => !invalidMetrics.has(metric)),
           );
         }
       }

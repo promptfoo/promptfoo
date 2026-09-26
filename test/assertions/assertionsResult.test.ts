@@ -1038,6 +1038,97 @@ describe('AssertionsResult', () => {
       expect(result.reason).toBe('Scoring function error: Scoring failed');
     });
 
+    it.each(['namedScores', 'namedScoreWeights'] as const)(
+      'contains errors reading custom %s during final inspection',
+      async (field) => {
+        const assertionsResult = new AssertionsResult({});
+        let reads = 0;
+        const metrics = {
+          get quality() {
+            if (++reads > 1) {
+              throw new Error('Metric unavailable');
+            }
+            return 0.75;
+          },
+        };
+
+        const result = await assertionsResult.testResult(() => ({
+          pass: true,
+          score: 0.75,
+          reason: 'Custom score',
+          [field]: metrics,
+        }));
+
+        expect(result).toMatchObject({
+          pass: false,
+          score: 0,
+          reason: 'Assertion aggregation error: unable to read scores or weights',
+          namedScores: {},
+          namedScoreWeights: {},
+        });
+        expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+        expect(await assertionsResult.testResult()).toBe(result);
+      },
+    );
+
+    it.each(['namedScores', 'namedScoreWeights'] as const)(
+      'preserves stable getter-backed custom %s',
+      async (field) => {
+        const assertionsResult = new AssertionsResult({});
+        const metrics = {
+          get quality() {
+            return 0.75;
+          },
+        };
+
+        const result = await assertionsResult.testResult(() => ({
+          pass: true,
+          score: 0.75,
+          reason: 'Custom score',
+          [field]: metrics,
+        }));
+
+        expect(result).toMatchObject({ pass: true, score: 0.75 });
+        expect(result[field]).toBe(metrics);
+        expect(result[field]?.quality).toBe(0.75);
+      },
+    );
+
+    it.each(['namedScores', 'namedScoreWeights'] as const)(
+      'reuses inspected %s entries when pruning invalid metrics',
+      async (field) => {
+        const assertionsResult = new AssertionsResult({});
+        let reads = 0;
+        const metrics = {
+          get quality() {
+            reads++;
+            if (reads > 2) {
+              throw new Error('Metric already inspected');
+            }
+            return reads === 1 ? 0.75 : Number.NaN;
+          },
+        };
+
+        const result = await assertionsResult.testResult(() => ({
+          pass: true,
+          score: 0.75,
+          reason: 'Custom score',
+          namedScores: { quality: 0.75 },
+          namedScoreWeights: { quality: 1 },
+          [field]: metrics,
+        }));
+
+        expect(result).toMatchObject({
+          pass: false,
+          score: 0,
+          reason: 'Assertion aggregation error: scores or weights must remain finite',
+          namedScores: {},
+          namedScoreWeights: {},
+        });
+        expect(reads).toBe(2);
+      },
+    );
+
     it.each(['Failed safety check', ''])(
       'should handle failed content safety checks: %j',
       async (reason) => {
@@ -1068,6 +1159,66 @@ describe('AssertionsResult', () => {
   });
 
   describe('namedScores weight normalization', () => {
+    it.each(['constructor', 'toString', '__proto__'])(
+      'preserves configured metric %s in ordinary public records',
+      async (metric) => {
+        const assertionsResult = new AssertionsResult({});
+        for (const [index, score, weight] of [
+          [0, 0.25, 1],
+          [1, 0.75, 3],
+        ]) {
+          assertionsResult.addResult({
+            index,
+            result: { pass: true, score, reason: 'Valid score' },
+            metric,
+            weight,
+          });
+        }
+
+        const result = await assertionsResult.testResult((scores) => {
+          expect(Object.getPrototypeOf(scores)).toBe(Object.prototype);
+          expect(Object.hasOwn(scores, metric)).toBe(true);
+          return { pass: true, score: scores[metric], reason: 'Custom score' };
+        });
+
+        expect(result).toMatchObject({ pass: true, score: 0.625 });
+        expect(result.namedScores).toEqual(Object.fromEntries([[metric, 0.625]]));
+        expect(result.namedScoreWeights).toEqual(Object.fromEntries([[metric, 4]]));
+        expect(Object.getPrototypeOf(result.namedScoreWeights)).toBe(Object.prototype);
+        expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+      },
+    );
+
+    it.each(
+      ['constructor', 'toString', '__proto__'].flatMap((metric) =>
+        [false, true].map((explicitWeight) => ({ metric, explicitWeight })),
+      ),
+    )(
+      'preserves returned metric $metric with explicit weight $explicitWeight',
+      async ({ metric, explicitWeight }) => {
+        const assertionsResult = new AssertionsResult({});
+        assertionsResult.addResult({
+          index: 0,
+          result: {
+            pass: true,
+            score: 0.75,
+            reason: 'Valid score',
+            namedScores: Object.fromEntries([[metric, 0.75]]),
+            namedScoreWeights: explicitWeight ? Object.fromEntries([[metric, 3]]) : {},
+          },
+          weight: 2,
+        });
+
+        const result = await assertionsResult.testResult();
+        expect(result).toMatchObject({ pass: true, score: 0.75 });
+        expect(result.namedScores).toEqual(Object.fromEntries([[metric, 0.75]]));
+        expect(result.namedScoreWeights).toEqual(
+          Object.fromEntries([[metric, explicitWeight ? 6 : 2]]),
+        );
+        expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+      },
+    );
+
     it('should normalize a shared metric using assertion weights', async () => {
       const assertionsResult = new AssertionsResult({});
 
