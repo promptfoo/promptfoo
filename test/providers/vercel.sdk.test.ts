@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../src/cache';
-import { VercelAiProvider } from '../../src/providers/vercel';
+import { VercelAiEmbeddingProvider, VercelAiProvider } from '../../src/providers/vercel';
 import type { FinishReason } from 'ai';
 
 vi.mock('../../src/cache', async (importOriginal) => ({
@@ -68,6 +68,34 @@ afterEach(() => {
 });
 
 describe('Vercel AI SDK response handling', () => {
+  it('returns embeddings and usage through the installed SDK', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ embeddings: [[0.25, 0.75]], usage: { tokens: 3 } }),
+    );
+    const provider = new VercelAiEmbeddingProvider('fixture/embedding', { config });
+
+    expect(await provider.callEmbeddingApi('Hello')).toEqual({
+      embedding: [0.25, 0.75],
+      tokenUsage: { total: 3 },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, request] = fetchMock.mock.calls[0];
+    expect(url).toBe(`${config.baseUrl}/embedding-model`);
+    expect(new Headers(request?.headers).get('ai-model-id')).toBe('fixture/embedding');
+  });
+
+  it('preserves gateway errors instead of reporting a missing SDK', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ error: { message: 'fixture gateway failure' } }, { status: 400 }),
+    );
+    const provider = new VercelAiProvider('fixture/model', { config });
+
+    const result = await provider.callApi('Hello');
+    expect(result.error).toContain('fixture gateway failure');
+    expect(result.error).not.toContain('optional ai package');
+    expect(cache.set).not.toHaveBeenCalled();
+  });
+
   it('accepts JSON response tools normalized to stop by the Anthropic adapter', async () => {
     fetchMock.mockResolvedValueOnce(
       gatewayResponse('{"answer":"Hello"}', 'stop', false, 'tool_use'),

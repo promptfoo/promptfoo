@@ -697,6 +697,45 @@ async function runInstalledCompressionEval(consumerDir: string, configDir: strin
   }
 }
 
+async function assertOptionalVercelSdk(consumerDir: string, configDir: string): Promise<void> {
+  const assertions = `
+    assert.throws(() => require.resolve('ai'), { code: 'MODULE_NOT_FOUND' });
+    for (const config of [{}, { streaming: true }, { responseSchema: { type: 'object' } }]) {
+      const provider = await loadApiProvider('vercel:fixture/model', { options: { config } });
+      const response = await provider.callApi('optional SDK fixture');
+      assert.match(response.error, /requires the optional ai package/);
+      assert.match(response.error, /npm install promptfoo/);
+    }
+    const provider = await loadApiProvider('vercel:embedding:fixture/model');
+    const response = await provider.callEmbeddingApi('optional SDK fixture');
+    assert.match(response.error, /requires the optional ai package/);
+  `;
+  for (const format of ['mjs', 'cjs']) {
+    const imports =
+      format === 'mjs'
+        ? `import assert from 'node:assert/strict';
+           import { createRequire } from 'node:module';
+           import { loadApiProvider } from 'promptfoo';
+           const require = createRequire(import.meta.url);`
+        : `const assert = require('node:assert/strict');
+           const { loadApiProvider } = require('promptfoo');`;
+    const script = `optional-vercel.${format}`;
+    fs.writeFileSync(
+      path.join(consumerDir, script),
+      `${imports}\n(async () => {${assertions}})().catch(error => {
+        console.error(error);
+        process.exitCode = 1;
+      });`,
+    );
+    await runAsync(process.execPath, [script], consumerDir, {
+      PROMPTFOO_CONFIG_DIR: configDir,
+      PROMPTFOO_CACHE_ENABLED: 'false',
+      PROMPTFOO_DISABLE_TELEMETRY: '1',
+      PROMPTFOO_DISABLE_UPDATE: 'true',
+    });
+  }
+}
+
 async function main(): Promise<void> {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-package-artifact-'));
   const artifactsDir = path.join(tempDir, 'artifacts');
@@ -782,6 +821,7 @@ async function main(): Promise<void> {
       );
     }
     await runInstalledCompressionEval(consumerDir, configDir);
+    await assertOptionalVercelSdk(consumerDir, configDir);
 
     console.log(`Verified installed package artifact: ${packResult.filename}`);
   } finally {

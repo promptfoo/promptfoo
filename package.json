@@ -223,13 +223,13 @@
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.273",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
-    "@aws/bedrock-token-generator": "^1.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.1045.0",
     "@aws-sdk/credential-provider-sso": "^3.972.16",
     "@aws-sdk/types": "^3.973.5",
+    "@aws/bedrock-token-generator": "^1.1.0",
     "@azure/identity": "^4.13.0",
     "@azure/openai-assistants": "^1.0.0-beta.6",
     "@biomejs/biome": "2.5.13",
@@ -252,6 +252,7 @@
     "@types/source-map-support": "^0.5.10",
     "@types/supertest": "^7.0.0",
     "@vitest/coverage-v8": "^5.0.0",
+    "ai": "^6.0.264",
     "block-no-verify": "^1.2.0",
     "concurrently": "^9.2.3",
     "drizzle-kit": "^0.31.10",
@@ -342,7 +343,6 @@
     "@opentelemetry/sdk-trace-node": "^2.6.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "@types/ws": "^8.18.1",
-    "ai": "^6.0.264",
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
     "async": "^3.2.6",
@@ -427,5 +427,13 @@
     ],
     "ignoredBuiltDependencies": []
   },
-  "homepage": "https://promptfoo.dev"
+  "homepage": "https://promptfoo.dev",
+  "peerDependencies": {
+    "ai": "^6.0.264"
+  },
+  "peerDependenciesMeta": {
+    "ai": {
+      "optional": true
+    }
+  }
 }

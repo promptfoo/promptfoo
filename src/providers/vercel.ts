@@ -6,6 +6,7 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import { sha256 } from '../util/createHash';
 import { normalizeFinishReason } from '../util/finishReason';
+import { isMissingPackageImportError } from '../util/packageImportErrors';
 import { getRequestTimeoutMs, parseChatPrompt } from './shared';
 import { hasActiveTracingSpan } from './tracing';
 import type { LanguageModelUsage } from 'ai';
@@ -93,8 +94,23 @@ function resolveBaseUrl(config: VercelAiConfig, env?: EnvOverrides): string | un
   );
 }
 
+async function loadAiSdk() {
+  try {
+    return await import('ai');
+  } catch (error) {
+    if (isMissingPackageImportError(error, 'ai')) {
+      throw new Error(
+        'The Vercel AI Gateway provider requires the optional ai package. ' +
+          'Install it alongside Promptfoo: npm install promptfoo "ai@^6.0.264". ' +
+          'For a global installation, use npm install -g promptfoo "ai@^6.0.264".',
+      );
+    }
+    throw error;
+  }
+}
+
 async function createGatewayInstance(config: VercelAiConfig, env?: EnvOverrides) {
-  const { createGateway } = await import('ai');
+  const { createGateway } = await loadAiSdk();
   return createGateway({
     apiKey: config.apiKey,
     baseURL: resolveBaseUrl(config, env),
@@ -325,7 +341,7 @@ export class VercelAiProvider implements ApiProvider {
 
     try {
       const gateway = await createGatewayInstance(config, this.env);
-      const { streamText } = await import('ai');
+      const { streamText } = await loadAiSdk();
 
       logger.debug('Calling Vercel AI Gateway (streaming)', {
         model: this.modelName,
@@ -451,7 +467,7 @@ export class VercelAiProvider implements ApiProvider {
 
     try {
       const gateway = await createGatewayInstance(config, this.env);
-      sdk = await import('ai');
+      sdk = await loadAiSdk();
       const { generateText, Output, jsonSchema } = sdk;
 
       logger.debug('Calling Vercel AI Gateway', {
@@ -584,7 +600,7 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
 
     try {
       const gateway = await createGatewayInstance(config, this.env);
-      const { embed } = await import('ai');
+      const { embed } = await loadAiSdk();
 
       logger.debug('Calling Vercel AI Gateway for embedding', { model: this.modelName });
 
