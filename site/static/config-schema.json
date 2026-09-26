@@ -372,6 +372,9 @@
         "GOOGLE_GENERATIVE_AI_API_KEY": {
           "type": "string"
         },
+        "GOOGLE_GENAI_USE_VERTEXAI": {
+          "type": "string"
+        },
         "GEMINI_API_KEY": {
           "type": "string"
         },
