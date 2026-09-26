@@ -42,7 +42,7 @@ module.exports = class OpenAIProvider {
   constructor(options) {
     this.providerId = options.id || 'openai-custom';
     this.config = options.config;
-    this.apiKey = this.config?.apiKey || options.env?.OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+    this.apiKey = this.config?.apiKey || options.env?.OPENAI_API_KEY;
   }
 
   id() {
@@ -56,7 +56,7 @@ module.exports = class OpenAIProvider {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.apiKey}`,
+          Authorization: `Bearer ${this.apiKey || process.env.OPENAI_API_KEY}`,
         },
         body: JSON.stringify({
           model: this.config?.model || 'gpt-5-mini',
@@ -176,7 +176,7 @@ module.exports = class TwoStageProvider {
   constructor(options) {
     this.providerId = options.id || 'two-stage';
     this.config = options.config;
-    this.apiKey = this.config?.apiKey || options.env?.OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+    this.apiKey = this.config?.apiKey || options.env?.OPENAI_API_KEY;
   }
 
   id() {
@@ -209,7 +209,7 @@ module.exports = class TwoStageProvider {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.apiKey}`,
+          Authorization: `Bearer ${this.apiKey || process.env.OPENAI_API_KEY}`,
         },
         body: JSON.stringify({
           model: 'gpt-5-mini',
@@ -301,7 +301,7 @@ async callEmbeddingApi(text) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${this.apiKey}`,
+      Authorization: `Bearer ${this.apiKey || process.env.OPENAI_API_KEY}`,
     },
     body: JSON.stringify({
       model: 'text-embedding-3-small',
@@ -367,8 +367,7 @@ Audio and video have opposite generation requirements today: audio requires remo
 ```javascript title="multimodalProvider.js"
 module.exports = class MultimodalProvider {
   constructor(options) {
-    this.apiKey =
-      options.config?.apiKey || options.env?.OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+    this.apiKey = options.config?.apiKey || options.env?.OPENAI_API_KEY;
   }
 
   id() {
@@ -376,7 +375,7 @@ module.exports = class MultimodalProvider {
   }
 
   async callApi(prompt, context) {
-    const apiKey = this.apiKey;
+    const apiKey = this.apiKey || process.env.OPENAI_API_KEY;
     if (!apiKey) {
       return { error: 'OPENAI_API_KEY is required' };
     }

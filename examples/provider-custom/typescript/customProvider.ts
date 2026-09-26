@@ -15,7 +15,7 @@ export default class CustomApiProvider implements ApiProvider {
 
     // The config object contains any options passed to the provider in the config file.
     this.config = options.config;
-    this.apiKey = this.config?.apiKey || options.env?.OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+    this.apiKey = this.config?.apiKey || options.env?.OPENAI_API_KEY;
   }
 
   id(): string {
@@ -42,7 +42,7 @@ export default class CustomApiProvider implements ApiProvider {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.apiKey}`,
+          Authorization: `Bearer ${this.apiKey || process.env.OPENAI_API_KEY}`,
         },
         body: JSON.stringify(body),
       },
