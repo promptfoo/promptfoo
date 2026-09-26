@@ -102,6 +102,8 @@ export function buildFunctionBody(code: string): string {
   return `return ${trimmed}`;
 }
 
+class JavascriptAssertionValidationError extends Error {}
+
 const validateResult = async (result: unknown): Promise<boolean | number | GradingResult> => {
   result = await Promise.resolve(result);
   if (
@@ -111,7 +113,7 @@ const validateResult = async (result: unknown): Promise<boolean | number | Gradi
   ) {
     return result;
   } else {
-    throw new Error(
+    throw new JavascriptAssertionValidationError(
       `Custom function must return a boolean, a finite number, or a GradingResult object with finite scores and weights. Got type ${typeof result}.`,
     );
   }
@@ -257,7 +259,7 @@ export const handleJavascript = async ({
       reason: appendRenderedValueToReason(
         `Custom function threw error: ${(err as Error).message}
 Stack Trace: ${(err as Error).stack}`,
-        renderedValue,
+        err instanceof JavascriptAssertionValidationError ? undefined : renderedValue,
       ),
       assertion: normalizeResultAssertion(undefined, assertion),
     };

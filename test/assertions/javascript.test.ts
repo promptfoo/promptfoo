@@ -931,6 +931,41 @@ describe('JavaScript file references', () => {
   });
 
   it.each([
+    'score: NaN',
+    'score: 1, namedScores: { quality: Infinity }',
+    'score: 1, componentResults: [{ pass: true, score: Infinity, reason: "Child" }]',
+  ])('omits rendered source from invalid grading diagnostics: %s', async (fields) => {
+    const value = `({ pass: true, reason: "Custom grade", ${fields}, metadata: { note: "{{ diagnosticMarker }}" } })`;
+    const result = await runAssertion({
+      assertion: { type: 'javascript', value },
+      test: { vars: { diagnosticMarker: 'diagnostic-placeholder' } },
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({ pass: false, score: 0 });
+    expect(result.reason).toContain('finite scores and weights. Got type object.');
+    expect(result.reason).not.toContain('diagnostic-placeholder');
+    expect(result.assertion?.value).toBe(value);
+    expect(result.metadata?.renderedAssertionValue).toContain('diagnostic-placeholder');
+  });
+
+  it.each([
+    ['runtime exception', '// diagnostic-placeholder\nthrow new Error("Ordinary failure");'],
+    ['syntax error', '// diagnostic-placeholder\nreturn ('],
+    ['false result', 'false /* diagnostic-placeholder */'],
+  ])('preserves rendered source for an ordinary %s', async (_kind, value) => {
+    const result = await runAssertion({
+      assertion: { type: 'javascript', value },
+      test: {},
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({ pass: false, score: 0 });
+    expect(result.reason).toContain(value);
+    expect(result.assertion?.value).toBe(value);
+  });
+
+  it.each([
     '({ pass: true, score: 1, reason: "Custom", namedScores: new Date(0) })',
     '({ pass: true, score: 1, reason: "Custom", namedScoreWeights: new Map([["quality", 1]]) })',
     '({ pass: true, score: 1, reason: "Custom", namedScores: new Set([1]) })',
