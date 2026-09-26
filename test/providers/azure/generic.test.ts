@@ -168,6 +168,47 @@ describe('AzureGenericProvider', () => {
       expect(JSON.stringify(debugSpy.mock.calls)).not.toMatch(/private-(client|secret|tenant)/);
     });
 
+    it('shares a service principal credential across concurrent requests within each provider', async () => {
+      // Resolve the mocked dynamic import before overlapping credential requests.
+      await import('@azure/identity');
+      await vi.mocked(ClientSecretCredential).withImplementation(
+        function () {
+          // Each construction must return a distinct object so duplicate
+          // initialization cannot pass the credential identity assertions.
+          return Object.assign(Object.create(ClientSecretCredential.prototype), {
+            getToken: vi.fn(async () => ({
+              token: 't',
+              expiresOnTimestamp: Date.now() + 3_600_000,
+            })),
+          });
+        },
+        async () => {
+          const config = {
+            azureClientId: 'private-client',
+            azureClientSecret: 'private-secret',
+            azureTenantId: 'private-tenant',
+          };
+          const providerCredentials = [];
+          for (const deployment of ['first', 'second']) {
+            const provider = new AzureGenericProvider(deployment, { config });
+            const [, ...credentials] = await Promise.all([
+              provider.ensureInitialized(),
+              provider.getAzureTokenCredential(),
+              provider.getAzureTokenCredential(),
+            ]);
+            credentials.push(await provider.getAzureTokenCredential());
+
+            expect(new Set(credentials).size).toBe(1);
+            providerCredentials.push(credentials[0]);
+          }
+
+          expect(providerCredentials[0]).not.toBe(providerCredentials[1]);
+          expect(ClientSecretCredential).toHaveBeenCalledTimes(2);
+          expect(AzureCliCredential).not.toHaveBeenCalled();
+        },
+      );
+    });
+
     it('warns and names the missing fields before falling back to Azure CLI', async () => {
       const warnSpy = vi.spyOn(logger, 'warn');
       const getToken = vi.fn(async () => {
@@ -197,12 +238,16 @@ describe('AzureGenericProvider', () => {
       const config = { azureClientSecret: 'private-secret' };
       for (const count of [1, 2]) {
         const provider = new AzureGenericProvider('d', { config });
-        await Promise.all([
+        const [, ...credentials] = await Promise.all([
           provider.ensureInitialized(),
           provider.getAzureTokenCredential(),
           provider.getAzureTokenCredential(),
         ]);
-        await provider.getAzureTokenCredential();
+        credentials.push(await provider.getAzureTokenCredential());
+        // Assert on credential identity rather than constructor call counts: a
+        // concurrent first dynamic import of a vi.mock'd package can resolve to
+        // the real module, which makes the mock's call count meaningless here.
+        expect(new Set(credentials).size).toBe(1);
         expect(warn).toHaveBeenCalledTimes(count);
       }
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('Falling back to Azure CLI'), {
@@ -210,6 +255,18 @@ describe('AzureGenericProvider', () => {
       });
       expect(JSON.stringify(warn.mock.calls)).not.toContain('private-secret');
       expect(ClientSecretCredential).not.toHaveBeenCalled();
+    });
+
+    it('retries credential initialization after a failed attempt', async () => {
+      vi.mocked(AzureCliCredential).mockImplementationOnce(function () {
+        throw new Error('credential unavailable');
+      });
+      // api-key auth keeps the constructor off the credential path so this test
+      // owns both attempts.
+      const provider = new AzureGenericProvider('d', { config: { apiKey: 'k' } });
+
+      await expect(provider.getAzureTokenCredential()).rejects.toThrow('@azure/identity');
+      await expect(provider.getAzureTokenCredential()).resolves.toBeDefined();
     });
 
     it('does not warn when an API key takes precedence over a partial service principal', async () => {
