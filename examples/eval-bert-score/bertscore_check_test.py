@@ -5,22 +5,20 @@ import bertscore_check
 
 
 class BertscoreAssertionTest(unittest.TestCase):
-    def tearDown(self):
-        bertscore_check.get_scorer.cache_clear()
-
-    def test_batches_multiple_references_and_reuses_model(self):
-        scorer = MagicMock()
-        scorer.score.return_value = (None, None, MagicMock(item=lambda: 0.85))
-        with patch("bertscore_check.BERTScorer", return_value=scorer) as factory:
-            self.assertEqual(
-                bertscore_check.get_assert(
-                    "candidate", {"vars": {"reference": ["a", "b"]}}
-                ),
-                0.85,
-            )
-            scorer.score.assert_called_once_with(["candidate"], [["a", "b"]])
-            bertscore_check.get_assert("candidate", {"vars": {"reference": "a"}})
-            factory.assert_called_once()
+    def test_batches_single_or_multiple_references_in_one_call(self):
+        for references in ["a", ["a", "b"]]:
+            with self.subTest(references=references):
+                scorer = MagicMock()
+                scorer.score.return_value = (None, None, MagicMock(item=lambda: 0.85))
+                with patch("bertscore_check.BERTScorer", return_value=scorer):
+                    self.assertEqual(
+                        bertscore_check.get_assert(
+                            "candidate", {"vars": {"reference": references}}
+                        ),
+                        0.85,
+                    )
+                expected = [references] if isinstance(references, str) else references
+                scorer.score.assert_called_once_with(["candidate"], [expected])
 
     def test_reports_model_failures_in_assertion_reason(self):
         with patch(

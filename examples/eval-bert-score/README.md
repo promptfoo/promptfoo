@@ -53,7 +53,7 @@ assert:
     threshold: 0.75
 ```
 
-The scorer is cached within each Python worker. Missing references and model/scoring failures produce failed assertions with an explanatory reason, rather than silently reporting a low similarity score.
+Each Python assertion runs in a separate process and loads its own scorer. The advanced example scores its references together in one call. Missing references and model/scoring failures produce failed assertions with an explanatory reason, rather than silently reporting a low similarity score.
 
 Scores depend on the model and task, so calibrate thresholds against your own examples. A high similarity score is not a factual-correctness check. To use a different model, set `vars.bertScoreModel` to its Hugging Face identifier or local directory. For models outside BERTScore's supported-model list, also set `vars.bertScoreLayers` to the number of layers to use; thresholds may need recalibration.
 

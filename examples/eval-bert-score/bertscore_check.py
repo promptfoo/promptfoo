@@ -1,14 +1,6 @@
-"""Measure semantic similarity with a cached BERTScore model."""
-
-from functools import lru_cache
+"""Measure semantic similarity with BERTScore."""
 
 from bert_score import BERTScorer
-
-
-@lru_cache(maxsize=1)
-def get_scorer(model_type=None, num_layers=None):
-    """Reuse the model between assertions executed by the same Python worker."""
-    return BERTScorer(lang="en", model_type=model_type, num_layers=num_layers)
 
 
 def get_assert(output, context):
@@ -30,8 +22,10 @@ def get_assert(output, context):
             "reason": "BERTScore requires a nonempty reference string or list of strings",
         }
     try:
-        scorer = get_scorer(
-            variables.get("bertScoreModel"), variables.get("bertScoreLayers")
+        scorer = BERTScorer(
+            lang="en",
+            model_type=variables.get("bertScoreModel"),
+            num_layers=variables.get("bertScoreLayers"),
         )
         _, _, f1 = scorer.score([output], [references])
         return f1.item()
