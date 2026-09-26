@@ -31,6 +31,8 @@ cd examples/openai-agents-advanced
 npm install
 ```
 
+Both configs wait 1.5 seconds after each agent response so the SDK’s batched traces can reach Promptfoo before trajectory assertions run.
+
 ## Run the session and tracing eval
 
 ```bash

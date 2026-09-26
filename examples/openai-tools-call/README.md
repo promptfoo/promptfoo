@@ -2,6 +2,8 @@
 
 This example validates function names and arguments returned by the Chat Completions `tools` API. It does not call a weather service.
 
+## Usage
+
 ```bash
 npx promptfoo@latest init --example openai-tools-call
 cd openai-tools-call

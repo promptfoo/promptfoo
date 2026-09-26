@@ -2,6 +2,8 @@
 
 These examples define JSON schemas inline, in external JSON or YAML files, and per test. Use the Responses API configuration for new workflows; the Chat Completions configuration demonstrates that API's schema format for comparison.
 
+## Usage
+
 ```bash
 npx promptfoo@latest init --example openai-structured-output
 cd openai-structured-output

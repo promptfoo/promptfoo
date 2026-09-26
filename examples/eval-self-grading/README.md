@@ -2,6 +2,8 @@
 
 This example compares two customer-support prompts using GPT-6 Sol through the Responses API. A separate model-graded rubric checks that responses do not mention being an AI, and a JavaScript assertion gives shorter responses a higher score.
 
+## Usage
+
 ```bash
 npx promptfoo@latest init --example eval-self-grading
 cd eval-self-grading

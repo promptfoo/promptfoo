@@ -2,6 +2,8 @@
 
 This example sends a conversation history and three follow-up questions to GPT-6 Luna through the Responses API. `prompt.json` combines the system message, earlier user and assistant messages, and the current question.
 
+## Usage
+
 ```bash
 npx promptfoo@latest init --example openai-chat-history
 cd openai-chat-history

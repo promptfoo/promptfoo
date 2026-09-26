@@ -2,6 +2,8 @@
 
 This example sends text and an image URL to GPT-6 Sol through the Responses API, then checks whether the description mentions a boardwalk.
 
+## Usage
+
 ```bash
 npx promptfoo@latest init --example openai-vision
 cd openai-vision
