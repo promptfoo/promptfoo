@@ -2,7 +2,7 @@ import { ExportResultCode } from '@opentelemetry/core';
 import logger from '../logger';
 import { getTraceStore, type SpanData, type TraceStore } from './store';
 import type { ExportResult } from '@opentelemetry/core';
-import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-node';
 
 const MISSING_TRACE_RETRY_DELAY_MS = 50;
 
