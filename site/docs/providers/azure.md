@@ -656,6 +656,8 @@ When client credentials are provided, promptfoo uses the `@azure/identity` libra
 
 If neither an API key nor client credentials are provided, promptfoo falls back to `AzureCliCredential` (i.e., your `az login` session) — see [Option 3](#option-3-azure-cli-authentication).
 
+Each provider instance shares authentication work across concurrent requests and refreshes bearer tokens within five minutes of expiry. A failed authentication or refresh fails the waiting requests; a later request retries. Successfully constructed credentials are reused. Refresh failures do not fall back to an older token. Tokens without expiry information retain the existing behavior of no automatic refresh. API keys take precedence and require no token refresh.
+
 The `azureAuthorityHost` defaults to `https://login.microsoftonline.com` if not specified. The `azureTokenScope` defaults to `https://cognitiveservices.azure.com/.default`, the scope required to authenticate with Azure Cognitive Services. You typically don't need to change these unless you're working with a sovereign cloud (e.g., Azure Government or Azure China).
 
 ## Model-Graded Tests
@@ -1325,6 +1327,8 @@ The [legacy Assistants evaluation guide](/docs/guides/evaluate-openai-assistants
 ## Azure AI Foundry Agents
 
 Azure AI Foundry Agents let promptfoo run an existing Foundry agent through the Azure AI Projects SDK (`@azure/ai-projects`) and the v2 agent runtime. Promptfoo resolves the agent from your Azure AI Foundry project, then calls the Responses API with an `agent_reference`.
+
+Each provider instance reuses its SDK clients and agent lookup across concurrent requests. Failed client initialization or agent lookup can retry on a later request. Foundry retains the SDK's `DefaultAzureCredential` chain, including environment, workload identity, managed identity, and developer credentials; SDK token refresh does not require recreating the clients.
 
 ### Key Differences from Standard Azure Assistants
 
