@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { authCommand } from '../../src/commands/auth';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
-import { readGlobalConfig } from '../../src/globalConfig/globalConfig';
+import { readGlobalConfig, writeGlobalConfig } from '../../src/globalConfig/globalConfig';
 import logger from '../../src/logger';
 import { setConfigDirectoryPath } from '../../src/util/config/manage';
 import { fetchWithProxy } from '../../src/util/fetch/index';
@@ -125,4 +125,114 @@ describe('auth command with persisted configuration', () => {
     expect(cloudConfig.getCurrentOrganizationId()).toBe('org-b');
     expect(cloudConfig.getRequestConfig().teamId).toBe('team-b');
   });
+
+  it('recovers a legacy environment selection when showing the current team', async () => {
+    writeGlobalConfig({
+      id: 'installation',
+      cloud: { currentOrganizationId: 'org-a', teams: { 'org-a': { currentTeamId: 'selected' } } },
+    });
+    vi.mocked(fetchWithProxy).mockImplementation(async (url) =>
+      String(url).endsWith('/users/me')
+        ? Response.json({ organization: { id: 'org-a' } })
+        : Response.json([
+            { id: 'selected', name: 'Selected', organizationId: 'org-a', createdAt: '2024-01-01' },
+          ]),
+    );
+    const program = new Command();
+    authCommand(program);
+
+    await program.parseAsync(['node', 'test', 'auth', 'teams', 'current']);
+
+    expect(logger.info).toHaveBeenCalledWith('Current team: Selected');
+    expect(cloudConfig.getRequestConfig().teamId).toBe('selected');
+    expect(readGlobalConfig().cloud?.apiKey).toBeUndefined();
+  });
+
+  it.each(['login', 'selection'])(
+    'does not overwrite a newer %s after looking up an explicit team',
+    async (change) => {
+      cloudConfig.setCurrentOrganization('org-a');
+      cloudConfig.setCurrentTeamId('old-team', 'org-a');
+      let newer: ReturnType<typeof readGlobalConfig>;
+      vi.mocked(fetchWithProxy).mockImplementation(async () => {
+        if (change === 'login') {
+          writeGlobalConfig({
+            id: 'installation',
+            cloud: {
+              apiKey: 'new-key',
+              currentOrganizationId: 'org-b',
+              teams: { 'org-b': { currentTeamId: 'new-team' } },
+            },
+          });
+        } else {
+          cloudConfig.setCurrentTeamId('new-choice', 'org-a');
+        }
+        newer = readGlobalConfig();
+        return Response.json([
+          { id: 'chosen', name: 'Chosen', organizationId: 'org-a', createdAt: '2024-01-01' },
+        ]);
+      });
+      const program = new Command();
+      authCommand(program);
+
+      await program.parseAsync(['node', 'test', 'auth', 'teams', 'set', 'chosen']);
+
+      expect(process.exitCode).toBe(1);
+      expect(readGlobalConfig()).toEqual(newer!);
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Cloud login or team selection changed'),
+      );
+    },
+  );
+
+  it.each(['identity', 'teams', 'teams unavailable'])(
+    'rejects mixed whoami identity when login changes during %s lookup',
+    async (stage) => {
+      cloudConfig.setCurrentOrganization('old-org');
+      cloudConfig.setCurrentTeamId('old-team', 'old-org');
+      const newer = {
+        id: 'installation',
+        cloud: {
+          apiKey: 'new-key',
+          apiHost: 'https://new.example.test',
+          appUrl: 'https://new-app.example.test',
+          currentOrganizationId: 'new-org',
+          teams: { 'new-org': { currentTeamId: 'new-team' } },
+        },
+      };
+      vi.mocked(fetchWithProxy).mockImplementation(async (url) => {
+        if (String(url).endsWith('/users/me')) {
+          if (stage === 'identity') {
+            writeGlobalConfig(newer);
+          }
+          return Response.json({
+            user: { email: 'old@example.test' },
+            organization: { id: 'old-org', name: 'Old organization' },
+          });
+        }
+        writeGlobalConfig(newer);
+        if (stage === 'teams unavailable') {
+          throw new Error('Offline');
+        }
+        return Response.json([{ id: 'old-team', name: 'Old team', organizationId: 'old-org' }]);
+      });
+      const program = new Command();
+      authCommand(program);
+
+      await program.parseAsync(['node', 'test', 'auth', 'whoami']);
+
+      expect(process.exitCode).toBe(1);
+      expect(readGlobalConfig()).toEqual(newer);
+      expect(logger.info).not.toHaveBeenCalledWith(
+        expect.stringContaining('Currently logged in as:'),
+      );
+      expect(logger.info).not.toHaveBeenCalledWith(expect.stringContaining('old@example.test'));
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Cloud login or team selection changed'),
+      );
+      if (stage === 'identity') {
+        expect(fetchWithProxy).toHaveBeenCalledOnce();
+      }
+    },
+  );
 });

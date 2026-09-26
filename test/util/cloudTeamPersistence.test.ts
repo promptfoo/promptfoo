@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CloudConfig, cloudConfig } from '../../src/globalConfig/cloud';
 import { readGlobalConfig, writeGlobalConfig } from '../../src/globalConfig/globalConfig';
-import { resolveCloudTeam, resolveTeamId } from '../../src/util/cloud';
+import { ensureCloudTeamContext, resolveCloudTeam, resolveTeamId } from '../../src/util/cloud';
 import { getConfigDirectoryPath, setConfigDirectoryPath } from '../../src/util/config/manage';
 import { fetchWithProxy } from '../../src/util/fetch/index';
 
@@ -70,6 +70,158 @@ afterEach(() => {
 });
 
 describe('team resolution with persisted preferences and environment credentials', () => {
+  it.each([
+    ['fallback', [team('replacement', 'org-a')]],
+    ['empty', []],
+  ] as const)(
+    'does not apply a stale %s response to a newer login or selection',
+    async (_label, teams) => {
+      for (const change of ['login', 'team', 'logout']) {
+        cloudConfig.setCurrentOrganization('org-a');
+        cloudConfig.setCurrentTeamId('removed', 'org-a');
+        let release!: (response: Response) => void;
+        vi.mocked(fetchWithProxy).mockReturnValue(
+          new Promise((resolve) => {
+            release = resolve;
+          }),
+        );
+        const pending = resolveTeamId();
+        if (change === 'login') {
+          writeGlobalConfig({
+            id: 'installation',
+            cloud: {
+              apiKey: 'new-key',
+              currentOrganizationId: 'org-b',
+              teams: { 'org-b': { currentTeamId: 'new-team' } },
+            },
+          });
+        } else if (change === 'team') {
+          cloudConfig.setCurrentTeamId('newer-choice', 'org-a');
+        } else {
+          cloudConfig.delete();
+        }
+        const newer = fs.readFileSync(path.join(directory, 'promptfoo.yaml'), 'utf8');
+        release(Response.json(teams));
+
+        await expect(pending).rejects.toThrow('Cloud login or team selection changed');
+        expect(fs.readFileSync(path.join(directory, 'promptfoo.yaml'), 'utf8')).toBe(newer);
+        writeGlobalConfig({ id: 'installation' });
+      }
+    },
+  );
+
+  it('keeps organization discovery and team lookup on the captured credential', async () => {
+    writeGlobalConfig(remembered);
+    const newer: GlobalConfig = {
+      id: 'installation',
+      cloud: {
+        apiKey: 'new-key',
+        apiHost: 'https://new.example.com',
+        currentOrganizationId: 'org-b',
+      },
+    };
+    vi.mocked(fetchWithProxy).mockImplementation(async (url) => {
+      if (String(url).endsWith('/users/me')) {
+        writeGlobalConfig(newer);
+        return Response.json({ organization: { id: 'org-a' } });
+      }
+      return Response.json([team('selected-a', 'org-a')]);
+    });
+
+    await expect(resolveTeamId()).rejects.toThrow('Cloud login or team selection changed');
+
+    expect(readGlobalConfig()).toEqual(newer);
+    expect(fetchWithProxy).toHaveBeenCalledTimes(2);
+    for (const [url, options] of vi.mocked(fetchWithProxy).mock.calls) {
+      expect(String(url)).toMatch(/^https:\/\/cloud.example.com\//);
+      expect(new Headers(options?.headers).get('Authorization')).toBe('Bearer environment-a');
+    }
+  });
+
+  it('allows identical parallel resolutions and preserves unrelated account updates', async () => {
+    writeGlobalConfig(remembered);
+    const release: Array<(response: Response) => void> = [];
+    vi.mocked(fetchWithProxy).mockImplementation(async (url) => {
+      if (String(url).endsWith('/users/me')) {
+        return Response.json({ organization: { id: 'org-a' } });
+      }
+      return new Promise((resolve) => release.push(resolve));
+    });
+    const pending = Promise.all([resolveTeamId(), resolveTeamId()]);
+    await vi.waitFor(() => expect(release).toHaveLength(2));
+    writeGlobalConfig({ ...readGlobalConfig(), account: { email: 'updated@example.test' } });
+    for (const resolve of release) {
+      resolve(Response.json([team('selected-a', 'org-a')]));
+    }
+
+    await expect(pending).resolves.toMatchObject([{ id: 'selected-a' }, { id: 'selected-a' }]);
+    expect(readGlobalConfig().account?.email).toBe('updated@example.test');
+    expect(cloudConfig.getRequestConfig().teamId).toBe('selected-a');
+  });
+
+  it('coalesces pending environment recovery and retries after a lookup failure', async () => {
+    writeGlobalConfig(remembered);
+    vi.mocked(fetchWithProxy).mockRejectedValue(new Error('Offline'));
+    await expect(ensureCloudTeamContext()).rejects.toThrow('Offline');
+    expect(readGlobalConfig()).toEqual(remembered);
+    vi.mocked(fetchWithProxy).mockClear();
+    mockTokenTeams();
+
+    await Promise.all([ensureCloudTeamContext(), ensureCloudTeamContext()]);
+
+    expect(fetchWithProxy).toHaveBeenCalledTimes(2);
+    expect(cloudConfig.getRequestConfig().teamId).toBe('selected-a');
+    expect(cloudConfig.hasPendingEnvironmentSelection()).toBe(false);
+  });
+
+  it('does not recover teams for a fresh credential, a foreign endpoint, or an explicit target', async () => {
+    await ensureCloudTeamContext();
+    writeGlobalConfig(remembered);
+    await ensureCloudTeamContext('https://other.example.com/api/v1/task');
+    await ensureCloudTeamContext('https://cloud.example.com/api/v1/task', 'target-a');
+    expect(fetchWithProxy).not.toHaveBeenCalled();
+    expect(cloudConfig.hasPendingEnvironmentSelection()).toBe(true);
+  });
+
+  it('rejects joined recovery callers if the session changes just after resolution', async () => {
+    writeGlobalConfig(remembered);
+    const requestConfig = cloudConfig.getRequestConfig.bind(cloudConfig);
+    const newer = {
+      id: 'installation',
+      cloud: { apiKey: 'new-key', currentOrganizationId: 'new-org' },
+    };
+    const snapshot = vi.spyOn(cloudConfig, 'getRequestConfig').mockImplementation(() => {
+      const request = requestConfig();
+      if (request.teamId === 'selected-a') {
+        writeGlobalConfig(newer);
+      }
+      return request;
+    });
+    try {
+      const results = await Promise.allSettled([
+        ensureCloudTeamContext(),
+        ensureCloudTeamContext(),
+      ]);
+      expect(results).toEqual([
+        {
+          status: 'rejected',
+          reason: expect.objectContaining({
+            message: expect.stringContaining('Cloud login changed'),
+          }),
+        },
+        {
+          status: 'rejected',
+          reason: expect.objectContaining({
+            message: expect.stringContaining('Cloud login changed'),
+          }),
+        },
+      ]);
+      expect(readGlobalConfig()).toEqual(newer);
+    } finally {
+      snapshot.mockRestore();
+    }
+  });
+
   it('follows A → B → A token rotation and remembers each organization’s selected team', async () => {
     await expect(resolveCloudTeam()).resolves.toMatchObject({ id: 'oldest-a' });
     cloudConfig.setCurrentTeamId('selected-a', 'org-a');
@@ -157,7 +309,7 @@ describe('team resolution with persisted preferences and environment credentials
       return Response.json([team('selected-a', 'org-a')]);
     });
 
-    await expect(resolveCloudTeam()).rejects.toThrow('Cloud login changed while selecting a team');
+    await expect(resolveCloudTeam()).rejects.toThrow('Cloud login or team selection changed');
   });
 
   it('uses the actual token organization’s remembered team with fallback disabled', async () => {

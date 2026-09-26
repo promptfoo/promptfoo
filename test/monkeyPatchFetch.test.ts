@@ -23,7 +23,6 @@ vi.mock('../src/globalConfig/cloud', () => ({
     getAuthHeaderName: vi.fn(),
     getCurrentOrganizationId: vi.fn(),
     getCurrentTeamId: vi.fn(),
-    clearCurrentTeamId: vi.fn(),
   },
 }));
 

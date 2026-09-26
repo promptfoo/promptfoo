@@ -3,7 +3,7 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import { isNonInteractive } from '../envars';
 import { getUserEmail } from '../globalConfig/accounts';
-import { cloudConfig } from '../globalConfig/cloud';
+import { CloudSelectionChangedError, cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import {
   canCreateTargets,
@@ -180,7 +180,13 @@ export function authCommand(program: Command) {
     .description('Show current user information')
     .action(async () => {
       try {
-        const { apiHost, authHeaderName, headers } = cloudConfig.getRequestConfig();
+        const selection = cloudConfig.getTeamSelection();
+        const { apiHost, appUrl, authHeaderName, headers, sessionId } = selection.request;
+        const assertSession = () => {
+          if (cloudConfig.getRequestConfig().sessionId !== sessionId) {
+            throw new CloudSelectionChangedError();
+          }
+        };
         logger.info(dedent`
             API URL: ${chalk.cyan(sanitizeUrlForLogging(apiHost))}
             Auth header: ${chalk.cyan(authHeaderName)}`);
@@ -200,8 +206,10 @@ export function authCommand(program: Command) {
         }
 
         const { user, organization } = await response.json();
+        cloudConfig.assertTeamSelection(selection);
         try {
-          const currentTeam = await resolveTeamId();
+          const currentTeam = await resolveTeamId(undefined, true, selection);
+          assertSession();
           const organizationLabel = getCloudOrganizationLabel(
             organization,
             currentTeam.organizationId,
@@ -211,17 +219,21 @@ export function authCommand(program: Command) {
               User: ${chalk.cyan(user.email)}
               Organization: ${chalk.cyan(organizationLabel)}
               Current Team: ${chalk.cyan(currentTeam.name)}
-              App URL: ${chalk.cyan(cloudConfig.getAppUrl())}`);
+              App URL: ${chalk.cyan(appUrl)}`);
         } catch (teamError) {
+          if (teamError instanceof CloudSelectionChangedError) {
+            throw teamError;
+          }
+          assertSession();
           const organizationLabel = getCloudOrganizationLabel(
             organization,
-            cloudConfig.getCurrentOrganizationId() ?? organization.id,
+            selection.organizationId ?? organization.id,
           );
           logger.info(dedent`
               ${chalk.green.bold('Currently logged in as:')}
               User: ${chalk.cyan(user.email)}
               Organization: ${chalk.cyan(organizationLabel)}
-              App URL: ${chalk.cyan(cloudConfig.getAppUrl())}`);
+              App URL: ${chalk.cyan(appUrl)}`);
           logger.warn(
             `Could not determine current team: ${teamError instanceof Error ? teamError.message : String(teamError)}`,
           );
@@ -319,11 +331,6 @@ export function authCommand(program: Command) {
           return;
         }
 
-        if (!cloudConfig.getCurrentTeamId(cloudConfig.getCurrentOrganizationId())) {
-          logger.info('No team currently selected');
-          return;
-        }
-
         // Shares the fallback used by whoami and red team generation; a stale team
         // is replaced only after a successful lookup in the effective organization.
         const team = await resolveTeamId();
@@ -348,14 +355,13 @@ export function authCommand(program: Command) {
           return;
         }
 
-        const previousOrganizationId = cloudConfig.getCurrentOrganizationId();
-        const team = await resolveTeamFromIdentifier(teamIdentifier);
+        const selection = cloudConfig.getTeamSelection();
+        const team = await resolveTeamFromIdentifier(teamIdentifier, selection);
         // The team only takes effect in its own organization, so switch to it as well.
-        cloudConfig.setCurrentOrganization(team.organizationId);
-        cloudConfig.setCurrentTeamId(team.id, team.organizationId);
+        cloudConfig.saveTeamSelection(selection, team.organizationId, team.id);
 
         const organizationNote =
-          team.organizationId === previousOrganizationId
+          team.organizationId === selection.organizationId
             ? ''
             : ` (organization ${team.organizationId})`;
         logger.info(chalk.green(`Switched to team: ${team.name}${organizationNote}`));

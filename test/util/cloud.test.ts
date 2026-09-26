@@ -40,7 +40,6 @@ describe('cloud utils', () => {
 
     mockCloudConfig.getApiHost.mockReturnValue('https://api.example.com');
     mockCloudConfig.getApiKey.mockReturnValue('test-api-key');
-    mockCloudConfig.hasSavedApiKey.mockReturnValue(true);
     mockCloudConfig.getAuthHeaderName.mockReturnValue('Authorization');
     mockCloudConfig.getAuthHeaders.mockReturnValue({ Authorization: 'Bearer test-api-key' });
     mockCloudConfig.getRequestConfig.mockImplementation(() => ({
@@ -1397,11 +1396,31 @@ describe('cloud utils', () => {
         state.organizationId = id;
       });
       mockCloudConfig.getCurrentTeamId.mockImplementation((id) => state.saved[slot(id)]);
-      mockCloudConfig.setCurrentTeamId.mockImplementation((teamId, id) => {
-        state.saved[slot(id)] = teamId;
-      });
-      mockCloudConfig.clearCurrentTeamId.mockImplementation((id) => {
-        delete state.saved[slot(id)];
+      mockCloudConfig.getTeamSelection.mockImplementation(() => ({
+        request: mockCloudConfig.getRequestConfig(),
+        organizationId: state.organizationId,
+        hasSavedApiKey: true,
+        selection: {
+          currentOrganizationId: state.organizationId,
+          currentTeamId: state.saved.legacy,
+          selectionContext: undefined,
+          teams: Object.fromEntries(
+            Object.entries(state.saved)
+              .filter(([id]) => id !== 'legacy')
+              .map(([id, currentTeamId]) => [id, { currentTeamId }]),
+          ),
+        },
+      }));
+      mockCloudConfig.saveTeamSelection.mockImplementation((_expected, id, teamId) => {
+        if (teamId) {
+          state.organizationId = id;
+          state.saved[slot(id)] = teamId;
+          if (id) {
+            delete state.saved.legacy;
+          }
+        } else {
+          delete state.saved[slot(id)];
+        }
       });
       mockFetchWithProxy.mockImplementation(async (url) => {
         if (String(url).endsWith('/users/me')) {
@@ -1514,7 +1533,6 @@ describe('cloud utils', () => {
         await expect(checkCloudPermissions({ providers: ['echo'] })).resolves.toBeUndefined();
 
         expect(state.saved).toEqual({ 'org-1': 'active-a' });
-        expect(mockCloudConfig.clearCurrentTeamId).not.toHaveBeenCalled();
       });
     });
 
@@ -1587,7 +1605,7 @@ describe('cloud utils', () => {
           teams: [team('oldest', 'org-2', '2022'), team('own', 'org-1', '2024')],
           expected: {
             team: 'own',
-            saved: { legacy: 'removed', 'org-1': 'own' },
+            saved: { 'org-1': 'own' },
             organizationId: 'org-1',
           },
         },
@@ -1597,7 +1615,7 @@ describe('cloud utils', () => {
           teams: [team('selected', 'org-1', '2024'), team('oldest', 'org-2', '2020')],
           expected: {
             team: 'selected',
-            saved: { legacy: 'selected', 'org-1': 'selected' },
+            saved: { 'org-1': 'selected' },
             organizationId: 'org-1',
           },
         },

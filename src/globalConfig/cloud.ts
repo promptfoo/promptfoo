@@ -1,7 +1,14 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import { z } from 'zod';
 import logger from '../logger';
 import { sha256 } from '../util/createHash';
-import { readGlobalConfig, updateAccountEmail, updateGlobalConfig } from './globalConfig';
+import {
+  readGlobalConfig,
+  updateAccountEmail,
+  updateGlobalConfig,
+  writeGlobalConfig,
+} from './globalConfig';
 
 import type { GlobalConfig } from '../configTypes';
 
@@ -62,6 +69,12 @@ function parseTokenValidation(response: unknown): CloudTokenValidation {
     throw new Error('Invalid Cloud login response');
   }
   return result.data;
+}
+
+export class CloudSelectionChangedError extends Error {
+  constructor() {
+    super('Cloud login or team selection changed. Retry the operation.');
+  }
 }
 
 export class CloudConfig {
@@ -161,8 +174,89 @@ export class CloudConfig {
     return !!this.resolveApiKey();
   }
 
-  hasSavedApiKey(): boolean {
-    return !!this.config.apiKey;
+  hasPendingEnvironmentSelection(): boolean {
+    const config = this.config;
+    return (
+      !!this.getSelectionContext(config) &&
+      !this.isCurrentSelection(config) &&
+      !!(
+        config.currentOrganizationId ||
+        config.currentTeamId ||
+        Object.keys(config.teams ?? {}).length
+      )
+    );
+  }
+
+  private getSelection(config: CloudConfigState) {
+    return {
+      currentOrganizationId: config.currentOrganizationId,
+      currentTeamId: config.currentTeamId,
+      selectionContext: config.selectionContext,
+      teams: config.teams,
+    };
+  }
+
+  getTeamSelection() {
+    const config = this.config;
+    return {
+      request: this.resolveRequestConfig(config),
+      selection: this.getSelection(config),
+      organizationId: this.isCurrentSelection(config) ? config.currentOrganizationId : undefined,
+      hasSavedApiKey: !!config.apiKey,
+    };
+  }
+
+  assertTeamSelection(expected: ReturnType<CloudConfig['getTeamSelection']>): void {
+    const config = this.config;
+    if (
+      this.getSessionId(config) !== expected.request.sessionId ||
+      !isDeepStrictEqual(this.getSelection(config), expected.selection)
+    ) {
+      throw new CloudSelectionChangedError();
+    }
+  }
+
+  /** Apply a directory lookup only while its login and selection are still current. */
+  saveTeamSelection(
+    expected: ReturnType<CloudConfig['getTeamSelection']>,
+    organizationId: string | undefined,
+    teamId: string | null,
+  ): void {
+    const next = structuredClone(expected.selection);
+    if (teamId) {
+      next.currentOrganizationId = organizationId;
+      next.selectionContext =
+        !expected.hasSavedApiKey && expected.request.headers
+          ? expected.request.sessionId
+          : undefined;
+      if (organizationId) {
+        (next.teams ??= {})[organizationId] = { currentTeamId: teamId };
+        next.currentTeamId = undefined;
+      } else {
+        next.currentTeamId = teamId;
+      }
+    } else if (organizationId) {
+      if (next.teams) {
+        delete next.teams[organizationId];
+      }
+    } else {
+      next.currentTeamId = undefined;
+    }
+
+    const config = readGlobalConfig();
+    const cloud = config.cloud ?? {};
+    const current = this.getSelection(cloud);
+    if (
+      this.getSessionId(cloud) !== expected.request.sessionId ||
+      (!isDeepStrictEqual(current, expected.selection) && !isDeepStrictEqual(current, next))
+    ) {
+      throw new CloudSelectionChangedError();
+    }
+    // Identical concurrent lookups are harmless, and need no second file replacement.
+    if (!isDeepStrictEqual(current, next)) {
+      config.cloud = { ...cloud, ...next };
+      writeGlobalConfig(config);
+    }
   }
 
   setApiHost(apiHost: string): void {
@@ -208,7 +302,11 @@ export class CloudConfig {
   }
 
   /** Resolve one request's host, credentials, and active team from the same saved session. */
-  getRequestConfig(): {
+  getRequestConfig() {
+    return this.resolveRequestConfig(this.config);
+  }
+
+  private resolveRequestConfig(config: CloudConfigState): {
     apiHost: string;
     appUrl: string;
     sessionId: string;
@@ -216,7 +314,6 @@ export class CloudConfig {
     headers: Record<string, string> | undefined;
     teamId: string | undefined;
   } {
-    const config = this.config;
     const token = this.resolveApiKey(config);
     const authHeaderName = this.resolveAuthHeaderName(config);
     return {
@@ -365,18 +462,6 @@ export class CloudConfig {
         (config.teams ??= {})[organizationId] = { currentTeamId: teamId };
       } else {
         config.currentTeamId = teamId;
-      }
-    });
-  }
-
-  clearCurrentTeamId(organizationId?: string): void {
-    this.update((config) => {
-      if (organizationId) {
-        if (config.teams) {
-          delete config.teams[organizationId];
-        }
-      } else {
-        delete config.currentTeamId;
       }
     });
   }

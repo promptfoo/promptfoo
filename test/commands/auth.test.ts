@@ -75,7 +75,6 @@ describe('auth command', () => {
     authCommand(program);
 
     vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
-    vi.mocked(cloudConfig.hasSavedApiKey).mockReturnValue(true);
     vi.mocked(cloudConfig.getRequestConfig).mockImplementation(() => ({
       apiHost: cloudConfig.getApiHost(),
       appUrl: 'https://www.promptfoo.app',
@@ -87,6 +86,17 @@ describe('auth command', () => {
           ? { Authorization: `Bearer ${cloudConfig.getApiKey()}` }
           : undefined),
       teamId: undefined,
+    }));
+    vi.mocked(cloudConfig.getTeamSelection).mockImplementation(() => ({
+      request: cloudConfig.getRequestConfig(),
+      organizationId: cloudConfig.getCurrentOrganizationId(),
+      hasSavedApiKey: true,
+      selection: {
+        currentOrganizationId: cloudConfig.getCurrentOrganizationId(),
+        currentTeamId: undefined,
+        selectionContext: undefined,
+        teams: undefined,
+      },
     }));
     vi.mocked(getUserTeams).mockResolvedValue([]);
 
@@ -661,7 +671,6 @@ describe('auth command', () => {
           expect(cloudConfig.saveValidatedApiToken).toHaveBeenCalledWith(
             expect.objectContaining({ teamId: null }),
           );
-          expect(cloudConfig.clearCurrentTeamId).not.toHaveBeenCalled();
           expect(search).not.toHaveBeenCalled();
           expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Test Org'));
         } else {
@@ -1096,13 +1105,17 @@ describe('auth command', () => {
           'Failed to get current team: Service Unavailable',
         ]);
         expect(process.exitCode).toBe(1);
-        expect(cloudConfig.clearCurrentTeamId).not.toHaveBeenCalled();
         expect(cloudConfig.setCurrentTeamId).not.toHaveBeenCalled();
       });
 
-      it('does not query teams when no team is currently selected', async () => {
-        expect(await runTeamsCommand('current')).toEqual(['No team currently selected']);
-        expect(resolveTeamId).not.toHaveBeenCalled();
+      it('resolves the current team when no active selection is available', async () => {
+        vi.mocked(resolveTeamId).mockResolvedValue({
+          id: 'default',
+          name: 'Default',
+          organizationId: 'org-1',
+        });
+        expect(await runTeamsCommand('current')).toEqual(['Current team: Default']);
+        expect(resolveTeamId).toHaveBeenCalledOnce();
       });
     });
 
@@ -1121,8 +1134,11 @@ describe('auth command', () => {
           });
 
           expect(await runTeamsCommand('set', 'chosen')).toEqual([output]);
-          expect(cloudConfig.setCurrentOrganization).toHaveBeenCalledWith(organizationId);
-          expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('chosen', organizationId);
+          expect(cloudConfig.saveTeamSelection).toHaveBeenCalledWith(
+            expect.objectContaining({ organizationId: 'org-1' }),
+            organizationId,
+            'chosen',
+          );
         },
       );
     });
@@ -1199,7 +1215,6 @@ describe('auth command', () => {
     it.each([true, false])(
       'shows the environment token organization after rotation when team lookup succeeds: %s',
       async (teamExists) => {
-        vi.mocked(cloudConfig.hasSavedApiKey).mockReturnValue(false);
         vi.mocked(cloudConfig.getApiKey).mockReturnValue('environment-key');
         // CloudConfig suppresses a selection bound to the previous credential.
         vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue(undefined);
@@ -1269,8 +1284,20 @@ describe('auth command', () => {
       vi.mocked(fetchWithProxy).mockResolvedValue(
         Response.json({ user: mockCloudUser, organization: mockOrganization }),
       );
+      vi.mocked(resolveTeamId).mockResolvedValue({
+        id: 'team-1',
+        name: 'Team One',
+        organizationId: mockOrganization.id,
+      });
       await program.parseAsync(['node', 'test', 'auth', 'whoami']);
-      expect(cloudConfig.getRequestConfig).toHaveBeenCalledOnce();
+      expect(cloudConfig.getTeamSelection).toHaveBeenCalledOnce();
+      expect(resolveTeamId).toHaveBeenCalledWith(
+        undefined,
+        true,
+        expect.objectContaining({
+          request: expect.objectContaining({ sessionId: 'test-session' }),
+        }),
+      );
       expect(fetchWithProxy).toHaveBeenCalledWith('https://snapshot.example.com/api/v1/users/me', {
         headers: { 'X-Cloud-Key': 'Bearer snapshot-key' },
         skipCloudAuthInjection: true,

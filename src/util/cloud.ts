@@ -5,6 +5,7 @@ import logger from '../logger';
 import { type UnifiedConfig, UnifiedConfigSchema } from '../types/index';
 import { ProviderOptionsSchema } from '../validators/providers';
 import { fetchWithProxy } from './fetch/index';
+import { isPromptfooCloudApiHost } from './fetch/monkeyPatchFetch';
 import invariant from './invariant';
 import { normalizeProviderRef } from './providerRef';
 import { checkServerFeatureSupport } from './server';
@@ -22,6 +23,34 @@ export interface ResolvedCloudTeam {
   name?: string;
   organizationId?: string;
   sessionId?: string;
+}
+
+const pendingTeamRecovery = new Map<string, Promise<void>>();
+
+/** Recover a remembered environment selection before an unscoped Cloud task starts. */
+export async function ensureCloudTeamContext(url?: string, targetId?: string): Promise<void> {
+  if (targetId || !cloudConfig.hasPendingEnvironmentSelection()) {
+    return;
+  }
+  const request = cloudConfig.getRequestConfig();
+  if (!request.headers || (url && !isPromptfooCloudApiHost(url, request.apiHost))) {
+    return;
+  }
+  let pending = pendingTeamRecovery.get(request.sessionId);
+  if (!pending) {
+    pending = resolveCloudTeam().then(() => undefined);
+    pendingTeamRecovery.set(request.sessionId, pending);
+  }
+  try {
+    await pending;
+    if (cloudConfig.getRequestConfig().sessionId !== request.sessionId) {
+      throw new Error('Cloud login changed while selecting a team. Retry the operation.');
+    }
+  } finally {
+    if (pendingTeamRecovery.get(request.sessionId) === pending) {
+      pendingTeamRecovery.delete(request.sessionId);
+    }
+  }
 }
 
 /** Resolve an operation's destination without replacing an explicit Cloud-config team. */
@@ -52,8 +81,13 @@ export async function resolveCloudTeam(
  * @returns Promise resolving to the fetch Response object
  * @throws Error if the request fails due to network or other issues
  */
-export function makeRequest(path: string, method: string, body?: any): Promise<Response> {
-  const { apiHost, headers } = cloudConfig.getRequestConfig();
+export function makeRequest(
+  path: string,
+  method: string,
+  body?: any,
+  request = cloudConfig.getRequestConfig(),
+): Promise<Response> {
+  const { apiHost, headers } = request;
   const url = `${apiHost}/api/v1/${path.startsWith('/') ? path.slice(1) : path}`;
   try {
     return fetchWithProxy(url, {
@@ -453,6 +487,7 @@ export async function getUserTeams(
   apiHost?: string,
   apiKey?: string,
   authHeaderName?: string,
+  request?: ReturnType<typeof cloudConfig.getRequestConfig>,
 ): Promise<
   Array<{
     id: string;
@@ -471,7 +506,7 @@ export async function getUserTeams(
           },
           skipCloudAuthInjection: true,
         })
-      : await makeRequest(`/users/me/teams`, 'GET');
+      : await makeRequest(`/users/me/teams`, 'GET', undefined, request);
   if (!response.ok) {
     throw new Error(`Failed to get user teams: ${response.statusText}`);
   }
@@ -537,9 +572,11 @@ export async function getTeamById(
  */
 export async function resolveTeamFromIdentifier(
   identifier: string,
+  selection = cloudConfig.getTeamSelection(),
 ): Promise<{ id: string; name: string; organizationId: string; createdAt: string }> {
-  const teams = await getUserTeams();
-  const team = findTeam(teams, identifier, cloudConfig.getCurrentOrganizationId());
+  const teams = await getUserTeams(undefined, undefined, undefined, selection.request);
+  const team = findTeam(teams, identifier, selection.organizationId);
+  cloudConfig.assertTeamSelection(selection);
 
   if (!team) {
     const availableTeams = teams.map((t) => t.name).join(', ');
@@ -565,18 +602,19 @@ export async function resolveTeamFromIdentifier(
 export async function resolveTeamId(
   teamIdentifier?: string,
   fallbackToDefault = true,
+  selection = cloudConfig.getTeamSelection(),
 ): Promise<{ id: string; name: string; organizationId: string }> {
   // 1. Use explicit team identifier if provided
   if (teamIdentifier) {
     logger.debug(`[Team Resolution] Using explicit team identifier: ${teamIdentifier}`);
-    return await resolveTeamFromIdentifier(teamIdentifier);
+    return await resolveTeamFromIdentifier(teamIdentifier, selection);
   }
 
   // 2. Use stored current team preference (scoped to current organization)
-  const configuredOrganizationId = cloudConfig.getCurrentOrganizationId();
+  const configuredOrganizationId = selection.organizationId;
   let currentOrganizationId = configuredOrganizationId;
   if (!currentOrganizationId) {
-    const response = await makeRequest('/users/me', 'GET');
+    const response = await makeRequest('/users/me', 'GET', undefined, selection.request);
     const organizationId = response.ok ? (await response.json())?.organization?.id : undefined;
     if (typeof organizationId !== 'string' || !organizationId) {
       throw new Error(
@@ -586,23 +624,22 @@ export async function resolveTeamId(
     currentOrganizationId = organizationId;
   }
   // Saved legacy logins still use their unscoped preference until it is migrated.
-  const preferenceOrganizationId = cloudConfig.hasSavedApiKey()
+  const preferenceOrganizationId = selection.hasSavedApiKey
     ? configuredOrganizationId
     : currentOrganizationId;
-  const currentTeamId = cloudConfig.getCurrentTeamId(preferenceOrganizationId);
+  const currentTeamId = preferenceOrganizationId
+    ? selection.selection.teams?.[preferenceOrganizationId]?.currentTeamId
+    : selection.selection.currentTeamId;
   if (!currentTeamId && !fallbackToDefault) {
     throw new Error('No team specified and no default available');
   }
   // Let lookup failures propagate: only a successful lookup proves the stored team is gone.
-  const teams = (await getUserTeams()).filter(
+  const teams = (await getUserTeams(undefined, undefined, undefined, selection.request)).filter(
     (team) => team.organizationId === currentOrganizationId,
   );
   const storedTeam = teams.find((team) => team.id === currentTeamId);
   if (storedTeam) {
-    if (configuredOrganizationId !== currentOrganizationId) {
-      cloudConfig.setCurrentOrganization(currentOrganizationId);
-      cloudConfig.setCurrentTeamId(storedTeam.id, currentOrganizationId);
-    }
+    cloudConfig.saveTeamSelection(selection, currentOrganizationId, storedTeam.id);
     logger.debug(`[Team Resolution] Using stored team ID: ${currentTeamId}`);
     return storedTeam;
   }
@@ -611,7 +648,7 @@ export async function resolveTeamId(
       `[Team Resolution] Stored team ${currentTeamId} no longer accessible, falling back`,
     );
     if (teams.length === 0) {
-      cloudConfig.clearCurrentTeamId(preferenceOrganizationId);
+      cloudConfig.saveTeamSelection(selection, preferenceOrganizationId, null);
     }
   }
 
@@ -626,10 +663,7 @@ export async function resolveTeamId(
   }
   const defaultTeam = getOldestTeam(teams);
   // Store the default team where the next lookup reads it
-  if (configuredOrganizationId !== currentOrganizationId) {
-    cloudConfig.setCurrentOrganization(currentOrganizationId);
-  }
-  cloudConfig.setCurrentTeamId(defaultTeam.id, currentOrganizationId);
+  cloudConfig.saveTeamSelection(selection, currentOrganizationId, defaultTeam.id);
   logger.info(`Using team: ${defaultTeam.name} (use 'promptfoo auth teams set <name>' to change)`);
   return defaultTeam;
 }
