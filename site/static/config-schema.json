@@ -351,6 +351,12 @@
         "GOOGLE_API_KEY": {
           "type": "string"
         },
+        "GOOGLE_APPLICATION_CREDENTIALS": {
+          "type": "string"
+        },
+        "GOOGLE_CLOUD_QUOTA_PROJECT": {
+          "type": "string"
+        },
         "GOOGLE_CLOUD_PROJECT": {
           "type": "string"
         },

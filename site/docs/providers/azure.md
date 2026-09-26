@@ -1356,7 +1356,7 @@ npm install @azure/ai-projects @azure/identity
 export AZURE_AI_PROJECT_URL="https://your-project.services.ai.azure.com/api/projects/your-project-id"
 ```
 
-Alternatively, you can provide the `projectUrl` in your configuration file.
+Alternatively, you can provide the `projectUrl` in your configuration file. Foundry accepts a complete service principal (`AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`) from provider/suite `env` or invocation env files, or the corresponding `azureClient*`/`azureTenantId` config fields. Keep all three values in one scope; empty or incomplete scoped principals are rejected. Without scoped credentials, `DefaultAzureCredential` retains its ambient workload and developer credential chain.
 
 ### Basic Configuration
 
@@ -1523,7 +1523,7 @@ The Azure Foundry Agent provider includes comprehensive error handling:
 
 ### Caching
 
-The provider supports caching to improve performance and reduce API calls. Results are cached based on:
+The provider reuses cached responses within a provider instance. Separate SDK owners use opaque namespaces so responses are not reused across credential contexts. Results are cached based on:
 
 - Request configuration (instructions, model override, temperature, etc.)
 - Tool definitions

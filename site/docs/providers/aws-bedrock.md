@@ -302,7 +302,9 @@ bearer-token flow. An explicit `config.apiKey` takes precedence over
 AWS credentials: provider `config` takes precedence over provider `env`, then process
 environment and the AWS default credential chain. Credential tuples are kept together;
 an explicit profile overrides ambient access keys. See [OpenAI Models](#openai-models)
-for the refresh behavior. Native InvokeModel and Converse keep their existing AWS SDK auth.
+for the refresh behavior. Native InvokeModel, Converse, and Nova Sonic also accept scoped `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` tuples, `AWS_SESSION_TOKEN`, `AWS_PROFILE`, and `AWS_BEARER_TOKEN_BEDROCK`. Keep a credential tuple in one scope; empty or incomplete tuples are rejected. Explicit config precedes provider `env`, suite `env`, invocation env files, and ambient SDK discovery.
+
+Native response caches reuse results within a provider instance. Separate instances use opaque namespaces because profiles and credential chains can change identity; they do not share persisted responses.
 
 ### Authentication Options
 

@@ -352,6 +352,8 @@ Choose one of these authentication methods:
 
 #### Option 1: Application Default Credentials (Recommended)
 
+`GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT`, and `GOOGLE_CLOUD_QUOTA_PROJECT` support provider/suite `env` and invocation env files. Explicit `config.credentials`, `keyFilename`, and `googleAuthOptions` take precedence. ADC availability is checked separately for each invocation, including Google Live authentication. Empty scoped ADC filenames are rejected instead of falling back to host credentials. Vertex chat response caches reuse results within a provider and invocation; separate scopes use opaque namespaces to keep credential contexts isolated.
+
 This is the most secure and flexible approach for development and production:
 
 ```bash
