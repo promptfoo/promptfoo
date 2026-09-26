@@ -15,7 +15,9 @@ Transformers.js and its ONNX runtimes are not included in the default install. I
 npm install promptfoo @huggingface/transformers@^4.0.0
 ```
 
-For a global installation, use `npm install -g promptfoo @huggingface/transformers@^4.0.0`. For a one-off eval, use `npx --package=promptfoo --package=@huggingface/transformers@^4.0.0 promptfoo eval -c promptfooconfig.yaml`. Model files are downloaded separately on first use.
+For a global installation, use `npm install -g promptfoo @huggingface/transformers@^4.0.0`.
+
+For a one-off eval, run `npx --package=promptfoo --package=@huggingface/transformers@^4.0.0 promptfoo eval -c /absolute/path/to/promptfooconfig.yaml` from an empty directory outside an existing npm project, with neither package installed locally. If either package is already installed in your project, use the project installation command above. Model files are downloaded separately on first use.
 
 ## Quick Start
 
