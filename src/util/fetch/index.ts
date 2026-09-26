@@ -325,7 +325,11 @@ export async function fetchWithProxy(
           ),
         };
       }
-      const response = await monkeyPatchFetch(finalUrl, attemptOptions);
+      const response = await monkeyPatchFetch(
+        finalUrl,
+        attemptOptions,
+        ownedAgent ? proxyUrl : undefined,
+      );
 
       if (!disableTransientRetries && isTransientError(response) && attempt < maxTransientRetries) {
         const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
