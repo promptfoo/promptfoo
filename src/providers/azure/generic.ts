@@ -111,16 +111,14 @@ export class AzureGenericProvider implements ApiProvider {
   async getAzureTokenCredential(): Promise<TokenCredential> {
     const clientSecret =
       this.config?.azureClientSecret ||
-      this.env?.AZURE_CLIENT_SECRET ||
-      getEnvString('AZURE_CLIENT_SECRET');
+      (this.env?.AZURE_CLIENT_SECRET ?? getEnvString('AZURE_CLIENT_SECRET'));
     const clientId =
-      this.config?.azureClientId || this.env?.AZURE_CLIENT_ID || getEnvString('AZURE_CLIENT_ID');
+      this.config?.azureClientId || (this.env?.AZURE_CLIENT_ID ?? getEnvString('AZURE_CLIENT_ID'));
     const tenantId =
-      this.config?.azureTenantId || this.env?.AZURE_TENANT_ID || getEnvString('AZURE_TENANT_ID');
+      this.config?.azureTenantId || (this.env?.AZURE_TENANT_ID ?? getEnvString('AZURE_TENANT_ID'));
     const authorityHost =
       this.config?.azureAuthorityHost ||
-      this.env?.AZURE_AUTHORITY_HOST ||
-      getEnvString('AZURE_AUTHORITY_HOST');
+      (this.env?.AZURE_AUTHORITY_HOST ?? getEnvString('AZURE_AUTHORITY_HOST'));
 
     if (this.cachedCredential) {
       return this.cachedCredential;
@@ -166,8 +164,7 @@ export class AzureGenericProvider implements ApiProvider {
     const credential = await this.getAzureTokenCredential();
     const tokenScope =
       this.config?.azureTokenScope ||
-      this.env?.AZURE_TOKEN_SCOPE ||
-      getEnvString('AZURE_TOKEN_SCOPE');
+      (this.env?.AZURE_TOKEN_SCOPE ?? getEnvString('AZURE_TOKEN_SCOPE'));
     const tokenResponse = await credential.getToken(
       tokenScope || 'https://cognitiveservices.azure.com/.default',
     );

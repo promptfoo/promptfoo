@@ -474,7 +474,7 @@ export class WatsonXProvider implements ApiProvider {
   }
 
   private getAuthType(): string | undefined {
-    return this.env?.WATSONX_AI_AUTH_TYPE || getEnvString('WATSONX_AI_AUTH_TYPE');
+    return this.env?.WATSONX_AI_AUTH_TYPE ?? getEnvString('WATSONX_AI_AUTH_TYPE');
   }
 
   private getAuthSelection(): WatsonXAuthSelection {

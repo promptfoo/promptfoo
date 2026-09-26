@@ -133,6 +133,16 @@ function getProviderEnvAliasGroups(providerPath: string): readonly (readonly str
   if (providerPath.startsWith('openai:')) {
     return [['OPENAI_API_HOST', 'OPENAI_API_BASE_URL', 'OPENAI_BASE_URL']];
   }
+  if (/^(?:openclaw|clawdbot)(?::|$)/.test(providerPath)) {
+    return [
+      [
+        'OPENCLAW_GATEWAY_TOKEN',
+        'CLAWDBOT_GATEWAY_TOKEN',
+        'OPENCLAW_GATEWAY_PASSWORD',
+        'CLAWDBOT_GATEWAY_PASSWORD',
+      ],
+    ];
+  }
   if (providerPath.startsWith('huggingface:') || providerPath.startsWith('hf:')) {
     return [['HF_TOKEN', 'HF_API_TOKEN']];
   }
@@ -151,7 +161,7 @@ function getProviderEnvAliasGroups(providerPath: string): readonly (readonly str
   if (/^(?:google|palm):(?:image:|[^:]*-image)/.test(providerPath)) {
     return [
       ['GOOGLE_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY', 'GEMINI_API_KEY'],
-      ['GOOGLE_CLOUD_PROJECT', 'GOOGLE_PROJECT_ID'],
+      ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'],
     ];
   }
   if (/^(?:google|palm):video:/.test(providerPath)) {

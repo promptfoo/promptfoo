@@ -166,8 +166,7 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
     this.configWithHeaders = config || {};
     this.apiVersion =
       config?.apiVersion ||
-      env?.AZURE_CONTENT_SAFETY_API_VERSION ||
-      getEnvString('AZURE_CONTENT_SAFETY_API_VERSION') ||
+      (env?.AZURE_CONTENT_SAFETY_API_VERSION ?? getEnvString('AZURE_CONTENT_SAFETY_API_VERSION')) ||
       '2024-09-01';
 
     this.endpoint =

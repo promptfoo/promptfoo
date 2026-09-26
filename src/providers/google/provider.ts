@@ -14,7 +14,6 @@
 
 import { fetchWithCache } from '../../cache';
 import cliState from '../../cliState';
-import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
@@ -162,8 +161,7 @@ export class GoogleProvider extends GoogleGenericProvider {
     if (this.isVertexMode) {
       return (
         this.config.apiVersion ||
-        this.env?.VERTEX_API_VERSION ||
-        getEnvString('VERTEX_API_VERSION') ||
+        resolveProviderEnv(this.env, ['VERTEX_API_VERSION'])?.value ||
         'v1'
       );
     } else {
@@ -182,10 +180,7 @@ export class GoogleProvider extends GoogleGenericProvider {
    */
   private getPublisher(): string {
     return (
-      this.config.publisher ||
-      this.env?.VERTEX_PUBLISHER ||
-      getEnvString('VERTEX_PUBLISHER') ||
-      'google'
+      this.config.publisher || resolveProviderEnv(this.env, ['VERTEX_PUBLISHER'])?.value || 'google'
     );
   }
 

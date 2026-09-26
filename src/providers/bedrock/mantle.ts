@@ -1,4 +1,5 @@
 import { getEnvString } from '../../envars';
+import { resolveProviderEnv } from '../env';
 
 import type { EnvOverrides } from '../../types/env';
 
@@ -12,12 +13,7 @@ export function resolveBedrockMantleRegion(
 ): string {
   return (
     config.region ||
-    env?.AWS_BEDROCK_REGION ||
-    env?.AWS_REGION ||
-    env?.AWS_DEFAULT_REGION ||
-    getEnvString('AWS_BEDROCK_REGION') ||
-    getEnvString('AWS_REGION') ||
-    getEnvString('AWS_DEFAULT_REGION') ||
+    resolveProviderEnv(env, ['AWS_BEDROCK_REGION', 'AWS_REGION', 'AWS_DEFAULT_REGION'])?.value ||
     defaultRegion
   );
 }

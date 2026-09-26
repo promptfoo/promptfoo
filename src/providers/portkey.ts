@@ -1,4 +1,3 @@
-import { getEnvString } from '../envars';
 import { resolveProviderEnv } from './env';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { hasHeaderOverride } from './openai/index';
@@ -117,7 +116,7 @@ function resolvePortkeyApiKey(
 ): string | undefined {
   // The per-provider `env:` override wins over ambient process env, matching how the
   // upstream credential is resolved in getApiKey below.
-  return config.portkeyApiKey || env?.PORTKEY_API_KEY || getEnvString('PORTKEY_API_KEY');
+  return config.portkeyApiKey || resolveProviderEnv(env, ['PORTKEY_API_KEY'])?.value;
 }
 
 /**
@@ -193,7 +192,7 @@ export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider 
     if (usesManagedCredentials(this.modelName, this.config)) {
       return undefined;
     }
-    return this.config.apiKey || this.env?.OPENAI_API_KEY || getEnvString('OPENAI_API_KEY');
+    return this.config.apiKey || resolveProviderEnv(this.env, ['OPENAI_API_KEY'])?.value;
   }
 
   protected override getMissingApiKeyErrorMessage(): string {
