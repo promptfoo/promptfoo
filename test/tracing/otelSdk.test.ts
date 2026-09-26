@@ -391,45 +391,50 @@ describe('evaluation-owned OpenTelemetry', () => {
     expect(hostPropagator.inject).toHaveBeenCalledOnce();
   });
 
-  it('preserves a host tracer, context manager, and custom propagator', async () => {
-    const hostExporter = new InMemorySpanExporter();
-    const host = new NodeTracerProvider({
-      spanProcessors: [new SimpleSpanProcessor(hostExporter)],
-    });
-    const manager = new AsyncLocalStorageContextManager().enable();
-    const hostKey = createContextKey('host-marker');
-    const hostPropagator = {
-      fields: () => ['host-header'],
-      inject: vi.fn(),
-      extract: (ctx: typeof import('@opentelemetry/api').ROOT_CONTEXT) => ctx,
-    };
-    host.register({ contextManager: manager, propagator: hostPropagator });
-    const globalProvider = trace.getTracerProvider();
-    const disable = vi.spyOn(manager, 'disable');
-    const shutdown = vi.spyOn(host, 'shutdown');
-    try {
-      await context.with(context.active().setValue(hostKey, 'host-value'), async () => {
-        await runScoped({}, async () => {
-          await Promise.resolve();
-          expect(context.active().getValue(hostKey)).toBe('host-value');
-          getGenAITracer().startSpan('owned').end();
-          trace.getTracer('host').startSpan('host during').end();
-        });
+  it.each([{ fields: ['host-header'] }, { fields: [] }])(
+    'preserves a host tracer, context manager, and custom propagator ($fields)',
+    async ({ fields }) => {
+      const hostExporter = new InMemorySpanExporter();
+      const host = new NodeTracerProvider({
+        spanProcessors: [new SimpleSpanProcessor(hostExporter)],
       });
-      expect(trace.getTracerProvider()).toBe(globalProvider);
-      expect(propagation.fields()).toEqual(['host-header']);
-      expect(disable).not.toHaveBeenCalled();
-      expect(shutdown).not.toHaveBeenCalled();
-      getOtelTracer('host').startSpan('host after').end();
-      expect(hostExporter.getFinishedSpans().map((span) => span.name)).toEqual([
-        'host during',
-        'host after',
-      ]);
-      expect(localSpans.map((span) => span.name)).toEqual(['owned']);
-    } finally {
-      await host.shutdown();
-    }
-  });
+      const manager = new AsyncLocalStorageContextManager().enable();
+      const hostKey = createContextKey('host-marker');
+      const hostPropagator = {
+        fields: () => fields,
+        inject: vi.fn(),
+        extract: (ctx: typeof import('@opentelemetry/api').ROOT_CONTEXT) => ctx,
+      };
+      host.register({ contextManager: manager, propagator: hostPropagator });
+      const globalProvider = trace.getTracerProvider();
+      const disable = vi.spyOn(manager, 'disable');
+      const shutdown = vi.spyOn(host, 'shutdown');
+      try {
+        await context.with(context.active().setValue(hostKey, 'host-value'), async () => {
+          await runScoped({}, async () => {
+            await Promise.resolve();
+            expect(context.active().getValue(hostKey)).toBe('host-value');
+            getGenAITracer().startSpan('owned').end();
+            trace.getTracer('host').startSpan('host during').end();
+          });
+        });
+        expect(trace.getTracerProvider()).toBe(globalProvider);
+        expect(propagation.fields()).toEqual(fields);
+        propagation.inject(context.active(), {});
+        expect(hostPropagator.inject).toHaveBeenCalledOnce();
+        expect(disable).not.toHaveBeenCalled();
+        expect(shutdown).not.toHaveBeenCalled();
+        getOtelTracer('host').startSpan('host after').end();
+        expect(hostExporter.getFinishedSpans().map((span) => span.name)).toEqual([
+          'host during',
+          'host after',
+        ]);
+        expect(localSpans.map((span) => span.name)).toEqual(['owned']);
+      } finally {
+        await host.shutdown();
+      }
+    },
+  );
 
   it('removes owned shutdown handlers after a failed operation', async () => {
     const counts = ['SIGINT', 'SIGTERM', 'beforeExit'].map((signal) =>
