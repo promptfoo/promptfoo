@@ -503,7 +503,7 @@ export class GoogleProvider extends GoogleGenericProvider {
           } as RequestInit,
           getRequestTimeoutMs(),
           'json',
-          false,
+          context?.bustCache ?? context?.debug,
         );
         data = result.data as GeminiApiResponse;
         cached = result.cached;

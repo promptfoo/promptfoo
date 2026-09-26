@@ -256,6 +256,8 @@ describe('AI21ChatCompletionProvider', () => {
         body: expect.stringContaining('"max_tokens":0'),
       }),
       expect.any(Number),
+      'json',
+      undefined,
     );
   });
 
@@ -284,5 +286,32 @@ describe('AI21ChatCompletionProvider', () => {
     // Each provider call delegates to fetchWithCache; the cache layer itself
     // is responsible for collapsing identical requests, not the provider.
     expect(vi.mocked(fetchWithCache)).toHaveBeenCalledTimes(2);
+  });
+
+  it('forwards cache-busting signals from the call context', async () => {
+    const mockResponse = {
+      data: {
+        choices: [{ message: { content: 'test response' } }],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    };
+
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const provider = new AI21ChatCompletionProvider('jamba-mini', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await provider.callApi('test prompt', { bustCache: true } as any);
+    expect(vi.mocked(fetchWithCache).mock.calls[0][4]).toBe(true);
+
+    await provider.callApi('test prompt', { debug: true } as any);
+    expect(vi.mocked(fetchWithCache).mock.calls[1][4]).toBe(true);
+
+    await provider.callApi('test prompt');
+    expect(vi.mocked(fetchWithCache).mock.calls[2][4]).toBeFalsy();
   });
 });

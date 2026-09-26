@@ -136,12 +136,17 @@ export class CohereChatCompletionProvider implements ApiProvider {
       return result;
     };
 
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, config), resultExtractor);
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, config, context?.bustCache ?? context?.debug),
+      resultExtractor,
+    );
   }
 
   private async callApiInternal(
     prompt: string,
     config: CohereChatOptions,
+    bustCache?: boolean,
   ): Promise<ProviderResponse> {
     if (!this.apiKey) {
       return { error: 'Cohere API key is not set. Please provide a valid apiKey.' };
@@ -197,6 +202,8 @@ export class CohereChatCompletionProvider implements ApiProvider {
           body: JSON.stringify(body),
         },
         getRequestTimeoutMs(),
+        'json',
+        bustCache,
       )) as unknown as { data: any; cached: boolean });
 
       if (data.message) {

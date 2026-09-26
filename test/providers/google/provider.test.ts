@@ -268,6 +268,27 @@ describe('GoogleProvider', () => {
       expect(calledOptions.headers['x-goog-api-key']).toBe('test-key');
     });
 
+    it('should forward cache-busting signals from the call context', async () => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'test response' }] } }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 20, totalTokenCount: 30 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await provider.callApi('test prompt', { bustCache: true } as any);
+      expect(vi.mocked(cache.fetchWithCache).mock.calls[0][4]).toBe(true);
+
+      await provider.callApi('test prompt', { debug: true } as any);
+      expect(vi.mocked(cache.fetchWithCache).mock.calls[1][4]).toBe(true);
+
+      await provider.callApi('test prompt');
+      expect(vi.mocked(cache.fetchWithCache).mock.calls[2][4]).toBeFalsy();
+    });
+
     it('should throw error when API key is missing in AI Studio mode', async () => {
       // Delete all possible API key env vars
       mockProcessEnv({ GEMINI_API_KEY: undefined });
