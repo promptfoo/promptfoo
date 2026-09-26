@@ -513,31 +513,61 @@ describe('auth command', () => {
       expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('team-2', 'org-2');
     });
 
-    it('should log and persist the resolved organization when the default org has no teams', async () => {
-      const mockTeams = [
-        {
-          id: 'team-2',
-          name: 'Security Team',
-          slug: 'security',
-          organizationId: 'org-2',
-          createdAt: '2024-01-02',
-          updatedAt: '2024-01-02',
-        },
-      ];
+    it.each([
+      { flags: [], organizationId: '1', warn: true },
+      { flags: ['--org', '1'], organizationId: '1', warn: false },
+      { flags: ['--org', 'org-2'], organizationId: 'org-2', warn: false },
+      { flags: ['--team', 'security'], organizationId: 'org-2', warn: false },
+    ])(
+      'requires an explicit switch when the key organization has no teams: $flags',
+      async ({ flags, organizationId, warn }) => {
+        const mockTeams = [
+          {
+            id: 'team-2',
+            name: 'Security Team',
+            slug: 'security',
+            organizationId: 'org-2',
+            createdAt: '2024-01-02',
+            updatedAt: '2024-01-02',
+          },
+        ];
 
-      vi.mocked(getUserTeams).mockResolvedValue(mockTeams);
+        vi.mocked(getUserTeams).mockResolvedValue(mockTeams);
+        vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-2');
 
-      const loginCmd = program.commands
-        .find((cmd) => cmd.name() === 'auth')
-        ?.commands.find((cmd) => cmd.name() === 'login');
-      await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
+        await program.parseAsync([
+          'node',
+          'test',
+          'auth',
+          'login',
+          '--api-key',
+          'test-key',
+          ...flags,
+        ]);
 
-      expect(cloudConfig.setCurrentOrganization).toHaveBeenCalledWith('org-2');
-      expect(cloudConfig.cacheTeams).toHaveBeenCalledWith([mockTeams[0]], 'org-2');
-      expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('team-2', 'org-2');
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Organization:'));
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('org-2'));
-    });
+        expect(cloudConfig.setCurrentOrganization).toHaveBeenCalledTimes(1);
+        expect(cloudConfig.setCurrentOrganization).toHaveBeenCalledWith(organizationId);
+        expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Successfully logged in'));
+        if (organizationId === '1') {
+          expect(cloudConfig.cacheTeams).toHaveBeenCalledWith([], '1');
+          expect(cloudConfig.setCurrentTeamId).not.toHaveBeenCalled();
+          expect(cloudConfig.clearCurrentTeamId).not.toHaveBeenCalled();
+          expect(search).not.toHaveBeenCalled();
+          expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Test Org'));
+        } else {
+          expect(cloudConfig.cacheTeams).toHaveBeenCalledWith(mockTeams, 'org-2');
+          expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('team-2', 'org-2');
+          expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('org-2'));
+        }
+        if (warn) {
+          expect(logger.warn).toHaveBeenCalledWith(
+            expect.stringContaining('promptfoo auth teams set <team>'),
+          );
+        } else {
+          expect(logger.warn).not.toHaveBeenCalled();
+        }
+      },
+    );
 
     it('should fail login when --org does not match any accessible team organization', async () => {
       vi.mocked(getUserTeams).mockResolvedValue([
@@ -705,7 +735,9 @@ describe('auth command', () => {
       expect(logger.warn).toHaveBeenCalledWith(
         expect.stringContaining('You have access to 2 teams'),
       );
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('--team flag'));
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('promptfoo auth teams set <team>'),
+      );
     });
 
     it("restores the organization's saved team instead of prompting or picking the oldest", async () => {
