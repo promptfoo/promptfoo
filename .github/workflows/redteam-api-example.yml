@@ -16,13 +16,19 @@ permissions:
 
 jobs:
   mcp-client:
-    name: MCP client on Python ${{ matrix.python-version }}
-    runs-on: ubuntu-latest
+    name: MCP client on ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.10', '3.14']
+        include:
+          - os: ubuntu-latest
+            python-version: '3.10'
+          - os: ubuntu-latest
+            python-version: '3.14'
+          - os: windows-latest
+            python-version: '3.14'
     defaults:
       run:
         working-directory: examples/redteam-api-top-10

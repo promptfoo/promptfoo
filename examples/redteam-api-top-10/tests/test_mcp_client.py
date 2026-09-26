@@ -4,6 +4,7 @@ import asyncio
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 from unittest.mock import patch
 
@@ -14,9 +15,10 @@ class MCPClientTest(unittest.IsolatedAsyncioTestCase):
     async def test_sqlite_tool_discovery_and_execution(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             database = Path(directory) / "test.db"
-            with sqlite3.connect(database) as connection:
+            with closing(sqlite3.connect(database)) as connection:
                 connection.execute("CREATE TABLE products (name TEXT)")
                 connection.execute("INSERT INTO products VALUES ('Fixture hoodie')")
+                connection.commit()
 
             client = mcp_client.SwagMCPClient()
             with (
