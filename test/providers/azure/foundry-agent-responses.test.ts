@@ -758,6 +758,256 @@ describe('Foundry Responses conversation and accounting', () => {
     });
   });
 
+  it.each([
+    ['cached input exceeds input', { input_tokens_details: { cached_tokens: 20 } }],
+    [
+      'cached image implies an impossible input partition',
+      {
+        input_tokens_details: {
+          cached_tokens: 5,
+          audio_tokens: 8,
+          cached_tokens_details: { image_tokens: 5 },
+        },
+      },
+    ],
+    [
+      'cached audio implies an impossible input partition',
+      {
+        input_tokens_details: {
+          cached_tokens: 5,
+          image_tokens: 8,
+          cached_tokens_details: { audio_tokens: 5 },
+        },
+      },
+    ],
+    ['input audio exceeds input', { input_tokens_details: { audio_tokens: 11 } }],
+    ['input image exceeds input', { input_tokens_details: { image_tokens: 11 } }],
+    [
+      'input modalities exceed input',
+      { input_tokens_details: { audio_tokens: 6, image_tokens: 5 } },
+    ],
+    ['output audio exceeds output', { output_tokens_details: { audio_tokens: 6 } }],
+    ['output image exceeds output', { output_tokens_details: { image_tokens: 6 } }],
+    [
+      'output modalities exceed output',
+      { output_tokens_details: { audio_tokens: 3, image_tokens: 3 } },
+    ],
+    [
+      'cached audio exceeds input audio',
+      {
+        input_tokens_details: {
+          cached_tokens: 5,
+          audio_tokens: 2,
+          cached_tokens_details: { audio_tokens: 3 },
+        },
+      },
+    ],
+    [
+      'cached image exceeds input image',
+      {
+        input_tokens_details: {
+          cached_tokens: 5,
+          image_tokens: 2,
+          cached_tokens_details: { image_tokens: 3 },
+        },
+      },
+    ],
+    [
+      'cached audio exceeds cached input',
+      {
+        input_tokens_details: {
+          cached_tokens: 2,
+          audio_tokens: 4,
+          cached_tokens_details: { audio_tokens: 3 },
+        },
+      },
+    ],
+    [
+      'cached image exceeds cached input',
+      {
+        input_tokens_details: {
+          cached_tokens: 2,
+          image_tokens: 4,
+          cached_tokens_details: { image_tokens: 3 },
+        },
+      },
+    ],
+    [
+      'cached modalities exceed cached input',
+      {
+        input_tokens_details: {
+          cached_tokens: 3,
+          audio_tokens: 4,
+          image_tokens: 4,
+          cached_tokens_details: { audio_tokens: 2, image_tokens: 2 },
+        },
+      },
+    ],
+    [
+      'cached modalities exceed input with omitted optional parents',
+      { input_tokens_details: { cached_tokens_details: { audio_tokens: 6, image_tokens: 5 } } },
+    ],
+    [
+      'explicit cached audio leaves too much cached input outside audio',
+      {
+        input_tokens_details: {
+          cached_tokens: 10,
+          audio_tokens: 8,
+          cached_tokens_details: { audio_tokens: 1 },
+        },
+      },
+    ],
+    [
+      'explicit cached modalities leave too much cached text',
+      {
+        input_tokens_details: {
+          cached_tokens: 5,
+          audio_tokens: 4,
+          image_tokens: 4,
+          cached_tokens_details: { audio_tokens: 1, image_tokens: 1 },
+        },
+      },
+    ],
+    [
+      'explicit zero cached audio contradicts fully cached audio',
+      {
+        input_tokens_details: {
+          cached_tokens: 10,
+          audio_tokens: 8,
+          cached_tokens_details: { audio_tokens: 0 },
+        },
+      },
+    ],
+  ])(
+    'keeps accounting incomplete when %s, including after a later valid turn',
+    async (_label, details) => {
+      create
+        .mockResolvedValueOnce(reply('first', [tool()], { usage: { ...usage, ...details } }))
+        .mockResolvedValueOnce(reply('last', [text('done')]));
+
+      const result = await provider().callApi('weather?');
+
+      expect(result.output).toBe('done');
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 20,
+        completion: 10,
+        total: 30,
+        numRequests: 2,
+      });
+      expect(result.metadata).toMatchObject({
+        usageIncomplete: true,
+        costIncomplete: true,
+        knownCost: calculateAzureCost('gpt-4.1', {}, 10, 5),
+      });
+      expect(result.cost).toBeUndefined();
+      expect(callback).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([
+    ['cached input equals input', { input_tokens_details: { cached_tokens: 10 } }],
+    [
+      'cached image implies a possible input partition at the boundary',
+      {
+        input_tokens_details: {
+          cached_tokens: 5,
+          audio_tokens: 5,
+          cached_tokens_details: { image_tokens: 5 },
+        },
+      },
+    ],
+    [
+      'cached audio implies a possible input partition at the boundary',
+      {
+        input_tokens_details: {
+          cached_tokens: 5,
+          image_tokens: 5,
+          cached_tokens_details: { audio_tokens: 5 },
+        },
+      },
+    ],
+    [
+      'all modality subtotals equal their parents',
+      {
+        input_tokens_details: {
+          cached_tokens: 10,
+          audio_tokens: 4,
+          image_tokens: 6,
+          cached_tokens_details: { audio_tokens: 4, image_tokens: 6 },
+        },
+        output_tokens_details: { audio_tokens: 2, image_tokens: 3 },
+      },
+    ],
+    [
+      'cached tokens overlap audio with an omitted cache breakdown',
+      { input_tokens_details: { cached_tokens: 5, audio_tokens: 8 } },
+    ],
+    [
+      'cached tokens overlap images with an omitted cache breakdown',
+      { input_tokens_details: { cached_tokens: 5, image_tokens: 8 } },
+    ],
+    [
+      'a partially reported cached modality partition stays possible',
+      {
+        input_tokens_details: {
+          cached_tokens: 5,
+          audio_tokens: 4,
+          image_tokens: 4,
+          cached_tokens_details: { audio_tokens: 1 },
+        },
+      },
+    ],
+    [
+      'explicit cached audio leaves exactly the available cached text',
+      {
+        input_tokens_details: {
+          cached_tokens: 5,
+          audio_tokens: 8,
+          cached_tokens_details: { audio_tokens: 3 },
+        },
+      },
+    ],
+    [
+      'explicit cached modalities leave exactly the available cached text',
+      {
+        input_tokens_details: {
+          cached_tokens: 5,
+          audio_tokens: 4,
+          image_tokens: 4,
+          cached_tokens_details: { audio_tokens: 1, image_tokens: 2 },
+        },
+      },
+    ],
+    [
+      'omitted cached and modality parents remain optional',
+      { input_tokens_details: { cached_tokens_details: { audio_tokens: 2, image_tokens: 2 } } },
+    ],
+    [
+      'explicit zero parents and subtotals remain valid',
+      {
+        input_tokens: 0,
+        output_tokens: 0,
+        total_tokens: 0,
+        input_tokens_details: {
+          cached_tokens: 0,
+          audio_tokens: 0,
+          image_tokens: 0,
+          cached_tokens_details: { audio_tokens: 0, image_tokens: 0 },
+        },
+        output_tokens_details: { audio_tokens: 0, image_tokens: 0 },
+      },
+    ],
+  ])('keeps usage and pricing complete when %s', async (_label, details) => {
+    create.mockResolvedValue(reply('first', [text('done')], { usage: { ...usage, ...details } }));
+
+    const result = await provider().callApi('weather?');
+
+    expect(result.output).toBe('done');
+    expect(result.metadata?.usageIncomplete).toBeUndefined();
+    expect(result.metadata?.costIncomplete).toBeUndefined();
+    expect(result.cost).toBeGreaterThanOrEqual(0);
+  });
+
   it('marks cost incomplete for an unknown served model but retains complete token usage', async () => {
     create
       .mockResolvedValueOnce(reply('first', [tool()], { model: 'custom-deployment' }))
