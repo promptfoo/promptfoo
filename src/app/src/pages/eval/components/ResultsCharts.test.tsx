@@ -570,6 +570,57 @@ describe('ResultsCharts', () => {
     });
   });
 
+  describe('Histogram bin boundaries', () => {
+    function renderHistogram(scores: number[]) {
+      vi.mocked(useTableStore).mockReturnValue({
+        table: {
+          head: {
+            prompts: [
+              { provider: 'first', metrics: { namedScores: {} } },
+              { provider: 'second', metrics: { namedScores: {} } },
+            ],
+            vars: [],
+          },
+          body: scores.map((score) => ({
+            outputs: [{ score }, { score }],
+            vars: [],
+          })),
+        },
+      });
+      render(<ResultsCharts scores={scores} />);
+      return vi.mocked(Chart).mock.calls.map(([, config]) => config)[1];
+    }
+
+    it.each([
+      ['decimal boundaries', [0, 0.1, 0.2, 0.3, 0.6, 1]],
+      ['negative and unbounded scores', [-2, -1.5, -1, 0, 1, 2, 3]],
+      ['uniform integer scores', [2, 2, 2]],
+      [
+        'non-finite scores',
+        [0, 0.3, 1, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY],
+      ],
+    ])('counts every finite loaded score exactly once with %s', (_name, scores) => {
+      const config = renderHistogram(scores);
+      for (const dataset of config.data.datasets) {
+        const counts = dataset.data as number[];
+        expect(counts.reduce((total, count) => total + count, 0)).toBe(
+          scores.filter(Number.isFinite).length,
+        );
+      }
+    });
+
+    it('assigns decimal boundary values to one bin and includes the maximum boundary', () => {
+      const config = renderHistogram([0, 0.1, 0.2, 0.3, 0.6, 1]);
+      expect(config.data.datasets[0].data).toEqual([1, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1]);
+    });
+
+    it('shows a zero upper boundary in negative-score tooltips', () => {
+      const config = renderHistogram([-1, -0.2, 0, 1]);
+      const tooltip = config.options!.plugins!.tooltip!.callbacks!.label!;
+      expect(tooltip.call({} as any, { dataIndex: 4 } as any)).toBe('-0.2 <= score < 0');
+    });
+  });
+
   describe('Metric meaning and chart scope', () => {
     function renderMetrics(namedScores: Record<string, number>[], scores = [0, 1]) {
       vi.mocked(useTableStore).mockReturnValue({

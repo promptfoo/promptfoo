@@ -88,7 +88,7 @@ function HistogramChart({ table }: ChartProps) {
     // Calculate bins and their counts
     const scores = table.body
       .flatMap((row) => row.outputs.map((output) => output?.score))
-      .filter((score) => typeof score === 'number' && !Number.isNaN(score));
+      .filter((score) => typeof score === 'number' && Number.isFinite(score));
 
     if (scores.length === 0) {
       return;
@@ -96,7 +96,7 @@ function HistogramChart({ table }: ChartProps) {
 
     const maxScore = Math.max(...scores);
     const minScore = Math.min(...scores);
-    const range = Math.ceil(maxScore) - Math.floor(minScore); // Adjust the range to be between whole numbers
+    const range = Math.max(1, Math.ceil(maxScore) - Math.floor(minScore));
     const binSize = range / 10; // Define the size of each bin
     const bins = Array.from({ length: 11 }, (_, i) =>
       Number.parseFloat((Math.floor(minScore) + i * binSize).toFixed(2)),
@@ -105,9 +105,12 @@ function HistogramChart({ table }: ChartProps) {
     const datasets = table.head.prompts.map((prompt, promptIdx) => {
       const scores = table.body
         .map((row) => row.outputs[promptIdx]?.score)
-        .filter((score) => typeof score === 'number' && !Number.isNaN(score));
+        .filter((score) => typeof score === 'number' && Number.isFinite(score));
       const counts = bins.map(
-        (bin) => scores.filter((score) => score >= bin && score < bin + binSize).length,
+        (bin, index) =>
+          scores.filter(
+            (score) => score >= bin && (index === bins.length - 1 || score < bins[index + 1]),
+          ).length,
       );
       return {
         label: prompt.provider,
@@ -142,7 +145,7 @@ function HistogramChart({ table }: ChartProps) {
                 const labelIndex = context.dataIndex;
                 const lowerBound = bins[labelIndex];
                 const upperBound = bins[labelIndex + 1];
-                if (!upperBound) {
+                if (upperBound === undefined) {
                   return `${lowerBound} <= score`;
                 }
                 return `${lowerBound} <= score < ${upperBound}`;
