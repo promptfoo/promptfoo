@@ -93,6 +93,37 @@ describe('scoped Azure credentials', () => {
     expect(ClientSecretCredential).not.toHaveBeenCalled();
   });
 
+  it.each(['config', 'provider', 'suite', 'file'] as const)(
+    'rejects whitespace-only Azure principal fields from %s before constructing a credential',
+    async (scope) => {
+      mockProcessEnv(principal('host'));
+      for (const field of ['AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET', 'AZURE_TENANT_ID'] as const) {
+        const env = { ...principal('scoped'), [field]: ' \t ' };
+        const verify = async () => {
+          await expect(
+            createAzureCredential(
+              scope === 'config'
+                ? {
+                    azureClientId: env.AZURE_CLIENT_ID,
+                    azureClientSecret: env.AZURE_CLIENT_SECRET,
+                    azureTenantId: env.AZURE_TENANT_ID,
+                  }
+                : {},
+              scope === 'provider' ? env : undefined,
+            ),
+          ).rejects.toThrow('incomplete');
+        };
+        if (scope === 'file') {
+          await cliState.withEnvFileOverrides(env, verify);
+        } else {
+          await cliState.withEnv(scope === 'suite' ? env : principal('lower'), verify);
+        }
+      }
+      expect(ClientSecretCredential).not.toHaveBeenCalled();
+      expect(DefaultAzureCredential).not.toHaveBeenCalled();
+    },
+  );
+
   it('uses invocation-file principals for Azure Blob reads', async () => {
     for (const label of ['a', 'b']) {
       const text = await cliState.withEnvFileOverrides(principal(label), () =>

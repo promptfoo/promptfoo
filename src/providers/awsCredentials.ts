@@ -49,14 +49,14 @@ export async function resolveAwsCredentials(
   }
   const { accessKeyId, secretAccessKey, sessionToken, profile } = source;
   if ([accessKeyId, secretAccessKey, sessionToken].some((value) => value !== undefined)) {
-    if (!accessKeyId || !secretAccessKey) {
+    if (!accessKeyId?.trim() || !secretAccessKey?.trim()) {
       throw new Error(
         'AWS access credentials are incomplete. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY together in the same configuration scope.',
       );
     }
     return { accessKeyId, secretAccessKey, ...(sessionToken ? { sessionToken } : {}) };
   }
-  if (profile !== undefined && !profile) {
+  if (profile !== undefined && !profile.trim()) {
     throw new Error(
       'Scoped AWS_PROFILE is empty. Supply a profile name or remove the scoped override.',
     );

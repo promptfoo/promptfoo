@@ -35,7 +35,7 @@ export async function createAzureCredential(
   );
   if (source) {
     const { clientId, clientSecret, tenantId } = source;
-    if (!clientId || !clientSecret || !tenantId) {
+    if (!clientId?.trim() || !clientSecret?.trim() || !tenantId?.trim()) {
       throw new Error(
         'Scoped Azure service principal credentials are incomplete. Set AZURE_CLIENT_ID, AZURE_CLIENT_SECRET and AZURE_TENANT_ID together in the same configuration scope.',
       );

@@ -18,6 +18,8 @@ import {
 } from '../../src/providers/sagemaker';
 import { mockProcessEnv } from '../util/utils';
 
+import type { EnvOverrides } from '../../src/contracts/env';
+
 const keys = (label: string) => ({
   AWS_ACCESS_KEY_ID: `${label}-access`,
   AWS_SECRET_ACCESS_KEY: `${label}-secret`,
@@ -281,6 +283,38 @@ describe('scoped AWS SDK authentication', () => {
       })) as SageMakerCompletionProvider;
       await expect(provider.getCredentials()).rejects.toThrow(/incomplete|empty/);
       await expect(provider.getSageMakerRuntimeInstance()).rejects.toThrow(/incomplete|empty/);
+    },
+  );
+
+  it.each(['config', 'provider', 'suite', 'file'] as const)(
+    'rejects whitespace-only AWS credentials from %s before constructing a client',
+    async (scope) => {
+      mockProcessEnv(keys('host'));
+      for (const field of ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_PROFILE'] as const) {
+        const env: EnvOverrides =
+          field === 'AWS_PROFILE'
+            ? { AWS_PROFILE: ' \t ' }
+            : { ...keys('scoped'), [field]: ' \t ' };
+        const config =
+          scope === 'config'
+            ? field === 'AWS_PROFILE'
+              ? { profile: env.AWS_PROFILE }
+              : { accessKeyId: env.AWS_ACCESS_KEY_ID, secretAccessKey: env.AWS_SECRET_ACCESS_KEY }
+            : {};
+        const verify = async () => {
+          const provider = new SageMakerCompletionProvider('fixture', {
+            config: { modelType: 'custom', ...config },
+            env: scope === 'provider' ? env : undefined,
+          });
+          await expect(provider.getCredentials()).rejects.toThrow(/incomplete|empty/);
+          await expect(provider.getSageMakerRuntimeInstance()).rejects.toThrow(/incomplete|empty/);
+        };
+        if (scope === 'file') {
+          await cliState.withEnvFileOverrides(env, verify);
+        } else {
+          await cliState.withEnv(scope === 'suite' ? env : keys('lower'), verify);
+        }
+      }
     },
   );
 
