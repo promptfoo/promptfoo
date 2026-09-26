@@ -34,11 +34,14 @@ When using browser automation:
 
 ## Prerequisites
 
-The browser provider requires Playwright and the stealth plugin. Install these packages in the project where you run promptfoo:
+Browser automation is an optional feature. Install Promptfoo, Playwright, and the stealth plugin together in your project, then install the matching Chromium binary:
 
 ```bash
-npm install playwright @playwright/browser-chromium playwright-extra puppeteer-extra-plugin-stealth
+npm install promptfoo "playwright@^1.63.0" "playwright-extra@^4.3.6" "puppeteer-extra-plugin-stealth@^2.11.2"
+npx playwright install chromium
 ```
+
+For a global CLI, install the same packages with `npm install -g` and run `playwright install chromium`.
 
 Playwright 1.63 and later no longer support Ubuntu 20.04. Check [Playwright's system requirements](https://playwright.dev/docs/intro#system-requirements) before installing the browser on Linux.
 

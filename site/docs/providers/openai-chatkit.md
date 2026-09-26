@@ -65,8 +65,11 @@ tests:
 
 ### Step 4: Run Your First Eval
 
+ChatKit browser support is optional. For a global CLI, use `npm install -g promptfoo "playwright@^1.63.0"` followed by `playwright install chromium`.
+
 ```bash
-# Install Playwright (first time only)
+# Install the optional SDK alongside Promptfoo and its matching browser
+npm install promptfoo "playwright@^1.63.0"
 npx playwright install chromium
 
 # Set your API key
