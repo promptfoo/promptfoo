@@ -77,6 +77,8 @@ import type { InternalEvaluateOptions } from '../types/internal';
 import type { FilterOptions } from '../util/eval/filterTests';
 
 export const EvalCommandSchema = CommandLineOptionsSchema.extend({
+  // Keep omission available for CLI precedence without changing the public schema default.
+  delay: z.coerce.number().int().nonnegative().optional(),
   help: z.boolean().optional(),
   interactiveProviders: z.boolean().optional(),
   remote: z.boolean().optional(),

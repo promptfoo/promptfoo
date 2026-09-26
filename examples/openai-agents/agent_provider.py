@@ -8,13 +8,14 @@ This example uses the official `openai-agents` Python SDK with:
 - a custom tracing bridge that forwards SDK spans into Promptfoo's OTLP receiver
 """
 
-from __future__ import annotations
-
 import asyncio
 import json
 import os
 import re
+import shlex
+import sys
 import traceback
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -46,6 +47,15 @@ DEFAULT_MODEL = os.getenv("OPENAI_AGENT_MODEL", "gpt-6-luna")
 SESSION_DB_PATH = Path(__file__).with_name(".promptfoo-openai-agents.sqlite3")
 EXAMPLE_DIR = Path(__file__).resolve().parent
 DISCOUNT_REVIEW_SKILL_DIR = EXAMPLE_DIR / "skills" / "discount-review"
+ALLOWED_SKILL_COMMANDS = {
+    (
+        "python3",
+        "skills/discount-review/scripts/analyze_discount_policy.py",
+        "skill_fixture/repo",
+    ),
+    ("cat", "skills/discount-review/SKILL.md"),
+    ("cat", "skill_fixture/repo/src/discount_policy.py"),
+}
 
 RESERVATIONS: dict[str, dict[str, str]] = {
     "ABC123": {
@@ -99,47 +109,22 @@ BOOKING_CHANGE_RE = re.compile(
 )
 
 
+@dataclass
 class AirlineContext:
-    def __init__(
-        self,
-        passenger_name: str | None = None,
-        confirmation_number: str | None = None,
-        seat_number: str | None = None,
-        requested_seat_number: str | None = None,
-        flight_number: str | None = None,
-        verified_confirmation_number: str | None = None,
-        user_passenger_name: str | None = None,
-        third_party_confirmation_number: str | None = None,
-        pending_third_party_booking_change: bool = False,
-    ) -> None:
-        self.passenger_name = passenger_name
-        self.confirmation_number = confirmation_number
-        self.seat_number = seat_number
-        self.requested_seat_number = requested_seat_number
-        self.flight_number = flight_number
-        self.verified_confirmation_number = verified_confirmation_number
-        self.user_passenger_name = user_passenger_name
-        self.third_party_confirmation_number = third_party_confirmation_number
-        self.pending_third_party_booking_change = pending_third_party_booking_change
-
-    def to_dict(self) -> dict[str, str | bool | None]:
-        return {
-            "passenger_name": self.passenger_name,
-            "confirmation_number": self.confirmation_number,
-            "seat_number": self.seat_number,
-            "requested_seat_number": self.requested_seat_number,
-            "flight_number": self.flight_number,
-            "verified_confirmation_number": self.verified_confirmation_number,
-            "user_passenger_name": self.user_passenger_name,
-            "third_party_confirmation_number": self.third_party_confirmation_number,
-            "pending_third_party_booking_change": (
-                self.pending_third_party_booking_change
-            ),
-        }
+    passenger_name: str | None = None
+    confirmation_number: str | None = None
+    seat_number: str | None = None
+    requested_seat_number: str | None = None
+    flight_number: str | None = None
+    verified_confirmation_number: str | None = None
+    user_passenger_name: str | None = None
+    authenticated_passenger_name: str | None = None
+    third_party_confirmation_number: str | None = None
+    pending_third_party_booking_change: bool = False
 
 
 class SkillShellExecutor:
-    """Execute local shell commands for the skill workflow."""
+    """Run only the bundled skill's approved commands, without a shell."""
 
     def __init__(self, cwd: Path) -> None:
         self.cwd = cwd
@@ -147,10 +132,29 @@ class SkillShellExecutor:
     async def __call__(self, request: ShellCommandRequest) -> ShellResult:
         outputs: list[ShellCommandOutput] = []
         for command in request.data.action.commands:
-            proc = await asyncio.create_subprocess_shell(
-                command,
+            try:
+                parts = shlex.split(command)
+            except ValueError:
+                parts = []
+
+            if tuple(parts) not in ALLOWED_SKILL_COMMANDS:
+                outputs.append(
+                    ShellCommandOutput(
+                        command=command,
+                        stdout="",
+                        stderr="Command is not allowed by this skill",
+                        outcome=ShellCallOutcome(type="exit", exit_code=126),
+                    )
+                )
+                continue
+
+            proc = await asyncio.create_subprocess_exec(
+                *parts,
                 cwd=self.cwd,
-                env=os.environ.copy(),
+                env={
+                    "PATH": f"{Path(sys.executable).parent}{os.pathsep}{os.defpath}",
+                    "PYTHONPATH": "",
+                },
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -212,10 +216,7 @@ def _normalize_confirmation_number(confirmation_number: str) -> str:
 
 
 def _normalize_name(name: str | None) -> str | None:
-    if name is None:
-        return None
-    normalized = " ".join(name.split()).casefold()
-    return normalized or None
+    return " ".join((name or "").split()).casefold() or None
 
 
 def _is_third_party_booking_change(step: str) -> bool:
@@ -448,17 +449,22 @@ def update_seat(
         context.context, normalized_confirmation_number
     )
     normalized_seat = new_seat.strip().upper()
+    if not re.fullmatch(r"[1-9]\d*[A-F]", normalized_seat):
+        return (
+            "Unable to update seat because the requested seat must be a valid "
+            "seat number (for example, 12A)."
+        )
     if reservation is None:
         return (
             f"Unable to update seat because {normalized_confirmation_number} "
             "was not found."
         )
-    if context.context.user_passenger_name and _normalize_name(
-        context.context.user_passenger_name
-    ) != _normalize_name(reservation["passenger_name"]):
+    if _normalize_name(context.context.authenticated_passenger_name) != _normalize_name(
+        reservation["passenger_name"]
+    ):
         return (
-            "Unable to update a reservation for a different passenger. The passenger "
-            "must contact support directly."
+            "Unable to update the seat. Authenticate as the reservation's passenger "
+            "before requesting changes."
         )
 
     context.context.confirmation_number = normalized_confirmation_number
@@ -703,7 +709,7 @@ def _build_skill_agent(model: str) -> Agent[Any]:
         model=model,
         instructions=(
             "Use the discount-review skill for discount-policy review tasks. "
-            "Read only the mounted skill's SKILL.md before using it; do not "
+            "Read `skills/discount-review/SKILL.md` before using it; do not "
             "enumerate the skill directory. Follow the helper workflow exactly, "
             "and return a concise maintainer report."
         ),
@@ -732,6 +738,7 @@ def _build_context(vars_dict: dict[str, Any]) -> AirlineContext:
         flight_number=vars_dict.get("flight_number"),
         user_passenger_name=vars_dict.get("user_passenger_name")
         or vars_dict.get("passenger_name"),
+        authenticated_passenger_name=vars_dict.get("authenticated_passenger_name"),
         third_party_confirmation_number=vars_dict.get(
             "third_party_confirmation_number"
         ),
@@ -951,7 +958,7 @@ def call_api(
         )
         transcript.append(f"Final agent: {current_agent.name}")
         transcript.append(f"Final output: {final_output}")
-        transcript.append(f"Shared context: {_serialize(airline_context.to_dict())}")
+        transcript.append(f"Shared context: {_serialize(asdict(airline_context))}")
 
         output = (
             final_output

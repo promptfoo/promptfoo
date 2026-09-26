@@ -485,21 +485,26 @@ function getTargetPromptMaxCharsPerMessage(context?: CallApiContextParams): numb
 }
 
 /** Invoke a red-team target with the same tracing behavior across every strategy. */
-export function callTargetProvider(
+export async function callTargetProvider(
   targetProvider: ApiProvider,
   targetPrompt: string,
   context?: CallApiContextParams,
   options?: CallApiOptionsParams,
 ): Promise<ProviderResponse> {
   const tracingContext = getProviderCallTracingContext();
-  if (!tracingContext) {
-    return targetProvider.callApi(targetPrompt, context, options);
+  const response = tracingContext
+    ? await tracingContext.withProviderSpan(
+        { provider: targetProvider, callContext: context },
+        async (callContext) => targetProvider.callApi(targetPrompt, callContext, options),
+      )
+    : await targetProvider.callApi(targetPrompt, context, options);
+  const delay = getProviderDelay(targetProvider);
+  const handlesDelay = targetProvider.handlesOwnDelay && targetProvider.delay != null;
+  if (!response.cached && !handlesDelay && delay && delay > 0) {
+    logger.debug(`Sleeping for ${delay}ms`);
+    await sleep(delay);
   }
-
-  return tracingContext.withProviderSpan(
-    { provider: targetProvider, callContext: context },
-    async (callContext) => targetProvider.callApi(targetPrompt, callContext, options),
-  );
+  return response;
 }
 
 /** Keep strategy judge calls beneath grader-owned spans without changing their requests. */
@@ -558,11 +563,6 @@ export async function getTargetResponse(
           error instanceof Error && error.message.includes('maxCharsPerMessage=') ? 0 : 1,
       },
     };
-  }
-  const delay = getProviderDelay(targetProvider);
-  if (!targetRespRaw.cached && delay && delay > 0) {
-    logger.debug(`Sleeping for ${delay}ms`);
-    await sleep(delay);
   }
   const tokenUsage = { numRequests: 1, ...targetRespRaw.tokenUsage };
   const hasOutput = targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'output');

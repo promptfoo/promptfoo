@@ -4,7 +4,6 @@ import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail, isLoggedIntoCloud } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { getProviderDelay } from '../../scheduler/providerCallExecutionContext';
 import {
   extractTraceIdFromTraceparent,
   fetchTraceContext,
@@ -14,7 +13,6 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
-import { sleep } from '../../util/time';
 import {
   accumulateAttackerTokenUsage,
   accumulateResponseTokenUsage,
@@ -228,7 +226,6 @@ export default class GoatProvider implements ApiProvider {
 
     const targetProvider: ApiProvider | undefined = context?.originalProvider;
     invariant(targetProvider, 'Expected originalProvider to be set');
-    const targetDelay = getProviderDelay(targetProvider);
     const maxCharsPerMessage =
       this.config.maxCharsPerMessage ??
       (context?.test?.metadata?.strategyConfig as { maxCharsPerMessage?: number } | undefined)
@@ -346,11 +343,6 @@ export default class GoatProvider implements ApiProvider {
               context,
               options,
             );
-
-            if (!unblockingResponse.cached && targetDelay && targetDelay > 0) {
-              logger.debug(`Sleeping for ${targetDelay}ms`);
-              await sleep(targetDelay);
-            }
 
             accumulateResponseTokenUsage(totalTokenUsage, unblockingResponse);
 
@@ -619,11 +611,6 @@ export default class GoatProvider implements ApiProvider {
         )) as GoatProviderResponse;
         messages.push(pendingMessage);
         lastFinalAttackPrompt = lastTransformResult?.prompt || latestMessageContent;
-
-        if (!targetResponse.cached && targetDelay && targetDelay > 0) {
-          logger.debug(`Sleeping for ${targetDelay}ms`);
-          await sleep(targetDelay);
-        }
         accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
         logger.debug(`GOAT turn ${turn} target response`, { response: targetResponse });

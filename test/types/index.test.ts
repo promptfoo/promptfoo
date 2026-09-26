@@ -624,6 +624,10 @@ describe('JSON Schema validation (AJV)', () => {
 });
 
 describe('CommandLineOptionsSchema', () => {
+  it('preserves the public numeric delay default', () => {
+    expect(CommandLineOptionsSchema.parse({ providers: [], output: [] }).delay).toBe(0);
+  });
+
   it('should validate options with filterErrorsOnly string', () => {
     const options = {
       providers: ['provider1'],

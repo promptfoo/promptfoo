@@ -6,8 +6,13 @@ import { evaluate } from '../../src/evaluator';
 import * as comparisonMatchers from '../../src/matchers/comparison';
 import Eval from '../../src/models/eval';
 import { EchoProvider } from '../../src/providers/echo';
+import { SageMakerCompletionProvider } from '../../src/providers/sagemaker';
 import * as targetWrapping from '../../src/redteam/mcpTargetProvider';
-import { getTargetResponse, redteamProviderManager } from '../../src/redteam/providers/shared';
+import {
+  callTargetProvider,
+  getTargetResponse,
+  redteamProviderManager,
+} from '../../src/redteam/providers/shared';
 import { getProviderDelay } from '../../src/scheduler/providerCallExecutionContext';
 import { ProviderGroupedCallQueue } from '../../src/scheduler/providerCallQueue';
 import { isRateLimitWrapped } from '../../src/scheduler/providerWrapper';
@@ -28,6 +33,16 @@ function createProvider(id = 'offline'): ApiProvider {
 }
 
 describeEvaluator('evaluation environment defaults', () => {
+  it('keeps progress callback delays numeric while applying an inherited delay', async () => {
+    const progressCallback = vi.fn();
+    await evaluate(createSuite(createProvider(), { PROMPTFOO_DELAY_MS: '7' }), new Eval({}), {
+      progressCallback,
+    });
+    expect(progressCallback).toHaveBeenCalled();
+    expect(progressCallback.mock.calls.map((call) => call[3].delay)).toEqual([0]);
+    expect(sleep).toHaveBeenCalledExactlyOnceWith(7);
+  });
+
   it.each([
     { providerDelay: undefined, evalDelay: undefined, expected: 7 },
     { providerDelay: undefined, evalDelay: 0, expected: 0 },
@@ -130,6 +145,48 @@ describeEvaluator('evaluation environment defaults', () => {
     );
     expect(target.delay).toBe(testCase.providerDelay);
     expect(getProviderDelay(target)).toBe(testCase.providerDelay);
+  });
+
+  it('paces each delegated call to a self-delaying target with an inherited delay', async () => {
+    const target = new EchoProvider();
+    const suite = createSuite(target, { PROMPTFOO_DELAY_MS: '7' });
+    suite.tests = [
+      {
+        provider: {
+          id: () => 'offline-delegate',
+          callApi: async (_prompt, context) => {
+            await callTargetProvider(target, 'hello', context);
+            expect(sleep).toHaveBeenCalledExactlyOnceWith(7);
+            return callTargetProvider(target, 'hello again', context);
+          },
+        },
+      },
+    ];
+    const record = new Eval({});
+    await evaluate(suite, record, {});
+    expect((await record.getResults())[0]).toMatchObject({ success: true });
+    expect(sleep).toHaveBeenCalledTimes(3);
+    expect(target.delay).toBeUndefined();
+  });
+
+  it.each([undefined, 3, 0])('applies SageMaker target delay %s exactly once', async (delay) => {
+    const target = new SageMakerCompletionProvider('fixture', {
+      delay,
+      config: { region: 'us-east-1', modelType: 'custom' },
+    });
+    const send = vi.fn().mockResolvedValue({ Body: Buffer.from(JSON.stringify({ output: 'ok' })) });
+    vi.spyOn(target, 'getSageMakerRuntimeInstance').mockResolvedValue({
+      send,
+    } as unknown as Awaited<ReturnType<typeof target.getSageMakerRuntimeInstance>>);
+    const record = new Eval({});
+    await evaluate(createSuite(target, { PROMPTFOO_DELAY_MS: '7' }), record, {});
+    expect((await record.getResults())[0]).toMatchObject({ success: true });
+    expect(send).toHaveBeenCalledOnce();
+    if (delay === 0) {
+      expect(sleep).not.toHaveBeenCalled();
+    } else {
+      expect(sleep).toHaveBeenCalledExactlyOnceWith(delay ?? 7);
+    }
   });
 
   it('isolates delegated delays when overlapping evaluations share the target', async () => {
