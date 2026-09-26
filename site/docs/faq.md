@@ -82,7 +82,7 @@ export HTTPS_PROXY=http://username:password@proxy.company.com:8080
 export NO_PROXY=localhost,127.0.0.1,internal.domain.com
 ```
 
-For HTTP, Bedrock, and GPT-Live providers, you can also set these variables in `env:` or an invocation env file. Lowercase names are supported; `ALL_PROXY` supplies a fallback when no protocol-specific proxy is set.
+For HTTP, Bedrock, and GPT-Live providers, you can also set these variables in top-level `env:` or an invocation env file. Lowercase names are supported; `ALL_PROXY` supplies a fallback when no protocol-specific proxy is set.
 
 Note: Environment variables are specific to your terminal/shell instance. If you need them permanently, add them to your shell's startup file (e.g., `~/.bashrc`, `~/.zshrc`).
 
