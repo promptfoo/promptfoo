@@ -61,6 +61,28 @@ describe('Ruby assertions', () => {
     resetRubyMocks();
   });
 
+  it('omits rejected object payloads from validation errors', async () => {
+    vi.mocked(runRubyCode).mockResolvedValueOnce({
+      pass_: true,
+      score: 1,
+      reason: 'Custom grade',
+      named_scores: { quality: null },
+      metadata: { http: { requestHeaders: { authorization: 'diagnostic-placeholder' } } },
+    });
+
+    const result = await runAssertion({
+      assertion: { type: 'ruby', value: 'unused' },
+      test: {},
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({ pass: false, score: 0 });
+    expect(result.reason).toContain('finite scores and weights. Got type object.');
+    expect(result.reason).not.toContain('diagnostic-placeholder');
+    expect(result.reason).not.toContain('requestHeaders');
+    expect(result.metadata).toBeUndefined();
+  });
+
   it.each([
     ['namedScores', 'namedScores'],
     ['named_scores', 'namedScores'],

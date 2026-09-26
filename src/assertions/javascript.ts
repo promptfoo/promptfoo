@@ -112,9 +112,7 @@ const validateResult = async (result: unknown): Promise<boolean | number | Gradi
     return result;
   } else {
     throw new Error(
-      `Custom function must return a boolean, a finite number, or a GradingResult object with finite scores and weights. Got type ${typeof result}: ${JSON.stringify(
-        result,
-      )}`,
+      `Custom function must return a boolean, a finite number, or a GradingResult object with finite scores and weights. Got type ${typeof result}.`,
     );
   }
 };

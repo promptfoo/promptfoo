@@ -882,6 +882,28 @@ describe('JavaScript file references', () => {
     expect(result.reason).toContain('finite');
   });
 
+  it('omits rejected object payloads from validation errors', async () => {
+    const result = await runAssertion({
+      assertion: {
+        type: 'javascript',
+        value: () => ({
+          pass: true,
+          score: Number.NaN,
+          reason: 'Custom grade',
+          metadata: { http: { requestHeaders: { authorization: 'diagnostic-placeholder' } } },
+        }),
+      },
+      test: {},
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({ pass: false, score: 0 });
+    expect(result.reason).toContain('finite scores and weights. Got type object.');
+    expect(result.reason).not.toContain('diagnostic-placeholder');
+    expect(result.reason).not.toContain('requestHeaders');
+    expect(result.metadata).toBeUndefined();
+  });
+
   it.each([
     '({ pass: true, score: 1, reason: "Custom", namedScores: new Date(0) })',
     '({ pass: true, score: 1, reason: "Custom", namedScoreWeights: new Map([["quality", 1]]) })',

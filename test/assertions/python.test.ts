@@ -780,6 +780,28 @@ describe('Python file references', { timeout: 15000 }, () => {
     },
   );
 
+  it('omits rejected object payloads from validation errors', async () => {
+    vi.mocked(runPythonCode).mockResolvedValueOnce({
+      pass_: true,
+      score: 1,
+      reason: 'Custom grade',
+      named_scores: { quality: null },
+      metadata: { http: { requestHeaders: { authorization: 'diagnostic-placeholder' } } },
+    });
+
+    const result = await runAssertion({
+      assertion: { type: 'python', value: 'unused' },
+      test: {},
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({ pass: false, score: 0 });
+    expect(result.reason).toContain('finite scores and weights. Got type object.');
+    expect(result.reason).not.toContain('diagnostic-placeholder');
+    expect(result.reason).not.toContain('requestHeaders');
+    expect(result.metadata).toBeUndefined();
+  });
+
   describe('Python threshold edge cases', () => {
     const baseParams = {
       prompt: 'test',
