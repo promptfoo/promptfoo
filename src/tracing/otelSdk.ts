@@ -35,6 +35,8 @@ const OTEL_ROUTING_KEY = Symbol.for('promptfoo.otelRouting');
 interface OtelRoutingState {
   provider: TracerProvider;
   owners: Set<NodeTracerProvider>;
+  contextManager?: AsyncLocalStorageContextManager;
+  propagatorFields?: string[];
 }
 const globalScopes = globalThis as {
   [OTEL_SCOPE_KEY]?: AsyncLocalStorage<OtelScope>;
@@ -117,11 +119,13 @@ function ensureGlobalTracerRouting(): void {
   }
 }
 
-function releaseGlobalTracerRouting(provider: NodeTracerProvider): void {
+function releaseGlobalTracingRegistrations(provider: NodeTracerProvider): void {
   routingState.owners.delete(provider);
+  if (routingState.owners.size > 0) {
+    return;
+  }
   const globalProvider = trace.getTracerProvider();
   if (
-    routingState.owners.size === 0 &&
     isProxyTracerProvider(globalProvider) &&
     globalProvider.getDelegate() === routingState.provider
   ) {
@@ -129,15 +133,34 @@ function releaseGlobalTracerRouting(provider: NodeTracerProvider): void {
     // Cached tracers still route through the same shared state on later calls.
     trace.disable();
   }
+  const manager = routingState.contextManager;
+  if (manager) {
+    // Probe our manager directly: a replacement host manager cannot see its store.
+    const probe = context.active().setValue(contextProbeKey, manager);
+    if (manager.with(probe, () => context.active().getValue(contextProbeKey)) === manager) {
+      context.disable();
+    } else {
+      manager.disable();
+    }
+    routingState.contextManager = undefined;
+  }
+  if (routingState.propagatorFields) {
+    if (propagation.fields() === routingState.propagatorFields) {
+      propagation.disable();
+    }
+    routingState.propagatorFields = undefined;
+  }
 }
 
 function ensureContextManager(): void {
   // A host may already own the context manager. Probe through the public API instead
-  // of replacing it, and keep our fallback alive across sequential evaluations.
+  // of replacing it. Shared ownership keeps the fallback alive for overlapping evaluations.
   const probe = context.active().setValue(contextProbeKey, true);
   if (!context.with(probe, () => context.active().getValue(contextProbeKey))) {
     const manager = new AsyncLocalStorageContextManager().enable();
-    if (!context.setGlobalContextManager(manager)) {
+    if (context.setGlobalContextManager(manager)) {
+      routingState.contextManager = manager;
+    } else {
       manager.disable();
     }
   }
@@ -178,13 +201,6 @@ export function initializeOtel(config: OtelConfig): void {
     diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
   }
 
-  ensureContextManager();
-
-  // Registered host propagators can use other formats; never replace them.
-  if (propagation.fields().length === 0) {
-    propagation.setGlobalPropagator(new W3CTraceContextPropagator());
-  }
-
   // Create resource with service info
   const resource = resourceFromAttributes({
     [ATTR_SERVICE_NAME]: config.serviceName,
@@ -214,6 +230,22 @@ export function initializeOtel(config: OtelConfig): void {
   scope.provider = new NodeTracerProvider({ resource, spanProcessors });
   ownedProviders.add(scope.provider);
   routingState.owners.add(scope.provider);
+  ensureContextManager();
+  // Keep a stable fields array so cleanup can recognize our registration through
+  // the public API, even if a host later installs another W3C propagator.
+  if (propagation.fields().length === 0) {
+    const propagator = new W3CTraceContextPropagator();
+    const fields = propagator.fields();
+    if (
+      propagation.setGlobalPropagator({
+        fields: () => fields,
+        inject: propagator.inject.bind(propagator),
+        extract: propagator.extract.bind(propagator),
+      })
+    ) {
+      routingState.propagatorFields = fields;
+    }
+  }
   ensureGlobalTracerRouting();
   logger.info('[OtelSdk] OpenTelemetry SDK initialized successfully');
 
@@ -242,7 +274,7 @@ async function shutdownProvider(provider: NodeTracerProvider): Promise<void> {
     logger.error('[OtelSdk] Error shutting down OpenTelemetry SDK', { error });
   } finally {
     ownedProviders.delete(provider);
-    releaseGlobalTracerRouting(provider);
+    releaseGlobalTracingRegistrations(provider);
     if (ownedProviders.size === 0) {
       cleanupShutdownHandlers();
     }

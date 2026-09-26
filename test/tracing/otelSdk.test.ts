@@ -332,6 +332,65 @@ describe('evaluation-owned OpenTelemetry', () => {
     expect(localSpans.map((span) => span.name)).toEqual(['remaining eval']);
   });
 
+  it('releases fallback globals so a later host SDK can register', async () => {
+    await runScoped({}, async () => {
+      getGenAITracer().startSpan('owned').end();
+    });
+    const manager = new AsyncLocalStorageContextManager().enable();
+    const hostPropagator = {
+      fields: () => ['host-header'],
+      inject: vi.fn(),
+      extract: (ctx: typeof import('@opentelemetry/api').ROOT_CONTEXT) => ctx,
+    };
+    expect(context.setGlobalContextManager(manager)).toBe(true);
+    expect(propagation.setGlobalPropagator(hostPropagator)).toBe(true);
+    const key = createContextKey('late-host');
+    await context.with(context.active().setValue(key, 'value'), async () => {
+      await Promise.resolve();
+      expect(context.active().getValue(key)).toBe('value');
+    });
+    expect(propagation.fields()).toEqual(['host-header']);
+  });
+
+  it('keeps fallback globals until the last bundle releases its provider', async () => {
+    vi.resetModules();
+    const other = await import('../../src/tracing/otelSdk');
+    await runScoped({}, async () => {
+      await other.withOtelContext(async () => {
+        other.initializeOtel(config);
+        await other.shutdownOtel();
+      });
+      const key = createContextKey('remaining-evaluation');
+      await context.with(context.active().setValue(key, 'value'), async () => {
+        await Promise.resolve();
+        expect(context.active().getValue(key)).toBe('value');
+      });
+      expect(propagation.fields()).toEqual(['traceparent', 'tracestate']);
+    });
+    expect(propagation.fields()).toEqual([]);
+    const manager = new AsyncLocalStorageContextManager().enable();
+    expect(context.setGlobalContextManager(manager)).toBe(true);
+  });
+
+  it('preserves globals a host replaces during an evaluation', async () => {
+    const manager = new AsyncLocalStorageContextManager().enable();
+    const disable = vi.spyOn(manager, 'disable');
+    const hostPropagator = {
+      fields: () => ['traceparent', 'tracestate'],
+      inject: vi.fn(),
+      extract: (ctx: typeof import('@opentelemetry/api').ROOT_CONTEXT) => ctx,
+    };
+    await runScoped({}, async () => {
+      context.disable();
+      propagation.disable();
+      expect(context.setGlobalContextManager(manager)).toBe(true);
+      expect(propagation.setGlobalPropagator(hostPropagator)).toBe(true);
+    });
+    expect(disable).not.toHaveBeenCalled();
+    propagation.inject(context.active(), {});
+    expect(hostPropagator.inject).toHaveBeenCalledOnce();
+  });
+
   it('preserves a host tracer, context manager, and custom propagator', async () => {
     const hostExporter = new InMemorySpanExporter();
     const host = new NodeTracerProvider({
