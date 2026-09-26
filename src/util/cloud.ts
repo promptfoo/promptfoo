@@ -17,6 +17,28 @@ import type { ProviderOptions } from '../types/providers';
 const PERMISSION_CHECK_SERVER_FEATURE_NAME = 'config-permission-check-endpoint';
 const PERMISSION_CHECK_SERVER_FEATURE_DATE = '2025-09-03T14:49:11Z';
 
+export interface ResolvedCloudTeam {
+  id: string;
+  name?: string;
+  organizationId?: string;
+}
+
+/** Resolve an operation's destination without replacing an explicit Cloud-config team. */
+export async function resolveCloudTeam(
+  config?: Partial<UnifiedConfig>,
+): Promise<ResolvedCloudTeam | undefined> {
+  if (!cloudConfig.isEnabled()) {
+    return undefined;
+  }
+  const assignedTeamId = config?.metadata?.configId ? config.metadata.teamId : undefined;
+  if (typeof assignedTeamId === 'string' && assignedTeamId) {
+    // The server authorizes this destination. A display lookup must not change it or
+    // make a server-issued config depend on an additional teams request.
+    return { id: assignedTeamId };
+  }
+  return resolveTeamId();
+}
+
 /**
  * Makes an authenticated HTTP request to the PromptFoo Cloud API.
  * @param path - The API endpoint path (with or without leading slash)
@@ -26,13 +48,14 @@ const PERMISSION_CHECK_SERVER_FEATURE_DATE = '2025-09-03T14:49:11Z';
  * @throws Error if the request fails due to network or other issues
  */
 export function makeRequest(path: string, method: string, body?: any): Promise<Response> {
-  const apiHost = cloudConfig.getApiHost();
+  const { apiHost, headers } = cloudConfig.getRequestConfig();
   const url = `${apiHost}/api/v1/${path.startsWith('/') ? path.slice(1) : path}`;
   try {
     return fetchWithProxy(url, {
       method,
       body: JSON.stringify(body),
-      headers: { ...(cloudConfig.getAuthHeaders() ?? {}), 'Content-Type': 'application/json' },
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      skipCloudAuthInjection: true,
     });
   } catch (e) {
     logger.error(`[Cloud] Failed to make request to ${url}: ${e}`);
@@ -477,28 +500,6 @@ export function findTeam<
 }
 
 /**
- * Retrieves the default team for the current user from Promptfoo Cloud.
- * The default team is determined as the oldest team by creation date.
- * @returns Promise resolving to an object with team id, name, organizationId, and createdAt
- * @throws Error if the request fails or no teams are found
- */
-export async function getDefaultTeam(): Promise<{
-  id: string;
-  name: string;
-  organizationId: string;
-  createdAt: string;
-}> {
-  const teams = await getUserTeams();
-
-  if (teams.length === 0) {
-    throw new Error('No teams found for user');
-  }
-
-  const { id, name, organizationId, createdAt } = getOldestTeam(teams);
-  return { id, name, organizationId, createdAt };
-}
-
-/**
  * Retrieves a team by its ID.
  * @param teamId - The team ID to look up
  * @returns Promise resolving to an object with team id, name, organizationId, and createdAt
@@ -559,7 +560,7 @@ export async function resolveTeamFromIdentifier(
 export async function resolveTeamId(
   teamIdentifier?: string,
   fallbackToDefault = true,
-): Promise<{ id: string; name: string }> {
+): Promise<{ id: string; name: string; organizationId: string }> {
   // 1. Use explicit team identifier if provided
   if (teamIdentifier) {
     logger.debug(`[Team Resolution] Using explicit team identifier: ${teamIdentifier}`);
@@ -600,6 +601,9 @@ export async function resolveTeamId(
     logger.warn(
       `[Team Resolution] Stored team ${currentTeamId} no longer accessible, falling back`,
     );
+    if (teams.length === 0) {
+      cloudConfig.clearCurrentTeamId(configuredOrganizationId);
+    }
   }
 
   // 3. Fall back to server default (oldest team in the current organization)
@@ -651,7 +655,10 @@ function convertErrorsToReadableMessage(
  * @throws ConfigPermissionError if permissions are insufficient (403 responses)
  * @throws Error for other critical permission check failures
  */
-export async function checkCloudPermissions(config: Partial<UnifiedConfig>): Promise<void> {
+export async function checkCloudPermissions(
+  config: Partial<UnifiedConfig>,
+  team?: ResolvedCloudTeam,
+): Promise<ResolvedCloudTeam | undefined> {
   if (!cloudConfig.isEnabled()) {
     return;
   }
@@ -672,6 +679,7 @@ export async function checkCloudPermissions(config: Partial<UnifiedConfig>): Pro
       );
       return;
     }
+    const resolvedTeam = team ?? (await resolveCloudTeam(config));
     // Strip large fields not needed for permission validation.
     // The server only needs providers, metadata, and whether redteam exists.
     const { tests, scenarios, defaultTest, evaluateOptions, ...minimalConfig } = config;
@@ -681,6 +689,7 @@ export async function checkCloudPermissions(config: Partial<UnifiedConfig>): Pro
 
     const response = await makeRequest('permissions/check', 'POST', {
       config: minimalConfig,
+      ...(resolvedTeam && { teamId: resolvedTeam.id }),
     });
 
     if (!response.ok) {
@@ -724,6 +733,7 @@ export async function checkCloudPermissions(config: Partial<UnifiedConfig>): Pro
     }
 
     logger.debug('Permission check passed');
+    return resolvedTeam;
   } catch (error) {
     if (error instanceof ConfigPermissionError) {
       throw error;
@@ -751,7 +761,7 @@ export async function canCreateTargets(teamId: string | undefined): Promise<bool
     return true;
   }
   if (!teamId) {
-    const team = await getDefaultTeam();
+    const team = await resolveTeamId();
     teamId = team.id;
     logger.debug(
       `[canCreateTargets] No team id provided, using default team ${team.name} (${teamId})`,
@@ -892,7 +902,7 @@ export async function validateLinkedTargetId(linkedTargetId: string): Promise<vo
 
         Troubleshooting steps:
         1. Verify you're logged in to the correct organization
-           Run: promptfoo auth status
+           Run: promptfoo auth whoami
 
         2. Check that the target exists in your cloud dashboard:
            ${appHost}/redteam/targets
@@ -911,7 +921,7 @@ export async function validateLinkedTargetId(linkedTargetId: string): Promise<vo
  * Returns null if cloud is not enabled or if fetching fails.
  * @returns Promise resolving to organization name and optional team name, or null
  */
-export async function getOrgContext(): Promise<{
+export async function getOrgContext(team?: ResolvedCloudTeam): Promise<{
   organizationName: string;
   teamName?: string;
 } | null> {
@@ -919,10 +929,20 @@ export async function getOrgContext(): Promise<{
     return null;
   }
 
+  if (team && (!team.name || !team.organizationId)) {
+    try {
+      team = await getTeamById(team.id);
+    } catch {
+      // Preserve the actual destination label when optional name lookup fails.
+      return { organizationName: team.id };
+    }
+  }
+
   try {
-    const apiHost = cloudConfig.getApiHost();
+    const { apiHost, headers } = cloudConfig.getRequestConfig();
     const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
-      headers: { ...(cloudConfig.getAuthHeaders() ?? {}) },
+      headers,
+      skipCloudAuthInjection: true,
     });
 
     if (!response.ok) {
@@ -930,17 +950,21 @@ export async function getOrgContext(): Promise<{
     }
 
     const { organization } = await response.json();
-    const organizationId = cloudConfig.getCurrentOrganizationId() ?? organization.id;
+    const organizationId =
+      team?.organizationId ?? cloudConfig.getCurrentOrganizationId() ?? organization.id;
     const organizationName = getCloudOrganizationLabel(organization, organizationId);
-    const currentTeamId = cloudConfig.getCurrentTeamId(organizationId);
+    const currentTeamId = team?.id ?? cloudConfig.getCurrentTeamId(organizationId);
 
     // Only include team name if it differs from organization name
     let teamName: string | undefined;
     if (currentTeamId) {
       try {
-        const team = await getTeamById(currentTeamId);
-        if (team.organizationId === organizationId && team.name !== organizationName) {
-          teamName = team.name;
+        const selectedTeam = team ?? (await getTeamById(currentTeamId));
+        if (
+          selectedTeam.organizationId === organizationId &&
+          selectedTeam.name !== organizationName
+        ) {
+          teamName = selectedTeam.name;
         }
       } catch {
         // Team lookup failed, continue without team name

@@ -5,7 +5,6 @@ import {
   ConfigPermissionError,
   checkCloudPermissions,
   getConfigFromCloud,
-  getDefaultTeam,
   getEvalConfigFromCloud,
   getPluginSeverityOverridesFromCloud,
   getPoliciesFromCloud,
@@ -43,6 +42,12 @@ describe('cloud utils', () => {
     mockCloudConfig.getApiKey.mockReturnValue('test-api-key');
     mockCloudConfig.getAuthHeaderName.mockReturnValue('Authorization');
     mockCloudConfig.getAuthHeaders.mockReturnValue({ Authorization: 'Bearer test-api-key' });
+    mockCloudConfig.getRequestConfig.mockImplementation(() => ({
+      apiHost: mockCloudConfig.getApiHost(),
+      headers: mockCloudConfig.getAuthHeaders(),
+      authHeaderName: mockCloudConfig.getAuthHeaderName(),
+      teamId: mockCloudConfig.getCurrentTeamId(),
+    }));
 
     mockMakeRequest = vi.spyOn(cloudModule, 'makeRequest');
   });
@@ -61,8 +66,29 @@ describe('cloud utils', () => {
 
       expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
         method: 'POST',
+        skipCloudAuthInjection: true,
         body: JSON.stringify(body),
         headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
+      });
+    });
+
+    it('keeps the request host and credentials from the same saved-session snapshot', async () => {
+      mockCloudConfig.getRequestConfig.mockReturnValue({
+        apiHost: 'https://first.example.com',
+        headers: { 'X-First-Auth': 'Bearer first-key' },
+        authHeaderName: 'X-First-Auth',
+        teamId: 'first-team',
+      });
+      mockCloudConfig.getApiHost.mockReturnValue('https://second.example.com');
+      mockCloudConfig.getAuthHeaders.mockReturnValue({ Authorization: 'Bearer second-key' });
+
+      await makeRequest('users/me', 'GET');
+
+      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://first.example.com/api/v1/users/me', {
+        method: 'GET',
+        skipCloudAuthInjection: true,
+        body: undefined,
+        headers: { 'X-First-Auth': 'Bearer first-key', 'Content-Type': 'application/json' },
       });
     });
 
@@ -74,6 +100,7 @@ describe('cloud utils', () => {
 
       expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
         method: 'GET',
+        skipCloudAuthInjection: true,
         body: undefined,
         headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
       });
@@ -90,6 +117,7 @@ describe('cloud utils', () => {
 
       expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
         method: 'GET',
+        skipCloudAuthInjection: true,
         body: undefined,
         headers: { 'Content-Type': 'application/json' },
       });
@@ -107,6 +135,7 @@ describe('cloud utils', () => {
 
       expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
         method: 'GET',
+        skipCloudAuthInjection: true,
         body: undefined,
         headers: {
           'X-Promptfoo-Api-Key': 'Bearer test-api-key',
@@ -123,6 +152,7 @@ describe('cloud utils', () => {
 
       expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/', {
         method: 'GET',
+        skipCloudAuthInjection: true,
         body: undefined,
         headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
       });
@@ -164,6 +194,7 @@ describe('cloud utils', () => {
 
       expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
         method: 'GET',
+        skipCloudAuthInjection: true,
         body: undefined,
         headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
       });
@@ -186,6 +217,7 @@ describe('cloud utils', () => {
 
       expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
         method: 'POST',
+        skipCloudAuthInjection: true,
         body: JSON.stringify(body),
         headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
       });
@@ -200,6 +232,7 @@ describe('cloud utils', () => {
 
       expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
         method: 'POST',
+        skipCloudAuthInjection: true,
         body: JSON.stringify(body),
         headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
       });
@@ -212,6 +245,7 @@ describe('cloud utils', () => {
       await makeRequest(path, method, null);
       expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
         method: 'POST',
+        skipCloudAuthInjection: true,
         body: 'null',
         headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
       });
@@ -219,6 +253,7 @@ describe('cloud utils', () => {
       await makeRequest(path, method, undefined);
       expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
         method: 'POST',
+        skipCloudAuthInjection: true,
         body: undefined,
         headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
       });
@@ -250,6 +285,7 @@ describe('cloud utils', () => {
         'https://api.example.com/api/v1/providers/test-provider',
         {
           method: 'GET',
+          skipCloudAuthInjection: true,
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
@@ -319,6 +355,7 @@ describe('cloud utils', () => {
         'https://api.example.com/api/v1/redteam/configs/test-config/unified',
         {
           method: 'GET',
+          skipCloudAuthInjection: true,
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
@@ -345,6 +382,7 @@ describe('cloud utils', () => {
         'https://api.example.com/api/v1/redteam/configs/test-config/unified?providerId=test-provider',
         {
           method: 'GET',
+          skipCloudAuthInjection: true,
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
@@ -431,6 +469,7 @@ describe('cloud utils', () => {
         'https://api.example.com/api/v1/eval/configs/eval-config-id',
         {
           method: 'GET',
+          skipCloudAuthInjection: true,
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
@@ -953,6 +992,7 @@ describe('cloud utils', () => {
         'https://api.example.com/api/v1/custom-policies/?id=policy-1&id=policy-2&id=policy-3&teamId=team-123',
         {
           method: 'GET',
+          skipCloudAuthInjection: true,
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
@@ -1050,6 +1090,7 @@ describe('cloud utils', () => {
         'https://api.example.com/api/v1/custom-policies/?&teamId=team-empty',
         {
           method: 'GET',
+          skipCloudAuthInjection: true,
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
@@ -1177,6 +1218,7 @@ describe('cloud utils', () => {
         'https://api.example.com/api/v1/custom-policies/?id=policy-1&id=policy-2&id=policy-3&id=policy-4&id=policy-5&teamId=team-multi',
         {
           method: 'GET',
+          skipCloudAuthInjection: true,
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
@@ -1270,6 +1312,7 @@ describe('cloud utils', () => {
         `https://api.example.com/api/v1/custom-policies/?id=policy-1&teamId=${specialTeamId}`,
         {
           method: 'GET',
+          skipCloudAuthInjection: true,
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
@@ -1320,94 +1363,7 @@ describe('cloud utils', () => {
         }),
       );
       const [, calledOpts] = mockFetchWithProxy.mock.calls.at(-1)!;
-      expect(calledOpts).not.toHaveProperty('skipCloudAuthInjection');
-    });
-  });
-
-  describe('getDefaultTeam', () => {
-    it('should return the oldest team', async () => {
-      const mockTeams = [
-        { id: 'team-3', name: 'Team 3', createdAt: '2023-01-03T00:00:00Z' },
-        { id: 'team-1', name: 'Team 1', createdAt: '2023-01-01T00:00:00Z' },
-        { id: 'team-2', name: 'Team 2', createdAt: '2023-01-02T00:00:00Z' },
-      ];
-
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockTeams),
-      } as Response);
-
-      const result = await getDefaultTeam();
-
-      expect(result).toEqual({ id: 'team-1', name: 'Team 1', createdAt: '2023-01-01T00:00:00Z' });
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        'https://api.example.com/api/v1/users/me/teams',
-        {
-          method: 'GET',
-          body: undefined,
-          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
-        },
-      );
-    });
-
-    it('should handle single team', async () => {
-      const mockTeams = [
-        { id: 'team-single', name: 'Single Team', createdAt: '2023-01-01T00:00:00Z' },
-      ];
-
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockTeams),
-      } as Response);
-
-      const result = await getDefaultTeam();
-
-      expect(result).toEqual({
-        id: 'team-single',
-        name: 'Single Team',
-        createdAt: '2023-01-01T00:00:00Z',
-      });
-    });
-
-    it('should handle teams with same creation date', async () => {
-      const mockTeams = [
-        { id: 'team-a', name: 'Team A', createdAt: '2023-01-01T00:00:00Z' },
-        { id: 'team-b', name: 'Team B', createdAt: '2023-01-01T00:00:00Z' },
-      ];
-
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockTeams),
-      } as Response);
-
-      const result = await getDefaultTeam();
-
-      // Should return the first one when dates are the same
-      expect(result).toEqual({ id: 'team-a', name: 'Team A', createdAt: '2023-01-01T00:00:00Z' });
-    });
-
-    it('should throw error when request fails', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: false,
-        statusText: 'Unauthorized',
-      } as Response);
-
-      await expect(getDefaultTeam()).rejects.toThrow('Failed to get user teams: Unauthorized');
-    });
-
-    it('should throw error when fetch throws', async () => {
-      mockFetchWithProxy.mockRejectedValueOnce(new Error('Network error'));
-
-      await expect(getDefaultTeam()).rejects.toThrow('Network error');
-    });
-
-    it('should handle empty teams array', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve([]),
-      } as Response);
-
-      await expect(getDefaultTeam()).rejects.toThrow('No teams found for user');
+      expect(calledOpts).toHaveProperty('skipCloudAuthInjection', true);
     });
   });
 
@@ -1439,6 +1395,9 @@ describe('cloud utils', () => {
       mockCloudConfig.setCurrentTeamId.mockImplementation((teamId, id) => {
         state.saved[slot(id)] = teamId;
       });
+      mockCloudConfig.clearCurrentTeamId.mockImplementation((id) => {
+        delete state.saved[slot(id)];
+      });
       mockFetchWithProxy.mockImplementation(async (url) => {
         if (String(url).endsWith('/users/me')) {
           return tokenOrganization instanceof Error
@@ -1451,6 +1410,104 @@ describe('cloud utils', () => {
       });
       return state;
     };
+
+    describe('operation destinations', () => {
+      beforeEach(() => {
+        mockCloudConfig.isEnabled.mockReturnValue(true);
+      });
+
+      it('preserves a Cloud-config team without changing the active selection or requiring a lookup', async () => {
+        const state = mockTeamState('org-1', { 'org-1': 'active-a' }, new Error('Offline'));
+        const config = { metadata: { configId: 'config-1', teamId: 'runtime-b' } };
+
+        await expect(cloudModule.resolveCloudTeam(config)).resolves.toEqual({ id: 'runtime-b' });
+
+        expect(mockFetchWithProxy).not.toHaveBeenCalled();
+        expect(state.saved).toEqual({ 'org-1': 'active-a' });
+      });
+
+      it('ignores standalone team metadata and selects an accessible team in the current organization', async () => {
+        const ownTeam = team('own', 'org-1', '2024');
+        const state = mockTeamState('org-1', {}, [team('foreign', 'org-2', '2020'), ownTeam]);
+
+        await expect(
+          cloudModule.resolveCloudTeam({ metadata: { teamId: 'foreign' } }),
+        ).resolves.toEqual(ownTeam);
+
+        expect(state.saved).toEqual({ 'org-1': 'own' });
+      });
+
+      it('clears a revoked selection after a successful empty lookup', async () => {
+        const state = mockTeamState('org-1', { 'org-1': 'revoked', 'org-2': 'kept' }, []);
+
+        await expect(cloudModule.resolveCloudTeam()).rejects.toThrow('No accessible teams');
+
+        expect(state.saved).toEqual({ 'org-2': 'kept' });
+      });
+
+      it('does not resolve teams when Cloud is disabled', async () => {
+        mockCloudConfig.isEnabled.mockReturnValue(false);
+
+        await expect(cloudModule.resolveCloudTeam()).resolves.toBeUndefined();
+
+        expect(mockFetchWithProxy).not.toHaveBeenCalled();
+      });
+
+      it('uses the selected organization when checking target creation without an explicit team', async () => {
+        const state = mockTeamState('org-1', {}, []);
+        mockFetchWithProxy
+          .mockResolvedValueOnce(
+            Response.json([team('foreign', 'org-2', '2020'), team('own', 'org-1', '2024')]),
+          )
+          .mockResolvedValueOnce(Response.json([{ action: 'create', subject: 'Provider' }]));
+
+        await expect(cloudModule.canCreateTargets(undefined)).resolves.toBe(true);
+
+        expect(mockFetchWithProxy).toHaveBeenLastCalledWith(
+          'https://api.example.com/api/v1/users/me/abilities?teamId=own',
+          expect.objectContaining({ method: 'GET' }),
+        );
+        expect(state.saved).toEqual({ 'org-1': 'own' });
+      });
+
+      it.each([
+        { name: 'active team', metadata: undefined, saved: 'team-b' },
+        { name: 'standalone metadata', metadata: { teamId: 'team-a' }, saved: 'team-b' },
+        {
+          name: 'Cloud-config assignment',
+          metadata: { configId: 'config-1', teamId: 'team-b' },
+          saved: 'team-a',
+        },
+      ])('scopes provider preflight to the $name', async ({ metadata, saved }) => {
+        mockCheckServerFeatureSupport.mockResolvedValue(true);
+        const state = mockTeamState('org-1', { 'org-1': saved }, []);
+        mockFetchWithProxy.mockImplementation(async (url, options) => {
+          if (String(url).endsWith('/permissions/check')) {
+            const { teamId } = JSON.parse(options?.body as string);
+            return teamId === 'team-b'
+              ? Response.json({ success: true })
+              : Response.json({ error: 'Provider not available in this team' }, { status: 403 });
+          }
+          return Response.json([team('team-a', 'org-1', '2020'), team('team-b', 'org-1', '2024')]);
+        });
+
+        await expect(
+          checkCloudPermissions({ providers: ['promptfoo://provider/provider-b'], metadata }),
+        ).resolves.toMatchObject({ id: 'team-b' });
+
+        expect(state.saved).toEqual({ 'org-1': saved });
+      });
+
+      it('lets local evaluation continue when team lookup is unavailable and preserves its selection', async () => {
+        mockCheckServerFeatureSupport.mockResolvedValue(true);
+        const state = mockTeamState('org-1', { 'org-1': 'active-a' }, new Error('Offline'));
+
+        await expect(checkCloudPermissions({ providers: ['echo'] })).resolves.toBeUndefined();
+
+        expect(state.saved).toEqual({ 'org-1': 'active-a' });
+        expect(mockCloudConfig.clearCurrentTeamId).not.toHaveBeenCalled();
+      });
+    });
 
     describe('resolveTeamId', () => {
       it.each<{
@@ -1512,7 +1569,7 @@ describe('cloud utils', () => {
           expected: {
             error:
               "No accessible teams in organization 'org-1'. Log in with an API key for the organization you want to use:",
-            saved: { 'org-1': 'removed', 'org-2': 'kept' },
+            saved: { 'org-2': 'kept' },
           },
         },
         {
@@ -1552,7 +1609,7 @@ describe('cloud utils', () => {
           teams: [team('other', 'org-2', '2022')],
           expected: {
             error: "No accessible teams in organization 'org-1'",
-            saved: { legacy: 'removed' },
+            saved: {},
           },
         },
         {
@@ -1670,7 +1727,40 @@ describe('cloud utils', () => {
     });
   });
 
+  describe('getOrgContext for an operation destination', () => {
+    it('displays the runtime team instead of the active team', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+      mockCloudConfig.getCurrentOrganizationId.mockReturnValue('org-1');
+      mockCloudConfig.getCurrentTeamId.mockReturnValue('active-a');
+      mockFetchWithProxy
+        .mockResolvedValueOnce(
+          Response.json([{ id: 'runtime-b', name: 'Runtime B', organizationId: 'org-1' }]),
+        )
+        .mockResolvedValueOnce(
+          Response.json({ organization: { id: 'org-1', name: 'Organization' } }),
+        );
+
+      await expect(cloudModule.getOrgContext({ id: 'runtime-b' })).resolves.toEqual({
+        organizationName: 'Organization',
+        teamName: 'Runtime B',
+      });
+      expect(mockCloudConfig.setCurrentTeamId).not.toHaveBeenCalled();
+    });
+
+    it('uses the runtime team ID when its display lookup fails', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+      mockCloudConfig.getCurrentTeamId.mockReturnValue('active-a');
+      mockFetchWithProxy.mockRejectedValue(new Error('Offline'));
+
+      await expect(cloudModule.getOrgContext({ id: 'runtime-b' })).resolves.toEqual({
+        organizationName: 'runtime-b',
+      });
+      expect(mockCloudConfig.setCurrentTeamId).not.toHaveBeenCalled();
+    });
+  });
+
   describe('checkCloudPermissions', () => {
+    const resolvedTeam = { id: 'team-1' };
     beforeEach(() => {
       mockCloudConfig.isEnabled.mockReturnValue(true);
       mockCheckServerFeatureSupport.mockResolvedValue(true);
@@ -1680,7 +1770,7 @@ describe('cloud utils', () => {
       mockCloudConfig.isEnabled.mockReturnValue(false);
 
       await expect(
-        checkCloudPermissions({ providers: ['test-provider'] }),
+        checkCloudPermissions({ providers: ['test-provider'] }, resolvedTeam),
       ).resolves.toBeUndefined();
 
       expect(mockCheckServerFeatureSupport).not.toHaveBeenCalled();
@@ -1688,7 +1778,7 @@ describe('cloud utils', () => {
     });
 
     it('should return early with warning when no providers specified', async () => {
-      await expect(checkCloudPermissions({})).resolves.toBeUndefined();
+      await expect(checkCloudPermissions({}, resolvedTeam)).resolves.toBeUndefined();
 
       expect(mockCheckServerFeatureSupport).not.toHaveBeenCalled();
       expect(mockFetchWithProxy).not.toHaveBeenCalled();
@@ -1698,7 +1788,7 @@ describe('cloud utils', () => {
       mockCheckServerFeatureSupport.mockResolvedValue(false);
 
       await expect(
-        checkCloudPermissions({ providers: ['test-provider'] }),
+        checkCloudPermissions({ providers: ['test-provider'] }, resolvedTeam),
       ).resolves.toBeUndefined();
 
       expect(mockCheckServerFeatureSupport).toHaveBeenCalledWith(
@@ -1715,14 +1805,18 @@ describe('cloud utils', () => {
       } as Response);
 
       await expect(
-        checkCloudPermissions({ providers: ['test-provider'] }),
-      ).resolves.toBeUndefined();
+        checkCloudPermissions({ providers: ['test-provider'] }, resolvedTeam),
+      ).resolves.toEqual(resolvedTeam);
 
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/permissions/check',
         {
           method: 'POST',
-          body: JSON.stringify({ config: { providers: ['test-provider'] } }),
+          skipCloudAuthInjection: true,
+          body: JSON.stringify({
+            config: { providers: ['test-provider'] },
+            teamId: resolvedTeam.id,
+          }),
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
       );
@@ -1745,11 +1839,13 @@ describe('cloud utils', () => {
         json: () => Promise.resolve(errorData),
       } as Response);
 
-      await expect(checkCloudPermissions({ providers: ['test-provider'] })).rejects.toThrow(
-        ConfigPermissionError,
-      );
+      await expect(
+        checkCloudPermissions({ providers: ['test-provider'] }, resolvedTeam),
+      ).rejects.toThrow(ConfigPermissionError);
 
-      await expect(checkCloudPermissions({ providers: ['test-provider'] })).rejects.toThrow(
+      await expect(
+        checkCloudPermissions({ providers: ['test-provider'] }, resolvedTeam),
+      ).rejects.toThrow(
         'Permission denied: permission access_denied: Access denied, permission insufficient_permissions: Insufficient permissions',
       );
     });
@@ -1762,13 +1858,13 @@ describe('cloud utils', () => {
         json: () => Promise.resolve(errorData),
       } as Response);
 
-      await expect(checkCloudPermissions({ providers: ['test-provider'] })).rejects.toThrow(
-        ConfigPermissionError,
-      );
+      await expect(
+        checkCloudPermissions({ providers: ['test-provider'] }, resolvedTeam),
+      ).rejects.toThrow(ConfigPermissionError);
 
-      await expect(checkCloudPermissions({ providers: ['test-provider'] })).rejects.toThrow(
-        'Permission denied: config unknown: Single error message',
-      );
+      await expect(
+        checkCloudPermissions({ providers: ['test-provider'] }, resolvedTeam),
+      ).rejects.toThrow('Permission denied: config unknown: Single error message');
     });
 
     it('should throw ConfigPermissionError when response is 403 with malformed JSON', async () => {
@@ -1778,13 +1874,13 @@ describe('cloud utils', () => {
         json: () => Promise.reject(new Error('Invalid JSON')),
       } as Response);
 
-      await expect(checkCloudPermissions({ providers: ['test-provider'] })).rejects.toThrow(
-        ConfigPermissionError,
-      );
+      await expect(
+        checkCloudPermissions({ providers: ['test-provider'] }, resolvedTeam),
+      ).rejects.toThrow(ConfigPermissionError);
 
-      await expect(checkCloudPermissions({ providers: ['test-provider'] })).rejects.toThrow(
-        'Permission denied: config unknown: Unknown error',
-      );
+      await expect(
+        checkCloudPermissions({ providers: ['test-provider'] }, resolvedTeam),
+      ).rejects.toThrow('Permission denied: config unknown: Unknown error');
     });
 
     it('should log warning and continue for non-403 errors', async () => {
@@ -1798,7 +1894,7 @@ describe('cloud utils', () => {
       } as Response);
 
       await expect(
-        checkCloudPermissions({ providers: ['test-provider'] }),
+        checkCloudPermissions({ providers: ['test-provider'] }, resolvedTeam),
       ).resolves.toBeUndefined();
     });
 
@@ -1814,11 +1910,13 @@ describe('cloud utils', () => {
         json: () => Promise.resolve(resultWithErrors),
       } as Response);
 
-      await expect(checkCloudPermissions({ providers: ['test-provider'] })).rejects.toThrow(
-        ConfigPermissionError,
-      );
+      await expect(
+        checkCloudPermissions({ providers: ['test-provider'] }, resolvedTeam),
+      ).rejects.toThrow(ConfigPermissionError);
 
-      await expect(checkCloudPermissions({ providers: ['test-provider'] })).rejects.toThrow(
+      await expect(
+        checkCloudPermissions({ providers: ['test-provider'] }, resolvedTeam),
+      ).rejects.toThrow(
         'Not able to continue with config: config validation_failed: Config validation failed, config invalid_provider: Invalid provider',
       );
     });
@@ -1831,15 +1929,15 @@ describe('cloud utils', () => {
       } as Response);
 
       await expect(
-        checkCloudPermissions({ providers: ['test-provider'] }),
-      ).resolves.toBeUndefined();
+        checkCloudPermissions({ providers: ['test-provider'] }, resolvedTeam),
+      ).resolves.toEqual(resolvedTeam);
     });
 
     it('should log warning and continue when server feature check throws', async () => {
       mockCheckServerFeatureSupport.mockRejectedValue(new Error('Server check failed'));
 
       await expect(
-        checkCloudPermissions({ providers: ['test-provider'] }),
+        checkCloudPermissions({ providers: ['test-provider'] }, resolvedTeam),
       ).resolves.toBeUndefined();
 
       expect(mockFetchWithProxy).not.toHaveBeenCalled();
@@ -1849,7 +1947,7 @@ describe('cloud utils', () => {
       mockFetchWithProxy.mockRejectedValue(new Error('Network error'));
 
       await expect(
-        checkCloudPermissions({ providers: ['test-provider'] }),
+        checkCloudPermissions({ providers: ['test-provider'] }, resolvedTeam),
       ).resolves.toBeUndefined();
     });
 
@@ -1857,13 +1955,13 @@ describe('cloud utils', () => {
       const configError = new ConfigPermissionError('Permission denied');
       mockFetchWithProxy.mockRejectedValue(configError);
 
-      await expect(checkCloudPermissions({ providers: ['test-provider'] })).rejects.toThrow(
-        ConfigPermissionError,
-      );
+      await expect(
+        checkCloudPermissions({ providers: ['test-provider'] }, resolvedTeam),
+      ).rejects.toThrow(ConfigPermissionError);
 
-      await expect(checkCloudPermissions({ providers: ['test-provider'] })).rejects.toThrow(
-        'Permission denied',
-      );
+      await expect(
+        checkCloudPermissions({ providers: ['test-provider'] }, resolvedTeam),
+      ).rejects.toThrow('Permission denied');
     });
 
     it('should handle complex config object', async () => {
@@ -1879,7 +1977,9 @@ describe('cloud utils', () => {
         json: () => Promise.resolve({ success: true }),
       } as Response);
 
-      await expect(checkCloudPermissions(complexConfig)).resolves.toBeUndefined();
+      await expect(checkCloudPermissions(complexConfig, resolvedTeam)).resolves.toEqual(
+        resolvedTeam,
+      );
 
       // Should strip tests and replace redteam with empty object
       const expectedConfig = {
@@ -1891,7 +1991,8 @@ describe('cloud utils', () => {
         'https://api.example.com/api/v1/permissions/check',
         {
           method: 'POST',
-          body: JSON.stringify({ config: expectedConfig }),
+          skipCloudAuthInjection: true,
+          body: JSON.stringify({ config: expectedConfig, teamId: resolvedTeam.id }),
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
       );
@@ -1926,7 +2027,7 @@ describe('cloud utils', () => {
         json: () => Promise.resolve({ success: true }),
       } as Response);
 
-      await expect(checkCloudPermissions(largeConfig)).resolves.toBeUndefined();
+      await expect(checkCloudPermissions(largeConfig, resolvedTeam)).resolves.toEqual(resolvedTeam);
 
       const sentBody = JSON.parse((mockFetchWithProxy.mock.calls[0] as any[])[1].body as string);
       const sentConfig = sentBody.config;
@@ -1947,7 +2048,9 @@ describe('cloud utils', () => {
     });
 
     it('should handle config with undefined providers', async () => {
-      await expect(checkCloudPermissions({ providers: undefined })).resolves.toBeUndefined();
+      await expect(
+        checkCloudPermissions({ providers: undefined }, resolvedTeam),
+      ).resolves.toBeUndefined();
 
       expect(mockCheckServerFeatureSupport).not.toHaveBeenCalled();
       expect(mockFetchWithProxy).not.toHaveBeenCalled();
@@ -1959,13 +2062,16 @@ describe('cloud utils', () => {
         json: () => Promise.resolve({ success: true }),
       } as Response);
 
-      await expect(checkCloudPermissions({ providers: [] })).resolves.toBeUndefined();
+      await expect(checkCloudPermissions({ providers: [] }, resolvedTeam)).resolves.toEqual(
+        resolvedTeam,
+      );
 
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/permissions/check',
         {
           method: 'POST',
-          body: JSON.stringify({ config: { providers: [] } }),
+          skipCloudAuthInjection: true,
+          body: JSON.stringify({ config: { providers: [] }, teamId: resolvedTeam.id }),
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
       );
@@ -1997,6 +2103,7 @@ describe('cloud utils', () => {
         'https://api.example.com/api/v1/providers/12345678-1234-1234-1234-123456789abc',
         {
           method: 'GET',
+          skipCloudAuthInjection: true,
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
@@ -2034,7 +2141,7 @@ describe('cloud utils', () => {
       await expect(promise).rejects.toThrow('linkedTargetId not found');
       await expect(promise).rejects.toThrow(validLinkedTargetId);
       await expect(promise).rejects.toThrow('Troubleshooting steps');
-      await expect(promise).rejects.toThrow('promptfoo auth status');
+      await expect(promise).rejects.toThrow('promptfoo auth whoami');
     });
 
     it('should throw error when API returns non-ok response', async () => {
@@ -2073,6 +2180,7 @@ describe('cloud utils', () => {
         'https://api.example.com/api/v1/providers/any-id-format-here',
         {
           method: 'GET',
+          skipCloudAuthInjection: true,
           body: undefined,
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },

@@ -2,6 +2,7 @@ import * as fs from 'fs';
 
 import cliProgress from 'cli-progress';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers/index';
 import {
@@ -20,9 +21,15 @@ import {
 } from '../../src/redteam/index';
 import { Plugins } from '../../src/redteam/plugins/index';
 import { redteamProviderManager } from '../../src/redteam/providers/shared';
-import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
+import {
+  getRemoteGenerationUrl,
+  getRemoteHealthUrl,
+  shouldGenerateRemote,
+} from '../../src/redteam/remoteGeneration';
 import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
+import { resolveCloudTeam } from '../../src/util/cloud';
+import { isPromptfooCloudApiHost } from '../../src/util/fetch/monkeyPatchFetch';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
 import { loadYaml } from '../../src/util/yamlLoad';
 import { mockProcessEnv, stripAnsi } from '../util/utils';
@@ -31,6 +38,7 @@ import type { ApiProvider } from '../../src/types/index';
 import type { Inputs } from '../../src/types/shared';
 
 vi.mock('cli-progress');
+vi.mock('../../src/globalConfig/cloud');
 vi.mock('../../src/logger');
 vi.mock('../../src/providers');
 vi.mock('../../src/redteam/extraction/entities');
@@ -54,6 +62,8 @@ vi.mock('../../src/redteam/strategies', async () => ({
 }));
 
 vi.mock('../../src/util/apiHealth');
+vi.mock('../../src/util/cloud');
+vi.mock('../../src/util/fetch/monkeyPatchFetch');
 vi.mock('../../src/redteam/remoteGeneration');
 vi.mock('../../src/redteam/sharpAvailability', async () => ({
   ...(await vi.importActual('../../src/redteam/sharpAvailability')),
@@ -63,6 +73,13 @@ vi.mock('../../src/redteam/util', async () => ({
   ...(await vi.importActual('../../src/redteam/util')),
   extractGoalFromPrompt: vi.fn().mockResolvedValue('mocked goal'),
 }));
+
+const cloudRequestConfig = {
+  apiHost: 'https://cloud.example',
+  authHeaderName: 'Authorization',
+  headers: { Authorization: 'Bearer test-key' },
+  teamId: undefined,
+};
 
 describe('synthesize', () => {
   const mockProvider = {
@@ -77,6 +94,7 @@ describe('synthesize', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(cloudConfig.getRequestConfig).mockReturnValue(cloudRequestConfig);
 
     // Set up logger mocks
     vi.mocked(logger.info).mockImplementation(function () {
@@ -1841,6 +1859,7 @@ describe('synthesize', () => {
     beforeEach(() => {
       vi.clearAllMocks();
       vi.resetAllMocks();
+      vi.mocked(cloudConfig.getRequestConfig).mockReturnValue(cloudRequestConfig);
 
       // Reset logger mocks
       vi.mocked(logger.info).mockImplementation(function () {
@@ -1942,6 +1961,68 @@ describe('synthesize', () => {
       expect(shouldGenerateRemote).toHaveBeenCalledWith();
       expect(getRemoteHealthUrl).toHaveBeenCalledWith();
       expect(checkRemoteHealth).not.toHaveBeenCalled();
+    });
+
+    it('validates the saved team once before using Cloud generation', async () => {
+      vi.mocked(cloudConfig.getRequestConfig).mockReturnValue({
+        ...cloudRequestConfig,
+        teamId: 'saved-team',
+      });
+      vi.mocked(getRemoteGenerationUrl).mockReturnValue('https://cloud.example/api/v1/task');
+      vi.mocked(isPromptfooCloudApiHost).mockReturnValue(true);
+      await synthesize({
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      expect(isPromptfooCloudApiHost).toHaveBeenCalledWith('https://cloud.example/api/v1/task');
+      expect(resolveCloudTeam).toHaveBeenCalledExactlyOnceWith();
+    });
+
+    it.each(['local', 'custom endpoint', 'Cloud target', 'no saved team'])(
+      'does not resolve a default team for %s generation',
+      async (mode) => {
+        vi.mocked(cloudConfig.getRequestConfig).mockReturnValue({
+          ...cloudRequestConfig,
+          teamId: mode === 'no saved team' ? undefined : 'saved-team',
+        });
+        vi.mocked(shouldGenerateRemote).mockReturnValue(mode !== 'local');
+        vi.mocked(isPromptfooCloudApiHost).mockReturnValue(mode !== 'custom endpoint');
+        await synthesize({
+          cloudTargetDatabaseId: mode === 'Cloud target' ? 'target-id' : undefined,
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          strategies: [],
+          targetIds: ['test-provider'],
+        });
+
+        expect(resolveCloudTeam).not.toHaveBeenCalled();
+      },
+    );
+
+    it('stops before generation when the selected team cannot be resolved', async () => {
+      vi.mocked(cloudConfig.getRequestConfig).mockReturnValue({
+        ...cloudRequestConfig,
+        teamId: 'saved-team',
+      });
+      vi.mocked(isPromptfooCloudApiHost).mockReturnValue(true);
+      vi.mocked(resolveCloudTeam).mockRejectedValue(new Error('No accessible teams'));
+      await expect(
+        synthesize({
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          strategies: [],
+          targetIds: ['test-provider'],
+        }),
+      ).rejects.toThrow('No accessible teams');
+
+      expect(extractSystemPurpose).not.toHaveBeenCalled();
+      expect(extractEntities).not.toHaveBeenCalled();
     });
   });
 
@@ -2069,6 +2150,7 @@ vi.mock('../../src/util/yamlLoad');
 describe('resolvePluginConfig', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(cloudConfig.getRequestConfig).mockReturnValue(cloudRequestConfig);
 
     // Set up logger mocks
     vi.mocked(logger.info).mockImplementation(function () {
@@ -2549,6 +2631,7 @@ describe('Language configuration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetAllMocks();
+    vi.mocked(cloudConfig.getRequestConfig).mockReturnValue(cloudRequestConfig);
 
     // Set up logger mocks
     vi.mocked(logger.info).mockImplementation(function () {
@@ -3323,6 +3406,7 @@ describe('Language configuration', () => {
     beforeEach(() => {
       vi.clearAllMocks();
       vi.resetAllMocks();
+      vi.mocked(cloudConfig.getRequestConfig).mockReturnValue(cloudRequestConfig);
 
       vi.mocked(logger.info).mockImplementation(() => logger as any);
       vi.mocked(logger.warn).mockImplementation(() => logger as any);
@@ -3608,6 +3692,7 @@ describe('Language configuration', () => {
     beforeEach(() => {
       vi.clearAllMocks();
       vi.resetAllMocks();
+      vi.mocked(cloudConfig.getRequestConfig).mockReturnValue(cloudRequestConfig);
 
       vi.mocked(logger.info).mockImplementation(() => logger as any);
       vi.mocked(logger.warn).mockImplementation(() => logger as any);
@@ -3943,6 +4028,7 @@ describe('Language configuration', () => {
   describe('redteamProvider config propagation to strategies', () => {
     beforeEach(() => {
       vi.resetAllMocks();
+      vi.mocked(cloudConfig.getRequestConfig).mockReturnValue(cloudRequestConfig);
 
       vi.mocked(logger.info).mockImplementation(() => logger as any);
       vi.mocked(logger.warn).mockImplementation(() => logger as any);

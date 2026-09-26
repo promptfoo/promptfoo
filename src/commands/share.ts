@@ -16,8 +16,11 @@ import {
   isModelAuditSharingEnabled,
   isSharingEnabled,
 } from '../share';
+import { resolveCloudTeam } from '../util/cloud';
 import { loadDefaultConfig } from '../util/config/default';
 import type { Command } from 'commander';
+
+import type { ResolvedCloudTeam } from '../util/cloud';
 
 // Preserve the established command-module import while the implementation lives in the node layer.
 export { notCloudEnabledShareInstructions };
@@ -25,8 +28,9 @@ export { notCloudEnabledShareInstructions };
 export async function createAndDisplayShareableUrl(
   evalRecord: Eval,
   showAuth: boolean,
+  cloudTeam?: ResolvedCloudTeam,
 ): Promise<string | null> {
-  const url = await createShareableUrl(evalRecord, { showAuth });
+  const url = await createShareableUrl(evalRecord, { showAuth, ...(cloudTeam && { cloudTeam }) });
 
   if (url) {
     logger.info(`View results: ${chalk.greenBright.bold(url)}`);
@@ -40,8 +44,9 @@ export async function createAndDisplayShareableUrl(
 export async function createAndDisplayShareableModelAuditUrl(
   auditRecord: ModelAudit,
   showAuth: boolean,
+  cloudTeam?: ResolvedCloudTeam,
 ): Promise<string | null> {
-  const url = await createShareableModelAuditUrl(auditRecord, showAuth);
+  const url = await createShareableModelAuditUrl(auditRecord, showAuth, cloudTeam);
 
   if (url) {
     logger.info(`View ModelAudit Scan Results: ${chalk.greenBright.bold(url)}`);
@@ -166,10 +171,11 @@ export function shareCommand(program: Command) {
             return;
           }
 
+          const cloudTeam = await resolveCloudTeam(eval_.config);
           if (
             // Idempotency is not implemented in self-hosted mode.
             cloudConfig.isEnabled() &&
-            (await hasEvalBeenShared(eval_))
+            (await hasEvalBeenShared(eval_, cloudTeam))
           ) {
             const url = await getShareableUrl(
               eval_,
@@ -200,7 +206,7 @@ export function shareCommand(program: Command) {
             }
           }
 
-          await createAndDisplayShareableUrl(eval_, cmdObj.showAuth);
+          await createAndDisplayShareableUrl(eval_, cmdObj.showAuth, cloudTeam);
           return;
         }
 
@@ -218,10 +224,11 @@ export function shareCommand(program: Command) {
           return;
         }
 
+        const cloudTeam = await resolveCloudTeam();
         if (
           // Idempotency is not implemented in self-hosted mode.
           cloudConfig.isEnabled() &&
-          (await hasModelAuditBeenShared(audit))
+          (await hasModelAuditBeenShared(audit, cloudTeam))
         ) {
           const url = getShareableModelAuditUrl(
             audit,
@@ -238,7 +245,7 @@ export function shareCommand(program: Command) {
           }
         }
 
-        await createAndDisplayShareableModelAuditUrl(audit, cmdObj.showAuth);
+        await createAndDisplayShareableModelAuditUrl(audit, cmdObj.showAuth, cloudTeam);
       },
     );
 }

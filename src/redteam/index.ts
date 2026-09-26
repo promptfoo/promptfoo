@@ -6,8 +6,11 @@ import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
+import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { checkRemoteHealth } from '../util/apiHealth';
+import { resolveCloudTeam } from '../util/cloud';
+import { isPromptfooCloudApiHost } from '../util/fetch/monkeyPatchFetch';
 import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
@@ -42,7 +45,11 @@ import { CustomPlugin } from './plugins/custom';
 import { Plugins } from './plugins/index';
 import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/utils';
 import { redteamProviderManager } from './providers/shared';
-import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
+import {
+  getRemoteGenerationUrl,
+  getRemoteHealthUrl,
+  shouldGenerateRemote,
+} from './remoteGeneration';
 import {
   remoteGenerationContextPayload,
   resolveRedteamGenerationContext,
@@ -1316,6 +1323,15 @@ export async function synthesize({
         );
       }
       logger.debug('API health check passed');
+    }
+    // Targets carry their own team context. Otherwise validate the saved selection
+    // once before generation starts using it in Cloud requests.
+    if (
+      !cloudTargetId &&
+      cloudConfig.getRequestConfig().teamId &&
+      isPromptfooCloudApiHost(getRemoteGenerationUrl())
+    ) {
+      await resolveCloudTeam();
     }
   }
 

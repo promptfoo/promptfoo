@@ -20,6 +20,7 @@ import {
   checkCloudPermissions,
   getOrgContext,
   makeRequest as makeCloudRequest,
+  resolveCloudTeam,
 } from './util/cloud';
 import { fetchWithProxy } from './util/fetch/index';
 import { createBlobInlineCache, inlineBlobRefsForShare } from './util/inlineBlobsForShare';
@@ -29,6 +30,7 @@ import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
 import type ModelAudit from './models/modelAudit';
 import type { Prompt, TestCase } from './types';
+import type { ResolvedCloudTeam } from './util/cloud';
 
 interface ShareDomainResult {
   domain: string;
@@ -39,6 +41,8 @@ export interface ShareOptions {
   silent?: boolean;
   /** Show authentication info in the URL */
   showAuth?: boolean;
+  /** Destination already resolved at the operation boundary. */
+  cloudTeam?: ResolvedCloudTeam;
 }
 
 /** Error types that indicate chunk size issues */
@@ -128,18 +132,6 @@ function findLargestResultSize(results: EvalResult[], sampleSize: number = 1000)
   return maxSize;
 }
 
-function getEffectiveShareTeamId(eval_: Eval): string | undefined {
-  const unifiedConfigTeamId = eval_.config?.metadata?.configId
-    ? eval_.config.metadata.teamId
-    : undefined;
-  if (unifiedConfigTeamId) {
-    return unifiedConfigTeamId;
-  }
-
-  const currentOrgId = cloudConfig.getCurrentOrganizationId();
-  return cloudConfig.getCurrentTeamId(currentOrgId);
-}
-
 function stripFilePaths<T>(value: T): T {
   if (typeof value === 'string') {
     return value.replace(/^file:\/\/.*[/\\]([^/\\]+)$/, 'file://$1') as T;
@@ -225,6 +217,7 @@ async function sendEvalRecord(
   url: string,
   headers: Record<string, string>,
   stripFlags: ReturnType<typeof getStripFlags>,
+  cloudTeam?: ResolvedCloudTeam,
 ): Promise<string> {
   // Fetch traces for the eval
   const traces = await evalRecord.getTraces();
@@ -274,19 +267,17 @@ async function sendEvalRecord(
     traces: projectTracesForOutput(traces, stripFlags),
   };
   if (cloudConfig.isEnabled()) {
-    const effectiveTeamId = getEffectiveShareTeamId(evalRecord);
-    if (effectiveTeamId) {
-      evalData = {
-        ...evalData,
-        config: {
-          ...(redactedConfig || {}),
-          metadata: {
-            ...(redactedConfig?.metadata || {}),
-            teamId: effectiveTeamId,
-          },
+    const { teamId: _ignoredTeamId, ...metadata } = redactedConfig.metadata ?? {};
+    evalData = {
+      ...evalData,
+      config: {
+        ...redactedConfig,
+        metadata: {
+          ...metadata,
+          ...(cloudTeam && { teamId: cloudTeam.id }),
         },
-      };
-    }
+      },
+    };
   }
 
   const jsonData = JSON.stringify(evalData);
@@ -298,6 +289,7 @@ async function sendEvalRecord(
   const response = await fetchWithProxy(url, {
     method: 'POST',
     headers,
+    skipCloudAuthInjection: true,
     body: jsonData,
     compress: true,
   });
@@ -350,6 +342,7 @@ async function sendChunkOfResults(
     const response = await fetchWithProxy(targetUrl, {
       method: 'POST',
       headers,
+      skipCloudAuthInjection: true,
       body: stringifiedChunk,
       compress: true,
     });
@@ -493,7 +486,11 @@ async function rollbackEval(url: string, evalId: string, headers: Record<string,
   const targetUrl = `${url}/${evalId}`;
   logger.debug(`Attempting to roll back eval ${evalId} at ${targetUrl}`);
   try {
-    const response = await fetchWithProxy(targetUrl, { method: 'DELETE', headers });
+    const response = await fetchWithProxy(targetUrl, {
+      method: 'DELETE',
+      headers,
+      skipCloudAuthInjection: true,
+    });
     if (response.ok) {
       logger.debug(`Successfully rolled back eval ${evalId}`);
     } else {
@@ -548,14 +545,15 @@ async function prepareChunkForShare(
 async function sendChunkedResults(
   evalRecord: Eval,
   url: string,
+  headers: Record<string, string>,
   options: ShareOptions = {},
 ): Promise<string | null> {
   const isVerbose = isDebugEnabled();
-  const { silent = false } = options;
+  const { silent = false, cloudTeam } = options;
   const stripFlags = getStripFlags(evalRecord.config.env);
   logger.debug(`Starting chunked results upload to ${url}`);
 
-  await checkCloudPermissions(evalRecord.config);
+  await checkCloudPermissions(evalRecord.config, cloudTeam);
 
   // Cloud shares upload referenced blobs at share time; self-hosted shares inline blob
   // bytes into the payload instead. At most one of these caches is active.
@@ -596,12 +594,6 @@ async function sendChunkedResults(
 
   logger.debug(`Chunk config: ${JSON.stringify(chunkConfig)}`);
 
-  // Prepare headers
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(cloudConfig.isEnabled() ? (cloudConfig.getAuthHeaders() ?? {}) : {}),
-  };
-
   // Use total row count (not distinct test count) since we iterate over all result rows
   const totalResults = await evalRecord.getTotalResultRowCount();
   logger.debug(`Total results to share: ${totalResults}`);
@@ -622,7 +614,7 @@ async function sendChunkedResults(
   let evalId: string | undefined;
   try {
     // Send initial data and get eval ID
-    evalId = await sendEvalRecord(evalRecord, url, headers, stripFlags);
+    evalId = await sendEvalRecord(evalRecord, url, headers, stripFlags, cloudTeam);
     logger.debug(`Initial eval data sent successfully - ${evalId}`);
 
     // Progress callback for adaptive retry
@@ -764,13 +756,15 @@ async function handleEmailCollection(evalRecord: Eval): Promise<void> {
   await evalRecord.save();
 }
 
-async function getApiConfig(evalRecord: Eval): Promise<{
+function getApiConfig(evalRecord: Eval): {
   url: string;
-}> {
+  headers: Record<string, string>;
+} {
   if (cloudConfig.isEnabled()) {
-    const apiBaseUrl = cloudConfig.getApiHost();
+    const { apiHost, headers } = cloudConfig.getRequestConfig();
     return {
-      url: `${apiBaseUrl}/api/v1/results`,
+      url: `${apiHost}/api/v1/results`,
+      headers: { ...headers, 'Content-Type': 'application/json' },
     };
   }
 
@@ -781,6 +775,7 @@ async function getApiConfig(evalRecord: Eval): Promise<{
   return {
     // This is going to a self-hosted instance so the api should match the Open Source API
     url: `${apiBaseUrl}/api/eval`,
+    headers: { 'Content-Type': 'application/json' },
   };
 }
 
@@ -828,9 +823,11 @@ export async function createShareableUrl(
     return null;
   }
 
+  const cloudTeam = options.cloudTeam ?? (await resolveCloudTeam(evalRecord.config));
+
   // Show org/team context before uploading (only when cloud is enabled and not silent)
   if (!silent) {
-    const orgContext = await getOrgContext();
+    const orgContext = await getOrgContext(cloudTeam);
     if (orgContext) {
       const teamSuffix = orgContext.teamName ? ` > ${orgContext.teamName}` : '';
       logger.info(
@@ -843,7 +840,7 @@ export async function createShareableUrl(
   await handleEmailCollection(evalRecord);
 
   // 2. Get API configuration
-  const { url } = await getApiConfig(evalRecord);
+  const { url, headers } = getApiConfig(evalRecord);
 
   // 3. Determine if we can use new results format
   const canUseNewResults = cloudConfig.isEnabled();
@@ -851,7 +848,7 @@ export async function createShareableUrl(
     `Sharing with ${url} canUseNewResults: ${canUseNewResults} Use old results: ${evalRecord.useOldResults()}`,
   );
 
-  const evalId = await sendChunkedResults(evalRecord, url, { silent });
+  const evalId = await sendChunkedResults(evalRecord, url, headers, { silent, cloudTeam });
 
   if (!evalId) {
     return null;
@@ -866,9 +863,12 @@ export async function createShareableUrl(
  * @param eval_ The eval to check.
  * @returns True if the eval has been shared to the effective team, false otherwise.
  */
-export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
+export async function hasEvalBeenShared(
+  eval_: Eval,
+  cloudTeam?: ResolvedCloudTeam,
+): Promise<boolean> {
   try {
-    const effectiveTeamId = getEffectiveShareTeamId(eval_);
+    const effectiveTeamId = (cloudTeam ?? (await resolveCloudTeam(eval_.config)))?.id;
 
     // GET /api/results/:id with optional teamId scope
     const url = effectiveTeamId
@@ -898,10 +898,12 @@ export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
  * @param audit The model audit to check.
  * @returns True if the model audit has been shared, false otherwise.
  */
-export async function hasModelAuditBeenShared(audit: ModelAudit): Promise<boolean> {
+export async function hasModelAuditBeenShared(
+  audit: ModelAudit,
+  cloudTeam?: ResolvedCloudTeam,
+): Promise<boolean> {
   try {
-    const currentOrgId = cloudConfig.getCurrentOrganizationId();
-    const currentTeamId = cloudConfig.getCurrentTeamId(currentOrgId);
+    const currentTeamId = (cloudTeam ?? (await resolveCloudTeam()))?.id;
     const url = currentTeamId
       ? `model-audits/${audit.id}?teamId=${currentTeamId}`
       : `model-audits/${audit.id}`;
@@ -933,6 +935,7 @@ export async function hasModelAuditBeenShared(audit: ModelAudit): Promise<boolea
 export async function createShareableModelAuditUrl(
   auditRecord: ModelAudit,
   showAuth: boolean = false,
+  cloudTeam?: ResolvedCloudTeam,
 ): Promise<string | null> {
   if (getEnvBool('PROMPTFOO_DISABLE_SHARING')) {
     logger.debug('Skipping model audit share because PROMPTFOO_DISABLE_SHARING is enabled');
@@ -943,11 +946,12 @@ export async function createShareableModelAuditUrl(
   // Model audits use cloud config directly
 
   // 2. Get API configuration
-  const apiBaseUrl = cloudConfig.isEnabled() ? cloudConfig.getApiHost() : getShareApiBaseUrl();
+  const requestConfig = cloudConfig.isEnabled() ? cloudConfig.getRequestConfig() : undefined;
+  const apiBaseUrl = requestConfig?.apiHost ?? getShareApiBaseUrl();
 
   const headers = {
     'Content-Type': 'application/json',
-    ...(cloudConfig.isEnabled() ? (cloudConfig.getAuthHeaders() ?? {}) : {}),
+    ...requestConfig?.headers,
   };
 
   const url = `${apiBaseUrl}/api/v1/model-audits/share`;
@@ -956,8 +960,7 @@ export async function createShareableModelAuditUrl(
   logger.debug(`Sharing model audit ${auditRecord.id} to ${url}`);
 
   try {
-    const currentOrgId = cloudConfig.getCurrentOrganizationId();
-    const currentTeamId = cloudConfig.getCurrentTeamId(currentOrgId);
+    const currentTeamId = (cloudTeam ?? (await resolveCloudTeam()))?.id;
     const payload = {
       scanId: auditRecord.id,
       createdAt: auditRecord.createdAt,
@@ -991,6 +994,7 @@ export async function createShareableModelAuditUrl(
     const response = await fetchWithProxy(url, {
       method: 'POST',
       headers,
+      skipCloudAuthInjection: true,
       body: JSON.stringify(payload),
     });
 
