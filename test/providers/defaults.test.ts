@@ -110,10 +110,10 @@ describe('Provider override tests', () => {
       const providers = await getDefaultProviders(
         source === 'scoped' ? { GITHUB_TOKEN: 'fixture-github-token' } : undefined,
       );
-      expect(providers.gradingProvider).toBe(baseline.gradingProvider);
-      expect(providers.gradingJsonProvider).toBe(baseline.gradingJsonProvider);
-      expect(providers.suggestionsProvider).toBe(baseline.suggestionsProvider);
-      expect(providers.synthesizeProvider).toBe(baseline.synthesizeProvider);
+      expect(providers.gradingProvider.id()).toBe(baseline.gradingProvider.id());
+      expect(providers.gradingJsonProvider.id()).toBe(baseline.gradingJsonProvider.id());
+      expect(providers.suggestionsProvider.id()).toBe(baseline.suggestionsProvider.id());
+      expect(providers.synthesizeProvider.id()).toBe(baseline.synthesizeProvider.id());
     },
   );
 
@@ -330,13 +330,13 @@ describe('Provider override tests', () => {
       },
     );
 
-    it('preserves process precedence for the Azure embedding deployment', async () => {
+    it('prefers the explicit Azure embedding deployment over the process value', async () => {
       mockProcessEnv({ AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: 'process-vectors' });
       const providers = await getDefaultProviders({
         ...azureEnv,
         AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: 'scoped-vectors',
       });
-      expect(providers.embeddingProvider).toHaveProperty('deploymentName', 'process-vectors');
+      expect(providers.embeddingProvider).toHaveProperty('deploymentName', 'scoped-vectors');
     });
 
     it.each([
@@ -386,10 +386,12 @@ describe('Provider override tests', () => {
 
     it('keeps the existing OpenAI fallback when no embedding credentials are available', async () => {
       const providers = await getDefaultProviders(azureEnv);
-      expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider);
+      expect(providers.embeddingProvider).toBeInstanceOf(OpenAiEmbeddingProvider.constructor);
       expect(providers.embeddingProvider).not.toBeInstanceOf(AzureEmbeddingProvider);
       expect(hasGoogleDefaultCredentials).toHaveBeenCalledTimes(1);
-      const response = await OpenAiEmbeddingProvider.callEmbeddingApi('hello');
+      const response = await (
+        providers.embeddingProvider as typeof OpenAiEmbeddingProvider
+      ).callEmbeddingApi('hello');
       expect(response.error).toMatch(/API key/i);
       expect(response.embedding).toBeUndefined();
     });
@@ -421,11 +423,16 @@ describe('Provider override tests', () => {
 
     const providers = await getDefaultProviders(envOverrides);
 
-    expect(providers.embeddingProvider).toBe(MistralEmbeddingProvider);
-    expect(providers.gradingJsonProvider).toBe(MistralGradingJsonProvider);
-    expect(providers.gradingProvider).toBe(MistralGradingProvider);
-    expect(providers.suggestionsProvider).toBe(MistralSuggestionsProvider);
-    expect(providers.synthesizeProvider).toBe(MistralSynthesizeProvider);
+    expect(providers.embeddingProvider.id()).toBe(MistralEmbeddingProvider.id());
+    expect(providers.embeddingProvider).toHaveProperty('env', envOverrides);
+    expect(providers.gradingJsonProvider.id()).toBe(MistralGradingJsonProvider.id());
+    expect(providers.gradingJsonProvider).toHaveProperty('env', envOverrides);
+    expect(providers.gradingProvider.id()).toBe(MistralGradingProvider.id());
+    expect(providers.gradingProvider).toHaveProperty('env', envOverrides);
+    expect(providers.suggestionsProvider.id()).toBe(MistralSuggestionsProvider.id());
+    expect(providers.suggestionsProvider).toHaveProperty('env', envOverrides);
+    expect(providers.synthesizeProvider.id()).toBe(MistralSynthesizeProvider.id());
+    expect(providers.synthesizeProvider).toHaveProperty('env', envOverrides);
   });
 
   it('should use xAI providers when provided via env overrides', async () => {
@@ -435,7 +442,8 @@ describe('Provider override tests', () => {
 
     const providers = await getDefaultProviders(envOverrides);
 
-    expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider);
+    expect(providers.embeddingProvider.id()).toBe(OpenAiEmbeddingProvider.id());
+    expect(providers.embeddingProvider).toHaveProperty('env', envOverrides);
     expect(providers.gradingJsonProvider.id()).toBe('xai:grok-4.3');
     expect(providers.gradingProvider.id()).toBe('xai:grok-4.3');
     expect(providers.suggestionsProvider.id()).toBe('xai:grok-4.3');

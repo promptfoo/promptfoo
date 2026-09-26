@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 
 import { z } from 'zod';
-import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
+import { getEnvString } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
 import { getTransformErrorMessage, TransformInputType, transform } from '../util/transform';
@@ -91,6 +91,12 @@ interface SageMakerOptions extends ProviderOptions {
  */
 abstract class SageMakerGenericProvider {
   env?: EnvOverrides;
+
+  protected getNumericEnv(key: string, integer: boolean, defaultValue: number): number {
+    const value = this.env?.[key] ?? getEnvString(key);
+    const parsed = integer ? Number.parseInt(value ?? '', 10) : Number.parseFloat(value ?? '');
+    return Number.isNaN(parsed) ? defaultValue : parsed;
+  }
   sagemakerRuntime?: any; // SageMaker runtime client
   private initializedRuntime?: { client: any; region: string };
   config: SageMakerConfig;
@@ -182,7 +188,7 @@ abstract class SageMakerGenericProvider {
         const runtimeRegion = region ?? this.getRegion();
         const runtime = new SageMakerRuntimeClient({
           region: runtimeRegion,
-          maxAttempts: getEnvInt('AWS_SAGEMAKER_MAX_RETRIES', 3),
+          maxAttempts: this.getNumericEnv('AWS_SAGEMAKER_MAX_RETRIES', true, 3),
           retryMode: 'adaptive',
           ...(credentials ? { credentials } : {}),
         });
@@ -207,6 +213,7 @@ abstract class SageMakerGenericProvider {
     return (
       this.config?.region ||
       this.env?.AWS_REGION ||
+      this.env?.AWS_DEFAULT_REGION ||
       getEnvString('AWS_REGION') ||
       getEnvString('AWS_DEFAULT_REGION') ||
       'us-east-1'
@@ -453,15 +460,16 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
    * Format the request payload based on model type
    */
   formatPayload(prompt: string): string {
-    const maxTokens = this.config.maxTokens ?? getEnvInt('AWS_SAGEMAKER_MAX_TOKENS') ?? 1024;
+    const maxTokens =
+      this.config.maxTokens ?? this.getNumericEnv('AWS_SAGEMAKER_MAX_TOKENS', true, 1024);
     const temperature =
       typeof this.config.temperature === 'number'
         ? this.config.temperature
-        : (getEnvFloat('AWS_SAGEMAKER_TEMPERATURE') ?? 0.7);
+        : this.getNumericEnv('AWS_SAGEMAKER_TEMPERATURE', false, 0.7);
     const topP =
       typeof this.config.topP === 'number'
         ? this.config.topP
-        : (getEnvFloat('AWS_SAGEMAKER_TOP_P') ?? 1.0);
+        : this.getNumericEnv('AWS_SAGEMAKER_TOP_P', false, 1.0);
     const stopSequences = this.config.stopSequences || [];
 
     let payload: any;

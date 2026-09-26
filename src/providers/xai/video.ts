@@ -238,7 +238,7 @@ export class XAIVideoProvider implements ApiProvider {
     if (this.config?.apiKey) {
       return this.config.apiKey;
     }
-    return getEnvString('XAI_API_KEY');
+    return this.env?.XAI_API_KEY || getEnvString('XAI_API_KEY');
   }
 
   /**
@@ -249,7 +249,7 @@ export class XAIVideoProvider implements ApiProvider {
     if (this.config.apiBaseUrl) {
       return this.config.apiBaseUrl;
     }
-    const envApiBaseUrl = getEnvString('XAI_API_BASE_URL');
+    const envApiBaseUrl = this.env?.XAI_API_BASE_URL || getEnvString('XAI_API_BASE_URL');
     if (envApiBaseUrl) {
       return envApiBaseUrl;
     }

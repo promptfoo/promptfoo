@@ -232,7 +232,7 @@ export class GoogleAuthManager {
 
     // Check for Python SDK environment variables
     const useVertexEnv = getEnvString('GOOGLE_GENAI_USE_VERTEXAI');
-    const cloudProject = getEnvString('GOOGLE_CLOUD_PROJECT');
+    const cloudProject = env?.GOOGLE_CLOUD_PROJECT || getEnvString('GOOGLE_CLOUD_PROJECT');
 
     // SDK alignment: project/location and apiKey are mutually exclusive
     // Only applies to explicit config values, not env vars (matching SDK behavior)
@@ -274,7 +274,7 @@ export class GoogleAuthManager {
     // Vertex mode requires either API key or project ID
     if (vertexai && !apiKey && !projectId && !cloudProject && !credentials) {
       const hasAdc = Boolean(
-        env?.GOOGLE_APPLICATION_CREDENTIALS || process.env.GOOGLE_APPLICATION_CREDENTIALS,
+        env?.GOOGLE_APPLICATION_CREDENTIALS || getEnvString('GOOGLE_APPLICATION_CREDENTIALS'),
       );
       if (!hasAdc) {
         logger.debug(
@@ -324,6 +324,7 @@ export class GoogleAuthManager {
         getEnvString('VERTEX_PROJECT_ID') ||
         env?.GOOGLE_PROJECT_ID ||
         getEnvString('GOOGLE_PROJECT_ID') ||
+        env?.GOOGLE_CLOUD_PROJECT ||
         getEnvString('GOOGLE_CLOUD_PROJECT'),
     );
     const hasCredentials = Boolean(config.credentials);
@@ -497,7 +498,7 @@ export class GoogleAuthManager {
     // Check for non-SDK env vars and warn
     const vertexProjectId = env?.VERTEX_PROJECT_ID || getEnvString('VERTEX_PROJECT_ID');
     const googleProjectId = env?.GOOGLE_PROJECT_ID || getEnvString('GOOGLE_PROJECT_ID');
-    const cloudProject = getEnvString('GOOGLE_CLOUD_PROJECT');
+    const cloudProject = env?.GOOGLE_CLOUD_PROJECT || getEnvString('GOOGLE_CLOUD_PROJECT');
 
     if (vertexProjectId && !config.projectId) {
       logger.debug(
@@ -511,7 +512,15 @@ export class GoogleAuthManager {
     }
 
     return (
-      config.projectId || vertexProjectId || googleProjectId || cloudProject || authProjectId || ''
+      config.projectId ||
+      env?.VERTEX_PROJECT_ID ||
+      env?.GOOGLE_PROJECT_ID ||
+      env?.GOOGLE_CLOUD_PROJECT ||
+      vertexProjectId ||
+      googleProjectId ||
+      cloudProject ||
+      authProjectId ||
+      ''
     );
   }
 
@@ -536,7 +545,7 @@ export class GoogleAuthManager {
   ): string {
     // Check for non-SDK env vars
     const vertexRegion = env?.VERTEX_REGION || getEnvString('VERTEX_REGION');
-    const cloudLocation = getEnvString('GOOGLE_CLOUD_LOCATION');
+    const cloudLocation = env?.GOOGLE_CLOUD_LOCATION || getEnvString('GOOGLE_CLOUD_LOCATION');
 
     if (vertexRegion && !config.region) {
       logger.debug(
@@ -544,7 +553,12 @@ export class GoogleAuthManager {
       );
     }
 
-    const configuredRegion = config.region || vertexRegion || cloudLocation;
+    const configuredRegion =
+      config.region ||
+      env?.VERTEX_REGION ||
+      env?.GOOGLE_CLOUD_LOCATION ||
+      vertexRegion ||
+      cloudLocation;
 
     if (configuredRegion) {
       return configuredRegion;

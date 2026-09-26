@@ -146,8 +146,8 @@ export class AI21ChatCompletionProvider implements ApiProvider {
     return (
       this.config.apiKey ||
       (this.config?.apiKeyEnvar
-        ? getEnvString(this.config.apiKeyEnvar) ||
-          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
+        ? this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides] ||
+          getEnvString(this.config.apiKeyEnvar)
         : undefined) ||
       this.env?.AI21_API_KEY ||
       getEnvString('AI21_API_KEY')

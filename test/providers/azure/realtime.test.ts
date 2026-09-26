@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../../src/cliState';
 import { AzureGenericProvider } from '../../../src/providers/azure/generic';
 import { AzureRealtimeProvider } from '../../../src/providers/azure/realtime';
 import { OpenAiRealtimeProvider } from '../../../src/providers/openai/realtime';
@@ -636,5 +637,25 @@ describe('AzureRealtimeProvider', () => {
     } finally {
       restoreEnv();
     }
+  });
+  it('prefers provider-scoped prompt key aliases over suite values', async () => {
+    const provider = new AzureRealtimeProvider('gpt-realtime', {
+      config: { apiKey: 'base-key', apiHost: 'example.test' },
+      env: { PROMPT_AZURE_REALTIME_KEY: 'provider-key' },
+    });
+    await cliState.withEnv({ PROMPT_AZURE_REALTIME_KEY: 'suite-key' }, () =>
+      provider.callApi('hello', {
+        vars: {},
+        prompt: {
+          raw: 'hello',
+          label: 'hello',
+          config: { apiKeyEnvar: 'PROMPT_AZURE_REALTIME_KEY' },
+        },
+      }),
+    );
+    expect(OpenAiRealtimeProvider).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ config: expect.objectContaining({ apiKey: 'provider-key' }) }),
+    );
   });
 });

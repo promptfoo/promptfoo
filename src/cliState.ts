@@ -69,6 +69,8 @@ interface CliState {
   /** The innermost environment scope, or the last config's env outside a scope. */
   readonly env?: EnvOverrides;
   readonly envFileOverrides?: EnvOverrides;
+  /** Opaque lifetime identity for resources owned by this environment invocation. */
+  readonly envScope?: object;
   /** File values act as process defaults beneath each nested suite environment. */
   withEnvFileOverrides<T>(env: EnvOverrides | undefined, fn: () => T): T;
   /** Replaces the outer env for this call and its async work; undefined masks config env. */
@@ -88,6 +90,7 @@ const maxConcurrencyContext = new AsyncLocalStorage<{ maxConcurrency: number | u
 const basePathContext = new AsyncLocalStorage<{ basePath: string | undefined }>();
 let globalBasePath: string | undefined;
 const envContext = new AsyncLocalStorage<{
+  scope: object;
   env: EnvOverrides | undefined;
   envFileOverrides?: EnvOverrides;
 }>();
@@ -157,11 +160,14 @@ const state: CliState = {
   get envFileOverrides() {
     return envContext.getStore()?.envFileOverrides;
   },
+  get envScope() {
+    return envContext.getStore()?.scope;
+  },
   withEnvFileOverrides<T>(env: EnvOverrides | undefined, fn: () => T): T {
-    return envContext.run({ env: undefined, envFileOverrides: env }, fn);
+    return envContext.run({ scope: {}, env: undefined, envFileOverrides: env }, fn);
   },
   withEnv<T>(env: EnvOverrides | undefined, fn: () => T): T {
-    return envContext.run({ env, envFileOverrides: state.envFileOverrides }, fn);
+    return envContext.run({ scope: {}, env, envFileOverrides: state.envFileOverrides }, fn);
   },
   get requestTracingConfig() {
     return requestTracingConfigContext.getStore()?.tracingConfig;

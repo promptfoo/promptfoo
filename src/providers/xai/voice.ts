@@ -224,7 +224,7 @@ export class XAIVoiceProvider implements ApiProvider {
   }
 
   protected getApiKey(): string | undefined {
-    return this.config.apiKey || getEnvString('XAI_API_KEY');
+    return this.config.apiKey || this.env?.XAI_API_KEY || getEnvString('XAI_API_KEY');
   }
 
   /**

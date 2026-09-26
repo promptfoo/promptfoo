@@ -2,6 +2,7 @@ import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import { getRequestTimeoutMs } from './shared';
 
+import type { EnvOverrides } from '../contracts/env';
 import type { ApiProvider, ProviderResponse } from '../types/index';
 
 interface LlamaCompletionOptions {
@@ -27,9 +28,14 @@ interface LlamaCompletionOptions {
 export class LlamaProvider implements ApiProvider {
   modelName: string;
   config?: LlamaCompletionOptions;
+  env?: EnvOverrides;
 
-  constructor(modelName: string, options: { config?: LlamaCompletionOptions; id?: string } = {}) {
-    const { config, id } = options;
+  constructor(
+    modelName: string,
+    options: { config?: LlamaCompletionOptions; env?: EnvOverrides; id?: string } = {},
+  ) {
+    const { config, id, env } = options;
+    this.env = env;
     this.modelName = modelName;
     this.config = config;
     this.id = id ? () => id : this.id;
@@ -65,7 +71,8 @@ export class LlamaProvider implements ApiProvider {
       logit_bias: this.config?.logit_bias,
     };
 
-    const url = getEnvString('LLAMA_BASE_URL') || 'http://localhost:8080';
+    const url =
+      this.env?.LLAMA_BASE_URL || getEnvString('LLAMA_BASE_URL') || 'http://localhost:8080';
 
     interface LlamaCompletionResponse {
       content: string;

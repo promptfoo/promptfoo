@@ -192,10 +192,8 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
     return (
       this.configWithHeaders.apiKey ||
       (this.configWithHeaders.apiKeyEnvar
-        ? getEnvString(this.configWithHeaders.apiKeyEnvar as EnvVarKey) ||
-          (this.env && this.configWithHeaders.apiKeyEnvar in this.env
-            ? (this.env as any)[this.configWithHeaders.apiKeyEnvar]
-            : undefined)
+        ? this.env?.[this.configWithHeaders.apiKeyEnvar] ||
+          getEnvString(this.configWithHeaders.apiKeyEnvar as EnvVarKey)
         : undefined) ||
       extendedEnv?.AZURE_CONTENT_SAFETY_API_KEY ||
       getEnvString('AZURE_CONTENT_SAFETY_API_KEY') ||

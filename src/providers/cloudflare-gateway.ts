@@ -94,15 +94,14 @@ const PROVIDER_CONFIGS: Record<string, GatewayProviderConfig> = {
 
 /**
  * Get a custom environment variable value safely
- * Uses process.env directly for arbitrary env var names to avoid type casting issues
  */
 function getCustomEnvValue(envVarName: string, env?: EnvOverrides): string | undefined {
-  // Check env overrides first (for testing), then fall back to process.env
+  // Provider overrides precede the active suite, invocation file, and shell.
   const envOverrideValue = env?.[envVarName as keyof EnvOverrides];
   if (envOverrideValue) {
     return envOverrideValue as string;
   }
-  return process.env[envVarName];
+  return getEnvString(envVarName);
 }
 
 /**
