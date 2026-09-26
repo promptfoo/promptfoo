@@ -188,6 +188,8 @@ describe('Foundry Responses conversation and accounting', () => {
     [{ background: true }, 'foreground'],
     [{ store: false }, 'stateless tool history'],
     [{ store: 'false' }, 'must be a boolean'],
+    [{ store: 0 }, 'must be a boolean'],
+    [{ store: 1 }, 'must be a boolean'],
   ])('rejects unsupported request combinations before SDK work: %j', async (passthrough, error) => {
     const result = await provider().callApi('weather?', {
       prompt: { config: { passthrough } },
@@ -198,15 +200,36 @@ describe('Foundry Responses conversation and accounting', () => {
     expect(callback).not.toHaveBeenCalled();
   });
 
-  it('supports single-turn stateless requests without automatic callbacks', async () => {
-    create.mockResolvedValue(reply('one', [text('done')]));
-    const result = await provider({
-      passthrough: { store: false },
-      functionToolCallbacks: undefined,
-    }).callApi('weather?');
-    expect(result.output).toBe('done');
-    expect(create.mock.calls[0][0].store).toBe(false);
-  });
+  it.each([null, true, false])(
+    'preserves store: %s on single-turn requests without automatic callbacks',
+    async (store) => {
+      create.mockResolvedValue(reply('one', [text('done')]));
+      const result = await provider({
+        passthrough: { store },
+        functionToolCallbacks: undefined,
+      }).callApi('weather?');
+      expect(result.output).toBe('done');
+      expect(create.mock.calls[0][0].store).toBe(store);
+    },
+  );
+
+  it.each(['provider', 'prompt'])(
+    'preserves nullable store from %s config through tool continuations',
+    async (source) => {
+      create
+        .mockResolvedValueOnce(reply('first', [tool()]))
+        .mockResolvedValueOnce(reply('last', [text('done')]));
+      const config = { passthrough: { store: null } };
+      const result = await provider(source === 'provider' ? config : {}).callApi(
+        'weather?',
+        source === 'prompt' ? ({ prompt: { config } } as any) : undefined,
+      );
+      expect(result.output).toBe('done');
+      expect(create).toHaveBeenCalledTimes(2);
+      expect(create.mock.calls.map(([body]) => body.store)).toEqual([null, null]);
+      expect(callback).toHaveBeenCalledOnce();
+    },
+  );
 
   it('submits id-less parallel function calls exactly once using their call IDs', async () => {
     create
