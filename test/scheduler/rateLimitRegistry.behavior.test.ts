@@ -78,7 +78,7 @@ describe('RateLimitRegistry integration - provider maxRetries', () => {
 
         // A replay cannot delay the next request on the same provider's shared rate-limit key.
         await expect(
-          registry.execute(
+          registry.execute<ProviderResponse>(
             provider,
             async () => ({ output: 'Fresh response' }),
             createProviderRateLimitOptions(),
