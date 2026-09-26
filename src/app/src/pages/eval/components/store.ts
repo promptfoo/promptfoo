@@ -304,7 +304,11 @@ interface TableState {
   tableQuery: { evalId: string; url: string } | null;
   tableRequestGeneration: number;
   tableLoadingRequestGeneration: number | null;
-  fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
+  // null is a failed request; undefined means a newer request superseded this one.
+  fetchEvalData: (
+    id: string,
+    options?: FetchEvalOptions,
+  ) => Promise<EvalTableDTO | null | undefined>;
   isFetching: boolean;
   isStreaming: boolean;
   setIsStreaming: (isStreaming: boolean) => void;
@@ -654,7 +658,7 @@ export const useTableStore = create<TableState>()(
       // Cancel any existing metadata keys request and reset state for new eval
       const currentState = get();
       if (skipSettingEvalId && currentState.evalId !== id) {
-        return null;
+        return undefined;
       }
       let url = new URL(
         `/eval/${id}/table`,
@@ -744,7 +748,7 @@ export const useTableStore = create<TableState>()(
           // A background refresh for the previously active eval must not replace a newly
           // selected eval while its response was in flight.
           if (shouldIgnoreResponse()) {
-            return null;
+            return undefined;
           }
 
           // Build async options
@@ -754,7 +758,7 @@ export const useTableStore = create<TableState>()(
           ]);
 
           if (shouldIgnoreResponse()) {
-            return null;
+            return undefined;
           }
 
           set((prevState) => {
@@ -798,13 +802,13 @@ export const useTableStore = create<TableState>()(
         }
 
         if (shouldIgnoreResponse()) {
-          return null;
+          return undefined;
         }
         finishCurrentRequest();
         return null;
       } catch (error) {
         if (shouldIgnoreResponse()) {
-          return null;
+          return undefined;
         }
         console.error('Error fetching eval data:', error);
         finishCurrentRequest();

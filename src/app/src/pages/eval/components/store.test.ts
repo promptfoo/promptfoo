@@ -1129,8 +1129,8 @@ describe('useTableStore', () => {
         useTableStore.getState().setEvalId('current-eval');
       });
 
-      let currentFetch!: Promise<EvalTableDTO | null>;
-      let staleFetch!: Promise<EvalTableDTO | null>;
+      let currentFetch!: Promise<EvalTableDTO | null | undefined>;
+      let staleFetch!: Promise<EvalTableDTO | null | undefined>;
       act(() => {
         currentFetch = useTableStore
           .getState()
@@ -1139,7 +1139,7 @@ describe('useTableStore', () => {
           .getState()
           .fetchEvalData('previous-eval', { skipLoadingState: true, skipSettingEvalId: true });
       });
-      expect(await staleFetch).toBeNull();
+      expect(await staleFetch).toBeUndefined();
       expect(callApi).toHaveBeenCalledTimes(1);
       expect(useTableStore.getState().isFetching).toBe(true);
 
@@ -1189,8 +1189,8 @@ describe('useTableStore', () => {
         act(() => {
           useTableStore.getState().setEvalId('current-eval');
         });
-        let foregroundFetch!: Promise<EvalTableDTO | null>;
-        let backgroundFetch!: Promise<EvalTableDTO | null>;
+        let foregroundFetch!: Promise<EvalTableDTO | null | undefined>;
+        let backgroundFetch!: Promise<EvalTableDTO | null | undefined>;
         act(() => {
           foregroundFetch = useTableStore.getState().fetchEvalData('current-eval', currentQuery);
           backgroundFetch = useTableStore.getState().fetchEvalData('current-eval', {
@@ -1248,8 +1248,8 @@ describe('useTableStore', () => {
       });
       vi.mocked(callApi).mockReturnValueOnce(firstResponse).mockReturnValueOnce(secondResponse);
 
-      let firstFetch!: Promise<EvalTableDTO | null>;
-      let secondFetch!: Promise<EvalTableDTO | null>;
+      let firstFetch!: Promise<EvalTableDTO | null | undefined>;
+      let secondFetch!: Promise<EvalTableDTO | null | undefined>;
       act(() => {
         firstFetch = useTableStore.getState().fetchEvalData('eval-id');
         secondFetch = useTableStore.getState().fetchEvalData('eval-id');
@@ -1282,8 +1282,8 @@ describe('useTableStore', () => {
         .mockReturnValueOnce(foregroundResponse)
         .mockReturnValueOnce(backgroundResponse);
 
-      let foregroundFetch!: Promise<EvalTableDTO | null>;
-      let backgroundFetch!: Promise<EvalTableDTO | null>;
+      let foregroundFetch!: Promise<EvalTableDTO | null | undefined>;
+      let backgroundFetch!: Promise<EvalTableDTO | null | undefined>;
       act(() => {
         foregroundFetch = useTableStore.getState().fetchEvalData('eval-id');
         backgroundFetch = useTableStore
@@ -1325,8 +1325,8 @@ describe('useTableStore', () => {
         .mockReturnValueOnce(foregroundResponse)
         .mockReturnValueOnce(backgroundResponse);
 
-      let foregroundFetch!: Promise<EvalTableDTO | null>;
-      let backgroundFetch!: Promise<EvalTableDTO | null>;
+      let foregroundFetch!: Promise<EvalTableDTO | null | undefined>;
+      let backgroundFetch!: Promise<EvalTableDTO | null | undefined>;
       act(() => {
         foregroundFetch = useTableStore.getState().fetchEvalData('eval-id');
         backgroundFetch = useTableStore

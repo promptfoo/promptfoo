@@ -4589,7 +4589,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     });
   });
 
-  it('preserves newer table changes when rating responses finish out of order', async () => {
+  it('keeps both server outcomes when ratings in different cells are queued', async () => {
     const user = userEvent.setup();
     const mockTable = createMockTableWithHumanAssertion();
     const secondRow = structuredClone(mockTable.body[0]);
@@ -4633,17 +4633,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     await user.click(clearButtons[0]);
     await user.click(clearButtons[1]);
 
-    resolveSecond({
-      ok: true,
-      json: vi.fn().mockResolvedValue({
-        id: 'test-output-2',
-        success: false,
-        score: 0.45,
-        failureReason: 2,
-        gradingResult: { pass: false, score: 0.45, reason: 'Second restored result' },
-      }),
-    });
-    await waitFor(() => expect(mockSetTable).toHaveBeenCalledTimes(3));
+    expect(mockCallApi).toHaveBeenCalledTimes(1);
 
     resolveFirst({
       ok: true,
@@ -4653,6 +4643,18 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
         score: 0.35,
         failureReason: 2,
         gradingResult: { pass: false, score: 0.35, reason: 'First restored result' },
+      }),
+    });
+    await waitFor(() => expect(mockSetTable).toHaveBeenCalledTimes(3));
+
+    resolveSecond({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        id: 'test-output-2',
+        success: false,
+        score: 0.45,
+        failureReason: 2,
+        gradingResult: { pass: false, score: 0.45, reason: 'Second restored result' },
       }),
     });
     await waitFor(() => expect(mockSetTable).toHaveBeenCalledTimes(4));
@@ -4939,6 +4941,109 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
 
     expect(mockSetTable).toHaveBeenCalledTimes(1);
   });
+
+  it.each([3, 4])('persists all accepted edits after unmounting (v%s)', async (version) => {
+    const user = userEvent.setup();
+    const table = createMockTableWithHumanAssertion();
+    let resolveFirst!: (response: any) => void;
+    mockCallApi.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveFirst = resolve;
+      }),
+    );
+    mockCallApi.mockResolvedValue({ ok: true });
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: mockSetTable,
+      table,
+      version,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+    }));
+    const rendered = renderWithProviders(<ResultsTable {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: 'Rate' }));
+    await user.click(screen.getByRole('button', { name: 'Clear rating' }));
+    await user.click(screen.getByRole('button', { name: 'Update score' }));
+    expect(mockCallApi).toHaveBeenCalledTimes(1);
+    const uiUpdatesBeforeUnmount = mockSetTable.mock.calls.length;
+    rendered.unmount();
+    await act(async () => {
+      resolveFirst({ ok: true });
+    });
+    await waitFor(() => expect(mockCallApi).toHaveBeenCalledTimes(3));
+    expect(mockSetTable).toHaveBeenCalledTimes(uiUpdatesBeforeUnmount);
+    const lastPayload = JSON.parse(mockCallApi.mock.calls[2][1].body);
+    if (version === 4) {
+      expect(lastPayload).toMatchObject({
+        ratingAction: 'update',
+        ratingUpdate: 'score',
+        score: 0.25,
+      });
+    } else {
+      const output = lastPayload.table.body[0].outputs[0];
+      expect(output.score).toBe(0.25);
+      expect(output.gradingResult.componentResults).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ assertion: { type: 'human' } })]),
+      );
+    }
+  });
+
+  it.each([3, 4])(
+    'orders new edits behind an old mount’s accepted writes (v%s)',
+    async (version) => {
+      const user = userEvent.setup();
+      const table = createMockTableWithHumanAssertion();
+      let resolveFirst!: (response: any) => void;
+      mockCallApi.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveFirst = resolve;
+        }),
+      );
+      mockCallApi.mockResolvedValue({ ok: true });
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        setTable: mockSetTable,
+        table,
+        version,
+        fetchEvalData: vi.fn(),
+        isFetching: false,
+        filteredResultsCount: 1,
+        filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+      }));
+      const firstMount = renderWithProviders(<ResultsTable {...defaultProps} />);
+      await user.click(screen.getByRole('button', { name: 'Rate' }));
+      await user.click(screen.getByRole('button', { name: 'Clear rating' }));
+      firstMount.unmount();
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+      await user.click(screen.getByRole('button', { name: 'Update score' }));
+      expect(mockCallApi).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        resolveFirst({ ok: true });
+      });
+      await waitFor(() => expect(mockCallApi).toHaveBeenCalledTimes(3));
+      const payloads = mockCallApi.mock.calls.map(([, options]: [string, RequestInit]) =>
+        JSON.parse(options.body as string),
+      );
+      if (version === 4) {
+        expect(payloads.map((payload: { ratingAction: string }) => payload.ratingAction)).toEqual([
+          'rate',
+          'clear',
+          'update',
+        ]);
+        expect(payloads[2].score).toBe(0.25);
+      } else {
+        const output = payloads[2].table.body[0].outputs[0];
+        expect(output.score).toBe(0.25);
+        expect(output.gradingResult.componentResults).not.toEqual(
+          expect.arrayContaining([expect.objectContaining({ assertion: { type: 'human' } })]),
+        );
+      }
+    },
+  );
 
   it('serializes v3 full-table rating writes across different results', async () => {
     const user = userEvent.setup();

@@ -1758,6 +1758,10 @@ function ResultsTableHeader({
   );
 }
 
+// Accepted writes must remain ordered across table remounts. Legacy saves replace
+// the whole evaluation, so serialize by eval even when edits affect different cells.
+const pendingRatingRequests = new Map<string, Promise<EvaluateTable | undefined>>();
+
 function ResultsTable({
   maxTextLength,
   columnVisibility,
@@ -1791,17 +1795,14 @@ function ResultsTable({
   const { head, body } = table;
   const latestTableRef = useRef(table);
   latestTableRef.current = table;
-  const pendingRatingRequestsRef = useRef(new Map<string, Promise<void>>());
   const ratingScopeRef = useRef({ evalId, generation: 0, mounted: false });
 
   React.useEffect(() => {
     const generation = ratingScopeRef.current.generation + 1;
     ratingScopeRef.current = { evalId, generation, mounted: true };
-    pendingRatingRequestsRef.current.clear();
     return () => {
       if (ratingScopeRef.current.generation === generation) {
         ratingScopeRef.current = { evalId, generation: generation + 1, mounted: false };
-        pendingRatingRequestsRef.current.clear();
       }
     };
   }, [evalId]);
@@ -1865,18 +1866,28 @@ function ResultsTable({
         const scope = ratingScopeRef.current;
         return scope.mounted && scope.generation === scopeGeneration && scope.evalId === evalId;
       };
-      const queueKey = version && version >= 4 ? resultId : `legacy:${evalId ?? ''}`;
-      const queuedLocation = findRatingOutput(latestTableRef.current, resultId);
+      if (!isScopeActive()) {
+        return;
+      }
+      const queueKey = evalId ?? '';
+      const queuedTable = latestTableRef.current;
+      const queuedLocation = findRatingOutput(queuedTable, resultId);
       if (!queuedLocation) {
         return;
       }
       const queuedOutput = queuedLocation.output;
-      let currentRequest: Promise<void>;
-      const runRating = async () => {
-        if (!isScopeActive()) {
-          return;
-        }
-        const currentTable = latestTableRef.current;
+      let currentRequest: Promise<EvaluateTable | undefined>;
+      const runRating = async (
+        previousTable?: EvaluateTable,
+      ): Promise<EvaluateTable | undefined> => {
+        // Accepted writes outlive the mounted table. Carry prior queued edits forward
+        // for legacy full-table saves without touching the newly selected eval's state.
+        const currentTable =
+          previousTable && (!isScopeActive() || !version || version < 4)
+            ? previousTable
+            : isScopeActive()
+              ? latestTableRef.current
+              : queuedTable;
         const currentLocation = findRatingOutput(currentTable, resultId);
         if (!currentLocation && (!version || version < 4)) {
           return;
@@ -1909,7 +1920,7 @@ function ResultsTable({
           ? newTable.body[currentLocation.rowIndex].outputs[currentLocation.promptIndex]
           : undefined;
 
-        if (optimisticOutput) {
+        if (optimisticOutput && isScopeActive()) {
           latestTableRef.current = newTable;
           setTable(newTable);
         }
@@ -1953,7 +1964,7 @@ function ResultsTable({
           const stalePersistedResponse = persistedResult && !ownsOptimisticOutput;
           if (
             persistedResult &&
-            pendingRatingRequestsRef.current.get(queueKey) === currentRequest &&
+            pendingRatingRequests.get(queueKey) === currentRequest &&
             (stalePersistedResponse ||
               query.filterMode !== 'all' ||
               Boolean(query.searchText) ||
@@ -1987,7 +1998,7 @@ function ResultsTable({
             if (
               optimisticOutput !== undefined &&
               latestLocation?.output === optimisticOutput &&
-              pendingRatingRequestsRef.current.get(queueKey) === currentRequest &&
+              pendingRatingRequests.get(queueKey) === currentRequest &&
               (query.filterMode !== 'all' || Boolean(query.searchText) || query.filters.length > 0)
             ) {
               await refreshCurrentPage().catch((refreshError) => {
@@ -2021,19 +2032,25 @@ function ResultsTable({
             table: newTable,
           });
           await handlePersistedResult(persistedResult);
+          return persistedResult
+            ? applyPersistedRatingResult({ table: newTable, resultId, result: persistedResult })
+            : newTable;
         } catch (error) {
           await handlePersistenceError(error);
+          return error instanceof ConfirmedRatingPersistenceError ? currentTable : newTable;
         }
       };
 
-      const previousRequest = pendingRatingRequestsRef.current.get(queueKey);
-      currentRequest = previousRequest ? previousRequest.then(runRating, runRating) : runRating();
-      pendingRatingRequestsRef.current.set(queueKey, currentRequest);
+      const previousRequest = pendingRatingRequests.get(queueKey);
+      currentRequest = previousRequest
+        ? previousRequest.then(runRating, () => runRating())
+        : runRating();
+      pendingRatingRequests.set(queueKey, currentRequest);
       try {
         await currentRequest;
       } finally {
-        if (pendingRatingRequestsRef.current.get(queueKey) === currentRequest) {
-          pendingRatingRequestsRef.current.delete(queueKey);
+        if (pendingRatingRequests.get(queueKey) === currentRequest) {
+          pendingRatingRequests.delete(queueKey);
         }
       }
     },

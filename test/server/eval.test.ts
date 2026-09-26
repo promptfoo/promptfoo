@@ -2024,6 +2024,83 @@ describe('eval routes', () => {
       );
     });
 
+    it.each(['Reviewer note', '!highlight Reviewer note'])(
+      'preserves an annotation when clearing an originally ungraded error: %s',
+      async (comment) => {
+        const eval_ = await EvalFactory.create();
+        testEvalIds.add(eval_.id);
+        const results = await eval_.getResults();
+        const result = results[1];
+        invariant(result instanceof EvalResult && result.id, 'Result is required');
+        await markResultAsError(eval_, result);
+        result.gradingResult = null;
+        await result.save();
+        const metrics = eval_.prompts[result.promptIdx].metrics;
+        invariant(metrics, 'Metrics are required');
+        metrics.assertFailCount -= 1;
+        await eval_.save();
+        const baselineMetrics = structuredClone(metrics);
+        const endpoint = `/api/eval/${eval_.id}/results/${result.id}/rating`;
+        expect(
+          (await api.post(endpoint).send({ pass: true, score: 1, ratingAction: 'rate' })).status,
+        ).toBe(200);
+        expect(
+          (
+            await api.post(endpoint).send({
+              pass: true,
+              score: 1,
+              ratingAction: 'update',
+              ratingUpdate: 'comment',
+              comment,
+            })
+          ).status,
+        ).toBe(200);
+        const cleared = await api
+          .post(endpoint)
+          .send({ pass: true, score: 1, ratingAction: 'clear' });
+        expect(cleared.status).toBe(200);
+        expect(cleared.body).toMatchObject({
+          success: false,
+          score: 0,
+          failureReason: ResultFailureReason.ERROR,
+        });
+        expect(cleared.body.gradingResult).toEqual({ pass: false, score: 0, reason: '', comment });
+        expect((await EvalResult.findById(result.id))?.gradingResult?.comment).toBe(comment);
+        expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toEqual(
+          baselineMetrics,
+        );
+        const repeated = await api
+          .post(endpoint)
+          .send({ pass: true, score: 1, ratingAction: 'clear' });
+        expect(repeated.body.gradingResult.comment).toBe(comment);
+      },
+    );
+
+    it('removes an omitted comment in an explicit comment update without changing metrics', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const [result] = await eval_.getResults();
+      invariant(result.id, 'Result is required');
+      const endpoint = `/api/eval/${eval_.id}/results/${result.id}/rating`;
+      const originalMetrics = structuredClone(eval_.prompts[result.promptIdx].metrics);
+      await api.post(endpoint).send({
+        pass: true,
+        score: 1,
+        ratingAction: 'update',
+        ratingUpdate: 'comment',
+        comment: 'Remove this note',
+      });
+      const response = await api
+        .post(endpoint)
+        .send({ pass: true, score: 1, ratingAction: 'update', ratingUpdate: 'comment' });
+      expect(response.status).toBe(200);
+      expect(response.body.gradingResult).not.toHaveProperty('comment');
+      expect((await EvalResult.findById(result.id))?.gradingResult).not.toHaveProperty('comment');
+      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toEqual(
+        originalMetrics,
+      );
+    });
+
     it('keeps manual-rating provenance private and preserves it across model saves', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);

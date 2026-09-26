@@ -786,7 +786,14 @@ function restoreOriginalGradingResult(
 ): GradingResult | null {
   const original = state.original.gradingResult;
   if (!original) {
-    return null;
+    return gradingResult.comment === undefined
+      ? null
+      : {
+          pass: state.original.success,
+          score: state.original.score,
+          reason: '',
+          comment: gradingResult.comment,
+        };
   }
   const restored = { ...gradingResult } as GradingResult;
   const restoredRecord = restored as unknown as Record<string, unknown>;
@@ -850,11 +857,8 @@ function applyExplicitRatingUpdate(
   updated.pass = previousSuccess;
   updated.score = ratingUpdate === 'score' ? submitted.score : previousScore;
   if (ratingUpdate === 'comment') {
-    if (hasOwn(submitted, 'comment')) {
-      updated.comment = submitted.comment;
-    } else {
-      delete updated.comment;
-    }
+    // Keep an explicit undefined so normalization cannot restore the previous comment.
+    updated.comment = submitted.comment;
   }
   return updated;
 }

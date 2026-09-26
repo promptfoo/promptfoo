@@ -166,6 +166,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         }
       };
       let succeeded = false;
+      let superseded = false;
       try {
         // A root-route refresh for a different eval is committed by fetchEvalData only after
         // its response succeeds; eagerly changing evalId would pair the old table with a new id.
@@ -185,7 +186,8 @@ export default function Eval({ fetchId }: EvalOptions) {
               : Boolean(filter.value),
           ),
         });
-        succeeded = data !== null;
+        superseded = data === undefined;
+        succeeded = data !== null && !superseded;
         return succeeded;
       } catch (error) {
         console.error('Error loading eval:', error);
@@ -195,13 +197,17 @@ export default function Eval({ fetchId }: EvalOptions) {
           loadState.backgroundPending = Math.max(0, loadState.backgroundPending - 1);
         } else {
           loadState.foregroundPending = false;
-          loadState.foregroundFailed = !succeeded;
+          loadState.foregroundFailed = !succeeded && !superseded;
         }
         if (succeeded && isCurrentLoad()) {
           loadState.succeeded = true;
           setFailed(false);
         }
-        reportFailureIfSettled();
+        // ResultsTable can supersede this load when its page or filters change.
+        // Its request owns the result; cancellation is not an eval-not-found failure.
+        if (!superseded) {
+          reportFailureIfSettled();
+        }
       }
     },
     [fetchEvalData, setFailed, setEvalId, filterMode],
