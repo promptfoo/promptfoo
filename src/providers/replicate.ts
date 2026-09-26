@@ -15,6 +15,7 @@ import { safeJsonStringify } from '../util/json';
 import { ellipsize } from '../util/text';
 import { sleep, sleepWithAbort } from '../util/time';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import { resolveProviderApiKey } from './credentials';
 import { parseChatPrompt } from './shared';
 
 import type { EnvOverrides } from '../types/env';
@@ -240,7 +241,19 @@ function getReplicateValueSummary(prefix: string, value: unknown): Record<string
 
 export class ReplicateProvider implements ApiProvider {
   modelName: string;
-  apiKey?: string;
+  #configuredApiKey?: string;
+  readonly #env?: EnvOverrides;
+  get apiKey(): string | undefined {
+    return resolveProviderApiKey(
+      { apiKey: this.#configuredApiKey },
+      this.#env,
+      ['REPLICATE_API_KEY', 'REPLICATE_API_TOKEN'],
+      ['REPLICATE_API_TOKEN', 'REPLICATE_API_KEY'],
+    );
+  }
+  set apiKey(value: string | undefined) {
+    this.#configuredApiKey = value;
+  }
   config: ReplicateCompletionOptions;
 
   constructor(
@@ -250,12 +263,8 @@ export class ReplicateProvider implements ApiProvider {
     const { config, id, env } = options;
     const { apiKey, ...restConfig } = config ?? {};
     this.modelName = modelName;
-    this.apiKey =
-      apiKey ||
-      env?.REPLICATE_API_KEY ||
-      env?.REPLICATE_API_TOKEN ||
-      getEnvString('REPLICATE_API_TOKEN') ||
-      getEnvString('REPLICATE_API_KEY');
+    this.apiKey = apiKey;
+    this.#env = env;
     this.config = restConfig;
     this.id = id ? () => id : this.id;
   }

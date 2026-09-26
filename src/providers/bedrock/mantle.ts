@@ -1,4 +1,5 @@
 import { getEnvString } from '../../envars';
+import { getScopedAwsCredentialConfig } from '../awsCredentials';
 import { resolveProviderEnv } from '../env';
 
 import type { EnvOverrides } from '../../types/env';
@@ -30,7 +31,7 @@ export function resolveBedrockMantleApiKey(
     typeof config.apiKey === 'string' && !config.apiKey.includes('{{') ? config.apiKey : undefined;
   // Explicit AWS credentials/profile select the target's principal ahead of environment
   // bearer tokens. Include partial tuples so validation fails instead of using another account.
-  // Match the token provider's treatment of empty values and unresolved templates.
+  // Empty strings still select a credential context; only unresolved templates are ignored.
   const hasExplicitAwsCredentials = [
     'accessKeyId',
     'secretAccessKey',
@@ -38,14 +39,26 @@ export function resolveBedrockMantleApiKey(
     'profile',
   ].some((key) => {
     const value = config[key];
-    return typeof value === 'string' && value.trim() && !value.includes('{{');
+    return typeof value === 'string' && !value.includes('{{');
   });
   // Optional-auth custom endpoints also suppress all ambient authentication.
   // An explicitly configured bearer token retains highest priority in either case.
   if (config.apiKeyRequired === false || hasExplicitAwsCredentials) {
     return explicitKey || undefined;
   }
-  return explicitKey || env?.AWS_BEARER_TOKEN_BEDROCK || getEnvString('AWS_BEARER_TOKEN_BEDROCK');
+  if (explicitKey) {
+    return explicitKey;
+  }
+  const scoped = getScopedAwsCredentialConfig({}, env, true);
+  if (scoped) {
+    if (scoped.apiKey !== undefined && !scoped.apiKey.trim()) {
+      throw new Error(
+        'Scoped AWS_BEARER_TOKEN_BEDROCK is empty. Supply a token or remove the scoped override.',
+      );
+    }
+    return scoped.apiKey;
+  }
+  return getEnvString('AWS_BEARER_TOKEN_BEDROCK');
 }
 
 export function getBedrockMantleOrigin(region: string): string {

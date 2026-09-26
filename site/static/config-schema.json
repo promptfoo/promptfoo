@@ -17,58 +17,58 @@
           "$ref": "#/definitions/__schema2"
         },
         "prompts": {
-          "$ref": "#/definitions/__schema180"
-        },
-        "tests": {
           "$ref": "#/definitions/__schema181"
         },
-        "scenarios": {
-          "$ref": "#/definitions/__schema198"
+        "tests": {
+          "$ref": "#/definitions/__schema182"
         },
-        "defaultTest": {
+        "scenarios": {
           "$ref": "#/definitions/__schema199"
         },
-        "outputPath": {
+        "defaultTest": {
           "$ref": "#/definitions/__schema200"
         },
-        "sharing": {
+        "outputPath": {
           "$ref": "#/definitions/__schema201"
         },
-        "nunjucksFilters": {
+        "sharing": {
           "$ref": "#/definitions/__schema202"
         },
-        "env": {
+        "nunjucksFilters": {
           "$ref": "#/definitions/__schema203"
         },
-        "derivedMetrics": {
+        "env": {
           "$ref": "#/definitions/__schema204"
         },
-        "extensions": {
+        "derivedMetrics": {
           "$ref": "#/definitions/__schema205"
         },
-        "metadata": {
+        "extensions": {
           "$ref": "#/definitions/__schema206"
         },
-        "redteam": {
+        "metadata": {
           "$ref": "#/definitions/__schema207"
         },
-        "writeLatestResults": {
-          "$ref": "#/definitions/__schema237"
+        "redteam": {
+          "$ref": "#/definitions/__schema208"
         },
-        "tracing": {
+        "writeLatestResults": {
           "$ref": "#/definitions/__schema238"
         },
-        "basePath": {
-          "$ref": "#/definitions/__schema243"
+        "tracing": {
+          "$ref": "#/definitions/__schema239"
         },
-        "evaluateOptions": {
+        "basePath": {
           "$ref": "#/definitions/__schema244"
         },
+        "evaluateOptions": {
+          "$ref": "#/definitions/__schema245"
+        },
         "commandLineOptions": {
-          "$ref": "#/definitions/__schema246"
+          "$ref": "#/definitions/__schema247"
         },
         "targets": {
-          "$ref": "#/definitions/__schema247"
+          "$ref": "#/definitions/__schema248"
         }
       },
       "required": ["prompts"],
@@ -329,339 +329,342 @@
             "GOOGLE_API_HOST": {
               "$ref": "#/definitions/__schema65"
             },
-            "GOOGLE_APPLICATION_CREDENTIALS": {
+            "GOOGLE_API_BASE_URL": {
               "$ref": "#/definitions/__schema66"
             },
-            "GOOGLE_API_BASE_URL": {
+            "GOOGLE_API_KEY": {
               "$ref": "#/definitions/__schema67"
             },
-            "GOOGLE_API_KEY": {
+            "GOOGLE_APPLICATION_CREDENTIALS": {
               "$ref": "#/definitions/__schema68"
             },
-            "GOOGLE_CLOUD_PROJECT": {
+            "GOOGLE_CLOUD_QUOTA_PROJECT": {
               "$ref": "#/definitions/__schema69"
             },
-            "GOOGLE_CLOUD_LOCATION": {
+            "GOOGLE_CLOUD_PROJECT": {
               "$ref": "#/definitions/__schema70"
             },
-            "GOOGLE_PROJECT_ID": {
+            "GOOGLE_CLOUD_LOCATION": {
               "$ref": "#/definitions/__schema71"
             },
-            "GOOGLE_LOCATION": {
+            "GOOGLE_PROJECT_ID": {
               "$ref": "#/definitions/__schema72"
             },
-            "GOOGLE_GENERATIVE_AI_API_KEY": {
+            "GOOGLE_LOCATION": {
               "$ref": "#/definitions/__schema73"
             },
-            "GOOGLE_GENAI_USE_VERTEXAI": {
+            "GOOGLE_GENERATIVE_AI_API_KEY": {
               "$ref": "#/definitions/__schema74"
             },
-            "GEMINI_API_KEY": {
+            "GOOGLE_GENAI_USE_VERTEXAI": {
               "$ref": "#/definitions/__schema75"
             },
-            "GROQ_API_KEY": {
+            "GEMINI_API_KEY": {
               "$ref": "#/definitions/__schema76"
             },
-            "HELICONE_API_KEY": {
+            "GROQ_API_KEY": {
               "$ref": "#/definitions/__schema77"
             },
-            "HF_API_TOKEN": {
+            "HELICONE_API_KEY": {
               "$ref": "#/definitions/__schema78"
             },
-            "HF_TOKEN": {
+            "HF_API_TOKEN": {
               "$ref": "#/definitions/__schema79"
             },
-            "HYPERBOLIC_API_KEY": {
+            "HF_TOKEN": {
               "$ref": "#/definitions/__schema80"
             },
-            "HUGGING_FACE_HUB_TOKEN": {
+            "HYPERBOLIC_API_KEY": {
               "$ref": "#/definitions/__schema81"
             },
-            "JFROG_API_KEY": {
+            "HUGGING_FACE_HUB_TOKEN": {
               "$ref": "#/definitions/__schema82"
             },
-            "LANGFUSE_BASE_URL": {
+            "JFROG_API_KEY": {
               "$ref": "#/definitions/__schema83"
             },
-            "LANGFUSE_HOST": {
+            "LANGFUSE_BASE_URL": {
               "$ref": "#/definitions/__schema84"
             },
-            "LANGFUSE_PUBLIC_KEY": {
+            "LANGFUSE_HOST": {
               "$ref": "#/definitions/__schema85"
             },
-            "LANGFUSE_SECRET_KEY": {
+            "LANGFUSE_PUBLIC_KEY": {
               "$ref": "#/definitions/__schema86"
             },
-            "LITELLM_API_BASE": {
+            "LANGFUSE_SECRET_KEY": {
               "$ref": "#/definitions/__schema87"
             },
-            "LITELLM_API_KEY": {
+            "LITELLM_API_BASE": {
               "$ref": "#/definitions/__schema88"
             },
-            "LLAMA_BASE_URL": {
+            "LITELLM_API_KEY": {
               "$ref": "#/definitions/__schema89"
             },
-            "LOCALAI_BASE_URL": {
+            "LLAMA_BASE_URL": {
               "$ref": "#/definitions/__schema90"
             },
-            "MISTRAL_API_BASE_URL": {
+            "LOCALAI_BASE_URL": {
               "$ref": "#/definitions/__schema91"
             },
-            "MISTRAL_API_HOST": {
+            "MISTRAL_API_BASE_URL": {
               "$ref": "#/definitions/__schema92"
             },
-            "MISTRAL_API_KEY": {
+            "MISTRAL_API_HOST": {
               "$ref": "#/definitions/__schema93"
             },
-            "MINIMAX_API_KEY": {
+            "MISTRAL_API_KEY": {
               "$ref": "#/definitions/__schema94"
             },
-            "MOONSHOT_API_KEY": {
+            "MINIMAX_API_KEY": {
               "$ref": "#/definitions/__schema95"
             },
-            "MLFLOW_GATEWAY_API_KEY": {
+            "MOONSHOT_API_KEY": {
               "$ref": "#/definitions/__schema96"
             },
-            "MLFLOW_GATEWAY_URL": {
+            "MLFLOW_GATEWAY_API_KEY": {
               "$ref": "#/definitions/__schema97"
             },
-            "MODEL_API_KEY": {
+            "MLFLOW_GATEWAY_URL": {
               "$ref": "#/definitions/__schema98"
             },
-            "MODELSLAB_API_KEY": {
+            "MODEL_API_KEY": {
               "$ref": "#/definitions/__schema99"
             },
-            "N8N_API_KEY": {
+            "MODELSLAB_API_KEY": {
               "$ref": "#/definitions/__schema100"
             },
-            "NSCALE_SERVICE_TOKEN": {
+            "N8N_API_KEY": {
               "$ref": "#/definitions/__schema101"
             },
-            "NSCALE_API_KEY": {
+            "NSCALE_SERVICE_TOKEN": {
               "$ref": "#/definitions/__schema102"
             },
-            "NOVITA_API_KEY": {
+            "NSCALE_API_KEY": {
               "$ref": "#/definitions/__schema103"
             },
-            "NVIDIA_API_BASE_URL": {
+            "NOVITA_API_KEY": {
               "$ref": "#/definitions/__schema104"
             },
-            "NVIDIA_API_KEY": {
+            "NVIDIA_API_BASE_URL": {
               "$ref": "#/definitions/__schema105"
             },
-            "OLLAMA_API_KEY": {
+            "NVIDIA_API_KEY": {
               "$ref": "#/definitions/__schema106"
             },
-            "OLLAMA_BASE_URL": {
+            "OLLAMA_API_KEY": {
               "$ref": "#/definitions/__schema107"
             },
-            "OPENAI_API_BASE_URL": {
+            "OLLAMA_BASE_URL": {
               "$ref": "#/definitions/__schema108"
             },
-            "OPENAI_API_HOST": {
+            "OPENAI_API_BASE_URL": {
               "$ref": "#/definitions/__schema109"
             },
-            "OPENAI_API_KEY": {
+            "OPENAI_API_HOST": {
               "$ref": "#/definitions/__schema110"
             },
-            "OPENAI_BASE_URL": {
+            "OPENAI_API_KEY": {
               "$ref": "#/definitions/__schema111"
             },
-            "OPENAI_ORGANIZATION": {
+            "OPENAI_BASE_URL": {
               "$ref": "#/definitions/__schema112"
             },
-            "CLAWDBOT_GATEWAY_PASSWORD": {
+            "OPENAI_ORGANIZATION": {
               "$ref": "#/definitions/__schema113"
             },
-            "CLAWDBOT_GATEWAY_TOKEN": {
+            "CLAWDBOT_GATEWAY_PASSWORD": {
               "$ref": "#/definitions/__schema114"
             },
-            "CLAWDBOT_GATEWAY_URL": {
+            "CLAWDBOT_GATEWAY_TOKEN": {
               "$ref": "#/definitions/__schema115"
             },
-            "CODEX_API_KEY": {
+            "CLAWDBOT_GATEWAY_URL": {
               "$ref": "#/definitions/__schema116"
             },
-            "OPENCLAW_CONFIG_PATH": {
+            "CODEX_API_KEY": {
               "$ref": "#/definitions/__schema117"
             },
-            "OPENCLAW_GATEWAY_PASSWORD": {
+            "OPENCLAW_CONFIG_PATH": {
               "$ref": "#/definitions/__schema118"
             },
-            "OPENCLAW_GATEWAY_PORT": {
+            "OPENCLAW_GATEWAY_PASSWORD": {
               "$ref": "#/definitions/__schema119"
             },
-            "OPENCLAW_GATEWAY_TOKEN": {
+            "OPENCLAW_GATEWAY_PORT": {
               "$ref": "#/definitions/__schema120"
             },
-            "OPENCLAW_GATEWAY_URL": {
+            "OPENCLAW_GATEWAY_TOKEN": {
               "$ref": "#/definitions/__schema121"
             },
-            "ORCAROUTER_API_KEY": {
+            "OPENCLAW_GATEWAY_URL": {
               "$ref": "#/definitions/__schema122"
             },
-            "PALM_API_HOST": {
+            "ORCAROUTER_API_KEY": {
               "$ref": "#/definitions/__schema123"
             },
-            "PALM_API_KEY": {
+            "PALM_API_HOST": {
               "$ref": "#/definitions/__schema124"
             },
-            "PORTKEY_API_BASE_URL": {
+            "PALM_API_KEY": {
               "$ref": "#/definitions/__schema125"
             },
-            "PORTKEY_API_KEY": {
+            "PORTKEY_API_BASE_URL": {
               "$ref": "#/definitions/__schema126"
             },
-            "PROMPTFOO_CA_CERT_PATH": {
+            "PORTKEY_API_KEY": {
               "$ref": "#/definitions/__schema127"
             },
-            "PROMPTFOO_FETCH_CONNECTIONS": {
+            "PROMPTFOO_CA_CERT_PATH": {
               "$ref": "#/definitions/__schema128"
             },
-            "PROMPTFOO_MAX_CONCURRENCY": {
+            "PROMPTFOO_FETCH_CONNECTIONS": {
               "$ref": "#/definitions/__schema129"
             },
-            "PROMPTFOO_PFX_CERT_PATH": {
+            "PROMPTFOO_MAX_CONCURRENCY": {
               "$ref": "#/definitions/__schema130"
             },
-            "PROMPTFOO_TRACING_ENABLED": {
+            "PROMPTFOO_PFX_CERT_PATH": {
               "$ref": "#/definitions/__schema131"
             },
-            "PROMPTFOO_PFX_PASSWORD": {
+            "PROMPTFOO_TRACING_ENABLED": {
               "$ref": "#/definitions/__schema132"
             },
-            "PROMPTFOO_JKS_CERT_PATH": {
+            "PROMPTFOO_PFX_PASSWORD": {
               "$ref": "#/definitions/__schema133"
             },
-            "PROMPTFOO_JKS_PASSWORD": {
+            "PROMPTFOO_JKS_CERT_PATH": {
               "$ref": "#/definitions/__schema134"
             },
-            "PROMPTFOO_JKS_ALIAS": {
+            "PROMPTFOO_JKS_PASSWORD": {
               "$ref": "#/definitions/__schema135"
             },
-            "PROMPTFOO_INSECURE_SSL": {
+            "PROMPTFOO_JKS_ALIAS": {
               "$ref": "#/definitions/__schema136"
             },
-            "QUIVERAI_API_KEY": {
+            "PROMPTFOO_INSECURE_SSL": {
               "$ref": "#/definitions/__schema137"
             },
-            "QWAK_TOKEN": {
+            "QUIVERAI_API_KEY": {
               "$ref": "#/definitions/__schema138"
             },
-            "REPLICATE_API_KEY": {
+            "QWAK_TOKEN": {
               "$ref": "#/definitions/__schema139"
             },
-            "REPLICATE_API_TOKEN": {
+            "REPLICATE_API_KEY": {
               "$ref": "#/definitions/__schema140"
             },
-            "REQUEST_TIMEOUT_MS": {
+            "REPLICATE_API_TOKEN": {
               "$ref": "#/definitions/__schema141"
             },
-            "SHAREPOINT_BASE_URL": {
+            "REQUEST_TIMEOUT_MS": {
               "$ref": "#/definitions/__schema142"
             },
-            "SHAREPOINT_CERT_PATH": {
+            "SHAREPOINT_BASE_URL": {
               "$ref": "#/definitions/__schema143"
             },
-            "SHAREPOINT_CLIENT_ID": {
+            "SHAREPOINT_CERT_PATH": {
               "$ref": "#/definitions/__schema144"
             },
-            "SHAREPOINT_TENANT_ID": {
+            "SHAREPOINT_CLIENT_ID": {
               "$ref": "#/definitions/__schema145"
             },
-            "SLACK_BOT_TOKEN": {
+            "SHAREPOINT_TENANT_ID": {
               "$ref": "#/definitions/__schema146"
             },
-            "SNOWFLAKE_ACCOUNT_IDENTIFIER": {
+            "SLACK_BOT_TOKEN": {
               "$ref": "#/definitions/__schema147"
             },
-            "TOGETHER_API_KEY": {
+            "SNOWFLAKE_ACCOUNT_IDENTIFIER": {
               "$ref": "#/definitions/__schema148"
             },
-            "VERCEL_AI_GATEWAY_API_KEY": {
+            "TOGETHER_API_KEY": {
               "$ref": "#/definitions/__schema149"
             },
-            "VERCEL_AI_GATEWAY_BASE_URL": {
+            "VERCEL_AI_GATEWAY_API_KEY": {
               "$ref": "#/definitions/__schema150"
             },
-            "VERTEX_API_HOST": {
+            "VERCEL_AI_GATEWAY_BASE_URL": {
               "$ref": "#/definitions/__schema151"
             },
-            "VERTEX_API_KEY": {
+            "VERTEX_API_HOST": {
               "$ref": "#/definitions/__schema152"
             },
-            "VERTEX_API_VERSION": {
+            "VERTEX_API_KEY": {
               "$ref": "#/definitions/__schema153"
             },
-            "VERTEX_PROJECT_ID": {
+            "VERTEX_API_VERSION": {
               "$ref": "#/definitions/__schema154"
             },
-            "VERTEX_PUBLISHER": {
+            "VERTEX_PROJECT_ID": {
               "$ref": "#/definitions/__schema155"
             },
-            "VERTEX_REGION": {
+            "VERTEX_PUBLISHER": {
               "$ref": "#/definitions/__schema156"
             },
-            "VOYAGE_API_BASE_URL": {
+            "VERTEX_REGION": {
               "$ref": "#/definitions/__schema157"
             },
-            "VOYAGE_API_KEY": {
+            "VOYAGE_API_BASE_URL": {
               "$ref": "#/definitions/__schema158"
             },
-            "WATSONX_AI_APIKEY": {
+            "VOYAGE_API_KEY": {
               "$ref": "#/definitions/__schema159"
             },
-            "WATSONX_AI_AUTH_TYPE": {
+            "WATSONX_AI_APIKEY": {
               "$ref": "#/definitions/__schema160"
             },
-            "WATSONX_AI_BEARER_TOKEN": {
+            "WATSONX_AI_AUTH_TYPE": {
               "$ref": "#/definitions/__schema161"
             },
-            "WATSONX_AI_PROJECT_ID": {
+            "WATSONX_AI_BEARER_TOKEN": {
               "$ref": "#/definitions/__schema162"
             },
-            "XAI_API_BASE_URL": {
+            "WATSONX_AI_PROJECT_ID": {
               "$ref": "#/definitions/__schema163"
             },
-            "XAI_API_KEY": {
+            "XAI_API_BASE_URL": {
               "$ref": "#/definitions/__schema164"
             },
-            "AZURE_CONTENT_SAFETY_ENDPOINT": {
+            "XAI_API_KEY": {
               "$ref": "#/definitions/__schema165"
             },
-            "AZURE_CONTENT_SAFETY_API_KEY": {
+            "AZURE_CONTENT_SAFETY_ENDPOINT": {
               "$ref": "#/definitions/__schema166"
             },
-            "AZURE_CONTENT_SAFETY_API_VERSION": {
+            "AZURE_CONTENT_SAFETY_API_KEY": {
               "$ref": "#/definitions/__schema167"
             },
-            "AWS_REGION": {
+            "AZURE_CONTENT_SAFETY_API_VERSION": {
               "$ref": "#/definitions/__schema168"
             },
-            "AWS_DEFAULT_REGION": {
+            "AWS_REGION": {
               "$ref": "#/definitions/__schema169"
             },
-            "AWS_SAGEMAKER_MAX_TOKENS": {
+            "AWS_DEFAULT_REGION": {
               "$ref": "#/definitions/__schema170"
             },
-            "AWS_SAGEMAKER_TEMPERATURE": {
+            "AWS_SAGEMAKER_MAX_TOKENS": {
               "$ref": "#/definitions/__schema171"
             },
-            "AWS_SAGEMAKER_TOP_P": {
+            "AWS_SAGEMAKER_TEMPERATURE": {
               "$ref": "#/definitions/__schema172"
             },
-            "AWS_SAGEMAKER_MAX_RETRIES": {
+            "AWS_SAGEMAKER_TOP_P": {
               "$ref": "#/definitions/__schema173"
             },
-            "PROMPTFOO_EVAL_TIMEOUT_MS": {
+            "AWS_SAGEMAKER_MAX_RETRIES": {
               "$ref": "#/definitions/__schema174"
+            },
+            "PROMPTFOO_EVAL_TIMEOUT_MS": {
+              "$ref": "#/definitions/__schema175"
             }
           }
         },
         "inputs": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema175"
+              "$ref": "#/definitions/__schema176"
             }
           ]
         }
@@ -1175,6 +1178,9 @@
       "type": "string"
     },
     "__schema175": {
+      "type": "string"
+    },
+    "__schema176": {
       "type": "object",
       "propertyNames": {
         "type": "string",
@@ -1190,13 +1196,13 @@
             "type": "object",
             "properties": {
               "config": {
-                "$ref": "#/definitions/__schema176"
+                "$ref": "#/definitions/__schema177"
               },
               "description": {
-                "$ref": "#/definitions/__schema178"
+                "$ref": "#/definitions/__schema179"
               },
               "type": {
-                "$ref": "#/definitions/__schema179"
+                "$ref": "#/definitions/__schema180"
               }
             },
             "required": ["description"]
@@ -1204,7 +1210,7 @@
         ]
       }
     },
-    "__schema176": {
+    "__schema177": {
       "type": "object",
       "properties": {
         "benign": {
@@ -1218,14 +1224,10 @@
           "minItems": 1,
           "type": "array",
           "items": {
-            "$ref": "#/definitions/__schema177"
+            "$ref": "#/definitions/__schema178"
           }
         }
       }
-    },
-    "__schema177": {
-      "type": "string",
-      "minLength": 1
     },
     "__schema178": {
       "type": "string",
@@ -1233,9 +1235,13 @@
     },
     "__schema179": {
       "type": "string",
-      "enum": ["text", "pdf", "docx", "image"]
+      "minLength": 1
     },
     "__schema180": {
+      "type": "string",
+      "enum": ["text", "pdf", "docx", "image"]
+    },
+    "__schema181": {
       "anyOf": [
         {
           "type": "string"
@@ -1299,7 +1305,7 @@
         }
       ]
     },
-    "__schema181": {
+    "__schema182": {
       "anyOf": [
         {
           "type": "string"
@@ -1312,62 +1318,62 @@
                 "type": "string"
               },
               {
-                "$ref": "#/definitions/__schema182"
+                "$ref": "#/definitions/__schema183"
               },
               {
-                "$ref": "#/definitions/__schema197"
+                "$ref": "#/definitions/__schema198"
               }
             ]
           }
         },
         {
-          "$ref": "#/definitions/__schema197"
+          "$ref": "#/definitions/__schema198"
         }
       ]
     },
-    "__schema182": {
+    "__schema183": {
       "type": "object",
       "properties": {
         "description": {
-          "$ref": "#/definitions/__schema183"
-        },
-        "vars": {
           "$ref": "#/definitions/__schema184"
         },
-        "provider": {
+        "vars": {
           "$ref": "#/definitions/__schema185"
         },
-        "providers": {
-          "$ref": "#/definitions/__schema187"
+        "provider": {
+          "$ref": "#/definitions/__schema186"
         },
-        "prompts": {
+        "providers": {
           "$ref": "#/definitions/__schema188"
         },
-        "providerOutput": {
+        "prompts": {
           "$ref": "#/definitions/__schema189"
         },
-        "assert": {
+        "providerOutput": {
           "$ref": "#/definitions/__schema190"
         },
-        "assertScoringFunction": {
-          "$ref": "#/definitions/__schema193"
+        "assert": {
+          "$ref": "#/definitions/__schema191"
         },
-        "options": {
+        "assertScoringFunction": {
           "$ref": "#/definitions/__schema194"
         },
-        "threshold": {
+        "options": {
           "$ref": "#/definitions/__schema195"
         },
-        "metadata": {
+        "threshold": {
           "$ref": "#/definitions/__schema196"
+        },
+        "metadata": {
+          "$ref": "#/definitions/__schema197"
         }
       }
     },
-    "__schema183": {
+    "__schema184": {
       "type": "string"
     },
-    "__schema184": {},
-    "__schema185": {
+    "__schema185": {},
+    "__schema186": {
       "anyOf": [
         {
           "type": "string"
@@ -1376,11 +1382,11 @@
           "$ref": "#/definitions/__schema5"
         },
         {
-          "$ref": "#/definitions/__schema186"
+          "$ref": "#/definitions/__schema187"
         }
       ]
     },
-    "__schema186": {
+    "__schema187": {
       "type": "object",
       "properties": {
         "id": {},
@@ -1398,18 +1404,12 @@
         "inputs": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema175"
+              "$ref": "#/definitions/__schema176"
             }
           ]
         }
       },
       "required": ["id", "callApi"]
-    },
-    "__schema187": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
     },
     "__schema188": {
       "type": "array",
@@ -1418,6 +1418,12 @@
       }
     },
     "__schema189": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "__schema190": {
       "anyOf": [
         {
           "type": "string"
@@ -1431,7 +1437,7 @@
         }
       ]
     },
-    "__schema190": {
+    "__schema191": {
       "type": "array",
       "items": {
         "anyOf": [
@@ -1447,7 +1453,7 @@
                 "items": {
                   "allOf": [
                     {
-                      "$ref": "#/definitions/__schema191"
+                      "$ref": "#/definitions/__schema192"
                     }
                   ]
                 }
@@ -1472,23 +1478,23 @@
             "required": ["type", "assert"]
           },
           {
-            "$ref": "#/definitions/__schema191"
+            "$ref": "#/definitions/__schema192"
           }
         ]
       }
     },
-    "__schema191": {
+    "__schema192": {
       "type": "object",
       "properties": {
         "type": {
           "anyOf": [
             {
-              "$ref": "#/definitions/__schema192"
+              "$ref": "#/definitions/__schema193"
             },
             {
               "allOf": [
                 {
-                  "$ref": "#/definitions/__schema192"
+                  "$ref": "#/definitions/__schema193"
                 }
               ]
             },
@@ -1527,7 +1533,7 @@
       },
       "required": ["type"]
     },
-    "__schema192": {
+    "__schema193": {
       "type": "string",
       "enum": [
         "agent-rubric",
@@ -1598,7 +1604,7 @@
         "word-count"
       ]
     },
-    "__schema193": {
+    "__schema194": {
       "anyOf": [
         {
           "type": "string",
@@ -1607,7 +1613,7 @@
         {}
       ]
     },
-    "__schema194": {
+    "__schema195": {
       "type": "object",
       "properties": {
         "prefix": {
@@ -1718,10 +1724,10 @@
       },
       "additionalProperties": {}
     },
-    "__schema195": {
+    "__schema196": {
       "type": "number"
     },
-    "__schema196": {
+    "__schema197": {
       "type": "object",
       "properties": {
         "pluginConfig": {},
@@ -1729,7 +1735,7 @@
       },
       "additionalProperties": {}
     },
-    "__schema197": {
+    "__schema198": {
       "type": "object",
       "properties": {
         "path": {
@@ -1771,7 +1777,7 @@
       },
       "required": ["path"]
     },
-    "__schema198": {
+    "__schema199": {
       "type": "array",
       "items": {
         "anyOf": [
@@ -1792,77 +1798,77 @@
                     "description": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema183"
+                          "$ref": "#/definitions/__schema184"
                         }
                       ]
                     },
                     "vars": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema184"
+                          "$ref": "#/definitions/__schema185"
                         }
                       ]
                     },
                     "provider": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema185"
+                          "$ref": "#/definitions/__schema186"
                         }
                       ]
                     },
                     "providers": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema187"
+                          "$ref": "#/definitions/__schema188"
                         }
                       ]
                     },
                     "prompts": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema188"
+                          "$ref": "#/definitions/__schema189"
                         }
                       ]
                     },
                     "providerOutput": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema189"
+                          "$ref": "#/definitions/__schema190"
                         }
                       ]
                     },
                     "assert": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema190"
+                          "$ref": "#/definitions/__schema191"
                         }
                       ]
                     },
                     "assertScoringFunction": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema193"
+                          "$ref": "#/definitions/__schema194"
                         }
                       ]
                     },
                     "options": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema194"
+                          "$ref": "#/definitions/__schema195"
                         }
                       ]
                     },
                     "threshold": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema195"
+                          "$ref": "#/definitions/__schema196"
                         }
                       ]
                     },
                     "metadata": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema196"
+                          "$ref": "#/definitions/__schema197"
                         }
                       ]
                     }
@@ -1872,7 +1878,7 @@
               "tests": {
                 "type": "array",
                 "items": {
-                  "$ref": "#/definitions/__schema182"
+                  "$ref": "#/definitions/__schema183"
                 }
               }
             },
@@ -1881,7 +1887,7 @@
         ]
       }
     },
-    "__schema199": {
+    "__schema200": {
       "anyOf": [
         {
           "type": "string"
@@ -1890,40 +1896,40 @@
           "type": "object",
           "properties": {
             "vars": {
-              "$ref": "#/definitions/__schema184"
-            },
-            "provider": {
               "$ref": "#/definitions/__schema185"
             },
-            "providers": {
-              "$ref": "#/definitions/__schema187"
+            "provider": {
+              "$ref": "#/definitions/__schema186"
             },
-            "prompts": {
+            "providers": {
               "$ref": "#/definitions/__schema188"
             },
-            "providerOutput": {
+            "prompts": {
               "$ref": "#/definitions/__schema189"
             },
-            "assert": {
+            "providerOutput": {
               "$ref": "#/definitions/__schema190"
             },
-            "assertScoringFunction": {
-              "$ref": "#/definitions/__schema193"
+            "assert": {
+              "$ref": "#/definitions/__schema191"
             },
-            "options": {
+            "assertScoringFunction": {
               "$ref": "#/definitions/__schema194"
             },
-            "threshold": {
+            "options": {
               "$ref": "#/definitions/__schema195"
             },
-            "metadata": {
+            "threshold": {
               "$ref": "#/definitions/__schema196"
+            },
+            "metadata": {
+              "$ref": "#/definitions/__schema197"
             }
           }
         }
       ]
     },
-    "__schema200": {
+    "__schema201": {
       "anyOf": [
         {
           "type": "string"
@@ -1936,7 +1942,7 @@
         }
       ]
     },
-    "__schema201": {
+    "__schema202": {
       "anyOf": [
         {
           "type": "boolean"
@@ -1954,7 +1960,7 @@
         }
       ]
     },
-    "__schema202": {
+    "__schema203": {
       "type": "object",
       "propertyNames": {
         "type": "string"
@@ -1963,7 +1969,7 @@
         "type": "string"
       }
     },
-    "__schema203": {
+    "__schema204": {
       "anyOf": [
         {
           "type": "object",
@@ -2145,332 +2151,335 @@
             "GOOGLE_API_HOST": {
               "$ref": "#/definitions/__schema65"
             },
-            "GOOGLE_APPLICATION_CREDENTIALS": {
+            "GOOGLE_API_BASE_URL": {
               "$ref": "#/definitions/__schema66"
             },
-            "GOOGLE_API_BASE_URL": {
+            "GOOGLE_API_KEY": {
               "$ref": "#/definitions/__schema67"
             },
-            "GOOGLE_API_KEY": {
+            "GOOGLE_APPLICATION_CREDENTIALS": {
               "$ref": "#/definitions/__schema68"
             },
-            "GOOGLE_CLOUD_PROJECT": {
+            "GOOGLE_CLOUD_QUOTA_PROJECT": {
               "$ref": "#/definitions/__schema69"
             },
-            "GOOGLE_CLOUD_LOCATION": {
+            "GOOGLE_CLOUD_PROJECT": {
               "$ref": "#/definitions/__schema70"
             },
-            "GOOGLE_PROJECT_ID": {
+            "GOOGLE_CLOUD_LOCATION": {
               "$ref": "#/definitions/__schema71"
             },
-            "GOOGLE_LOCATION": {
+            "GOOGLE_PROJECT_ID": {
               "$ref": "#/definitions/__schema72"
             },
-            "GOOGLE_GENERATIVE_AI_API_KEY": {
+            "GOOGLE_LOCATION": {
               "$ref": "#/definitions/__schema73"
             },
-            "GOOGLE_GENAI_USE_VERTEXAI": {
+            "GOOGLE_GENERATIVE_AI_API_KEY": {
               "$ref": "#/definitions/__schema74"
             },
-            "GEMINI_API_KEY": {
+            "GOOGLE_GENAI_USE_VERTEXAI": {
               "$ref": "#/definitions/__schema75"
             },
-            "GROQ_API_KEY": {
+            "GEMINI_API_KEY": {
               "$ref": "#/definitions/__schema76"
             },
-            "HELICONE_API_KEY": {
+            "GROQ_API_KEY": {
               "$ref": "#/definitions/__schema77"
             },
-            "HF_API_TOKEN": {
+            "HELICONE_API_KEY": {
               "$ref": "#/definitions/__schema78"
             },
-            "HF_TOKEN": {
+            "HF_API_TOKEN": {
               "$ref": "#/definitions/__schema79"
             },
-            "HYPERBOLIC_API_KEY": {
+            "HF_TOKEN": {
               "$ref": "#/definitions/__schema80"
             },
-            "HUGGING_FACE_HUB_TOKEN": {
+            "HYPERBOLIC_API_KEY": {
               "$ref": "#/definitions/__schema81"
             },
-            "JFROG_API_KEY": {
+            "HUGGING_FACE_HUB_TOKEN": {
               "$ref": "#/definitions/__schema82"
             },
-            "LANGFUSE_BASE_URL": {
+            "JFROG_API_KEY": {
               "$ref": "#/definitions/__schema83"
             },
-            "LANGFUSE_HOST": {
+            "LANGFUSE_BASE_URL": {
               "$ref": "#/definitions/__schema84"
             },
-            "LANGFUSE_PUBLIC_KEY": {
+            "LANGFUSE_HOST": {
               "$ref": "#/definitions/__schema85"
             },
-            "LANGFUSE_SECRET_KEY": {
+            "LANGFUSE_PUBLIC_KEY": {
               "$ref": "#/definitions/__schema86"
             },
-            "LITELLM_API_BASE": {
+            "LANGFUSE_SECRET_KEY": {
               "$ref": "#/definitions/__schema87"
             },
-            "LITELLM_API_KEY": {
+            "LITELLM_API_BASE": {
               "$ref": "#/definitions/__schema88"
             },
-            "LLAMA_BASE_URL": {
+            "LITELLM_API_KEY": {
               "$ref": "#/definitions/__schema89"
             },
-            "LOCALAI_BASE_URL": {
+            "LLAMA_BASE_URL": {
               "$ref": "#/definitions/__schema90"
             },
-            "MISTRAL_API_BASE_URL": {
+            "LOCALAI_BASE_URL": {
               "$ref": "#/definitions/__schema91"
             },
-            "MISTRAL_API_HOST": {
+            "MISTRAL_API_BASE_URL": {
               "$ref": "#/definitions/__schema92"
             },
-            "MISTRAL_API_KEY": {
+            "MISTRAL_API_HOST": {
               "$ref": "#/definitions/__schema93"
             },
-            "MINIMAX_API_KEY": {
+            "MISTRAL_API_KEY": {
               "$ref": "#/definitions/__schema94"
             },
-            "MOONSHOT_API_KEY": {
+            "MINIMAX_API_KEY": {
               "$ref": "#/definitions/__schema95"
             },
-            "MLFLOW_GATEWAY_API_KEY": {
+            "MOONSHOT_API_KEY": {
               "$ref": "#/definitions/__schema96"
             },
-            "MLFLOW_GATEWAY_URL": {
+            "MLFLOW_GATEWAY_API_KEY": {
               "$ref": "#/definitions/__schema97"
             },
-            "MODEL_API_KEY": {
+            "MLFLOW_GATEWAY_URL": {
               "$ref": "#/definitions/__schema98"
             },
-            "MODELSLAB_API_KEY": {
+            "MODEL_API_KEY": {
               "$ref": "#/definitions/__schema99"
             },
-            "N8N_API_KEY": {
+            "MODELSLAB_API_KEY": {
               "$ref": "#/definitions/__schema100"
             },
-            "NSCALE_SERVICE_TOKEN": {
+            "N8N_API_KEY": {
               "$ref": "#/definitions/__schema101"
             },
-            "NSCALE_API_KEY": {
+            "NSCALE_SERVICE_TOKEN": {
               "$ref": "#/definitions/__schema102"
             },
-            "NOVITA_API_KEY": {
+            "NSCALE_API_KEY": {
               "$ref": "#/definitions/__schema103"
             },
-            "NVIDIA_API_BASE_URL": {
+            "NOVITA_API_KEY": {
               "$ref": "#/definitions/__schema104"
             },
-            "NVIDIA_API_KEY": {
+            "NVIDIA_API_BASE_URL": {
               "$ref": "#/definitions/__schema105"
             },
-            "OLLAMA_API_KEY": {
+            "NVIDIA_API_KEY": {
               "$ref": "#/definitions/__schema106"
             },
-            "OLLAMA_BASE_URL": {
+            "OLLAMA_API_KEY": {
               "$ref": "#/definitions/__schema107"
             },
-            "OPENAI_API_BASE_URL": {
+            "OLLAMA_BASE_URL": {
               "$ref": "#/definitions/__schema108"
             },
-            "OPENAI_API_HOST": {
+            "OPENAI_API_BASE_URL": {
               "$ref": "#/definitions/__schema109"
             },
-            "OPENAI_API_KEY": {
+            "OPENAI_API_HOST": {
               "$ref": "#/definitions/__schema110"
             },
-            "OPENAI_BASE_URL": {
+            "OPENAI_API_KEY": {
               "$ref": "#/definitions/__schema111"
             },
-            "OPENAI_ORGANIZATION": {
+            "OPENAI_BASE_URL": {
               "$ref": "#/definitions/__schema112"
             },
-            "CLAWDBOT_GATEWAY_PASSWORD": {
+            "OPENAI_ORGANIZATION": {
               "$ref": "#/definitions/__schema113"
             },
-            "CLAWDBOT_GATEWAY_TOKEN": {
+            "CLAWDBOT_GATEWAY_PASSWORD": {
               "$ref": "#/definitions/__schema114"
             },
-            "CLAWDBOT_GATEWAY_URL": {
+            "CLAWDBOT_GATEWAY_TOKEN": {
               "$ref": "#/definitions/__schema115"
             },
-            "CODEX_API_KEY": {
+            "CLAWDBOT_GATEWAY_URL": {
               "$ref": "#/definitions/__schema116"
             },
-            "OPENCLAW_CONFIG_PATH": {
+            "CODEX_API_KEY": {
               "$ref": "#/definitions/__schema117"
             },
-            "OPENCLAW_GATEWAY_PASSWORD": {
+            "OPENCLAW_CONFIG_PATH": {
               "$ref": "#/definitions/__schema118"
             },
-            "OPENCLAW_GATEWAY_PORT": {
+            "OPENCLAW_GATEWAY_PASSWORD": {
               "$ref": "#/definitions/__schema119"
             },
-            "OPENCLAW_GATEWAY_TOKEN": {
+            "OPENCLAW_GATEWAY_PORT": {
               "$ref": "#/definitions/__schema120"
             },
-            "OPENCLAW_GATEWAY_URL": {
+            "OPENCLAW_GATEWAY_TOKEN": {
               "$ref": "#/definitions/__schema121"
             },
-            "ORCAROUTER_API_KEY": {
+            "OPENCLAW_GATEWAY_URL": {
               "$ref": "#/definitions/__schema122"
             },
-            "PALM_API_HOST": {
+            "ORCAROUTER_API_KEY": {
               "$ref": "#/definitions/__schema123"
             },
-            "PALM_API_KEY": {
+            "PALM_API_HOST": {
               "$ref": "#/definitions/__schema124"
             },
-            "PORTKEY_API_BASE_URL": {
+            "PALM_API_KEY": {
               "$ref": "#/definitions/__schema125"
             },
-            "PORTKEY_API_KEY": {
+            "PORTKEY_API_BASE_URL": {
               "$ref": "#/definitions/__schema126"
             },
-            "PROMPTFOO_CA_CERT_PATH": {
+            "PORTKEY_API_KEY": {
               "$ref": "#/definitions/__schema127"
             },
-            "PROMPTFOO_FETCH_CONNECTIONS": {
+            "PROMPTFOO_CA_CERT_PATH": {
               "$ref": "#/definitions/__schema128"
             },
-            "PROMPTFOO_MAX_CONCURRENCY": {
+            "PROMPTFOO_FETCH_CONNECTIONS": {
               "$ref": "#/definitions/__schema129"
             },
-            "PROMPTFOO_PFX_CERT_PATH": {
+            "PROMPTFOO_MAX_CONCURRENCY": {
               "$ref": "#/definitions/__schema130"
             },
-            "PROMPTFOO_TRACING_ENABLED": {
+            "PROMPTFOO_PFX_CERT_PATH": {
               "$ref": "#/definitions/__schema131"
             },
-            "PROMPTFOO_PFX_PASSWORD": {
+            "PROMPTFOO_TRACING_ENABLED": {
               "$ref": "#/definitions/__schema132"
             },
-            "PROMPTFOO_JKS_CERT_PATH": {
+            "PROMPTFOO_PFX_PASSWORD": {
               "$ref": "#/definitions/__schema133"
             },
-            "PROMPTFOO_JKS_PASSWORD": {
+            "PROMPTFOO_JKS_CERT_PATH": {
               "$ref": "#/definitions/__schema134"
             },
-            "PROMPTFOO_JKS_ALIAS": {
+            "PROMPTFOO_JKS_PASSWORD": {
               "$ref": "#/definitions/__schema135"
             },
-            "PROMPTFOO_INSECURE_SSL": {
+            "PROMPTFOO_JKS_ALIAS": {
               "$ref": "#/definitions/__schema136"
             },
-            "QUIVERAI_API_KEY": {
+            "PROMPTFOO_INSECURE_SSL": {
               "$ref": "#/definitions/__schema137"
             },
-            "QWAK_TOKEN": {
+            "QUIVERAI_API_KEY": {
               "$ref": "#/definitions/__schema138"
             },
-            "REPLICATE_API_KEY": {
+            "QWAK_TOKEN": {
               "$ref": "#/definitions/__schema139"
             },
-            "REPLICATE_API_TOKEN": {
+            "REPLICATE_API_KEY": {
               "$ref": "#/definitions/__schema140"
             },
-            "REQUEST_TIMEOUT_MS": {
+            "REPLICATE_API_TOKEN": {
               "$ref": "#/definitions/__schema141"
             },
-            "SHAREPOINT_BASE_URL": {
+            "REQUEST_TIMEOUT_MS": {
               "$ref": "#/definitions/__schema142"
             },
-            "SHAREPOINT_CERT_PATH": {
+            "SHAREPOINT_BASE_URL": {
               "$ref": "#/definitions/__schema143"
             },
-            "SHAREPOINT_CLIENT_ID": {
+            "SHAREPOINT_CERT_PATH": {
               "$ref": "#/definitions/__schema144"
             },
-            "SHAREPOINT_TENANT_ID": {
+            "SHAREPOINT_CLIENT_ID": {
               "$ref": "#/definitions/__schema145"
             },
-            "SLACK_BOT_TOKEN": {
+            "SHAREPOINT_TENANT_ID": {
               "$ref": "#/definitions/__schema146"
             },
-            "SNOWFLAKE_ACCOUNT_IDENTIFIER": {
+            "SLACK_BOT_TOKEN": {
               "$ref": "#/definitions/__schema147"
             },
-            "TOGETHER_API_KEY": {
+            "SNOWFLAKE_ACCOUNT_IDENTIFIER": {
               "$ref": "#/definitions/__schema148"
             },
-            "VERCEL_AI_GATEWAY_API_KEY": {
+            "TOGETHER_API_KEY": {
               "$ref": "#/definitions/__schema149"
             },
-            "VERCEL_AI_GATEWAY_BASE_URL": {
+            "VERCEL_AI_GATEWAY_API_KEY": {
               "$ref": "#/definitions/__schema150"
             },
-            "VERTEX_API_HOST": {
+            "VERCEL_AI_GATEWAY_BASE_URL": {
               "$ref": "#/definitions/__schema151"
             },
-            "VERTEX_API_KEY": {
+            "VERTEX_API_HOST": {
               "$ref": "#/definitions/__schema152"
             },
-            "VERTEX_API_VERSION": {
+            "VERTEX_API_KEY": {
               "$ref": "#/definitions/__schema153"
             },
-            "VERTEX_PROJECT_ID": {
+            "VERTEX_API_VERSION": {
               "$ref": "#/definitions/__schema154"
             },
-            "VERTEX_PUBLISHER": {
+            "VERTEX_PROJECT_ID": {
               "$ref": "#/definitions/__schema155"
             },
-            "VERTEX_REGION": {
+            "VERTEX_PUBLISHER": {
               "$ref": "#/definitions/__schema156"
             },
-            "VOYAGE_API_BASE_URL": {
+            "VERTEX_REGION": {
               "$ref": "#/definitions/__schema157"
             },
-            "VOYAGE_API_KEY": {
+            "VOYAGE_API_BASE_URL": {
               "$ref": "#/definitions/__schema158"
             },
-            "WATSONX_AI_APIKEY": {
+            "VOYAGE_API_KEY": {
               "$ref": "#/definitions/__schema159"
             },
-            "WATSONX_AI_AUTH_TYPE": {
+            "WATSONX_AI_APIKEY": {
               "$ref": "#/definitions/__schema160"
             },
-            "WATSONX_AI_BEARER_TOKEN": {
+            "WATSONX_AI_AUTH_TYPE": {
               "$ref": "#/definitions/__schema161"
             },
-            "WATSONX_AI_PROJECT_ID": {
+            "WATSONX_AI_BEARER_TOKEN": {
               "$ref": "#/definitions/__schema162"
             },
-            "XAI_API_BASE_URL": {
+            "WATSONX_AI_PROJECT_ID": {
               "$ref": "#/definitions/__schema163"
             },
-            "XAI_API_KEY": {
+            "XAI_API_BASE_URL": {
               "$ref": "#/definitions/__schema164"
             },
-            "AZURE_CONTENT_SAFETY_ENDPOINT": {
+            "XAI_API_KEY": {
               "$ref": "#/definitions/__schema165"
             },
-            "AZURE_CONTENT_SAFETY_API_KEY": {
+            "AZURE_CONTENT_SAFETY_ENDPOINT": {
               "$ref": "#/definitions/__schema166"
             },
-            "AZURE_CONTENT_SAFETY_API_VERSION": {
+            "AZURE_CONTENT_SAFETY_API_KEY": {
               "$ref": "#/definitions/__schema167"
             },
-            "AWS_REGION": {
+            "AZURE_CONTENT_SAFETY_API_VERSION": {
               "$ref": "#/definitions/__schema168"
             },
-            "AWS_DEFAULT_REGION": {
+            "AWS_REGION": {
               "$ref": "#/definitions/__schema169"
             },
-            "AWS_SAGEMAKER_MAX_TOKENS": {
+            "AWS_DEFAULT_REGION": {
               "$ref": "#/definitions/__schema170"
             },
-            "AWS_SAGEMAKER_TEMPERATURE": {
+            "AWS_SAGEMAKER_MAX_TOKENS": {
               "$ref": "#/definitions/__schema171"
             },
-            "AWS_SAGEMAKER_TOP_P": {
+            "AWS_SAGEMAKER_TEMPERATURE": {
               "$ref": "#/definitions/__schema172"
             },
-            "AWS_SAGEMAKER_MAX_RETRIES": {
+            "AWS_SAGEMAKER_TOP_P": {
               "$ref": "#/definitions/__schema173"
             },
-            "PROMPTFOO_EVAL_TIMEOUT_MS": {
+            "AWS_SAGEMAKER_MAX_RETRIES": {
               "$ref": "#/definitions/__schema174"
+            },
+            "PROMPTFOO_EVAL_TIMEOUT_MS": {
+              "$ref": "#/definitions/__schema175"
             },
             "ALL_PROXY": {
               "type": "string"
@@ -2509,7 +2518,7 @@
         }
       ]
     },
-    "__schema204": {
+    "__schema205": {
       "type": "array",
       "items": {
         "type": "object",
@@ -2529,7 +2538,7 @@
         "required": ["name", "value"]
       }
     },
-    "__schema205": {
+    "__schema206": {
       "anyOf": [
         {
           "type": "array",
@@ -2542,21 +2551,21 @@
         }
       ]
     },
-    "__schema206": {
+    "__schema207": {
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {}
     },
-    "__schema207": {
+    "__schema208": {
       "type": "object",
       "properties": {
         "injectVar": {
           "description": "Variable to inject. Can be a string or array of strings. If string, it's transformed to an array. Inferred from the prompts by default.",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema208"
+              "$ref": "#/definitions/__schema209"
             }
           ]
         },
@@ -2564,7 +2573,7 @@
           "description": "Purpose override string - describes the prompt templates",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema209"
+              "$ref": "#/definitions/__schema210"
             }
           ]
         },
@@ -2572,7 +2581,7 @@
           "description": "Additional instructions for test generation applied to each plugin",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema210"
+              "$ref": "#/definitions/__schema211"
             }
           ]
         },
@@ -2580,7 +2589,7 @@
           "description": "Provider used for generating adversarial inputs",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema211"
+              "$ref": "#/definitions/__schema212"
             }
           ]
         },
@@ -2588,7 +2597,7 @@
           "description": "Number of tests to generate",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema212"
+              "$ref": "#/definitions/__schema213"
             }
           ]
         },
@@ -2596,7 +2605,7 @@
           "description": "Language(s) of tests to generate for this plugin",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema213"
+              "$ref": "#/definitions/__schema214"
             }
           ]
         },
@@ -2604,7 +2613,7 @@
           "description": "Compliance frameworks to include across reports and commands",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema214"
+              "$ref": "#/definitions/__schema215"
             }
           ]
         },
@@ -2612,7 +2621,7 @@
           "description": "Names of people, brands, or organizations related to your LLM application",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema216"
+              "$ref": "#/definitions/__schema217"
             }
           ]
         },
@@ -2620,7 +2629,7 @@
           "description": "Security contexts for testing multiple states - each context has its own purpose",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema217"
+              "$ref": "#/definitions/__schema218"
             }
           ]
         },
@@ -2628,7 +2637,7 @@
           "default": ["default"],
           "type": "array",
           "items": {
-            "$ref": "#/definitions/__schema220"
+            "$ref": "#/definitions/__schema221"
           },
           "description": "Plugins to use for redteam generation"
         },
@@ -2636,7 +2645,7 @@
           "default": ["default"],
           "type": "array",
           "items": {
-            "$ref": "#/definitions/__schema228"
+            "$ref": "#/definitions/__schema229"
           },
           "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, indirect-web-pwn, jailbreak, jailbreak-templates, jailbreak:composite, jailbreak:goblin, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video"
         },
@@ -2644,7 +2653,7 @@
           "description": "Maximum number of concurrent API calls",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema231"
+              "$ref": "#/definitions/__schema232"
             }
           ]
         },
@@ -2652,7 +2661,7 @@
           "description": "Maximum number of characters allowed per generated user message",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema232"
+              "$ref": "#/definitions/__schema233"
             }
           ]
         },
@@ -2660,7 +2669,7 @@
           "description": "Delay in milliseconds between plugin API calls",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema233"
+              "$ref": "#/definitions/__schema234"
             }
           ]
         },
@@ -2668,7 +2677,7 @@
           "description": "Whether to exclude target output from the agentific attack generation process",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema234"
+              "$ref": "#/definitions/__schema235"
             }
           ]
         },
@@ -2676,7 +2685,7 @@
           "description": "Tracing defaults applied to all strategies unless overridden",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema235"
+              "$ref": "#/definitions/__schema236"
             }
           ]
         },
@@ -2684,14 +2693,11 @@
           "description": "Global grading examples that apply to all plugins",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema236"
+              "$ref": "#/definitions/__schema237"
             }
           ]
         }
       }
-    },
-    "__schema208": {
-      "type": "string"
     },
     "__schema209": {
       "type": "string"
@@ -2700,24 +2706,27 @@
       "type": "string"
     },
     "__schema211": {
+      "type": "string"
+    },
+    "__schema212": {
       "anyOf": [
         {
           "type": "string"
         },
         {
-          "$ref": "#/definitions/__schema186"
+          "$ref": "#/definitions/__schema187"
         },
         {
           "$ref": "#/definitions/__schema5"
         }
       ]
     },
-    "__schema212": {
+    "__schema213": {
       "type": "integer",
       "exclusiveMinimum": 0,
       "maximum": 9007199254740991
     },
-    "__schema213": {
+    "__schema214": {
       "anyOf": [
         {
           "type": "string"
@@ -2730,14 +2739,14 @@
         }
       ]
     },
-    "__schema214": {
+    "__schema215": {
       "minItems": 1,
       "type": "array",
       "items": {
-        "$ref": "#/definitions/__schema215"
+        "$ref": "#/definitions/__schema216"
       }
     },
-    "__schema215": {
+    "__schema216": {
       "type": "string",
       "enum": [
         "mitre:atlas",
@@ -2751,13 +2760,13 @@
         "dod:ai:ethics"
       ]
     },
-    "__schema216": {
+    "__schema217": {
       "type": "array",
       "items": {
         "type": "string"
       }
     },
-    "__schema217": {
+    "__schema218": {
       "type": "array",
       "items": {
         "type": "object",
@@ -2770,7 +2779,7 @@
             "description": "Optional purpose/context for this context - used for generation and grading, or inherited from the root redteam purpose when omitted or blank",
             "allOf": [
               {
-                "$ref": "#/definitions/__schema218"
+                "$ref": "#/definitions/__schema219"
               }
             ]
           },
@@ -2778,7 +2787,7 @@
             "description": "Variables passed to provider (e.g., context_file, user_role)",
             "allOf": [
               {
-                "$ref": "#/definitions/__schema219"
+                "$ref": "#/definitions/__schema220"
               }
             ]
           }
@@ -2786,10 +2795,10 @@
         "required": ["id"]
       }
     },
-    "__schema218": {
+    "__schema219": {
       "type": "string"
     },
-    "__schema219": {
+    "__schema220": {
       "type": "object",
       "propertyNames": {
         "type": "string"
@@ -2798,15 +2807,15 @@
         "type": "string"
       }
     },
-    "__schema220": {
+    "__schema221": {
       "anyOf": [
         {
           "anyOf": [
             {
-              "$ref": "#/definitions/__schema221"
+              "$ref": "#/definitions/__schema222"
             },
             {
-              "$ref": "#/definitions/__schema222"
+              "$ref": "#/definitions/__schema223"
             }
           ],
           "description": "Name of the plugin or path to custom plugin"
@@ -2817,10 +2826,10 @@
             "id": {
               "anyOf": [
                 {
-                  "$ref": "#/definitions/__schema223"
+                  "$ref": "#/definitions/__schema224"
                 },
                 {
-                  "$ref": "#/definitions/__schema224"
+                  "$ref": "#/definitions/__schema225"
                 }
               ],
               "description": "Name of the plugin"
@@ -2829,7 +2838,7 @@
               "description": "Number of tests to generate for this plugin",
               "allOf": [
                 {
-                  "$ref": "#/definitions/__schema225"
+                  "$ref": "#/definitions/__schema226"
                 }
               ]
             },
@@ -2837,7 +2846,7 @@
               "description": "Plugin-specific configuration",
               "allOf": [
                 {
-                  "$ref": "#/definitions/__schema226"
+                  "$ref": "#/definitions/__schema227"
                 }
               ]
             },
@@ -2845,7 +2854,7 @@
               "description": "Severity level for this plugin",
               "allOf": [
                 {
-                  "$ref": "#/definitions/__schema227"
+                  "$ref": "#/definitions/__schema228"
                 }
               ]
             }
@@ -2854,7 +2863,7 @@
         }
       ]
     },
-    "__schema221": {
+    "__schema222": {
       "type": "string",
       "enum": [
         "aegis",
@@ -3149,11 +3158,11 @@
         "wordplay",
         "xstest"
       ]
-    },
-    "__schema222": {
-      "type": "string"
     },
     "__schema223": {
+      "type": "string"
+    },
+    "__schema224": {
       "type": "string",
       "enum": [
         "aegis",
@@ -3449,41 +3458,41 @@
         "xstest"
       ]
     },
-    "__schema224": {
+    "__schema225": {
       "type": "string"
     },
-    "__schema225": {
+    "__schema226": {
       "type": "integer",
       "exclusiveMinimum": 0,
       "maximum": 9007199254740991
     },
-    "__schema226": {
+    "__schema227": {
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {}
     },
-    "__schema227": {
+    "__schema228": {
       "type": "string",
       "enum": ["critical", "high", "medium", "low", "informational"]
     },
-    "__schema228": {
+    "__schema229": {
       "anyOf": [
         {
-          "$ref": "#/definitions/__schema229"
+          "$ref": "#/definitions/__schema230"
         },
         {
           "type": "object",
           "properties": {
             "id": {
-              "$ref": "#/definitions/__schema229"
+              "$ref": "#/definitions/__schema230"
             },
             "config": {
               "description": "Strategy-specific configuration",
               "allOf": [
                 {
-                  "$ref": "#/definitions/__schema230"
+                  "$ref": "#/definitions/__schema231"
                 }
               ]
             }
@@ -3492,7 +3501,7 @@
         }
       ]
     },
-    "__schema229": {
+    "__schema230": {
       "anyOf": [
         {
           "type": "string",
@@ -3544,17 +3553,12 @@
         }
       ]
     },
-    "__schema230": {
+    "__schema231": {
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {}
-    },
-    "__schema231": {
-      "type": "integer",
-      "exclusiveMinimum": 0,
-      "maximum": 9007199254740991
     },
     "__schema232": {
       "type": "integer",
@@ -3563,13 +3567,18 @@
     },
     "__schema233": {
       "type": "integer",
-      "minimum": 0,
+      "exclusiveMinimum": 0,
       "maximum": 9007199254740991
     },
     "__schema234": {
-      "type": "boolean"
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
     },
     "__schema235": {
+      "type": "boolean"
+    },
+    "__schema236": {
       "type": "object",
       "properties": {
         "enabled": {
@@ -3621,14 +3630,14 @@
           "additionalProperties": {
             "allOf": [
               {
-                "$ref": "#/definitions/__schema235"
+                "$ref": "#/definitions/__schema236"
               }
             ]
           }
         }
       }
     },
-    "__schema236": {
+    "__schema237": {
       "type": "array",
       "items": {
         "type": "object",
@@ -3649,10 +3658,10 @@
         "required": ["output", "pass", "score", "reason"]
       }
     },
-    "__schema237": {
+    "__schema238": {
       "type": "boolean"
     },
-    "__schema238": {
+    "__schema239": {
       "type": "object",
       "properties": {
         "enabled": {
@@ -3763,19 +3772,19 @@
                   "const": "tempo"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema239"
+                  "$ref": "#/definitions/__schema240"
                 },
                 "auth": {
                   "type": "object",
                   "properties": {
                     "token": {
-                      "$ref": "#/definitions/__schema240"
-                    },
-                    "username": {
                       "$ref": "#/definitions/__schema241"
                     },
-                    "password": {
+                    "username": {
                       "$ref": "#/definitions/__schema242"
+                    },
+                    "password": {
+                      "$ref": "#/definitions/__schema243"
                     }
                   }
                 },
@@ -3804,7 +3813,7 @@
                   "const": "braintrust"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema239"
+                  "$ref": "#/definitions/__schema240"
                 },
                 "projectId": {
                   "type": "string",
@@ -3846,7 +3855,7 @@
                   "const": "langfuse"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema239"
+                  "$ref": "#/definitions/__schema240"
                 },
                 "auth": {
                   "type": "object",
@@ -3892,13 +3901,9 @@
         }
       }
     },
-    "__schema239": {
-      "type": "string",
-      "format": "uri"
-    },
     "__schema240": {
       "type": "string",
-      "minLength": 1
+      "format": "uri"
     },
     "__schema241": {
       "type": "string",
@@ -3909,9 +3914,13 @@
       "minLength": 1
     },
     "__schema243": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1
     },
     "__schema244": {
+      "type": "string"
+    },
+    "__schema245": {
       "type": "object",
       "properties": {
         "cache": {
@@ -3954,14 +3963,14 @@
           "type": "boolean"
         },
         "filterRange": {
-          "$ref": "#/definitions/__schema245"
+          "$ref": "#/definitions/__schema246"
         }
       }
     },
-    "__schema245": {
+    "__schema246": {
       "type": "string"
     },
-    "__schema246": {
+    "__schema247": {
       "type": "object",
       "properties": {
         "description": {
@@ -4090,7 +4099,7 @@
         "filterRange": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema245"
+              "$ref": "#/definitions/__schema246"
             }
           ]
         },
@@ -4163,7 +4172,7 @@
         }
       }
     },
-    "__schema247": {
+    "__schema248": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"

@@ -109,13 +109,22 @@ async function createApiProvider(
   const renderTemplate = <T>(value: T): T =>
     cliState.withEnv(templateEnv, () => renderEnvOnlyInObject(value, templateEnv));
   const renderedProviderPath = renderTemplate(providerPath);
-  const mergedEnv = mergeProviderEnv(renderedProviderPath, env, options.env);
+  let mergedEnv = mergeProviderEnv(renderedProviderPath, env, options.env);
 
   // Render ONLY environment variable templates at load time (e.g., {{ env.AZURE_ENDPOINT }})
   // This allows constructors to access real env values while preserving runtime templates
   // like {{ vars.* }} for per-test customization at callApi() time
   const renderedConfig = options.config ? renderTemplate(options.config) : undefined;
   const renderedId = options.id ? renderTemplate(options.id) : undefined;
+  if (
+    renderedProviderPath.startsWith('vertex:') &&
+    renderedConfig?.expressMode === false &&
+    templateEnv?.GOOGLE_APPLICATION_CREDENTIALS !== undefined
+  ) {
+    // Forced OAuth must retain ADC even when a higher API key prunes the implicit auth group.
+    mergedEnv ??= {};
+    mergedEnv.GOOGLE_APPLICATION_CREDENTIALS = templateEnv.GOOGLE_APPLICATION_CREDENTIALS;
+  }
 
   const providerOptions: ProviderOptions = {
     id: renderedId,

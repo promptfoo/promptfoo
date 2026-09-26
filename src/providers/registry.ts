@@ -129,6 +129,9 @@ function getProviderEnvAliasGroups(providerPath: string): readonly (readonly str
   if (CODEX_CLI_PROVIDER_PATH.test(providerPath)) {
     return [['OPENAI_API_KEY', 'CODEX_API_KEY']];
   }
+  if (/^azure(?:openai)?:foundry-agent:/.test(providerPath)) {
+    return [['AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET', 'AZURE_TENANT_ID']];
+  }
   if (/^(?:openclaw|clawdbot)(?::|$)/.test(providerPath)) {
     return [
       [
@@ -142,14 +145,27 @@ function getProviderEnvAliasGroups(providerPath: string): readonly (readonly str
   if (providerPath.startsWith('huggingface:') || providerPath.startsWith('hf:')) {
     return [['HF_TOKEN', 'HF_API_TOKEN']];
   }
+  const awsAuth = [
+    'AWS_ACCESS_KEY_ID',
+    'AWS_SECRET_ACCESS_KEY',
+    'AWS_SESSION_TOKEN',
+    'AWS_PROFILE',
+    'AWS_BEARER_TOKEN_BEDROCK',
+  ];
   if (providerPath.startsWith('sagemaker:')) {
-    return [['AWS_REGION', 'AWS_DEFAULT_REGION']];
+    return [
+      awsAuth.filter((key) => key !== 'AWS_BEARER_TOKEN_BEDROCK'),
+      ['AWS_REGION', 'AWS_DEFAULT_REGION'],
+    ];
   }
   if (providerPath.startsWith('bedrock:')) {
     const mode = getBedrockTextRoute(providerPath)?.apiMode;
     return mode === 'chat' || mode === 'messages' || mode === 'responses'
-      ? [['AWS_BEDROCK_REGION', 'AWS_REGION', 'AWS_DEFAULT_REGION']]
-      : [];
+      ? [awsAuth, ['AWS_BEDROCK_REGION', 'AWS_REGION', 'AWS_DEFAULT_REGION']]
+      : [awsAuth];
+  }
+  if (providerPath.startsWith('bedrock-agent:')) {
+    return [awsAuth];
   }
   if (/^(?:google|palm):live:/.test(providerPath)) {
     return [['GOOGLE_API_KEY', 'GEMINI_API_KEY']];
@@ -167,8 +183,17 @@ function getProviderEnvAliasGroups(providerPath: string): readonly (readonly str
     ];
   }
   if (providerPath.startsWith('vertex:')) {
+    const modelName = providerPath.replace(/^vertex:(?:chat:)?/, '');
+    const supportsApiKey =
+      !/^(?:live|embeddings?|video):/.test(modelName) &&
+      !modelName.includes('claude') &&
+      modelName.includes('gemini') &&
+      !['gemini-omni-flash-preview', 'gemini-omni-1.1-flash-preview'].includes(modelName);
     return [
-      ['VERTEX_API_KEY', 'GOOGLE_API_KEY'],
+      // Only Gemini chat supports express API keys; all other routes require OAuth.
+      supportsApiKey
+        ? ['VERTEX_API_KEY', 'GOOGLE_API_KEY', 'GOOGLE_APPLICATION_CREDENTIALS']
+        : ['GOOGLE_APPLICATION_CREDENTIALS'],
       ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'],
       ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION'],
     ];
@@ -228,9 +253,11 @@ export function mergeProviderEnv(
     }
     merged ??= {};
     for (const aliases of aliasGroups) {
-      // Empty entries retain their existing per-variable meaning; a non-empty
-      // alias selects this scope without retaining a conflicting lower alias.
-      if (aliases.some((key) => layer[key])) {
+      // Ordinary aliases retain their existing empty-value meaning. A scoped
+      // credential field, including an empty mask, must never borrow a lower tuple.
+      const credentialTuple =
+        aliases.includes('AWS_ACCESS_KEY_ID') || aliases.includes('AZURE_CLIENT_ID');
+      if (aliases.some((key) => (credentialTuple ? layer[key] !== undefined : layer[key]))) {
         for (const key of aliases) {
           delete merged[key];
         }

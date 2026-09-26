@@ -236,7 +236,7 @@ describe('GoogleLiveProvider', () => {
           emit({ serverContent: { outputTranscription: { text: 'Hello' }, turnComplete: true } }),
         );
         expect((await provider.callApi('Hello')).error).toBeUndefined();
-        expect(getGoogleAccessToken).toHaveBeenCalledWith(credentials);
+        expect(getGoogleAccessToken).toHaveBeenCalledWith(credentials, undefined);
         expect(WebSocket).toHaveBeenCalledWith(
           expect.stringContaining('?access_token=gemini-oauth-token'),
         );
@@ -269,7 +269,7 @@ describe('GoogleLiveProvider', () => {
           emit({ serverContent: { outputTranscription: { text: 'Hello' }, turnComplete: true } }),
         );
         expect((await provider.callApi('Hello')).error).toBeUndefined();
-        expect(getGoogleAccessToken).toHaveBeenCalledWith(undefined);
+        expect(getGoogleAccessToken).toHaveBeenCalledWith(undefined, undefined);
         expect(WebSocket).toHaveBeenCalledWith(
           expect.stringContaining('?access_token=gemini-oauth-token'),
         );

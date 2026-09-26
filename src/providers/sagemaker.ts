@@ -6,7 +6,9 @@ import logger from '../logger';
 import telemetry from '../telemetry';
 import { getTransformErrorMessage, TransformInputType, transform } from '../util/transform';
 import { StringOrFunctionSchema } from '../validators/shared';
+import { getScopedAwsCredentialConfig, resolveAwsCredentials } from './awsCredentials';
 import { resolveProviderEnv } from './env';
+import { createEnvironmentScopedState } from './scopedState';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -91,6 +93,24 @@ interface SageMakerOptions extends ProviderOptions {
  * Base class for SageMaker providers with common functionality
  */
 abstract class SageMakerGenericProvider {
+  private readonly getSdkState = createEnvironmentScopedState(
+    () => ({
+      namespace: crypto.randomUUID(),
+      client: undefined as any,
+      runtimes: new Map<string, Promise<any>>(),
+    }),
+    async (state) => {
+      const clients = await Promise.allSettled(state.runtimes.values());
+      for (const client of clients) {
+        if (client.status === 'fulfilled') {
+          client.value.destroy();
+        }
+      }
+    },
+  );
+  protected get responseCacheNamespace(): string {
+    return this.getSdkState().namespace;
+  }
   env?: EnvOverrides;
 
   protected getNumericEnv(key: string, integer: boolean, defaultValue: number): number {
@@ -98,8 +118,13 @@ abstract class SageMakerGenericProvider {
     const parsed = integer ? Number.parseInt(value ?? '', 10) : Number.parseFloat(value ?? '');
     return Number.isNaN(parsed) ? defaultValue : parsed;
   }
-  sagemakerRuntime?: any; // SageMaker runtime client
-  private initializedRuntime?: { client: any; region: string };
+  private injectedRuntime?: any;
+  get sagemakerRuntime(): any {
+    return this.injectedRuntime ?? this.getSdkState().client;
+  }
+  set sagemakerRuntime(client: any) {
+    this.injectedRuntime = client;
+  }
   config: SageMakerConfig;
   endpointName: string;
   delay?: number; // Delay between API calls in milliseconds
@@ -145,66 +170,53 @@ abstract class SageMakerGenericProvider {
   /**
    * Get AWS credentials from config or environment
    */
-  async getCredentials(): Promise<any> {
-    if (this.config.accessKeyId && this.config.secretAccessKey) {
-      logger.debug('Using explicit credentials from config');
-      return {
-        accessKeyId: this.config.accessKeyId,
-        secretAccessKey: this.config.secretAccessKey,
-        sessionToken: this.config.sessionToken,
-      };
-    }
-    if (this.config.profile) {
-      logger.debug(`Using AWS profile: ${this.config.profile}`);
-      try {
-        const { fromSSO } = await import('@aws-sdk/credential-provider-sso');
-        return fromSSO({ profile: this.config.profile });
-      } catch {
-        throw new Error(
-          `Failed to load AWS SSO profile. Please install @aws-sdk/credential-provider-sso`,
-        );
-      }
-    }
-
-    // Default credentials will be loaded from environment or instance profile
-    logger.debug('Using default AWS credentials from environment');
-    return undefined;
+  async getCredentials() {
+    return resolveAwsCredentials(this.config, this.env);
   }
 
   /**
    * Initialize and return the SageMaker runtime client
    */
   async getSageMakerRuntimeInstance(region?: string) {
-    if (
-      !this.sagemakerRuntime ||
-      (region !== undefined &&
-        this.initializedRuntime !== undefined &&
-        this.sagemakerRuntime === this.initializedRuntime.client &&
-        region !== this.initializedRuntime.region)
-    ) {
-      try {
-        const { SageMakerRuntimeClient } = await import('@aws-sdk/client-sagemaker-runtime');
+    if (this.injectedRuntime) {
+      return this.injectedRuntime;
+    }
+    const state = this.getSdkState();
+    const runtimeRegion = region ?? this.getRegion();
+    let initialization = state.runtimes.get(runtimeRegion);
+    if (!initialization) {
+      initialization = (async () => {
+        const { SageMakerRuntimeClient } = await import('@aws-sdk/client-sagemaker-runtime').catch(
+          (cause) => {
+            const error = new Error(
+              'The @aws-sdk/client-sagemaker-runtime package is required. Please install it with: npm install @aws-sdk/client-sagemaker-runtime',
+            );
+            // The app also typechecks this provider with ES2020 Error types.
+            (error as Error & { cause?: unknown }).cause = cause;
+            throw error;
+          },
+        );
         const credentials = await this.getCredentials();
+        const profile = getScopedAwsCredentialConfig(this.config, this.env)?.profile;
 
-        const runtimeRegion = region ?? this.getRegion();
         const runtime = new SageMakerRuntimeClient({
           region: runtimeRegion,
           maxAttempts: this.getNumericEnv('AWS_SAGEMAKER_MAX_RETRIES', true, 3),
           retryMode: 'adaptive',
           ...(credentials ? { credentials } : {}),
+          ...(profile ? { profile } : {}),
         });
 
-        this.sagemakerRuntime = runtime;
-        this.initializedRuntime = { client: runtime, region: runtimeRegion };
+        state.client = runtime;
         logger.debug(`SageMaker client initialized for region ${runtimeRegion}`);
         return runtime;
-      } catch {
-        throw new Error(
-          'The @aws-sdk/client-sagemaker-runtime package is required. Please install it with: npm install @aws-sdk/client-sagemaker-runtime',
-        );
-      }
+      })().catch((error) => {
+        state.runtimes.delete(runtimeRegion);
+        throw error;
+      });
+      state.runtimes.set(runtimeRegion, initialization);
     }
-    return this.sagemakerRuntime;
+    return initialization;
   }
 
   /**
@@ -692,6 +704,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     // Keep request and parsing settings together across cache and network awaits.
     const payload = this.formatPayload(transformedPrompt);
     const request = {
+      cacheNamespace: this.responseCacheNamespace,
       payload,
       endpoint: this.getEndpointName(),
       modelType: this.modelType,
@@ -865,6 +878,7 @@ export class SageMakerEmbeddingProvider
   private getCacheKey(text: string): string {
     // Create a deterministic representation of the request parameters
     const configForKey = {
+      cacheNamespace: this.responseCacheNamespace,
       endpoint: this.getEndpointName(),
       modelType: this.config.modelType,
       contentType: this.getContentType(),
@@ -877,7 +891,7 @@ export class SageMakerEmbeddingProvider
 
     // Generate shorter, more efficient hashed keys
     const textHash = crypto.createHash('sha256').update(text).digest('hex').substring(0, 16);
-    const configHash = crypto.createHash('sha256').update(configStr).digest('hex').substring(0, 8);
+    const configHash = crypto.createHash('sha256').update(configStr).digest('hex');
 
     return `sagemaker:embedding:v1:${this.getEndpointName()}:${textHash}:${configHash}`;
   }

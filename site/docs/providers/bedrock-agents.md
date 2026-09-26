@@ -256,7 +256,7 @@ tests:
 
 ## Authentication
 
-The provider supports multiple authentication methods:
+Bedrock bearer API keys (`AWS_BEARER_TOKEN_BEDROCK`) are not supported by this provider. Use one of these authentication methods:
 
 1. **Environment Variables** (recommended):
 

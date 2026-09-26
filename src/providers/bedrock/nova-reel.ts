@@ -198,11 +198,9 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
         '@aws-sdk/client-bedrock-runtime'
       );
 
-      const credentials = await this.getCredentials();
-
       const client = new BedrockRuntimeClient({
         region: this.getRegion(),
-        ...(credentials ? { credentials } : {}),
+        ...(await this.getBedrockAuthOptions()),
       });
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -241,11 +239,9 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
         '@aws-sdk/client-bedrock-runtime'
       );
 
-      const credentials = await this.getCredentials();
-
       const client = new BedrockRuntimeClient({
         region: this.getRegion(),
-        ...(credentials ? { credentials } : {}),
+        ...(await this.getBedrockAuthOptions()),
       });
 
       while (Date.now() - startTime < maxPollTimeMs) {
@@ -309,6 +305,7 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
       const s3 = new S3Client({
         region: this.getRegion(),
         ...(credentials ? { credentials } : {}),
+        ...(this.getProfile() ? { profile: this.getProfile() } : {}),
       });
 
       // Nova Reel outputs to {s3Uri}/output.mp4
@@ -359,6 +356,13 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    if (this.getApiKey()) {
+      return {
+        error:
+          'Bedrock video generation requires AWS access credentials or a profile for S3 output. Bearer tokens are not supported.',
+      };
+    }
+
     // Validate S3 output URI
     const s3OutputUri = this.videoConfig.s3OutputUri;
     if (!s3OutputUri) {

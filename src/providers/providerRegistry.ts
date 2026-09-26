@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 import logger from '../logger';
 
 /**
@@ -8,15 +10,30 @@ interface CleanupProvider {
 }
 
 /**
- * Global registry of Python providers for cleanup on process exit.
- * Ensures no zombie Python processes are left running.
+ * Registry of provider resources, optionally owned by one evaluation environment.
  */
 class ProviderRegistry {
-  private providers: Set<CleanupProvider> = new Set();
+  private providers = new Map<CleanupProvider, object | undefined>();
   private shutdownRegistered: boolean = false;
+  private readonly scopeContext = new AsyncLocalStorage<object>();
 
-  register(provider: CleanupProvider): void {
-    this.providers.add(provider);
+  get currentScope(): object | undefined {
+    return this.scopeContext.getStore();
+  }
+
+  async withScope<T>(fn: () => Promise<T>): Promise<T> {
+    const scope = {};
+    return this.scopeContext.run(scope, async () => {
+      try {
+        return await fn();
+      } finally {
+        await this.shutdownAll(scope);
+      }
+    });
+  }
+
+  register(provider: CleanupProvider, scope?: object): void {
+    this.providers.set(provider, scope);
 
     if (!this.shutdownRegistered) {
       this.registerShutdownHandlers();
@@ -37,17 +54,11 @@ class ProviderRegistry {
       }
       shuttingDown = true;
 
-      logger.debug(`Received ${signal}, shutting down ${this.providers.size} Python providers...`);
-
-      await Promise.all(
-        Array.from(this.providers).map((p) =>
-          p.shutdown().catch((err) => {
-            logger.error(`Error shutting down provider: ${err}`);
-          }),
-        ),
+      logger.debug(
+        `Received ${signal}, shutting down ${this.providers.size} provider resources...`,
       );
-
-      logger.debug('Python provider shutdown complete');
+      await this.shutdownAll();
+      logger.debug('Provider shutdown complete');
     };
 
     process.once('SIGINT', () => void shutdown('SIGINT'));
@@ -56,8 +67,13 @@ class ProviderRegistry {
     process.once('beforeExit', () => void shutdown('beforeExit'));
   }
 
-  async shutdownAll(): Promise<void> {
-    const results = await Promise.allSettled(Array.from(this.providers).map((p) => p.shutdown()));
+  async shutdownAll(scope?: object): Promise<void> {
+    const providers = [...this.providers]
+      .filter(([, owner]) => !scope || !owner || owner === scope)
+      .map(([provider]) => provider);
+    // Remove this batch before awaiting it; cleanup may register new resources.
+    providers.forEach((provider) => this.providers.delete(provider));
+    const results = await Promise.allSettled(providers.map((provider) => provider.shutdown()));
 
     // Log any failures but don't throw - cleanup should be defensive
     for (const result of results) {
@@ -65,8 +81,6 @@ class ProviderRegistry {
         logger.warn(`Error shutting down provider: ${result.reason}`);
       }
     }
-
-    this.providers.clear();
   }
 }
 
