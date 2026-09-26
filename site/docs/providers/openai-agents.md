@@ -30,6 +30,8 @@ If you are using the Python `openai-agents` SDK, use the [OpenAI Agents Python S
 - Set `OPENAI_API_KEY` environment variable
 - Agent definition (inline or in a TypeScript/JavaScript file)
 
+You can also supply OpenAI credentials and endpoints through provider or top-level `env`, an invocation env file, or `config.apiKey` and `config.apiBaseUrl`. Agents with a custom SDK `Model` object keep that model's client.
+
 ## Basic Usage
 
 ```yaml
