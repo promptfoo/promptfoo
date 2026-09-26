@@ -223,6 +223,7 @@ for (const test of cases) {
         env: {
           ...process.env,
           PROMPTFOO_CONFIG_DIR: configDir,
+          PROMPTFOO_LOG_DIR: path.join(configDir, 'logs'),
           PROMPTFOO_DISABLE_TELEMETRY: 'true',
           PROMPTFOO_DISABLE_UPDATE: 'true',
           PROMPTFOO_TRACING_ENABLED: 'true',

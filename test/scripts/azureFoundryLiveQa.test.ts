@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mockProcessEnv } from '../util/utils';
 
 const mocks = vi.hoisted(() => ({ execFile: vi.fn() }));
 vi.mock('node:child_process', () => ({
@@ -10,7 +11,7 @@ vi.mock('node:child_process', () => ({
   execFileSync: vi.fn(() => 'fixture-head'),
 }));
 
-describe('Azure Foundry live QA export failures', () => {
+describe('Azure Foundry live QA', () => {
   let directory: string;
   let originalArgv: string[];
   let originalExitCode: typeof process.exitCode;
@@ -42,6 +43,78 @@ describe('Azure Foundry live QA export failures', () => {
     vi.restoreAllMocks();
     fs.rmSync(directory, { recursive: true, force: true });
   });
+
+  it.each(['inherited environment', '.env'])(
+    'keeps child logs isolated from a directory configured through %s',
+    async (source) => {
+      const externalLogs = path.join(directory, 'external-logs');
+      fs.mkdirSync(externalLogs);
+      // Exceed logger retention so an escaped directory also exposes unwanted pruning.
+      const sentinels = Array.from({ length: 60 }, (_, i) => `promptfoo-debug-sentinel-${i}.log`);
+      for (const name of sentinels) {
+        fs.writeFileSync(path.join(externalLogs, name), 'preserve existing logs');
+      }
+      fs.writeFileSync(path.join(directory, '.env'), `PROMPTFOO_LOG_DIR=${externalLogs}\n`);
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_LOG_DIR: source === 'inherited environment' ? externalLogs : undefined,
+      });
+      try {
+        mocks.execFile.mockImplementation((_file, args, _options, callback) => {
+          fs.writeFileSync(
+            args[args.indexOf('-o') + 1],
+            JSON.stringify({ results: { results: [completed] } }),
+          );
+          fs.appendFileSync(path.join(directory, 'output', 'callbacks.jsonl'), '{}\n');
+          callback(null, '', '');
+        });
+        await import('../../scripts/azureFoundryLiveQa');
+
+        const { execFileSync } =
+          await vi.importActual<typeof import('node:child_process')>('node:child_process');
+        const options = mocks.execFile.mock.calls[0][2];
+        execFileSync(
+          process.execPath,
+          [
+            '--import',
+            'tsx',
+            '--input-type=module',
+            '--eval',
+            `import { setupEnv } from ${JSON.stringify(new URL('../../src/util/env.ts', import.meta.url).href)};
+             import logger, { initializeRunLogging, closeLogger } from ${JSON.stringify(new URL('../../src/logger.ts', import.meta.url).href)};
+             process.chdir(${JSON.stringify(directory)});
+             setupEnv(undefined, { refreshConfigDirectory: true });
+             initializeRunLogging();
+             logger.error('isolated Foundry QA fixture');
+             await closeLogger();`,
+          ],
+          {
+            cwd: options.cwd,
+            env: {
+              ...options.env,
+              PROMPTFOO_DISABLE_DEBUG_LOG: 'false',
+              PROMPTFOO_DISABLE_ERROR_LOG: 'false',
+            },
+            stdio: 'pipe',
+          },
+        );
+
+        expect(fs.readdirSync(externalLogs).sort()).toEqual(sentinels.sort());
+        const isolatedLogs = path.join(directory, 'output', 'promptfoo', 'logs');
+        expect(fs.readdirSync(isolatedLogs)).toHaveLength(2);
+        for (const name of fs.readdirSync(isolatedLogs)) {
+          expect(fs.readFileSync(path.join(isolatedLogs, name), 'utf8')).toContain(
+            'isolated Foundry QA fixture',
+          );
+        }
+        expect(mocks.execFile).toHaveBeenCalledTimes(3);
+        for (const [, , childOptions] of mocks.execFile.mock.calls) {
+          expect(childOptions.env.PROMPTFOO_LOG_DIR).toBe(isolatedLogs);
+        }
+      } finally {
+        restoreEnv();
+      }
+    },
+  );
 
   it.each([
     ['truncated JSON', '{"results":', false],
