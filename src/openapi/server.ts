@@ -352,7 +352,10 @@ export function createServerOpenApiRegistry() {
     responses: {
       200: jsonResponse('ShareResponse', ServerSchemas.Share.Response),
       400: validationError(),
+      401: errorResponse('The share server rejected the saved credentials'),
+      403: errorResponse('Not permitted to share this evaluation'),
       404: notFound('Evaluation not found'),
+      422: errorResponse('Sharing is disabled or the evaluation has no results'),
       500: serverError(),
     },
   });

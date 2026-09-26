@@ -43,6 +43,14 @@ vi.mock('../../../src/redteam/remoteGeneration', () => ({
 vi.mock('../../../src/share', () => ({
   createShareableUrl: vi.fn(),
   determineShareDomain: vi.fn(),
+  ShareUploadError: class ShareUploadError extends Error {
+    constructor(
+      message: string,
+      readonly status: number,
+    ) {
+      super(message);
+    }
+  },
   stripAuthFromUrl: vi.fn((url: string) => url),
 }));
 
@@ -75,10 +83,11 @@ vi.mock('../../../src/util/database', () => ({
 import { cloudConfig } from '../../../src/globalConfig/cloud';
 import Eval, { getEvalSummaries } from '../../../src/models/eval';
 import { getRemoteHealthUrl } from '../../../src/redteam/remoteGeneration';
-import { createShareableUrl, determineShareDomain } from '../../../src/share';
+import { createShareableUrl, determineShareDomain, ShareUploadError } from '../../../src/share';
 import telemetry from '../../../src/telemetry';
 import { synthesizeFromTestSuite } from '../../../src/testCase/synthesis';
 import { checkRemoteHealth } from '../../../src/util/apiHealth';
+import { ConfigPermissionError } from '../../../src/util/cloud';
 import {
   getPrompts,
   getPromptsForTestCasesHash,
@@ -312,6 +321,59 @@ describe('inline server API DTO validation', () => {
     // The share route intentionally avoids `readResult` because it converts
     // load failures into `undefined`, which would collapse real DB errors into 404s.
     expect(mockedReadResult).not.toHaveBeenCalled();
+  });
+
+  it('returns 422 instead of a null URL when there is nothing to share', async () => {
+    mockedEval.findById.mockResolvedValue({ id: 'eval-1' } as never);
+    mockedCreateShareableUrl.mockResolvedValue(null);
+
+    const response = await api.post('/api/results/share').send({ id: 'eval-1' });
+
+    expect(response.status).toBe(422);
+    expect(response.body).toEqual({
+      error: 'Sharing is disabled or this eval has no results to share',
+    });
+  });
+
+  it.each([
+    [
+      new ShareUploadError('401 Unauthorized: upstream secret', 401),
+      401,
+      'rejected your credentials',
+    ],
+    [new ShareUploadError('403 Forbidden: upstream secret', 403), 403, 'do not have permission'],
+    [
+      new ConfigPermissionError('Permission denied: provider secret'),
+      403,
+      'do not have permission',
+    ],
+    [new ShareUploadError('500 Internal Server Error: upstream secret', 500), 500, 'Failed'],
+    [new Error('fetch failed: upstream secret'), 500, 'Failed to generate share URL'],
+  ])('maps %s to a fixed client-safe %i', async (error, status, message) => {
+    mockedEval.findById.mockResolvedValue({ id: 'eval-1' } as never);
+    mockedCreateShareableUrl.mockRejectedValue(error);
+
+    const response = await api.post('/api/results/share').send({ id: 'eval-1' });
+
+    expect(response.status).toBe(status);
+    expect(response.body.error).toContain(message);
+    expect(JSON.stringify(response.body)).not.toContain('secret');
+    expect(mockedCreateShareableUrl).toHaveBeenCalledWith(expect.anything(), {
+      showAuth: true,
+      throwOnError: true,
+    });
+  });
+
+  it('only suggests `promptfoo auth login` when a Cloud share is rejected with 401', async () => {
+    mockedEval.findById.mockResolvedValue({ id: 'eval-1' } as never);
+    mockedCreateShareableUrl.mockRejectedValue(new ShareUploadError('401 Unauthorized', 401));
+
+    const selfHosted = await api.post('/api/results/share').send({ id: 'eval-1' });
+    mockedCloudConfig.isEnabled.mockReturnValue(true);
+    const cloud = await api.post('/api/results/share').send({ id: 'eval-1' });
+
+    expect(selfHosted.body).toEqual({ error: 'The share server rejected your credentials.' });
+    expect(cloud.body.error).toContain('Run `promptfoo auth login` and retry.');
   });
 
   it('returns a 404 DTO when sharing a result whose eval row is missing', async () => {

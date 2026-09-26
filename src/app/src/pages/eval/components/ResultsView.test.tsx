@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsView from './ResultsView';
+import ShareModal from './ShareModal';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import type { ResultLightweightWithLabel } from '@promptfoo/types';
 
@@ -365,6 +366,34 @@ describe('ResultsView Share Button', () => {
     await waitFor(() => {
       expect(screen.getByTestId('share-modal')).toBeInTheDocument();
     });
+  });
+
+  it('passes a stable onShare that surfaces the server share error', async () => {
+    vi.mocked(callApi).mockResolvedValue(
+      Response.json(
+        { error: 'Sharing is disabled or this eval has no results to share' },
+        { status: 422 },
+      ),
+    );
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+    const initialOnShare = vi.mocked(ShareModal).mock.lastCall![0].onShare;
+
+    await userEvent.click(screen.getByText('Eval actions'));
+    await userEvent.click(screen.getByText('Share'));
+    await waitFor(() => expect(screen.getByTestId('share-modal')).toBeInTheDocument());
+
+    // A new function per render would make ShareModal start a duplicate upload.
+    const { onShare } = vi.mocked(ShareModal).mock.lastCall![0];
+    expect(onShare).toBe(initialOnShare);
+    await expect(onShare('test-eval-id')).rejects.toThrow(
+      'Sharing is disabled or this eval has no results to share',
+    );
   });
 
   it('shows share button alongside other menu items', async () => {
