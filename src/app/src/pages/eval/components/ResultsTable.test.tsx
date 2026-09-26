@@ -4882,9 +4882,12 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
       'https://second.example.test',
       'https://first.example.test',
     ]);
-    // Completion of the first server's writes must not replace the second server's table.
+    // Completion of the first server's writes must not replace or refresh the second server's table.
     expect(mockSetTable).toHaveBeenCalledTimes(2);
-    expect(mockFetchEvalData).not.toHaveBeenCalled();
+    expect(mockFetchEvalData).not.toHaveBeenCalledWith(
+      '123',
+      expect.objectContaining({ skipLoadingState: true }),
+    );
   });
 
   it('persists a queued v4 rating when its result leaves the current page', async () => {
