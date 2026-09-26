@@ -4076,5 +4076,33 @@ Turn 3: Expected tool "execute_create"
         'Does the output correctly reference the input: {{myVar}}?',
       );
     });
+
+    // Regression for https://github.com/promptfoo/promptfoo/issues/10501: a judge that reuses
+    // a live target provider holds an SDK client with circular references
+    // (client.messages._client === client). Grading must neither serialize nor deep-clone it.
+    it('grades with a reused provider that holds circular references', async () => {
+      const client: { messages: { _client?: unknown } } = { messages: {} };
+      client.messages._client = client;
+      const grader = Object.assign(
+        createMockProvider({
+          id: 'anthropic:messages:claude-sonnet-4-5',
+          callApi: async () => ({
+            output: JSON.stringify({ pass: true, score: 1, reason: 'graded' }),
+          }),
+        }),
+        { anthropic: client },
+      );
+      const assertion: Assertion = { type: 'llm-rubric', value: 'is polite', provider: grader };
+
+      const result = await runAssertion({
+        prompt: 'Some prompt',
+        assertion,
+        test: { vars: {}, assert: [assertion] },
+        providerResponse: { output: 'Hello!' },
+        provider: grader,
+      });
+
+      expect(result).toMatchObject({ pass: true, reason: 'graded' });
+    });
   });
 });
