@@ -134,6 +134,7 @@ interface BackgroundResponseResult {
   headers?: Record<string, string>;
   error?: string;
   retried?: boolean;
+  cacheHit?: boolean;
   cancelled?: boolean;
   shared?: boolean;
   timedOut?: boolean;
@@ -530,7 +531,7 @@ async function createBackgroundResponseWithCancellation(
     }
     const shared = inFlight.billed;
     inFlight.billed = true;
-    return shared ? { ...created, cached: true } : created;
+    return shared ? { ...created, coalesced: true } : created;
   } finally {
     if (onAbort) {
       signal?.removeEventListener('abort', onAbort);
@@ -580,6 +581,7 @@ async function resolveBackgroundResponse(
       headers: retried.headers,
       error: `API error: ${retried.status} ${retried.statusText}\n${JSON.stringify(retried.data)}`,
       retried: true,
+      cacheHit: retried.cached,
     };
   }
 
@@ -596,6 +598,7 @@ async function resolveBackgroundResponse(
         cancelOnStop,
       )),
       retried: true,
+      cacheHit: retried.cached,
     };
   }
 
@@ -605,6 +608,7 @@ async function resolveBackgroundResponse(
     statusText: retried.statusText,
     headers: retried.headers,
     retried: true,
+    cacheHit: retried.cached,
   };
 }
 
@@ -1334,6 +1338,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     let status: number;
     let statusText: string;
     let cached = false;
+    let cacheHit = false;
+    let coalesced = false;
     let deleteFromCache: (() => Promise<void>) | undefined;
     let updateCache:
       | ((
@@ -1545,6 +1551,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         ({
           data,
           cached,
+          coalesced = false,
           status,
           statusText,
           deleteFromCache,
@@ -1572,6 +1579,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
               this.shouldBustCache(context),
               config.maxRetries,
             ));
+        cacheHit = cached;
+        if (body.background && coalesced) {
+          cached = true;
+        }
       }
 
       const policyResponse = this.getPolicyResponse(
@@ -1640,6 +1651,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           cancelOnStop,
           backgroundDeadline,
         );
+        cacheHit = polled.cacheHit ?? cacheHit;
         if (polled.shared) {
           cached = true;
         } else if (
@@ -1749,6 +1761,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // Merge HTTP metadata with any existing metadata from the processor
     return {
       ...billedResult,
+      cacheHit,
       metadata: {
         ...billedResult.metadata,
         http: {

@@ -27,7 +27,8 @@ vi.mock('../src/assertions', async () => {
 });
 
 // Mock cache to prevent file system operations
-vi.mock('../src/cache', () => ({
+vi.mock('../src/cache', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/cache')>()),
   getCache: vi.fn(() => ({
     get: vi.fn(),
     set: vi.fn(),
