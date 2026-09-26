@@ -131,8 +131,9 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * Reasoning effort levels for model reasoning intensity.
  *
  * Model support varies:
- * - gpt-6-astra / gpt-5.6-sol / gpt-5.6-terra: 'low', 'medium', 'high', 'xhigh', 'max', and 'ultra'
- * - gpt-5.6-luna: 'low', 'medium', 'high', 'xhigh', and 'max'
+ * - gpt-6-astra / gpt-6-sol / gpt-5.6-sol / gpt-5.6-terra: 'low', 'medium', 'high', 'xhigh', 'max', and 'ultra'
+ * - gpt-6-luna / gpt-5.6-luna: 'low', 'medium', 'high', 'xhigh', and 'max';
+ *   gpt-6-luna does not support 'ultra'
  * - gpt-5.5: 'minimal', 'low', 'medium', 'high', 'xhigh' in the Codex SDK;
  *   the OpenAI API uses 'none' instead of 'minimal'
  * - gpt-5.5-pro: 'medium', 'high', 'xhigh'
@@ -145,11 +146,11 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * Values:
  * - 'minimal': Minimal reasoning overhead
  * - 'low': Light reasoning, faster responses
- * - 'medium': Balanced (default for GPT-5.6 Terra and Luna)
+ * - 'medium': Balanced reasoning; runtime defaults vary by model
  * - 'high': Thorough reasoning for complex tasks
  * - 'xhigh': Maximum reasoning depth (gpt-5.5, gpt-5.4, gpt-5.2)
- * - 'max': Deepest single-agent reasoning for GPT-5.6
- * - 'ultra': Proactive multi-agent reasoning for GPT-5.6 Sol and Terra
+ * - 'max': Deepest single-agent reasoning
+ * - 'ultra': Proactive multi-agent reasoning on supported Codex models
  */
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 
@@ -284,7 +285,7 @@ export interface OpenAICodexSDKConfig {
   codex_path_override?: string;
 
   /**
-   * Model to use (e.g., 'gpt-5.6-terra' or 'gpt-5.6-luna').
+   * Model to use (e.g., 'gpt-6-sol' or 'gpt-6-luna').
    * Availability depends on authentication mode and account access; omitted models
    * use the installed Codex SDK's default.
    * When routing through a non-OpenAI `model_provider` (such as `amazon-bedrock`), use that
@@ -680,6 +681,8 @@ async function loadCodexSDK(): Promise<any> {
 export class OpenAICodexSDKProvider implements ApiProvider {
   static OPENAI_MODELS = [
     'gpt-6-astra',
+    'gpt-6-sol',
+    'gpt-6-luna',
     // GPT-5.6 models (requires Codex 0.144.0 or later)
     'gpt-5.6-sol',
     'gpt-5.6-terra',

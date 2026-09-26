@@ -1077,7 +1077,7 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'chat') {
         return new OpenAiChatCompletionProvider(
-          modelName || configuredModel || 'gpt-5.6-terra',
+          modelName || configuredModel || 'gpt-6-sol',
           providerOptions,
         );
       }
@@ -1107,7 +1107,7 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'responses') {
         return new OpenAiResponsesProvider(
-          modelName || configuredModel || 'gpt-5.6-terra',
+          modelName || configuredModel || 'gpt-6-sol',
           providerOptions,
         );
       }

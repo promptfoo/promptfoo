@@ -5,12 +5,30 @@ import { OpenAiEmbeddingProvider } from './openai/embedding';
 import type { ProviderOptions } from '../types/index';
 
 const KNOWN_MODELS = new Set([
+  // Qwen3.8
+  'qwen3.8-max',
+  'qwen3.8-max-0902',
+  'qwen3.8-flash',
+  'qwen3.8-omni-flash',
+
+  // Qwen3.7
+  'qwen3.7-max',
+  'qwen3.7-max-preview',
+  'qwen3.7-max-2026-06-08',
+  'qwen3.7-max-2026-05-20',
+  'qwen3.7-max-2026-05-17',
+  'qwen3.7-plus',
+  'qwen3.7-plus-2026-05-26',
+  'qwen3.7-flash',
+  'qwen3.7-flash-2026-07-15',
+
   // Qwen3.6
   'qwen3.6-max-preview',
   'qwen3.6-plus',
   'qwen3.6-plus-2026-04-02',
   'qwen3.6-flash',
   'qwen3.6-flash-2026-04-16',
+  'qwen3.6-35b-a3b',
 
   // Qwen3.5
   'qwen3.5-plus',
@@ -170,6 +188,10 @@ const KNOWN_MODELS = new Set([
   'qwen3-coder-30b-a3b-instruct',
 
   // DeepSeek
+  'deepseek-v4.1-flash',
+  'deepseek-v4-pro-0813',
+  'deepseek-v4-pro',
+  'deepseek-v4-flash',
   'deepseek-v3.2',
   'deepseek-v3.2-exp',
   'deepseek-v3.1',
@@ -184,7 +206,13 @@ const KNOWN_MODELS = new Set([
   'deepseek-r1-distill-llama-70b',
 
   // Kimi
+  'kimi-k3',
+  'kimi-k2.6',
   'moonshot-kimi-k2-instruct',
+
+  // GLM
+  'ZHIPU/GLM-5.3',
+  'glm-5.2',
 
   // Image generation
   'qwen-image-plus',
@@ -192,6 +220,7 @@ const KNOWN_MODELS = new Set([
   // Embedding models
   'text-embedding-v3',
   'text-embedding-v4',
+  'qwen3.7-text-embedding',
 ]);
 
 const API_BASE_URL = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1';

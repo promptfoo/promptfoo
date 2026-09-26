@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getGradingInputHash } from '../../../../src/redteam/grading/storedResult';
 import { CustomProvider, MemorySystem } from '../../../../src/redteam/providers/custom/index';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
@@ -1406,9 +1407,9 @@ describe('CustomProvider', () => {
       }),
     });
 
-    mockTargetProvider.callApi.mockResolvedValue({
-      output: 'target response',
-    });
+    mockTargetProvider.callApi
+      .mockResolvedValueOnce({ output: 'target response', guardrails: { flagged: false } })
+      .mockResolvedValueOnce({ output: 'target response', guardrails: { flagged: true } });
 
     // Mock scoring provider responses for both turns
     mockScoringProvider.callApi.mockResolvedValue({
@@ -1421,18 +1422,27 @@ describe('CustomProvider', () => {
 
     const result = await testProvider.callApi(prompt, context);
 
-    // Should continue to max turns and store the LAST grader result (with assertion.value set to rubric)
     expect(result.metadata?.storedGraderResult).toEqual({
       metadata: {
         redteamGradingInputHash: expect.any(String),
         redteamGradingAssertionHash: expect.any(String),
       },
-      ...secondGraderResult,
+      ...firstGraderResult,
       assertion: { type: 'mock-grader', value: testRubric },
     });
     expect(result.metadata?.stopReason).toBe('Max rounds reached');
     expect(result.metadata?.successfulAttacks).toHaveLength(1);
     expect(result.metadata?.totalSuccessfulAttacks).toBe(1);
+    expect(result.guardrails).toEqual({ flagged: false });
+    expect(result.metadata?.messages).toHaveLength(2);
+    expect(result.metadata?.storedGraderResult?.metadata?.redteamGradingInputHash).toBe(
+      getGradingInputHash(
+        result.metadata?.redteamFinalPrompt as string,
+        result.output as string,
+        result.metadata?.messages,
+        'mock',
+      ),
+    );
   });
 
   it('should include modifiers in system prompt from test metadata', async () => {

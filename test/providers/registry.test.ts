@@ -483,11 +483,11 @@ describe('Provider Registry', () => {
       it.each([
         ['chat', OpenAiChatCompletionProvider],
         ['responses', OpenAiResponsesProvider],
-      ])('uses Terra when openai:%s omits a model', async (endpoint, Provider) => {
+      ])('uses GPT-6 Sol when openai:%s omits a model', async (endpoint, Provider) => {
         const provider = await registry.create(`openai:${endpoint}`);
 
         expect(provider).toBeInstanceOf(Provider);
-        expect(provider).toHaveProperty('modelName', 'gpt-5.6-terra');
+        expect(provider).toHaveProperty('modelName', 'gpt-6-sol');
       });
 
       it.each([
@@ -501,6 +501,8 @@ describe('Provider Registry', () => {
         'gpt-5.10',
         'gpt-6',
         'gpt-6-astra',
+        'gpt-6-sol',
+        'gpt-6-luna',
         'gpt-6-astra-2026-09-01',
         'gpt-6.1',
         'gpt-7-mini',
@@ -512,7 +514,7 @@ describe('Provider Registry', () => {
         expect(provider.id()).toBe(`openai:${model}`);
       });
 
-      it.each(['gpt-5.6', 'gpt-5.6-luna', 'gpt-6-astra', 'gpt-7-mini'])(
+      it.each(['gpt-5.6', 'gpt-5.6-luna', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-7-mini'])(
         'honors the explicit Chat endpoint for %s',
         async (model) => {
           const provider = await registry.create(`openai:chat:${model}`);

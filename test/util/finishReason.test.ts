@@ -30,6 +30,13 @@ describe('normalizeFinishReason', () => {
     });
   });
 
+  describe('Vercel AI SDK mappings', () => {
+    it('should map hyphenated AI SDK reasons to standard values', () => {
+      expect(normalizeFinishReason('tool-calls')).toBe('tool_calls');
+      expect(normalizeFinishReason('content-filter')).toBe('content_filter');
+    });
+  });
+
   describe('case normalization', () => {
     it('should handle uppercase input', () => {
       expect(normalizeFinishReason('STOP')).toBe('stop');

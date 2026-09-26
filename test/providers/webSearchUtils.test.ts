@@ -40,8 +40,8 @@ describe('webSearchUtils', () => {
     });
 
     it('should return false for provider-like values without an id function', () => {
-      expect(hasWebSearchCapability('openai:responses:gpt-5.6-terra' as any)).toBe(false);
-      expect(hasWebSearchCapability({ id: 'openai:responses:gpt-5.6-terra' } as any)).toBe(false);
+      expect(hasWebSearchCapability('openai:responses:gpt-6-sol' as any)).toBe(false);
+      expect(hasWebSearchCapability({ id: 'openai:responses:gpt-6-sol' } as any)).toBe(false);
     });
 
     it('should return false when a provider id function throws', () => {
@@ -152,7 +152,7 @@ describe('webSearchUtils', () => {
 
     it('should return true for OpenAI responses provider with web_search_preview tool', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'openai:responses:gpt-5.6-terra',
+        id: () => 'openai:responses:gpt-6-sol',
         config: {
           tools: [{ type: 'web_search_preview' }],
         },
@@ -162,7 +162,7 @@ describe('webSearchUtils', () => {
 
     it('should return true for OpenAI responses provider with the current web_search tool', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'openai:responses:gpt-5.6-terra',
+        id: () => 'openai:responses:gpt-6-sol',
         config: {
           tools: [{ type: 'web_search' }],
         },
@@ -220,13 +220,13 @@ describe('webSearchUtils', () => {
     });
 
     it('should return true for a real OpenAI Responses provider whose id omits the responses prefix', () => {
-      const provider = new OpenAiResponsesProvider('gpt-5.6-terra', {
+      const provider = new OpenAiResponsesProvider('gpt-6-sol', {
         config: {
           tools: [{ type: 'web_search_preview' }],
         },
       });
 
-      expect(provider.id()).toBe('openai:gpt-5.6-terra');
+      expect(provider.id()).toBe('openai:gpt-6-sol');
       expect(hasWebSearchCapability(provider)).toBe(true);
     });
 
@@ -309,7 +309,7 @@ describe('webSearchUtils', () => {
 
     it('should return false for OpenAI responses provider without web_search_preview', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'openai:responses:gpt-5.6-terra',
+        id: () => 'openai:responses:gpt-6-sol',
         config: {
           tools: [{ type: 'code_interpreter' }],
         },
@@ -356,7 +356,7 @@ describe('webSearchUtils', () => {
 
     it('should return false for provider with no tools configured', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'openai:responses:gpt-5.6-terra',
+        id: () => 'openai:responses:gpt-6-sol',
         config: {},
       };
       expect(hasWebSearchCapability(provider as ApiProvider)).toBe(false);
@@ -374,14 +374,14 @@ describe('webSearchUtils', () => {
   describe('loadWebSearchProvider', () => {
     const mockLoadApiProvider = vi.mocked(loadApiProvider);
     const mockAnthropicWebSearchProvider = (): Partial<ApiProvider> => ({
-      id: () => 'anthropic:messages:claude-opus-4-8',
+      id: () => 'anthropic:messages:claude-opus-5-5',
       config: {
         tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
       },
     });
     const mockOpenAiWebSearchProvider = (): Partial<ApiProvider> =>
       ({
-        id: () => 'openai:gpt-5.6-terra',
+        id: () => 'openai:gpt-6-sol',
         constructor: { name: 'OpenAiResponsesProvider' },
         config: {
           tools: [{ type: 'web_search_preview' }],
@@ -422,7 +422,7 @@ describe('webSearchUtils', () => {
 
       expect(result).toBe(mockProvider);
       expect(mockLoadApiProvider).toHaveBeenCalledWith(
-        'anthropic:messages:claude-opus-4-8',
+        'anthropic:messages:claude-opus-5-5',
         expect.objectContaining({
           options: expect.objectContaining({
             config: expect.objectContaining({
@@ -443,7 +443,7 @@ describe('webSearchUtils', () => {
 
       expect(result).toBe(mockProvider);
       expect(mockLoadApiProvider).toHaveBeenCalledWith(
-        'openai:responses:gpt-5.6-terra',
+        'openai:responses:gpt-6-sol',
         expect.objectContaining({
           options: expect.objectContaining({
             config: expect.objectContaining({
@@ -557,7 +557,7 @@ describe('webSearchUtils', () => {
 
       // Should try OpenAI first (since preferAnthropic defaults to false)
       expect(mockLoadApiProvider).toHaveBeenCalledWith(
-        'openai:responses:gpt-5.6-terra',
+        'openai:responses:gpt-6-sol',
         expect.anything(),
       );
     });

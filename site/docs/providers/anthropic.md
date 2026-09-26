@@ -252,6 +252,8 @@ Promptfoo currently requires `stop_details` to create the top-level `guardrails`
 
 In a stream, the terminal refusal reason can arrive after partial text in the final message delta. Promptfoo merges those details before returning the provider response, and cached structured refusals preserve the signal. Use [`not-guardrails`](/docs/configuration/expected-outputs/guardrails#inverse-assertion-not-guardrails) to require the structured classifier signal. Use [`is-refusal`](/docs/configuration/expected-outputs/deterministic#is-refusal) for model-written refusal text.
 
+Cost estimates follow [Anthropic's refusal billing rules](https://platform.claude.com/docs/en/build-with-claude/refusals-and-fallback#how-refusals-are-billed): refusals before any output cost zero unless the category is `bio`, `frontier_llm`, or `reasoning_extraction`. Those categories and refusals after output begins use normal token pricing.
+
 ### Metadata
 
 Pass request metadata to the API for tracking or auditing purposes:

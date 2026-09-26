@@ -208,7 +208,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   mcp?: MCPConfig;
 
   /**
-   * Controls response verbosity for GPT-5 models and GPT-6 Astra.
+   * Controls response verbosity for GPT-5 and GPT-6 models.
    */
   verbosity?: GPT5Verbosity;
 
