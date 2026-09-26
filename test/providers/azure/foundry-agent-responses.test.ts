@@ -232,6 +232,49 @@ describe('Foundry Responses conversation and accounting', () => {
     expect(create).toHaveBeenCalledOnce();
   });
 
+  it.each([null, undefined])(
+    'preserves usable output and accounting without executing a batch containing %s',
+    async (invalidItem) => {
+      const response = reply('first', [invalidItem, tool(), text('partial answer')]);
+      create.mockResolvedValue(response);
+
+      const result = await provider().callApi('weather?');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toContain('partial answer');
+      expect(result.output).toContain('"call_id":"call_one"');
+      expect(result.raw).toBe(response);
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 10,
+        completion: 5,
+        total: 15,
+        numRequests: 1,
+      });
+      expect(result.cost).toBeCloseTo(calculateAzureCost('gpt-4.1', {}, 10, 5)!, 12);
+      expect(callback).not.toHaveBeenCalled();
+      expect(create).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([null, undefined])(
+    'retains a late final answer containing %s after a completed tool turn',
+    async (invalidItem) => {
+      vi.useFakeTimers();
+      create.mockResolvedValueOnce(reply('first', [tool()])).mockImplementationOnce(async () => {
+        vi.advanceTimersByTime(100);
+        return reply('last', [invalidItem, text('final answer')]);
+      });
+
+      const result = await provider({ maxPollTimeMs: 100 }).callApi('weather?');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('final answer');
+      expect(result.tokenUsage).toMatchObject({ total: 30, numRequests: 2 });
+      expect(callback).toHaveBeenCalledOnce();
+      expect(create).toHaveBeenCalledTimes(2);
+    },
+  );
+
   it.each(['failed', 'cancelled', 'incomplete', 'queued', 'in_progress'])(
     'preserves %s as an error even with partial text',
     async (status) => {
@@ -497,6 +540,84 @@ describe('Foundry Responses conversation and accounting', () => {
       },
     });
     expect(result.metadata).toMatchObject({ usageIncomplete: true, costIncomplete: true });
+  });
+
+  describe.each([
+    {
+      field: 'input audio',
+      details: (value: unknown) => ({ input_tokens_details: { audio_tokens: value } }),
+    },
+    {
+      field: 'output audio',
+      details: (value: unknown) => ({ output_tokens_details: { audio_tokens: value } }),
+    },
+    {
+      field: 'input image',
+      details: (value: unknown) => ({ input_tokens_details: { image_tokens: value } }),
+    },
+    {
+      field: 'output image',
+      details: (value: unknown) => ({ output_tokens_details: { image_tokens: value } }),
+    },
+    {
+      field: 'cached input audio',
+      details: (value: unknown) => ({
+        input_tokens_details: { cached_tokens_details: { audio_tokens: value } },
+      }),
+    },
+    {
+      field: 'cached input image',
+      details: (value: unknown) => ({
+        input_tokens_details: { cached_tokens_details: { image_tokens: value } },
+      }),
+    },
+  ])('$field modality usage validation', ({ details }) => {
+    it.each([null, '2', NaN, Infinity, -1])(
+      'excludes cost with an invalid count %s while retaining later known cost',
+      async (value) => {
+        create
+          .mockResolvedValueOnce(
+            reply('first', [tool()], { usage: { ...usage, ...details(value) } }),
+          )
+          .mockResolvedValueOnce(reply('last', [text('done')]));
+
+        const result = await provider().callApi('weather?');
+
+        expect(result.output).toBe('done');
+        expect(result.tokenUsage).toMatchObject({
+          prompt: 20,
+          completion: 10,
+          total: 30,
+          numRequests: 2,
+        });
+        expect(result.metadata).toMatchObject({
+          usageIncomplete: true,
+          costIncomplete: true,
+          knownCost: calculateAzureCost('gpt-4.1', {}, 10, 5),
+        });
+        expect(result.cost).toBeUndefined();
+        expect(callback).toHaveBeenCalledOnce();
+      },
+    );
+
+    it.each([undefined, 0, 2])('retains complete accounting for count %s', async (value) => {
+      create.mockResolvedValue(
+        reply('first', [text('done')], { usage: { ...usage, ...details(value) } }),
+      );
+
+      const result = await provider().callApi('weather?');
+
+      expect(result.output).toBe('done');
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 10,
+        completion: 5,
+        total: 15,
+        numRequests: 1,
+      });
+      expect(result.metadata?.usageIncomplete).toBeUndefined();
+      expect(result.metadata?.costIncomplete).toBeUndefined();
+      expect(result.cost).toBeGreaterThan(0);
+    });
   });
 
   it('marks cost incomplete for an unknown served model but retains complete token usage', async () => {
