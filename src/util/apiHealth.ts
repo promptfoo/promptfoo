@@ -2,6 +2,7 @@ import { getEnvString } from '../envars';
 import { CloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { fetchWithTimeout } from './fetch/index';
+import { getProxyEnvironment } from './fetch/proxy';
 
 interface HealthResponse {
   status: string;
@@ -14,20 +15,14 @@ interface HealthResponse {
  * @returns A promise that resolves to the health check response.
  */
 export async function checkRemoteHealth(url: string): Promise<HealthResponse> {
-  logger.debug(
-    `[CheckRemoteHealth] Checking API health: ${JSON.stringify({
-      url,
-      // Log environment variables that might affect network requests
-      env: {
-        httpProxy: getEnvString('HTTP_PROXY') || getEnvString('http_proxy'),
-        httpsProxy: getEnvString('HTTPS_PROXY') || getEnvString('https_proxy'),
-        allProxy: getEnvString('ALL_PROXY') || getEnvString('all_proxy'),
-        noProxy: getEnvString('NO_PROXY') || getEnvString('no_proxy'),
-        nodeExtra: getEnvString('NODE_EXTRA_CA_CERTS'),
-        nodeTls: getEnvString('NODE_TLS_REJECT_UNAUTHORIZED'),
-      },
-    })}`,
-  );
+  logger.debug('[CheckRemoteHealth] Checking API health', {
+    url,
+    env: {
+      ...getProxyEnvironment(),
+      nodeExtra: getEnvString('NODE_EXTRA_CA_CERTS'),
+      nodeTls: getEnvString('NODE_TLS_REJECT_UNAUTHORIZED'),
+    },
+  });
 
   try {
     const cloudConfig = new CloudConfig();

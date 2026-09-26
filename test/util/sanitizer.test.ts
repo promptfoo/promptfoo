@@ -86,6 +86,12 @@ describe('proxy environment redaction', () => {
     'ftp_proxy',
     'GOPHER_PROXY',
     'gopher_proxy',
+    'NPM_CONFIG_PROXY',
+    'npm_config_proxy',
+    'NPM_CONFIG_HTTP_PROXY',
+    'npm_config_http_proxy',
+    'NPM_CONFIG_HTTPS_PROXY',
+    'npm_config_https_proxy',
   ])('redacts credentials in %s from logs and output', (key) => {
     for (const proxy of [
       'http://fixture-user:fixture-password@proxy.example:8080',
