@@ -30,6 +30,7 @@ describe.each(['Python', 'Ruby'] as const)('%s executable validation', (language
   });
 
   afterEach(() => {
+    execFileAsync.mockReset();
     vi.restoreAllMocks();
   });
 

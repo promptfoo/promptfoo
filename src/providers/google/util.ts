@@ -1857,10 +1857,6 @@ export function validateFunctionCall(
 
   const interpolatedFunctions = loadFile(functions, vars) as Tool[];
   const ajv = getAjv();
-  // Gemini's optional ordering hint does not affect function-call validation.
-  if (!ajv.getKeyword('property_ordering')) {
-    ajv.addKeyword({ keyword: 'property_ordering', valid: true });
-  }
 
   for (const functionCall of functionCalls) {
     // Parse function call and validate it against schema
