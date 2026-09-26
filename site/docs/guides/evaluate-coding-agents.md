@@ -24,7 +24,7 @@ Standard LLM evals test a function: given input X, does output Y meet criteria Z
 
 | Tier                      | Example providers                                                | Use when you need                                             | Watch for                                     |
 | ------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------- |
-| **0: Text**               | `openai:gpt-5.1`, `anthropic:claude-sonnet-4-6`                  | Code generation, explanation, JSON output, baseline behavior  | No file reads, shell commands, or tool traces |
+| **0: Text**               | `openai:gpt-6-sol`, `anthropic:claude-sonnet-4-6`                | Code generation, explanation, JSON output, baseline behavior  | No file reads, shell commands, or tool traces |
 | **1: Coding agent SDK**   | `openai:codex-sdk`, `anthropic:claude-agent-sdk`, `opencode:sdk` | Codebase reads, refactors, command runs, CI-friendly agent QA | Side effects, tool permissions, session state |
 | **2: Rich client server** | `openai:codex-app-server`, `openinterpreter`                     | App-server events, approvals, skills, plugins, thread details | Experimental protocol and local child process |
 
@@ -62,7 +62,7 @@ prompts:
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.6-terra
+      model: gpt-6-sol
       working_dir: ./test-codebase
       output_schema:
         type: object
@@ -138,7 +138,7 @@ prompts:
     Explain whether the command was allowed.
 
 providers:
-  - id: openai:codex-app-server:gpt-5.4
+  - id: openai:codex-app-server:gpt-6-sol
     config:
       sandbox_mode: read-only
       approval_policy: on-request
