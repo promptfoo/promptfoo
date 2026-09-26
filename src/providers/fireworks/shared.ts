@@ -1,5 +1,5 @@
-import { getEnvString } from '../../envars';
 import { resolveProviderApiKey } from '../credentials';
+import { resolveProviderEnv } from '../env';
 
 import type { EnvOverrides } from '../../types/env';
 
@@ -29,7 +29,7 @@ export function buildFireworksProviderConfig<T extends FireworksCredentialConfig
   config: T,
   env: EnvOverrides | undefined,
 ): T & { apiBaseUrl: string; apiKeyEnvar: string } {
-  const envBaseUrl = env?.FIREWORKS_API_BASE_URL || getEnvString('FIREWORKS_API_BASE_URL');
+  const envBaseUrl = resolveProviderEnv(env, ['FIREWORKS_API_BASE_URL'])?.value;
   return {
     ...config,
     apiBaseUrl: config?.apiBaseUrl || envBaseUrl || FIREWORKS_API_BASE_URL,

@@ -5,6 +5,7 @@ import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { resolveProviderApiKey } from '../credentials';
+import { resolveProviderEnv } from '../env';
 import { getRequestTimeoutMs } from '../shared';
 import { AzureGenericProvider } from './generic';
 
@@ -170,9 +171,7 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
       '2024-09-01';
 
     this.endpoint =
-      config?.endpoint ||
-      env?.AZURE_CONTENT_SAFETY_ENDPOINT ||
-      getEnvString('AZURE_CONTENT_SAFETY_ENDPOINT');
+      config?.endpoint || resolveProviderEnv(env, ['AZURE_CONTENT_SAFETY_ENDPOINT'])?.value;
 
     if (!AzureModerationProvider.MODERATION_MODEL_IDS.includes(modelName)) {
       logger.warn(`Using unknown Azure moderation model: ${modelName}`);

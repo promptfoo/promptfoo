@@ -20,6 +20,7 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
+import { resolveProviderEnv } from '../env';
 import { getRequestTimeoutMs } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { getVertexApiHostForRegion } from './shared';
@@ -136,18 +137,14 @@ export class GoogleProvider extends GoogleGenericProvider {
       const region = this.getRegion();
       return (
         this.config.apiHost ||
-        this.env?.VERTEX_API_HOST ||
-        getEnvString('VERTEX_API_HOST') ||
+        resolveProviderEnv(this.env, ['VERTEX_API_HOST'])?.value ||
         getVertexApiHostForRegion(region)
       );
     } else {
       // AI Studio mode
       const apiHost =
         this.config.apiHost ||
-        this.env?.GOOGLE_API_HOST ||
-        this.env?.PALM_API_HOST ||
-        getEnvString('GOOGLE_API_HOST') ||
-        getEnvString('PALM_API_HOST') ||
+        resolveProviderEnv(this.env, ['GOOGLE_API_HOST', 'PALM_API_HOST'])?.value ||
         DEFAULT_AI_STUDIO_HOST;
       return getNunjucksEngine().renderString(apiHost, {});
     }
@@ -213,34 +210,21 @@ export class GoogleProvider extends GoogleGenericProvider {
    * Get the base URL for AI Studio API.
    */
   private getApiBaseUrl(): string {
-    // Check for apiHost first (most specific override)
-    const apiHost =
-      this.config.apiHost ||
-      this.env?.GOOGLE_API_HOST ||
-      this.env?.PALM_API_HOST ||
-      getEnvString('GOOGLE_API_HOST') ||
-      getEnvString('PALM_API_HOST');
-    if (apiHost) {
-      const renderedHost = getNunjucksEngine().renderString(apiHost, {});
-      return `https://${renderedHost}`;
+    if (this.config.apiHost) {
+      return `https://${getNunjucksEngine().renderString(this.config.apiHost, {})}`;
     }
-
-    // Check for apiBaseUrl (less specific override)
-    if (
-      this.config.apiBaseUrl ||
-      this.env?.GOOGLE_API_BASE_URL ||
-      getEnvString('GOOGLE_API_BASE_URL')
-    ) {
-      return (
-        this.config.apiBaseUrl ||
-        this.env?.GOOGLE_API_BASE_URL ||
-        getEnvString('GOOGLE_API_BASE_URL')!
-      );
+    if (this.config.apiBaseUrl) {
+      return this.config.apiBaseUrl;
     }
-
-    // Default: render the default host with Nunjucks for template variable support
-    const renderedHost = getNunjucksEngine().renderString(DEFAULT_AI_STUDIO_HOST, {});
-    return `https://${renderedHost}`;
+    const endpoint = resolveProviderEnv(this.env, [
+      'GOOGLE_API_HOST',
+      'PALM_API_HOST',
+      'GOOGLE_API_BASE_URL',
+    ]);
+    if (endpoint?.name === 'GOOGLE_API_BASE_URL') {
+      return endpoint.value;
+    }
+    return `https://${getNunjucksEngine().renderString(endpoint?.value || DEFAULT_AI_STUDIO_HOST, {})}`;
   }
 
   /**

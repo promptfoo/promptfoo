@@ -1,4 +1,5 @@
 import { getEnvString } from '../envars';
+import { resolveProviderEnv } from './env';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { hasHeaderOverride } from './openai/index';
 
@@ -151,8 +152,8 @@ export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider 
           config.apiKeyRequired ??
           !(portkeyApiKey || hasHeaderOverride(config.headers, 'x-portkey-api-key')),
         apiBaseUrl:
-          getEnvString('PORTKEY_API_BASE_URL') ||
           config.portkeyApiBaseUrl ||
+          resolveProviderEnv(providerOptions.env, ['PORTKEY_API_BASE_URL'])?.value ||
           'https://api.portkey.ai/v1',
         headers: getPortkeyHeaders(config, portkeyApiKey),
       },

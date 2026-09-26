@@ -220,9 +220,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     this.assistantConfig = options.config || {};
     this.projectUrl =
       options.config?.projectUrl ||
-      options.env?.AZURE_AI_PROJECT_URL ||
-      getEnvString('AZURE_AI_PROJECT_URL') ||
-      '';
+      (options.env?.AZURE_AI_PROJECT_URL ?? getEnvString('AZURE_AI_PROJECT_URL') ?? '');
 
     if (!this.projectUrl) {
       throw new Error(

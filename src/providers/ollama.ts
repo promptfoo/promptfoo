@@ -4,6 +4,7 @@ import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { normalizeFinishReason } from '../util/finishReason';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
+import { resolveProviderEnv } from './env';
 import { getRequestTimeoutMs, parseChatPrompt, transformTools } from './shared';
 
 import type { EnvOverrides } from '../contracts/env';
@@ -610,7 +611,7 @@ export class OllamaCompletionProvider implements ApiProvider {
     let response: FetchWithCacheResult<string> | undefined;
     try {
       response = await fetchWithCache<string>(
-        `${this.env?.OLLAMA_BASE_URL || getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/generate`,
+        `${resolveProviderEnv(this.env, ['OLLAMA_BASE_URL'])?.value || 'http://localhost:11434'}/api/generate`,
         {
           method: 'POST',
           headers: {
@@ -782,7 +783,7 @@ export class OllamaChatProvider implements ApiProvider {
     let response: FetchWithCacheResult<string> | undefined;
     try {
       response = await fetchWithCache<string>(
-        `${this.env?.OLLAMA_BASE_URL || getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/chat`,
+        `${resolveProviderEnv(this.env, ['OLLAMA_BASE_URL'])?.value || 'http://localhost:11434'}/api/chat`,
         {
           method: 'POST',
           headers: {
@@ -915,7 +916,7 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
     let response: FetchWithCacheResult<OllamaEmbedResponse>;
     try {
       response = await fetchWithCache<OllamaEmbedResponse>(
-        `${this.env?.OLLAMA_BASE_URL || getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/embed`,
+        `${resolveProviderEnv(this.env, ['OLLAMA_BASE_URL'])?.value || 'http://localhost:11434'}/api/embed`,
         {
           method: 'POST',
           headers: {

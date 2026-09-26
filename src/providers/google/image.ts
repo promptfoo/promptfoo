@@ -4,6 +4,7 @@ import logger from '../../logger';
 import { toDataUri } from '../../util/dataUrl';
 import { sleep } from '../../util/time';
 import { resolveProviderApiKey } from '../credentials';
+import { resolveProviderEnv } from '../env';
 import { getRequestTimeoutMs } from '../shared';
 import {
   createAuthCacheDiscriminator,
@@ -115,10 +116,7 @@ export class GoogleImageProvider implements ApiProvider {
     // Check if we should use Vertex AI (when projectId is provided)
     const projectId =
       this.config.projectId ||
-      this.env?.GOOGLE_CLOUD_PROJECT ||
-      this.env?.GOOGLE_PROJECT_ID ||
-      getEnvString('GOOGLE_CLOUD_PROJECT') ||
-      getEnvString('GOOGLE_PROJECT_ID');
+      resolveProviderEnv(this.env, ['GOOGLE_CLOUD_PROJECT', 'GOOGLE_PROJECT_ID'])?.value;
 
     if (projectId) {
       // Use Vertex AI if project ID is available
@@ -143,8 +141,7 @@ export class GoogleImageProvider implements ApiProvider {
   private async callVertexApi(prompt: string): Promise<ProviderResponse> {
     const location =
       this.config.region ||
-      this.env?.GOOGLE_LOCATION ||
-      getEnvString('GOOGLE_LOCATION') ||
+      (this.env?.GOOGLE_LOCATION ?? getEnvString('GOOGLE_LOCATION')) ||
       'us-central1';
 
     try {
