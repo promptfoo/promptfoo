@@ -126,7 +126,7 @@ function getProviderEnvAliasGroups(providerPath: string): readonly (readonly str
   if (/^openai:(?:codex-sdk|codex)(?::|$)/.test(providerPath)) {
     return [['OPENAI_API_KEY', 'CODEX_API_KEY']];
   }
-  if (providerPath.startsWith('huggingface:')) {
+  if (providerPath.startsWith('huggingface:') || providerPath.startsWith('hf:')) {
     return [['HF_TOKEN', 'HF_API_TOKEN']];
   }
   if (providerPath.startsWith('sagemaker:')) {
@@ -578,7 +578,7 @@ export const providerMap: ProviderFactory[] = [
       const modelName = splits.slice(2).join(':');
 
       if (modelType === 'embedding' || modelType === 'embeddings') {
-        return new CohereEmbeddingProvider(modelName, providerOptions);
+        return new CohereEmbeddingProvider(modelName, providerOptions.config, providerOptions.env);
       }
       if (modelType === 'chat' || modelType === undefined) {
         return new CohereChatCompletionProvider(modelName || modelType, providerOptions);
@@ -1443,7 +1443,11 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      return new VoyageEmbeddingProvider(providerPath.split(':')[1], providerOptions);
+      return new VoyageEmbeddingProvider(
+        providerPath.split(':')[1],
+        providerOptions.config,
+        providerOptions.env,
+      );
     },
   },
   {
