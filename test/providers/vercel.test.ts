@@ -406,6 +406,20 @@ describe('VercelAiProvider', () => {
         error: 'Request timed out after 5000ms',
       });
     });
+
+    it('should normalize the AI SDK finish reason', async () => {
+      const { generateText } = await import('ai');
+      vi.mocked(generateText).mockResolvedValueOnce({
+        text: 'Calling get_weather',
+        usage: { inputTokens: 10, outputTokens: 5 },
+        finishReason: 'tool-calls',
+      } as any);
+
+      const provider = new VercelAiProvider('openai/gpt-4o');
+      const result = await provider.callApi('What is the weather in Paris?');
+
+      expect(result.finishReason).toBe('tool_calls');
+    });
   });
 
   describe('callApi() - streaming', () => {
@@ -704,6 +718,27 @@ describe('VercelAiProvider', () => {
       expect(result).toEqual({
         error: 'Request timed out after 10000ms',
       });
+    });
+
+    it('should normalize the AI SDK finish reason when streaming', async () => {
+      const { streamText } = await import('ai');
+
+      async function* mockTextStream() {
+        yield { type: 'text-delta', text: 'I cannot help with that.' };
+      }
+
+      vi.mocked(streamText).mockReturnValueOnce({
+        fullStream: mockTextStream(),
+        usage: Promise.resolve({ inputTokens: 5, outputTokens: 7, totalTokens: 12 }),
+        finishReason: Promise.resolve('content-filter'),
+      } as any);
+
+      const provider = new VercelAiProvider('openai/gpt-4o', {
+        config: { streaming: true },
+      });
+      const result = await provider.callApi('Hello');
+
+      expect(result.finishReason).toBe('content_filter');
     });
   });
 
@@ -1321,6 +1356,22 @@ describe('VercelAiProvider', () => {
       expect(vi.mocked(generateObject)).toHaveBeenCalled();
       expect(vi.mocked(streamText)).not.toHaveBeenCalled();
       expect(result.output).toEqual({ result: 'structured' });
+    });
+
+    it('should normalize the AI SDK finish reason for structured output', async () => {
+      const { generateObject } = await import('ai');
+      vi.mocked(generateObject).mockResolvedValueOnce({
+        object: {},
+        usage: { inputTokens: 15, outputTokens: 0, totalTokens: 15 },
+        finishReason: 'content-filter',
+      } as any);
+
+      const provider = new VercelAiProvider('openai/gpt-4o', {
+        config: { responseSchema: { type: 'object', properties: {} } },
+      });
+      const result = await provider.callApi('Analyze this text');
+
+      expect(result.finishReason).toBe('content_filter');
     });
   });
 });
