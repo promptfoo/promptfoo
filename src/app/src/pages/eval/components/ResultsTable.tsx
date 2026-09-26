@@ -1137,7 +1137,6 @@ function PromptColumnHeader({
   numGoodAsserts,
   testCounts,
   passingTestCounts,
-  assertionMetricTotals,
   config,
   filterMode,
   headPromptCount,
@@ -1157,7 +1156,6 @@ function PromptColumnHeader({
   numGoodAsserts: number[];
   testCounts: PromptSummaryMetric[];
   passingTestCounts: PromptSummaryMetric[];
-  assertionMetricTotals: Record<string, number>;
   config: ReturnType<typeof useTableStore.getState>['config'];
   filterMode: EvalResultsFilterMode;
   headPromptCount: number;
@@ -1168,7 +1166,6 @@ function PromptColumnHeader({
 }) {
   const columnId = `Prompt ${idx + 1}`;
   const { total: metrics, filtered: filteredMetrics } = getMetrics(idx);
-  const namedMetricTotals = getNamedMetricTotals(metrics);
 
   return (
     <div className="output-header">
@@ -1220,8 +1217,7 @@ function PromptColumnHeader({
           <div className="collapse-hidden">
             <CustomMetrics
               lookup={metrics.namedScores}
-              counts={namedMetricTotals}
-              metricTotals={namedMetricTotals ?? assertionMetricTotals}
+              metricTotals={getNamedMetricTotals(metrics)}
               onShowMore={() => setCustomMetricsDialogOpen(true)}
             />
           </div>
@@ -2160,28 +2156,6 @@ function ResultsTable({
     [tableBody],
   );
 
-  // Fallback for evals without backend named metric totals. Columns with backend totals use
-  // their own (see PromptColumnHeader), since errored rows make the totals differ per column.
-  const assertionMetricTotals = React.useMemo(() => {
-    const totals: Record<string, number> = {};
-    table?.body.forEach((row) => {
-      row.test.assert?.forEach((assertion) => {
-        if (assertion.metric) {
-          totals[assertion.metric] = (totals[assertion.metric] || 0) + (assertion.weight ?? 1);
-        }
-        if ('assert' in assertion && Array.isArray(assertion.assert)) {
-          assertion.assert.forEach((subAssertion) => {
-            if ('metric' in subAssertion && subAssertion.metric) {
-              totals[subAssertion.metric] =
-                (totals[subAssertion.metric] || 0) + (subAssertion.weight ?? 1);
-            }
-          });
-        }
-      });
-    });
-    return totals;
-  }, [table?.body]);
-
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const promptColumns = React.useMemo(() => {
     return [
@@ -2204,7 +2178,6 @@ function ResultsTable({
                 numGoodAsserts={numGoodAsserts}
                 testCounts={testCounts}
                 passingTestCounts={passingTestCounts}
-                assertionMetricTotals={assertionMetricTotals}
                 config={config}
                 filterMode={filterMode}
                 headPromptCount={head.prompts.length}
@@ -2273,7 +2246,6 @@ function ResultsTable({
     head.prompts,
     isRedteam,
     maxTextLength,
-    assertionMetricTotals,
     numAsserts,
     numGoodAsserts,
     onFailureFilterToggle,

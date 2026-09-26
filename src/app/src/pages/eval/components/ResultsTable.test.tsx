@@ -3529,30 +3529,54 @@ describe('ResultsTable Named Metric Totals', () => {
     atInitialVerticalScrollPosition: true,
   };
 
-  // An errored row is never graded, so that column's named metric count is lower than the others.
-  const columnMetrics = (graded: number) => ({
+  type ColumnMetrics = {
+    testPassCount: number;
+    testFailCount: number;
+    testErrorCount: number;
+    namedScores: Record<string, number>;
+    namedScoresCount?: Record<string, number>;
+    namedScoreWeights?: Record<string, number>;
+  };
+
+  // Provider errors do not contribute to the named metric's score or denominator.
+  const columnMetrics = (graded: number, total = 5): ColumnMetrics => ({
     testPassCount: graded,
     testFailCount: 0,
-    testErrorCount: 5 - graded,
+    testErrorCount: total - graded,
     namedScores: { 'has-hello': graded },
     namedScoresCount: { 'has-hello': graded },
   });
 
-  const mockTableStore = (gradedPerColumn: number[]) => {
+  const mockTableStore = (
+    metricsPerColumn: ColumnMetrics[],
+    { pageSize = 5, assertionWeight = 1 } = {},
+  ) => {
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
       evalId: '123',
-      inComparisonMode: false,
       setTable: vi.fn(),
       table: {
-        body: Array(5).fill({
-          outputs: gradedPerColumn.map(() => ({ pass: true, score: 1, text: 'test output' })),
-          test: { assert: [{ type: 'contains', value: 'Hello', metric: 'has-hello' }] },
+        body: Array.from({ length: pageSize }, (_, rowIndex) => ({
+          outputs: metricsPerColumn.map((metrics) => {
+            const pass = rowIndex < metrics.testPassCount;
+            return {
+              pass,
+              score: pass ? 1 : 0,
+              text: pass ? 'Hello' : 'Provider error',
+              error: pass ? undefined : 'Provider error',
+            };
+          }),
+          test: {
+            assert: [
+              { type: 'contains', value: 'Hello', metric: 'has-hello', weight: assertionWeight },
+            ],
+          },
+          testIdx: rowIndex,
           vars: [],
-        }),
+        })),
         head: {
-          prompts: gradedPerColumn.map((graded, idx) => ({
-            metrics: columnMetrics(graded),
+          prompts: metricsPerColumn.map((metrics, idx) => ({
+            metrics,
             provider: `provider-${idx + 1}`,
           })),
           vars: [],
@@ -3574,8 +3598,22 @@ describe('ResultsTable Named Metric Totals', () => {
   const metricValueTexts = () =>
     screen.getAllByTestId('metric-value-has-hello').map((el) => el.textContent);
 
+  beforeEach(() => {
+    vi.mocked(useTableStore).mockReset();
+    vi.mocked(useResultsViewSettingsStore).mockReset();
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: true,
+    }));
+  });
+
+  afterEach(() => {
+    vi.mocked(useTableStore).mockReset();
+    vi.mocked(useResultsViewSettingsStore).mockReset();
+  });
+
   it('uses each column’s own named metric count when the first column errored', () => {
-    mockTableStore([4, 5, 5]);
+    mockTableStore([columnMetrics(4), columnMetrics(5), columnMetrics(5)]);
 
     renderWithProviders(<ResultsTable {...defaultProps} />);
 
@@ -3587,11 +3625,91 @@ describe('ResultsTable Named Metric Totals', () => {
   });
 
   it('uses each column’s own named metric count when a later column errored', () => {
-    mockTableStore([5, 4]);
+    mockTableStore([columnMetrics(5), columnMetrics(4)]);
 
     renderWithProviders(<ResultsTable {...defaultProps} />);
 
     expect(metricValueTexts()).toEqual(['100.00% (5.00/5.00)', '100.00% (4.00/4.00)']);
+  });
+
+  it('uses each column’s own weights instead of assertion counts for weighted metrics', () => {
+    mockTableStore(
+      [
+        {
+          ...columnMetrics(4),
+          namedScores: { 'has-hello': 6 },
+          namedScoreWeights: { 'has-hello': 8 },
+        },
+        {
+          ...columnMetrics(5),
+          namedScores: { 'has-hello': 8 },
+          namedScoreWeights: { 'has-hello': 10 },
+        },
+      ],
+      { assertionWeight: 2 },
+    );
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(metricValueTexts()).toEqual(['75.00% (6.00/8.00)', '80.00% (8.00/10.00)']);
+  });
+
+  it.each([false, true])(
+    'keeps a legacy aggregate score raw across page sizes (legacy column first: %s)',
+    (legacyFirst) => {
+      const modern = columnMetrics(100, 100);
+      const legacy = { ...columnMetrics(100, 100), namedScoresCount: undefined };
+      const metrics = legacyFirst ? [legacy, modern] : [modern, legacy];
+      const expected = legacyFirst
+        ? ['100.00', '100.00% (100.00/100.00)']
+        : ['100.00% (100.00/100.00)', '100.00'];
+      mockTableStore(metrics, { pageSize: 50 });
+
+      const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      expect(metricValueTexts()).toEqual(expected);
+
+      for (const pageSize of [25, 100]) {
+        mockTableStore(metrics, { pageSize });
+        rerender(<ResultsTable {...defaultProps} />);
+
+        expect(metricValueTexts()).toEqual(expected);
+      }
+    },
+  );
+
+  it('shows raw scores when all columns lack aggregate denominators', () => {
+    mockTableStore(
+      [
+        { ...columnMetrics(100, 100), namedScoresCount: undefined },
+        {
+          ...columnMetrics(100, 100),
+          namedScores: { 'has-hello': 80 },
+          namedScoresCount: undefined,
+        },
+      ],
+      { pageSize: 50 },
+    );
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(metricValueTexts()).toEqual(['100.00', '80.00']);
+  });
+
+  it('uses a later column’s totals when the first column has no graded named metrics', () => {
+    mockTableStore([
+      {
+        ...columnMetrics(0),
+        namedScores: {},
+        namedScoresCount: {},
+        namedScoreWeights: {},
+      },
+      columnMetrics(5),
+    ]);
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(metricValueTexts()).toEqual(['100.00% (5.00/5.00)']);
   });
 });
 
