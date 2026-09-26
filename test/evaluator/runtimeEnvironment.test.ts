@@ -422,6 +422,28 @@ describeEvaluator('evaluation environment defaults', () => {
     expect(provider.delay).toBeUndefined();
   });
 
+  it('cancels the post-response delay before a timed-out step can grade', async () => {
+    vi.useFakeTimers();
+    const actualTime =
+      await vi.importActual<typeof import('../../src/util/time')>('../../src/util/time');
+    await vi.mocked(sleep).withImplementation(actualTime.sleep, async () => {
+      const grade = vi.fn().mockReturnValue(true);
+      const provider = createProvider();
+      const suite = createSuite(provider, { PROMPTFOO_DELAY_MS: '1000' });
+      suite.tests = [{ assert: [{ type: 'javascript', value: grade }] }];
+      const record = new Eval({});
+      const evaluation = evaluate(suite, record, { timeoutMs: 10 });
+
+      await vi.advanceTimersByTimeAsync(20);
+      await evaluation;
+      expect(provider.callApi).toHaveBeenCalledOnce();
+      const [result] = await record.getResults();
+      expect(result.error).toContain('timed out after 10ms');
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(grade).not.toHaveBeenCalled();
+    });
+  });
+
   it.each([undefined, 0])(
     'preserves timeout override %s against an environment default',
     async (timeoutMs) => {

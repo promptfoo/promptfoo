@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getEnvString } from '../../src/envars';
+import { getEnvOverrides, getEnvString } from '../../src/envars';
 import { doEval } from '../../src/node/doEval';
 import { getEvalConfigFromCloud } from '../../src/util/cloud';
 import { mockProcessEnv } from '../util/utils';
@@ -31,6 +31,42 @@ describe('doEval environment files', () => {
     restoreEnv();
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
+
+  it.each(['command', 'config'])(
+    'retains the CLI %s env file as a distinct priority layer',
+    async (source) => {
+      mockProcessEnv({ OPENAI_BASE_URL: undefined, OPENAI_API_HOST: 'host.example.invalid' });
+      const envPath = path.join(tempDir, 'cli.env');
+      fs.writeFileSync(envPath, 'OPENAI_BASE_URL=https://file.example.invalid/v1\n');
+      const result = await doEval(
+        {
+          write: false,
+          share: false,
+          table: false,
+          progressBar: false,
+          ...(source === 'command' && { envPath: [envPath] }),
+        },
+        {
+          prompts: ['hello'],
+          providers: [
+            async () => ({
+              output: getEnvOverrides('file')?.OPENAI_BASE_URL ?? 'missing file scope',
+            }),
+          ],
+          tests: [{ vars: {} }],
+          ...(source === 'config' && { commandLineOptions: { envPath: [envPath] } }),
+        },
+        undefined,
+        { eventSource: 'cli', cache: false },
+      );
+      const [row] = await result.getResults();
+      expect(row.success).toBe(true);
+      expect(row.response?.output).toBe('https://file.example.invalid/v1');
+      expect(process.env.OPENAI_BASE_URL).toBe('https://file.example.invalid/v1');
+      expect(process.env.OPENAI_API_HOST).toBe('host.example.invalid');
+      expect(getEnvOverrides('file')).toBeUndefined();
+    },
+  );
 
   it('isolates overlapping env files before cloud loading, provider loading, and evaluation', async () => {
     let release!: () => void;

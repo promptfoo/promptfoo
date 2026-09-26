@@ -99,7 +99,7 @@ import {
 } from './util/provider';
 import { promptYesNo } from './util/readline';
 import { analyzeTemplateReference, extractVariablesFromTemplate } from './util/templates';
-import { sleep } from './util/time';
+import { sleep, sleepWithAbort } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
   accumulateAssertionTokenUsage,
@@ -1090,7 +1090,11 @@ async function callActiveProvider({
       {
         ...getProviderCallExecutionContext(),
         abortSignal,
-        providerDelay: { provider: originalProvider, delay: getProviderDelay(provider) },
+        providerDelay: {
+          provider: originalProvider,
+          delay: getProviderDelay(provider),
+          queueKey: provider,
+        },
       },
       () => {
         onProviderInvoked();
@@ -1213,12 +1217,13 @@ async function applyProviderDelayIfNeeded(
   provider: ApiProvider,
   response: ProviderResponse,
   delay: number,
+  abortSignal?: AbortSignal,
 ) {
   // A provider only handles a delay that it owns. Evaluation defaults stay local.
   const handlesDelay = provider.handlesOwnDelay && provider.delay != null;
   if (!response.cached && !handlesDelay && delay > 0) {
     logger.debug(`Sleeping for ${delay}ms`);
-    await sleep(delay);
+    await (abortSignal ? sleepWithAbort(delay, abortSignal) : sleep(delay));
   } else if (response.cached) {
     logger.debug(`Skipping delay because response is cached`);
   }
@@ -1763,7 +1768,7 @@ async function runEvalInContext({
             `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
           );
 
-          await applyProviderDelayIfNeeded(provider, response, effectiveDelay);
+          await applyProviderDelayIfNeeded(provider, response, effectiveDelay, abortSignal);
 
           // The __eval* runtime vars were exposed to prompt/provider rendering above.
           // Build a copy without them for the persisted result, assertions, and

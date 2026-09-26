@@ -7,18 +7,20 @@ import { withProviderCallExecutionContext } from '../../src/scheduler/providerCa
 
 import type { CallApiOptionsParams } from '../../src/types/providers';
 
-const { send, cacheGet } = vi.hoisted(() => ({ send: vi.fn(), cacheGet: vi.fn() }));
+const { send, cacheGet, isCacheEnabled, runtime, command } = vi.hoisted(() => ({
+  send: vi.fn(),
+  cacheGet: vi.fn(),
+  isCacheEnabled: vi.fn(),
+  runtime: vi.fn(),
+  command: vi.fn(),
+}));
 vi.mock('../../src/cache', () => ({
-  isCacheEnabled: () => false,
+  isCacheEnabled,
   getCache: () => ({ get: cacheGet, set: vi.fn() }),
 }));
 vi.mock('@aws-sdk/client-sagemaker-runtime', () => ({
-  SageMakerRuntimeClient: vi.fn().mockImplementation(function () {
-    return { send };
-  }),
-  InvokeEndpointCommand: vi.fn().mockImplementation(function (input) {
-    return input;
-  }),
+  SageMakerRuntimeClient: runtime,
+  InvokeEndpointCommand: command,
 }));
 
 const cases = [
@@ -43,8 +45,14 @@ const cases = [
 describe('SageMaker cancellation', () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    send.mockReset();
-    cacheGet.mockReset();
+    vi.resetAllMocks();
+    runtime.mockImplementation(function () {
+      return { send };
+    });
+    command.mockImplementation(function (input) {
+      return input;
+    });
+    isCacheEnabled.mockReturnValue(false);
     send.mockResolvedValue({
       Body: new TextEncoder().encode(JSON.stringify({ output: 'ok', embedding: [1, 0] })),
     });
@@ -52,8 +60,7 @@ describe('SageMaker cancellation', () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
-    send.mockReset();
-    cacheGet.mockReset();
+    vi.resetAllMocks();
   });
 
   it.each(cases)(
@@ -61,6 +68,7 @@ describe('SageMaker cancellation', () => {
     async (_kind, call) => {
       const controller = new AbortController();
       controller.abort();
+      isCacheEnabled.mockReturnValue(true);
       const result = call(0, { abortSignal: controller.signal });
       await expect(result).rejects.toMatchObject({ name: 'AbortError' });
       expect(send).not.toHaveBeenCalled();
