@@ -11,7 +11,7 @@ The `modelslab` provider supports text-to-image generation through ModelsLab's [
 
 ## Setup
 
-1. **Create an API key** at [ModelsLab](https://modelslab.com/dashboard/apikeys)
+1. **Create an API key** at [ModelsLab](https://modelslab.com/dashboard/api-keys)
 
 2. **Set the environment variable**:
    ```bash
@@ -58,18 +58,20 @@ providers:
 
 ### Configuration Options
 
-| Parameter             | Type   | Default | Description                              |
-| --------------------- | ------ | ------- | ---------------------------------------- |
-| `apiKey`              | string | -       | API key (or use `MODELSLAB_API_KEY` env) |
-| `width`               | number | 512     | Image width in pixels                    |
-| `height`              | number | 512     | Image height in pixels                   |
-| `num_inference_steps` | number | 30      | Number of denoising steps                |
-| `guidance_scale`      | number | 7.5     | How closely to follow the prompt         |
-| `samples`             | number | 1       | Number of images to generate             |
-| `seed`                | number | -       | Random seed for reproducibility          |
-| `negative_prompt`     | string | -       | What to avoid in the image               |
-| `safety_checker`      | string | `no`    | Enable safety filter (`yes` or `no`)     |
-| `enhance_prompt`      | string | `no`    | Auto-enhance the prompt (`yes` or `no`)  |
+| Parameter             | Type   | Default | Description                                                                                                   |
+| --------------------- | ------ | ------- | ------------------------------------------------------------------------------------------------------------- |
+| `apiKey`              | string | -       | API key (or use `MODELSLAB_API_KEY` env)                                                                      |
+| `width`               | number | 512     | Image width in pixels                                                                                         |
+| `height`              | number | 512     | Image height in pixels                                                                                        |
+| `num_inference_steps` | number | 30      | Number of denoising steps                                                                                     |
+| `guidance_scale`      | number | 7.5     | How closely to follow the prompt                                                                              |
+| `samples`             | number | 1       | Images requested upstream. Only the first is returned, so values above 1 bill extra for no additional output. |
+| `seed`                | number | -       | Random seed for reproducibility                                                                               |
+| `negative_prompt`     | string | -       | What to avoid in the image                                                                                    |
+| `safety_checker`      | string | `no`    | Enable safety filter (`yes` or `no`)                                                                          |
+| `enhance_prompt`      | string | `no`    | Auto-enhance the prompt (`yes` or `no`)                                                                       |
+
+The provider returns a Markdown image reference, `![prompt](url)`. To check that shape, use an assertion with `type: contains` and `value: '!['`.
 
 ### Full Example
 

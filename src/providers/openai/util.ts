@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import { maybeLoadFromExternalFileWithVars } from '../../util/index';
 import { getAjv, safeJsonStringify } from '../../util/json';
-import { looksLikeSecret, sanitizeUrl } from '../../util/sanitizer';
+import { isNonCredentialHeader, looksLikeSecret, sanitizeUrl } from '../../util/sanitizer';
 import { calculateCost } from '../shared';
 
 import type { TokenUsage, VarValue } from '../../types/index';
@@ -10,8 +10,198 @@ import type { ProviderConfig } from '../shared';
 const ajv = getAjv();
 
 const GPT_LONG_CONTEXT_THRESHOLD = 272_000;
+const AZURE_OPENAI_HOSTNAME = /(?:^|\.)(?:openai\.azure\.com|services\.ai\.azure\.com)$/;
 const OPAQUE_CREDENTIAL_PATH_SEGMENT =
   /(?:^|\/)(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32,}|(?:token|key|secret|credential|auth)[-_][a-z0-9._-]{8,})(?:\/|$)/i;
+
+function getRecord(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function getOpenAiEndpointHostname(value: string): string | undefined {
+  try {
+    const endpoint = /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? value : `https://${value}`;
+    return new URL(endpoint).hostname;
+  } catch {
+    return undefined;
+  }
+}
+
+export function isAzureOpenAiEndpoint(value: string | undefined): boolean {
+  return value !== undefined && AZURE_OPENAI_HOSTNAME.test(getOpenAiEndpointHostname(value) ?? '');
+}
+
+export function isCustomOpenAiEndpoint(value: string): boolean {
+  const hostname = getOpenAiEndpointHostname(value);
+  return (
+    hostname !== undefined &&
+    !/^(?:[a-z0-9-]+\.)?api\.openai\.com$/.test(hostname) &&
+    !AZURE_OPENAI_HOSTNAME.test(hostname)
+  );
+}
+
+export function getOpenAiChatChoiceError(data: unknown):
+  | {
+      error: Record<string, unknown> & { message: string };
+      partialOutput?: string | unknown[];
+    }
+  | undefined {
+  const response = getRecord(data);
+  const choice = Array.isArray(response?.choices) ? getRecord(response.choices[0]) : undefined;
+  if (choice?.finish_reason !== 'error') {
+    return undefined;
+  }
+  const error = getRecord(choice.error);
+  if (!error) {
+    return undefined;
+  }
+  const content = getRecord(choice.message)?.content;
+  return {
+    error: {
+      ...error,
+      message:
+        typeof error.message === 'string'
+          ? error.message
+          : 'The provider failed during generation.',
+    },
+    ...((typeof content === 'string' || Array.isArray(content)) && content.length
+      ? { partialOutput: content }
+      : {}),
+  };
+}
+
+function isOpenAiPolicyAccessRevoked(message: string): boolean {
+  const entity = String.raw`(?:organization|account|api key|user|safety[- ]identifier)`;
+  const access = String.raw`(?:access|permissions?)`;
+  const providerTarget = String.raw`(?:(?:these|this|the|our|openai(?:['’]s)?)\s+)?(?:models?|api|service|platform|provider)`;
+  const state = String.raw`(?:(?:has|have)\s+been|is|are|was|were)\s+(?:(?:temporarily|permanently)\s+)?(?:revoked|suspended|disabled|restricted)\b`;
+  const patterns = [
+    new RegExp(
+      String.raw`^(?:your|this)\s+${entity}(?:['’]s)?\s+${access}(?:\s+to\s+${providerTarget})?\s+${state}`,
+      'i',
+    ),
+    new RegExp(String.raw`^(?:your|this)\s+${access}\s+to\s+${providerTarget}\s+${state}`, 'i'),
+    new RegExp(
+      String.raw`^${access}\s+(?:for|of)\s+(?:(?:your|this|the)\s+)?${entity}(?:\s+["'][\w.-]+["'])?\s+${state}`,
+      'i',
+    ),
+    new RegExp(String.raw`^(?:your|this|the)\s+${entity}\s+${state}`, 'i'),
+    new RegExp(
+      String.raw`^(?:we|openai|the provider)\s+(?:have|has)\s+(?:(?:temporarily|permanently)\s+)?(?:revoked|suspended|disabled|restricted)\s+(?:your|this)\s+(?:${entity}(?:['’]s)?\s+)?${access}(?:\s+to\s+${providerTarget})?(?:$|[!,;]|\s+(?:because|due)\b)`,
+      'i',
+    ),
+  ];
+  return message.split(/(?:[!?]|\.(?:\s|$)|\n)+/).some((part) => {
+    const sentence = part.trim().replace(/^error:\s*/i, '');
+    return patterns.some((pattern) => pattern.test(sentence));
+  });
+}
+
+export function getOpenAiGatewayErrorType(data: unknown): string | undefined {
+  const root = getRecord(data);
+  const response = getRecord(root?.response) ?? root;
+  const topLevelError = getRecord(response?.error);
+  const choiceError = topLevelError ? undefined : getOpenAiChatChoiceError(response);
+  const error = topLevelError ?? choiceError?.error;
+  const metadata = getRecord(error?.metadata);
+  return [
+    metadata?.error_type,
+    error?.error_type,
+    choiceError ? undefined : response?.error_type,
+  ].find((value): value is string => typeof value === 'string' && value.length > 0);
+}
+
+export function getOpenAiGatewayProviderCode(data: unknown): string | undefined {
+  const root = getRecord(data);
+  const response = getRecord(root?.response) ?? root;
+  const error = getRecord(response?.error) ?? getOpenAiChatChoiceError(response)?.error;
+  const metadata = getRecord(error?.metadata);
+  const code = metadata?.provider_code ?? error?.code;
+  return typeof code === 'string' ? code : undefined;
+}
+
+export function getOpenAiPartialOutput(output: unknown, jsonSchema: boolean): unknown {
+  if (jsonSchema && typeof output === 'string') {
+    try {
+      return JSON.parse(output);
+    } catch {
+      // A refusal can interrupt a JSON response before it is complete.
+    }
+  }
+  return output;
+}
+
+/** A gateway refusal marker distinguishes prompt blocks from native access-level policy errors. */
+export function getOpenAiPolicyRefusal(
+  data: unknown,
+  allowGatewayMarker = false,
+):
+  | { message: string; code?: string; flaggedInput?: true; partialOutput?: string | unknown[] }
+  | undefined {
+  if (!allowGatewayMarker) {
+    return undefined;
+  }
+  const root = getRecord(data);
+  const response = getRecord(root?.response) ?? root;
+  const topLevelError = getRecord(response?.error);
+  const choiceError = topLevelError ? undefined : getOpenAiChatChoiceError(response);
+  const error = topLevelError ?? choiceError?.error;
+  if (!error) {
+    return undefined;
+  }
+  const metadata = getRecord(error.metadata);
+  const providerCode = metadata?.provider_code ?? error.code;
+  const marker = getOpenAiGatewayErrorType(data);
+  const message = typeof error.message === 'string' ? error.message : '';
+  if (
+    (marker !== 'refusal' && marker !== 'content_policy_violation') ||
+    (marker === 'refusal' && isOpenAiPolicyAccessRevoked(message))
+  ) {
+    return undefined;
+  }
+  return {
+    message: message.trim() ? message : 'The model provider declined this request.',
+    ...(typeof providerCode === 'string' ? { code: providerCode } : {}),
+    ...(!choiceError &&
+    marker === 'refusal' &&
+    (providerCode === 'bio_policy' || providerCode === 'cyber_policy')
+      ? { flaggedInput: true as const }
+      : {}),
+    ...(choiceError?.partialOutput === undefined
+      ? {}
+      : { partialOutput: choiceError.partialOutput }),
+  };
+}
+
+export function classifyOpenAiGatewayStreamError(
+  data: unknown,
+): 'refusal' | 'content_policy_violation' | 'potential' | 'technical' | undefined {
+  const marker = getOpenAiGatewayErrorType(data);
+  if (getOpenAiPolicyRefusal(data, true)) {
+    return marker as 'refusal' | 'content_policy_violation';
+  }
+  if (marker) {
+    return 'technical';
+  }
+  const root = getRecord(data);
+  const response = getRecord(root?.response) ?? root;
+  const error = getRecord(response?.error);
+  switch (error?.code) {
+    case 'image_content_policy_violation':
+    case 'content_policy_violation':
+    case 'content_filter':
+      return 'content_policy_violation';
+    case 'refusal':
+      return 'refusal';
+    case 'bio_policy':
+    case 'cyber_policy':
+      return 'potential';
+    default:
+      return undefined;
+  }
+}
 
 function hasInlineSecret(value: string): boolean {
   return (
@@ -42,6 +232,19 @@ export function hasSensitiveOpenAiCacheString(value: string): boolean {
 
 export function hasSensitiveOpenAiCachePath(value: string): boolean {
   return hasInlineSecret(value) || OPAQUE_CREDENTIAL_PATH_SEGMENT.test(value);
+}
+
+export function hasOpenAiGatewayCredentials(
+  headers: Record<string, string> | undefined,
+  apiUrl: string,
+): boolean {
+  const hasCredentialHeader = Object.entries(headers ?? {}).some(
+    ([name, value]) =>
+      Boolean(value?.trim()) &&
+      !isNonCredentialHeader(name) &&
+      !/^(?:x-(?:request|correlation)-id|traceparent|tracestate|baggage)$/i.test(name),
+  );
+  return hasCredentialHeader || hasSensitiveOpenAiCacheString(apiUrl);
 }
 
 const DEFAULT_MAX_TOOL_ITERATIONS = 8;
@@ -276,6 +479,30 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
         threshold: GPT_LONG_CONTEXT_THRESHOLD,
         input: 20 / 1e6,
         output: 75 / 1e6,
+      },
+    },
+  },
+  {
+    id: 'gpt-6-sol',
+    cost: {
+      input: 2 / 1e6,
+      output: 10 / 1e6,
+      longContext: {
+        threshold: GPT_LONG_CONTEXT_THRESHOLD,
+        input: 4 / 1e6,
+        output: 15 / 1e6,
+      },
+    },
+  },
+  {
+    id: 'gpt-6-luna',
+    cost: {
+      input: 0.1 / 1e6,
+      output: 0.5 / 1e6,
+      longContext: {
+        threshold: GPT_LONG_CONTEXT_THRESHOLD,
+        input: 0.2 / 1e6,
+        output: 0.75 / 1e6,
       },
     },
   },

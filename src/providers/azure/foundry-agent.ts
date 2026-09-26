@@ -202,6 +202,10 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   private resolvedAgent: FoundryAgent | null = null;
   private warnedUnsupportedFields = new Set<string>();
 
+  override async initialize(): Promise<void> {
+    // Foundry authenticates through DefaultAzureCredential in initializeClient().
+  }
+
   constructor(deploymentName: string, options: AzureAssistantProviderOptions = {}) {
     super(deploymentName, options);
     this.assistantConfig = options.config || {};

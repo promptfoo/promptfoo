@@ -9,7 +9,7 @@ describe('getProviderType', () => {
       description: 'an A2A provider URL',
     },
     {
-      providerId: 'openrouter:openai/gpt-5.4',
+      providerId: 'openrouter:openai/gpt-6-sol',
       expected: 'openrouter',
       description: 'a standard provider ID with a model',
     },

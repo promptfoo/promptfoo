@@ -7,11 +7,15 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import {
   canCreateTargets,
+  findTeam,
+  getCloudOrganizationLabel,
+  getOldestTeam,
   getUserTeams,
   resolveTeamFromIdentifier,
   resolveTeamId,
 } from '../util/cloud';
 import { fetchWithProxy } from '../util/fetch/index';
+import { sanitizeUrlForLogging } from '../util/sanitizer';
 import { BrowserBehavior, openAuthBrowser } from '../util/server';
 import type { Command } from 'commander';
 
@@ -71,22 +75,12 @@ function getOrganizationTeams(
   };
 }
 
-function getOldestTeam(teams: UserTeam[]): UserTeam {
-  return [...teams].sort(
-    (teamA, teamB) => new Date(teamA.createdAt).getTime() - new Date(teamB.createdAt).getTime(),
-  )[0];
-}
-
 function resolveTeamFromOrganizationTeams(
   teams: UserTeam[],
   teamIdentifier: string,
   organizationId: string,
 ): UserTeam {
-  const selectedTeam =
-    teams.find((team) => team.id === teamIdentifier) ||
-    teams.find((team) => team.name.toLowerCase() === teamIdentifier.toLowerCase()) ||
-    teams.find((team) => team.slug === teamIdentifier);
-
+  const selectedTeam = findTeam(teams, teamIdentifier);
   if (selectedTeam) {
     return selectedTeam;
   }
@@ -95,26 +89,6 @@ function resolveTeamFromOrganizationTeams(
   throw new Error(
     `Team '${teamIdentifier}' not found in organization '${organizationId}'. Available teams: ${availableTeams}`,
   );
-}
-
-function resolveTeamFromTeams(teams: UserTeam[], teamIdentifier: string): UserTeam {
-  const selectedTeam = teams.find((team) => team.id === teamIdentifier);
-  if (selectedTeam) {
-    return selectedTeam;
-  }
-
-  const nameMatch = teams.find((team) => team.name.toLowerCase() === teamIdentifier.toLowerCase());
-  if (nameMatch) {
-    return nameMatch;
-  }
-
-  const slugMatch = teams.find((team) => team.slug === teamIdentifier);
-  if (slugMatch) {
-    return slugMatch;
-  }
-
-  const availableTeams = teams.map((team) => team.name).join(', ');
-  throw new Error(`Team '${teamIdentifier}' not found. Available teams: ${availableTeams}`);
 }
 
 async function setupTeamContext(
@@ -139,6 +113,8 @@ async function setupTeamContext(
     cloudConfig.setCurrentOrganization(currentOrganizationId);
     cloudConfig.cacheTeams(organizationTeams, currentOrganizationId);
 
+    const savedTeamId = cloudConfig.getCurrentTeamId(currentOrganizationId);
+    const savedTeam = organizationTeams.find((team) => team.id === savedTeamId);
     let selectedTeam;
     let teamLabelSuffix = '';
 
@@ -148,6 +124,11 @@ async function setupTeamContext(
         cmdObj.team,
         currentOrganizationId,
       );
+    } else if (savedTeam) {
+      // Each organization remembers its team selection across logins.
+      selectedTeam = savedTeam;
+    } else if (savedTeamId && organizationTeams.length > 0) {
+      selectedTeam = getOldestTeam(organizationTeams);
     } else if (organizationTeams.length === 1) {
       selectedTeam = organizationTeams[0];
     } else if (organizationTeams.length > 1) {
@@ -225,7 +206,12 @@ async function loginWithApiKey(cmdObj: LoginCommandOptions, apiHost: string): Pr
     organizationTeams = resolvedOrganizationTeams.teams;
 
     if (cmdObj.team && !cmdObj.org) {
-      const selectedTeam = resolveTeamFromTeams(allTeams, cmdObj.team);
+      // Prefer the key's organization when several organizations share a team name or slug.
+      const selectedTeam = findTeam(allTeams, cmdObj.team, organizationId);
+      if (!selectedTeam) {
+        const availableTeams = allTeams.map((team) => team.name).join(', ');
+        throw new Error(`Team '${cmdObj.team}' not found. Available teams: ${availableTeams}`);
+      }
       organizationId = selectedTeam.organizationId;
       organizationTeams = allTeams.filter((team) => team.organizationId === organizationId);
     }
@@ -256,7 +242,7 @@ async function loginWithApiKey(cmdObj: LoginCommandOptions, apiHost: string): Pr
   logger.info(chalk.green.bold('Successfully logged in'));
   logger.info(`User: ${chalk.cyan(user.email)}`);
   logger.info(
-    `Organization: ${chalk.cyan(organizationId === organization.id ? organization.name : organizationId)}`,
+    `Organization: ${chalk.cyan(getCloudOrganizationLabel(organization, organizationId))}`,
   );
   logger.info(`App: ${chalk.cyan(cloudConfig.getAppUrl())}`);
 }
@@ -297,7 +283,7 @@ export function authCommand(program: Command) {
     )
     .option(
       '--auth-header-name <name>',
-      'The header name to use for Cloud API authentication (defaults to Authorization).',
+      'Cloud auth header (overrides the saved setting and PROMPTFOO_CLOUD_AUTH_HEADER; otherwise defaults to Authorization).',
     )
     .action(async (cmdObj: LoginCommandOptions) => {
       // Strip a trailing slash from the --host flag so the login-time validate /
@@ -347,12 +333,16 @@ export function authCommand(program: Command) {
         const email = getUserEmail();
         const apiKey = cloudConfig.getApiKey();
 
+        const apiHost = cloudConfig.getApiHost();
+        logger.info(dedent`
+            API URL: ${chalk.cyan(sanitizeUrlForLogging(apiHost))}
+            Auth header: ${chalk.cyan(cloudConfig.getAuthHeaderName())}`);
+
         if (!email || !apiKey) {
           logger.info(`Not logged in. Run ${chalk.bold('promptfoo auth login')} to login.`);
           return;
         }
 
-        const apiHost = cloudConfig.getApiHost();
         const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
           headers: { ...(cloudConfig.getAuthHeaders() ?? {}) },
         });
@@ -362,20 +352,21 @@ export function authCommand(program: Command) {
         }
 
         const { user, organization } = await response.json();
+        const organizationLabel = getCloudOrganizationLabel(organization);
 
         try {
           const currentTeam = await resolveTeamId();
           logger.info(dedent`
               ${chalk.green.bold('Currently logged in as:')}
               User: ${chalk.cyan(user.email)}
-              Organization: ${chalk.cyan(organization.name)}
+              Organization: ${chalk.cyan(organizationLabel)}
               Current Team: ${chalk.cyan(currentTeam.name)}
               App URL: ${chalk.cyan(cloudConfig.getAppUrl())}`);
         } catch (teamError) {
           logger.info(dedent`
               ${chalk.green.bold('Currently logged in as:')}
               User: ${chalk.cyan(user.email)}
-              Organization: ${chalk.cyan(organization.name)}
+              Organization: ${chalk.cyan(organizationLabel)}
               App URL: ${chalk.cyan(cloudConfig.getAppUrl())}`);
           logger.warn(
             `Could not determine current team: ${teamError instanceof Error ? teamError.message : String(teamError)}`,
@@ -472,21 +463,15 @@ export function authCommand(program: Command) {
           return;
         }
 
-        const currentOrganizationId = cloudConfig.getCurrentOrganizationId();
-        const currentTeamId = cloudConfig.getCurrentTeamId(currentOrganizationId);
-        if (!currentTeamId) {
+        if (!cloudConfig.getCurrentTeamId(cloudConfig.getCurrentOrganizationId())) {
           logger.info('No team currently selected');
           return;
         }
 
-        try {
-          const team = await resolveTeamId();
-          logger.info(`Current team: ${chalk.green(team.name)}`);
-        } catch (_error) {
-          logger.warn('Stored team is no longer accessible, falling back to default');
-          const team = await resolveTeamId();
-          logger.info(`Current team: ${chalk.green(team.name)} ${chalk.dim('(default)')}`);
-        }
+        // Shares the fallback used by whoami and red team generation, which never switches
+        // organizations; a stale team is replaced only after a successful lookup.
+        const team = await resolveTeamId();
+        logger.info(`Current team: ${chalk.green(team.name)}`);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error(`Failed to get current team: ${errorMessage}`);
@@ -507,10 +492,17 @@ export function authCommand(program: Command) {
           return;
         }
 
+        const previousOrganizationId = cloudConfig.getCurrentOrganizationId();
         const team = await resolveTeamFromIdentifier(teamIdentifier);
+        // The team only takes effect in its own organization, so switch to it as well.
+        cloudConfig.setCurrentOrganization(team.organizationId);
         cloudConfig.setCurrentTeamId(team.id, team.organizationId);
 
-        logger.info(chalk.green(`Switched to team: ${team.name}`));
+        const organizationNote =
+          team.organizationId === previousOrganizationId
+            ? ''
+            : ` (organization ${team.organizationId})`;
+        logger.info(chalk.green(`Switched to team: ${team.name}${organizationNote}`));
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error(`Failed to set team: ${errorMessage}`);
