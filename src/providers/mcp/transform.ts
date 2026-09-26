@@ -154,7 +154,7 @@ export async function transformMCPConfigToClaudeCode(
     if (name) {
       return [name, server] as const;
     }
-    const fallback = url ?? command ?? 'default';
+    const fallback = url ? getUrlServerKey(url) : (command ?? 'default');
     let key = fallback;
     for (let suffix = 2; taken.has(key); suffix++) {
       key = `${fallback}_${suffix}`;
@@ -164,6 +164,20 @@ export async function transformMCPConfigToClaudeCode(
   });
 
   return Object.fromEntries(entries);
+}
+
+// A URL can carry credentials in its userinfo, query, or fragment. Drop them from the key;
+// a URL without them keeps its original key, so existing `mcp__<url>__<tool>` rules match.
+function getUrlServerKey(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (parsed.username || parsed.password || parsed.search || parsed.hash) {
+      return `${parsed.origin}${parsed.pathname}`;
+    }
+  } catch {
+    // Not a parseable URL; the transform reports that separately.
+  }
+  return url;
 }
 
 export function validateMCPConfigForClaudeCode(input: unknown): McpConfigParsed {

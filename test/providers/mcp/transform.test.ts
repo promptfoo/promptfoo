@@ -412,6 +412,27 @@ describe('transformMCPConfigToClaudeCode', () => {
     expect(Object.keys(servers)).toEqual(['npx']);
   });
 
+  it('keeps credentials in a server URL out of the derived key', async () => {
+    const servers = await transformMCPConfigToClaudeCode({
+      enabled: true,
+      servers: [
+        { url: 'https://mcp.example.com/v1?token=first-secret' },
+        { url: 'https://mcp.example.com/v1?token=second-secret' },
+        { url: 'https://user:password@other.example.com/mcp#fragment' },
+      ],
+    });
+
+    expect(Object.keys(servers)).toEqual([
+      'https://mcp.example.com/v1',
+      'https://mcp.example.com/v1_2',
+      'https://other.example.com/mcp',
+    ]);
+    // The connection still uses the configured URL.
+    expect(servers['https://mcp.example.com/v1_2']).toMatchObject({
+      url: 'https://mcp.example.com/v1?token=second-secret',
+    });
+  });
+
   it('preserves the legacy key for a single unnamed server with args', async () => {
     // `mcp__npx__tool` allow/deny rules written against the old key must keep matching.
     await expect(
