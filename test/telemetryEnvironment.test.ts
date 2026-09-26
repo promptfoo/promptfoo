@@ -1,6 +1,6 @@
 import { PostHog } from 'posthog-node';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mockProcessEnv } from './util/utils';
+import { createDeferred, mockProcessEnv } from './util/utils';
 
 const client = vi.hoisted(() => ({
   capture: vi.fn(),
@@ -35,7 +35,11 @@ beforeEach(() => {
   restoreEnv = mockProcessEnv({ IS_TESTING: undefined, PROMPTFOO_DISABLE_TELEMETRY: undefined });
 });
 
-afterEach(() => {
+afterEach(async () => {
+  const owners = Reflect.get(process, Symbol.for('promptfoo.telemetry.clientOwners')) as
+    | Set<{ shutdown(): Promise<void> }>
+    | undefined;
+  await Promise.allSettled([...(owners ?? [])].map((owner) => owner.shutdown()));
   restoreEnv();
   vi.resetAllMocks();
 });
@@ -172,6 +176,47 @@ describe('telemetry test-mode environment restrictions', () => {
     expect(nextClient.capture).toHaveBeenCalledOnce();
     await second.shutdown();
     expect(nextClient.shutdown).toHaveBeenCalledOnce();
+  });
+
+  it('drains live and closing instances across module reloads at process exit', async () => {
+    const handlerKey = Symbol.for('promptfoo.telemetry.shutdownHandler');
+    const previousFlag = Reflect.get(process, handlerKey);
+    Reflect.deleteProperty(process, handlerKey);
+    const once = vi.spyOn(process, 'once');
+    const closing = createDeferred<void>();
+    let handler: ((code: number) => void | Promise<void>) | undefined;
+    try {
+      const firstModule = await import('../src/telemetry');
+      firstModule.default.initialize();
+      const explicit = new firstModule.Telemetry();
+      handler = once.mock.calls.find(([event]) => event === 'beforeExit')?.[1];
+      expect(handler).toBeDefined();
+      client.shutdown.mockReturnValueOnce(closing.promise);
+      const explicitShutdown = explicit.shutdown();
+      const owners = Reflect.get(process, Symbol.for('promptfoo.telemetry.clientOwners')) as
+        | Set<unknown>
+        | undefined;
+      expect(owners?.has(explicit)).toBe(true);
+      vi.resetModules();
+      const secondModule = await import('../src/telemetry');
+      new secondModule.Telemetry();
+      mockProcessEnv({ IS_TESTING: 'true' });
+      new secondModule.Telemetry();
+      expect(PostHog).toHaveBeenCalledTimes(3);
+      const exiting = handler!(0);
+      await Promise.resolve();
+      expect(client.shutdown).toHaveBeenCalledTimes(3);
+      expect(owners?.has(explicit)).toBe(true);
+      closing.resolve();
+      await Promise.all([exiting, explicitShutdown]);
+      expect(owners?.size).toBe(0);
+    } finally {
+      closing.resolve();
+      if (handler) {
+        process.removeListener('beforeExit', handler);
+      }
+      Reflect.set(process, handlerKey, previousFlag);
+    }
   });
 
   it('retains the captured CLI host restriction across later initialization calls', async () => {

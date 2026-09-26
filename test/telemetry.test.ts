@@ -810,12 +810,10 @@ describe('Telemetry', () => {
 
   describe('beforeExit handler registration', () => {
     const SHUTDOWN_HANDLER_KEY = Symbol.for('promptfoo.telemetry.shutdownHandler');
-    const TELEMETRY_INSTANCE_KEY = Symbol.for('promptfoo.telemetry.instance');
 
     beforeEach(() => {
       // Clear the process-level flags before each test
       delete (process as unknown as Record<symbol, unknown>)[SHUTDOWN_HANDLER_KEY];
-      delete (process as unknown as Record<symbol, unknown>)[TELEMETRY_INSTANCE_KEY];
     });
 
     it('should register beforeExit handler only once across multiple module loads', async () => {
@@ -836,39 +834,6 @@ describe('Telemetry', () => {
       // Should have added exactly one listener total
       expect(listenersAfterFirst).toBe(beforeExitListenersBefore + 1);
       expect(listenersAfterSecond).toBe(listenersAfterFirst);
-    });
-
-    it('should store telemetry instance on process for beforeExit handler', async () => {
-      resetModulesAndMockFetch();
-
-      const telemetryModule = await import('../src/telemetry');
-      const telemetryInstance = telemetryModule.default;
-
-      const storedInstance = (process as unknown as Record<symbol, unknown>)[
-        TELEMETRY_INSTANCE_KEY
-      ];
-      expect(storedInstance).toBe(telemetryInstance);
-    });
-
-    it('should update stored instance when module is reloaded', async () => {
-      resetModulesAndMockFetch();
-
-      const firstModule = await import('../src/telemetry');
-      const firstInstance = firstModule.default;
-
-      resetModulesAndMockFetch();
-
-      const secondModule = await import('../src/telemetry');
-      const secondInstance = secondModule.default;
-
-      // Instances should be different (new module load)
-      expect(firstInstance).not.toBe(secondInstance);
-
-      // Stored instance should be the most recent one
-      const storedInstance = (process as unknown as Record<symbol, unknown>)[
-        TELEMETRY_INSTANCE_KEY
-      ];
-      expect(storedInstance).toBe(secondInstance);
     });
   });
 });

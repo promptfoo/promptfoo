@@ -12,6 +12,11 @@ export { TELEMETRY_EVENTS, TelemetryEventSchema } from './telemetryEvents';
 
 export type { EventProperties, TelemetryEventTypes } from './telemetryEvents';
 
+// Keep live owners across module reloads without registering another process listener.
+const CLIENT_OWNERS_KEY = Symbol.for('promptfoo.telemetry.clientOwners');
+const clientOwners = ((process as unknown as Record<symbol, Set<Telemetry>>)[CLIENT_OWNERS_KEY] ??=
+  new Set<Telemetry>());
+
 // An invocation or suite cannot turn off the host's test-mode restriction.
 function isTestMode(): boolean {
   return (
@@ -73,6 +78,7 @@ export class Telemetry {
           // See: https://github.com/promptfoo/promptfoo/issues/5893
           flushInterval: 0,
         });
+        clientOwners.add(this);
       } catch {
         this.posthogClient = null;
       }
@@ -200,7 +206,12 @@ export class Telemetry {
         .catch((error) => {
           logger.debug(`PostHog shutdown error: ${error}`);
         });
-      this.shutdownPromise = Promise.all([this.shutdownPromise, shutdown]).then(() => undefined);
+      const pending = Promise.all([this.shutdownPromise, shutdown]).then(() => {
+        if (!this.posthogClient && this.shutdownPromise === pending) {
+          clientOwners.delete(this);
+        }
+      });
+      this.shutdownPromise = pending;
     }
     return this.shutdownPromise;
   }
@@ -238,11 +249,7 @@ const telemetry = new Telemetry(false);
 
 // Use Symbol.for to ensure the same symbol across module reloads (e.g., in tests).
 // This prevents MaxListenersExceededWarning when tests use vi.resetModules().
-const TELEMETRY_INSTANCE_KEY = Symbol.for('promptfoo.telemetry.instance');
 const SHUTDOWN_HANDLER_KEY = Symbol.for('promptfoo.telemetry.shutdownHandler');
-
-// Store telemetry instance on process so the beforeExit handler can access the current instance
-(process as unknown as Record<symbol, unknown>)[TELEMETRY_INSTANCE_KEY] = telemetry;
 
 // Register cleanup handler only once across all module reloads.
 // This is a safety net to ensure PostHog client is properly shut down when the process exits.
@@ -250,15 +257,8 @@ const SHUTDOWN_HANDLER_KEY = Symbol.for('promptfoo.telemetry.shutdownHandler');
 // doesn't keep the event loop alive. See: https://github.com/promptfoo/promptfoo/issues/5893
 if (!(process as unknown as Record<symbol, boolean>)[SHUTDOWN_HANDLER_KEY]) {
   (process as unknown as Record<symbol, boolean>)[SHUTDOWN_HANDLER_KEY] = true;
-  process.once('beforeExit', () => {
-    const instance = (process as unknown as Record<symbol, Telemetry | undefined>)[
-      TELEMETRY_INSTANCE_KEY
-    ];
-    if (instance) {
-      instance.shutdown().catch(() => {
-        // Silently ignore - logger may be unavailable during shutdown
-      });
-    }
+  process.once('beforeExit', async () => {
+    await Promise.allSettled([...clientOwners].map((instance) => instance.shutdown()));
   });
 }
 
