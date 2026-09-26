@@ -1261,14 +1261,18 @@ describe('fetchWithTimeout', () => {
 });
 
 describe('isRateLimited', () => {
-  it('should detect standard rate limit headers', () => {
+  it.each([
+    'X-RateLimit-Remaining',
+    'x-ratelimit-remaining-requests',
+    'x-ratelimit-remaining-tokens',
+  ])('does not reject a successful response with exhausted %s', (header) => {
     const response = createMockResponse({
       headers: new Headers({
-        'X-RateLimit-Remaining': '0',
+        [header]: '0',
       }),
       status: 200,
     });
-    expect(isRateLimited(response)).toBe(true);
+    expect(isRateLimited(response)).toBe(false);
   });
 
   it('should detect 429 status code', () => {
@@ -1276,22 +1280,6 @@ describe('isRateLimited', () => {
       status: 429,
     });
     expect(isRateLimited(response)).toBe(true);
-  });
-
-  it('should detect OpenAI specific rate limits', () => {
-    const response = createMockResponse({
-      headers: new Headers({
-        'x-ratelimit-remaining-requests': '0',
-      }),
-    });
-    expect(isRateLimited(response)).toBe(true);
-
-    const tokenResponse = createMockResponse({
-      headers: new Headers({
-        'x-ratelimit-remaining-tokens': '0',
-      }),
-    });
-    expect(isRateLimited(tokenResponse)).toBe(true);
   });
 
   it('should return false when not rate limited', () => {
@@ -1514,6 +1502,35 @@ describe('fetchWithRetries', () => {
     vi.mocked(sleep).mockClear();
     vi.spyOn(global, 'fetch').mockImplementation(() => Promise.resolve(new Response()));
     vi.clearAllMocks();
+  });
+
+  describe.each([0, 1, 3])('successful exhausted-quota responses with %i retries', (maxRetries) => {
+    it.each([
+      'X-RateLimit-Remaining',
+      'x-ratelimit-remaining-requests',
+      'x-ratelimit-remaining-tokens',
+    ])('returns the body and headers without replaying the POST for %s', async (header) => {
+      const successResponse = new Response('{"output":"accepted"}', {
+        status: 200,
+        headers: { [header]: '0', 'Retry-After': '60', 'Content-Type': 'application/json' },
+      });
+      vi.mocked(global.fetch).mockResolvedValueOnce(successResponse);
+
+      const response = await fetchWithRetries(
+        'https://example.com',
+        { method: 'POST', body: '{"prompt":"hello"}' },
+        1000,
+        maxRetries,
+      );
+
+      expect(response).toBe(successResponse);
+      expect(response.headers.get(header)).toBe('0');
+      expect(response.headers.get('Retry-After')).toBe('60');
+      expect(response.bodyUsed).toBe(false);
+      expect(await response.json()).toEqual({ output: 'accepted' });
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(sleep).not.toHaveBeenCalled();
+    });
   });
 
   it('should make exactly one attempt when retries is 0', async () => {

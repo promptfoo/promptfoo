@@ -377,14 +377,7 @@ export function isRateLimited(response: Response): boolean {
   invariant(response.headers, 'Response headers are missing');
   invariant(response.status, 'Response status is missing');
 
-  // Check for OpenAI specific rate limit headers and status codes
-  return (
-    response.headers.get('X-RateLimit-Remaining') === '0' ||
-    response.status === 429 ||
-    // OpenAI specific error codes
-    response.headers.get('x-ratelimit-remaining-requests') === '0' ||
-    response.headers.get('x-ratelimit-remaining-tokens') === '0'
-  );
+  return response.status === 429;
 }
 
 /**
@@ -647,14 +640,6 @@ export function isTransientError(response: Response): boolean {
 export type { FetchOptions } from './types';
 
 /**
- * Decide what to do with a rate-limited response inside `fetchWithRetries`.
- *
- * Throws on hard-quota fail-fast or retry exhaustion (with a structured
- * {@link HttpRateLimitError} for status 429, or a plain `Error` for the soft
- * `X-RateLimit-Remaining=0` 200 case). Otherwise sleeps via
- * {@link handleRateLimit} and returns so the caller can `continue` the loop.
- */
-/**
  * Returns a string form of a {@link RequestInfo} suitable for log output.
  * Strips basic-auth credentials and known sensitive query parameters (api_key,
  * token, password, signature, …) via {@link sanitizeUrl} so providers that
@@ -666,6 +651,7 @@ function urlForLog(url: RequestInfo): string {
   return sanitizeUrlForLogging(raw);
 }
 
+/** Classify an HTTP 429 and either fail with a structured error or wait to retry. */
 async function handleRateLimitedResponse(
   response: Response,
   url: RequestInfo,
@@ -673,27 +659,18 @@ async function handleRateLimitedResponse(
   maxRetries: number,
   signal?: AbortSignal | null,
 ): Promise<void> {
-  // Only the 429 path produces a structured error. A 200 OK with
-  // `X-RateLimit-Remaining=0` is a soft hint that we're approaching a limit —
-  // sleep and retry, but constructing a "Rate limit exceeded: HTTP 200 OK"
-  // error on retry exhaustion would be misleading and pointlessly buffers a
-  // 64 KB body peek on every successful call.
-  const isHardRateLimit = response.status === 429;
   const safeUrl = urlForLog(url);
 
   // Classify a 429 up front: `HttpRateLimitError` derives `kind` from the body
   // code / type and the Retry-After downgrade, so the fail-fast decision below
   // sees the same classification callers do.
-  let rateLimitError: HttpRateLimitError | undefined;
-  if (isHardRateLimit) {
-    const { body, code, type } = await peekRateLimitBody(response);
-    rateLimitError = buildHttpRateLimitError(response, body, code, type);
-  }
+  const { body, code, type } = await peekRateLimitBody(response);
+  const rateLimitError = buildHttpRateLimitError(response, body, code, type);
 
   // Hard quota failures (e.g. insufficient_quota) won't resolve on retry. Fail
   // fast with a structured error so the caller can stop instead of amplifying
   // load against an exhausted account.
-  if (rateLimitError?.kind === 'quota') {
+  if (rateLimitError.kind === 'quota') {
     logger.debug(
       `Quota exhausted on URL ${safeUrl}: HTTP ${response.status} (code: ${rateLimitError.code}), failing fast.`,
     );
@@ -701,17 +678,10 @@ async function handleRateLimitedResponse(
   }
 
   if (attempt >= maxRetries) {
-    if (rateLimitError) {
-      // No retries remain: throw a structured error instead of a bare string
-      // so callers can read Retry-After / reset / code without re-parsing.
-      logger.debug(
-        `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`,
-      );
-      throw rateLimitError;
-    }
-    throw new Error(
-      `Rate limited: ${response.status} ${response.statusText} after ${maxRetries + 1} attempts`,
+    logger.debug(
+      `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`,
     );
+    throw rateLimitError;
   }
 
   logger.debug(
