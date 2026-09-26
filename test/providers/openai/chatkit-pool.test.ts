@@ -1,3 +1,5 @@
+import * as http from 'http';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatKitBrowserPool } from '../../../src/providers/openai/chatkit-pool';
 
@@ -22,6 +24,9 @@ const mockBrowser = vi.hoisted(() => ({
 const mockChromium = vi.hoisted(() => ({
   launch: vi.fn().mockResolvedValue(mockBrowser),
 }));
+
+const playwrightMetadata = vi.hoisted(() => ({ version: '1.63.0' }));
+vi.mock('playwright/package.json', () => ({ default: playwrightMetadata }));
 
 // Mock playwright
 vi.mock('playwright', () => ({
@@ -58,6 +63,7 @@ describe('ChatKitBrowserPool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetPlaywrightMocks();
+    playwrightMetadata.version = '1.63.0';
     // Reset the singleton between tests
     ChatKitBrowserPool.resetInstance();
   });
@@ -162,6 +168,29 @@ describe('ChatKitBrowserPool', () => {
   });
 
   describe('initialize', () => {
+    it('does not allocate a server for an incompatible SDK and can retry', async () => {
+      const instance = ChatKitBrowserPool.getInstance();
+      playwrightMetadata.version = '1.62.0';
+      await expect(instance.initialize()).rejects.toThrow(
+        'installed playwright package (1.62.0) is incompatible',
+      );
+      expect(http.createServer).not.toHaveBeenCalled();
+      expect(mockChromium.launch).not.toHaveBeenCalled();
+      playwrightMetadata.version = '1.63.0';
+      await instance.initialize();
+      expect(mockChromium.launch).toHaveBeenCalledOnce();
+    });
+
+    it('closes its server when the browser binary is absent and can retry', async () => {
+      const instance = ChatKitBrowserPool.getInstance();
+      mockChromium.launch.mockRejectedValueOnce(new Error("Executable doesn't exist"));
+      await expect(instance.initialize()).rejects.toThrow('npx playwright install chromium');
+      const server = vi.mocked(http.createServer).mock.results[0].value;
+      expect(server.close).toHaveBeenCalledOnce();
+      await instance.initialize();
+      expect(mockChromium.launch).toHaveBeenCalledTimes(2);
+    });
+
     it('should start HTTP server and launch browser', async () => {
       const instance = ChatKitBrowserPool.getInstance();
 

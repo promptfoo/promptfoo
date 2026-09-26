@@ -14,9 +14,10 @@
 
 import * as http from 'http';
 
-import { type Browser, type BrowserContext, chromium, type Page } from 'playwright';
 import logger from '../../logger';
+import { CHROMIUM_INSTALL_HINT, loadPlaywright } from '../browserDependencies';
 import { providerRegistry } from '../providerRegistry';
+import type { Browser, BrowserContext, Page } from 'playwright';
 
 // Pool configuration constants
 const CHATKIT_READY_TIMEOUT_MS = 60000;
@@ -190,15 +191,23 @@ export class ChatKitBrowserPool {
       return this.initPromise;
     }
 
-    this.initPromise = this.doInitialize();
-    await this.initPromise;
-    this.initPromise = null;
+    this.initPromise = this.doInitialize().catch(async (error) => {
+      await this.shutdown();
+      throw error;
+    });
+    try {
+      await this.initPromise;
+    } finally {
+      this.initPromise = null;
+    }
   }
 
   private async doInitialize(): Promise<void> {
     logger.debug('[ChatKitPool] Initializing browser pool', {
       maxConcurrency: this.config.maxConcurrency,
     });
+
+    const { chromium } = await loadPlaywright();
 
     // Create shared HTTP server with per-template routing
     this.server = http.createServer((req, res) => {
@@ -242,7 +251,7 @@ export class ChatKitBrowserPool {
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       if (msg.includes("Executable doesn't exist")) {
-        throw new Error('Playwright browser not installed. Run: npx playwright install chromium');
+        throw new Error(`Playwright browser not installed. ${CHROMIUM_INSTALL_HINT}`);
       }
       throw error;
     }

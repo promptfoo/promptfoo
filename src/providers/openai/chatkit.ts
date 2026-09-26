@@ -9,7 +9,8 @@
  * the ChatKit web component, which this provider automates using Playwright.
  *
  * Prerequisites:
- *   - Playwright installed: npm install playwright && npx playwright install chromium
+ *   - Playwright installed alongside Promptfoo: npm install promptfoo "playwright@^1.63.0"
+ *     followed by npx playwright install chromium
  *   - OPENAI_API_KEY environment variable set
  *
  * Usage:
@@ -33,11 +34,12 @@
 
 import * as http from 'http';
 
-import { type Browser, type BrowserContext, chromium, type Page } from 'playwright';
 import logger from '../../logger';
+import { CHROMIUM_INSTALL_HINT, loadPlaywright } from '../browserDependencies';
 import { providerRegistry } from '../providerRegistry';
 import { ChatKitBrowserPool } from './chatkit-pool';
 import { OpenAiGenericProvider } from './index';
+import type { Browser, BrowserContext, Page } from 'playwright';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -804,6 +806,8 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       version: this.chatKitConfig.version,
     });
 
+    const { chromium } = await loadPlaywright();
+
     // Create HTTP server to serve the ChatKit HTML
     const html = generateChatKitHTML(
       apiKey,
@@ -841,7 +845,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
         errorMessage.includes('browserType.launch')
       ) {
         throw new Error(
-          'Playwright browser not installed. Run: npx playwright install chromium\n' +
+          `Playwright browser not installed. ${CHROMIUM_INSTALL_HINT}\n` +
             `Original error: ${errorMessage}`,
         );
       }
@@ -1060,6 +1064,11 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
         },
       };
     } catch (error) {
+      if (!this.initialized) {
+        await this.cleanup().catch((cleanupError) => {
+          logger.debug('[ChatKitProvider] Initialization cleanup failed', { error: cleanupError });
+        });
+      }
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('[ChatKitProvider] Call failed', { error: errorMessage });
 
@@ -1094,7 +1103,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
 
       if (errorMessage.includes('Playwright') || errorMessage.includes('browser')) {
         return {
-          error: `Browser error: ${errorMessage}. Ensure Playwright is installed: npx playwright install chromium`,
+          error: `Browser error: ${errorMessage}`,
         };
       }
 

@@ -697,6 +697,76 @@ async function runInstalledCompressionEval(consumerDir: string, configDir: strin
   }
 }
 
+async function assertOptionalBrowserDependencies(
+  consumerDir: string,
+  configDir: string,
+): Promise<void> {
+  const assertions = `
+    const incompatible = process.argv[2] === 'incompatible';
+    if (incompatible) {
+      assert.equal(require('playwright/package.json').version, '1.62.0');
+    } else {
+      for (const name of ['playwright', 'playwright-extra', 'puppeteer-extra-plugin-stealth', '@playwright/browser-chromium']) {
+        assert.throws(() => require.resolve(name), { code: 'MODULE_NOT_FOUND' });
+      }
+    }
+    for (const [id, config] of [
+      ['browser', { steps: [] }],
+      ['openai:chatkit:wf_fixture', { apiKey: 'fixture-key', usePool: false }],
+      ['openai:chatkit:wf_fixture', { apiKey: 'fixture-key', usePool: true }],
+    ]) {
+      const provider = await loadApiProvider(id, { options: { config } });
+      const response = await provider.callApi('optional browser fixture', { vars: {} });
+      assert.match(response.error, incompatible
+        ? /installed playwright package [(]1[.]62[.]0[)] is incompatible/
+        : /requires the optional Playwright package/);
+      assert.match(response.error, /npm install promptfoo/);
+      assert.match(response.error, /npx playwright install chromium/);
+      await provider.cleanup?.();
+    }
+  `;
+  for (const format of ['mjs', 'cjs']) {
+    const imports =
+      format === 'mjs'
+        ? `import assert from 'node:assert/strict';
+         import { createRequire } from 'node:module';
+         import { loadApiProvider } from 'promptfoo';
+         const require = createRequire(import.meta.url);`
+        : `const assert = require('node:assert/strict');
+         const { loadApiProvider } = require('promptfoo');`;
+    fs.writeFileSync(
+      path.join(consumerDir, `optional-browser.${format}`),
+      `${imports}\n(async () => {${assertions}})().catch(error => {
+        console.error(error); process.exitCode = 1;
+      });`,
+    );
+  }
+  for (const state of ['missing', 'incompatible']) {
+    if (state === 'incompatible') {
+      runNpm(
+        [
+          'install',
+          '--ignore-scripts',
+          '--no-audit',
+          '--no-fund',
+          '--no-package-lock',
+          'playwright@1.62.0',
+        ],
+        consumerDir,
+      );
+    }
+    for (const format of ['mjs', 'cjs']) {
+      await runAsync(process.execPath, [`optional-browser.${format}`, state], consumerDir, {
+        PROMPTFOO_CONFIG_DIR: configDir,
+        PROMPTFOO_CACHE_ENABLED: 'false',
+        PROMPTFOO_DISABLE_TELEMETRY: '1',
+        PROMPTFOO_DISABLE_UPDATE: 'true',
+      });
+    }
+  }
+  await runInstalledCompressionEval(consumerDir, configDir);
+}
+
 async function main(): Promise<void> {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-package-artifact-'));
   const artifactsDir = path.join(tempDir, 'artifacts');
@@ -782,6 +852,7 @@ async function main(): Promise<void> {
       );
     }
     await runInstalledCompressionEval(consumerDir, configDir);
+    await assertOptionalBrowserDependencies(consumerDir, configDir);
 
     console.log(`Verified installed package artifact: ${packResult.filename}`);
   } finally {

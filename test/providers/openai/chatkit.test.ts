@@ -1,3 +1,5 @@
+import * as http from 'http';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
 import {
@@ -5,6 +7,9 @@ import {
   OpenAiChatKitProvider,
 } from '../../../src/providers/openai/chatkit';
 import { mockProcessEnv } from '../../util/utils';
+
+const playwrightMetadata = vi.hoisted(() => ({ version: '1.63.0' }));
+vi.mock('playwright/package.json', () => ({ default: playwrightMetadata }));
 
 // Mock Playwright - we don't want to actually launch browsers in unit tests
 vi.mock('playwright', () => ({
@@ -147,6 +152,7 @@ function getGeneratedHTML(provider: OpenAiChatKitProvider): string {
 
 describe('OpenAiChatKitProvider', () => {
   beforeEach(() => {
+    playwrightMetadata.version = '1.63.0';
     vi.clearAllMocks();
     disableCache();
   });
@@ -239,6 +245,29 @@ describe('OpenAiChatKitProvider', () => {
   });
 
   describe('callApi', () => {
+    it('does not allocate a server for an incompatible SDK in standalone mode', async () => {
+      playwrightMetadata.version = '1.62.0';
+      const provider = new OpenAiChatKitProvider('wf_test', {
+        config: { apiKey: 'test-key', usePool: false },
+      });
+      const result = await provider.callApi('test prompt');
+      expect(result.error).toContain('installed playwright package (1.62.0) is incompatible');
+      expect(http.createServer).not.toHaveBeenCalled();
+    });
+
+    it('closes its server when the browser binary is absent in standalone mode', async () => {
+      const { chromium } = await import('playwright');
+      vi.mocked(chromium.launch).mockRejectedValueOnce(new Error("Executable doesn't exist"));
+      const provider = new OpenAiChatKitProvider('wf_test', {
+        config: { apiKey: 'test-key', usePool: false },
+      });
+      const result = await provider.callApi('test prompt');
+      expect(result.error).toContain('npx playwright install chromium');
+      const server = vi.mocked(http.createServer).mock.results[0].value;
+      expect(server.close).toHaveBeenCalledOnce();
+      expect((provider as any).server).toBeNull();
+    });
+
     it('should return error when API key is missing', async () => {
       const restoreEnv = mockProcessEnv({ OPENAI_API_KEY: undefined });
       try {
