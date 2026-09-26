@@ -288,7 +288,7 @@ The scoring function can be JavaScript or Python, referenced with `file://` pref
 
 ```typescript
 type ScoringFunction = (
-  namedScores: Record<string, number>, // Map of metric names to finite scores
+  namedScores: Record<string, number>, // Normalized scores; NaN marks aggregation overflow
   context: {
     threshold?: number; // Test case threshold if set
     tokensUsed?: {
@@ -309,7 +309,7 @@ When assertions use `weight`, each named score passed into the scoring function 
 
 Custom scoring functions must return finite numbers for `score` and any values in `namedScores` or `namedScoreWeights`, including nested `componentResults`. Nonfinite values such as `NaN` or `Infinity` cause a scoring function error.
 
-Finite inputs can still overflow during aggregation. Overflow in the accumulated score or total weight invalidates the default aggregate score; a valid custom scoring result can override it. If the final score or a named score or weight is nonfinite after custom scoring, the test fails with score 0 and an aggregation error. Invalid metric/weight pairs are omitted; valid metrics and component results remain available.
+Finite inputs can still overflow during aggregation. A named metric whose accumulated score or weight overflows reaches JavaScript scoring functions as `NaN` and Python scoring functions as `None`. Overflow in the accumulated score or total weight invalidates the default aggregate score; a valid custom scoring result can override it. If the final score or a named score or weight is nonfinite after custom scoring, the test fails with score 0 and an aggregation error. Invalid metric/weight pairs are omitted; valid metrics and component results remain available.
 
 See the [custom assertion scoring example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-assertion-scoring-override) for complete implementations in JavaScript and Python.
 
