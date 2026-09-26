@@ -81,10 +81,17 @@ export class AwsBedrockKnowledgeBaseProvider
   set knowledgeBaseClient(client: BedrockAgentRuntimeClient | undefined) {
     this.injectedClient = client;
   }
-  private readonly getClientState = createEnvironmentScopedState(() => ({
-    client: undefined as BedrockAgentRuntimeClient | undefined,
-    initialization: undefined as Promise<BedrockAgentRuntimeClient> | undefined,
-  }));
+  private readonly getClientState = createEnvironmentScopedState(
+    () => ({
+      client: undefined as BedrockAgentRuntimeClient | undefined,
+      initialization: undefined as Promise<BedrockAgentRuntimeClient> | undefined,
+    }),
+    async (state) => {
+      // A construction already in flight still belongs to this invocation.
+      await state.initialization?.catch(() => undefined);
+      state.client?.destroy();
+    },
+  );
   kbConfig: BedrockKnowledgeBaseOptions;
 
   constructor(

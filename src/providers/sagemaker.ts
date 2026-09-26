@@ -92,11 +92,21 @@ interface SageMakerOptions extends ProviderOptions {
  * Base class for SageMaker providers with common functionality
  */
 abstract class SageMakerGenericProvider {
-  private readonly getSdkState = createEnvironmentScopedState(() => ({
-    namespace: crypto.randomUUID(),
-    client: undefined as any,
-    runtimes: new Map<string, Promise<any>>(),
-  }));
+  private readonly getSdkState = createEnvironmentScopedState(
+    () => ({
+      namespace: crypto.randomUUID(),
+      client: undefined as any,
+      runtimes: new Map<string, Promise<any>>(),
+    }),
+    async (state) => {
+      const clients = await Promise.allSettled(state.runtimes.values());
+      for (const client of clients) {
+        if (client.status === 'fulfilled') {
+          client.value.destroy();
+        }
+      }
+    },
+  );
   protected get responseCacheNamespace(): string {
     return this.getSdkState().namespace;
   }
@@ -177,10 +187,12 @@ abstract class SageMakerGenericProvider {
       initialization = (async () => {
         const { SageMakerRuntimeClient } = await import('@aws-sdk/client-sagemaker-runtime').catch(
           (cause) => {
-            throw new Error(
+            const error = new Error(
               'The @aws-sdk/client-sagemaker-runtime package is required. Please install it with: npm install @aws-sdk/client-sagemaker-runtime',
-              { cause },
             );
+            // The app also typechecks this provider with ES2020 Error types.
+            (error as Error & { cause?: unknown }).cause = cause;
+            throw error;
           },
         );
         const credentials = await this.getCredentials();

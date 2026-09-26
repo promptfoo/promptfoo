@@ -181,10 +181,17 @@ interface BedrockAgentsOptions {
  */
 export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implements ApiProvider {
   private agentRuntimeClient?: BedrockAgentRuntimeClient;
-  private readonly getClientState = createEnvironmentScopedState(() => ({
-    client: undefined as BedrockAgentRuntimeClient | undefined,
-    initialization: undefined as Promise<BedrockAgentRuntimeClient> | undefined,
-  }));
+  private readonly getClientState = createEnvironmentScopedState(
+    () => ({
+      client: undefined as BedrockAgentRuntimeClient | undefined,
+      initialization: undefined as Promise<BedrockAgentRuntimeClient> | undefined,
+    }),
+    async (state) => {
+      // A construction already in flight still belongs to this invocation.
+      await state.initialization?.catch(() => undefined);
+      state.client?.destroy();
+    },
+  );
   config: BedrockAgentsOptions; // Make public to match base class
 
   constructor(

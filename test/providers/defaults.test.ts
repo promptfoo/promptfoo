@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureEmbeddingProvider } from '../../src/providers/azure/embedding';
 import { AzureModerationProvider } from '../../src/providers/azure/moderation';
@@ -12,7 +13,7 @@ import {
   AIStudioEmbeddingProvider,
 } from '../../src/providers/google/ai.studio';
 import { hasGoogleDefaultCredentials } from '../../src/providers/google/util';
-import { VertexEmbeddingProvider } from '../../src/providers/google/vertex';
+import { VertexChatProvider, VertexEmbeddingProvider } from '../../src/providers/google/vertex';
 import {
   DefaultEmbeddingProvider as MistralEmbeddingProvider,
   DefaultGradingJsonProvider as MistralGradingJsonProvider,
@@ -555,6 +556,55 @@ describe('Provider override tests', () => {
   });
 
   describe('Google AI Studio provider selection', () => {
+    it.each(['provider', 'suite', 'file'])(
+      'selects %s ADC before a lower API key',
+      async (scope) => {
+        mockProcessEnv({ GOOGLE_API_KEY: 'host-key' });
+        const env = { GOOGLE_APPLICATION_CREDENTIALS: '/fixture/adc.json' };
+        const run = () => getDefaultProviders(scope === 'provider' ? env : undefined);
+        const providers =
+          scope === 'suite'
+            ? await cliState.withEnv(env, run)
+            : scope === 'file'
+              ? await cliState.withEnvFileOverrides(env, run)
+              : await run();
+        expect(providers.gradingProvider).toBeInstanceOf(VertexChatProvider);
+        expect(providers.embeddingProvider).toBeInstanceOf(VertexEmbeddingProvider);
+        expect(hasGoogleDefaultCredentials).not.toHaveBeenCalled();
+      },
+    );
+
+    it('selects a higher API key before lower ADC', async () => {
+      await cliState.withEnvFileOverrides(
+        { GOOGLE_APPLICATION_CREDENTIALS: '/fixture/adc.json' },
+        async () => {
+          const providers = await getDefaultProviders({ GOOGLE_API_KEY: 'provider-key' });
+          expect(providers.gradingProvider).toBeInstanceOf(AIStudioChatProvider);
+          expect(hasGoogleDefaultCredentials).not.toHaveBeenCalled();
+        },
+      );
+    });
+
+    it('keeps explicitly empty scoped ADC on the ADC path', async () => {
+      mockProcessEnv({ GOOGLE_API_KEY: 'host-key' });
+      const providers = await getDefaultProviders({ GOOGLE_APPLICATION_CREDENTIALS: '' });
+      expect(providers.gradingProvider).toBeInstanceOf(VertexChatProvider);
+      expect(hasGoogleDefaultCredentials).not.toHaveBeenCalled();
+    });
+
+    it('uses scoped ADC for Azure embeddings before a lower Google API key', async () => {
+      mockProcessEnv({ GOOGLE_API_KEY: 'host-key' });
+      const providers = await getDefaultProviders({
+        AZURE_API_KEY: 'azure-fixture',
+        AZURE_DEPLOYMENT_NAME: 'chat',
+        AZURE_OPENAI_DEPLOYMENT_NAME: 'chat',
+        GOOGLE_APPLICATION_CREDENTIALS: '/fixture/adc.json',
+      });
+      expect(providers.gradingProvider).toBeInstanceOf(AzureChatCompletionProvider);
+      expect(providers.embeddingProvider).toBeInstanceOf(VertexEmbeddingProvider);
+      expect(hasGoogleDefaultCredentials).not.toHaveBeenCalled();
+    });
+
     it('should use Google AI Studio providers when GEMINI_API_KEY is set', async () => {
       mockProcessEnv({ GEMINI_API_KEY: 'test-key' });
 

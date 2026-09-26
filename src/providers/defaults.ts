@@ -1,4 +1,4 @@
-import { getEnvString } from '../envars';
+import { getEnvOverrides, getEnvString } from '../envars';
 import logger from '../logger';
 import { getAnthropicProviders } from './anthropic/defaults';
 import { AzureChatCompletionProvider } from './azure/chat';
@@ -31,6 +31,15 @@ const EMBEDDING_PROVIDERS: (keyof DefaultProviders)[] = ['embeddingProvider'];
 let defaultCompletionProvider: ApiProvider;
 let defaultEmbeddingProvider: ApiProvider;
 
+function hasScopedGoogleAdc(env?: EnvOverrides): boolean {
+  const authScope = [env, getEnvOverrides(), getEnvOverrides('file')].find((layer) =>
+    ['GOOGLE_APPLICATION_CREDENTIALS', 'GEMINI_API_KEY', 'GOOGLE_API_KEY', 'PALM_API_KEY'].some(
+      (key) => layer?.[key] !== undefined,
+    ),
+  );
+  return authScope?.GOOGLE_APPLICATION_CREDENTIALS !== undefined;
+}
+
 async function getEmbeddingProviderForAzureDefaults(env?: EnvOverrides): Promise<ApiProvider> {
   if (defaultEmbeddingProvider) {
     return defaultEmbeddingProvider;
@@ -41,6 +50,10 @@ async function getEmbeddingProviderForAzureDefaults(env?: EnvOverrides): Promise
     getEnvString('AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME');
   if (embeddingDeploymentName) {
     return new AzureEmbeddingProvider(embeddingDeploymentName, { env });
+  }
+
+  if (hasScopedGoogleAdc(env)) {
+    return getGoogleVertexEmbeddingProvider(env);
   }
 
   // A chat deployment is not an embedding deployment. Prefer configured embedding
@@ -77,9 +90,12 @@ async function getDefaultProviderPreferences(
     resolveProviderApiKey(undefined, env, ['ANTHROPIC_API_KEY']),
   );
   const hasOpenAiCredentials = Boolean(resolveProviderApiKey(undefined, env, ['OPENAI_API_KEY']));
-  const hasGoogleAiStudioCredentials = Boolean(
-    resolveProviderApiKey(undefined, env, ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'PALM_API_KEY']),
-  );
+  const hasScopedAdc = hasScopedGoogleAdc(env);
+  const hasGoogleAiStudioCredentials =
+    !hasScopedAdc &&
+    Boolean(
+      resolveProviderApiKey(undefined, env, ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'PALM_API_KEY']),
+    );
   const hasAzureApiKey = resolveProviderApiKey(undefined, env, [
     'AZURE_API_KEY',
     'AZURE_OPENAI_API_KEY',
@@ -104,7 +120,7 @@ async function getDefaultProviderPreferences(
     !hasAnthropicCredentials &&
     !hasGoogleAiStudioCredentials;
   const useGoogleVertexDefaults = shouldUseFallbackDefaults
-    ? await hasGoogleDefaultCredentials(env)
+    ? hasScopedAdc || (await hasGoogleDefaultCredentials(env))
     : false;
   const useNonGoogleFallbackDefaults = shouldUseFallbackDefaults && !useGoogleVertexDefaults;
   const hasCodexCredentials =

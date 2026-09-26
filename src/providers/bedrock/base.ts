@@ -72,11 +72,18 @@ export function createBedrockCacheKeyHash({
 }
 
 export abstract class AwsBedrockGenericProvider {
-  private readonly getSdkState = createEnvironmentScopedState(() => ({
-    namespace: randomUUID(),
-    client: undefined as BedrockRuntime | undefined,
-    initialization: undefined as Promise<BedrockRuntime> | undefined,
-  }));
+  private readonly getSdkState = createEnvironmentScopedState(
+    () => ({
+      namespace: randomUUID(),
+      client: undefined as BedrockRuntime | undefined,
+      initialization: undefined as Promise<BedrockRuntime> | undefined,
+    }),
+    async (state) => {
+      // A construction already in flight still belongs to this invocation.
+      await state.initialization?.catch(() => undefined);
+      state.client?.destroy();
+    },
+  );
   protected get responseCacheNamespace(): string {
     return this.getSdkState().namespace;
   }

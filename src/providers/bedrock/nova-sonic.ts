@@ -117,10 +117,17 @@ const DEFAULT_CONFIG = {
 export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiProvider {
   private sessions = new Map<string, SessionState>();
   private bedrockClient?: BedrockRuntimeClient;
-  private readonly getClientState = createEnvironmentScopedState(() => ({
-    client: undefined as BedrockRuntimeClient | undefined,
-    initialization: undefined as Promise<BedrockRuntimeClient> | undefined,
-  }));
+  private readonly getClientState = createEnvironmentScopedState(
+    () => ({
+      client: undefined as BedrockRuntimeClient | undefined,
+      initialization: undefined as Promise<BedrockRuntimeClient> | undefined,
+    }),
+    async (state) => {
+      // A construction already in flight still belongs to this invocation.
+      await state.initialization?.catch(() => undefined);
+      state.client?.destroy();
+    },
+  );
   private readonly inferenceConfiguration: typeof DEFAULT_CONFIG.inference;
   config: BedrockAmazonNovaSonicGenerationOptions;
 

@@ -171,7 +171,10 @@ function getProviderEnvAliasGroups(providerPath: string): readonly (readonly str
   }
   if (providerPath.startsWith('vertex:')) {
     return [
-      ['VERTEX_API_KEY', 'GOOGLE_API_KEY', 'GOOGLE_APPLICATION_CREDENTIALS'],
+      // OAuth-only routes ignore API keys, so those keys must not discard ADC.
+      /^vertex:(?:live|embeddings?|video):/.test(providerPath)
+        ? ['GOOGLE_APPLICATION_CREDENTIALS']
+        : ['VERTEX_API_KEY', 'GOOGLE_API_KEY', 'GOOGLE_APPLICATION_CREDENTIALS'],
       ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'],
       ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION'],
     ];

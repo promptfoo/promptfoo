@@ -52,6 +52,54 @@ describe('real cloud SDK credential construction without authentication calls', 
     }
   });
 
+  it.each([
+    'vertex:live:fixture',
+    'vertex:embedding:fixture',
+    'vertex:embeddings:fixture',
+    'vertex:video:fixture',
+  ])('retains suite ADC when an unrelated provider API key is present on %s', async (id) => {
+    const dir = fs.mkdtempSync(path.join(fixtureTempRoot, 'promptfoo-oauth-route-'));
+    const file = path.join(dir, 'adc.json');
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        type: 'authorized_user',
+        client_id: 'suite-id',
+        client_secret: 'fixture-secret',
+        refresh_token: 'fixture-refresh',
+      }),
+    );
+    mockProcessEnv({ GOOGLE_CLOUD_PROJECT: 'fixture-project' });
+    vi.spyOn(UserRefreshClient.prototype, 'getRequestHeaders').mockResolvedValue(
+      new Headers({ authorization: 'Bearer fixture' }),
+    );
+    try {
+      const provider = await loadApiProvider(id, {
+        env: { GOOGLE_APPLICATION_CREDENTIALS: file },
+        options: {
+          env: { GOOGLE_API_KEY: 'unrelated-provider-key' },
+          config: { projectId: 'fixture-project' },
+        },
+      });
+      expect(Reflect.get(provider, 'env').GOOGLE_APPLICATION_CREDENTIALS).toBe(file);
+      if (id.includes(':live:')) {
+        expect(
+          await Reflect.get(provider, 'getConnection').call(provider, {
+            projectId: 'fixture-project',
+          }),
+        ).toMatchObject({
+          headers: { authorization: 'Bearer fixture' },
+        });
+      } else {
+        const client = await Reflect.get(provider, 'getClientWithCredentials').call(provider, {});
+        expect(client).toBeInstanceOf(UserRefreshClient);
+        expect(Reflect.get(client, '_clientId')).toBe('suite-id');
+      }
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('constructs an explicit Azure service principal and preserves the default chain fallback', async () => {
     const credential = await createAzureCredential(
       {},

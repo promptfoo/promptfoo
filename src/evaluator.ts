@@ -5076,8 +5076,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         }
         await stopOtlpReceiverIfNeeded(otlpReceiverAcquired, this.store.id);
 
-        // Clean up Python worker pools to prevent resource leaks
-        await providerRegistry.shutdownAll();
+        // Release this invocation's SDK clients and registered provider resources.
+        await providerRegistry.shutdownAll(cliState.envScope);
 
         // Log rate limit metrics for debugging before cleanup
         if (this.rateLimitRegistry) {

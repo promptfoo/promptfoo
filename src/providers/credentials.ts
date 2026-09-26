@@ -10,19 +10,18 @@ export function resolveProviderApiKey(
   config: CredentialOptions | undefined,
   env: Readonly<Record<string, string | undefined>> | undefined,
   defaultEnvars: readonly string[],
+  ambientEnvars: readonly string[] = defaultEnvars,
 ): string | undefined {
   if (config?.apiKey) {
     return config.apiKey;
   }
   const envars = config?.apiKeyEnvar ? [config.apiKeyEnvar] : defaultEnvars;
   const masked = new Set<string>();
-  for (const layer of [
-    env,
-    getEnvOverrides(),
-    getEnvOverrides('file'),
-    Object.fromEntries(envars.map((key) => [key, getEnvString(key as EnvVarKey)])),
-  ]) {
-    for (const envar of envars) {
+  const ambient = Object.fromEntries(envars.map((key) => [key, getEnvString(key as EnvVarKey)]));
+  for (const layer of [env, getEnvOverrides(), getEnvOverrides('file'), ambient]) {
+    // Preserve providers whose legacy shell aliases use a different preference order.
+    const aliases = layer === ambient && !config?.apiKeyEnvar ? ambientEnvars : envars;
+    for (const envar of aliases) {
       const value = layer?.[envar];
       if (masked.has(envar) || value === undefined) {
         continue;
