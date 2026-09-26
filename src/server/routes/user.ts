@@ -112,7 +112,8 @@ userRouter.get('/email/status', async (req: Request, res: Response): Promise<voi
   }
 });
 
-// New API key authentication endpoint that mirrors CLI behavior
+// This route saves the local operator's Cloud credentials; it does not protect access to
+// the local server. Keep it unthrottled under the policy in src/server/AGENTS.md.
 userRouter.post('/login', async (req: Request, res: Response): Promise<void> => {
   const bodyResult = UserSchemas.Login.Request.safeParse(req.body);
   if (!bodyResult.success) {
