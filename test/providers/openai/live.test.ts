@@ -2,6 +2,7 @@ import { PassThrough } from 'node:stream';
 import type { EventEmitter } from 'node:events';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../../src/cliState';
 import { OpenAiLiveProvider } from '../../../src/providers/openai/live';
 import { providerRegistry } from '../../../src/providers/providerRegistry';
 import { checkProviderApiKeys } from '../../../src/util/provider';
@@ -3361,6 +3362,18 @@ describe('OpenAiLiveProvider', () => {
     text(socket);
     closed(socket);
     expect((await result).error).toBeUndefined();
+  });
+
+  it('uses invocation-file proxy settings for the WebSocket upgrade', async () => {
+    await cliState.withEnvFileOverrides({ HTTPS_PROXY: 'http://file.example:8080' }, async () => {
+      const result = provider().callApi('Hi');
+      const socket = await connect();
+      expect(socket.options.agent?.getProxyForUrl(socket.url)).toBe('http://file.example:8080');
+      start(socket);
+      text(socket);
+      closed(socket);
+      expect((await result).error).toBeUndefined();
+    });
   });
 
   it('reports a handler failure without returning its exception text', async () => {

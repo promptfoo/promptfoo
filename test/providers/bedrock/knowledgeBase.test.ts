@@ -4,7 +4,7 @@ import logger from '../../../src/logger';
 import { AwsBedrockKnowledgeBaseProvider } from '../../../src/providers/bedrock/knowledgeBase';
 import { sha256 } from '../../../src/util/createHash';
 import { createEmptyTokenUsage } from '../../../src/util/tokenUsageUtils';
-import { mockProcessEnv } from '../../util/utils';
+import { mockProcessEnv, PROXY_ENV_KEYS } from '../../util/utils';
 
 const mockSend = vi.fn();
 const mockBedrockClient = {
@@ -115,6 +115,8 @@ vi.mock('../../../src/cache', async (importOriginal) => {
   };
 });
 
+let restoreProxyEnv = () => {};
+
 describe('AwsBedrockKnowledgeBaseProvider', () => {
   beforeAll(async () => {
     const bedrockModule = await import('@aws-sdk/client-bedrock-agent-runtime');
@@ -123,6 +125,9 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
   });
 
   beforeEach(() => {
+    restoreProxyEnv = mockProcessEnv(
+      Object.fromEntries(PROXY_ENV_KEYS.map((key) => [key, undefined])),
+    );
     vi.clearAllMocks();
     mockGet.mockReset();
     mockSet.mockReset();
@@ -150,6 +155,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     mockProcessEnv({ npm_config_http_proxy: undefined });
     mockProcessEnv({ npm_config_proxy: undefined });
     mockProcessEnv({ all_proxy: undefined });
+    restoreProxyEnv();
   });
 
   it('should throw an error if knowledgeBaseId is not provided', () => {
