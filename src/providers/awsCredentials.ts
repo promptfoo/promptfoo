@@ -64,7 +64,11 @@ export async function resolveAwsCredentials(
   // Keep the documented explicit SSO configuration. Scoped AWS_PROFILE is passed
   // to the SDK itself, which also supports shared-file and process profiles.
   if (profile && source === config) {
-    const { fromSSO } = await import('@aws-sdk/credential-provider-sso');
+    const { fromSSO } = await import('@aws-sdk/credential-provider-sso').catch(() => {
+      throw new Error(
+        'AWS SSO profiles require @aws-sdk/credential-provider-sso. Please install it with: npm install @aws-sdk/credential-provider-sso',
+      );
+    });
     return fromSSO({ profile });
   }
   return undefined;
