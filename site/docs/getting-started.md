@@ -142,15 +142,11 @@ Now that you've created an initial configuration, you can update `promptfooconfi
 
    ```yaml
    providers:
-     - openai:chat:gpt-5.4
-     - openai:chat:gpt-5.4-mini
-     - anthropic:messages:claude-opus-4-6
-     - google:gemini-3.8-flash
-     # Or use your own custom provider
-     - file://path/to/custom/provider.py
+     - openai:gpt-6-sol
+     - openai:gpt-6-luna
    ```
 
-   This includes cloud APIs, local models like [Ollama](/docs/providers/ollama), and custom [Python](/docs/providers/python) or [JavaScript](/docs/providers/custom-api) code.
+   This example uses your OpenAI API key. You can also configure [Anthropic](/docs/providers/anthropic), [Google](/docs/providers/google), local models like [Ollama](/docs/providers/ollama), or custom [Python](/docs/providers/python) and [JavaScript](/docs/providers/custom-api) code. Each provider has its own setup requirements.
 
    [&raquo; See all providers](/docs/providers)
 
@@ -267,11 +263,10 @@ You can quickly set up this example by running:
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Automatic response evaluation using LLM rubric scoring
 
-# Load prompts
 prompts:
   - file://prompts.txt
 providers:
-  - openai:chat:gpt-5.4
+  - openai:gpt-6-sol
 defaultTest:
   assert:
     - type: llm-rubric
@@ -286,30 +281,6 @@ tests:
   - vars:
       name: Jane
       question: Do you have any promotions or discounts currently available?
-  - vars:
-      name: Ben
-      question: Can you check the availability of a product at a specific store location?
-  - vars:
-      name: Dave
-      question: What are your shipping and return policies?
-  - vars:
-      name: Jim
-      question: Can you provide more information about the product specifications or features?
-  - vars:
-      name: Alice
-      question: Can you recommend products that are similar to what I've been looking at?
-  - vars:
-      name: Sophie
-      question: Do you have any recommendations for products that are currently popular or trending?
-  - vars:
-      name: Jessie
-      question: How can I track my order after it has been shipped?
-  - vars:
-      name: Kim
-      question: What payment methods do you accept?
-  - vars:
-      name: Emily
-      question: Can you help me with a problem I'm having with my account or order?
 ```
 
 </details>
@@ -324,7 +295,7 @@ You can also output a [spreadsheet](https://docs.google.com/spreadsheets/d/1nano
 
 ### Model quality
 
-In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-openai-models), we evaluate the difference between GPT-5.4 and GPT-5.4 Mini outputs for a given prompt:
+In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-openai-models), we evaluate GPT-6 Luna, Sol, and Astra on 15 riddles, each with an answer check. The full run makes 45 model calls plus grading calls. Cost and latency assertions check completed responses; they do not cap spending or stop slow requests.
 
 You can quickly set up this example by running:
 
@@ -351,30 +322,43 @@ You can quickly set up this example by running:
 
 ```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Comparing OpenAI flagship and mini models performance on riddles
+description: Comparing current OpenAI models on riddles
 
 prompts:
   - 'Solve this riddle: {{riddle}}'
 
 providers:
-  - openai:chat:gpt-5.4
-  - openai:chat:gpt-5.4-mini
+  - id: openai:gpt-6-luna
+    config:
+      reasoning:
+        effort: low
+      max_output_tokens: 2048
+  - id: openai:gpt-6-sol
+    config:
+      reasoning:
+        effort: low
+      max_output_tokens: 2048
+  - id: openai:gpt-6-astra
+    config:
+      reasoning:
+        effort: low
+      max_output_tokens: 2048
 
 defaultTest:
   assert:
-    # Inference should always cost less than this (USD)
+    # Example per-response cost threshold (USD)
     - type: cost
-      threshold: 0.002
-    # Inference should always be faster than this (milliseconds)
+      threshold: 0.15
+    # Example per-response latency threshold (milliseconds)
     - type: latency
-      threshold: 3000
+      threshold: 60000
 
 tests:
   - vars:
       riddle: 'I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?'
     assert:
       # Make sure the LLM output contains this word
-      - type: contains
+      - type: icontains
         value: echo
       # Use model-graded assertions to enforce free-form instructions
       - type: llm-rubric
@@ -387,48 +371,84 @@ tests:
   - vars:
       riddle: 'The more of this there is, the less you see. What is it?'
     assert:
-      - type: contains
+      - type: icontains
         value: darkness
   - vars:
       riddle: >-
         I have keys but no locks. I have space but no room. You can enter, but
         can't go outside. What am I?
+    assert:
+      - type: icontains
+        value: keyboard
   - vars:
       riddle: >-
         I am not alive, but I grow; I don't have lungs, but I need air; I don't
         have a mouth, but water kills me. What am I?
+    assert:
+      - type: icontains
+        value: fire
   - vars:
       riddle: What can travel around the world while staying in a corner?
+    assert:
+      - type: icontains
+        value: stamp
   - vars:
       riddle: Forward I am heavy, but backward I am not. What am I?
+    assert:
+      - type: llm-rubric
+        value: Identifies the word ton and explains that reversing it spells not.
   - vars:
       riddle: >-
         The person who makes it, sells it. The person who buys it, never uses
         it. The person who uses it, doesn't know they're using it. What is it?
+    assert:
+      - type: icontains-any
+        value: [coffin, casket]
   - vars:
       riddle: I can be cracked, made, told, and played. What am I?
+    assert:
+      - type: icontains
+        value: joke
   - vars:
       riddle: What has keys but can't open locks?
+    assert:
+      - type: llm-rubric
+        value: Identifies an object with keys that do not open locks, such as a piano or keyboard.
   - vars:
       riddle: >-
         I'm light as a feather, yet the strongest person can't hold me for much
         more than a minute. What am I?
+    assert:
+      - type: icontains
+        value: breath
   - vars:
       riddle: >-
         I can fly without wings, I can cry without eyes. Whenever I go, darkness
         follows me. What am I?
+    assert:
+      - type: icontains
+        value: cloud
   - vars:
       riddle: >-
         I am taken from a mine, and shut up in a wooden case, from which I am
         never released, and yet I am used by almost every person. What am I?
+    assert:
+      - type: icontains-any
+        value: [graphite, pencil lead]
   - vars:
       riddle: >-
         David's father has three sons: Snap, Crackle, and _____? What is the
         name of the third son?
+    assert:
+      - type: icontains
+        value: David
   - vars:
       riddle: >-
         I am light as a feather, but even the world's strongest man couldn't
         hold me for much longer than a minute. What am I?
+    assert:
+      - type: icontains
+        value: breath
 ```
 
 </details>
@@ -461,7 +481,7 @@ It produces the following table, with Gemini models replacing the GPT models in 
 
 A similar approach can be used to run other model comparisons. For example, you can:
 
-- Compare GPT-5.4 reasoning effort settings (see [GPT reasoning effort comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-gpt-reasoning-effort))
+- Compare GPT-6 Luna reasoning effort settings (see [GPT reasoning effort comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-gpt-reasoning-effort))
 - Compare models with different temperatures (see [GPT temperature comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-gpt-temperature))
 - Compare open-source models (see [Comparing Open-Source Models](/docs/guides/compare-open-source-models))
 - Compare Retrieval-Augmented Generation (RAG) with LangChain vs. regular GPT (see [LangChain example](/docs/configuration/testing-llm-chains))
