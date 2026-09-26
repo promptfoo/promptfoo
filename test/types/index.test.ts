@@ -186,6 +186,78 @@ describe('isGradingResult', () => {
     expect(isGradingResult(null)).toBe(false);
   });
 
+  it.each(['namedScores', 'namedScoreWeights'] as const)(
+    'rejects unreadable %s entries, including in nested results',
+    (field) => {
+      const result = {
+        pass: true,
+        score: 0.75,
+        reason: '',
+        [field]: {
+          get quality() {
+            throw new Error('Metric unavailable');
+          },
+        },
+      };
+      expect(isGradingResult(result)).toBe(false);
+      expect(
+        isGradingResult({ pass: true, score: 1, reason: '', componentResults: [result] }),
+      ).toBe(false);
+    },
+  );
+
+  it.each(['namedScores', 'namedScoreWeights'] as const)(
+    'accepts stable %s entry getters',
+    (field) => {
+      const result = {
+        pass: true,
+        score: 0.75,
+        reason: '',
+        [field]: {
+          get quality() {
+            return 0.75;
+          },
+        },
+      };
+      expect(isGradingResult(result)).toBe(true);
+      expect(
+        isGradingResult({ pass: true, score: 1, reason: '', componentResults: [result] }),
+      ).toBe(true);
+    },
+  );
+
+  it.each([false, true])('contains indexed child inspection errors: throws=%s', (throws) => {
+    const child = { pass: true, score: 0.75, reason: '' };
+    const components = [child];
+    Object.defineProperty(components, 0, {
+      get() {
+        if (throws) {
+          throw new Error('Child unavailable');
+        }
+        return child;
+      },
+    });
+    expect(
+      isGradingResult({ pass: true, score: 1, reason: '', componentResults: components }),
+    ).toBe(!throws);
+  });
+
+  it.each([false, true])('contains nested grade inspection errors: throws=%s', (throws) => {
+    const child = {
+      pass: true,
+      get score() {
+        if (throws) {
+          throw new Error('Score unavailable');
+        }
+        return 0.75;
+      },
+      reason: '',
+    };
+    expect(isGradingResult({ pass: true, score: 1, reason: '', componentResults: [child] })).toBe(
+      !throws,
+    );
+  });
+
   it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
     'rejects nonfinite scores and metric weights: %s',
     (value) => {

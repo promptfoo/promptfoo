@@ -620,37 +620,41 @@ function hasValidGradingResultFields(result: any): boolean {
 }
 
 export function isGradingResult(result: any): result is GradingResult {
-  const ancestors = new WeakSet<object>();
-  const validated = new WeakSet<object>();
-  const frames = [{ result, nextChild: -1 }];
+  try {
+    const ancestors = new WeakSet<object>();
+    const validated = new WeakSet<object>();
+    const frames = [{ result, nextChild: -1 }];
 
-  // Traverse one indexed child at a time without consuming the JavaScript call stack.
-  while (frames.length > 0) {
-    const frame = frames[frames.length - 1];
-    const current = frame.result;
-    if (frame.nextChild === -1) {
-      if (validated.has(current)) {
+    // Traverse one indexed child at a time without consuming the JavaScript call stack.
+    while (frames.length > 0) {
+      const frame = frames[frames.length - 1];
+      const current = frame.result;
+      if (frame.nextChild === -1) {
+        if (validated.has(current)) {
+          frames.pop();
+          continue;
+        }
+        if (!hasValidGradingResultFields(current) || ancestors.has(current)) {
+          return false;
+        }
+        ancestors.add(current);
+        frame.nextChild = 0;
+      }
+
+      const components = current.componentResults;
+      if (components != null && frame.nextChild < components.length) {
+        // Ignore custom iterators and reject a sparse entry as soon as it is visited.
+        frames.push({ result: components[frame.nextChild++], nextChild: -1 });
+      } else {
+        ancestors.delete(current);
+        validated.add(current);
         frames.pop();
-        continue;
       }
-      if (!hasValidGradingResultFields(current) || ancestors.has(current)) {
-        return false;
-      }
-      ancestors.add(current);
-      frame.nextChild = 0;
     }
-
-    const components = current.componentResults;
-    if (components != null && frame.nextChild < components.length) {
-      // Ignore custom iterators and reject a sparse entry as soon as it is visited.
-      frames.push({ result: components[frame.nextChild++], nextChild: -1 });
-    } else {
-      ancestors.delete(current);
-      validated.add(current);
-      frames.pop();
-    }
+    return true;
+  } catch {
+    return false;
   }
-  return true;
 }
 
 export const BaseAssertionTypesSchema = z.enum([
