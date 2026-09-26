@@ -72,6 +72,7 @@ import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
 import {
   getNamedMetricTotals,
+  mergeFilteredNamedMetrics,
   parseEvalOutputPromptHash,
   setEvalDetailsHash,
   useEvalDetailsHash,
@@ -1137,6 +1138,8 @@ function PromptColumnHeader({
   numGoodAsserts,
   testCounts,
   passingTestCounts,
+  hasCompleteFilteredMetrics,
+  derivedMetricNames,
   config,
   filterMode,
   headPromptCount,
@@ -1156,6 +1159,8 @@ function PromptColumnHeader({
   numGoodAsserts: number[];
   testCounts: PromptSummaryMetric[];
   passingTestCounts: PromptSummaryMetric[];
+  hasCompleteFilteredMetrics: boolean;
+  derivedMetricNames: string[];
   config: ReturnType<typeof useTableStore.getState>['config'];
   filterMode: EvalResultsFilterMode;
   headPromptCount: number;
@@ -1166,6 +1171,18 @@ function PromptColumnHeader({
 }) {
   const columnId = `Prompt ${idx + 1}`;
   const { total: metrics, filtered: filteredMetrics } = getMetrics(idx);
+  const displayMetrics = mergeFilteredNamedMetrics(
+    metrics,
+    hasCompleteFilteredMetrics ? filteredMetrics : null,
+    derivedMetricNames,
+  );
+  const totalMetricNames =
+    hasCompleteFilteredMetrics && filteredMetrics
+      ? derivedMetricNames.filter((metricName) =>
+          Object.prototype.hasOwnProperty.call(metrics?.namedScores ?? {}, metricName),
+        )
+      : [];
+  const metricTotals = getNamedMetricTotals(displayMetrics);
 
   return (
     <div className="output-header">
@@ -1213,11 +1230,14 @@ function PromptColumnHeader({
             </div>
           </button>
         ) : null}
-        {!isRedteam && metrics?.namedScores && Object.keys(metrics.namedScores).length > 0 ? (
+        {!isRedteam &&
+        displayMetrics?.namedScores &&
+        Object.keys(displayMetrics.namedScores).length > 0 ? (
           <div className="collapse-hidden">
             <CustomMetrics
-              lookup={metrics.namedScores}
-              metricTotals={getNamedMetricTotals(metrics)}
+              lookup={displayMetrics.namedScores}
+              metricTotals={metricTotals}
+              totalMetricNames={totalMetricNames}
               onShowMore={() => setCustomMetricsDialogOpen(true)}
             />
           </div>
@@ -1673,6 +1693,8 @@ function ResultsTable({
     fetchEvalData,
     isFetching,
     filters,
+    filteredMetrics,
+    derivedMetricNamesByPrompt,
   } = useTableStore();
   const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
   const { setFilterMode } = useFilterMode();
@@ -1683,6 +1705,7 @@ function ResultsTable({
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
+  const hasCompleteFilteredMetrics = filteredMetrics?.length === head.prompts.length;
 
   const isRedteam = React.useMemo(() => {
     return config?.redteam !== undefined;
@@ -2178,6 +2201,12 @@ function ResultsTable({
                 numGoodAsserts={numGoodAsserts}
                 testCounts={testCounts}
                 passingTestCounts={passingTestCounts}
+                hasCompleteFilteredMetrics={hasCompleteFilteredMetrics}
+                derivedMetricNames={
+                  derivedMetricNamesByPrompt?.[idx] ??
+                  config?.derivedMetrics?.map((metric) => metric.name) ??
+                  []
+                }
                 config={config}
                 filterMode={filterMode}
                 headPromptCount={head.prompts.length}
@@ -2244,6 +2273,8 @@ function ResultsTable({
     handleRating,
     head,
     head.prompts,
+    hasCompleteFilteredMetrics,
+    derivedMetricNamesByPrompt,
     isRedteam,
     maxTextLength,
     numAsserts,
@@ -2484,6 +2515,11 @@ function ResultsTable({
     // of this component. This ensures that the pagination footer is always pinned to the bottom
     // of the viewport (because the parent container is a flexbox).
     <>
+      {isFilteringActive && !hasCompleteFilteredMetrics && !isFetching && (
+        <p className="text-sm text-muted-foreground" role="status">
+          Filtered named metrics are unavailable. Named metrics show evaluation totals.
+        </p>
+      )}
       {filteredResultsCount === 0 && !isFetching && isFilteringActive && (
         <div className="p-5 text-center bg-black/[0.03] dark:bg-white/[0.03] rounded my-5">
           <p>No results found for the current filters.</p>

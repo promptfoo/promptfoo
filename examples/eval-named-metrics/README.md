@@ -25,6 +25,8 @@ promptfoo eval
 
 3. **Derived Metrics**: Creating custom metrics based on formulas (e.g., `DoubleConsistency = Consistency * 2`)
 
+The viewer shows `DoubleConsistency` as a raw value rather than an assertion percentage. Filtering the results updates assertion metrics, while derived metrics retain their full-eval values and are labeled `(total)`.
+
 ## Dynamic Metric Example
 
 ```yaml

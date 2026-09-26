@@ -32,6 +32,7 @@ import {
   showRedteamProviderLabelMissingWarning,
 } from '../../src/node/doEval';
 import {
+  createNamedMetricsPreservationGuard,
   deleteErrorResults,
   getErrorResultIds,
   recalculatePromptMetrics,
@@ -70,6 +71,7 @@ vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
 });
 vi.mock('../../src/migrate');
 vi.mock('../../src/node/retry', () => ({
+  createNamedMetricsPreservationGuard: vi.fn(() => vi.fn(() => true)),
   deleteErrorResults: vi.fn(),
   getErrorResultIds: vi.fn(),
   recalculatePromptMetrics: vi.fn(),
@@ -205,8 +207,14 @@ describe('evalCommand', () => {
     vi.mocked(getAuthor).mockReturnValue(null);
     vi.mocked(promptForEmailUnverified).mockResolvedValue({ emailNeedsValidation: false });
     vi.mocked(checkEmailStatusAndMaybeExit).mockResolvedValue('ok');
-    vi.mocked(deleteErrorResults).mockResolvedValue(undefined);
+    vi.mocked(deleteErrorResults).mockResolvedValue({
+      allRequestedDeleted: true,
+      hadNamedScores: false,
+    });
     vi.mocked(getErrorResultIds).mockResolvedValue([]);
+    vi.mocked(createNamedMetricsPreservationGuard)
+      .mockReset()
+      .mockResolvedValue(() => true);
     vi.mocked(recalculatePromptMetrics).mockResolvedValue(undefined);
   });
 
@@ -1889,8 +1897,62 @@ describe('evalCommand', () => {
         { filterProviders: 'selected-target' },
         latestEval.config,
       );
-      expect(deleteErrorResults).toHaveBeenCalledWith(['result-1', 'result-2']);
-      expect(recalculatePromptMetrics).toHaveBeenCalledWith(latestEval);
+      expect(deleteErrorResults).toHaveBeenCalledWith(['result-1', 'result-2'], {
+        reportNamedScores: true,
+      });
+      expect(recalculatePromptMetrics).toHaveBeenCalledWith(latestEval, {
+        preserveNamedMetrics: true,
+      });
+    } finally {
+      latestSpy.mockRestore();
+    }
+  });
+
+  it('cleans up cancellation handlers when retry checkpoint verification fails', async () => {
+    const latestEval = new Eval({ prompts: [] } as UnifiedConfig);
+    const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
+    const originalListeners = process.listeners('SIGINT');
+    const abortSignal = new AbortController().signal;
+    const options = { eventSource: 'cli' as const, abortSignal };
+    vi.mocked(getErrorResultIds).mockResolvedValueOnce(['result-1']);
+    vi.mocked(createNamedMetricsPreservationGuard).mockRejectedValueOnce(
+      new Error('checkpoint query failed'),
+    );
+
+    try {
+      await expect(
+        doEval({ retryErrors: true, write: true }, defaultConfig, defaultConfigPath, options),
+      ).rejects.toThrow('checkpoint query failed');
+      expect(process.listeners('SIGINT')).toEqual(originalListeners);
+      expect(options.abortSignal).toBe(abortSignal);
+      expect(evaluate).not.toHaveBeenCalled();
+      expect(deleteErrorResults).not.toHaveBeenCalled();
+      expect(cliState.resume).toBe(false);
+      expect(cliState.retryMode).toBe(false);
+      expect(cliState._retryErrorResultIds).toBeUndefined();
+    } finally {
+      latestSpy.mockRestore();
+    }
+  });
+
+  it('rebuilds named metrics from stored rows when retry replacements fail to persist', async () => {
+    const latestEval = new Eval({ prompts: [] } as UnifiedConfig);
+    const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
+    vi.mocked(getErrorResultIds).mockResolvedValueOnce(['result-1']);
+    vi.mocked(evaluate).mockImplementationOnce(async () => {
+      latestEval.resultPersistenceFailed = true;
+      return latestEval;
+    });
+
+    try {
+      await doEval({ retryErrors: true }, defaultConfig, defaultConfigPath, {});
+      expect(deleteErrorResults).not.toHaveBeenCalled();
+      expect(recalculatePromptMetrics).toHaveBeenCalledWith(latestEval, {
+        preserveNamedMetrics: false,
+      });
+      expect(cliState.resume).toBe(false);
+      expect(cliState.retryMode).toBe(false);
+      expect(cliState._retryErrorResultIds).toBeUndefined();
     } finally {
       latestSpy.mockRestore();
     }
