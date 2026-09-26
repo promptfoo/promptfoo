@@ -126,7 +126,7 @@ The provider includes the same comprehensive error handling as the regular Azure
 
 ## Opt-in live QA from this repository
 
-Use an existing test project and agent. This harness runs text, structured-output, and benign function-tool evals, with at most nine model requests and SDK/scheduler retries disabled. It does not create agents, deployments, or other Azure infrastructure.
+Use an existing test project and agent. This harness runs text, structured-output, and benign function-tool evals, with at most nine client Responses requests and SDK/scheduler retries disabled. Azure may perform additional model calls internally. Each CLI process has a three-minute wall-clock limit. The harness does not create agents, deployments, or other Azure infrastructure.
 
 From the repository root, preview the configs without contacting Azure:
 

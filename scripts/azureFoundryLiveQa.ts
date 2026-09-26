@@ -13,6 +13,7 @@ import type { EvaluateResult } from '../src/types';
 const root = path.resolve(import.meta.dirname, '..');
 const require = createRequire(import.meta.url);
 const run = promisify(execFile);
+const cliWallClockTimeoutMs = 180_000;
 const { values } = parseArgs({
   options: {
     endpoint: { type: 'string' },
@@ -88,8 +89,10 @@ const metadata = {
   endpoint: endpoint.toString(),
   agent: values.agent,
   live: Boolean(values.live),
-  // Each of three evals permits one initial model request and two callback batches.
-  maxModelRequests: 9,
+  // Each eval permits one initial Responses request and two tool continuations.
+  // This does not count model calls performed internally by the Azure agent service.
+  maxClientResponsesRequests: 9,
+  cliWallClockTimeoutMs,
   configDir,
   traces: path.join(configDir, 'promptfoo.db'),
 };
@@ -184,6 +187,7 @@ for (const test of cases) {
     continue;
   }
   let exitCode = 0;
+  let terminalError: string | undefined;
   try {
     await run(
       'npm',
@@ -212,17 +216,26 @@ for (const test of cases) {
           OTEL_EXPORTER_OTLP_ENDPOINT: '',
         },
         maxBuffer: 4 * 1024 * 1024,
+        timeout: cliWallClockTimeoutMs,
+        killSignal: 'SIGKILL',
       },
     );
   } catch (error) {
-    exitCode =
-      typeof (error as { code?: unknown }).code === 'number' ? (error as { code: number }).code : 1;
+    const failure = error as { code?: string | number; killed?: boolean; signal?: string };
+    exitCode = typeof failure.code === 'number' ? failure.code : 1;
+    if (failure.killed) {
+      terminalError = `CLI terminated before completion (wall-clock limit: ${cliWallClockTimeoutMs}ms).`;
+    } else if (failure.signal || typeof failure.code !== 'number') {
+      terminalError = 'CLI was interrupted or could not complete.';
+    }
   }
   if (!fs.existsSync(resultPath)) {
     summaries.push({
       case: test.name,
       exitCode,
-      error: 'CLI did not export results; inspect the isolated promptfoo/logs directory.',
+      error:
+        terminalError ??
+        'CLI did not export results; inspect the isolated promptfoo/logs directory.',
     });
     process.exitCode = 1;
     break;
@@ -240,6 +253,7 @@ for (const test of cases) {
   summaries.push({
     case: test.name,
     exitCode,
+    ...(terminalError && { error: terminalError }),
     callbackCount,
     results: results.map((result) => ({
       success: result.success,
@@ -252,11 +266,16 @@ for (const test of cases) {
       metadata: result.metadata,
     })),
   });
-  if (results.some((result) => !result.success) || (test.name === 'tool' && callbackCount === 0)) {
+  if (
+    exitCode !== 0 ||
+    results.length !== 1 ||
+    results.some((result) => !result.success) ||
+    (test.name === 'tool' && callbackCount === 0)
+  ) {
     process.exitCode = 1;
   }
   // Authentication, reachability and provider errors need attention before more live calls.
-  if (results.some((result) => result.response?.error)) {
+  if (terminalError || results.some((result) => result.response?.error)) {
     break;
   }
 }
