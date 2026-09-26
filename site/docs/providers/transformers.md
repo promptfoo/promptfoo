@@ -140,7 +140,7 @@ assert:
 
 | Problem                  | Solution                                                                                                                                                |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Dependency not installed | Run `npm install @huggingface/transformers`                                                                                                             |
+| Dependency not installed | Follow the [installation instructions](#installation) to install the runtime alongside Promptfoo.                                                       |
 | Model not found          | Verify model exists at [HuggingFace](https://huggingface.co/models?library=transformers.js) with ONNX weights. Try `Xenova` or `onnx-community` models. |
 | Out of memory            | Use `dtype: q4`, run with `-j 1`, or try smaller models                                                                                                 |
 | Slow first run           | Models download on first use. Pre-download with `await pipeline('feature-extraction', 'model-name')`                                                    |
