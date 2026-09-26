@@ -3605,6 +3605,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
             testSuite: context.testSuite,
           }));
 
+        if (rows.length === 0) {
+          // Let interruption handling keep this step unprocessed for resume or timeout results.
+          evalStep.abortSignal?.throwIfAborted();
+        }
+
         if (!deferGrading) {
           await this.processEvalRows(evalStep, index, rows, shouldSkipStaleRows, context);
         }

@@ -470,6 +470,39 @@ describeEvaluator('evaluation environment defaults', () => {
     });
   });
 
+  it.each([
+    { maxConcurrency: 1, runSerially: false },
+    { maxConcurrency: 2, runSerially: false },
+    { maxConcurrency: 2, runSerially: true },
+  ])(
+    'records max-duration errors when pacing is interrupted: %j',
+    async ({ maxConcurrency, runSerially }) => {
+      vi.useFakeTimers();
+      const grade = vi.fn().mockReturnValue(true);
+      const provider = createProvider();
+      const suite = createSuite(provider, { PROMPTFOO_DELAY_MS: '1000' });
+      suite.tests = Array.from({ length: 3 }, () => ({
+        assert: [{ type: 'javascript' as const, value: grade }],
+        options: { runSerially },
+      }));
+      const record = new Eval({});
+      const evaluation = evaluate(suite, record, { maxConcurrency, maxEvalTimeMs: 10 });
+
+      await vi.advanceTimersByTimeAsync(20);
+      await evaluation;
+      expect(provider.callApi).toHaveBeenCalledTimes(runSerially ? 1 : maxConcurrency);
+      const results = await record.getResults();
+      expect(results).toHaveLength(3);
+      expect(results.map((result) => result.testIdx).sort()).toEqual([0, 1, 2]);
+      for (const result of results) {
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Evaluation exceeded max duration of 10ms');
+      }
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(grade).not.toHaveBeenCalled();
+    },
+  );
+
   it.each([undefined, 0])(
     'preserves timeout override %s against an environment default',
     async (timeoutMs) => {
