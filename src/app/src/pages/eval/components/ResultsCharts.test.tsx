@@ -38,14 +38,6 @@ vi.mock('./store', () => ({
   useTableStore: vi.fn(),
 }));
 
-// Mock API calls
-vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn(),
-  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
-  fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
-  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
-}));
-
 describe('ResultsCharts', () => {
   const defaultProps = {};
 
@@ -420,7 +412,7 @@ describe('ResultsCharts', () => {
       ).toContain('right first output');
     });
 
-    it('handles empty recentEvals array gracefully', () => {
+    it('renders only three equal-width charts when the evaluation has a description', () => {
       const mockTable = {
         head: {
           prompts: [{ provider: 'test-provider-1' }, { provider: 'test-provider-2' }],
@@ -459,9 +451,11 @@ describe('ResultsCharts', () => {
 
       const { container } = render(<ResultsCharts {...defaultProps} scores={scores} />);
 
-      expect(container).toBeDefined();
-
-      expect(screen.queryByText('PerformanceOverTimeChart')).toBeNull();
+      const canvases = container.querySelectorAll('canvas');
+      expect(canvases).toHaveLength(3);
+      for (const canvas of canvases) {
+        expect(canvas.parentElement).toHaveStyle({ width: '33%' });
+      }
     });
   });
 
