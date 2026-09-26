@@ -147,6 +147,8 @@ describe('ResultsTable Metrics Display', () => {
   };
 
   beforeEach(() => {
+    vi.mocked(useResultsViewSettingsStore).mockReset();
+    vi.mocked(useTableStore).mockReset();
     vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
       inComparisonMode: false,
       renderMarkdown: true,
@@ -220,6 +222,68 @@ describe('ResultsTable Metrics Display', () => {
     expect(screen.getByText('Avg Tokens:')).toBeInTheDocument();
     expect(screen.getByText('100')).toBeInTheDocument();
   });
+
+  it.each([0, 1])(
+    'includes runtime errors in resource averages with %i passing results',
+    async (testPassCount) => {
+      const user = userEvent.setup();
+      const state = useTableStore();
+      vi.mocked(useTableStore).mockReturnValue({
+        ...state,
+        table: {
+          ...mockTable,
+          body: [0, 1].map((index) => ({
+            ...mockTable.body[0],
+            outputs: [
+              {
+                pass: index < testPassCount,
+                score: index < testPassCount ? 1 : 0,
+                text: index < testPassCount ? 'Test output' : 'Provider error',
+                ...(index >= testPassCount && { error: 'Provider error' }),
+              },
+            ],
+          })),
+          head: {
+            ...mockTable.head,
+            prompts: [
+              {
+                ...mockTable.head.prompts[0],
+                metrics: {
+                  ...mockTable.head.prompts[0].metrics,
+                  cost: 2,
+                  testPassCount,
+                  testErrorCount: 2 - testPassCount,
+                  tokenUsage: { total: 100 },
+                  totalLatencyMs: 1000,
+                },
+              },
+            ],
+          },
+        },
+        filteredMetrics: [
+          {
+            cost: 0.8,
+            testPassCount: 0,
+            testFailCount: 0,
+            testErrorCount: 1,
+            tokenUsage: { total: 20 },
+            totalLatencyMs: 200,
+          },
+        ],
+      });
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      expect(screen.getByText('Avg Tokens:').parentElement).toHaveTextContent(
+        'Avg Tokens: 50(20 filtered)',
+      );
+      expect(screen.getByText('Avg Latency:').parentElement).toHaveTextContent(
+        'Avg Latency: 500ms(200ms filtered)',
+      );
+      await user.hover(screen.getByText('$2.00'));
+      expect(await screen.findByRole('tooltip')).toHaveTextContent('Average: $1.0 per test');
+    },
+  );
 
   it('hides metrics when showStats is false', () => {
     renderWithProviders(<ResultsTable {...defaultProps} showStats={false} />);

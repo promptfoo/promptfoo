@@ -346,7 +346,7 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
       COUNT(DISTINCT test_idx) as total_count,
       SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as pass_count,
       SUM(CASE WHEN success = 0 AND failure_reason != ${ResultFailureReason.ERROR} THEN 1 ELSE 0 END) as fail_count,
-      SUM(CASE WHEN failure_reason = ${ResultFailureReason.ERROR} THEN 1 ELSE 0 END) as error_count,
+      SUM(CASE WHEN success = 0 AND failure_reason = ${ResultFailureReason.ERROR} THEN 1 ELSE 0 END) as error_count,
       SUM(score) as total_score,
       SUM(latency_ms) as total_latency,
       SUM(cost) as total_cost,
