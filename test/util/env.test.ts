@@ -50,6 +50,16 @@ describe('setupEnv', () => {
     vi.resetAllMocks();
   });
 
+  it('loads explicit files without logging before CLI console initialization', () => {
+    setupEnv('fixture.env', { quiet: true });
+    expect(dotenvConfigSpy).toHaveBeenCalledWith({
+      quiet: true,
+      path: 'fixture.env',
+      override: true,
+    });
+    expect(loggerInfoSpy).not.toHaveBeenCalled();
+  });
+
   it('should call dotenv.config with quiet=true when envPath is undefined', () => {
     setupEnv(undefined);
 

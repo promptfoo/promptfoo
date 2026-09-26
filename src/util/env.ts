@@ -5,6 +5,8 @@ import logger from '../logger';
 import { refreshConfigDirectoryPathFromEnv } from './config/manage';
 
 interface SetupEnvOptions {
+  /** Suppress startup messages until console logging has been configured. */
+  quiet?: boolean;
   refreshConfigDirectory?: boolean;
   /** Load into an invocation's environment instead of changing process.env. */
   processEnv?: NodeJS.ProcessEnv;
@@ -28,9 +30,9 @@ export function setupEnv(envPath: string | string[] | undefined, options: SetupE
     }
 
     // Log files being loaded
-    if (paths.length === 1) {
+    if (!options.quiet && paths.length === 1) {
       logger.info(`Loading environment variables from ${paths[0]}`);
-    } else {
+    } else if (!options.quiet) {
       logger.info(`Loading environment variables from: ${paths.join(', ')}`);
     }
   }

@@ -271,7 +271,21 @@ function createRunLogFile(
 /**
  * Initialize per-run logging
  */
-export function initializeRunLogging(): void {
+export function initializeRunLogging({
+  structuredOutput = false,
+}: {
+  structuredOutput?: boolean;
+} = {}): void {
+  // Console configuration belongs to process startup, after argv env files load.
+  // Never refresh the shared transport from individual evaluation env scopes.
+  setLogLevel(structuredOutput ? 'error' : ((getEnvString('LOG_LEVEL') || 'info') as LogLevel));
+  Object.assign(winstonLogger.transports[0], {
+    stderrLevels:
+      structuredOutput || getEnvBool('PROMPTFOO_LOG_TO_STDERR')
+        ? Object.fromEntries(Object.keys(LOG_LEVELS).map((level) => [level, true]))
+        : {},
+  });
+
   try {
     const date = new Date();
     if (!getEnvBool('PROMPTFOO_DISABLE_DEBUG_LOG', false)) {
