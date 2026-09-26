@@ -126,7 +126,7 @@ Referencing the entry label still selects every row — `prompts: [Translations]
 
 ### Multiple Prompts in One File
 
-Separate multiple prompts with `---`:
+In `.txt` files, separate multiple prompts with `---`:
 
 ```text title="prompts.txt"
 Translate to French: {{text}}
@@ -135,6 +135,15 @@ Translate to Spanish: {{text}}
 ---
 Translate to German: {{text}}
 ```
+
+Set `PROMPTFOO_PROMPT_SEPARATOR` to use a custom separator, for example in your config:
+
+```yaml
+env:
+  PROMPTFOO_PROMPT_SEPARATOR: '%%%'
+```
+
+With this config, `%%%` separates prompts and `---` remains part of the prompt. The separator is matched literally against the entire line after trimming whitespace from the line. An unset or empty value uses `---`.
 
 ### Using Globs
 
