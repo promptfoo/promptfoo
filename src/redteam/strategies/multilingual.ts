@@ -4,6 +4,7 @@ import dedent from 'dedent';
 import cliState from '../../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../../constants';
 import logger from '../../logger';
+import { describeFetchError } from '../../util/fetch/errors';
 import invariant from '../../util/invariant';
 import { loadYaml } from '../../util/yamlLoad';
 import { shouldGenerateRemote } from '../remoteGeneration';
@@ -339,7 +340,7 @@ async function generateMultilingual(
 
     return deduplicatedResults;
   } catch (error) {
-    logger.debug(`Remote multilingual generation failed: ${error}`);
+    logger.warn(`Remote multilingual generation failed: ${describeFetchError(error)}`);
     return [];
   }
 }
