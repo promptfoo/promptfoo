@@ -701,6 +701,36 @@ describe('Python file references', { timeout: 15000 }, () => {
     expect(pythonResult).not.toHaveProperty('tokensUsed');
   });
 
+  it.each(['namedScores', 'named_scores', 'namedScoreWeights'])(
+    'treats nullable %s maps as absent, including nested results',
+    async (field) => {
+      const scriptResult = {
+        pass_: true,
+        score: 1,
+        reason: 'ok',
+        [field]: null,
+        component_results: [{ pass_: true, score: 0.75, reason: 'nested', [field]: null }],
+      };
+      vi.mocked(runPythonCode).mockResolvedValueOnce(scriptResult);
+
+      const result = await runAssertion({
+        prompt: 'Test',
+        assertion: { type: 'python', value: 'unused' },
+        test: {},
+        providerResponse: { output: 'Test output' },
+      });
+
+      expect(result).toMatchObject({ pass: true, score: 1, reason: 'ok' });
+      expect(result.namedScores).toBeUndefined();
+      expect(result.namedScoreWeights).toBeUndefined();
+      expect(result.componentResults?.[0]).toMatchObject({ pass: true, score: 0.75 });
+      expect(result.componentResults?.[0].namedScores).toBeUndefined();
+      expect(result.componentResults?.[0].namedScoreWeights).toBeUndefined();
+      expect(scriptResult[field]).toBeNull();
+      expect(scriptResult.component_results[0][field]).toBeNull();
+    },
+  );
+
   describe('Python threshold edge cases', () => {
     const baseParams = {
       prompt: 'test',

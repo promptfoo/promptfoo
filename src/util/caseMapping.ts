@@ -26,6 +26,13 @@ export function mapSnakeCaseToCamelCase(obj: Record<string, any>): Record<string
     result.tokensUsed = result.tokens_used;
   }
 
+  // Python None and Ruby nil represent absent optional metric maps.
+  for (const field of ['namedScores', 'namedScoreWeights']) {
+    if (result[field] === null) {
+      delete result[field];
+    }
+  }
+
   // Recursively handle nested component results
   if (result.componentResults && Array.isArray(result.componentResults)) {
     result.componentResults = result.componentResults.map((component: any) => {

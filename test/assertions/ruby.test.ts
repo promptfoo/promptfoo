@@ -61,6 +61,36 @@ describe('Ruby assertions', () => {
     resetRubyMocks();
   });
 
+  it.each(['namedScores', 'named_scores', 'namedScoreWeights'])(
+    'treats nullable %s maps as absent, including nested results',
+    async (field) => {
+      const scriptResult = {
+        pass_: true,
+        score: 1,
+        reason: 'ok',
+        [field]: null,
+        component_results: [{ pass_: true, score: 0.75, reason: 'nested', [field]: null }],
+      };
+      vi.mocked(runRubyCode).mockResolvedValueOnce(scriptResult);
+
+      const result = await runAssertion({
+        prompt: 'Test',
+        assertion: { type: 'ruby', value: 'unused' },
+        test: {},
+        providerResponse: { output: 'Test output' },
+      });
+
+      expect(result).toMatchObject({ pass: true, score: 1, reason: 'ok' });
+      expect(result.namedScores).toBeUndefined();
+      expect(result.namedScoreWeights).toBeUndefined();
+      expect(result.componentResults?.[0]).toMatchObject({ pass: true, score: 0.75 });
+      expect(result.componentResults?.[0].namedScores).toBeUndefined();
+      expect(result.componentResults?.[0].namedScoreWeights).toBeUndefined();
+      expect(scriptResult[field]).toBeNull();
+      expect(scriptResult.component_results[0][field]).toBeNull();
+    },
+  );
+
   it.each([
     [
       'boolean',
