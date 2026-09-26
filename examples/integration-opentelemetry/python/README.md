@@ -182,7 +182,6 @@ Click on any test result to see the "Trace Timeline" section.
 | `opentelemetry-api`                      | >=1.28.0 | Core tracing API              |
 | `opentelemetry-sdk`                      | >=1.28.0 | SDK implementation            |
 | `opentelemetry-exporter-otlp-proto-http` | >=1.28.0 | OTLP HTTP exporter (protobuf) |
-| `opentelemetry-semantic-conventions`     | >=0.49b0 | Standard attribute names      |
 
 ## Troubleshooting
 

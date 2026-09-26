@@ -36,7 +36,6 @@ pip install -r requirements.txt
 This installs:
 
 - [`strands-agents[openai]`](https://pypi.org/project/strands-agents/) - The Strands Agents SDK with OpenAI support
-- [`pydantic`](https://docs.pydantic.dev/) - Data validation library required by Strands
 
 ### 2. Set environment variables
 
