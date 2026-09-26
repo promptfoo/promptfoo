@@ -196,6 +196,11 @@ providers:
       apiKey: your_api_key_here
 ```
 
+For the same supported environment variable, the provider's `env` value takes priority over
+the evaluation's top-level `env`, values loaded with `--env-file`, and shell variables.
+Explicit provider `config` values take priority over environment settings. Provider overrides
+stay with that provider during requests.
+
 ### Overriding Pricing
 
 For providers with built-in token pricing, you can override promptfoo's cost estimates in
