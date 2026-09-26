@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import cliState from '../../../src/cliState';
 import { CreateJobRequestSchema } from '../../../src/types/api/eval';
 import { getProxyEnvironment, getProxyForUrl } from '../../../src/util/fetch/proxy';
+import { ProviderOptionsSchema } from '../../../src/validators/providers';
 import { mockProcessEnv, PROXY_ENV_KEYS } from '../utils';
 
 let restore = () => {};
@@ -17,6 +18,14 @@ beforeEach(() => {
 afterEach(() => restore());
 
 describe('effective proxy environment', () => {
+  it('keeps transport settings out of the per-provider configuration contract', () => {
+    const provider = ProviderOptionsSchema.parse({
+      id: 'http',
+      env: { HTTP_PROXY: 'http://proxy.example:8080', OPENAI_API_KEY: 'provider-key' },
+    });
+    expect(provider.env).toEqual({ OPENAI_API_KEY: 'provider-key' });
+  });
+
   it.each(['upper', 'lower'])('keeps %s proxy settings through API validation', (casing) => {
     const values = {
       HTTP_PROXY: 'http://http-proxy.example:8080',
