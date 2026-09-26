@@ -77,13 +77,31 @@ export function getCache() {
   return getCacheInstance();
 }
 
-function getCacheBackend(): CacheBackend {
+function resolveCachePath(cachePath: string): string {
+  const absolutePath = path.resolve(cachePath);
+  let ancestor = absolutePath;
+  while (true) {
+    try {
+      return path.join(fs.realpathSync(ancestor), path.relative(ancestor, absolutePath));
+    } catch (error) {
+      const parent = path.dirname(ancestor);
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || parent === ancestor) {
+        // Preserve the existing disk-store/claim error handling for inaccessible paths.
+        return absolutePath;
+      }
+      // Resolve an existing parent when this invocation has not created its cache yet.
+      ancestor = parent;
+    }
+  }
+}
+
+function getCacheBackend(cacheEnabled = getEffectiveCacheEnabled()): CacheBackend {
   const cacheType =
     getEnvString('PROMPTFOO_CACHE_TYPE') ||
     (getEnvString('NODE_ENV') === 'test' ? 'memory' : 'disk');
   const cachePath =
-    cacheType === 'disk' && getEffectiveCacheEnabled()
-      ? path.resolve(
+    cacheType === 'disk' && cacheEnabled
+      ? resolveCachePath(
           getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache'),
         )
       : undefined;
@@ -1008,7 +1026,8 @@ export function disableCache() {
  * ```
  */
 export async function clearCache() {
-  const backend = getCacheBackend();
+  // Explicit clearing targets the configured backend even when reads/writes are disabled.
+  const backend = getCacheBackend(true);
   backend.inflight.clear();
   const result = await getCacheInstance(backend).clear();
   backend.claims.clear();

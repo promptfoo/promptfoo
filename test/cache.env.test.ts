@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import { Keyv } from 'keyv';
+import { KeyvFile } from 'keyv-file';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDeferred } from './util/utils';
 
@@ -119,6 +121,61 @@ describe('invocation-scoped cache settings', () => {
     });
     expect(fs.existsSync(path.join(cachePath, 'cache.json'))).toBe(true);
   });
+
+  it.each(['existing', 'new'])(
+    'shares a disk writer through %s directory aliases',
+    async (kind) => {
+      const realParent = path.join(tempDir, 'physical');
+      const aliasParent = path.join(tempDir, 'alias');
+      fs.mkdirSync(realParent);
+      fs.symlinkSync(realParent, aliasParent, 'junction');
+      const suffix = kind === 'new' ? path.join('nested', 'cache') : '';
+      const realPath = path.join(realParent, suffix);
+      const aliasPath = path.join(aliasParent, suffix);
+
+      // Both stores are selected before either writes, exposing competing snapshots.
+      const first = cliState.withEnv(disk(aliasPath), () => cache.getCache());
+      const second = cliState.withEnv(disk(realPath), () => cache.getCache());
+      await Promise.all([first.set('first', 'one'), second.set('second', 'two')]);
+
+      expect(first.stores[0]).toBe(second.stores[0]);
+      expect(await first.get('second')).toBe('two');
+      expect(await second.get('first')).toBe('one');
+      const persisted = new Keyv({
+        store: new KeyvFile({ filename: path.join(realPath, 'cache.json') }),
+      });
+      expect(await persisted.get('first')).toBe('one');
+      expect(await persisted.get('second')).toBe('two');
+    },
+  );
+
+  it.each(['api', 'scope', 'env'])(
+    'clears the configured disk cache while disabled by %s',
+    async (mode) => {
+      const settings = disk(path.join(tempDir, 'clear-disabled'));
+      await cliState.withEnv(settings, async () => {
+        const instance = cache.getCache();
+        await instance.set('key', 'stale');
+        expect(cache.claimCacheKeyOnce('usage')).toBe(true);
+
+        if (mode === 'api') {
+          cache.disableCache();
+          await cache.clearCache();
+          cache.enableCache();
+        } else if (mode === 'scope') {
+          await cache.withCacheEnabled(false, () => cache.clearCache());
+        } else {
+          await cliState.withEnv({ ...settings, PROMPTFOO_CACHE_ENABLED: 'false' }, () =>
+            cache.clearCache(),
+          );
+        }
+
+        expect(await instance.get('key')).toBeUndefined();
+        expect(await cache.getCache().get('key')).toBeUndefined();
+        expect(cache.claimCacheKeyOnce('usage')).toBe(true);
+      });
+    },
+  );
 
   it.each(['memory', 'disk'])('keeps concurrent TTL defaults on one %s store', async (type) => {
     // Freeze Date only: disk writes still use their ordinary short debounce timer.
