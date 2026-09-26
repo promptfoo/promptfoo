@@ -845,9 +845,8 @@ export async function createShareableUrl(
   // 1. Handle email collection
   await handleEmailCollection(evalRecord);
 
-  await checkCloudPermissions(evalRecord.config, cloudTeam);
-  // Team resolution and permission checks use the current login. Do not upload
-  // their result with a different session if another process changed it meanwhile.
+  assertSameCloudSession(requestConfig);
+  await checkCloudPermissions(evalRecord.config, cloudTeam, requestConfig);
   assertSameCloudSession(requestConfig);
   const destination = getShareDestination(evalRecord, requestConfig);
   logger.debug(`Sharing with ${destination.url} Use old results: ${evalRecord.useOldResults()}`);

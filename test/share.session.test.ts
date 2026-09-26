@@ -12,7 +12,12 @@ import {
   hasEvalBeenShared,
   hasModelAuditBeenShared,
 } from '../src/share';
-import { checkCloudPermissions, makeRequest, resolveCloudTeam } from '../src/util/cloud';
+import {
+  checkCloudPermissions,
+  getOrgContext,
+  makeRequest,
+  resolveCloudTeam,
+} from '../src/util/cloud';
 import { getConfigDirectoryPath, setConfigDirectoryPath } from '../src/util/config/manage';
 import { fetchWithProxy } from '../src/util/fetch/index';
 import { inlineBlobRefsForShare } from '../src/util/inlineBlobsForShare';
@@ -213,7 +218,7 @@ describe('share session consistency', () => {
     expect(JSON.parse(String(options?.body)).config.metadata.teamId).toBe('untrusted-team');
   });
 
-  it.each(['resolve', 'permissions'])(
+  it.each(['resolve', 'display', 'permissions'])(
     'stops before uploading if the session changes during %s',
     async (stage) => {
       if (stage === 'resolve') {
@@ -221,15 +226,23 @@ describe('share session consistency', () => {
           setSession(cloudB);
           return { id: 'team-b' };
         });
+      } else if (stage === 'display') {
+        vi.mocked(getOrgContext).mockImplementation(async () => {
+          setSession(cloudB);
+          return null;
+        });
       } else {
         vi.mocked(checkCloudPermissions).mockImplementation(async () => {
           setSession(cloudB);
           return undefined;
         });
       }
-      await expect(createShareableUrl(buildEval(), { silent: true })).rejects.toThrow(
-        'Cloud login changed',
-      );
+      await expect(
+        createShareableUrl(buildEval(), { silent: stage !== 'display' }),
+      ).rejects.toThrow('Cloud login changed');
+      if (stage !== 'permissions') {
+        expect(checkCloudPermissions).not.toHaveBeenCalled();
+      }
       expect(fetchWithProxy).not.toHaveBeenCalled();
     },
   );

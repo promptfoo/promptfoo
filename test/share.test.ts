@@ -511,7 +511,11 @@ describe('createShareableUrl', () => {
     vi.mocked(resolveCloudTeam).mockResolvedValue(cloudTeam);
     await createShareableUrl(mockEval as Eval);
 
-    expect(checkCloudPermissions).toHaveBeenCalledWith(mockEval.config, cloudTeam);
+    expect(checkCloudPermissions).toHaveBeenCalledWith(
+      mockEval.config,
+      cloudTeam,
+      cloudConfig.getRequestConfig(),
+    );
     expect(getOrgContext).toHaveBeenCalledWith(cloudTeam);
     const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
     expect(requestBody.config.metadata).toMatchObject({
@@ -602,7 +606,11 @@ describe('createShareableUrl', () => {
 
     expect(resolveCloudTeam).not.toHaveBeenCalled();
     expect(makeRequest).toHaveBeenCalledWith(expect.stringContaining('teamId=runtime-b'), 'GET');
-    expect(checkCloudPermissions).toHaveBeenCalledWith(mockEval.config, cloudTeam);
+    expect(checkCloudPermissions).toHaveBeenCalledWith(
+      mockEval.config,
+      cloudTeam,
+      cloudConfig.getRequestConfig(),
+    );
     expect(getOrgContext).toHaveBeenCalledWith(cloudTeam);
     expect(JSON.parse(mockFetch.mock.calls[0][1].body).config.metadata.teamId).toBe('runtime-b');
   });

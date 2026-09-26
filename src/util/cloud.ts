@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import { z } from 'zod';
 import { CLOUD_PROVIDER_PREFIX } from '../constants';
-import { cloudConfig } from '../globalConfig/cloud';
+import { CloudSelectionChangedError, cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { type UnifiedConfig, UnifiedConfigSchema } from '../types/index';
 import { ProviderOptionsSchema } from '../validators/providers';
@@ -706,8 +706,9 @@ function convertErrorsToReadableMessage(
 export async function checkCloudPermissions(
   config: Partial<UnifiedConfig>,
   team?: ResolvedCloudTeam,
+  request = cloudConfig.getRequestConfig(),
 ): Promise<ResolvedCloudTeam | undefined> {
-  if (!cloudConfig.isEnabled()) {
+  if (!request.headers) {
     return;
   }
 
@@ -716,11 +717,23 @@ export async function checkCloudPermissions(
     return;
   }
 
+  const assertSession = () => {
+    if (
+      cloudConfig.getRequestConfig().sessionId !== request.sessionId ||
+      (team?.sessionId && team.sessionId !== request.sessionId)
+    ) {
+      throw new CloudSelectionChangedError();
+    }
+  };
+  assertSession();
+
   try {
     const hasPermissionCheckServerFeature = await checkServerFeatureSupport(
       PERMISSION_CHECK_SERVER_FEATURE_NAME,
       PERMISSION_CHECK_SERVER_FEATURE_DATE,
+      request,
     );
+    assertSession();
     if (!hasPermissionCheckServerFeature) {
       logger.debug(
         `[Config Permission Check] Server feature ${PERMISSION_CHECK_SERVER_FEATURE_NAME} is not supported. Skipping permission check.`,
@@ -728,6 +741,7 @@ export async function checkCloudPermissions(
       return;
     }
     const resolvedTeam = team ?? (await resolveCloudTeam(config));
+    assertSession();
     // Strip large fields not needed for permission validation.
     // The server only needs providers, metadata, and whether redteam exists.
     const { tests, scenarios, defaultTest, evaluateOptions, ...minimalConfig } = config;
@@ -735,10 +749,15 @@ export async function checkCloudPermissions(
       minimalConfig.redteam = {} as typeof minimalConfig.redteam;
     }
 
-    const response = await makeRequest('permissions/check', 'POST', {
-      config: minimalConfig,
-      ...(resolvedTeam && { teamId: resolvedTeam.id }),
-    });
+    const response = await makeRequest(
+      'permissions/check',
+      'POST',
+      {
+        config: minimalConfig,
+        ...(resolvedTeam && { teamId: resolvedTeam.id }),
+      },
+      request,
+    );
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ errors: ['Unknown error'] }));
@@ -783,13 +802,15 @@ export async function checkCloudPermissions(
     logger.debug('Permission check passed');
     return resolvedTeam;
   } catch (error) {
-    if (error instanceof ConfigPermissionError) {
+    if (error instanceof ConfigPermissionError || error instanceof CloudSelectionChangedError) {
       throw error;
     }
 
     // If we can't check permissions, allow the operation to continue
     // It will fail later with a proper error message if permissions are actually missing
     logger.warn(`Error checking permissions: ${error}. Continuing anyway.`);
+  } finally {
+    assertSession();
   }
 
   return;

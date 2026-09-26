@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
-import { cloudConfig } from '../../src/globalConfig/cloud';
+import { CloudSelectionChangedError, cloudConfig } from '../../src/globalConfig/cloud';
 import * as cloudModule from '../../src/util/cloud';
 import {
   ConfigPermissionError,
@@ -1827,6 +1827,7 @@ describe('cloud utils', () => {
 
     it('should return early when cloud config is not enabled', async () => {
       mockCloudConfig.isEnabled.mockReturnValue(false);
+      mockCloudConfig.getAuthHeaders.mockReturnValue(undefined);
 
       await expect(
         checkCloudPermissions({ providers: ['test-provider'] }, resolvedTeam),
@@ -1853,6 +1854,7 @@ describe('cloud utils', () => {
       expect(mockCheckServerFeatureSupport).toHaveBeenCalledWith(
         'config-permission-check-endpoint',
         '2025-09-03T14:49:11Z',
+        mockCloudConfig.getRequestConfig(),
       );
       expect(mockFetchWithProxy).not.toHaveBeenCalled();
     });
@@ -1880,6 +1882,76 @@ describe('cloud utils', () => {
         },
       );
     });
+
+    it('rejects a team selected under a different login before preflight', async () => {
+      await expect(
+        checkCloudPermissions(
+          { providers: ['echo'] },
+          { id: 'previous-team', sessionId: 'previous-session' },
+        ),
+      ).rejects.toBeInstanceOf(CloudSelectionChangedError);
+
+      expect(mockCheckServerFeatureSupport).not.toHaveBeenCalled();
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it.each(['supported', 'unsupported', 'failure'])(
+      'stops if login changes during a %s feature check',
+      async (result) => {
+        const request = mockCloudConfig.getRequestConfig();
+        mockCheckServerFeatureSupport.mockImplementationOnce(async () => {
+          mockCloudConfig.getRequestConfig.mockReturnValue({
+            ...request,
+            sessionId: 'new-session',
+            apiHost: 'https://new.example.com',
+          });
+          if (result === 'failure') {
+            throw new Error('Version unavailable');
+          }
+          return result === 'supported';
+        });
+
+        await expect(
+          checkCloudPermissions({ providers: ['echo'] }, resolvedTeam, request),
+        ).rejects.toBeInstanceOf(CloudSelectionChangedError);
+
+        expect(mockCheckServerFeatureSupport).toHaveBeenCalledWith(
+          'config-permission-check-endpoint',
+          '2025-09-03T14:49:11Z',
+          request,
+        );
+        expect(mockFetchWithProxy).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([true, false])(
+      'rejects a changed login after permission response (ok=%s)',
+      async (ok) => {
+        const request = mockCloudConfig.getRequestConfig();
+        mockFetchWithProxy.mockResolvedValueOnce({
+          ok,
+          status: ok ? 200 : 500,
+          json: async () => {
+            mockCloudConfig.getRequestConfig.mockReturnValue({
+              ...request,
+              sessionId: 'new-session',
+            });
+            return {};
+          },
+        } as Response);
+
+        await expect(
+          checkCloudPermissions({ providers: ['echo'] }, resolvedTeam, request),
+        ).rejects.toBeInstanceOf(CloudSelectionChangedError);
+        expect(mockFetchWithProxy).toHaveBeenCalledWith(
+          'https://api.example.com/api/v1/permissions/check',
+          expect.objectContaining({
+            headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
+            skipCloudAuthInjection: true,
+          }),
+        );
+      },
+    );
 
     it('should throw ConfigPermissionError when response is 403', async () => {
       const errorData = {
