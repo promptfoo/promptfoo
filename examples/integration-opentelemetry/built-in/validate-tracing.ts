@@ -15,8 +15,11 @@
  *   - Or modify the providers array to use a different provider
  */
 
-import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import {
+  InMemorySpanExporter,
+  NodeTracerProvider,
+  SimpleSpanProcessor,
+} from '@opentelemetry/sdk-trace-node';
 import { disableCache } from '../../../src/cache';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
 import { GenAIAttributes, PromptfooAttributes } from '../../../src/tracing/genaiTracer';
