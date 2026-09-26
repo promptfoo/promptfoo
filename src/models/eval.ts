@@ -57,6 +57,8 @@ import {
   notifyEvaluationsDeleted,
 } from './evalMutation';
 import {
+  clearCountCache,
+  getCachedResponseRowsCount as getCachedResponseRowsCountFromDb,
   getCachedResultsCount,
   getTotalResultRowCount,
   queryTestIndicesOptimized,
@@ -95,6 +97,53 @@ interface MetadataKeyResult {
 
 export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
+}
+
+function countCachedRows(results: unknown): number {
+  if (!Array.isArray(results)) {
+    return 0;
+  }
+
+  return results.reduce((count, result) => {
+    if (!result || typeof result !== 'object') {
+      return count;
+    }
+    return count + Number((result as EvaluateResult).response?.cached === true);
+  }, 0);
+}
+
+function isValidCachedRowsMetric(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+function hasLegacyCachedRowsMetrics(prompts: CompletedPrompt[]): boolean {
+  return prompts.some((prompt) => !isValidCachedRowsMetric(prompt.metrics?.cachedRows));
+}
+
+function updateCachedRowsMetrics(
+  prompts: CompletedPrompt[],
+  results: EvalResult[],
+): Map<number, number> {
+  const cachedRowsByPrompt = new Map<number, number>();
+  for (const result of results) {
+    if (result.response?.cached !== true) {
+      continue;
+    }
+
+    const { promptIdx } = result;
+    if (!Number.isInteger(promptIdx) || promptIdx < 0 || promptIdx >= prompts.length) {
+      continue;
+    }
+
+    const metrics = prompts[promptIdx]?.metrics;
+    if (!metrics || !isValidCachedRowsMetric(metrics.cachedRows)) {
+      continue;
+    }
+
+    metrics.cachedRows += 1;
+    cachedRowsByPrompt.set(promptIdx, (cachedRowsByPrompt.get(promptIdx) ?? 0) + 1);
+  }
+  return cachedRowsByPrompt;
 }
 
 /** Result from queries extracting variable keys with eval IDs */
@@ -328,6 +377,7 @@ export default class Eval {
   persisted: boolean;
   vars: string[];
   _resultsLoaded: boolean = false;
+  private legacyCachedRowsMetrics = false;
   runtimeOptions?: EvalRuntimeOptions;
   _shared: boolean = false;
   resultPersistenceFailed: boolean = false;
@@ -417,6 +467,7 @@ export default class Eval {
       datasetId,
       persisted: true,
       vars: eval_.vars || [],
+      legacyCachedRowsMetrics: (eval_.prompts?.length ?? 0) === 0,
       runtimeOptions: eval_.runtimeOptions ?? undefined,
       durationMs,
       generationDurationMs,
@@ -460,6 +511,7 @@ export default class Eval {
           description: e.description || undefined,
           prompts: e.prompts || [],
           persisted: true,
+          legacyCachedRowsMetrics: (e.prompts?.length ?? 0) === 0,
         }),
     );
   }
@@ -635,6 +687,7 @@ export default class Eval {
       durationMs?: number;
       generationDurationMs?: number;
       evaluationDurationMs?: number;
+      legacyCachedRowsMetrics?: boolean;
     },
   ) {
     const createdAt = opts?.createdAt || new Date();
@@ -644,6 +697,8 @@ export default class Eval {
     this.config = config;
     this.results = [];
     this.prompts = opts?.prompts || [];
+    this.legacyCachedRowsMetrics =
+      opts?.legacyCachedRowsMetrics ?? hasLegacyCachedRowsMetrics(this.prompts);
     this.datasetId = opts?.datasetId;
     this.persisted = opts?.persisted || false;
     this._resultsLoaded = false;
@@ -839,6 +894,26 @@ export default class Eval {
    */
   async getTotalResultRowCount(): Promise<number> {
     return getTotalResultRowCount(this.id);
+  }
+
+  /** Get the number of result rows served from the response cache. */
+  async getCachedResponseRowsCount(): Promise<number> {
+    if (this.useOldResults()) {
+      return this.getStats().cachedRows ?? 0;
+    }
+    if (!this.persisted || this._resultsLoaded) {
+      return countCachedRows(this.results);
+    }
+    const db = await getDb();
+    if (typeof db.select !== 'function') {
+      return 0;
+    }
+    return getCachedResponseRowsCountFromDb(this.id);
+  }
+
+  /** Whether this eval contains prompt metrics written before cachedRows existed. */
+  hasLegacyCachedRowsMetrics(): boolean {
+    return this.legacyCachedRowsMetrics || hasLegacyCachedRowsMetrics(this.prompts);
   }
 
   /**
@@ -1356,6 +1431,7 @@ export default class Eval {
   }
 
   async addPrompts(prompts: CompletedPrompt[]) {
+    this.legacyCachedRowsMetrics ||= hasLegacyCachedRowsMetrics(prompts);
     this.prompts = prompts;
     if (this.persisted) {
       const db = await getDb();
@@ -1368,6 +1444,7 @@ export default class Eval {
 
   async setResults(results: EvalResult[]) {
     this.results = results;
+    const cachedRowsByPrompt = updateCachedRowsMetrics(this.prompts, results);
     if (this.persisted && results.length > 0) {
       const db = await getDb();
       await db
@@ -1380,6 +1457,20 @@ export default class Eval {
           })),
         )
         .run();
+      if (cachedRowsByPrompt.size > 0) {
+        const metricUpdates = Array.from(cachedRowsByPrompt, ([promptIdx, count]) => {
+          const jsonPath = `$[${promptIdx}].metrics.cachedRows`;
+          return sql`${jsonPath}, COALESCE(json_extract(${evalsTable.prompts}, ${jsonPath}), 0) + ${count}`;
+        });
+        await db
+          .update(evalsTable)
+          .set({
+            prompts: sql`json_set(${evalsTable.prompts}, ${sql.join(metricUpdates, sql`, `)})`,
+          })
+          .where(eq(evalsTable.id, this.id))
+          .run();
+      }
+      clearCountCache(this.id);
       notifyEvaluationChanged(this.id);
     }
     this._resultsLoaded = true;
@@ -1408,11 +1499,33 @@ export default class Eval {
   }
 
   getStats(): EvaluateStats {
+    if (this.useOldResults()) {
+      invariant(this.oldResults, 'Old results not found');
+      const legacyStats: EvaluateStats =
+        this.oldResults.stats && typeof this.oldResults.stats === 'object'
+          ? this.oldResults.stats
+          : {
+              successes: 0,
+              failures: 0,
+              errors: 0,
+              tokenUsage: createEmptyTokenUsage(),
+            };
+      const cachedRows = isValidCachedRowsMetric(legacyStats.cachedRows)
+        ? legacyStats.cachedRows
+        : countCachedRows(this.oldResults.results);
+      legacyStats.cachedRows = cachedRows;
+      return {
+        ...legacyStats,
+        cachedRows,
+      };
+    }
+
     const stats: EvaluateStats = {
       successes: 0,
       failures: 0,
       errors: 0,
       tokenUsage: createEmptyTokenUsage(),
+      cachedRows: 0,
       durationMs: this.durationMs,
       generationDurationMs: this.generationDurationMs,
       evaluationDurationMs: this.evaluationDurationMs,
@@ -1422,6 +1535,10 @@ export default class Eval {
       stats.successes += prompt.metrics?.testPassCount ?? 0;
       stats.failures += prompt.metrics?.testFailCount ?? 0;
       stats.errors += prompt.metrics?.testErrorCount ?? 0;
+      const cachedRows = prompt.metrics?.cachedRows;
+      if (isValidCachedRowsMetric(cachedRows)) {
+        stats.cachedRows = (stats.cachedRows ?? 0) + cachedRows;
+      }
 
       accumulateTokenUsage(stats.tokenUsage, prompt.metrics?.tokenUsage);
     }
@@ -1430,6 +1547,10 @@ export default class Eval {
       stats.tokenUsage,
       this.config.metadata?.generationAccounting?.tokenUsage,
     );
+
+    if (this._resultsLoaded && this.results.length > 0 && this.hasLegacyCachedRowsMetrics()) {
+      stats.cachedRows = countCachedRows(this.results);
+    }
 
     return stats;
   }
@@ -1442,7 +1563,7 @@ export default class Eval {
         timestamp: new Date(this.createdAt).toISOString(),
         results: this.oldResults.results,
         table: this.oldResults.table,
-        stats: this.oldResults.stats,
+        stats: this.getStats(),
       };
     }
     if (this.results.length === 0) {

@@ -772,6 +772,7 @@ describe('retry command', () => {
           score: 1,
           latencyMs: 100,
           cost: 0.01,
+          response: { cached: true },
           failureReason: ResultFailureReason.NONE,
           namedScores: { accuracy: 1 },
         },
@@ -803,6 +804,7 @@ describe('retry command', () => {
       expect(evalRecord.prompts[0].metrics?.score).toBe(1);
       expect(evalRecord.prompts[0].metrics?.totalLatencyMs).toBe(300);
       expect(evalRecord.prompts[0].metrics?.cost).toBe(0.03);
+      expect(evalRecord.prompts[0].metrics?.cachedRows).toBe(1);
     });
 
     it('should count ERROR results correctly', async () => {

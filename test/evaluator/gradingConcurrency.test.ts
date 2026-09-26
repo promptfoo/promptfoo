@@ -243,6 +243,7 @@ describeEvaluator('evaluator grading concurrency', () => {
       id: vi.fn().mockReturnValue('target-provider'),
       callApi: vi.fn(async (prompt: string) => ({
         output: `Target output for ${prompt}`,
+        cached: true,
         metadata: {
           http: {
             status: 403,
@@ -282,6 +283,7 @@ describeEvaluator('evaluator grading concurrency', () => {
     expect(judge.callApi).toHaveBeenCalledTimes(1);
     expect(summary.results).toHaveLength(1);
     expect(summary.results[0].vars.topic).toBe('alpha');
+    expect(summary.stats.cachedRows).toBe(1);
   });
 
   it('groups model-graded assert-set children by provider id when maxConcurrency is 1', async () => {
