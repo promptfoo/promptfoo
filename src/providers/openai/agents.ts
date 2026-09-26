@@ -321,7 +321,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
   ): ReturnType<OpenAiAgentsSessionClientFactory> {
     const separateEndpoint = overrides.baseURL !== undefined;
     const apiKey = overrides.apiKey ?? (separateEndpoint ? undefined : this.getApiKey());
-    const keyless = !apiKey && !this.requiresApiKey();
+    const keyless = !separateEndpoint && !apiKey && !this.requiresApiKey();
     const config = {
       ...this.config,
       apiHost: undefined,
@@ -372,6 +372,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       'apiBaseUrl',
       'organization',
       'headers',
+      'maxRetries',
     ] as const;
     if (
       configKeys.some((key) => this.config[key] !== undefined) ||
@@ -386,8 +387,13 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       'OPENAI_BASE_URL',
       'OPENAI_ORGANIZATION',
     ] as const;
-    return [this.env, getEnvOverrides(), getEnvOverrides('file')].some((env) =>
-      envKeys.some((key) => env?.[key] !== undefined),
+    return (
+      [this.env, getEnvOverrides(), getEnvOverrides('file')].some((env) =>
+        envKeys.some((key) => env?.[key] !== undefined),
+      ) ||
+      ['OPENAI_API_HOST', 'OPENAI_API_BASE_URL', 'OPENAI_BASE_URL'].some(
+        (key) => getEnvString(key) !== undefined,
+      )
     );
   }
 

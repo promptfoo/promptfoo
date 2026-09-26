@@ -88,6 +88,33 @@ describe('Agents SDK scoped client', () => {
     expect(request().headers.get('openai-organization')).toBe('provider-org');
   });
 
+  it.each([
+    ['OPENAI_API_HOST', 'gateway.example.invalid'],
+    ['OPENAI_API_BASE_URL', 'https://gateway.example.invalid/v1'],
+    ['OPENAI_BASE_URL', 'https://gateway.example.invalid/v1'],
+  ])('honors process-only %s', async (name, value) => {
+    mockProcessEnv({ [name]: value });
+    const custom = new OpenAIProvider({ apiKey: 'sdk-key' });
+    vi.spyOn(custom, 'getModel').mockRejectedValue(new Error('default provider bypassed gateway'));
+    setDefaultModelProvider(custom);
+
+    await provider().callApi('hello');
+    expect(request().url).toBe('https://gateway.example.invalid/v1/responses');
+    expect(request().headers.get('authorization')).toBe('Bearer host-key');
+  });
+
+  it('applies a retry budget configured without other connection settings', async () => {
+    const custom = new OpenAIProvider({ apiKey: 'sdk-key' });
+    vi.spyOn(custom, 'getModel').mockRejectedValue(new Error('default provider bypassed retries'));
+    setDefaultModelProvider(custom);
+    vi.mocked(fetchWithProxy).mockResolvedValue(
+      Response.json({ error: 'retry fixture' }, { status: 409 }),
+    );
+
+    await expect(provider({ maxRetries: 0 }).callApi('hello')).rejects.toThrow('409');
+    expect(fetchWithProxy).toHaveBeenCalledOnce();
+  });
+
   it('uses explicit connection config ahead of scoped values', async () => {
     await cliState.withEnv({ OPENAI_API_KEY: 'suite-key' }, () =>
       provider({ apiKey: 'config-key', apiBaseUrl: 'https://config.example/v1' }).callApi('hello'),
@@ -511,6 +538,20 @@ describe('Agents SDK scoped client', () => {
         },
       }).callApi('hello'),
     ).rejects.toThrow(/Missing credentials/);
+    expect(fetchWithProxy).not.toHaveBeenCalled();
+  });
+
+  it('does not share model keyless mode with a separate session endpoint', async () => {
+    await expect(
+      provider({
+        apiKeyRequired: false,
+        session: {
+          type: 'openai-conversations',
+          conversationId: 'conv_fixture',
+          baseURL: 'https://session.example.invalid/v1',
+        },
+      }).callApi('hello'),
+    ).rejects.toThrow('Missing credentials');
     expect(fetchWithProxy).not.toHaveBeenCalled();
   });
 
