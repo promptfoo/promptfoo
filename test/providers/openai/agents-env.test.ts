@@ -19,7 +19,7 @@ import { CreateJobRequestSchema } from '../../../src/types/api/eval';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 import { getProxyForUrl } from '../../../src/util/fetch/proxy';
 import { ProviderOptionsSchema } from '../../../src/validators/providers';
-import { createDeferred, mockProcessEnv } from '../../util/utils';
+import { clearProxyEnv, createDeferred, mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/util/fetch/index', () => ({ fetchWithProxy: vi.fn() }));
 let restoreEnv = () => {};
@@ -331,14 +331,8 @@ describe('Agents SDK scoped client', () => {
       ].map((testCase) => ({ loading, ...testCase })),
     ),
   )('retains $loading loaded proxy policy $env', async ({ loading, env, active, expected }) => {
-    mockProcessEnv({
-      HTTPS_PROXY: 'http://host.example:8080',
-      https_proxy: undefined,
-      ALL_PROXY: undefined,
-      all_proxy: undefined,
-      NO_PROXY: undefined,
-      no_proxy: undefined,
-    });
+    clearProxyEnv();
+    mockProcessEnv({ HTTPS_PROXY: 'http://host.example:8080' });
     const custom = new OpenAIProvider({ apiKey: 'sdk-key' });
     vi.spyOn(custom, 'getModel').mockRejectedValue(new Error('loaded proxy policy was ignored'));
     setDefaultModelProvider(custom);
