@@ -103,6 +103,12 @@ vi.mock('@openai/agents', async (importOriginal) => {
       isEnabled: vi.fn(async () => true),
     })),
     retryPolicies: mockRetryPolicies,
+    Runner: class Runner {
+      constructor(private config: Record<string, unknown>) {}
+      run(agent: unknown, input: unknown, options: Record<string, unknown>) {
+        return mockRun(agent, input, { ...this.config, ...options });
+      }
+    },
     run: mockRun,
     setTraceProcessors: vi.fn(),
     startTraceExportLoop: vi.fn(),

@@ -2,13 +2,16 @@ import {
   addTraceProcessor,
   BatchTraceProcessor,
   getOrCreateTrace,
+  OpenAIProvider,
   protocol,
-  run,
+  Runner,
   startTraceExportLoop,
 } from '@openai/agents';
 import { SandboxAgent } from '@openai/agents/sandbox';
-import { getEnvString } from '../../envars';
+import OpenAI from 'openai';
+import { getEnvOverrides, getEnvString } from '../../envars';
 import logger from '../../logger';
+import { fetchWithProxy } from '../../util/fetch/index';
 import { getConfiguredTracingExport } from '../tracing';
 import {
   loadAgentDefinition,
@@ -23,7 +26,7 @@ import {
 import { resolveModelSettings } from './agents-model-settings';
 import { OTLPTracingExporter } from './agents-tracing';
 import { OpenAiGenericProvider } from './index';
-import type { Agent, AgentInputItem, Session } from '@openai/agents';
+import type { Agent, AgentInputItem, OpenAIProviderOptions, Session } from '@openai/agents';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -183,6 +186,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    let modelProvider: OpenAIProvider | undefined;
     try {
       const maxTurns = this.agentConfig.maxTurns === undefined ? 10 : this.agentConfig.maxTurns;
 
@@ -213,6 +217,29 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         assertNoMockToolOverrides(runOptions.modelSettings, 'run options');
       }
 
+      const runner = new Runner({
+        ...(this.hasScopedConnectionSettings() && {
+          modelProvider: {
+            getModel: async (name) => {
+              // SDK Model objects bypass this factory and retain their own clients.
+              // The SDK's nested OpenAI dependency has a nominally distinct client type.
+              modelProvider ??= new OpenAIProvider({
+                openAIClient: new OpenAI({
+                  apiKey: this.getApiKey() ?? null,
+                  adminAPIKey: null,
+                  baseURL: this.getApiUrl(),
+                  organization: this.getOrganization(),
+                  defaultHeaders: this.getOpenAiRequestHeaders(),
+                  fetch: (input, options) =>
+                    fetchWithProxy(input instanceof URL ? input.href : input, options),
+                }) as unknown as OpenAIProviderOptions['openAIClient'],
+              });
+              return modelProvider.getModel(name);
+            },
+          },
+        }),
+      });
+
       const traceContext = parseTraceparent(context?.traceparent);
       const configuredExport = getConfiguredTracingExport();
       const explicitModel = runOptions.model ?? this.agent?.model;
@@ -230,7 +257,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       const executeRun = () =>
         getOrCreateTrace(
           async () => {
-            return await run(this.agent!, this.parsePromptInput(prompt), runOptions);
+            return await runner.run(this.agent!, this.parsePromptInput(prompt), runOptions);
           },
           {
             ...(traceContext ? { traceId: `trace_${traceContext.traceId}` } : {}),
@@ -258,7 +285,36 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     } catch (error) {
       logger.error('[AgentsProvider] Failed to run agent', { error });
       throw error;
+    } finally {
+      await modelProvider?.close();
     }
+  }
+
+  private hasScopedConnectionSettings(): boolean {
+    const configKeys = [
+      'apiKey',
+      'apiKeyEnvar',
+      'apiHost',
+      'apiBaseUrl',
+      'organization',
+      'headers',
+    ] as const;
+    if (
+      configKeys.some((key) => this.config[key] !== undefined) ||
+      this.config.useDefaultApiKey === false
+    ) {
+      return true;
+    }
+    const envKeys = [
+      'OPENAI_API_KEY',
+      'OPENAI_API_HOST',
+      'OPENAI_API_BASE_URL',
+      'OPENAI_BASE_URL',
+      'OPENAI_ORGANIZATION',
+    ] as const;
+    return [this.env, getEnvOverrides(), getEnvOverrides('file')].some((env) =>
+      envKeys.some((key) => env?.[key] !== undefined),
+    );
   }
 
   /**
