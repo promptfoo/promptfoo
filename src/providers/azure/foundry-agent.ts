@@ -650,7 +650,8 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const { body, effectiveConfig } = await this.buildResponsesBody(prompt, context);
-    const maxLoopTimeMs = effectiveConfig.maxPollTimeMs ?? 300000;
+    const maxLoopTimeMs =
+      effectiveConfig.maxPollTimeMs === undefined ? 300000 : effectiveConfig.maxPollTimeMs;
     if (!Number.isFinite(maxLoopTimeMs) || maxLoopTimeMs < 0) {
       return {
         error: 'Azure Foundry agent maxPollTimeMs must be a finite, non-negative number.',
