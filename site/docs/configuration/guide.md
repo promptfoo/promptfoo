@@ -217,9 +217,9 @@ tests:
 PDF text variables require the optional `pdf-parse` package. Install it alongside Promptfoo:
 
 ```bash
-npm install promptfoo pdf-parse
+npm install promptfoo pdf-parse@^2.4.5
 # Or, for a global CLI installation:
-npm install -g promptfoo pdf-parse
+npm install -g promptfoo pdf-parse@^2.4.5
 ```
 
 For a one-off eval, run this command from an empty directory outside an existing npm project, using an absolute config path:

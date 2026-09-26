@@ -427,8 +427,8 @@
   },
   "homepage": "https://promptfoo.dev",
   "peerDependencies": {
-    "node-sql-parser": "^5.4.0",
-    "pdf-parse": "^2.4.5"
+    "node-sql-parser": "*",
+    "pdf-parse": "*"
   },
   "peerDependenciesMeta": {
     "node-sql-parser": {

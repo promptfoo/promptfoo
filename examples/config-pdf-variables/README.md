@@ -12,7 +12,7 @@ cd config-pdf-variables
 Install Promptfoo and the PDF parser together in this example directory:
 
 ```bash
-npm install promptfoo pdf-parse
+npm install promptfoo pdf-parse@^2.4.5
 ```
 
 Then download some PDFs from arxiv.org:

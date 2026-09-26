@@ -12,7 +12,7 @@ cd eval-sql-validation
 Install Promptfoo and the SQL parser together in this example directory:
 
 ```bash
-npm install promptfoo node-sql-parser
+npm install promptfoo node-sql-parser@^5.4.0
 ```
 
 Then set your OPENAI_API_KEY environment variable.

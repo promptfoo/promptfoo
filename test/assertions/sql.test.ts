@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleContainsSql, handleIsSql } from '../../src/assertions/sql';
+import * as packageVersion from '../../src/util/packageVersion';
 
 import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index';
 
@@ -831,8 +832,27 @@ describe('is-sql parser loading', () => {
 
   afterEach(() => {
     vi.doUnmock('node-sql-parser');
+    vi.restoreAllMocks();
     vi.resetModules();
   });
+
+  it.each(['4.18.0', '5.3.0', '6.0.0', 'invalid', null])(
+    'rejects unsupported SQL parser version %s with a supported install command',
+    async (version) => {
+      vi.spyOn(packageVersion, 'getPackageVersion').mockReturnValueOnce(version);
+
+      await expect(
+        handleIsSql({
+          assertion,
+          renderedValue: undefined,
+          outputString: 'SELECT 1',
+          inverse: false,
+        } as AssertionParams),
+      ).rejects.toThrow(
+        `node-sql-parser ${version ?? '(unknown version)'} is not supported. Install it alongside promptfoo with: npm install promptfoo node-sql-parser@^5.4.0`,
+      );
+    },
+  );
 
   it('should report when node-sql-parser cannot be imported', async () => {
     vi.doMock('node-sql-parser', () => {
@@ -847,7 +867,7 @@ describe('is-sql parser loading', () => {
         inverse: false,
       } as AssertionParams),
     ).rejects.toThrow(
-      'node-sql-parser is not installed. Install it alongside promptfoo with: npm install promptfoo node-sql-parser',
+      'node-sql-parser is not installed. Install it alongside promptfoo with: npm install promptfoo node-sql-parser@^5.4.0',
     );
   });
 
@@ -862,7 +882,7 @@ describe('is-sql parser loading', () => {
         inverse: false,
       } as AssertionParams),
     ).rejects.toThrow(
-      'node-sql-parser is not installed. Install it alongside promptfoo with: npm install promptfoo node-sql-parser',
+      'node-sql-parser is not installed. Install it alongside promptfoo with: npm install promptfoo node-sql-parser@^5.4.0',
     );
   });
 });

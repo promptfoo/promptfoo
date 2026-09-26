@@ -1,6 +1,8 @@
+import { createRequire } from 'node:module';
 import fs from 'fs/promises';
 import * as path from 'path';
 
+import semverSatisfies from 'semver/functions/satisfies.js';
 import cliState from './cliState';
 import { getEnvBool } from './envars';
 import { importModule } from './esm';
@@ -27,6 +29,7 @@ import { renderVarsInObject } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
 import { isMissingPackageImportError } from './util/packageImportErrors';
+import { getPackageVersion } from './util/packageVersion';
 import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
 import { loadYaml } from './util/yamlLoad';
@@ -36,6 +39,13 @@ type FileMetadata = Record<string, { path: string; type: string; format?: string
 export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   logger.debug(`Extracting text from PDF: ${pdfPath}`);
   try {
+    const entryPoint = createRequire(import.meta.url).resolve('pdf-parse');
+    const version = getPackageVersion('pdf-parse', entryPoint);
+    if (!version || !semverSatisfies(version, '^2.4.5')) {
+      throw new Error(
+        `pdf-parse ${version ?? '(unknown version)'} is not supported. Install it alongside promptfoo with: npm install promptfoo pdf-parse@^2.4.5 (or npm install -g promptfoo pdf-parse@^2.4.5 for a global install).`,
+      );
+    }
     const { PDFParse } = await import('pdf-parse');
     const dataBuffer = await fs.readFile(pdfPath);
     const parser = new PDFParse({ data: dataBuffer });
@@ -45,7 +55,7 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   } catch (error) {
     if (isMissingPackageImportError(error, 'pdf-parse')) {
       throw new Error(
-        'pdf-parse is not installed. Install it alongside promptfoo with: npm install promptfoo pdf-parse (or npm install -g promptfoo pdf-parse for a global install).',
+        'pdf-parse is not installed. Install it alongside promptfoo with: npm install promptfoo pdf-parse@^2.4.5 (or npm install -g promptfoo pdf-parse@^2.4.5 for a global install).',
       );
     }
     throw new Error(

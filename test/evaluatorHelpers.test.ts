@@ -14,6 +14,7 @@ import {
 import logger from '../src/logger';
 import { AIStudioChatProvider } from '../src/providers/google/ai.studio';
 import { VertexChatProvider } from '../src/providers/google/vertex';
+import { getPackageVersion } from '../src/util/packageVersion';
 import { transform } from '../src/util/transform';
 import { createMockProvider } from './factories/provider';
 import { mockProcessEnv } from './util/utils';
@@ -94,6 +95,10 @@ vi.mock('pdf-parse', () => ({
   }),
 }));
 
+vi.mock('../src/util/packageVersion', () => ({
+  getPackageVersion: vi.fn().mockReturnValue('2.4.5'),
+}));
+
 vi.mock('../src/esm', () => ({
   getDirectory: () => '/test/dir',
   importModule: vi.fn(async (filePath: string, functionName?: string) => {
@@ -154,6 +159,19 @@ describe('evaluatorHelpers', () => {
       expect(result).toBe(mockPDFText);
     });
 
+    it.each(['1.1.1', '2.4.4', '3.0.0', 'invalid', null])(
+      'rejects unsupported PDF parser version %s before constructing a parser',
+      async (version) => {
+        vi.mocked(getPackageVersion).mockReturnValueOnce(version);
+        const pdfParse = await import('pdf-parse');
+
+        await expect(extractTextFromPDF('test.pdf')).rejects.toThrow(
+          'npm install promptfoo pdf-parse@^2.4.5',
+        );
+        expect(pdfParse.PDFParse).not.toHaveBeenCalled();
+      },
+    );
+
     it.each([
       "Cannot find module 'pdf-parse'",
       "Cannot find package 'pdf-parse' imported from /project/dist/evaluatorHelpers.js",
@@ -165,7 +183,7 @@ describe('evaluatorHelpers', () => {
       });
 
       await expect(extractTextFromPDF('test.pdf')).rejects.toThrow(
-        'pdf-parse is not installed. Install it alongside promptfoo with: npm install promptfoo pdf-parse',
+        'pdf-parse is not installed. Install it alongside promptfoo with: npm install promptfoo pdf-parse@^2.4.5',
       );
     });
 
