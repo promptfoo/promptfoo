@@ -29,7 +29,6 @@ import { resolveModelSettings } from './agents-model-settings';
 import { OTLPTracingExporter } from './agents-tracing';
 import { OpenAiGenericProvider } from './index';
 import type { Agent, AgentInputItem, OpenAIProviderOptions, Session } from '@openai/agents';
-import type { AbstractPage } from 'openai/core/pagination';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -53,15 +52,8 @@ class AgentsOpenAIClient extends OpenAI {
     return super.request<Rsp>(this.withRetryPolicy(args[0]), args[1]);
   }
 
-  override requestAPIList<
-    Item = unknown,
-    PageClass extends AbstractPage<Item> = AbstractPage<Item>,
-  >(
-    Page: new (...args: ConstructorParameters<typeof AbstractPage>) => PageClass,
-    options: Parameters<OpenAI['requestAPIList']>[1],
-  ) {
-    return super.requestAPIList<Item, PageClass>(Page, this.withRetryPolicy(options));
-  }
+  override requestAPIList: OpenAI['requestAPIList'] = (Page, options) =>
+    super.requestAPIList(Page, this.withRetryPolicy(options));
 }
 
 /**
