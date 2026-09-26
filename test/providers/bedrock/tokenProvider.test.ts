@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../../src/cliState';
 import { BedrockTokenProvider } from '../../../src/providers/bedrock/tokenProvider';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -30,6 +31,50 @@ describe('BedrockTokenProvider', () => {
     restoreEnv?.();
     restoreEnv = undefined;
     vi.resetAllMocks();
+  });
+
+  it.each(['provider', 'suite', 'file'])(
+    'rejects empty %s credential masks before using lower credentials',
+    async (scope) => {
+      const restore = mockProcessEnv({
+        AWS_BEARER_TOKEN_BEDROCK: 'host-token',
+        AWS_ACCESS_KEY_ID: 'host-key',
+        AWS_SECRET_ACCESS_KEY: 'host-secret',
+      });
+      try {
+        for (const key of ['AWS_BEARER_TOKEN_BEDROCK', 'AWS_ACCESS_KEY_ID', 'AWS_PROFILE']) {
+          const env = { [key]: '' };
+          await cliState.withEnvFileOverrides(scope === 'file' ? env : {}, () =>
+            cliState.withEnv(scope === 'suite' ? env : {}, async () => {
+              const provider = new BedrockTokenProvider(
+                {},
+                scope === 'provider' ? env : undefined,
+                'us-east-1',
+              );
+              await expect(provider.getToken()).rejects.toThrow(/empty|incomplete/);
+              expect(getTokenProvider).not.toHaveBeenCalled();
+            }),
+          );
+        }
+      } finally {
+        restore();
+      }
+    },
+  );
+
+  it('keeps scoped key credentials ahead of a lower bearer token', async () => {
+    await cliState.withEnv({ AWS_BEARER_TOKEN_BEDROCK: 'suite-token' }, async () => {
+      const provider = new BedrockTokenProvider(
+        {},
+        { AWS_ACCESS_KEY_ID: 'provider-key', AWS_SECRET_ACCESS_KEY: 'provider-secret' },
+        'us-east-1',
+      );
+      await expect(provider.getToken()).resolves.toBe('generated-token');
+      expect(getTokenProvider).toHaveBeenCalledWith({
+        region: 'us-east-1',
+        credentials: { accessKeyId: 'provider-key', secretAccessKey: 'provider-secret' },
+      });
+    });
   });
 
   it('prefers a configured bearer token without loading the generator', async () => {

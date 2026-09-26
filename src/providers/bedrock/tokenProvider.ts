@@ -1,4 +1,6 @@
 import { getEnvString } from '../../envars';
+import { getScopedAwsCredentialConfig } from '../awsCredentials';
+import { createEnvironmentScopedState } from '../scopedState';
 import { resolveBedrockMantleApiKey } from './mantle';
 
 import type { EnvOverrides } from '../../types/env';
@@ -35,8 +37,10 @@ export interface BedrockTokenProviderConfig {
  * eval does not stampede the credential chain.
  */
 export class BedrockTokenProvider {
-  private generationLock?: Promise<string>;
-  private tokenGenerator?: Promise<BedrockTokenGenerator>;
+  private readonly getTokenState = createEnvironmentScopedState(() => ({
+    generationLock: undefined as Promise<string> | undefined,
+    tokenGenerator: undefined as Promise<BedrockTokenGenerator> | undefined,
+  }));
 
   constructor(
     private readonly config: BedrockTokenProviderConfig,
@@ -71,17 +75,18 @@ export class BedrockTokenProvider {
   }
 
   private async getGeneratedToken(): Promise<string> {
-    if (this.generationLock !== undefined) {
-      return this.generationLock;
+    const state = this.getTokenState();
+    if (state.generationLock !== undefined) {
+      return state.generationLock;
     }
 
     const generation = this.generateToken();
-    this.generationLock = generation;
+    state.generationLock = generation;
     try {
       return await generation;
     } finally {
-      if (this.generationLock === generation) {
-        this.generationLock = undefined;
+      if (state.generationLock === generation) {
+        state.generationLock = undefined;
       }
     }
   }
@@ -101,16 +106,17 @@ export class BedrockTokenProvider {
   }
 
   private async getTokenGenerator(): Promise<BedrockTokenGenerator> {
+    const state = this.getTokenState();
     // Cache the generator, but never cache a construction failure. Both failure modes
     // here are recoverable without restarting the process — the optional
     // @aws/bedrock-token-generator package can be installed, and the credential chain
     // can become ready — so a rejected promise must not pin every later request to the
     // same error. This mirrors the generation lock below, which also releases on failure.
-    this.tokenGenerator ??= this.createTokenGenerator().catch((error) => {
-      this.tokenGenerator = undefined;
+    state.tokenGenerator ??= this.createTokenGenerator().catch((error) => {
+      state.tokenGenerator = undefined;
       throw error;
     });
-    return this.tokenGenerator;
+    return state.tokenGenerator;
   }
 
   private async createTokenGenerator(): Promise<BedrockTokenGenerator> {
@@ -134,23 +140,22 @@ export class BedrockTokenProvider {
   private getCredentialOptions(): Pick<BedrockTokenGeneratorOptions, 'credentials' | 'profile'> {
     // Select credentials as a tuple from one source. Never attach an ambient session token
     // to another account's explicit keys. Within each source, explicit keys precede a profile.
-    const sources = [
-      this.config,
-      {
-        accessKeyId: this.env?.AWS_ACCESS_KEY_ID,
-        secretAccessKey: this.env?.AWS_SECRET_ACCESS_KEY,
-        sessionToken: this.env?.AWS_SESSION_TOKEN,
-        profile: this.env?.AWS_PROFILE,
-      },
-      {
-        profile: getEnvString('AWS_PROFILE'),
-      },
-      {
-        accessKeyId: getEnvString('AWS_ACCESS_KEY_ID'),
-        secretAccessKey: getEnvString('AWS_SECRET_ACCESS_KEY'),
-        sessionToken: getEnvString('AWS_SESSION_TOKEN'),
-      },
-    ];
+    const config = Object.fromEntries(
+      Object.entries(this.config).filter(
+        ([, value]) => typeof value === 'string' && value.trim() && !value.includes('{{'),
+      ),
+    ) as Record<string, string>;
+    const scoped = getScopedAwsCredentialConfig(config, this.env);
+    const sources = scoped
+      ? [scoped]
+      : [
+          { profile: getEnvString('AWS_PROFILE') },
+          {
+            accessKeyId: getEnvString('AWS_ACCESS_KEY_ID'),
+            secretAccessKey: getEnvString('AWS_SECRET_ACCESS_KEY'),
+            sessionToken: getEnvString('AWS_SESSION_TOKEN'),
+          },
+        ];
     for (const source of sources) {
       const value = (key: keyof BedrockTokenProviderConfig): string | undefined => {
         const v = source[key as keyof typeof source];
@@ -159,7 +164,11 @@ export class BedrockTokenProvider {
       const accessKeyId = value('accessKeyId');
       const secretAccessKey = value('secretAccessKey');
       const sessionToken = value('sessionToken');
-      if (accessKeyId || secretAccessKey || sessionToken) {
+      if (
+        [source.accessKeyId, source.secretAccessKey, source.sessionToken].some(
+          (v) => v !== undefined,
+        )
+      ) {
         if (!accessKeyId || !secretAccessKey) {
           throw new Error(
             'AWS access credentials are incomplete. Set both AWS_ACCESS_KEY_ID and ' +
@@ -175,6 +184,11 @@ export class BedrockTokenProvider {
         };
       }
       const profile = value('profile');
+      if (source.profile !== undefined && !profile) {
+        throw new Error(
+          'Scoped AWS_PROFILE is empty. Supply a profile name or remove the scoped override.',
+        );
+      }
       if (profile) {
         return { profile };
       }

@@ -6,12 +6,14 @@ import { ClientSecretCredential, DefaultAzureCredential } from '@azure/identity'
 import { UserRefreshClient } from 'google-auth-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
+import { loadApiProvider } from '../../src/providers';
 import { AzureFoundryAgentProvider } from '../../src/providers/azure/foundry-agent';
 import { GoogleAuthManager } from '../../src/providers/google/auth';
 import { getGoogleAccessToken } from '../../src/providers/google/util';
 import { createAzureCredential } from '../../src/util/azureCredentials';
 import { mockProcessEnv } from '../util/utils';
 
+const fixtureTempRoot = os.tmpdir();
 let restore: () => void;
 beforeEach(() => {
   restore = mockProcessEnv({}, { clear: true });
@@ -24,7 +26,7 @@ afterEach(() => {
 
 describe('real cloud SDK credential construction without authentication calls', () => {
   it('loads a local scoped ADC file and applies scoped quota over the host quota', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-adc-fixture-'));
+    const dir = fs.mkdtempSync(path.join(fixtureTempRoot, 'promptfoo-adc-fixture-'));
     const file = path.join(dir, 'adc.json');
     fs.writeFileSync(
       file,
@@ -62,8 +64,28 @@ describe('real cloud SDK credential construction without authentication calls', 
     expect(credential).toBeInstanceOf(ClientSecretCredential);
     expect(await createAzureCredential()).toBeInstanceOf(DefaultAzureCredential);
   });
+  it.each(['azure:foundry-agent:fixture', 'azureopenai:foundry-agent:fixture'])(
+    'rejects partial provider credentials on %s instead of borrowing a suite principal',
+    async (id) => {
+      const provider = await loadApiProvider(id, {
+        env: {
+          AZURE_CLIENT_ID: 'suite-client',
+          AZURE_CLIENT_SECRET: 'suite-secret',
+          AZURE_TENANT_ID: 'suite-tenant',
+        },
+        options: {
+          config: { projectUrl: 'https://fixture.services.ai.azure.com/api/projects/fixture' },
+          env: { AZURE_CLIENT_ID: 'provider-client' },
+        },
+      });
+      await expect(Reflect.get(provider, 'initializeClient').call(provider)).rejects.toThrow(
+        'incomplete',
+      );
+    },
+  );
+
   it('isolates concurrent Live ADC clients without minting tokens', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-live-adc-fixture-'));
+    const dir = fs.mkdtempSync(path.join(fixtureTempRoot, 'promptfoo-live-adc-fixture-'));
     vi.spyOn(UserRefreshClient.prototype, 'getAccessToken').mockImplementation(async function (
       this: UserRefreshClient,
     ) {

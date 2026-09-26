@@ -126,7 +126,7 @@ function getProviderEnvAliasGroups(providerPath: string): readonly (readonly str
   if (/^openai:(?:codex-sdk|codex)(?::|$)/.test(providerPath)) {
     return [['OPENAI_API_KEY', 'CODEX_API_KEY']];
   }
-  if (providerPath.startsWith('azure:foundry-agent:')) {
+  if (/^azure(?:openai)?:foundry-agent:/.test(providerPath)) {
     return [['AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET', 'AZURE_TENANT_ID']];
   }
   if (providerPath.startsWith('huggingface:') || providerPath.startsWith('hf:')) {
@@ -171,7 +171,7 @@ function getProviderEnvAliasGroups(providerPath: string): readonly (readonly str
   }
   if (providerPath.startsWith('vertex:')) {
     return [
-      ['VERTEX_API_KEY', 'GOOGLE_API_KEY'],
+      ['VERTEX_API_KEY', 'GOOGLE_API_KEY', 'GOOGLE_APPLICATION_CREDENTIALS'],
       ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'],
       ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION'],
     ];

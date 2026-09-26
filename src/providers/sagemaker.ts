@@ -7,6 +7,7 @@ import telemetry from '../telemetry';
 import { getTransformErrorMessage, TransformInputType, transform } from '../util/transform';
 import { StringOrFunctionSchema } from '../validators/shared';
 import { getScopedAwsCredentialConfig, resolveAwsCredentials } from './awsCredentials';
+import { createEnvironmentScopedState } from './scopedState';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -91,7 +92,14 @@ interface SageMakerOptions extends ProviderOptions {
  * Base class for SageMaker providers with common functionality
  */
 abstract class SageMakerGenericProvider {
-  protected readonly responseCacheNamespace = crypto.randomUUID();
+  private readonly getSdkState = createEnvironmentScopedState(() => ({
+    namespace: crypto.randomUUID(),
+    client: undefined as any,
+    runtimes: new Map<string, Promise<any>>(),
+  }));
+  protected get responseCacheNamespace(): string {
+    return this.getSdkState().namespace;
+  }
   env?: EnvOverrides;
 
   protected getNumericEnv(key: string, integer: boolean, defaultValue: number): number {
@@ -99,8 +107,13 @@ abstract class SageMakerGenericProvider {
     const parsed = integer ? Number.parseInt(value ?? '', 10) : Number.parseFloat(value ?? '');
     return Number.isNaN(parsed) ? defaultValue : parsed;
   }
-  sagemakerRuntime?: any; // SageMaker runtime client
-  private initializedRuntime?: { client: any; region: string };
+  private injectedRuntime?: any;
+  get sagemakerRuntime(): any {
+    return this.injectedRuntime ?? this.getSdkState().client;
+  }
+  set sagemakerRuntime(client: any) {
+    this.injectedRuntime = client;
+  }
   config: SageMakerConfig;
   endpointName: string;
   delay?: number; // Delay between API calls in milliseconds
@@ -154,19 +167,25 @@ abstract class SageMakerGenericProvider {
    * Initialize and return the SageMaker runtime client
    */
   async getSageMakerRuntimeInstance(region?: string) {
-    if (
-      !this.sagemakerRuntime ||
-      (region !== undefined &&
-        this.initializedRuntime !== undefined &&
-        this.sagemakerRuntime === this.initializedRuntime.client &&
-        region !== this.initializedRuntime.region)
-    ) {
-      try {
-        const { SageMakerRuntimeClient } = await import('@aws-sdk/client-sagemaker-runtime');
+    if (this.injectedRuntime) {
+      return this.injectedRuntime;
+    }
+    const state = this.getSdkState();
+    const runtimeRegion = region ?? this.getRegion();
+    let initialization = state.runtimes.get(runtimeRegion);
+    if (!initialization) {
+      initialization = (async () => {
+        const { SageMakerRuntimeClient } = await import('@aws-sdk/client-sagemaker-runtime').catch(
+          (cause) => {
+            throw new Error(
+              'The @aws-sdk/client-sagemaker-runtime package is required. Please install it with: npm install @aws-sdk/client-sagemaker-runtime',
+              { cause },
+            );
+          },
+        );
         const credentials = await this.getCredentials();
         const profile = getScopedAwsCredentialConfig(this.config, this.env)?.profile;
 
-        const runtimeRegion = region ?? this.getRegion();
         const runtime = new SageMakerRuntimeClient({
           region: runtimeRegion,
           maxAttempts: this.getNumericEnv('AWS_SAGEMAKER_MAX_RETRIES', true, 3),
@@ -175,17 +194,16 @@ abstract class SageMakerGenericProvider {
           ...(profile ? { profile } : {}),
         });
 
-        this.sagemakerRuntime = runtime;
-        this.initializedRuntime = { client: runtime, region: runtimeRegion };
+        state.client = runtime;
         logger.debug(`SageMaker client initialized for region ${runtimeRegion}`);
         return runtime;
-      } catch {
-        throw new Error(
-          'The @aws-sdk/client-sagemaker-runtime package is required. Please install it with: npm install @aws-sdk/client-sagemaker-runtime',
-        );
-      }
+      })().catch((error) => {
+        state.runtimes.delete(runtimeRegion);
+        throw error;
+      });
+      state.runtimes.set(runtimeRegion, initialization);
     }
-    return this.sagemakerRuntime;
+    return initialization;
   }
 
   /**

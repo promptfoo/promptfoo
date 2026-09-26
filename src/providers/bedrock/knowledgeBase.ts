@@ -5,6 +5,7 @@ import telemetry from '../../telemetry';
 import { sha256 } from '../../util/createHash';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
+import { createEnvironmentScopedState } from '../scopedState';
 import { AwsBedrockGenericProvider } from './base';
 import { createBedrockRequestHandler, hasProxyEnv } from './util';
 import type {
@@ -73,7 +74,17 @@ export class AwsBedrockKnowledgeBaseProvider
   extends AwsBedrockGenericProvider
   implements ApiProvider
 {
-  knowledgeBaseClient?: BedrockAgentRuntimeClient;
+  private injectedClient?: BedrockAgentRuntimeClient;
+  get knowledgeBaseClient(): BedrockAgentRuntimeClient | undefined {
+    return this.injectedClient ?? this.getClientState().client;
+  }
+  set knowledgeBaseClient(client: BedrockAgentRuntimeClient | undefined) {
+    this.injectedClient = client;
+  }
+  private readonly getClientState = createEnvironmentScopedState(() => ({
+    client: undefined as BedrockAgentRuntimeClient | undefined,
+    initialization: undefined as Promise<BedrockAgentRuntimeClient> | undefined,
+  }));
   kbConfig: BedrockKnowledgeBaseOptions;
 
   constructor(
@@ -106,16 +117,20 @@ export class AwsBedrockKnowledgeBaseProvider
   }
 
   async getKnowledgeBaseClient() {
-    if (!this.knowledgeBaseClient) {
+    if (this.knowledgeBaseClient) {
+      return this.knowledgeBaseClient;
+    }
+    const state = this.getClientState();
+    return (state.initialization ??= (async () => {
       // client-bedrock-agent-runtime already defaults to HTTP/1.1, so we only
       // need a custom handler for proxy or API key authentication.
       const apiKey = this.getApiKey();
       const handler =
         hasProxyEnv() || apiKey ? await createBedrockRequestHandler({ apiKey }) : undefined;
 
+      const credentials = await this.getCredentials();
       try {
         const { BedrockAgentRuntimeClient } = await import('@aws-sdk/client-bedrock-agent-runtime');
-        const credentials = await this.getCredentials();
         const client = new BedrockAgentRuntimeClient({
           region: this.getRegion(),
           maxAttempts: getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
@@ -124,15 +139,17 @@ export class AwsBedrockKnowledgeBaseProvider
           ...(credentials ? { credentials } : {}),
           ...(this.getProfile() ? { profile: this.getProfile() } : {}),
         });
-        this.knowledgeBaseClient = client;
+        state.client = client;
       } catch (err) {
         throw new Error(
           `The @aws-sdk/client-bedrock-agent-runtime package is required as a peer dependency. Please install it in your project or globally. Error: ${err}`,
         );
       }
-    }
-
-    return this.knowledgeBaseClient;
+      return state.client;
+    })().catch((error) => {
+      state.initialization = undefined;
+      throw error;
+    }));
   }
 
   private buildGenerationConfiguration(modelArn: string) {
@@ -228,7 +245,7 @@ export class AwsBedrockKnowledgeBaseProvider
 
     const cache = await getCache();
 
-    const sensitiveKeys = ['accessKeyId', 'secretAccessKey', 'sessionToken'];
+    const sensitiveKeys = ['accessKeyId', 'secretAccessKey', 'sessionToken', 'apiKey', 'profile'];
     const cacheConfig = {
       region: this.getRegion(),
       modelName: this.modelName,
@@ -239,7 +256,7 @@ export class AwsBedrockKnowledgeBaseProvider
 
     const configStr = JSON.stringify(cacheConfig, Object.keys(cacheConfig).sort());
     // Earlier cached results did not apply configured generation parameters.
-    const cacheKey = `bedrock-kb:v2:${this.kbConfig.knowledgeBaseId}:${modelArn}:${this.getRegion()}:${sha256(
+    const cacheKey = `bedrock-kb:v2:${this.responseCacheNamespace}:${this.kbConfig.knowledgeBaseId}:${modelArn}:${this.getRegion()}:${sha256(
       JSON.stringify({
         configStr,
         prompt,

@@ -11,6 +11,7 @@ import { getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { getScopedAwsCredentialConfig, resolveAwsCredentials } from '../awsCredentials';
+import { createEnvironmentScopedState } from '../scopedState';
 import { createBedrockRequestHandler } from './util';
 import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
@@ -71,10 +72,23 @@ export function createBedrockCacheKeyHash({
 }
 
 export abstract class AwsBedrockGenericProvider {
-  protected readonly responseCacheNamespace = randomUUID();
+  private readonly getSdkState = createEnvironmentScopedState(() => ({
+    namespace: randomUUID(),
+    client: undefined as BedrockRuntime | undefined,
+    initialization: undefined as Promise<BedrockRuntime> | undefined,
+  }));
+  protected get responseCacheNamespace(): string {
+    return this.getSdkState().namespace;
+  }
   modelName: string;
   env?: EnvOverrides;
-  bedrock?: BedrockRuntime;
+  private injectedBedrock?: BedrockRuntime;
+  get bedrock(): BedrockRuntime | undefined {
+    return this.injectedBedrock ?? this.getSdkState().client;
+  }
+  set bedrock(client: BedrockRuntime | undefined) {
+    this.injectedBedrock = client;
+  }
   config: BedrockOptions;
 
   constructor(
@@ -156,7 +170,11 @@ export abstract class AwsBedrockGenericProvider {
   }
 
   async getBedrockInstance() {
-    if (!this.bedrock) {
+    if (this.bedrock) {
+      return this.bedrock;
+    }
+    const state = this.getSdkState();
+    return (state.initialization ??= (async () => {
       const apiKey = this.getApiKey();
       const authOptions = await this.getBedrockAuthOptions();
       const handler = await createBedrockRequestHandler({ apiKey });
@@ -172,15 +190,18 @@ export abstract class AwsBedrockGenericProvider {
           ...(this.config.endpoint ? { endpoint: this.config.endpoint } : {}),
         });
 
-        this.bedrock = bedrock;
+        state.client = bedrock;
+        return bedrock;
       } catch (err) {
         logger.error(`Error creating BedrockRuntime: ${err}`);
         throw new Error(
           'The @aws-sdk/client-bedrock-runtime package is required as a peer dependency. Please install it in your project or globally.',
         );
       }
-    }
-    return this.bedrock;
+    })().catch((error) => {
+      state.initialization = undefined;
+      throw error;
+    }));
   }
 
   getRegion(): string {

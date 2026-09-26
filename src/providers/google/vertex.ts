@@ -2,7 +2,7 @@ import { createHmac, randomUUID } from 'crypto';
 
 import { getCache, isCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
-import { getEnvString } from '../../envars';
+import { getEnvOverrides, getEnvString } from '../../envars';
 import logger from '../../logger';
 import {
   type GenAISpanContext,
@@ -24,6 +24,7 @@ import {
   outputFromMessage,
   parseMessages,
 } from '../anthropic/util';
+import { createEnvironmentScopedState } from '../scopedState';
 import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { getVertexApiHostForRegion } from './shared';
@@ -170,21 +171,7 @@ function getVertexBodyCacheKey(
  * authentication management, and resource cleanup.
  */
 export class VertexChatProvider extends GoogleGenericProvider {
-  private readonly responseCacheNamespace = randomUUID();
-  private readonly scopedResponseCacheNamespaces = new WeakMap<object, string>();
-
-  private getResponseCacheNamespace(): string {
-    const scope = cliState.envScope;
-    if (!scope) {
-      return this.responseCacheNamespace;
-    }
-    let namespace = this.scopedResponseCacheNamespaces.get(scope);
-    if (!namespace) {
-      namespace = randomUUID();
-      this.scopedResponseCacheNamespaces.set(scope, namespace);
-    }
-    return namespace;
-  }
+  private readonly getResponseCacheNamespace = createEnvironmentScopedState(randomUUID);
 
   constructor(modelName: string, options: GoogleProviderOptions = {}) {
     // Force vertex mode for Vertex AI provider
@@ -192,6 +179,22 @@ export class VertexChatProvider extends GoogleGenericProvider {
       ...options,
       config: { ...options.config, vertexai: true },
     });
+  }
+
+  getApiKey(): string | undefined {
+    if (!this.config.apiKey) {
+      // Select the authentication scope before choosing an API key or scoped ADC.
+      const scopedAuth = [this.env, getEnvOverrides(), getEnvOverrides('file'), process.env].find(
+        (layer) =>
+          ['GOOGLE_APPLICATION_CREDENTIALS', 'VERTEX_API_KEY', 'GOOGLE_API_KEY'].some(
+            (key) => layer?.[key] !== undefined,
+          ),
+      );
+      if (scopedAuth?.GOOGLE_APPLICATION_CREDENTIALS !== undefined) {
+        return undefined;
+      }
+    }
+    return super.getApiKey();
   }
 
   /**

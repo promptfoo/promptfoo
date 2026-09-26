@@ -356,6 +356,13 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    if (this.getApiKey()) {
+      return {
+        error:
+          'Bedrock video generation requires AWS access credentials or a profile for S3 output. Bearer tokens are not supported.',
+      };
+    }
+
     // Validate S3 output URI
     const s3OutputUri = this.videoConfig.s3OutputUri;
     if (!s3OutputUri) {

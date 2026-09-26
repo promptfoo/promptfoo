@@ -23,6 +23,7 @@ import {
 } from '../../util/index';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
+import { createEnvironmentScopedState } from '../scopedState';
 import {
   buildChatSpanContext,
   emitTurnMarkerSpan,
@@ -68,6 +69,11 @@ type ResponseFunctionCallItem = Extract<
 >;
 type EffectiveFoundryConfig = AzureAssistantOptions & Record<string, any>;
 type FunctionToolCallbacks = AzureAssistantOptions['functionToolCallbacks'];
+interface FoundryClientState {
+  cacheNamespace: string;
+  projectClient?: Promise<AzureAIProjectClient>;
+  resolvedAgent?: FoundryAgent;
+}
 
 function hashFoundryAgentCacheValue(value: unknown): string {
   const serialized = typeof value === 'string' ? value : JSON.stringify(value);
@@ -199,16 +205,15 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   assistantConfig: AzureAssistantOptions;
   private loadedFunctionCallbacks: Record<string, Function> = {};
   private processor: ResponsesProcessor;
-  private projectClient: AzureAIProjectClient | null = null;
   private projectUrl: string;
-  private resolvedAgent: FoundryAgent | null = null;
+  private readonly getClientState = createEnvironmentScopedState<FoundryClientState>(() => ({
+    cacheNamespace: randomUUID(),
+  }));
   private warnedUnsupportedFields = new Set<string>();
 
   override async initialize(): Promise<void> {
     // Foundry initializes its scoped Azure credential in initializeClient().
   }
-
-  private readonly responseCacheNamespace = randomUUID();
 
   constructor(deploymentName: string, options: AzureAssistantProviderOptions = {}) {
     super(deploymentName, options);
@@ -258,10 +263,15 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   }
 
   private async initializeClient(): Promise<AzureAIProjectClient> {
-    if (this.projectClient) {
-      return this.projectClient;
-    }
+    const state = this.getClientState();
+    state.projectClient ??= this.createProjectClient().catch((error) => {
+      state.projectClient = undefined;
+      throw error;
+    });
+    return state.projectClient;
+  }
 
+  private async createProjectClient(): Promise<AzureAIProjectClient> {
     try {
       const { AIProjectClient } = await import('@azure/ai-projects');
 
@@ -269,7 +279,6 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         this.projectUrl,
         await createAzureCredential(this.config, this.env),
       ) as AzureAIProjectClient;
-      this.projectClient = projectClient;
       logger.debug('Azure AI Project client initialized successfully');
       return projectClient;
     } catch (error) {
@@ -280,13 +289,14 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   }
 
   private async resolveAgent(client: AzureAIProjectClient): Promise<FoundryAgent> {
-    if (this.resolvedAgent) {
-      return this.resolvedAgent;
+    const state = this.getClientState();
+    if (state.resolvedAgent) {
+      return state.resolvedAgent;
     }
 
     try {
       const agent = await client.agents.get(this.deploymentName);
-      this.resolvedAgent = agent;
+      state.resolvedAgent = agent;
       return agent;
     } catch (error) {
       logger.debug(
@@ -299,7 +309,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
 
     for await (const agent of client.agents.list()) {
       if (agent.id === this.deploymentName || agent.name === this.deploymentName) {
-        this.resolvedAgent = agent;
+        state.resolvedAgent = agent;
         return agent;
       }
     }
@@ -636,8 +646,8 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       {
         ...spanContext,
         operationName: 'invoke_agent',
-        agentName: this.resolvedAgent?.name ?? this.deploymentName,
-        agentId: this.resolvedAgent?.id,
+        agentName: this.getClientState().resolvedAgent?.name ?? this.deploymentName,
+        agentId: this.getClientState().resolvedAgent?.id,
       },
       (span) => this.callApiInternal(prompt, span, context, callApiOptions),
       extractProviderResponseAttributes,
@@ -652,7 +662,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   ): Promise<ProviderResponse> {
     const { body, effectiveConfig } = await this.buildResponsesBody(prompt, context);
     const projectScope = hashFoundryAgentCacheValue(this.projectUrl);
-    const cacheKey = `azure_foundry_agent:${this.deploymentName}:${this.responseCacheNamespace}:${projectScope}:${hashFoundryAgentCacheValue(body)}`;
+    const cacheKey = `azure_foundry_agent:${this.deploymentName}:${this.getClientState().cacheNamespace}:${projectScope}:${hashFoundryAgentCacheValue(body)}`;
 
     // Client-side tool behavior is absent from the serialized request body.
     // Callback closures cannot be safely represented in a persistent cache key.

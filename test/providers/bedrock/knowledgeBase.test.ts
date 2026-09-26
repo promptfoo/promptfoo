@@ -2,7 +2,6 @@ import { NodeHttpHandler } from '@smithy/node-http-handler';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 import { AwsBedrockKnowledgeBaseProvider } from '../../../src/providers/bedrock/knowledgeBase';
-import { sha256 } from '../../../src/util/createHash';
 import { createEmptyTokenUsage } from '../../../src/util/tokenUsageUtils';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -65,40 +64,6 @@ const mockGet = vi.hoisted(() => vi.fn());
 const mockSet = vi.hoisted(() => vi.fn());
 
 const mockIsCacheEnabled = vi.fn().mockReturnValue(false);
-
-function buildKnowledgeBaseCacheKey({
-  knowledgeBaseId,
-  modelArn,
-  modelName,
-  prompt,
-  region,
-  kbConfig,
-}: {
-  knowledgeBaseId: string;
-  modelArn?: string;
-  modelName: string;
-  prompt: string;
-  region: string;
-  kbConfig: Record<string, unknown>;
-}) {
-  const cacheConfig = {
-    region,
-    modelName,
-    ...Object.fromEntries(
-      Object.entries(kbConfig).filter(
-        ([key]) => !['accessKeyId', 'secretAccessKey', 'sessionToken'].includes(key),
-      ),
-    ),
-  };
-  const configStr = JSON.stringify(cacheConfig, Object.keys(cacheConfig).sort());
-
-  return `bedrock-kb:v2:${knowledgeBaseId}:${modelArn}:${region}:${sha256(
-    JSON.stringify({
-      configStr,
-      prompt,
-    }),
-  )}`;
-}
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -653,19 +618,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     const cacheKey = mockGet.mock.calls[0][0];
 
-    expect(cacheKey).toBe(
-      buildKnowledgeBaseCacheKey({
-        knowledgeBaseId: 'kb-123',
-        modelArn: 'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
-        modelName: 'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
-        prompt: 'What is the capital of France?',
-        region: 'us-east-1',
-        kbConfig: {
-          knowledgeBaseId: 'kb-123',
-          region: 'us-east-1',
-        },
-      }),
-    );
+    expect(cacheKey).toMatch(/^bedrock-kb:v2:[\w-]+:kb-123:/);
     expect(cacheKey).not.toContain('What is the capital of France?');
     const cacheHitLog = vi
       .mocked(logger.debug)
@@ -721,20 +674,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     const cacheKey = mockGet.mock.calls[0][0];
 
-    expect(cacheKey).toBe(
-      buildKnowledgeBaseCacheKey({
-        knowledgeBaseId: 'kb-123',
-        modelArn: 'custom:model:arn',
-        modelName: 'amazon.nova-lite-v1:0',
-        prompt: 'What is the capital of France?',
-        region: 'us-east-1',
-        kbConfig: {
-          knowledgeBaseId: 'kb-123',
-          region: 'us-east-1',
-          modelArn: 'custom:model:arn',
-        },
-      }),
-    );
+    expect(cacheKey).toMatch(/^bedrock-kb:v2:[\w-]+:kb-123:/);
     expect(cacheKey).not.toContain('What is the capital of France?');
 
     expect(mockSet).toHaveBeenCalledWith(cacheKey, expect.any(String));
@@ -764,29 +704,20 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
       },
       citations: [],
     };
-    mockSend.mockResolvedValueOnce(mockResponse);
+    mockSend.mockResolvedValue(mockResponse);
 
     await provider.callApi('What is the capital of France?');
 
     const cacheKey = mockGet.mock.calls[0][0];
 
-    expect(cacheKey).toBe(
-      buildKnowledgeBaseCacheKey({
-        knowledgeBaseId: 'kb-123',
-        modelArn: 'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
-        modelName: 'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
-        prompt: 'What is the capital of France?',
-        region: 'us-east-1',
-        kbConfig: {
-          knowledgeBaseId: 'kb-123',
-          region: 'us-east-1',
-          numberOfResults: 10,
-        },
-      }),
-    );
+    expect(cacheKey).toMatch(/^bedrock-kb:v2:[\w-]+:kb-123:/);
     expect(cacheKey).not.toContain('What is the capital of France?');
 
     expect(mockSet).toHaveBeenCalledWith(cacheKey, expect.any(String));
+
+    provider.kbConfig.numberOfResults = 11;
+    await provider.callApi('What is the capital of France?');
+    expect(mockGet.mock.calls[1][0]).not.toBe(cacheKey);
 
     mockIsCacheEnabled.mockReturnValue(false);
   });
@@ -821,24 +752,15 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
 
     expect(cacheKey).not.toContain('SECRET_PROMPT_VALUE');
     expect(cacheKey).not.toContain('SECRET_API_KEY');
+    // Credentials are owned by the initialized client; they must not enter the cache fingerprint.
+    provider.kbConfig.apiKey = 'DIFFERENT_UNUSED_KEY';
+    mockGet.mockResolvedValueOnce(JSON.stringify({ output: 'cached response', citations: [] }));
+    await provider.callApi('SECRET_PROMPT_VALUE');
+    expect(mockGet.mock.calls[1][0]).toBe(cacheKey);
     expect(debugLogs).not.toContain('SECRET_PROMPT_VALUE');
     expect(debugLogs).not.toContain('SECRET_RESPONSE_VALUE');
     expect(debugLogs).not.toContain('SECRET_CITATION_VALUE');
-    expect(cacheKey).toBe(
-      buildKnowledgeBaseCacheKey({
-        knowledgeBaseId: 'kb-123',
-        modelArn: 'custom:model:arn',
-        modelName: 'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
-        prompt: 'SECRET_PROMPT_VALUE',
-        region: 'us-east-1',
-        kbConfig: {
-          knowledgeBaseId: 'kb-123',
-          region: 'us-east-1',
-          apiKey: 'SECRET_API_KEY',
-          modelArn: 'custom:model:arn',
-        },
-      }),
-    );
+    expect(cacheKey).toMatch(/^bedrock-kb:v2:[\w-]+:kb-123:/);
 
     mockIsCacheEnabled.mockReturnValue(false);
   });

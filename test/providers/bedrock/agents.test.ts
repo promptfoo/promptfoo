@@ -1,6 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AwsBedrockAgentsProvider } from '../../../src/providers/bedrock/agents';
-import { sha256 } from '../../../src/util/createHash';
 
 const mockSend = vi.fn();
 const mockBedrockClient = {
@@ -57,57 +56,6 @@ vi.mock('../../../src/cache', async (importOriginal) => {
     isCacheEnabled: () => mockIsCacheEnabled(),
   };
 });
-
-function buildAgentCacheKey({
-  agentId,
-  agentAliasId,
-  prompt,
-  region,
-  actionGroups,
-  enableTrace,
-  endSession,
-  guardrailConfiguration,
-  inferenceConfig,
-  inputDataConfig,
-  knowledgeBaseConfigurations,
-  memoryId,
-  promptOverrideConfiguration,
-  sessionId,
-  sessionState,
-}: {
-  agentId: string;
-  agentAliasId: string;
-  prompt: string;
-  region: string;
-  actionGroups?: Array<Record<string, unknown>>;
-  enableTrace?: boolean;
-  endSession?: boolean;
-  guardrailConfiguration?: Record<string, unknown>;
-  inferenceConfig?: Record<string, unknown>;
-  inputDataConfig?: Record<string, unknown>;
-  knowledgeBaseConfigurations?: Array<Record<string, unknown>>;
-  memoryId?: string;
-  promptOverrideConfiguration?: Record<string, unknown>;
-  sessionId?: string;
-  sessionState?: Record<string, unknown>;
-}) {
-  return `bedrock-agent:v2:${agentId}:${agentAliasId}:${region}:${sha256(
-    JSON.stringify({
-      prompt,
-      actionGroups,
-      enableTrace,
-      endSession,
-      guardrailConfiguration,
-      inferenceConfig,
-      inputDataConfig,
-      knowledgeBaseConfigurations,
-      memoryId,
-      promptOverrideConfiguration,
-      sessionId,
-      sessionState,
-    }),
-  )}`;
-}
 
 function makeCompletionResponse(output: string) {
   return {
@@ -309,30 +257,8 @@ describe('AwsBedrockAgentsProvider', () => {
     const firstKey = mockGet.mock.calls[0][0];
     const secondKey = mockGet.mock.calls[1][0];
 
-    expect(firstKey).toBe(
-      buildAgentCacheKey({
-        agentId: 'agent-123',
-        agentAliasId: 'alias-456',
-        prompt,
-        region: 'us-east-1',
-        sessionState: {
-          promptSessionAttributes: {
-            tenant: 'SECRET_SESSION_ATTRIBUTE',
-          },
-        },
-        knowledgeBaseConfigurations: [
-          {
-            knowledgeBaseId: 'kb-123',
-            retrievalConfiguration: {
-              vectorSearchConfiguration: {
-                filter: {
-                  equals: { key: 'sensitiveFilter', value: 'SECRET_FILTER_VALUE' },
-                },
-              },
-            },
-          },
-        ],
-      }),
+    expect(firstKey).toMatch(
+      /^bedrock-agent:v2:[\w-]+:agent-123:alias-456:us-east-1:[a-f0-9]{64}$/,
     );
     expect(firstKey).not.toContain(prompt);
     expect(firstKey).not.toContain('SECRET_FILTER_VALUE');
@@ -372,24 +298,13 @@ describe('AwsBedrockAgentsProvider', () => {
         },
       },
     });
-    const secondProvider = new AwsBedrockAgentsProvider('agent-123', {
-      config: {
-        agentId: 'agent-123',
-        agentAliasId: 'alias-456',
-        region: 'us-east-1',
-        sessionState: {
-          promptSessionAttributes: {
-            tenant: 'SECRET_TENANT_B',
-          },
-        },
-      },
-    });
 
     mockGet.mockResolvedValue(null);
     mockSend.mockImplementation(async () => makeCompletionResponse('fresh response'));
 
     await firstProvider.callApi('same prompt');
-    await secondProvider.callApi('same prompt');
+    firstProvider.config.sessionState = { promptSessionAttributes: { tenant: 'SECRET_TENANT_B' } };
+    await firstProvider.callApi('same prompt');
 
     const firstKey = mockGet.mock.calls[0][0];
     const secondKey = mockGet.mock.calls[1][0];

@@ -1,4 +1,5 @@
 import { getEnvString } from '../../envars';
+import { getScopedAwsCredentialConfig } from '../awsCredentials';
 
 import type { EnvOverrides } from '../../types/env';
 
@@ -49,7 +50,19 @@ export function resolveBedrockMantleApiKey(
   if (config.apiKeyRequired === false || hasExplicitAwsCredentials) {
     return explicitKey || undefined;
   }
-  return explicitKey || env?.AWS_BEARER_TOKEN_BEDROCK || getEnvString('AWS_BEARER_TOKEN_BEDROCK');
+  if (explicitKey) {
+    return explicitKey;
+  }
+  const scoped = getScopedAwsCredentialConfig({}, env, true);
+  if (scoped) {
+    if (scoped.apiKey === '') {
+      throw new Error(
+        'Scoped AWS_BEARER_TOKEN_BEDROCK is empty. Supply a token or remove the scoped override.',
+      );
+    }
+    return scoped.apiKey;
+  }
+  return getEnvString('AWS_BEARER_TOKEN_BEDROCK');
 }
 
 export function getBedrockMantleOrigin(region: string): string {
