@@ -150,6 +150,8 @@ describe('initializeCliLogging', () => {
     { argv: ['eval', '--verbose'], structuredOutput: false },
     { argv: ['code-scans', 'run', '--json'], structuredOutput: true },
     { argv: ['code-scans', 'run', '--format', 'sarif'], structuredOutput: true },
+    { argv: ['code-scans', '--env-file', 'settings.env', 'run', '--json'], structuredOutput: true },
+    { argv: ['code-scans', '--verbose', 'run', '--format', 'sarif'], structuredOutput: true },
   ])('preserves console routing for $argv', ({ argv, structuredOutput }) => {
     initializeCliLogging(argv);
     expect(mockInitializeRunLogging).toHaveBeenCalledExactlyOnceWith({ structuredOutput });

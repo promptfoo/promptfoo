@@ -30,14 +30,34 @@ const CODE_SCANS_RUN_VALUE_FLAGS: ReadonlySet<string> = new Set([
  */
 export function requestsStructuredCodeScanOutput(argv: readonly string[]): boolean {
   const codeScansIndex = argv.indexOf('code-scans');
-  if (codeScansIndex === -1 || argv[codeScansIndex + 1] !== 'run') {
+  if (codeScansIndex === -1) {
+    return false;
+  }
+
+  let runIndex = codeScansIndex + 1;
+  while (runIndex < argv.length) {
+    const arg = argv[runIndex];
+    if (arg === '--env-file' || arg === '--env-path') {
+      runIndex += 2;
+    } else if (
+      arg === '-v' ||
+      arg === '--verbose' ||
+      arg.startsWith('--env-file=') ||
+      arg.startsWith('--env-path=')
+    ) {
+      runIndex++;
+    } else {
+      break;
+    }
+  }
+  if (argv[runIndex] !== 'run') {
     return false;
   }
 
   let jsonFlag = false;
   let lastFormat: string | undefined;
 
-  for (let index = codeScansIndex + 2; index < argv.length; index++) {
+  for (let index = runIndex + 1; index < argv.length; index++) {
     const arg = argv[index];
     if (arg === '--') {
       // Conventional positional separator; nothing past it is a flag.

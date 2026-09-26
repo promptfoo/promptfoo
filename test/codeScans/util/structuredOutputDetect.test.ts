@@ -21,6 +21,27 @@ describe('requestsStructuredCodeScanOutput', () => {
     expect(requestsStructuredCodeScanOutput(argv('code-scans', 'run', '--json', '.'))).toBe(true);
   });
 
+  it.each([
+    ['--env-file', 'settings.env'],
+    ['--env-path=settings.env'],
+    ['--verbose'],
+    ['-v', '--env-file', 'first.env', '--env-file=second.env'],
+  ])('accepts parent command options %j before run', (...options) => {
+    expect(requestsStructuredCodeScanOutput(argv('code-scans', ...options, 'run', '--json'))).toBe(
+      true,
+    );
+  });
+
+  it('does not mistake an option value or positional argument for the run subcommand', () => {
+    expect(
+      requestsStructuredCodeScanOutput(argv('code-scans', '--env-file', 'run', '--json')),
+    ).toBe(false);
+    expect(requestsStructuredCodeScanOutput(argv('code-scans', '--', 'run', '--json'))).toBe(false);
+    expect(
+      requestsStructuredCodeScanOutput(argv('code-scans', '--verbose', 'list', 'run', '--json')),
+    ).toBe(false);
+  });
+
   it('detects --format sarif and --format json (space-separated)', () => {
     expect(requestsStructuredCodeScanOutput(argv('code-scans', 'run', '--format', 'sarif'))).toBe(
       true,
