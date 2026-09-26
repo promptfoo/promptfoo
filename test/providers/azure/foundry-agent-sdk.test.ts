@@ -90,6 +90,22 @@ describe('Foundry SDK cancellation and retries', () => {
     expect(fetchMock.mock.calls.every(([, options]) => options.signal.aborted)).toBe(true);
   });
 
+  it('accepts the maximum supported timer delay through the real SDK', async () => {
+    fetchMock.mockImplementationOnce(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return response();
+    });
+    const setTimer = vi.spyOn(globalThis, 'setTimeout');
+    const pending = provider({ timeoutMs: 2_147_483_647, retryOptions: { maxRetries: 0 } }).callApi(
+      'hello',
+    );
+    await vi.advanceTimersByTimeAsync(5);
+    expect(await pending).toMatchObject({ output: 'ok' });
+    expect(setTimer.mock.calls.filter(([, delay]) => delay === 2_147_483_647)).toHaveLength(2);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it.each<Record<string, string>>([{ 'retry-after-ms': '60000' }, { 'retry-after': '60' }])(
     'cancels a long retry wait without retained timers or another request (%j)',
     async (headers) => {

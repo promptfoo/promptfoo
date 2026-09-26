@@ -73,6 +73,7 @@ type ResponseFunctionCallItem = Extract<
 >;
 type EffectiveFoundryConfig = AzureAssistantOptions & Record<string, any>;
 type FunctionToolCallbacks = AzureAssistantOptions['functionToolCallbacks'];
+const MAX_REQUEST_TIMEOUT_MS = 2_147_483_647;
 
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) {
@@ -810,8 +811,11 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       return 'Azure Foundry agent maxPollTimeMs must be a finite, non-negative number.';
     }
     const timeout = config.timeoutMs;
-    if (timeout !== undefined && (!Number.isFinite(timeout) || timeout <= 0)) {
-      return 'Azure Foundry agent timeoutMs must be a finite, positive number.';
+    if (
+      timeout !== undefined &&
+      (!Number.isFinite(timeout) || timeout <= 0 || timeout > MAX_REQUEST_TIMEOUT_MS)
+    ) {
+      return `Azure Foundry agent timeoutMs must be a finite, positive number no greater than ${MAX_REQUEST_TIMEOUT_MS}.`;
     }
     const maxRetries = config.retryOptions?.maxRetries;
     if (maxRetries !== undefined && (!Number.isSafeInteger(maxRetries) || maxRetries < 0)) {

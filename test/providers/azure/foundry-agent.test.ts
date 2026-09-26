@@ -1228,18 +1228,32 @@ describe('AzureFoundryAgentProvider', () => {
       expect(logger.warn).not.toHaveBeenCalled();
     });
 
-    it.each([0, -1, NaN, Infinity, '1000'])(
-      'rejects invalid request timeout %s',
-      async (timeoutMs) => {
-        const provider = new AzureFoundryAgentProvider('weather-agent', {
-          config: { projectUrl, timeoutMs: timeoutMs as number },
-        });
+    describe.each(['provider', 'prompt'] as const)(
+      '%s-level request timeout validation',
+      (level) => {
+        it.each([0, -1, NaN, Infinity, '1000', 2_147_483_648, Number.MAX_VALUE])(
+          'rejects invalid request timeout %s before client initialization',
+          async (timeoutMs) => {
+            const provider = new AzureFoundryAgentProvider('weather-agent', {
+              config: {
+                projectUrl,
+                timeoutMs: level === 'provider' ? (timeoutMs as number) : 1000,
+              },
+            });
 
-        expect(await provider.callApi('prompt')).toEqual({
-          error: 'Azure Foundry agent timeoutMs must be a finite, positive number.',
-        });
-        expect((provider as any).initializeClient).not.toHaveBeenCalled();
-        expect(mockResponsesCreate).not.toHaveBeenCalled();
+            expect(
+              await provider.callApi(
+                'prompt',
+                level === 'prompt' ? ({ prompt: { config: { timeoutMs } } } as any) : undefined,
+              ),
+            ).toEqual({
+              error:
+                'Azure Foundry agent timeoutMs must be a finite, positive number no greater than 2147483647.',
+            });
+            expect((provider as any).initializeClient).not.toHaveBeenCalled();
+            expect(mockResponsesCreate).not.toHaveBeenCalled();
+          },
+        );
       },
     );
 

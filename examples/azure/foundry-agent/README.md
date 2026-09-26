@@ -67,7 +67,7 @@ These per-request settings are supported:
 - `metadata`
 - `passthrough`
 - `maxPollTimeMs`
-- `timeoutMs` (deadline for each Responses attempt, including credential wait and body reads; excludes shared client initialization, agent lookup, and callbacks)
+- `timeoutMs` (positive deadline up to `2147483647` ms for each Responses attempt, including credential wait and body reads; excludes shared client initialization, agent lookup, and callbacks)
 - `retryOptions.maxRetries` (request retries; defaults to 2)
 - `maxToolIterations` (callback batches; defaults to 8, valid range 1–64)
 
