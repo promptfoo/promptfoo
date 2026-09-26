@@ -605,7 +605,6 @@ function hasValidGradingResultFields(result: any): boolean {
     typeof result === 'object' &&
     result !== null &&
     typeof result.pass === 'boolean' &&
-    typeof result.score === 'number' &&
     Number.isFinite(result.score) &&
     typeof result.reason === 'string' &&
     (result.namedScores == null || isFiniteNumberRecord(result.namedScores)) &&

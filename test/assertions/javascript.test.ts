@@ -812,6 +812,32 @@ describe('JavaScript file references', () => {
     expect(result.assertion?.value).toContain('() => false');
   });
 
+  it('preserves the existing two reads of a getter-backed result score', async () => {
+    let reads = 0;
+    const assertion: Assertion = {
+      type: 'javascript',
+      value: () => ({
+        pass: true,
+        get score() {
+          return ++reads <= 2 ? 1 : Number.POSITIVE_INFINITY;
+        },
+        reason: 'Custom reason',
+      }),
+    };
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({ pass: true, score: 1, reason: 'Custom reason' });
+    expect(reads).toBe(2);
+    expect(JSON.parse(JSON.stringify(result)).score).toBe(1);
+  });
+
   it.each([
     ['true', () => true, true, 1],
     ['false', () => false, false, 0],

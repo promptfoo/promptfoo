@@ -186,6 +186,20 @@ describe('isGradingResult', () => {
     expect(isGradingResult(null)).toBe(false);
   });
 
+  it('reads the score once when checking its finite numeric value', () => {
+    const readScore = vi.fn(() => 0.75);
+    const result = {
+      pass: true,
+      get score() {
+        return readScore();
+      },
+      reason: '',
+    };
+
+    expect(isGradingResult(result)).toBe(true);
+    expect(readScore).toHaveBeenCalledOnce();
+  });
+
   it.each(['namedScores', 'namedScoreWeights'] as const)(
     'rejects unreadable %s entries, including in nested results',
     (field) => {
