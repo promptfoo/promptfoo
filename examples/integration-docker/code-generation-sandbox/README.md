@@ -12,7 +12,9 @@ cd integration-docker/code-generation-sandbox
 Use Python 3.10 or later and a running Docker daemon:
 
 ```bash
-pip install -r requirements.txt
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+python -m pip install -r requirements.txt
 docker pull python:3.9-alpine
 ```
 
