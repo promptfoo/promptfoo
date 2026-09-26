@@ -1441,13 +1441,13 @@ METEOR (Metric for Evaluation of Translation with Explicit ORdering) is the most
 For additional context, read about the metric on [Wikipedia](https://en.wikipedia.org/wiki/METEOR).
 
 :::info Installation Required
-METEOR requires the optional `natural` package. Install it before using METEOR assertions:
+METEOR requires `natural`, which is not included in the default installation. Install it alongside your project-local `promptfoo` package:
 
 ```bash
-npm install natural@^8.1.0
+npm install promptfoo natural@^8.1.1
 ```
 
-If the package is not installed, you'll receive an error message with installation instructions when attempting to use METEOR assertions.
+For a global installation, use `npm install -g promptfoo natural@^8.1.1`. For a one-off eval, use `npx --package=promptfoo --package=natural@^8.1.1 promptfoo eval -c promptfooconfig.yaml`. If `natural` is missing, only METEOR assertions fail with installation instructions; other assertions work normally.
 :::
 
 #### How METEOR Works
