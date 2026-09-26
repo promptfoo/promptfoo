@@ -34,6 +34,7 @@ import {
   isActiveTracingExport,
   waitForNativeTraceExport,
 } from './tracing';
+import { copyWorkingDirectory, releaseWorkingDirectoryCopies } from './workingDirectoryCopies';
 import type {
   AgentDefinition,
   CanUseTool,
@@ -63,6 +64,7 @@ import type {
   SkillCallEntry,
 } from '../types/index';
 import type { MCPConfig, MCPServerConfig } from './mcp/types';
+import type { WorkingDirectoryCopy } from './workingDirectoryCopies';
 
 /**
  * Represents a single tool call captured during a Claude Agent SDK session.
@@ -393,6 +395,8 @@ export interface ClaudeCodeOptions {
    * If not supplied, we'll use an empty temp dir for isolation
    */
   working_dir?: string;
+  /** Copy working_dir for each provider call, including repeats and retries. */
+  copy_working_dir?: boolean;
 
   /**
    * 'model' and 'fallback_model' are optional
@@ -1405,6 +1409,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       ...this.config,
       ...context?.prompt?.config,
     };
+    if (config.copy_working_dir !== undefined && typeof config.copy_working_dir !== 'boolean') {
+      return { error: 'copy_working_dir must be a boolean' };
+    }
+    if (config.copy_working_dir && !config.working_dir) {
+      return { error: 'copy_working_dir requires working_dir' };
+    }
 
     if (config.ask_user_question !== undefined) {
       validateAskUserQuestionConfig(config.ask_user_question);
@@ -1598,6 +1608,8 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
     let isTempDir = false;
     let workingDir: string | undefined;
+    let workingDirCopy: WorkingDirectoryCopy | undefined;
+    const copyWorkingDir = config.copy_working_dir === true;
 
     if (config.working_dir) {
       workingDir = resolveAgenticWorkingDir(config.working_dir, basePath);
@@ -1762,6 +1774,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       );
     }
     const cacheResult =
+      copyWorkingDir ||
       runtimeCallbackBypassesCache ||
       sensitiveMcpBypassesCache ||
       settingsConfigurationBypassesCache ||
@@ -1816,58 +1829,67 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       workingDir = await fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-claude-agent-sdk-'));
     }
 
-    // Make sure we didn't already abort
-    if (callOptions?.abortSignal?.aborted) {
-      if (isTempDir && workingDir) {
-        await fs.rm(workingDir, { recursive: true, force: true });
+    if (copyWorkingDir && workingDir) {
+      try {
+        workingDirCopy = await copyWorkingDirectory(workingDir, context?.evaluationId ?? this);
+        workingDir = workingDirCopy.workingDir;
+      } catch (error) {
+        return { error: `Unable to copy working_dir: ${String(error)}` };
       }
-      return { error: ABORTED_BEFORE_START_ERROR };
     }
 
-    // Propagate abort signal to the Claude Agent SDK call
+    // Keep setup inside the same cleanup scope as the SDK call. The copy is
+    // already registered, so even an options or logging error must release it.
     const abortController = new AbortController();
     let abortHandler: (() => void) | undefined;
-    if (callOptions?.abortSignal) {
-      abortHandler = () => {
-        abortController.abort(callOptions.abortSignal!.reason);
-      };
-      callOptions.abortSignal.addEventListener('abort', abortHandler);
-    }
-
-    // Make the Claude Agent SDK call
-    const options: QueryOptions = {
-      ...cacheKeyQueryOptions,
-      env,
-      abortController,
-      mcpServers,
-      cwd: workingDir,
-      // Callbacks are not included in cache key since they're functions
-      stderr: config.stderr,
-      spawnClaudeCodeProcess: config.spawn_claude_code_process,
-      canUseTool,
-      hooks,
-      onElicitation: config.on_elicitation,
-      // Session metadata — excluded from cache key so cosmetic changes don't
-      // force cache misses. The SDK ignores `title` on resumed sessions
-      // (the persisted title wins), so we warn above when both are set.
-      title: config.title,
-    };
-    const queryParams = { prompt, options };
-
-    // Log the query params for debugging
-    logger.debug(
-      `Calling Claude Agent SDK: ${JSON.stringify({
-        prompt,
-        options: {
-          ...options,
-          // overwrite with metadata instead of the full objects to avoid logging secrets
-          mcpServers: options.mcpServers ? Object.keys(options.mcpServers) : undefined,
-          env: Object.keys(env).length > 0 ? Object.keys(env) : undefined,
-        },
-      })}`,
-    );
-
     try {
+      // Make sure we didn't already abort
+      if (callOptions?.abortSignal?.aborted) {
+        await workingDirCopy?.settle(false);
+        return { error: ABORTED_BEFORE_START_ERROR };
+      }
+
+      // Propagate abort signal to the Claude Agent SDK call
+      if (callOptions?.abortSignal) {
+        abortHandler = () => {
+          abortController.abort(callOptions.abortSignal!.reason);
+        };
+        callOptions.abortSignal.addEventListener('abort', abortHandler);
+      }
+
+      // Make the Claude Agent SDK call
+      const options: QueryOptions = {
+        ...cacheKeyQueryOptions,
+        env,
+        abortController,
+        mcpServers,
+        cwd: workingDir,
+        // Callbacks are not included in cache key since they're functions
+        stderr: config.stderr,
+        spawnClaudeCodeProcess: config.spawn_claude_code_process,
+        canUseTool,
+        hooks,
+        onElicitation: config.on_elicitation,
+        // Session metadata — excluded from cache key so cosmetic changes don't
+        // force cache misses. The SDK ignores `title` on resumed sessions
+        // (the persisted title wins), so we warn above when both are set.
+        title: config.title,
+      };
+      const queryParams = { prompt, options };
+
+      // Log the query params for debugging
+      logger.debug(
+        `Calling Claude Agent SDK: ${JSON.stringify({
+          prompt,
+          options: {
+            ...options,
+            // overwrite with metadata instead of the full objects to avoid logging secrets
+            mcpServers: options.mcpServers ? Object.keys(options.mcpServers) : undefined,
+            env: Object.keys(env).length > 0 ? Object.keys(env) : undefined,
+          },
+        })}`,
+      );
+
       return await withGenAISpan(
         {
           system: 'anthropic',
@@ -2112,7 +2134,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           const finalMsg = lastMainResultMsg ?? lastResultMsg;
 
           if (!finalMsg) {
-            return { error: "Claude Agent SDK call didn't return a result" };
+            return {
+              error: "Claude Agent SDK call didn't return a result",
+              ...(workingDirCopy ? { metadata: { workingDir: workingDirCopy.workingDir } } : {}),
+            };
           }
 
           if (sdkExportsNativeSpans && tpTraceId && tpSpanId) {
@@ -2279,6 +2304,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               raw,
               sessionId,
               metadata: {
+                ...(workingDirCopy ? { workingDir: workingDirCopy.workingDir } : {}),
                 skillCalls,
                 toolCalls: toolCallsArray,
                 numTurns: finalMsg.num_turns,
@@ -2322,6 +2348,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             raw,
             sessionId,
             metadata: {
+              ...(workingDirCopy ? { workingDir: workingDirCopy.workingDir } : {}),
               skillCalls,
               toolCalls: toolCallsArray,
               numTurns: finalMsg.num_turns,
@@ -2403,14 +2430,19 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
       if (isAbort) {
         logger.warn('Claude Agent SDK call aborted');
-        return { error: 'Claude Agent SDK call aborted' };
+        return {
+          error: 'Claude Agent SDK call aborted',
+          ...(workingDirCopy ? { metadata: { workingDir: workingDirCopy.workingDir } } : {}),
+        };
       }
 
       logger.error(`Error calling Claude Agent SDK: ${error}`);
       return {
         error: `Error calling Claude Agent SDK: ${error}`,
+        ...(workingDirCopy ? { metadata: { workingDir: workingDirCopy.workingDir } } : {}),
       };
     } finally {
+      await workingDirCopy?.settle(true);
       if (isTempDir && workingDir) {
         // Clean up the temp dir
         await fs.rm(workingDir, { recursive: true, force: true });
@@ -2435,6 +2467,8 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
   }
 
   async cleanup(): Promise<void> {
-    // no cleanup needed
+    for (const error of await releaseWorkingDirectoryCopies(this)) {
+      logger.warn('Failed to remove Claude Agent SDK working directory copy', { error });
+    }
   }
 }

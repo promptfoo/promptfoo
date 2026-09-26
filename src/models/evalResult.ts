@@ -530,8 +530,32 @@ function sanitizeMetadataForDb<T>(metadata: T, responseMetadata?: unknown): T {
   });
 }
 
+function sanitizeGradingResultAssertions<T>(gradingResult: T): T {
+  if (!gradingResult || typeof gradingResult !== 'object' || Array.isArray(gradingResult)) {
+    return gradingResult;
+  }
+
+  const gr = gradingResult as Record<string, unknown>;
+  return {
+    ...gr,
+    ...(gr.assertion === undefined
+      ? {}
+      : {
+          assertion: sanitizeObject(gr.assertion, {
+            context: 'grading assertion',
+            maxDepth: Number.POSITIVE_INFINITY,
+            sanitizeUrls: true,
+            throwOnError: true,
+          }),
+        }),
+    ...(Array.isArray(gr.componentResults) && {
+      componentResults: gr.componentResults.map(sanitizeGradingResultAssertions),
+    }),
+  } as T;
+}
+
 function sanitizeGradingResultForDb<T>(gradingResult: T): T {
-  return redactHttpHeadersOnGradingResult(gradingResult);
+  return redactHttpHeadersOnGradingResult(sanitizeGradingResultAssertions(gradingResult));
 }
 
 // `__promptfoo` is reserved at the metadata top level for promptfoo-internal namespaced data
@@ -1089,6 +1113,7 @@ export default class EvalResult {
     const { traceId: _traceId, evaluationId: _evaluationId, pluginId: _pluginId, ...rest } = this;
     const persistedValues = {
       ...rest,
+      gradingResult: sanitizeGradingResultForDb(this.gradingResult),
       metadata: persistTraceMetadata(this.metadata, this.traceId, this.evaluationId),
     };
     //check if this exists in the db

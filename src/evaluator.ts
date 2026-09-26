@@ -1450,7 +1450,7 @@ async function gradeRunEvalResponse({
     invariant(providerCallQueue, 'providerCallQueue is required when deferGrading is enabled');
     ret.response = processedResponse;
     const gradingPromise = withProviderCallExecutionContext(
-      { abortSignal, providerCallQueue, rateLimitRegistry },
+      { abortSignal, evaluationId: evalId, providerCallQueue, rateLimitRegistry },
       () =>
         runAssertions({
           prompt: renderedPrompt,
@@ -1470,7 +1470,7 @@ async function gradeRunEvalResponse({
   }
 
   const checkResult = await withProviderCallExecutionContext(
-    { abortSignal, rateLimitRegistry },
+    { abortSignal, evaluationId: evalId, rateLimitRegistry },
     () =>
       runAssertions({
         prompt: renderedPrompt,
@@ -4171,6 +4171,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     rowsWithMaxScoreAssertion,
     rowsWithSelectBestAssertion,
     runEvalOptions,
+    comparisonTestCasesByTestIdx,
   }: {
     ciProgressReporter: CIProgressReporter | null;
     isWebUI: boolean;
@@ -4181,6 +4182,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     rowsWithMaxScoreAssertion: Set<number>;
     rowsWithSelectBestAssertion: Set<number>;
     runEvalOptions: RunEvalOptions[];
+    comparisonTestCasesByTestIdx: Map<number, AtomicTestCase>;
   }) {
     const compareRowsCount = rowsWithSelectBestAssertion.size + rowsWithMaxScoreAssertion.size;
     updateComparisonReporterTotals({
@@ -4200,6 +4202,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       repeatCacheContextByTestIdx,
       rowsWithSelectBestAssertion,
       runEvalOptions,
+      comparisonTestCasesByTestIdx,
     });
 
     await this.processMaxScoreAssertions({
@@ -4223,6 +4226,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     repeatCacheContextByTestIdx,
     rowsWithSelectBestAssertion,
     runEvalOptions,
+    comparisonTestCasesByTestIdx,
   }: {
     ciProgressReporter: CIProgressReporter | null;
     compareRowsCount: number;
@@ -4233,6 +4237,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     repeatCacheContextByTestIdx: Map<number, RepeatCacheContext>;
     rowsWithSelectBestAssertion: Set<number>;
     runEvalOptions: RunEvalOptions[];
+    comparisonTestCasesByTestIdx: Map<number, AtomicTestCase>;
   }) {
     let compareCount = 0;
     for (const testIdx of rowsWithSelectBestAssertion) {
@@ -4247,6 +4252,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         providerAbortSignal,
         repeatCacheContextByTestIdx,
         runEvalOptions,
+        comparisonTestCasesByTestIdx,
         testIdx,
       });
     }
@@ -4263,6 +4269,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     providerAbortSignal,
     repeatCacheContextByTestIdx,
     runEvalOptions,
+    comparisonTestCasesByTestIdx,
     testIdx,
   }: {
     ciProgressReporter: CIProgressReporter | null;
@@ -4274,6 +4281,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     providerAbortSignal?: AbortSignal;
     repeatCacheContextByTestIdx: Map<number, RepeatCacheContext>;
     runEvalOptions: RunEvalOptions[];
+    comparisonTestCasesByTestIdx: Map<number, AtomicTestCase>;
     testIdx: number;
   }) {
     if (isWebUI) {
@@ -4286,7 +4294,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       return;
     }
 
-    const compareAssertion = resultsToCompare[0].testCase.assert?.find(
+    // Persisted results redact provider settings before comparison assertions run.
+    // Use the current run's test case so a grader can still access its runtime config.
+    const comparisonTestCase =
+      comparisonTestCasesByTestIdx.get(testIdx) ?? resultsToCompare[0].testCase;
+    const compareAssertion = comparisonTestCase.assert?.find(
       (a) => a.type === 'select-best',
     ) as Assertion;
     if (!compareAssertion) {
@@ -4307,7 +4319,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           { abortSignal: providerAbortSignal, rateLimitRegistry: this.rateLimitRegistry },
           () =>
             runCompareAssertion(
-              resultsToCompare[0].testCase,
+              comparisonTestCase,
               compareAssertion,
               outputs,
               this.getComparisonCallApiContext(resultsToCompare[0], repeatCacheContext),
@@ -4457,6 +4469,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const originalProvider = this.testSuite.providers.find((p) => p.id() === providerId);
     return {
       getCache,
+      evaluationId: this.store.id,
       ...(originalProvider && { originalProvider }),
       prompt: firstResult.prompt,
       promptIdx: firstResult.promptIdx,
@@ -4844,6 +4857,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       tests,
     });
     markComparisonRows(runEvalOptions, rowsWithSelectBestAssertion, rowsWithMaxScoreAssertion);
+    const comparisonTestCasesByTestIdx = new Map(
+      runEvalOptions.map(({ testIdx, test }) => [testIdx, test]),
+    );
     const repeatCacheContextByTestIdx = buildRepeatCacheContextByTestIdx(runEvalOptions);
     await filterCompletedResumeSteps(runEvalOptions, this.store);
 
@@ -4998,6 +5014,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       rowsWithMaxScoreAssertion,
       rowsWithSelectBestAssertion,
       runEvalOptions,
+      comparisonTestCasesByTestIdx,
     });
 
     await this.finalizeEvaluation({
@@ -5056,6 +5073,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       const writerCloseResults = await Promise.allSettled(
         this.fileWriters.map((writer) => writer.close()),
       );
+      // Assertions (including deferred graders) and afterEach hooks have finished.
+      // Active SDK calls that outlive a timeout release their own copies when they settle.
+      await providerRegistry.releaseEvaluationWorkingDirectories(this.store.id);
       const writerCloseErrors = writerCloseResults.flatMap((result) =>
         result.status === 'rejected' ? [result.reason] : [],
       );

@@ -16,6 +16,8 @@ import type { ProviderCallQueue } from './providerCallQueue';
  * cancellation and rate-limit orchestration.
  */
 export interface ProviderCallExecutionContext {
+  /** Owning evaluation for temporary workspaces opened by grading providers. */
+  evaluationId?: string;
   abortSignal?: AbortSignal;
   providerCallQueue?: ProviderCallQueue;
   rateLimitRegistry?: RateLimitRegistryRef;

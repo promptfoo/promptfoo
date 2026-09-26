@@ -615,11 +615,13 @@ async function runAssertionInternal({
       ? activeTraceparent
       : generateTraceparent(traceId, generateSpanId())
     : undefined;
+  const gradingEvaluationId = getProviderCallExecutionContext()?.evaluationId;
   const providerCallContext: CallApiContextParams | undefined = provider
     ? {
         originalProvider: provider,
         prompt: { raw: prompt || '', label: '' },
         vars: resolvedVars,
+        ...(gradingEvaluationId && { evaluationId: gradingEvaluationId }),
         ...(graderTraceparent && { traceparent: graderTraceparent }),
       }
     : undefined;
@@ -890,7 +892,9 @@ export async function runCompareAssertion(
   context?: CallApiContextParams,
 ): Promise<GradingResult[]> {
   invariant(typeof assertion.value === 'string', 'select-best must have a string value');
-  test = getFinalTest(test, assertion);
+  // The matcher needs options and vars, not the assertion list. A runtime assertion can
+  // contain a provider with a circular SDK client, which getFinalTest cannot deep-clone.
+  test = getFinalTest({ ...test, assert: undefined }, assertion);
   const comparisonResults = await matchesSelectBest(
     assertion.value,
     outputs,
@@ -898,9 +902,17 @@ export async function runCompareAssertion(
     test.vars,
     context,
   );
+  // The runtime assertion may contain a live grader and secrets. Results only need
+  // the comparison criteria and scoring labels, so keep provider config out of memory.
+  const safeAssertion: Assertion = {
+    type: assertion.type,
+    value: assertion.value,
+    metric: assertion.metric,
+    weight: assertion.weight,
+  };
   return comparisonResults.map((result) => ({
     ...result,
-    assertion,
+    assertion: safeAssertion,
   }));
 }
 
