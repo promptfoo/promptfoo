@@ -29,12 +29,18 @@ You can set this in a `.env` file or directly in your environment.
 ## Requirements
 
 - Python 3.10 or later
-- The example dependencies installed with `pip install -r requirements.txt`
+- The example dependencies installed in a virtual environment:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate # Windows: .venv\Scripts\activate
+python -m pip install -r requirements.txt
+```
 
 The AnyIO minimum includes fixes for TLS hostname validation and process-pool
-stderr handling. Minimum versions of h11, idna, and certifi preserve the HTTP
-parser, hostname, and certificate trust fixes when updating an existing Python
-environment. OpenAI manages the remaining transitive dependencies.
+stderr handling. OpenAI 3 uses HTTPX2, whose dependencies already require the
+fixed h11 parser and idna versions and use the system certificate trust store.
+OpenAI manages those transitive dependencies.
 
 Run the dependency regression check after installation:
 
@@ -106,7 +112,7 @@ providers:
 Run the example with:
 
 ```bash
-npx promptfoo@latest evaluate -c examples/provider-python/promptfooconfig.yaml
+npx promptfoo@latest eval
 ```
 
 ## Learn More
