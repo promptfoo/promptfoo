@@ -452,21 +452,28 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
     let sdkVersion: string | undefined;
     let operation = this.config.operation ?? 'security-scan';
     let reportFile = this.config.report_file;
+    let importingReport = reportFile !== undefined;
 
     try {
       const mergedConfig = { ...this.config, ...context?.prompt?.config };
       delete mergedConfig.provider;
-      const config = parseConfig(renderVarsInObject(mergedConfig, context?.vars), {
-        stripUnknownKeys: true,
-      });
+      importingReport = mergedConfig.report_file !== undefined;
+      reportFile =
+        typeof mergedConfig.report_file === 'string' ? mergedConfig.report_file : undefined;
+      // Saved reports use only their path; retained native settings may reference
+      // variables that are intentionally absent from an import-only eval row.
+      const renderedConfig = importingReport
+        ? {
+            ...mergedConfig,
+            ...renderVarsInObject(
+              { report_file: mergedConfig.report_file, basePath: mergedConfig.basePath },
+              context?.vars,
+            ),
+          }
+        : renderVarsInObject(mergedConfig, context?.vars);
+      const config = parseConfig(renderedConfig, { stripUnknownKeys: true });
       operation = config.operation ?? 'security-scan';
       reportFile = resolveConfigPath(config.report_file, config.basePath);
-      const repositoryVariable = context?.vars?.repository;
-      const configuredRepository =
-        config.repository ??
-        config.working_dir ??
-        (typeof repositoryVariable === 'string' ? repositoryVariable : undefined);
-      const repository = resolveConfigPath(configuredRepository, config.basePath) ?? process.cwd();
 
       if (callOptions?.abortSignal?.aborted) {
         throw new Error('Codex Security operation was aborted before it started.');
@@ -486,6 +493,13 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
           metadata: { codexSecurity: summary },
         };
       }
+
+      const repositoryVariable = context?.vars?.repository;
+      const configuredRepository =
+        config.repository ??
+        config.working_dir ??
+        (typeof repositoryVariable === 'string' ? repositoryVariable : undefined);
+      const repository = resolveConfigPath(configuredRepository, config.basePath) ?? process.cwd();
 
       const environmentError = this.environmentError();
       if (environmentError) {
@@ -547,13 +561,13 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
 
       return {
         error: message,
-        ...(reportFile ? { incurredCost: 0 } : {}),
+        ...(importingReport ? { incurredCost: 0 } : {}),
         ...(observedCost ? { cost: observedCost.estimatedUsd } : {}),
         ...(tokenUsage ? { tokenUsage } : {}),
         metadata: {
           codexSecurity: normalizeCodexSecurityResult(undefined, {
-            source: reportFile ? { kind: 'saved-report', file: reportFile } : { kind: 'sdk' },
-            ...(reportFile ? {} : { operation }),
+            source: importingReport ? { kind: 'saved-report', file: reportFile } : { kind: 'sdk' },
+            ...(importingReport ? {} : { operation }),
             error: message,
             sdkVersion,
             observedCost,

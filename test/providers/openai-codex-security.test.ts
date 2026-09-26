@@ -462,6 +462,133 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(mockPreflight).not.toHaveBeenCalled();
     });
 
+    it('imports with dormant native templates after a successful local setup check', async () => {
+      const { file } = await saveReport(createScanResult().toJSON());
+      const provider = new OpenAICodexSecurityProvider({
+        config: {
+          report_file: file,
+          repository: '{{repository}}',
+          working_dir: '{{workingDirectory}}',
+          paths: ['{{scope}}'],
+          model: '{{model | unusedFilter}}',
+          model_provider: '{{modelProvider}}',
+          base_ref: '{{baseRef}}',
+          head_ref: '{{headRef}}',
+          output_dir: '{{outputDirectory}}',
+          plugin_path: '{{pluginPath}}',
+          python_path: '{{pythonPath}}',
+          finding_file: '{{findingFile}}',
+          knowledge_base_paths: ['{{knowledgeBase}}'],
+        },
+      });
+
+      expect((await provider.checkSetup()).success).toBe(true);
+      const response = await provider.callApi('Compare', {
+        prompt: { raw: 'Compare', label: 'Compare' },
+        vars: {},
+      });
+
+      expect(response.error).toBeUndefined();
+      expect(response.metadata?.codexSecurity?.source).toMatchObject({
+        kind: 'saved-report',
+        file,
+      });
+      expect(importModule).not.toHaveBeenCalled();
+      expect(mockRun).not.toHaveBeenCalled();
+      expect(mockValidate).not.toHaveBeenCalled();
+    });
+
+    it('renders only report inputs from mixed per-test configuration overrides', async () => {
+      const { file } = await saveReport(createScanResult().toJSON());
+      const provider = new OpenAICodexSecurityProvider({
+        config: { repository: '{{repository}}', model: '{{model}}' },
+      });
+      const response = await provider.callApi('Compare', {
+        prompt: {
+          raw: 'Compare',
+          label: 'Compare',
+          config: {
+            report_file: '{{reportName}}',
+            basePath: '{{reportDirectory}}',
+            paths: ['{{scope}}'],
+            timeout: 30_000,
+          },
+        },
+        vars: { reportName: 'report.json', reportDirectory },
+      });
+
+      expect(response.error).toBeUndefined();
+      expect(response.metadata?.codexSecurity?.source).toMatchObject({
+        kind: 'saved-report',
+        file,
+      });
+      expect(importModule).not.toHaveBeenCalled();
+      expect(mockRun).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['repository', 42],
+      ['paths', [null]],
+      ['model', false],
+    ])('still rejects malformed dormant %s settings', async (field, value) => {
+      const { file } = await saveReport(createScanResult().toJSON());
+      const response = await new OpenAICodexSecurityProvider().callApi('Compare', {
+        prompt: {
+          raw: 'Compare',
+          label: 'Compare',
+          config: { report_file: file, [field as string]: value },
+        },
+        vars: {},
+      });
+
+      expect(response.error).toContain(`configuration: ${field}`);
+      expect(response).toMatchObject({
+        incurredCost: 0,
+        metadata: { codexSecurity: { source: { kind: 'saved-report' }, status: 'failed' } },
+      });
+      expect(importModule).not.toHaveBeenCalled();
+      expect(mockRun).not.toHaveBeenCalled();
+    });
+
+    it.each(['{{missingReport}}', '{{report | unusedFilter}}', 42])(
+      'keeps import provenance when a report override cannot render or validate: %s',
+      async (reportFile) => {
+        const response = await new OpenAICodexSecurityProvider().callApi('Compare', {
+          prompt: { raw: 'Compare', label: 'Compare', config: { report_file: reportFile } },
+          vars: {},
+        });
+
+        expect(response.error).toBeDefined();
+        expect(response).toMatchObject({
+          incurredCost: 0,
+          metadata: { codexSecurity: { source: { kind: 'saved-report' }, status: 'failed' } },
+        });
+        expect(response.metadata?.codexSecurity?.operation).toBeNull();
+        expect(importModule).not.toHaveBeenCalled();
+        expect(mockRun).not.toHaveBeenCalled();
+      },
+    );
+
+    it('renders native inputs when a per-test override removes saved-report mode', async () => {
+      const { file } = await saveReport(createScanResult().toJSON());
+      vi.mocked(resolvePackageEntryPoint).mockReturnValue(
+        '/packages/@openai/codex-security/dist/index.js',
+      );
+      const provider = new OpenAICodexSecurityProvider({ config: { report_file: file } });
+      const response = await provider.callApi('Scan', {
+        prompt: {
+          raw: 'Scan',
+          label: 'Scan',
+          config: { report_file: undefined, repository: '/repos/{{service}}' },
+        },
+        vars: { service: 'example' },
+      });
+
+      expect(response.error).toBeUndefined();
+      expect(response.metadata?.codexSecurity?.source.kind).toBe('sdk');
+      expect(mockRun).toHaveBeenCalledWith('/repos/example', expect.any(Object));
+    });
+
     it('resolves relative files against the explicit provider base path', async () => {
       const { file } = await saveReport(createScanResult().toJSON());
       cliState.basePath = path.join(reportDirectory, 'unrelated');
