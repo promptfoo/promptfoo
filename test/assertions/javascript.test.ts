@@ -907,7 +907,7 @@ describe('JavaScript file references', () => {
       },
       false,
       0.75,
-      'Custom function returned true',
+      'Custom reason',
     ],
   ];
 
@@ -972,7 +972,7 @@ describe('JavaScript file references', () => {
       },
       false,
       0.75,
-      'Custom function returned true',
+      'Custom reason',
     ],
   ];
 
@@ -1743,5 +1743,107 @@ return s >= 0.5 && s <= 0.75;`,
 
       expect(result).toMatchObject({ pass: true });
     });
+  });
+});
+
+describe('not-javascript: GradingResult reason preservation on inversion', () => {
+  const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+
+  it('preserves custom reason verbatim when function returns pass:true and assertion is inverted (test fails)', async () => {
+    // Function says "output contains foo" — not-javascript should fail and keep the reason verbatim.
+    const assertion: Assertion = {
+      type: 'not-javascript',
+      value: async (output: string) => ({
+        pass: output.includes('foo'),
+        score: output.includes('foo') ? 1 : 0,
+        reason: 'Expected output not to contain "foo", but it did.',
+      }),
+    };
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'foo bar' },
+    });
+
+    expect(result.pass).toBe(false);
+    // Reason must NOT be the generic "Custom function returned true"
+    expect(result.reason).not.toBe('Custom function returned true');
+    // Reason must surface the custom message verbatim (no NOT: prefix)
+    expect(result.reason).toBe('Expected output not to contain "foo", but it did.');
+  });
+
+  it('preserves custom reason when function returns pass:false and assertion is inverted (test passes)', async () => {
+    // Function says output does NOT contain "foo" — not-javascript should pass.
+    const assertion: Assertion = {
+      type: 'not-javascript',
+      value: async (output: string) => ({
+        pass: output.includes('foo'),
+        score: output.includes('foo') ? 1 : 0,
+        reason: 'Output does not contain the forbidden word.',
+      }),
+    };
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'hello world' },
+    });
+
+    expect(result.pass).toBe(true);
+    // The custom reason should be surfaced (possibly with a prefix or as-is)
+    expect(result.reason).toContain('Output does not contain the forbidden word.');
+  });
+
+  it('does not replace reason when inversion does not change the outcome', async () => {
+    // Function returns pass:false — not-javascript inverts to pass:true, so outcome changes.
+    // But here we test the non-changing case: function pass:true, not-javascript fail.
+    const assertion: Assertion = {
+      type: 'javascript',
+      value: async (_output: string) => ({
+        pass: true,
+        score: 1,
+        reason: 'My custom reason',
+      }),
+    };
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'anything' },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.reason).toBe('My custom reason');
+  });
+
+  it('preserves empty-string reason verbatim and does not replace it with a fallback', async () => {
+    // Returning reason: '' is a valid GradingResult. The || fallback used to
+    // replace it with 'Assertion passed'; ?? preserves it.
+    const assertion: Assertion = {
+      type: 'not-javascript',
+      value: async (output: string) => ({
+        pass: output.includes('foo'),
+        score: 0,
+        reason: '',
+      }),
+    };
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'hello world' }, // does not include 'foo' → function pass:false → not-javascript pass:true
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.reason).toBe(''); // empty string must be preserved verbatim
   });
 });
