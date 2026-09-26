@@ -3,7 +3,7 @@ import React from 'react';
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { render as rtlRender, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
 
 import type { ProviderOptions } from '../../types';
@@ -31,6 +31,149 @@ const replaceText = async (
   await user.keyboard('{Control>}a{/Control}');
   await user.paste(value);
 };
+
+afterEach(() => {
+  vi.clearAllMocks();
+});
+
+describe('CustomTargetConfiguration - Config Field Handling', () => {
+  let mockUpdateCustomTarget: (field: string, value: unknown) => void;
+  let mockSetRawConfigJson: (value: string) => void;
+
+  const defaultProps = {
+    selectedTarget: {
+      id: 'custom',
+      config: { temperature: 0.5 },
+      label: 'Custom Target',
+    },
+    rawConfigJson: JSON.stringify({ temperature: 0.5 }, null, 2),
+    bodyError: null,
+  };
+
+  beforeEach(() => {
+    mockUpdateCustomTarget = vi.fn();
+    mockSetRawConfigJson = vi.fn();
+  });
+
+  it('should use custom target copy for the generic configuration screen', () => {
+    render(
+      <CustomTargetConfiguration
+        {...defaultProps}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setRawConfigJson={mockSetRawConfigJson}
+      />,
+    );
+
+    expect(screen.getByText('Custom Target Configuration')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Custom target documentation' })).toHaveAttribute(
+      'href',
+      'https://www.promptfoo.dev/docs/red-team/configuration/#custom-providerstargets',
+    );
+  });
+
+  it('should call updateCustomTarget with "config" field when JSON is edited', async () => {
+    const user = userEvent.setup();
+    render(
+      <CustomTargetConfiguration
+        {...defaultProps}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setRawConfigJson={mockSetRawConfigJson}
+      />,
+    );
+
+    // The Editor component renders a textarea for input
+    // Find the JSON editor container and get the textarea inside it
+    const configLabel = screen.getByText('Configuration (JSON)');
+    const editorContainer = configLabel.closest('.space-y-2');
+    const configTextarea = editorContainer?.querySelector('textarea');
+    expect(configTextarea).toBeTruthy();
+
+    const newConfig = { temperature: 0.7, max_tokens: 100 };
+    const newConfigJson = JSON.stringify(newConfig, null, 2);
+
+    await user.click(configTextarea!);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste(newConfigJson);
+
+    // Verify that setRawConfigJson is called with the new JSON string
+    expect(mockSetRawConfigJson).toHaveBeenCalledWith(newConfigJson);
+
+    // Verify that updateCustomTarget is called with 'config' field and the parsed object
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('config', newConfig);
+  });
+
+  it('should preserve the last valid config and report invalid JSON', async () => {
+    const user = userEvent.setup();
+    const onConfigErrorChange = vi.fn();
+    render(
+      <CustomTargetConfiguration
+        {...defaultProps}
+        selectedTarget={{ id: 'custom', config: { temperature: 0.7 } }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setRawConfigJson={mockSetRawConfigJson}
+        onConfigErrorChange={onConfigErrorChange}
+      />,
+    );
+
+    // Find the JSON editor textarea
+    const configLabel = screen.getByText('Configuration (JSON)');
+    const editorContainer = configLabel.closest('.space-y-2');
+    const configTextarea = editorContainer?.querySelector('textarea');
+    expect(configTextarea).toBeTruthy();
+
+    const invalidJson = '{ invalid json }';
+
+    await user.click(configTextarea!);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste(invalidJson);
+
+    // Should still call setRawConfigJson to update the display
+    expect(mockSetRawConfigJson).toHaveBeenCalledWith(invalidJson);
+
+    expect(mockUpdateCustomTarget).not.toHaveBeenCalled();
+    expect(onConfigErrorChange).toHaveBeenLastCalledWith('Invalid JSON configuration');
+  });
+
+  it('should show error state when bodyError is provided', () => {
+    render(
+      <CustomTargetConfiguration
+        {...defaultProps}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setRawConfigJson={mockSetRawConfigJson}
+        bodyError="Invalid JSON format"
+      />,
+    );
+
+    // Error message should be displayed in an Alert
+    expect(screen.getByText('Invalid JSON format')).toBeInTheDocument();
+
+    // The editor container should have destructive border styling
+    const configLabel = screen.getByText('Configuration (JSON)');
+    const editorSection = configLabel.closest('.space-y-2');
+    const editorContainer = editorSection?.querySelector('.border-destructive');
+    expect(editorContainer).toBeTruthy();
+  });
+
+  it('should update target ID when changed', async () => {
+    const user = userEvent.setup();
+    render(
+      <CustomTargetConfiguration
+        {...defaultProps}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setRawConfigJson={mockSetRawConfigJson}
+      />,
+    );
+
+    const targetIdInput = screen.getByRole('textbox', { name: /Target ID/i });
+    const newId = 'openai:chat:gpt-4o';
+
+    await user.click(targetIdInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste(newId);
+
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('id', newId);
+  });
+});
 
 describe('CustomTargetConfiguration', () => {
   it('shows valid Open Interpreter target and configuration examples', async () => {
