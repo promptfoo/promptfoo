@@ -1328,7 +1328,7 @@ The [legacy Assistants evaluation guide](/docs/guides/evaluate-openai-assistants
 
 Azure AI Foundry Agents let promptfoo run an existing Foundry agent through the Azure AI Projects SDK (`@azure/ai-projects`) and the v2 agent runtime. Promptfoo resolves the agent from your Azure AI Foundry project, then calls the Responses API with an `agent_reference`.
 
-Each provider instance reuses its SDK clients and agent lookup across concurrent requests. Failed client initialization or agent lookup can retry on a later request. Foundry retains the SDK's `DefaultAzureCredential` chain, including environment, workload identity, managed identity, and developer credentials; SDK token refresh does not require recreating the clients.
+Each provider instance reuses its project client, credential, and agent lookup across concurrent requests. Failed client initialization or agent lookup can retry on a later request. Each invocation gets its own OpenAI Responses client. Foundry retains the SDK's `DefaultAzureCredential` chain, including environment, workload identity, managed identity, and developer credentials.
 
 ### Key Differences from Standard Azure Assistants
 
