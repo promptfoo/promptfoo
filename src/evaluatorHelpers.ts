@@ -71,14 +71,17 @@ export function resolveVariables(
         continue;
       }
       const value = variables[key] as string;
-      const match = regex.exec(value);
+      const match = regex.exec(maskNunjucksBlocks(value));
       if (match) {
         const [placeholder, varName] = match;
         if (variables[varName] === undefined) {
           // Do nothing - final nunjucks render will fail if necessary.
           // logger.warn(`Variable "${varName}" not found for substitution.`);
         } else {
-          variables[key] = value.replace(placeholder, variables[varName] as string);
+          variables[key] =
+            value.slice(0, match.index) +
+            variables[varName] +
+            value.slice(match.index + placeholder.length);
           if (skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName)) {
             varsResolvedFromSkipped?.add(key);
           }
@@ -90,6 +93,31 @@ export function resolveVariables(
   } while (!resolved && iterations < 5);
 
   return variables;
+}
+
+/**
+ * Hide literal Nunjucks contents from variable-to-variable resolution. Spaces
+ * preserve match offsets, so substitutions can use the original string without
+ * introducing placeholders that could collide with variable contents.
+ */
+function maskNunjucksBlocks(value: string): string {
+  // Only raw blocks, comments, and quoted expressions are masked.
+  if (!/['"]|\{[%#]/.test(value)) {
+    return value;
+  }
+  // An expression cannot contain an unquoted `{{`, so a failed match stops at the next one
+  // instead of rescanning the rest of the value.
+  const pattern =
+    /\{%-?\s*raw\s*-?%\}[\s\S]*?\{%-?\s*endraw\s*-?%\}|\{#[\s\S]*?#\}|\{\{(?:[^'"{]|\{(?!\{)|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')*?\}\}/g;
+
+  return value.replace(pattern, (block) => {
+    // Plain variable references still need resolution. Expressions with quoted
+    // literals are left intact for Nunjucks, including literals after operators.
+    if (block.startsWith('{{') && !/['"]/.test(block)) {
+      return block;
+    }
+    return ' '.repeat(block.length);
+  });
 }
 
 // Utility: Detect partial/unclosed Nunjucks tags and wrap in {% raw %} if needed
