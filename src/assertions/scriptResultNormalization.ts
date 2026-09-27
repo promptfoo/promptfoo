@@ -81,11 +81,7 @@ export function normalizeScriptObjectResult(
 
   if (!isGradingResult(mappedObj)) {
     throw new Error(
-      `${labels.language} assertion must return a boolean, number, or {pass, score, reason} object. Got instead:\n${JSON.stringify(
-        mappedObj,
-        null,
-        2,
-      )}`,
+      `${labels.language} assertion must return a boolean, number, or {pass, score, reason} object with finite scores and weights. Got type ${typeof result}.`,
     );
   }
 
