@@ -101,11 +101,21 @@ You need Docker because OSWorld runs a desktop environment:
 - Python with Inspect OSWorld dependencies; OpenTelemetry for tracing
 - The SDK and API key for the model provider you choose
 
-Install the Python dependencies:
+For the default OpenAI model, install:
 
 ```bash
 python -m pip install 'inspect-evals[osworld]>=0.21,<0.23' 'openai>=3.19.2,<4'
-# Optional, for the traced commands in this guide:
+```
+
+For Anthropic, run this command instead:
+
+```bash
+python -m pip install 'inspect-evals[osworld]>=0.21,<0.23' 'anthropic>=1.7.0,<2'
+```
+
+Optionally, install tracing support for the traced commands in this guide:
+
+```bash
 python -m pip install 'opentelemetry-sdk>=1.44,<2' 'opentelemetry-exporter-otlp-proto-http>=1.44,<2'
 ```
 
