@@ -56,7 +56,8 @@ export function requestsStructuredCodeScanOutput(argv: readonly string[]): boole
   let lastFormat: string | undefined;
 
   for (; index < argv.length; index++) {
-    const arg = argv[index];
+    // Commander permits repeated boolean -v flags before the value-taking -f/-c flags.
+    const arg = argv[index].replace(/^-v+(?=[fc])/, '-');
     if (arg === '--') {
       // Conventional positional separator; nothing past it is a flag.
       break;
@@ -88,8 +89,5 @@ export function requestsStructuredCodeScanOutput(argv: readonly string[]): boole
     }
   }
 
-  if (jsonFlag) {
-    return true;
-  }
-  return lastFormat === 'json' || lastFormat === 'sarif';
+  return jsonFlag || lastFormat === 'json' || lastFormat === 'sarif';
 }

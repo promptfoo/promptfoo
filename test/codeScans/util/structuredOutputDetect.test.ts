@@ -1,3 +1,4 @@
+import { Command } from 'commander';
 import { describe, expect, it } from 'vitest';
 import { requestsStructuredCodeScanOutput } from '../../../src/codeScan/util/structuredOutputDetect';
 
@@ -84,6 +85,42 @@ describe('requestsStructuredCodeScanOutput', () => {
     expect(requestsStructuredCodeScanOutput(argv('code-scans', 'run', '-fsarif'))).toBe(true);
     expect(requestsStructuredCodeScanOutput(argv('code-scans', 'run', '-fjson'))).toBe(true);
     expect(requestsStructuredCodeScanOutput(argv('code-scans', 'run', '-ftext'))).toBe(false);
+  });
+
+  it.each([
+    ['-vfsarif'],
+    ['-vvfjson'],
+    ['-vf', 'sarif'],
+    ['-vvf', 'json'],
+    ['-vftext'],
+    ['-f', '=sarif'],
+    ['-vfsarif', '-vftext'],
+    ['-vftext', '-vvfjson'],
+    ['-vc', '--json'],
+    ['-vc--json'],
+    ['-c', '-vfsarif'],
+    ['-vcsarif', '--format', 'json'],
+    ['--base', '-vfsarif'],
+    ['--', '-vfsarif'],
+  ])('matches Commander for short option clusters %j', (...options) => {
+    const program = new Command().exitOverride();
+    const run = program
+      .command('code-scans')
+      .command('run')
+      .argument('[repo-path]')
+      .option('-v, --verbose')
+      .option('-c, --config <path>')
+      .option('--base <ref>')
+      .option('--json')
+      .option('-f, --format <format>', 'Output format', 'text')
+      .action(() => {});
+    const args = ['code-scans', 'run', ...options];
+    program.parse(args, { from: 'user' });
+    const parsed = run.opts();
+
+    expect(requestsStructuredCodeScanOutput(args)).toBe(
+      Boolean(parsed.json || parsed.format === 'json' || parsed.format === 'sarif'),
+    );
   });
 
   it('returns false for --format text (the default)', () => {

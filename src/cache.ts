@@ -179,6 +179,7 @@ function getCacheFileIdentity(filePath: string) {
 function getCacheBackend(
   cacheEnabled = getEffectiveCacheEnabled(),
   cachePath?: string,
+  retain = cacheEnabled,
 ): CacheBackend {
   const cacheType =
     getEnvString('PROMPTFOO_CACHE_TYPE') ||
@@ -197,8 +198,8 @@ function getCacheBackend(
         )
       : undefined;
   const identity = JSON.stringify(filePath ?? null);
-  let backend = cacheEnabled ? cacheBackends.get(identity) : undefined;
-  if (!backend && cacheEnabled && filePath) {
+  let backend = retain ? cacheBackends.get(identity) : undefined;
+  if (!backend && retain && filePath) {
     const fileIdentity = getCacheFileIdentity(filePath);
     if (fileIdentity) {
       // Resolve an unfamiliar alias against live paths, avoiding a stale inode index.
@@ -220,7 +221,7 @@ function getCacheBackend(
       writes: new Map(),
       clears: new Map(),
     };
-    if (cacheEnabled) {
+    if (retain) {
       cacheBackends.set(identity, backend);
     }
   }
@@ -798,7 +799,8 @@ function getInflightFetchCacheKey(cacheKey: string, url: RequestInfo, options: R
  * separate eval processes cannot both attribute the same background response's usage.
  */
 export function claimCacheKeyOnce(cacheKey: string): boolean {
-  const backend = getCacheBackend();
+  // Disabling response caching must still retain process-local one-time claims.
+  const backend = getCacheBackend(getEffectiveCacheEnabled(), undefined, true);
   const claimedCacheKeys = backend.claims;
   const scopedCacheKey = getScopedCacheKey(cacheKey);
   if (claimedCacheKeys.has(scopedCacheKey)) {

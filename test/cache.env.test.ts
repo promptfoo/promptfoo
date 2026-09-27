@@ -593,6 +593,94 @@ describe('invocation-scoped cache settings', () => {
     expect(fs.existsSync(path.join(cachePath, 'cache.json'))).toBe(true);
   });
 
+  it.each(['api', 'scope', 'env'] as const)(
+    'remembers one-time claims while caching is disabled by %s without touching disk',
+    async (mode) => {
+      const cachePath = path.join(tempDir, 'disabled-claims');
+      await cliState.withEnv(
+        { ...disk(cachePath), ...(mode === 'env' ? { PROMPTFOO_CACHE_ENABLED: 'false' } : {}) },
+        async () => {
+          if (mode === 'api') {
+            cache.disableCache();
+          }
+          const run = async () => {
+            const mkdir = vi.spyOn(fs, 'mkdirSync').mockImplementation(() => {
+              throw new Error('Disabled claims must not initialize a disk cache');
+            });
+            expect(cache.claimCacheKeyOnce('usage')).toBe(true);
+            expect(cache.claimCacheKeyOnce('usage')).toBe(false);
+            await cache.withCacheNamespace('other', async () => {
+              expect(cache.claimCacheKeyOnce('usage')).toBe(true);
+              expect(cache.claimCacheKeyOnce('usage')).toBe(false);
+            });
+            expect(cache.claimCacheKeyOnce('usage')).toBe(false);
+            expect(mkdir).not.toHaveBeenCalled();
+          };
+          if (mode === 'scope') {
+            await cache.withCacheEnabled(false, run);
+          } else {
+            await run();
+          }
+        },
+      );
+      expect(fs.existsSync(cachePath)).toBe(false);
+    },
+  );
+
+  it('preserves memory claims across disable and re-enable without sharing disabled data', async () => {
+    await cliState.withEnv(memory, async () => {
+      await cache.getCache().set('response', 'enabled');
+      expect(cache.claimCacheKeyOnce('usage')).toBe(true);
+      cache.disableCache();
+      expect(cache.claimCacheKeyOnce('usage')).toBe(false);
+      expect(cache.claimCacheKeyOnce('disabled-usage')).toBe(true);
+      const disabled = cache.getCache();
+      expect(await disabled.get('response')).toBeUndefined();
+      await disabled.set('response', 'disabled');
+      expect(await cache.getCache().get('response')).toBeUndefined();
+      cache.enableCache();
+      expect(cache.claimCacheKeyOnce('disabled-usage')).toBe(false);
+      expect(await cache.getCache().get('response')).toBe('enabled');
+      cache.disableCache();
+      await cache.clearCache();
+      expect(cache.claimCacheKeyOnce('usage')).toBe(true);
+      expect(cache.claimCacheKeyOnce('usage')).toBe(false);
+    });
+  });
+
+  it('keeps disabled memory claims separate from disk claims and clears both explicitly', async () => {
+    await cliState.withEnv(disk(path.join(tempDir, 'claim-transition')), async () => {
+      cache.disableCache();
+      expect(cache.claimCacheKeyOnce('usage')).toBe(true);
+      expect(cache.claimCacheKeyOnce('usage')).toBe(false);
+      cache.enableCache();
+      expect(cache.claimCacheKeyOnce('usage')).toBe(true);
+      expect(cache.claimCacheKeyOnce('usage')).toBe(false);
+      cache.disableCache();
+      expect(cache.claimCacheKeyOnce('usage')).toBe(false);
+      await cache.clearCache();
+      expect(cache.claimCacheKeyOnce('usage')).toBe(true);
+      cache.enableCache();
+      expect(cache.claimCacheKeyOnce('usage')).toBe(true);
+    });
+  });
+
+  it('retains failed disk-persistence claims when caching is disabled and restored', async () => {
+    await cliState.withEnv(disk(path.join(tempDir, 'read-only-claims')), async () => {
+      const open = vi.spyOn(fs, 'openSync').mockImplementation(() => {
+        throw Object.assign(new Error('Read-only fixture'), { code: 'EROFS' });
+      });
+      expect(cache.claimCacheKeyOnce('usage')).toBe(true);
+      expect(cache.claimCacheKeyOnce('usage')).toBe(false);
+      cache.disableCache();
+      expect(cache.claimCacheKeyOnce('usage')).toBe(true);
+      expect(cache.claimCacheKeyOnce('usage')).toBe(false);
+      cache.enableCache();
+      expect(cache.claimCacheKeyOnce('usage')).toBe(false);
+      expect(open).toHaveBeenCalledOnce();
+    });
+  });
+
   it.each(['existing', 'new'])(
     'shares a disk writer through %s directory aliases',
     async (kind) => {
