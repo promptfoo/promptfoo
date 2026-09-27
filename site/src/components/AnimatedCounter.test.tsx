@@ -19,6 +19,7 @@ function advance(timestamp: number) {
 
 describe('AnimatedCounter', () => {
   beforeEach(() => {
+    disconnect.mockReset();
     frames = new Map();
     nextFrame = 0;
     vi.stubGlobal(
@@ -106,9 +107,10 @@ describe('AnimatedCounter', () => {
     intersect(true);
     advance(100);
     expect(frames.size).toBe(1);
+    const disconnectsBeforeUnmount = disconnect.mock.calls.length;
     unmount();
     expect(frames.size).toBe(0);
-    expect(disconnect).toHaveBeenCalled();
+    expect(disconnect).toHaveBeenCalledTimes(disconnectsBeforeUnmount + 1);
   });
 
   it('cancels old animation work when the target changes', () => {
