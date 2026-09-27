@@ -136,10 +136,6 @@ export class Telemetry {
   }
 
   async identify() {
-    if (clientRegistry.exiting || this.disabled || isTestMode()) {
-      return;
-    }
-
     const client = this.getPostHogClient();
     if (client) {
       try {
