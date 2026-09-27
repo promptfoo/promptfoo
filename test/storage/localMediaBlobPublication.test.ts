@@ -60,26 +60,26 @@ describe('completed media blob publication', () => {
     });
   });
 
-  it('repairs metadata removed by a delete between publication renames', async () => {
+  it('recovers after a delete between data and metadata publication', async () => {
     const provider = new FilesystemBlobStorageProvider({ basePath: directory });
-    const metadataPublished = createDeferred<void>();
+    const dataPublished = createDeferred<void>();
     const resumePublication = createDeferred<void>();
     vi.mocked(fs.rename).mockImplementation(async (source, destination) => {
       await realFs.rename(source, destination);
-      if (String(destination).endsWith('.meta.json')) {
-        metadataPublished.resolve();
+      if (destination === provider.getFilePath(hash)) {
+        dataPublished.resolve();
         await resumePublication.promise;
       }
     });
     const writing = provider.store(data, 'image/jpeg');
-    await metadataPublished.promise;
+    await dataPublished.promise;
     try {
       await new FilesystemBlobStorageProvider({ basePath: directory }).deleteByHash(hash);
     } finally {
       resumePublication.resolve();
       await writing;
     }
-    expect((await provider.getByHash(hash)).data).toEqual(data);
+    await expect(provider.getByHash(hash)).rejects.toThrow(`Blob not found: ${hash}`);
     vi.mocked(fs.rename).mockImplementation(realFs.rename);
 
     const restarted = new FilesystemBlobStorageProvider({ basePath: directory });
@@ -220,7 +220,13 @@ describe('completed media blob publication', () => {
       }
       const provider = new FilesystemBlobStorageProvider({ basePath: directory });
       await expect(provider.store(data, 'image/jpeg')).rejects.toBe(failure);
-      expect(await provider.exists(hash)).toBe(false);
+      expect(await provider.exists(hash)).toBe(stage === 'metadata rename');
+      if (stage === 'metadata rename') {
+        expect(await provider.getByHash(hash)).toMatchObject({
+          data,
+          metadata: { mimeType: 'application/octet-stream' },
+        });
+      }
       const parent = path.dirname(provider.getFilePath(hash));
       expect(
         (await fs.readdir(parent)).filter(
@@ -293,5 +299,31 @@ describe('completed media blob publication', () => {
     expect(await fs.readdir(path.dirname(provider.getFilePath(hash)))).toEqual(
       expect.arrayContaining([hash, `${hash}.meta.json`]),
     );
+  });
+
+  it('preserves committed metadata when a competing data publication fails', async () => {
+    const failure = Object.assign(new Error('fixture publish failure'), { code: 'EACCES' });
+    const provider = new FilesystemBlobStorageProvider({ basePath: directory });
+    let failedWriterDirectory: string | undefined;
+    vi.mocked(fs.rename).mockImplementation(async (source, destination) => {
+      if (!failedWriterDirectory) {
+        failedWriterDirectory = path.dirname(source as string);
+        await new FilesystemBlobStorageProvider({ basePath: directory }).store(data, 'video/mp4');
+      }
+      if (source === path.join(failedWriterDirectory, 'data')) {
+        throw failure;
+      }
+      return realFs.rename(source, destination);
+    });
+
+    await expect(provider.store(data, 'image/jpeg')).rejects.toBe(failure);
+    expect(await provider.getByHash(hash)).toMatchObject({
+      data,
+      metadata: { mimeType: 'video/mp4' },
+    });
+    expect(await provider.store(data, 'image/jpeg')).toMatchObject({
+      deduplicated: true,
+      ref: { mimeType: 'video/mp4' },
+    });
   });
 });

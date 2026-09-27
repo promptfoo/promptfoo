@@ -126,9 +126,9 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
       await fsPromises.writeFile(stagedMetadata, JSON.stringify(metadata, null, 2), {
         flag: 'wx',
       });
-      await fsPromises.rename(stagedMetadata, this.metadataPath(filePath));
-      // Publish bytes last so readers never observe partially written data.
+      // Publish complete bytes first: a failed data rename must not change another writer's MIME.
       await fsPromises.rename(stagedData, filePath);
+      await fsPromises.rename(stagedMetadata, this.metadataPath(filePath));
     } finally {
       try {
         await fsPromises.rm(stagingDir, { recursive: true, force: true });
