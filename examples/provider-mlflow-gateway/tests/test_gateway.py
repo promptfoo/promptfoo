@@ -185,6 +185,7 @@ store.create_gateway_endpoint(
                         "-c",
                         "examples/provider-mlflow-gateway/promptfooconfig.yaml",
                         "--no-cache",
+                        "--no-share",
                         "-o",
                         str(result_path),
                     ],
