@@ -812,6 +812,101 @@ describe('JavaScript file references', () => {
     expect(result.assertion?.value).toContain('() => false');
   });
 
+  it('preserves the existing two reads of a getter-backed result score', async () => {
+    let reads = 0;
+    const assertion: Assertion = {
+      type: 'javascript',
+      value: () => ({
+        pass: true,
+        get score() {
+          return ++reads <= 2 ? 1 : Number.POSITIVE_INFINITY;
+        },
+        reason: 'Custom reason',
+      }),
+    };
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      assertion,
+      test: {},
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({ pass: true, score: 1, reason: 'Custom reason' });
+    expect(reads).toBe(2);
+    expect(JSON.parse(JSON.stringify(result)).score).toBe(1);
+  });
+
+  it.each([Number.POSITIVE_INFINITY, Number.NaN])(
+    'rejects a score that becomes %s when the result is normalized',
+    async (score) => {
+      let reads = 0;
+      const result = await runAssertion({
+        assertion: {
+          type: 'javascript',
+          value: () => ({
+            pass: true,
+            get score() {
+              return ++reads === 1 ? 1 : score;
+            },
+            reason: 'Custom grade',
+          }),
+        },
+        test: {},
+        providerResponse: { output: 'Test output' },
+      });
+
+      expect(result).toMatchObject({ pass: false, score: 0 });
+      expect(result.reason).toContain('GradingResult object with a finite score');
+      expect(reads).toBe(2);
+      expect(JSON.parse(JSON.stringify(result)).score).toBe(0);
+    },
+  );
+
+  it.each(['Infinity', 'NaN'])(
+    'omits inline source when a normalized score becomes %s',
+    async (score) => {
+      const value = `let reads = 0;\nreturn { pass: true, get score() { return ++reads === 1 ? 1 : ${score}; }, reason: 'normalized-score-placeholder' };`;
+      const result = await runAssertion({
+        assertion: { type: 'javascript', value },
+        test: {},
+        providerResponse: { output: 'Test output' },
+      });
+
+      expect(result).toMatchObject({ pass: false, score: 0 });
+      expect(result.reason).toContain('GradingResult object with a finite score');
+      expect(result.reason).not.toContain('normalized-score-placeholder');
+      expect(result.assertion?.value).toBe(value);
+    },
+  );
+
+  it.each([Number.POSITIVE_INFINITY, Number.NaN])(
+    'rejects a file assertion score that becomes %s during normalization',
+    async (score) => {
+      let reads = 0;
+      vi.mocked(path.resolve).mockReturnValue('/mocked/path/to/assert.js');
+      vi.mocked(path.extname).mockReturnValue('.js');
+      vi.mocked(isPackagePath).mockReturnValue(false);
+      vi.mocked(importModule).mockResolvedValue(() => ({
+        pass: true,
+        get score() {
+          return ++reads === 1 ? 1 : score;
+        },
+        reason: 'File grade',
+      }));
+
+      const result = await runAssertion({
+        assertion: { type: 'javascript', value: 'file:///path/to/assert.js' },
+        test: {},
+        providerResponse: { output: 'Test output' },
+      });
+
+      expect(result).toMatchObject({ pass: false, score: 0 });
+      expect(result.reason).toContain('GradingResult object with a finite score');
+      expect(reads).toBe(2);
+    },
+  );
+
   it.each([
     ['true', () => true, true, 1],
     ['false', () => false, false, 0],
@@ -846,6 +941,197 @@ describe('JavaScript file references', () => {
     },
   );
 
+  it.each([
+    '1 / 0',
+    '-1 / 0',
+    '0 / 0',
+    '({ pass: true, score: Infinity, reason: "Custom" })',
+    '({ pass: true, score: 1, reason: "Custom", namedScores: { quality: NaN } })',
+    '({ pass: true, score: 1, reason: "Custom", namedScoreWeights: { quality: Infinity } })',
+    '({ pass: true, score: 1, reason: "Custom", componentResults: [{ pass: true, score: Infinity, reason: "Nested" }] })',
+    '({ pass: true, score: 1, reason: "Custom", namedScores: new Date(0) })',
+    '({ pass: true, score: 1, reason: "Custom", namedScoreWeights: new Map([["quality", 1]]) })',
+    '({ pass: true, score: 1, reason: "Custom", namedScores: new Set([1]) })',
+    '({ pass: true, score: 1, reason: "Custom", namedScores: Object.defineProperty([1], Symbol.toStringTag, { value: "Object" }) })',
+    '({ pass: true, score: 1, reason: "Custom", namedScoreWeights: Object.defineProperty(new Map([["quality", 1]]), Symbol.toStringTag, { value: "Object" }) })',
+  ])('rejects invalid inline assertion results: %s', async (value) => {
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: { type: 'javascript', value },
+      test: {},
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({ pass: false, score: 0 });
+    expect(result.reason).toContain('Custom function threw error:');
+    expect(result.reason).toContain('finite');
+    expect(result.namedScores).toBeUndefined();
+    expect(result.namedScoreWeights).toBeUndefined();
+    expect(result.componentResults).toBeUndefined();
+  });
+
+  it('rejects a nonfinite async function result before applying inverse logic', async () => {
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: { type: 'not-javascript', value: async () => Number.NaN },
+      test: {},
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({ pass: false, score: 0 });
+    expect(result.reason).toContain('finite');
+  });
+
+  it('omits rejected object payloads from validation errors', async () => {
+    const result = await runAssertion({
+      assertion: {
+        type: 'javascript',
+        value: () => ({
+          pass: true,
+          score: Number.NaN,
+          reason: 'Custom grade',
+          metadata: { http: { requestHeaders: { authorization: 'diagnostic-placeholder' } } },
+        }),
+      },
+      test: {},
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({ pass: false, score: 0 });
+    expect(result.reason).toContain('finite scores and weights. Got type object.');
+    expect(result.reason).not.toContain('diagnostic-placeholder');
+    expect(result.reason).not.toContain('requestHeaders');
+    expect(result.metadata).toBeUndefined();
+  });
+
+  it.each([
+    'score: NaN',
+    'score: 1, namedScores: { quality: Infinity }',
+    'score: 1, componentResults: [{ pass: true, score: Infinity, reason: "Child" }]',
+  ])('omits rendered source from invalid grading diagnostics: %s', async (fields) => {
+    const value = `({ pass: true, reason: "Custom grade", ${fields}, metadata: { note: "{{ diagnosticMarker }}" } })`;
+    const result = await runAssertion({
+      assertion: { type: 'javascript', value },
+      test: { vars: { diagnosticMarker: 'diagnostic-placeholder' } },
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({ pass: false, score: 0 });
+    expect(result.reason).toContain('finite scores and weights. Got type object.');
+    expect(result.reason).not.toContain('diagnostic-placeholder');
+    expect(result.assertion?.value).toBe(value);
+    expect(result.metadata?.renderedAssertionValue).toContain('diagnostic-placeholder');
+  });
+
+  it.each([
+    ['runtime exception', '// diagnostic-placeholder\nthrow new Error("Ordinary failure");'],
+    ['syntax error', '// diagnostic-placeholder\nreturn ('],
+    ['false result', 'false /* diagnostic-placeholder */'],
+  ])('preserves rendered source for an ordinary %s', async (_kind, value) => {
+    const result = await runAssertion({
+      assertion: { type: 'javascript', value },
+      test: {},
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({ pass: false, score: 0 });
+    expect(result.reason).toContain(value);
+    expect(result.assertion?.value).toBe(value);
+  });
+
+  it.each(['namedScores', 'namedScoreWeights', 'componentResults'])(
+    'accepts nullable %s on JavaScript results and nested components',
+    async (field) => {
+      const result = await runAssertion({
+        prompt: 'Some prompt',
+        assertion: {
+          type: 'javascript',
+          value: `(${JSON.stringify({
+            pass: true,
+            score: 0.75,
+            reason: 'Custom',
+            [field]: null,
+            componentResults: [{ pass: true, score: 0.5, reason: 'Nested', [field]: null }],
+          })})`,
+        },
+        test: {},
+        providerResponse: { output: 'Test output' },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        score: 0.75,
+        componentResults: [{ pass: true, score: 0.5, [field]: null }],
+      });
+    },
+  );
+
+  it.each([
+    'new Array(1)',
+    'Object.assign(new Array(1), { [Symbol.iterator]: function* () { yield { pass: true, score: 1, reason: "Iterator result" }; } })',
+  ])('rejects sparse nested results before they become null components: %s', async (components) => {
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: {
+        type: 'javascript',
+        value: `({ pass: true, score: 1, reason: "", componentResults: ${components} })`,
+      },
+      test: {},
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({ pass: false, score: 0 });
+    expect(result.reason).toContain('Custom function threw error:');
+    expect(result.componentResults).toBeUndefined();
+  });
+
+  it('rejects cyclic component results with the ordinary validation error', async () => {
+    const grade: GradingResult = { pass: true, score: 1, reason: 'Custom grade' };
+    grade.componentResults = [grade];
+
+    const result = await runAssertion({
+      assertion: { type: 'javascript', value: () => grade },
+      test: {},
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({ pass: false, score: 0 });
+    expect(result.reason).toContain('finite scores and weights. Got type object.');
+    expect(result.reason).not.toContain('RangeError');
+    expect(result.componentResults).toBeUndefined();
+  });
+
+  it('rejects nonfinite metrics from a file assertion', async () => {
+    vi.mocked(path.resolve).mockReturnValue('/mocked/path/to/assert.js');
+    vi.mocked(path.extname).mockReturnValue('.js');
+    vi.mocked(isPackagePath).mockReturnValue(false);
+    vi.mocked(importModule).mockResolvedValue(
+      vi.fn(() => ({ pass: true, score: 1, reason: '', namedScores: { quality: Infinity } })),
+    );
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: { type: 'javascript', value: 'file:///path/to/assert.js' },
+      test: {},
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({ pass: false, score: 0 });
+    expect(result.reason).toContain('finite');
+    expect(result.namedScores).toBeUndefined();
+  });
+
+  it.each([-2, 2])('preserves finite numeric scores outside 0–1: %s', async (score) => {
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: { type: 'javascript', value: () => score },
+      test: {},
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({ pass: score > 0, score });
+  });
+
   it('should honor threshold when a direct function-valued javascript assertion returns a number', async () => {
     const output = 'Expected output';
     const assertion: Assertion = {
@@ -872,6 +1158,68 @@ describe('JavaScript file references', () => {
       },
     });
   });
+
+  describe.each(['inherited', 'non-enumerable'] as const)('%s numeric threshold', (kind) => {
+    it.each([
+      ['javascript', 0.25, false],
+      ['javascript', 0.5, true],
+      ['javascript', 0.75, true],
+      ['not-javascript', 0.25, true],
+      ['not-javascript', 0.5, false],
+      ['not-javascript', 0.75, false],
+    ] as const)('grades %s score %s before serializing metadata', async (type, score, pass) => {
+      const value = () => score;
+      const assertion: Assertion = Object.assign(
+        kind === 'inherited' ? Object.create({ threshold: 0.5 }) : {},
+        { type, value },
+      );
+      if (kind === 'non-enumerable') {
+        Object.defineProperty(assertion, 'threshold', { value: 0.5 });
+      }
+      Object.freeze(assertion);
+
+      const result = await runAssertion({
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Threshold fixture' },
+      });
+
+      expect(result).toMatchObject({ pass, score });
+      expect(result.assertion).toEqual({ type, value: value.toString() });
+      expect(assertion.value).toBe(value);
+      expect(assertion.threshold).toBe(0.5);
+    });
+  });
+
+  it.each(['javascript', 'not-javascript'] as const)(
+    'preserves threshold getter ordering for %s numeric results',
+    async (type) => {
+      const reads: number[] = [];
+      const assertion: Assertion = {
+        type,
+        value: () => 0.6,
+        get threshold() {
+          const value = [0.7, 0.7, 0.7, 0.5][reads.length] ?? 0.5;
+          reads.push(value);
+          return value;
+        },
+      };
+
+      const result = await runAssertion({
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Threshold getter fixture' },
+      });
+
+      expect(result).toMatchObject({
+        pass: type === 'javascript',
+        score: 0.6,
+        assertion: { type, threshold: 0.7, value: expect.any(String) },
+      });
+      // The dispatcher serializes once, followed by metadata serialization and two comparisons.
+      expect(reads).toEqual([0.7, 0.7, 0.7, 0.5]);
+    },
+  );
 
   const inverseFunctionAssertionCases: [string, Assertion, boolean, number, string][] = [
     [
@@ -933,6 +1281,64 @@ describe('JavaScript file references', () => {
           value: expect.any(String),
         },
       });
+    },
+  );
+
+  it.each(['prototype', 'non-enumerable'] as const)(
+    'preserves %s grading fields from frozen custom results',
+    async (storage) => {
+      for (const rawPass of [false, true]) {
+        for (const inverse of [false, true]) {
+          class CustomResult {
+            score = 0.4;
+            namedScores = { safety: 0.7 };
+            tokensUsed = { total: 3 };
+            get pass() {
+              return rawPass;
+            }
+            get reason() {
+              return 'Custom reason';
+            }
+            get assertion(): Assertion {
+              return { type: 'javascript', value: () => false };
+            }
+          }
+          const grading = new CustomResult();
+          if (storage === 'non-enumerable') {
+            Object.defineProperties(grading, {
+              pass: { value: rawPass },
+              reason: { value: 'Custom reason' },
+            });
+          }
+          Object.freeze(grading);
+          const assertion: Assertion = {
+            type: inverse ? 'not-javascript' : 'javascript',
+            value: () => grading,
+          };
+          const result = await runAssertion({
+            prompt: 'Some prompt',
+            provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+            assertion,
+            test: {} as AtomicTestCase,
+            providerResponse: { output: 'Expected output' },
+          });
+          expect(result).toMatchObject({
+            pass: rawPass !== inverse,
+            score: 0.4,
+            reason: inverse
+              ? rawPass
+                ? 'Custom function returned true'
+                : 'Assertion passed'
+              : 'Custom reason',
+            namedScores: { safety: 0.7 },
+            tokensUsed: { total: 3 },
+            assertion: { type: 'javascript', value: '() => false' },
+          });
+          expect(Object.isFrozen(grading)).toBe(true);
+          expect(grading.pass).toBe(rawPass);
+          expect(grading.reason).toBe('Custom reason');
+        }
+      }
     },
   );
 
