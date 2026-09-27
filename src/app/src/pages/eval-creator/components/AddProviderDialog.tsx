@@ -58,9 +58,7 @@ export default function AddProviderDialog({
         setProviderType(getProviderTypeFromId(initialProvider.id));
         setStep('configure');
       } else {
-        // Use placeholder ID to prevent ProviderTypeSelector from auto-selecting HTTP
-        // The empty string is falsy and triggers the default, so use a truthy placeholder
-        setProvider({ id: '__selecting__', config: {} } as ProviderOptions);
+        setProvider(undefined);
         setProviderType(undefined);
         setStep('select');
       }
@@ -70,16 +68,12 @@ export default function AddProviderDialog({
   }, [open, initialProvider]);
 
   const handleProviderTypeSelect = (newProvider: ProviderOptions, type: string) => {
-    // Only move to configure step if user has made an explicit selection
-    // (not when ProviderTypeSelector auto-sets a default or we're using placeholder)
-    if (newProvider.id && newProvider.id !== '' && newProvider.id !== '__selecting__') {
-      validateRef.current = null;
-      setError(null);
-      setShouldValidate(false);
-      setProvider(newProvider);
-      setProviderType(type);
-      setStep('configure');
-    }
+    validateRef.current = null;
+    setError(null);
+    setShouldValidate(false);
+    setProvider(newProvider);
+    setProviderType(type);
+    setStep('configure');
   };
 
   const handleSave = () => {
