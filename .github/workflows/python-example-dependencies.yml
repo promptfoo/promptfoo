@@ -38,10 +38,16 @@ jobs:
           import pathlib
           import subprocess
 
+          workflow = '.github/workflows/python-example-dependencies.yml'
           changed = subprocess.check_output([
               'git', 'diff', '--name-only', '-z', '--diff-filter=ACMR',
-              os.environ['BASE_SHA'] + '...' + os.environ['HEAD_SHA'], '--', 'examples/',
+              os.environ['BASE_SHA'] + '...' + os.environ['HEAD_SHA'], '--', 'examples/', workflow,
           ]).decode().split('\0')
+          if workflow in changed:
+              # Exercise every installer path when its selection or install logic changes.
+              changed = subprocess.check_output([
+                  'git', 'ls-files', '-z', '--', 'examples/',
+              ]).decode().split('\0')
           manifests = sorted(path for path in changed if path and pathlib.Path(path).is_file()
               and (pathlib.Path(path).match('requirements*.txt')
                    or pathlib.Path(path).name == 'pyproject.toml'))
