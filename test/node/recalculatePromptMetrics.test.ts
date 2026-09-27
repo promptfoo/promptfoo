@@ -12,6 +12,7 @@ import { recalculatePromptMetrics } from '../../src/node/recalculatePromptMetric
 import { deleteErrorResults } from '../../src/node/retry';
 import { ResultFailureReason } from '../../src/types/index';
 import { deleteEval } from '../../src/util/database';
+import { streamEvalCsv } from '../../src/util/eval/evalTableUtils';
 import {
   createCompletedPrompt,
   createEvaluateResult,
@@ -205,6 +206,54 @@ describe('replaying retained prompt metrics', () => {
     expect(metrics.tokenUsage.assertions).toBeUndefined();
   });
 
+  it.each([false, true])(
+    'preserves legacy metric discovery alongside known contributions (%s)',
+    async (knownSibling) => {
+      const evaluation = await saved({ namedScores: { quality: 1 }, namedScoresCount: undefined }, [
+        { gradingResult: null, namedScores: { quality: 1 } },
+        ...(knownSibling
+          ? [
+              {
+                namedScores: { fresh: 0.5 },
+                gradingResult: {
+                  pass: true,
+                  score: 1,
+                  reason: 'Known contribution',
+                  namedScoreWeights: { fresh: 2 },
+                  componentResults: [
+                    {
+                      pass: true,
+                      score: 1,
+                      reason: 'Passed',
+                      assertion: { type: 'contains' as const, metric: 'fresh' },
+                    },
+                  ],
+                },
+              },
+            ]
+          : []),
+      ]);
+      const csv = async (record: Eval) => {
+        const chunks: string[] = [];
+        await streamEvalCsv(record, {
+          write: (chunk) => {
+            chunks.push(chunk);
+          },
+        });
+        return chunks.join('');
+      };
+      const before = await csv(evaluation);
+      expect(before).toContain('Metric: quality');
+      await recalculatePromptMetrics(evaluation);
+      const reloaded = (await Eval.findById(evaluation.id))!;
+      expect(await csv(reloaded)).toBe(before);
+      expect(reloaded.prompts[0].metrics!.namedScoresCount).toBeUndefined();
+      if (knownSibling) {
+        expect(reloaded.prompts[0].metrics!.namedScoreWeights?.fresh).toBe(2);
+      }
+    },
+  );
+
   it('retains reconstructed target usage when restoring incurred grading totals', async () => {
     const evaluation = await saved(
       {
@@ -275,6 +324,46 @@ describe('replaying retained prompt metrics', () => {
     const release = await beginEvalRun(evaluation, () => recalculatePromptMetrics(evaluation));
     await release();
     expect((await Eval.findById(evaluation.id))!.prompts[0].metrics).toEqual(before);
+  });
+
+  it('recomputes formulas after retry debits a header with unpersisted work', async () => {
+    const evaluation = await saved(
+      {
+        testPassCount: 2,
+        testErrorCount: 1,
+        score: 2,
+        cost: 15,
+        tokenUsage: { total: 15, numRequests: 3 },
+        namedScores: { quality: 2, Rows: 3, Average: 2 / 3 },
+        namedScoresCount: { quality: 2 },
+        namedScoreWeights: { quality: 2 },
+      },
+      [
+        {
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+          score: 0,
+          cost: 4,
+          gradingResult: null,
+          response: { error: 'Old attempt', tokenUsage: { total: 4, numRequests: 1 } },
+        },
+        { cost: 1, namedScores: { quality: 1 } },
+      ],
+      {
+        derivedMetrics: [
+          { name: 'Rows', value: '__count' },
+          { name: 'Average', value: 'quality / __count' },
+        ],
+      },
+    );
+    const old = (await EvalResult.findManyByEvalId(evaluation.id)).find((row) => !row.success)!;
+    await deleteErrorResults([old.id], evaluation);
+    const debited = structuredClone(evaluation.prompts[0].metrics!);
+    await recalculatePromptMetrics(evaluation);
+    expect((await Eval.findById(evaluation.id))!.prompts[0].metrics).toEqual({
+      ...debited,
+      namedScores: { ...debited.namedScores, Rows: 2, Average: 1 },
+    });
   });
 
   it.each([false, true])(

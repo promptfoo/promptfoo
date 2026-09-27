@@ -3685,17 +3685,26 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   private async processEvalStepWithTimeout(
     evalStep: RunEvalOptions,
     index: number,
-    processOptions: Pick<ProcessEvalStepOptions, 'deferGrading' | 'providerCallQueue'>,
+    processOptions: Pick<
+      ProcessEvalStepOptions,
+      'deferGrading' | 'onRowsReady' | 'providerCallQueue' | 'shouldSkipStaleRows'
+    > & { abandonSignal?: AbortSignal },
     context: EvalProcessingContext,
   ) {
-    const { deferGrading = false, providerCallQueue } = processOptions;
+    const {
+      deferGrading = false,
+      onRowsReady,
+      providerCallQueue,
+      shouldSkipStaleRows,
+      abandonSignal,
+    } = processOptions;
     const timeoutMs = context.options.timeoutMs || getEvalTimeoutMs();
 
     if (timeoutMs <= 0) {
       return await this.processEvalStep(
         evalStep,
         index,
-        { deferGrading, providerCallQueue },
+        { deferGrading, onRowsReady, providerCallQueue, shouldSkipStaleRows },
         context,
       );
     }
@@ -3717,6 +3726,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       }
     };
 
+    abandonSignal?.addEventListener('abort', clearEvalStepTimeout, { once: true });
+
     try {
       return await Promise.race([
         this.processEvalStep(
@@ -3724,9 +3735,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           index,
           {
             deferGrading,
-            onRowsReady: clearEvalStepTimeout,
+            onRowsReady: () => {
+              clearEvalStepTimeout();
+              onRowsReady?.();
+            },
             providerCallQueue,
-            shouldSkipStaleRows: () => didTimeout,
+            shouldSkipStaleRows: () => didTimeout || Boolean(shouldSkipStaleRows?.()),
           },
           context,
         ),
@@ -3739,11 +3753,16 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         }),
       ]);
     } catch (error) {
+      if (shouldSkipStaleRows?.()) {
+        return;
+      }
       if (!didTimeout) {
         throw error;
       }
+      onRowsReady?.();
       await this.addEvalStepTimeoutResult(evalStep, index, timeoutMs, error, context);
     } finally {
+      abandonSignal?.removeEventListener('abort', clearEvalStepTimeout);
       clearEvalStepTimeout();
     }
   }
@@ -4061,16 +4080,35 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     prompts: CompletedPrompt[];
   }) {
     let lastPromptsFlush = 0;
-    const pending = new Set<Promise<void>>();
+    const pending = new Map<Promise<void>, { rowsReady: boolean }>();
+    const abandoned = new AbortController();
     try {
       await async.forEachOfLimit(
         concurrentRunEvalOptions,
         processingContext.concurrency,
         async (evalStep) => {
+          const state = { rowsReady: false };
+          const shouldSkipStaleRows = () => abandoned.signal.aborted && !state.rowsReady;
           const work = (async () => {
             checkAbort();
             const idx = evalStepIndexMap.get(evalStep)!;
-            await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
+            await this.processEvalStepWithTimeout(
+              evalStep,
+              idx,
+              {
+                abandonSignal: abandoned.signal,
+                shouldSkipStaleRows,
+                onRowsReady: () => {
+                  if (!abandoned.signal.aborted) {
+                    state.rowsReady = true;
+                  }
+                },
+              },
+              processingContext,
+            );
+            if (shouldSkipStaleRows()) {
+              return;
+            }
             processedIndices.add(idx);
             const now = Date.now();
             if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {
@@ -4078,7 +4116,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
               await this.store.appendPrompts(prompts);
             }
           })();
-          pending.add(work);
+          pending.set(work, state);
           try {
             await work;
           } finally {
@@ -4087,8 +4125,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         },
       );
     } finally {
-      // async stops scheduling on the first error without waiting for the other callbacks.
-      await Promise.allSettled(pending);
+      // async exits on scheduling errors while callbacks may still be running.
+      abandoned.abort();
+      await Promise.allSettled(
+        [...pending].filter(([, state]) => state.rowsReady).map(([work]) => work),
+      );
     }
   }
 

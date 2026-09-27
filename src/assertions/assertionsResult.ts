@@ -430,6 +430,9 @@ export class AssertionsResult {
       }
     }
 
+    // Fresh runtime metric names are literal; retain that provenance for inverse accounting.
+    this.result.metadata = { ...this.result.metadata, namedMetricCountsKnown: true };
+
     // Finite inputs can overflow when weighted or accumulated. Check the final
     // output after custom scoring has had an opportunity to replace those values.
     let metricEntries: Record<'namedScores' | 'namedScoreWeights', [string, number][]>;

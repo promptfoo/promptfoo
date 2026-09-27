@@ -130,7 +130,8 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
     const savedCount =
       newMetrics.testPassCount + newMetrics.testFailCount + newMetrics.testErrorCount;
     // Failed inserts can leave accounted work only in the header.
-    if (Number.isFinite(previousCount) && previousCount > savedCount) {
+    if (previous && Number.isFinite(previousCount) && previousCount > savedCount) {
+      await recomputeDerivedMetrics(previous, derivedMetrics, previousCount);
       continue;
     }
     // Stripped and historical rows cannot replace retained totals with guessed contributions.
@@ -151,7 +152,10 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
     for (const [name, buckets] of state.unknownNamedMetrics) {
       for (const bucket of buckets) {
         const value = previous?.[bucket]?.[name];
-        if (value === undefined) {
+        if (bucket === 'namedScoresCount' && !previous?.namedScoresCount) {
+          // A missing legacy map keeps row-level metric discovery available.
+          delete (newMetrics as NamedMetricAccumulator).namedScoresCount;
+        } else if (value === undefined) {
           delete newMetrics[bucket]?.[name];
         } else {
           newMetrics[bucket] ||= {};

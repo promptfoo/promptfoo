@@ -168,10 +168,7 @@ describe('evaluation run ownership', () => {
           {
             id: () => 'interrupted-writer',
             callApi: async (prompt) => {
-              if (prompt === 'slow') {
-                slowStarted.resolve();
-                await releaseSlow.promise;
-              } else {
+              if (prompt !== 'slow') {
                 await slowStarted.promise;
               }
               return { output: prompt, cost: 3, tokenUsage: { total: 2, numRequests: 1 } };
@@ -193,6 +190,18 @@ describe('evaluation run ownership', () => {
       },
       {
         ...nodeEvaluatorRuntime,
+        createEvaluationStore: (record) => {
+          const store = nodeEvaluatorRuntime.createEvaluationStore(record);
+          const append = store.appendResult.bind(store);
+          store.appendResult = async (row) => {
+            if (row.testIdx === 1) {
+              slowStarted.resolve();
+              await releaseSlow.promise;
+            }
+            await append(row);
+          };
+          return store;
+        },
         acquireEvaluationRun: async (record) => {
           const release = await nodeEvaluatorRuntime.acquireEvaluationRun!(record);
           return async (completed) => {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { AssertionsResult } from '../../src/assertions/assertionsResult';
 import {
   accumulateNamedMetric,
   backfillNamedScoreWeights,
@@ -193,6 +194,50 @@ describe('backfillNamedScoreWeights', () => {
 });
 
 describe('subtractNamedMetric', () => {
+  it.each([false, true])(
+    'reverses fresh fallback contributions after %s custom scoring replaces components',
+    async (replaceComponents) => {
+      const aggregation = new AssertionsResult({});
+      aggregation.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'No named scores until a later hook',
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'Literal runtime metric',
+              assertion: { type: 'javascript', metric: '{{ tag }}' },
+            },
+          ],
+        },
+      });
+      const gradingResult = await aggregation.testResult(
+        replaceComponents
+          ? async () => ({
+              pass: true,
+              score: 1,
+              reason: 'Replacement components',
+              componentResults: null,
+              metadata: { namedMetricCountsKnown: false },
+            })
+          : undefined,
+      );
+      const metrics = { namedScores: {}, namedScoresCount: {}, namedScoreWeights: {} };
+      const contribution = { metricName: 'quality', metricValue: 1, gradingResult };
+      accumulateNamedMetric(metrics, contribution);
+      accumulateNamedMetric(metrics, contribution);
+      subtractNamedMetric(metrics, contribution);
+      expect(metrics).toEqual({
+        namedScores: { quality: 1 },
+        namedScoresCount: { quality: 1 },
+        namedScoreWeights: { quality: 1 },
+      });
+    },
+  );
+
   it('preserves an absent metric weight inside a tracked map', () => {
     const metrics = {
       namedScores: { quality: 2 },

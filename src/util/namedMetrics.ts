@@ -16,8 +16,9 @@ function getContributingAssertionCount(
   gradingResult: GradingResult | null | undefined,
   metricName: string,
 ): number | undefined {
+  const countsKnown = gradingResult?.metadata?.namedMetricCountsKnown === true;
   if (!Array.isArray(gradingResult?.componentResults)) {
-    return undefined;
+    return countsKnown ? 1 : undefined;
   }
   let count = 0;
   for (const component of gradingResult.componentResults) {
@@ -34,6 +35,7 @@ function getContributingAssertionCount(
     if (metric === metricName) {
       count++;
     } else if (
+      !countsKnown &&
       typeof renderedMetric !== 'string' &&
       typeof metric === 'string' &&
       /\{[{%#]/.test(metric)
@@ -74,7 +76,7 @@ export function getNamedMetricContribution(
       ? metricWeightTotal === undefined
         ? undefined
         : metricValue * metricWeightTotal
-      : Array.isArray(gradingResult?.componentResults) || fallbackAssertionCount !== undefined
+      : Array.isArray(gradingResult?.componentResults) || assertionCount !== undefined
         ? metricValue
         : undefined,
   };
