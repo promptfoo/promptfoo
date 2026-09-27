@@ -212,7 +212,14 @@ describe('eval job result snapshots', () => {
     const target = `${filename}-target`;
     fs.writeFileSync(target, JSON.stringify(snapshot('forged')), { mode: 0o600 });
     fs.unlinkSync(filename);
-    fs.symlinkSync(target, filename);
+    try {
+      fs.symlinkSync(target, filename);
+    } catch (error) {
+      if (process.platform === 'win32' && (error as NodeJS.ErrnoException).code === 'EPERM') {
+        return;
+      }
+      throw error;
+    }
     expect(() => service.get('job')).toThrow();
   });
 
