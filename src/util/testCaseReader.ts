@@ -756,16 +756,21 @@ async function readTestsWithEnv(
   };
 
   if (typeof tests === 'string') {
-    tests = renderEnvOnlyInObject(tests);
-    if (tests.startsWith('az://')) {
-      return loadStandalone(tests);
+    const source = renderEnvOnlyInObject(tests);
+    if (source.startsWith('az://')) {
+      return loadStandalone(source);
     }
     // Points to a tests file with multiple test cases
-    if (tests.endsWith('yaml') || tests.endsWith('yml')) {
-      return loadTestsFromGlobWithEnv(tests, basePath, env, loadProviders);
+    if (source.endsWith('yaml') || source.endsWith('yml')) {
+      return loadTestsFromGlobWithEnv(source, basePath, env, loadProviders);
     }
-    // Points to a tests.{csv,json,yaml,yml,py,js,ts,mjs} or Google Sheet
-    return loadStandalone(tests);
+    const withoutScheme = source.replace(/^file:\/\//, '');
+    if (!hasGlobMagic(withoutScheme) || fs.existsSync(path.resolve(basePath, withoutScheme))) {
+      // Preserve standalone parsing for literal files, including names with glob characters.
+      return loadStandalone(source);
+    }
+    // Use the original reference so the array loader renders env templates consistently.
+    tests = [tests];
   } else if (
     typeof tests === 'object' &&
     tests !== null &&
