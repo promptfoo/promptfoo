@@ -1,10 +1,9 @@
 import unittest
 from unittest.mock import patch
 
-from langchain_core.messages import AIMessage
-
 import agent
 import provider
+from langchain_core.messages import AIMessage
 
 
 class ResearchAgentTest(unittest.TestCase):
