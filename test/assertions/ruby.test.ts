@@ -57,6 +57,107 @@ describe('Ruby assertions', () => {
     resetRubyMocks();
   });
 
+  it('omits rejected object payloads from validation errors', async () => {
+    vi.mocked(runRubyCode).mockResolvedValueOnce({
+      pass_: true,
+      score: 1,
+      reason: 'Custom grade',
+      named_scores: { quality: null },
+      metadata: { http: { requestHeaders: { authorization: 'diagnostic-placeholder' } } },
+    });
+
+    const result = await runAssertion({
+      assertion: { type: 'ruby', value: 'unused' },
+      test: {},
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({ pass: false, score: 0 });
+    expect(result.reason).toContain('finite scores and weights. Got type object.');
+    expect(result.reason).not.toContain('diagnostic-placeholder');
+    expect(result.reason).not.toContain('requestHeaders');
+    expect(result.metadata).toBeUndefined();
+  });
+
+  it.each([
+    ['namedScores', 'namedScores'],
+    ['named_scores', 'namedScores'],
+    ['namedScoreWeights', 'namedScoreWeights'],
+    ['named_score_weights', 'namedScoreWeights'],
+  ])(
+    'accepts nullable %s maps and component lists, including nested results',
+    async (field, mappedField) => {
+      const scriptResult = {
+        pass_: true,
+        score: 1,
+        reason: 'ok',
+        [field]: null,
+        component_results: [
+          { pass_: true, score: 0.75, reason: 'nested', [field]: null, component_results: null },
+        ],
+      };
+      vi.mocked(runRubyCode).mockResolvedValueOnce(scriptResult);
+
+      const result = await runAssertion({
+        prompt: 'Test',
+        assertion: { type: 'ruby', value: 'unused' },
+        test: {},
+        providerResponse: { output: 'Test output' },
+      });
+
+      expect(result).toMatchObject({ pass: true, score: 1, reason: 'ok' });
+      expect(result).toHaveProperty(mappedField, null);
+      expect(result.componentResults?.[0]).toMatchObject({
+        pass: true,
+        score: 0.75,
+        [mappedField]: null,
+        componentResults: null,
+      });
+      expect(scriptResult[field]).toBeNull();
+      expect(scriptResult.component_results[0][field]).toBeNull();
+    },
+  );
+
+  it.each([2, Number.POSITIVE_INFINITY])(
+    'validates snake_case weights in nested script results: %s',
+    async (weight) => {
+      const scriptResult = {
+        pass_: true,
+        score: 1,
+        reason: 'ok',
+        named_scores: { quality: 0.5 },
+        named_score_weights: { quality: 3 },
+        component_results: [
+          {
+            pass_: true,
+            score: 0.75,
+            reason: 'nested',
+            named_scores: { quality: 0.75 },
+            named_score_weights: { quality: weight },
+          },
+        ],
+      };
+      vi.mocked(runRubyCode).mockResolvedValueOnce(scriptResult);
+
+      const result = await runAssertion({
+        prompt: 'Test',
+        assertion: { type: 'ruby', value: 'unused' },
+        test: {},
+        providerResponse: { output: 'Test output' },
+      });
+
+      if (Number.isFinite(weight)) {
+        expect(result.namedScoreWeights).toEqual({ quality: 3 });
+        expect(result.componentResults?.[0].namedScoreWeights).toEqual({ quality: weight });
+      } else {
+        expect(result).toMatchObject({ pass: false, score: 0 });
+        expect(result.componentResults).toBeUndefined();
+      }
+      expect(scriptResult).not.toHaveProperty('namedScoreWeights');
+      expect(scriptResult.component_results[0]).not.toHaveProperty('namedScoreWeights');
+    },
+  );
+
   it.each([
     [
       'boolean',
