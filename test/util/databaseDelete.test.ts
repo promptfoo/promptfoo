@@ -23,12 +23,13 @@ import {
 } from '../../src/util/database';
 import { accumulateNamedMetric } from '../../src/util/namedMetrics';
 import {
+  accumulateGradingTokenUsage,
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../src/util/tokenUsageUtils';
 import EvalFactory from '../factories/evalFactory';
 
-import type { PromptMetrics } from '../../src/types/index';
+import type { GradingResult, PromptMetrics, ProviderResponse } from '../../src/types/index';
 
 vi.mock('../../src/database/signal', async () => {
   const actual = await vi.importActual('../../src/database/signal');
@@ -159,6 +160,260 @@ describe('database eval deletion', () => {
   });
 
   describe('deleteEvalResult', () => {
+    it('keeps deletion metrics when an older eval instance saves metadata', async () => {
+      const evaluation = await EvalFactory.create({ numResults: 2, resultTypes: ['success'] });
+      const stale = await Eval.findById(evaluation.id);
+      const [target] = await EvalResult.findManyByEvalId(evaluation.id);
+      await deleteEvalResult(evaluation.id, target.id);
+      const afterDelete = await Eval.findById(evaluation.id);
+
+      stale!.author = 'updated@example.com';
+      stale!.setGenerationDurationMs(25);
+      await stale!.save({ updatePrompts: false });
+
+      const afterSave = await Eval.findById(evaluation.id);
+      expect(afterSave?.author).toBe('updated@example.com');
+      expect(afterSave?.generationDurationMs).toBe(25);
+      expect(afterSave?.prompts).toEqual(afterDelete?.prompts);
+      expect(await EvalResult.findManyByEvalId(evaluation.id)).toHaveLength(1);
+    });
+
+    it.each([
+      {
+        name: 'cached and incurred buckets',
+        response: {
+          cached: true,
+          cost: 1,
+          incurredCost: 0.2,
+          tokenUsage: {
+            total: 0,
+            cached: 100,
+            numRequests: 0,
+            attacker: { total: 7, numRequests: 2 },
+            generation: { total: 6, numRequests: 1 },
+            incurredTokenUsage: {
+              total: 0,
+              numRequests: 0,
+              attacker: { total: 3, numRequests: 1 },
+              generation: { total: 2, numRequests: 1 },
+            },
+          },
+        },
+      },
+      {
+        name: 'omitted totals',
+        response: { cost: 1, tokenUsage: { prompt: 6, completion: 4 } },
+      },
+      {
+        name: 'uncached usage before incurred accounting begins',
+        response: { cost: 1, tokenUsage: { total: 10, numRequests: 1 } },
+      },
+    ])('removes the forward contribution of $name', async ({ response }) => {
+      const eval_ = await EvalFactory.create({ numResults: 2 });
+      const [target, survivor] = await EvalResult.findManyByEvalId(eval_.id);
+      const survivorResponse: ProviderResponse = {
+        output: 'survivor',
+        cached: true,
+        cost: 2,
+        incurredCost: 0.5,
+        tokenUsage: {
+          total: 20,
+          numRequests: 1,
+          attacker: { total: 5, numRequests: 1 },
+          incurredTokenUsage: { total: 10, numRequests: 1, attacker: { total: 2, numRequests: 1 } },
+        },
+      };
+      const targetGrade: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'multiple grading requests',
+        tokensUsed: { total: 9, numRequests: 3 },
+      };
+      const survivorGrade: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'surviving grader',
+        tokensUsed: { total: 4, numRequests: 1 },
+      };
+      const tokenUsage = createEmptyTokenUsage();
+      for (const [providerResponse, gradingResult] of [
+        [response, targetGrade],
+        [survivorResponse, survivorGrade],
+      ] as const) {
+        accumulateResponseTokenUsage(tokenUsage, providerResponse);
+        accumulateGradingTokenUsage(tokenUsage, gradingResult.tokensUsed);
+      }
+      const metrics = eval_.prompts[0].metrics!;
+      Object.assign(metrics, {
+        tokenUsage,
+        cost: 3,
+        incurredCost: (response.incurredCost ?? 1) + 0.5,
+      });
+      await eval_.addPrompts(eval_.prompts);
+      await dbUpdateResult(target.id, { response, gradingResult: targetGrade, cost: 1 });
+      await dbUpdateResult(survivor.id, {
+        response: survivorResponse,
+        gradingResult: survivorGrade,
+        cost: 2,
+      });
+
+      await deleteEvalResult(eval_.id, target.id);
+
+      const expectedUsage = createEmptyTokenUsage();
+      expectedUsage.incurredTokenUsage = {};
+      accumulateResponseTokenUsage(expectedUsage, survivorResponse);
+      accumulateGradingTokenUsage(expectedUsage, survivorGrade.tokensUsed);
+      const after = (await Eval.findById(eval_.id))!.prompts[0].metrics!;
+      expect(after.tokenUsage).toMatchObject(expectedUsage);
+      expect(after.tokenUsage.generation?.total ?? 0).toBe(0);
+      expect(after.tokenUsage.incurredTokenUsage?.generation?.total ?? 0).toBe(0);
+      expect(after.cost).toBe(2);
+      expect(after.incurredCost).toBeCloseTo(0.5);
+    });
+
+    it.each([
+      {},
+      { pass: 'bad' },
+      { pass: 1 },
+      { componentResults: [{ pass: 'bad' }, []] },
+      'bad',
+      [],
+    ])('does not debit surviving assertions for malformed grading %j', async (gradingResult) => {
+      const eval_ = await EvalFactory.create({ numResults: 2 });
+      const [target, survivor] = await EvalResult.findManyByEvalId(eval_.id);
+      const metrics = eval_.prompts[0].metrics!;
+      Object.assign(metrics, { assertPassCount: 1, assertFailCount: 1 });
+      metrics.tokenUsage.assertions = { total: 8, numRequests: 2 };
+      await eval_.addPrompts(eval_.prompts);
+      await dbUpdateResult(target.id, { gradingResult: gradingResult as unknown as GradingResult });
+      await dbUpdateResult(survivor.id, {
+        gradingResult: {
+          pass: false,
+          score: 0,
+          reason: 'survivor',
+          tokensUsed: { total: 8, numRequests: 2 },
+          componentResults: [
+            { pass: true, score: 1, reason: 'pass' },
+            { pass: false, score: 0, reason: 'fail' },
+          ],
+        },
+      });
+
+      await deleteEvalResult(eval_.id, target.id);
+
+      const after = (await Eval.findById(eval_.id))!.prompts[0].metrics!;
+      expect(after).toMatchObject({ assertPassCount: 1, assertFailCount: 1 });
+      expect(after.tokenUsage.assertions).toMatchObject({ total: 8, numRequests: 2 });
+    });
+
+    it('only subtracts completion detail fields tracked by the aggregate', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 1 });
+      const [target] = await EvalResult.findManyByEvalId(eval_.id);
+      eval_.prompts[0].metrics!.tokenUsage.completionDetails = { reasoning: 5 };
+      await eval_.addPrompts(eval_.prompts);
+      await dbUpdateResult(target.id, {
+        response: { tokenUsage: { completionDetails: { reasoning: 2, acceptedPrediction: 3 } } },
+      });
+
+      await deleteEvalResult(eval_.id, target.id);
+
+      expect(
+        (await Eval.findById(eval_.id))!.prompts[0].metrics!.tokenUsage.completionDetails,
+      ).toEqual({ reasoning: 3 });
+    });
+
+    it('keeps response-side grading when reconstructing stripped assertion usage', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 2 });
+      const [target, survivor] = await EvalResult.findManyByEvalId(eval_.id);
+      eval_.prompts[0].metrics!.tokenUsage.assertions = { total: 25, numRequests: 5 };
+      await eval_.addPrompts(eval_.prompts);
+      await dbUpdateResult(target.id, { gradingResult: null });
+      await dbUpdateResult(survivor.id, {
+        response: { tokenUsage: { assertions: { total: 9, numRequests: 2 } } },
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'survivor',
+          tokensUsed: { total: 4, numRequests: 1 },
+        },
+      });
+
+      await deleteEvalResult(eval_.id, target.id);
+
+      expect(
+        (await Eval.findById(eval_.id))!.prompts[0].metrics!.tokenUsage.assertions,
+      ).toMatchObject({ total: 13, numRequests: 3 });
+    });
+
+    it('reserves the derived __count for surviving rows', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 2 });
+      const [target, survivor] = await EvalResult.findManyByEvalId(eval_.id);
+      eval_.config.derivedMetrics = [{ name: 'Rows', value: '__count' }];
+      Object.assign(eval_.prompts[0].metrics!, {
+        namedScores: { __count: 1, Rows: 2 },
+        namedScoresCount: { __count: 2 },
+      });
+      await eval_.save();
+      for (const result of [target, survivor]) {
+        await dbUpdateResult(result.id, { namedScores: { __count: 0.5 } });
+      }
+
+      await deleteEvalResult(eval_.id, target.id);
+
+      expect((await Eval.findById(eval_.id))!.prompts[0].metrics!.namedScores.Rows).toBe(1);
+    });
+
+    it.each([
+      {
+        name: 'component arrays',
+        grade: { componentResults: [{ pass: true, score: 1, reason: 'survivor' }] },
+        expected: 1,
+      },
+      { name: 'explicit human assertions', grade: { assertion: { type: 'human' } }, expected: 1 },
+      {
+        name: 'explicit select-best assertions',
+        grade: { assertion: { type: 'select-best' } },
+        expected: 1,
+      },
+      {
+        name: 'explicit max-score assertions',
+        grade: { assertion: { type: 'max-score' } },
+        expected: 1,
+      },
+      { name: 'stripped survivors', grade: null, expected: 4 },
+      { name: 'legacy componentless survivors', grade: {}, expected: 4 },
+      {
+        name: 'arbitrary top-level assertions',
+        grade: { assertion: { type: 'javascript' } },
+        expected: 4,
+      },
+      { name: 'no survivors', grade: undefined, expected: 0 },
+    ])(
+      'recounts historical componentless targets conservatively with $name',
+      async ({ grade, expected }) => {
+        const eval_ = await EvalFactory.create({ numResults: grade === undefined ? 1 : 2 });
+        const [target, survivor] = await EvalResult.findManyByEvalId(eval_.id);
+        eval_.prompts[0].metrics!.assertPassCount = 5;
+        eval_.prompts[0].metrics!.assertFailCount = 0;
+        await eval_.addPrompts(eval_.prompts);
+        await dbUpdateResult(target.id, {
+          gradingResult: { pass: true, score: 1, reason: 'historical' },
+        });
+        if (survivor) {
+          await dbUpdateResult(survivor.id, {
+            gradingResult:
+              grade === null
+                ? null
+                : ({ pass: true, score: 1, reason: 'survivor', ...grade } as GradingResult),
+          });
+        }
+
+        await deleteEvalResult(eval_.id, target.id);
+
+        expect((await Eval.findById(eval_.id))!.prompts[0].metrics!.assertPassCount).toBe(expected);
+      },
+    );
+
     it('deletes only the targeted result and leaves siblings + parent eval intact', async () => {
       const eval_ = await EvalFactory.create();
       const results = await EvalResult.findManyByEvalId(eval_.id);
@@ -1229,47 +1484,58 @@ describe('database eval deletion', () => {
       });
     });
 
-    it('debits assertions.numRequests even when the graded row reported no tokens', async () => {
-      const eval_ = await EvalFactory.create({ numResults: 2, resultTypes: ['success'] });
-      const [target] = await EvalResult.findManyByEvalId(eval_.id);
-      const reloaded = await Eval.findById(eval_.id);
-      if (!reloaded) {
-        throw new Error('expected eval to be findable');
-      }
-      reloaded.prompts = [
-        {
-          ...reloaded.prompts[0],
-          metrics: {
-            ...reloaded.prompts[0].metrics!,
-            tokenUsage: {
-              total: 0,
-              prompt: 0,
-              completion: 0,
-              cached: 0,
-              assertions: {
+    it.each([undefined, 'bad', []])(
+      'preserves assertion requests when grading usage is absent or malformed: %j',
+      async (tokensUsed) => {
+        const eval_ = await EvalFactory.create({ numResults: 2, resultTypes: ['success'] });
+        const [target, survivor] = await EvalResult.findManyByEvalId(eval_.id);
+        const reloaded = await Eval.findById(eval_.id);
+        if (!reloaded) {
+          throw new Error('expected eval to be findable');
+        }
+        reloaded.prompts = [
+          {
+            ...reloaded.prompts[0],
+            metrics: {
+              ...reloaded.prompts[0].metrics!,
+              tokenUsage: {
                 total: 0,
                 prompt: 0,
                 completion: 0,
                 cached: 0,
-                numRequests: 2,
+                assertions: {
+                  total: 0,
+                  prompt: 0,
+                  completion: 0,
+                  cached: 0,
+                  numRequests: 2,
+                },
               },
             },
           },
-        },
-      ];
-      await reloaded.save();
-      await dbUpdateResult(target.id, {
-        gradingResult: {
-          ...target.gradingResult!,
-          tokensUsed: undefined,
-        },
-      });
+        ];
+        await reloaded.save();
+        await dbUpdateResult(target.id, {
+          gradingResult: {
+            ...target.gradingResult!,
+            tokensUsed: tokensUsed as unknown as GradingResult['tokensUsed'],
+          },
+        });
 
-      await deleteEvalResult(eval_.id, target.id);
+        await dbUpdateResult(survivor.id, {
+          gradingResult: {
+            pass: true,
+            score: 1,
+            reason: 'surviving requests',
+            tokensUsed: { total: 0, numRequests: 2 },
+          },
+        });
+        await deleteEvalResult(eval_.id, target.id);
 
-      const after = await Eval.findById(eval_.id);
-      expect(after?.prompts[0]?.metrics?.tokenUsage?.assertions?.numRequests).toBe(1);
-    });
+        const after = await Eval.findById(eval_.id);
+        expect(after?.prompts[0]?.metrics?.tokenUsage?.assertions?.numRequests).toBe(2);
+      },
+    );
 
     it('preserves zero-weight named metrics during recompute after delete', async () => {
       const eval_ = await EvalFactory.create({ numResults: 2, resultTypes: ['success'] });

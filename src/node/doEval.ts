@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
+import { beginEvalRun } from '../database/evalRun';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
 import { evaluate, PromptSuggestionsRejectedError } from '../evaluator';
 import {
@@ -941,7 +942,11 @@ async function doEvalWithEnv(
 
     // Run the evaluation!!!!!!
     let ret;
+    let releaseRetryRun: (() => Promise<void>) | undefined;
     try {
+      if (retryErrors && evalRecord.persisted) {
+        releaseRetryRun = await beginEvalRun(evalRecord);
+      }
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
         filterRange: hasScenarios || resumeEval ? filterRange : undefined,
@@ -974,6 +979,7 @@ async function doEvalWithEnv(
       }
     } finally {
       cleanupHandler(); // Always cleanup, even if evaluate() throws
+      await releaseRetryRun?.();
     }
 
     // Clear resume flag after run completes

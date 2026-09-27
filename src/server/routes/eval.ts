@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { HUMAN_ASSERTION_TYPE } from '../../constants';
+import { EvalRunningError } from '../../database/evalRun';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
@@ -301,7 +302,7 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
     }
 
     eval_.author = author;
-    await eval_.save();
+    await eval_.save({ updatePrompts: false });
 
     // NOTE: Side effect. If user email is not set, set it to the author's email
     if (!getUserEmail()) {
@@ -899,12 +900,6 @@ evalRouter.delete('/', async (req: Request, res: Response) => {
   }
 });
 
-/**
- * Delete a single result row from within an eval, leaving the eval and its
- * other results intact. Backs the `promptfoo delete eval-result` CLI so a
- * long eval session can be recovered from a single transient failure without
- * re-running everything.
- */
 evalRouter.delete('/:evalId/results/:id', async (req: Request, res: Response): Promise<void> => {
   const paramsResult = EvalSchemas.DeleteResult.Params.safeParse(req.params);
   if (!paramsResult.success) {
@@ -917,6 +912,10 @@ evalRouter.delete('/:evalId/results/:id', async (req: Request, res: Response): P
     await deleteEvalResult(evalId, id);
     res.status(204).send();
   } catch (error) {
+    if (error instanceof EvalRunningError) {
+      res.status(409).json({ error: error.message });
+      return;
+    }
     if (error instanceof EvalResultNotFoundError) {
       res.status(404).json({ error: 'Eval result not found' });
       return;

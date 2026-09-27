@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, type SQL, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
+import { EVAL_ACTIVE_RUNS_KEY } from '../database/evalRun';
 import { getDb } from '../database/index';
 import {
   datasetsTable,
@@ -98,17 +99,6 @@ export function createEvalId(createdAt: Date = new Date()) {
 }
 
 const EVAL_SUMMARY_TEST_COUNT_BATCH_SIZE = 500;
-
-export function chunkEvalSummaryIds(
-  evalIds: string[],
-  batchSize = EVAL_SUMMARY_TEST_COUNT_BATCH_SIZE,
-): string[][] {
-  const chunks: string[][] = [];
-  for (let start = 0; start < evalIds.length; start += batchSize) {
-    chunks.push(evalIds.slice(start, start + batchSize));
-  }
-  return chunks;
-}
 
 /** Result from queries extracting variable keys with eval IDs */
 export interface VarKeyWithEvalIdResult {
@@ -685,22 +675,30 @@ export default class Eval {
     this.oldResults.table = table;
   }
 
-  async save() {
+  async save({ updatePrompts = true }: { updatePrompts?: boolean } = {}) {
     const db = await getDb();
     const updateObj: Record<string, unknown> = {
       config: sanitizeTracingConfigForPersistence(this.config),
       isRedteam: this.config.redteam !== undefined,
-      prompts: this.prompts,
       description: this.config.description,
       author: this.author,
       updatedAt: getCurrentTimestamp(),
       vars: Array.from(this.vars),
       runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),
     };
+    if (updatePrompts) {
+      updateObj.prompts = this.prompts;
+    }
 
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
-      updateObj.results = this.oldResults;
+      // Run ownership belongs to the database, including when a legacy table is replaced.
+      const runsPath = `$.${EVAL_ACTIVE_RUNS_KEY}`;
+      const results = JSON.stringify(this.oldResults);
+      updateObj.results = sql`CASE
+        WHEN json_valid(${evalsTable.results}) AND json_type(${evalsTable.results}, ${runsPath}) = 'object'
+        THEN json_set(${results}, ${runsPath}, json_extract(${evalsTable.results}, ${runsPath}))
+        ELSE json_remove(${results}, ${runsPath}) END`;
     } else if (
       this.durationMs !== undefined ||
       this.generationDurationMs !== undefined ||
@@ -1788,21 +1786,22 @@ export async function getEvalSummaries(
     .all();
 
   const distinctTestCountsByEvalId = new Map<string, number>();
-  if (results.length > 0) {
-    for (const evalIdBatch of chunkEvalSummaryIds(results.map((result) => result.evalId))) {
-      const rows = await db
-        .select({
-          evalId: evalResultsTable.evalId,
-          testCount: sql<number>`count(distinct ${evalResultsTable.testIdx})`,
-        })
-        .from(evalResultsTable)
-        .where(inArray(evalResultsTable.evalId, evalIdBatch))
-        .groupBy(evalResultsTable.evalId)
-        .all();
+  for (let start = 0; start < results.length; start += EVAL_SUMMARY_TEST_COUNT_BATCH_SIZE) {
+    const evalIdBatch = results
+      .slice(start, start + EVAL_SUMMARY_TEST_COUNT_BATCH_SIZE)
+      .map((result) => result.evalId);
+    const rows = await db
+      .select({
+        evalId: evalResultsTable.evalId,
+        testCount: sql<number>`count(distinct ${evalResultsTable.testIdx})`,
+      })
+      .from(evalResultsTable)
+      .where(inArray(evalResultsTable.evalId, evalIdBatch))
+      .groupBy(evalResultsTable.evalId)
+      .all();
 
-      for (const row of rows) {
-        distinctTestCountsByEvalId.set(row.evalId, Number(row.testCount));
-      }
+    for (const row of rows) {
+      distinctTestCountsByEvalId.set(row.evalId, Number(row.testCount));
     }
   }
 

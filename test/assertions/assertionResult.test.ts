@@ -279,6 +279,7 @@ describe('AssertionsResult', () => {
         pass: true,
         score: 1,
         reason: 'No assertions',
+        componentResults: [],
         tokensUsed: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
       });
     });

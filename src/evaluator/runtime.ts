@@ -69,6 +69,7 @@ export interface EvaluatorRuntime<
   TEvaluation extends EvaluationRecord = EvaluationRecord,
   TResult extends EvaluationStoreResult = EvaluationStoreResult,
 > {
+  acquireEvaluationRun?(evaluation: TEvaluation): Promise<(() => Promise<void>) | undefined>;
   resolveRuntimeTestSuite?(testSuite: TestSuite): TestSuite;
   createEvaluationStore(evaluation: TEvaluation): EvaluationStore<TEvaluation, TResult>;
   createResultWriters(

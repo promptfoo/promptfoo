@@ -2,6 +2,7 @@ import { IncomingMessage, ServerResponse } from 'node:http';
 import { Duplex } from 'node:stream';
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { EvalRunningError } from '../../../src/database/evalRun';
 import {
   createServerOpenApiDocument,
   SERVER_OPENAPI_ROUTE_COUNT,
@@ -885,5 +886,19 @@ describe('server route end-to-end smoke coverage', { concurrent: false }, () => 
     if (response.status !== 204) {
       expect(response.headers['content-type']).toContain('application/json');
     }
+  });
+
+  it('returns a conflict when deleting a result from a running eval', async () => {
+    const error = new EvalRunningError('eval-1');
+    mocks.deleteEvalResult.mockRejectedValueOnce(error);
+    const response = await sendRequest(app, {
+      method: 'delete',
+      openApiPath: '/api/eval/{evalId}/results/{id}',
+      path: '/api/eval/eval-1/results/result-1',
+      expectedStatus: 409,
+    });
+
+    expect(response.status).toBe(409);
+    expect(response.body).toEqual({ error: error.message });
   });
 });

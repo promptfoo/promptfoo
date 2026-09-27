@@ -101,11 +101,10 @@ import { analyzeTemplateReference, extractVariablesFromTemplate } from './util/t
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
-  accumulateAssertionTokenUsage,
+  accumulateComparisonTokenUsage,
   accumulateGradingRequest,
   accumulateGradingTokenUsage,
   accumulateResponseTokenUsage,
-  cloneTokenUsageBreakdown,
   createEmptyAssertions,
   createEmptyTokenUsage,
 } from './util/tokenUsageUtils';
@@ -370,46 +369,6 @@ export class ProgressBarManager {
   stop(): void {
     if (this.progressBar) {
       this.progressBar.stop();
-    }
-  }
-}
-
-/**
- * Update token usage metrics with assertion token usage
- */
-function updateAssertionMetrics(
-  metrics: { tokenUsage: Partial<TokenUsage> },
-  assertionTokens: Partial<TokenUsage>,
-  options?: { cached?: boolean },
-): void {
-  if (metrics.tokenUsage && assertionTokens) {
-    const reportedTotal =
-      assertionTokens.total ?? (assertionTokens.prompt ?? 0) + (assertionTokens.completion ?? 0);
-    const cachedTokens = assertionTokens.cached ?? 0;
-    const cachedResponse =
-      options?.cached === true ||
-      (options?.cached === undefined &&
-        assertionTokens.numRequests === 0 &&
-        cachedTokens > 0 &&
-        reportedTotal <= cachedTokens);
-
-    if (cachedResponse && !metrics.tokenUsage.incurredTokenUsage) {
-      metrics.tokenUsage.incurredTokenUsage = cloneTokenUsageBreakdown(metrics.tokenUsage);
-    }
-
-    if (!metrics.tokenUsage.assertions) {
-      metrics.tokenUsage.assertions = createEmptyAssertions();
-    }
-
-    // Accumulate assertion tokens using the specialized assertion function
-    accumulateAssertionTokenUsage(metrics.tokenUsage.assertions, assertionTokens);
-
-    if (metrics.tokenUsage.incurredTokenUsage && !cachedResponse) {
-      metrics.tokenUsage.incurredTokenUsage.assertions ??= createEmptyAssertions();
-      accumulateAssertionTokenUsage(
-        metrics.tokenUsage.incurredTokenUsage.assertions,
-        assertionTokens.incurredTokenUsage ?? assertionTokens,
-      );
     }
   }
 }
@@ -2103,7 +2062,7 @@ function mergeComparisonTokenUsage(
       }),
     },
   };
-  updateAssertionMetrics(rowMetrics, gradingResult.tokensUsed, {
+  accumulateComparisonTokenUsage(rowMetrics.tokenUsage, gradingResult.tokensUsed, {
     cached: gradingResult.metadata?.cachedResponse,
   });
   if (rowMetrics.tokenUsage.incurredTokenUsage?.assertions) {
@@ -2111,7 +2070,7 @@ function mergeComparisonTokenUsage(
   }
 
   if (resultHasModelGradedAssertion(result)) {
-    updateAssertionMetrics({ tokenUsage: evalTokenUsage }, gradingResult.tokensUsed, {
+    accumulateComparisonTokenUsage(evalTokenUsage, gradingResult.tokensUsed, {
       cached: gradingResult.metadata?.cachedResponse,
     });
   }
@@ -3419,7 +3378,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       metrics.assertPassCount += passed ? 1 : 0;
       metrics.assertFailCount += passed ? 0 : 1;
       if (tokensUsed) {
-        updateAssertionMetrics(metrics, tokensUsed, { cached: gradingCached });
+        accumulateComparisonTokenUsage(metrics.tokenUsage, tokensUsed, { cached: gradingCached });
       }
       if (!passed && result.score !== wasScore) {
         metrics.score += result.score - wasScore;
@@ -5189,21 +5148,26 @@ export function evaluate<
           defaultTest: testSuite.defaultTest ?? evalRecord.config.defaultTest,
           redteam: testSuite.redteam ?? evalRecord.config.redteam,
         },
-        () => {
+        async () => {
           const resolvedRuntime =
             runtime ?? (nodeEvaluatorRuntime as unknown as EvaluatorRuntime<TEvaluation, TResult>);
-          const runtimeTestSuite =
-            resolvedRuntime.resolveRuntimeTestSuite?.(testSuite) ??
-            nodeEvaluatorRuntime.resolveRuntimeTestSuite?.(testSuite) ??
-            testSuite;
-          const store = resolvedRuntime.createEvaluationStore(evalRecord);
-          const ev = new Evaluator(
-            withTracingInputDefaults(runtimeTestSuite),
-            store,
-            options,
-            resolvedRuntime,
-          );
-          return ev.evaluate();
+          const release = await resolvedRuntime.acquireEvaluationRun?.(evalRecord);
+          try {
+            const runtimeTestSuite =
+              resolvedRuntime.resolveRuntimeTestSuite?.(testSuite) ??
+              nodeEvaluatorRuntime.resolveRuntimeTestSuite?.(testSuite) ??
+              testSuite;
+            const store = resolvedRuntime.createEvaluationStore(evalRecord);
+            const ev = new Evaluator(
+              withTracingInputDefaults(runtimeTestSuite),
+              store,
+              options,
+              resolvedRuntime,
+            );
+            return await ev.evaluate();
+          } finally {
+            await release?.();
+          }
         },
         testSuite.providers.map((provider) => ({ id: provider.id(), config: provider.config })),
       ),

@@ -23,17 +23,14 @@ function getContributingAssertionCount(
   metricName: string,
   testVars: Vars,
 ): number {
-  // Imported/saved V4 rows accept result records as `unknown`, so
-  // `componentResults` can contain `null` or non-object entries; skip those
-  // rather than throwing while dereferencing `componentResult.assertion`.
+  // Imported rows can contain malformed assertion entries.
   const componentResults = Array.isArray(gradingResult?.componentResults)
     ? gradingResult.componentResults.filter((c) => c != null && typeof c === 'object')
     : [];
-  const contributingAssertions =
-    componentResults.reduce((count, componentResult) => {
-      const renderedMetric = renderMetricName(componentResult.assertion?.metric, testVars);
-      return renderedMetric === metricName ? count + 1 : count;
-    }, 0) ?? 0;
+  const contributingAssertions = componentResults.reduce((count, componentResult) => {
+    const renderedMetric = renderMetricName(componentResult.assertion?.metric, testVars);
+    return renderedMetric === metricName ? count + 1 : count;
+  }, 0);
 
   return contributingAssertions > 0 ? contributingAssertions : 1;
 }
@@ -101,13 +98,7 @@ export function accumulateNamedMetric(
     (accumulator.namedScoreWeights[metricName] ?? 0) + metricWeightTotal;
 }
 
-/**
- * Inverse of {@link accumulateNamedMetric}: removes the contribution this metric value
- * made when its eval result row was originally accumulated. Shares
- * {@link getNamedMetricContribution} with the forward path so the deltas are
- * symmetric — pass the row's own `namedScores[name]`, `gradingResult`, and
- * `testVars` to debit exactly what was credited.
- */
+/** Remove a row contribution while preserving absent legacy count and weight maps. */
 export function subtractNamedMetric(
   accumulator: NamedMetricAccumulator,
   {
@@ -123,9 +114,6 @@ export function subtractNamedMetric(
   },
 ): void {
   accumulator.namedScores ||= {};
-  const hadScoreCounts = accumulator.namedScoresCount !== undefined;
-  const hadScoreWeights = accumulator.namedScoreWeights !== undefined;
-
   const { assertionCount, metricWeightTotal, weightedScoreTotal } = getNamedMetricContribution({
     metricName,
     metricValue,
@@ -133,30 +121,15 @@ export function subtractNamedMetric(
     testVars,
   });
 
-  // Mirror the guard used for count/weight buckets below: if a legacy or
-  // imported aggregate never tracked this metric, seed it with the row's
-  // contribution before subtracting so the debit nets to zero instead of
-  // producing a negative value.
-  if (!Object.prototype.hasOwnProperty.call(accumulator.namedScores, metricName)) {
-    accumulator.namedScores[metricName] = weightedScoreTotal;
-  }
   accumulator.namedScores[metricName] =
-    (accumulator.namedScores[metricName] ?? 0) - weightedScoreTotal;
-  if (hadScoreCounts) {
-    accumulator.namedScoresCount ||= {};
-    if (!Object.prototype.hasOwnProperty.call(accumulator.namedScoresCount, metricName)) {
-      accumulator.namedScoresCount[metricName] = assertionCount;
-    }
+    (accumulator.namedScores[metricName] ?? weightedScoreTotal) - weightedScoreTotal;
+  if (accumulator.namedScoresCount) {
     accumulator.namedScoresCount[metricName] =
-      (accumulator.namedScoresCount[metricName] ?? 0) - assertionCount;
+      (accumulator.namedScoresCount[metricName] ?? assertionCount) - assertionCount;
   }
-  if (hadScoreWeights) {
-    accumulator.namedScoreWeights ||= {};
-    if (!Object.prototype.hasOwnProperty.call(accumulator.namedScoreWeights, metricName)) {
-      accumulator.namedScoreWeights[metricName] = metricWeightTotal;
-    }
+  if (accumulator.namedScoreWeights) {
     accumulator.namedScoreWeights[metricName] =
-      (accumulator.namedScoreWeights[metricName] ?? 0) - metricWeightTotal;
+      (accumulator.namedScoreWeights[metricName] ?? metricWeightTotal) - metricWeightTotal;
   }
 
   const score = accumulator.namedScores[metricName] ?? 0;

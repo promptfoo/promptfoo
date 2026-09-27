@@ -7,7 +7,6 @@ import { getAuthor } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
 import Eval, {
   buildSafeJsonPath,
-  chunkEvalSummaryIds,
   combineFilterConditions,
   EvalQueries,
   escapeJsonPathKey,
@@ -389,15 +388,6 @@ describe('evaluator', () => {
   });
 
   describe('summaryResults', () => {
-    it('chunks eval ids for summary result-count queries', () => {
-      const chunks = chunkEvalSummaryIds(
-        Array.from({ length: 5 }, (_, index) => `eval-${index}`),
-        2,
-      );
-
-      expect(chunks).toEqual([['eval-0', 'eval-1'], ['eval-2', 'eval-3'], ['eval-4']]);
-    });
-
     it('counts sparse prompt results when prompts no longer have matching row counts', async () => {
       const eval_ = await Eval.create({}, [], {
         completedPrompts: [

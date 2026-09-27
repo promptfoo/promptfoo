@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import { and, eq, inArray } from 'drizzle-orm';
 import cliState from '../cliState';
+import { beginEvalRun } from '../database/evalRun';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import { evaluate } from '../evaluator';
@@ -420,7 +421,9 @@ async function retryWithConfig(
     showProgressBar: !cmdObj.verbose, // Show progress bar unless verbose mode
   };
 
+  let releaseRun: (() => Promise<void>) | undefined;
   try {
+    releaseRun = await beginEvalRun(originalEval);
     // Run the retry evaluation - this will only run ERROR test cases due to retry mode
     const retriedEval = await evaluate(testSuite, originalEval, evaluateOptions);
     const jsonlOutputPaths = getJsonlOutputPaths(originalEval.config.outputPath);
@@ -499,5 +502,6 @@ async function retryWithConfig(
     cliState.resume = false;
     cliState.retryMode = false;
     cliState.maxConcurrency = undefined;
+    await releaseRun?.();
   }
 }

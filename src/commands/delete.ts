@@ -35,11 +35,8 @@ export async function handleEvalDeleteAll() {
   logger.info('All evaluations have been deleted.');
 }
 
-export async function handleEvalResultDelete(resultId: string, _envPath?: string) {
+export async function handleEvalResultDelete(resultId: string) {
   try {
-    // Look up the parent evalId from the result row so the storage delete is
-    // scoped to (evalId, resultId): a stray uuid that exists under a different
-    // eval must not be deleted by the bare `eval-result <id>` invocation.
     const evalId = await getEvalIdForResult(resultId);
     if (!evalId) {
       logger.error(`No eval result found with ID ${resultId}.`);
@@ -120,6 +117,6 @@ export function deleteCommand(program: Command) {
       telemetry.record('command_used', {
         name: 'delete eval-result',
       });
-      await handleEvalResultDelete(resultId, cmdObj.envPath);
+      await handleEvalResultDelete(resultId);
     });
 }

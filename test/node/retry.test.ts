@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
+import { beginEvalRun } from '../../src/database/evalRun';
 import { getEnvBool } from '../../src/envars';
 import { evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
@@ -58,6 +59,7 @@ const dbMocks = vi.hoisted(() => {
 vi.mock('../../src/database/index', () => ({
   getDb: vi.fn(async () => dbMocks.db),
 }));
+vi.mock('../../src/database/evalRun');
 vi.mock('../../src/evaluator');
 vi.mock('../../src/logger');
 vi.mock('../../src/models/eval');
@@ -112,8 +114,11 @@ function mockResolvedConfig({
 }
 
 describe('retryCommand', () => {
+  const releaseRun = vi.fn<() => Promise<void>>();
   beforeEach(() => {
     vi.resetAllMocks();
+    releaseRun.mockResolvedValue(undefined);
+    vi.mocked(beginEvalRun).mockResolvedValue(releaseRun);
     dbMocks.errorRows.splice(0);
     dbMocks.affectedEvalRows.splice(0);
     cliState.resume = false;
@@ -505,7 +510,7 @@ describe('retryCommand', () => {
       config: { sharing: false } as UnifiedConfig,
       runtimeOptions: { providerFilter: 'selected-target' },
     });
-    const retriedEval = createEval();
+    const retriedEval = createEval({ persisted: true });
     vi.mocked(Eval.findById).mockResolvedValue(originalEval);
     dbMocks.errorRows.push({ id: 'error-result-1' });
     dbMocks.affectedEvalRows.push({ evalId: originalEval.id });
@@ -539,6 +544,11 @@ describe('retryCommand', () => {
     );
     expect(dbMocks.deleteRun).toHaveBeenCalledTimes(1);
     expect(notifyEvaluationChanged).toHaveBeenCalledWith(originalEval.id);
+    expect(beginEvalRun).toHaveBeenCalledWith(originalEval);
+    expect(releaseRun).toHaveBeenCalledTimes(1);
+    expect(releaseRun.mock.invocationCallOrder[0]).toBeGreaterThan(
+      vi.mocked(retriedEval.addPrompts).mock.invocationCallOrder[0],
+    );
     expect(shouldShareResults).toHaveBeenCalledWith({
       cliShare: undefined,
       configShare: true,
@@ -649,6 +659,7 @@ describe('retryCommand', () => {
 
     await expect(retryCommand(originalEval.id, {})).rejects.toThrow('provider unavailable');
 
+    expect(releaseRun).toHaveBeenCalledTimes(1);
     expect(dbMocks.deleteRun).not.toHaveBeenCalled();
     expect(cliState.resume).toBe(false);
     expect(cliState.retryMode).toBe(false);

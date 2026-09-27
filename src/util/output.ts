@@ -308,23 +308,7 @@ const outputToSimpleString = (output: EvaluateTableOutput | undefined) => {
 
 const outputToHtmlReportCell = (output?: EvaluateTableOutput) => {
   if (!output) {
-    return {
-      status: '',
-      statusLabel: '',
-      score: '',
-      namedScores: [],
-      text: '',
-      reason: '',
-      prompt: '',
-      provider: '',
-      error: '',
-      failureReason: undefined,
-      latencyDisplay: '',
-      costDisplay: '',
-      totalTokensDisplay: '',
-      promptTokensDisplay: '',
-      completionTokensDisplay: '',
-    };
+    return {};
   }
 
   const status = output.pass
@@ -392,12 +376,6 @@ function buildHtmlReportTable(table: EvalTableForHtml) {
       }),
     ]),
   ];
-}
-
-function getHtmlReportOutputs(table: EvalTableForHtml): EvaluateTableOutput[] {
-  return table.body.flatMap((row) =>
-    row.outputs.filter((output): output is EvaluateTableOutput => Boolean(output)),
-  );
 }
 
 async function createOutputSummary(
@@ -602,7 +580,9 @@ async function writeHtmlOutput(outputPath: string, evalRecord: Eval): Promise<vo
     'utf-8',
   );
   const htmlTable = buildHtmlReportTable(table);
-  const reportOutputs = getHtmlReportOutputs(table);
+  const reportOutputs = table.body.flatMap((row) =>
+    row.outputs.filter((output): output is EvaluateTableOutput => Boolean(output)),
+  );
   const totalResults = reportOutputs.length;
   const successes = reportOutputs.filter((output) => output.pass).length;
   const errors = reportOutputs.filter(

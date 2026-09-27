@@ -1,3 +1,4 @@
+import { beginEvalRun } from '../database/evalRun';
 import { getProcessEnv, isTemplateProcessEnvDisabled } from '../envars';
 import { JsonlFileWriter } from '../util/exportToFile/writeToFile';
 import { getOutputFileFormat } from '../util/outputFormats';
@@ -21,6 +22,9 @@ function getJsonlOutputPaths(outputPath: string | string[] | undefined): string[
 }
 
 export const nodeEvaluatorRuntime: EvaluatorRuntime<Eval, EvalResult> = {
+  async acquireEvaluationRun(evaluation) {
+    return evaluation.persisted ? beginEvalRun(evaluation) : undefined;
+  },
   resolveRuntimeTestSuite(testSuite) {
     if (!testSuite.tracing?.provider) {
       return testSuite;

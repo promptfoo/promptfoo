@@ -636,6 +636,10 @@ export function mergeComparisonTables(
   mainTable: TablePageResult,
   comparisonData: Array<{ evalId: string; table: TablePageResult }>,
 ): TablePageResult {
+  const comparisonRows = comparisonData.map(
+    ({ table }) => new Map(table.body.map((row) => [row.testIdx, row])),
+  );
+
   return {
     head: {
       prompts: [
@@ -657,15 +661,13 @@ export function mergeComparisonTables(
     body: mainTable.body.map((row) => {
       const testIdx = row.testIdx;
       // Find matching rows in comparison tables by test index
-      const comparisonOutputs = comparisonData
-        .map(({ table }) => {
-          const matchingRow = table.body.find((compRow) => compRow.testIdx === testIdx);
-          return Array.from(
-            { length: table.head.prompts.length },
-            (_, outputIndex) => matchingRow?.outputs[outputIndex],
-          ) as EvaluateTableOutput[];
-        })
-        .flat();
+      const comparisonOutputs = comparisonData.flatMap(({ table }, comparisonIndex) => {
+        const matchingRow = comparisonRows[comparisonIndex].get(testIdx);
+        return Array.from(
+          { length: table.head.prompts.length },
+          (_, outputIndex) => matchingRow?.outputs[outputIndex],
+        ) as EvaluateTableOutput[];
+      });
 
       return {
         ...row,

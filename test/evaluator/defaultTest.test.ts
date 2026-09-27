@@ -376,7 +376,7 @@ describe('Evaluator with external defaultTest', () => {
           metrics: { ...initialMetrics2 },
         },
       ];
-      evalRecord.persisted = true;
+      await evalRecord.save();
 
       // Enable resume mode
       cliState.resume = true;
@@ -461,7 +461,7 @@ describe('Evaluator with external defaultTest', () => {
           },
         },
       ];
-      evalRecord.persisted = true;
+      await evalRecord.save();
       cliState.resume = true;
 
       await evaluate(testSuite, evalRecord, {});

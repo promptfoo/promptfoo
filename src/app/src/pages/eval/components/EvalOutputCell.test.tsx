@@ -214,6 +214,45 @@ describe('EvalOutputCell', () => {
     expect(() => renderWithProviders(<EvalOutputCell {...propsWithoutText} />)).not.toThrow();
   });
 
+  it.each([null, undefined])(
+    'keeps the surviving cell prompt when the first output becomes %s',
+    (firstOutput) => {
+      const output = { ...defaultProps.output, prompt: 'Surviving column prompt' };
+      const { rerender } = renderWithProviders(
+        <EvalOutputCell {...defaultProps} output={output} promptIndex={1} />,
+      );
+
+      expect(screen.getByText('Surviving column prompt')).toBeInTheDocument();
+
+      rerender(
+        <ShiftKeyProvider>
+          <EvalOutputCell
+            {...defaultProps}
+            output={output}
+            promptIndex={1}
+            firstOutput={firstOutput}
+          />
+        </ShiftKeyProvider>,
+      );
+
+      expect(screen.getByText('Surviving column prompt')).toBeInTheDocument();
+
+      mockResultsViewSettings.showPrompts = false;
+      rerender(
+        <ShiftKeyProvider>
+          <EvalOutputCell
+            {...defaultProps}
+            output={output}
+            promptIndex={1}
+            firstOutput={firstOutput}
+          />
+        </ShiftKeyProvider>,
+      );
+
+      expect(screen.queryByText('Surviving column prompt')).not.toBeInTheDocument();
+    },
+  );
+
   it('passes metadata correctly to the dialog', async () => {
     const user = userEvent.setup();
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
