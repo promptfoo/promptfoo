@@ -89,17 +89,17 @@ providers:
 
 ## Provider Types
 
-- `azure:chat:<deployment name>` - For chat endpoints (e.g., gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.4, gpt-4o)
+- `azure:chat:<deployment name>` - For chat endpoints (e.g., gpt-6-sol, gpt-6-luna, gpt-5.6-terra, gpt-5.4, gpt-4o)
 - `azure:completion:<deployment name>` - For completion endpoints (e.g., gpt-35-turbo-instruct)
 - `azure:embedding:<deployment name>` - For embedding models (e.g., text-embedding-3-small, text-embedding-3-large)
-- `azure:responses:<deployment name>` - For the Responses API (e.g., gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-4.1)
+- `azure:responses:<deployment name>` - For the Responses API (e.g., gpt-6-astra, gpt-6-sol, gpt-6-luna, gpt-5.6-terra, gpt-4.1)
 - `azure:realtime:<deployment name>` - For GA Realtime API deployments (e.g., gpt-realtime-1.5-2026-02-23)
 - `azure:assistant:<assistant id>` - Legacy Azure OpenAI Assistants (retired August 26, 2026)
 - `azure:foundry-agent:<agent name or id>` - For Azure AI Foundry Agents (using Azure AI Projects SDK)
 - `azure:video:<deployment name>` - For video generation (Sora)
 - `azure:image:<deployment name>` - For Microsoft MAI image generation (e.g., MAI-Image-2.6) — see [Using Microsoft MAI Models](#using-microsoft-mai-models)
 
-Vision-capable GPT-5, GPT-4o, and GPT-4.1 deployments use the standard `azure:chat:` provider type.
+Vision-capable GPT-6, GPT-5, GPT-4o, and GPT-4.1 deployments use the standard `azure:chat:` provider type.
 
 Azure deployment availability changes frequently and varies by region. Check the
 [Azure OpenAI model availability page](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure)
@@ -144,6 +144,8 @@ For the complete list of models with pricing, see the [Microsoft Foundry model c
 ### GPT-6 on Azure
 
 Azure supports `gpt-6-astra`, `gpt-6-sol`, and `gpt-6-luna` through Chat Completions and Responses. Use your deployment name with `azure:chat:` or `azure:responses:`. Check the [Azure model catalog](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure#gpt-6) for availability.
+
+For a deployment name that does not identify its underlying model, set `config.modelName` to `gpt-6-astra`, `gpt-6-sol`, or `gpt-6-luna` so Promptfoo applies the model's request rules. Sol and Luna require `reasoning_effort: none` for Chat function tools; use Responses for tools with reasoning enabled or with Astra.
 
 Microsoft publishes these [Global Standard rates](https://azure.microsoft.com/en-us/blog/gpt-6-astra-sol-and-luna-for-production-agents-in-microsoft-foundry/) in USD per million tokens. Each cell shows short-context / long-context pricing:
 
@@ -208,6 +210,7 @@ does not select the Azure URL or its API-key authentication.
 
 The Responses API supports Azure deployments backed by current Azure OpenAI responses-capable models. Common examples include:
 
+- **GPT-6 Series**: `gpt-6-astra`, `gpt-6-sol`, `gpt-6-luna`
 - **GPT-5 Series**: `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, `gpt-5.5-pro`, `gpt-5.4`, `gpt-5.4-pro`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5.2-pro`, `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5.1`
 - **GPT-4 Series**: `gpt-4o`, `gpt-4o-mini`, `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`
 - **Reasoning Models**: `o1`, `o1-mini`, `o1-pro`, `o3`, `o3-mini`, `o3-pro`, `o4-mini`
@@ -655,6 +658,8 @@ providers:
 When client credentials are provided, promptfoo uses the `@azure/identity` library to create a `ClientSecretCredential` and requests an access token scoped to Azure Cognitive Services (`https://cognitiveservices.azure.com/.default`). The token is then sent as a `Bearer` token in the `Authorization` header instead of an API key.
 
 If neither an API key nor client credentials are provided, promptfoo falls back to `AzureCliCredential` (i.e., your `az login` session) — see [Option 3](#option-3-azure-cli-authentication).
+
+Each provider instance shares authentication work across concurrent requests and refreshes bearer tokens within five minutes of expiry. A failed authentication or refresh fails the waiting requests; a later request retries. Successfully constructed credentials are reused. Refresh failures do not fall back to an older token. Tokens without expiry information retain the existing behavior of no automatic refresh. API keys take precedence and require no token refresh.
 
 The `azureAuthorityHost` defaults to `https://login.microsoftonline.com` if not specified. The `azureTokenScope` defaults to `https://cognitiveservices.azure.com/.default`, the scope required to authenticate with Azure Cognitive Services. You typically don't need to change these unless you're working with a sovereign cloud (e.g., Azure Government or Azure China).
 
@@ -1326,6 +1331,8 @@ The [legacy Assistants evaluation guide](/docs/guides/evaluate-openai-assistants
 
 Azure AI Foundry Agents let promptfoo run an existing Foundry agent through the Azure AI Projects SDK (`@azure/ai-projects`) and the v2 agent runtime. Promptfoo resolves the agent from your Azure AI Foundry project, then calls the Responses API with an `agent_reference`.
 
+Each provider instance reuses its project client, credential, and agent lookup across concurrent requests. Failed client initialization or agent lookup can retry on a later request. Each invocation gets its own OpenAI Responses client. Foundry retains the SDK's `DefaultAzureCredential` chain, including environment, workload identity, managed identity, and developer credentials.
+
 ### Key Differences from Standard Azure Assistants
 
 | Feature             | Azure Assistant                              | Azure Foundry Agent                                                                       |
@@ -1408,6 +1415,18 @@ Ignored per-request settings:
 - `retryOptions`
 
 Configure those on the Foundry agent definition itself instead of on the eval request.
+
+### Response continuity and accounting
+
+The provider resends instructions, tools, response format, model overrides, and generation settings on each tool turn. A forced `tool_choice` (`required` or a named function) applies to the initial request; subsequent turns use `auto` so the agent can return a final answer. An `allowed_tools` restriction remains in place while its mode changes to `auto`.
+
+By default, tool outputs continue the latest response using `previous_response_id`. If `passthrough.conversation` is configured, every turn uses that conversation instead. Do not combine `conversation` and `previous_response_id`. Requests using either explicit linkage field bypass promptfoo's response cache so repeated prompts still reach the conversation.
+
+Foundry supports [stateless responses](https://learn.microsoft.com/en-us/azure/foundry/agents/concepts/runtime-components#generate-a-response-without-storing), but this provider does not yet carry stateless tool history. `passthrough.store: false` works for a single request without local callbacks; combining it with `functionToolCallbacks` returns a configuration error before Azure access. Streaming and background requests are also unsupported by this provider.
+
+Failed, cancelled, incomplete, or still-pending Responses results return an error, preserving any available partial output, raw response, and usage. A completed refusal remains distinguishable through `isRefusal: true`. Partial text never clears a service error.
+
+Usage and cost cover every model turn in the invocation, including work completed before a later timeout or failure. `numRequests` counts SDK request attempts within that provider invocation, excluding local callbacks and retries internal to the SDK. Separate scheduler retries restart the provider invocation; their earlier usage is not aggregated here. Cached and reasoning tokens remain subsets of the total. Cost is calculated separately for each response's model. If usage or pricing is unavailable, metadata includes `usageIncomplete` or `costIncomplete`; incomplete cost is omitted from `cost`, with the known subtotal in `metadata.knownCost`.
 
 ### Function Tools with Azure Foundry Agents
 
