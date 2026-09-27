@@ -51,6 +51,74 @@ async function writeLegacy() {
 }
 
 describe('local media blob adapter', () => {
+  it.each(['delete', 'stale lookup'] as const)(
+    'preserves later legacy index entries during %s from an older snapshot',
+    async (operation) => {
+      const legacyKey = await writeLegacy();
+      const laterPayload = Buffer.from('later legacy content');
+      const laterHash = createHash('sha256').update(laterPayload).digest('hex');
+      const laterKey = `image/${laterHash.slice(0, 12)}.jpg`;
+      await fs.writeFile(path.join(directory, laterKey), laterPayload);
+      const indexPath = path.join(directory, 'hash-index.json');
+      const laterIndex = JSON.stringify({ [hash]: legacyKey, [laterHash]: laterKey });
+      await fs.writeFile(indexPath, laterIndex);
+
+      if (operation === 'delete') {
+        await provider.delete(legacyKey);
+      } else {
+        await fs.unlink(path.join(directory, legacyKey));
+        expect(await provider.findByHash(hash)).toBeNull();
+      }
+
+      expect(await fs.readFile(indexPath, 'utf8')).toBe(laterIndex);
+      const restarted = new LocalFileSystemProvider({ basePath: directory });
+      expect(await restarted.findByHash(laterHash)).toBe(laterKey);
+      expect(await restarted.retrieve(laterKey)).toEqual(laterPayload);
+      expect(await restarted.findByHash(hash)).toBeNull();
+      const replacement = await restarted.store(payload, metadata);
+      expect(replacement.ref.key).toBe(key);
+      expect(replacement.deduplicated).toBe(false);
+      expect(await restarted.findByHash(hash)).toBe(key);
+      expect(await fs.readFile(indexPath, 'utf8')).toBe(laterIndex);
+    },
+  );
+
+  it('preserves the legacy index when deleting the data fails', async () => {
+    const legacyKey = await writeLegacy();
+    const indexPath = path.join(directory, 'hash-index.json');
+    const originalIndex = await fs.readFile(indexPath, 'utf8');
+    const legacyPath = path.join(directory, legacyKey);
+    await fs.unlink(legacyPath);
+    await fs.mkdir(legacyPath);
+
+    await expect(provider.delete(legacyKey)).rejects.toMatchObject({
+      code: expect.stringMatching(/^(EISDIR|EPERM)$/),
+    });
+    expect(await fs.readFile(indexPath, 'utf8')).toBe(originalIndex);
+    expect((await fs.stat(legacyPath)).isDirectory()).toBe(true);
+  });
+
+  it('finds separate new writes after restart without modifying the legacy index', async () => {
+    const legacyKey = await writeLegacy();
+    const indexPath = path.join(directory, 'hash-index.json');
+    const originalIndex = await fs.readFile(indexPath, 'utf8');
+    const second = new LocalFileSystemProvider({ basePath: directory });
+    const firstData = Buffer.from('first new blob');
+    const secondData = Buffer.from('second new blob');
+    const first = await provider.store(firstData, metadata);
+    const other = await second.store(secondData, metadata);
+    const restarted = new LocalFileSystemProvider({ basePath: directory });
+    for (const [stored, bytes] of [
+      [first, firstData],
+      [other, secondData],
+    ] as const) {
+      expect(await restarted.findByHash(stored.ref.contentHash)).toBe(stored.ref.key);
+      expect(await restarted.retrieve(stored.ref.key)).toEqual(bytes);
+    }
+    expect(await restarted.findByHash(hash)).toBe(legacyKey);
+    expect(await fs.readFile(indexPath, 'utf8')).toBe(originalIndex);
+  });
+
   it('stores new bytes by full hash and preserves the media reference metadata', async () => {
     const first = await storeMedia(payload, metadata);
     expect(first).toEqual({
@@ -259,7 +327,9 @@ describe('local media blob adapter', () => {
       JSON.stringify({ [hash]: `image/${hash.slice(0, 12)}.jpg` }),
     );
     const restarted = new LocalFileSystemProvider({ basePath: directory });
+    const originalIndex = await fs.readFile(path.join(directory, 'hash-index.json'), 'utf8');
     const result = await restarted.store(payload, metadata);
+    expect(await fs.readFile(path.join(directory, 'hash-index.json'), 'utf8')).toBe(originalIndex);
     expect(result.ref.key).toBe(key);
     expect(await restarted.findByHash(hash)).toBe(key);
     expect(await restarted.retrieve(key)).toEqual(payload);
