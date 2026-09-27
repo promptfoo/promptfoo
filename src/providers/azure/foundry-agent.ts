@@ -690,6 +690,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   }
 
   private async createResponseWithRetries(
+    initialClient: FoundryOpenAIClient,
     getClient: () => FoundryOpenAIClient,
     body: Record<string, any>,
     options: FoundryResponseCreateOptions,
@@ -700,7 +701,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     const retrySignal = signal ?? new AbortController().signal;
     for (let attempt = 0; ; attempt += 1) {
       throwIfAborted(signal);
-      const client = getClient();
+      const client = attempt === 0 ? initialClient : getClient();
       const controller = new AbortController();
       const attemptSignal = signal
         ? AbortSignal.any([signal, controller.signal])
@@ -1164,6 +1165,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         accumulateTokenUsage(tokenUsage, { numRequests: 1 });
         try {
           const response = await this.createResponseWithRetries(
+            openAIClient,
             () => client.getOpenAIClient(),
             requestBody,
             responseOptions,
