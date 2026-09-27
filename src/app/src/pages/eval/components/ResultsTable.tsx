@@ -1948,11 +1948,16 @@ function ResultsTable({
         await write.promise;
       } finally {
         write.settled = true;
-        if (queue.tail === write && evalId && getApiBaseUrl() === apiBaseUrl) {
-          // Refresh owns reads independently: a slow GET must not block the next POST.
-          void Promise.resolve(
-            fetchEvalData(evalId, { skipSettingEvalId: true, skipLoadingState: true }),
-          ).catch((error) => console.error('Failed to refresh table after a rating:', error));
+        const current = useTableStore.getState();
+        if (current.ratingQueues.get(queueKey) === queue && queue.tail === write) {
+          if (current.evalId !== evalId || getApiBaseUrl() !== apiBaseUrl) {
+            current.ratingQueues.delete(queueKey);
+          } else if (evalId) {
+            // Refresh owns reads independently: a slow GET must not block the next POST.
+            void Promise.resolve(
+              fetchEvalData(evalId, { skipSettingEvalId: true, skipLoadingState: true }),
+            ).catch((error) => console.error('Failed to refresh table after a rating:', error));
+          }
         }
       }
     },

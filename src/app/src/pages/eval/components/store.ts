@@ -311,6 +311,7 @@ interface TableState {
   tableRequestGeneration: number;
   tableSelectionRequest: { generation: number; evalId: string } | null;
   ratingQueues: Map<string, RatingQueue>;
+  pruneInactiveRatingQueues: () => void;
   // null is a failed request; undefined means a newer request superseded this one.
   fetchEvalData: (
     id: string,
@@ -548,7 +549,10 @@ const isFilterApplied = (filter: Partial<ResultsFilter> | ResultsFilter): boolea
 export const useTableStore = create<TableState>()(
   subscribeWithSelector((set, get) => ({
     evalId: null,
-    setEvalId: (evalId: string) => set(() => ({ evalId, filteredMetrics: null })),
+    setEvalId: (evalId: string) => {
+      set({ evalId, filteredMetrics: null });
+      get().pruneInactiveRatingQueues();
+    },
 
     author: null,
     setAuthor: (author: string | null) => set(() => ({ author })),
@@ -639,6 +643,15 @@ export const useTableStore = create<TableState>()(
     tableRequestGeneration: 0,
     tableSelectionRequest: null,
     ratingQueues: new Map(),
+    pruneInactiveRatingQueues: () => {
+      const { evalId, ratingQueues } = get();
+      const activeKey = JSON.stringify([getApiBaseUrl(), evalId]);
+      for (const [key, queue] of ratingQueues) {
+        if (key !== activeKey && queue.tail?.settled) {
+          ratingQueues.delete(key);
+        }
+      }
+    },
 
     highlightedResultsCount: 0,
     userRatedResultsCount: 0,
@@ -834,6 +847,8 @@ export const useTableStore = create<TableState>()(
               },
             };
           });
+
+          get().pruneInactiveRatingQueues();
 
           // Metadata keys will be fetched lazily when user opens metadata filter dropdown
 

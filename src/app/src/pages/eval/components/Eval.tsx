@@ -416,6 +416,8 @@ export default function Eval({ fetchId }: EvalOptions) {
   useEffect(() => {
     const _searchParams = new URLSearchParams(window.location.search);
 
+    // API changes can retire settled queues even when the new server never sends an init.
+    useTableStore.getState().pruneInactiveRatingQueues();
     // Use getState() to avoid adding functions to dependencies
     const { resetFilters: doResetFilters, addFilter: doAddFilter } = useTableStore.getState();
 

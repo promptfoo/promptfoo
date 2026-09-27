@@ -833,6 +833,7 @@ function normalizeRatingSubmission(
   submitted: GradingResult,
   previousSuccess: boolean,
   ratingAction?: SubmitRatingAction,
+  ratingUpdate?: SubmitRatingUpdate,
 ): {
   gradingResult: GradingResult;
   clearingManualRating: boolean;
@@ -893,6 +894,17 @@ function normalizeRatingSubmission(
     pass: submitted.pass,
     score: submitted.score,
     reason: manualReason,
+    // Deferred comparisons can change the aggregate without changing the human vote.
+    // Annotation and score edits must preserve that vote's independent outcome.
+    ...(ratingUpdate &&
+      humanSource &&
+      applyExplicitRatingUpdate(
+        humanSource,
+        submitted,
+        humanSource.pass,
+        humanSource.score,
+        ratingUpdate,
+      )),
     assertion: {
       ...(asRecord(humanSource?.assertion) ?? {}),
       type: HUMAN_ASSERTION_TYPE,
@@ -1232,16 +1244,18 @@ function resolveRatingTransition(
     effectiveSubmission,
     result.success,
     ratingAction,
+    update,
   );
   let nextState: ManualRatingState | undefined;
   let gradingResult: GradingResult | null = normalized.gradingResult;
   let success = gradingResult.pass;
   let score = gradingResult.score;
-  let failureReason = normalized.hasManualRating
-    ? success
-      ? ResultFailureReason.NONE
-      : ResultFailureReason.ASSERT
-    : normalizeFailureReason(result.failureReason);
+  let failureReason =
+    normalized.hasManualRating && !update
+      ? success
+        ? ResultFailureReason.NONE
+        : ResultFailureReason.ASSERT
+      : normalizeFailureReason(result.failureReason);
   const isClearingManualRating = ratingAction === 'clear' || normalized.clearingManualRating;
   const clearRestoreBase =
     result.gradingResult && isClearingManualRating

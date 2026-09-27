@@ -110,6 +110,7 @@ const baseMockTableStore = {
     .fn()
     .mockResolvedValue({ table: mockTable, config: {}, totalCount: 0, filteredCount: 0 }),
   resetFilters: vi.fn(),
+  pruneInactiveRatingQueues: vi.fn(),
   setIsStreaming: vi.fn(),
   addFilter: vi.fn(),
 };
@@ -1524,6 +1525,7 @@ describe('Eval', () => {
     });
     (useTableStore as any).getState = vi.fn(() => ({
       filters: { values: {} },
+      pruneInactiveRatingQueues: baseMockTableStore.pruneInactiveRatingQueues,
       resetFilters: vi.fn(() => {
         subscriptionCallback?.({ values: {}, appliedCount: 0 });
       }),

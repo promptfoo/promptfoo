@@ -13,6 +13,22 @@ import { describeEvaluator } from './lifecycle';
 
 import type { Assertion, TestSuite } from '../../src/types/index';
 
+async function expectCanonicalMetrics(evalId: string) {
+  const saved = await Eval.findById(evalId);
+  expect(saved).toBeDefined();
+  const canonical = await saved!.getFilteredMetrics({ filterMode: 'all' });
+  for (const [index, metrics] of canonical.entries()) {
+    expect(saved!.prompts[index].metrics).toMatchObject({
+      score: metrics.score,
+      testPassCount: metrics.testPassCount,
+      testFailCount: metrics.testFailCount,
+      testErrorCount: metrics.testErrorCount,
+      assertPassCount: metrics.assertPassCount,
+      assertFailCount: metrics.assertFailCount,
+    });
+  }
+}
+
 describeEvaluator('manual ratings during deferred comparison grading', () => {
   it.each([
     {
@@ -179,6 +195,53 @@ describeEvaluator('manual ratings during deferred comparison grading', () => {
     try {
       await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
       expect(ratedId).toBeDefined();
+      await expectCanonicalMetrics(evalRecord.id);
+      const beforeComment = await EvalResult.findById(ratedId!);
+      const humanBeforeComment = beforeComment?.gradingResult?.componentResults?.find(
+        (component) => component.assertion?.type === 'human',
+      );
+      expect(humanBeforeComment).toBeDefined();
+      const comment = await EvalResult.submitRating(
+        evalRecord.id,
+        ratedId!,
+        { pass: true, score: 1, reason: 'Stale client reason', comment: 'Reviewed comparison' },
+        'update',
+        'comment',
+      );
+      expect(comment.status).toBe('updated');
+      await expectCanonicalMetrics(evalRecord.id);
+      const afterComment = await EvalResult.findById(ratedId!);
+      expect(afterComment).toMatchObject({
+        success: beforeComment!.success,
+        score: beforeComment!.score,
+        failureReason: beforeComment!.failureReason,
+        gradingResult: {
+          reason: beforeComment!.gradingResult!.reason,
+          comment: 'Reviewed comparison',
+          componentResults: expect.arrayContaining([
+            { ...humanBeforeComment, comment: 'Reviewed comparison' },
+          ]),
+        },
+      });
+      const scoreEdit = await EvalResult.submitRating(
+        evalRecord.id,
+        ratedId!,
+        { pass: !beforeComment!.success, score: 0.6, reason: 'Stale client reason' },
+        'update',
+        'score',
+      );
+      expect(scoreEdit.status).toBe('updated');
+      await expectCanonicalMetrics(evalRecord.id);
+      expect(await EvalResult.findById(ratedId!)).toMatchObject({
+        success: beforeComment!.success,
+        score: 0.6,
+        failureReason: beforeComment!.failureReason,
+        gradingResult: {
+          componentResults: expect.arrayContaining([
+            { ...humanBeforeComment, score: 0.6, comment: 'Reviewed comparison' },
+          ]),
+        },
+      });
       const clear = await EvalResult.submitRating(
         evalRecord.id,
         ratedId!,
@@ -190,6 +253,7 @@ describeEvaluator('manual ratings during deferred comparison grading', () => {
         'clear',
       );
       expect(clear.status).toBe('updated');
+      await expectCanonicalMetrics(evalRecord.id);
       const result = await EvalResult.findById(ratedId!);
       const expectedPass = baselinePass && scenario.compare.every(comparisonPass);
       const lastFailure = scenario.compare.filter((type) => !comparisonPass(type)).at(-1);

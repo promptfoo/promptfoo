@@ -11,14 +11,15 @@ import Eval from './Eval';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 
-const { filterMode, showToast } = vi.hoisted(() => ({
+const { filterMode, showToast, apiConfig } = vi.hoisted(() => ({
   filterMode: { current: 'all' as 'all' | 'failures' },
   showToast: vi.fn(),
+  apiConfig: { apiBaseUrl: '' },
 }));
 
 vi.mock('@app/utils/api', () => ({ callApi: vi.fn(), getApiBaseUrl: vi.fn(() => '') }));
 vi.mock('@app/hooks/useToast', () => ({ useToast: () => ({ showToast }) }));
-vi.mock('@app/stores/apiConfig', () => ({ default: () => ({ apiBaseUrl: '' }) }));
+vi.mock('@app/stores/apiConfig', () => ({ default: () => apiConfig }));
 vi.mock('socket.io-client', () => ({
   io: () => ({ on: vi.fn().mockReturnThis(), off: vi.fn().mockReturnThis(), disconnect: vi.fn() }),
 }));
@@ -72,6 +73,7 @@ beforeEach(() => {
   useTableStore.setState({ ...initialTableState, ratingQueues: new Map() }, true);
   useResultsViewSettingsStore.setState(initialViewState, true);
   filterMode.current = 'all';
+  apiConfig.apiBaseUrl = '';
 });
 
 afterEach(() => {
@@ -408,6 +410,7 @@ it.each([
     await user.click(screen.getByRole('button', { name: 'Set score' }));
     expect(writeCount).toBe(1);
     rendered.rerender(ratingView(false));
+    expect(useTableStore.getState().ratingQueues.size).toBe(1);
     if (remountBeforeCompletion) {
       rendered.rerender(ratingView(true));
     }
@@ -418,6 +421,7 @@ it.each([
       expect(useTableStore.getState().table?.body[0].outputs[0].score).toBe(expectedScore),
     );
     expect(writeCount).toBe(2);
+    expect(useTableStore.getState().ratingQueues.size).toBe(0);
     expect(useTableStore.getState().tableQuery?.url).toBe(ratingQuery);
     if (!remountBeforeCompletion) {
       rendered.rerender(ratingView(true));
@@ -457,6 +461,7 @@ it.each(['eval', 'API'] as const)(
         vi.mocked(getApiBaseUrl).mockReturnValue('https://other.example.test');
       }
     });
+    expect(useTableStore.getState().ratingQueues.size).toBe(1);
     await act(async () =>
       resolveWrite({
         id: 'result-id',
@@ -467,10 +472,188 @@ it.each(['eval', 'API'] as const)(
       }),
     );
     expect(callApi).toHaveBeenCalledTimes(1);
+    expect(useTableStore.getState().ratingQueues.size).toBe(0);
     expect(useTableStore.getState().table).toBe(otherTable);
     expect(useTableStore.getState().isFetching).toBe(false);
   },
 );
+
+it.each(['eval', 'API'] as const)(
+  'releases settled queues after changing %s even when the old refresh remains pending',
+  async (changedScope) => {
+    const user = userEvent.setup();
+    initializeRatingTable();
+    let releaseRead!: () => void;
+    const heldRead = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    onTestFinished(async () => {
+      await act(async () => releaseRead());
+    });
+    mockCallApiRoutes([
+      {
+        path: ratingRoute,
+        method: 'POST',
+        response: {
+          id: 'result-id',
+          success: false,
+          score: 0,
+          failureReason: 1,
+          gradingResult: { pass: false, score: 0 },
+        },
+      },
+      { path: ratingQuery, response: () => heldRead, status: 500 },
+    ]);
+    const rootView = () => (
+      <MemoryRouter>
+        <Eval fetchId={null} />
+      </MemoryRouter>
+    );
+    const rendered = renderWithProviders(rootView());
+    await user.click(screen.getByRole('button', { name: 'Fail result' }));
+    await waitFor(() => expect(callApi).toHaveBeenCalledTimes(2));
+    const queue = [...useTableStore.getState().ratingQueues.values()][0];
+    expect(queue.tail?.settled).toBe(true);
+    expect(queue.edits.get('result-id')?.completed.pass).toBe(false);
+    expect(useTableStore.getState().ratingQueues.size).toBe(1);
+
+    if (changedScope === 'eval') {
+      rendered.rerender(ratingView(false));
+      act(() => useTableStore.getState().setEvalId('other-eval'));
+    } else {
+      apiConfig.apiBaseUrl = 'https://offline.example.test';
+      vi.mocked(getApiBaseUrl).mockReturnValue(apiConfig.apiBaseUrl);
+      rendered.rerender(rootView());
+    }
+    expect(useTableStore.getState().ratingQueues.size).toBe(0);
+    await act(async () => releaseRead());
+    expect(useTableStore.getState().ratingQueues.size).toBe(0);
+  },
+);
+
+it.each([200, 500])(
+  'retains a settled queue until a background selection commits (HTTP %i)',
+  async (status) => {
+    const user = userEvent.setup();
+    initializeRatingTable();
+    let finishSelection!: () => void;
+    const selection = new Promise<void>((resolve) => {
+      finishSelection = resolve;
+    });
+    onTestFinished(async () => {
+      await act(async () => finishSelection());
+    });
+    mockCallApiRoutes([
+      {
+        path: ratingRoute,
+        method: 'POST',
+        response: {
+          id: 'result-id',
+          success: false,
+          score: 0,
+          failureReason: 1,
+          gradingResult: { pass: false, score: 0 },
+        },
+      },
+      { path: ratingQuery, status: 500, response: {} },
+      {
+        path: '/eval/other-eval/table?offset=0&limit=50&filterMode=all',
+        status,
+        response: async () => {
+          await selection;
+          return { table: ratingTable, config: {}, version: 4, totalCount: 1, filteredCount: 1 };
+        },
+      },
+    ]);
+    const rendered = renderWithProviders(ratingView(true));
+    await user.click(screen.getByRole('button', { name: 'Fail result' }));
+    await waitFor(() => expect(callApi).toHaveBeenCalledTimes(2));
+    rendered.rerender(ratingView(false));
+    let switching!: ReturnType<ReturnType<typeof useTableStore.getState>['fetchEvalData']>;
+    act(() => {
+      switching = useTableStore.getState().fetchEvalData('other-eval', { skipLoadingState: true });
+    });
+    expect(useTableStore.getState().evalId).toBe('rating-eval');
+    expect(useTableStore.getState().ratingQueues.size).toBe(1);
+    await act(async () => {
+      finishSelection();
+      await switching;
+    });
+    expect(useTableStore.getState().evalId).toBe(status === 200 ? 'other-eval' : 'rating-eval');
+    expect(useTableStore.getState().ratingQueues.size).toBe(status === 200 ? 0 : 1);
+    if (status === 500) {
+      act(() => useTableStore.getState().setEvalId('other-eval'));
+      expect(useTableStore.getState().ratingQueues.size).toBe(0);
+    }
+  },
+);
+
+it('retains pending writes across navigation away and back until their authoritative refresh', async () => {
+  const user = userEvent.setup();
+  initializeRatingTable();
+  let releaseWrite!: () => void;
+  const heldWrite = new Promise<void>((resolve) => {
+    releaseWrite = resolve;
+  });
+  onTestFinished(async () => {
+    await act(async () => releaseWrite());
+  });
+  let writeCount = 0;
+  const serverTable = structuredClone(ratingTable);
+  const payload = () => ({
+    table: structuredClone(serverTable),
+    config: {},
+    version: 4,
+    totalCount: 1,
+    filteredCount: 1,
+  });
+  const writeResponse = async (_url: string, options?: RequestInit) => {
+    writeCount += 1;
+    if (writeCount === 1) {
+      await heldWrite;
+    }
+    const gradingResult = JSON.parse(options?.body as string);
+    Object.assign(serverTable.body[0].outputs[0], {
+      pass: gradingResult.pass,
+      score: gradingResult.score,
+      gradingResult,
+    });
+    return {
+      id: 'result-id',
+      success: gradingResult.pass,
+      score: gradingResult.score,
+      failureReason: 1,
+      gradingResult,
+    };
+  };
+  mockCallApiRoutes([
+    { path: ratingRoute, method: 'POST', response: writeResponse },
+    { path: /^\/eval\/rating-eval\/table\?/, response: payload },
+    { path: ratingRoute, method: 'POST', response: writeResponse },
+    { path: /^\/eval\/rating-eval\/table\?/, response: payload },
+  ]);
+  const rendered = renderWithProviders(ratingView(true));
+  await user.click(screen.getByRole('button', { name: 'Fail result' }));
+  const queue = [...useTableStore.getState().ratingQueues.values()][0];
+  rendered.rerender(ratingView(false));
+  act(() => useTableStore.getState().setEvalId('other-eval'));
+  expect([...useTableStore.getState().ratingQueues.values()]).toEqual([queue]);
+  expect(queue.tail?.settled).toBe(false);
+  await act(async () => {
+    useTableStore.getState().setEvalId('rating-eval');
+    await useTableStore.getState().fetchEvalData('rating-eval');
+  });
+  expect(useTableStore.getState().table?.body[0].outputs[0].score).toBe(0);
+  rendered.rerender(ratingView(true));
+  await user.click(screen.getByRole('button', { name: 'Set score' }));
+  expect(writeCount).toBe(1);
+  expect([...useTableStore.getState().ratingQueues.values()]).toEqual([queue]);
+  await act(async () => releaseWrite());
+  await waitFor(() => expect(useTableStore.getState().ratingQueues.size).toBe(0));
+  expect(writeCount).toBe(2);
+  expect(serverTable.body[0].outputs[0].score).toBe(0.25);
+  expect(useTableStore.getState().table?.body[0].outputs[0].score).toBe(0.25);
+});
 
 it.each([200, 500])(
   'preserves pending edits and a foreground selection across a background read (HTTP %i)',

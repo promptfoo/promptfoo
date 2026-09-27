@@ -34,7 +34,10 @@ import {
   type ResultsFile,
   type UnifiedConfig,
 } from '../types/index';
-import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
+import {
+  calculateFilteredMetrics,
+  reconcileManualRatingMetrics,
+} from '../util/calculateFilteredMetrics';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
@@ -674,11 +677,9 @@ export default class Eval {
   }
 
   async save() {
-    const db = await getDb();
     const updateObj: Record<string, unknown> = {
       config: sanitizeTracingConfigForPersistence(this.config),
       isRedteam: this.config.redteam !== undefined,
-      prompts: this.prompts,
       description: this.config.description,
       author: this.author,
       updatedAt: getCurrentTimestamp(),
@@ -709,7 +710,7 @@ export default class Eval {
       }
       updateObj.results = expr;
     }
-    await db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
+    await this.persistWithPrompts(updateObj, this.prompts);
     notifyEvaluationChanged(this.id);
     this.persisted = true;
   }
@@ -1361,11 +1362,28 @@ export default class Eval {
   async addPrompts(prompts: CompletedPrompt[]) {
     this.prompts = prompts;
     if (this.persisted) {
-      const db = await getDb();
-      await db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
+      await this.persistWithPrompts({}, prompts);
       // Notify the view server after prompt metadata changes so cached /api/prompts
       // responses and socket listeners can pick up prompts added after eval creation.
       notifyEvaluationChanged(this.id);
+    }
+  }
+
+  private async persistWithPrompts(update: Record<string, unknown>, incoming: CompletedPrompt[]) {
+    const db = await getDb();
+    const reconciled = await db.transaction(async (tx) => {
+      const prompts = this.useOldResults()
+        ? incoming
+        : await reconcileManualRatingMetrics(tx, this.id, incoming);
+      await tx
+        .update(evalsTable)
+        .set({ ...update, prompts })
+        .where(eq(evalsTable.id, this.id))
+        .run();
+      return prompts;
+    });
+    if (this.prompts === incoming) {
+      this.prompts = reconciled;
     }
   }
 
