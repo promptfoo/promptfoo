@@ -95,16 +95,14 @@ describe('callApi', () => {
     expect(mockFetch).toHaveBeenCalledWith('https://api.example.com/api/users', options);
   });
 
-  it('uses a captured API base after the configured server changes', async () => {
-    vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://first.example.test/'));
-    const originalBase = getApiBaseUrl();
-    vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://second.example.test'));
-
-    await callApi('/users', { method: 'POST' }, originalBase);
-
-    expect(mockFetch).toHaveBeenCalledWith('https://first.example.test/api/users', {
-      method: 'POST',
-    });
+  it('uses an explicitly captured endpoint after global settings change', async () => {
+    const captured = getApiBaseUrl('https://original.example/proxy/');
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://changed.example'));
+    await callApi('/user/cloud-config', {}, captured);
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://original.example/proxy/api/user/cloud-config',
+      {},
+    );
   });
 
   it('returns the fetch response', async () => {

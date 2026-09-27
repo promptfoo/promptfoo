@@ -2,8 +2,7 @@ import useApiConfig from '@app/stores/apiConfig';
 import type { GetUserIdResponse, GetUserResponse } from '@promptfoo/contracts';
 import type { UpdateEvalAuthorResponse } from '@promptfoo/types/api/eval';
 
-export function getApiBaseUrl(): string {
-  const { apiBaseUrl } = useApiConfig.getState();
+export function getApiBaseUrl(apiBaseUrl = useApiConfig.getState().apiBaseUrl): string {
   if (apiBaseUrl) {
     return apiBaseUrl.replace(/\/$/, '');
   }
