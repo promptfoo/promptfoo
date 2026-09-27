@@ -37,7 +37,7 @@ interface CacheBackend {
   instances: CacheRegistry<number, Cache>;
   claims: Set<string>;
   inflight: Map<string, Promise<string>>;
-  writes: Set<Promise<unknown>>;
+  writes: Map<Promise<unknown>, string>;
 }
 
 // Bound idle retention while preserving identity for callers that still hold a
@@ -150,9 +150,25 @@ function resolveCachePath(cachePath: string): string {
 }
 
 function getCacheFileIdentity(filePath: string) {
+  let ancestor = filePath;
   try {
-    const stat = fs.statSync(filePath, { bigint: true, throwIfNoEntry: false });
-    return stat && stat.ino > 0n ? `${stat.dev}:${stat.ino}` : undefined;
+    while (true) {
+      const stat = fs.statSync(ancestor, { bigint: true, throwIfNoEntry: false });
+      if (stat) {
+        return stat.ino > 0n
+          ? JSON.stringify([
+              stat.dev.toString(),
+              stat.ino.toString(),
+              path.relative(ancestor, filePath),
+            ])
+          : undefined;
+      }
+      const parent = path.dirname(ancestor);
+      if (parent === ancestor) {
+        return undefined;
+      }
+      ancestor = parent;
+    }
   } catch {
     return undefined;
   }
@@ -196,7 +212,7 @@ function getCacheBackend(
       instances: new CacheRegistry<number, Cache>(16),
       claims: new Set(),
       inflight: new Map(),
-      writes: new Set(),
+      writes: new Map(),
     };
     if (cacheEnabled) {
       cacheBackends.set(identity, backend);
@@ -243,7 +259,7 @@ function getCacheInstance(backend = getCacheBackend()) {
     cacheInstance.clear = async () => {
       backend.clearGeneration = nextCacheClearGeneration++;
       backend.inflight.clear();
-      await Promise.allSettled(backend.writes);
+      await Promise.allSettled(backend.writes.keys());
       const result = await clear();
       backend.claims.clear();
       if (backend.filePath) {
@@ -329,7 +345,11 @@ function getUnscopedCacheKey(cacheKey: string, namespace: string) {
 async function clearNamespacedCache(cache: Cache, namespace: string, backend: CacheBackend) {
   const namespacePrefix = `${namespace}:`;
   backend.clearGeneration = nextCacheClearGeneration++;
-  await Promise.allSettled(backend.writes);
+  await Promise.allSettled(
+    [...backend.writes]
+      .filter(([, key]) => key.startsWith(namespacePrefix))
+      .map(([write]) => write),
+  );
 
   for (const store of cache.stores) {
     if (!store.iterator) {
@@ -1072,7 +1092,7 @@ export async function fetchWithCache<T = unknown>(
         const write = cache
           .set(cacheKey, preparedResponse.response)
           .finally(() => backend.writes.delete(write));
-        backend.writes.add(write);
+        backend.writes.set(write, cacheKey);
         await write;
       }
       return preparedResponse.response;

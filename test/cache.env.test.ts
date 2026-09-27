@@ -165,6 +165,82 @@ describe('invocation-scoped cache settings', () => {
     },
   );
 
+  it('clears a namespace without waiting for another namespace to begin its store write', async () => {
+    await cliState.withEnv(disk(path.join(tempDir, 'independent-namespaces')), async () => {
+      const first = await cache.withCacheNamespace('first', async () => cache.getCache());
+      await first.set('existing', 'old');
+      const store = first.stores[0];
+      const set = store.set.bind(store);
+      const entered = createDeferred<void>();
+      const release = createDeferred<void>();
+      vi.spyOn(store, 'set').mockImplementationOnce(async (...args) => {
+        entered.resolve();
+        await release.promise;
+        return set(...args);
+      });
+      vi.mocked(fetchWithRetries).mockResolvedValue(Response.json('second response'));
+      const pending = cache.withCacheNamespace('second', () =>
+        cache.fetchWithCache('https://cache-fixture.invalid/independent'),
+      );
+      await entered.promise;
+      let cleared = false;
+      const clearing = first.clear().then(() => {
+        cleared = true;
+      });
+      try {
+        await vi.waitFor(() => expect(cleared).toBe(true));
+        expect(await first.get('existing')).toBeUndefined();
+      } finally {
+        release.resolve();
+        await Promise.all([pending, clearing]);
+      }
+      expect(
+        await cache.withCacheNamespace('second', () =>
+          cache.fetchWithCache('https://cache-fixture.invalid/independent'),
+        ),
+      ).toMatchObject({ data: 'second response', cached: true });
+      expect(fetchWithRetries).toHaveBeenCalledOnce();
+    });
+  });
+
+  it.each(['parent', 'ancestor'])(
+    'shares a not-yet-created cache through physical %s directory aliases',
+    async (kind) => {
+      const firstDirectory = path.join(tempDir, 'physical');
+      const secondDirectory = path.join(tempDir, 'alias');
+      fs.mkdirSync(firstDirectory);
+      fs.symlinkSync(firstDirectory, secondDirectory, 'junction');
+      const realpath = fs.realpathSync;
+      // Bind mounts preserve distinct realpaths. Keep real stat identities and file writes.
+      vi.spyOn(fs, 'realpathSync').mockImplementation(((file, options) => {
+        const resolved = realpath(file, options as never);
+        const filename = String(file);
+        return filename === secondDirectory || filename.startsWith(`${secondDirectory}${path.sep}`)
+          ? filename
+          : resolved;
+      }) as typeof fs.realpathSync);
+      const suffix = kind === 'ancestor' ? path.join('missing', 'nested') : '';
+      const firstPath = path.join(firstDirectory, suffix);
+      const secondPath = path.join(secondDirectory, suffix);
+      const generation = (cachePath: string) =>
+        cliState.withEnv(disk(cachePath), () => cache.getCacheClearGeneration());
+      expect(generation(secondPath)).toBe(generation(firstPath));
+      const first = cliState.withEnv(disk(firstPath), () => cache.getCache());
+      const second = cliState.withEnv(disk(secondPath), () => cache.getCache());
+      expect(second.stores[0]).toBe(first.stores[0]);
+      await Promise.all([first.set('first', 'one'), second.set('second', 'two')]);
+      const persisted = new Keyv({
+        store: new KeyvFile({ filename: path.join(firstPath, 'cache.json') }),
+      });
+      expect(await persisted.get('first')).toBe('one');
+      expect(await persisted.get('second')).toBe('two');
+      expect(cliState.withEnv(disk(firstPath), () => cache.claimCacheKeyOnce('usage'))).toBe(true);
+      expect(cliState.withEnv(disk(secondPath), () => cache.claimCacheKeyOnce('usage'))).toBe(
+        false,
+      );
+    },
+  );
+
   it('shares a physical cache and usage claims through hard-linked file paths', async () => {
     const firstPath = path.join(tempDir, 'first');
     const secondPath = path.join(tempDir, 'second');
