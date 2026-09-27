@@ -11,12 +11,19 @@ import Eval from './Eval';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 
-const { filterMode, showToast, apiConfig } = vi.hoisted(() => ({
+const { filterMode, showToast, apiConfig, runtime } = vi.hoisted(() => ({
   filterMode: { current: 'all' as 'all' | 'failures' },
   showToast: vi.fn(),
   apiConfig: { apiBaseUrl: '' },
+  runtime: { isRunningLocally: true },
 }));
 
+vi.mock('@app/constants', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/constants')>()),
+  get IS_RUNNING_LOCALLY() {
+    return runtime.isRunningLocally;
+  },
+}));
 vi.mock('@app/utils/api', () => ({ callApi: vi.fn(), getApiBaseUrl: vi.fn(() => '') }));
 vi.mock('@app/hooks/useToast', () => ({ useToast: () => ({ showToast }) }));
 vi.mock('@app/stores/apiConfig', () => ({ default: () => apiConfig }));
@@ -74,6 +81,7 @@ beforeEach(() => {
   useResultsViewSettingsStore.setState(initialViewState, true);
   filterMode.current = 'all';
   apiConfig.apiBaseUrl = '';
+  runtime.isRunningLocally = true;
 });
 
 afterEach(() => {
@@ -81,7 +89,7 @@ afterEach(() => {
   window.history.replaceState({}, '', '/');
 });
 
-it('keeps the eval visible when a child filter request supersedes the parent load', async () => {
+it('loads pinned eval filters without repeating the initial selection request', async () => {
   const pending: Array<(body: unknown) => void> = [];
   mockCallApiRoutes([
     {
@@ -119,13 +127,166 @@ it('keeps the eval visible when a child filter request supersedes the parent loa
 
   filterMode.current = 'failures';
   rendered.rerender(element());
-  expect(pending.length).toBeGreaterThan(1);
+  expect(pending).toHaveLength(1);
   await resolveTableRequests();
 
   expect(screen.queryByText('404 Eval not found')).not.toBeInTheDocument();
   expect(useTableStore.getState().tableQuery?.url).toContain('filterMode=failures');
   expect(useTableStore.getState().isFetching).toBe(false);
   expect(rendered.container.querySelector('table.results-table')).not.toBeNull();
+});
+
+it.each(['before', 'after'] as const)(
+  'keeps the hosted page size when recent evals complete %s the filtered table',
+  async (recentOrder) => {
+    runtime.isRunningLocally = false;
+    const user = userEvent.setup();
+    const requests: string[] = [];
+    let releaseRecent!: () => void;
+    let releaseTable!: () => void;
+    const recentReady = new Promise<void>((resolve) => {
+      releaseRecent = resolve;
+    });
+    const tableReady = new Promise<void>((resolve) => {
+      releaseTable = resolve;
+    });
+    onTestFinished(() => {
+      releaseRecent();
+      releaseTable();
+    });
+    mockCallApiRoutes([
+      {
+        path: /^\/(?:results$|eval\/hosted\/table\?)/,
+        repeat: true,
+        response: async (url: string) => {
+          requests.push(url);
+          if (url === '/results') {
+            if (filterMode.current !== 'all') {
+              await recentReady;
+            }
+            return { data: [{ evalId: 'hosted' }] };
+          }
+          const query = new URL(url, window.location.origin).searchParams;
+          const filtered = query.get('filterMode') === 'failures';
+          const count = filtered ? 80 : 100;
+          const offset = Number(query.get('offset'));
+          const limit = Number(query.get('limit'));
+          if (filtered) {
+            await tableReady;
+          }
+          return {
+            table: {
+              head: { prompts: [], vars: ['case'] },
+              body: Array.from({ length: Math.min(limit, count - offset) }, (_, index) => ({
+                outputs: [],
+                test: {},
+                testIdx: offset + index,
+                vars: [`${filtered ? 'filtered' : 'all'} row ${offset + index}`],
+              })),
+            },
+            config: {},
+            version: 4,
+            totalCount: 100,
+            filteredCount: count,
+          };
+        },
+      },
+    ]);
+    const element = () => (
+      <MemoryRouter>
+        <Eval fetchId={null} />
+      </MemoryRouter>
+    );
+    const rendered = renderWithProviders(element());
+    await screen.findByText('all row 49');
+    await user.click(screen.getByLabelText('Results per page'));
+    await user.click(screen.getByRole('option', { name: '10' }));
+    await waitFor(() => expect(rendered.container.querySelectorAll('tbody tr')).toHaveLength(10));
+
+    filterMode.current = 'failures';
+    rendered.rerender(element());
+    await waitFor(() =>
+      expect(requests.some((url) => url.includes('filterMode=failures'))).toBe(true),
+    );
+    await act(async () => {
+      (recentOrder === 'before' ? releaseRecent : releaseTable)();
+    });
+    await act(async () => {
+      (recentOrder === 'before' ? releaseTable : releaseRecent)();
+    });
+    await screen.findByText('filtered row 0');
+    await waitFor(() => expect(useTableStore.getState().isFetching).toBe(false));
+
+    expect(rendered.container.querySelectorAll('tbody tr')).toHaveLength(10);
+    expect(screen.getByLabelText('Results per page')).toHaveTextContent('10');
+    expect(
+      new URL(useTableStore.getState().tableQuery!.url, window.location.origin).searchParams.get(
+        'limit',
+      ),
+    ).toBe('10');
+    expect(requests.filter((url) => url === '/results')).toHaveLength(1);
+
+    requests.length = 0;
+    await user.click(screen.getByRole('button', { name: 'Next page' }));
+    await screen.findByText('filtered row 10');
+    expect(requests).toHaveLength(1);
+    const query = new URL(requests[0], window.location.origin).searchParams;
+    expect(query.get('offset')).toBe('10');
+    expect(query.get('limit')).toBe('10');
+    expect(query.get('filterMode')).toBe('failures');
+    expect(rendered.container.querySelectorAll('tbody tr')).toHaveLength(10);
+  },
+);
+
+it('uses the latest filter mode when the initial hosted recent-eval request completes', async () => {
+  runtime.isRunningLocally = false;
+  let releaseRecent!: () => void;
+  const recentReady = new Promise<void>((resolve) => {
+    releaseRecent = resolve;
+  });
+  onTestFinished(() => releaseRecent());
+  const requests: string[] = [];
+  mockCallApiRoutes([
+    {
+      path: /^\/(?:results$|eval\/hosted\/table\?)/,
+      repeat: true,
+      response: async (url: string) => {
+        requests.push(url);
+        if (url === '/results') {
+          await recentReady;
+          return { data: [{ evalId: 'hosted' }] };
+        }
+        return {
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          config: {},
+          version: 4,
+          totalCount: 100,
+          filteredCount: 80,
+        };
+      },
+    },
+  ]);
+  const element = () => (
+    <MemoryRouter>
+      <Eval fetchId={null} />
+    </MemoryRouter>
+  );
+  const rendered = renderWithProviders(element());
+  await waitFor(() => expect(requests).toEqual(['/results']));
+  filterMode.current = 'failures';
+  rendered.rerender(element());
+  await act(async () => {
+    releaseRecent();
+  });
+  await waitFor(() => expect(useTableStore.getState().table).not.toBeNull());
+
+  expect(requests.filter((url) => url === '/results')).toHaveLength(1);
+  const tableRequests = requests.filter((url) => url.startsWith('/eval/'));
+  expect(tableRequests).toHaveLength(1);
+  expect(new URL(tableRequests[0], window.location.origin).searchParams.get('filterMode')).toBe(
+    'failures',
+  );
+  expect(screen.queryByText('404 Eval not found')).not.toBeInTheDocument();
 });
 
 it('keeps pagination aligned with the initial request when navigating from a small eval', async () => {

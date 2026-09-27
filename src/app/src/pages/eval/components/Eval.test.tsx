@@ -1176,8 +1176,7 @@ describe('Eval', () => {
     const disconnectsAfterMount = mockSocketDisconnect.mock.calls.length;
     expect(ioCallsAfterMount).toBeGreaterThan(0);
 
-    // Toggling the result filter mode re-renders the component (and changes loadEvalById's
-    // identity). The socket must stay mounted instead of tearing down and reconnecting.
+    // Toggling the result filter mode must keep the existing socket connected.
     mockFilterMode.current = 'failures';
     await act(async () => {
       rerender(
