@@ -223,8 +223,6 @@ function getFilteredTokenUsage(row: FilteredBasicMetricsRow): PromptMetrics['tok
   };
 }
 
-class FilteredMetricsLimitError extends Error {}
-
 export async function calculateFilteredMetrics(
   opts: FilteredMetricsOptions,
 ): Promise<PromptMetrics[]> {
@@ -242,7 +240,7 @@ async function calculateWithOptimizedQuery(
     logger.warn(`Filtered result count exceeds limit ${MAX_RESULTS_FOR_METRICS}`, {
       evalId: opts.evalId,
     });
-    throw new FilteredMetricsLimitError(`Result count exceeds maximum ${MAX_RESULTS_FOR_METRICS}`);
+    throw new Error(`Result count exceeds maximum ${MAX_RESULTS_FOR_METRICS}`);
   }
 
   const response = sql`response`;
@@ -499,7 +497,6 @@ async function aggregateResultDetails(
     AND eval_results.named_scores <> ${'{}'}
   `;
   let lastRowCursor: number | undefined;
-  let processedRows = 0;
   let totalDetailBytes = 0;
 
   while (true) {
@@ -532,9 +529,7 @@ async function aggregateResultDetails(
         throw new Error('Invalid result detail page metadata');
       }
       if (row.detail_bytes > MAX_RESULT_DETAILS_PAGE_BYTES) {
-        throw new FilteredMetricsLimitError(
-          'Filtered result details exceed the safe processing limit',
-        );
+        throw new Error('Filtered result details exceed the safe processing limit');
       }
       if (pageBytes + row.detail_bytes > MAX_RESULT_DETAILS_PAGE_BYTES) {
         break;
@@ -544,9 +539,7 @@ async function aggregateResultDetails(
     }
     totalDetailBytes += pageBytes;
     if (totalDetailBytes > MAX_RESULT_DETAILS_TOTAL_BYTES) {
-      throw new FilteredMetricsLimitError(
-        'Filtered result details exceed the safe processing limit',
-      );
+      throw new Error('Filtered result details exceed the safe processing limit');
     }
 
     const pageLastRowCursor = pageRows[pageRowCount - 1]?.row_cursor;
@@ -574,12 +567,6 @@ async function aggregateResultDetails(
       accumulateResultDetails(metrics, row);
     }
 
-    processedRows += rows.length;
-    if (processedRows > MAX_RESULTS_FOR_METRICS) {
-      throw new FilteredMetricsLimitError(
-        `Result count exceeds maximum ${MAX_RESULTS_FOR_METRICS}`,
-      );
-    }
     lastRowCursor = pageLastRowCursor;
     if (pageRowCount === pageRows.length && pageRows.length < RESULT_DETAILS_BATCH_SIZE) {
       break;

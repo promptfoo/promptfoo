@@ -9,6 +9,26 @@ import {
 } from '../../src/util/namedMetrics';
 
 describe('accumulateNamedMetrics', () => {
+  it('excludes deferred comparisons from legacy metric counts and weights', () => {
+    const metrics: NamedMetricAccumulator = { namedScores: {}, namedScoresCount: {} };
+    accumulateNamedMetrics(metrics, {
+      namedScores: { quality: 2 },
+      gradingResult: {
+        componentResults: [
+          { assertion: { type: 'contains', metric: 'quality' } },
+          { assertion: { type: 'equals', metric: 'quality' } },
+          { assertion: { type: 'select-best', metric: 'quality' } },
+          { assertion: { type: 'max-score', metric: '{{ unrelated | lower }}' } },
+        ],
+      },
+    });
+    expect(metrics).toEqual({
+      namedScores: { quality: 2 },
+      namedScoresCount: { quality: 2 },
+      namedScoreWeights: { quality: 2 },
+    });
+  });
+
   it.each([
     ['true', 'true'],
     ['false', 'false'],

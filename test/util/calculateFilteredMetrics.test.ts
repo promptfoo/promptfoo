@@ -8,10 +8,12 @@
 import { sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
+import { evaluate } from '../../src/evaluator';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
-import { ResultFailureReason, type TokenUsage } from '../../src/types/index';
+import { EchoProvider } from '../../src/providers/echo';
+import { ResultFailureReason, type TestSuite, type TokenUsage } from '../../src/types/index';
 import { calculateFilteredMetrics } from '../../src/util/calculateFilteredMetrics';
 import EvalFactory from '../factories/evalFactory';
 
@@ -534,6 +536,63 @@ describe('calculateFilteredMetrics', () => {
   });
 
   describe('named scores aggregation', () => {
+    it.each([
+      ['max-score', 'quality'],
+      ['select-best', 'quality'],
+      ['max-score', '{{ unrelated | lower }}'],
+      ['select-best', '{{ unrelated | lower }}'],
+    ] as const)(
+      'preserves evaluated named counts when filtering %s with metric %s',
+      async (type, metric) => {
+        const suite: TestSuite = {
+          providers: [new EchoProvider({ id: 'echo-target' })],
+          prompts: ['A {{ sample }}', 'B {{ sample }}'].map((raw) => ({ raw, label: raw })),
+          tests: ['needle-first', 'other-second'].map((sample) => ({
+            vars: { sample },
+            assert: [
+              { type: 'contains', value: sample, metric: 'quality' },
+              {
+                type,
+                metric,
+                value: 'Choose the first response',
+                provider: 'echo',
+                rubricPrompt: '0',
+              },
+            ],
+          })),
+        };
+        const evaluation = await Eval.create({}, suite.prompts);
+        await evaluate(suite, evaluation, { maxConcurrency: 1 });
+        const saved = (await Eval.findById(evaluation.id))!;
+        const rows = await EvalResult.findManyByEvalId(saved.id);
+        expect(rows).toHaveLength(4);
+        for (const row of rows) {
+          expect(
+            row.gradingResult?.componentResults?.map((result) => result.assertion?.type),
+          ).toEqual(['contains', type]);
+        }
+        for (const { metrics } of saved.prompts) {
+          expect(metrics).toMatchObject({
+            namedScores: { quality: 2 },
+            namedScoresCount: { quality: 2 },
+            namedScoreWeights: { quality: 2 },
+          });
+        }
+
+        const filtered = await saved.getFilteredMetrics({ searchQuery: 'needle-first' });
+        expect(filtered).toHaveLength(2);
+        for (const metrics of filtered) {
+          expect(metrics).toMatchObject({
+            namedScores: { quality: 1 },
+            namedScoresCount: { quality: 1 },
+            namedScoreWeights: { quality: 1 },
+          });
+          expect(metrics.testPassCount + metrics.testFailCount).toBe(1);
+          expect(metrics.assertPassCount + metrics.assertFailCount).toBe(2);
+        }
+      },
+    );
+
     it('should aggregate named scores from persisted result details', async () => {
       const eval_ = await EvalFactory.create({
         numResults: 10,

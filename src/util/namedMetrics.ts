@@ -119,7 +119,12 @@ function getContributingAssertionCounts(
     ? gradingResult.componentResults
     : [];
   for (const componentResult of componentResults) {
-    if (!isRecord(componentResult) || !isRecord(componentResult.assertion)) {
+    if (
+      !isRecord(componentResult) ||
+      !isRecord(componentResult.assertion) ||
+      componentResult.assertion.type === 'select-best' ||
+      componentResult.assertion.type === 'max-score'
+    ) {
       continue;
     }
     const metric =
