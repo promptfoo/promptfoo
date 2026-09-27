@@ -111,6 +111,49 @@ describe('provider registry signal ownership', () => {
     }
   });
 
+  it.each(events)(
+    'rearms %s after a new provider registers during signal cleanup',
+    async (event) => {
+      const closing = deferred();
+      const first = { shutdown: vi.fn(() => closing.promise) };
+      const replacement = { shutdown: vi.fn().mockResolvedValue(undefined) };
+      const hostListener = vi.fn();
+      process.on('SIGTERM', hostListener);
+      registry.register(first);
+
+      const invokeOwnedSignal = () => {
+        const handler = addedListeners(event).find((listener) => listener !== hostListener);
+        const wrappers =
+          event === 'beforeExit' ? process.rawListeners('beforeExit') : process.rawListeners(event);
+        const wrapper = wrappers.find(
+          (listener) => (listener as typeof listener & { listener?: unknown }).listener === handler,
+        );
+        expect(wrapper).toBeDefined();
+        // Invoke Node's actual once wrapper without broadcasting a signal to the test runner.
+        wrapper!();
+      };
+      invokeOwnedSignal();
+      expect(first.shutdown).toHaveBeenCalledOnce();
+      registry.register(replacement);
+      closing.resolve();
+      await vi.waitFor(() => {
+        expect(addedListeners(event).filter((listener) => listener !== hostListener)).toHaveLength(
+          1,
+        );
+      });
+      expect(replacement.shutdown).not.toHaveBeenCalled();
+
+      invokeOwnedSignal();
+      await vi.waitFor(() => {
+        expect(replacement.shutdown).toHaveBeenCalledOnce();
+        expect(addedListeners('SIGINT')).toHaveLength(0);
+        expect(addedListeners('beforeExit')).toHaveLength(0);
+        expect(addedListeners('SIGTERM')).toEqual([hostListener]);
+      });
+      expect(hostListener).not.toHaveBeenCalled();
+    },
+  );
+
   it('releases signal handlers after a caught first Python configuration failure', async () => {
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-failed-python-'));
     const providerModule = pathToFileURL(path.resolve('src/providers/pythonCompletion.ts')).href;
@@ -188,5 +231,5 @@ describe('provider registry signal ownership', () => {
       await exited;
       await fs.rm(directory, { recursive: true, force: true });
     }
-  }, 30_000);
+  });
 });

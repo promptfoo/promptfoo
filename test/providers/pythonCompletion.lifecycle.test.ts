@@ -186,16 +186,72 @@ describe('Python provider resource lifetime', () => {
     expect(second.shutdown).toHaveBeenCalledOnce();
   });
 
-  it('preserves the startup error if cleanup also fails and permits a retry', async () => {
+  it.each(['direct', 'registry'] as const)(
+    'retains the existing pool for retry when %s shutdown fails',
+    async (mode) => {
+      const pool = createPool();
+      pool.shutdown.mockRejectedValueOnce(new Error('worker kill failed'));
+      mocks.createPool.mockReturnValue(pool);
+      const provider = createProvider();
+      await provider.initialize();
+
+      if (mode === 'direct') {
+        await expect(provider.shutdown()).rejects.toThrow('worker kill failed');
+      } else {
+        await providerRegistry.shutdownAll();
+      }
+      await provider.initialize();
+      expect(mocks.createPool).toHaveBeenCalledOnce();
+
+      await providerRegistry.shutdownAll();
+      expect(pool.shutdown).toHaveBeenCalledTimes(2);
+      await provider.initialize();
+      expect(mocks.createPool).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it.each(['direct', 'registry'] as const)(
+    'retains a failed partial pool for %s cleanup retry',
+    async (mode) => {
+      const first = createPool();
+      const second = createPool();
+      first.initialize.mockRejectedValue(new Error('startup failed'));
+      first.shutdown.mockRejectedValueOnce(new Error('cleanup failed'));
+      mocks.createPool.mockReturnValueOnce(first).mockReturnValueOnce(second);
+      const provider = createProvider();
+
+      await expect(provider.initialize()).rejects.toThrow('startup failed');
+      expect(first.shutdown).toHaveBeenCalledOnce();
+      if (mode === 'direct') {
+        await provider.shutdown();
+      } else {
+        await providerRegistry.shutdownAll();
+      }
+      expect(first.shutdown).toHaveBeenCalledTimes(2);
+      await provider.initialize();
+      await provider.callApi('retry');
+      expect(second.execute).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('finishes failed-startup cleanup before allowing concurrent initialization retries', async () => {
     const first = createPool();
     const second = createPool();
     first.initialize.mockRejectedValue(new Error('startup failed'));
-    first.shutdown.mockRejectedValue(new Error('cleanup failed'));
+    first.shutdown
+      .mockRejectedValueOnce(new Error('first cleanup failed'))
+      .mockRejectedValueOnce(new Error('cleanup still failing'));
     mocks.createPool.mockReturnValueOnce(first).mockReturnValueOnce(second);
     const provider = createProvider();
 
     await expect(provider.initialize()).rejects.toThrow('startup failed');
-    await provider.initialize();
+    await expect(provider.initialize()).rejects.toThrow('cleanup still failing');
+    expect(mocks.createPool).toHaveBeenCalledOnce();
+    expect(first.execute).not.toHaveBeenCalled();
+
+    await Promise.all([provider.initialize(), provider.initialize()]);
+    expect(first.shutdown).toHaveBeenCalledTimes(3);
+    expect(mocks.createPool).toHaveBeenCalledTimes(2);
     await provider.callApi('retry');
     expect(second.execute).toHaveBeenCalledOnce();
   });

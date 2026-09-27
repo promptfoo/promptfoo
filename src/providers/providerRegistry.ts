@@ -51,18 +51,32 @@ class ProviderRegistry {
 
       logger.debug(`Received ${signal}, shutting down ${this.providers.size} Python providers...`);
 
-      await this.shutdownAll();
-
-      logger.debug('Python provider shutdown complete');
+      try {
+        await this.shutdownAll();
+        logger.debug('Python provider shutdown complete');
+      } finally {
+        // A once handler has been consumed. New registrations during cleanup
+        // must receive a fresh set without removing any host-owned listeners.
+        if (this.shutdownHandlers === handlers) {
+          for (const [event, handler] of Object.entries(handlers)) {
+            process.removeListener(event, handler);
+          }
+          this.shutdownHandlers = null;
+          if (this.providers.size || this.pendingShutdowns) {
+            this.registerShutdownHandlers();
+          }
+        }
+      }
     };
 
-    this.shutdownHandlers = {
+    const handlers = {
       SIGINT: () => void shutdown('SIGINT'),
       SIGTERM: () => void shutdown('SIGTERM'),
       // Use beforeExit for async cleanup (exit event cannot await).
       beforeExit: () => void shutdown('beforeExit'),
     };
-    for (const [event, handler] of Object.entries(this.shutdownHandlers)) {
+    this.shutdownHandlers = handlers;
+    for (const [event, handler] of Object.entries(handlers)) {
       process.once(event, handler);
     }
   }

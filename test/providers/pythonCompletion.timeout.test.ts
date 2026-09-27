@@ -1,103 +1,75 @@
-import { spawn } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { setImmediate } from 'node:timers/promises';
 
-import { expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
+import { evaluate } from '../../src/evaluator';
+import Eval from '../../src/models/eval';
+import { providerRegistry } from '../../src/providers/providerRegistry';
+import { PythonProvider } from '../../src/providers/pythonCompletion';
+import telemetry from '../../src/telemetry';
+import { createDeferred, mockProcessEnv } from '../util/utils';
+
+const loaderGlobals = globalThis as typeof globalThis & {
+  pythonTimeoutConfigLoader?: () => Promise<never>;
+};
+
+afterEach(() => {
+  delete loaderGlobals.pythonTimeoutConfigLoader;
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
 
 it('finishes an evaluation timeout when a Python configuration loader never resolves', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'python-config-timeout-'));
-  const moduleUrl = (filename: string) => pathToFileURL(path.resolve(filename)).href;
+  const restoreEnv = mockProcessEnv({ PROMPTFOO_CACHE_ENABLED: 'false' });
+  const pending = createDeferred<never>();
+  const entered = createDeferred<void>();
+  loaderGlobals.pythonTimeoutConfigLoader = () => {
+    entered.resolve();
+    return pending.promise;
+  };
   const pendingConfig = path.join(directory, 'pending.mjs');
-  await writeFile(
-    pendingConfig,
-    `export default () => {
-    globalThis.pythonTimeoutLoaderEntered = true;
-    return new Promise(() => {});
-  };`,
-  );
-  const script = `
-    const { PythonProvider } = await import(${JSON.stringify(moduleUrl('src/providers/pythonCompletion.ts'))});
-    const { evaluate } = await import(${JSON.stringify(moduleUrl('src/evaluator.ts'))});
-    const { default: Eval } = await import(${JSON.stringify(moduleUrl('src/models/eval.ts'))});
-    const { default: telemetry } = await import(${JSON.stringify(moduleUrl('src/telemetry.ts'))});
-    // Disabling telemetry still sends an opt-out event outside IS_TESTING.
-    // Keep this real evaluator regression entirely offline.
-    telemetry.record = () => {};
-    await import(${JSON.stringify(pathToFileURL(pendingConfig).href)});
-    const provider = new PythonProvider(${JSON.stringify(path.resolve('test/smoke/fixtures/providers/echo_provider.py'))}, {
-      config: { settings: ${JSON.stringify(`file://${pendingConfig}`)}, workers: 1 },
-    });
-    // Keep the child alive if shutdown deadlocks, so unresolved top-level await
-    // cannot masquerade as successful evaluation completion.
-    const keepAlive = setInterval(() => {}, 1000);
-    const record = new Eval({});
-    await evaluate({ providers: [provider], prompts: [{ raw: 'hello', label: 'hello' }], tests: [{}] }, record, {
-      timeoutMs: 100, maxConcurrency: 1, showProgressBar: false,
-    });
-    process.send({ rows: record.results.map(({ success, score, error }) => ({ success, score, error })),
-      loaderEntered: globalThis.pythonTimeoutLoaderEntered,
-      signalListeners: process.listenerCount('SIGTERM') });
-    clearInterval(keepAlive);
-    process.disconnect();
-  `;
-  const child = spawn(
-    process.execPath,
-    [
-      '--import',
-      moduleUrl('node_modules/tsx/dist/loader.mjs'),
-      '--input-type=module',
-      '-e',
-      script,
-    ],
+  await writeFile(pendingConfig, 'export default () => globalThis.pythonTimeoutConfigLoader();');
+  vi.spyOn(telemetry, 'record').mockImplementation(() => {});
+  const originalListeners = process.listeners('SIGTERM');
+  const provider = new PythonProvider(
+    path.resolve('test/smoke/fixtures/providers/echo_provider.py'),
     {
-      cwd: process.cwd(),
-      env: {
-        ...process.env,
-        PROMPTFOO_CONFIG_DIR: directory,
-        PROMPTFOO_CACHE_ENABLED: 'false',
-        PROMPTFOO_DISABLE_TELEMETRY: 'true',
-        PROMPTFOO_DISABLE_UPDATE: 'true',
-        IS_TESTING: 'false',
-        LOG_LEVEL: 'error',
-      },
-      stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
+      config: { settings: `file://${pendingConfig}`, workers: 1 },
     },
   );
-  let stderr = '';
-  child.stderr!.on('data', (data) => {
-    stderr += String(data);
+  const record = new Eval({});
+  // Exercise the actual evaluator and file loader without counting a second
+  // process's cold TypeScript imports against a cleanup watchdog on Windows.
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  let finished = false;
+  const evaluation = evaluate(
+    { providers: [provider], prompts: [{ raw: 'hello', label: 'hello' }], tests: [{}] },
+    record,
+    { timeoutMs: 100, maxConcurrency: 1, showProgressBar: false },
+  ).then(() => {
+    finished = true;
   });
-  const closed = new Promise<void>((resolve) => child.once('close', () => resolve()));
-  let timer: NodeJS.Timeout | undefined;
   try {
-    const result = await new Promise<{
-      rows: Array<{ success: boolean; score: number; error: string }>;
-      loaderEntered: boolean;
-      signalListeners: number;
-    }>((resolve, reject) => {
-      timer = setTimeout(
-        () => reject(new Error(`Evaluation cleanup did not finish: ${stderr}`)),
-        15_000,
-      );
-      child.once('message', (message) => resolve(message as Awaited<typeof result>));
-      child.once('error', reject);
-      child.once('exit', () =>
-        reject(new Error(`Child exited before returning results: ${stderr}`)),
-      );
-    });
-    expect(result.rows).toHaveLength(1);
-    expect(result.rows[0]).toMatchObject({ success: false, score: 0 });
-    expect(result.rows[0].error).toContain('timed out');
-    expect(result.loaderEntered).toBe(true);
-    expect(result.signalListeners).toBe(0);
+    await entered.promise;
+    await vi.advanceTimersByTimeAsync(100);
+    await setImmediate();
+    expect(finished).toBe(true);
+    await evaluation;
+    expect(record.results).toHaveLength(1);
+    expect(record.results[0]).toMatchObject({ success: false, score: 0 });
+    expect(record.results[0].error).toContain('timed out');
+    expect(process.listeners('SIGTERM')).toEqual(originalListeners);
   } finally {
-    clearTimeout(timer);
-    if (child.exitCode === null && child.signalCode === null) {
-      child.kill('SIGKILL');
-    }
-    await closed;
+    // Also settle the historical broken implementation if this regression fails.
+    // Rejecting the loader prevents a late Python worker from being started.
+    pending.reject(new Error('test teardown'));
+    await evaluation;
+    await providerRegistry.shutdownAll();
+    vi.useRealTimers();
+    restoreEnv();
     await rm(directory, { recursive: true, force: true });
   }
 });

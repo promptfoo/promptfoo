@@ -181,6 +181,7 @@ export class PythonProvider implements ApiProvider {
   private configResolved = false;
   private cancelConfigLoading: (() => void) | null = null;
   private poolPromise: Promise<PythonWorkerPool> | null = null;
+  private failedPool: PythonWorkerPool | null = null;
   private shutdownPromise: Promise<void> | null = null;
   public label: string | undefined;
 
@@ -215,6 +216,11 @@ export class PythonProvider implements ApiProvider {
   private async getPool(): Promise<PythonWorkerPool> {
     while (this.shutdownPromise) {
       await this.shutdownPromise;
+    }
+    // A failed startup may still own workers if its cleanup rejected. Dispose
+    // those workers before retrying; a partial pool is never ready for calls.
+    if (this.failedPool) {
+      await this.shutdown();
     }
     if (this.poolPromise) {
       return this.poolPromise;
@@ -262,10 +268,14 @@ export class PythonProvider implements ApiProvider {
         return pool;
       } catch (error) {
         await pool?.shutdown().catch((cleanupError) => {
+          this.failedPool = pool ?? null;
+          providerRegistry.register(this);
           logger.warn('Failed to clean up Python provider startup', { error: cleanupError });
         });
         this.poolPromise = null;
-        providerRegistry.unregister(this);
+        if (!this.failedPool) {
+          providerRegistry.unregister(this);
+        }
         throw error;
       }
     })();
@@ -432,12 +442,19 @@ export class PythonProvider implements ApiProvider {
       this.cancelConfigLoading?.();
       this.shutdownPromise = (async () => {
         try {
-          // Failed startup already disposes its pool and reports the error to its callers.
-          const pool = await this.poolPromise?.catch(() => null);
+          // Startup reports its own error; any partial pool whose cleanup failed
+          // remains owned separately from the promise for a ready pool.
+          const pool = (await this.poolPromise?.catch(() => null)) ?? this.failedPool;
           await pool?.shutdown();
-        } finally {
           this.poolPromise = null;
+          this.failedPool = null;
           providerRegistry.unregister(this);
+        } catch (error) {
+          // Global cleanup releases its snapshot before awaiting providers. A pool
+          // that could not stop still needs ownership and a later cleanup attempt.
+          providerRegistry.register(this);
+          throw error;
+        } finally {
           this.shutdownPromise = null;
         }
       })();
