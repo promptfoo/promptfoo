@@ -25,6 +25,20 @@ function matchesStoredProvider(saved: unknown, current: unknown): boolean {
   );
 }
 
+function requireRuntimeGradingFunction(saved: unknown, current: unknown, field: string): void {
+  if (
+    typeof saved === 'string' &&
+    saved.startsWith('[Function] ') &&
+    saved !== current &&
+    (typeof current !== 'function' || saved !== `[Function] ${current.name}`)
+  ) {
+    throw new Error(
+      `Cannot resume assertion grading: runtime function '${field}' is unavailable. ` +
+        'Rerun the test to recreate hook-only callbacks.',
+    );
+  }
+}
+
 // The public API resolves graders eagerly, while CLI resume leaves declarations
 // lazy. Load only a candidate for a saved instance, then require an exact match.
 async function resolveStoredGradingProvider(
@@ -64,6 +78,9 @@ async function restoreGradingAssertion(
   current: Assertion | undefined,
   resolveGradingProvider: GradingProviderResolver,
 ): Promise<Assertion> {
+  for (const field of ['value', 'transform', 'contextTransform'] as const) {
+    requireRuntimeGradingFunction(saved[field], current?.[field], field);
+  }
   return restoreRuntimeGradingValues(saved, {
     ...current,
     provider: await resolveStoredGradingProvider(
@@ -207,6 +224,11 @@ export class EvalEvaluationStore implements EvaluationStore<Eval, EvalResult> {
     currentTest: AtomicTestCase,
     resolveGradingProvider: GradingProviderResolver,
   ): Promise<{ providerResponse: ProviderResponse; test: AtomicTestCase }> {
+    requireRuntimeGradingFunction(
+      savedTest.assertScoringFunction,
+      currentTest.assertScoringFunction,
+      'assertScoringFunction',
+    );
     const { assert, options, ...savedValues } = savedTest;
     const test = restoreRuntimeGradingValues(savedValues, currentTest) as AtomicTestCase;
     if (options) {

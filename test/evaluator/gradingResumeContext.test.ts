@@ -19,6 +19,92 @@ import { describeEvaluator } from './lifecycle';
 import type { ApiProvider, ProviderResponse, TestSuite } from '../../src/types/index';
 
 describeEvaluator('interrupted grading context', () => {
+  it.each(['value', 'transform', 'contextTransform', 'assertScoringFunction'] as const)(
+    'reports an unavailable hook-created %s without replaying its target or hook',
+    async (field) => {
+      const controller = new AbortController();
+      const started = createDeferred<void>();
+      const pending = createDeferred<ProviderResponse>();
+      const grader: ApiProvider = {
+        id: () => 'offline-hook-grader',
+        callApi: vi.fn(() => {
+          started.resolve();
+          return pending.promise;
+        }),
+      };
+      const target: ApiProvider = {
+        id: () => 'offline-hook-target',
+        callApi: vi.fn(async () => ({ output: 'retained target output' })),
+      };
+      const beforeEachCalls = vi.fn();
+      const injectedAssertion = () => true;
+      const injectedTransform = (output: string) => output;
+      const injectedScorer = () => ({ pass: true, score: 0.4, reason: 'hook scorer' });
+      vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hook, context) => {
+        if (hook !== 'beforeEach' || !('test' in context)) {
+          return context;
+        }
+        beforeEachCalls();
+        return {
+          ...context,
+          test: {
+            ...context.test,
+            ...(field === 'assertScoringFunction' && { assertScoringFunction: injectedScorer }),
+            assert: [
+              ...context.test.assert!,
+              ...(field === 'value'
+                ? [{ type: 'javascript' as const, value: injectedAssertion }]
+                : []),
+            ].map((assertion) =>
+              field === 'transform' || field === 'contextTransform'
+                ? { ...assertion, [field]: injectedTransform }
+                : assertion,
+            ),
+          },
+        };
+      });
+      const suite: TestSuite = {
+        providers: [target],
+        prompts: [toPrompt('hello')],
+        extensions: ['file://offline-hook.js'],
+        tests: [{ assert: [{ type: 'llm-rubric', value: 'fixture', provider: grader }] }],
+      };
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      const evaluation = evaluate(suite, record, {
+        maxConcurrency: 1,
+        abortSignal: controller.signal,
+      });
+      try {
+        await started.promise;
+        controller.abort();
+        await evaluation;
+        pending.resolve({ output: 'late result' });
+        const [interrupted] = await record.getResults();
+        expect(JSON.stringify(interrupted.testCase)).toContain('[Function]');
+        cliState.resume = true;
+        const reloaded = await Eval.findById(record.id);
+        await evaluate(suite, reloaded!, { maxConcurrency: 1 });
+        const [result] = await reloaded!.getResults();
+        expect(result.id).toBe(interrupted.id);
+        expect(result.response?.output).toBe('retained target output');
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('Cannot resume assertion grading: runtime function');
+        expect(result.error).toContain(field);
+        expect(
+          result.gradingResult?.metadata?.__promptfoo?.assertionGradingInterrupted,
+        ).toBeUndefined();
+        expect(reloaded!.getStats()).toMatchObject({ successes: 0, failures: 0, errors: 1 });
+        expect(target.callApi).toHaveBeenCalledOnce();
+        expect(grader.callApi).toHaveBeenCalledOnce();
+        expect(beforeEachCalls).toHaveBeenCalledOnce();
+      } finally {
+        pending.resolve({ output: 'late result' });
+        await evaluation;
+        cliState.resume = false;
+      }
+    },
+  );
+
   it.each([
     'runtime inputs',
     'afterEach projections',
