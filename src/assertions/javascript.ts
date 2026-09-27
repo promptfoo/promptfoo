@@ -156,9 +156,10 @@ function normalizeJavascriptAssertionResult(
   inverse: boolean,
   renderedValue?: string,
 ): GradingResult {
+  // Preserve metadata getter ordering while grading against the original assertion.
   const normalizedAssertion = normalizeResultAssertion(undefined, assertion);
   const normalizedResult = normalizeScriptAssertionResult(
-    normalizedAssertion,
+    assertion,
     result,
     inverse,
     { code: 'Custom function', language: 'JavaScript' },
@@ -166,7 +167,10 @@ function normalizeJavascriptAssertionResult(
   );
   return {
     ...normalizedResult,
-    assertion: normalizeResultAssertion(normalizedResult.assertion, assertion),
+    assertion:
+      typeof result === 'object'
+        ? normalizeResultAssertion(normalizedResult.assertion, assertion)
+        : normalizedAssertion,
   };
 }
 

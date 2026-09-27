@@ -873,6 +873,68 @@ describe('JavaScript file references', () => {
     });
   });
 
+  describe.each(['inherited', 'non-enumerable'] as const)('%s numeric threshold', (kind) => {
+    it.each([
+      ['javascript', 0.25, false],
+      ['javascript', 0.5, true],
+      ['javascript', 0.75, true],
+      ['not-javascript', 0.25, true],
+      ['not-javascript', 0.5, false],
+      ['not-javascript', 0.75, false],
+    ] as const)('grades %s score %s before serializing metadata', async (type, score, pass) => {
+      const value = () => score;
+      const assertion: Assertion = Object.assign(
+        kind === 'inherited' ? Object.create({ threshold: 0.5 }) : {},
+        { type, value },
+      );
+      if (kind === 'non-enumerable') {
+        Object.defineProperty(assertion, 'threshold', { value: 0.5 });
+      }
+      Object.freeze(assertion);
+
+      const result = await runAssertion({
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Threshold fixture' },
+      });
+
+      expect(result).toMatchObject({ pass, score });
+      expect(result.assertion).toEqual({ type, value: value.toString() });
+      expect(assertion.value).toBe(value);
+      expect(assertion.threshold).toBe(0.5);
+    });
+  });
+
+  it.each(['javascript', 'not-javascript'] as const)(
+    'preserves threshold getter ordering for %s numeric results',
+    async (type) => {
+      const reads: number[] = [];
+      const assertion: Assertion = {
+        type,
+        value: () => 0.6,
+        get threshold() {
+          const value = [0.7, 0.7, 0.7, 0.5][reads.length] ?? 0.5;
+          reads.push(value);
+          return value;
+        },
+      };
+
+      const result = await runAssertion({
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Threshold getter fixture' },
+      });
+
+      expect(result).toMatchObject({
+        pass: type === 'javascript',
+        score: 0.6,
+        assertion: { type, threshold: 0.7, value: expect.any(String) },
+      });
+      // The dispatcher serializes once, followed by metadata serialization and two comparisons.
+      expect(reads).toEqual([0.7, 0.7, 0.7, 0.5]);
+    },
+  );
+
   const inverseFunctionAssertionCases: [string, Assertion, boolean, number, string][] = [
     [
       'boolean results for not-javascript assertions',
