@@ -22,6 +22,8 @@ import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 
 import type { ApiProvider, ProviderResponse } from '../../src/types/providers';
 
+vi.mock('../../src/telemetry', () => ({ default: { record: vi.fn() } }));
+
 vi.mock('ai', async (importOriginal) => ({
   ...(await importOriginal<typeof import('ai')>()),
   streamText: vi.fn(),
@@ -61,6 +63,7 @@ describe('scheduler recovery outside provider transport retries', () => {
         prompt: { raw: prompt, label: 'fixture' },
       }),
     ).catch((error: Error): ProviderResponse => ({ error: error.message }));
+    await vi.dynamicImportSettled();
     await vi.runAllTimersAsync();
     return pending;
   }
@@ -343,19 +346,38 @@ describe('scheduler recovery outside provider transport retries', () => {
     expect(fetch).toHaveBeenCalledOnce();
   });
 
-  it('rechecks cache and request-setup ownership on each HTTP invocation', async () => {
-    const provider = new HttpProvider('https://retry.fixture.test/default', {
-      config: { method: 'GET' },
-    });
-    expect(await withCacheEnabled(false, async () => provider.handlesOwnRetries)).toBe(true);
-    expect(await withCacheEnabled(true, async () => provider.handlesOwnRetries)).toBe(false);
-    for (const property of ['tls', 'multipart', 'signatureAuth', 'auth', 'session'] as const) {
-      Object.assign(provider.config, { [property]: {} });
-      expect(await withCacheEnabled(false, async () => provider.handlesOwnRetries)).toBe(false);
-      delete provider.config[property];
-    }
-    expect(await withCacheEnabled(false, async () => provider.handlesOwnRetries)).toBe(true);
-  });
+  it.each([0, 1, 3])(
+    'preserves truncated HTTP 503 body recovery with maxRetries=%i',
+    async (maxRetries) => {
+      vi.stubEnv('PROMPTFOO_RETRY_5XX', 'false');
+      const fetch = vi.fn().mockImplementation(async () => {
+        if (fetch.mock.calls.length <= Math.max(1, maxRetries)) {
+          return new Response(
+            new ReadableStream({
+              start(controller) {
+                controller.error(new TypeError('terminated'));
+              },
+            }),
+            { status: 503, statusText: 'Service Unavailable' },
+          );
+        }
+        return Response.json({ output: 'recovered' });
+      });
+      vi.stubGlobal('fetch', fetch);
+      const result = await invoke(
+        new HttpProvider('https://retry.fixture.test/body-read', {
+          config: { method: 'GET', maxRetries },
+        }),
+      );
+      if (maxRetries === 0) {
+        expect(result.error).toContain('terminated. HTTP 503 Service Unavailable');
+      } else {
+        expect(result.error).toBeUndefined();
+        expect(result.output).toEqual({ output: 'recovered' });
+      }
+      expect(fetch).toHaveBeenCalledTimes(maxRetries + 1);
+    },
+  );
 
   it('rechecks n8n method ownership and preserves explicit no-replay for body errors', async () => {
     const fetch = vi.fn().mockImplementation(async () => Response.json(failed));

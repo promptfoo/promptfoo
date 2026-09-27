@@ -54,7 +54,7 @@ describe('provider operation retry ownership', () => {
   }
 
   it.each([0, 1, 3])(
-    'does not multiply HTTP maxRetries=%i after transport exhaustion',
+    'retains HTTP scheduler recovery with maxRetries=%i after transport exhaustion',
     async (maxRetries) => {
       const fetch = vi.fn().mockImplementation(async () => throttled());
       vi.stubGlobal('fetch', fetch);
@@ -63,7 +63,7 @@ describe('provider operation retry ownership', () => {
       });
       const result = await invoke(provider);
       expect(result.error).toContain('429');
-      expect(fetch).toHaveBeenCalledTimes(maxRetries + 1);
+      expect(fetch).toHaveBeenCalledTimes((maxRetries + 1) ** 2);
     },
   );
 
@@ -353,27 +353,6 @@ describe('provider operation retry ownership', () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
-  it('keeps HTTP ownership aligned with the captured validator when config is mutated', async () => {
-    const validated = new HttpProvider('https://retry.fixture.test/validated', {
-      config: { method: 'GET', validateStatus: 'status === 200' },
-    });
-    const defaultValidation = new HttpProvider('https://retry.fixture.test/default', {
-      config: { method: 'GET' },
-    });
-    validated.config.validateStatus = undefined;
-    defaultValidation.config.validateStatus = 'status === 200';
-    expect(await withCacheEnabled(false, async () => validated.handlesOwnRetries)).toBe(false);
-    expect(await withCacheEnabled(false, async () => defaultValidation.handlesOwnRetries)).toBe(
-      true,
-    );
-    defaultValidation.config.session = {
-      method: 'POST',
-      url: 'https://retry.fixture.test/session',
-      responseParser: 'data.body.id',
-    };
-    expect(defaultValidation.handlesOwnRetries).toBe(false);
-  });
-
   it('retains OpenAI scheduler recovery until all response phases own retries', async () => {
     const fetch = vi.fn().mockImplementation(async () => throttled());
     vi.stubGlobal('fetch', fetch);
@@ -557,7 +536,7 @@ describe('provider operation retry ownership', () => {
   it('lets custom subclasses opt back into scheduler retries', async () => {
     let calls = 0;
     class CustomHttpProvider extends HttpProvider {
-      override get handlesOwnRetries(): boolean {
+      get handlesOwnRetries(): boolean {
         return false;
       }
       override async callApi(): Promise<ProviderResponse> {

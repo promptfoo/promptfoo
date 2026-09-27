@@ -8,7 +8,7 @@ import httpZ from 'http-z';
 import { LRUCache } from 'lru-cache';
 import { Agent, type Dispatcher, interceptors } from 'undici';
 import { z } from 'zod';
-import { fetchWithCache, isCacheEnabled } from '../cache';
+import { fetchWithCache } from '../cache';
 import cliState from '../cliState';
 import {
   HttpProviderConfigFieldsSchema,
@@ -1745,21 +1745,6 @@ async function createHttpsAgent(
 }
 
 export class HttpProvider implements ApiProvider {
-  private readonly hasCustomRetryLogic: boolean;
-
-  get handlesOwnRetries(): boolean {
-    // Cache and request-setup failures can need recovery outside fetch retries.
-    return (
-      !isCacheEnabled() &&
-      !this.hasCustomRetryLogic &&
-      !this.config.auth &&
-      !this.config.signatureAuth &&
-      !this.config.session &&
-      !this.config.tls &&
-      !this.config.multipart
-    );
-  }
-
   url: string;
   config: HttpProviderConfig;
   private transformResponse: Promise<
@@ -1803,14 +1788,6 @@ export class HttpProvider implements ApiProvider {
       createTransformRequest,
     );
     this.validateStatus = createValidateStatus(this.config.validateStatus);
-    // These captured callbacks can fail outside the transport retry loop.
-    this.hasCustomRetryLogic = Boolean(
-      this.config.validateStatus ||
-        this.config.transformRequest ||
-        this.config.transformResponse ||
-        this.config.responseParser ||
-        this.config.sessionParser,
-    );
 
     // Initialize session endpoint parser if session config is provided
     if (this.config.session) {
