@@ -690,18 +690,18 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   }
 
   private async createResponseWithRetries(
-    initialClient: FoundryOpenAIClient,
     getClient: () => FoundryOpenAIClient,
     body: Record<string, any>,
     options: FoundryResponseCreateOptions,
-    maxRetries: number,
+    maxRetries: number | undefined,
     onRetry: () => void,
     signal?: AbortSignal,
   ): Promise<FoundryResponse> {
     const retrySignal = signal ?? new AbortController().signal;
     for (let attempt = 0; ; attempt += 1) {
       throwIfAborted(signal);
-      const client = attempt === 0 ? initialClient : getClient();
+      const client = getClient();
+      maxRetries ??= client.maxRetries ?? 2;
       const controller = new AbortController();
       const attemptSignal = signal
         ? AbortSignal.any([signal, controller.signal])
@@ -709,8 +709,8 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       let receivedError: { status: number; headers: Headers } | undefined;
       const fetchWithTimeout = client.fetchWithTimeout;
       // The SDK reads error bodies before exposing the Response or APIError.
-      // getOpenAIClient returns a fresh SDK client for each attempt, so this
-      // wrapper cannot leak across concurrent invocations.
+      // Each attempt (including tool continuations) gets its own SDK client so
+      // it cannot inherit a timed-out credential promise or transport wrapper.
       client.fetchWithTimeout = async (...args) => {
         const response = await fetchWithTimeout.apply(client, args);
         if (!response.ok && !attemptSignal.aborted) {
@@ -1135,7 +1135,6 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       span.setAttribute(GenAIAttributes.AGENT_ID, agent.id);
       span.setAttribute(GenAIAttributes.AGENT_NAME, agent.name);
       span.updateName(`invoke_agent ${agent.name}`);
-      const openAIClient = client.getOpenAIClient();
       const responseOptions = this.getResponseOptions(agent, effectiveConfig);
       const tracer = getGenAITracer();
       let turnCount = 0;
@@ -1165,11 +1164,10 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         accumulateTokenUsage(tokenUsage, { numRequests: 1 });
         try {
           const response = await this.createResponseWithRetries(
-            openAIClient,
             () => client.getOpenAIClient(),
             requestBody,
             responseOptions,
-            effectiveConfig.retryOptions?.maxRetries ?? openAIClient.maxRetries ?? 2,
+            effectiveConfig.retryOptions?.maxRetries,
             () => {
               transportRetries += 1;
               usageComplete = false;

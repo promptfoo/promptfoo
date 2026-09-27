@@ -29,17 +29,17 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
 
   // Editable transform code in modal
   const [editableTransform, setEditableTransform] = React.useState('');
+  const requestTransform =
+    (selectedTarget.config?.transformRequest as string | undefined) ??
+    defaultRequestTransform ??
+    '';
 
   // Initialize editable code when opening modal
   React.useEffect(() => {
     if (testOpen) {
-      setEditableTransform(
-        (selectedTarget.config?.transformRequest as string | undefined) ??
-          defaultRequestTransform ??
-          '',
-      );
+      setEditableTransform(requestTransform);
     }
-  }, [testOpen, selectedTarget.config?.transformRequest, defaultRequestTransform]);
+  }, [testOpen, requestTransform]);
 
   // Test handler function
   const handleTest = async (transformCode: string, testInput: string) => {
@@ -103,11 +103,7 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
       <div className="relative">
         <div className="rounded-md border border-border bg-white dark:bg-zinc-900">
           <Editor
-            value={
-              (selectedTarget.config?.transformRequest as string | undefined) ??
-              defaultRequestTransform ??
-              ''
-            }
+            value={requestTransform}
             onValueChange={(code) => updateCustomTarget('transformRequest', code)}
             highlight={highlightJS}
             padding={10}

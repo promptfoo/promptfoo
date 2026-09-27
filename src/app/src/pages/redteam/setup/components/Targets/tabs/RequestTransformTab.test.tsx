@@ -1,6 +1,6 @@
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import RequestTransformTab from './RequestTransformTab';
 
 import type { HttpProviderOptions } from '../../../types';
@@ -16,18 +16,28 @@ vi.mock('../TransformTestDialog', () => ({
 }));
 
 describe('RequestTransformTab', () => {
-  it('preserves an intentionally empty saved transform instead of restoring the default', async () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    ['an empty saved transform', '', 'return defaultTransform(prompt);', ''],
+    ['a saved transform', 'return prompt;', 'return defaultTransform(prompt);', 'return prompt;'],
+    ['the default for an unset transform', undefined, 'return prompt;', 'return prompt;'],
+    ['an empty value when neither is set', undefined, undefined, ''],
+  ])('uses %s in both the editor and test dialog', async (_name, saved, fallback, expected) => {
     const user = userEvent.setup();
     render(
       <RequestTransformTab
-        selectedTarget={{ config: { transformRequest: '' } } as HttpProviderOptions}
+        selectedTarget={{ config: { transformRequest: saved } } as HttpProviderOptions}
         updateCustomTarget={vi.fn()}
-        defaultRequestTransform="return defaultTransform(prompt);"
+        defaultRequestTransform={fallback}
       />,
     );
 
-    expect(screen.getByTestId('code-editor')).toHaveValue('');
+    expect(screen.getByTestId('code-editor')).toHaveValue(expected);
     await user.click(screen.getByRole('button', { name: 'Test' }));
-    expect(screen.getByTestId('transform-test-dialog')).toHaveTextContent('');
+    expect(screen.getByTestId('transform-test-dialog').textContent).toBe(expected);
   });
 });
