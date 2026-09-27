@@ -1134,10 +1134,10 @@ export default class Eval {
         sql`json_extract(grading_result, '$.comment') LIKE ${searchPattern}`,
         sql`json_extract(named_scores, '$') LIKE ${searchPattern}`,
         // Search user-visible metadata only — drop the reserved `__promptfoo` namespace
-        // (trace linkage) so a query can't match on internal data the UI never shows.
+        // (trace linkage and remote dataset markers) from result and test metadata.
         sql`json_remove(metadata, ${`$.${PROMPTFOO_METADATA_KEY}`}) LIKE ${searchPattern}`,
         sql`json_extract(test_case, '$.vars') LIKE ${searchPattern}`,
-        sql`json_extract(test_case, '$.metadata') LIKE ${searchPattern}`,
+        sql`json_extract(json_remove(test_case, ${`$.metadata.${PROMPTFOO_METADATA_KEY}`}), '$.metadata') LIKE ${searchPattern}`,
       ];
 
       const searchClause = sql.join(searchConditions, sql` OR `);

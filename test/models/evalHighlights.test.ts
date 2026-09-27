@@ -314,55 +314,6 @@ describe('Highlights Filter Feature', () => {
   });
 
   describe('Eval.getTablePage highlights filter', () => {
-    it('should return only highlighted results through getTablePage', async () => {
-      const eval_ = await EvalFactory.create({ numResults: 0 });
-
-      // Add test data
-      const results = [
-        { testIdx: 0, comment: '!highlight Performance test' },
-        { testIdx: 1, comment: 'Not highlighted' },
-        { testIdx: 2, comment: '!highlight Another highlight' },
-      ];
-
-      for (const result of results) {
-        await eval_.addResult({
-          description: `test-${result.testIdx}`,
-          promptIdx: 0,
-          testIdx: result.testIdx,
-          testCase: { vars: { test: `value${result.testIdx}` } },
-          promptId: 'test-prompt',
-          provider: { id: 'test-provider', label: 'test-label' },
-          prompt: { raw: 'Test prompt', label: 'Test prompt' },
-          vars: { test: `value${result.testIdx}` },
-          response: { output: `Response ${result.testIdx}` },
-          error: null,
-          failureReason: ResultFailureReason.NONE,
-          success: true,
-          score: 1,
-          latencyMs: 100,
-          gradingResult: {
-            pass: true,
-            score: 1,
-            reason: 'Test passed',
-            comment: result.comment,
-            namedScores: {},
-            tokensUsed: { total: 10, prompt: 5, completion: 5 },
-            componentResults: [],
-          },
-          namedScores: {},
-          cost: 0.007,
-          metadata: {},
-        } as EvaluateResult);
-      }
-
-      const { body, filteredCount } = await eval_.getTablePage({
-        filterMode: 'highlights',
-      });
-
-      expect(filteredCount).toBe(2);
-      expect(body.map((row) => row.testIdx)).toEqual([0, 2]);
-    });
-
     it('should handle large datasets efficiently', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
 

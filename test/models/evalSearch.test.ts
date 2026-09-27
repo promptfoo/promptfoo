@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { runDbMigrations } from '../../src/migrate';
 import { createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
@@ -8,9 +8,6 @@ import type { EvalResultsFilterMode, EvaluateResult } from '../../src/types/inde
 describe('table search and filtered metrics', () => {
   beforeAll(async () => {
     await runDbMigrations();
-  });
-  afterEach(() => {
-    vi.restoreAllMocks();
   });
 
   const fieldCases: [string, Partial<EvaluateResult>][] = [
@@ -141,14 +138,35 @@ describe('table search and filtered metrics', () => {
     expect((await eval_.getTablePage({ searchQuery: 'no match' })).filteredCount).toBe(0);
   });
 
-  it('does not expose matches from reserved internal metadata', async () => {
-    const eval_ = await create([{ metadata: { __promptfoo: { trace: { id: 'hidden-needle' } } } }]);
-    expect((await eval_.getTablePage({ searchQuery: 'hidden-needle' })).filteredCount).toBe(0);
-    expect(
-      (await eval_.getFilteredMetrics({ searchQuery: 'hidden-needle' })).reduce(
-        (n, m) => n + m.testPassCount + m.testFailCount + m.testErrorCount,
-        0,
-      ),
-    ).toBe(0);
-  });
+  it.each([
+    { searchQuery: 'hidden-needle', expected: [] },
+    { searchQuery: 'remote', expected: [1] },
+    { searchQuery: 'public-marker', expected: [0] },
+  ])(
+    'excludes reserved metadata while searching $searchQuery',
+    async ({ searchQuery, expected }) => {
+      const eval_ = await create([
+        {
+          metadata: { __promptfoo: { trace: { id: 'hidden-needle' } } },
+          testCase: {
+            metadata: {
+              // Remote dataset loading adds this reserved marker before persistence.
+              __promptfoo: { remote: true, marker: 'hidden-needle' },
+              note: 'public-marker',
+            },
+          },
+        },
+        { testCase: { metadata: { note: 'remote' } } },
+      ]);
+      const page = await eval_.getTablePage({ searchQuery });
+      expect(page.body.map((row) => row.testIdx)).toEqual(expected);
+      expect(page.filteredCount).toBe(expected.length);
+      expect(
+        (await eval_.getFilteredMetrics({ searchQuery })).reduce(
+          (n, m) => n + m.testPassCount + m.testFailCount + m.testErrorCount,
+          0,
+        ),
+      ).toBe(expected.length);
+    },
+  );
 });
