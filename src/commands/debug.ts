@@ -21,7 +21,7 @@ interface DebugOptions {
 }
 
 async function doDebug(options: DebugOptions): Promise<void> {
-  let configEnv = options.defaultConfig.env;
+  let configEnv = options.config ? undefined : options.defaultConfig.env;
   const configInfo = {
     defaultConfigPath: options.defaultConfigPath,
     specifiedConfigPath: options.config,
