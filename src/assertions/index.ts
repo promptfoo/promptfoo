@@ -277,8 +277,7 @@ const ASSERTION_HANDLERS: Record<
       }
       if (
         error instanceof Error &&
-        (error.message.includes('Cannot find module') ||
-          error.message.includes('natural" package is required'))
+        error.message.startsWith('The "natural" package is required for METEOR assertions.')
       ) {
         return {
           pass: false,

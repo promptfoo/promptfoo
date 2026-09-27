@@ -47,10 +47,9 @@ describe('METEOR assertion', () => {
     expect(result.reason).toBe('METEOR test passed');
   });
 
-  it.each([
-    "Cannot find module 'natural'",
-    'The "natural" package is required for METEOR assertions. Install it with: npm install natural@^8.1.1',
-  ])('handles asynchronous missing-package errors: %s', async (message) => {
+  it('handles the loader missing-package error', async () => {
+    const message =
+      'The "natural" package is required for METEOR assertions. Install it alongside Promptfoo: npm install promptfoo natural@^8.1.1.';
     mockHandleMeteorAssertion.mockRejectedValue(new Error(message));
 
     const result = await runAssertion({
@@ -93,23 +92,25 @@ describe('METEOR assertion', () => {
     expect(result).toMatchObject({ pass: false, score: 0, reason: message, assertion });
   });
 
-  it('should rethrow other errors that are not related to missing module', async () => {
-    // Mock handleMeteorAssertion to throw a non-module-related error
-    mockHandleMeteorAssertion.mockRejectedValue(new Error('Some other error'));
+  it.each(['Some other error', "Cannot find module 'natural-binding'"])(
+    'preserves unexpected handler errors: %s',
+    async (message) => {
+      const error = Object.assign(new Error(message), { code: 'MODULE_NOT_FOUND' });
+      mockHandleMeteorAssertion.mockRejectedValue(error);
 
-    // The error should be rethrown since it's not a "Cannot find module" error
-    await expect(
-      runAssertion({
-        prompt: 'Test prompt',
-        provider: {} as any,
-        assertion: {
-          type: 'meteor',
-          value: 'Expected output',
-          threshold: 0.7,
-        },
-        test: {} as any,
-        providerResponse: { output: 'Actual output' },
-      }),
-    ).rejects.toThrow('Some other error');
-  });
+      await expect(
+        runAssertion({
+          prompt: 'Test prompt',
+          provider: {} as any,
+          assertion: {
+            type: 'meteor',
+            value: 'Expected output',
+            threshold: 0.7,
+          },
+          test: {} as any,
+          providerResponse: { output: 'Actual output' },
+        }),
+      ).rejects.toBe(error);
+    },
+  );
 });

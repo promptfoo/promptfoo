@@ -9,15 +9,18 @@ afterEach(() => {
   vi.resetModules();
 });
 
-describe('METEOR optional dependency', () => {
+describe('METEOR dependency loading errors', () => {
   it.each([
     'natural/package.json',
     'natural/lib/natural/stemmers/index.js',
     'natural/lib/natural/wordnet/index.js',
-  ])('explains how to install a missing %s', async (modulePath) => {
+  ])('preserves unexpected errors from %s', async (modulePath) => {
     vi.resetModules();
+    const cause = Object.assign(new Error("Cannot find module 'natural-binding'"), {
+      code: 'MODULE_NOT_FOUND',
+    });
     vi.doMock(modulePath, () => {
-      throw new Error(`Cannot find package '${modulePath}'`);
+      throw cause;
     });
     const { handleMeteorAssertion } = await import('../../src/assertions/meteor');
     await expect(
@@ -27,8 +30,6 @@ describe('METEOR optional dependency', () => {
         renderedValue: 'the cat sat',
         inverse: false,
       } as AssertionParams),
-    ).rejects.toThrow(
-      'The "natural" package is required for METEOR assertions. Install it alongside Promptfoo: npm install promptfoo natural@^8.1.1. For a global installation, use npm install -g promptfoo natural@^8.1.1.',
-    );
+    ).rejects.toHaveProperty('cause', cause);
   });
 });
