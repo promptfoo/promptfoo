@@ -178,6 +178,7 @@ export class PythonProvider implements ApiProvider {
 
   private scriptPath: string;
   private functionName: string | null;
+  private configResolved = false;
   private poolPromise: Promise<PythonWorkerPool> | null = null;
   private shutdownPromise: Promise<void> | null = null;
   public label: string | undefined;
@@ -223,10 +224,13 @@ export class PythonProvider implements ApiProvider {
     this.poolPromise = (async () => {
       let pool: PythonWorkerPool | undefined;
       try {
-        this.config = await processConfigFileReferences(
-          this.config,
-          this.options?.config.basePath || '',
-        );
+        if (!this.configResolved) {
+          this.config = await processConfigFileReferences(
+            this.config,
+            this.options?.config.basePath || '',
+          );
+          this.configResolved = true;
+        }
 
         // Initialize worker pool
         const workerCount = this.getWorkerCount();
