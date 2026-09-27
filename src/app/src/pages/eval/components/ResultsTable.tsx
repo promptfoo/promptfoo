@@ -1053,7 +1053,29 @@ function buildRatingTableUpdate({
   };
 }
 
-function findRatingOutput(table: EvaluateTable, resultId: string) {
+type RatingCoordinates = {
+  rowIndex: number;
+  promptIndex: number;
+  testIdx?: number;
+};
+
+function findRatingOutput(
+  table: EvaluateTable,
+  resultId: string,
+  legacyCoordinates?: RatingCoordinates,
+) {
+  if (!resultId) {
+    if (!legacyCoordinates) {
+      return undefined;
+    }
+    const { promptIndex, testIdx } = legacyCoordinates;
+    const rowIndex =
+      testIdx === undefined
+        ? legacyCoordinates.rowIndex
+        : table.body.findIndex((row) => row.testIdx === testIdx);
+    const output = table.body[rowIndex]?.outputs[promptIndex];
+    return output && !output.id ? { output, promptIndex, rowIndex } : undefined;
+  }
   for (let rowIndex = 0; rowIndex < table.body.length; rowIndex++) {
     const promptIndex = table.body[rowIndex].outputs.findIndex((output) => output?.id === resultId);
     if (promptIndex !== -1) {
@@ -1070,8 +1092,9 @@ function replaceRatingOutput(
   table: EvaluateTable,
   resultId: string,
   output: EvaluateTableOutput,
+  legacyCoordinates?: RatingCoordinates,
 ): EvaluateTable {
-  const location = findRatingOutput(table, resultId);
+  const location = findRatingOutput(table, resultId, legacyCoordinates);
   if (!location) {
     return table;
   }
@@ -1855,9 +1878,8 @@ function ResultsTable({
 
   const handleRating = React.useCallback(
     async (
-      _rowIndex: number,
-      _promptIndex: number,
       resultId: string,
+      coordinates: RatingCoordinates,
       isPass?: boolean | null,
       score?: number,
       comment?: string,
@@ -1873,15 +1895,17 @@ function ResultsTable({
           getApiBaseUrl() === apiBaseUrl
         );
       };
-      if (!isScopeActive()) {
+      if (!isScopeActive() || (!resultId && version && version >= 4)) {
         return;
       }
+      // Legacy tables can omit IDs. Keep the clicked cell's coordinates through queued PATCHes.
+      const legacyCoordinates = resultId ? undefined : coordinates;
       const queueKey = JSON.stringify([apiBaseUrl, evalId]);
       const queuedTable = useTableStore.getState().table;
       if (!queuedTable) {
         return;
       }
-      const queuedLocation = findRatingOutput(queuedTable, resultId);
+      const queuedLocation = findRatingOutput(queuedTable, resultId, legacyCoordinates);
       if (!queuedLocation) {
         return;
       }
@@ -1898,7 +1922,7 @@ function ResultsTable({
             : isScopeActive()
               ? (useTableStore.getState().table ?? queuedTable)
               : queuedTable;
-        const currentLocation = findRatingOutput(currentTable, resultId);
+        const currentLocation = findRatingOutput(currentTable, resultId, legacyCoordinates);
         if (!currentLocation && (!version || version < 4)) {
           return;
         }
@@ -1952,7 +1976,7 @@ function ResultsTable({
         const handlePersistedResult = async (persistedResult?: PersistedRatingResult) => {
           const latestTable = useTableStore.getState().table;
           if (isScopeActive() && latestTable) {
-            const latestLocation = findRatingOutput(latestTable, resultId);
+            const latestLocation = findRatingOutput(latestTable, resultId, legacyCoordinates);
             const ownsOptimisticOutput =
               optimisticOutput !== undefined && latestLocation?.output === optimisticOutput;
             if (persistedResult && ownsOptimisticOutput) {
@@ -1975,9 +1999,14 @@ function ResultsTable({
           console.error('Failed to update table:', error);
           const latestTable = useTableStore.getState().table;
           if (isScopeActive() && latestTable && error instanceof ConfirmedRatingPersistenceError) {
-            const latestLocation = findRatingOutput(latestTable, resultId);
+            const latestLocation = findRatingOutput(latestTable, resultId, legacyCoordinates);
             if (optimisticOutput && latestLocation?.output === optimisticOutput) {
-              const rolledBackTable = replaceRatingOutput(latestTable, resultId, existingOutput);
+              const rolledBackTable = replaceRatingOutput(
+                latestTable,
+                resultId,
+                existingOutput,
+                legacyCoordinates,
+              );
               setTable(rolledBackTable);
               if (pendingRatingRequests.get(queueKey) !== currentRequest) {
                 return;
@@ -2431,12 +2460,11 @@ function ResultsTable({
                       output.originalRowPositionIndex ?? output.originalRowIndex ?? info.row.index
                     }
                     promptIndex={idx}
-                    onRating={handleRating.bind(
-                      null,
-                      output.originalRowIndex ?? info.row.index,
-                      output.originalPromptIndex ?? idx,
-                      output.id,
-                    )}
+                    onRating={handleRating.bind(null, output.id, {
+                      rowIndex: output.originalRowIndex ?? info.row.index,
+                      promptIndex: output.originalPromptIndex ?? idx,
+                      testIdx: info.row.original.testIdx,
+                    })}
                     firstOutput={getFirstOutput(info.row.index)}
                     showDiffs={filterMode === 'different' && visiblePromptCount > 1}
                     searchText={debouncedSearchText}

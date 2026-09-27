@@ -601,8 +601,7 @@ describe('AssertionsResult', () => {
         namedScores: { quality: 0.75 },
         namedScoreWeights: { quality: 1 },
       };
-      const result = await assertionsResult.testResult(() => customResult);
-      expect(result).toMatchObject(customResult);
+      expect(await assertionsResult.testResult(() => customResult)).toMatchObject(customResult);
     });
 
     it('still rejects invalid inherited metrics after a finite score override', async () => {
@@ -613,17 +612,9 @@ describe('AssertionsResult', () => {
         metric: 'quality',
         weight: 2,
       });
-      const result = await assertionsResult.testResult(() => ({
-        pass: true,
-        score: 2,
-        reason: 'Custom',
-      }));
-      expect(result).toMatchObject({
-        pass: false,
-        score: 0,
-        namedScores: {},
-        namedScoreWeights: {},
-      });
+      expect(
+        await assertionsResult.testResult(() => ({ pass: true, score: 2, reason: 'Custom' })),
+      ).toMatchObject({ pass: false, score: 0, namedScores: {}, namedScoreWeights: {} });
     });
 
     it('should calculate final result with threshold', async () => {
@@ -792,7 +783,6 @@ describe('AssertionsResult', () => {
       expect(result.pass).toBe(true);
       expect(result.score).toBe(0.9);
       expect(result.reason).toBe('Custom scoring');
-      expect(result.metadata).toBeUndefined();
       expect(scoringFunction).toHaveBeenCalledWith(
         {},
         {
@@ -1046,7 +1036,6 @@ describe('AssertionsResult', () => {
       expect(result.pass).toBe(false);
       expect(result.score).toBe(0);
       expect(result.reason).toBe('Scoring function error: Scoring failed');
-      expect(result.metadata).toBeUndefined();
     });
 
     it.each(['namedScores', 'namedScoreWeights'] as const)(

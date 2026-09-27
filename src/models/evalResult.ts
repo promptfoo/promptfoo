@@ -864,21 +864,57 @@ function hasManualRating(gradingResult: GradingResult | null | undefined): boole
   );
 }
 
-function applyExplicitRatingUpdate(
+function inferLegacyRatingUpdate(
+  result: RatingEvalResult,
+  submitted: GradingResult,
+): SubmitRatingUpdate | undefined {
+  if (
+    isHumanAssertion(submitted.assertion) ||
+    submitted.pass !== result.success ||
+    !Array.isArray(result.gradingResult?.componentResults) ||
+    !Array.isArray(submitted.componentResults)
+  ) {
+    return undefined;
+  }
+  const previousHuman = result.gradingResult.componentResults.find(isHumanGradingResult);
+  const submittedHuman = submitted.componentResults.find(isHumanGradingResult);
+  if (
+    !previousHuman ||
+    !submittedHuman ||
+    previousHuman.pass !== submittedHuman.pass ||
+    previousHuman.score !== submittedHuman.score ||
+    !isDeepStrictEqual(previousHuman.reason, submittedHuman.reason)
+  ) {
+    return undefined;
+  }
+  if (submitted.score === result.score) {
+    return 'comment';
+  }
+  return submitted.reason === MANUAL_RATING_REASON ? 'score' : undefined;
+}
+
+function applyRatingFieldUpdate(
   previous: GradingResult | null,
   submitted: GradingResult,
   previousSuccess: boolean,
   previousScore: number,
   ratingUpdate: SubmitRatingUpdate,
+  preserveHumanScore: boolean,
 ): GradingResult {
+  const changes =
+    ratingUpdate === 'score' ? { score: submitted.score } : { comment: submitted.comment };
   const updated = {
-    ...(previous ?? { pass: previousSuccess, score: previousScore }),
+    ...previous,
+    pass: previousSuccess,
+    score: previousScore,
+    ...changes,
   } as GradingResult;
-  updated.pass = previousSuccess;
-  updated.score = ratingUpdate === 'score' ? submitted.score : previousScore;
-  if (ratingUpdate === 'comment') {
-    // Keep an explicit undefined so normalization cannot restore the previous comment.
-    updated.comment = submitted.comment;
+  if (Array.isArray(previous?.componentResults)) {
+    updated.componentResults = previous.componentResults.map((component) =>
+      isHumanGradingResult(component) && !(ratingUpdate === 'score' && preserveHumanScore)
+        ? { ...component, ...changes }
+        : component,
+    );
   }
   return updated;
 }
@@ -1220,7 +1256,11 @@ function resolveRatingTransition(
     (hasOwn(submittedGradingResult, 'comment') ||
       Array.isArray(submittedGradingResult.componentResults) ||
       submittedGradingResult.reason === MANUAL_RATING_REASON);
-  let update = ratingAction === 'update' ? (ratingUpdate ?? 'comment') : undefined;
+  const legacyUpdate =
+    ratingAction === undefined
+      ? inferLegacyRatingUpdate(result, submittedGradingResult)
+      : undefined;
+  let update = ratingAction === 'update' ? (ratingUpdate ?? 'comment') : legacyUpdate;
   if (isLegacyClearedUpdate) {
     // Old clients retain stale outcomes after clearing. Only their annotations and marked
     // score edits are meaningful in these full payloads. Bare API pass/score edits retain
@@ -1251,30 +1291,35 @@ function resolveRatingTransition(
       manualRatingState: existingState ?? null,
     };
   }
-  const effectiveSubmission = update
-    ? applyExplicitRatingUpdate(
+  const normalized = update
+    ? {
+        gradingResult: applyRatingFieldUpdate(
+          result.gradingResult,
+          submittedGradingResult,
+          result.success,
+          result.score,
+          update,
+          legacyUpdate === 'score',
+        ),
+        clearingManualRating: false,
+        hasManualRating: previousHasManualRating,
+      }
+    : normalizeRatingSubmission(
         result.gradingResult,
         submittedGradingResult,
         result.success,
-        result.score,
-        update,
-      )
-    : submittedGradingResult;
-  const normalized = normalizeRatingSubmission(
-    result.gradingResult,
-    effectiveSubmission,
-    result.success,
-    ratingAction,
-  );
+        ratingAction,
+      );
   let nextState: ManualRatingState | undefined;
   let gradingResult: GradingResult | null = normalized.gradingResult;
   let success = gradingResult.pass;
   let score = gradingResult.score;
-  let failureReason = normalized.hasManualRating
-    ? success
-      ? ResultFailureReason.NONE
-      : ResultFailureReason.ASSERT
-    : normalizeFailureReason(result.failureReason);
+  let failureReason =
+    normalized.hasManualRating && !update
+      ? success
+        ? ResultFailureReason.NONE
+        : ResultFailureReason.ASSERT
+      : normalizeFailureReason(result.failureReason);
   const isClearingManualRating = ratingAction === 'clear' || normalized.clearingManualRating;
   const clearRestoreBase =
     result.gradingResult && isClearingManualRating

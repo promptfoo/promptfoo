@@ -1,12 +1,9 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import { getEnvBool } from '../envars';
-import {
-  type AssertionSet,
-  type GradingResult,
-  isGradingResult,
-  type ScoringFunction,
-} from '../types/index';
+import { isGradingResult } from '../types/index';
+
+import type { AssertionSet, GradingResult, ScoringFunction } from '../types/index';
 
 export const GUARDRAIL_BLOCKED_REASON = 'Content failed guardrail safety checks';
 

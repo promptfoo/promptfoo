@@ -532,6 +532,245 @@ describe('eval routes', () => {
       },
     );
 
+    it.each([
+      { name: 'comment', update: 'comment', comment: 'Reviewer note', score: 0, humanScore: 1 },
+      { name: 'highlight', update: 'comment', comment: '!highlight', score: 0, humanScore: 1 },
+      { name: 'comment removal', update: 'comment', score: 0, humanScore: 1 },
+      { name: 'score', update: 'score', comment: 'Prior note', score: 0.4, humanScore: 0.4 },
+      {
+        name: 'legacy comment',
+        update: 'comment',
+        legacy: true,
+        comment: 'Old client note',
+        score: 0,
+        humanScore: 1,
+      },
+      {
+        name: 'legacy highlight',
+        update: 'comment',
+        legacy: true,
+        comment: '!highlight Old client',
+        score: 0,
+        humanScore: 1,
+      },
+      {
+        name: 'legacy score',
+        update: 'score',
+        legacy: true,
+        comment: 'Prior note',
+        score: 0.4,
+        humanScore: 1,
+      },
+    ])('preserves the human verdict on a $name update after comparison', async (scenario) => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const [result] = await eval_.getResults();
+      invariant(result instanceof EvalResult, 'Result is required');
+      const endpoint = `/api/eval/${eval_.id}/results/${result.id}/rating`;
+      const rated = await api.post(endpoint).send({
+        pass: true,
+        score: 1,
+        reason: 'Reviewer prefers this output',
+        comment: 'Prior note',
+        ratingAction: 'rate',
+      });
+      expect(rated.status).toBe(200);
+      const compared = await EvalResult.findById(result.id);
+      invariant(compared?.gradingResult?.componentResults, 'Rated result is required');
+      const human = compared.gradingResult.componentResults.find(
+        (component) => component.assertion?.type === 'human',
+      );
+      invariant(human, 'Human rating is required');
+      const laterComparison = comparison('max-score', false);
+      compared.success = compared.gradingResult.pass = false;
+      compared.score = compared.gradingResult.score = 0;
+      compared.failureReason = ResultFailureReason.ASSERT;
+      compared.gradingResult.reason = laterComparison.reason;
+      compared.gradingResult.assertion = laterComparison.assertion;
+      compared.gradingResult.componentResults.push(laterComparison);
+      await compared.save();
+      const comparisonEval = await Eval.findById(eval_.id);
+      invariant(comparisonEval, 'Eval is required');
+      const metrics = comparisonEval.prompts[result.promptIdx].metrics;
+      invariant(metrics, 'Metrics are required');
+      metrics.score -= 1;
+      metrics.testPassCount -= 1;
+      metrics.testFailCount += 1;
+      metrics.assertFailCount += 1;
+      await comparisonEval.save();
+      const db = await getDb();
+      const readRatingState = () =>
+        db
+          .select({ state: evalResultsTable.manualRatingState })
+          .from(evalResultsTable)
+          .where(eq(evalResultsTable.id, result.id))
+          .get();
+      const previousState = await readRatingState();
+
+      const legacyPayload = {
+        ...compared.gradingResult,
+        score: scenario.score,
+        reason:
+          scenario.update === 'score'
+            ? 'Manual result (overrides all other grading results)'
+            : compared.gradingResult.reason,
+        comment: scenario.comment,
+      };
+      const updated = await api.post(endpoint).send(
+        scenario.legacy
+          ? legacyPayload
+          : {
+              pass: true,
+              score: scenario.update === 'score' ? scenario.score : 999,
+              reason: 'Stale submitted reason',
+              componentResults: rated.body.gradingResult.componentResults,
+              comment: scenario.comment,
+              ratingAction: 'update',
+              ratingUpdate: scenario.update,
+            },
+      );
+      expect(updated.status).toBe(200);
+      const expected = {
+        success: false,
+        score: scenario.score,
+        failureReason: ResultFailureReason.ASSERT,
+        gradingResult: {
+          pass: false,
+          score: scenario.score,
+          reason: laterComparison.reason,
+          assertion: laterComparison.assertion,
+        },
+      };
+      expect(updated.body).toMatchObject(expected);
+      const persisted = await EvalResult.findById(result.id);
+      expect(persisted).toMatchObject(expected);
+      expect(persisted?.gradingResult?.comment).toBe(scenario.comment);
+      expect(persisted?.gradingResult?.componentResults).toContainEqual({
+        ...human,
+        pass: true,
+        score: scenario.humanScore,
+        comment: scenario.comment,
+      });
+      expect(persisted?.gradingResult?.componentResults).toContainEqual(laterComparison);
+      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toEqual({
+        ...metrics,
+        score: metrics.score + scenario.score,
+      });
+      expect(await readRatingState()).toEqual(previousState);
+
+      if (scenario.legacy) {
+        // Old clients keep their original human component when editing again.
+        const commented = await api.post(endpoint).send({
+          ...legacyPayload,
+          comment: 'Another old client note',
+        });
+        expect(commented.status).toBe(200);
+        expect(commented.body).toMatchObject(expected);
+        expect(commented.body.gradingResult.componentResults).toContainEqual({
+          ...human,
+          comment: 'Another old client note',
+        });
+        expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toEqual({
+          ...metrics,
+          score: metrics.score + scenario.score,
+        });
+        expect(await readRatingState()).toEqual(previousState);
+      }
+
+      const cleared = await api
+        .post(endpoint)
+        .send({ pass: true, score: 1, ratingAction: 'clear' });
+      expect(cleared.status).toBe(200);
+      expect(cleared.body).toMatchObject({
+        success: false,
+        score: 0,
+        failureReason: ResultFailureReason.ASSERT,
+      });
+      expect(cleared.body.gradingResult.componentResults).toContainEqual(laterComparison);
+      expect(cleared.body.gradingResult.componentResults).not.toContainEqual(
+        expect.objectContaining({ assertion: { type: 'human' } }),
+      );
+    });
+
+    it.each(['bare', 'explicit', 'top-level human'])(
+      'keeps %s rating inference separate from legacy field edits',
+      async (intent) => {
+        const eval_ = await EvalFactory.create();
+        testEvalIds.add(eval_.id);
+        const [, result] = await eval_.getResults();
+        invariant(result instanceof EvalResult && result.gradingResult, 'Result is required');
+        result.gradingResult.componentResults = [
+          ...(result.gradingResult.componentResults ?? []),
+          { pass: true, score: 1, reason: 'Human pass', assertion: { type: 'human' } },
+        ];
+        await result.save();
+        const metrics = eval_.prompts[result.promptIdx].metrics;
+        invariant(metrics, 'Metrics are required');
+        metrics.assertPassCount += 1;
+        await eval_.save();
+        const response = await api.post(`/api/eval/${eval_.id}/results/${result.id}/rating`).send({
+          ...(intent === 'bare' ? {} : result.gradingResult),
+          ...(intent === 'explicit' ? { ratingAction: 'rate' } : {}),
+          ...(intent === 'top-level human' ? { assertion: { type: 'human' } } : {}),
+          pass: false,
+          score: 0.4,
+          reason: 'Manual result (overrides all other grading results)',
+        });
+        expect(response.status).toBe(200);
+        expect(response.body.gradingResult.componentResults).toContainEqual(
+          expect.objectContaining({
+            pass: false,
+            score: 0.4,
+            assertion: { type: 'human' },
+          }),
+        );
+      },
+    );
+
+    it.each(['comment', 'score'])(
+      'preserves a stored error category with a human component on %s updates',
+      async (ratingUpdate) => {
+        const eval_ = await EvalFactory.create();
+        testEvalIds.add(eval_.id);
+        const [, result] = await eval_.getResults();
+        invariant(result instanceof EvalResult && result.gradingResult, 'Result is required');
+        await markResultAsError(eval_, result);
+        const human = {
+          pass: true,
+          score: 1,
+          reason: 'Retained human verdict',
+          assertion: { type: 'human' as const },
+        };
+        result.gradingResult.componentResults = [
+          ...(result.gradingResult.componentResults ?? []),
+          human,
+        ];
+        await result.save();
+        const metrics = eval_.prompts[result.promptIdx].metrics;
+        invariant(metrics, 'Metrics are required');
+        metrics.assertPassCount += 1;
+        await eval_.save();
+        const score = ratingUpdate === 'score' ? 0.4 : result.score;
+        const updated = await api
+          .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+          .send({ pass: true, score: 0.4, comment: 'Note', ratingAction: 'update', ratingUpdate });
+        expect(updated.status).toBe(200);
+        expect(updated.body).toMatchObject({
+          success: false,
+          score,
+          failureReason: ResultFailureReason.ERROR,
+        });
+        expect(updated.body.gradingResult.componentResults).toContainEqual({
+          ...human,
+          ...(ratingUpdate === 'score' ? { score: 0.4 } : { comment: 'Note' }),
+        });
+        expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toEqual({
+          ...metrics,
+          score: metrics.score + score - result.score,
+        });
+      },
+    );
+
     it('rejects result ratings when the URL eval does not own the result', async () => {
       const evalA = await EvalFactory.create();
       const evalB = await EvalFactory.create();
