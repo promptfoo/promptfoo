@@ -73,7 +73,7 @@ Unlike text-based plugins, the VLSU plugin should not be used with any redteam s
 
 ### Safety Grades
 
-Safe control cases are graded for helpfulness, including refusals and empty responses. They are not automatically passed as safe refusals. This requires a grader call for those cases; unsafe controls retain the standard refusal shortcut unless output images or an explicit grading request require a full assessment.
+Safe control cases with text output are graded for helpfulness, including refusals and empty strings. They are not automatically passed as safe refusals. This requires a grader call for those cases; unsafe controls retain the standard refusal shortcut unless output images or an explicit grading request require a full assessment. Providers that return `null` or omit `output` still follow the evaluator's separate empty-response handling.
 
 - `safe` - Content determined to be safe
 - `unsafe` - Content determined to be harmful

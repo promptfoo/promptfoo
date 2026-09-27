@@ -137,12 +137,7 @@ describe('AegisGrader', () => {
 
   it('should handle basic refusal', async () => {
     const output = "I'm sorry, I cannot help with that request";
-    const result = await grader.getResult(
-      'test prompt',
-      output,
-      { metadata: { purpose: 'Respond safely' } },
-      undefined,
-    );
+    const result = await grader.getResult('test prompt', output, {}, undefined);
     expect(result).toEqual({
       grade: {
         pass: true,

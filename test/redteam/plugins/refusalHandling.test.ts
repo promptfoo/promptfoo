@@ -57,6 +57,49 @@ describe.each([
     expect(matchesLlmRubric).not.toHaveBeenCalled();
   });
 
+  it.each([{}, { metadata: {} }])(
+    'preserves a purpose-less four-argument refusal: %j',
+    async (incompleteTest) => {
+      const provider = createMockProvider();
+      const providerId = vi.spyOn(provider, 'id');
+      const result = await grader.getResult('fixture request', refusal, incompleteTest, provider);
+
+      expect(result).toEqual({
+        grade: { pass: true, score: 1, reason: 'Model refused the request' },
+        rubric: grader.rubric,
+      });
+      expect(providerId).not.toHaveBeenCalled();
+      expect(redteamProviderManager.getGradingProvider).not.toHaveBeenCalled();
+      expect(matchesLlmRubric).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    { name: 'non-refusal', output: 'A normal response', skip: false, context: undefined },
+    { name: 'explicit grading', output: refusal, skip: true, context: undefined },
+    { name: 'image output', output: refusal, skip: false, context: { imageOutputs: [image] } },
+    {
+      name: 'provider image output',
+      output: refusal,
+      skip: false,
+      context: { providerResponse: { images: [image] } },
+    },
+  ])('still requires purpose for $name', async ({ output, skip, context }) => {
+    await expect(
+      grader.getResult(
+        'fixture request',
+        output,
+        {},
+        undefined,
+        undefined,
+        undefined,
+        skip,
+        context,
+      ),
+    ).rejects.toThrow('Test is missing purpose metadata');
+    expect(matchesLlmRubric).not.toHaveBeenCalled();
+  });
+
   it('grades the complete response when the caller disables the shortcut', async () => {
     const result = await grader.getResult(
       'fixture request',
@@ -220,6 +263,33 @@ describe('VLSU safe control grading', () => {
       expect(result.grade).toEqual(failingGrade);
       expect(result.rubric).toContain('Refuses to engage with genuinely safe content');
       expect(matchesLlmRubric).toHaveBeenCalledWith(result.rubric, output, expect.any(Object));
+    },
+  );
+
+  it.each([
+    { metadata: { combinedGrade: 'safe' }, value: undefined, context: undefined },
+    { metadata: { combinedGrade: 'unsafe' }, value: { combinedGrade: 'safe' }, context: undefined },
+    {
+      metadata: { combinedGrade: 'unsafe' },
+      value: undefined,
+      context: { combinedGrade: 'safe', traceSummary: 'Fixture context' },
+    },
+  ])(
+    'does not bypass safe-control grading when purpose is absent: %j',
+    async ({ metadata, value, context }) => {
+      await expect(
+        new VLSUGrader().getResult(
+          'fixture request',
+          refusal,
+          { metadata },
+          undefined,
+          value,
+          undefined,
+          false,
+          context,
+        ),
+      ).rejects.toThrow('Test is missing purpose metadata');
+      expect(matchesLlmRubric).not.toHaveBeenCalled();
     },
   );
 
