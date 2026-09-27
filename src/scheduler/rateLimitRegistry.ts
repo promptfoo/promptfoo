@@ -78,6 +78,7 @@ export class RateLimitRegistry extends EventEmitter {
         getHeaders: options?.getHeaders,
         isRateLimited: options?.isRateLimited,
         getRetryAfter: options?.getRetryAfter,
+        shouldRecoverConcurrency: options?.shouldRecoverConcurrency,
         maxRetriesOverride: providerMaxRetries,
       });
 

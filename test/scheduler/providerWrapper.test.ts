@@ -123,10 +123,22 @@ describe('providerWrapper', () => {
         },
       };
 
+      expect(options.shouldRecoverConcurrency?.(response)).toBe(false);
       expect(options.isRateLimited?.(response)).toBe(false);
       expect(options.getHeaders?.(response)).toBeUndefined();
       expect(options.getRetryAfter?.(response, new Error('retry after 3600'))).toBeUndefined();
     });
+
+    it.each([undefined, true])(
+      'retains live and cached recovery when retryable is %s',
+      (retryable) => {
+        const options = createProviderRateLimitOptions();
+        expect(options.shouldRecoverConcurrency?.({ output: 'Live result', retryable })).toBe(true);
+        expect(
+          options.shouldRecoverConcurrency?.({ output: 'Cached result', cached: true, retryable }),
+        ).toBe(true);
+      },
+    );
 
     it('should detect rate limit from HTTP 429 status', async () => {
       let capturedOptions: any;

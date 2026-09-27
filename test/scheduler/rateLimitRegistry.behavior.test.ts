@@ -98,6 +98,72 @@ describe('RateLimitRegistry integration - provider maxRetries', () => {
     },
   );
 
+  it.each(['success', 'failure'] as const)(
+    'does not recover live concurrency from opted-out local %s responses',
+    async (outcome) => {
+      vi.useFakeTimers();
+      vi.stubEnv('PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER', 'false');
+      const registry = new RateLimitRegistry({ maxConcurrency: 8, minConcurrency: 1 });
+      const provider = createProvider(0);
+      const localProvider = {
+        ...provider,
+        config: { ...provider.config, report_file: '/unused/local-regression-fixture.json' },
+      };
+      const options = createProviderRateLimitOptions();
+      const recovered = vi.fn();
+      registry.on('concurrency:increased', recovered);
+      try {
+        await registry.execute<ProviderResponse>(
+          provider,
+          async () => ({ error: 'HTTP 429', metadata: { headers: { 'retry-after': '0' } } }),
+          options,
+        );
+        await vi.advanceTimersByTimeAsync(0);
+        expect(registry.getMetrics()[provider.id()].maxConcurrency).toBe(4);
+
+        const local: ProviderResponse = {
+          ...(outcome === 'failure' ? { error: 'Recorded 429' } : { output: 'Local fixture' }),
+          retryable: false,
+          incurredCost: 0,
+        };
+        for (let i = 0; i < 5; i++) {
+          expect(await registry.execute(localProvider, async () => local, options)).toBe(local);
+        }
+        expect(Object.keys(registry.getMetrics())).toEqual([provider.id()]);
+        expect(registry.getMetrics()[provider.id()]).toMatchObject({
+          maxConcurrency: 4,
+          totalRequests: 6,
+          completedRequests: 5,
+          failedRequests: 1,
+          rateLimitHits: 1,
+          retriedRequests: 0,
+          activeRequests: 0,
+        });
+        expect(recovered).not.toHaveBeenCalled();
+
+        // Five subsequent live successes still recover; local reads contribute no streak.
+        for (let i = 0; i < 4; i++) {
+          await registry.execute<ProviderResponse>(
+            provider,
+            async () => ({ output: 'Live result' }),
+            options,
+          );
+        }
+        expect(registry.getMetrics()[provider.id()].maxConcurrency).toBe(4);
+        await registry.execute<ProviderResponse>(
+          provider,
+          async () => ({ output: 'Live result' }),
+          options,
+        );
+        expect(registry.getMetrics()[provider.id()].maxConcurrency).toBe(6);
+        expect(recovered).toHaveBeenCalledOnce();
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        registry.dispose();
+      }
+    },
+  );
+
   it('still retries a live rate-limit response with ordinary retry detection', async () => {
     vi.useFakeTimers();
     vi.stubEnv('PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER', 'false');

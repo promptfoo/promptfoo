@@ -59,6 +59,8 @@ export function createProviderRateLimitOptions(): RateLimitExecuteOptions<Provid
         ? undefined
         : getProviderResponseHeaders(result),
     isRateLimited: isProviderResponseRateLimited,
+    // Historical/local responses do not prove the upstream rate limit recovered.
+    shouldRecoverConcurrency: (result) => result.retryable !== false,
     getRetryAfter: (result: ProviderResponse | undefined, error: Error | undefined) => {
       if (result?.retryable === false) {
         return undefined;
