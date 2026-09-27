@@ -1,3 +1,5 @@
+import { StrictMode } from 'react';
+
 import { render, screen } from '@testing-library/react';
 import { Chart } from 'chart.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -863,5 +865,101 @@ describe('ResultsCharts', () => {
 
     const canvasElements = container.querySelectorAll('canvas');
     expect(canvasElements.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('active chart resource cleanup', () => {
+  const createTable = (metrics = false, empty = false) => ({
+    head: {
+      prompts: ['first', 'second'].map((provider) => ({
+        provider,
+        metrics: { namedScores: metrics ? { accuracy: 1, relevance: 2 } : {} },
+      })),
+      vars: [],
+    },
+    body: empty
+      ? []
+      : [
+          {
+            outputs: [
+              { score: 0.5, pass: true },
+              { score: 0.8, pass: true },
+            ],
+            vars: [],
+          },
+        ],
+  });
+
+  const createdCharts = () => vi.mocked(Chart).mock.results.map(({ value }) => value);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useTableStore).mockReturnValue({ table: createTable() });
+  });
+
+  it.each([false, true])('destroys every chart on unmount (metrics: %s)', (metrics) => {
+    vi.mocked(useTableStore).mockReturnValue({ table: createTable(metrics) });
+    const view = render(<ResultsCharts scores={[0.5, 0.8]} />);
+    expect(Chart).toHaveBeenCalledTimes(3);
+
+    view.unmount();
+
+    for (const chart of createdCharts()) {
+      expect(chart.destroy).toHaveBeenCalledOnce();
+    }
+  });
+
+  it('cleans both StrictMode lifetimes exactly once', () => {
+    const view = render(
+      <StrictMode>
+        <ResultsCharts scores={[0.5, 0.8]} />
+      </StrictMode>,
+    );
+    expect(Chart).toHaveBeenCalledTimes(6);
+
+    view.unmount();
+
+    for (const chart of createdCharts()) {
+      expect(chart.destroy).toHaveBeenCalledOnce();
+    }
+  });
+
+  it.each([false, true])(
+    'releases replaced charts and their final replacements (switch to metrics: %s)',
+    (metrics) => {
+      const view = render(<ResultsCharts scores={[0.5, 0.8]} />);
+      const initialCharts = createdCharts();
+      vi.mocked(useTableStore).mockReturnValue({ table: createTable(metrics) });
+
+      view.rerender(<ResultsCharts scores={[0.5, 0.8]} />);
+
+      expect(Chart).toHaveBeenCalledTimes(6);
+      for (const chart of initialCharts) {
+        expect(chart.destroy).toHaveBeenCalledOnce();
+      }
+      view.unmount();
+      for (const chart of createdCharts()) {
+        expect(chart.destroy).toHaveBeenCalledOnce();
+      }
+    },
+  );
+
+  it('releases charts when scores disappear without double-destroying them on recovery', () => {
+    const view = render(<ResultsCharts scores={[0.5, 0.8]} />);
+    const initialCharts = createdCharts();
+    vi.mocked(useTableStore).mockReturnValue({ table: createTable(false, true) });
+
+    view.rerender(<ResultsCharts scores={[]} />);
+
+    expect(Chart).toHaveBeenCalledTimes(4);
+    for (const chart of initialCharts) {
+      expect(chart.destroy).toHaveBeenCalledOnce();
+    }
+    vi.mocked(useTableStore).mockReturnValue({ table: createTable() });
+    view.rerender(<ResultsCharts scores={[0.5, 0.8]} />);
+    view.unmount();
+    for (const chart of createdCharts()) {
+      expect(chart.destroy).toHaveBeenCalledOnce();
+    }
   });
 });
