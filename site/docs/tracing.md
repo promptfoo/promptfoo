@@ -146,6 +146,8 @@ tracing:
 
 ### 2. Instrument Your Provider
 
+If your application already uses OpenTelemetry, register its SDK before running evals.
+
 Promptfoo passes a W3C trace context to providers via the `traceparent` field. Use this to create child spans:
 
 ```javascript
