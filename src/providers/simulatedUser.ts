@@ -198,6 +198,7 @@ export class SimulatedUser implements ApiProvider {
   private async sendMessageToUser(
     messages: Message[],
     userProvider: PromptfooSimulatedUserProvider,
+    options?: CallApiOptionsParams,
   ): Promise<{ messages: Message[]; response: ProviderResponse }> {
     logger.debug('[SimulatedUser] Sending message to simulated user provider');
 
@@ -208,7 +209,11 @@ export class SimulatedUser implements ApiProvider {
       };
     });
 
-    const response = await userProvider.callApi(JSON.stringify(flippedMessages));
+    const response = await userProvider.callApi(
+      JSON.stringify(flippedMessages),
+      undefined,
+      options,
+    );
 
     // Propagate error from remote generation disable check
     if (response.error) {
@@ -357,7 +362,7 @@ export class SimulatedUser implements ApiProvider {
       logger.debug(`[SimulatedUser] Turn ${i + 1} of ${maxTurns}`);
 
       // The simulated-user provider generates the next attack turn and may signal completion.
-      const userResult = await this.sendMessageToUser(messages, userProvider);
+      const userResult = await this.sendMessageToUser(messages, userProvider, callApiOptions);
 
       this.accumulateSimulatedUserTokenUsage(tokenUsage, userResult.response);
 

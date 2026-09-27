@@ -21,7 +21,11 @@ import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from 
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
-import { getResultIndexKey, sanitizeResultForJsonlArtifact } from './models/evalResult';
+import {
+  getResultIndexKey,
+  PROMPTFOO_METADATA_KEY,
+  sanitizeResultForJsonlArtifact,
+} from './models/evalResult';
 import { generateIdFromPrompt } from './models/prompt';
 import { nodeEvaluatorRuntime } from './node/evaluatorRuntime';
 import { CIProgressReporter } from './progress/ciProgressReporter';
@@ -627,6 +631,16 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
 
 const ABORTED_GRADING_PREFIX = 'Aborted: ';
 
+type ComparisonGradingState = Pick<
+  EvaluationStoreResult,
+  'success' | 'score' | 'failureReason' | 'error' | 'namedScores' | 'gradingResult'
+>;
+
+function getComparisonGradingState(result: ComparisonGradingState): ComparisonGradingState {
+  const { success, score, failureReason, error, namedScores, gradingResult } = result;
+  return { success, score, failureReason, error, namedScores, gradingResult };
+}
+
 function applyGradingError(row: EvaluationStoreResult, error: unknown, abortSignal?: AbortSignal) {
   const errorAsError = error instanceof Error ? error : undefined;
   // Require both signals: a third-party SDK that throws `AbortError` during a
@@ -1086,8 +1100,9 @@ async function callActiveProvider({
   });
   const callApiOptions = abortSignal ? { abortSignal } : undefined;
 
-  const callApi = () =>
-    withProviderCallExecutionContext(
+  const callApi = () => {
+    let providerCall: Promise<ProviderResponse> | undefined;
+    return withProviderCallExecutionContext(
       {
         ...getProviderCallExecutionContext(),
         abortSignal,
@@ -1102,10 +1117,10 @@ async function callActiveProvider({
         const invokeProvider = (context?: CallApiContextParams) => {
           abortSignal?.throwIfAborted();
           onProviderInvoked();
-          return waitForProviderCall(
+          providerCall = Promise.resolve(
             activeProvider.callApi(renderedPrompt, context, callApiOptions),
-            abortSignal,
           );
+          return waitForProviderCall(providerCall, abortSignal);
         };
         const invoke = () =>
           traceContext?.traceparent
@@ -1124,7 +1139,12 @@ async function callActiveProvider({
           ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
           : invoke();
       },
-    );
+    ).finally(async () => {
+      // Cancellation settles the evaluator and tracing, but the scheduler still owns
+      // the actual request until it finishes, even if the provider ignores its signal.
+      await providerCall?.catch(() => {});
+    });
+  };
   const response = await waitForProviderCall(
     rateLimitRegistry
       ? rateLimitRegistry.execute(activeProvider, callApi, createProviderRateLimitOptions())
@@ -4361,6 +4381,28 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       return;
     }
 
+    for (const result of resultsToCompare) {
+      const internalMetadata = result.metadata?.[PROMPTFOO_METADATA_KEY];
+      const previous = internalMetadata?.comparisonBeforeAbort as
+        | ComparisonGradingState
+        | undefined;
+      if (previous) {
+        Object.assign(result, getComparisonGradingState(previous));
+        const { comparisonBeforeAbort: _previous, ...remaining } = internalMetadata;
+        result.metadata = { ...result.metadata, [PROMPTFOO_METADATA_KEY]: remaining };
+        if (Object.keys(remaining).length === 0) {
+          delete result.metadata[PROMPTFOO_METADATA_KEY];
+        }
+        this.stats[result.success ? 'successes' : 'failures']++;
+        const metrics = prompts[result.promptIdx]?.metrics;
+        if (metrics) {
+          metrics.testErrorCount--;
+          metrics[result.success ? 'testPassCount' : 'testFailCount']++;
+          metrics.score += result.score;
+        }
+      }
+    }
+
     const repeatCacheContext = repeatCacheContextByTestIdx.get(testIdx);
     const outputs = resultsToCompare.map((r) => r.response?.output || '');
     const callApiContext = this.getComparisonCallApiContext(
@@ -4415,6 +4457,21 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         }
         const wasSuccess = result.success;
         const wasScore = result.score;
+        result.metadata = {
+          ...result.metadata,
+          [PROMPTFOO_METADATA_KEY]: {
+            ...result.metadata?.[PROMPTFOO_METADATA_KEY],
+            comparisonBeforeAbort: getComparisonGradingState(result),
+          },
+        };
+        // Keep the original grading intact for resume; merging the aborted component
+        // mutates the aggregate and its component array.
+        if (result.gradingResult) {
+          result.gradingResult = {
+            ...result.gradingResult,
+            componentResults: [...(result.gradingResult.componentResults ?? [])],
+          };
+        }
         applyGradingError(result, error, providerAbortSignal);
         mergeSelectBestGradingResult(
           result,
