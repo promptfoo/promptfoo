@@ -297,6 +297,44 @@ describe('isGradingResult', () => {
     expect(isGradingResult({ ...result, componentResults: [result] })).toBe(false);
   });
 
+  it.each([0, 1])('rejects a component hole at index %s filled by its prototype', (index) => {
+    const child = { pass: true, score: 0.75, reason: '' };
+    const componentResults = new Array<GradingResult>(index + 1);
+    if (index > 0) {
+      componentResults[0] = child;
+    }
+    Object.setPrototypeOf(
+      componentResults,
+      Object.assign(Object.create(Array.prototype), { [index]: child }),
+    );
+    const result = { pass: true, score: 1, reason: '', componentResults };
+
+    expect(Object.hasOwn(componentResults, index)).toBe(false);
+    expect(componentResults[index]).toBe(child);
+    expect(isGradingResult(result)).toBe(false);
+    expect(isGradingResult({ ...result, componentResults: [result] })).toBe(false);
+  });
+
+  it.each(['value', 'accessor'])('accepts an own component %s with a custom prototype', (slot) => {
+    const child = { pass: true, score: 0.75, reason: '' };
+    const componentResults = [child];
+    const readChild = vi.fn(() => child);
+    Object.setPrototypeOf(
+      componentResults,
+      Object.assign(Object.create(Array.prototype), { 0: { ...child, score: Infinity } }),
+    );
+    if (slot === 'accessor') {
+      Object.defineProperty(componentResults, 0, { get: readChild });
+    }
+    const result = { pass: true, score: 1, reason: '', componentResults };
+
+    expect(isGradingResult(result)).toBe(true);
+    expect(readChild).toHaveBeenCalledTimes(slot === 'accessor' ? 1 : 0);
+    readChild.mockClear();
+    expect(isGradingResult({ ...result, componentResults: [result] })).toBe(true);
+    expect(readChild).toHaveBeenCalledTimes(slot === 'accessor' ? 1 : 0);
+  });
+
   it.each([
     { componentResults: new Array(1) },
     { componentResults: [{ pass: true, score: Number.POSITIVE_INFINITY, reason: '' }] },

@@ -619,7 +619,11 @@ export function isGradingResult(result: any): result is GradingResult {
       const components = current.componentResults;
       if (components != null && frame.nextChild < components.length) {
         // Ignore custom iterators and reject a sparse entry as soon as it is visited.
-        frames.push({ result: components[frame.nextChild++], nextChild: -1 });
+        const index = frame.nextChild++;
+        if (!Object.prototype.hasOwnProperty.call(components, index)) {
+          return false;
+        }
+        frames.push({ result: components[index], nextChild: -1 });
       } else {
         ancestors.delete(current);
         validated.add(current);
