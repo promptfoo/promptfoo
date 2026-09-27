@@ -215,6 +215,14 @@ function mergeScoringTokenUsage(
   return mergedTokensUsed;
 }
 
+function normalizeWeightedScore(totalScore: number, totalWeight: number): number {
+  // An infinite denominator can hide overflow behind a finite quotient.
+  if (!Number.isFinite(totalScore) || !Number.isFinite(totalWeight)) {
+    return Number.NaN;
+  }
+  return totalWeight > 0 ? totalScore / totalWeight : 0;
+}
+
 export class AssertionsResult {
   static noAssertsResult(): GradingResult {
     return {
@@ -319,11 +327,7 @@ export class AssertionsResult {
       return this.result;
     }
 
-    let score = this.totalWeight > 0 ? this.totalScore / this.totalWeight : 0;
-    if (!Number.isFinite(this.totalScore) || !Number.isFinite(this.totalWeight)) {
-      // An infinite denominator can hide overflow behind a finite quotient.
-      score = Number.NaN;
-    }
+    const score = normalizeWeightedScore(this.totalScore, this.totalWeight);
 
     // An empty explanation still records a failed assertion.
     let pass = this.failedReason === undefined;
@@ -362,17 +366,10 @@ export class AssertionsResult {
     });
 
     const normalizedNamedScores: Record<string, number> = Object.fromEntries(
-      Object.entries(this.namedScores).map(([key, value]) => {
-        const totalWeight = this.namedScoreWeights[key] ?? 0;
-        return [
-          key,
-          !Number.isFinite(value) || !Number.isFinite(totalWeight)
-            ? Number.NaN
-            : totalWeight > 0
-              ? value / totalWeight
-              : 0,
-        ];
-      }),
+      Object.entries(this.namedScores).map(([key, value]) => [
+        key,
+        normalizeWeightedScore(value, this.namedScoreWeights[key] ?? 0),
+      ]),
     );
 
     const hasNamedScoreWeights = Object.keys(this.namedScoreWeights).length > 0;

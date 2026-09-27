@@ -123,9 +123,9 @@
     "storybook": {
       "esbuild": "0.28.2"
     },
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "react-is": "^19.2.4",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-is": "^19.3.0",
     "react-router-config": {
       "react-router": "^5.3.4"
     },
@@ -136,8 +136,8 @@
       "whatwg-url": "16.0.1",
       "chokidar": "5.0.0",
       "esbuild": "0.28.2",
-      "react": "^19.2.4",
-      "react-dom": "^19.2.4"
+      "react": "^19.3.0",
+      "react-dom": "^19.3.0"
     },
     "@opentelemetry/exporter-trace-otlp-http": {
       "@opentelemetry/core": "2.11.0"
@@ -300,7 +300,7 @@
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@openai/agents": "^0.11.3",
     "@openai/codex-sdk": "^0.156.1",
-    "@openai/codex-security": "^0.1.28",
+    "@openai/codex-security": "^0.1.31",
     "@opencode-ai/sdk": "^1.18.30",
     "@playwright/browser-chromium": "^1.63.0",
     "@slack/web-api": "^8.1.1",
