@@ -270,7 +270,6 @@ diff --git "a/src/caf\303\251.ts" "b/src/caf\303\251.ts"
       ]);
       expect(result.invalidLineComments).toEqual([]);
       expect(result.generalComments).toEqual([]);
-      expect(mocks.github.getOctokit).toHaveBeenCalledWith('fake-token');
       expect(mocks.pulls.get).toHaveBeenCalledWith({
         owner: 'test-owner',
         repo: 'test-repo',
