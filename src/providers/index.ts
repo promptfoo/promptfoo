@@ -31,16 +31,18 @@ import type {
   ProvidersConfig,
 } from '../types/providers';
 
-type ProviderFunctionWithMetadata = ProviderFunction &
-  Pick<ApiProvider, 'label' | 'transform' | 'delay' | 'inputs' | 'config'>;
-
 const FORWARDED_PROVIDER_METADATA_KEYS = [
   'label',
   'transform',
   'delay',
   'inputs',
   'config',
-] as const satisfies ReadonlyArray<keyof ProviderFunctionWithMetadata>;
+  'handlesOwnRetries',
+  'usesOriginalProvider',
+] as const satisfies ReadonlyArray<keyof ApiProvider>;
+
+type ProviderFunctionWithMetadata = ProviderFunction &
+  Pick<ApiProvider, (typeof FORWARDED_PROVIDER_METADATA_KEYS)[number]>;
 
 function createProviderFromFunction(
   provider: ProviderFunctionWithMetadata,

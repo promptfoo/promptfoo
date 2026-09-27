@@ -1016,6 +1016,8 @@ describe('loadApiProvider', () => {
     expect('delay' in providers[0]).toBe(false);
     expect('inputs' in providers[0]).toBe(false);
     expect('config' in providers[0]).toBe(false);
+    expect('handlesOwnRetries' in providers[0]).toBe(false);
+    expect('usesOriginalProvider' in providers[0]).toBe(false);
   });
 
   it('loadApiProviders with ProviderFunction preserves metadata properties', async () => {

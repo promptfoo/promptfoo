@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { runEval } from '../../src/evaluator';
 import { callProviderWithContext } from '../../src/matchers/providers';
+import { loadApiProviders } from '../../src/providers';
 import { OpenAiAgentsProvider } from '../../src/providers/openai/agents';
 import { PromptfooSimulatedUserProvider } from '../../src/providers/promptfoo';
 import { SequenceProvider } from '../../src/providers/sequence';
@@ -94,6 +95,46 @@ async function settleWithTimers<T>(promise: Promise<T>): Promise<T> {
 }
 
 describe('retry ownership through test-level providers', () => {
+  it.each(
+    ['handlesOwnRetries', 'usesOriginalProvider'].flatMap((capability) =>
+      [true, false, undefined].map((enabled) => ({ capability, enabled })),
+    ),
+  )(
+    'preserves loaded function $capability=$enabled during scheduling',
+    async ({ capability, enabled }) => {
+      const error = new Error('429 retry after 0');
+      const callApi = vi
+        .fn<ApiProvider['callApi']>()
+        .mockRejectedValueOnce(error)
+        .mockResolvedValueOnce({ output: 'retried' });
+      const target: ApiProvider = {
+        id: () => 'internally-retried',
+        handlesOwnRetries: true,
+        callApi,
+      };
+      const invoke: ApiProvider['callApi'] =
+        capability === 'usesOriginalProvider'
+          ? (prompt, context, options) =>
+              context!.originalProvider!.callApi(prompt, context, options)
+          : callApi;
+      const [provider] = await loadApiProviders(Object.assign(invoke, { [capability]: enabled }));
+      registry = new RateLimitRegistry({ maxConcurrency: 1 });
+      const result = wrapProviderWithRateLimiting(provider, registry)
+        .callApi('fixture', {
+          originalProvider: target,
+          vars: {},
+          prompt: { raw: 'fixture', label: 'fixture' },
+        })
+        .then(
+          (value) => ({ value }),
+          (failure: Error) => ({ error: failure }),
+        );
+      await settleWithTimers(result);
+      expect(await result).toEqual(enabled ? { error } : { value: { output: 'retried' } });
+      expect(callApi).toHaveBeenCalledTimes(enabled ? 1 : 2);
+    },
+  );
+
   it.each(
     [
       { schedulerDisabled: false, maxRetries: 1 },
