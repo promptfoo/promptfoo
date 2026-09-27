@@ -316,6 +316,308 @@ describe('AssertionsResult', () => {
       });
     });
 
+    it.each([[''], ['Explained failure', ''], ['', 'Explained failure']])(
+      'fails regardless of the failure explanations: %j',
+      async (...reasons) => {
+        const assertionsResult = new AssertionsResult();
+        reasons.forEach((reason, index) => {
+          assertionsResult.addResult({ index, result: { pass: false, score: 0, reason } });
+        });
+        assertionsResult.addResult({
+          index: reasons.length,
+          result: { pass: true, score: 1, reason: 'Passed' },
+        });
+
+        expect(await assertionsResult.testResult()).toMatchObject({
+          pass: false,
+          reason: reasons.at(-1),
+        });
+      },
+    );
+
+    it('allows a threshold to override a failure with an empty explanation', async () => {
+      const assertionsResult = new AssertionsResult({ threshold: 0 });
+      assertionsResult.addResult({ index: 0, result: { pass: false, score: 0, reason: '' } });
+
+      expect(await assertionsResult.testResult()).toMatchObject({
+        pass: true,
+        score: 0,
+        reason: 'Aggregate score 0.00 ≥ 0 threshold',
+      });
+    });
+
+    it('allows custom scoring to override a failure with an empty explanation', async () => {
+      const assertionsResult = new AssertionsResult();
+      assertionsResult.addResult({ index: 0, result: { pass: false, score: 0, reason: '' } });
+
+      expect(
+        await assertionsResult.testResult(() => ({ pass: true, score: 2, reason: 'Custom' })),
+      ).toMatchObject({ pass: true, score: 2, reason: 'Custom' });
+    });
+
+    it.each(['namedScores', 'namedScoreWeights', 'componentResults'])(
+      'preserves nullable %s returned by custom scoring',
+      async (field) => {
+        const assertionsResult = new AssertionsResult();
+        const scoringResult = { pass: true, score: 0.75, reason: 'Custom', [field]: null };
+
+        expect(await assertionsResult.testResult(() => scoringResult)).toMatchObject(scoringResult);
+        expect(scoringResult[field]).toBeNull();
+      },
+    );
+
+    it.each([
+      { score: Number.POSITIVE_INFINITY },
+      { namedScores: { quality: Number.NaN } },
+      { namedScoreWeights: { quality: Number.NEGATIVE_INFINITY } },
+    ])('rejects nonfinite custom scoring results: %j', async (invalidFields) => {
+      const assertionsResult = new AssertionsResult();
+      const result = await assertionsResult.testResult(() => ({
+        pass: true,
+        score: 1,
+        reason: 'Custom',
+        ...invalidFields,
+      }));
+
+      expect(result).toMatchObject({ pass: false, score: 0 });
+      expect(result.reason).toContain('Scoring function error:');
+      expect(result.namedScores).toEqual({});
+      expect(result.namedScoreWeights).toBeUndefined();
+    });
+
+    it.each([undefined, 0, 0.2])(
+      'rejects unlabelled weight overflow even when the quotient is finite (threshold %s)',
+      async (threshold) => {
+        const assertionsResult = new AssertionsResult({ threshold });
+        for (let index = 0; index < 2; index++) {
+          assertionsResult.addResult({
+            index,
+            result: { pass: true, score: 0.25, reason: 'Finite input' },
+            weight: Number.MAX_VALUE,
+          });
+        }
+
+        expect(await assertionsResult.testResult()).toMatchObject({
+          pass: false,
+          score: 0,
+          reason: 'Assertion aggregation error: scores or weights must remain finite',
+          namedScores: {},
+          componentResults: [
+            { pass: true, score: 0.25 },
+            { pass: true, score: 0.25 },
+          ],
+        });
+      },
+    );
+
+    it('allows valid custom scoring to override unlabelled weight overflow', async () => {
+      const assertionsResult = new AssertionsResult({ threshold: 0.9 });
+      for (let index = 0; index < 2; index++) {
+        assertionsResult.addResult({
+          index,
+          result: { pass: true, score: 0.25, reason: 'Finite input' },
+          weight: Number.MAX_VALUE,
+        });
+      }
+
+      expect(
+        await assertionsResult.testResult(() => ({ pass: true, score: 2, reason: 'Custom' })),
+      ).toMatchObject({ pass: true, score: 2, reason: 'Custom' });
+    });
+
+    it.each([
+      { score: Number.MAX_VALUE, weight: 2, count: 1 },
+      { score: -Number.MAX_VALUE, weight: 2, count: 1 },
+      { score: Number.MAX_VALUE, weight: 1, count: 2 },
+    ])(
+      'fails explicitly when finite scores overflow during aggregation: %j',
+      async ({ score, weight, count }) => {
+        const assertionsResult = new AssertionsResult({ threshold: 0 });
+        for (let index = 0; index < count; index++) {
+          assertionsResult.addResult({
+            index,
+            result: { pass: true, score, reason: 'Finite input' },
+            metric: 'overflow',
+            weight,
+          });
+        }
+        assertionsResult.addResult({
+          index: count,
+          result: { pass: true, score: 0.25, reason: 'Valid metric' },
+          metric: 'valid',
+        });
+
+        const result = await assertionsResult.testResult();
+        expect(result).toMatchObject({
+          pass: false,
+          score: 0,
+          reason: 'Assertion aggregation error: scores or weights must remain finite',
+          namedScores: { valid: 0.25 },
+          namedScoreWeights: { valid: 1 },
+        });
+        expect(result.namedScores).not.toHaveProperty('overflow');
+        expect(result.namedScoreWeights).not.toHaveProperty('overflow');
+        expect(result.componentResults?.[0]).toMatchObject({ pass: true, score });
+        expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+      },
+    );
+
+    it.each([
+      { score: Number.MAX_VALUE, weight: 1 },
+      { score: 1, weight: Number.MAX_VALUE },
+    ])('fails when named scores or weights overflow: %j', async ({ score, weight }) => {
+      const assertionsResult = new AssertionsResult();
+      const component = {
+        pass: true,
+        score: 1,
+        reason: 'Finite component',
+        namedScores: { overflow: score, valid: 0.25 },
+        namedScoreWeights: { overflow: weight, valid: 1 },
+      };
+      assertionsResult.addResult({ index: 0, result: component, weight: 2 });
+
+      const result = await assertionsResult.testResult();
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Assertion aggregation error: scores or weights must remain finite',
+        namedScores: { valid: 0.25 },
+        namedScoreWeights: { valid: 2 },
+      });
+      expect(result.namedScores).not.toHaveProperty('overflow');
+      expect(result.namedScoreWeights).not.toHaveProperty('overflow');
+      expect(component.namedScores.overflow).toBe(score);
+      expect(component.namedScoreWeights.overflow).toBe(weight);
+      expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+    });
+
+    it.each([-2, 2, Number.MAX_VALUE])('preserves finite aggregate scores: %s', async (score) => {
+      const assertionsResult = new AssertionsResult();
+      assertionsResult.addResult({
+        index: 0,
+        result: { pass: true, score, reason: '' },
+        metric: 'quality',
+      });
+      expect(await assertionsResult.testResult()).toMatchObject({
+        pass: true,
+        score,
+        namedScores: { quality: score },
+        namedScoreWeights: { quality: 1 },
+      });
+    });
+
+    it.each([
+      { scores: [Number.MAX_VALUE, -Number.MAX_VALUE, 1], weights: [2, 2, 1] },
+      { scores: [Number.MAX_VALUE, Number.MAX_VALUE], weights: [2, -2] },
+      { scores: [Number.MAX_VALUE, Number.MAX_VALUE], weights: [2, -3] },
+      { scores: [0, 0, 1], weights: [Number.MAX_VALUE, -Number.MAX_VALUE, 1] },
+    ])('retains intermediate named metric overflow: %j', async ({ scores, weights }) => {
+      const assertionsResult = new AssertionsResult();
+      scores.forEach((score, index) => {
+        assertionsResult.addResult({
+          index,
+          weight: 2,
+          result: {
+            pass: true,
+            score: 1,
+            reason: 'Finite component',
+            namedScores: { quality: score, valid: 0.25 },
+            namedScoreWeights: { quality: weights[index], valid: 1 },
+          },
+        });
+      });
+
+      const result = await assertionsResult.testResult();
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Assertion aggregation error: scores or weights must remain finite',
+        namedScores: { valid: 0.25 },
+        namedScoreWeights: { valid: scores.length * 2 },
+      });
+      expect(result.namedScores).not.toHaveProperty('quality');
+      expect(result.namedScoreWeights).not.toHaveProperty('quality');
+      expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+    });
+
+    it.each([0, -1])(
+      'preserves finite named metrics with nonpositive weight %s',
+      async (weight) => {
+        const assertionsResult = new AssertionsResult();
+        assertionsResult.addResult({
+          index: 0,
+          result: {
+            pass: true,
+            score: 1,
+            reason: '',
+            namedScores: { quality: 0.75 },
+            namedScoreWeights: { quality: weight },
+          },
+        });
+        expect(await assertionsResult.testResult()).toMatchObject({
+          pass: true,
+          score: 1,
+          namedScores: { quality: 0 },
+          namedScoreWeights: { quality: weight },
+        });
+      },
+    );
+
+    it('allows custom scoring to replace an intermediate named metric overflow', async () => {
+      const assertionsResult = new AssertionsResult();
+      [Number.MAX_VALUE, -Number.MAX_VALUE, 1].forEach((score, index) => {
+        assertionsResult.addResult({
+          index,
+          result: {
+            pass: true,
+            score: 1,
+            reason: '',
+            namedScores: { quality: score },
+            namedScoreWeights: { quality: 2 },
+          },
+        });
+      });
+      const customResult = {
+        pass: true,
+        score: 0.75,
+        reason: 'Custom',
+        namedScores: { quality: 0.75 },
+        namedScoreWeights: { quality: 1 },
+      };
+      expect(await assertionsResult.testResult(() => customResult)).toMatchObject(customResult);
+    });
+
+    it('allows a valid custom scoring override to repair an overflow', async () => {
+      const assertionsResult = new AssertionsResult();
+      assertionsResult.addResult({
+        index: 0,
+        result: { pass: true, score: Number.MAX_VALUE, reason: '' },
+        metric: 'quality',
+        weight: 2,
+      });
+      const customResult = {
+        pass: true,
+        score: 2,
+        reason: 'Custom',
+        namedScores: { quality: 0.75 },
+        namedScoreWeights: { quality: 1 },
+      };
+      expect(await assertionsResult.testResult(() => customResult)).toMatchObject(customResult);
+    });
+
+    it('still rejects invalid inherited metrics after a finite score override', async () => {
+      const assertionsResult = new AssertionsResult();
+      assertionsResult.addResult({
+        index: 0,
+        result: { pass: true, score: Number.MAX_VALUE, reason: '' },
+        metric: 'quality',
+        weight: 2,
+      });
+      expect(
+        await assertionsResult.testResult(() => ({ pass: true, score: 2, reason: 'Custom' })),
+      ).toMatchObject({ pass: false, score: 0, namedScores: {}, namedScoreWeights: {} });
+    });
+
     it('should calculate final result with threshold', async () => {
       const assertionsResult = new AssertionsResult({ threshold: 0.7 });
 
@@ -747,33 +1049,187 @@ describe('AssertionsResult', () => {
       expect(result.metadata).toBeUndefined();
     });
 
-    it('should handle failed content safety checks', async () => {
-      const assertionsResult = new AssertionsResult({});
+    it.each(['namedScores', 'namedScoreWeights'] as const)(
+      'contains errors reading custom %s during final inspection',
+      async (field) => {
+        const assertionsResult = new AssertionsResult({});
+        let reads = 0;
+        const metrics = {
+          get quality() {
+            if (++reads > 1) {
+              throw new Error('Metric unavailable');
+            }
+            return 0.75;
+          },
+        };
 
-      assertionsResult.addResult({
-        index: 0,
-        result: {
+        const result = await assertionsResult.testResult(() => ({
+          pass: true,
+          score: 0.75,
+          reason: 'Custom score',
+          [field]: metrics,
+        }));
+
+        expect(result).toMatchObject({
           pass: false,
           score: 0,
-          reason: 'Failed safety check',
-          assertion: {
-            type: 'guardrails',
-            config: {
-              purpose: 'redteam',
-            },
+          reason: 'Assertion aggregation error: unable to read scores or weights',
+          namedScores: {},
+          namedScoreWeights: {},
+        });
+        expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+        expect(await assertionsResult.testResult()).toBe(result);
+      },
+    );
+
+    it.each(['namedScores', 'namedScoreWeights'] as const)(
+      'preserves stable getter-backed custom %s',
+      async (field) => {
+        const assertionsResult = new AssertionsResult({});
+        const metrics = {
+          get quality() {
+            return 0.75;
           },
-          tokensUsed: DEFAULT_TOKENS_USED,
-        },
-      });
+        };
 
-      const result = await assertionsResult.testResult();
+        const result = await assertionsResult.testResult(() => ({
+          pass: true,
+          score: 0.75,
+          reason: 'Custom score',
+          [field]: metrics,
+        }));
 
-      expect(result.pass).toBe(true);
-      expect(result.reason).toBe(GUARDRAIL_BLOCKED_REASON);
-    });
+        expect(result).toMatchObject({ pass: true, score: 0.75 });
+        expect(result[field]).toBe(metrics);
+        expect(result[field]?.quality).toBe(0.75);
+      },
+    );
+
+    it.each(['namedScores', 'namedScoreWeights'] as const)(
+      'reuses inspected %s entries when pruning invalid metrics',
+      async (field) => {
+        const assertionsResult = new AssertionsResult({});
+        let reads = 0;
+        const metrics = {
+          get quality() {
+            reads++;
+            if (reads > 2) {
+              throw new Error('Metric already inspected');
+            }
+            return reads === 1 ? 0.75 : Number.NaN;
+          },
+        };
+
+        const result = await assertionsResult.testResult(() => ({
+          pass: true,
+          score: 0.75,
+          reason: 'Custom score',
+          namedScores: { quality: 0.75 },
+          namedScoreWeights: { quality: 1 },
+          [field]: metrics,
+        }));
+
+        expect(result).toMatchObject({
+          pass: false,
+          score: 0,
+          reason: 'Assertion aggregation error: scores or weights must remain finite',
+          namedScores: {},
+          namedScoreWeights: {},
+        });
+        expect(reads).toBe(2);
+      },
+    );
+
+    it.each(['Failed safety check', ''])(
+      'should handle failed content safety checks: %j',
+      async (reason) => {
+        const assertionsResult = new AssertionsResult({});
+
+        assertionsResult.addResult({
+          index: 0,
+          result: {
+            pass: false,
+            score: 0,
+            reason,
+            assertion: {
+              type: 'guardrails',
+              config: {
+                purpose: 'redteam',
+              },
+            },
+            tokensUsed: DEFAULT_TOKENS_USED,
+          },
+        });
+
+        const result = await assertionsResult.testResult();
+
+        expect(result.pass).toBe(true);
+        expect(result.reason).toBe(GUARDRAIL_BLOCKED_REASON);
+      },
+    );
   });
 
   describe('namedScores weight normalization', () => {
+    it.each(['constructor', 'toString', '__proto__'])(
+      'preserves configured metric %s in ordinary public records',
+      async (metric) => {
+        const assertionsResult = new AssertionsResult({});
+        for (const [index, score, weight] of [
+          [0, 0.25, 1],
+          [1, 0.75, 3],
+        ]) {
+          assertionsResult.addResult({
+            index,
+            result: { pass: true, score, reason: 'Valid score' },
+            metric,
+            weight,
+          });
+        }
+
+        const result = await assertionsResult.testResult((scores) => {
+          expect(Object.getPrototypeOf(scores)).toBe(Object.prototype);
+          expect(Object.hasOwn(scores, metric)).toBe(true);
+          return { pass: true, score: scores[metric], reason: 'Custom score' };
+        });
+
+        expect(result).toMatchObject({ pass: true, score: 0.625 });
+        expect(result.namedScores).toEqual(Object.fromEntries([[metric, 0.625]]));
+        expect(result.namedScoreWeights).toEqual(Object.fromEntries([[metric, 4]]));
+        expect(Object.getPrototypeOf(result.namedScoreWeights)).toBe(Object.prototype);
+        expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+      },
+    );
+
+    it.each(
+      ['constructor', 'toString', '__proto__'].flatMap((metric) =>
+        [false, true].map((explicitWeight) => ({ metric, explicitWeight })),
+      ),
+    )(
+      'preserves returned metric $metric with explicit weight $explicitWeight',
+      async ({ metric, explicitWeight }) => {
+        const assertionsResult = new AssertionsResult({});
+        assertionsResult.addResult({
+          index: 0,
+          result: {
+            pass: true,
+            score: 0.75,
+            reason: 'Valid score',
+            namedScores: Object.fromEntries([[metric, 0.75]]),
+            namedScoreWeights: explicitWeight ? Object.fromEntries([[metric, 3]]) : {},
+          },
+          weight: 2,
+        });
+
+        const result = await assertionsResult.testResult();
+        expect(result).toMatchObject({ pass: true, score: 0.75 });
+        expect(result.namedScores).toEqual(Object.fromEntries([[metric, 0.75]]));
+        expect(result.namedScoreWeights).toEqual(
+          Object.fromEntries([[metric, explicitWeight ? 6 : 2]]),
+        );
+        expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+      },
+    );
+
     it('should normalize a shared metric using assertion weights', async () => {
       const assertionsResult = new AssertionsResult({});
 
