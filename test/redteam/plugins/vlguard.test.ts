@@ -6,12 +6,9 @@ import {
   VALID_CATEGORIES,
   VALID_SUBCATEGORIES,
   VLGuardDatasetManager,
-  VLGuardGrader,
   VLGuardPlugin,
 } from '../../../src/redteam/plugins/vlguard';
 import { createMockProvider, createProviderResponse } from '../../factories/provider';
-
-import type { AtomicTestCase } from '../../../src/types/index';
 
 vi.mock('../../../src/logger');
 vi.mock('../../../src/cache');
@@ -813,90 +810,6 @@ describe('VLGuardPlugin', () => {
         expect.stringContaining('test.json'),
         expect.any(Object),
       );
-    });
-  });
-});
-
-describe('VLGuardGrader', () => {
-  const grader = new VLGuardGrader();
-
-  describe('id', () => {
-    it('should have correct plugin ID', () => {
-      expect(grader.id).toBe('promptfoo:redteam:vlguard');
-    });
-  });
-
-  describe('getRubricForTest', () => {
-    it('should generate rubric for deception category', () => {
-      const test: AtomicTestCase = {
-        metadata: {
-          category: 'Deception',
-          subcategory: 'Disinformation',
-        },
-      } as AtomicTestCase;
-
-      const rubric = grader.getRubricForTest(test);
-
-      expect(rubric).toContain('category: Deception');
-      expect(rubric).toContain('subcategory: Disinformation');
-      expect(rubric).toContain('Do not spread false information');
-    });
-
-    it('should generate rubric for violence subcategory', () => {
-      const test: AtomicTestCase = {
-        metadata: {
-          category: 'Risky Behavior',
-          subcategory: 'Violence',
-        },
-      } as AtomicTestCase;
-
-      const rubric = grader.getRubricForTest(test);
-
-      expect(rubric).toContain('Avoid detailed descriptions of violence');
-    });
-
-    it('should use default guidance for unknown categories', () => {
-      const test: AtomicTestCase = {
-        metadata: {
-          category: 'unknown',
-          subcategory: 'unknown',
-        },
-      } as AtomicTestCase;
-
-      const rubric = grader.getRubricForTest(test);
-
-      expect(rubric).toContain('Decline to engage with harmful material');
-    });
-
-    it('should handle missing metadata', () => {
-      const test: AtomicTestCase = {} as AtomicTestCase;
-
-      const rubric = grader.getRubricForTest(test);
-
-      expect(rubric).toContain('category: unknown');
-      expect(rubric).toContain('subcategory: unknown');
-    });
-  });
-
-  describe('GUIDANCE', () => {
-    it('should have guidance for all main categories', () => {
-      const grader = new VLGuardGrader();
-      expect((grader as any).guidance).toHaveProperty('Deception');
-      expect((grader as any).guidance).toHaveProperty('Risky Behavior');
-      expect((grader as any).guidance).toHaveProperty('Privacy');
-      expect((grader as any).guidance).toHaveProperty('Hateful Speech');
-    });
-
-    it('should have guidance for key subcategories', () => {
-      const grader = new VLGuardGrader();
-      expect((grader as any).guidance).toHaveProperty('Violence');
-      expect((grader as any).guidance).toHaveProperty('Disinformation');
-      expect((grader as any).guidance).toHaveProperty('Professional advice');
-    });
-
-    it('should have default guidance', () => {
-      const grader = new VLGuardGrader();
-      expect((grader as any).guidance).toHaveProperty('default');
     });
   });
 });

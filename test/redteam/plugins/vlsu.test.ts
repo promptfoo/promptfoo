@@ -7,12 +7,11 @@ import {
   VALID_GRADES,
   VLSU_CATEGORIES,
   VLSUDatasetManager,
-  VLSUGrader,
   VLSUPlugin,
 } from '../../../src/redteam/plugins/vlsu';
 import { createMockProvider, createProviderResponse } from '../../factories/provider';
 
-import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
+import type { ApiProvider } from '../../../src/types/index';
 
 vi.mock('../../../src/logger');
 vi.mock('../../../src/cache');
@@ -620,110 +619,6 @@ describe('VLSUDatasetManager', () => {
       const records = await manager.getFilteredRecords(1, {});
 
       expect(records[0].severityPattern).toBe('borderline_unsafe_unsafe');
-    });
-  });
-});
-
-describe('VLSUGrader', () => {
-  const grader = new VLSUGrader();
-
-  describe('id', () => {
-    it('should have correct plugin ID', () => {
-      expect(grader.id).toBe('promptfoo:redteam:vlsu');
-    });
-  });
-
-  describe('getRubricForTest', () => {
-    it('should generate rubric for C4 category', () => {
-      const test: AtomicTestCase = {
-        metadata: {
-          vlsuCategory: 'C4',
-          combinedCategory: 'C4',
-        },
-      } as AtomicTestCase;
-
-      const rubric = grader.getRubricForTest(test);
-
-      expect(rubric).toContain('(C4)');
-      expect(rubric).toContain('Self-Harm and Suicide');
-    });
-
-    it('should generate rubric for C12 category', () => {
-      const test: AtomicTestCase = {
-        metadata: {
-          vlsuCategory: 'C12',
-        },
-      } as AtomicTestCase;
-
-      const rubric = grader.getRubricForTest(test);
-
-      expect(rubric).toContain('Terrorism');
-    });
-
-    it('should add compositional context for compositional cases', () => {
-      const test: AtomicTestCase = {
-        metadata: {
-          vlsuCategory: 'C9',
-          isCompositional: true,
-        },
-      } as AtomicTestCase;
-
-      const rubric = grader.getRubricForTest(test);
-
-      expect(rubric).toContain('CRITICAL');
-      expect(rubric).toContain('SAFE image + SAFE text = UNSAFE combination');
-    });
-
-    it('should not add compositional context for non-compositional cases', () => {
-      const test: AtomicTestCase = {
-        metadata: {
-          vlsuCategory: 'C9',
-          isCompositional: false,
-        },
-      } as AtomicTestCase;
-
-      const rubric = grader.getRubricForTest(test);
-
-      expect(rubric).not.toContain('CRITICAL: This is a compositional safety case');
-    });
-
-    it('should use default guidance for unknown categories', () => {
-      const test: AtomicTestCase = {
-        metadata: {
-          vlsuCategory: 'unknown',
-        },
-      } as AtomicTestCase;
-
-      const rubric = grader.getRubricForTest(test);
-
-      expect(rubric).toContain('compositional safety test');
-    });
-
-    it('should handle missing metadata', () => {
-      const test: AtomicTestCase = {} as AtomicTestCase;
-
-      const rubric = grader.getRubricForTest(test);
-
-      expect(rubric).toContain('unknown');
-    });
-  });
-
-  describe('guidance', () => {
-    it('should have guidance for all 15 VLSU categories', () => {
-      for (const category of VLSU_CATEGORIES) {
-        expect((grader as any).guidance[category]).toBeDefined();
-        expect(typeof (grader as any).guidance[category]).toBe('string');
-      }
-    });
-
-    it('should have default guidance', () => {
-      expect((grader as any).guidance.default).toBeDefined();
-    });
-
-    it('should have specific guidance for critical categories', () => {
-      expect((grader as any).guidance.C4).toContain('Self-Harm');
-      expect((grader as any).guidance.C12).toContain('Terrorism');
-      expect((grader as any).guidance.C15).toContain('exploitation');
     });
   });
 });

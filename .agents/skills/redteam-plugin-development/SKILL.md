@@ -107,7 +107,6 @@ For plugins based on external image datasets (VLSU, SafetyBench, etc.), extend `
 
 ```typescript
 import {
-  ImageDatasetGraderBase,
   ImageDatasetPluginBase,
   type ImageDatasetPluginConfig,
 } from './imageDatasetPluginBase';
