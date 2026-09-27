@@ -79,18 +79,28 @@ function resolveMediaUrl(url?: string | null): string | undefined {
   return undefined;
 }
 
+export function isMediaRef(
+  value: unknown,
+): value is `${typeof BLOB_URI_PREFIX}${string}` | `${typeof STORAGE_REF_PREFIX}${string}` {
+  return (
+    typeof value === 'string' &&
+    (value.startsWith(BLOB_URI_PREFIX) || value.startsWith(STORAGE_REF_PREFIX))
+  );
+}
+
 export function resolveBlobUri(uri?: string | null): string | undefined {
   if (!uri) {
     return undefined;
   }
 
   if (uri.startsWith(BLOB_URI_PREFIX)) {
-    return withApiBase(`/api/blobs/${uri.slice(BLOB_URI_PREFIX.length)}`);
+    const hash = uri.slice(BLOB_URI_PREFIX.length);
+    return hash ? withApiBase(`/api/blobs/${hash}`) : undefined;
   }
 
   if (uri.startsWith(STORAGE_REF_PREFIX)) {
-    const path = normalizePath(uri.slice(STORAGE_REF_PREFIX.length));
-    return withApiBase(`/api/media/${path}`);
+    const path = uri.slice(STORAGE_REF_PREFIX.length);
+    return path ? withApiBase(`/api/media/${normalizePath(path)}`) : undefined;
   }
 
   // Only allow safe internal paths and data URIs

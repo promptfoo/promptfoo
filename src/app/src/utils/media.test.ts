@@ -11,6 +11,7 @@ import {
   getKindIcon,
   getKindLabel,
   hashToNumber,
+  isMediaRef,
   normalizeMediaText,
   resolveAudioSource,
   resolveBlobUri,
@@ -638,6 +639,32 @@ describe('resolveVideoSource', () => {
   });
 });
 
+describe('isMediaRef', () => {
+  it.each([
+    'promptfoo://blob/hash',
+    'storageRef:audio/test.mp3',
+    'promptfoo://blob/',
+    'storageRef:',
+  ])('recognizes the reference prefix in %s', (value) => {
+    expect(isMediaRef(value)).toBe(true);
+  });
+
+  it.each([
+    undefined,
+    null,
+    123,
+    {},
+    [],
+    '',
+    '/api/blobs/hash',
+    'data:audio/mp3;base64,YWJj',
+    'http://example.com/audio.mp3',
+    '//example.com/audio.mp3',
+  ])('does not classify %j as a reference', (value) => {
+    expect(isMediaRef(value)).toBe(false);
+  });
+});
+
 describe('resolveBlobUri security', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -670,6 +697,13 @@ describe('resolveBlobUri security', () => {
     const dataUri = 'data:image/png;base64,iVBORw0KGgo=';
     expect(resolveBlobUri(dataUri)).toBe(dataUri);
   });
+
+  it.each(['promptfoo://blob/', 'storageRef:'])(
+    'does not resolve an empty reference %s',
+    (value) => {
+      expect(resolveBlobUri(value)).toBeUndefined();
+    },
+  );
 
   it('should convert promptfoo://blob/ URIs', () => {
     expect(resolveBlobUri('promptfoo://blob/abc123')).toBe('/api/blobs/abc123');
