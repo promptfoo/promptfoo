@@ -42,7 +42,7 @@ promptfoo eval
 
 Before starting, make sure you have:
 
-- Python 3.10+
+- Python 3.10–3.13
 - Node.js `>=22.22.0`
 - OpenAI API access for GPT-4.1, the model selected by this example
 - An OpenAI API key
@@ -61,7 +61,7 @@ Run this in your terminal:
 python3 --version
 ```
 
-If you see something like `Python 3.10.12` (or newer), you’re good to go.
+Use Python 3.10 through 3.13 for the CrewAI version used by this example.
 
 **Node.js and npm installed**
 
@@ -105,26 +105,22 @@ What’s happening here?
 
 Now it’s time to set up the key Python packages and the Promptfoo CLI.
 
-In your project folder, run:
+In your project folder, use a virtual environment and run:
 
-```
-pip install crewai
+```bash
+python -m pip install "crewai>=1.15.22,<2"
 npm install -g promptfoo
 ```
 
 Here’s what’s happening:
 
-- **`pip install crewai`** →
+- **`python -m pip install "crewai>=1.15.22,<2"`** →
   This installs CrewAI for creating and managing multi-agent workflows.
-  Note: The `openai` package and other dependencies (langchain, pydantic, etc.) will be automatically installed as dependencies of crewai.
+  CrewAI installs the OpenAI SDK, Pydantic, and its other runtime dependencies.
 - **`npm install -g promptfoo`** →
   Installs Promptfoo globally using Node.js, so you can run its CLI commands anywhere.
 
-Optional: If you want to use `.env` files for API keys, also install:
-
-```bash
-pip install python-dotenv
-```
+To load API keys from a `.env` file, run `promptfoo eval --env-file .env`. No extra Python package is needed.
 
 **Verify the installation worked**
 
@@ -251,7 +247,7 @@ async def run_recruitment_agent(prompt, model='openai/gpt-4.1'):
     crew = get_recruitment_agent(model)
     try:
         # ⚡ Trigger the agent to start working
-        result = crew.kickoff(inputs={'job_requirements': prompt})
+        result = await crew.kickoff_async(inputs={'job_requirements': prompt})
 
         # The result might be a string, or an object with a 'raw' attribute.
         output_text = ""
