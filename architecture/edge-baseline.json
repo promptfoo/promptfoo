@@ -8,7 +8,7 @@
   "cli -> core": 5,
   "cli -> legacy-contracts": 24,
   "cli -> legacy-runtime": 81,
-  "cli -> node": 127,
+  "cli -> node": 128,
   "cli -> providers": 3,
   "cli -> redteam": 10,
   "cli -> view-server": 5,

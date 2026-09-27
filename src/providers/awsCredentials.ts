@@ -1,5 +1,5 @@
 import { getEnvOverrides } from '../envars';
-import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
+import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@smithy/types';
 
 import type { EnvOverrides } from '../contracts/env';
 
