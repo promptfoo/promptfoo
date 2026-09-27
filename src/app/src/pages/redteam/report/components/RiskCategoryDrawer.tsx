@@ -10,8 +10,8 @@ import {
 import { Sheet, SheetContent, SheetTitle } from '@app/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { cn } from '@app/lib/utils';
-import { getActualPrompt } from '@app/utils/providerResponse';
 import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
+import { getActualPrompt } from '@promptfoo/util/providerResponse';
 import { ChevronDown, Lightbulb } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import ChatMessages, { type Message } from '../../../eval/components/ChatMessages';

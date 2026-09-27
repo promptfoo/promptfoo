@@ -6,7 +6,7 @@
  * provider-reported prompts or redteam final prompts in inject variable cells.
  */
 
-import { getActualPrompt } from '@app/utils/providerResponse';
+import { getActualPrompt } from '@promptfoo/util/providerResponse';
 import { describe, expect, it } from 'vitest';
 
 /**
