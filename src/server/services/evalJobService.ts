@@ -7,34 +7,65 @@ import logger from '../../logger';
 
 import type { Job } from '../../types/index';
 
-type StoredJob = Omit<Job, 'result'> & { resultPath: string | null };
+type ResultDirectory = { path: string; dev: number; ino: number };
+type ResultSnapshot = { path: string; directory: ResultDirectory };
+type StoredJob = Omit<Job, 'result'> & { resultSnapshot: ResultSnapshot | null };
 
-let resultDirectory: string | undefined;
+let resultDirectory: ResultDirectory | undefined;
 let cleanupRegistered = false;
 
-function storeResult(result: NonNullable<Job['result']>): string {
+function hasPrivatePermissions(stats: fs.Stats, mode: number): boolean {
+  return (
+    process.platform === 'win32' ||
+    (stats.uid === process.geteuid!() && (stats.mode & 0o777) === mode)
+  );
+}
+
+function ownsDirectory(directory: ResultDirectory): boolean {
+  const stats = fs.lstatSync(directory.path, { throwIfNoEntry: false });
+  return (
+    stats !== undefined &&
+    stats.isDirectory() &&
+    stats.dev === directory.dev &&
+    stats.ino === directory.ino &&
+    hasPrivatePermissions(stats, 0o700)
+  );
+}
+
+function removeDirectory(directory: ResultDirectory): void {
+  if (ownsDirectory(directory)) {
+    fs.rmSync(directory.path, { recursive: true, force: true });
+  }
+}
+
+function storeResult(result: NonNullable<Job['result']>): ResultSnapshot {
   const serialized = serializeResult(result);
-  let resultPath: string | undefined;
+  let snapshot: ResultSnapshot | undefined;
   let descriptor: number | undefined;
   try {
-    if (!resultDirectory || !fs.statSync(resultDirectory, { throwIfNoEntry: false })) {
-      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-job-results-'));
+    if (!resultDirectory || !ownsDirectory(resultDirectory)) {
+      const directoryPath = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-job-results-'));
+      const { dev, ino } = fs.lstatSync(directoryPath);
+      const directory = { path: directoryPath, dev, ino };
       try {
         if (process.platform !== 'win32') {
-          fs.chmodSync(directory, 0o700);
+          fs.chmodSync(directoryPath, 0o700);
+        }
+        if (!ownsDirectory(directory)) {
+          throw new Error('Snapshot directory is not private');
         }
       } catch (error) {
-        fs.rmSync(directory, { recursive: true, force: true });
+        removeDirectory(directory);
         throw error;
       }
       resultDirectory = directory;
-      // Temporary-file cleanup may remove a prior directory. Allocate a new private
-      // path, and keep one exit listener that cleans the current directory.
+      // Allocate a fresh path after cleanup or replacement. Never remove a
+      // replacement at the old path, including during process-exit cleanup.
       if (!cleanupRegistered) {
         process.once('exit', () => {
           try {
             if (resultDirectory) {
-              fs.rmSync(resultDirectory, { recursive: true, force: true });
+              removeDirectory(resultDirectory);
             }
           } catch {
             // Cleanup at process exit is best effort.
@@ -43,31 +74,64 @@ function storeResult(result: NonNullable<Job['result']>): string {
         cleanupRegistered = true;
       }
     }
-    resultPath = path.join(resultDirectory, `${randomUUID()}.json`);
-    descriptor = fs.openSync(resultPath, 'wx', 0o600);
+    snapshot = {
+      path: path.join(resultDirectory.path, `${randomUUID()}.json`),
+      directory: resultDirectory,
+    };
+    descriptor = fs.openSync(snapshot.path, 'wx', 0o600);
     try {
+      if (!ownsDirectory(snapshot.directory)) {
+        throw new Error('Snapshot directory was replaced');
+      }
       fs.writeFileSync(descriptor, serialized, 'utf8');
     } finally {
       fs.closeSync(descriptor);
     }
-    return resultPath;
+    return snapshot;
   } catch (error) {
     // An exclusive-open failure must never remove another snapshot's file.
     if (descriptor !== undefined) {
-      removeResult(resultPath);
+      removeResult(snapshot);
     }
     logger.error('Failed to store eval job result snapshot', { error });
     throw new Error('Failed to store eval job result snapshot');
   }
 }
 
-function removeResult(resultPath: string | null | undefined): void {
-  if (resultPath) {
+function removeResult(snapshot: ResultSnapshot | null | undefined): void {
+  if (snapshot) {
     try {
-      fs.rmSync(resultPath, { force: true });
+      if (ownsDirectory(snapshot.directory)) {
+        fs.rmSync(snapshot.path, { force: true });
+      }
     } catch (error) {
       logger.warn('Failed to remove obsolete job result snapshot', { error });
     }
+  }
+}
+
+function readResult(snapshot: ResultSnapshot): Job['result'] {
+  if (!ownsDirectory(snapshot.directory) || !fs.lstatSync(snapshot.path).isFile()) {
+    throw new Error('Snapshot path was replaced');
+  }
+  const descriptor = fs.openSync(
+    snapshot.path,
+    fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0),
+  );
+  try {
+    const stats = fs.fstatSync(descriptor);
+    // Check the opened file itself before reading; a prior path check cannot
+    // reject a foreign-owned file substituted while openSync resolves its parent.
+    if (
+      !stats.isFile() ||
+      (!hasPrivatePermissions(stats, 0o600) && !hasPrivatePermissions(stats, 0o400)) ||
+      !ownsDirectory(snapshot.directory)
+    ) {
+      throw new Error('Snapshot file is not private');
+    }
+    return JSON.parse(fs.readFileSync(descriptor, 'utf8'));
+  } finally {
+    fs.closeSync(descriptor);
   }
 }
 
@@ -77,7 +141,7 @@ function createInitialJob(): StoredJob {
     status: 'in-progress',
     progress: 0,
     total: 0,
-    resultPath: null,
+    resultSnapshot: null,
     logs: [],
   };
 }
@@ -104,10 +168,10 @@ function serializeResult(result: NonNullable<Job['result']>): string {
 }
 
 function cloneJob(job: StoredJob): Job {
-  const { resultPath, ...fields } = job;
+  const { resultSnapshot, ...fields } = job;
   return {
     ...fields,
-    result: resultPath === null ? null : JSON.parse(fs.readFileSync(resultPath, 'utf8')),
+    result: resultSnapshot === null ? null : readResult(resultSnapshot),
     logs: [...job.logs],
   };
 }
@@ -119,7 +183,7 @@ export class EvalJobService {
     const previous = this.jobs.get(id);
     const job = createInitialJob();
     this.jobs.set(id, job);
-    removeResult(previous?.resultPath);
+    removeResult(previous?.resultSnapshot);
     return cloneJob(job);
   }
 
@@ -141,12 +205,12 @@ export class EvalJobService {
       return false;
     }
     // Serialize and write before replacing a previous completion snapshot.
-    const resultPath = result === null ? null : storeResult(result);
-    const previousPath = job.resultPath;
+    const resultSnapshot = result === null ? null : storeResult(result);
+    const previousSnapshot = job.resultSnapshot;
     job.status = 'complete';
-    job.resultPath = resultPath;
+    job.resultSnapshot = resultSnapshot;
     job.evalId = evalId;
-    removeResult(previousPath);
+    removeResult(previousSnapshot);
     return true;
   }
 
@@ -158,10 +222,10 @@ export class EvalJobService {
     return this.update(id, (job) => {
       job.status = 'error';
       if (resetResult) {
-        const previousPath = job.resultPath;
-        job.resultPath = null;
+        const previousSnapshot = job.resultSnapshot;
+        job.resultSnapshot = null;
         job.evalId = null;
-        removeResult(previousPath);
+        removeResult(previousSnapshot);
       }
       job.logs = append ? [...job.logs, ...logs] : [...logs];
     });

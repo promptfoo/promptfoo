@@ -11,12 +11,14 @@ describe('eval job result snapshots', () => {
   let service: EvalJobService;
   let directorySpy: MockInstance<typeof fs.mkdtempSync>;
   let cleanups: Array<() => void>;
+  let movedDirectories: string[];
 
   beforeEach(async () => {
     vi.resetModules();
     ({ EvalJobService: Service } = await import('../../../src/server/services/evalJobService'));
     service = new Service();
     cleanups = [];
+    movedDirectories = [];
     const once = process.once.bind(process);
     vi.spyOn(process, 'once').mockImplementation((event, listener) => {
       if (event === 'exit') {
@@ -28,10 +30,17 @@ describe('eval job result snapshots', () => {
   });
 
   afterEach(() => {
+    const ownedDirectories = directorySpy.mock.results
+      .filter((entry) => entry.type === 'return')
+      .map((entry) => entry.value as string);
     vi.restoreAllMocks();
     for (const cleanup of cleanups) {
       process.removeListener('exit', cleanup);
       cleanup();
+    }
+    // These paths belong to the test, including replacements the service must leave alone.
+    for (const directory of [...ownedDirectories, ...movedDirectories]) {
+      fs.rmSync(directory, { recursive: true, force: true });
     }
   });
 
@@ -71,7 +80,7 @@ describe('eval job result snapshots', () => {
     if (process.platform !== 'win32') {
       expect(fs.statSync(directory()).mode & 0o777).toBe(0o700);
     }
-    expect(service.get('../untrusted-job-id')).not.toHaveProperty('resultPath');
+    expect(service.get('../untrusted-job-id')).not.toHaveProperty('resultSnapshot');
     expect(service.get('../untrusted-job-id')?.result).toEqual(snapshot('first'));
     expect(another.get('other')?.result).toEqual(snapshot('second'));
     cleanups[0]();
@@ -106,11 +115,179 @@ describe('eval job result snapshots', () => {
     expect(fs.existsSync(replacement)).toBe(false);
   });
 
+  const replaceDirectory = (kind: 'directory' | 'private directory' | 'symlink') => {
+    const original = directory();
+    const moved = `${original}-original`;
+    fs.renameSync(original, moved);
+    movedDirectories.push(moved);
+    if (kind === 'symlink') {
+      fs.symlinkSync(moved, original, 'junction');
+    } else {
+      fs.mkdirSync(original);
+      fs.chmodSync(original, kind === 'private directory' ? 0o700 : 0o777);
+    }
+    return { original, moved };
+  };
+
+  it.each(['directory', 'private directory', 'symlink'] as const)(
+    'does not write new results through a replaced %s',
+    (kind) => {
+      service.create('old');
+      service.complete('old', snapshot('old result'), 'old-eval');
+      const { original, moved } = replaceDirectory(kind);
+      const before = fs.readdirSync(original);
+      service.create('new');
+      expect(service.complete('new', snapshot('new result'), 'new-eval')).toBe(true);
+      expect(directorySpy).toHaveBeenCalledTimes(2);
+      expect(fs.readdirSync(original)).toEqual(before);
+      expect(fs.readdirSync(moved)).toHaveLength(1);
+      expect(service.get('new')?.result).toEqual(snapshot('new result'));
+      expect(() => service.get('old')).toThrow();
+      expect(cleanups).toHaveLength(1);
+      cleanups[0]();
+      expect(fs.existsSync(original)).toBe(true);
+    },
+  );
+
+  it.each(['directory', 'private directory', 'symlink'] as const)(
+    'rejects old results and preserves a replaced %s during cleanup',
+    (kind) => {
+      for (const id of ['read', 'create', 'fail']) {
+        service.create(id);
+        service.complete(id, snapshot(id), null);
+      }
+      const originals = files().map((file) => path.basename(file));
+      const { original } = replaceDirectory(kind);
+      if (kind !== 'symlink') {
+        for (const filename of originals) {
+          fs.writeFileSync(path.join(original, filename), JSON.stringify(snapshot('forged')), {
+            mode: 0o600,
+          });
+        }
+      }
+      expect(() => service.get('read')).toThrow();
+      service.create('create');
+      service.fail('fail', ['failed']);
+      cleanups[0]();
+      expect(fs.readdirSync(original).sort()).toEqual(originals.sort());
+    },
+  );
+
+  it('rejects a directory with widened permissions even when its identity is unchanged', () => {
+    if (process.platform !== 'win32') {
+      service.create('old');
+      service.complete('old', snapshot('private'), null);
+      const original = directory();
+      const identity = fs.statSync(original).ino;
+      fs.chmodSync(original, 0o777);
+      expect(fs.statSync(original).ino).toBe(identity);
+      expect(() => service.get('old')).toThrow();
+      service.create('new');
+      service.complete('new', snapshot('new private result'), null);
+      expect(directorySpy).toHaveBeenCalledTimes(2);
+      expect(service.get('new')?.result).toEqual(snapshot('new private result'));
+      cleanups[0]();
+      expect(fs.existsSync(original)).toBe(true);
+    }
+  });
+
+  it('rejects a directory owned by another user even if its mode and identity match', () => {
+    if (process.platform !== 'win32') {
+      service.create('job');
+      service.complete('job', snapshot('original'), null);
+      const stat = fs.lstatSync;
+      vi.spyOn(fs, 'lstatSync').mockImplementationOnce((filename) => {
+        const actual = stat(filename);
+        return Object.assign(actual, { uid: actual.uid + 1 });
+      });
+      expect(() => service.get('job')).toThrow();
+      expect(service.get('job')?.result).toEqual(snapshot('original'));
+    }
+  });
+
+  it('rejects a snapshot symlink and never reads its target', () => {
+    service.create('job');
+    service.complete('job', snapshot('original'), null);
+    const filename = files()[0];
+    const target = `${filename}-target`;
+    fs.writeFileSync(target, JSON.stringify(snapshot('forged')), { mode: 0o600 });
+    fs.unlinkSync(filename);
+    fs.symlinkSync(target, filename);
+    expect(() => service.get('job')).toThrow();
+  });
+
+  it('reads a private owner-readable snapshot created with a restrictive umask', () => {
+    if (process.platform !== 'win32') {
+      const previous = process.umask(0o200);
+      try {
+        service.create('job');
+        expect(service.complete('job', snapshot('private readable result'), null)).toBe(true);
+        expect(fs.statSync(files()[0]).mode & 0o777).toBe(0o400);
+        expect(service.get('job')?.result).toEqual(snapshot('private readable result'));
+      } finally {
+        process.umask(previous);
+      }
+    }
+  });
+
+  it('validates the opened file owner and permissions before reading it', () => {
+    if (process.platform !== 'win32') {
+      service.create('job');
+      service.complete('job', snapshot('original'), null);
+      const filename = files()[0];
+      for (const mode of [0o700, 0o640, 0o644]) {
+        fs.chmodSync(filename, mode);
+        expect(() => service.get('job')).toThrow();
+      }
+      fs.chmodSync(filename, 0o600);
+      const stat = fs.fstatSync;
+      vi.spyOn(fs, 'fstatSync').mockImplementationOnce((fd) => {
+        const actual = stat(fd);
+        return Object.assign(actual, { uid: actual.uid + 1 });
+      });
+      const open = vi.spyOn(fs, 'openSync');
+      expect(() => service.get('job')).toThrow();
+      expect(() => fs.fstatSync(open.mock.results.at(-1)!.value as number)).toThrow();
+      expect(service.get('job')?.result).toEqual(snapshot('original'));
+    }
+  });
+
+  it('rejects parent substitution between validation and opening a result', () => {
+    service.create('job');
+    service.complete('job', snapshot('original'), null);
+    const filename = path.basename(files()[0]);
+    const open = fs.openSync;
+    vi.spyOn(fs, 'openSync').mockImplementationOnce((file, flags, mode) => {
+      const { original } = replaceDirectory('directory');
+      fs.writeFileSync(path.join(original, filename), JSON.stringify(snapshot('forged')), {
+        mode: 0o600,
+      });
+      return open(file, flags, mode);
+    });
+    expect(() => service.get('job')).toThrow();
+  });
+
+  it('does not write data if its parent is substituted during exclusive open', () => {
+    service.create('job');
+    service.complete('job', snapshot('original'), null);
+    const open = fs.openSync;
+    let replacementFile: fs.PathLike | undefined;
+    vi.spyOn(fs, 'openSync').mockImplementationOnce((file, flags, mode) => {
+      replaceDirectory('directory');
+      replacementFile = file;
+      return open(file, flags, mode);
+    });
+    expect(() => service.complete('job', snapshot('must stay private'), null)).toThrow(
+      'Failed to store eval job result snapshot',
+    );
+    expect(fs.readFileSync(replacementFile!, 'utf8')).toBe('');
+  });
+
   it('preserves the existing result when checking its directory fails', () => {
     service.create('job');
     service.complete('job', snapshot('original'), 'eval');
     const before = service.get('job');
-    vi.spyOn(fs, 'statSync').mockImplementationOnce(() => {
+    vi.spyOn(fs, 'lstatSync').mockImplementationOnce(() => {
       throw Object.assign(new Error('Synthetic permission failure'), { code: 'EACCES' });
     });
     expect(() => service.complete('job', snapshot('replacement'), 'new-eval')).toThrow(
