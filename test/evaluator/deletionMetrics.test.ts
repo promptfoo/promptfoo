@@ -24,7 +24,6 @@ describe('deleting evaluated results preserves surviving token usage', () => {
   const evalIds: string[] = [];
   let fixtureDir: string;
   let comparisonProvider: string;
-  let nestedMetricAssertion: string;
   let hookMetricExtension: string;
   let errorProvider: string;
 
@@ -58,7 +57,6 @@ describe('deleting evaluated results preserves surviving token usage', () => {
       {pass:true,score:1,reason:'second',assertion:{type:'contains',metric:'{{ env.PF9868_METRIC }}'},metadata:{custom:true}}
     ]});`,
     );
-    nestedMetricAssertion = `file://${assertionPath}`;
     const hookPath = path.join(fixtureDir, 'hook-metric.cjs');
     await writeFile(
       hookPath,
@@ -322,7 +320,7 @@ describe('deleting evaluated results preserves surviving token usage', () => {
             {
               type: 'javascript',
               metric: '{{ env.PF9868_METRIC }}',
-              value: nestedMetricAssertion,
+              value: 'file://nested-metric.cjs',
             },
           ],
         },
@@ -330,7 +328,13 @@ describe('deleting evaluated results preserves surviving token usage', () => {
     };
     const evaluation = await Eval.create({}, suite.prompts, { id: randomUUID() });
     evalIds.push(evaluation.id);
-    await evaluate(suite, evaluation, {});
+    const originalBasePath = cliState.basePath;
+    cliState.basePath = fixtureDir;
+    try {
+      await evaluate(suite, evaluation, {});
+    } finally {
+      cliState.basePath = originalBasePath;
+    }
     const [result] = await EvalResult.findManyByEvalId(evaluation.id);
     expect((await Eval.findById(evaluation.id))!.prompts[0].metrics!.namedScoresCount).toEqual({
       quality: 3,
