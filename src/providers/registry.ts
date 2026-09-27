@@ -310,7 +310,10 @@ export const providerMap: ProviderFactory[] = [
         return new AnthropicCompletionProvider(modelName, providerOptions);
       }
       if (AnthropicCompletionProvider.ANTHROPIC_COMPLETION_MODELS.includes(modelType)) {
-        return new AnthropicCompletionProvider(modelType, providerOptions);
+        return new AnthropicCompletionProvider(
+          modelNameFromProviderPath(providerPath, 1),
+          providerOptions,
+        );
       }
 
       // The second part is a model name: route it to the Messages API. Catalogued ids
@@ -320,7 +323,10 @@ export const providerMap: ProviderFactory[] = [
       // not_found_error if the id is not real.
       const modelIds = ANTHROPIC_MODELS.map((model) => model.id);
       if (modelIds.includes(modelType) || looksLikeClaudeModelId(modelType)) {
-        return new AnthropicMessagesProvider(modelType, providerOptions);
+        return new AnthropicMessagesProvider(
+          modelNameFromProviderPath(providerPath, 1),
+          providerOptions,
+        );
       }
 
       throw new Error(
@@ -1401,7 +1407,7 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       return new VoyageEmbeddingProvider(
-        modelNameFromProviderPath(providerPath, 1) as string,
+        modelNameFromProviderPath(providerPath, 1),
         providerOptions,
       );
     },

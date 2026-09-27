@@ -3,19 +3,9 @@ import { loadYaml } from '../util/yamlLoad';
 
 import type { ApiProvider } from '../types/index';
 
-/**
- * The model name from a provider path, with any colons it contains intact.
- *
- * @param providerPath The full path, e.g. `anthropic:messages:my:model`.
- * @param segments How many leading segments belong to the provider prefix.
- * @returns Everything after the prefix, rejoined, or undefined when absent.
- */
-export function modelNameFromProviderPath(
-  providerPath: string,
-  segments: number,
-): string | undefined {
-  const rest = providerPath.split(':').slice(segments);
-  return rest.length > 0 ? rest.join(':') : undefined;
+/** Returns the complete model suffix after the given number of provider/type segments. */
+export function modelNameFromProviderPath(providerPath: string, segments: number): string {
+  return providerPath.split(':').slice(segments).join(':');
 }
 
 /**

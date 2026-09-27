@@ -53,9 +53,10 @@ describe('Shared Provider Functions', () => {
       expect(modelNameFromProviderPath('voyage:some:model:v2', 1)).toBe('some:model:v2');
     });
 
-    it('returns undefined when there is no model name', () => {
-      expect(modelNameFromProviderPath('anthropic:messages', 2)).toBeUndefined();
-      expect(modelNameFromProviderPath('voyage', 1)).toBeUndefined();
+    it('returns an empty string when there is no model name', () => {
+      expect(modelNameFromProviderPath('anthropic:messages', 2)).toBe('');
+      expect(modelNameFromProviderPath('voyage', 1)).toBe('');
+      expect(modelNameFromProviderPath('anthropic:messages:', 2)).toBe('');
     });
 
     it('keeps an empty trailing segment rather than dropping it', () => {
