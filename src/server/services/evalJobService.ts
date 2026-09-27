@@ -83,6 +83,13 @@ function storeResult(result: NonNullable<Job['result']>): ResultSnapshot {
       if (!ownsDirectory(snapshot.directory)) {
         throw new Error('Snapshot directory was replaced');
       }
+      if (process.platform !== 'win32') {
+        const mode = fs.fstatSync(descriptor).mode & 0o600;
+        if ((mode & 0o400) === 0) {
+          // A restrictive umask can remove owner-read from the new snapshot.
+          fs.fchmodSync(descriptor, mode | 0o400);
+        }
+      }
       fs.writeFileSync(descriptor, serialized, 'utf8');
     } finally {
       fs.closeSync(descriptor);

@@ -216,17 +216,50 @@ describe('eval job result snapshots', () => {
     expect(() => service.get('job')).toThrow();
   });
 
-  it('reads a private owner-readable snapshot created with a restrictive umask', () => {
+  it.each([
+    [0o000, 0o600],
+    [0o200, 0o400],
+    [0o400, 0o600],
+    [0o600, 0o400],
+    [0o777, 0o400],
+  ])('reads private snapshots created with umask %i', (mask, expectedMode) => {
     if (process.platform !== 'win32') {
-      const previous = process.umask(0o200);
+      const previous = process.umask(mask);
       try {
         service.create('job');
         expect(service.complete('job', snapshot('private readable result'), null)).toBe(true);
-        expect(fs.statSync(files()[0]).mode & 0o777).toBe(0o400);
+        expect(fs.statSync(files()[0]).mode & 0o777).toBe(expectedMode);
         expect(service.get('job')?.result).toEqual(snapshot('private readable result'));
       } finally {
         process.umask(previous);
       }
+    }
+  });
+
+  it('preserves the old result and removes a replacement when securing its descriptor fails', () => {
+    if (process.platform !== 'win32') {
+      service.create('job');
+      service.complete('job', snapshot('original'), 'eval');
+      const before = service.get('job');
+      const originalFiles = files();
+      const chmod = vi.spyOn(fs, 'fchmodSync').mockImplementationOnce(() => {
+        throw new Error('EPERM synthetic descriptor permission failure');
+      });
+      const open = vi.spyOn(fs, 'openSync');
+      const previous = process.umask(0o400);
+      try {
+        expect(() => service.complete('job', snapshot('replacement'), 'new-eval')).toThrow(
+          'Failed to store eval job result snapshot',
+        );
+      } finally {
+        process.umask(previous);
+      }
+      expect(chmod).toHaveBeenCalledOnce();
+      const descriptor = open.mock.results.find((entry) => entry.type === 'return')!
+        .value as number;
+      expect(() => fs.fstatSync(descriptor)).toThrow();
+      expect(files()).toEqual(originalFiles);
+      expect(service.get('job')).toEqual(before);
     }
   });
 

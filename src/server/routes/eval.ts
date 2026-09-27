@@ -211,43 +211,41 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
   }
 
   const { id } = paramsResult.data;
-  let job: ReturnType<typeof evalJobService.get>;
   try {
-    job = evalJobService.get(id);
+    const job = evalJobService.get(id);
+    if (!job) {
+      res.status(404).json({ error: 'Job not found' });
+      return;
+    }
+
+    if (job.status === 'complete') {
+      res.json(
+        EvalSchemas.GetJob.Response.parse({
+          status: 'complete',
+          result: job.result,
+          evalId: job.evalId,
+          logs: job.logs,
+        }),
+      );
+    } else if (job.status === 'error') {
+      res.json(
+        EvalSchemas.GetJob.Response.parse({
+          status: 'error',
+          logs: job.logs,
+        }),
+      );
+    } else {
+      res.json(
+        EvalSchemas.GetJob.Response.parse({
+          status: 'in-progress',
+          progress: job.progress,
+          total: job.total,
+          logs: job.logs,
+        }),
+      );
+    }
   } catch (error) {
     sendError(res, 500, 'Failed to load eval job', error);
-    return;
-  }
-  if (!job) {
-    res.status(404).json({ error: 'Job not found' });
-    return;
-  }
-
-  if (job.status === 'complete') {
-    res.json(
-      EvalSchemas.GetJob.Response.parse({
-        status: 'complete',
-        result: job.result,
-        evalId: job.evalId,
-        logs: job.logs,
-      }),
-    );
-  } else if (job.status === 'error') {
-    res.json(
-      EvalSchemas.GetJob.Response.parse({
-        status: 'error',
-        logs: job.logs,
-      }),
-    );
-  } else {
-    res.json(
-      EvalSchemas.GetJob.Response.parse({
-        status: 'in-progress',
-        progress: job.progress,
-        total: job.total,
-        logs: job.logs,
-      }),
-    );
   }
 });
 

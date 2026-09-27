@@ -227,7 +227,7 @@ describe('Eval Routes - Sharing behavior', () => {
     });
   });
 
-  it.each(['missing', 'invalid JSON'])(
+  it.each(['missing', 'invalid JSON', 'array', 'string', 'number', 'boolean'])(
     'returns a generic JSON error for a %s snapshot',
     async (failure) => {
       mockedEvaluateWithSource.mockResolvedValueOnce({
@@ -251,10 +251,18 @@ describe('Eval Routes - Sharing behavior', () => {
         if (failure === 'missing') {
           fs.unlinkSync(snapshotPath);
         } else {
-          fs.writeFileSync(snapshotPath, 'private malformed snapshot');
+          const contents: Record<string, string> = {
+            'invalid JSON': 'private malformed snapshot',
+            array: '[]',
+            string: '"private snapshot text"',
+            number: '42',
+            boolean: 'true',
+          };
+          fs.writeFileSync(snapshotPath, contents[failure]);
         }
 
         const response = await api.get(jobUrl).expect(500);
+        expect(response.headers['content-type']).toContain('application/json');
         expect(response.body).toEqual({ error: 'Failed to load eval job' });
         expect(response.text).not.toContain(snapshotPath);
         expect(response.text).not.toContain('private malformed snapshot');
