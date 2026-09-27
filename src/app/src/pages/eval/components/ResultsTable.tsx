@@ -53,6 +53,7 @@ import { ProviderDisplay } from './ProviderDisplay';
 import { type ProviderDef } from './providerConfig';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
+import { useHeaderCollapse } from './useHeaderCollapse';
 import VariableMarkdownCell from './VariableMarkdownCell';
 import type {
   Cell,
@@ -1577,12 +1578,16 @@ function ResultsTableHeader({
   hasMinimalScrollRoom: boolean;
   zoom: number;
 }) {
+  const collapsed = useHeaderCollapse(stickyHeader);
+
   return (
     <div
       data-testid="results-table-header"
+      data-header-collapsed={collapsed}
       className={cn(
         'relative -mx-4 overflow-hidden px-4',
         stickyHeader && 'results-table-sticky',
+        collapsed !== undefined && 'results-table-scroll-fallback',
         hasMinimalScrollRoom && 'minimal-scroll-room',
       )}
     >
