@@ -108,6 +108,8 @@ Now it’s time to set up the key Python packages and the Promptfoo CLI.
 In your project folder, use a virtual environment and run:
 
 ```bash
+python3 -m venv venv
+source venv/bin/activate
 python -m pip install "crewai>=1.15.22,<2"
 npm install -g promptfoo
 ```
