@@ -6,6 +6,7 @@ import { expect, it, vi } from 'vitest';
 import * as assertions from '../../src/assertions';
 import cliState from '../../src/cliState';
 import { evaluate } from '../../src/evaluator';
+import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
 import {
   asEvaluateResult,
@@ -21,14 +22,35 @@ import type { ApiProvider, ProviderResponse, TestSuite } from '../../src/types/i
 
 describeEvaluator('resuming interrupted grouped assertion grading', () => {
   it.each([
+    {
+      pass: true,
+      interruptAgain: false,
+      termination: 'pause',
+      concurrency: 2,
+      initialTermination: 'deadline',
+    },
+    {
+      pass: true,
+      interruptAgain: false,
+      termination: 'pause',
+      concurrency: 1,
+      initialTermination: 'step timeout',
+    },
+    { pass: true, interruptAgain: false, termination: 'pause', concurrency: 2 },
+    { pass: false, interruptAgain: false, termination: 'pause', concurrency: 2 },
     ...[true, false].flatMap((pass) =>
-      [true, false].map((interruptAgain) => ({ pass, interruptAgain, termination: 'pause' })),
+      [true, false].map((interruptAgain) => ({
+        pass,
+        interruptAgain,
+        termination: 'pause',
+        concurrency: 1,
+      })),
     ),
-    { pass: true, interruptAgain: true, termination: 'deadline' },
-    { pass: true, interruptAgain: true, termination: 'step timeout' },
+    { pass: true, interruptAgain: true, termination: 'deadline', concurrency: 1 },
+    { pass: true, interruptAgain: true, termination: 'step timeout', concurrency: 1 },
   ])(
-    'retries grading without repeating the target, pass=$pass repeated=$interruptAgain termination=$termination',
-    async ({ pass, interruptAgain, termination }) => {
+    'retries grading without repeating the target, pass=$pass repeated=$interruptAgain termination=$termination concurrency=$concurrency initial=$initialTermination',
+    async ({ pass, interruptAgain, termination, concurrency, initialTermination = 'pause' }) => {
       vi.useFakeTimers();
       const runAssertions = vi.spyOn(assertions, 'runAssertions');
       const controller = new AbortController();
@@ -65,6 +87,7 @@ describeEvaluator('resuming interrupted grouped assertion grading', () => {
       const suite: TestSuite = {
         providers: [target],
         prompts: [toPrompt('hello {{name}}')],
+        extensions: ['file://offline-resume-hook.js'],
         tests: [
           { vars: { name: 'Ada' }, assert: [{ type: 'javascript', value: () => true }] },
           {
@@ -77,15 +100,17 @@ describeEvaluator('resuming interrupted grouped assertion grading', () => {
       const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
       const evaluation = evaluate(suite, record, {
         abortSignal: controller.signal,
-        maxConcurrency: 1,
-        timeoutMs: 0,
-        maxEvalTimeMs: 0,
+        maxConcurrency: concurrency,
+        timeoutMs: initialTermination === 'step timeout' ? 10 : 0,
+        maxEvalTimeMs: initialTermination === 'deadline' ? 10 : 0,
       });
       try {
         await vi.advanceTimersByTimeAsync(1);
         await started.promise;
-        controller.abort();
-        await vi.advanceTimersByTimeAsync(0);
+        if (initialTermination === 'pause') {
+          controller.abort();
+        }
+        await vi.advanceTimersByTimeAsync(20);
         await evaluation;
         const first = await record.getResults();
         expect(first).toHaveLength(2);
@@ -108,6 +133,18 @@ describeEvaluator('resuming interrupted grouped assertion grading', () => {
         }
         response.resolve({ output: '{"pass":false,"score":0,"reason":"late response"}' });
         await vi.advanceTimersByTimeAsync(0);
+        expect((await record.getResults()).find((row) => row.testIdx === 1)).toMatchObject({
+          id: interrupted.id,
+          gradingResult: { metadata: { __promptfoo: { assertionGradingInterrupted: true } } },
+        });
+        expect(
+          vi
+            .mocked(runExtensionHook)
+            .mock.calls.filter(
+              ([, hook, context]) =>
+                hook === 'afterEach' && 'result' in context && context.result.testIdx === 1,
+            ),
+        ).toHaveLength(1);
         resumeAttempt = 1;
         cliState.resume = true;
         if (interruptAgain) {

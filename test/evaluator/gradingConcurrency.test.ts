@@ -55,11 +55,12 @@ describeEvaluator('evaluator grading concurrency', () => {
         expect(finished).toBe(true);
         const before = await record.getResults();
         expect(before.every((row) => !row.success)).toBe(true);
-        if (maxConcurrency === 1) {
-          expect(before[0].error).toMatch(/^Aborted: /);
-        } else {
-          expect(before).toEqual([]);
-        }
+        expect(before).toHaveLength(1);
+        expect(before[0].error).toMatch(/^Aborted: /);
+        expect(before[0]).toMatchObject({
+          response: { output: 'hello' },
+          gradingResult: { metadata: { __promptfoo: { assertionGradingInterrupted: true } } },
+        });
         pending.resolve({
           output: JSON.stringify({ pass: true, score: 1, reason: 'late success' }),
         });
