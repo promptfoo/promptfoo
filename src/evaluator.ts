@@ -4382,17 +4382,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     for (const result of resultsToCompare) {
-      const internalMetadata = result.metadata?.[PROMPTFOO_METADATA_KEY];
+      const internalMetadata = result.gradingResult?.metadata?.[PROMPTFOO_METADATA_KEY];
       const previous = internalMetadata?.comparisonBeforeAbort as
         | ComparisonGradingState
         | undefined;
       if (previous) {
         Object.assign(result, getComparisonGradingState(previous));
-        const { comparisonBeforeAbort: _previous, ...remaining } = internalMetadata;
-        result.metadata = { ...result.metadata, [PROMPTFOO_METADATA_KEY]: remaining };
-        if (Object.keys(remaining).length === 0) {
-          delete result.metadata[PROMPTFOO_METADATA_KEY];
-        }
         this.stats[result.success ? 'successes' : 'failures']++;
         const metrics = prompts[result.promptIdx]?.metrics;
         if (metrics) {
@@ -4457,21 +4452,23 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         }
         const wasSuccess = result.success;
         const wasScore = result.score;
-        result.metadata = {
-          ...result.metadata,
-          [PROMPTFOO_METADATA_KEY]: {
-            ...result.metadata?.[PROMPTFOO_METADATA_KEY],
-            comparisonBeforeAbort: getComparisonGradingState(result),
+        const previous = getComparisonGradingState(result);
+        // Keep the original grading intact for resume, inside the grading projection
+        // so stripping grading results also removes the saved state.
+        result.gradingResult = {
+          pass: result.success,
+          score: result.score,
+          reason: result.error ?? '',
+          ...result.gradingResult,
+          componentResults: [...(result.gradingResult?.componentResults ?? [])],
+          metadata: {
+            ...result.gradingResult?.metadata,
+            [PROMPTFOO_METADATA_KEY]: {
+              ...result.gradingResult?.metadata?.[PROMPTFOO_METADATA_KEY],
+              comparisonBeforeAbort: previous,
+            },
           },
         };
-        // Keep the original grading intact for resume; merging the aborted component
-        // mutates the aggregate and its component array.
-        if (result.gradingResult) {
-          result.gradingResult = {
-            ...result.gradingResult,
-            componentResults: [...(result.gradingResult.componentResults ?? [])],
-          };
-        }
         applyGradingError(result, error, providerAbortSignal);
         mergeSelectBestGradingResult(
           result,
