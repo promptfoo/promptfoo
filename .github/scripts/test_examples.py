@@ -54,6 +54,10 @@ class SelectionTests(unittest.TestCase):
             ".github/workflows/examples.yml",
             "package-lock.json",
             ".nvmrc",
+            "tsdown.config.ts",
+            "tsconfig.json",
+            "scripts/postbuild.ts",
+            "drizzle/0000_example.sql",
         ):
             with self.subTest(path=path):
                 self.assertEqual(select_examples([path]), select_examples(None))

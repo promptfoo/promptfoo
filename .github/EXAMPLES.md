@@ -5,8 +5,9 @@ job per registered example/runtime and one aggregate `Examples` status check. It
 replaces the Docker-only and Python-provider-only workflows. Core Python wrapper
 tests stay in `main.yml`.
 
-PRs run the affected registered examples. Changes to `src/`, workflows, the runner,
-or root dependency/toolchain manifests run the full registered matrix. Pushes to
+PRs run the affected registered examples. Changes to `src/`, build scripts/config,
+database migrations, workflows, the runner, or root dependency/toolchain manifests
+run the full registered matrix. Pushes to
 `main` and manual runs also run the full matrix. Selection errors, missing or fully
 skipped suites, and failed or cancelled selected jobs fail the aggregate check; an unrelated PR
 gets an explicit successful empty selection. The workflow is not path-filtered,

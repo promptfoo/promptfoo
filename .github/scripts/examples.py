@@ -63,8 +63,21 @@ EXAMPLES = {
 }
 
 # Shared runtime changes can break examples without changing their own directories.
-SHARED_PREFIXES = ("src/", ".github/scripts/", ".github/workflows/")
-SHARED_FILES = {"package.json", "package-lock.json", ".nvmrc", ".npmrc"}
+SHARED_PREFIXES = (
+    "src/",
+    "scripts/",
+    "drizzle/",
+    ".github/scripts/",
+    ".github/workflows/",
+)
+SHARED_FILES = {
+    "package.json",
+    "package-lock.json",
+    "tsdown.config.ts",
+    "tsconfig.json",
+    ".nvmrc",
+    ".npmrc",
+}
 
 
 def validate_registry(root: Path = ROOT) -> None:
