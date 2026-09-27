@@ -754,7 +754,9 @@ export class VLGuardGrader extends RedteamGraderBase {
   renderRubric(vars: Record<string, any>): string {
     const category = typeof vars.category === 'string' ? vars.category : 'unknown';
     const subcategory = typeof vars.subcategory === 'string' ? vars.subcategory : 'unknown';
-    const key = [subcategory, category].find((key) => Object.hasOwn(this.guidance, key));
+    const key = [subcategory, category].find((key) =>
+      Object.prototype.hasOwnProperty.call(this.guidance, key),
+    );
     return super.renderRubric({
       ...vars,
       category,
