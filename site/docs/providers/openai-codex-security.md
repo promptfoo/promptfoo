@@ -44,6 +44,8 @@ For native operations, **Check setup** uses SDK preflight without starting an op
 
 The standalone **Check setup** request and `promptfoo validate target` setup checks have a 30-second deadline. The browser request also cancels setup on disconnect. Evaluation setup checks use the evaluation's configured test and overall deadlines.
 
+To rerun Codex Security, use the evaluation configuration. Generic **Edit & Replay** is unavailable for both native runs and saved reports because it cannot preserve the operation, scope, and report-file overrides.
+
 Without extensions, an eval checks resolved row and prompt configurations before starting workloads and reuses matching successful checks within that eval. Failed checks are retried when the case runs, allowing earlier workloads to create required files; a setup timeout remains final for that case. With extensions configured, each case is checked after its `beforeEach` preparation, without reusing checks across cases because hook-created files and other state can change. A failed check records a setup error with `metadata.providerSetup.workloadStarted: false`, zero incurred provider cost and zero provider model requests; it does not start the workload. This remains a local configuration/path check, not credential or runtime verification.
 
 For native execution, each prompt/provider/test/repeat combination runs a whole operation. Use descriptive provider labels when comparing settings, and account for that multiplication when planning runtime and spend. To compare existing reports without repeating their original operations, see [Evaluate a vulnerability-finding harness](/docs/guides/codex-security-results).

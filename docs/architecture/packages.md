@@ -139,6 +139,8 @@ The associated edge baseline records these intentional consumers:
 | node → legacy-runtime             | Share bounded setup checks between connectivity tests and evaluation.              |
 | providers → contracts             | Normalize and validate security reports and replay evidence.                       |
 | view-server → contracts           | Validate and type bounded progress stored in evaluation jobs.                      |
+| view-server → node                | Identify replay provider references without starting a workload.                   |
+| view-server → providers           | Expand provider configuration files once before checking replay eligibility.       |
 
 The progress UI uses the app's existing duration formatter, keeping presentation
 inside the browser layer. These contract dependencies introduce no upward imports

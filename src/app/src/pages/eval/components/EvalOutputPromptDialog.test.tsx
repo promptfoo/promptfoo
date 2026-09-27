@@ -8,6 +8,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
+import * as PromptEditorModule from './PromptEditor';
 import type { AssertionType, GradingResult } from '@promptfoo/types';
 
 // Mock the Citations component to verify it receives the correct props
@@ -639,6 +640,63 @@ describe('EvalOutputPromptDialog', () => {
 
     expect(screen.queryByLabelText('Edit & Replay')).toBeNull();
   });
+
+  it.each(['sdk', 'saved-report'] as const)(
+    'keeps %s Codex Security results read-only when switching from an edited text prompt',
+    async (kind) => {
+      const user = userEvent.setup();
+      const { rerender } = renderWithProviders(<EvalOutputPromptDialog {...defaultProps} />);
+      await user.click(screen.getByLabelText('Edit & Replay'));
+      expect(screen.getByRole('button', { name: 'Replay' })).toBeInTheDocument();
+
+      rerender(
+        <EvalOutputPromptDialog
+          {...defaultProps}
+          metadata={{
+            codexSecurity: createCodexSecurityResult({ source: { kind, mocked: false } }),
+          }}
+        />,
+      );
+
+      expect(screen.queryByLabelText('Edit & Replay')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Replay' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+      expect(
+        screen.getByText(/Rerun Codex Security from the evaluation configuration/),
+      ).toBeVisible();
+      expect(screen.getByText('Test prompt')).toBeInTheDocument();
+      expect(mockReplayEvaluation).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['sdk', 'saved-report'] as const)(
+    'guards the replay callback for %s Codex Security even if the editor invokes it',
+    async (kind) => {
+      // Exercise the handler boundary independently of the editor's hidden controls.
+      const editor = vi
+        .spyOn(PromptEditorModule, 'PromptEditor')
+        .mockImplementation(({ onReplay }) => (
+          <button type="button" onClick={onReplay}>
+            Invoke replay callback
+          </button>
+        ));
+      try {
+        const user = userEvent.setup();
+        renderWithProviders(
+          <EvalOutputPromptDialog
+            {...defaultProps}
+            metadata={{
+              codexSecurity: createCodexSecurityResult({ source: { kind, mocked: false } }),
+            }}
+          />,
+        );
+        await user.click(screen.getByRole('button', { name: 'Invoke replay callback' }));
+        expect(mockReplayEvaluation).not.toHaveBeenCalled();
+      } finally {
+        editor.mockRestore();
+      }
+    },
+  );
 
   it('should transition PromptEditor from read-only to editable when readOnly prop changes', async () => {
     const { rerender } = renderWithProviders(

@@ -153,6 +153,10 @@ function getSdkReportText(
   return text === output ? undefined : text;
 }
 
+function getPromptEditorState(hasSecurityResult: boolean, readOnly: boolean, editMode: boolean) {
+  return hasSecurityResult ? { editMode: false, readOnly: true } : { editMode, readOnly };
+}
+
 interface EvalOutputPromptDialogProps {
   open: boolean;
   onClose: () => void;
@@ -215,6 +219,7 @@ export default function EvalOutputPromptDialog({
   const [replayOutput, setReplayOutput] = useState<string | null>(null);
   const [replayError, setReplayError] = useState<string | null>(null);
   const [traces, setTraces] = useState<Trace[]>([]);
+  const promptEditorState = getPromptEditorState(securityResult.success, readOnly, editMode);
 
   useEffect(() => {
     setCopied(false);
@@ -277,7 +282,7 @@ export default function EvalOutputPromptDialog({
       return;
     }
 
-    if (!onReplay) {
+    if (!onReplay || securityResult.success) {
       setReplayError('Replay functionality is not available');
       return;
     }
@@ -481,8 +486,8 @@ export default function EvalOutputPromptDialog({
             {/* Prompt & Output Panel */}
             <TabsContent value="prompt-output" className="mt-0">
               <PromptEditor
+                {...promptEditorState}
                 prompt={prompt}
-                editMode={editMode}
                 editedPrompt={editedPrompt}
                 replayLoading={replayLoading}
                 replayError={replayError}
@@ -497,10 +502,13 @@ export default function EvalOutputPromptDialog({
                 onMouseLeave={() => setHoveredElement(null)}
                 CodeDisplay={CodeDisplay}
                 subtitleTypographyClassName={subtitleTypographyClassName}
-                readOnly={readOnly}
               />
               {securityResult.success && (
                 <div className="mb-4">
+                  <p className="mb-3 text-sm text-muted-foreground">
+                    Rerun Codex Security from the evaluation configuration. Single-prompt replay
+                    cannot preserve its scan, validation, or saved-report settings.
+                  </p>
                   <CodexSecurityQualityStatus gradingResults={gradingResults} />
                   <CodexSecurityResultSummary result={securityResult.data} />
                 </div>
