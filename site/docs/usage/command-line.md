@@ -439,6 +439,8 @@ Deletes a specific resource.
 | `eval <id>`        | Delete an eval by ID; accepts `latest` or `all`                            |
 | `eval-result <id>` | Delete a single result row within an eval session, leaving the rest intact |
 
+Result deletion is blocked while its eval is running. Wait for the run to finish or stop it first.
+
 ## `promptfoo retry <evalId>`
 
 Retry all ERROR results from a specific eval. This command finds test cases that resulted in errors (e.g., from network issues, rate limits, or API failures) and re-runs only those test cases. The results are updated in place in the original eval.
