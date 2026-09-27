@@ -91,6 +91,10 @@ def run_smoke(repo, output):
         if not key.lower().endswith("_proxy")
         and not key.startswith(("MLFLOW_", "OPENAI_", "ANTHROPIC_"))
     }
+    # Empty values prevent implicit dotenv from restoring proxies.
+    for proxy in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
+        env[proxy] = env[proxy.lower()] = ""
+    env["NO_PROXY"] = env["no_proxy"] = "*"
     env.update(
         MLFLOW_DISABLE_AGENT_HINT="1",
         MLFLOW_ENABLE_TELEMETRY="false",
