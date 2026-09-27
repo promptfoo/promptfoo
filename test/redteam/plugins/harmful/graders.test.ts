@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
   CopyrightViolationGrader,
   GraphicContentGrader,
@@ -8,14 +8,12 @@ import {
   SelfHarmGrader,
   SexualContentGrader,
 } from '../../../../src/redteam/plugins/harmful/graders';
-import { isBasicRefusal } from '../../../../src/redteam/util';
 import { createMockProvider } from '../../../factories/provider';
 
 import type { ApiProvider, AtomicTestCase } from '../../../../src/types/index';
 
-vi.mock('../../../../src/redteam/util');
-
 const createMockTest = (overrides?: Partial<AtomicTestCase>): AtomicTestCase => ({
+  metadata: { purpose: 'To assist users with general tasks while avoiding harmful content' },
   vars: {
     purpose: 'To assist users with general tasks while avoiding harmful content',
     harmCategory: 'test harm',
@@ -35,15 +33,10 @@ describe('HarmfulGrader', () => {
     grader = new HarmfulGrader();
     mockProvider = createMockProvider();
     mockTest = createMockTest();
-    vi.mocked(isBasicRefusal).mockReset();
   });
 
   describe('getResult', () => {
     it('should pass and return score 1 for basic refusal', async () => {
-      vi.mocked(isBasicRefusal).mockImplementation(function () {
-        return true;
-      });
-
       const result = await grader.getResult(
         'test prompt',
         'I cannot help with that.',
@@ -54,55 +47,10 @@ describe('HarmfulGrader', () => {
       expect(result.grade).toEqual({
         pass: true,
         score: 1,
-        reason: 'The output contains a standard refusal.',
-        assertion: undefined,
+        reason: 'Model refused the request',
       });
-      expect(result.rubric).toBe(grader.rubric);
-    });
-
-    it('should fallback to superclass getResult for non-refusal', async () => {
-      vi.mocked(isBasicRefusal).mockImplementation(function () {
-        return false;
-      });
-
-      const superGetResult = vi.spyOn(Object.getPrototypeOf(HarmfulGrader.prototype), 'getResult');
-      superGetResult.mockResolvedValue({
-        grade: {
-          pass: false,
-          score: 0,
-          reason: 'test reason',
-        },
-        rubric: 'test rubric',
-      });
-
-      const result = await grader.getResult(
-        'test prompt',
-        'harmful response',
-        mockTest,
-        mockProvider as ApiProvider,
-      );
-
-      expect(superGetResult).toHaveBeenCalledWith(
-        'test prompt',
-        'harmful response',
-        mockTest,
-        mockProvider as ApiProvider,
-        undefined,
-        undefined, // additionalRubric
-        undefined, // skipRefusalCheck
-        undefined, // gradingContext
-      );
-
-      expect(result).toEqual({
-        grade: {
-          pass: false,
-          score: 0,
-          reason: 'test reason',
-        },
-        rubric: 'test rubric',
-      });
-
-      superGetResult.mockRestore();
+      expect(result.rubric).toContain('Evaluate the entire response:');
+      expect(result.rubric).toContain(mockTest.metadata!.purpose);
     });
   });
 
@@ -154,10 +102,6 @@ describe('HarmfulPrivacyGrader', () => {
   });
 
   it('should inherit basic refusal handling from parent', async () => {
-    vi.mocked(isBasicRefusal).mockImplementation(function () {
-      return true;
-    });
-
     const result = await grader.getResult(
       'test prompt',
       'I cannot help with that.',
@@ -184,10 +128,6 @@ describe('SelfHarmGrader', () => {
   });
 
   it('should inherit basic refusal handling from parent', async () => {
-    vi.mocked(isBasicRefusal).mockImplementation(function () {
-      return true;
-    });
-
     const result = await grader.getResult(
       'test prompt',
       'I cannot help with that.',
@@ -215,10 +155,6 @@ describe('GraphicContentGrader', () => {
   });
 
   it('should inherit basic refusal handling from parent', async () => {
-    vi.mocked(isBasicRefusal).mockImplementation(function () {
-      return true;
-    });
-
     const result = await grader.getResult(
       'test prompt',
       'I cannot help with that.',
@@ -246,10 +182,6 @@ describe('SexualContentGrader', () => {
   });
 
   it('should inherit basic refusal handling from parent', async () => {
-    vi.mocked(isBasicRefusal).mockImplementation(function () {
-      return true;
-    });
-
     const result = await grader.getResult(
       'test prompt',
       'I cannot help with that.',
@@ -277,10 +209,6 @@ describe('ProfanityGrader', () => {
   });
 
   it('should inherit basic refusal handling from parent', async () => {
-    vi.mocked(isBasicRefusal).mockImplementation(function () {
-      return true;
-    });
-
     const result = await grader.getResult(
       'test prompt',
       'I cannot help with that.',
@@ -308,10 +236,6 @@ describe('CopyrightViolationGrader', () => {
   });
 
   it('should inherit basic refusal handling from parent', async () => {
-    vi.mocked(isBasicRefusal).mockImplementation(function () {
-      return true;
-    });
-
     const result = await grader.getResult(
       'test prompt',
       'I cannot help with that.',

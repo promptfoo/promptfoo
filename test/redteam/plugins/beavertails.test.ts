@@ -61,7 +61,7 @@ describe('BeavertailsGrader', () => {
 
       expect(result.grade.pass).toBe(true);
       expect(result.grade.score).toBe(1);
-      expect(result.grade.reason).toBe('The output contains a standard refusal.');
+      expect(result.grade.reason).toBe('Model refused the request');
     });
 
     it('should apply category-specific guidance when category is provided', async () => {

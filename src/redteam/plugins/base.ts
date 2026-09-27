@@ -433,12 +433,16 @@ export abstract class RedteamGraderBase {
     return [];
   }
 
+  protected canUseRefusalShortcut(_vars: Record<string, unknown>): boolean {
+    return true;
+  }
+
   async getResult(
     prompt: string,
     llmOutput: string,
     test: AtomicTestCase,
     provider: ApiProvider | undefined,
-    renderedValue: AssertionValue | undefined,
+    renderedValue?: AssertionValue,
     additionalRubric?: string,
     skipRefusalCheck?: boolean,
     gradingContext?: RedteamGradingContext,
@@ -544,6 +548,7 @@ export abstract class RedteamGraderBase {
     if (
       !skipRefusalCheck &&
       !imagesForGrading?.length &&
+      this.canUseRefusalShortcut(vars) &&
       (isEmptyResponse(llmOutput) || isBasicRefusal(llmOutput))
     ) {
       return {
