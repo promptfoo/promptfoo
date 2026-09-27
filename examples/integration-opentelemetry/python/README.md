@@ -6,18 +6,33 @@ Requires Python 3.10+ and Node.js >=22.22.0.
 
 ## Quick Start
 
+On Windows (PowerShell), use `npx.cmd` instead of `npx` for the Promptfoo commands in this guide.
+
 ```bash
 npx promptfoo@latest init --example integration-opentelemetry/python
 cd integration-opentelemetry/python
+```
 
-# Create and activate a virtual environment
+On macOS/Linux, install the dependencies in a virtual environment:
+
+```bash
 python3 -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install dependencies
+source .venv/bin/activate
 python -m pip install -r requirements.txt
 
-# Run the evaluation
+```
+
+On Windows (PowerShell):
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+$env:PROMPTFOO_PYTHON = (Resolve-Path .\.venv\Scripts\python.exe).Path
+```
+
+Run the evaluation using the configured virtual environment:
+
+```bash
 npx promptfoo@latest eval --no-cache
 npx promptfoo@latest view
 ```
