@@ -113,7 +113,8 @@ async function createApiProvider(
     cliState.withEnv(templateEnv, () => renderEnvOnlyInObject(value, templateEnv));
   const renderedProviderPath = renderTemplate(providerPath);
   const envLayers =
-    originalEnvLayers && /^openai:agents(?::|$)/.test(renderedProviderPath)
+    originalEnvLayers &&
+    /^(?:openai:agents(?::|$)|(?:google|palm):live:)/.test(renderedProviderPath)
       ? originalEnvLayers
       : [env, options.env];
   let mergedEnv = mergeProviderEnv(renderedProviderPath, ...envLayers);
