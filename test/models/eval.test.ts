@@ -12,7 +12,7 @@ import Eval, {
   escapeJsonPathKey,
   getEvalSummaries,
 } from '../../src/models/eval';
-import { getCachedResultsCount } from '../../src/models/evalPerformance';
+import { clearCountCache, getCachedResultsCount } from '../../src/models/evalPerformance';
 import EvalResult from '../../src/models/evalResult';
 import { EvalEvaluationStore } from '../../src/node/evaluationStore';
 import { TraceStore } from '../../src/tracing/store';
@@ -54,6 +54,7 @@ describe('evaluator', () => {
   });
 
   beforeEach(async () => {
+    clearCountCache();
     vi.mocked(getAuthor).mockReset();
     vi.mocked(updateSignalFile).mockClear();
 
@@ -453,7 +454,7 @@ describe('evaluator', () => {
       },
     );
 
-    it.each(['"corrupt"', '"2"', '-1', 'null', '{}', '1e309'])(
+    it.each(['"corrupt"', '"2"', 'null', '{}', '1e309'])(
       'ignores malformed persisted outcome counts (%s) consistently across columns',
       async (invalidCount) => {
         const evaluation = await Eval.create({ redteam: {} }, []);
@@ -492,13 +493,12 @@ describe('evaluator', () => {
           metrics: createPromptMetrics({ testPassCount: 1, testFailCount: 1 }),
         }),
         createCompletedPrompt('Second', {
-          metrics: createPromptMetrics({ testPassCount: 0, testFailCount: -1, testErrorCount: 1 }),
+          metrics: createPromptMetrics({ testPassCount: 0, testFailCount: 0, testErrorCount: 1 }),
         }),
       ];
-      const storedPrompts = JSON.stringify(prompts).replace(
-        '"testPassCount":0',
-        '"testPassCount":"2"',
-      );
+      const storedPrompts = JSON.stringify(prompts)
+        .replace('"testPassCount":0', '"testPassCount":"2"')
+        .replace('"testFailCount":0', '"testFailCount":"corrupt"');
       const db = await getDb();
       await db.run(sql`UPDATE ${evalsTable} SET prompts = ${storedPrompts}
         WHERE id = ${evaluation.id}`);
@@ -511,6 +511,58 @@ describe('evaluator', () => {
           attackSuccessRate: (1 / 3) * 100,
         }),
       ]);
+    });
+
+    it('preserves signed counters from legacy manual error-to-pass ratings', async () => {
+      const evaluation = await Eval.create({}, []);
+      await evaluation.addPrompts([
+        createCompletedPrompt('Rated error', {
+          metrics: createPromptMetrics({ testPassCount: 1, testFailCount: -1, testErrorCount: 1 }),
+        }),
+      ]);
+      await evaluation.addResult(createEvaluateResult());
+
+      expect(await getEvalSummaries()).toEqual([
+        expect.objectContaining({ evalId: evaluation.id, numTests: 1, passRate: 100 }),
+      ]);
+    });
+
+    it('reuses historical distinct counts and refreshes only the changed eval', async () => {
+      const historical = await Eval.create({}, []);
+      const active = await Eval.create({}, []);
+      await historical.addResult(createEvaluateResult());
+      await active.addResult(createEvaluateResult());
+      const db = await getDb();
+      const execute = vi.spyOn(db.$client, 'execute');
+      const isCountQuery = (query: string | { sql: string }) =>
+        (typeof query === 'string' ? query : query.sql).includes('COUNT(DISTINCT test_idx)');
+      const countQueries = () => execute.mock.calls.filter(([query]) => isCountQuery(query)).length;
+
+      try {
+        expect(await getEvalSummaries()).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ evalId: historical.id, numTests: 1 }),
+            expect.objectContaining({ evalId: active.id, numTests: 1 }),
+          ]),
+        );
+        expect(countQueries()).toBe(2);
+
+        execute.mockClear();
+        await getEvalSummaries();
+        expect(countQueries()).toBe(0);
+
+        await active.addResult(createEvaluateResult({ testIdx: 1 }));
+        execute.mockClear();
+        expect(await getEvalSummaries()).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ evalId: historical.id, numTests: 1 }),
+            expect.objectContaining({ evalId: active.id, numTests: 2 }),
+          ]),
+        );
+        expect(countQueries()).toBe(1);
+      } finally {
+        execute.mockRestore();
+      }
     });
 
     it('returns zero counts and rate when no tests have run', async () => {

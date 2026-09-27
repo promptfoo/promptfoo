@@ -1728,7 +1728,8 @@ export default class Eval {
 }
 
 function normalizeSummaryCount(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
+  // Legacy manual ratings can leave signed counters whose sum still reflects the run count.
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
 /**
@@ -1768,11 +1769,6 @@ export async function getEvalSummaries(
       datasetId: evalsToDatasetsTable.datasetId,
       isRedteam: evalsTable.isRedteam,
       prompts: evalsTable.prompts,
-      persistedTestCount: sql<number>`(
-        SELECT COUNT(DISTINCT ${evalResultsTable.testIdx})
-        FROM ${evalResultsTable}
-        WHERE ${evalResultsTable.evalId} = ${evalsTable.id}
-      )`,
       // Configs can contain very large embedded test definitions. Only materialize them
       // for the report surface that requests provider labels.
       config: includeProviders ? evalsTable.config : sql<Partial<UnifiedConfig> | null>`NULL`,
@@ -1789,81 +1785,83 @@ export async function getEvalSummaries(
    * - Outcome counts come from V4 prompt metrics, including partially uploaded evals.
    * - Persisted test indices distinguish test cases from runs across provider/prompt columns.
    */
-  return results.map((result) => {
-    let passCount = 0;
-    let failCount = 0;
-    let testRunCount = 0;
-    let testCount = result.persistedTestCount;
+  return Promise.all(
+    results.map(async (result) => {
+      let passCount = 0;
+      let failCount = 0;
+      let testRunCount = 0;
+      let testCount = await getCachedResultsCount(result.evalId);
 
-    // Provider selection can give each column a different number of runs.
-    // V4 uploads send complete metrics before result row chunks arrive.
-    for (const prompt of result.prompts ?? []) {
-      const passes = normalizeSummaryCount(prompt.metrics?.testPassCount);
-      const failures = normalizeSummaryCount(prompt.metrics?.testFailCount);
-      const errors = normalizeSummaryCount(prompt.metrics?.testErrorCount);
-      const runs = passes + failures + errors;
-      passCount += passes;
-      failCount += failures;
-      testRunCount += runs;
-      testCount = Math.max(testCount, runs);
-    }
-
-    // Construct an array of providers
-    const deserializedProviders = [];
-    const providers = result.config?.providers;
-
-    if (includeProviders) {
-      if (typeof providers === 'string') {
-        // `providers: string`
-        deserializedProviders.push({
-          id: providers,
-          label: null,
-        });
-      } else if (Array.isArray(providers)) {
-        providers.forEach((p) => {
-          if (typeof p === 'string') {
-            // `providers: string[]`
-            deserializedProviders.push({
-              id: p,
-              label: null,
-            });
-          } else if (typeof p === 'object' && p) {
-            // Check if it's a declarative provider (record format)
-            // e.g., { 'openai:gpt-4': { config: {...} } }
-            const keys = Object.keys(p);
-            if (keys.length === 1 && !('id' in p)) {
-              // This is a declarative provider
-              const providerId = keys[0];
-              // biome-ignore lint/suspicious/noExplicitAny: FIXME this should use Object.keys or something to keep it type safe
-              const providerConfig = (p as any)[providerId];
-              deserializedProviders.push({
-                id: providerId,
-                label: providerConfig.label ?? null,
-              });
-            } else {
-              // `providers: ProviderOptions[]` with explicit id
-              deserializedProviders.push({
-                id: p.id ?? 'unknown',
-                label: p.label ?? null,
-              });
-            }
-          }
-        });
+      // Provider selection can give each column a different number of runs.
+      // V4 uploads send complete metrics before result row chunks arrive.
+      for (const prompt of result.prompts ?? []) {
+        const passes = normalizeSummaryCount(prompt.metrics?.testPassCount);
+        const failures = normalizeSummaryCount(prompt.metrics?.testFailCount);
+        const errors = normalizeSummaryCount(prompt.metrics?.testErrorCount);
+        const runs = passes + failures + errors;
+        passCount += passes;
+        failCount += failures;
+        testRunCount += runs;
+        testCount = Math.max(testCount, runs);
       }
-    }
 
-    return {
-      evalId: result.evalId,
-      createdAt: result.createdAt,
-      description: result.description,
-      numTests: testCount,
-      datasetId: result.datasetId,
-      isRedteam: Boolean(result.isRedteam),
-      passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
-      label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
-      providers: deserializedProviders,
-      attackSuccessRate:
-        type === 'redteam' ? calculateAttackSuccessRate(testRunCount, failCount) : undefined,
-    };
-  });
+      // Construct an array of providers
+      const deserializedProviders = [];
+      const providers = result.config?.providers;
+
+      if (includeProviders) {
+        if (typeof providers === 'string') {
+          // `providers: string`
+          deserializedProviders.push({
+            id: providers,
+            label: null,
+          });
+        } else if (Array.isArray(providers)) {
+          providers.forEach((p) => {
+            if (typeof p === 'string') {
+              // `providers: string[]`
+              deserializedProviders.push({
+                id: p,
+                label: null,
+              });
+            } else if (typeof p === 'object' && p) {
+              // Check if it's a declarative provider (record format)
+              // e.g., { 'openai:gpt-4': { config: {...} } }
+              const keys = Object.keys(p);
+              if (keys.length === 1 && !('id' in p)) {
+                // This is a declarative provider
+                const providerId = keys[0];
+                // biome-ignore lint/suspicious/noExplicitAny: FIXME this should use Object.keys or something to keep it type safe
+                const providerConfig = (p as any)[providerId];
+                deserializedProviders.push({
+                  id: providerId,
+                  label: providerConfig.label ?? null,
+                });
+              } else {
+                // `providers: ProviderOptions[]` with explicit id
+                deserializedProviders.push({
+                  id: p.id ?? 'unknown',
+                  label: p.label ?? null,
+                });
+              }
+            }
+          });
+        }
+      }
+
+      return {
+        evalId: result.evalId,
+        createdAt: result.createdAt,
+        description: result.description,
+        numTests: testCount,
+        datasetId: result.datasetId,
+        isRedteam: Boolean(result.isRedteam),
+        passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
+        label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
+        providers: deserializedProviders,
+        attackSuccessRate:
+          type === 'redteam' ? calculateAttackSuccessRate(testRunCount, failCount) : undefined,
+      };
+    }),
+  );
 }
