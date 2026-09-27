@@ -1019,7 +1019,9 @@ function hasExecutionError(result: RatingEvalResult, hasAutomatedComponents: boo
   ) {
     return true;
   }
-  if (failureReason === ResultFailureReason.ASSERT) {
+  // Native assertion grading retains a response, even when its output is stripped. Exceptions
+  // and timeouts can lose their ERROR category to an imported manual Fail rating.
+  if (failureReason === ResultFailureReason.ASSERT && result.response) {
     return false;
   }
   return !hasAutomatedComponents && typeof result.error === 'string' && result.error.length > 0;

@@ -10,6 +10,7 @@ import { evalResultsTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
+import { getErrorResultIds } from '../../src/node/retry';
 import { createApp } from '../../src/server/server';
 import { type GradingResult, ResultFailureReason } from '../../src/types';
 import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
@@ -2674,11 +2675,17 @@ describe('eval routes', () => {
     });
 
     it.each([
-      { providerError: true, manualPass: false, components: false },
-      { providerError: true, manualPass: true, components: false },
+      { providerError: 'response', manualPass: false, components: false },
+      { providerError: 'response', manualPass: true, components: false },
+      { providerError: 'exception', manualPass: false, components: false },
+      { providerError: 'exception', manualPass: true, components: false },
+      { providerError: 'timeout', manualPass: false, components: false },
+      { providerError: 'timeout', manualPass: true, components: false },
       { providerError: false, manualPass: false, components: true },
       { providerError: false, manualPass: true, components: true },
       { providerError: false, manualPass: false, components: false },
+      { providerError: false, manualPass: false, components: 'comparison' },
+      { providerError: false, manualPass: true, components: 'comparison' },
     ])(
       'restores imported failure category (provider error $providerError, manual pass $manualPass, components $components)',
       async ({ providerError, manualPass, components }) => {
@@ -2692,13 +2699,36 @@ describe('eval routes', () => {
           result.gradingResult = null;
           metrics.assertFailCount -= 1;
         }
-        result.error = providerError ? 'Provider request failed' : 'Assertion failed';
+        result.error =
+          providerError === 'timeout'
+            ? 'Evaluation timed out after 10ms: Error: Evaluation timed out after 10ms'
+            : providerError
+              ? 'Provider request failed'
+              : 'Assertion failed';
+        if (components === 'comparison') {
+          result.response = undefined;
+          result.gradingResult = {
+            pass: false,
+            score: 0,
+            reason: result.error,
+            componentResults: [
+              { pass: false, score: 0, reason: result.error, assertion: { type: 'max-score' } },
+            ],
+          };
+        }
         if (providerError) {
-          result.response = { error: result.error };
+          // Thrown provider errors and per-test timeouts never produce a response object.
+          result.response = providerError === 'response' ? { error: result.error } : undefined;
           await markResultAsError(source, result);
         } else {
           await result.save();
           await source.save();
+        }
+        if (!result.response) {
+          await (await getDb())
+            .update(evalResultsTable)
+            .set({ response: null })
+            .where(eq(evalResultsTable.id, result.id));
         }
         const originalMetrics = structuredClone(metrics);
         const expectedFailure = providerError
@@ -2732,7 +2762,7 @@ describe('eval routes', () => {
           (row) => row.testIdx === result.testIdx,
         );
         invariant(importedResult?.id, 'Imported result is required');
-        expect(importedResult.response?.error).toBe(providerError ? result.error : undefined);
+        expect(importedResult.response).toEqual(result.response);
         const privateState = await (await getDb())
           .select({ state: evalResultsTable.manualRatingState })
           .from(evalResultsTable)
@@ -2754,8 +2784,21 @@ describe('eval routes', () => {
           score: 0,
           failureReason: expectedFailure,
         });
-        expect((await Eval.findById(importedEval.id))?.prompts[result.promptIdx].metrics).toEqual(
-          originalMetrics,
+        const saved = await Eval.findById(importedEval.id);
+        invariant(saved, 'Saved eval is required');
+        expect(saved.prompts[result.promptIdx].metrics).toEqual(originalMetrics);
+        expect(
+          (await saved.getFilteredMetrics({ filterMode: 'all' }))[result.promptIdx],
+        ).toMatchObject({
+          score: originalMetrics.score,
+          testPassCount: originalMetrics.testPassCount,
+          testFailCount: originalMetrics.testFailCount,
+          testErrorCount: originalMetrics.testErrorCount,
+          assertPassCount: originalMetrics.assertPassCount,
+          assertFailCount: originalMetrics.assertFailCount,
+        });
+        expect(await getErrorResultIds(importedEval.id)).toEqual(
+          providerError ? [importedResult.id] : [],
         );
 
         vi.mocked(updateSignalFile).mockClear();
