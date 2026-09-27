@@ -124,6 +124,66 @@ describe('invocation-scoped cache settings', () => {
     ]);
   });
 
+  it.each([
+    { cleared: 'first', active: 'first', retained: false },
+    { cleared: 'first', active: 'first:child', retained: false },
+    { cleared: 'first', active: 'second', retained: true },
+    { cleared: 'first:child', active: 'first', retained: true },
+    { cleared: undefined, active: 'second', retained: false },
+  ])('invalidates only the pending requests covered by $cleared ($active)', async (scenario) => {
+    await cliState.withEnv(memory, async () => {
+      const entered = createDeferred<void>();
+      const release = createDeferred<Response>();
+      vi.mocked(fetchWithRetries)
+        .mockImplementationOnce(async () => {
+          entered.resolve();
+          return release.promise;
+        })
+        .mockResolvedValue(Response.json('fresh'));
+      const call = () =>
+        cache.withCacheNamespace(scenario.active, () =>
+          cache.fetchWithCache('https://cache-fixture.invalid/scoped-clear'),
+        );
+      const pending = call();
+      await entered.promise;
+      try {
+        await cache.withCacheNamespace(scenario.cleared, () => cache.getCache().clear());
+      } finally {
+        release.resolve(Response.json('first response'));
+        await pending;
+      }
+      expect(await call()).toMatchObject({
+        data: scenario.retained ? 'first response' : 'fresh',
+        cached: scenario.retained,
+      });
+      expect(fetchWithRetries).toHaveBeenCalledTimes(scenario.retained ? 1 : 2);
+    });
+  });
+
+  it('keeps completed provider-local responses in unrelated namespaces cached', async () => {
+    const { AnthropicMessagesProvider } = await import('../src/providers/anthropic/messages');
+    const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
+      config: { apiKey: 'synthetic-fixture-key' },
+    });
+    const create = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+      content: [{ type: 'text', text: 'fixture' }],
+    } as never);
+    await cliState.withEnv(memory, async () => {
+      const call = (namespace: string) =>
+        cache.withCacheNamespace(namespace, () => provider.callApi('same prompt'));
+      await call('first');
+      await call('second');
+      await cache.withCacheNamespace('first', () => cache.getCache().clear());
+      expect(await call('second')).toMatchObject({ cached: true, output: 'fixture' });
+      expect(create).toHaveBeenCalledTimes(2);
+      await call('first');
+      expect(create).toHaveBeenCalledTimes(3);
+      await cache.getCache().clear();
+      await call('second');
+      expect(create).toHaveBeenCalledTimes(4);
+    });
+  });
+
   it.each(['backend', 'namespace'])(
     'waits for an already-started store write before clearing the %s',
     async (kind) => {
@@ -436,12 +496,14 @@ describe('invocation-scoped cache settings', () => {
       cache.withCacheNamespace('same', async () => cache.getCache()),
     );
     const generation = (env: typeof firstEnv) =>
-      cliState.withEnv(env, () => cache.getCacheClearGeneration());
-    const firstGeneration = generation(firstEnv);
-    const secondGeneration = generation(secondEnv);
+      cliState.withEnv(env, () =>
+        cache.withCacheNamespace('same', async () => cache.getCacheClearGeneration()),
+      );
+    const firstGeneration = await generation(firstEnv);
+    const secondGeneration = await generation(secondEnv);
     await cliState.withEnv(secondEnv, () => first.clear());
-    expect(generation(firstEnv)).not.toBe(firstGeneration);
-    expect(generation(secondEnv)).toBe(secondGeneration);
+    expect(await generation(firstEnv)).not.toBe(firstGeneration);
+    expect(await generation(secondEnv)).toBe(secondGeneration);
   });
 
   it('keeps an unlabeled provider cache reusable across overlapping backends', async () => {

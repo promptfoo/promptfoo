@@ -34,6 +34,7 @@ import type { FetchOptions } from './util/fetch/types';
 interface CacheBackend {
   filePath?: string;
   clearGeneration: number;
+  namespaces: CacheRegistry<string, { namespace: string; clearGeneration: number }>;
   instances: CacheRegistry<number, Cache>;
   claims: Set<string>;
   inflight: Map<string, Promise<string>>;
@@ -209,6 +210,7 @@ function getCacheBackend(
     backend = {
       filePath,
       clearGeneration: nextCacheClearGeneration++,
+      namespaces: new CacheRegistry(32),
       instances: new CacheRegistry<number, Cache>(16),
       claims: new Set(),
       inflight: new Map(),
@@ -258,6 +260,9 @@ function getCacheInstance(backend = getCacheBackend()) {
     const clear = cacheInstance.clear.bind(cacheInstance);
     cacheInstance.clear = async () => {
       backend.clearGeneration = nextCacheClearGeneration++;
+      for (const state of backend.namespaces.values()) {
+        state.clearGeneration = backend.clearGeneration;
+      }
       backend.inflight.clear();
       await Promise.allSettled(backend.writes.keys());
       const result = await clear();
@@ -332,9 +337,23 @@ export function getScopedCacheKey(cacheKey: string, namespace = getCurrentCacheN
   return namespace ? `${namespace}:${cacheKey}` : cacheKey;
 }
 
-/** Opaque invalidation token for the currently selected backend. */
+function getCacheGeneration(backend: CacheBackend) {
+  const namespace = getCurrentCacheNamespace();
+  if (!namespace) {
+    return backend;
+  }
+  let state = backend.namespaces.get(namespace);
+  if (!state) {
+    // Active calls retain their state; an evicted idle namespace starts with a fresh token.
+    state = { namespace, clearGeneration: nextCacheClearGeneration++ };
+    backend.namespaces.set(namespace, state);
+  }
+  return state;
+}
+
+/** Opaque invalidation token for the currently selected backend and namespace. */
 export function getCacheClearGeneration() {
-  return getCacheBackend().clearGeneration;
+  return getCacheGeneration(getCacheBackend()).clearGeneration;
 }
 
 function getUnscopedCacheKey(cacheKey: string, namespace: string) {
@@ -344,7 +363,12 @@ function getUnscopedCacheKey(cacheKey: string, namespace: string) {
 
 async function clearNamespacedCache(cache: Cache, namespace: string, backend: CacheBackend) {
   const namespacePrefix = `${namespace}:`;
-  backend.clearGeneration = nextCacheClearGeneration++;
+  const clearGeneration = nextCacheClearGeneration++;
+  for (const state of backend.namespaces.values()) {
+    if (state.namespace === namespace || state.namespace.startsWith(namespacePrefix)) {
+      state.clearGeneration = clearGeneration;
+    }
+  }
   await Promise.allSettled(
     [...backend.writes]
       .filter(([, key]) => key.startsWith(namespacePrefix))
@@ -1065,7 +1089,8 @@ export async function fetchWithCache<T = unknown>(
   const backend = getCacheBackend();
   const cache = getCacheInstance(backend);
   const inflightFetchResponses = backend.inflight;
-  const clearGeneration = backend.clearGeneration;
+  const generationState = getCacheGeneration(backend);
+  const clearGeneration = generationState.clearGeneration;
 
   const cachedResponse = await cache.get<SerializedFetchResponse>(cacheKey);
   if (cachedResponse != null) {
@@ -1088,7 +1113,7 @@ export async function fetchWithCache<T = unknown>(
         isIdempotent,
         format,
       );
-      if (preparedResponse.cacheable && backend.clearGeneration === clearGeneration) {
+      if (preparedResponse.cacheable && generationState.clearGeneration === clearGeneration) {
         const write = cache
           .set(cacheKey, preparedResponse.response)
           .finally(() => backend.writes.delete(write));

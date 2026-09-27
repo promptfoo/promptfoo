@@ -37,6 +37,29 @@ it('releases unused backends, TTL instances, and namespace wrappers', () => {
       });
       await cliState.withEnv({ PROMPTFOO_CACHE_TYPE: 'disk', PROMPTFOO_CACHE_PATH: customPath },
         () => cache.getCache().set('previous-result', 'stale'));
+      let releaseFetch;
+      let enterFetch;
+      let fetchCalls = 0;
+      const fetchGate = new Promise(resolve => { releaseFetch = resolve; });
+      const fetchEntered = new Promise(resolve => { enterFetch = resolve; });
+      globalThis.fetch = async url => {
+        if (String(url) !== 'https://retention-fixture.invalid/response') {
+          throw new Error('Unexpected network request');
+        }
+        fetchCalls++;
+        if (fetchCalls === 1) {
+          enterFetch();
+          await fetchGate;
+          return Response.json('old');
+        }
+        return Response.json('fresh');
+      };
+      const inPendingNamespace = fn => cliState.withEnv({ PROMPTFOO_CACHE_TYPE: 'memory' },
+        () => cache.withCacheNamespace('pending-fetch', fn));
+      const pendingGeneration = await inPendingNamespace(async () => cache.getCacheClearGeneration());
+      const call = () => cache.fetchWithCache('https://retention-fixture.invalid/response');
+      const pendingFetch = inPendingNamespace(call);
+      await fetchEntered;
       for (let index = 0; index < 80; index++) {
         backendRefs.push(new WeakRef(cliState.withEnv({
           PROMPTFOO_CACHE_TYPE: 'disk',
@@ -48,6 +71,7 @@ it('releases unused backends, TTL instances, and namespace wrappers', () => {
         await cliState.withEnv({ PROMPTFOO_CACHE_TYPE: 'memory' }, () =>
           cache.withCacheNamespace('run-' + index, async () => {
             namespaceRefs.push(new WeakRef(cache.getCache()));
+            cache.getCacheClearGeneration();
           }),
         );
       }
@@ -60,6 +84,13 @@ it('releases unused backends, TTL instances, and namespace wrappers', () => {
       releaseWrite();
       await pendingWrite;
       const pendingResult = await returned.get('pending-result');
+      const activeGenerationRetained = pendingGeneration ===
+        await inPendingNamespace(async () => cache.getCacheClearGeneration());
+      await inPendingNamespace(() => cache.getCache().clear());
+      releaseFetch();
+      await pendingFetch;
+      const afterClear = await inPendingNamespace(call);
+      const cachedAfterClear = await inPendingNamespace(call);
       await cache.clearCache(customPath);
       const customResult = await cliState.withEnv({
         PROMPTFOO_CACHE_TYPE: 'disk', PROMPTFOO_CACHE_PATH: customPath,
@@ -71,6 +102,9 @@ it('releases unused backends, TTL instances, and namespace wrappers', () => {
         customCleared: customResult === undefined,
         pendingWriterShared,
         pendingResult,
+        activeGenerationRetained,
+        freshAfterClear: afterClear.data === 'fresh' && !afterClear.cached &&
+          cachedAfterClear.cached && fetchCalls === 2,
       }));
     `;
     const child = spawnSync(
@@ -78,7 +112,7 @@ it('releases unused backends, TTL instances, and namespace wrappers', () => {
       ['--expose-gc', '--import', 'tsx', '--input-type=module', '--eval', script],
       {
         cwd: path.resolve(__dirname, '..'),
-        env: { ...process.env, LOG_LEVEL: 'error' },
+        env: { ...process.env, LOG_LEVEL: 'error', PROMPTFOO_DISABLE_TELEMETRY: 'true' },
         encoding: 'utf8',
       },
     );
@@ -90,6 +124,8 @@ it('releases unused backends, TTL instances, and namespace wrappers', () => {
     expect(retained.customCleared).toBe(true);
     expect(retained.pendingWriterShared).toBe(true);
     expect(retained.pendingResult).toBe('preserved');
+    expect(retained.activeGenerationRetained).toBe(true);
+    expect(retained.freshAfterClear).toBe(true);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }
