@@ -611,6 +611,50 @@ function synchronizeLegacyTransportHeaders(
   return { ...metadataWithoutHeaders, headers: hookResponseMetadata.headers };
 }
 
+async function applyAfterEachHook(
+  row: EvaluateResult,
+  test: AtomicTestCase,
+  testSuite: TestSuite,
+): Promise<void> {
+  // Apply afterEach hook mutations before persisting. Pass a shallow copy
+  // so in-place mutations don't corrupt the row on hook failure.
+  if (testSuite.extensions?.length) {
+    try {
+      const originalMetadata = row.metadata;
+      const originalResponseMetadata = row.response?.metadata;
+      const afterEachOut = await runExtensionHook(testSuite.extensions, 'afterEach', {
+        test,
+        result: {
+          ...row,
+          namedScores: { ...row.namedScores },
+          metadata: { ...row.metadata },
+          response: row.response
+            ? { ...row.response, metadata: { ...row.response.metadata } }
+            : row.response,
+        },
+      });
+      // runExtensionHook sanitizes namedScores via filterFiniteScores;
+      // re-sanitize here to also catch in-place mutations that bypass the merge.
+      row.namedScores = filterFiniteScores(afterEachOut.result.namedScores);
+      // If a hook replaced response.metadata, a legacy top-level metadata.headers copied
+      // from the old transport would otherwise persist as stale credentials. Re-sync it.
+      row.metadata = synchronizeLegacyTransportHeaders(
+        originalMetadata,
+        originalResponseMetadata,
+        afterEachOut.result.metadata,
+        afterEachOut.result.response?.metadata,
+      );
+      if (row.response && afterEachOut.result.response) {
+        row.response.metadata = afterEachOut.result.response.metadata;
+      }
+    } catch (error) {
+      logger.error(`afterEach extension hook failed, persisting row without hook modifications`, {
+        error,
+      });
+    }
+  }
+}
+
 function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
   if (!checkResult.pass) {
     row.error = checkResult.reason;
@@ -1126,6 +1170,7 @@ async function callActiveProvider({
       {
         ...getProviderCallExecutionContext(),
         abortSignal,
+        providerCallOwned: true,
         providerDelay: {
           provider: originalProvider,
           delay: getProviderDelay(provider),
@@ -1540,6 +1585,7 @@ async function gradeRunEvalResponse({
       applyDeferredGradingError(ret, error, abortSignal);
       if (abortSignal?.aborted && isAbortError(error)) {
         ret.response = { ...processedResponse, providerTransformedOutput };
+        ret.testCase = { ...test, vars: { ...vars } };
       }
     });
     deferredGradingPromises.set(ret, gradingPromise);
@@ -3645,7 +3691,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   private async resumeInterruptedGrading(
-    runEvalOptions: RunEvalOptions[],
+    runEvalOptions: InternalRunEvalOptions[],
     prompts: CompletedPrompt[],
     testSuite: TestSuite,
     mathjsModule: typeof import('mathjs') | null,
@@ -3677,6 +3723,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           continue;
         }
         const row = this.store.toEvaluateResult(result);
+        let test = step.test;
+        const previousNamedScores = row.namedScores;
         row.error = undefined;
         row.failureReason = ResultFailureReason.NONE;
         row.gradingResult = undefined;
@@ -3693,18 +3741,38 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
               getRepeatCacheNamespace(step.repeatIndex, step.evaluateOptions),
               () =>
                 withProviderCallExecutionContext(
-                  { abortSignal, rateLimitRegistry: this.rateLimitRegistry },
-                  () =>
-                    runAssertions({
+                  {
+                    abortSignal,
+                    rateLimitRegistry: this.rateLimitRegistry,
+                    providerDelay: {
+                      provider: step.provider,
+                      delay: resolveInvocationDelay(
+                        step.provider,
+                        step.delayOmitted ? undefined : step.delay,
+                        step.evaluateOptions,
+                      ),
+                    },
+                  },
+                  async () => {
+                    const inputs = await this.store.resolveGradingInputs?.(
+                      result.response!,
+                      result.testCase,
+                      step.test,
+                    );
+                    test = inputs?.test ?? result.testCase;
+                    const providerResponse = inputs?.providerResponse ?? result.response!;
+                    abortSignal.throwIfAborted();
+                    return runAssertions({
                       prompt: result.prompt.raw,
                       provider: step.provider,
-                      providerResponse: result.response!,
-                      test: step.test,
-                      vars: result.testCase.vars ?? {},
+                      providerResponse,
+                      test,
+                      vars: test.vars ?? {},
                       latencyMs: row.latencyMs,
-                      assertScoringFunction: step.test.assertScoringFunction as ScoringFunction,
+                      assertScoringFunction: test.assertScoringFunction as ScoringFunction,
                       traceId: row.traceId,
-                    }),
+                    });
+                  },
                 ),
             ),
             abortSignal,
@@ -3720,14 +3788,29 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         } finally {
           clearTimeout(timeout);
         }
+        await applyAfterEachHook(row, test, testSuite);
         const persisted = sanitizeResultForJsonlArtifact(row);
         Object.assign(result, getGradingState(persisted), {
+          metadata: persisted.metadata,
+          response: result.response && {
+            ...result.response,
+            metadata: persisted.response?.metadata,
+          },
           error: persisted.error ?? null,
           gradingResult: persisted.gradingResult ?? null,
         });
         const metrics = prompts[result.promptIdx]?.metrics;
         if (metrics) {
           metrics.testErrorCount--;
+          // An interrupted grading marker has no assertion contributions. Any named
+          // scores came from afterEach and must be replaced, not counted twice.
+          for (const [name, value] of Object.entries(previousNamedScores)) {
+            metrics.namedScores[name] -= value;
+            metrics.namedScoresCount[name]--;
+            if (metrics.namedScoreWeights) {
+              metrics.namedScoreWeights[name]--;
+            }
+          }
           this.updatePromptGradingMetrics({
             derivedMetrics: testSuite.derivedMetrics,
             evalStep: step,
@@ -3829,44 +3912,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       this.trackCompletedRow(evalStep, row, context);
       context.numComplete++;
 
-      // Apply afterEach hook mutations before persisting. Pass a shallow copy
-      // so in-place mutations don't corrupt the row on hook failure.
-      if (context.testSuite.extensions?.length) {
-        try {
-          const originalMetadata = row.metadata;
-          const originalResponseMetadata = row.response?.metadata;
-          const afterEachOut = await runExtensionHook(context.testSuite.extensions, 'afterEach', {
-            test: evalStep.test,
-            result: {
-              ...row,
-              namedScores: { ...row.namedScores },
-              metadata: { ...row.metadata },
-              response: row.response
-                ? { ...row.response, metadata: { ...row.response.metadata } }
-                : row.response,
-            },
-          });
-          // runExtensionHook sanitizes namedScores via filterFiniteScores;
-          // re-sanitize here to also catch in-place mutations that bypass the merge.
-          row.namedScores = filterFiniteScores(afterEachOut.result.namedScores);
-          // If a hook replaced response.metadata, a legacy top-level metadata.headers copied
-          // from the old transport would otherwise persist as stale credentials. Re-sync it.
-          row.metadata = synchronizeLegacyTransportHeaders(
-            originalMetadata,
-            originalResponseMetadata,
-            afterEachOut.result.metadata,
-            afterEachOut.result.response?.metadata,
-          );
-          if (row.response && afterEachOut.result.response) {
-            row.response.metadata = afterEachOut.result.response.metadata;
-          }
-        } catch (error) {
-          logger.error(
-            `afterEach extension hook failed, persisting row without hook modifications`,
-            { error },
-          );
-        }
-      }
+      await applyAfterEachHook(row, evalStep.test, context.testSuite);
 
       await this.persistEvalRow(row);
 

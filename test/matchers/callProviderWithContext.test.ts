@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { callGradingProvider, callProviderWithContext } from '../../src/matchers/providers';
 import {
+  callProviderWithContext as callDelegatedProvider,
   withProviderCallExecutionContext,
   withProviderCallTracingContext,
 } from '../../src/scheduler/providerCallExecutionContext';
@@ -297,9 +298,15 @@ describe('callGradingProvider', () => {
     },
   );
 
-  it.each([false, true].flatMap((traced) => [false, true].map((queued) => ({ traced, queued }))))(
-    'retains a cancelled grader request in its scheduler slot, traced=$traced queued=$queued',
-    async ({ traced, queued }) => {
+  it.each(
+    [false, true].flatMap((traced) =>
+      [false, true].flatMap((queued) =>
+        [false, true].map((delegated) => ({ traced, queued, delegated })),
+      ),
+    ),
+  )(
+    'retains a cancelled grader request in its scheduler slot, traced=$traced queued=$queued delegated=$delegated',
+    async ({ traced, queued, delegated }) => {
       const registry = new RateLimitRegistry({ maxConcurrency: 1 });
       const queue = queued ? new ProviderGroupedCallQueue() : undefined;
       const controller = new AbortController();
@@ -322,7 +329,12 @@ describe('callGradingProvider', () => {
       const firstCall = () =>
         callGradingProvider(provider, 'rubric', () => {
           started.resolve();
-          return pending.promise;
+          return delegated
+            ? callDelegatedProvider(
+                { id: () => 'offline-delegate', callApi: () => pending.promise },
+                'benign fixture',
+              )
+            : pending.promise;
         });
       const first = withProviderCallExecutionContext(
         { abortSignal: controller.signal, rateLimitRegistry: registry, providerCallQueue: queue },
@@ -360,6 +372,25 @@ describe('callGradingProvider', () => {
       await expect(second).resolves.toEqual({ output: 'next result' });
     },
   );
+
+  it('still cancels a standalone delegate when a registry is present without an owning call', async () => {
+    const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+    const controller = new AbortController();
+    const pending = createDeferred<ProviderResponse>();
+    const provider = { id: () => 'offline-standalone', callApi: () => pending.promise };
+    const call = withProviderCallExecutionContext(
+      { abortSignal: controller.signal, rateLimitRegistry: registry },
+      () => callDelegatedProvider(provider, 'benign fixture'),
+    ).catch((error) => error.name);
+    try {
+      controller.abort();
+      expect(await call).toBe('AbortError');
+    } finally {
+      pending.resolve({ output: 'late response' });
+      await call;
+      registry.dispose();
+    }
+  });
 
   it('preserves a provider failure when its signal has not been cancelled', async () => {
     const error = new SyntaxError('fixture parsing failed');
