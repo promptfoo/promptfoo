@@ -9,7 +9,7 @@ sidebar_position: 27
 Use Google ADK's Python SDK with Promptfoo by wrapping your app as a Python provider. That keeps the ADK runtime in process, so Promptfoo can inspect the same sessions, artifacts, and native OpenTelemetry spans that the agent produced.
 
 :::note
-This guide targets ADK 2.x and requires Python 3.10 or later. The bundled example uses in-memory sessions and artifacts; check ADK's migration guidance separately before upgrading a persisted production app.
+This guide targets ADK 2.x and requires Python 3.10 or later. The bundled example uses in-memory sessions and artifacts. Before upgrading a production app, review [ADK's migration guidance](https://adk.dev/2.0/#adk-python-1x-compatibility): persisted event schemas gain `node_info` and `output`, custom execution overrides change, and the runtime must own event emission and retries.
 :::
 
 ## Quick Start
@@ -140,6 +140,10 @@ The provider drains both back out and returns them as one JSON payload. Determin
 One eval row now covers the assistant's reply _and_ the agent's internal bookkeeping.
 
 ## Workflow Agents
+
+ADK 2.9.2 deprecates `SequentialAgent` in favor of `Workflow`, but still supports
+the sequential-agent example below. For new graph-based apps, use
+[ADK workflows](https://adk.dev/workflows/) and match trace assertions to that runtime.
 
 When the order of work is fixed, encode it as a workflow agent instead of relying on the LLM to route. The bundled example chains a lookup agent into a briefing agent:
 
