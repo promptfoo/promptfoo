@@ -8,6 +8,8 @@
  *
  * API Documentation: https://docs.x.ai/docs/guides/video-generations-and-edits
  */
+import { randomUUID } from 'node:crypto';
+
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { sleep } from '../../util/time';
@@ -525,22 +527,24 @@ export class XAIVideoProvider implements ApiProvider {
       }
     }
 
-    // Generate cache key (skip caching for edits)
-    const cacheKey = generateVideoCacheKey({
-      provider: 'xai',
-      prompt,
-      model: this.modelName,
-      size: `${aspectRatio}:${resolution}`,
-      seconds: duration,
-      inputReference: config.image?.url
-        ? `image:${config.image.url}`
-        : config.reference_images?.length
-          ? `reference_images:${config.reference_images.map(({ url }) => url).join('|')}`
-          : null,
-    });
+    // Custom endpoints have no non-secret account discriminator for shared caching.
+    const canCacheVideo = !isEdit && this.getApiUrl() === DEFAULT_API_BASE_URL;
+    const cacheKey = canCacheVideo
+      ? generateVideoCacheKey({
+          provider: 'xai',
+          prompt,
+          model: this.modelName,
+          size: `${aspectRatio}:${resolution}`,
+          seconds: duration,
+          inputReference: config.image?.url
+            ? `image:${config.image.url}`
+            : config.reference_images?.length
+              ? `reference_images:${config.reference_images.map(({ url }) => url).join('|')}`
+              : null,
+        })
+      : randomUUID();
 
-    // Check cache (skip for edits)
-    if (!isEdit) {
+    if (canCacheVideo) {
       const cachedVideoKey = await checkVideoCache(cacheKey, PROVIDER_NAME);
       if (cachedVideoKey) {
         logger.info(`[${PROVIDER_NAME}] Cache hit for video: ${cacheKey}`);
@@ -630,8 +634,7 @@ export class XAIVideoProvider implements ApiProvider {
     const latencyMs = Date.now() - startTime;
     const cost = reportedCost ?? calculateVideoCost(actualDuration, false, this.modelName);
 
-    // Store cache mapping (skip for edits)
-    if (!isEdit) {
+    if (canCacheVideo) {
       await storeCacheMapping(cacheKey, storageKey, undefined, undefined, PROVIDER_NAME);
     }
 

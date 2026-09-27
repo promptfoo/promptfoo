@@ -699,6 +699,39 @@ describe('XAI Video Provider', () => {
   });
 
   describe('Cache key generation', () => {
+    it.each(['https://gateway-a.example/v1', 'https://gateway-b.example/v1'])(
+      'does not reuse or publish shared video cache entries for %s',
+      async (apiBaseUrl) => {
+        vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(mockStorageKey);
+        vi.mocked(fetch.fetchWithProxy)
+          .mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ request_id: mockRequestId }),
+          } as Response)
+          .mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ video: { url: mockVideoUrl, duration: 5 } }),
+          } as Response)
+          .mockResolvedValueOnce({
+            ok: true,
+            arrayBuffer: async () => new ArrayBuffer(1000),
+          } as Response);
+        const provider = new XAIVideoProvider('grok-imagine-video', {
+          env: { XAI_API_BASE_URL: apiBaseUrl },
+        });
+        const result = await provider.callApi(mockPrompt);
+        expect(result.error).toBeUndefined();
+        expect(result.cached).toBe(false);
+        expect(videoUtils.checkVideoCache).not.toHaveBeenCalled();
+        expect(videoUtils.storeCacheMapping).not.toHaveBeenCalled();
+        expect(fetch.fetchWithProxy).toHaveBeenNthCalledWith(
+          1,
+          `${apiBaseUrl}/videos/generations`,
+          expect.anything(),
+        );
+      },
+    );
+
     it('generates cache key with correct parameters', async () => {
       // Mock responses for successful generation
       const createResponse = {
