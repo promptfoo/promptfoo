@@ -920,17 +920,17 @@ function normalizeRatingSubmission(
 
 function hasExecutionError(result: RatingEvalResult, hasAutomatedComponents: boolean): boolean {
   const failureReason = normalizeFailureReason(result.failureReason);
-  if (failureReason === ResultFailureReason.ERROR) {
+  const responseError = asRecord(result.response)?.error;
+  if (
+    failureReason === ResultFailureReason.ERROR ||
+    (typeof responseError === 'string' && responseError.length > 0)
+  ) {
     return true;
   }
   if (failureReason === ResultFailureReason.ASSERT) {
     return false;
   }
-  const responseError = asRecord(result.response)?.error;
-  return (
-    (!hasAutomatedComponents && typeof result.error === 'string' && result.error.length > 0) ||
-    (typeof responseError === 'string' && responseError.length > 0)
-  );
+  return !hasAutomatedComponents && typeof result.error === 'string' && result.error.length > 0;
 }
 
 type AutomatedClearComponent = {

@@ -1948,6 +1948,102 @@ describe('eval routes', () => {
       });
     });
 
+    it.each([
+      { providerError: true, manualPass: false, components: false },
+      { providerError: true, manualPass: true, components: false },
+      { providerError: false, manualPass: false, components: true },
+      { providerError: false, manualPass: true, components: true },
+      { providerError: false, manualPass: false, components: false },
+    ])(
+      'restores imported failure category (provider error $providerError, manual pass $manualPass, components $components)',
+      async ({ providerError, manualPass, components }) => {
+        const source = await EvalFactory.create();
+        testEvalIds.add(source.id);
+        const result = (await source.getResults())[1];
+        invariant(result instanceof EvalResult && result.id, 'Result is required');
+        const metrics = source.prompts[result.promptIdx].metrics;
+        invariant(metrics, 'Prompt metrics are required');
+        if (!components) {
+          result.gradingResult = null;
+          metrics.assertFailCount -= 1;
+        }
+        result.error = providerError ? 'Provider request failed' : 'Assertion failed';
+        if (providerError) {
+          result.response = { error: result.error };
+          await markResultAsError(source, result);
+        } else {
+          await result.save();
+          await source.save();
+        }
+        const originalMetrics = structuredClone(metrics);
+        const expectedFailure = providerError
+          ? ResultFailureReason.ERROR
+          : ResultFailureReason.ASSERT;
+        const rated = await api
+          .post(`/api/eval/${source.id}/results/${result.id}/rating`)
+          .send({ pass: manualPass, score: manualPass ? 1 : 0, ratingAction: 'rate' });
+        expect(rated.status).toBe(200);
+        expect(rated.body.failureReason).toBe(
+          manualPass ? ResultFailureReason.NONE : ResultFailureReason.ASSERT,
+        );
+
+        const ratedEval = await Eval.findById(source.id);
+        invariant(ratedEval, 'Rated eval is required');
+        const exported = await ratedEval.toResultsFile();
+        const imported = await api.post('/api/eval').send(
+          JSON.parse(
+            JSON.stringify({
+              config: exported.config,
+              prompts: exported.prompts,
+              results: exported.results.results,
+            }),
+          ),
+        );
+        expect(imported.status).toBe(200);
+        testEvalIds.add(imported.body.id);
+        const importedEval = await Eval.findById(imported.body.id);
+        invariant(importedEval, 'Imported eval is required');
+        const importedResult = (await importedEval.getResults()).find(
+          (row) => row.testIdx === result.testIdx,
+        );
+        invariant(importedResult?.id, 'Imported result is required');
+        expect(importedResult.response?.error).toBe(providerError ? result.error : undefined);
+        const privateState = await (await getDb())
+          .select({ state: evalResultsTable.manualRatingState })
+          .from(evalResultsTable)
+          .where(eq(evalResultsTable.id, importedResult.id))
+          .get();
+        expect(privateState?.state).toBeNull();
+
+        const route = `/api/eval/${importedEval.id}/results/${importedResult.id}/rating`;
+        const clearPayload = { pass: true, score: 1, ratingAction: 'clear' };
+        const cleared = await api.post(route).send(clearPayload);
+        expect(cleared.status).toBe(200);
+        expect(cleared.body).toMatchObject({
+          success: false,
+          score: 0,
+          failureReason: expectedFailure,
+        });
+        expect(await EvalResult.findById(importedResult.id)).toMatchObject({
+          success: false,
+          score: 0,
+          failureReason: expectedFailure,
+        });
+        expect((await Eval.findById(importedEval.id))?.prompts[result.promptIdx].metrics).toEqual(
+          originalMetrics,
+        );
+
+        vi.mocked(updateSignalFile).mockClear();
+        const repeated = await api.post(route).send(clearPayload);
+        expect(repeated.status).toBe(200);
+        expect(repeated.body).toEqual(cleared.body);
+        expect(updateSignalFile).not.toHaveBeenCalled();
+        expect((await Eval.findById(importedEval.id))?.prompts[result.promptIdx].metrics).toEqual(
+          originalMetrics,
+        );
+      },
+    );
+
     it('fails closed on caller aggregate fields when a legacy error has no components', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
