@@ -1377,6 +1377,17 @@ describe('provider environment scopes', () => {
       expect(fetchWithCache).not.toHaveBeenCalled();
     });
   });
+  it.each(['google', 'palm'])(
+    'ignores unused Vertex API keys on %s video routes',
+    async (prefix) => {
+      const provider = await loadApiProvider(`${prefix}:video:veo-3.0-generate-preview`, {
+        env: { GOOGLE_API_KEY: 'suite-key' },
+        options: { env: { VERTEX_API_KEY: 'unused-vertex-key' } },
+      });
+      expect(apiKey(provider)).toBe('suite-key');
+    },
+  );
+
   it('keeps Google key aliases scoped after provider construction', async () => {
     mockProcessEnv({ GOOGLE_API_KEY: 'host-key' });
     await cliState.withEnv({ GOOGLE_API_KEY: 'suite-key' }, async () => {
