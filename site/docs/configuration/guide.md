@@ -582,7 +582,7 @@ tests:
       headline: 'Articles about {{ env.TOPIC }}'
 ```
 
-Environment references in config templates are resolved when the config loads. Built-in providers also read environment settings when they run.
+Environment references in config templates are resolved when the config loads. Built-in providers also read environment settings when they run. Only use trusted environment values in templates, which can set file paths and credentials.
 
 :::warning
 
