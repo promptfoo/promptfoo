@@ -5,11 +5,21 @@ on:
     paths:
       - 'examples/eval-rag-full/**'
       - '.github/workflows/rag-pdf-example.yml'
+      - 'src/providers/pythonCompletion.ts'
+      - 'src/python/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.nvmrc'
   push:
     branches: [main]
     paths:
       - 'examples/eval-rag-full/**'
       - '.github/workflows/rag-pdf-example.yml'
+      - 'src/providers/pythonCompletion.ts'
+      - 'src/python/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.nvmrc'
 
 permissions:
   contents: read
@@ -39,3 +49,18 @@ jobs:
           python -m pip check
       - name: Exercise PDF downloads and ingestion
         run: python -m unittest discover -s tests -v
+      - name: Use Node for the CLI smoke
+        if: matrix.python-version == '3.14'
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version-file: '.nvmrc'
+      - name: Install CLI dependencies
+        if: matrix.python-version == '3.14'
+        working-directory: .
+        run: |
+          npm install -g npm@11.18.0
+          npm ci
+      - name: Exercise persisted retrieval through the original CLI config
+        if: matrix.python-version == '3.14'
+        working-directory: .
+        run: python examples/eval-rag-full/tests/smoke_cli.py

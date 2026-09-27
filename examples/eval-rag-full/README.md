@@ -59,3 +59,11 @@ python -m unittest discover -s tests -v
 ```
 
 These tests use a local HTTP server and generated PDFs. They do not need an API key or download the SEC filings.
+
+In a repository checkout with its Node dependencies and this example's Python requirements installed, run the Linux/macOS integration smoke from the repository root:
+
+```bash
+python examples/eval-rag-full/tests/smoke_cli.py
+```
+
+It persists two document batches, reopens Chroma through the Python provider, and evaluates the original nine-question config against local embedding/chat APIs. It uses no API credentials or paid model calls; the tokenizer may download its vocabulary on first use.
