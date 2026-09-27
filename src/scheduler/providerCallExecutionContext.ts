@@ -27,6 +27,8 @@ export interface ProviderCallExecutionContext {
     delay: number | undefined;
     /** Stable target identity when an invocation uses a temporary provider wrapper. */
     queueKey?: ApiProvider;
+    /** Shared only within this invocation, including wrapped target calls. */
+    state?: { handled: boolean };
   };
   providerCallQueue?: ProviderCallQueue;
   rateLimitRegistry?: RateLimitRegistryRef;
@@ -100,10 +102,10 @@ function providerAbortError(): DOMException {
   return new DOMException('Provider call cancelled', 'AbortError');
 }
 
-export function waitForProviderCall(
-  result: Promise<ProviderResponse>,
+export function waitForProviderCall<T extends ProviderResponse>(
+  result: Promise<T>,
   signal?: AbortSignal,
-): Promise<ProviderResponse> {
+): Promise<T> {
   if (!signal) {
     return result;
   }
@@ -148,6 +150,11 @@ export async function callProviderWithContext(
       : await provider.callApi(prompt, context, callOptions);
     if (!response.cached && !handlesDelay && delay && delay > 0) {
       await (signal ? sleepWithAbort(delay, signal) : sleep(delay));
+    }
+    const scopedDelay = executionContext?.providerDelay;
+    if (scopedDelay?.provider === provider && scopedDelay.state) {
+      // A cached turn also handles pacing: it deliberately skips its delay.
+      scopedDelay.state.handled = true;
     }
     return response;
   };

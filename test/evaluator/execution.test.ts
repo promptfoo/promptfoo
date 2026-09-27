@@ -1089,7 +1089,7 @@ describeEvaluator('evaluator execution control', () => {
     }
   });
 
-  it('flushes queued grouped grading before writing max-duration timeout rows', async () => {
+  it('preserves completed targets without starting queued grading after max duration', async () => {
     vi.useFakeTimers();
 
     const results: any[] = [];
@@ -1168,16 +1168,17 @@ describeEvaluator('evaluator execution control', () => {
 
     const resultByTopic = new Map(results.map((result) => [result.vars.topic, result]));
 
-    expect(judge.callApi).toHaveBeenCalledTimes(1);
+    expect(judge.callApi).not.toHaveBeenCalled();
     expect(resultByTopic.get('alpha')).toEqual(
       expect.objectContaining({
-        success: true,
+        success: false,
         response: expect.objectContaining({
           output: 'Target output for Test prompt alpha',
         }),
       }),
     );
-    expect(resultByTopic.get('alpha')?.error).toBeUndefined();
+    expect(resultByTopic.get('alpha')?.error).toMatch(/^Aborted: /);
+    expect(resultByTopic.get('beta')?.error).toContain('Evaluation exceeded max duration');
     expect(resultByTopic.get('gamma')?.error).toContain('Evaluation exceeded max duration');
   });
 });

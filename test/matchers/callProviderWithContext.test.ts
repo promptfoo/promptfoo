@@ -7,6 +7,7 @@ import {
 import { ProviderGroupedCallQueue } from '../../src/scheduler/providerCallQueue';
 import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
 import { createMockProvider } from '../factories/provider';
+import { createDeferred } from '../util/utils';
 
 import type { ProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import type { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
@@ -220,6 +221,92 @@ describe('callProviderWithContext', () => {
 describe('callGradingProvider', () => {
   afterEach(() => {
     vi.resetAllMocks();
+  });
+
+  it.each([false, true])('does not start cancelled grading, queued=%s', async (queued) => {
+    const controller = new AbortController();
+    const provider = createProvider();
+    const queue = queued ? new ProviderGroupedCallQueue() : undefined;
+    const invoke = vi.fn(async (): Promise<ProviderEmbeddingResponse> => ({ embedding: [1, 0] }));
+    if (!queued) {
+      controller.abort();
+    }
+    const promise = withProviderCallExecutionContext(
+      { abortSignal: controller.signal, providerCallQueue: queue },
+      () => callGradingProvider(provider, 'embedding', invoke),
+    );
+    const outcome = promise.then(
+      () => 'resolved',
+      (error) => error.name,
+    );
+    controller.abort();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(await outcome).toBe('AbortError');
+    if (queue) {
+      for (const job of queue.takeNextGroup()) {
+        await queue.run(job);
+      }
+    }
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])(
+    'settles an ignored grading signal and its span, traced=%s',
+    async (traced) => {
+      const controller = new AbortController();
+      const pending = createDeferred<ProviderResponse>();
+      const provider = createProvider();
+      const invoke = vi.fn(() => pending.promise);
+      let spanEnded = false;
+      const tracingContext: ProviderCallTracingContext = {
+        getActiveTraceparent: () => undefined,
+        withGraderSpan: async (_options, fn) => fn(),
+        withProviderSpan: async ({ callContext }, fn) => {
+          try {
+            return await fn(callContext);
+          } finally {
+            spanEnded = true;
+          }
+        },
+      };
+      const call = () => callGradingProvider(provider, 'rubric', invoke);
+      const result = withProviderCallExecutionContext({ abortSignal: controller.signal }, () =>
+        traced ? withProviderCallTracingContext(tracingContext, call) : call(),
+      );
+      let outcome = 'pending';
+      const settled = result.then(
+        () => {
+          outcome = 'resolved';
+        },
+        (error) => {
+          outcome = error.name;
+        },
+      );
+      try {
+        expect(invoke).toHaveBeenCalledOnce();
+        controller.abort();
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(outcome).toBe('AbortError');
+        if (traced) {
+          expect(spanEnded).toBe(true);
+        }
+      } finally {
+        pending.reject(new Error('late fixture failure'));
+        await settled;
+      }
+    },
+  );
+
+  it('preserves a provider failure when its signal has not been cancelled', async () => {
+    const error = new SyntaxError('fixture parsing failed');
+    const invoke = vi.fn(async () => {
+      throw error;
+    });
+    await expect(
+      withProviderCallExecutionContext({ abortSignal: new AbortController().signal }, () =>
+        callGradingProvider(createProvider(), 'rubric', invoke),
+      ),
+    ).rejects.toBe(error);
   });
 
   it('traces non-text grading calls without changing their response shape', async () => {

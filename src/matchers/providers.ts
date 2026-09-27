@@ -6,6 +6,7 @@ import { getCloudTargetIdFromProviders } from '../redteam/remoteGenerationContex
 import {
   getProviderCallExecutionContext,
   getProviderCallTracingContext,
+  waitForProviderCall,
 } from '../scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
 import invariant from '../util/invariant';
@@ -60,13 +61,18 @@ export function callGradingProvider<T extends ProviderResponse>(
   const { callContext, operationName } = options;
   const executionContext = getProviderCallExecutionContext();
   const tracingContext = getProviderCallTracingContext();
+  const signal = executionContext?.abortSignal;
+  const invokeWithCancellation = async (context: CallApiContextParams | undefined): Promise<T> => {
+    signal?.throwIfAborted();
+    return waitForProviderCall(invoke(context), signal);
+  };
   const callProvider = (): Promise<T> =>
     tracingContext
       ? (tracingContext.withProviderSpan(
           { provider, callContext, operationName, role: 'grader', promptLabel: label },
-          invoke,
+          invokeWithCancellation,
         ) as Promise<T>)
-      : invoke(callContext);
+      : invokeWithCancellation(callContext);
 
   const executeCall = () => {
     if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
@@ -80,11 +86,10 @@ export function callGradingProvider<T extends ProviderResponse>(
     return callProvider();
   };
 
-  if (executionContext?.providerCallQueue) {
-    return executionContext.providerCallQueue.enqueue(provider.id(), executeCall);
-  }
-
-  return executeCall();
+  const result = executionContext?.providerCallQueue
+    ? executionContext.providerCallQueue.enqueue(provider.id(), executeCall)
+    : executeCall();
+  return waitForProviderCall(result, signal);
 }
 
 /** Preserve evaluator context while adding this grading call's prompt metadata and cancellation. */
