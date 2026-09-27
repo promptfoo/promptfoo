@@ -176,5 +176,44 @@ describe('GitHub API Client', () => {
         }),
       ]);
     });
+
+    it('keeps quoted paths inline and does not mistake added content for a file header', async () => {
+      const diff = String.raw`diff --git "a/src/tab\tfile.ts" "b/src/tab\tfile.ts"
+--- "a/src/tab\tfile.ts"
++++ "b/src/tab\tfile.ts"
+@@ -1 +1,2 @@
+-old
++++ b/not-a-file.ts
++new
+diff --git "a/src/caf\303\251.ts" "b/src/caf\303\251.ts"
+--- "a/src/caf\303\251.ts"
++++ "b/src/caf\303\251.ts"
+@@ -1 +1 @@
+-old
++new
+`;
+      const get = vi.fn().mockResolvedValue({ data: diff });
+      mocks.Octokit.mockImplementation(function () {
+        return { pulls: { get } } as unknown as Octokit;
+      });
+
+      const result = await partitionReviewCommentsByDiff('fake-token', mockContext, [
+        { file: 'src/tab\tfile.ts', line: 99, finding: 'Tab filename' },
+        { file: 'src/café.ts', line: 99, finding: 'UTF-8 filename' },
+      ]);
+
+      expect(result.lineComments).toEqual([
+        { file: 'src/tab\tfile.ts', line: 2, startLine: null, finding: 'Tab filename' },
+        { file: 'src/café.ts', line: 1, startLine: null, finding: 'UTF-8 filename' },
+      ]);
+      expect(result.invalidLineComments).toEqual([]);
+      expect(result.generalComments).toEqual([]);
+      expect(get).toHaveBeenCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        pull_number: 123,
+        mediaType: { format: 'diff' },
+      });
+    });
   });
 });

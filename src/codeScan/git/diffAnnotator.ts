@@ -10,7 +10,7 @@
 
 import { parseHunkHeader } from '../util/diffHunkParser';
 
-import type { LineRange } from '../util/diffLineRanges';
+import type { LineRange } from '../../types/codeScan';
 
 export interface AnnotationResult {
   annotatedDiff: string;
