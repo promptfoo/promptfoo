@@ -26,6 +26,7 @@ describe('optional OpenAI Agents modules', () => {
       }),
     );
     fs.writeFileSync(path.join(sdkDirectory, 'dist/index.mjs'), 'export {};');
+    fs.writeFileSync(path.join(sdkDirectory, 'dist/index.cjs'), 'module.exports = {};');
     return sdkDirectory;
   }
 

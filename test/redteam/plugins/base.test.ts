@@ -2048,7 +2048,11 @@ describe('RedteamGraderBase', () => {
         });
         const spy =
           status === 'missing'
-            ? vi.spyOn(esm, 'resolvePackageEntryPoint').mockReturnValue(null)
+            ? vi.spyOn(esm, 'getDirectory').mockImplementation(() => {
+                throw Object.assign(new Error("Cannot find package '@openai/agents'"), {
+                  code: 'MODULE_NOT_FOUND',
+                });
+              })
             : vi.spyOn(packageVersion, 'getPackageVersion').mockReturnValue('0.18.0');
         mockLoadTools.mockClear();
         try {

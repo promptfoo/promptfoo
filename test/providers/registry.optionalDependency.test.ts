@@ -18,7 +18,11 @@ describe('Provider registry optional dependencies', () => {
   it('explains how to install the OpenAI Agents SDK when that provider is requested', async () => {
     const { providerMap } = await import('../../src/providers/registry');
     const esm = await import('../../src/esm');
-    vi.spyOn(esm, 'resolvePackageEntryPoint').mockReturnValue(null);
+    vi.spyOn(esm, 'getDirectory').mockImplementation(() => {
+      throw Object.assign(new Error("Cannot find package '@openai/agents'"), {
+        code: 'MODULE_NOT_FOUND',
+      });
+    });
     const factory = providerMap.find((providerFactory) =>
       providerFactory.test('openai:agents:default-agent'),
     );

@@ -747,6 +747,7 @@ async function runOptionalOpenAiAgentsChecks(
 
   // An unrelated application's SDK must not block ordinary providers. Reject an
   // unsupported SDK before executing its code when the Agents feature is used.
+  const loaderPackages = path.join(consumerDir, 'loader-packages');
   fs.mkdirSync(sdkDir, { recursive: true });
   try {
     fs.writeFileSync(
@@ -758,8 +759,21 @@ async function runOptionalOpenAiAgentsChecks(
       'throw new Error("Unsupported SDK code must not execute");',
     );
     await runChecks('incompatible');
+
+    // CommonJS supports SDK installations provided through NODE_PATH. The
+    // compatibility check must inspect that SDK rather than report it missing.
+    const loaderSdk = path.join(loaderPackages, '@openai', 'agents');
+    fs.mkdirSync(path.dirname(loaderSdk), { recursive: true });
+    fs.renameSync(sdkDir, loaderSdk);
+    await runAsync(process.execPath, ['optional-agents.cjs', 'incompatible'], consumerDir, {
+      NODE_PATH: loaderPackages,
+      PROMPTFOO_CONFIG_DIR: configDir,
+      PROMPTFOO_DISABLE_TELEMETRY: '1',
+      PROMPTFOO_DISABLE_UPDATE: 'true',
+    });
   } finally {
     fs.rmSync(sdkDir, { recursive: true, force: true });
+    fs.rmSync(loaderPackages, { recursive: true, force: true });
   }
 }
 
