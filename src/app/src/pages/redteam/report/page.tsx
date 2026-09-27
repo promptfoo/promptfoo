@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { Spinner } from '@app/components/ui/spinner';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useUserStore } from '@app/stores/userStore';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router';
 import Report from './components/Report';
 import ReportIndex from './components/ReportIndex';
 
