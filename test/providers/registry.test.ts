@@ -483,11 +483,11 @@ describe('Provider Registry', () => {
       it.each([
         ['chat', OpenAiChatCompletionProvider],
         ['responses', OpenAiResponsesProvider],
-      ])('uses Terra when openai:%s omits a model', async (endpoint, Provider) => {
+      ])('uses GPT-6 Sol when openai:%s omits a model', async (endpoint, Provider) => {
         const provider = await registry.create(`openai:${endpoint}`);
 
         expect(provider).toBeInstanceOf(Provider);
-        expect(provider).toHaveProperty('modelName', 'gpt-5.6-terra');
+        expect(provider).toHaveProperty('modelName', 'gpt-6-sol');
       });
 
       it.each([
@@ -880,6 +880,61 @@ describe('Provider Registry', () => {
 
       const provider = await factory!.create(path, redteamConfig, mockContext);
       expect(provider.id()).toBe(path);
+    });
+
+    it.each([
+      ['ai21:jamba:custom:v2', 'AI21ChatCompletionProvider', 'jamba:custom:v2'],
+      ['voyage:custom:model:v2', 'VoyageEmbeddingProvider', 'custom:model:v2'],
+      [
+        'anthropic:messages:anthropic.claude-3-5-sonnet-20241022-v2:0',
+        'AnthropicMessagesProvider',
+        'anthropic.claude-3-5-sonnet-20241022-v2:0',
+      ],
+      ['anthropic:completion:claude-2:custom', 'AnthropicCompletionProvider', 'claude-2:custom'],
+      [
+        'anthropic:claude-sonnet-4-6:custom',
+        'AnthropicMessagesProvider',
+        'claude-sonnet-4-6:custom',
+      ],
+      ['anthropic:claude-2.1:custom', 'AnthropicCompletionProvider', 'claude-2.1:custom'],
+    ])('preserves the model suffix and provider type for %s', async (path, type, modelName) => {
+      const provider = await loadApiProvider(path, { options: { config: { apiKey: 'test-key' } } });
+      expect(provider.constructor.name).toBe(type);
+      expect(provider).toHaveProperty('modelName', modelName);
+      expect(provider.id()).toContain(modelName);
+    });
+
+    it('preserves the full Promptfoo-hosted model ID', async () => {
+      const path = 'promptfoo:model:custom:model:v2';
+      const provider = await loadApiProvider(path);
+      expect(provider.id()).toBe(path);
+    });
+
+    it.each(['anthropic:messages', 'anthropic:messages:'])(
+      'reports a missing model for %s without sending a request',
+      async (path) => {
+        const provider = await loadApiProvider(path, {
+          options: { config: { apiKey: 'test-key' } },
+        });
+        await expect(provider.callApi('hello')).rejects.toThrow('Anthropic model name is not set');
+      },
+    );
+
+    it.each(['azure', 'azureopenai'])('preserves %s deployment suffixes', async (prefix) => {
+      for (const type of [
+        'chat',
+        'completion',
+        'embedding',
+        'embeddings',
+        'responses',
+        'realtime',
+        'video',
+      ]) {
+        const provider = await loadApiProvider(`${prefix}:${type}:deployment:custom:v2`, {
+          options: { config: { apiKey: 'test-key' } },
+        });
+        expect(provider).toHaveProperty('deploymentName', 'deployment:custom:v2');
+      }
     });
 
     it('should handle anthropic providers correctly', async () => {

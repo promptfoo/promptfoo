@@ -46,6 +46,28 @@ describe('xAI Chat Provider', () => {
   });
 
   describe('Provider creation and configuration', () => {
+    it('sends Grok 4.7 requests to the configured endpoint before the region default', async () => {
+      const provider = createXAIProvider('xai:grok-4.7', {
+        config: {
+          config: {
+            apiKey: 'test-key',
+            apiBaseUrl: 'http://localhost:8080/v1',
+            region: 'us',
+          },
+        },
+      });
+      const result = await provider.callApi('Hello');
+      expect(result.error).toBeUndefined();
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        'http://localhost:8080/v1/chat/completions',
+        expect.objectContaining({ body: expect.stringContaining('grok-4.7') }),
+        expect.any(Number),
+        'json',
+        undefined,
+        undefined,
+      );
+    });
+
     it('throws an error if no model name is provided', () => {
       expect(() => createXAIProvider('xai:')).toThrow('Model name is required');
     });

@@ -20,6 +20,24 @@ vi.mock('@app/hooks/useTelemetry', () => ({
 }));
 
 describe('ProviderTypeSelector', () => {
+  it.each([
+    ['OpenAI', 'openai', 'openai:gpt-6-sol'],
+    ['Anthropic', 'anthropic', 'anthropic:messages:claude-sonnet-5'],
+    ['DeepSeek', 'deepseek', 'deepseek:deepseek-flash'],
+    ['X.AI (Grok)', 'xai', 'xai:grok-4.7'],
+  ])('selects the current %s model for new targets', async (label, type, id) => {
+    const user = userEvent.setup();
+    const setProvider = vi.fn();
+    renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={{ id: '', config: {}, label: 'New target' }}
+        setProvider={setProvider}
+      />,
+    );
+    await user.click(screen.getByText(label, { exact: true }).closest('[role="button"]')!);
+    expect(setProvider).toHaveBeenCalledWith({ id, config: {}, label: 'New target' }, type);
+  });
+
   it('defaults newly selected OpenRouter targets to OpenAI GPT-6 Sol', async () => {
     const user = userEvent.setup();
     const setProvider = vi.fn();

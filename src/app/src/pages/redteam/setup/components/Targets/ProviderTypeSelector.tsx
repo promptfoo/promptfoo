@@ -585,7 +585,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'anthropic') {
       setProvider(
         {
-          id: 'anthropic:messages:claude-sonnet-4-5-20250929',
+          id: 'anthropic:messages:claude-sonnet-5',
           config: {},
           label: currentLabel,
         },
@@ -648,7 +648,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'deepseek') {
       setProvider(
         {
-          id: 'deepseek:deepseek-chat',
+          id: 'deepseek:deepseek-flash',
           config: {},
           label: currentLabel,
         },
@@ -765,7 +765,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'xai') {
       setProvider(
         {
-          id: 'xai:grok-4.20-reasoning',
+          id: 'xai:grok-4.7',
           config: {},
           label: currentLabel,
         },
