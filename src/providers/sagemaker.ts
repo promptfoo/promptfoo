@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import {
-  getProviderCallExecutionContext,
+  getProviderCallAbortSignal,
   getProviderDelay,
 } from '../scheduler/providerCallExecutionContext';
 import telemetry from '../telemetry';
@@ -657,11 +657,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const evaluationSignal = getProviderCallExecutionContext()?.abortSignal;
-    const abortSignal =
-      options?.abortSignal && evaluationSignal
-        ? AbortSignal.any([options.abortSignal, evaluationSignal])
-        : (options?.abortSignal ?? evaluationSignal);
+    const abortSignal = getProviderCallAbortSignal(options?.abortSignal);
     abortSignal?.throwIfAborted();
 
     // Import cache functions dynamically to avoid circular dependencies
@@ -898,11 +894,7 @@ export class SageMakerEmbeddingProvider
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
-    const evaluationSignal = getProviderCallExecutionContext()?.abortSignal;
-    const abortSignal =
-      options?.abortSignal && evaluationSignal
-        ? AbortSignal.any([options.abortSignal, evaluationSignal])
-        : (options?.abortSignal ?? evaluationSignal);
+    const abortSignal = getProviderCallAbortSignal(options?.abortSignal);
     abortSignal?.throwIfAborted();
 
     // Import cache functions dynamically to avoid circular dependencies

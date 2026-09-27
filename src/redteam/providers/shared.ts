@@ -10,6 +10,7 @@ import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
 import { getProviderCallTracingContext, wrapProviderWithRateLimiting } from '../../scheduler';
 import {
   callProviderWithContext,
+  getProviderCallAbortSignal,
   getProviderCallExecutionContext,
   waitForProviderCall,
 } from '../../scheduler/providerCallExecutionContext';
@@ -501,11 +502,7 @@ export function callGradingProvider(
   callContext?: CallApiContextParams,
   options?: CallApiOptionsParams,
 ): Promise<ProviderResponse> {
-  const evaluationSignal = getProviderCallExecutionContext()?.abortSignal;
-  const signal =
-    options?.abortSignal && evaluationSignal
-      ? AbortSignal.any([options.abortSignal, evaluationSignal])
-      : (options?.abortSignal ?? evaluationSignal);
+  const signal = getProviderCallAbortSignal(options?.abortSignal);
   const callOptions = signal ? { ...options, abortSignal: signal } : options;
   const invoke = async (context?: CallApiContextParams) => {
     signal?.throwIfAborted();
