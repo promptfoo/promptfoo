@@ -1,17 +1,82 @@
+import { randomUUID } from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+import logger from '../../logger';
+
 import type { Job } from '../../types/index';
 
-function createInitialJob(): Job {
+type StoredJob = Omit<Job, 'result'> & { resultPath: string | null };
+
+let resultDirectory: string | undefined;
+
+function storeResult(result: NonNullable<Job['result']>): string {
+  const serialized = serializeResult(result);
+  let resultPath: string | undefined;
+  let descriptor: number | undefined;
+  try {
+    if (!resultDirectory) {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-job-results-'));
+      try {
+        if (process.platform !== 'win32') {
+          fs.chmodSync(directory, 0o700);
+        }
+      } catch (error) {
+        fs.rmSync(directory, { recursive: true, force: true });
+        throw error;
+      }
+      resultDirectory = directory;
+      // One directory and exit listener per process, shared across service instances.
+      // Abrupt termination can leave this private temporary directory behind.
+      process.once('exit', () => {
+        try {
+          fs.rmSync(directory, { recursive: true, force: true });
+        } catch {
+          // Cleanup at process exit is best effort.
+        }
+      });
+    }
+    resultPath = path.join(resultDirectory, `${randomUUID()}.json`);
+    descriptor = fs.openSync(resultPath, 'wx', 0o600);
+    try {
+      fs.writeFileSync(descriptor, serialized, 'utf8');
+    } finally {
+      fs.closeSync(descriptor);
+    }
+    return resultPath;
+  } catch (error) {
+    // An exclusive-open failure must never remove another snapshot's file.
+    if (descriptor !== undefined) {
+      removeResult(resultPath);
+    }
+    logger.error('Failed to store eval job result snapshot', { error });
+    throw new Error('Failed to store eval job result snapshot');
+  }
+}
+
+function removeResult(resultPath: string | null | undefined): void {
+  if (resultPath) {
+    try {
+      fs.rmSync(resultPath, { force: true });
+    } catch (error) {
+      logger.warn('Failed to remove obsolete job result snapshot', { error });
+    }
+  }
+}
+
+function createInitialJob(): StoredJob {
   return {
     evalId: null,
     status: 'in-progress',
     progress: 0,
     total: 0,
-    result: null,
+    resultPath: null,
     logs: [],
   };
 }
 
-function cloneResult(result: NonNullable<Job['result']>): NonNullable<Job['result']> {
+function serializeResult(result: NonNullable<Job['result']>): string {
   const ancestors: unknown[] = [];
   const serialized = JSON.stringify(result, function (_key, value) {
     if (typeof value === 'bigint') {
@@ -29,23 +94,26 @@ function cloneResult(result: NonNullable<Job['result']>): NonNullable<Job['resul
     return value;
   });
 
-  return JSON.parse(serialized);
+  return serialized;
 }
 
-function cloneJob(job: Job): Job {
+function cloneJob(job: StoredJob): Job {
+  const { resultPath, ...fields } = job;
   return {
-    ...job,
-    result: job.result === null ? null : cloneResult(job.result),
+    ...fields,
+    result: resultPath === null ? null : JSON.parse(fs.readFileSync(resultPath, 'utf8')),
     logs: [...job.logs],
   };
 }
 
 export class EvalJobService {
-  private jobs = new Map<string, Job>();
+  private jobs = new Map<string, StoredJob>();
 
   create(id: string): Job {
+    const previous = this.jobs.get(id);
     const job = createInitialJob();
     this.jobs.set(id, job);
+    removeResult(previous?.resultPath);
     return cloneJob(job);
   }
 
@@ -62,11 +130,18 @@ export class EvalJobService {
   }
 
   complete(id: string, result: Job['result'], evalId: string | null): boolean {
-    return this.update(id, (job) => {
-      job.status = 'complete';
-      job.result = result === null ? null : cloneResult(result);
-      job.evalId = evalId;
-    });
+    const job = this.jobs.get(id);
+    if (!job) {
+      return false;
+    }
+    // Serialize and write before replacing a previous completion snapshot.
+    const resultPath = result === null ? null : storeResult(result);
+    const previousPath = job.resultPath;
+    job.status = 'complete';
+    job.resultPath = resultPath;
+    job.evalId = evalId;
+    removeResult(previousPath);
+    return true;
   }
 
   fail(
@@ -77,8 +152,10 @@ export class EvalJobService {
     return this.update(id, (job) => {
       job.status = 'error';
       if (resetResult) {
-        job.result = null;
+        const previousPath = job.resultPath;
+        job.resultPath = null;
         job.evalId = null;
+        removeResult(previousPath);
       }
       job.logs = append ? [...job.logs, ...logs] : [...logs];
     });
@@ -90,7 +167,7 @@ export class EvalJobService {
     });
   }
 
-  private update(id: string, updateJob: (job: Job) => void): boolean {
+  private update(id: string, updateJob: (job: StoredJob) => void): boolean {
     const job = this.jobs.get(id);
     if (!job) {
       return false;

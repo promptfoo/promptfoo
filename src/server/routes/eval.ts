@@ -211,7 +211,13 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
   }
 
   const { id } = paramsResult.data;
-  const job = evalJobService.get(id);
+  let job: ReturnType<typeof evalJobService.get>;
+  try {
+    job = evalJobService.get(id);
+  } catch (error) {
+    sendError(res, 500, 'Failed to load eval job', error);
+    return;
+  }
   if (!job) {
     res.status(404).json({ error: 'Job not found' });
     return;
