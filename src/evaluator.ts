@@ -1108,7 +1108,10 @@ async function callActiveProvider({
   if (abortSignal?.aborted) {
     throw new Error('Operation cancelled');
   }
-  const setupFailure = await providerSetup?.(activeProvider, callApiContext, { abortSignal });
+  const setupFailure = await providerSetup?.(activeProvider, callApiContext, {
+    abortSignal,
+    timeoutMs: evaluateOptions?.timeoutMs || getEvalTimeoutMs(),
+  });
   if (abortSignal?.aborted) {
     throw new Error('Operation cancelled');
   }

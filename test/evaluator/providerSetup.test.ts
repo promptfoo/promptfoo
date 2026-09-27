@@ -11,6 +11,7 @@ import {
 import { createProviderSetupCheck } from '../../src/evaluator/providerSetup';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
+import { createDeferred, mockProcessEnv } from '../util/utils';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
@@ -155,6 +156,8 @@ describeEvaluator('provider batch preflight', () => {
     'bounds eager setup when the workload timeout is %s',
     async (timeoutMs) => {
       vi.useFakeTimers();
+      const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+      const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
       const abort = new AbortController();
       let setupEntered!: () => void;
       const entered = new Promise<void>((resolve) => {
@@ -200,10 +203,128 @@ describeEvaluator('provider batch preflight', () => {
         });
         expect(provider.checkSetup).toHaveBeenCalledOnce();
         expect(provider.callApi).not.toHaveBeenCalled();
-        expect(vi.getTimerCount()).toBe(0);
+        const deadlines = setTimeoutSpy.mock.calls.flatMap(([, delay], index) =>
+          delay === 30_000 ? [setTimeoutSpy.mock.results[index].value] : [],
+        );
+        expect(deadlines).toHaveLength(1);
+        expect(clearTimeoutSpy).toHaveBeenCalledWith(deadlines[0]);
       } finally {
         abort.abort();
         await pending.catch(() => {});
+        setTimeoutSpy.mockRestore();
+        clearTimeoutSpy.mockRestore();
+      }
+    },
+  );
+
+  it.each([
+    { source: 'configured', outcome: 'successful' },
+    { source: 'environment', outcome: 'successful' },
+    { source: 'configured', outcome: 'hanging' },
+  ])(
+    'respects the $source row deadline for $outcome setup after a lifecycle hook',
+    async ({ source, outcome }) => {
+      vi.useFakeTimers();
+      const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+      const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_EVAL_TIMEOUT_MS: source === 'environment' ? '60000' : undefined,
+        PROMPTFOO_MAX_EVAL_TIME_MS: undefined,
+      });
+      const abort = new AbortController();
+      const hookEntered = createDeferred<void>();
+      const finishHook = createDeferred<void>();
+      const setupEntered = createDeferred<void>();
+      const finishSetup = createDeferred<{ success: boolean; message: string }>();
+      let setupSignal: AbortSignal | undefined;
+      vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hook, context) => {
+        if (hook === 'beforeEach') {
+          hookEntered.resolve();
+          await finishHook.promise;
+        }
+        return context;
+      });
+      const provider: ApiProvider = {
+        id: () => 'local-scanner',
+        checkSetupOnEval: true,
+        checkSetup: vi.fn((_context, options) => {
+          setupSignal = options?.abortSignal;
+          setupEntered.resolve();
+          return finishSetup.promise;
+        }),
+        callApi: vi.fn(async () => ({ output: 'workload completed' })),
+      };
+      const record = createInMemoryRecord();
+      const pending = evaluate(
+        {
+          providers: [provider],
+          prompts: [toPrompt('Review')],
+          tests: [{}],
+          extensions: ['file://prepare-finding.mjs'],
+        },
+        record,
+        {
+          silent: true,
+          timeoutMs: source === 'configured' ? 60_000 : undefined,
+          abortSignal: abort.signal,
+        },
+        inMemoryRuntime,
+      );
+      try {
+        await hookEntered.promise;
+        expect(provider.checkSetup).not.toHaveBeenCalled();
+        // The hook spends part of the row budget before setup gets its own timer.
+        await vi.advanceTimersByTimeAsync(10_000);
+        finishHook.resolve();
+        await setupEntered.promise;
+        await vi.advanceTimersByTimeAsync(30_000);
+        expect(setupSignal?.aborted).toBe(false);
+        expect(record.results).toHaveLength(0);
+        expect(provider.callApi).not.toHaveBeenCalled();
+
+        if (outcome === 'successful') {
+          // Setup lasts 45 seconds; the entire row remains within its 60-second budget.
+          await vi.advanceTimersByTimeAsync(15_000);
+          finishSetup.resolve({ success: true, message: 'Ready' });
+          await pending;
+          expect(record.results).toHaveLength(1);
+          expect(record.results[0]).toMatchObject({
+            success: true,
+            response: { output: 'workload completed' },
+          });
+          expect(provider.callApi).toHaveBeenCalledOnce();
+          expect(setupSignal?.aborted).toBe(false);
+        } else {
+          await vi.advanceTimersByTimeAsync(19_999);
+          expect(setupSignal?.aborted).toBe(false);
+          expect(record.results).toHaveLength(0);
+          await vi.advanceTimersByTimeAsync(1);
+          await pending;
+          expect(record.results).toHaveLength(1);
+          expect(record.results[0]).toMatchObject({
+            success: false,
+            error: expect.stringContaining('Evaluation timed out after 60000ms'),
+          });
+          expect(setupSignal?.aborted).toBe(true);
+          expect(provider.callApi).not.toHaveBeenCalled();
+        }
+        expect(provider.checkSetup).toHaveBeenCalledOnce();
+        // Verify both deadlines, independently of queued cancellation-log microtasks.
+        const deadlines = setTimeoutSpy.mock.calls.flatMap(([, delay], index) =>
+          delay === 60_000 ? [setTimeoutSpy.mock.results[index].value] : [],
+        );
+        expect(deadlines).toHaveLength(2);
+        for (const deadline of deadlines) {
+          expect(clearTimeoutSpy).toHaveBeenCalledWith(deadline);
+        }
+      } finally {
+        abort.abort();
+        finishHook.resolve();
+        finishSetup.resolve({ success: true, message: 'Ready' });
+        await pending.catch(() => {});
+        restoreEnv();
+        setTimeoutSpy.mockRestore();
+        clearTimeoutSpy.mockRestore();
       }
     },
   );
