@@ -109,7 +109,7 @@ export function getEstimatedProbes(config: Config) {
     }
     const pluginNumTests =
       typeof plugin === 'object' && 'numTests' in plugin ? plugin.numTests : undefined;
-    return total + (pluginNumTests ?? numTests);
+    return total + (pluginNumTests || numTests);
   }, countSelectedCustomIntents(config));
 
   // Calculate total multiplier for all active strategies

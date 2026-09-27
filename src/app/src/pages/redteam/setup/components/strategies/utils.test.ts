@@ -42,6 +42,8 @@ describe('getEstimatedProbes', () => {
   it.each([
     { plugins: [{ id: 'bola', numTests: 500 }], numTests: 5, expected: 500 },
     { plugins: [{ id: 'bola', numTests: 2 }], numTests: 50, expected: 2 },
+    { plugins: [{ id: 'bola', numTests: 0 }], numTests: 5, expected: 5 },
+    { plugins: [{ id: 'bola', numTests: 0 }], numTests: undefined, expected: 5 },
     {
       plugins: ['bola', { id: 'bfla' }, { id: 'ssrf', numTests: 17 }],
       numTests: 5,
