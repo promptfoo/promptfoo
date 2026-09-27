@@ -117,7 +117,7 @@ export class PythonWorker {
       workerProcess.on('error', startupError);
       workerProcess.on('pythonError', startupError);
 
-      workerProcess.on('close', () => {
+      workerProcess.childProcess.on('close', () => {
         if (this.process !== workerProcess) {
           return;
         }
@@ -327,7 +327,7 @@ export class PythonWorker {
       // Wait for exit (5s timeout)
       await Promise.race([
         new Promise<void>((resolve) => {
-          this.process!.on('close', () => resolve());
+          this.process!.childProcess.once('close', () => resolve());
         }),
         new Promise<void>((resolve) => setTimeout(resolve, 5000).unref()),
       ]);

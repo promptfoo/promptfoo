@@ -49,6 +49,49 @@ function deferred() {
 }
 
 describe('provider registry signal ownership', () => {
+  it('retains the automatic-attempt marker when failed cleanup unregisters its owner', async () => {
+    let rejectCleanup = true;
+    const provider = {
+      shutdown: vi.fn(async () => {
+        try {
+          await Promise.resolve();
+          if (rejectCleanup) {
+            throw new Error('owned cleanup failure');
+          }
+        } finally {
+          registry.unregister(provider);
+        }
+      }),
+    };
+    registry.register(provider);
+    addedListeners('beforeExit')[0]();
+    await vi.waitFor(() => {
+      expect(addedListeners('beforeExit')).toHaveLength(0);
+      expect(addedListeners('SIGTERM')).toHaveLength(1);
+    });
+    expect(provider.shutdown).toHaveBeenCalledOnce();
+
+    // Explicit retries keep ownership without renewing automatic retry eligibility.
+    await registry.shutdownAll();
+    expect(provider.shutdown).toHaveBeenCalledTimes(2);
+    expect(addedListeners('beforeExit')).toHaveLength(0);
+    const fresh = { shutdown: vi.fn().mockResolvedValue(undefined) };
+    registry.register(fresh);
+    addedListeners('beforeExit')[0]();
+    await vi.waitFor(() => {
+      expect(fresh.shutdown).toHaveBeenCalledOnce();
+      expect(addedListeners('beforeExit')).toHaveLength(0);
+    });
+    expect(provider.shutdown).toHaveBeenCalledTimes(2);
+
+    rejectCleanup = false;
+    await registry.shutdownAll();
+    expect(provider.shutdown).toHaveBeenCalledTimes(3);
+    expect(addedListeners('SIGTERM')).toHaveLength(0);
+    registry.register(provider);
+    expect(addedListeners('beforeExit')).toHaveLength(1);
+  });
+
   it('does not automatically retry a failed beforeExit owner but retains signal cleanup', async () => {
     let rejectCleanup = true;
     const provider = {

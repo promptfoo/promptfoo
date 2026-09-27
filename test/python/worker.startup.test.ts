@@ -18,9 +18,11 @@ vi.mock('python-shell', () => ({
 function makeShell() {
   const created = Object.assign(new EventEmitter(), {
     stderr: new EventEmitter(),
+    childProcess: new EventEmitter(),
     send: vi.fn(),
     kill: vi.fn(),
   });
+  created.on('close', () => created.childProcess.emit('close'));
   created.send.mockImplementation(() => {
     void Promise.resolve().then(() => created.emit('close'));
   });
@@ -43,6 +45,38 @@ afterEach(() => {
 });
 
 describe('Python worker startup cancellation', () => {
+  it.each(['before cleanup', 'during cleanup'])(
+    'settles a failed spawn whose native close occurs %s without a PythonShell close',
+    async (timing) => {
+      const worker = new PythonWorker('fixture.py', 'call_api');
+      const initialized = worker.initialize().catch((error: Error) => error.message);
+      await Promise.resolve();
+      shell.send.mockImplementation(() => {});
+      shell.emit('error', Object.assign(new Error('spawn python3 ENOENT'), { code: 'ENOENT' }));
+      expect(await initialized).toBe('spawn python3 ENOENT');
+      if (timing === 'before cleanup') {
+        shell.childProcess.emit('close', -2, null);
+      }
+      let settled = false;
+      const cleanup = worker.shutdown().then(() => {
+        settled = true;
+      });
+      if (timing === 'during cleanup') {
+        shell.childProcess.emit('close', -2, null);
+      }
+      await vi.advanceTimersByTimeAsync(0);
+      try {
+        expect(settled).toBe(true);
+        expect(worker.isReady()).toBe(false);
+        expect(createShell).toHaveBeenCalledOnce();
+        expect(shell.kill).not.toHaveBeenCalled();
+      } finally {
+        await vi.advanceTimersByTimeAsync(5000);
+        await cleanup;
+      }
+    },
+  );
+
   it('settles cleanup after the only close event has already followed an import failure', async () => {
     const worker = new PythonWorker('fixture.py', 'call_api');
     const initialized = worker.initialize().catch((error: Error) => error.message);
