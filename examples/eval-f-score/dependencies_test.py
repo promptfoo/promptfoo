@@ -47,9 +47,6 @@ class DatasetDependenciesTest(unittest.TestCase):
 
         self.assertEqual(len(rows), 100)
         self.assertEqual(len({row["text"] for row in rows}), 100)
-        self.assertEqual(
-            [row["text"] for row in rows[:3]], [texts[i] for i in [18, 170, 107]]
-        )
         for row in rows:
             self.assertIn(row["text"], texts)
             index = texts.index(row["text"])

@@ -75,4 +75,15 @@ describe('F-score example metrics', () => {
       accuracy_score: 1,
     });
   });
+
+  it('reports finite zero metrics for an unsupported sentiment', async () => {
+    const result = await grade('neutral', 'positive');
+    expect(result.pass).toBe(false);
+    expect(derive(result.namedScores!)).toMatchObject({
+      precision: 0,
+      recall: 0,
+      f1_score: 0,
+      accuracy_score: 0,
+    });
+  });
 });

@@ -76,6 +76,6 @@ derivedMetrics:
 
   # Accuracy = (TP + TN) / (TP + TN + FP + FN)
   - name: accuracy_score
-    value: (true_positives + true_negatives) / (true_positives + true_negatives + false_positives + false_negatives)
+    value: 'true_positives + true_negatives + false_positives + false_negatives > 0 ? (true_positives + true_negatives) / (true_positives + true_negatives + false_positives + false_negatives) : 0'
 
 tests: file://imdb_eval_sample.csv
