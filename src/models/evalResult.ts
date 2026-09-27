@@ -3,8 +3,9 @@ import { isDeepStrictEqual } from 'node:util';
 import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
 import { extractBlobHashesFromValue } from '../blobs/blobRefs';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
+import { HUMAN_ASSERTION_TYPE } from '../constants';
 import { getDb } from '../database/index';
-import { evalResultsTable } from '../database/tables';
+import { evalResultsTable, evalsTable } from '../database/tables';
 import { type EnvVarKey, getEnvBool, parseEnvBool } from '../envars';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
@@ -24,6 +25,7 @@ import {
   type TraceData,
 } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
+import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { isSecretField, REDACTED, sanitizeObject } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
@@ -32,7 +34,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
-import { invalidateEvaluationCache } from './evalMutation';
+import { invalidateEvaluationCache, notifyEvaluationChanged } from './evalMutation';
 import { clearCountCache } from './evalPerformance';
 
 function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
@@ -886,6 +888,90 @@ export default class EvalResult {
     });
     clearCountCache(evalId);
     return returnResults;
+  }
+
+  static async submitRating(evalId: string, id: string, gradingResult: GradingResult) {
+    const db = await getDb();
+    const outcome = await db.transaction(async (tx) => {
+      const result = await tx
+        .select()
+        .from(evalResultsTable)
+        .where(and(eq(evalResultsTable.id, id), eq(evalResultsTable.evalId, evalId)))
+        .get();
+      if (!result) {
+        return { status: 'result-not-found' as const };
+      }
+      const evalRow = await tx
+        .select({ prompts: evalsTable.prompts })
+        .from(evalsTable)
+        .where(eq(evalsTable.id, evalId))
+        .get();
+      if (!evalRow) {
+        return { status: 'eval-not-found' as const };
+      }
+      const prompts = evalRow.prompts ?? [];
+      const prompt = prompts[result.promptIdx];
+      invariant(prompt, 'Prompt not found');
+      if (!prompt.metrics) {
+        logger.error(
+          `[${id}] This is not normal. Prompt metrics not found for prompt ${result.promptIdx}`,
+        );
+        return { status: 'prompt-metrics-not-found' as const };
+      }
+
+      const hasExistingManualOverride = Boolean(
+        result.gradingResult?.componentResults?.some(
+          (r) => r.assertion?.type === HUMAN_ASSERTION_TYPE,
+        ),
+      );
+      const successChanged = result.success !== gradingResult.pass;
+      const scoreChange = gradingResult.score - result.score;
+      if (successChanged) {
+        if (gradingResult.pass) {
+          prompt.metrics.testPassCount += 1;
+          prompt.metrics.testFailCount -= 1;
+          prompt.metrics.assertPassCount += 1;
+          prompt.metrics.score += scoreChange;
+          if (hasExistingManualOverride) {
+            prompt.metrics.assertFailCount -= 1;
+          }
+        } else {
+          prompt.metrics.testPassCount -= 1;
+          prompt.metrics.testFailCount += 1;
+          prompt.metrics.assertFailCount += 1;
+          prompt.metrics.score += scoreChange;
+          if (hasExistingManualOverride) {
+            prompt.metrics.assertPassCount -= 1;
+          }
+        }
+      } else if (!hasExistingManualOverride) {
+        if (gradingResult.pass) {
+          prompt.metrics.assertPassCount += 1;
+        } else {
+          prompt.metrics.assertFailCount += 1;
+        }
+      }
+
+      const updated = await tx
+        .update(evalResultsTable)
+        .set({
+          gradingResult,
+          success: gradingResult.pass,
+          score: gradingResult.score,
+          updatedAt: getCurrentTimestamp(),
+        })
+        .where(and(eq(evalResultsTable.id, id), eq(evalResultsTable.evalId, evalId)))
+        .returning()
+        .get();
+      invariant(updated, 'Result disappeared while submitting rating');
+      await tx.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, evalId)).run();
+      return { status: 'updated' as const, result: updated };
+    });
+    if (outcome.status !== 'updated') {
+      return outcome;
+    }
+    notifyEvaluationChanged(evalId);
+    return { ...outcome, result: new EvalResult({ ...outcome.result, persisted: true }) };
   }
 
   static async findById(id: string) {

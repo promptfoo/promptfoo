@@ -380,12 +380,12 @@ describe('database eval deletion', () => {
         grade: { assertion: { type: 'max-score' } },
         expected: 1,
       },
-      { name: 'stripped survivors', grade: null, expected: 4 },
-      { name: 'legacy componentless survivors', grade: {}, expected: 4 },
+      { name: 'stripped survivors', grade: null, expected: 5 },
+      { name: 'legacy componentless survivors', grade: {}, expected: 5 },
       {
         name: 'arbitrary top-level assertions',
         grade: { assertion: { type: 'javascript' } },
-        expected: 4,
+        expected: 5,
       },
       { name: 'no survivors', grade: undefined, expected: 0 },
     ])(
@@ -413,6 +413,140 @@ describe('database eval deletion', () => {
         expect((await Eval.findById(eval_.id))!.prompts[0].metrics!.assertPassCount).toBe(expected);
       },
     );
+
+    it.each(['deleted', 'surviving'])(
+      'keeps %s imported metric templates inert',
+      async (location) => {
+        const eval_ = await EvalFactory.create({ numResults: 2 });
+        const [target, survivor] = await EvalResult.findManyByEvalId(eval_.id);
+        const marker = globalThis as typeof globalThis & {
+          __promptfooMetricTemplateExecuted?: boolean;
+        };
+        Object.assign(eval_.prompts[0].metrics!, {
+          namedScores: { accuracy: 2 },
+          namedScoresCount: { accuracy: 2 },
+          namedScoreWeights: { accuracy: 2 },
+        });
+        await eval_.addPrompts(eval_.prompts);
+        await dbUpdateResult(target.id, {
+          namedScores: { accuracy: 1 },
+          gradingResult: location === 'surviving' ? null : target.gradingResult,
+        });
+        await dbUpdateResult(location === 'deleted' ? target.id : survivor.id, {
+          namedScores: { accuracy: 1 },
+          gradingResult: {
+            pass: true,
+            score: 1,
+            reason: 'Imported metric',
+            componentResults: [
+              {
+                pass: true,
+                score: 1,
+                reason: 'Imported component',
+                assertion: {
+                  type: 'contains',
+                  value: 'ok',
+                  metric: `{{ range.constructor("globalThis.__promptfooMetricTemplateExecuted = true; return 'accuracy'")() }}`,
+                },
+              },
+            ],
+          },
+        });
+        try {
+          await deleteEvalResult(eval_.id, target.id);
+          expect(marker.__promptfooMetricTemplateExecuted).toBeUndefined();
+        } finally {
+          delete marker.__promptfooMetricTemplateExecuted;
+        }
+      },
+    );
+
+    it('preserves unavailable assertion and weighted metric contributions from stripped survivors', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 3 });
+      const rows = await EvalResult.findManyByEvalId(eval_.id);
+      Object.assign(eval_.prompts[0].metrics!, {
+        assertPassCount: 3,
+        assertFailCount: 1,
+        namedScores: { quality: 3 },
+        namedScoresCount: { quality: 3 },
+        namedScoreWeights: { quality: 5 },
+      });
+      await eval_.addPrompts(eval_.prompts);
+      for (const [index, row] of rows.entries()) {
+        await dbUpdateResult(row.id, {
+          gradingResult: null,
+          namedScores: { quality: index === 1 ? 1 : 0 },
+        });
+      }
+
+      await deleteEvalResult(eval_.id, rows[0].id);
+
+      expect((await Eval.findById(eval_.id))!.prompts[0].metrics).toMatchObject({
+        assertPassCount: 3,
+        assertFailCount: 1,
+        namedScores: { quality: 3 },
+        namedScoresCount: { quality: 3 },
+        namedScoreWeights: { quality: 5 },
+      });
+    });
+
+    it('does not debit asserted siblings for historical no-assertion rows', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 3 });
+      const rows = await EvalResult.findManyByEvalId(eval_.id);
+      eval_.prompts[0].metrics!.assertPassCount = 1;
+      await eval_.addPrompts(eval_.prompts);
+      for (const row of rows.slice(0, 2)) {
+        await dbUpdateResult(row.id, {
+          gradingResult: {
+            pass: true,
+            score: 1,
+            reason: 'No assertions',
+            tokensUsed: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
+          },
+        });
+      }
+
+      await deleteEvalResult(eval_.id, rows[0].id);
+
+      expect((await Eval.findById(eval_.id))!.prompts[0].metrics!.assertPassCount).toBe(1);
+    });
+
+    it('preserves grading usage when a survivor rating discarded its tokens', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 2 });
+      const [target, survivor] = await EvalResult.findManyByEvalId(eval_.id);
+      eval_.prompts[0].metrics!.tokenUsage.assertions = { total: 9, numRequests: 2 };
+      await eval_.addPrompts(eval_.prompts);
+      await dbUpdateResult(target.id, {
+        gradingResult: null,
+        success: false,
+        failureReason: 2,
+        error: 'Provider error',
+      });
+      await dbUpdateResult(survivor.id, {
+        gradingResult: { pass: true, score: 1 } as GradingResult,
+      });
+
+      await deleteEvalResult(eval_.id, target.id);
+
+      expect((await Eval.findById(eval_.id))!.prompts[0].metrics!.tokenUsage.assertions).toEqual({
+        total: 9,
+        numRequests: 2,
+      });
+    });
+
+    it('carries incomplete survivor evidence across accounting batches', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 502 });
+      const rows = await EvalResult.findManyByEvalId(eval_.id);
+      const sorted = rows.slice().sort((a, b) => a.id.localeCompare(b.id));
+      eval_.prompts[0].metrics!.assertPassCount = 502;
+      await eval_.addPrompts(eval_.prompts);
+      await dbUpdateResult(sorted[0].id, { gradingResult: null });
+      await dbUpdateResult(sorted.at(-1)!.id, { gradingResult: null });
+
+      await deleteEvalResult(eval_.id, sorted[0].id);
+
+      expect((await Eval.findById(eval_.id))!.prompts[0].metrics!.assertPassCount).toBe(502);
+    });
 
     it('deletes only the targeted result and leaves siblings + parent eval intact', async () => {
       const eval_ = await EvalFactory.create();
@@ -561,7 +695,6 @@ describe('database eval deletion', () => {
           metricName: name,
           metricValue: value,
           gradingResult: target.gradingResult ?? null,
-          testVars: target.testCase?.vars ?? {},
         });
       }
       accumulateResponseTokenUsage(seededMetrics.tokenUsage, target.response);
@@ -699,7 +832,7 @@ describe('database eval deletion', () => {
       expect(await db.select().from(blobAssetsTable).all()).toHaveLength(1);
     });
 
-    it('keeps blob references when another result still uses the same blob', async () => {
+    it('keeps independently classified references for surviving media cells', async () => {
       const eval_ = await EvalFactory.create({ numResults: 2, resultTypes: ['success'] });
       const [target, survivor] = await EvalResult.findManyByEvalId(eval_.id);
       const db = await getDb();
@@ -710,15 +843,17 @@ describe('database eval deletion', () => {
         mimeType: 'image/png',
         provider: 'test-provider',
       });
-      await db.insert(blobReferencesTable).values({
-        id: 'shared-blob-ref',
-        blobHash,
-        evalId: eval_.id,
-        testIdx: target.testIdx,
-        promptIdx: target.promptIdx,
-        location: 'response.images[0].blobRef',
-        kind: 'image',
-      });
+      await db.insert(blobReferencesTable).values(
+        [target, survivor].map((row) => ({
+          id: `shared-blob-ref-${row.id}`,
+          blobHash,
+          evalId: eval_.id,
+          testIdx: row.testIdx,
+          promptIdx: row.promptIdx,
+          location: 'response.images[0].blobRef',
+          kind: 'image',
+        })),
+      );
       await dbUpdateResult(survivor.id, {
         response: {
           ...survivor.response,
@@ -741,7 +876,7 @@ describe('database eval deletion', () => {
       const refs = await db.select().from(blobReferencesTable).all();
       expect(refs).toEqual([
         expect.objectContaining({
-          id: 'shared-blob-ref',
+          id: `shared-blob-ref-${survivor.id}`,
           blobHash,
           evalId: eval_.id,
           testIdx: survivor.testIdx,
@@ -1276,7 +1411,7 @@ describe('database eval deletion', () => {
       expect(metrics?.assertFailCount).toBe(0);
     });
 
-    it('preserves surviving manual rating assertion counts when deleting a componentless row', async () => {
+    it('preserves unavailable assertion counts after historical manual ratings replaced both grades', async () => {
       const eval_ = await EvalFactory.create({ numResults: 2, resultTypes: ['success'] });
       const [target, survivor] = await EvalResult.findManyByEvalId(eval_.id);
       const reloaded = await Eval.findById(eval_.id);
@@ -1310,7 +1445,7 @@ describe('database eval deletion', () => {
       const after = await Eval.findById(eval_.id);
       const metrics = after?.prompts[0]?.metrics;
       expect(metrics?.testPassCount).toBe(1);
-      expect(metrics?.assertPassCount).toBe(1);
+      expect(metrics?.assertPassCount).toBe(2);
       expect(metrics?.assertFailCount).toBe(0);
     });
 

@@ -55,6 +55,70 @@ describe('deleting evaluated results preserves surviving token usage', () => {
     vi.restoreAllMocks();
   });
 
+  it('deletes the resolved contribution of environment-dependent metric names', async () => {
+    const metric = '{{ env.PF9868_METRIC }}';
+    const suite: TestSuite = {
+      env: { PF9868_METRIC: 'accuracy' } as TestSuite['env'],
+      providers: [{ id: () => 'env-metric-target', callApi: async () => ({ output: 'ok' }) }],
+      prompts: [{ raw: 'ok', label: 'Environment metric' }],
+      tests: [
+        {
+          assert: [
+            { type: 'contains', value: 'ok', metric },
+            { type: 'contains', value: 'ok', metric },
+          ],
+        },
+      ],
+    };
+    const evaluation = await Eval.create({ env: suite.env }, suite.prompts, { id: randomUUID() });
+    evalIds.push(evaluation.id);
+    await evaluate(suite, evaluation, {});
+    const [result] = await EvalResult.findManyByEvalId(evaluation.id);
+    expect((await Eval.findById(evaluation.id))?.prompts[0].metrics).toMatchObject({
+      namedScoresCount: { accuracy: 2 },
+    });
+    await deleteEvalResult(evaluation.id, result.id);
+    expect(
+      (await Eval.findById(evaluation.id))?.prompts[0].metrics?.namedScoresCount?.accuracy ?? 0,
+    ).toBe(0);
+    expect(
+      result.gradingResult?.componentResults?.map((grade) => grade.metadata?.renderedMetric),
+    ).toEqual(['accuracy', 'accuracy']);
+    expect(result.gradingResult?.componentResults?.map((grade) => grade.assertion?.metric)).toEqual(
+      [metric, metric],
+    );
+    expect(suite.tests?.[0].assert?.map((assertion) => assertion.metric)).toEqual([metric, metric]);
+  });
+
+  it('keeps repeated metric counts when another resolved name contains template delimiters', async () => {
+    const suite: TestSuite = {
+      providers: [{ id: () => 'literal-metric-target', callApi: async () => ({ output: 'ok' }) }],
+      prompts: [{ raw: 'ok', label: 'Literal metric' }],
+      tests: [
+        {
+          vars: { tag: '{{ literal }}' },
+          assert: [
+            { type: 'contains', value: 'ok', metric: 'accuracy' },
+            { type: 'contains', value: 'ok', metric: 'accuracy' },
+            { type: 'contains', value: 'ok', metric: '{{ tag }}' },
+          ],
+        },
+      ],
+    };
+    const evaluation = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    evalIds.push(evaluation.id);
+    await evaluate(suite, evaluation, {});
+    const [result] = await EvalResult.findManyByEvalId(evaluation.id);
+    expect((await Eval.findById(evaluation.id))?.prompts[0].metrics).toMatchObject({
+      namedScoresCount: { accuracy: 2, '{{ literal }}': 1 },
+    });
+    expect(
+      result.gradingResult?.componentResults?.map((grade) => grade.metadata?.renderedMetric),
+    ).toEqual(['accuracy', 'accuracy', '{{ literal }}']);
+    await deleteEvalResult(evaluation.id, result.id);
+    expect((await Eval.findById(evaluation.id))?.prompts[0].metrics?.namedScoresCount).toEqual({});
+  });
+
   it('rejects deletion during evaluation and allows it after final metrics are saved', async () => {
     const secondCallStarted = createDeferred<void>();
     const releaseSecondCall = createDeferred<void>();

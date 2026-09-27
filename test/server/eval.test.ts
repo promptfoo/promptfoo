@@ -174,9 +174,7 @@ describe('eval routes', () => {
     });
 
     it('returns a JSON 500 response when rating storage fails', async () => {
-      const findByIdSpy = vi
-        .spyOn(EvalResult, 'findById')
-        .mockRejectedValueOnce(new Error('database unavailable'));
+      vi.spyOn(EvalResult, 'submitRating').mockRejectedValueOnce(new Error('database unavailable'));
 
       const res = await api
         .post('/api/eval/eval-1/results/result-1/rating')
@@ -184,7 +182,6 @@ describe('eval routes', () => {
 
       expect(res.status).toBe(500);
       expect(res.body).toEqual({ error: 'Failed to submit rating' });
-      expect(findByIdSpy).toHaveBeenCalledWith('result-1');
     });
 
     it('returns the persisted result row so SDK clients see refreshed metrics', async () => {
@@ -217,27 +214,6 @@ describe('eval routes', () => {
       expect(res.body.gradingResult?.pass).toBe(true);
       expect(res.body.gradingResult?.score).toBe(1);
       expect(res.body.gradingResult?.reason).toContain('Manual result');
-    });
-
-    it('persists the rated result before notifying through the eval save', async () => {
-      const eval_ = await EvalFactory.create();
-      testEvalIds.add(eval_.id);
-      const results = await eval_.getResults();
-      const result = results[1];
-      invariant(result.id, 'Result ID is required');
-      const resultSaveSpy = vi.spyOn(EvalResult.prototype, 'save');
-      const evalSaveSpy = vi.spyOn(Eval.prototype, 'save');
-
-      const res = await api
-        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
-        .send(createManualRatingPayload(result, true));
-
-      expect(res.status).toBe(200);
-      expect(resultSaveSpy).toHaveBeenCalledTimes(1);
-      expect(evalSaveSpy).toHaveBeenCalledTimes(1);
-      expect(resultSaveSpy.mock.invocationCallOrder[0]).toBeLessThan(
-        evalSaveSpy.mock.invocationCallOrder[0],
-      );
     });
 
     it('Passing test and the user marked it as passing (no change)', async () => {

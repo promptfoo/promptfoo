@@ -272,6 +272,10 @@ export class AssertionsResult {
   }) {
     this.totalScore += result.score * weight;
     this.totalWeight += weight;
+    // Persist the resolved identity so later accounting never needs to render a template.
+    if (metric !== undefined && result.assertion?.metric !== undefined) {
+      result = { ...result, metadata: { ...result.metadata, renderedMetric: metric } };
+    }
     this.componentResults[index] = result;
 
     const isRedteamGuardrail =

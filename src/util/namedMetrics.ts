@@ -1,6 +1,4 @@
-import { renderMetricName } from '../assertions/index';
-
-import type { GradingResult, Vars } from '../types/index';
+import type { GradingResult } from '../types/index';
 
 export interface NamedMetricAccumulator {
   namedScores: Record<string, number>;
@@ -21,32 +19,46 @@ function isFiniteNumber(value: unknown): value is number {
 function getContributingAssertionCount(
   gradingResult: GradingResult | null | undefined,
   metricName: string,
-  testVars: Vars,
-): number {
-  // Imported rows can contain malformed assertion entries.
-  const componentResults = Array.isArray(gradingResult?.componentResults)
-    ? gradingResult.componentResults.filter((c) => c != null && typeof c === 'object')
-    : [];
-  const contributingAssertions = componentResults.reduce((count, componentResult) => {
-    const renderedMetric = renderMetricName(componentResult.assertion?.metric, testVars);
-    return renderedMetric === metricName ? count + 1 : count;
-  }, 0);
+): number | undefined {
+  if (!Array.isArray(gradingResult?.componentResults)) {
+    return undefined;
+  }
+  let count = 0;
+  for (const component of gradingResult.componentResults) {
+    const renderedMetric = component?.metadata?.renderedMetric;
+    const metric =
+      typeof renderedMetric === 'string' ? renderedMetric : component?.assertion?.metric;
+    if (metric === metricName) {
+      count++;
+    } else if (
+      typeof renderedMetric !== 'string' &&
+      typeof metric === 'string' &&
+      /\{[{%#]/.test(metric)
+    ) {
+      // Older reports retain templates without their original rendering context.
+      return undefined;
+    }
+  }
+  return count || 1;
+}
 
-  return contributingAssertions > 0 ? contributingAssertions : 1;
+export function hasNamedMetricContribution(
+  gradingResult: GradingResult | null | undefined,
+  metricName: string,
+): boolean {
+  return getContributingAssertionCount(gradingResult, metricName) !== undefined;
 }
 
 function getNamedMetricContribution({
   metricName,
   metricValue,
   gradingResult,
-  testVars = {},
 }: {
   metricName: string;
   metricValue: number;
   gradingResult: GradingResult | null | undefined;
-  testVars?: Vars;
 }): NamedMetricContribution {
-  const assertionCount = getContributingAssertionCount(gradingResult, metricName, testVars);
+  const assertionCount = getContributingAssertionCount(gradingResult, metricName) ?? 1;
   const namedScoreWeights = gradingResult?.namedScoreWeights;
   const hasNamedScoreWeight = Object.prototype.hasOwnProperty.call(
     namedScoreWeights ?? {},
@@ -72,19 +84,16 @@ export function accumulateNamedMetric(
     metricName,
     metricValue,
     gradingResult,
-    testVars,
   }: {
     metricName: string;
     metricValue: number;
     gradingResult: GradingResult | null | undefined;
-    testVars?: Vars;
   },
 ): void {
   const { assertionCount, metricWeightTotal, weightedScoreTotal } = getNamedMetricContribution({
     metricName,
     metricValue,
     gradingResult,
-    testVars,
   });
 
   accumulator.namedScores[metricName] =
@@ -105,12 +114,10 @@ export function subtractNamedMetric(
     metricName,
     metricValue,
     gradingResult,
-    testVars,
   }: {
     metricName: string;
     metricValue: number;
     gradingResult: GradingResult | null | undefined;
-    testVars?: Vars;
   },
 ): void {
   accumulator.namedScores ||= {};
@@ -118,7 +125,6 @@ export function subtractNamedMetric(
     metricName,
     metricValue,
     gradingResult,
-    testVars,
   });
 
   accumulator.namedScores[metricName] =

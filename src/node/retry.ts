@@ -262,7 +262,6 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
             metricName: key,
             metricValue: value,
             gradingResult: result.gradingResult,
-            testVars: result.testCase?.vars || {},
           });
         }
 

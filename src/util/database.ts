@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import {
   BLOB_SCAN_MAX_DEPTH,
   BLOB_SCAN_MAX_STRING_LENGTH,
@@ -40,12 +40,12 @@ import {
   type TestCasesWithMetadataPrompt,
   type TokenUsage,
   type UnifiedConfig,
-  type Vars,
 } from '../types/index';
 import invariant from '../util/invariant';
 import { sha256 } from './createHash';
 import {
   accumulateNamedMetric,
+  hasNamedMetricContribution,
   type NamedMetricAccumulator,
   subtractNamedMetric,
 } from './namedMetrics';
@@ -510,7 +510,8 @@ function getAssertionCounts(result: Pick<typeof evalResultsTable.$inferSelect, '
   const componentResults = gradingResult.componentResults;
   if (!Array.isArray(componentResults)) {
     return Object.prototype.hasOwnProperty.call(gradingResult, 'componentResults') ||
-      typeof gradingResult.pass !== 'boolean'
+      typeof gradingResult.pass !== 'boolean' ||
+      !['human', 'select-best', 'max-score'].includes(gradingResult.assertion?.type ?? '')
       ? null
       : { pass: gradingResult.pass ? 1 : 0, fail: gradingResult.pass ? 0 : 1 };
   }
@@ -520,36 +521,25 @@ function getAssertionCounts(result: Pick<typeof evalResultsTable.$inferSelect, '
   };
 }
 
-function getSurvivingAssertionCounts(
-  results: Array<Pick<typeof evalResultsTable.$inferSelect, 'gradingResult'>>,
-): { pass: number; fail: number } {
-  return results.reduce(
-    (acc, result) => {
-      const counts = getAssertionCounts(result);
-      if (!counts) {
-        return acc;
-      }
-      acc.pass += counts.pass;
-      acc.fail += counts.fail;
-      return acc;
-    },
-    { pass: 0, fail: 0 },
+type UsageResult = Pick<typeof evalResultsTable.$inferSelect, 'response' | 'gradingResult'>;
+
+function hasGradingTokenUsage(
+  grade: UsageResult['gradingResult'],
+): grade is NonNullable<UsageResult['gradingResult']> & { tokensUsed: TokenUsage } {
+  return Boolean(
+    grade &&
+      typeof grade === 'object' &&
+      !Array.isArray(grade) &&
+      grade.tokensUsed &&
+      typeof grade.tokensUsed === 'object' &&
+      !Array.isArray(grade.tokensUsed),
   );
 }
-
-type UsageResult = Pick<typeof evalResultsTable.$inferSelect, 'response' | 'gradingResult'>;
 
 function accumulateResultTokenUsage(usage: TokenUsage, result: UsageResult): void {
   accumulateResponseTokenUsage(usage, result.response ?? undefined);
   const grade = result.gradingResult;
-  if (
-    !grade ||
-    typeof grade !== 'object' ||
-    Array.isArray(grade) ||
-    !grade.tokensUsed ||
-    typeof grade.tokensUsed !== 'object' ||
-    Array.isArray(grade.tokensUsed)
-  ) {
+  if (!hasGradingTokenUsage(grade)) {
     return;
   }
 
@@ -591,56 +581,13 @@ function accumulateResultTokenUsage(usage: TokenUsage, result: UsageResult): voi
   }
 }
 
-function recomputeAssertionTokenUsageFromResults(results: UsageResult[], trackIncurred: boolean) {
-  const usage = createEmptyTokenUsage();
-  if (trackIncurred) {
-    usage.incurredTokenUsage = {};
-  }
-  for (const result of results) {
-    accumulateResultTokenUsage(usage, result);
-  }
-  return usage;
-}
-
-type NamedMetricResult = Pick<
-  typeof evalResultsTable.$inferSelect,
-  'gradingResult' | 'namedScores' | 'testCase'
->;
-
-function recomputeNamedMetricsFromResults(
+function applyRecomputedNamedMetrics(
   metrics: PromptMetrics,
   metricNames: Set<string>,
-  results: NamedMetricResult[],
+  recomputed: Required<NamedMetricAccumulator>,
 ): void {
-  if (metricNames.size === 0) {
-    return;
-  }
-
   const hadScoreCounts = metrics.namedScoresCount !== undefined;
   const hadScoreWeights = metrics.namedScoreWeights !== undefined;
-  const recomputed: Required<NamedMetricAccumulator> = {
-    namedScores: {},
-    namedScoresCount: {},
-    namedScoreWeights: {},
-  };
-
-  for (const result of results) {
-    const namedScores = (result.namedScores ?? {}) as Record<string, unknown>;
-    const testVars = (result.testCase?.vars ?? {}) as Vars;
-    for (const metricName of metricNames) {
-      const metricValue = namedScores[metricName];
-      if (!isFiniteNumber(metricValue)) {
-        continue;
-      }
-      accumulateNamedMetric(recomputed, {
-        metricName,
-        metricValue,
-        gradingResult: result.gradingResult ?? null,
-        testVars,
-      });
-    }
-  }
-
   metrics.namedScores ||= {};
   for (const metricName of metricNames) {
     if (Object.prototype.hasOwnProperty.call(recomputed.namedScores, metricName)) {
@@ -744,46 +691,6 @@ function resultMentionsBlobHash(result: BlobUsageResult, blobHash: string): bool
   );
 }
 
-function valueUsesStructuredBlobRef(
-  value: unknown,
-  blobHash: string,
-  visited = new WeakSet<object>(),
-  depth = 0,
-): boolean {
-  if (depth > BLOB_SCAN_MAX_DEPTH || !value || typeof value !== 'object') {
-    return false;
-  }
-  if (visited.has(value)) {
-    return false;
-  }
-  visited.add(value);
-
-  const candidate = value as Record<string, unknown>;
-  if (
-    typeof candidate.hash === 'string' &&
-    candidate.hash.toLowerCase() === blobHash &&
-    typeof candidate.uri === 'string' &&
-    candidate.uri.toLowerCase() === `${BLOB_URI_PREFIX}${blobHash}` &&
-    typeof candidate.mimeType === 'string' &&
-    typeof candidate.sizeBytes === 'number' &&
-    Number.isFinite(candidate.sizeBytes) &&
-    typeof candidate.provider === 'string'
-  ) {
-    return true;
-  }
-
-  return Object.values(candidate).some((child) =>
-    valueUsesStructuredBlobRef(child, blobHash, visited, depth + 1),
-  );
-}
-
-function resultUsesStructuredBlobRef(result: BlobUsageResult, blobHash: string): boolean {
-  const normalizedBlobHash = blobHash.toLowerCase();
-  return [result.response, result.testCase, result.metadata, result.gradingResult].some((value) =>
-    valueUsesStructuredBlobRef(value, normalizedBlobHash),
-  );
-}
-
 async function traceUsesBlobHash(
   tx: DatabaseTransaction,
   evalId: string,
@@ -813,12 +720,6 @@ async function findSurvivingResultUsingBlobHash(
   resultId: string,
   blobHash: string,
   cell?: { testIdx: number; promptIdx: number },
-  // Cell-scoped survivor lookups require a structured blob envelope so a
-  // survivor that merely echoes the URI as text cannot inherit the deleted
-  // row's trusted provenance. Imported eval-level references, by contrast,
-  // never carry a structured envelope in the persisted result — the import
-  // path stores only the raw URI — so they use a textual match.
-  scanMode: 'structured' | 'textual' = 'structured',
 ): Promise<BlobUsageResult | undefined> {
   let offset = 0;
   for (;;) {
@@ -850,9 +751,7 @@ async function findSurvivingResultUsingBlobHash(
       .offset(offset)
       .all();
 
-    const matcher =
-      scanMode === 'structured' ? resultUsesStructuredBlobRef : resultMentionsBlobHash;
-    const match = rows.find((survivingResult) => matcher(survivingResult, blobHash));
+    const match = rows.find((survivingResult) => resultMentionsBlobHash(survivingResult, blobHash));
     if (match || rows.length < BLOB_SURVIVOR_SCAN_BATCH_SIZE) {
       return match;
     }
@@ -882,54 +781,93 @@ async function updatePromptMetricsForDeletedResult(
     ? evalRow.config.derivedMetrics
     : undefined;
   const shouldRecomputeAssertionTokenUsage =
-    result.gradingResult == null && Boolean(prompt.metrics.tokenUsage?.assertions);
-  const componentless = !Array.isArray(result.gradingResult?.componentResults);
-  const survivingPromptResults = componentless
-    ? await tx
-        .select({
-          response: evalResultsTable.response,
-          gradingResult: evalResultsTable.gradingResult,
-          namedScores: evalResultsTable.namedScores,
-          testCase: evalResultsTable.testCase,
-        })
-        .from(evalResultsTable)
-        .where(
-          and(
-            eq(evalResultsTable.evalId, evalId),
-            eq(evalResultsTable.promptIdx, result.promptIdx),
-            ne(evalResultsTable.id, resultId),
-          ),
-        )
-        .all()
-    : undefined;
-  // A legacy componentless grade may have lost its original assertions during a rating edit.
-  // Recount only when surviving rows explicitly retain their assertion contributions.
-  const canRecountComponentless =
-    componentless &&
-    (survivingPromptResults ?? []).every(
-      (row) =>
-        Array.isArray(row.gradingResult?.componentResults) ||
-        ['human', 'select-best', 'max-score'].includes(row.gradingResult?.assertion?.type ?? ''),
-    );
-  const survivingAssertionCounts =
-    !resultAssertionCounts || canRecountComponentless
-      ? getSurvivingAssertionCounts(survivingPromptResults ?? [])
-      : undefined;
-  const canRecomputeAssertionTokenUsage =
-    shouldRecomputeAssertionTokenUsage &&
-    (survivingPromptResults ?? []).every(
-      (survivingResult) => survivingResult.gradingResult != null,
-    );
-  const survivingAssertionTokenUsage = canRecomputeAssertionTokenUsage
-    ? recomputeAssertionTokenUsageFromResults(
-        survivingPromptResults ?? [],
-        Boolean(prompt.metrics.tokenUsage?.incurredTokenUsage),
+    !hasGradingTokenUsage(result.gradingResult) && Boolean(prompt.metrics.tokenUsage?.assertions);
+  const namedMetricsToRecompute = new Set(
+    Object.entries(result.namedScores ?? {})
+      .filter(
+        ([name, value]) =>
+          isFiniteNumber(value) && !hasNamedMetricContribution(result.gradingResult, name),
       )
+      .map(([name]) => name),
+  );
+  let survivingAssertionCounts = resultAssertionCounts ? undefined : { pass: 0, fail: 0 };
+  let survivingAssertionTokenUsage = shouldRecomputeAssertionTokenUsage
+    ? createEmptyTokenUsage()
     : undefined;
-  const survivingNamedMetricResults =
-    result.gradingResult == null && Object.keys(result.namedScores ?? {}).length > 0
-      ? survivingPromptResults
-      : undefined;
+  if (survivingAssertionTokenUsage && prompt.metrics.tokenUsage?.incurredTokenUsage) {
+    survivingAssertionTokenUsage.incurredTokenUsage = {};
+  }
+  const survivingNamedMetrics: Required<NamedMetricAccumulator> = {
+    namedScores: {},
+    namedScoresCount: {},
+    namedScoreWeights: {},
+  };
+  const survivorCondition = and(
+    eq(evalResultsTable.evalId, evalId),
+    eq(evalResultsTable.promptIdx, result.promptIdx),
+    ne(evalResultsTable.id, resultId),
+  );
+  // Missing legacy contributions are unknown. Rebuild only buckets with complete survivor evidence.
+  let afterId: string | undefined;
+  while (survivingAssertionCounts || survivingAssertionTokenUsage || namedMetricsToRecompute.size) {
+    const batch = await tx
+      .select({
+        id: evalResultsTable.id,
+        gradingResult: evalResultsTable.gradingResult,
+        namedScores: namedMetricsToRecompute.size ? evalResultsTable.namedScores : sql<null>`NULL`,
+        response: survivingAssertionTokenUsage
+          ? sql<
+              UsageResult['response']
+            >`CASE WHEN ${evalResultsTable.response} IS NULL THEN NULL ELSE
+            json_object('tokenUsage', json_extract(${evalResultsTable.response}, '$.tokenUsage'),
+                        'cached', json_extract(${evalResultsTable.response}, '$.cached')) END`.mapWith(
+              (value: string | null) => (value === null ? null : JSON.parse(value)),
+            )
+          : sql<null>`NULL`,
+      })
+      .from(evalResultsTable)
+      .where(and(survivorCondition, afterId ? gt(evalResultsTable.id, afterId) : undefined))
+      .orderBy(evalResultsTable.id)
+      .limit(500)
+      .all();
+    for (const row of batch) {
+      if (survivingAssertionCounts) {
+        const counts = getAssertionCounts(row);
+        if (counts) {
+          survivingAssertionCounts.pass += counts.pass;
+          survivingAssertionCounts.fail += counts.fail;
+        } else {
+          survivingAssertionCounts = undefined;
+        }
+      }
+      if (survivingAssertionTokenUsage) {
+        if (hasGradingTokenUsage(row.gradingResult)) {
+          accumulateResultTokenUsage(survivingAssertionTokenUsage, row);
+        } else {
+          survivingAssertionTokenUsage = undefined;
+        }
+      }
+      for (const metricName of namedMetricsToRecompute) {
+        const metricValue = row.namedScores?.[metricName];
+        if (!isFiniteNumber(metricValue)) {
+          continue;
+        }
+        if (hasNamedMetricContribution(row.gradingResult, metricName)) {
+          accumulateNamedMetric(survivingNamedMetrics, {
+            metricName,
+            metricValue,
+            gradingResult: row.gradingResult,
+          });
+        } else {
+          namedMetricsToRecompute.delete(metricName);
+        }
+      }
+    }
+    if (batch.length < 500) {
+      break;
+    }
+    afterId = batch.at(-1)!.id;
+  }
 
   const updatedPrompts: CompletedPrompt[] = prompts.map((p, i) =>
     i === result.promptIdx && p.metrics ? { ...p, metrics: { ...p.metrics } } : p,
@@ -940,26 +878,22 @@ async function updatePromptMetricsForDeletedResult(
     updatedPrompt.metrics,
     result,
     survivingAssertionCounts,
-    survivingNamedMetricResults,
     survivingAssertionTokenUsage,
+  );
+  applyRecomputedNamedMetrics(
+    updatedPrompt.metrics,
+    namedMetricsToRecompute,
+    survivingNamedMetrics,
   );
   if (derivedMetrics?.length) {
     const remainingCount =
-      survivingPromptResults?.length ??
       (
         await tx
           .select({ count: sql<number>`count(*)` })
           .from(evalResultsTable)
-          .where(
-            and(
-              eq(evalResultsTable.evalId, evalId),
-              eq(evalResultsTable.promptIdx, result.promptIdx),
-              ne(evalResultsTable.id, resultId),
-            ),
-          )
+          .where(survivorCondition)
           .get()
-      )?.count ??
-      0;
+      )?.count ?? 0;
     await recomputeDerivedMetrics(updatedPrompt.metrics, derivedMetrics, remainingCount);
   }
   await tx
@@ -1004,6 +938,7 @@ async function cleanupBlobReferencesForDeletedResult(
 
   for (const blobReference of blobReferences) {
     const isEvalLevelReference = blobReference.testIdx === null && blobReference.promptIdx === null;
+    const isImportedReference = blobReference.location === 'import';
     if (isEvalLevelReference && !resultMentionsBlobHash(result, blobReference.blobHash)) {
       continue;
     }
@@ -1018,16 +953,12 @@ async function cleanupBlobReferencesForDeletedResult(
       continue;
     }
 
-    const survivingBlobResult = await findSurvivingResultUsingBlobHash(
-      tx,
-      evalId,
-      resultId,
-      blobReference.blobHash,
-      undefined,
-      // Imported eval-level references never persist a structured envelope
-      // in the surviving result payload, so fall back to a URI-text scan.
-      isEvalLevelReference && blobReference.location === 'import' ? 'textual' : 'structured',
-    );
+    // Imports authorize media for the eval, even when reference recording retained cell
+    // coordinates. Runtime extraction records each cell's own provenance; copied result
+    // data (including a complete blob envelope) cannot inherit another cell's reference.
+    const survivingBlobResult = isImportedReference
+      ? await findSurvivingResultUsingBlobHash(tx, evalId, resultId, blobReference.blobHash)
+      : undefined;
     if (survivingBlobResult) {
       if (!isEvalLevelReference) {
         await tx
@@ -1039,11 +970,18 @@ async function cleanupBlobReferencesForDeletedResult(
           .where(eq(blobReferencesTable.id, blobReference.id))
           .run();
       }
-    } else if (await traceUsesBlobHash(tx, evalId, blobReference.blobHash)) {
+    } else if (
+      isImportedReference &&
+      (await traceUsesBlobHash(tx, evalId, blobReference.blobHash))
+    ) {
       if (!isEvalLevelReference) {
         await tx
           .update(blobReferencesTable)
-          .set({ testIdx: null, promptIdx: null, location: 'trace' })
+          .set({
+            testIdx: null,
+            promptIdx: null,
+            location: 'import',
+          })
           .where(eq(blobReferencesTable.id, blobReference.id))
           .run();
       }
@@ -1060,7 +998,6 @@ function subtractResultFromPromptMetrics(
   metrics: PromptMetrics,
   result: typeof evalResultsTable.$inferSelect,
   survivingAssertionCounts?: { pass: number; fail: number },
-  survivingNamedMetricResults?: NamedMetricResult[],
   survivingAssertionTokenUsage?: TokenUsage,
 ): void {
   if (result.success) {
@@ -1096,21 +1033,15 @@ function subtractResultFromPromptMetrics(
     );
   }
 
-  const namedScores = result.namedScores ?? {};
-  const namedScoreNames = new Set(Object.keys(namedScores));
-  if (survivingNamedMetricResults) {
-    recomputeNamedMetricsFromResults(metrics, namedScoreNames, survivingNamedMetricResults);
-  } else {
-    const testVars = (result.testCase?.vars ?? {}) as Vars;
-    for (const [metricName, metricValue] of Object.entries(namedScores)) {
-      if (!isFiniteNumber(metricValue)) {
-        continue;
-      }
+  for (const [metricName, metricValue] of Object.entries(result.namedScores ?? {})) {
+    if (
+      isFiniteNumber(metricValue) &&
+      hasNamedMetricContribution(result.gradingResult, metricName)
+    ) {
       subtractNamedMetric(metrics, {
         metricName,
         metricValue,
-        gradingResult: result.gradingResult ?? null,
-        testVars,
+        gradingResult: result.gradingResult,
       });
     }
   }
@@ -1122,7 +1053,7 @@ function subtractResultFromPromptMetrics(
     accumulateResultTokenUsage(delta, result);
     subtractTokenUsage(metrics.tokenUsage, delta);
     if (survivingAssertionTokenUsage) {
-      // Stripped grading cannot be debited; only rebuild when every survivor retains its grade.
+      // Rebuild only when every survivor retains its grading usage.
       metrics.tokenUsage.assertions = survivingAssertionTokenUsage.assertions;
       if (metrics.tokenUsage.incurredTokenUsage) {
         metrics.tokenUsage.incurredTokenUsage.assertions =

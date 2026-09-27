@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   accumulateNamedMetric,
   backfillNamedScoreWeights,
+  hasNamedMetricContribution,
   subtractNamedMetric,
 } from '../../src/util/namedMetrics';
 
@@ -78,7 +79,7 @@ describe('accumulateNamedMetric', () => {
     });
   });
 
-  it('falls back to rendered assertion counts when stored weights are absent', () => {
+  it('counts resolved assertion identities when stored weights are absent', () => {
     const metrics = {
       namedScores: {},
       namedScoresCount: {},
@@ -88,27 +89,72 @@ describe('accumulateNamedMetric', () => {
     accumulateNamedMetric(metrics, {
       metricName: 'accuracy:alpha',
       metricValue: 0.8,
-      testVars: { suffix: 'alpha' },
       gradingResult: {
         pass: true,
         score: 0.8,
         reason: 'templated metric',
-        componentResults: [
-          {
-            pass: true,
-            score: 0.8,
-            reason: 'templated metric',
-            assertion: { type: 'contains', value: 'alpha', metric: 'accuracy:{{ suffix }}' },
-          },
-        ],
+        componentResults: Array.from({ length: 2 }, () => ({
+          pass: true,
+          score: 0.8,
+          reason: 'templated metric',
+          assertion: { type: 'contains' as const, value: 'alpha', metric: 'accuracy:alpha' },
+        })),
       },
     });
 
     expect(metrics).toEqual({
       namedScores: { 'accuracy:alpha': 0.8 },
-      namedScoresCount: { 'accuracy:alpha': 1 },
-      namedScoreWeights: { 'accuracy:alpha': 1 },
+      namedScoresCount: { 'accuracy:alpha': 2 },
+      namedScoreWeights: { 'accuracy:alpha': 2 },
     });
+  });
+});
+
+describe('hasNamedMetricContribution', () => {
+  it('treats missing components and unresolved templates as unavailable accounting', () => {
+    expect(hasNamedMetricContribution(null, 'accuracy')).toBe(false);
+    expect(hasNamedMetricContribution({ pass: true, score: 1, reason: 'legacy' }, 'accuracy')).toBe(
+      false,
+    );
+    expect(
+      hasNamedMetricContribution(
+        {
+          pass: true,
+          score: 1,
+          reason: 'legacy',
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'legacy',
+              assertion: { type: 'contains', metric: '{{ env.METRIC }}' },
+            },
+          ],
+        },
+        'accuracy',
+      ),
+    ).toBe(false);
+  });
+
+  it('keeps matching persisted names literal even when they contain template delimiters', () => {
+    expect(
+      hasNamedMetricContribution(
+        {
+          pass: true,
+          score: 1,
+          reason: 'literal',
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'literal',
+              assertion: { type: 'contains', metric: '{{ literal }}' },
+            },
+          ],
+        },
+        '{{ literal }}',
+      ),
+    ).toBe(true);
   });
 });
 

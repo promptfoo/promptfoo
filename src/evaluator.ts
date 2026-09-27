@@ -3459,7 +3459,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         metricName: key,
         metricValue: value,
         gradingResult: row.gradingResult,
-        testVars: row.testCase?.vars || {},
       });
     }
 
