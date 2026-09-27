@@ -56,9 +56,6 @@ vi.mock('../../src/cache', async (importOriginal) => {
   };
 });
 
-const ORIGINAL_HTTP_PROXY = process.env.HTTP_PROXY;
-const ORIGINAL_HTTPS_PROXY = process.env.HTTPS_PROXY;
-
 let restoreProxyEnv = () => {};
 
 describe('AwsBedrockAgentsProvider', () => {
@@ -67,21 +64,9 @@ describe('AwsBedrockAgentsProvider', () => {
       Object.fromEntries(PROXY_ENV_KEYS.map((key) => [key, undefined])),
     );
     vi.clearAllMocks();
-    mockProcessEnv({ HTTP_PROXY: '' });
-    mockProcessEnv({ HTTPS_PROXY: '' });
   });
 
   afterEach(() => {
-    if (ORIGINAL_HTTP_PROXY === undefined) {
-      mockProcessEnv({ HTTP_PROXY: undefined });
-    } else {
-      mockProcessEnv({ HTTP_PROXY: ORIGINAL_HTTP_PROXY });
-    }
-    if (ORIGINAL_HTTPS_PROXY === undefined) {
-      mockProcessEnv({ HTTPS_PROXY: undefined });
-    } else {
-      mockProcessEnv({ HTTPS_PROXY: ORIGINAL_HTTPS_PROXY });
-    }
     restoreProxyEnv();
   });
 

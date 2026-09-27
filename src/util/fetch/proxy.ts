@@ -16,11 +16,10 @@ export function getProxyEnvironment(): Record<string, string> {
     [...Object.keys(DEFAULT_PORTS), 'all', 'no'].map((protocol) => {
       const name = `${protocol}_proxy`;
       for (const layer of layers) {
-        const lower = layer?.[name];
-        const upper = layer?.[name.toUpperCase()];
-        if (lower !== undefined || upper !== undefined) {
+        const value = layer?.[name] ?? layer?.[name.toUpperCase()];
+        if (value !== undefined) {
           // Lowercase wins within a layer; an explicit empty layer masks inherited values.
-          return [name, lower ?? upper ?? ''];
+          return [name, value];
         }
       }
       return [name, ''];

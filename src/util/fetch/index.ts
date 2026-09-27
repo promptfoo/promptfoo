@@ -293,7 +293,7 @@ export async function fetchWithProxy(
       logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
     }
   }
-  const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
+  const proxyUrl = getProxyForUrl(finalUrlString);
 
   // Bind the dispatcher per-request to avoid global state races under concurrency.
   // Respect a caller-provided dispatcher (e.g. HTTP provider's custom TLS agent for mTLS).
