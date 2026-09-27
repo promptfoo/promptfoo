@@ -7,7 +7,6 @@ import {
   isGradingResult,
   type ScoringFunction,
 } from '../types/index';
-import { setNonstandardScoringBaseline } from '../types/internal';
 
 export const GUARDRAIL_BLOCKED_REASON = 'Content failed guardrail safety checks';
 
@@ -439,7 +438,7 @@ export class AssertionsResult {
       this.result.reason = 'Assertion aggregation error: unable to read scores or weights';
       this.result.namedScores = {};
       this.result.namedScoreWeights = {};
-      metricEntries = { namedScores: [], namedScoreWeights: [] };
+      return this.result;
     }
 
     const invalidMetrics = new Set<string>();
@@ -463,14 +462,6 @@ export class AssertionsResult {
       }
     }
 
-    if (scoringFunction) {
-      // Function-valued test-case fields are stripped before persistence. Retain only the
-      // validated aggregate for the persistence layer to move into private provenance.
-      setNonstandardScoringBaseline(this.result, {
-        pass: this.result.pass,
-        score: this.result.score,
-      });
-    }
     return this.result;
   }
 }

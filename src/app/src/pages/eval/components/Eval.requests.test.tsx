@@ -1,6 +1,11 @@
 import { act } from 'react';
 
-import { createMockResponse, mockCallApiRoutes } from '@app/tests/apiMocks';
+import {
+  createMockResponse,
+  getCallApiMock,
+  mockCallApiRoutes,
+  resetCallApiMock,
+} from '@app/tests/apiMocks';
 import { callApi, getApiBaseUrl } from '@app/utils/api';
 import { renderWithProviders } from '@app/utils/testutils';
 import { screen, waitFor } from '@testing-library/react';
@@ -64,17 +69,30 @@ vi.mock('./ResultsView', async () => {
 
 const initialTableState = useTableStore.getState();
 const initialViewState = useResultsViewSettingsStore.getState();
+const pendingSettlements: Array<() => void> = [];
+
+function defer<T>(fallback: T) {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((settle) => {
+    resolve = settle;
+  });
+  pendingSettlements.push(() => resolve(fallback));
+  return { promise, resolve };
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(callApi).mockReset();
+  resetCallApiMock();
   vi.mocked(getApiBaseUrl).mockReset().mockReturnValue('');
   useTableStore.setState(initialTableState, true);
   useResultsViewSettingsStore.setState(initialViewState, true);
   filterMode.current = 'all';
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await act(async () => {
+    pendingSettlements.splice(0).forEach((settle) => settle());
+  });
   vi.restoreAllMocks();
   window.history.replaceState({}, '', '/');
 });
@@ -201,10 +219,11 @@ it.each(['success', 'HTTP failure', 'network failure'] as const)(
     const pending: Array<() => void> = [];
     const destinationRequests: string[] = [];
     let holdDestination = true;
-    vi.mocked(callApi).mockImplementation(async (url) => {
+    getCallApiMock().mockImplementation(async (url) => {
       if (url === '/results') {
         return createMockResponse({ data: [{ evalId: 'source' }, { evalId: 'destination' }] });
       }
+      expect(url).toMatch(/^\/eval\/(?:source|destination)\/table\?/);
       const parsed = new URL(url, window.location.origin);
       const id = parsed.pathname.split('/')[2];
       const offset = Number(parsed.searchParams.get('offset'));
@@ -343,14 +362,12 @@ it.each([
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     initializeRatingTable();
     let serverTable = structuredClone(ratingTable);
-    let resolveFirst!: () => void;
-    const firstWrite = new Promise<void>((resolve) => {
-      resolveFirst = resolve;
-    });
+    const { promise: firstWrite, resolve: resolveFirst } = defer<void>(undefined);
     let writeCount = 0;
     const reads: string[] = [];
-    vi.mocked(callApi).mockImplementation(async (url, options) => {
+    getCallApiMock().mockImplementation(async (url, options) => {
       if (options?.method === 'POST') {
+        expect(url).toBe('/eval/rating-eval/results/result-id/rating');
         writeCount += 1;
         if (writeCount === 1) {
           await firstWrite;
@@ -376,6 +393,8 @@ it.each([
           gradingResult: { pass: false, score },
         });
       }
+      expect(url).toBe(ratingQuery);
+      expect(options?.method ?? 'GET').toBe('GET');
       reads.push(url);
       return createMockResponse({
         table: serverTable,
@@ -415,12 +434,8 @@ it.each(['eval', 'API'] as const)(
   async (changedScope) => {
     const user = userEvent.setup();
     initializeRatingTable();
-    let resolveWrite!: (response: Response) => void;
-    vi.mocked(callApi).mockReturnValue(
-      new Promise<Response>((resolve) => {
-        resolveWrite = resolve;
-      }),
-    );
+    const { promise, resolve: resolveWrite } = defer(createMockResponse({}, { status: 400 }));
+    getCallApiMock().mockReturnValueOnce(promise);
     const rendered = renderWithProviders(ratingView(true));
     await user.click(screen.getByRole('button', { name: 'Fail result' }));
     rendered.rerender(ratingView(false));
@@ -462,9 +477,13 @@ it.each([
   async ({ first, refreshFails, switchFails }) => {
     initializeRatingTable();
     const pending = new Map<string, (response: Response) => void>();
-    vi.mocked(callApi).mockImplementation(
-      (url) => new Promise<Response>((resolve) => pending.set(url, resolve)),
-    );
+    getCallApiMock().mockImplementation((url, options) => {
+      expect(options?.method ?? 'GET').toBe('GET');
+      expect(url).toMatch(/^\/eval\/(?:next-eval|rating-eval)\/table\?/);
+      const { promise, resolve } = defer(createMockResponse({}, { status: 500 }));
+      pending.set(url, resolve);
+      return promise;
+    });
     const switching = useTableStore
       .getState()
       .fetchEvalData('next-eval', { skipLoadingState: true });
@@ -514,9 +533,13 @@ it.each([
   async ({ foreground, newestFails }) => {
     initializeRatingTable();
     const pending: Array<(response: Response) => void> = [];
-    vi.mocked(callApi).mockImplementation(
-      () => new Promise<Response>((resolve) => pending.push(resolve)),
-    );
+    getCallApiMock().mockImplementation((url, options) => {
+      expect(options?.method ?? 'GET').toBe('GET');
+      expect(url).toMatch(/^\/eval\/(?:older-eval|newest-eval)\/table\?/);
+      const { promise, resolve } = defer(createMockResponse({}, { status: 500 }));
+      pending.push(resolve);
+      return promise;
+    });
     const older = useTableStore.getState().fetchEvalData('older-eval', { skipLoadingState: true });
     const newer = useTableStore
       .getState()
@@ -551,21 +574,13 @@ it.each([
     initializeRatingTable();
     const user = userEvent.setup();
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    let resolveWrite!: (response: Response) => void;
-    let resolveJson!: (body: unknown) => void;
-    const json = vi.fn(
-      () =>
-        new Promise((resolve) => {
-          resolveJson = resolve;
-        }),
+    const { promise: write, resolve: resolveWrite } = defer(
+      createMockResponse({}, { status: 400 }),
     );
-    vi.mocked(callApi).mockImplementation(async (_url, options) =>
-      options?.method === 'POST'
-        ? new Promise<Response>((resolve) => {
-            resolveWrite = resolve;
-          })
-        : createMockResponse({}, { status: 500 }),
-    );
+    const { promise: body, resolve: resolveJson } = defer<unknown>({});
+    const json = vi.fn(() => body);
+    mockCallApiRoutes([{ path: ratingQuery, status: 500 }]);
+    getCallApiMock().mockReturnValueOnce(write);
     renderWithProviders(ratingView(true));
     await user.click(screen.getByRole('button', { name: 'Fail result' }));
     const newTable = structuredClone(ratingTable);
@@ -605,9 +620,13 @@ it.each([false, true])(
   async (refreshFails) => {
     initializeRatingTable();
     const pending: Array<(response: Response) => void> = [];
-    vi.mocked(callApi).mockImplementation(
-      () => new Promise<Response>((resolve) => pending.push(resolve)),
-    );
+    getCallApiMock().mockImplementation((url, options) => {
+      expect(options?.method ?? 'GET').toBe('GET');
+      expect(url).toMatch(/^\/eval\/next-eval\/table\?/);
+      const { promise, resolve } = defer(createMockResponse({}, { status: 500 }));
+      pending.push(resolve);
+      return promise;
+    });
     const selection = useTableStore
       .getState()
       .fetchEvalData('next-eval', { skipLoadingState: true });

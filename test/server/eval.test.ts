@@ -11,7 +11,7 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { createApp } from '../../src/server/server';
-import { ResultFailureReason } from '../../src/types';
+import { type GradingResult, ResultFailureReason } from '../../src/types';
 import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
@@ -264,6 +264,274 @@ describe('eval routes', () => {
   });
 
   describe('post("/:evalId/results/:id/rating")', () => {
+    function outcomeCategory(pass: boolean, error = false) {
+      if (error) {
+        return ResultFailureReason.ERROR;
+      }
+      return pass ? ResultFailureReason.NONE : ResultFailureReason.ASSERT;
+    }
+
+    function comparison(type: 'max-score' | 'select-best', pass: boolean, score = pass ? 1 : 0) {
+      return {
+        pass,
+        score,
+        reason: `${type} ${pass ? 'winner' : 'loser'}`,
+        assertion: { type },
+      } satisfies GradingResult;
+    }
+
+    const lateComparisonCases: Array<{
+      name: string;
+      later: GradingResult[];
+      originalPass?: boolean;
+      originalError?: boolean;
+      originalGrade?: boolean;
+      initial?: GradingResult[];
+      editedScore?: number;
+      oldState?: boolean;
+      removeHuman?: boolean;
+      expectedPass: boolean;
+      expectedScore: number;
+      expectedReason: string;
+    }> = [
+      {
+        name: 'max-score loser',
+        later: [comparison('max-score', false)],
+        expectedPass: false,
+        expectedScore: 0,
+        expectedReason: 'max-score loser',
+      },
+      {
+        name: 'max-score winner preserves custom score',
+        later: [comparison('max-score', true)],
+        expectedPass: true,
+        expectedScore: 0.25,
+        expectedReason: 'Custom outcome',
+      },
+      {
+        name: 'select-best loser',
+        later: [comparison('select-best', false)],
+        expectedPass: false,
+        expectedScore: 0,
+        expectedReason: 'select-best loser',
+      },
+      {
+        name: 'select-best winner preserves custom failure',
+        originalPass: false,
+        later: [comparison('select-best', true)],
+        expectedPass: false,
+        expectedScore: 0.25,
+        expectedReason: 'Custom outcome',
+      },
+      {
+        name: 'max-score loser preserves earlier failure reason',
+        originalPass: false,
+        later: [comparison('max-score', false)],
+        expectedPass: false,
+        expectedScore: 0,
+        expectedReason: 'Custom outcome',
+      },
+      {
+        name: 'comparison preserves execution error category',
+        originalPass: false,
+        originalError: true,
+        later: [comparison('max-score', false)],
+        expectedPass: false,
+        expectedScore: 0,
+        expectedReason: 'Custom outcome',
+      },
+      {
+        name: 'max-score loser adds evidence to originally absent grade',
+        originalGrade: false,
+        later: [comparison('max-score', false)],
+        expectedPass: false,
+        expectedScore: 0,
+        expectedReason: 'max-score loser',
+      },
+      {
+        name: 'select-best winner adds evidence to originally absent grade',
+        originalGrade: false,
+        later: [comparison('select-best', true)],
+        expectedPass: true,
+        expectedScore: 0.25,
+        expectedReason: 'select-best winner',
+      },
+      {
+        name: 'multiple later comparisons retain evaluator order',
+        later: [
+          comparison('max-score', false),
+          comparison('select-best', false, 0.1),
+          comparison('max-score', true),
+        ],
+        expectedPass: false,
+        expectedScore: 0.1,
+        expectedReason: 'select-best loser',
+      },
+      {
+        name: 'score edit after completed comparison survives clear',
+        originalPass: false,
+        initial: [comparison('max-score', false)],
+        editedScore: 0.4,
+        later: [],
+        expectedPass: false,
+        expectedScore: 0.4,
+        expectedReason: 'Custom outcome',
+      },
+      {
+        name: 'later winner does not undo score edit after completed comparison',
+        originalPass: false,
+        initial: [comparison('max-score', false)],
+        editedScore: 0.4,
+        later: [comparison('max-score', true)],
+        expectedPass: false,
+        expectedScore: 0.4,
+        expectedReason: 'Custom outcome',
+      },
+      {
+        name: 'old private state retains snapshot semantics without guessing a boundary',
+        oldState: true,
+        later: [comparison('max-score', false)],
+        expectedPass: true,
+        expectedScore: 0.25,
+        expectedReason: 'Custom outcome',
+      },
+      {
+        name: 'active private state restores after human component was removed',
+        removeHuman: true,
+        later: [comparison('max-score', false)],
+        expectedPass: false,
+        expectedScore: 0,
+        expectedReason: 'max-score loser',
+      },
+    ];
+
+    it.each(lateComparisonCases)('clears a rating with $name', async (scenario) => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const [result] = await eval_.getResults();
+      invariant(result instanceof EvalResult, 'Result is required');
+      const originalPass = scenario.originalPass ?? true;
+      result.success = originalPass;
+      result.score = 0.25;
+      result.failureReason = outcomeCategory(originalPass, scenario.originalError);
+      result.gradingResult =
+        scenario.originalGrade === false
+          ? null
+          : {
+              pass: originalPass,
+              score: 0.25,
+              reason: 'Custom outcome',
+              componentResults: [
+                { pass: true, score: 1, reason: 'Ordinary assertion passed' },
+                ...(scenario.initial ?? []),
+              ],
+            };
+      await result.save();
+      const endpoint = `/api/eval/${eval_.id}/results/${result.id}/rating`;
+      if (scenario.editedScore !== undefined) {
+        const edited = await api.post(endpoint).send({
+          pass: originalPass,
+          score: scenario.editedScore,
+          ratingAction: 'update',
+          ratingUpdate: 'score',
+        });
+        expect(edited.status).toBe(200);
+      }
+      const rated = await api
+        .post(endpoint)
+        .send({ pass: true, score: 1, ratingAction: 'rate', comment: 'Retain reviewer note' });
+      expect(rated.status).toBe(200);
+      if (scenario.oldState) {
+        const db = await getDb();
+        await db
+          .update(evalResultsTable)
+          .set({
+            manualRatingState: sql`json_remove(${evalResultsTable.manualRatingState}, '$.original.comparisonCount')`,
+          })
+          .where(eq(evalResultsTable.id, result.id));
+      }
+      // Comparison finalization reloads the persisted row and appends its verdicts.
+      const compared = await EvalResult.findById(result.id);
+      invariant(compared?.gradingResult, 'Rated result is required');
+      compared.gradingResult.componentResults = [
+        ...(compared.gradingResult.componentResults ?? []).filter(
+          (component) => !scenario.removeHuman || component.assertion?.type !== 'human',
+        ),
+        ...scenario.later,
+      ];
+      const lastFailure = [...scenario.later].reverse().find((component) => !component.pass);
+      if (lastFailure) {
+        compared.success = compared.gradingResult.pass = false;
+        compared.score = compared.gradingResult.score = lastFailure.score;
+        compared.gradingResult.reason = lastFailure.reason;
+        compared.failureReason = ResultFailureReason.ASSERT;
+      }
+      await compared.save();
+
+      const cleared = await api
+        .post(endpoint)
+        .send({ pass: true, score: 1, ratingAction: 'clear' });
+      expect(cleared.status).toBe(200);
+      const expected = {
+        success: scenario.expectedPass,
+        score: scenario.expectedScore,
+        failureReason: outcomeCategory(scenario.expectedPass, scenario.originalError),
+        gradingResult: {
+          pass: scenario.expectedPass,
+          score: scenario.expectedScore,
+          reason: scenario.expectedReason,
+          comment: 'Retain reviewer note',
+        },
+      };
+      expect(cleared.body).toMatchObject(expected);
+      const persisted = await EvalResult.findById(result.id);
+      expect(persisted).toMatchObject(expected);
+      expect(persisted?.gradingResult?.componentResults).not.toContainEqual(
+        expect.objectContaining({ assertion: { type: 'human' } }),
+      );
+      for (const component of [...(scenario.initial ?? []), ...scenario.later]) {
+        expect(persisted?.gradingResult?.componentResults).toContainEqual(component);
+      }
+      const repeated = await api
+        .post(endpoint)
+        .send({ pass: true, score: 1, ratingAction: 'clear' });
+      expect(repeated.body).toEqual(cleared.body);
+    });
+
+    it.each([true, false])(
+      'clears the manual override reason on imported legacy grades (pass: %s)',
+      async (pass) => {
+        const eval_ = await EvalFactory.create();
+        testEvalIds.add(eval_.id);
+        const [result] = await eval_.getResults();
+        invariant(result instanceof EvalResult, 'Result is required');
+        result.success = true;
+        result.score = 1;
+        result.gradingResult = {
+          pass: true,
+          score: 1,
+          reason: 'Manual result (overrides all other grading results)',
+          componentResults: [
+            { pass, score: pass ? 1 : 0, reason: 'Original assertion result' },
+            { pass: true, score: 1, reason: 'Manual rating', assertion: { type: 'human' } },
+          ],
+        };
+        await result.save();
+        const cleared = await api
+          .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+          .send({ pass: true, score: 1, reason: 'Caller reason', ratingAction: 'clear' });
+        expect(cleared.status).toBe(200);
+        expect(cleared.body).toMatchObject({
+          success: pass,
+          score: pass ? 1 : 0,
+          gradingResult: { reason: 'Manual rating cleared' },
+        });
+        expect((await EvalResult.findById(result.id))?.gradingResult?.reason).toBe(
+          'Manual rating cleared',
+        );
+      },
+    );
+
     it('rejects result ratings when the URL eval does not own the result', async () => {
       const evalA = await EvalFactory.create();
       const evalB = await EvalFactory.create();
@@ -1828,7 +2096,7 @@ describe('eval routes', () => {
       }
     });
 
-    it('restores a durable custom-scoring baseline after the function is stripped', async () => {
+    it('captures the custom-scored outcome at the first rating after the function is stripped', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
       const [result] = await eval_.getResults();
@@ -1865,15 +2133,9 @@ describe('eval routes', () => {
         .from(evalResultsTable)
         .where(eq(evalResultsTable.id, result.id))
         .get();
-      expect(persistedBaseline?.manualRatingState).toMatchObject({
-        status: 'baseline',
-        original: { success: false, score: 0.25, failureReason: ResultFailureReason.ASSERT },
-      });
+      expect(persistedBaseline?.manualRatingState).toBeNull();
       const reloadedBaseline = await EvalResult.findById(result.id);
       invariant(reloadedBaseline, 'Reloaded custom baseline is required');
-      expect(reloadedBaseline.gradingResult?.metadata ?? {}).not.toHaveProperty(
-        '__promptfooNonstandardScoringBaseline',
-      );
 
       const rateResponse = await api
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)

@@ -2661,123 +2661,56 @@ describe('ResultsTable fetchEvalData pagination filters', () => {
     vi.clearAllMocks();
   });
 
-  it('should call fetchEvalData with only applied filters when pagination changes', () => {
-    const mockUseTableStore = vi.mocked(useTableStore);
+  it('should call fetchEvalData with only applied filters when pagination changes', async () => {
+    const user = userEvent.setup();
     const mockFetchEvalData = vi.fn();
-    mockUseTableStore.mockImplementation(() => ({
+    const appliedFilter = {
+      id: 'filter1',
+      type: 'metric',
+      operator: 'equals',
+      field: 'quality',
+      value: '0.5',
+      logicOperator: 'or',
+      sortIndex: 0,
+    };
+    vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
       evalId: '123',
       setTable: vi.fn(),
       table: {
-        head: { prompts: [], vars: [] },
-        body: [],
+        head: { prompts: [], vars: ['case'] },
+        body: Array.from({ length: 50 }, (_, testIdx) => ({
+          outputs: [],
+          test: {},
+          testIdx,
+          vars: [`case ${testIdx}`],
+        })),
       },
       version: 4,
       fetchEvalData: mockFetchEvalData,
       isFetching: false,
-      filteredResultsCount: 1,
-      totalResultsCount: 1,
+      filteredResultsCount: 80,
+      totalResultsCount: 80,
       filters: {
         values: {
-          filter1: {
-            id: 'filter1',
-            type: 'metric',
-            operator: 'equals',
-            value: 'metric1',
-            logicOperator: 'or',
-          },
-          filter2: {
-            id: 'filter2',
-            type: 'metric',
-            operator: 'equals',
-            value: '',
-            logicOperator: 'or',
-          },
+          filter1: appliedFilter,
+          filter2: { ...appliedFilter, id: 'filter2', value: '', sortIndex: 1 },
         },
         appliedCount: 1,
-        options: {
-          metric: [],
-        },
+        options: { metric: [] },
       },
     }));
 
     renderWithProviders(<ResultsTable {...defaultProps} />);
-
-    const newPageIndex = 1;
-
     mockFetchEvalData.mockClear();
+    await user.click(screen.getByRole('button', { name: 'Next page' }));
 
-    mockUseTableStore.mockImplementationOnce(() => ({
-      config: {},
-      evalId: '123',
-      setTable: vi.fn(),
-      table: {
-        head: { prompts: [], vars: [] },
-        body: [],
-      },
-      version: 4,
-      fetchEvalData: mockFetchEvalData,
-      isFetching: false,
-      filteredResultsCount: 1,
-      totalResultsCount: 1,
-      filters: {
-        values: {
-          filter1: {
-            id: 'filter1',
-            type: 'metric',
-            operator: 'equals',
-            value: 'metric1',
-            logicOperator: 'or',
-          },
-          filter2: {
-            id: 'filter2',
-            type: 'metric',
-            operator: 'equals',
-            value: '',
-            logicOperator: 'or',
-          },
-        },
-        appliedCount: 1,
-        options: {
-          metric: [],
-        },
-      },
-    }));
-
-    act(() => {
-      mockFetchEvalData('123', {
-        pageIndex: newPageIndex,
-        pageSize: 50,
-        filterMode: 'all',
-        searchText: '',
-        filters: [
-          {
-            id: 'filter1',
-            type: 'metric',
-            operator: 'equals',
-            value: 'metric1',
-            logicOperator: 'or',
-          },
-        ],
-        skipSettingEvalId: true,
-      });
-    });
-
-    expect(mockFetchEvalData).toHaveBeenCalledTimes(1);
-    expect(mockFetchEvalData).toHaveBeenCalledWith('123', {
-      pageIndex: newPageIndex,
+    expect(mockFetchEvalData).toHaveBeenCalledExactlyOnceWith('123', {
+      pageIndex: 1,
       pageSize: 50,
       filterMode: 'all',
-      searchText: '',
-      filters: [
-        {
-          id: 'filter1',
-          type: 'metric',
-          operator: 'equals',
-          value: 'metric1',
-          logicOperator: 'or',
-        },
-      ],
+      searchText: undefined,
+      filters: [appliedFilter],
       skipSettingEvalId: true,
     });
   });
@@ -4431,6 +4364,23 @@ describe('ResultsTable Header Column Updates on Eval Switch', () => {
 describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => {
   let mockSetTable: ReturnType<typeof vi.fn>;
   let mockCallApi: any;
+  const pendingSettlements: Array<() => void> = [];
+
+  function defer<T>(fallback: T) {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((settle) => {
+      resolve = settle;
+    });
+    pendingSettlements.push(() => resolve(fallback));
+    return { promise, resolve };
+  }
+
+  afterEach(async () => {
+    // Drain this test's accepted writes before the next test resets its mocks.
+    await act(async () => {
+      pendingSettlements.splice(0).forEach((settle) => settle());
+    });
+  });
 
   const createMockTableWithHumanAssertion = () => ({
     body: [
@@ -4505,6 +4455,11 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    vi.mocked(useTableStore).mockReset();
+    vi.mocked(useResultsViewSettingsStore).mockReset().mockReturnValue({
+      inComparisonMode: false,
+      renderMarkdown: true,
+    });
     mockSetTable = vi.fn((table) => {
       // Mirror Zustand's synchronous writes; response ownership reads getState before rerender.
       vi.mocked(useTableStore).mockReturnValue({ ...useTableStore.getState(), table });
@@ -4512,7 +4467,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     const apiModule = await import('@app/utils/api');
     vi.mocked(apiModule.getApiBaseUrl).mockReset().mockReturnValue('');
     mockCallApi = vi.mocked(apiModule.callApi);
-    mockCallApi.mockResolvedValue({ ok: true });
+    mockCallApi.mockReset().mockResolvedValue({ ok: true });
   });
 
   it('should remove human assertion and recalculate pass/score when isPass is null', () => {
@@ -4709,13 +4664,11 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     secondRow.testIdx = 1;
     mockTable.body.push(secondRow);
 
-    let resolveFirst!: (response: any) => void;
-    let resolveSecond!: (response: any) => void;
-    const firstResponse = new Promise<any>((resolve) => {
-      resolveFirst = resolve;
+    const { promise: firstResponse, resolve: resolveFirst } = defer<Partial<Response>>({
+      ok: true,
     });
-    const secondResponse = new Promise<any>((resolve) => {
-      resolveSecond = resolve;
+    const { promise: secondResponse, resolve: resolveSecond } = defer<Partial<Response>>({
+      ok: true,
     });
     mockCallApi.mockImplementation((url: string) =>
       url.includes('test-output-1') ? firstResponse : secondResponse,
@@ -4778,17 +4731,14 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
   it('serializes three repeated ratings for the same result', async () => {
     const user = userEvent.setup();
     const mockTable = createMockTableWithHumanAssertion();
-    let resolveFirst!: (response: any) => void;
-    let resolveSecond!: (response: any) => void;
-    let resolveThird!: (response: any) => void;
-    const firstResponse = new Promise<any>((resolve) => {
-      resolveFirst = resolve;
+    const { promise: firstResponse, resolve: resolveFirst } = defer<Partial<Response>>({
+      ok: true,
     });
-    const secondResponse = new Promise<any>((resolve) => {
-      resolveSecond = resolve;
+    const { promise: secondResponse, resolve: resolveSecond } = defer<Partial<Response>>({
+      ok: true,
     });
-    const thirdResponse = new Promise<any>((resolve) => {
-      resolveThird = resolve;
+    const { promise: thirdResponse, resolve: resolveThird } = defer<Partial<Response>>({
+      ok: true,
     });
     mockCallApi
       .mockReturnValueOnce(firstResponse)
@@ -4846,13 +4796,11 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     const mockFetchEvalData = vi.fn().mockResolvedValue({
       table: { head: mockTable.head, body: [] },
     });
-    let resolveFirst!: (response: any) => void;
-    let resolveSecond!: (response: any) => void;
-    const firstResponse = new Promise<any>((resolve) => {
-      resolveFirst = resolve;
+    const { promise: firstResponse, resolve: resolveFirst } = defer<Partial<Response>>({
+      ok: true,
     });
-    const secondResponse = new Promise<any>((resolve) => {
-      resolveSecond = resolve;
+    const { promise: secondResponse, resolve: resolveSecond } = defer<Partial<Response>>({
+      ok: true,
     });
     mockCallApi.mockReturnValueOnce(firstResponse).mockReturnValueOnce(secondResponse);
 
@@ -4903,10 +4851,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
   it('persists a rating queued while a filtered refresh removes the result', async () => {
     const user = userEvent.setup();
     const mockTable = createMockTableWithHumanAssertion();
-    let resolveRefresh!: (value: { table: typeof mockTable }) => void;
-    const refreshResponse = new Promise<{ table: typeof mockTable }>((resolve) => {
-      resolveRefresh = resolve;
-    });
+    const { promise: refreshResponse, resolve: resolveRefresh } = defer({ table: mockTable });
     const mockFetchEvalData = vi.fn().mockReturnValue(refreshResponse);
     mockCallApi.mockResolvedValue({
       ok: true,
@@ -4950,9 +4895,8 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     getApiBaseUrl.mockReturnValue('https://first.example.test');
     let currentTable = createMockTableWithHumanAssertion();
     const mockFetchEvalData = vi.fn();
-    let resolveFirst!: (response: any) => void;
-    const firstResponse = new Promise<any>((resolve) => {
-      resolveFirst = resolve;
+    const { promise: firstResponse, resolve: resolveFirst } = defer<Partial<Response>>({
+      ok: true,
     });
     mockCallApi.mockReturnValueOnce(firstResponse).mockResolvedValue({ ok: true });
     vi.mocked(useTableStore).mockImplementation(() => ({
@@ -5000,9 +4944,8 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     const user = userEvent.setup();
     let currentTable = createMockTableWithHumanAssertion();
     const mockFetchEvalData = vi.fn().mockResolvedValue(null);
-    let resolveFirst!: (response: any) => void;
-    const firstResponse = new Promise<any>((resolve) => {
-      resolveFirst = resolve;
+    const { promise: firstResponse, resolve: resolveFirst } = defer<Partial<Response>>({
+      ok: true,
     });
     mockCallApi.mockReturnValueOnce(firstResponse).mockResolvedValue({
       ok: true,
@@ -5067,10 +5010,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
   it('does not reconcile a rating through an unmounted component', async () => {
     const user = userEvent.setup();
     const mockTable = createMockTableWithHumanAssertion();
-    let resolveResponse!: (response: any) => void;
-    const response = new Promise<any>((resolve) => {
-      resolveResponse = resolve;
-    });
+    const { promise: response, resolve: resolveResponse } = defer<Partial<Response>>({ ok: true });
     mockCallApi.mockReturnValueOnce(response);
 
     vi.mocked(useTableStore).mockImplementation(() => ({
@@ -5112,12 +5052,8 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
   it.each([3, 4])('persists all accepted edits after unmounting (v%s)', async (version) => {
     const user = userEvent.setup();
     const table = createMockTableWithHumanAssertion();
-    let resolveFirst!: (response: any) => void;
-    mockCallApi.mockReturnValueOnce(
-      new Promise((resolve) => {
-        resolveFirst = resolve;
-      }),
-    );
+    const { promise, resolve: resolveFirst } = defer<Partial<Response>>({ ok: true });
+    mockCallApi.mockReturnValueOnce(promise);
     mockCallApi.mockResolvedValue({ ok: true });
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
@@ -5163,12 +5099,8 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     async (version) => {
       const user = userEvent.setup();
       const table = createMockTableWithHumanAssertion();
-      let resolveFirst!: (response: any) => void;
-      mockCallApi.mockReturnValueOnce(
-        new Promise((resolve) => {
-          resolveFirst = resolve;
-        }),
-      );
+      const { promise, resolve: resolveFirst } = defer<Partial<Response>>({ ok: true });
+      mockCallApi.mockReturnValueOnce(promise);
       mockCallApi.mockResolvedValue({ ok: true });
       vi.mocked(useTableStore).mockImplementation(() => ({
         config: {},
@@ -5218,12 +5150,8 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
       const user = userEvent.setup();
       const table = createMockTableWithHumanAssertion();
       const mockFetchEvalData = vi.fn().mockResolvedValue(null);
-      let resolveRating!: (response: any) => void;
-      mockCallApi.mockReturnValueOnce(
-        new Promise((resolve) => {
-          resolveRating = resolve;
-        }),
-      );
+      const { promise, resolve: resolveRating } = defer<Partial<Response>>({ ok: true });
+      mockCallApi.mockReturnValueOnce(promise);
       vi.mocked(useTableStore).mockImplementation(() => ({
         config: {},
         evalId: '123',
@@ -5272,13 +5200,11 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     secondRow.outputs[0].id = 'test-output-2';
     secondRow.testIdx = 1;
     mockTable.body.push(secondRow);
-    let resolveFirst!: (response: any) => void;
-    let resolveSecond!: (response: any) => void;
-    const firstResponse = new Promise<any>((resolve) => {
-      resolveFirst = resolve;
+    const { promise: firstResponse, resolve: resolveFirst } = defer<Partial<Response>>({
+      ok: true,
     });
-    const secondResponse = new Promise<any>((resolve) => {
-      resolveSecond = resolve;
+    const { promise: secondResponse, resolve: resolveSecond } = defer<Partial<Response>>({
+      ok: true,
     });
     mockCallApi.mockReturnValueOnce(firstResponse).mockReturnValueOnce(secondResponse);
 
@@ -5381,10 +5307,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     const user = userEvent.setup();
     const mockTable = createMockTableWithHumanAssertion();
     const mockFetchEvalData = vi.fn().mockResolvedValue(null);
-    let resolveResponse!: (response: any) => void;
-    const response = new Promise<any>((resolve) => {
-      resolveResponse = resolve;
-    });
+    const { promise: response, resolve: resolveResponse } = defer<Partial<Response>>({ ok: true });
     mockCallApi.mockReturnValueOnce(response);
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
@@ -5459,10 +5382,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     const user = userEvent.setup();
     let currentTable = createMockTableWithHumanAssertion();
     const mockFetchEvalData = vi.fn().mockResolvedValue(null);
-    let resolveResponse!: (response: any) => void;
-    const response = new Promise<any>((resolve) => {
-      resolveResponse = resolve;
-    });
+    const { promise: response, resolve: resolveResponse } = defer<Partial<Response>>({ ok: true });
     mockCallApi.mockReturnValueOnce(response);
 
     vi.mocked(useTableStore).mockImplementation(() => ({
@@ -5522,10 +5442,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     const user = userEvent.setup();
     let currentTable = createMockTableWithHumanAssertion();
     const mockFetchEvalData = vi.fn().mockResolvedValue(null);
-    let resolveResponse!: (response: any) => void;
-    const response = new Promise<any>((resolve) => {
-      resolveResponse = resolve;
-    });
+    const { promise: response, resolve: resolveResponse } = defer<Partial<Response>>({ ok: true });
     mockCallApi.mockReturnValueOnce(response);
 
     vi.mocked(useTableStore).mockImplementation(() => ({
