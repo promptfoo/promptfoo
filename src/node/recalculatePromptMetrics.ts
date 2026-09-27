@@ -80,6 +80,7 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
             metricName: key,
             metricValue: value,
             gradingResult: result.gradingResult,
+            metadata: result.metadata,
           });
           for (const bucket of Object.keys(contribution) as (keyof NamedMetricAccumulator)[]) {
             const delta = contribution[bucket];

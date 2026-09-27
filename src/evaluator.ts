@@ -3465,6 +3465,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         metricName: key,
         metricValue: value,
         gradingResult: row.gradingResult,
+        metadata: row.metadata,
       });
     }
 
@@ -3618,6 +3619,22 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         }
       }
 
+      const ungradedNamedMetrics =
+        row.gradingResult == null && Object.keys(row.namedScores).length > 0;
+      const internalMetadata = row.metadata?.__promptfoo;
+      if (ungradedNamedMetrics || internalMetadata?.ungradedNamedMetrics !== undefined) {
+        row.metadata = {
+          ...row.metadata,
+          __promptfoo: {
+            ...(internalMetadata &&
+            typeof internalMetadata === 'object' &&
+            !Array.isArray(internalMetadata)
+              ? internalMetadata
+              : {}),
+            ungradedNamedMetrics: ungradedNamedMetrics || undefined,
+          },
+        };
+      }
       await this.persistEvalRow(row);
 
       const metrics = context.prompts[row.promptIdx].metrics;

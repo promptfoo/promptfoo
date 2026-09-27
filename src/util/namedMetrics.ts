@@ -8,6 +8,13 @@ export interface NamedMetricAccumulator {
 
 type NamedMetricContribution = Record<keyof NamedMetricAccumulator, number | undefined>;
 
+interface NamedMetricInput {
+  metricName: string;
+  metricValue: number;
+  gradingResult: GradingResult | null | undefined;
+  metadata?: Record<string, unknown> | null;
+}
+
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
@@ -48,17 +55,19 @@ function getContributingAssertionCount(
 }
 
 export function getNamedMetricContribution(
-  {
-    metricName,
-    metricValue,
-    gradingResult,
-  }: {
-    metricName: string;
-    metricValue: number;
-    gradingResult: GradingResult | null | undefined;
-  },
+  { metricName, metricValue, gradingResult, metadata }: NamedMetricInput,
   fallbackAssertionCount?: number,
 ): NamedMetricContribution {
+  const internal = metadata?.__promptfoo;
+  if (
+    internal &&
+    typeof internal === 'object' &&
+    'ungradedNamedMetrics' in internal &&
+    internal.ungradedNamedMetrics === true
+  ) {
+    // Later comparisons or ratings do not change the original hook contribution.
+    return { namedScores: metricValue, namedScoresCount: 1, namedScoreWeights: 1 };
+  }
   const assertionCount =
     getContributingAssertionCount(gradingResult, metricName) ?? fallbackAssertionCount;
   const namedScoreWeights = gradingResult?.namedScoreWeights;
@@ -84,50 +93,24 @@ export function getNamedMetricContribution(
 
 export function accumulateNamedMetric(
   accumulator: NamedMetricAccumulator,
-  {
-    metricName,
-    metricValue,
-    gradingResult,
-  }: {
-    metricName: string;
-    metricValue: number;
-    gradingResult: GradingResult | null | undefined;
-  },
+  input: NamedMetricInput,
 ): void {
-  const contribution = getNamedMetricContribution(
-    {
-      metricName,
-      metricValue,
-      gradingResult,
-    },
-    1,
-  );
+  const contribution = getNamedMetricContribution(input, 1);
   for (const bucket of Object.keys(contribution) as (keyof NamedMetricAccumulator)[]) {
     accumulator[bucket] ||= {};
-    accumulator[bucket][metricName] =
-      (accumulator[bucket][metricName] ?? 0) + contribution[bucket]!;
+    accumulator[bucket][input.metricName] =
+      (accumulator[bucket][input.metricName] ?? 0) + contribution[bucket]!;
   }
 }
 
 /** Remove a row contribution while preserving absent legacy count and weight maps. */
 export function subtractNamedMetric(
   accumulator: NamedMetricAccumulator,
-  {
-    metricName,
-    metricValue,
-    gradingResult,
-  }: {
-    metricName: string;
-    metricValue: number;
-    gradingResult: GradingResult | null | undefined;
-  },
+  input: NamedMetricInput,
 ): void {
   accumulator.namedScores ||= {};
-  const contribution = getNamedMetricContribution({
-    metricName,
-    metricValue,
-    gradingResult,
-  });
+  const { metricName } = input;
+  const contribution = getNamedMetricContribution(input);
 
   for (const bucket of Object.keys(contribution) as (keyof NamedMetricAccumulator)[]) {
     const delta = contribution[bucket];

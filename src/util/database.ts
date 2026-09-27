@@ -633,6 +633,7 @@ async function updatePromptMetricsForDeletedResult(
       metricName,
       metricValue,
       gradingResult: result.gradingResult,
+      metadata: result.metadata,
     });
     const unknownBuckets = new Set(
       (Object.keys(contribution) as (keyof NamedMetricAccumulator)[]).filter(
@@ -669,6 +670,11 @@ async function updatePromptMetricsForDeletedResult(
         id: evalResultsTable.id,
         gradingResult: evalResultsTable.gradingResult,
         namedScores: namedMetricsToRecompute.size ? evalResultsTable.namedScores : sql<null>`NULL`,
+        metadata: namedMetricsToRecompute.size
+          ? sql`json_type(${evalResultsTable.metadata}, '$.__promptfoo.ungradedNamedMetrics') = 'true'`.mapWith(
+              (value) => ({ __promptfoo: { ungradedNamedMetrics: value === 1 } }),
+            )
+          : sql<null>`NULL`,
         response: survivingAssertionTokenUsage
           ? sql<
               UsageResult['response']
@@ -710,6 +716,7 @@ async function updatePromptMetricsForDeletedResult(
           metricName,
           metricValue,
           gradingResult: row.gradingResult,
+          metadata: row.metadata,
         });
         for (const bucket of buckets) {
           const value = contribution[bucket];

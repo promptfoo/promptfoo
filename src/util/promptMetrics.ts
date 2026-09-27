@@ -137,6 +137,7 @@ export function subtractResultFromPromptMetrics(
         metricName,
         metricValue,
         gradingResult: result.gradingResult,
+        metadata: result.metadata,
       });
     }
   }

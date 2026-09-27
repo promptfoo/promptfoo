@@ -13,9 +13,10 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { recalculatePromptMetrics } from '../../src/node/recalculatePromptMetrics';
+import { retryCommand } from '../../src/node/retry';
 import { deleteEval, deleteEvalResult } from '../../src/util/database';
 import { streamEvalCsv } from '../../src/util/eval/evalTableUtils';
-import { createDeferred } from '../util/utils';
+import { createDeferred, mockProcessEnv } from '../util/utils';
 
 import type { ApiProvider, Assertion, TestSuite } from '../../src/types/index';
 
@@ -24,6 +25,8 @@ describe('deleting evaluated results preserves surviving token usage', () => {
   let fixtureDir: string;
   let comparisonProvider: string;
   let nestedMetricAssertion: string;
+  let hookMetricExtension: string;
+  let errorProvider: string;
 
   beforeAll(async () => {
     await runDbMigrations();
@@ -56,6 +59,24 @@ describe('deleting evaluated results preserves surviving token usage', () => {
     ]});`,
     );
     nestedMetricAssertion = `file://${assertionPath}`;
+    const hookPath = path.join(fixtureDir, 'hook-metric.cjs');
+    await writeFile(
+      hookPath,
+      `module.exports=(name,context)=>{
+      if(name==='afterEach') context.result.namedScores={...context.result.namedScores,attempts:1};
+      return context;
+    };`,
+    );
+    hookMetricExtension = `file://${hookPath}`;
+    const errorPath = path.join(fixtureDir, 'error-target.cjs');
+    await writeFile(
+      errorPath,
+      `module.exports=class {
+      id(){return 'hook-error-target'}
+      async callApi(){return {error:'Retryable error'}}
+    };`,
+    );
+    errorProvider = `file://${errorPath}`;
   });
 
   afterAll(async () => {
@@ -67,6 +88,108 @@ describe('deleting evaluated results preserves surviving token usage', () => {
       await deleteEval(evalId);
     }
     vi.restoreAllMocks();
+  });
+
+  it.each(['delete', 'retry', 'human-grade', 'legacy-target'] as const)(
+    'reverses fresh ungraded hook metrics during %s',
+    async (operation) => {
+      const tests = Array.from({ length: operation === 'retry' ? 1 : 2 }, () => ({}));
+      const suite: TestSuite = {
+        providers: [
+          { id: () => 'hook-error-target', callApi: async () => ({ error: 'Retryable error' }) },
+        ],
+        prompts: [{ raw: 'error', label: 'error' }],
+        tests,
+        extensions: [hookMetricExtension],
+      };
+      const config = {
+        prompts: ['error'],
+        providers: [errorProvider],
+        tests,
+        extensions: [hookMetricExtension],
+      };
+      const evaluation = await Eval.create(config, suite.prompts, { id: randomUUID() });
+      evalIds.push(evaluation.id);
+      await evaluate(suite, evaluation, { maxConcurrency: 1 });
+      const rows = await EvalResult.findManyByEvalId(evaluation.id);
+      expect(rows.every((row) => row.gradingResult == null)).toBe(true);
+      const target = rows[0];
+      if (operation === 'retry') {
+        await retryCommand(evaluation.id, { maxConcurrency: 1 });
+      } else {
+        if (operation === 'human-grade') {
+          target.gradingResult = {
+            pass: true,
+            score: 1,
+            reason: 'Human override',
+            assertion: { type: 'human' },
+            namedScoreWeights: { attempts: 7 },
+          };
+          await target.save();
+        } else if (operation === 'legacy-target') {
+          target.metadata = {};
+          await target.save();
+        }
+        await deleteEvalResult(evaluation.id, target.id);
+      }
+      const reloaded = (await Eval.findById(evaluation.id))!;
+      expect(await EvalResult.findManyByEvalId(evaluation.id)).toHaveLength(1);
+      expect(reloaded.prompts[0].metrics).toMatchObject({
+        namedScores: { attempts: 1 },
+        namedScoresCount: { attempts: 1 },
+        namedScoreWeights: { attempts: 1 },
+      });
+    },
+  );
+
+  it('does not treat stripped graded rows or supplied markers as ungraded contributions', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_GRADING_RESULT: 'true' });
+    try {
+      const suite: TestSuite = {
+        providers: [
+          {
+            id: () => 'graded-target',
+            callApi: async () => ({
+              output: 'pass',
+              metadata: { __promptfoo: { ungradedNamedMetrics: true, retained: 'control' } },
+            }),
+          },
+        ],
+        prompts: [{ raw: 'pass', label: 'pass' }],
+        tests: Array.from({ length: 2 }, () => ({
+          assert: Array.from({ length: 2 }, () => ({
+            type: 'contains' as const,
+            value: 'pass',
+            metric: 'attempts',
+          })),
+        })),
+        extensions: [hookMetricExtension],
+      };
+      const evaluation = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      evalIds.push(evaluation.id);
+      await evaluate(suite, evaluation, {});
+      const rows = await EvalResult.findManyByEvalId(evaluation.id);
+      const exported = rows.map((row) => row.toEvaluateResult());
+      expect(exported.every((row) => row.gradingResult == null)).toBe(true);
+      expect(rows[0].metadata?.__promptfoo).toEqual({ retained: 'control' });
+      const before = structuredClone(evaluation.prompts[0].metrics);
+      const imported = await Eval.create({}, evaluation.prompts, {
+        id: randomUUID(),
+        completedPrompts: evaluation.prompts,
+      });
+      evalIds.push(imported.id);
+      for (const row of exported) {
+        await imported.addResult(row);
+      }
+      const [target] = await EvalResult.findManyByEvalId(imported.id);
+      await deleteEvalResult(imported.id, target.id);
+      const metrics = (await Eval.findById(imported.id))!.prompts[0].metrics!;
+      expect(metrics.namedScores).toEqual(before!.namedScores);
+      expect(metrics.namedScoresCount).toEqual({ attempts: 4 });
+      expect(metrics.namedScoreWeights).toEqual({ attempts: 4 });
+    } finally {
+      restoreEnv();
+    }
   });
 
   it.each(['delete', 'recalculate'])(
