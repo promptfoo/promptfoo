@@ -13,7 +13,9 @@ import type { MockInstance } from 'vitest';
 
 const { execFileAsync, shells, signals } = vi.hoisted(() => ({
   execFileAsync: vi.fn(),
-  shells: [] as Array<EventEmitter & { options: Options; send(command: string): void }>,
+  shells: [] as Array<
+    EventEmitter & { options: Options; send(command: string): void; kill(signal: string): void }
+  >,
   signals: { autoReady: true },
 }));
 
@@ -26,6 +28,7 @@ vi.mock('python-shell', async () => {
   const { EventEmitter } = await import('node:events');
   return {
     PythonShell: class extends EventEmitter {
+      childProcess = this;
       stderr = new EventEmitter();
       constructor(
         _script: string,
@@ -40,7 +43,9 @@ vi.mock('python-shell', async () => {
       send() {
         queueMicrotask(() => this.emit('close'));
       }
-      kill() {}
+      kill() {
+        queueMicrotask(() => this.emit('close'));
+      }
     },
   };
 });
@@ -204,6 +209,60 @@ describe('Python pool executable validation', () => {
       expect(shells).toHaveLength(2);
     },
   );
+
+  it('waits for a timed-out startup process to close before permitting retry', async () => {
+    vi.useFakeTimers();
+    signals.autoReady = false;
+    const worker = new PythonWorker('fixture.py', 'call_api', 'fixture-python');
+    let settled = false;
+    const initialized = worker.initialize('fixture-python').catch((error) => {
+      settled = true;
+      return error;
+    });
+    const process = shells[0];
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => {});
+    try {
+      await vi.advanceTimersByTimeAsync(30000);
+      expect(settled).toBe(false);
+      expect(kill).toHaveBeenCalledWith('SIGKILL');
+      process.emit('message', 'READY');
+      expect(worker.isReady()).toBe(false);
+      process.emit('close');
+      expect(await initialized).toEqual(new Error('Worker failed to become ready within timeout'));
+      expect(vi.getTimerCount()).toBe(0);
+      signals.autoReady = true;
+      await worker.initialize('fixture-python');
+      expect(worker.isReady()).toBe(true);
+      expect(shells).toHaveLength(2);
+    } finally {
+      process.emit('close');
+      await initialized;
+      await worker.shutdown();
+    }
+  });
+
+  it('waits for forced shutdown to actually close the child', async () => {
+    const worker = new PythonWorker('fixture.py', 'call_api', 'fixture-python');
+    await worker.initialize('fixture-python');
+    vi.useFakeTimers();
+    const process = shells[0];
+    vi.spyOn(process, 'send').mockImplementation(() => {});
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => {});
+    let settled = false;
+    const shutdown = worker.shutdown().then(() => {
+      settled = true;
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(kill).toHaveBeenCalledWith('SIGKILL');
+      expect(settled).toBe(false);
+    } finally {
+      process.emit('close');
+      await shutdown;
+    }
+    expect(vi.getTimerCount()).toBe(0);
+    expect(worker.isReady()).toBe(false);
+  });
 
   it('drains queued calls after a successful restart', async () => {
     const pool = new PythonWorkerPool('fixture.py', 'call_api', 1, 'fixture-python');

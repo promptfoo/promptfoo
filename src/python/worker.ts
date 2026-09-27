@@ -73,18 +73,19 @@ export class PythonWorker {
     // Listen for READY signal
     return new Promise((resolve, reject) => {
       let becameReady = false;
+      let startupError: Error | undefined;
       const readyTimeout = setTimeout(() => {
-        // This startup failed; its close event must not start another worker.
-        if (this.process === workerProcess) {
-          this.process = null;
-        }
-        workerProcess.kill('SIGTERM');
-        reject(new Error('Worker failed to become ready within timeout'));
+        startupError = new Error('Worker failed to become ready within timeout');
+        // Retain ownership until close, including children that ignore SIGTERM.
+        workerProcess.kill('SIGKILL');
       }, 30000);
 
       workerProcess.on('message', (message: string) => {
         if (message.trim() === 'READY') {
           clearTimeout(readyTimeout);
+          if (startupError) {
+            return;
+          }
           if (this.shuttingDown || this.process !== workerProcess) {
             reject(new Error('Worker shutting down'));
             return;
@@ -105,14 +106,16 @@ export class PythonWorker {
         reject(err);
       });
 
-      workerProcess.on('close', () => {
+      workerProcess.childProcess.once('close', () => {
         clearTimeout(readyTimeout);
         this.flushStderr();
         if (this.process !== workerProcess) {
           return;
         }
         this.process = null;
-        if (this.shuttingDown) {
+        if (startupError) {
+          reject(startupError);
+        } else if (this.shuttingDown) {
           reject(new Error('Worker shutting down'));
         } else if (becameReady) {
           this.handleCrash();
@@ -335,31 +338,27 @@ export class PythonWorker {
       return;
     }
 
+    const workerProcess = this.process;
+    const closed = new Promise<void>((resolve) =>
+      workerProcess.childProcess.once('close', resolve),
+    );
+    const killTimeout = setTimeout(() => workerProcess.kill('SIGKILL'), 5000).unref();
     try {
-      // Reject any in-flight request promptly
       if (this.pendingRequest) {
         this.pendingRequest.reject(new Error('Worker shutting down'));
         this.pendingRequest = null;
       }
-
-      // Note: PythonShell.send() adds newline automatically in 'text' mode
-      this.process.send('SHUTDOWN');
-
-      // Wait for exit (5s timeout)
-      await Promise.race([
-        new Promise<void>((resolve) => {
-          this.process!.on('close', () => resolve());
-        }),
-        new Promise<void>((resolve) => setTimeout(resolve, 5000).unref()),
-      ]);
+      workerProcess.send('SHUTDOWN');
+      await closed;
     } catch (error) {
       logger.error(`Error during worker shutdown: ${error}`);
+      workerProcess.kill('SIGKILL');
+      await closed;
     } finally {
-      if (this.process) {
-        this.process.kill('SIGTERM');
+      clearTimeout(killTimeout);
+      if (this.process === workerProcess) {
         this.process = null;
       }
-      this.ready = false;
       this.busy = false;
     }
   }
