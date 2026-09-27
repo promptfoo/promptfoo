@@ -690,7 +690,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   }
 
   private async createResponseWithRetries(
-    client: FoundryOpenAIClient,
+    getClient: () => FoundryOpenAIClient,
     body: Record<string, any>,
     options: FoundryResponseCreateOptions,
     maxRetries: number,
@@ -700,6 +700,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     const retrySignal = signal ?? new AbortController().signal;
     for (let attempt = 0; ; attempt += 1) {
       throwIfAborted(signal);
+      const client = getClient();
       const controller = new AbortController();
       const attemptSignal = signal
         ? AbortSignal.any([signal, controller.signal])
@@ -707,8 +708,8 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       let receivedError: { status: number; headers: Headers } | undefined;
       const fetchWithTimeout = client.fetchWithTimeout;
       // The SDK reads error bodies before exposing the Response or APIError.
-      // Observe its public transport method on this invocation-local client so
-      // deadlines retain headers without replacing Azure's request/tracing wrappers.
+      // getOpenAIClient returns a fresh SDK client for each attempt, so this
+      // wrapper cannot leak across concurrent invocations.
       client.fetchWithTimeout = async (...args) => {
         const response = await fetchWithTimeout.apply(client, args);
         if (!response.ok && !attemptSignal.aborted) {
@@ -1163,7 +1164,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         accumulateTokenUsage(tokenUsage, { numRequests: 1 });
         try {
           const response = await this.createResponseWithRetries(
-            openAIClient,
+            () => client.getOpenAIClient(),
             requestBody,
             responseOptions,
             effectiveConfig.retryOptions?.maxRetries ?? openAIClient.maxRetries ?? 2,

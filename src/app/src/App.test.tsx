@@ -1,15 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
-import {
-  createMemoryRouter,
-  createRoutesFromElements,
-  Navigate,
-  Outlet,
-  Route,
-} from 'react-router';
-import { RouterProvider } from 'react-router/dom';
+import { Outlet } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
-import PageShell from './components/PageShell';
-import { ToastProvider } from './contexts/ToastContext';
+import App, { router } from './App';
 
 // Mock all page components
 vi.mock('./pages/model-audit-latest/page', () => ({
@@ -55,112 +47,52 @@ vi.mock('./pages/prompts/page', () => ({ default: () => <div>PromptsPage</div> }
 vi.mock('./pages/redteam/report/page', () => ({ default: () => <div>ReportPage</div> }));
 vi.mock('./pages/redteam/setup/page', () => ({ default: () => <div>RedteamSetupPage</div> }));
 
-// Helper function to create a test router with the same structure as App
-const createTestRouter = (initialEntries: string[]) => {
-  return createMemoryRouter(
-    createRoutesFromElements(
-      <Route path="/" element={<PageShell />}>
-        <Route index element={<Navigate to="/evals" replace />} />
-        <Route
-          path="/model-audit"
-          element={<div data-testid="model-audit-latest-page">ModelAuditLatestPage</div>}
-        />
-        <Route
-          path="/model-audit/setup"
-          element={<div data-testid="model-audit-setup-page">ModelAuditSetupPage</div>}
-        />
-        <Route
-          path="/model-audit/history"
-          element={<div data-testid="model-audit-history-page">ModelAuditHistoryPage</div>}
-        />
-        <Route
-          path="/model-audit/history/:id"
-          element={<div data-testid="model-audit-result-page">ModelAuditResultPage</div>}
-        />
-        <Route
-          path="/model-audit/:id"
-          element={<div data-testid="model-audit-result-page">ModelAuditResultPage</div>}
-        />
-        <Route
-          path="/model-audit-legacy"
-          element={<div data-testid="model-audit-legacy-page">ModelAuditLegacyPage</div>}
-        />
-      </Route>,
-    ),
-    { initialEntries },
-  );
+// Render the production route configuration at a specific location.
+const renderAtRoute = async (initialEntries: string[]) => {
+  await router.navigate(initialEntries[0] ?? '/');
+  return render(<App />);
 };
 
 describe('App Routing', () => {
   it('renders ModelAuditLatestPage for /model-audit', async () => {
-    const router = createTestRouter(['/model-audit']);
-    render(
-      <ToastProvider>
-        <RouterProvider router={router} />
-      </ToastProvider>,
-    );
+    await renderAtRoute(['/model-audit']);
     await waitFor(() => {
       expect(screen.getByTestId('model-audit-latest-page')).toBeInTheDocument();
     });
   });
 
   it('renders ModelAuditSetupPage for /model-audit/setup', async () => {
-    const router = createTestRouter(['/model-audit/setup']);
-    render(
-      <ToastProvider>
-        <RouterProvider router={router} />
-      </ToastProvider>,
-    );
+    await renderAtRoute(['/model-audit/setup']);
     await waitFor(() => {
       expect(screen.getByTestId('model-audit-setup-page')).toBeInTheDocument();
     });
   });
 
   it('renders ModelAuditHistoryPage for /model-audit/history', async () => {
-    const router = createTestRouter(['/model-audit/history']);
-    render(
-      <ToastProvider>
-        <RouterProvider router={router} />
-      </ToastProvider>,
-    );
+    await renderAtRoute(['/model-audit/history']);
     await waitFor(() => {
       expect(screen.getByTestId('model-audit-history-page')).toBeInTheDocument();
     });
   });
 
-  it('renders ModelAuditResultPage for /model-audit/history/:id', async () => {
-    const router = createTestRouter(['/model-audit/history/123']);
-    render(
-      <ToastProvider>
-        <RouterProvider router={router} />
-      </ToastProvider>,
-    );
+  it('renders ModelAuditHistoryPage for /model-audits', async () => {
+    await renderAtRoute(['/model-audits']);
     await waitFor(() => {
-      expect(screen.getByTestId('model-audit-result-page')).toBeInTheDocument();
+      expect(screen.getByTestId('model-audit-history-page')).toBeInTheDocument();
     });
   });
 
   it('renders ModelAuditResultPage for /model-audit/:id', async () => {
-    const router = createTestRouter(['/model-audit/456']);
-    render(
-      <ToastProvider>
-        <RouterProvider router={router} />
-      </ToastProvider>,
-    );
+    await renderAtRoute(['/model-audit/456']);
     await waitFor(() => {
       expect(screen.getByTestId('model-audit-result-page')).toBeInTheDocument();
     });
   });
 
-  it('renders ModelAuditLegacyPage for /model-audit-legacy', async () => {
-    const router = createTestRouter(['/model-audit-legacy']);
-    render(
-      <ToastProvider>
-        <RouterProvider router={router} />
-      </ToastProvider>,
-    );
+  it('renders the not-found page for the removed model-audit legacy route', async () => {
+    await renderAtRoute(['/model-audit-legacy']);
     await waitFor(() => {
-      expect(screen.getByTestId('model-audit-legacy-page')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Page Not Found' })).toBeInTheDocument();
     });
   });
 });

@@ -46,7 +46,7 @@ function TelemetryTracker() {
   return <Outlet />;
 }
 
-const router = createBrowserRouter(
+export const router = createBrowserRouter(
   createRoutesFromElements(
     <>
       {import.meta.env.VITE_PROMPTFOO_LAUNCHER && (
