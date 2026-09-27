@@ -275,6 +275,46 @@ describe('MCP evaluation execution contract', () => {
     }
   });
 
+  it.each([{}, { testCaseIndices: 0 }])(
+    'keeps provider URL credentials out of failure summaries with filters %j',
+    async (filters) => {
+      const log = vi.spyOn(logger, 'debug');
+      const requests: string[] = [];
+      server = createServer((request, response) => {
+        requests.push(request.url!);
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ output: 'actual output' }));
+      });
+      await new Promise<void>((resolve) => server!.listen(0, '127.0.0.1', resolve));
+      const address = server.address();
+      expect(address && typeof address !== 'string').toBe(true);
+      const secret = 'fixture-failed-assertion-query-secret';
+      const providerId = `http://127.0.0.1:${(address as { port: number }).port}/eval?api_key=${secret}`;
+      await writeFile(
+        configPath,
+        JSON.stringify({
+          providers: [
+            {
+              id: providerId,
+              config: { body: { prompt: '{{prompt}}' }, responseParser: 'json.output' },
+            },
+          ],
+          prompts: ['Hello'],
+          tests: [{ assert: [{ type: 'equals', value: 'expected output' }] }],
+        }),
+      );
+
+      const response = await run({ ...filters, write: false });
+      expect(response.success, response.error).toBe(true);
+      expect(response.data.results.stats).toMatchObject({ successes: 0, failures: 1, errors: 0 });
+      expect(requests).toEqual([`/eval?api_key=${secret}`]);
+      // String messages bypass logger context sanitization.
+      for (const [message] of log.mock.calls) {
+        expect(message).not.toContain(secret);
+      }
+    },
+  );
+
   it.each([
     { command: { generateSuggestions: true }, options: {} },
     { command: {}, options: { generateSuggestions: true } },

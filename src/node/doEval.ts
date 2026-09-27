@@ -1118,12 +1118,6 @@ async function doEvalWithEnv(
         const rowsLeft = table.body.length - 25;
         logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
       }
-    } else if (failures !== 0) {
-      logger.debug(
-        `At least one evaluation failure occurred. This might be caused by the underlying call to the provider, or a test failure. Context: \n${JSON.stringify(
-          evalRecord.prompts,
-        )}`,
-      );
     }
 
     if (totalTests >= 500) {
