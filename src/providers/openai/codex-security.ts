@@ -318,6 +318,11 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
     return false;
   }
 
+  shouldSkipRateLimit(context?: CallApiContextParams): boolean {
+    // Even malformed import configuration fails locally without using the live service.
+    return this.operationContext(context).importingReport;
+  }
+
   toString(): string {
     return '[OpenAI Codex Security Provider]';
   }

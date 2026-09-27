@@ -1154,7 +1154,11 @@ async function callActiveProvider({
   };
   try {
     const response = rateLimitRegistry
-      ? await rateLimitRegistry.execute(activeProvider, callApi, createProviderRateLimitOptions())
+      ? await rateLimitRegistry.execute(
+          activeProvider,
+          callApi,
+          createProviderRateLimitOptions(activeProvider, callApiContext),
+        )
       : await callApi();
 
     logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
@@ -1254,6 +1258,9 @@ function getConversationLastInput(renderedJson: unknown) {
 }
 
 async function applyProviderDelayIfNeeded(provider: ApiProvider, response: ProviderResponse) {
+  if (response.metadata?.providerSetup?.workloadStarted === false) {
+    return;
+  }
   if (!response.cached && !provider.handlesOwnDelay && provider.delay && provider.delay > 0) {
     logger.debug(`Sleeping for ${provider.delay}ms`);
     await sleep(provider.delay);

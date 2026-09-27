@@ -621,6 +621,33 @@ describe('OpenAICodexSecurityProvider', () => {
   });
 
   describe('saved report files', () => {
+    it.each(['{{report}}', '', null, 42])(
+      'classifies merged report_file %j as local before validation or rendering',
+      (report_file) => {
+        const provider = new OpenAICodexSecurityProvider({ config: { repository: '/native' } });
+        expect(provider.shouldSkipRateLimit()).toBe(false);
+        expect(
+          provider.shouldSkipRateLimit({
+            vars: {},
+            prompt: { raw: '', label: '', config: { report_file } },
+          }),
+        ).toBe(true);
+        expect(importModule).not.toHaveBeenCalled();
+        expect(mockRun).not.toHaveBeenCalled();
+      },
+    );
+
+    it('classifies base imports but resumes native scheduling for an explicit undefined row override', () => {
+      const provider = new OpenAICodexSecurityProvider({ config: { report_file: '{{report}}' } });
+      expect(provider.shouldSkipRateLimit()).toBe(true);
+      expect(
+        provider.shouldSkipRateLimit({
+          vars: {},
+          prompt: { raw: '', label: '', config: { report_file: undefined } },
+        }),
+      ).toBe(false);
+      expect(importModule).not.toHaveBeenCalled();
+    });
     let reportDirectory: string;
 
     beforeEach(async () => {
@@ -816,10 +843,7 @@ describe('OpenAICodexSecurityProvider', () => {
           expect(imported.tokenUsage).toEqual({ incurredTokenUsage: { numRequests: 0 } });
           expect(call).toHaveBeenCalledOnce();
           expect(importModule).not.toHaveBeenCalled();
-          expect(Object.values(registry.getMetrics())[0]).toMatchObject({
-            retriedRequests: 0,
-            rateLimitHits: 0,
-          });
+          expect(registry.getMetrics()).toEqual({});
         } finally {
           registry.dispose();
           restoreEnv();

@@ -140,6 +140,8 @@ export interface ApiProvider extends MinimalApiProvider {
   checkSetupOnEval?: boolean;
   /** Emits bounded operational updates through callApi's onProgress observer. */
   supportsProgress?: boolean;
+  /** Pure per-call classification for local operations that must not queue or update shared rate limits. */
+  shouldSkipRateLimit?: (context?: CallApiContextParams) => boolean;
   callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
   callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
   config?: any;

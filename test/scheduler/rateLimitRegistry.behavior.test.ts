@@ -164,6 +164,86 @@ describe('RateLimitRegistry integration - provider maxRetries', () => {
     },
   );
 
+  it.each(['success', 'failure'] as const)(
+    'runs exempt local %s calls without waiting on or updating a live cooldown',
+    async (outcome) => {
+      vi.useFakeTimers();
+      vi.stubEnv('PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER', 'false');
+      const registry = new RateLimitRegistry({ maxConcurrency: 8, queueTimeoutMs: 100 });
+      const provider = {
+        ...createProvider(0),
+        shouldSkipRateLimit: (context?: { vars: Record<string, unknown> }) =>
+          context?.vars.local === true,
+      };
+      try {
+        await registry.execute<ProviderResponse>(
+          provider,
+          async () => ({ error: 'HTTP 429', metadata: { headers: { 'retry-after': '60' } } }),
+          createProviderRateLimitOptions(),
+        );
+        const before = registry.getMetrics();
+        const response: ProviderResponse = {
+          ...(outcome === 'success' ? { output: 'Recorded result' } : { error: 'Recorded 429' }),
+          retryable: false,
+          incurredCost: 0,
+        };
+        const call = vi.fn(async () => {
+          expect(getFetchRetryContextMaxRetries()).toBe(0);
+          return response;
+        });
+        const settled = vi.fn();
+        const pending = registry
+          .execute(
+            provider,
+            call,
+            createProviderRateLimitOptions(provider, {
+              vars: { local: true },
+              prompt: { raw: 'Read', label: 'Read' },
+            }),
+          )
+          .then(settled, settled);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(settled).toHaveBeenCalledWith(response);
+        await pending;
+        expect(call).toHaveBeenCalledOnce();
+        expect(registry.getMetrics()).toEqual(before);
+
+        const live = vi.fn(async () => ({ output: 'Fresh result' }));
+        const queued = registry.execute<ProviderResponse>(
+          provider,
+          live,
+          createProviderRateLimitOptions(provider, {
+            vars: { local: false },
+            prompt: { raw: 'Read', label: 'Read' },
+          }),
+        );
+        const rejected = expect(queued).rejects.toThrow('timed out after 100ms in queue');
+        await vi.advanceTimersByTimeAsync(100);
+        await rejected;
+        expect(live).not.toHaveBeenCalled();
+      } finally {
+        registry.dispose();
+      }
+    },
+  );
+
+  it.each([false, true])(
+    'keeps exempt calls out of scheduler state (disabled: %s)',
+    async (disabled) => {
+      vi.stubEnv('PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER', String(disabled));
+      const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+      const provider = { ...createProvider(0), shouldSkipRateLimit: () => true };
+      const call = vi.fn(async () => getFetchRetryContextMaxRetries());
+      try {
+        expect(await registry.execute(provider, call, { skipRateLimit: true })).toBe(0);
+        expect(call).toHaveBeenCalledOnce();
+        expect(registry.getMetrics()).toEqual({});
+      } finally {
+        registry.dispose();
+      }
+    },
+  );
+
   it('still retries a live rate-limit response with ordinary retry detection', async () => {
     vi.useFakeTimers();
     vi.stubEnv('PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER', 'false');

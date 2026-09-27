@@ -43,8 +43,12 @@ export function isRateLimitWrapped(provider: ApiProvider): boolean {
  * Create rate limit detection options for ProviderResponse.
  * Shared between providerWrapper and evaluator for consistency.
  */
-export function createProviderRateLimitOptions(): RateLimitExecuteOptions<ProviderResponse> {
+export function createProviderRateLimitOptions(
+  provider?: ApiProvider,
+  context?: CallApiContextParams,
+): RateLimitExecuteOptions<ProviderResponse> {
   return {
+    skipRateLimit: provider?.shouldSkipRateLimit?.(context) ?? false,
     // Provider errors are values carrying output, usage and HTTP metadata.
     // Keep that evidence when the scheduler has no retries left.
     onRateLimitExhausted: (result, error) =>
@@ -123,6 +127,10 @@ export function wrapProviderWithRateLimiting(
     ...provider,
     // Explicitly delegate id() since prototype methods aren't copied by spread
     id: () => provider.id(),
+    ...(provider.checkSetup ? { checkSetup: provider.checkSetup.bind(provider) } : {}),
+    ...(provider.shouldSkipRateLimit
+      ? { shouldSkipRateLimit: provider.shouldSkipRateLimit.bind(provider) }
+      : {}),
     callApi: async (
       prompt: string,
       context?: CallApiContextParams,
@@ -131,7 +139,7 @@ export function wrapProviderWithRateLimiting(
       return registry.execute(
         provider,
         () => originalCallApi(prompt, context, options),
-        createProviderRateLimitOptions(),
+        createProviderRateLimitOptions(provider, context),
       );
     },
   };

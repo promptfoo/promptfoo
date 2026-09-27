@@ -11,6 +11,7 @@ import {
 import { checkProviderSetup } from '../../src/evaluator/providerSetup';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
+import { sleep } from '../../src/util/time';
 import { createDeferred, mockProcessEnv } from '../util/utils';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
@@ -37,6 +38,77 @@ const inMemoryRuntime = {
 };
 
 describeEvaluator('provider batch preflight', () => {
+  it('preserves a setup failure without spending the row deadline on provider delay', async () => {
+    vi.useFakeTimers();
+    const sleepMock = vi.mocked(sleep);
+    sleepMock.mockImplementation((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+    const provider: ApiProvider = {
+      id: () => 'local-scanner',
+      delay: 500,
+      checkSetupOnEval: true,
+      checkSetup: vi.fn(async () => ({
+        success: false,
+        message: 'Actionable setup failure',
+        response: { error: 'Actionable setup failure', metadata: { diagnostic: 'setup' } },
+      })),
+      callApi: vi.fn<ApiProvider['callApi']>(),
+    };
+    const record = createInMemoryRecord();
+    const pending = evaluate(
+      { providers: [provider], prompts: [toPrompt('Review')], tests: [{}] },
+      record,
+      { silent: true, timeoutMs: 100 },
+      inMemoryRuntime,
+    );
+    try {
+      await vi.advanceTimersByTimeAsync(100);
+      await pending;
+      expect(record.results).toHaveLength(1);
+      expect(record.results[0]).toMatchObject({
+        error: 'Actionable setup failure',
+        response: {
+          error: 'Actionable setup failure',
+          incurredCost: 0,
+          tokenUsage: { numRequests: 0 },
+          metadata: { diagnostic: 'setup', providerSetup: { workloadStarted: false } },
+        },
+      });
+      expect(record.results[0].response?.cached).not.toBe(true);
+      expect(provider.callApi).not.toHaveBeenCalled();
+      expect(sleepMock).not.toHaveBeenCalled();
+    } finally {
+      await vi.advanceTimersByTimeAsync(500);
+      await pending;
+      sleepMock.mockReset();
+    }
+  });
+
+  it('classifies scheduling using each merged prompt and test configuration', async () => {
+    const classify = vi.fn(
+      (context?: CallApiContextParams) => context?.prompt?.config?.report_file !== undefined,
+    );
+    const provider: ApiProvider = {
+      id: () => 'local-scanner',
+      shouldSkipRateLimit: classify,
+      callApi: vi.fn(async () => ({ output: 'Local result' })),
+    };
+    await evaluate(
+      {
+        providers: [provider],
+        prompts: [{ ...toPrompt('Review'), config: { report_file: 'prompt.json' } }],
+        tests: [{}, { options: { report_file: '{{report}}' }, vars: { report: 'test.json' } }],
+      },
+      createInMemoryRecord(),
+      { silent: true, maxConcurrency: 1 },
+      inMemoryRuntime,
+    );
+    expect(classify).toHaveBeenCalledTimes(2);
+    expect(classify.mock.calls.map(([context]) => context?.prompt?.config?.report_file)).toEqual([
+      'prompt.json',
+      '{{report}}',
+    ]);
+    expect(classify.mock.calls[1][0]?.vars.report).toBe('test.json');
+  });
   it('rechecks an eager failure after an earlier serial workload prepares the file without extensions', async () => {
     let fileReady = false;
     const events: string[] = [];
