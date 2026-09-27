@@ -1425,6 +1425,7 @@ async function applyRunEvalResponseOutcome({
   evalId,
   isRedteam,
   latencyMs,
+  onGradingStarted,
   prompt,
   promptIdx,
   provider,
@@ -1444,6 +1445,7 @@ async function applyRunEvalResponseOutcome({
   evalId?: string;
   isRedteam: boolean;
   latencyMs: number;
+  onGradingStarted?: (row: EvaluateResult) => void;
   prompt: Prompt;
   promptIdx: number;
   provider: ApiProvider;
@@ -1475,6 +1477,7 @@ async function applyRunEvalResponseOutcome({
     deferGrading,
     evalId,
     latencyMs,
+    onGradingStarted,
     prompt,
     promptIdx,
     provider,
@@ -1506,6 +1509,7 @@ async function gradeRunEvalResponse({
   deferGrading,
   evalId,
   latencyMs,
+  onGradingStarted,
   prompt,
   promptIdx,
   provider,
@@ -1524,6 +1528,7 @@ async function gradeRunEvalResponse({
   deferGrading?: boolean;
   evalId?: string;
   latencyMs: number;
+  onGradingStarted?: (row: EvaluateResult) => void;
   prompt: Prompt;
   promptIdx: number;
   provider: ApiProvider;
@@ -1567,33 +1572,22 @@ async function gradeRunEvalResponse({
 
   if (deferGrading) {
     invariant(providerCallQueue, 'providerCallQueue is required when deferGrading is enabled');
-    ret.response = processedResponse;
-    const gradingPromise = withProviderCallExecutionContext(
-      { ...getProviderCallExecutionContext(), abortSignal, providerCallQueue, rateLimitRegistry },
-      () =>
-        runAssertions({
-          prompt: renderedPrompt,
-          provider,
-          providerResponse: assertionProviderResponse,
-          test,
-          vars,
-          latencyMs: response.latencyMs ?? latencyMs,
-          assertScoringFunction: test.assertScoringFunction as ScoringFunction,
-          traceId,
-        }).then((checkResult) => applyGradingResult(ret, checkResult)),
-    ).catch((error) => {
-      applyDeferredGradingError(ret, error, abortSignal);
-      if (abortSignal?.aborted && isAbortError(error)) {
-        ret.response = { ...processedResponse, providerTransformedOutput };
-        ret.testCase = { ...test, vars: { ...vars } };
-      }
-    });
-    deferredGradingPromises.set(ret, gradingPromise);
-    return;
   }
-
-  const checkResult = await withProviderCallExecutionContext(
-    { ...getProviderCallExecutionContext(), abortSignal, rateLimitRegistry },
+  ret.response = processedResponse;
+  onGradingStarted?.({
+    ...ret,
+    response: {
+      ...processedResponse,
+      metadata: { ...processedResponse.metadata },
+      providerTransformedOutput,
+    },
+    testCase: { ...test, vars: { ...vars } },
+    tokenUsage: structuredClone(ret.tokenUsage),
+    namedScores: { ...ret.namedScores },
+    metadata: { ...ret.metadata },
+  });
+  const gradingPromise = withProviderCallExecutionContext(
+    { ...getProviderCallExecutionContext(), abortSignal, providerCallQueue, rateLimitRegistry },
     () =>
       runAssertions({
         prompt: renderedPrompt,
@@ -1604,10 +1598,28 @@ async function gradeRunEvalResponse({
         latencyMs: response.latencyMs ?? latencyMs,
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,
         traceId,
+      }).then((checkResult) => {
+        if (abortSignal?.aborted) {
+          throw new DOMException('Provider call cancelled', 'AbortError');
+        }
+        applyGradingResult(ret, checkResult);
       }),
-  );
-  applyGradingResult(ret, checkResult);
-  ret.response = processedResponse;
+  ).catch((error) => {
+    const interrupted = abortSignal?.aborted && isAbortError(error);
+    if (!deferGrading && !interrupted) {
+      throw error;
+    }
+    applyDeferredGradingError(ret, error, abortSignal);
+    if (interrupted) {
+      ret.response = { ...processedResponse, providerTransformedOutput };
+      ret.testCase = { ...test, vars: { ...vars } };
+    }
+  });
+  if (deferGrading) {
+    deferredGradingPromises.set(ret, gradingPromise);
+  } else {
+    await gradingPromise;
+  }
 }
 
 async function transformRunEvalResponse({
@@ -1730,7 +1742,10 @@ export async function runEval(options: RunEvalOptions): Promise<EvaluateResult[]
   );
 }
 
-function runEvalInternal(options: InternalRunEvalOptions): Promise<EvaluateResult[]> {
+function runEvalInternal(
+  options: InternalRunEvalOptions,
+  onGradingStarted?: (row: EvaluateResult) => void,
+): Promise<EvaluateResult[]> {
   const delay = resolveInvocationDelay(
     options.provider,
     options.delayOmitted ? undefined : options.delay,
@@ -1741,7 +1756,7 @@ function runEvalInternal(options: InternalRunEvalOptions): Promise<EvaluateResul
       ...getProviderCallExecutionContext(),
       providerDelay: { provider: options.provider, delay, state: { handled: false } },
     },
-    () => runEvalInContext({ ...options, delay: delay ?? 0 }),
+    () => runEvalInContext({ ...options, delay: delay ?? 0 }, onGradingStarted),
   );
 }
 
@@ -1762,27 +1777,30 @@ function resolveInvocationDelay(
   return effectiveDelay;
 }
 
-async function runEvalInContext({
-  provider,
-  prompt, // raw prompt
-  test,
-  testSuite,
-  delay,
-  nunjucksFilters: filters,
-  evaluateOptions,
-  // TODO(ian): Rename these public `Idx` fields to `Index` with compatibility handling.
-  testIdx: testIndex,
-  promptIdx: promptIndex,
-  repeatIndex,
-  conversations,
-  registers,
-  isRedteam,
-  abortSignal,
-  deferGrading,
-  evalId,
-  providerCallQueue,
-  rateLimitRegistry,
-}: RunEvalOptions): Promise<EvaluateResult[]> {
+async function runEvalInContext(
+  {
+    provider,
+    prompt, // raw prompt
+    test,
+    testSuite,
+    delay,
+    nunjucksFilters: filters,
+    evaluateOptions,
+    // TODO(ian): Rename these public `Idx` fields to `Index` with compatibility handling.
+    testIdx: testIndex,
+    promptIdx: promptIndex,
+    repeatIndex,
+    conversations,
+    registers,
+    isRedteam,
+    abortSignal,
+    deferGrading,
+    evalId,
+    providerCallQueue,
+    rateLimitRegistry,
+  }: RunEvalOptions,
+  onGradingStarted?: (row: EvaluateResult) => void,
+): Promise<EvaluateResult[]> {
   const effectiveDelay = delay ?? 0;
   const state = createRunEvalState({ provider, prompt, promptIndex, test });
   attachConversationVar({
@@ -1901,7 +1919,13 @@ async function runEvalInContext({
           invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
 
           trackProviderUsage(provider, response);
+          // Retain completed target usage even if grading is interrupted.
+          if (response.tokenUsage) {
+            accumulateResponseTokenUsage(ret.tokenUsage, response);
+          }
+
           await applyRunEvalResponseOutcome({
+            onGradingStarted,
             abortSignal,
             deferGrading,
             evalId,
@@ -1921,11 +1945,6 @@ async function runEvalInContext({
             traceContext: executionTraceContext,
             vars: persistedVars,
           });
-
-          // Update token usage stats
-          if (response.tokenUsage) {
-            accumulateResponseTokenUsage(ret.tokenUsage, response);
-          }
 
           if (test.options?.storeOutputAs && ret.response?.output && registers) {
             // Save the output in a register for later use
@@ -3177,6 +3196,7 @@ function adjustConcurrencyForSerialFeatures({
 
 interface ProcessEvalStepOptions {
   deferGrading?: boolean;
+  onGradingStarted?: (row: EvaluateResult) => void;
   onRowsReady?: () => void;
   precomputedRows?: EvaluateResult[];
   providerCallQueue?: ProviderCallQueue;
@@ -3834,6 +3854,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     {
       deferGrading = false,
       onRowsReady,
+      onGradingStarted,
       precomputedRows,
       providerCallQueue,
       shouldSkipStaleRows,
@@ -3848,6 +3869,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           (await this.runEvalStepAfterBeforeEach(evalStep, {
             deferGrading,
             onRowsReady,
+            onGradingStarted,
             providerCallQueue,
             testSuite: context.testSuite,
           }));
@@ -3870,11 +3892,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     {
       deferGrading,
       onRowsReady,
+      onGradingStarted,
       providerCallQueue,
       testSuite,
     }: {
       deferGrading: boolean;
       onRowsReady?: () => void;
+      onGradingStarted?: (row: EvaluateResult) => void;
       providerCallQueue?: ProviderCallQueue;
       testSuite: TestSuite;
     },
@@ -3884,11 +3908,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
     evalStep.test = beforeEachOut.test;
 
-    const rows = await runEvalInternal({
-      ...evalStep,
-      deferGrading,
-      providerCallQueue: deferGrading ? providerCallQueue : undefined,
-    });
+    const rows = await runEvalInternal(
+      {
+        ...evalStep,
+        deferGrading,
+        providerCallQueue: deferGrading ? providerCallQueue : undefined,
+      },
+      onGradingStarted,
+    );
     onRowsReady?.();
     return rows;
   }
@@ -4006,6 +4033,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     let timeoutId: NodeJS.Timeout | undefined;
     let didTimeout = false;
+    let gradingRow: EvaluateResult | undefined;
     const clearEvalStepTimeout = () => {
       if (timeoutId) {
         clearTimeout(timeoutId);
@@ -4021,6 +4049,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           {
             deferGrading,
             onRowsReady: clearEvalStepTimeout,
+            onGradingStarted: (row) => {
+              gradingRow = row;
+            },
             providerCallQueue,
             shouldSkipStaleRows: () => didTimeout,
           },
@@ -4038,7 +4069,17 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       if (!didTimeout) {
         throw error;
       }
-      await this.addEvalStepTimeoutResult(evalStep, index, timeoutMs, error, context);
+      if (gradingRow) {
+        applyDeferredGradingError(
+          gradingRow,
+          new DOMException('Provider call cancelled', 'AbortError'),
+          abortController.signal,
+          timeoutMs,
+        );
+        await this.processEvalRows(evalStep, index, [gradingRow], undefined, context);
+      } else {
+        await this.addEvalStepTimeoutResult(evalStep, index, timeoutMs, error, context);
+      }
     } finally {
       clearEvalStepTimeout();
     }
