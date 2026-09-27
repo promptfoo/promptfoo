@@ -42,7 +42,7 @@ const ScanReportSchema = z.object({
 
 const ValidationReportSchema = z.object({
   disposition: z.enum(['reportable', 'suppressed', 'not_applicable', 'deferred']),
-  report: z.string(),
+  report: z.string().refine((value) => value.trim().length > 0),
 });
 
 const MAX_REPORT_BYTES = 64 * 1024 * 1024;

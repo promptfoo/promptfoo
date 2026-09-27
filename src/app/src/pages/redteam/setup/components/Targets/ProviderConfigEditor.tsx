@@ -373,34 +373,6 @@ function ProviderConfigEditor({
       ) {
         errors.push('Codex Security provider ID must start with openai:codex-security');
       }
-      if (
-        structuredProvider.config.operation !== undefined &&
-        !CODEX_SECURITY_OPERATION_OPTIONS.some(
-          (option) => option.value === structuredProvider.config.operation,
-        )
-      ) {
-        errors.push('Unsupported Codex Security operation');
-      }
-      if (
-        structuredProvider.config.auth !== undefined &&
-        !CODEX_SECURITY_AUTH_OPTIONS.some(
-          (option) => option.value === structuredProvider.config.auth,
-        )
-      ) {
-        errors.push('Unsupported Codex Security authentication method');
-      }
-      if (
-        [
-          structuredProvider.config.model_reasoning_effort,
-          structuredProvider.config.reasoning_effort,
-        ].some(
-          (effort) =>
-            effort !== undefined &&
-            !CODEX_SECURITY_REASONING_OPTIONS.some((option) => option === effort),
-        )
-      ) {
-        errors.push('Unsupported Codex Security reasoning effort');
-      }
       const isSavedReport = Object.prototype.hasOwnProperty.call(
         structuredProvider.config,
         'report_file',
@@ -413,6 +385,34 @@ function ProviderConfigEditor({
           errors.push('Report file path is required');
         }
       } else {
+        if (
+          structuredProvider.config.operation !== undefined &&
+          !CODEX_SECURITY_OPERATION_OPTIONS.some(
+            (option) => option.value === structuredProvider.config.operation,
+          )
+        ) {
+          errors.push('Unsupported Codex Security operation');
+        }
+        if (
+          structuredProvider.config.auth !== undefined &&
+          !CODEX_SECURITY_AUTH_OPTIONS.some(
+            (option) => option.value === structuredProvider.config.auth,
+          )
+        ) {
+          errors.push('Unsupported Codex Security authentication method');
+        }
+        if (
+          [
+            structuredProvider.config.model_reasoning_effort,
+            structuredProvider.config.reasoning_effort,
+          ].some(
+            (effort) =>
+              effort !== undefined &&
+              !CODEX_SECURITY_REASONING_OPTIONS.some((option) => option === effort),
+          )
+        ) {
+          errors.push('Unsupported Codex Security reasoning effort');
+        }
         const repository =
           structuredProvider.config.repository ?? structuredProvider.config.working_dir;
         if (typeof repository !== 'string' || !repository.trim()) {
@@ -451,13 +451,13 @@ function ProviderConfigEditor({
         ) {
           errors.push('Reasoning effort settings must match');
         }
-      }
-      const budget = structuredProvider.config.max_cost_usd;
-      if (
-        budget !== undefined &&
-        (typeof budget !== 'number' || !Number.isFinite(budget) || budget <= 0)
-      ) {
-        errors.push('Estimated scan budget must be a finite number greater than 0');
+        const budget = structuredProvider.config.max_cost_usd;
+        if (
+          budget !== undefined &&
+          (typeof budget !== 'number' || !Number.isFinite(budget) || budget <= 0)
+        ) {
+          errors.push('Estimated scan budget must be a finite number greater than 0');
+        }
       }
     } else if (
       [

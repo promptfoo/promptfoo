@@ -359,6 +359,73 @@ describe('Codex Security replay evidence validation', () => {
     ).rejects.toThrow('must record a failed outcome');
   });
 
+  it.each(['raw validation', 'replay envelope'] as const)(
+    'rejects blank report text in a %s',
+    async (format) => {
+      for (const report of ['', ' \t\r\n ']) {
+        const payload = { disposition: 'reportable', report };
+        const result = normalizeCodexSecurityResult(payload, {
+          source: { kind: 'sdk' },
+          operation: 'validation',
+          status: 'completed',
+        });
+        const input =
+          format === 'raw validation'
+            ? payload
+            : { ...createCodexSecurityReplayHeader(payload, result), payload };
+
+        await expect(load(input)).rejects.toThrow('validation result with disposition and report');
+      }
+    },
+  );
+
+  it.each(['raw validation', 'replay envelope'] as const)(
+    'preserves nonblank report text exactly in a %s',
+    async (format) => {
+      const payload = { disposition: 'deferred', report: ' \nRecorded validation decision.\t ' };
+      const result = normalizeCodexSecurityResult(payload, {
+        source: { kind: 'sdk' },
+        operation: 'validation',
+        status: 'completed',
+      });
+      const input =
+        format === 'raw validation'
+          ? payload
+          : { ...createCodexSecurityReplayHeader(payload, result), payload };
+
+      const imported = await load(input);
+
+      expect(imported.raw).toEqual(payload);
+      expect(imported.summary).toMatchObject({
+        status: 'completed',
+        operation: 'validation',
+        validation: { disposition: 'deferred' },
+      });
+    },
+  );
+
+  it('preserves a failed validation replay without a report payload', async () => {
+    const result = normalizeCodexSecurityResult(undefined, {
+      source: { kind: 'sdk' },
+      operation: 'validation',
+      status: 'failed',
+      error: 'Finding validation returned an invalid result.',
+    });
+
+    const imported = await load({
+      ...createCodexSecurityReplayHeader(null, result),
+      payload: null,
+    });
+
+    expect(imported.raw).toBeNull();
+    expect(imported.summary).toMatchObject({
+      operation: 'validation',
+      status: 'failed',
+      validation: null,
+      error: result.error,
+    });
+  });
+
   it('preserves validation disposition and runtime warnings through replay', async () => {
     const payload = { disposition: 'deferred', report: 'Recorded validation decision' };
     const result = normalizeCodexSecurityResult(payload, {

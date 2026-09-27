@@ -124,6 +124,33 @@ describe('AddProviderDialog provider validation', () => {
     });
   });
 
+  it('saves a report provider while preserving dormant invalid native settings', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    const config = {
+      report_file: '/reports/scan.json',
+      operation: '{{operation}}',
+      auth: '{{auth}}',
+      model_reasoning_effort: '{{effort}}',
+      max_cost_usd: -1,
+    };
+    render(
+      <TooltipProvider>
+        <AddProviderDialog
+          open
+          onClose={vi.fn()}
+          onSave={onSave}
+          initialProvider={{ id: 'openai:codex-security', config }}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Save Changes' })).toBeEnabled();
+    expect(screen.queryByLabelText('Estimated scan budget (USD)')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ config }));
+  });
+
   it('rejects an imported string budget until it is replaced with a number', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();

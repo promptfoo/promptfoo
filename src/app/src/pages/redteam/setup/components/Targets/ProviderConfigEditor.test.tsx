@@ -830,6 +830,41 @@ describe('ProviderConfigEditor', () => {
     expect(screen.queryByText(/credentials, account access/)).not.toBeInTheDocument();
   });
 
+  it.each([
+    { operation: '{{operation}}' },
+    { auth: '{{auth}}' },
+    { model_reasoning_effort: '{{effort}}' },
+    { reasoning_effort: 'unsupported' },
+    { max_cost_usd: -1 },
+  ])('validates retained native settings only after switching to SDK mode: %j', async (dormant) => {
+    const user = userEvent.setup();
+    const onValidate = vi.fn();
+    const setError = vi.fn();
+    function Editor() {
+      const [provider, setProvider] = React.useState<ProviderOptions>({
+        id: 'openai:codex-security',
+        config: { report_file: '/reports/scan.json', repository: '/repos/service', ...dormant },
+      });
+      return (
+        <ProviderConfigEditor
+          provider={provider}
+          setProvider={setProvider}
+          providerType="codex-security"
+          validateAll
+          onValidate={onValidate}
+          setError={setError}
+        />
+      );
+    }
+    renderWithProviders(<Editor />);
+
+    expect(onValidate).toHaveBeenLastCalledWith(true);
+    expect(setError).toHaveBeenLastCalledWith(null);
+    await user.selectOptions(screen.getByLabelText('Result source'), 'sdk');
+    expect(onValidate).toHaveBeenLastCalledWith(false);
+    expect(setError).toHaveBeenLastCalledWith(expect.any(String));
+  });
+
   it.each(['', '   ', undefined, null, 42])(
     'requires a saved report path for %j',
     (report_file) => {
