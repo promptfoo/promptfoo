@@ -631,12 +631,12 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
 
 const ABORTED_GRADING_PREFIX = 'Aborted: ';
 
-type ComparisonGradingState = Pick<
+type GradingState = Pick<
   EvaluationStoreResult,
   'success' | 'score' | 'failureReason' | 'error' | 'namedScores' | 'gradingResult'
 >;
 
-function getComparisonGradingState(result: ComparisonGradingState): ComparisonGradingState {
+function getGradingState(result: GradingState): GradingState {
   const { success, score, failureReason, error, namedScores, gradingResult } = result;
   return { success, score, failureReason, error, namedScores, gradingResult };
 }
@@ -671,6 +671,26 @@ function applyGradingError(row: EvaluationStoreResult, error: unknown, abortSign
   row.success = false;
   row.score = 0;
   row.namedScores = {};
+}
+
+function applyDeferredGradingError(
+  row: EvaluateResult,
+  error: unknown,
+  abortSignal?: AbortSignal,
+  timeoutMs?: number,
+) {
+  applyGradingError(row, error, abortSignal);
+  if (abortSignal?.aborted && isAbortError(error)) {
+    if (timeoutMs !== undefined) {
+      row.error = `Evaluation timed out after ${timeoutMs}ms`;
+    }
+    row.gradingResult = {
+      pass: false,
+      score: 0,
+      reason: row.error!,
+      metadata: { [PROMPTFOO_METADATA_KEY]: { assertionGradingInterrupted: true } },
+    };
+  }
 }
 
 function getNonTransientTargetStatus(row: EvaluateResult): number | undefined {
@@ -1517,7 +1537,10 @@ async function gradeRunEvalResponse({
           traceId,
         }).then((checkResult) => applyGradingResult(ret, checkResult)),
     ).catch((error) => {
-      applyGradingError(ret, error, abortSignal);
+      applyDeferredGradingError(ret, error, abortSignal);
+      if (abortSignal?.aborted && isAbortError(error)) {
+        ret.response = { ...processedResponse, providerTransformedOutput };
+      }
     });
     deferredGradingPromises.set(ret, gradingPromise);
     return;
@@ -3120,6 +3143,15 @@ interface GroupedRows {
   rows: EvaluateResult[];
 }
 
+interface PromptGradingMetricsContext {
+  derivedMetrics: TestSuite['derivedMetrics'];
+  evalStep: RunEvalOptions;
+  mathjsModule: typeof import('mathjs') | null;
+  metrics: PromptMetrics;
+  promptEvalCount: number;
+  row: EvaluateResult;
+}
+
 interface EvalProcessingContext {
   assertionTypes: Set<string>;
   concurrency: number;
@@ -3562,21 +3594,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
   }
 
-  private updatePromptMetricsForRow({
+  private updatePromptGradingMetrics({
     derivedMetrics,
     evalStep,
     mathjsModule,
     metrics,
     promptEvalCount,
     row,
-  }: {
-    derivedMetrics: TestSuite['derivedMetrics'];
-    evalStep: RunEvalOptions;
-    mathjsModule: typeof import('mathjs') | null;
-    metrics: PromptMetrics;
-    promptEvalCount: number;
-    row: EvaluateResult;
-  }): void {
+  }: PromptGradingMetricsContext): void {
     metrics.score += row.score;
     for (const [key, value] of Object.entries(row.namedScores)) {
       accumulateNamedMetric(metrics, {
@@ -3597,22 +3622,127 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
     metrics.assertFailCount +=
       row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
-    metrics.totalLatencyMs += row.latencyMs || 0;
-    accumulateResponseTokenUsage(metrics.tokenUsage, row.response, {
-      countCachedAsRequest: (row.tokenUsage?.numRequests ?? 0) > 0,
-    });
-
     if (row.gradingResult?.tokensUsed) {
       accumulateGradingTokenUsage(metrics.tokenUsage, row.gradingResult.tokensUsed, {
         cached: row.gradingResult.metadata?.cachedResponse,
       });
     }
+  }
+
+  private updatePromptMetricsForRow(context: PromptGradingMetricsContext): void {
+    this.updatePromptGradingMetrics(context);
+    const { metrics, row } = context;
+    metrics.totalLatencyMs += row.latencyMs || 0;
+    accumulateResponseTokenUsage(metrics.tokenUsage, row.response, {
+      countCachedAsRequest: (row.tokenUsage?.numRequests ?? 0) > 0,
+    });
 
     if (row.incurredCost !== undefined || metrics.incurredCost !== undefined) {
       metrics.incurredCost =
         (metrics.incurredCost ?? metrics.cost) + (row.incurredCost ?? row.cost ?? 0);
     }
     metrics.cost += row.cost || 0;
+  }
+
+  private async resumeInterruptedGrading(
+    runEvalOptions: RunEvalOptions[],
+    prompts: CompletedPrompt[],
+    testSuite: TestSuite,
+    mathjsModule: typeof import('mathjs') | null,
+  ): Promise<void> {
+    if (!cliState.resume || !this.store.persisted || cliState.retryMode) {
+      return;
+    }
+    const interruptedPairs = await this.store.readCompletedIndexPairs({
+      interruptedGradingOnly: true,
+    });
+    const steps = new Map(runEvalOptions.map((step) => [getResultIndexKey(step), step]));
+    const testIndices = new Set(
+      runEvalOptions
+        .filter((step) => interruptedPairs.has(getResultIndexKey(step)))
+        .map((step) => step.testIdx),
+    );
+    for (const testIdx of testIndices) {
+      for (const result of await this.store.readResultsByTestIdx(testIdx)) {
+        if (
+          !result.gradingResult?.metadata?.[PROMPTFOO_METADATA_KEY]?.assertionGradingInterrupted
+        ) {
+          continue;
+        }
+        const step = steps.get(getResultIndexKey(result));
+        if (step?.abortSignal?.aborted) {
+          return;
+        }
+        if (!step || result.response?.output == null) {
+          continue;
+        }
+        const row = this.store.toEvaluateResult(result);
+        row.error = undefined;
+        row.failureReason = ResultFailureReason.NONE;
+        row.gradingResult = undefined;
+        const timeoutMs = this.options.timeoutMs ?? getEvalTimeoutMs();
+        const timeoutController = new AbortController();
+        const abortSignal = step.abortSignal
+          ? AbortSignal.any([step.abortSignal, timeoutController.signal])
+          : timeoutController.signal;
+        const timeout =
+          timeoutMs > 0 ? setTimeout(() => timeoutController.abort(), timeoutMs) : undefined;
+        try {
+          const check = await waitForProviderCall(
+            withCacheNamespace(
+              getRepeatCacheNamespace(step.repeatIndex, step.evaluateOptions),
+              () =>
+                withProviderCallExecutionContext(
+                  { abortSignal, rateLimitRegistry: this.rateLimitRegistry },
+                  () =>
+                    runAssertions({
+                      prompt: result.prompt.raw,
+                      provider: step.provider,
+                      providerResponse: result.response!,
+                      test: step.test,
+                      vars: result.testCase.vars ?? {},
+                      latencyMs: row.latencyMs,
+                      assertScoringFunction: step.test.assertScoringFunction as ScoringFunction,
+                      traceId: row.traceId,
+                    }),
+                ),
+            ),
+            abortSignal,
+          );
+          applyGradingResult(row, check);
+        } catch (error) {
+          applyDeferredGradingError(
+            row,
+            error,
+            abortSignal,
+            timeoutController.signal.aborted && !step.abortSignal?.aborted ? timeoutMs : undefined,
+          );
+        } finally {
+          clearTimeout(timeout);
+        }
+        const persisted = sanitizeResultForJsonlArtifact(row);
+        Object.assign(result, getGradingState(persisted), {
+          error: persisted.error ?? null,
+          gradingResult: persisted.gradingResult ?? null,
+        });
+        const metrics = prompts[result.promptIdx]?.metrics;
+        if (metrics) {
+          metrics.testErrorCount--;
+          this.updatePromptGradingMetrics({
+            derivedMetrics: testSuite.derivedMetrics,
+            evalStep: step,
+            mathjsModule,
+            metrics,
+            promptEvalCount:
+              metrics.testPassCount + metrics.testFailCount + metrics.testErrorCount + 1,
+            row,
+          });
+        }
+        this.trackRowStats(row);
+        this.trackFinalJsonlResult(result);
+        await this.store.saveResult(result);
+      }
+    }
   }
 
   private async processEvalStep(
@@ -4383,11 +4513,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     for (const result of resultsToCompare) {
       const internalMetadata = result.gradingResult?.metadata?.[PROMPTFOO_METADATA_KEY];
-      const previous = internalMetadata?.comparisonBeforeAbort as
-        | ComparisonGradingState
-        | undefined;
+      const previous = internalMetadata?.comparisonBeforeAbort as GradingState | undefined;
       if (previous) {
-        Object.assign(result, getComparisonGradingState(previous));
+        Object.assign(result, getGradingState(previous));
         this.stats[result.success ? 'successes' : 'failures']++;
         const metrics = prompts[result.promptIdx]?.metrics;
         if (metrics) {
@@ -4452,7 +4580,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         }
         const wasSuccess = result.success;
         const wasScore = result.score;
-        const previous = getComparisonGradingState(result);
+        const previous = getGradingState(result);
         // Keep the original grading intact for resume, inside the grading projection
         // so stripping grading results also removes the saved state.
         result.gradingResult = {
@@ -5021,6 +5149,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
     markComparisonRows(runEvalOptions, rowsWithSelectBestAssertion, rowsWithMaxScoreAssertion);
     const repeatCacheContextByTestIdx = buildRepeatCacheContextByTestIdx(runEvalOptions);
+    const mathjsModule = testSuite.derivedMetrics ? await import('mathjs') : null;
+    await this.resumeInterruptedGrading(runEvalOptions, prompts, testSuite, mathjsModule);
     await filterCompletedResumeSteps(runEvalOptions, this.store);
 
     const concurrencySettings = adjustConcurrencyForSerialFeatures({
@@ -5031,10 +5161,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
     concurrency = concurrencySettings.concurrency;
     const { usesConversationVar } = concurrencySettings;
-
-    // Awaiting after accumulating scores lets other rows change the total
-    // before derived metrics use this row's __count.
-    const mathjsModule = testSuite.derivedMetrics ? await import('mathjs') : null;
 
     const processingContext: EvalProcessingContext = {
       assertionTypes,

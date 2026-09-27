@@ -350,7 +350,10 @@ describeEvaluator('evaluator repeat cache isolation', () => {
     const { default: EvalResultModel } = await import('../../src/models/evalResult');
     const getCompletedIndexPairsSpy = vi
       .spyOn(EvalResultModel, 'getCompletedIndexPairs')
-      .mockResolvedValue(new Set(['0:0', '0:1', '1:0', '1:1']));
+      .mockImplementation(
+        async (_evalId, options) =>
+          new Set(options?.interruptedGradingOnly ? [] : ['0:0', '0:1', '1:0', '1:1']),
+      );
 
     const matchers = await import('../../src/matchers/comparison');
     let comparisonCacheMissCount = 0;
