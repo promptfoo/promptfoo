@@ -94,8 +94,8 @@ export abstract class AwsBedrockGenericProvider {
     return this.injectedBedrock ?? this.getSdkState().client;
   }
   set bedrock(client: BedrockRuntime | undefined) {
-    this.injectedBedrock = client;
-    if (client === undefined) {
+    this.injectedBedrock = client || undefined;
+    if (!client) {
       this.getSdkState.reset();
     }
   }

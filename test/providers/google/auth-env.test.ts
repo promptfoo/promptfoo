@@ -9,12 +9,13 @@ import { getEnvString } from '../../../src/envars';
 import { loadApiProvider } from '../../../src/providers';
 import { GoogleAuthManager } from '../../../src/providers/google/auth';
 import { getGoogleAccessToken } from '../../../src/providers/google/util';
+import { VertexChatProvider } from '../../../src/providers/google/vertex';
 import { providerRegistry } from '../../../src/providers/providerRegistry';
 import { CreateJobRequestSchema } from '../../../src/types/api/eval';
 import { getProviderFromCloud } from '../../../src/util/cloud';
 import { mockProcessEnv } from '../../util/utils';
 
-import type { VertexChatProvider } from '../../../src/providers/google/vertex';
+import type { EnvOverrides } from '../../../src/types/env';
 
 const makeClient = (value: string) => ({
   quotaProjectId: 'host-quota',
@@ -28,6 +29,10 @@ vi.mock('../../../src/util/cloud', async (importOriginal) => ({
 let restore: () => void;
 beforeEach(() => {
   restore = mockProcessEnv({
+    GOOGLE_API_KEY: undefined,
+    GEMINI_API_KEY: undefined,
+    PALM_API_KEY: undefined,
+    VERTEX_API_KEY: undefined,
     GOOGLE_APPLICATION_CREDENTIALS: undefined,
     GOOGLE_CLOUD_PROJECT: undefined,
     GCLOUD_PROJECT: undefined,
@@ -56,6 +61,99 @@ afterEach(() => {
 });
 
 describe('Google scoped ADC inputs', () => {
+  it.each([
+    ['provider Google mask', { GOOGLE_API_KEY: '' }, {}, { VERTEX_API_KEY: 'file-key' }],
+    ['suite Google mask', {}, { GOOGLE_API_KEY: '' }, { VERTEX_API_KEY: 'file-key' }],
+    ['provider Vertex mask', { VERTEX_API_KEY: '' }, {}, { GOOGLE_API_KEY: 'file-key' }],
+    ['suite Vertex mask', {}, { VERTEX_API_KEY: '' }, { GOOGLE_API_KEY: 'file-key' }],
+    [
+      'masked intermediate Google alias',
+      { GOOGLE_API_KEY: '' },
+      { GOOGLE_API_KEY: 'masked-suite-key' },
+      { VERTEX_API_KEY: 'file-key' },
+    ],
+    [
+      'masked intermediate Vertex alias',
+      { VERTEX_API_KEY: '' },
+      { VERTEX_API_KEY: 'masked-suite-key' },
+      { GOOGLE_API_KEY: 'file-key' },
+    ],
+  ] satisfies [string, EnvOverrides, EnvOverrides, EnvOverrides][])(
+    'selects lower Vertex ADC before its API key after a %s',
+    async (_name, env, suite, file) => {
+      await cliState.withEnvFileOverrides(
+        { ...file, GOOGLE_APPLICATION_CREDENTIALS: 'file.json' },
+        () =>
+          cliState.withEnv(suite, async () => {
+            const provider = new VertexChatProvider('gemini-2.5-flash', { env });
+            expect(provider.getApiKey()).toBeUndefined();
+            expect(await provider.getAuthHeaders()).not.toHaveProperty('x-goog-api-key');
+            await provider.getClientWithCredentials();
+            expect(GoogleAuth).toHaveBeenCalledWith(
+              expect.objectContaining({ keyFilename: 'file.json' }),
+            );
+          }),
+      );
+    },
+  );
+
+  it.each(['provider', 'suite', 'config'] as const)(
+    'keeps a usable %s API key above lower Vertex ADC',
+    async (scope) => {
+      await cliState.withEnvFileOverrides({ GOOGLE_APPLICATION_CREDENTIALS: 'file.json' }, () =>
+        cliState.withEnv(scope === 'suite' ? { GOOGLE_API_KEY: 'higher-key' } : {}, async () => {
+          const provider = new VertexChatProvider('gemini-2.5-flash', {
+            env: scope === 'provider' ? { GOOGLE_API_KEY: 'higher-key' } : {},
+            config: scope === 'config' ? { apiKey: 'higher-key' } : {},
+          });
+          expect(await provider.getAuthHeaders()).toHaveProperty('x-goog-api-key', 'higher-key');
+          expect(GoogleAuth).not.toHaveBeenCalled();
+        }),
+      );
+    },
+  );
+
+  it.each(['scoped.json', ''])(
+    'keeps same-layer host ADC %j ahead of an API key while allowing SDK discovery',
+    async (adc) => {
+      mockProcessEnv({ GOOGLE_APPLICATION_CREDENTIALS: adc, GOOGLE_API_KEY: 'host-key' });
+      const provider = new VertexChatProvider('gemini-2.5-flash');
+      expect(await provider.getAuthHeaders()).not.toHaveProperty('x-goog-api-key');
+      await provider.getClientWithCredentials();
+      expect(GoogleAuth).toHaveBeenCalledOnce();
+      expect(vi.mocked(GoogleAuth).mock.calls[0][0]?.keyFilename).toBe(adc);
+    },
+  );
+
+  it('keeps explicit config API keys and AI Studio independent of same-layer ADC', async () => {
+    const env = { GOOGLE_APPLICATION_CREDENTIALS: 'scoped.json', GOOGLE_API_KEY: 'scoped-key' };
+    const explicit = new VertexChatProvider('gemini-2.5-flash', {
+      config: { apiKey: 'config-key' },
+      env,
+    });
+    expect(await explicit.getAuthHeaders()).toHaveProperty('x-goog-api-key', 'config-key');
+    expect(GoogleAuthManager.getApiKey({}, env)).toEqual({
+      apiKey: 'scoped-key',
+      source: 'GOOGLE_API_KEY',
+    });
+  });
+
+  it('keeps forced OAuth when a higher config API key is available', async () => {
+    await cliState.withEnvFileOverrides(
+      { GOOGLE_APPLICATION_CREDENTIALS: 'file.json' },
+      async () => {
+        const provider = new VertexChatProvider('gemini-2.5-flash', {
+          config: { apiKey: 'config-key', expressMode: false },
+        });
+        expect(await provider.getAuthHeaders()).not.toHaveProperty('x-goog-api-key');
+        await provider.getClientWithCredentials();
+        expect(GoogleAuth).toHaveBeenCalledWith(
+          expect.objectContaining({ keyFilename: 'file.json' }),
+        );
+      },
+    );
+  });
+
   it('reuses the Live OAuth client for repeated and concurrent calls within an invocation', async () => {
     await cliState.withEnv({ GOOGLE_APPLICATION_CREDENTIALS: 'scoped.json' }, async () => {
       expect(await Promise.all([getGoogleAccessToken(), getGoogleAccessToken()])).toEqual([
