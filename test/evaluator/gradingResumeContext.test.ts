@@ -203,11 +203,14 @@ describeEvaluator('interrupted grading context', () => {
           result: {
             ...context.result,
             namedScores: { hookScore: context.result.score },
-            metadata: { ...context.result.metadata, hookSuccess: context.result.success },
-            response: {
-              ...context.result.response,
-              metadata: { hookSuccess: context.result.success },
-            },
+            ...(!context.result.gradingResult?.metadata?.__promptfoo
+              ?.assertionGradingInterrupted && {
+              metadata: { ...context.result.metadata, hookSuccess: context.result.success },
+              response: {
+                ...context.result.response,
+                metadata: { hookSuccess: context.result.success },
+              },
+            }),
           },
         };
       }

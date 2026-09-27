@@ -620,6 +620,16 @@ async function applyAfterEachHook(
   // Apply afterEach hook mutations before persisting. Pass a shallow copy
   // so in-place mutations don't corrupt the row on hook failure.
   if (testSuite.extensions?.length) {
+    const gradingMetadata = row.gradingResult?.metadata?.[PROMPTFOO_METADATA_KEY];
+    const interrupted = gradingMetadata?.assertionGradingInterrupted;
+    let metadataBeforeHook: unknown;
+    if (interrupted) {
+      try {
+        metadataBeforeHook = structuredClone([row.metadata ?? {}, row.response?.metadata ?? {}]);
+      } catch {
+        // If metadata cannot be compared safely, keep the hook output and require a rerun.
+      }
+    }
     try {
       const originalMetadata = row.metadata;
       const originalResponseMetadata = row.response?.metadata;
@@ -652,6 +662,14 @@ async function applyAfterEachHook(
       logger.error(`afterEach extension hook failed, persisting row without hook modifications`, {
         error,
       });
+    } finally {
+      if (
+        interrupted &&
+        !isDeepStrictEqual(metadataBeforeHook, [row.metadata ?? {}, row.response?.metadata ?? {}])
+      ) {
+        // Never retain a hidden copy of data the hook may have deliberately redacted.
+        gradingMetadata.assertionGradingMetadataChanged = true;
+      }
     }
   }
 }
@@ -3748,6 +3766,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         const row = this.store.toEvaluateResult(result);
         let test = step.test;
         const previousNamedScores = row.namedScores;
+        const metadataChanged =
+          row.gradingResult?.metadata?.[PROMPTFOO_METADATA_KEY]?.assertionGradingMetadataChanged;
         row.error = undefined;
         row.failureReason = ResultFailureReason.NONE;
         row.gradingResult = undefined;
@@ -3759,6 +3779,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         const timeout =
           timeoutMs > 0 ? setTimeout(() => timeoutController.abort(), timeoutMs) : undefined;
         try {
+          if (metadataChanged) {
+            throw new Error(
+              'Cannot resume assertion grading: afterEach changed metadata. Rerun the test to grade the original inputs.',
+            );
+          }
           const check = await waitForProviderCall(
             withCacheNamespace(
               getRepeatCacheNamespace(step.repeatIndex, step.evaluateOptions),
@@ -3812,7 +3837,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         } finally {
           clearTimeout(timeout);
         }
-        await applyAfterEachHook(row, test, testSuite);
+        if (metadataChanged) {
+          row.namedScores = previousNamedScores;
+        } else {
+          await applyAfterEachHook(row, test, testSuite);
+        }
         const persisted = sanitizeResultForJsonlArtifact(row);
         Object.assign(result, getGradingState(persisted), {
           metadata: persisted.metadata,
