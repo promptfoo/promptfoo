@@ -90,6 +90,26 @@ describe('Codex Security replay evidence validation', () => {
     await expect(load(envelope)).rejects.toThrow('payload hash does not match');
   });
 
+  it('rejects scan payloads labeled as validation even when the SDK omits the operation', async () => {
+    const envelope = replay();
+    envelope.result.operation = 'validation';
+
+    await expect(load(envelope)).rejects.toThrow('metadata disagrees');
+  });
+
+  it.each(['security-scan', 'deep-security-scan', 'security-diff-scan', null] as const)(
+    'preserves compatible runtime scan operation %s when the SDK omits it',
+    async (operation) => {
+      const envelope = replay();
+      envelope.result.operation = operation;
+
+      const imported = await load(envelope);
+
+      expect(imported.summary.operation).toBe(operation);
+      expect(imported.raw).toEqual(envelope.payload);
+    },
+  );
+
   it.each([
     [
       'scan ID',
@@ -317,5 +337,18 @@ describe('Codex Security replay evidence validation', () => {
       validation: { disposition: 'deferred' },
       warnings: ['Recorded warning'],
     });
+  });
+
+  it('rejects validation payloads labeled as scan operations', async () => {
+    const payload = { disposition: 'deferred', report: 'Recorded validation decision' };
+    const result = normalizeCodexSecurityResult(payload, {
+      source: { kind: 'sdk' },
+      operation: 'security-scan',
+      status: 'completed',
+    });
+
+    await expect(
+      load({ ...createCodexSecurityReplayHeader(payload, result), payload }),
+    ).rejects.toThrow('metadata disagrees');
   });
 });

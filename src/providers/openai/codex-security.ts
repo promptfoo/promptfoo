@@ -341,7 +341,12 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
     return {
       importingReport: config.report_file !== undefined,
       reportFile: typeof config.report_file === 'string' ? config.report_file : undefined,
-      operation: this.config.operation ?? 'security-scan',
+      // Parsing can fail before resolveConfig returns. Preserve a recognized row
+      // override in failure evidence; invalid/unresolved values remain unknown.
+      operation:
+        config.operation === undefined
+          ? 'security-scan'
+          : CODEX_SECURITY_OPERATIONS.find((operation) => operation === config.operation),
       phase: 'configuration',
     };
   }

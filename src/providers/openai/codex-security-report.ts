@@ -175,6 +175,10 @@ function validateReplay(replay: CodexSecurityReplay): void {
   if (intrinsic.source.mocked || result.source.mocked) {
     throw new Error('Codex Security report_file is marked as a mock result.');
   }
+  // Scan serialization can omit its precise mode, but it cannot describe a validation operation.
+  if ('manifest' in payload && result.operation === 'validation') {
+    throw new Error('Codex Security replay metadata disagrees with its SDK payload.');
+  }
   // Required scan fields and derived finding counts must match exactly, including unknowns.
   for (const key of ['scanId', 'status', 'findings', 'coverage', 'validation'] as const) {
     if (JSON.stringify(intrinsic[key]) !== JSON.stringify(result[key])) {

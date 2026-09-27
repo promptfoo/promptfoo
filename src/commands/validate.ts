@@ -55,7 +55,7 @@ async function testBasicConnectivity(provider: ApiProvider): Promise<{
 
   try {
     if (provider.checkSetup) {
-      const result = await provider.checkSetup();
+      const result = await testProviderConnectivity({ provider });
       const log = result.success ? logger.info.bind(logger) : logger.error.bind(logger);
       const color = result.success ? chalk.green : chalk.red;
       log(color(`  ${result.success ? '✓' : '✗'} Local setup check`));

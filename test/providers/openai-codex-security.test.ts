@@ -1395,6 +1395,75 @@ describe('OpenAICodexSecurityProvider', () => {
   });
 
   describe('configuration', () => {
+    it.each(CODEX_SECURITY_OPERATIONS)(
+      'preserves the merged %s operation when another row option fails validation',
+      async (operation) => {
+        const provider = new OpenAICodexSecurityProvider({
+          config: { operation: operation === 'validation' ? 'security-scan' : 'validation' },
+        });
+        const context = {
+          prompt: { raw: '', label: '', config: { operation, max_cost_usd: -1 } },
+          vars: {},
+        };
+
+        const response = await provider.callApi('', context);
+        const setup = await provider.checkSetup(context);
+
+        expect(setup.success).toBe(false);
+        for (const failure of [response, setup.response]) {
+          expect(failure?.error).toContain('max_cost_usd');
+          expect(failure?.metadata?.codexSecurity).toMatchObject({ operation, status: 'failed' });
+          expect(failure?.metadata?.codexSecurityReplay.result).toMatchObject({
+            operation,
+            status: 'failed',
+          });
+        }
+        expect(importModule).not.toHaveBeenCalled();
+        expect(mockPreflight).not.toHaveBeenCalled();
+        expect(mockRun).not.toHaveBeenCalled();
+        expect(mockValidate).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(['unsupported-operation', '{{operation}}'])(
+      'leaves failed unresolved operation %s unknown instead of attributing it to the base',
+      async (operation) => {
+        const provider = new OpenAICodexSecurityProvider({ config: { operation: 'validation' } });
+        const context = {
+          prompt: { raw: '', label: '', config: { operation } },
+          vars: {},
+        };
+
+        const response = await provider.callApi('', context);
+        const setup = await provider.checkSetup(context);
+
+        expect(setup.success).toBe(false);
+        for (const failure of [response, setup.response]) {
+          expect(failure?.error).toContain('operation');
+          expect(failure?.metadata?.codexSecurity).toMatchObject({
+            operation: null,
+            status: 'failed',
+          });
+          expect(failure?.metadata?.codexSecurityReplay.result.operation).toBeNull();
+        }
+        expect(importModule).not.toHaveBeenCalled();
+        expect(mockRun).not.toHaveBeenCalled();
+        expect(mockValidate).not.toHaveBeenCalled();
+      },
+    );
+
+    it('retains the provider operation when an invalid row has no operation override', async () => {
+      const provider = new OpenAICodexSecurityProvider({ config: { operation: 'validation' } });
+      const response = await provider.callApi('', {
+        prompt: { raw: '', label: '', config: { max_cost_usd: -1 } },
+        vars: {},
+      });
+
+      expect(response.error).toContain('max_cost_usd');
+      expect(response.metadata?.codexSecurity?.operation).toBe('validation');
+      expect(importModule).not.toHaveBeenCalled();
+    });
+
     it.each([{ stop_after_no_new: 0 }, { max_time_hours: 97 }])(
       'rejects values outside SDK bounds: %j',
       (config) => {
