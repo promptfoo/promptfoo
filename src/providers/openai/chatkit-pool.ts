@@ -577,8 +577,17 @@ export class ChatKitBrowserPool {
 
     // Close server
     if (this.server) {
-      this.server.close();
+      const server = this.server;
       this.server = null;
+      this.serverPort = 0;
+      try {
+        await new Promise<void>((resolve, reject) => {
+          server.close((error) => (error ? reject(error) : resolve()));
+          server.closeAllConnections();
+        });
+      } catch (error) {
+        logger.debug('[ChatKitPool] Error closing HTTP server', { error: String(error) });
+      }
     }
 
     this.initialized = false;
