@@ -15,8 +15,11 @@ import logger from '../../../../src/logger';
 import { runDbMigrations } from '../../../../src/migrate';
 import Eval from '../../../../src/models/eval';
 import { doEval } from '../../../../src/node/doEval';
+import { GeminiImageProvider } from '../../../../src/providers/google/gemini-image';
+import { GoogleImageProvider } from '../../../../src/providers/google/image';
 import { GoogleLiveProvider } from '../../../../src/providers/google/live';
 import { VertexLiveProvider } from '../../../../src/providers/google/vertexLive';
+import { HuggingfaceTextGenerationProvider } from '../../../../src/providers/huggingface';
 import { OpenCodeSDKProvider } from '../../../../src/providers/opencode-sdk';
 import { createShareableUrl, isSharingEnabled } from '../../../../src/share';
 import * as suggestions from '../../../../src/suggestions';
@@ -277,6 +280,54 @@ describe('MCP evaluation execution contract', () => {
   );
 
   describe.each([
+    { id: 'google:gemini-3.1-flash-image', prototype: GeminiImageProvider.prototype },
+    { id: 'google:image:imagen-3.0-generate-002', prototype: GoogleImageProvider.prototype },
+  ])('$id missing image authentication', ({ id, prototype }) => {
+    it.each([false, true])(
+      'fails preflight without calling the provider with filtering=%s',
+      async (filtered) => {
+        for (const key of [
+          'GOOGLE_API_KEY',
+          'GOOGLE_GENERATIVE_AI_API_KEY',
+          'GEMINI_API_KEY',
+          'GOOGLE_CLOUD_PROJECT',
+          'GOOGLE_PROJECT_ID',
+        ]) {
+          vi.stubEnv(key, undefined);
+        }
+        const call = vi.spyOn(prototype, 'callApi').mockResolvedValue({ output: 'Hello' });
+        await writeFile(
+          configPath,
+          JSON.stringify({
+            providers: [id],
+            prompts: ['Hello'],
+            tests: [{ assert: [{ type: 'equals', value: 'Hello' }] }],
+          }),
+        );
+        const response = await run({ ...(filtered ? { testCaseIndices: 0 } : {}), write: false });
+        expect(response.success).toBe(false);
+        expect(response.error).toContain('Missing required API keys');
+        expect(call).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  describe.each([
+    {
+      id: 'google:gemini-3.1-flash-image',
+      config: { projectId: 'fixture-project' },
+      prototype: GeminiImageProvider.prototype,
+    },
+    {
+      id: 'google:image:imagen-3.0-generate-002',
+      config: { projectId: 'fixture-project' },
+      prototype: GoogleImageProvider.prototype,
+    },
+    {
+      id: 'huggingface:text-generation:fixture-model',
+      config: { apiEndpoint: 'http://127.0.0.1:12345/generate' },
+      prototype: HuggingfaceTextGenerationProvider.prototype,
+    },
     {
       id: 'opencode:sdk',
       config: { baseUrl: 'http://127.0.0.1:12345' },
@@ -309,6 +360,9 @@ describe('MCP evaluation execution contract', () => {
         'OPENAI_API_KEY',
         'GOOGLE_API_KEY',
         'GEMINI_API_KEY',
+        'GOOGLE_GENERATIVE_AI_API_KEY',
+        'HF_TOKEN',
+        'HF_API_TOKEN',
       ]) {
         vi.stubEnv(key, undefined);
       }

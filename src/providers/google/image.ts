@@ -111,15 +111,7 @@ export class GoogleImageProvider implements ApiProvider {
       };
     }
 
-    // Check if we should use Vertex AI (when projectId is provided)
-    const projectId =
-      this.config.projectId ||
-      getEnvString('GOOGLE_CLOUD_PROJECT') ||
-      getEnvString('GOOGLE_PROJECT_ID') ||
-      this.env?.GOOGLE_CLOUD_PROJECT ||
-      this.env?.GOOGLE_PROJECT_ID;
-
-    if (projectId) {
+    if (!this.requiresApiKey()) {
       // Use Vertex AI if project ID is available
       return this.callVertexApi(prompt);
     }
@@ -344,6 +336,16 @@ export class GoogleImageProvider implements ApiProvider {
       );
     }
     return 'block_low_and_above';
+  }
+
+  requiresApiKey(): boolean {
+    return !(
+      this.config.projectId ||
+      getEnvString('GOOGLE_CLOUD_PROJECT') ||
+      getEnvString('GOOGLE_PROJECT_ID') ||
+      this.env?.GOOGLE_CLOUD_PROJECT ||
+      this.env?.GOOGLE_PROJECT_ID
+    );
   }
 
   private getApiKey(): string | undefined {

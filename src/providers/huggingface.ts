@@ -153,6 +153,10 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
     return `[Huggingface Text Generation Provider ${this.modelName}]`;
   }
 
+  requiresApiKey(): boolean {
+    return false;
+  }
+
   getApiKey(): string | undefined {
     return this.config.apiKey || getEnvString('HF_TOKEN') || getEnvString('HF_API_TOKEN');
   }
@@ -309,6 +313,10 @@ export class HuggingfaceTextClassificationProvider implements ApiProvider {
     return `[Huggingface Text Classification Provider ${this.modelName}]`;
   }
 
+  requiresApiKey(): boolean {
+    return false;
+  }
+
   getApiKey(): string | undefined {
     return this.config.apiKey || getEnvString('HF_TOKEN') || getEnvString('HF_API_TOKEN');
   }
@@ -410,6 +418,10 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
     return `[Huggingface Feature Extraction Provider ${this.modelName}]`;
   }
 
+  requiresApiKey(): boolean {
+    return false;
+  }
+
   getApiKey(): string | undefined {
     return this.config.apiKey || getEnvString('HF_TOKEN') || getEnvString('HF_API_TOKEN');
   }
@@ -495,6 +507,10 @@ export class HuggingfaceSentenceSimilarityProvider implements ApiSimilarityProvi
 
   id(): string {
     return `huggingface:sentence-similarity:${this.modelName}`;
+  }
+
+  requiresApiKey(): boolean {
+    return false;
   }
 
   getApiKey(): string | undefined {
@@ -591,6 +607,10 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
 
   id(): string {
     return `huggingface:token-classification:${this.modelName}`;
+  }
+
+  requiresApiKey(): boolean {
+    return false;
   }
 
   getApiKey(): string | undefined {

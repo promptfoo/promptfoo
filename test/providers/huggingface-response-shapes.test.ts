@@ -2,15 +2,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import {
   HuggingfaceFeatureExtractionProvider,
+  HuggingfaceSentenceSimilarityProvider,
   HuggingfaceTextClassificationProvider,
+  HuggingfaceTextGenerationProvider,
+  HuggingfaceTokenExtractionProvider,
 } from '../../src/providers/huggingface';
+import { checkProviderApiKeys } from '../../src/util/provider';
 
 vi.mock('../../src/cache', async (importOriginal) => ({
   ...(await importOriginal()),
   fetchWithCache: vi.fn(),
 }));
 beforeEach(() => vi.mocked(fetchWithCache).mockReset());
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+});
 function reply(data: unknown) {
   vi.mocked(fetchWithCache).mockResolvedValue({
     data,
@@ -81,5 +88,24 @@ describe('Hugging Face task response compatibility', () => {
     expect((await embedding.callEmbeddingApi('Hello')).error).toContain(
       'Fixture model unavailable',
     );
+  });
+});
+
+// Local inference endpoints support anonymous requests for every task family.
+describe.each([
+  HuggingfaceTextGenerationProvider,
+  HuggingfaceTextClassificationProvider,
+  HuggingfaceFeatureExtractionProvider,
+  HuggingfaceSentenceSimilarityProvider,
+  HuggingfaceTokenExtractionProvider,
+])('%s authentication preflight', (Provider) => {
+  it('allows the task provider to reach its configured endpoint without a token', () => {
+    vi.stubEnv('HF_TOKEN', undefined);
+    vi.stubEnv('HF_API_TOKEN', undefined);
+    const provider = new Provider('fixture/model', {
+      config: { apiEndpoint: 'http://127.0.0.1:12345/inference' },
+    });
+    expect(provider.getApiKey()).toBeUndefined();
+    expect(checkProviderApiKeys([provider]).size).toBe(0);
   });
 });
