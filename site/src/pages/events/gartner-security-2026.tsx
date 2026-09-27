@@ -3,25 +3,13 @@ import React from 'react';
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import { useForcedTheme } from '@site/src/hooks/useForcedTheme';
+import { handleSmoothScroll } from '@site/src/utils/smoothScroll';
 import Layout from '@theme/Layout';
 import { SITE_CONSTANTS } from '../../constants';
 import styles from './gartner-security-2026.module.css';
 
 export default function GartnerSecurity2026(): React.ReactElement {
   useForcedTheme('dark');
-
-  const handleSmoothScroll = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
-    e.preventDefault();
-    const element = document.querySelector(targetId);
-    if (element) {
-      const offset = 80;
-      const elementPosition = element.getBoundingClientRect().top;
-      const offsetPosition = elementPosition + window.scrollY - offset;
-      // CSS scroll-behavior does not govern an explicit JS behavior, so choose it here.
-      const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-      window.scrollTo({ top: offsetPosition, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
-    }
-  };
 
   return (
     <Layout
@@ -97,7 +85,9 @@ export default function GartnerSecurity2026(): React.ReactElement {
                 <a
                   href="#learn-more"
                   className={styles.primaryButton}
-                  onClick={(e) => handleSmoothScroll(e, '#learn-more')}
+                  onClick={(e) =>
+                    handleSmoothScroll(e, '#learn-more', { respectReducedMotion: true })
+                  }
                 >
                   Learn More
                 </a>

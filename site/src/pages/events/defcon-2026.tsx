@@ -3,6 +3,7 @@ import React from 'react';
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import { useForcedTheme } from '@site/src/hooks/useForcedTheme';
+import { handleSmoothScroll } from '@site/src/utils/smoothScroll';
 import Layout from '@theme/Layout';
 import { SITE_CONSTANTS } from '../../constants';
 import styles from './defcon-2026.module.css';
@@ -42,19 +43,6 @@ const SCAN_RESULTS: { status: 'PASS' | 'FAIL'; plugin: string; note: string }[] 
 
 export default function Defcon2026(): React.ReactElement {
   useForcedTheme('dark');
-
-  const handleSmoothScroll = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
-    e.preventDefault();
-    const element = document.querySelector(targetId);
-    if (!element) {
-      return;
-    }
-    const offset = 80; // Offset for the fixed navbar
-    const offsetPosition = element.getBoundingClientRect().top + window.scrollY - offset;
-    const prefersReducedMotion =
-      window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false;
-    window.scrollTo({ top: offsetPosition, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
-  };
 
   return (
     <Layout title="Promptfoo at DEF CON 34" description={DESCRIPTION}>
@@ -108,7 +96,7 @@ export default function Defcon2026(): React.ReactElement {
                 <a
                   href="#find-us"
                   className={styles.primaryButton}
-                  onClick={(e) => handleSmoothScroll(e, '#find-us')}
+                  onClick={(e) => handleSmoothScroll(e, '#find-us', { respectReducedMotion: true })}
                 >
                   Event recap
                 </a>
