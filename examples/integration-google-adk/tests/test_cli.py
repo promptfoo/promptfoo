@@ -109,6 +109,9 @@ class GoogleAdkCliTest(unittest.TestCase):
                 }
                 env.update(
                     GOOGLE_API_KEY="local-test-key",
+                    # Existing values also prevent root dotenv from changing routing.
+                    ADK_MODEL="gemini-2.5-flash",
+                    GOOGLE_GENAI_USE_VERTEXAI="false",
                     GOOGLE_GEMINI_BASE_URL=f"http://127.0.0.1:{server.server_port}",
                     PROMPTFOO_PYTHON=sys.executable,
                     PROMPTFOO_CONFIG_DIR=str(work / "promptfoo"),
