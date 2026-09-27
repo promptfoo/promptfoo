@@ -6,6 +6,8 @@ This example demonstrates how to evaluate [Strands Agents SDK](https://github.co
 
 You can run this example with:
 
+On Windows (PowerShell), use `npx.cmd` instead of `npx` for the Promptfoo commands in this guide.
+
 ```bash
 npx promptfoo@latest init --example integration-strands-agents
 cd integration-strands-agents
@@ -41,8 +43,8 @@ On Windows (PowerShell):
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+$env:PROMPTFOO_PYTHON = (Resolve-Path .\.venv\Scripts\python.exe).Path
 ```
 
 This installs Strands 1.56 or newer within the 1.x release series:
@@ -71,7 +73,7 @@ $env:OPENAI_API_KEY = "your-api-key-here"
 python -m pip install "strands-agents[anthropic]>=1.56.0,<2"
 ```
 
-Set `ANTHROPIC_API_KEY` using the syntax for your shell shown above. Then modify `agent.py` to use [`AnthropicModel`](https://strandsagents.com/latest/user-guide/concepts/model-providers/anthropic/) instead of [`OpenAIModel`](https://strandsagents.com/latest/user-guide/concepts/model-providers/openai/).
+On Windows, run the install command with `.\.venv\Scripts\python.exe -m pip` instead of `python -m pip`. Set `ANTHROPIC_API_KEY` using the syntax for your shell shown above. Then modify `agent.py` to use [`AnthropicModel`](https://strandsagents.com/latest/user-guide/concepts/model-providers/anthropic/) instead of [`OpenAIModel`](https://strandsagents.com/latest/user-guide/concepts/model-providers/openai/).
 
 Amazon Bedrock support is included in the base SDK. To use it, replace
 `OpenAIModel` in `agent.py` with `BedrockModel` and configure AWS credentials; no
