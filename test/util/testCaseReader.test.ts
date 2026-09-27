@@ -1785,6 +1785,26 @@ describe('readTests', () => {
       expect(result.map((test) => test.vars?.q).sort()).toEqual(['from-a-csv', 'from-b-csv']);
     });
 
+    it('resolves nested env templates like the one-element array form', async () => {
+      const source = 'file://{{ env.GLOB_SOURCE }}/*.csv';
+      const env = {
+        GLOB_SOURCE: '{{ env.GLOB_DIRECTORY }}',
+        GLOB_DIRECTORY: '{{ env.GLOB_LITERAL }}',
+        GLOB_LITERAL: 'nomatch',
+      };
+      vi.mocked(globSync).mockImplementation((pattern) =>
+        String(pattern) === path.resolve('{{ env.GLOB_LITERAL }}/*.csv')
+          ? [path.resolve('tests/a.csv')]
+          : [],
+      );
+
+      const arrayResult = await readTests([source], '', env);
+      const stringResult = await readTests(source, '', env);
+
+      expect(arrayResult).toMatchObject([{ vars: { q: 'from-a-csv' } }]);
+      expect(stringResult).toEqual(arrayResult);
+    });
+
     it('warns and adds no rows when the glob matches nothing', async () => {
       await expect(readTests('file://nomatch/*.csv')).resolves.toEqual([]);
       expect(logger.warn).toHaveBeenCalledWith(
