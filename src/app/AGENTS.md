@@ -23,7 +23,7 @@ This handles API base URL differences between dev and production.
 - Lucide React for icons
 - **Vitest** for testing
 - Zustand for state management
-- React Router v7
+- React Router v8
 
 ## Modern React 19 Patterns
 
