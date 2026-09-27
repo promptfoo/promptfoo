@@ -2,7 +2,7 @@
 
 Examples for writing custom promptfoo providers in different JavaScript/TypeScript module formats.
 
-The API examples read `config.apiKey`, then the provider or suite `env.OPENAI_API_KEY`, then the shell environment. Custom providers receive those overrides in their constructor as `options.env`.
+The API examples use `config.apiKey`, then `options.env.OPENAI_API_KEY` (provider or suite settings), then `process.env.OPENAI_API_KEY`.
 
 ## Examples
 

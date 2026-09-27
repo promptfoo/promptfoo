@@ -36,7 +36,7 @@ class CustomApiProvider {
         error: 'Unknown error',
       };
     }
-    const ret = {
+    return {
       embedding: data.data[0].embedding,
       tokenUsage: {
         total: data.usage.total_tokens,
@@ -44,7 +44,6 @@ class CustomApiProvider {
         completion: 0,
       },
     };
-    return ret;
   }
 }
 

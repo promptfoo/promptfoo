@@ -1,9 +1,6 @@
 import promptfoo from 'promptfoo';
 import type { ApiProvider, ProviderOptions, ProviderResponse } from 'promptfoo';
 
-// import promptfoo from '../../dist/src/index.js';
-// import type { ApiProvider, ProviderOptions, ProviderResponse } from '../../src/types/providers';
-
 export default class CustomApiProvider implements ApiProvider {
   protected providerId: string;
   public config: any;
@@ -36,7 +33,7 @@ export default class CustomApiProvider implements ApiProvider {
     };
 
     // Fetch the data from the API using promptfoo's cache. You can use your own fetch implementation if preferred.
-    const { data, cached: _cached } = await promptfoo.cache.fetchWithCache(
+    const { data } = await promptfoo.cache.fetchWithCache(
       'https://api.openai.com/v1/chat/completions',
       {
         method: 'POST',
@@ -49,7 +46,7 @@ export default class CustomApiProvider implements ApiProvider {
       10_000 /* 10 second timeout */,
     );
 
-    const ret: ProviderResponse = {
+    return {
       output: data.choices[0].message.content,
       tokenUsage: {
         total: data.usage.total_tokens,
@@ -57,6 +54,5 @@ export default class CustomApiProvider implements ApiProvider {
         completion: data.usage.completion_tokens,
       },
     };
-    return ret;
   }
 }

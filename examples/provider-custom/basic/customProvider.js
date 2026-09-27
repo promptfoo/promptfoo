@@ -1,4 +1,3 @@
-// const promptfoo = require('../../dist/src/index.js').default;
 const promptfoo = require('promptfoo').default;
 
 class CustomApiProvider {
@@ -29,7 +28,7 @@ class CustomApiProvider {
     };
 
     // Fetch the data from the API using promptfoo's cache. You can use your own fetch implementation if preferred.
-    const { data, cached: _cached } = await promptfoo.cache.fetchWithCache(
+    const { data } = await promptfoo.cache.fetchWithCache(
       'https://api.openai.com/v1/chat/completions',
       {
         method: 'POST',
@@ -42,7 +41,7 @@ class CustomApiProvider {
       10_000 /* 10 second timeout */,
     );
 
-    const ret = {
+    return {
       output: data.choices[0].message.content,
       tokenUsage: {
         total: data.usage.total_tokens,
@@ -50,7 +49,6 @@ class CustomApiProvider {
         completion: data.usage.completion_tokens,
       },
     };
-    return ret;
   }
 }
 
