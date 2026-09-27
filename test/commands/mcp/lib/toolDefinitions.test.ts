@@ -1,16 +1,10 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  initializeToolRegistry,
+  generateToolDocs,
   TOOL_DEFINITIONS,
-  toolRegistry,
-} from '../../../../src/commands/mcp/lib/toolRegistry';
+} from '../../../../src/commands/mcp/lib/toolDefinitions';
 
-describe('ToolRegistry', () => {
-  beforeEach(() => {
-    // Re-initialize the registry for each test
-    initializeToolRegistry();
-  });
-
+describe('MCP tool documentation', () => {
   describe('TOOL_DEFINITIONS', () => {
     it('should define all 14 MCP tools', () => {
       expect(TOOL_DEFINITIONS.length).toBe(14);
@@ -86,47 +80,9 @@ describe('ToolRegistry', () => {
     });
   });
 
-  describe('registry operations', () => {
-    it('should retrieve all registered tools', () => {
-      const tools = toolRegistry.getAll();
-      expect(tools.length).toBe(14);
-    });
-
-    it('should retrieve a tool by name', () => {
-      const tool = toolRegistry.get('list_evaluations');
-      expect(tool).toBeDefined();
-      expect(tool?.name).toBe('list_evaluations');
-      expect(tool?.category).toBe('evaluation');
-    });
-
-    it('should return undefined for non-existent tool', () => {
-      const tool = toolRegistry.get('non_existent_tool');
-      expect(tool).toBeUndefined();
-    });
-
-    it('should get tools by category', () => {
-      const evaluationTools = toolRegistry.getByCategory('evaluation');
-      expect(evaluationTools.length).toBe(4);
-      expect(evaluationTools.every((t) => t.category === 'evaluation')).toBe(true);
-
-      const generationTools = toolRegistry.getByCategory('generation');
-      expect(generationTools.length).toBe(3);
-
-      const redteamTools = toolRegistry.getByCategory('redteam');
-      expect(redteamTools.length).toBe(2);
-
-      const configTools = toolRegistry.getByCategory('configuration');
-      expect(configTools.length).toBe(3);
-
-      const debuggingTools = toolRegistry.getByCategory('debugging');
-      expect(debuggingTools.length).toBe(2);
-      expect(debuggingTools.every((t) => t.category === 'debugging')).toBe(true);
-    });
-  });
-
-  describe('generateDocs', () => {
+  describe('generateToolDocs', () => {
     it('should generate documentation object', () => {
-      const docs = toolRegistry.generateDocs();
+      const docs = generateToolDocs();
 
       expect(docs.totalTools).toBe(14);
       expect(docs.version).toBe('1.0.0');
@@ -135,7 +91,7 @@ describe('ToolRegistry', () => {
     });
 
     it('should include all tool fields in docs', () => {
-      const docs = toolRegistry.generateDocs();
+      const docs = generateToolDocs();
 
       for (const tool of docs.tools) {
         expect(tool.name).toBeDefined();

@@ -33,75 +33,6 @@ export interface ToolMetadata {
 }
 
 /**
- * Global tool registry for auto-generating documentation
- */
-class ToolRegistry {
-  private tools: Map<string, ToolMetadata> = new Map();
-
-  /**
-   * Register a tool with its metadata
-   */
-  register(metadata: ToolMetadata): void {
-    this.tools.set(metadata.name, metadata);
-  }
-
-  /**
-   * Get all registered tools
-   */
-  getAll(): ToolMetadata[] {
-    return Array.from(this.tools.values());
-  }
-
-  /**
-   * Get tool by name
-   */
-  get(name: string): ToolMetadata | undefined {
-    return this.tools.get(name);
-  }
-
-  /**
-   * Generate documentation object for MCP resources
-   */
-  generateDocs(): {
-    tools: Array<{
-      name: string;
-      description: string;
-      parameters: string;
-      category: string;
-      annotations: ToolAnnotations;
-    }>;
-    version: string;
-    lastUpdated: string;
-    totalTools: number;
-  } {
-    const toolDocs = this.getAll().map((tool) => ({
-      name: tool.name,
-      description: tool.description,
-      parameters: tool.parameters,
-      category: tool.category,
-      annotations: tool.annotations,
-    }));
-
-    return {
-      tools: toolDocs,
-      version: '1.0.0',
-      lastUpdated: new Date().toISOString(),
-      totalTools: toolDocs.length,
-    };
-  }
-
-  /**
-   * Get tools by category
-   */
-  getByCategory(category: ToolMetadata['category']): ToolMetadata[] {
-    return this.getAll().filter((tool) => tool.category === category);
-  }
-}
-
-// Singleton instance
-export const toolRegistry = new ToolRegistry();
-
-/**
  * Tool definitions with metadata for all MCP tools
  * This is the single source of truth for tool documentation
  */
@@ -228,10 +159,21 @@ export const TOOL_DEFINITIONS: ToolMetadata[] = [
 ];
 
 /**
- * Initialize the tool registry with all tool definitions
+ * Generate the documentation payload from the static tool definitions.
  */
-export function initializeToolRegistry(): void {
-  for (const tool of TOOL_DEFINITIONS) {
-    toolRegistry.register(tool);
-  }
+export function generateToolDocs() {
+  const tools = TOOL_DEFINITIONS.map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.parameters,
+    category: tool.category,
+    annotations: tool.annotations,
+  }));
+
+  return {
+    tools,
+    version: '1.0.0',
+    lastUpdated: new Date().toISOString(),
+    totalTools: tools.length,
+  };
 }

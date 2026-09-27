@@ -1,9 +1,6 @@
 import { loadDefaultConfig } from '../../util/config/default';
-import { initializeToolRegistry, toolRegistry } from './lib/toolRegistry';
+import { generateToolDocs } from './lib/toolDefinitions';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-
-// Initialize the tool registry on module load
-initializeToolRegistry();
 
 /**
  * Register MCP resources with the server
@@ -40,8 +37,8 @@ export function registerResources(server: McpServer) {
   });
 
   server.resource('promptfoo-docs', 'promptfoo://docs/tools', async () => {
-    // Auto-generate documentation from the tool registry
-    const toolDocs = toolRegistry.generateDocs();
+    // Generate documentation from the static tool definitions
+    const toolDocs = generateToolDocs();
 
     return {
       contents: [
