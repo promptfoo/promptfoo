@@ -1,3 +1,5 @@
+import { addEncodedTestCases } from './testCaseAdapters';
+
 import type { TestCase } from '../../types/index';
 
 // Map of standard characters to homoglyph unicode characters
@@ -80,23 +82,9 @@ export function toHomoglyphs(text: string): string {
  * Add homoglyph encoding to test cases
  */
 export function addHomoglyphs(testCases: TestCase[], injectVar: string): TestCase[] {
-  return testCases.map((testCase) => {
-    const originalText = String(testCase.vars![injectVar]);
-    return {
-      ...testCase,
-      assert: testCase.assert?.map((assertion) => ({
-        ...assertion,
-        metric: assertion.metric ? `${assertion.metric}/Homoglyph` : assertion.metric,
-      })),
-      vars: {
-        ...testCase.vars,
-        [injectVar]: toHomoglyphs(originalText),
-      },
-      metadata: {
-        ...testCase.metadata,
-        strategyId: 'homoglyph',
-        originalText,
-      },
-    };
+  return addEncodedTestCases(testCases, injectVar, {
+    strategyId: 'homoglyph',
+    metricSuffix: 'Homoglyph',
+    encode: toHomoglyphs,
   });
 }

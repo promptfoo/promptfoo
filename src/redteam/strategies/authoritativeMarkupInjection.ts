@@ -1,4 +1,5 @@
 import logger from '../../logger';
+import { addProviderTestCases } from './testCaseAdapters';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 
@@ -8,28 +9,9 @@ export async function addAuthoritativeMarkupInjectionTestCases(
   config: Record<string, unknown>,
 ): Promise<TestCase[]> {
   logger.debug('Adding Authoritative Markup Injection test cases');
-  return testCases.map((testCase) => {
-    const originalText = String(testCase.vars![injectVar]);
-    return {
-      ...testCase,
-      provider: {
-        id: 'promptfoo:redteam:authoritative-markup-injection',
-        config: {
-          injectVar,
-          ...config,
-        },
-      },
-      assert: testCase.assert?.map((assertion) => ({
-        ...assertion,
-        metric: assertion.metric
-          ? `${assertion.metric}/AuthoritativeMarkupInjection`
-          : assertion.metric,
-      })),
-      metadata: {
-        ...testCase.metadata,
-        strategyId: 'authoritative-markup-injection',
-        originalText,
-      },
-    };
+  return addProviderTestCases(testCases, injectVar, config, {
+    providerName: 'promptfoo:redteam:authoritative-markup-injection',
+    metricSuffix: 'AuthoritativeMarkupInjection',
+    strategyId: 'authoritative-markup-injection',
   });
 }
