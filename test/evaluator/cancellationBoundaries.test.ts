@@ -1,6 +1,9 @@
 import './setup';
 
+import { randomUUID } from 'node:crypto';
+
 import { expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { evaluate } from '../../src/evaluator';
 import * as comparisonMatchers from '../../src/matchers/comparison';
 import { callProviderWithContext } from '../../src/matchers/providers';
@@ -98,6 +101,130 @@ describeEvaluator('cancellation at target and comparison boundaries', () => {
       } else {
         expect(results).toHaveLength(1);
         expect(results[0].error).toContain('Evaluation exceeded max duration of 10ms');
+      }
+    },
+  );
+
+  it('retains the scheduler slot until a timed-out provider really finishes', async () => {
+    vi.useFakeTimers();
+    const response = createDeferred<ProviderResponse>();
+    const provider: ApiProvider = {
+      id: () => 'offline-slot-ownership',
+      callApi: vi.fn(() => response.promise),
+    };
+    const record = new Eval({});
+    const evaluation = evaluate(
+      { providers: [provider], prompts: [toPrompt('hello')], tests: [{}, {}, {}] },
+      record,
+      { maxConcurrency: 1, timeoutMs: 25, maxEvalTimeMs: 0 },
+    );
+    try {
+      await vi.advanceTimersByTimeAsync(100);
+      await evaluation;
+      expect(provider.callApi).toHaveBeenCalledTimes(1);
+      const rows = await record.getResults();
+      expect(rows).toHaveLength(3);
+      expect(rows.every((row) => row.error?.includes('Evaluation timed out after 25ms'))).toBe(
+        true,
+      );
+    } finally {
+      response.resolve({ output: 'late response' });
+      await vi.advanceTimersByTimeAsync(0);
+      await evaluation;
+    }
+    expect(provider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([true, false])(
+    'retries persisted interrupted comparisons while preserving ordinary pass=%s',
+    async (ordinaryPass) => {
+      vi.useFakeTimers();
+      const controller = new AbortController();
+      const started = createDeferred<void>();
+      const response = createDeferred<ProviderResponse>();
+      const grader: ApiProvider = {
+        id: () => 'offline-resume-grader',
+        callApi: async () => {
+          started.resolve();
+          return response.promise;
+        },
+      };
+      const compare = vi
+        .spyOn(comparisonMatchers, 'matchesSelectBest')
+        .mockImplementation(async (_criteria, outputs, _grading, _vars, context) => {
+          await callProviderWithContext(grader, 'synthetic comparison', 'select-best', {}, context);
+          return outputs.map(() => ({ pass: true, score: 1, reason: 'late comparison' }));
+        });
+      const provider: ApiProvider = {
+        id: () => 'offline-resume-target',
+        callApi: vi.fn(async () => ({ output: 'completed' })),
+      };
+      const suite: TestSuite = {
+        providers: [provider],
+        prompts: [toPrompt('first'), toPrompt('second')],
+        tests: [
+          {
+            assert: [
+              {
+                type: 'javascript',
+                value: () => ({
+                  pass: ordinaryPass,
+                  score: ordinaryPass ? 0.75 : 0.25,
+                  reason: 'ordinary assertion',
+                }),
+              },
+              { type: 'select-best', value: 'fixture' },
+            ],
+          },
+        ],
+      };
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      const evaluation = evaluate(suite, record, {
+        abortSignal: controller.signal,
+        timeoutMs: 0,
+        maxEvalTimeMs: 0,
+      });
+      try {
+        await vi.advanceTimersByTimeAsync(1);
+        await started.promise;
+        controller.abort();
+        await vi.advanceTimersByTimeAsync(0);
+        await evaluation;
+        expect(
+          (await record.getResults()).every(
+            (row) => row.failureReason === ResultFailureReason.ERROR,
+          ),
+        ).toBe(true);
+        compare.mockResolvedValue([
+          { pass: true, score: 1, reason: 'selected' },
+          { pass: false, score: 0, reason: 'not selected' },
+        ]);
+        response.resolve({ output: 'late' });
+        cliState.resume = true;
+        const resumed = await Eval.findById(record.id);
+        expect(resumed).not.toBeNull();
+        await evaluate(suite, resumed!, { timeoutMs: 0, maxEvalTimeMs: 0 });
+        const rows = await resumed!.getResults();
+        const selected = rows.find((row) => row.promptIdx === 0)!;
+        expect(selected.success).toBe(ordinaryPass);
+        expect(selected.score).toBe(ordinaryPass ? 0.75 : 0.25);
+        expect(selected.failureReason).toBe(
+          ordinaryPass ? ResultFailureReason.NONE : ResultFailureReason.ASSERT,
+        );
+        expect(rows.every((row) => !row.error?.startsWith('Aborted: '))).toBe(true);
+        expect(JSON.stringify(rows.map((row) => row.gradingResult))).not.toContain('Aborted: ');
+        expect(rows.every((row) => !row.metadata?.__promptfoo?.comparisonBeforeAbort)).toBe(true);
+        expect(provider.callApi).toHaveBeenCalledTimes(2);
+        expect(resumed!.getStats()).toMatchObject({
+          successes: ordinaryPass ? 1 : 0,
+          failures: ordinaryPass ? 1 : 2,
+          errors: 0,
+        });
+      } finally {
+        response.resolve({ output: 'late' });
+        await evaluation;
+        cliState.resume = false;
+        compare.mockRestore();
       }
     },
   );

@@ -8,6 +8,7 @@ import {
   createProviderResponse,
   type MockApiProvider,
 } from '../factories/provider';
+import { createDeferred } from '../util/utils';
 
 import type { ApiProvider } from '../../src/types/index';
 
@@ -367,7 +368,7 @@ describe('SimulatedUser', () => {
     );
 
     it.each([false, true])(
-      'forwards call options to every target turn (initial=%s)',
+      'forwards call options to every conversation turn (initial=%s)',
       async (initial) => {
         const controller = new AbortController();
         const options = { abortSignal: controller.signal, includeLogProbs: true };
@@ -384,6 +385,47 @@ describe('SimulatedUser', () => {
         for (const call of vi.mocked(originalProvider.callApi).mock.calls) {
           expect(call[2]).toEqual(options);
         }
+        expect(mockUserProviderCallApi).toHaveBeenCalledTimes(2);
+        for (const call of mockUserProviderCallApi.mock.calls) {
+          expect(call[2]).toEqual(options);
+        }
+      },
+    );
+
+    it.each([false, true])(
+      'cancels user generation without starting a target turn (already aborted=%s)',
+      async (alreadyAborted) => {
+        const controller = new AbortController();
+        const reason = new DOMException('Fixture cancellation', 'AbortError');
+        const entered = createDeferred<void>();
+        mockUserProviderCallApi.mockImplementationOnce(
+          (_prompt, _context, options) =>
+            new Promise((resolve, reject) => {
+              entered.resolve();
+              const signal = options?.abortSignal;
+              if (!signal) {
+                resolve({ output: '###STOP###' });
+              } else if (signal.aborted) {
+                reject(signal.reason);
+              } else {
+                signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+              }
+            }),
+        );
+        if (alreadyAborted) {
+          controller.abort(reason);
+        }
+        const pending = simulatedUser.callApi(
+          'fixture',
+          { originalProvider, vars: {}, prompt: { raw: 'fixture', label: 'fixture' } },
+          { abortSignal: controller.signal },
+        );
+        const rejected = expect(pending).rejects.toBe(reason);
+        await entered.promise;
+        controller.abort(reason);
+        await rejected;
+        expect(mockUserProviderCallApi).toHaveBeenCalledTimes(1);
+        expect(originalProvider.callApi).not.toHaveBeenCalled();
       },
     );
 
