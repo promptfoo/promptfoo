@@ -873,10 +873,11 @@ sys.exit(4)
       } as any);
 
       expect(result.error).toContain(`Could not find Inspect CLI command '${missingInspect}'`);
-      expect(result.error).toContain("python -m pip install 'inspect-evals[osworld]'");
-      expect(result.error).toContain('plus the SDK for your selected model');
-      expect(result.error).toContain('providers[0].config.inspectCommand');
-      expect(result.error).not.toMatch(/openai|anthropic|opentelemetry/i);
+      const guidance = result.error?.split('Install prerequisites with ')[1];
+      expect(guidance).toContain("python -m pip install 'inspect-evals[osworld]'");
+      expect(guidance).toContain('plus the SDK for your selected model');
+      expect(guidance).toContain('providers[0].config.inspectCommand');
+      expect(guidance).not.toMatch(/openai|anthropic|opentelemetry/i);
       expect(result.output).toBeUndefined();
     } finally {
       await provider.shutdown();
