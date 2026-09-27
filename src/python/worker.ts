@@ -103,7 +103,10 @@ export class PythonWorker {
 
       workerProcess.on('error', (err) => {
         clearTimeout(readyTimeout);
-        reject(err);
+        if (!becameReady && !startupError) {
+          startupError = err;
+          workerProcess.kill('SIGKILL');
+        }
       });
 
       workerProcess.childProcess.once('close', () => {
@@ -310,11 +313,6 @@ export class PythonWorker {
   private markFailed(error: unknown): void {
     this.failed = true;
     this.ready = false;
-    if (this.process) {
-      const workerProcess = this.process;
-      this.process = null;
-      workerProcess.kill('SIGTERM');
-    }
     logger.error(`Python worker cannot restart: ${error}`);
     this.onStateChange?.();
   }

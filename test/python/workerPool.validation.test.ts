@@ -210,6 +210,71 @@ describe('Python pool executable validation', () => {
     },
   );
 
+  it.each(['initial', 'replacement'] as const)(
+    'waits for a failed %s process to close and ignores late readiness',
+    async (phase) => {
+      const pool = new PythonWorkerPool('fixture.py', 'call_api', 1, 'fixture-python');
+      pools.push(pool);
+      if (phase === 'replacement') {
+        await pool.initialize();
+        signals.autoReady = false;
+        shells[0].emit('close');
+      } else {
+        signals.autoReady = false;
+      }
+      let settled = false;
+      const result = (phase === 'initial' ? pool.initialize() : pool.execute('call_api', []))
+        .catch((error) => error)
+        .then((outcome) => {
+          settled = true;
+          return outcome;
+        });
+      await setImmediate();
+      const process = shells.at(-1)!;
+      const call = vi.spyOn(PythonWorker.prototype, 'call').mockResolvedValue('unexpected');
+      const kill = vi.spyOn(process, 'kill').mockImplementation(() => {});
+      try {
+        process.emit('error', new Error('fixture startup failure'));
+        await setImmediate();
+        expect(settled).toBe(false);
+        expect(kill).toHaveBeenCalledExactlyOnceWith('SIGKILL');
+        process.emit('error', new Error('duplicate startup failure'));
+        process.emit('message', 'READY');
+        expect(kill).toHaveBeenCalledTimes(1);
+        expect(call).not.toHaveBeenCalled();
+        process.emit('close');
+        expect(await result).toEqual(
+          new Error(
+            phase === 'initial'
+              ? 'fixture startup failure'
+              : 'Python worker pool has no usable workers',
+          ),
+        );
+      } finally {
+        process.emit('close');
+        await result;
+      }
+    },
+  );
+
+  it('restarts normally after an error on an already-ready worker closes', async () => {
+    const pool = new PythonWorkerPool('fixture.py', 'call_api', 1, 'fixture-python');
+    pools.push(pool);
+    await pool.initialize();
+    const process = shells[0];
+    const kill = vi.spyOn(process, 'kill');
+    process.emit('error', new Error('fixture ready-worker error'));
+    await setImmediate();
+    expect(kill).not.toHaveBeenCalled();
+    expect(shells).toHaveLength(1);
+    process.emit('close');
+    await setImmediate();
+    expect(shells).toHaveLength(2);
+    const call = vi.spyOn(PythonWorker.prototype, 'call').mockResolvedValue('recovered');
+    await expect(pool.execute('call_api', [])).resolves.toBe('recovered');
+    expect(call).toHaveBeenCalledOnce();
+  });
+
   it('waits for a timed-out startup process to close before permitting retry', async () => {
     vi.useFakeTimers();
     signals.autoReady = false;
