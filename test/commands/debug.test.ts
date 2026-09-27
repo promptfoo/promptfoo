@@ -6,13 +6,14 @@ import { setLogger, winstonLogger } from '../../src/logger';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { resolveConfigs } from '../../src/util/config/load';
 import { fetchWithTimeout } from '../../src/util/fetch/index';
+import { pathExists } from '../../src/util/file';
 import { mockProcessEnv } from '../util/utils';
 
 vi.unmock('../../src/logger');
 vi.mock('../../src/util/config/load', () => ({ resolveConfigs: vi.fn() }));
 vi.mock('../../src/util/file', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/util/file')>()),
-  pathExists: async () => true,
+  pathExists: vi.fn(),
 }));
 vi.mock('../../src/util/fetch/index', () => ({ fetchWithTimeout: vi.fn() }));
 
@@ -22,6 +23,7 @@ let restoreEnvironment: () => void;
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(resolveConfigs).mockReset();
+  vi.mocked(pathExists).mockResolvedValue(true);
   vi.mocked(fetchWithTimeout).mockReset();
   restoreEnvironment = mockProcessEnv({
     HTTP_PROXY: undefined,
@@ -87,6 +89,41 @@ describe('proxy diagnostics', () => {
     const info = JSON.parse(output);
     expect(info.env.httpsProxy).toBe('http://host.example:8080');
     expect(info.configInfo.configContent).toContain('fixture config failure');
+  });
+
+  it.each(['missing', 'invalid'] as const)(
+    'does not report default config settings when the explicit config is %s',
+    async (failure) => {
+      mockProcessEnv({ HTTPS_PROXY: 'http://host.example:8080' });
+      vi.mocked(pathExists).mockResolvedValue(failure !== 'missing');
+      vi.mocked(resolveConfigs).mockRejectedValue(new Error('fixture config failure'));
+      const program = new Command();
+      debugCommand(
+        program,
+        { env: { HTTPS_PROXY: 'http://default.example:8080' } },
+        'default.yaml',
+      );
+      await program.parseAsync(['debug', '-c', 'explicit.yaml'], { from: 'user' });
+      const output = capture.info.mock.calls.find(([message]) => message.startsWith('{'))?.[0];
+      const info = JSON.parse(output);
+      expect(info.env.httpsProxy).toBe('http://host.example:8080');
+      expect(info.configInfo.configExists).toBe(failure !== 'missing');
+      expect(info.configInfo.specifiedConfigPath).toBe('explicit.yaml');
+      if (failure === 'missing') {
+        expect(resolveConfigs).not.toHaveBeenCalled();
+      } else {
+        expect(info.configInfo.configContent).toContain('fixture config failure');
+      }
+    },
+  );
+
+  it('reports provided defaults when no config path is selected', async () => {
+    const program = new Command();
+    debugCommand(program, { env: { HTTPS_PROXY: 'http://default.example:8080' } }, undefined);
+    await program.parseAsync(['debug'], { from: 'user' });
+    const output = capture.info.mock.calls.find(([message]) => message.startsWith('{'))?.[0];
+    expect(JSON.parse(output).env.httpsProxy).toBe('http://default.example:8080');
+    expect(resolveConfigs).not.toHaveBeenCalled();
   });
 
   it.each([
