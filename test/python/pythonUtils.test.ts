@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Create mock for execFileAsync - must be hoisted for vi.mock factory
 const { mockExecFileAsync, mockExecFile } = vi.hoisted(() => {
@@ -28,7 +28,7 @@ import {
   removeSecureTempDirectory,
   writeSecureTempFile,
 } from '../../src/util/secureTempFiles';
-import { mockProcessEnv } from '../util/utils';
+import { createDeferred, mockProcessEnv } from '../util/utils';
 
 const fsMock = vi.hoisted(() => ({
   writeFileSync: vi.fn(),
@@ -491,6 +491,108 @@ describe('Python Utils', () => {
     });
     beforeEach(() => {
       vi.clearAllMocks();
+    });
+
+    describe('one-shot invocation validation', () => {
+      beforeEach(() => {
+        vi.mocked(fs.readFileSync).mockReturnValue(
+          JSON.stringify({ type: 'final_result', data: 42 }),
+        );
+        mockExecFileAsync.mockResolvedValue({ stdout: 'Python 3.12.0', stderr: '' });
+        mockPythonShellInstance.end.mockImplementation((callback: (error: Error | null) => void) =>
+          callback(null),
+        );
+      });
+
+      afterEach(() => {
+        mockExecFileAsync.mockReset();
+        mockPythonShellInstance.end.mockReset();
+        vi.mocked(fs.readFileSync).mockReset();
+      });
+
+      const run = (pythonExecutable?: string) =>
+        pythonUtils.runPython('/fixture/script.py', 'call_api', [], { pythonExecutable });
+
+      it('coalesces concurrent probes and reuses success within one invocation', async () => {
+        const probe = createDeferred<{ stdout: string; stderr: string }>();
+        mockExecFileAsync.mockReturnValue(probe.promise);
+        await cliState.withEnv({}, async () => {
+          const calls = Promise.all(Array.from({ length: 4 }, () => run('fixture-python')));
+          try {
+            expect(mockExecFileAsync).toHaveBeenCalledOnce();
+          } finally {
+            probe.resolve({ stdout: 'Python 3.12.0', stderr: '' });
+            await calls;
+          }
+          expect(await run('fixture-python')).toBe(42);
+          expect(mockExecFileAsync).toHaveBeenCalledOnce();
+          expect(PythonShell).toHaveBeenCalledTimes(5);
+        });
+      });
+
+      it('keeps concurrent file and suite environments in separate validation scopes', async () => {
+        await Promise.all(
+          ['first', 'second'].map((name) =>
+            cliState.withEnvFileOverrides({ PATH: `/fixture/${name}` }, () =>
+              cliState.withEnv({ PROMPTFOO_REVIEW_ENV_PROBE: name }, () =>
+                Promise.all([run('fixture-python'), run('fixture-python')]),
+              ),
+            ),
+          ),
+        );
+        expect(mockExecFileAsync).toHaveBeenCalledTimes(2);
+        expect(mockExecFileAsync.mock.calls.map((call) => call[2].env.PATH).sort()).toEqual([
+          '/fixture/first',
+          '/fixture/second',
+        ]);
+        expect(
+          vi
+            .mocked(PythonShell)
+            .mock.calls.map((call) => call[1]?.env?.PATH)
+            .sort(),
+        ).toEqual(['/fixture/first', '/fixture/first', '/fixture/second', '/fixture/second']);
+      });
+
+      it('distinguishes executable names and explicit versus fallback validation', async () => {
+        await cliState.withEnv({}, async () => {
+          await run('python');
+          await run();
+          await run('other-python');
+          await run('python');
+        });
+        expect(mockExecFileAsync.mock.calls.map((call) => call[0])).toEqual([
+          'python',
+          'python',
+          'other-python',
+        ]);
+      });
+
+      it('evicts failed validation so the same invocation can retry', async () => {
+        mockExecFileAsync.mockRejectedValue(new Error('fixture unavailable'));
+        await cliState.withEnv({}, async () => {
+          const results = await Promise.allSettled([run('fixture-python'), run('fixture-python')]);
+          expect(results.every((result) => result.status === 'rejected')).toBe(true);
+          expect(mockExecFileAsync).toHaveBeenCalledOnce();
+          mockExecFileAsync.mockResolvedValue({ stdout: 'Python 3.12.0', stderr: '' });
+          expect(await run('fixture-python')).toBe(42);
+          expect(await run('fixture-python')).toBe(42);
+          expect(mockExecFileAsync).toHaveBeenCalledTimes(2);
+        });
+      });
+
+      it('revalidates unscoped calls and explicit worker validation', async () => {
+        await run('fixture-python');
+        await run('fixture-python');
+        expect(mockExecFileAsync).toHaveBeenCalledTimes(2);
+        await cliState.withEnv({}, async () => {
+          await run('fixture-python');
+          mockExecFileAsync.mockRejectedValue(new Error('fixture removed'));
+          await expect(pythonUtils.validatePythonPath('fixture-python', true)).rejects.toThrow(
+            'Python 3 not found',
+          );
+        });
+        expect(mockExecFileAsync).toHaveBeenCalledTimes(4);
+      });
     });
 
     it('should execute a Python script with proper arguments', async () => {

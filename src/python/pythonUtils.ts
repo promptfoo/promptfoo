@@ -4,6 +4,7 @@ import path from 'path';
 import { promisify } from 'util';
 
 import { PythonShell } from 'python-shell';
+import cliState from '../cliState';
 import { getEnvBool, getEnvString, getProcessEnv } from '../envars';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
@@ -16,6 +17,7 @@ import {
 import { PythonStderrLogger } from './stderr';
 
 const execFileAsync = promisify(execFile);
+const oneShotValidations = new WeakMap<object, Map<string, Promise<string>>>();
 
 import type { Options as PythonShellOptions } from 'python-shell';
 
@@ -221,6 +223,29 @@ export async function validatePythonPath(pythonPath: string, isExplicit: boolean
   );
 }
 
+// One-shot calls share validation within an invocation; worker restarts revalidate directly.
+function validateOneShotPythonPath(pythonPath: string, isExplicit: boolean): Promise<string> {
+  const scope = cliState.envScope;
+  if (!scope) {
+    return validatePythonPath(pythonPath, isExplicit);
+  }
+  let validations = oneShotValidations.get(scope);
+  if (!validations) {
+    validations = new Map();
+    oneShotValidations.set(scope, validations);
+  }
+  const key = JSON.stringify([pythonPath, isExplicit]);
+  let validation = validations.get(key);
+  if (!validation) {
+    validation = validatePythonPath(pythonPath, isExplicit).catch((error) => {
+      validations.delete(key);
+      throw error;
+    });
+    validations.set(key, validation);
+  }
+  return validation;
+}
+
 /**
  * Runs a Python script with the specified method and arguments.
  *
@@ -243,7 +268,7 @@ export async function runPython<T = unknown>(
   let pythonPath = customPath || 'python';
   let tempDirectory: string | undefined;
 
-  pythonPath = await validatePythonPath(pythonPath, typeof customPath === 'string');
+  pythonPath = await validateOneShotPythonPath(pythonPath, typeof customPath === 'string');
 
   try {
     tempDirectory = await createSecureTempDirectory('promptfoo-python-');
