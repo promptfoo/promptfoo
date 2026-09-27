@@ -2526,18 +2526,6 @@
             "all_proxy": {
               "type": "string"
             },
-            "FTP_PROXY": {
-              "type": "string"
-            },
-            "ftp_proxy": {
-              "type": "string"
-            },
-            "GOPHER_PROXY": {
-              "type": "string"
-            },
-            "gopher_proxy": {
-              "type": "string"
-            },
             "HTTP_PROXY": {
               "type": "string"
             },
@@ -2554,18 +2542,6 @@
               "type": "string"
             },
             "no_proxy": {
-              "type": "string"
-            },
-            "WS_PROXY": {
-              "type": "string"
-            },
-            "ws_proxy": {
-              "type": "string"
-            },
-            "WSS_PROXY": {
-              "type": "string"
-            },
-            "wss_proxy": {
               "type": "string"
             }
           }

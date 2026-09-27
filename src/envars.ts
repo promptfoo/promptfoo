@@ -168,20 +168,12 @@ type EnvVars = {
   //=========================================================================
   ALL_PROXY?: string;
   all_proxy?: string;
-  FTP_PROXY?: string;
-  ftp_proxy?: string;
-  GOPHER_PROXY?: string;
-  gopher_proxy?: string;
   HTTP_PROXY?: string;
   http_proxy?: string;
   HTTPS_PROXY?: string;
   https_proxy?: string;
   NO_PROXY?: string;
   no_proxy?: string;
-  WS_PROXY?: string;
-  ws_proxy?: string;
-  WSS_PROXY?: string;
-  wss_proxy?: string;
 
   //=========================================================================
   // System and network settings
