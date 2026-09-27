@@ -411,6 +411,22 @@
       "rangeStrategy": "bump",
       "schedule": ["before 6am on the first day of the month"],
       "minimumReleaseAge": "10 days"
+    },
+    {
+      "description": "Preserve provider-python's Python 3.9-compatible AnyIO pin until the example raises its Python floor and replaces the 4.12.x pin.",
+      "matchManagers": ["pip_requirements"],
+      "matchFileNames": ["examples/provider-python/requirements.txt"],
+      "matchPackageNames": ["anyio"],
+      "matchCurrentValue": "/^==\\s*4\\.12\\.\\d+$/",
+      "allowedVersions": "<4.13"
+    },
+    {
+      "description": "Preserve the OpenAI usage-object compatibility bound for Agents SDK 0.14 until the example migrates the SDK and removes this bound.",
+      "matchManagers": ["pip_requirements"],
+      "matchFileNames": ["examples/openai-agents/requirements.txt"],
+      "matchPackageNames": ["openai"],
+      "matchCurrentValue": "/<\\s*2\\.45(?:\\.0)?(?:,|$)/",
+      "allowedVersions": "<2.45.0"
     }
   ]
 }
