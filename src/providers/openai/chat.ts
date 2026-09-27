@@ -290,7 +290,10 @@ function reconcileOpenRouterReasoning(
 }
 
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
-  readonly handlesOwnRetries: boolean = true;
+  get handlesOwnRetries(): boolean {
+    // Gateways can return retryable errors in successful HTTP response bodies.
+    return !this.usesGatewayErrorFormat();
+  }
 
   private usesOpenRouter(): boolean {
     const system = this.getGenAISystem();

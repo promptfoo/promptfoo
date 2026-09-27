@@ -1745,7 +1745,11 @@ async function createHttpsAgent(
 }
 
 export class HttpProvider implements ApiProvider {
-  readonly handlesOwnRetries: boolean = true;
+  private readonly hasCustomRetryLogic: boolean;
+
+  get handlesOwnRetries(): boolean {
+    return !this.hasCustomRetryLogic && !this.config.auth && !this.config.session;
+  }
 
   url: string;
   config: HttpProviderConfig;
@@ -1790,6 +1794,14 @@ export class HttpProvider implements ApiProvider {
       createTransformRequest,
     );
     this.validateStatus = createValidateStatus(this.config.validateStatus);
+    // These captured callbacks can fail outside the transport retry loop.
+    this.hasCustomRetryLogic = Boolean(
+      this.config.validateStatus ||
+        this.config.transformRequest ||
+        this.config.transformResponse ||
+        this.config.responseParser ||
+        this.config.sessionParser,
+    );
 
     // Initialize session endpoint parser if session config is provided
     if (this.config.session) {

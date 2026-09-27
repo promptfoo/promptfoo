@@ -1,10 +1,14 @@
+import { OAuth2Client } from 'google-auth-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { withCacheEnabled } from '../../src/cache';
 import { AnthropicMessagesProvider } from '../../src/providers/anthropic/messages';
+import { GoogleImageProvider } from '../../src/providers/google/image';
 import { HttpProvider } from '../../src/providers/http';
 import { N8nProvider } from '../../src/providers/n8n';
 import { OpenAiAgentsApiProvider } from '../../src/providers/openai/agents-api';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
+import { OpenRouterProvider } from '../../src/providers/openrouter';
 import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { getFetchRetryContextMaxRetries } from '../../src/util/fetch/retryContext';
@@ -63,11 +67,332 @@ describe('provider operation retry ownership', () => {
     },
   );
 
+  it.each([0, 1, 3])(
+    'preserves HTTP status-validation recovery with maxRetries=%i',
+    async (maxRetries) => {
+      vi.stubEnv('PROMPTFOO_RETRY_5XX', 'false');
+      const fetch = vi
+        .fn()
+        .mockImplementation(async () =>
+          fetch.mock.calls.length <= maxRetries
+            ? new Response('temporarily unavailable', { status: 503 })
+            : Response.json({ output: 'recovered' }),
+        );
+      vi.stubGlobal('fetch', fetch);
+      const result = await invoke(
+        new HttpProvider('https://retry.fixture.test/validated', {
+          config: {
+            method: 'GET',
+            maxRetries,
+            validateStatus: 'status >= 200 && status < 300',
+            responseParser: 'json.output',
+          },
+        }),
+      );
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('recovered');
+      expect(fetch).toHaveBeenCalledTimes(maxRetries + 1);
+    },
+  );
+
+  const chatProviders = [
+    [
+      'OpenRouter',
+      (maxRetries: number) =>
+        new OpenRouterProvider('fixture', { config: { apiKey: 'fixture', maxRetries } }),
+    ],
+    [
+      'OpenAI gateway',
+      (maxRetries: number) =>
+        new OpenAiChatCompletionProvider('fixture', {
+          config: { apiKey: 'fixture', apiBaseUrl: 'https://gateway.fixture.test/v1', maxRetries },
+        }),
+    ],
+  ] as const;
+  describe.each(chatProviders)('%s parsed response recovery', (_label, createProvider) => {
+    it.each([0, 1, 3])(
+      'preserves HTTP 200 throttling recovery with maxRetries=%i',
+      async (maxRetries) => {
+        const fetch = vi.fn().mockImplementation(async () =>
+          Response.json(
+            fetch.mock.calls.length <= maxRetries
+              ? {
+                  choices: [
+                    {
+                      finish_reason: 'error',
+                      error: {
+                        message: 'Too many requests',
+                        metadata: { error_type: 'rate_limit_exceeded' },
+                      },
+                    },
+                  ],
+                }
+              : {
+                  choices: [
+                    {
+                      finish_reason: 'stop',
+                      message: { role: 'assistant', content: 'recovered' },
+                    },
+                  ],
+                },
+          ),
+        );
+        vi.stubGlobal('fetch', fetch);
+        const result = await invoke(createProvider(maxRetries));
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('recovered');
+        expect(fetch).toHaveBeenCalledTimes(maxRetries + 1);
+      },
+    );
+  });
+
+  describe.each(chatProviders)('%s excluded retry limits', (_label, createProvider) => {
+    it('keeps maxRetries zero when a parsed throttle persists', async () => {
+      const fetch = vi.fn().mockImplementation(async () =>
+        Response.json({
+          choices: [
+            {
+              finish_reason: 'error',
+              error: {
+                message: 'Rate limit exceeded',
+                metadata: { error_type: 'rate_limit_exceeded' },
+              },
+            },
+          ],
+        }),
+      );
+      vi.stubGlobal('fetch', fetch);
+      const result = await invoke(createProvider(0));
+      expect(result.error).toContain('Rate limit exceeded');
+      expect(result.metadata?.rateLimitKind).toBe('rate_limit');
+      expect(fetch).toHaveBeenCalledOnce();
+    });
+
+    it('does not retry a parsed hard quota', async () => {
+      const fetch = vi.fn().mockImplementation(async () =>
+        Response.json({
+          choices: [
+            {
+              finish_reason: 'error',
+              error: {
+                message: 'Rate limit exceeded',
+                code: 'credit_balance_exhausted',
+                metadata: { error_type: 'rate_limit_exceeded' },
+              },
+            },
+          ],
+        }),
+      );
+      vi.stubGlobal('fetch', fetch);
+      const result = await invoke(createProvider(3));
+      expect(result.error).toContain('Rate limit exceeded');
+      expect(result.metadata?.rateLimitKind).toBe('quota');
+      expect(fetch).toHaveBeenCalledOnce();
+    });
+  });
+
+  it.each([0, 1, 3])(
+    'preserves Vertex Imagen OAuth 429 recovery with maxRetries=%i',
+    async (maxRetries) => {
+      let requests = 0;
+      const client = new OAuth2Client({ credentials: { access_token: 'fixture' } });
+      client.transporter.defaults.adapter = async (config) => {
+        const throttled = ++requests <= maxRetries;
+        const data = throttled
+          ? { error: { message: 'Rate limit exceeded' } }
+          : { predictions: [{ bytesBase64Encoded: 'aGk=', mimeType: 'image/png' }] };
+        return Object.assign(
+          new Response(JSON.stringify(data), { status: throttled ? 429 : 200 }),
+          { data: data as any, config },
+        );
+      };
+      const config = { projectId: 'fixture', maxRetries };
+      const provider = new GoogleImageProvider('imagen-4.0-generate-001', { config });
+      vi.spyOn(provider as any, 'getClientWithCredentials').mockResolvedValue(client);
+      vi.spyOn(provider as any, 'getProjectId').mockResolvedValue('fixture');
+      const result = await invoke(provider);
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('data:image/png;base64,aGk=');
+      expect(requests).toBe(maxRetries + 1);
+      // This is the existing provider-local total-attempt count, not the scheduler budget.
+      expect(provider.maxRetries).toBe(3);
+    },
+  );
+
+  it('preserves HTTP OAuth token status recovery before the target request', async () => {
+    vi.stubEnv('PROMPTFOO_RETRY_5XX', 'false');
+    let tokens = 0;
+    let targets = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string | URL | Request) => {
+        if (String(url).endsWith('/token')) {
+          return ++tokens === 1
+            ? new Response('unavailable', { status: 503 })
+            : Response.json({ access_token: 'fixture', expires_in: 3600 });
+        }
+        targets++;
+        return Response.json({ output: 'recovered' });
+      }),
+    );
+    const result = await invoke(
+      new HttpProvider('https://retry.fixture.test/target', {
+        config: {
+          method: 'GET',
+          maxRetries: 1,
+          auth: {
+            type: 'oauth',
+            grantType: 'client_credentials',
+            tokenUrl: 'https://retry.fixture.test/token',
+            clientId: 'fixture',
+            clientSecret: 'fixture',
+          },
+        },
+      }),
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.output).toEqual({ output: 'recovered' });
+    expect(tokens).toBe(2);
+    expect(targets).toBe(1);
+  });
+
+  it('keeps zero scheduler retries for excluded HTTP validation', async () => {
+    vi.stubEnv('PROMPTFOO_RETRY_5XX', 'false');
+    const fetch = vi
+      .fn()
+      .mockImplementation(async () => new Response('unavailable', { status: 503 }));
+    vi.stubGlobal('fetch', fetch);
+    const result = await invoke(
+      new HttpProvider('https://retry.fixture.test/zero', {
+        config: { method: 'GET', maxRetries: 0, validateStatus: 'status === 200' },
+      }),
+    );
+    expect(result.error).toContain('503');
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it('preserves HTTP session endpoint status recovery before the target request', async () => {
+    vi.stubEnv('PROMPTFOO_RETRY_5XX', 'false');
+    let sessions = 0;
+    let targets = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string | URL | Request) => {
+        if (String(url).endsWith('/session')) {
+          return ++sessions === 1
+            ? new Response('unavailable', { status: 503 })
+            : Response.json({ id: 'session-fixture' });
+        }
+        targets++;
+        return Response.json({ output: 'recovered' });
+      }),
+    );
+    const result = await invoke(
+      new HttpProvider('https://retry.fixture.test/target', {
+        config: {
+          method: 'GET',
+          maxRetries: 1,
+          session: { url: 'https://retry.fixture.test/session', responseParser: 'data.body.id' },
+        },
+      }),
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.output).toEqual({ output: 'recovered' });
+    expect(sessions).toBe(2);
+    expect(targets).toBe(1);
+  });
+
+  it('preserves custom HTTP response-transform recovery outside the transport loop', async () => {
+    const fetch = vi
+      .fn()
+      .mockImplementation(async () =>
+        Response.json(fetch.mock.calls.length === 1 ? { retry: true } : { output: 'recovered' }),
+      );
+    vi.stubGlobal('fetch', fetch);
+    const result = await invoke(
+      new HttpProvider('https://retry.fixture.test/transform', {
+        config: {
+          method: 'GET',
+          maxRetries: 1,
+          responseParser:
+            "json.retry ? (() => { throw new Error('503 from upstream'); })() : json.output",
+        },
+      }),
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('recovered');
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserves Responses gateway HTTP 200 error recovery', async () => {
+    const fetch = vi.fn().mockImplementation(async () =>
+      Response.json(
+        fetch.mock.calls.length === 1
+          ? { error: { message: 'Rate limit exceeded' } }
+          : {
+              id: 'resp_fixture',
+              status: 'completed',
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'recovered' }],
+                },
+              ],
+            },
+      ),
+    );
+    vi.stubGlobal('fetch', fetch);
+    const result = await invoke(
+      new OpenAiResponsesProvider('fixture', {
+        config: { apiKey: 'fixture', apiBaseUrl: 'https://gateway.fixture.test/v1', maxRetries: 1 },
+      }),
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('recovered');
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps HTTP ownership aligned with the captured validator when config is mutated', () => {
+    const validated = new HttpProvider('https://retry.fixture.test/validated', {
+      config: { method: 'GET', validateStatus: 'status === 200' },
+    });
+    const defaultValidation = new HttpProvider('https://retry.fixture.test/default', {
+      config: { method: 'GET' },
+    });
+    validated.config.validateStatus = undefined;
+    defaultValidation.config.validateStatus = 'status === 200';
+    expect(validated.handlesOwnRetries).toBe(false);
+    expect(defaultValidation.handlesOwnRetries).toBe(true);
+    defaultValidation.config.session = {
+      method: 'POST',
+      url: 'https://retry.fixture.test/session',
+      responseParser: 'data.body.id',
+    };
+    expect(defaultValidation.handlesOwnRetries).toBe(false);
+  });
+
+  it('rechecks endpoint-dependent ownership and recognizes OpenRouter subclasses', () => {
+    const provider = new OpenAiChatCompletionProvider('fixture', {
+      config: { apiKey: 'fixture', apiBaseUrl: 'https://api.openai.com/v1' },
+    });
+    expect(provider.handlesOwnRetries).toBe(true);
+    provider.config.apiBaseUrl = 'https://gateway.fixture.test/v1';
+    expect(provider.handlesOwnRetries).toBe(false);
+    provider.config.apiBaseUrl = 'https://api.openai.com/v1';
+    expect(provider.handlesOwnRetries).toBe(true);
+    // OpenRouter's response parser remains active even with a custom endpoint.
+    const openRouter = new OpenRouterProvider('fixture', {
+      config: { apiKey: 'fixture', apiBaseUrl: 'https://api.openai.com/v1' },
+    });
+    expect(openRouter.handlesOwnRetries).toBe(false);
+  });
+
   it('does not restart an OpenAI conversation after its request retry budget', async () => {
     const fetch = vi.fn().mockImplementation(async () => throttled());
     vi.stubGlobal('fetch', fetch);
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
-      config: { apiKey: 'fixture', apiBaseUrl: 'https://retry.fixture.test/v1', maxRetries: 1 },
+      config: { apiKey: 'fixture', apiBaseUrl: 'https://api.openai.com/v1', maxRetries: 1 },
     });
     const result = await invoke(provider);
     expect(result.error).toContain('429');
@@ -247,7 +572,9 @@ describe('provider operation retry ownership', () => {
   it('lets custom subclasses opt back into scheduler retries', async () => {
     let calls = 0;
     class CustomHttpProvider extends HttpProvider {
-      override readonly handlesOwnRetries = false;
+      override get handlesOwnRetries(): boolean {
+        return false;
+      }
       override async callApi(): Promise<ProviderResponse> {
         calls++;
         return {
