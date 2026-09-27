@@ -383,10 +383,14 @@ describe('provider operation retry ownership', () => {
     const config = { apiKey: 'fixture', apiBaseUrl: 'https://retry.fixture.test', maxRetries: 1 };
     const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', { config });
     const sdkErrors: string[] = [];
-    const create = provider.anthropic.messages.create.bind(provider.anthropic.messages);
-    vi.spyOn(provider.anthropic.messages, 'create').mockImplementation((...args) => {
-      const request = create(...args);
-      // Preserve the real SDK promise while retaining errors before provider normalization.
+    const create = provider.anthropic.messages.create;
+    const sdk = provider.anthropic as unknown as {
+      makeRequest: (...args: unknown[]) => Promise<unknown>;
+    };
+    const makeRequest = sdk.makeRequest.bind(sdk);
+    vi.spyOn(sdk, 'makeRequest').mockImplementation((...args) => {
+      const request = makeRequest(...args);
+      // Observe the native promise without starting APIPromise's lazy response parsing.
       void request.catch((error) => {
         sdkErrors.push(error instanceof Error ? error.stack || error.message : String(error));
       });
@@ -394,6 +398,8 @@ describe('provider operation retry ownership', () => {
     });
     const result = await invoke(provider);
     const diagnostics = JSON.stringify({ fetchCount: fetch.mock.calls.length, sdkErrors });
+    expect(provider.anthropic.messages.create).toBe(create);
+    expect(sdkErrors, diagnostics).not.toHaveLength(0);
     expect(result.error, diagnostics).toContain('429');
     // The SDK's two retries and the scheduler's one retry remain separate.
     expect(fetch, diagnostics).toHaveBeenCalledTimes(6);
