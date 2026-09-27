@@ -9,7 +9,7 @@ Promptfoo uses OpenTelemetry (OTLP) traces to show what your application did beh
 
 Each Node.js eval owns its tracer and exporters, using its own `PROMPTFOO_OTEL_*` settings. Finishing an eval flushes its spans without stopping other evals.
 
-Promptfoo preserves your application's registered OpenTelemetry SDK. Otherwise, global tracers follow the active eval. Promptfoo releases its global registrations after the last eval, so your application can register its SDK later.
+If your application uses its own OpenTelemetry SDK, register it before running evals. Promptfoo preserves that SDK. Otherwise, global tracers follow the active eval.
 
 Use traces to check tool calls and execution paths, give graders more context, guide red-team attacks, and explore the full timeline alongside your results.
 
@@ -145,8 +145,6 @@ tracing:
 ```
 
 ### 2. Instrument Your Provider
-
-If your application already uses OpenTelemetry, register its SDK before running evals.
 
 Promptfoo passes a W3C trace context to providers via the `traceparent` field. Use this to create child spans:
 
