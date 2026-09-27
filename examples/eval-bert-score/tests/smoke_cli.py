@@ -8,6 +8,8 @@ import signal
 import subprocess
 import sys
 import tempfile
+import uuid
+from contextlib import contextmanager
 from pathlib import Path
 
 import torch
@@ -20,6 +22,17 @@ from transformers import PreTrainedTokenizerFast, RobertaConfig, RobertaModel
 
 EXAMPLE = Path(__file__).resolve().parents[1]
 REPO = EXAMPLE.parents[1]
+
+
+@contextmanager
+def local_model_alias(model_path):
+    # BERTScore treats any model name containing "t5" as T5, even a local path.
+    alias = REPO / f".promptfoo-bertscore-model-{uuid.uuid4().hex}"
+    alias.symlink_to(model_path, target_is_directory=True)
+    try:
+        yield f"./{alias.name}"
+    finally:
+        alias.unlink()
 
 
 def run_cli(config, output, env):
@@ -64,7 +77,11 @@ def main():
             reference = test["vars"]["reference"]
             references.extend(reference if isinstance(reference, list) else [reference])
 
-    with tempfile.TemporaryDirectory(prefix="promptfoo-bertscore-smoke-") as directory:
+    # Force the physical path to contain "t5" so removing the safe alias regresses.
+    with (
+        tempfile.TemporaryDirectory(prefix="promptfoo-bertscore-smoke-t5-") as directory,
+        local_model_alias(Path(directory) / "model") as model_type,
+    ):
         root = Path(directory)
         model_path = root / "model"
         vocabulary = ["<s>", "<pad>", "</s>", "<unk>"]
@@ -121,7 +138,7 @@ def main():
                 variables = test["vars"]
                 reference = variables["reference"]
                 variables.update(
-                    bertScoreModel=str(model_path),
+                    bertScoreModel=model_type,
                     bertScoreLayers=2,
                     smokeOutput=reference[-1]
                     if isinstance(reference, list)
