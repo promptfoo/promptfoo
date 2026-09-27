@@ -109,12 +109,13 @@ def main():
             ):
                 shutil.copyfile(EXAMPLE / name, root / name)
             endpoint = f"http://127.0.0.1:{server.server_port}/v1"
-            env = {
-                key: value
-                for key, value in os.environ.items()
-                if not key.lower().endswith("_proxy")
-            }
+            env = os.environ.copy()
+            # Empty values also prevent dotenv from restoring repository proxy settings.
+            for key in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
+                env[key] = env[key.lower()] = ""
             env.update(
+                NO_PROXY="*",
+                no_proxy="*",
                 OPENAI_API_KEY="local-smoke-key",
                 OPENAI_BASE_URL=endpoint,
                 OPENAI_API_BASE=endpoint,
