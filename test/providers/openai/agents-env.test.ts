@@ -1,3 +1,7 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import {
   Agent,
   type Model,
@@ -16,12 +20,17 @@ import { loadApiProvider } from '../../../src/providers/index';
 import { OpenAiAgentsProvider } from '../../../src/providers/openai/agents';
 import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
 import { CreateJobRequestSchema } from '../../../src/types/api/eval';
+import { getProviderFromCloud } from '../../../src/util/cloud';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 import { getProxyForUrl } from '../../../src/util/fetch/proxy';
 import { ProviderOptionsSchema } from '../../../src/validators/providers';
 import { clearProxyEnv, createDeferred, mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/util/fetch/index', () => ({ fetchWithProxy: vi.fn() }));
+vi.mock('../../../src/util/cloud', async (importOriginal) => ({
+  ...(await importOriginal()),
+  getProviderFromCloud: vi.fn(),
+}));
 let restoreEnv = () => {};
 const response = {
   id: 'resp_fixture',
@@ -349,6 +358,118 @@ describe('Agents SDK scoped client', () => {
     expect(fetchWithProxy).toHaveBeenCalledOnce();
     expect(request().headers.get('authorization')).toBe('Bearer host-key');
   });
+
+  it.each([
+    {
+      env: { HTTPS_PROXY: 'http://provider.example:8080' },
+      expected: 'http://provider.example:8080',
+    },
+    { env: { HTTPS_PROXY: '' }, expected: '' },
+    { env: { HTTPS_PROXY: undefined }, expected: 'http://suite.example:8080' },
+    {
+      env: { HTTPS_PROXY: 'http://upper.example:8080', https_proxy: 'http://lower.example:8080' },
+      expected: 'http://lower.example:8080',
+    },
+    { env: { HTTPS_PROXY: 'http://upper.example:8080', https_proxy: '' }, expected: '' },
+    { env: { NO_PROXY: '*' }, expected: '' },
+  ])('merges provider proxy aliases before retained capture: $env', async ({ env, expected }) => {
+    clearProxyEnv();
+    vi.mocked(fetchWithProxy).mockImplementation(async () => {
+      expect(getProxyForUrl('https://api.openai.com/v1/responses')).toBe(expected);
+      return Response.json(response);
+    });
+    const target = await loadApiProvider('openai:agents:fixture', {
+      env: { https_proxy: 'http://suite.example:8080', no_proxy: '' },
+      options: {
+        env,
+        config: {
+          agent: { name: 'fixture', model: 'gpt-4.1-mini' },
+          headers: { 'x-explicit-template': '{{env.https_proxy}}' },
+        },
+      },
+    });
+    expect((await target.callApi('hello')).output).toBe('ok');
+    expect(request().headers.get('x-explicit-template')).toBe(
+      env.https_proxy ?? 'http://suite.example:8080',
+    );
+  });
+
+  it.each(['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY'] as const)(
+    'retains a provider %s empty mask over a suite lowercase alias',
+    async (key) => {
+      clearProxyEnv();
+      const url =
+        key === 'HTTP_PROXY'
+          ? 'http://fixture.example/v1/responses'
+          : 'https://api.openai.com/v1/responses';
+      vi.mocked(fetchWithProxy).mockImplementation(async () => {
+        expect(getProxyForUrl(url)).toBe(key === 'NO_PROXY' ? 'http://host.example:8080' : '');
+        return Response.json(response);
+      });
+      const target = await loadApiProvider('openai:agents', {
+        env: {
+          ...(key === 'NO_PROXY' && { HTTPS_PROXY: 'http://host.example:8080' }),
+          [key.toLowerCase()]: key === 'NO_PROXY' ? '*' : 'http://suite.example:8080',
+        },
+        options: {
+          env: { [key]: '' },
+          config: { agent: { name: 'fixture', model: 'gpt-4.1-mini' } },
+        },
+      });
+      expect((await target.callApi('hello')).output).toBe('ok');
+    },
+  );
+
+  it.each(
+    ['http://provider.example:8080', ''].flatMap((value) =>
+      ['file', 'nested file', 'cloud'].map((wrapperType) => ({ value, wrapperType })),
+    ),
+  )(
+    'preserves provider proxy priority through a $wrapperType wrapper (value=$value)',
+    async ({ value, wrapperType }) => {
+      clearProxyEnv();
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-agents-proxy-'));
+      const filename = path.join(directory, 'provider.json');
+      try {
+        fs.writeFileSync(
+          filename,
+          JSON.stringify({
+            id: 'openai:agents:fixture',
+            config: { agent: { name: 'fixture', model: 'gpt-4.1-mini' } },
+          }),
+        );
+        const wrapper = path.join(directory, 'wrapper.json');
+        if (wrapperType === 'nested file') {
+          fs.writeFileSync(
+            wrapper,
+            JSON.stringify({ id: '{{env.AGENTS_PROXY_FIXTURE_PROVIDER}}' }),
+          );
+        }
+        vi.mocked(fetchWithProxy).mockImplementation(async () => {
+          expect(getProxyForUrl('https://api.openai.com/v1/responses')).toBe(value);
+          return Response.json(response);
+        });
+        vi.mocked(getProviderFromCloud).mockResolvedValue({
+          id: `file://${filename}`,
+          env: { https_proxy: 'http://cloud-default.example:8080' },
+        });
+        const reference =
+          wrapperType === 'cloud'
+            ? 'promptfoo://provider/12345678-1234-1234-1234-123456789abc'
+            : `file://${wrapperType === 'nested file' ? wrapper : filename}`;
+        const target = await loadApiProvider(reference, {
+          env: {
+            https_proxy: 'http://suite.example:8080',
+            AGENTS_PROXY_FIXTURE_PROVIDER: `file://${filename}`,
+          },
+          options: { env: { HTTPS_PROXY: value } },
+        });
+        expect((await target.callApi('hello')).output).toBe('ok');
+      } finally {
+        fs.rmSync(directory, { recursive: true, force: true });
+      }
+    },
+  );
 
   it('isolates sequential invocation-file credentials on a reused provider', async () => {
     const target = provider();

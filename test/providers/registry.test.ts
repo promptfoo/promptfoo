@@ -9,7 +9,7 @@ import { MCPProvider } from '../../src/providers/mcp';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
-import { getProviderFactories, providerMap } from '../../src/providers/registry';
+import { getProviderFactories, mergeProviderEnv, providerMap } from '../../src/providers/registry';
 import { ScriptCompletionProvider } from '../../src/providers/scriptCompletion';
 
 import type { CometApiImageProvider } from '../../src/providers/cometapi';
@@ -64,6 +64,19 @@ vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 
 describe('Provider Registry', () => {
+  it.each(['openai:agents-api:fixture', 'openai:chat:fixture', 'openai:codex-sdk'])(
+    'does not apply Agents SDK proxy merging to %s',
+    (providerPath) => {
+      expect(
+        mergeProviderEnv(
+          providerPath,
+          { https_proxy: 'http://suite.example:8080' },
+          { HTTPS_PROXY: '' },
+        ),
+      ).toEqual({ https_proxy: 'http://suite.example:8080', HTTPS_PROXY: '' });
+    },
+  );
+
   it.each(['openai:agents-api', 'openai:agents-api:gpt-6-astra'])(
     'routes %s to the hosted Agents API with scoped credentials',
     async (providerPath) => {

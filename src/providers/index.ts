@@ -98,6 +98,7 @@ async function createApiProvider(
   providerPath: string,
   context: LoadApiProviderContext,
   completeTemplateEnv?: EnvOverrides,
+  originalEnvLayers?: (EnvOverrides | undefined)[],
 ): Promise<ApiProvider> {
   const { options = {}, basePath, env } = context;
 
@@ -109,7 +110,11 @@ async function createApiProvider(
   const renderTemplate = <T>(value: T): T =>
     cliState.withEnv(templateEnv, () => renderEnvOnlyInObject(value, templateEnv));
   const renderedProviderPath = renderTemplate(providerPath);
-  let mergedEnv = mergeProviderEnv(renderedProviderPath, env, options.env);
+  const envLayers =
+    originalEnvLayers && /^openai:agents(?::|$)/.test(renderedProviderPath)
+      ? originalEnvLayers
+      : [env, options.env];
+  let mergedEnv = mergeProviderEnv(renderedProviderPath, ...envLayers);
 
   // Render ONLY environment variable templates at load time (e.g., {{ env.AZURE_ENDPOINT }})
   // This allows constructors to access real env values while preserving runtime templates
@@ -184,7 +189,14 @@ async function createApiProvider(
     };
 
     const provider = await cliState.withEnv(mergedOptions.env, () =>
-      createApiProvider(cloudProvider.id, mergedContext, cloudTemplateEnv),
+      createApiProvider(
+        cloudProvider.id,
+        mergedContext,
+        cloudTemplateEnv,
+        originalEnvLayers
+          ? [cloudProvider.env, ...originalEnvLayers]
+          : [env, cloudProvider.env, options.env],
+      ),
     );
     // Preserve the target already fetched above for per-evaluation grading context.
     provider.config ??= {};
@@ -239,6 +251,10 @@ async function createApiProvider(
           options: { ...fileContent, env: mergedFileEnv },
         },
         fileTemplateEnv,
+        // Inner wrapper defaults remain below the already combined outer scopes.
+        originalEnvLayers
+          ? [fileContent.env, ...originalEnvLayers]
+          : [env, fileContent.env, options.env],
       ),
     );
   }
