@@ -1608,7 +1608,7 @@ describe('useTableStore', () => {
       });
 
       act(() => {
-        useTableStore.setState({ isFetching: true });
+        useTableStore.setState({ evalId: mockEvalId, isFetching: true });
       });
 
       const initialState = useTableStore.getState();

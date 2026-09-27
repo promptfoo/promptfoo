@@ -303,7 +303,7 @@ interface TableState {
 
   tableQuery: { evalId: string; url: string } | null;
   tableRequestGeneration: number;
-  tableLoadingRequestGeneration: number | null;
+  tableSelectionRequest: { generation: number; evalId: string } | null;
   // null is a failed request; undefined means a newer request superseded this one.
   fetchEvalData: (
     id: string,
@@ -630,7 +630,7 @@ export const useTableStore = create<TableState>()(
     stats: null,
     tableQuery: null,
     tableRequestGeneration: 0,
-    tableLoadingRequestGeneration: null,
+    tableSelectionRequest: null,
 
     highlightedResultsCount: 0,
     userRatedResultsCount: 0,
@@ -699,10 +699,10 @@ export const useTableStore = create<TableState>()(
       const tableQuery = { evalId: id, url: url.pathname + url.search };
 
       const requestGeneration = currentState.tableRequestGeneration + 1;
-      const ownsLoadingRequest = () =>
-        !skipLoadingState && get().tableLoadingRequestGeneration === requestGeneration;
+      const ownsSelectionRequest = () =>
+        get().tableSelectionRequest?.generation === requestGeneration;
       const isCurrentRequest = () =>
-        (get().tableRequestGeneration === requestGeneration || ownsLoadingRequest()) &&
+        (get().tableRequestGeneration === requestGeneration || ownsSelectionRequest()) &&
         (!skipSettingEvalId || get().evalId === id);
       const shouldIgnoreResponse = () => !isCurrentRequest();
       const finishCurrentRequest = () => {
@@ -710,8 +710,8 @@ export const useTableStore = create<TableState>()(
           return;
         }
         set((prevState) => {
-          const ownsLoading = prevState.tableLoadingRequestGeneration === requestGeneration;
-          return ownsLoading ? { isFetching: false, tableLoadingRequestGeneration: null } : {};
+          const ownsSelection = prevState.tableSelectionRequest?.generation === requestGeneration;
+          return ownsSelection ? { isFetching: false, tableSelectionRequest: null } : {};
         });
       };
       if (currentState.currentMetadataKeysRequest) {
@@ -722,9 +722,14 @@ export const useTableStore = create<TableState>()(
         tableQuery:
           !skipLoadingState || currentState.evalId === id ? tableQuery : currentState.tableQuery,
         tableRequestGeneration: requestGeneration,
-        tableLoadingRequestGeneration: skipLoadingState
-          ? currentState.tableLoadingRequestGeneration
-          : requestGeneration,
+        // Refreshing the displayed eval must not cancel a pending switch to another eval.
+        tableSelectionRequest:
+          !skipLoadingState ||
+          (!skipSettingEvalId &&
+            currentState.evalId !== id &&
+            currentState.tableSelectionRequest?.evalId !== id)
+            ? { generation: requestGeneration, evalId: id }
+            : currentState.tableSelectionRequest,
         isFetching: skipLoadingState ? currentState.isFetching : true,
         shouldHighlightSearchText: false,
         // Clear previous metadata keys to prevent memory accumulation
@@ -763,7 +768,7 @@ export const useTableStore = create<TableState>()(
 
           set((prevState) => {
             const shouldClearLoading =
-              !skipLoadingState || prevState.tableLoadingRequestGeneration !== null;
+              !skipLoadingState || prevState.tableSelectionRequest?.evalId === id;
             return {
               table: data.table,
               tableQuery,
@@ -776,9 +781,7 @@ export const useTableStore = create<TableState>()(
               author: data.author,
               evalId: skipSettingEvalId ? get().evalId : id,
               isFetching: shouldClearLoading ? false : prevState.isFetching,
-              tableLoadingRequestGeneration: shouldClearLoading
-                ? null
-                : prevState.tableLoadingRequestGeneration,
+              tableSelectionRequest: shouldClearLoading ? null : prevState.tableSelectionRequest,
               shouldHighlightSearchText: url.searchParams.has('search'),
               // Store filtered metrics from backend (null when no filters or feature disabled)
               filteredMetrics: data.filteredMetrics || null,

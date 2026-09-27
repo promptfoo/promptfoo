@@ -1803,16 +1803,15 @@ function ResultsTable({
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
-  const latestTableRef = useRef(table);
-  latestTableRef.current = table;
-  const ratingScopeRef = useRef({ evalId, generation: 0, mounted: false });
+  const ratingScopeRef = useRef({ generation: 0, mounted: false });
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: each eval change retires this mount's old rating callbacks, including A -> B -> A.
   React.useEffect(() => {
     const generation = ratingScopeRef.current.generation + 1;
-    ratingScopeRef.current = { evalId, generation, mounted: true };
+    ratingScopeRef.current = { generation, mounted: true };
     return () => {
       if (ratingScopeRef.current.generation === generation) {
-        ratingScopeRef.current = { evalId, generation: generation + 1, mounted: false };
+        ratingScopeRef.current = { generation: generation + 1, mounted: false };
       }
     };
   }, [evalId]);
@@ -1870,7 +1869,7 @@ function ResultsTable({
         return (
           scope.mounted &&
           scope.generation === scopeGeneration &&
-          scope.evalId === evalId &&
+          useTableStore.getState().evalId === evalId &&
           getApiBaseUrl() === apiBaseUrl
         );
       };
@@ -1878,7 +1877,10 @@ function ResultsTable({
         return;
       }
       const queueKey = JSON.stringify([apiBaseUrl, evalId]);
-      const queuedTable = latestTableRef.current;
+      const queuedTable = useTableStore.getState().table;
+      if (!queuedTable) {
+        return;
+      }
       const queuedLocation = findRatingOutput(queuedTable, resultId);
       if (!queuedLocation) {
         return;
@@ -1894,7 +1896,7 @@ function ResultsTable({
           previousTable && (!isScopeActive() || !version || version < 4)
             ? previousTable
             : isScopeActive()
-              ? latestTableRef.current
+              ? (useTableStore.getState().table ?? queuedTable)
               : queuedTable;
         const currentLocation = findRatingOutput(currentTable, resultId);
         if (!currentLocation && (!version || version < 4)) {
@@ -1929,7 +1931,6 @@ function ResultsTable({
           : undefined;
 
         if (optimisticOutput && isScopeActive()) {
-          latestTableRef.current = newTable;
           setTable(newTable);
         }
         if (inComparisonMode) {
@@ -1942,27 +1943,24 @@ function ResultsTable({
             return;
           }
           // The shared store owns the active eval/query, including while Results is unmounted.
-          const refreshed = await fetchEvalData(evalId, {
+          await fetchEvalData(evalId, {
             skipSettingEvalId: true,
             skipLoadingState: true,
           });
-          if (isScopeActive() && refreshed?.table) {
-            latestTableRef.current = refreshed.table;
-          }
         };
 
         const handlePersistedResult = async (persistedResult?: PersistedRatingResult) => {
-          if (isScopeActive()) {
-            const latestLocation = findRatingOutput(latestTableRef.current, resultId);
+          const latestTable = useTableStore.getState().table;
+          if (isScopeActive() && latestTable) {
+            const latestLocation = findRatingOutput(latestTable, resultId);
             const ownsOptimisticOutput =
               optimisticOutput !== undefined && latestLocation?.output === optimisticOutput;
             if (persistedResult && ownsOptimisticOutput) {
               const reconciledTable = applyPersistedRatingResult({
-                table: latestTableRef.current,
+                table: latestTable,
                 resultId,
                 result: persistedResult,
               });
-              latestTableRef.current = reconciledTable;
               setTable(reconciledTable);
             }
           }
@@ -1975,15 +1973,11 @@ function ResultsTable({
 
         const handlePersistenceError = async (error: unknown) => {
           console.error('Failed to update table:', error);
-          if (isScopeActive() && error instanceof ConfirmedRatingPersistenceError) {
-            const latestLocation = findRatingOutput(latestTableRef.current, resultId);
+          const latestTable = useTableStore.getState().table;
+          if (isScopeActive() && latestTable && error instanceof ConfirmedRatingPersistenceError) {
+            const latestLocation = findRatingOutput(latestTable, resultId);
             if (optimisticOutput && latestLocation?.output === optimisticOutput) {
-              const rolledBackTable = replaceRatingOutput(
-                latestTableRef.current,
-                resultId,
-                existingOutput,
-              );
-              latestTableRef.current = rolledBackTable;
+              const rolledBackTable = replaceRatingOutput(latestTable, resultId, existingOutput);
               setTable(rolledBackTable);
               if (pendingRatingRequests.get(queueKey) !== currentRequest) {
                 return;

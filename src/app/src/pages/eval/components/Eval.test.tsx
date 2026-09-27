@@ -121,11 +121,7 @@ const baseMockResultsViewSettings = {
 };
 
 // Mock getState and subscribe for the store
-(useTableStore as any).getState = vi.fn(() => ({
-  filters: { values: {} },
-  resetFilters: baseMockTableStore.resetFilters,
-  addFilter: baseMockTableStore.addFilter,
-}));
+(useTableStore as any).getState = vi.fn(() => useTableStore());
 (useTableStore as any).subscribe = vi.fn(() => vi.fn());
 
 describe('Eval', () => {
@@ -163,11 +159,7 @@ describe('Eval', () => {
     });
     window.history.replaceState({}, '', '/eval/test-eval');
 
-    (useTableStore as any).getState = vi.fn(() => ({
-      filters: { values: {} },
-      resetFilters: baseMockTableStore.resetFilters,
-      addFilter: baseMockTableStore.addFilter,
-    }));
+    (useTableStore as any).getState = vi.fn(() => useTableStore());
     (useTableStore as any).subscribe = vi.fn(() => vi.fn());
 
     useTestTimers();

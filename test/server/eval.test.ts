@@ -2146,56 +2146,155 @@ describe('eval routes', () => {
       });
     });
 
-    it.each([
-      { type: 'max-score' as const, threshold: undefined },
-      { type: 'max-score' as const, threshold: 0 },
-      { type: 'select-best' as const, threshold: undefined },
-      { type: 'select-best' as const, threshold: 0 },
+    it.each<{
+      label: string;
+      comparisons: { type: 'max-score' | 'select-best'; pass: boolean; score: number }[];
+      ordinary?: { pass: boolean; score: number; weight?: number; guardrail?: boolean }[];
+      threshold?: number;
+      expectedPass: boolean;
+      expectedScore: number;
+    }>([
+      ...(['max-score', 'select-best'] as const).flatMap((type) => [
+        ...([undefined, 0] as const).map((threshold) => ({
+          label: `${type} failure with threshold ${threshold}`,
+          comparisons: [{ type, pass: false, score: 0 }],
+          ordinary: [{ pass: true, score: 1 }],
+          threshold,
+          expectedPass: false,
+          expectedScore: 0,
+        })),
+        {
+          label: `${type} winner with ordinary failure`,
+          comparisons: [{ type, pass: true, score: 1 }],
+          ordinary: [{ pass: false, score: 0.4 }],
+          expectedPass: false,
+          expectedScore: 0.4,
+        },
+      ]),
+      {
+        label: 'winner preserves weighted threshold score',
+        comparisons: [{ type: 'max-score', pass: true, score: 1 }],
+        ordinary: [
+          { pass: true, score: 1, weight: 9 },
+          { pass: false, score: 0 },
+        ],
+        threshold: 0.8,
+        expectedPass: true,
+        expectedScore: 0.9,
+      },
+      {
+        label: 'winner preserves threshold zero pass',
+        comparisons: [{ type: 'select-best', pass: true, score: 1 }],
+        ordinary: [{ pass: false, score: 0 }],
+        threshold: 0,
+        expectedPass: true,
+        expectedScore: 0,
+      },
+      {
+        label: 'winner preserves redteam guardrail pass',
+        comparisons: [{ type: 'select-best', pass: true, score: 1 }],
+        ordinary: [{ pass: false, score: 0, guardrail: true }],
+        expectedPass: true,
+        expectedScore: 0,
+      },
+      {
+        label: 'failed comparison vetoes redteam guardrail pass',
+        comparisons: [{ type: 'select-best', pass: false, score: 0 }],
+        ordinary: [{ pass: false, score: 0, guardrail: true }],
+        expectedPass: false,
+        expectedScore: 0,
+      },
+      {
+        label: 'comparison-only winner preserves empty aggregate score',
+        comparisons: [{ type: 'select-best', pass: true, score: 1 }],
+        expectedPass: true,
+        expectedScore: 0,
+      },
+      {
+        label: 'comparison-only winner preserves failed threshold',
+        comparisons: [{ type: 'select-best', pass: true, score: 1 }],
+        threshold: 0.5,
+        expectedPass: false,
+        expectedScore: 0,
+      },
+      {
+        label: 'later winner preserves earlier comparison failure',
+        comparisons: [
+          { type: 'select-best', pass: false, score: 0 },
+          { type: 'max-score', pass: true, score: 1 },
+        ],
+        ordinary: [{ pass: true, score: 0.7 }],
+        expectedPass: false,
+        expectedScore: 0,
+      },
+      {
+        label: 'last failed comparison replaces the score',
+        comparisons: [
+          { type: 'select-best', pass: false, score: 0.25 },
+          { type: 'max-score', pass: false, score: 0.5 },
+        ],
+        ordinary: [{ pass: true, score: 0.7 }],
+        expectedPass: false,
+        expectedScore: 0.5,
+      },
+      {
+        label: 'winner cannot restore an overflowing ordinary aggregate',
+        comparisons: [{ type: 'select-best', pass: true, score: 1 }],
+        ordinary: [
+          { pass: true, score: 1, weight: Number.MAX_VALUE },
+          { pass: true, score: 1, weight: Number.MAX_VALUE },
+        ],
+        threshold: 0,
+        expectedPass: false,
+        expectedScore: 0,
+      },
     ])(
-      'restores imported $type failures after clearing (threshold $threshold)',
-      async ({ type, threshold }) => {
+      'restores imported comparison outcome: $label',
+      async ({ comparisons, ordinary = [], threshold, expectedPass, expectedScore }) => {
         const sourceEval = await EvalFactory.create();
         testEvalIds.add(sourceEval.id);
         const [result] = await sourceEval.getResults();
         invariant(result instanceof EvalResult && result.id, 'Result is required');
         const automatedComponents = [
-          {
-            pass: true,
-            score: 1,
-            reason: 'Ordinary pass',
-            assertion: { type: 'equals' as const, value: 'yes' },
-          },
-          {
-            pass: false,
-            score: 0,
-            reason: 'Comparison failed',
+          ...ordinary.map(({ pass, score, weight = 1, guardrail }) => ({
+            pass,
+            score,
+            reason: pass ? 'Ordinary pass' : 'Ordinary failure',
+            assertion: guardrail
+              ? { type: 'guardrails' as const, config: { purpose: 'redteam' }, weight }
+              : { type: 'equals' as const, value: 'yes', weight },
+          })),
+          ...comparisons.map(({ type, pass, score }) => ({
+            pass,
+            score,
+            reason: pass ? 'Comparison passed' : 'Comparison failed',
             assertion: { type, value: 'metric' },
-          },
+          })),
         ];
         result.testCase = {
           ...result.testCase,
           threshold,
           assert: automatedComponents.map(({ assertion }) => assertion),
         };
-        result.success = false;
-        result.score = 0;
-        result.failureReason = ResultFailureReason.ASSERT;
-        result.error = 'Comparison failed';
+        result.success = expectedPass;
+        result.score = expectedScore;
+        result.failureReason = expectedPass ? ResultFailureReason.NONE : ResultFailureReason.ASSERT;
+        result.error = expectedPass ? undefined : 'Automated failure';
         result.gradingResult = {
-          pass: false,
-          score: 0,
-          reason: result.error,
+          pass: expectedPass,
+          score: expectedScore,
+          reason: result.error ?? 'Automated pass',
           componentResults: automatedComponents,
         };
         await result.save();
         const metrics = sourceEval.prompts[result.promptIdx].metrics;
         invariant(metrics, 'Prompt metrics are required');
         Object.assign(metrics, {
-          score: 0,
-          testPassCount: 0,
-          testFailCount: 2,
-          assertPassCount: 1,
-          assertFailCount: 2,
+          score: expectedScore,
+          testPassCount: expectedPass ? 1 : 0,
+          testFailCount: expectedPass ? 1 : 2,
+          assertPassCount: automatedComponents.filter((component) => component.pass).length,
+          assertFailCount: automatedComponents.filter((component) => !component.pass).length + 1,
         });
         await sourceEval.save();
 
@@ -2237,9 +2336,9 @@ describe('eval routes', () => {
           .send({ pass: true, score: 1, ratingAction: 'clear' });
         expect(cleared.status).toBe(200);
         expect(cleared.body).toMatchObject({
-          success: false,
-          score: 0,
-          failureReason: ResultFailureReason.ASSERT,
+          success: expectedPass,
+          score: expectedScore,
+          failureReason: expectedPass ? ResultFailureReason.NONE : ResultFailureReason.ASSERT,
         });
         expect(cleared.body.gradingResult.componentResults).toEqual(automatedComponents);
         expect(

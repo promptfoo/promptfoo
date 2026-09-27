@@ -451,3 +451,179 @@ it.each(['eval', 'API'] as const)(
     expect(useTableStore.getState().isFetching).toBe(false);
   },
 );
+
+it.each([
+  { first: 'refresh', refreshFails: false, switchFails: false },
+  { first: 'switch', refreshFails: false, switchFails: false },
+  { first: 'refresh', refreshFails: true, switchFails: false },
+  { first: 'refresh', refreshFails: false, switchFails: true },
+])(
+  'preserves pending eval selection ($first first, refresh failure $refreshFails, switch failure $switchFails)',
+  async ({ first, refreshFails, switchFails }) => {
+    initializeRatingTable();
+    const pending = new Map<string, (response: Response) => void>();
+    vi.mocked(callApi).mockImplementation(
+      (url) => new Promise<Response>((resolve) => pending.set(url, resolve)),
+    );
+    const switching = useTableStore
+      .getState()
+      .fetchEvalData('next-eval', { skipLoadingState: true });
+    const refreshing = useTableStore.getState().fetchEvalData('rating-eval', {
+      skipLoadingState: true,
+      skipSettingEvalId: true,
+    });
+    expect(useTableStore.getState().evalId).toBe('rating-eval');
+    expect(useTableStore.getState().tableQuery?.url).toBe(ratingQuery);
+    expect([...pending.keys()][1]).toBe(ratingQuery);
+    const nextTable = structuredClone(ratingTable);
+    nextTable.body[0].outputs[0].text = 'Next eval';
+    const complete = async (which: string) => {
+      const isSwitch = which === 'switch';
+      const url = isSwitch ? [...pending.keys()][0] : ratingQuery;
+      pending.get(url)!(
+        createMockResponse(
+          {
+            table: isSwitch ? nextTable : ratingTable,
+            config: {},
+            version: 4,
+            totalCount: 1,
+            filteredCount: 1,
+          },
+          { status: (isSwitch ? switchFails : refreshFails) ? 500 : 200 },
+        ),
+      );
+      await (isSwitch ? switching : refreshing);
+    };
+    await complete(first);
+    await complete(first === 'switch' ? 'refresh' : 'switch');
+    expect(useTableStore.getState().evalId).toBe(switchFails ? 'rating-eval' : 'next-eval');
+    expect(useTableStore.getState().table).toEqual(switchFails ? ratingTable : nextTable);
+    expect(useTableStore.getState().isFetching).toBe(false);
+    if (switchFails) {
+      expect(useTableStore.getState().tableQuery?.url).toBe(ratingQuery);
+    }
+  },
+);
+
+it.each([
+  { foreground: false, newestFails: false },
+  { foreground: false, newestFails: true },
+  { foreground: true, newestFails: false },
+])(
+  'only the newest selection can replace the eval ($foreground foreground, failure $newestFails)',
+  async ({ foreground, newestFails }) => {
+    initializeRatingTable();
+    const pending: Array<(response: Response) => void> = [];
+    vi.mocked(callApi).mockImplementation(
+      () => new Promise<Response>((resolve) => pending.push(resolve)),
+    );
+    const older = useTableStore.getState().fetchEvalData('older-eval', { skipLoadingState: true });
+    const newer = useTableStore
+      .getState()
+      .fetchEvalData('newest-eval', { skipLoadingState: !foreground });
+    const response = () =>
+      createMockResponse({
+        table: ratingTable,
+        config: {},
+        version: 4,
+        totalCount: 1,
+        filteredCount: 1,
+      });
+    pending[1](newestFails ? createMockResponse({}, { status: 500 }) : response());
+    await newer;
+    pending[0](response());
+    expect(await older).toBeUndefined();
+    expect(useTableStore.getState().evalId).toBe(newestFails ? 'rating-eval' : 'newest-eval');
+    expect(useTableStore.getState().isFetching).toBe(false);
+  },
+);
+
+it.each([
+  { changed: 'page', rejected: false },
+  { changed: 'page', rejected: true },
+  { changed: 'result', rejected: false },
+  { changed: 'result', rejected: true },
+  { changed: 'eval', rejected: false },
+  { changed: 'eval', rejected: true },
+])(
+  'preserves a newer store $changed before React renders (rejected $rejected)',
+  async ({ changed, rejected }) => {
+    initializeRatingTable();
+    const user = userEvent.setup();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    let resolveWrite!: (response: Response) => void;
+    let resolveJson!: (body: unknown) => void;
+    const json = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          resolveJson = resolve;
+        }),
+    );
+    vi.mocked(callApi).mockImplementation(async (_url, options) =>
+      options?.method === 'POST'
+        ? new Promise<Response>((resolve) => {
+            resolveWrite = resolve;
+          })
+        : createMockResponse({}, { status: 500 }),
+    );
+    renderWithProviders(ratingView(true));
+    await user.click(screen.getByRole('button', { name: 'Fail result' }));
+    const newTable = structuredClone(ratingTable);
+    if (changed !== 'result') {
+      newTable.body[0].outputs[0].id = 'different-result';
+    }
+    newTable.body[0].outputs[0].score = 0.75;
+    if (rejected) {
+      resolveWrite(createMockResponse({}, { status: 400 }));
+    } else {
+      resolveWrite({ ok: true, json } as unknown as Response);
+      await waitFor(() => expect(json).toHaveBeenCalledTimes(1));
+      resolveJson({
+        id: 'result-id',
+        success: false,
+        score: 0,
+        failureReason: 1,
+        gradingResult: { pass: false, score: 0 },
+      });
+    }
+    // Settle the request and then advance Zustand before the rating continuation and React render.
+    queueMicrotask(() =>
+      useTableStore.setState({
+        table: newTable,
+        ...(changed === 'eval' && { evalId: 'other-eval' }),
+      }),
+    );
+    await waitFor(() => expect(useTableStore.getState().table).toBe(newTable));
+    await waitFor(() => expect(callApi).toHaveBeenCalledTimes(changed === 'eval' ? 1 : 2));
+    expect(useTableStore.getState().table).toBe(newTable);
+    expect(screen.getByText('Persisted score: 0.75')).toBeInTheDocument();
+  },
+);
+
+it.each([false, true])(
+  'keeps the pending destination load as a fallback when its refresh fails (%s)',
+  async (refreshFails) => {
+    initializeRatingTable();
+    const pending: Array<(response: Response) => void> = [];
+    vi.mocked(callApi).mockImplementation(
+      () => new Promise<Response>((resolve) => pending.push(resolve)),
+    );
+    const selection = useTableStore
+      .getState()
+      .fetchEvalData('next-eval', { skipLoadingState: true });
+    const refresh = useTableStore.getState().fetchEvalData('next-eval', { skipLoadingState: true });
+    const olderTable = structuredClone(ratingTable);
+    olderTable.body[0].outputs[0].score = 0.25;
+    const newerTable = structuredClone(ratingTable);
+    newerTable.body[0].outputs[0].score = 0.75;
+    const response = (table: typeof ratingTable) =>
+      createMockResponse({ table, config: {}, version: 4, totalCount: 1, filteredCount: 1 });
+    pending[1](refreshFails ? createMockResponse({}, { status: 500 }) : response(newerTable));
+    await refresh;
+    pending[0](response(olderTable));
+    await selection;
+    expect(useTableStore.getState().evalId).toBe('next-eval');
+    expect(useTableStore.getState().table).toEqual(refreshFails ? olderTable : newerTable);
+    expect(useTableStore.getState().isFetching).toBe(false);
+  },
+);

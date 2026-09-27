@@ -10,8 +10,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 
-vi.mock('./store', () => ({
-  useTableStore: vi.fn(() => ({
+vi.mock('./store', () => {
+  const useTableStore = vi.fn(() => ({
     config: {},
     evalId: '123',
     setTable: vi.fn(),
@@ -25,12 +25,15 @@ vi.mock('./store', () => ({
         metric: [],
       },
     },
-  })),
-  useResultsViewSettingsStore: vi.fn(() => ({
-    inComparisonMode: false,
-    renderMarkdown: true,
-  })),
-}));
+  }));
+  return {
+    useTableStore: Object.assign(useTableStore, { getState: () => useTableStore() }),
+    useResultsViewSettingsStore: vi.fn(() => ({
+      inComparisonMode: false,
+      renderMarkdown: true,
+    })),
+  };
+});
 
 vi.mock('@app/hooks/useToast', () => ({
   useToast: vi.fn(() => ({
@@ -4502,7 +4505,10 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    mockSetTable = vi.fn();
+    mockSetTable = vi.fn((table) => {
+      // Mirror Zustand's synchronous writes; response ownership reads getState before rerender.
+      vi.mocked(useTableStore).mockReturnValue({ ...useTableStore.getState(), table });
+    });
     const apiModule = await import('@app/utils/api');
     vi.mocked(apiModule.getApiBaseUrl).mockReset().mockReturnValue('');
     mockCallApi = vi.mocked(apiModule.callApi);
@@ -5477,6 +5483,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     await user.click(screen.getByRole('button', { name: 'Clear rating' }));
     currentTable = structuredClone(currentTable);
     currentTable.body[0].outputs[0].score = 0.8;
+    vi.mocked(useTableStore).mockReturnValue({ ...useTableStore.getState(), table: currentTable });
     rendered.rerender(<ResultsTable {...defaultProps} zoom={1.01} />);
     resolveResponse({ ok: false, status: 400 });
 
@@ -5549,6 +5556,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
         reason: 'Newer external rating',
       },
     };
+    vi.mocked(useTableStore).mockReturnValue({ ...useTableStore.getState(), table: currentTable });
     rendered.rerender(<ResultsTable {...defaultProps} zoom={1.01} />);
     resolveResponse({
       ok: true,

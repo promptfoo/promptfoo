@@ -96,14 +96,12 @@ export default function Eval({ fetchId }: EvalOptions) {
   const [recentEvals, setRecentEvals] = useState<ResultLightweightWithLabel[]>([]);
   const [defaultEvalId, setDefaultEvalId] = useState<string | undefined>(undefined);
   const isHydratingFiltersRef = useRef(false);
-  const currentEvalIdRef = useRef(evalId);
   const loadStateRef = useRef<EvalLoadGeneration>({
     backgroundPending: 0,
     foregroundFailed: false,
     foregroundPending: false,
     succeeded: table !== null,
   });
-  currentEvalIdRef.current = evalId;
 
   // ================================
   // Handlers
@@ -295,7 +293,8 @@ export default function Eval({ fetchId }: EvalOptions) {
     }
 
     const latestEvalId = newRecentEvals[0].evalId;
-    const displayedEvalId = fetchId ?? currentEvalIdRef.current;
+    const currentEvalId = useTableStore.getState().evalId;
+    const displayedEvalId = fetchId ?? currentEvalId;
     setDefaultEvalId(latestEvalId);
 
     if (deletedEvalIds) {
@@ -313,7 +312,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     const shouldReload =
       fetchId === null
         ? scopedEvalId === undefined ||
-          scopedEvalId === currentEvalIdRef.current ||
+          scopedEvalId === currentEvalId ||
           scopedEvalId === latestEvalId
         : scopedEvalId === fetchId;
     if (shouldReload) {

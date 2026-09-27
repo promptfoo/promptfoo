@@ -938,7 +938,7 @@ type AutomatedClearComponent = {
   score: number;
   weight: number;
   failedContentSafetyCheck: boolean;
-  nonstandardScoring: boolean;
+  comparison: boolean;
 };
 
 function getFlattenedChildCount(
@@ -986,7 +986,7 @@ function getAutomatedClearComponents(componentResults: unknown): AutomatedClearC
           component.pass === false &&
           assertion?.type === 'guardrails' &&
           asRecord(assertion.config)?.purpose === 'redteam',
-        nonstandardScoring:
+        comparison:
           assertion?.type === 'max-score' ||
           (typeof assertion?.type === 'string' && assertion.type.startsWith('select-')),
       });
@@ -1005,8 +1005,10 @@ function buildServerOwnedClearGradingResult(
 ): GradingResult {
   const automatedComponents = getAutomatedClearComponents(normalized.componentResults);
   const executionError = hasExecutionError(result, automatedComponents.length > 0);
-  const totalWeight = automatedComponents.reduce((sum, component) => sum + component.weight, 0);
-  const totalScore = automatedComponents.reduce(
+  // Comparisons are merged after ordinary assertion aggregation, never weighted into it.
+  const ordinaryComponents = automatedComponents.filter((component) => !component.comparison);
+  const totalWeight = ordinaryComponents.reduce((sum, component) => sum + component.weight, 0);
+  const totalScore = ordinaryComponents.reduce(
     (sum, component) => sum + component.score * component.weight,
     0,
   );
@@ -1016,8 +1018,8 @@ function buildServerOwnedClearGradingResult(
   let automatedPass =
     typeof threshold === 'number' && Number.isFinite(threshold)
       ? automatedScore >= threshold
-      : automatedComponents.every((component) => component.pass);
-  if (automatedComponents.some((component) => component.failedContentSafetyCheck)) {
+      : ordinaryComponents.every((component) => component.pass);
+  if (ordinaryComponents.some((component) => component.failedContentSafetyCheck)) {
     automatedPass = true;
   }
   if (executionError) {
@@ -1026,23 +1028,14 @@ function buildServerOwnedClearGradingResult(
   const hasUnreconstructableRetainedFailure =
     !executionError && automatedPass && typeof result.error === 'string' && result.error.length > 0;
   const fallbackPass =
-    !executionError &&
-    normalizeFailureReason(result.failureReason) === ResultFailureReason.NONE &&
-    // Comparisons run after aggregate scoring; a failed comparison always fails the result.
-    !automatedComponents.some((component) => component.nonstandardScoring && !component.pass);
-  const hasNonstandardScoring =
-    hasOwn(testCase ?? {}, 'assertScoringFunction') ||
-    automatedComponents.some((component) => component.nonstandardScoring);
-  const canReconstructAutomatedOutcome = automatedComponents.length > 0 && !hasNonstandardScoring;
+    !executionError && normalizeFailureReason(result.failureReason) === ResultFailureReason.NONE;
+  const canReconstructAutomatedOutcome =
+    automatedComponents.length > 0 && !hasOwn(testCase ?? {}, 'assertScoringFunction');
   const cleared = {
     ...current,
-    // A legacy clear submits the whole grading result. Recompute from the server-owned
-    // automated components using the evaluator's weighting/threshold rules. Component-less or
-    // nonstandard-scored legacy rows have no recoverable standard score, so use the failure
-    // category's canonical baseline rather than accepting caller-controlled aggregate fields.
-    // A historical/imported manual pass can retain a top-level assertion failure after the
-    // custom scorer itself has been stripped. If ordinary components all pass, they cannot
-    // explain that failure; fail closed instead of fabricating a pass from incomplete evidence.
+    // Without private provenance, missing components or custom scoring need a canonical
+    // fallback. Retained failures unexplained by the components remain failures: the public
+    // export may have stripped the custom scorer that produced them.
     pass: hasUnreconstructableRetainedFailure
       ? false
       : canReconstructAutomatedOutcome
@@ -1066,7 +1059,14 @@ function buildServerOwnedClearGradingResult(
     cleared.pass = false;
     cleared.score = 0;
   }
-  cleared.reason = current.reason;
+  // Match the evaluator's ordered comparison merge: winners preserve the aggregate,
+  // while each failed comparison vetoes success and replaces the current score.
+  for (const component of automatedComponents) {
+    if (component.comparison && !component.pass) {
+      cleared.pass = false;
+      cleared.score = component.score;
+    }
+  }
   if (hasOwn(normalized, 'componentResults')) {
     cleared.componentResults = normalized.componentResults;
   } else {
