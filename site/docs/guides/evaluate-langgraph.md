@@ -155,14 +155,10 @@ In this step, we'll define how our LangGraph research agent works, connect it to
 Inside your project folder, create a file called `agent.py` and add:
 
 ```python
-import os
 import asyncio
 from pydantic import BaseModel
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph
-
-# Load the OpenAI API key from environment variable
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # Define the data structure (state) passed between nodes in the graph
 class ResearchState(BaseModel):
@@ -171,9 +167,9 @@ class ResearchState(BaseModel):
     summary: str = ""     # Final summarized result
 
 # Function to create and return the research agent graph
-def get_research_agent(model="gpt-4o"):
-    # Initialize the OpenAI LLM with the specified model and API key
-    llm = ChatOpenAI(model=model, api_key=OPENAI_API_KEY)
+def get_research_agent(model="gpt-4o", base_url=None):
+    # ChatOpenAI reads OPENAI_API_KEY from the environment when initialized
+    llm = ChatOpenAI(model=model, base_url=base_url)
 
     # Create a stateful graph with ResearchState as the shared state type
     graph = StateGraph(ResearchState)
@@ -212,9 +208,9 @@ def get_research_agent(model="gpt-4o"):
     return graph.compile()
 
 # Function to run the research agent with a given query prompt
-def run_research_agent(prompt):
+def run_research_agent(prompt, model="gpt-4o", base_url=None):
     # Get the compiled graph application
-    app = get_research_agent()
+    app = get_research_agent(model=model, base_url=base_url)
     # Run the asynchronous invocation and get the result
     result = asyncio.run(app.ainvoke(ResearchState(query=prompt)))
     return result
@@ -234,7 +230,7 @@ def call_api(prompt, options, context):
 
     Args:
         prompt (str): The research query or question.
-        options (dict): Additional options for future extension (currently unused).
+        options (dict): Provider configuration, including model and apiBaseUrl.
         context (dict): Contextual information (currently unused).
 
     Returns:
@@ -242,12 +238,17 @@ def call_api(prompt, options, context):
     """
     try:
         # Run the research agent and get the result
-        result = run_research_agent(prompt)
+        config = options.get("config", {})
+        result = run_research_agent(
+            prompt,
+            model=config.get("model", "gpt-4o"),
+            base_url=config.get("apiBaseUrl"),
+        )
         # Wrap and return the result inside a dictionary
         return {"output": result}
     except Exception as e:
-        # Handle any exceptions and return an error summary
-        return {"output": {"summary": f"Error: {str(e)}"}}
+        # Handle any exceptions and return a provider error
+        return {"error": str(e)}
 
 # If this file is run directly, execute a simple test
 if __name__ == "__main__":
