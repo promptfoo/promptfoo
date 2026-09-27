@@ -35,7 +35,7 @@ export async function createBedrockRequestHandler(options?: {
     }
 
     const handler = new NodeHttpHandler({
-      ...(proxyAgent ? { httpsAgent: proxyAgent } : {}),
+      ...(proxyAgent ? { httpAgent: proxyAgent, httpsAgent: proxyAgent } : {}),
       requestTimeout: REQUEST_TIMEOUT_MS,
     });
 
