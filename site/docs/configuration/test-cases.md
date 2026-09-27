@@ -766,7 +766,7 @@ A SAS query string on the URI takes precedence. Otherwise, authentication comes 
 
 When using `AZURE_STORAGE_CONNECTION_STRING`, the storage account comes from the connection string. Keep the `az://` account segment aligned with that account so the URI remains self-describing; Promptfoo rejects clearly mismatched `AccountName` values. Query strings are interpreted as SAS tokens and must include `sig`.
 
-A complete `AZURE_CLIENT_ID`/`AZURE_CLIENT_SECRET`/`AZURE_TENANT_ID` tuple in suite `env` or an invocation env file selects that service principal. Keep the tuple in one scope; empty or incomplete scoped principals are rejected. Otherwise, the ambient `DefaultAzureCredential` chain remains available.
+For a scoped service principal, set `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, and `AZURE_TENANT_ID` together in suite `env` or one invocation env file. Empty or incomplete principals are rejected. These test-file credentials do not come from provider `env`.
 
 SAS query strings and `DefaultAzureCredential` use the standard public Azure Blob endpoint for the named account. For Azure Government, Azure operated by 21Vianet, or custom blob endpoints, use `AZURE_STORAGE_CONNECTION_STRING` with the appropriate `EndpointSuffix` or explicit `BlobEndpoint`.
 
