@@ -291,6 +291,89 @@ describeEvaluator('evaluation environment defaults', () => {
     }
   });
 
+  it('keeps SageMaker grading delays separate from target pacing across rows', async () => {
+    const events: string[] = [];
+    const target = createProvider('target-with-sagemaker-grader');
+    vi.mocked(target.callApi).mockImplementation(async () => {
+      events.push('target');
+      return { output: 'ok' };
+    });
+    const grader = new SageMakerCompletionProvider('grader-fixture', {
+      config: { region: 'us-east-1', modelType: 'custom' },
+    });
+    const send = vi.fn().mockImplementation(async () => {
+      events.push('grader');
+      return { Body: Buffer.from(JSON.stringify({ output: '{"pass":true,"score":1}' })) };
+    });
+    const runtime = vi.spyOn(grader, 'getSageMakerRuntimeInstance').mockResolvedValue({ send });
+    const suite = createSuite(target, { PROMPTFOO_DELAY_MS: '7' });
+    suite.tests = [0, 1].map((row) => ({
+      assert: [{ type: 'llm-rubric', value: `fixture ${row}`, provider: grader }],
+    }));
+    const record = new Eval({});
+    try {
+      await vi.mocked(sleep).withImplementation(
+        async (delay) => {
+          events.push(`sleep:${delay}`);
+        },
+        () => evaluate(suite, record, { maxConcurrency: 1 }),
+      );
+      expect(events).toEqual([
+        'target',
+        'sleep:7',
+        'target',
+        'sleep:7',
+        'sleep:7',
+        'grader',
+        'sleep:7',
+        'grader',
+      ]);
+      expect((await record.getResults()).map(({ success }) => success)).toEqual([true, true]);
+      expect(target.delay).toBeUndefined();
+      expect(grader.delay).toBeUndefined();
+    } finally {
+      runtime.mockRestore();
+    }
+  });
+
+  it.each([
+    { evalDelay: undefined, expected: 7 },
+    { evalDelay: 5, expected: 5 },
+    { evalDelay: 0, expected: 0 },
+  ])(
+    'paces a SageMaker test provider override exactly once: %j',
+    async ({ evalDelay, expected }) => {
+      const target = createProvider('overridden-target');
+      const replacement = new SageMakerCompletionProvider('override-fixture', {
+        config: { region: 'us-east-1', modelType: 'custom' },
+      });
+      const send = vi
+        .fn()
+        .mockResolvedValue({ Body: Buffer.from(JSON.stringify({ output: 'ok' })) });
+      const runtime = vi
+        .spyOn(replacement, 'getSageMakerRuntimeInstance')
+        .mockResolvedValue({ send });
+      const suite = createSuite(target, { PROMPTFOO_DELAY_MS: '7' });
+      suite.tests = [{ provider: replacement }];
+      const record = new Eval({});
+      try {
+        await evaluate(suite, record, { delay: evalDelay });
+        expect((await record.getResults())[0]).toMatchObject({ success: true });
+        expect(target.callApi).not.toHaveBeenCalled();
+        expect(send).toHaveBeenCalledOnce();
+        if (expected === 0) {
+          expect(sleep).not.toHaveBeenCalled();
+        } else {
+          expect(sleep).toHaveBeenCalledExactlyOnceWith(expected);
+        }
+        expect(target.delay).toBeUndefined();
+        expect(replacement.delay).toBeUndefined();
+      } finally {
+        runtime.mockRestore();
+      }
+    },
+  );
+
   it('isolates delegated delays when overlapping evaluations share the target', async () => {
     let started = 0;
     let release!: () => void;
@@ -527,7 +610,7 @@ describeEvaluator('evaluation environment defaults', () => {
 
   it.each(
     ['provider', 'delegated delay', 'late response'].flatMap((phase) =>
-      ['pause', 'step timeout', 'evaluation timeout'].map((termination) => ({
+      ['pause', 'pause with reason', 'step timeout', 'evaluation timeout'].map((termination) => ({
         phase,
         termination,
       })),
@@ -569,8 +652,10 @@ describeEvaluator('evaluation environment defaults', () => {
     });
     await vi.advanceTimersByTimeAsync(1);
     await started.promise;
-    if (termination === 'pause') {
-      controller.abort();
+    if (termination.startsWith('pause')) {
+      controller.abort(
+        termination === 'pause with reason' ? new Error('Paused by fixture') : undefined,
+      );
     } else {
       await vi.advanceTimersByTimeAsync(20);
     }
@@ -580,7 +665,7 @@ describeEvaluator('evaluation environment defaults', () => {
     await vi.advanceTimersByTimeAsync(0);
     await evaluation;
     const results = await record.getResults();
-    if (termination === 'pause') {
+    if (termination.startsWith('pause')) {
       expect(results).toEqual([]);
     } else {
       expect(results).toHaveLength(1);

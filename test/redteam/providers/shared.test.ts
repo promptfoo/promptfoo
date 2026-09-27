@@ -2,6 +2,7 @@ import { getEventListeners } from 'node:events';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
+import { callGradingProvider as callOwnedGradingProvider } from '../../../src/matchers/providers';
 import { PromptfooChatCompletionProvider } from '../../../src/providers/promptfoo';
 import {
   ATTACKER_MODEL,
@@ -34,7 +35,7 @@ import {
 } from '../../../src/scheduler/providerCallExecutionContext';
 import { sleep } from '../../../src/util/time';
 import { createMockProvider } from '../../factories/provider';
-import { mockProcessEnv } from '../../util/utils';
+import { createDeferred, mockProcessEnv } from '../../util/utils';
 
 import type { RedteamGraderBase } from '../../../src/redteam/plugins/base';
 import type { ProviderCallTracingContext } from '../../../src/scheduler/providerCallExecutionContext';
@@ -45,6 +46,7 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   Prompt,
+  ProviderResponse,
 } from '../../../src/types/index';
 
 // Hoisted mocks for class constructor and loadApiProviders
@@ -1436,6 +1438,61 @@ describe('shared redteam provider utilities', () => {
   });
 
   describe('callGradingProvider', () => {
+    it.each(
+      [false, true].flatMap((traced) => ['resolve', 'reject'].map((late) => ({ traced, late }))),
+    )('retains its owning scheduler slot until the judge settles: %j', async ({ traced, late }) => {
+      const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+      const controller = new AbortController();
+      const started = createDeferred<void>();
+      const pending = createDeferred<ProviderResponse>();
+      const owner = createMockProvider({ id: 'offline-owned-grader' });
+      const judge = createMockProvider({
+        id: 'offline-judge',
+        callApi: async () => {
+          started.resolve();
+          return pending.promise;
+        },
+      });
+      const tracingContext: ProviderCallTracingContext = {
+        getActiveTraceparent: () => undefined,
+        withGraderSpan: async (_context, callback) => callback(),
+        withProviderSpan: async ({ callContext }, callback) => callback(callContext),
+      };
+      const invoke = () =>
+        callOwnedGradingProvider(owner, 'fixture', () =>
+          callGradingProvider(judge, 'benign fixture'),
+        );
+      const first = withProviderCallExecutionContext(
+        { abortSignal: controller.signal, rateLimitRegistry: registry },
+        () => (traced ? withProviderCallTracingContext(tracingContext, invoke) : invoke()),
+      ).catch((error) => error.name);
+      const next = vi.fn(async () => ({ output: 'next result' }));
+      let second: Promise<ProviderResponse> | undefined;
+      try {
+        await started.promise;
+        controller.abort();
+        expect(await first).toBe('AbortError');
+        expect(judge.callApi).toHaveBeenCalledWith('benign fixture', undefined, {
+          abortSignal: controller.signal,
+        });
+        second = withProviderCallExecutionContext({ rateLimitRegistry: registry }, () =>
+          callOwnedGradingProvider(owner, 'fixture', next),
+        );
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(next).not.toHaveBeenCalled();
+      } finally {
+        if (late === 'resolve') {
+          pending.resolve({ output: 'late result' });
+        } else {
+          pending.reject(new Error('late fixture failure'));
+        }
+        await first;
+        await second;
+        registry.dispose();
+      }
+      expect(next).toHaveBeenCalledOnce();
+    });
+
     it.each(
       [false, true].flatMap((traced) => ['resolve', 'reject'].map((late) => ({ traced, late }))),
     )(

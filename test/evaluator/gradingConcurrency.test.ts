@@ -769,53 +769,65 @@ describeEvaluator('evaluator grading concurrency', () => {
     errorSpy.mockRestore();
   });
 
-  it('still logs a post-provider grading failure during an unrelated abort', async () => {
-    // The provider wait has completed. A grading bug outside that cancelled
-    // wait must still retain its real error classification.
-    const { default: logger } = await import('../../src/logger');
-    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+  it.each([1, 2])(
+    'persists a post-provider grading failure during an unrelated abort, concurrency=%s',
+    async (maxConcurrency) => {
+      // The provider wait has completed. A grading bug outside that cancelled
+      // wait must still retain its real error classification.
+      const { default: logger } = await import('../../src/logger');
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
 
-    const abortController = new AbortController();
-    const provider: ApiProvider = {
-      id: vi.fn().mockReturnValue('target-provider'),
-      callApi: vi.fn(async (prompt: string) => ({
-        output: `Target output for ${prompt}`,
-        tokenUsage: createEmptyTokenUsage(),
-      })),
-    };
-    const judge: ApiProvider = {
-      id: vi.fn().mockReturnValue('judge'),
-      callApi: vi.fn(async () => ({
-        get output() {
-          abortController.abort();
-          throw new SyntaxError('Unexpected token in grader output');
-        },
-      })),
-    };
-    const testSuite: TestSuite = {
-      providers: [provider],
-      prompts: [toPrompt('Test prompt {{topic}}')],
-      tests: [
-        {
-          vars: { topic: 'alpha' },
-          assert: [{ type: 'llm-rubric', value: 'Judge alpha', provider: judge }],
-        },
-      ],
-    };
+      const abortController = new AbortController();
+      const provider: ApiProvider = {
+        id: vi.fn().mockReturnValue('target-provider'),
+        callApi: vi.fn(async (prompt: string) => ({
+          output: `Target output for ${prompt}`,
+          tokenUsage: createEmptyTokenUsage(),
+        })),
+      };
+      const judge: ApiProvider = {
+        id: vi.fn().mockReturnValue('judge'),
+        callApi: vi.fn(async () => ({
+          get output() {
+            abortController.abort();
+            throw new SyntaxError('Unexpected token in grader output');
+          },
+        })),
+      };
+      const testSuite: TestSuite = {
+        providers: [provider],
+        prompts: [toPrompt('Test prompt {{topic}}')],
+        tests: [
+          {
+            vars: { topic: 'alpha' },
+            assert: [{ type: 'llm-rubric', value: 'Judge alpha', provider: judge }],
+          },
+        ],
+      };
 
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, {
-      maxConcurrency: 1,
-      abortSignal: abortController.signal,
-    });
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, {
+        maxConcurrency,
+        abortSignal: abortController.signal,
+      });
 
-    const gradingErrorLogs = errorSpy.mock.calls.filter(
-      ([message]) => typeof message === 'string' && message.includes('Assertion grading failed'),
-    );
-    expect(gradingErrorLogs.length).toBeGreaterThanOrEqual(1);
+      const errorMessage =
+        maxConcurrency === 1 ? 'Assertion grading failed' : 'Provider call failed during eval';
+      const gradingErrorLogs = errorSpy.mock.calls.filter(
+        ([message]) => typeof message === 'string' && message.includes(errorMessage),
+      );
+      expect(gradingErrorLogs.length).toBeGreaterThanOrEqual(1);
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.stats.errors).toBe(1);
+      expect(summary.results).toHaveLength(1);
+      expect(summary.results[0].error).toContain('Unexpected token in grader output');
+      expect(
+        summary.results[0].gradingResult?.metadata?.__promptfoo?.assertionGradingInterrupted,
+      ).toBeUndefined();
 
-    errorSpy.mockRestore();
-  });
+      errorSpy.mockRestore();
+    },
+  );
 
   it('logs grouping-active info when serial eval contains model-graded assertions', async () => {
     const { default: logger } = await import('../../src/logger');

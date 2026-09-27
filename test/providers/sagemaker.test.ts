@@ -792,8 +792,9 @@ describe('SageMaker invocation-local pacing', () => {
           ? new SageMakerCompletionProvider('offline-endpoint', options)
           : new SageMakerEmbeddingProvider('offline-endpoint', options);
       const timeout = vi.spyOn(global, 'setTimeout');
+      const delayState = { handled: false };
       const response = withProviderCallExecutionContext(
-        { providerDelay: { provider: target, delay } },
+        { providerDelay: { provider: target, delay, state: delayState } },
         () =>
           provider instanceof SageMakerCompletionProvider
             ? provider.callApi('hello', context)
@@ -809,6 +810,7 @@ describe('SageMaker invocation-local pacing', () => {
         .map(([, ms]) => ms)
         .filter((ms) => ms === 20 || ms === 50);
       expect(pacingTimers).toEqual(expectedDelay > 0 && !cached ? [expectedDelay] : []);
+      expect(delayState.handled).toBe(expectedDelay > 0 && !cached);
       expect(mockSend).toHaveBeenCalledTimes(cached ? 0 : 1);
       expect(target.delay).toBeUndefined();
       expect(provider.delay).toBe(50);

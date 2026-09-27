@@ -793,7 +793,7 @@ describe('evaluator trace integration', () => {
       const provider = createMockProvider({ response: { output: 'Target output' } });
       mockFetchTraceContext.mockImplementationOnce(async () => {
         controller.abort();
-        throw new Error('cancelled by user');
+        throw new DOMException('cancelled by user', 'AbortError');
       });
 
       const results = await runEval(createRunOptions(provider, { abortSignal: controller.signal }));

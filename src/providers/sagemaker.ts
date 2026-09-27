@@ -5,6 +5,7 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import {
   getProviderCallAbortSignal,
+  getProviderCallExecutionContext,
   getProviderDelay,
 } from '../scheduler/providerCallExecutionContext';
 import telemetry from '../telemetry';
@@ -132,6 +133,13 @@ abstract class SageMakerGenericProvider {
 
   toString(): string {
     return `[Amazon SageMaker Provider ${this.endpointName}]`;
+  }
+
+  protected markDelayHandled(provider?: ApiProvider): void {
+    const invocationDelay = getProviderCallExecutionContext()?.providerDelay;
+    if (invocationDelay?.state && invocationDelay.provider === provider) {
+      invocationDelay.state.handled = true;
+    }
   }
 
   /**
@@ -746,6 +754,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
         `Applying delay of ${delayMs}ms before calling SageMaker endpoint ${request.endpoint}`,
       );
       await (abortSignal ? sleepWithAbort(delayMs, abortSignal) : sleep(delayMs));
+      this.markDelayHandled(context?.originalProvider);
     }
 
     // Not in cache or cache disabled, make the actual API call
@@ -962,6 +971,7 @@ export class SageMakerEmbeddingProvider
         `Applying delay of ${delayMs}ms before calling SageMaker embedding endpoint ${this.getEndpointName()}`,
       );
       await (abortSignal ? sleepWithAbort(delayMs, abortSignal) : sleep(delayMs));
+      this.markDelayHandled(context?.originalProvider);
     }
 
     // Not in cache or cache disabled, make the actual API call
