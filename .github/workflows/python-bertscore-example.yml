@@ -5,7 +5,9 @@ on:
     paths:
       - 'examples/eval-bert-score/**'
       - '.github/workflows/python-bertscore-example.yml'
+      - 'src/assertions/index.ts'
       - 'src/assertions/python.ts'
+      - 'src/assertions/scriptResultNormalization.ts'
       - 'src/evaluator.ts'
       - 'src/python/**'
       - 'package.json'
@@ -17,7 +19,9 @@ on:
     paths:
       - 'examples/eval-bert-score/**'
       - '.github/workflows/python-bertscore-example.yml'
+      - 'src/assertions/index.ts'
       - 'src/assertions/python.ts'
+      - 'src/assertions/scriptResultNormalization.ts'
       - 'src/evaluator.ts'
       - 'src/python/**'
       - 'package.json'
