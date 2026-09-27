@@ -212,7 +212,7 @@ const ratingTable: EvaluateTable = {
           score: 1,
           testCase: {},
           text: 'test output',
-          gradingResult: { pass: true, score: 1 },
+          gradingResult: { pass: true, score: 1, reason: 'Automated pass' },
         },
       ],
     },
