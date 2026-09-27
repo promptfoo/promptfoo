@@ -1508,7 +1508,7 @@ Use this provider to test an agent already configured in Foundry. To call a mode
 
 ### Example Repository
 
-The [Foundry example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/foundry-agent) includes a starter config and an optional live QA command for contributors.
+The [Foundry example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/foundry-agent) includes a starter config.
 
 ## Video Generation (Sora)
 

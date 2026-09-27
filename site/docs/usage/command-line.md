@@ -124,7 +124,6 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--no-progress-bar`                  | Do not show progress bar                                                                                 |
 | `--no-table`                         | Do not output table in CLI                                                                               |
 | `--no-write`                         | Do not write results to promptfoo directory                                                              |
-| `--write`                            | Save results to the local database, overriding the configuration default                                 |
 | `--resume [evalId]`                  | Resume a paused/incomplete eval. If `evalId` is omitted, resumes latest                                  |
 | `--retry-errors`                     | Retry all ERROR results from the latest eval                                                             |
 | `-o, --output <paths...>`            | Path(s) to output file (csv, txt, json, jsonl, yaml, yml, html, xml, junit.xml)                          |
