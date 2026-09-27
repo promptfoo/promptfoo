@@ -697,6 +697,72 @@ async function runInstalledCompressionEval(consumerDir: string, configDir: strin
   }
 }
 
+async function runOptionalOpenAiAgentsChecks(
+  consumerDir: string,
+  configDir: string,
+): Promise<void> {
+  const sdkDir = path.join(consumerDir, 'node_modules', '@openai', 'agents');
+  assert(!fs.existsSync(sdkDir), 'Default consumers should not install the optional Agents SDK');
+  const checks = `
+    const echo = await loadApiProvider('echo');
+    assert.equal((await echo.callApi('ordinary evaluation')).output, 'ordinary evaluation');
+    await assert.rejects(
+      loadApiProvider('openai:agents:gpt-4.1-mini'),
+      (error) => {
+        assert.match(error.message, /npm install promptfoo @openai\\/agents@\\^0\\.11\\.8/);
+        if (process.argv[2] === 'incompatible') {
+          assert.match(error.message, /found 0\\.0\\.0/);
+        } else {
+          assert.match(error.message, /package is required/);
+        }
+        return true;
+      },
+    );
+  `;
+  fs.writeFileSync(
+    path.join(consumerDir, 'optional-agents.mjs'),
+    `import assert from 'node:assert/strict';
+     import { loadApiProvider } from 'promptfoo';
+     ${checks}`,
+  );
+  fs.writeFileSync(
+    path.join(consumerDir, 'optional-agents.cjs'),
+    `const assert = require('node:assert/strict');
+     const { loadApiProvider } = require('promptfoo');
+     (async () => { ${checks} })().catch((error) => {
+       console.error(error);
+       process.exitCode = 1;
+     });`,
+  );
+  const runChecks = async (mode: string) => {
+    for (const script of ['optional-agents.mjs', 'optional-agents.cjs']) {
+      await runAsync(process.execPath, [script, mode], consumerDir, {
+        PROMPTFOO_CONFIG_DIR: configDir,
+        PROMPTFOO_DISABLE_TELEMETRY: '1',
+        PROMPTFOO_DISABLE_UPDATE: 'true',
+      });
+    }
+  };
+  await runChecks('missing');
+
+  // An unrelated application's SDK must not block ordinary providers. Reject an
+  // unsupported SDK before executing its code when the Agents feature is used.
+  fs.mkdirSync(sdkDir, { recursive: true });
+  try {
+    fs.writeFileSync(
+      path.join(sdkDir, 'package.json'),
+      JSON.stringify({ name: '@openai/agents', version: '0.0.0', main: './index.js' }),
+    );
+    fs.writeFileSync(
+      path.join(sdkDir, 'index.js'),
+      'throw new Error("Unsupported SDK code must not execute");',
+    );
+    await runChecks('incompatible');
+  } finally {
+    fs.rmSync(sdkDir, { recursive: true, force: true });
+  }
+}
+
 async function main(): Promise<void> {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-package-artifact-'));
   const artifactsDir = path.join(tempDir, 'artifacts');
@@ -782,6 +848,7 @@ async function main(): Promise<void> {
       );
     }
     await runInstalledCompressionEval(consumerDir, configDir);
+    await runOptionalOpenAiAgentsChecks(consumerDir, configDir);
 
     console.log(`Verified installed package artifact: ${packResult.filename}`);
   } finally {
