@@ -427,6 +427,13 @@
       "matchPackageNames": ["openai"],
       "matchCurrentValue": "/<\\s*2\\.45(?:\\.0)?(?:,|$)/",
       "allowedVersions": "<2.45.0"
+    },
+    {
+      "description": "Change example Python support floors explicitly alongside compatibility validation, not as routine package updates.",
+      "matchManagers": ["pep621"],
+      "matchFileNames": ["examples/**/pyproject.toml"],
+      "matchDepTypes": ["requires-python"],
+      "enabled": false
     }
   ]
 }
