@@ -12,7 +12,7 @@
  */
 
 import cliState from '../../cliState';
-import { getEnvOverrides, getEnvString } from '../../envars';
+import { type EnvVarKey, getEnvOverrides, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { resolveProviderEnv } from '../env';
@@ -20,6 +20,18 @@ import type { GoogleAuthOptions } from 'google-auth-library';
 
 import type { EnvOverrides } from '../../contracts/env';
 import type { CompletionOptions } from './types';
+
+const GOOGLE_PROJECT_ENV_KEYS: readonly string[] = [
+  'VERTEX_PROJECT_ID',
+  'GOOGLE_PROJECT_ID',
+  'GOOGLE_CLOUD_PROJECT',
+];
+const GOOGLE_MODE_ENV_KEYS = [
+  'GOOGLE_GENAI_USE_VERTEXAI',
+  ...GOOGLE_PROJECT_ENV_KEYS,
+  'GOOGLE_APPLICATION_CREDENTIALS',
+];
+const GOOGLE_API_KEY_ENV_KEYS = ['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'PALM_API_KEY'];
 
 // gcp-metadata (8.x) emits a `MetadataLookupWarning` of the form
 // `received unexpected error = ${err.message} code = ${code}` when the optional ADC probe cannot
@@ -292,57 +304,73 @@ export class GoogleAuthManager {
     }
   }
 
-  /**
-   * Determine if Vertex AI mode should be used.
-   *
-   * Priority:
-   * 1. Explicit vertexai config flag
-   * 2. GOOGLE_GENAI_USE_VERTEXAI env var (Python SDK compatibility)
-   * 3. Auto-detect from projectId/credentials presence
-   * 4. Default: false (Google AI Studio)
-   *
-   * @param config - Provider configuration
-   * @param env - Environment overrides
-   * @returns Whether to use Vertex AI mode
-   */
+  /** Select a mode before flattening scopes; empty values mask only their own name. */
+  static getVertexModeFromEnv(
+    layers: readonly (EnvOverrides | undefined)[],
+    apiKeyNames: readonly string[] = GOOGLE_API_KEY_ENV_KEYS,
+  ): boolean | undefined {
+    const names = [...GOOGLE_MODE_ENV_KEYS, ...apiKeyNames];
+    const masked = new Set<string>();
+    for (const layer of layers) {
+      for (const name of names) {
+        const value = layer?.[name];
+        if (masked.has(name) || value === undefined) {
+          continue;
+        }
+        masked.add(name);
+        if (name === 'GOOGLE_GENAI_USE_VERTEXAI') {
+          if (value === 'true' || value === '1') {
+            logger.debug('[Google] Vertex AI mode enabled via GOOGLE_GENAI_USE_VERTEXAI');
+            return true;
+          }
+          if (value === 'false' || value === '0') {
+            return false;
+          }
+        } else if (name === 'GOOGLE_APPLICATION_CREDENTIALS' || value) {
+          return (
+            name === 'GOOGLE_APPLICATION_CREDENTIALS' || GOOGLE_PROJECT_ENV_KEYS.includes(name)
+          );
+        }
+      }
+    }
+    return undefined;
+  }
+
+  /** Explicit configuration wins; otherwise select project/ADC or API key within each scope. */
   static determineVertexMode(
     config: CompletionOptions & { vertexai?: boolean },
     env?: EnvOverrides,
+    apiKeyNames: readonly string[] = GOOGLE_API_KEY_ENV_KEYS,
   ): boolean {
-    // 1. Explicit config flag takes precedence
     if (config.vertexai !== undefined) {
       return config.vertexai;
     }
-
-    // 2. Python SDK env var
-    const useVertexEnv =
-      env?.GOOGLE_GENAI_USE_VERTEXAI ?? getEnvString('GOOGLE_GENAI_USE_VERTEXAI');
-    if (useVertexEnv === 'true' || useVertexEnv === '1') {
-      logger.debug('[Google] Vertex AI mode enabled via GOOGLE_GENAI_USE_VERTEXAI');
+    if (config.projectId || config.credentials) {
       return true;
     }
-    if (useVertexEnv === 'false' || useVertexEnv === '0') {
+    if (config.apiKey) {
       return false;
     }
-
-    // 3. Auto-detect from config/env (explicit project/credentials suggests Vertex)
-    const hasProjectId = Boolean(
-      config.projectId ||
-        resolveProviderEnv(env, ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'])
-          ?.value,
-    );
-    const hasCredentials = Boolean(config.credentials);
-
-    if (hasProjectId || hasCredentials) {
+    const names = [...GOOGLE_MODE_ENV_KEYS, ...apiKeyNames];
+    const mode =
+      this.getVertexModeFromEnv(
+        [
+          env,
+          getEnvOverrides(),
+          getEnvOverrides('file'),
+          // Empty host values are unset; scoped empty ADC was handled above.
+          Object.fromEntries(
+            names.map((name) => [name, getEnvString(name as EnvVarKey) || undefined]),
+          ),
+        ],
+        apiKeyNames,
+      ) ?? false;
+    if (mode) {
       logger.debug(
-        '[Google] Auto-detected Vertex AI mode from projectId/credentials. ' +
-          'Set vertexai: true/false explicitly to suppress this message.',
+        '[Google] Auto-detected Vertex AI mode from projectId/credentials. Set vertexai: true/false explicitly to suppress this message.',
       );
-      return true;
     }
-
-    // 4. Default: Google AI Studio mode
-    return false;
+    return mode;
   }
 
   /**

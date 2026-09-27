@@ -3,8 +3,8 @@ import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { toDataUri } from '../../util/dataUrl';
 import { resolveProviderApiKey } from '../credentials';
-import { resolveProviderEnv } from '../env';
 import { getRequestTimeoutMs } from '../shared';
+import { GoogleAuthManager } from './auth';
 import {
   createAuthCacheDiscriminator,
   geminiFormatAndSystemInstructions,
@@ -152,16 +152,13 @@ export class GeminiImageProvider implements ApiProvider {
       return { error: sizeError };
     }
 
-    // Check if we should use Vertex AI (when projectId is provided)
-    const projectId =
-      this.config.projectId ||
-      resolveProviderEnv(this.env, [
-        'VERTEX_PROJECT_ID',
-        'GOOGLE_PROJECT_ID',
-        'GOOGLE_CLOUD_PROJECT',
-      ])?.value;
-
-    if (projectId) {
+    if (
+      GoogleAuthManager.determineVertexMode(this.config, this.env, [
+        'GOOGLE_API_KEY',
+        'GOOGLE_GENERATIVE_AI_API_KEY',
+        'GEMINI_API_KEY',
+      ])
+    ) {
       return this.callVertexApi(prompt, context);
     }
 

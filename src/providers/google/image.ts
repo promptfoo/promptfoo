@@ -4,8 +4,8 @@ import logger from '../../logger';
 import { toDataUri } from '../../util/dataUrl';
 import { sleep } from '../../util/time';
 import { resolveProviderApiKey } from '../credentials';
-import { resolveProviderEnv } from '../env';
 import { getRequestTimeoutMs } from '../shared';
+import { GoogleAuthManager } from './auth';
 import {
   createAuthCacheDiscriminator,
   getGoogleClient,
@@ -113,17 +113,13 @@ export class GoogleImageProvider implements ApiProvider {
       };
     }
 
-    // Check if we should use Vertex AI (when projectId is provided)
-    const projectId =
-      this.config.projectId ||
-      resolveProviderEnv(this.env, [
-        'VERTEX_PROJECT_ID',
-        'GOOGLE_PROJECT_ID',
-        'GOOGLE_CLOUD_PROJECT',
-      ])?.value;
-
-    if (projectId) {
-      // Use Vertex AI if project ID is available
+    if (
+      GoogleAuthManager.determineVertexMode(this.config, this.env, [
+        'GOOGLE_API_KEY',
+        'GOOGLE_GENERATIVE_AI_API_KEY',
+        'GEMINI_API_KEY',
+      ])
+    ) {
       return this.callVertexApi(prompt);
     }
 
