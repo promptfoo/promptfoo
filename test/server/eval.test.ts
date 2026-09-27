@@ -729,28 +729,41 @@ describe('eval routes', () => {
     });
 
     it('normalizes a missing legacy error counter before applying a category delta', async () => {
-      const eval_ = await EvalFactory.create();
+      const eval_ = await EvalFactory.create({ numResults: 3, resultTypes: ['error'] });
       testEvalIds.add(eval_.id);
       const results = await eval_.getResults();
-      const result = results[1];
-      invariant(result instanceof EvalResult, 'EvalResult is required');
-      invariant(result.id, 'Result ID is required');
-      await markResultAsError(eval_, result);
-      const prompt = eval_.prompts[result.promptIdx];
+      const otherPromptResult = results[2];
+      invariant(otherPromptResult instanceof EvalResult, 'Result is required');
+      otherPromptResult.promptIdx = 1;
+      await otherPromptResult.save();
+      const prompt = eval_.prompts[0];
       invariant(prompt.metrics, 'Prompt metrics are required');
+      Object.assign(prompt.metrics, { score: 0, testPassCount: 0, testFailCount: 0 });
+      const otherPrompt = structuredClone(prompt);
+      invariant(otherPrompt.metrics, 'Other prompt metrics are required');
+      otherPrompt.metrics.testErrorCount = 1;
+      eval_.prompts.push(otherPrompt);
       delete (prompt.metrics as Partial<typeof prompt.metrics>).testErrorCount;
       await eval_.save();
 
-      const response = await api
-        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
-        .send({ ...createManualRatingPayload(result, true), ratingAction: 'rate' });
-
-      expect(response.status).toBe(200);
-      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toMatchObject({
-        testPassCount: 2,
-        testFailCount: 0,
-        testErrorCount: 0,
-      });
+      for (const [index, ratingAction, errorCount] of [
+        [0, 'rate', 1],
+        [1, 'rate', 0],
+        [0, 'clear', 1],
+        [1, 'clear', 2],
+      ] as const) {
+        const response = await api
+          .post(`/api/eval/${eval_.id}/results/${results[index].id}/rating`)
+          .send({ pass: true, score: 1, ratingAction });
+        expect(response.status).toBe(200);
+        const updatedEval = await Eval.findById(eval_.id);
+        expect(updatedEval?.prompts[0].metrics).toMatchObject({
+          testPassCount: 2 - errorCount,
+          testFailCount: 0,
+          testErrorCount: errorCount,
+        });
+        expect(updatedEval?.prompts[1].metrics).toEqual(otherPrompt.metrics);
+      }
     });
 
     it('should preserve an error category when a rating submission only adds a comment', async () => {

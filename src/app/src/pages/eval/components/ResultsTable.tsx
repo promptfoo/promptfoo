@@ -1807,28 +1807,9 @@ function ResultsTable({
   latestTableRef.current = table;
   const ratingScopeRef = useRef({ evalId, generation: 0, mounted: false });
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: observe pending writes only when this eval mounts; fetchEvalData is a stable store action.
   React.useEffect(() => {
     const generation = ratingScopeRef.current.generation + 1;
     ratingScopeRef.current = { evalId, generation, mounted: true };
-    const apiBaseUrl = getApiBaseUrl();
-    const queueKey = JSON.stringify([apiBaseUrl, evalId]);
-    const pending = pendingRatingRequests.get(queueKey);
-    const refreshAfterRemount = async () => {
-      const latest = pendingRatingRequests.get(queueKey);
-      if (
-        evalId &&
-        ratingScopeRef.current.generation === generation &&
-        getApiBaseUrl() === apiBaseUrl &&
-        (!latest || latest === pending)
-      ) {
-        await fetchEvalData(evalId, { skipSettingEvalId: true, skipLoadingState: true });
-      }
-    };
-    // A write accepted by a previous mount can finish after this mount loaded its table.
-    void pending?.then(refreshAfterRemount, refreshAfterRemount).catch((error) => {
-      console.error('Failed to refresh table after a pending rating:', error);
-    });
     return () => {
       if (ratingScopeRef.current.generation === generation) {
         ratingScopeRef.current = { evalId, generation: generation + 1, mounted: false };
@@ -1957,9 +1938,10 @@ function ResultsTable({
         }
 
         const refreshCurrentPage = async () => {
-          if (!evalId || !isScopeActive()) {
+          if (!evalId || getApiBaseUrl() !== apiBaseUrl) {
             return;
           }
+          // The shared store owns the active eval/query, including while Results is unmounted.
           const refreshed = await fetchEvalData(evalId, {
             skipSettingEvalId: true,
             skipLoadingState: true,
@@ -1970,20 +1952,19 @@ function ResultsTable({
         };
 
         const handlePersistedResult = async (persistedResult?: PersistedRatingResult) => {
-          if (!isScopeActive()) {
-            return;
-          }
-          const latestLocation = findRatingOutput(latestTableRef.current, resultId);
-          const ownsOptimisticOutput =
-            optimisticOutput !== undefined && latestLocation?.output === optimisticOutput;
-          if (persistedResult && ownsOptimisticOutput) {
-            const reconciledTable = applyPersistedRatingResult({
-              table: latestTableRef.current,
-              resultId,
-              result: persistedResult,
-            });
-            latestTableRef.current = reconciledTable;
-            setTable(reconciledTable);
+          if (isScopeActive()) {
+            const latestLocation = findRatingOutput(latestTableRef.current, resultId);
+            const ownsOptimisticOutput =
+              optimisticOutput !== undefined && latestLocation?.output === optimisticOutput;
+            if (persistedResult && ownsOptimisticOutput) {
+              const reconciledTable = applyPersistedRatingResult({
+                table: latestTableRef.current,
+                resultId,
+                result: persistedResult,
+              });
+              latestTableRef.current = reconciledTable;
+              setTable(reconciledTable);
+            }
           }
           // The response contains one result; refresh the active query for prompt metrics
           // and rows that entered or left its filters, even without a websocket connection.
@@ -1994,10 +1975,7 @@ function ResultsTable({
 
         const handlePersistenceError = async (error: unknown) => {
           console.error('Failed to update table:', error);
-          if (!isScopeActive()) {
-            return;
-          }
-          if (error instanceof ConfirmedRatingPersistenceError) {
+          if (isScopeActive() && error instanceof ConfirmedRatingPersistenceError) {
             const latestLocation = findRatingOutput(latestTableRef.current, resultId);
             if (optimisticOutput && latestLocation?.output === optimisticOutput) {
               const rolledBackTable = replaceRatingOutput(

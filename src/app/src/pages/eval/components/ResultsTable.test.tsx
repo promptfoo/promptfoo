@@ -5058,7 +5058,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     consoleError.mockRestore();
   });
 
-  it('does not update the global table after unmounting with a rating in flight', async () => {
+  it('does not reconcile a rating through an unmounted component', async () => {
     const user = userEvent.setup();
     const mockTable = createMockTableWithHumanAssertion();
     let resolveResponse!: (response: any) => void;

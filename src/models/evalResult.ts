@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 
-import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
+import { and, count, eq, gte, inArray, lt, ne } from 'drizzle-orm';
 import { z } from 'zod';
 import { extractBlobHashesFromValue } from '../blobs/blobRefs';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
@@ -1311,7 +1311,7 @@ function applyResultMetricDelta(
     if (category === 'pass') {
       metrics.testPassCount += delta;
     } else if (category === 'error') {
-      metrics.testErrorCount = (metrics.testErrorCount ?? (delta < 0 ? 1 : 0)) + delta;
+      metrics.testErrorCount += delta;
     } else {
       metrics.testFailCount += delta;
     }
@@ -1380,6 +1380,21 @@ async function submitEvalResultRating(
     const nextAssertions = countGradingAssertions(transition.gradingResult);
     const nextCategory = getResultMetricCategory(transition.success, transition.failureReason);
 
+    if (prompt.metrics.testErrorCount == null) {
+      const errors = await tx
+        .select({ count: count() })
+        .from(evalResultsTable)
+        .where(
+          and(
+            eq(evalResultsTable.evalId, evalId),
+            eq(evalResultsTable.promptIdx, result.promptIdx),
+            eq(evalResultsTable.success, false),
+            eq(evalResultsTable.failureReason, ResultFailureReason.ERROR),
+          ),
+        )
+        .get();
+      prompt.metrics.testErrorCount = errors?.count ?? 0;
+    }
     prompt.metrics.score += transition.score - result.score;
     applyResultMetricDelta(prompt.metrics, previousCategory, nextCategory);
     prompt.metrics.assertPassCount += nextAssertions.pass - previousAssertions.pass;
