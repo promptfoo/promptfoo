@@ -37,6 +37,8 @@ try {
     $process = Start-Process (Get-Command pwsh).Source -ArgumentList @('-NoProfile', '-File', ('"{0}"' -f $script)) -WorkingDirectory $work -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
     $deadline = (Get-Date).AddSeconds(120)
     $healthy = $false
+    $lastHealthError = 'No HTTP response received'
+    Write-Output ('PowerShell ' + $PSVersionTable.PSVersion + '; localhost addresses: ' + ([System.Net.Dns]::GetHostAddresses('localhost') -join ', '))
     while ((Get-Date) -lt $deadline) {
         $process.Refresh()
         if ($process.HasExited) { throw 'The documented MLflow server command exited before becoming healthy' }
@@ -44,10 +46,11 @@ try {
             $response = Invoke-WebRequest ($env:MLFLOW_GATEWAY_URL + '/health') -NoProxy -TimeoutSec 2
             if ($response.StatusCode -eq 200) { $healthy = $true; break }
         } catch {
+            $lastHealthError = $_.Exception.Message
             Start-Sleep -Seconds 1
         }
     }
-    if (!$healthy) { throw 'The documented MLflow server did not become healthy in 120 seconds' }
+    if (!$healthy) { throw "The documented MLflow server did not become healthy in 120 seconds: $lastHealthError" }
     Write-Output 'Documented PowerShell install, server startup, gateway URL, and npx command passed.'
 } finally {
     if ($process -and !$process.HasExited) {
