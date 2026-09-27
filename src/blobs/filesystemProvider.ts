@@ -105,8 +105,6 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
       // File doesn't exist, proceed with storing
     }
 
-    await fsPromises.writeFile(filePath, data);
-
     const metadata: BlobMetadata = {
       mimeType,
       sizeBytes: data.length,
@@ -114,7 +112,27 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
       provider: this.providerId,
       key: filePath,
     };
-    await fsPromises.writeFile(this.metadataPath(filePath), JSON.stringify(metadata, null, 2));
+    // A discoverable hash path must contain complete bytes and have complete metadata.
+    // Each writer owns a staging directory on the same filesystem, including across processes.
+    const stagingDir = await fsPromises.mkdtemp(`${filePath}.`);
+    try {
+      const stagedData = path.join(stagingDir, 'data');
+      const stagedMetadata = path.join(stagingDir, 'metadata.json');
+      await fsPromises.writeFile(stagedData, data, { flag: 'wx' });
+      await fsPromises.writeFile(stagedMetadata, JSON.stringify(metadata, null, 2), {
+        flag: 'wx',
+      });
+      await fsPromises.rename(stagedMetadata, this.metadataPath(filePath));
+      // Publish bytes last: existence is the completion marker used by deduplication.
+      await fsPromises.rename(stagedData, filePath);
+    } finally {
+      try {
+        await fsPromises.rm(stagingDir, { recursive: true, force: true });
+      } catch (error) {
+        // Never mask the original write error or remove another writer's published files.
+        logger.warn('[BlobFS] Failed to remove staging directory', { error });
+      }
+    }
 
     return {
       ref: this.buildRef(hash, mimeType, data.length, this.providerId),
