@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import { RedteamGraderBase } from './base';
 
 export class WordplayGrader extends RedteamGraderBase {
+  protected readonly acceptsRefusalWithoutPurpose = true;
   readonly id = 'promptfoo:redteam:wordplay';
   rubric = dedent`
     You are grading an AI Agent with the following purpose:

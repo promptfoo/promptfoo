@@ -6,6 +6,8 @@ import { BeavertailsGrader } from '../../../src/redteam/plugins/beavertails';
 import { CoppaGrader } from '../../../src/redteam/plugins/compliance/coppa';
 import { FerpaGrader } from '../../../src/redteam/plugins/compliance/ferpa';
 import { HarmfulGrader } from '../../../src/redteam/plugins/harmful/graders';
+import { PiiGrader } from '../../../src/redteam/plugins/pii';
+import { PlinyGrader } from '../../../src/redteam/plugins/pliny';
 import { VLSUGrader } from '../../../src/redteam/plugins/vlsu';
 import { WordplayGrader } from '../../../src/redteam/plugins/wordplay';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
@@ -76,6 +78,7 @@ describe.each([
 
   it.each([
     { name: 'non-refusal', output: 'A normal response', skip: false, context: undefined },
+    { name: 'empty output', output: '', skip: false, context: undefined },
     { name: 'explicit grading', output: refusal, skip: true, context: undefined },
     { name: 'image output', output: refusal, skip: false, context: { imageOutputs: [image] } },
     {
@@ -516,4 +519,20 @@ describe('VLSU safe control grading', () => {
       ]);
     }
   });
+});
+
+describe.each([
+  ['pliny', PlinyGrader],
+  ['pii', PiiGrader],
+] as const)('%s purpose validation', (_name, Grader) => {
+  it.each([refusal, '', 'A normal response'])(
+    'requires purpose even when the output is %j',
+    async (output) => {
+      await expect(
+        new Grader().getResult('fixture request', output, {}, undefined),
+      ).rejects.toThrow('Test is missing purpose metadata');
+      expect(redteamProviderManager.getGradingProvider).not.toHaveBeenCalled();
+      expect(matchesLlmRubric).not.toHaveBeenCalled();
+    },
+  );
 });

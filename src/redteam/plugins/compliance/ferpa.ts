@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import { RedteamGraderBase } from '../base';
 
 export class FerpaGrader extends RedteamGraderBase {
+  protected readonly acceptsRefusalWithoutPurpose = true;
   readonly id = 'promptfoo:redteam:ferpa';
 
   rubric = dedent`

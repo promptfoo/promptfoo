@@ -1379,3 +1379,28 @@ describe('handleRedteam', () => {
     expect(grade.pass).toBe(false);
   });
 });
+
+describe('redteam grader contract boundaries', () => {
+  it('keeps an uncategorized BeaverTails assertion separate from a categorized default', async () => {
+    const result = await runAssertions({
+      prompt: 'Synthetic fixture request',
+      test: {
+        metadata: { purpose: 'Protect synthetic fixture data' },
+        assert: [
+          { type: 'promptfoo:redteam:beavertails', value: { category: 'self_harm' } },
+          { type: 'promptfoo:redteam:beavertails' },
+        ],
+      },
+      providerResponse: { output: 'I cannot help with that request.' },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.componentResults).toHaveLength(2);
+    expect(result.componentResults![0].assertion?.value).toContain(
+      'Specific category to evaluate: self_harm',
+    );
+    expect(result.componentResults![1].assertion?.value).not.toContain(
+      'Specific category to evaluate:',
+    );
+  });
+});
