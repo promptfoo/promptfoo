@@ -3,17 +3,76 @@ import { isDeepStrictEqual } from 'node:util';
 import { getShareAuthorizedBlob } from '../blobs/index';
 import EvalResult, { asEvaluateResult, PROMPTFOO_METADATA_KEY } from '../models/evalResult';
 import { isApiProvider } from '../types/providers';
+import { GRADING_PROVIDER_TYPE_KEYS, isProviderTypeMap } from '../util/gradingProvider';
 import { REDACTED, sanitizeObject } from '../util/sanitizer';
 
-import type { EvaluationStore } from '../evaluator/runtime';
+import type { EvaluationStore, GradingProviderResolver } from '../evaluator/runtime';
 import type Eval from '../models/eval';
 import type {
   Assertion,
+  AssertionSet,
   AtomicTestCase,
   CompletedPrompt,
   EvaluateResult,
   ProviderResponse,
 } from '../types/index';
+
+function matchesStoredProvider(saved: unknown, current: unknown): boolean {
+  return (
+    isApiProvider(current) &&
+    (saved === `[${current.constructor?.name ?? 'Object'} Instance]` ||
+      isDeepStrictEqual(saved, sanitizeObject(current, { maxDepth: Number.POSITIVE_INFINITY })))
+  );
+}
+
+// The public API resolves graders eagerly, while CLI resume leaves declarations
+// lazy. Load only a candidate for a saved instance, then require an exact match.
+async function resolveStoredGradingProvider(
+  saved: unknown,
+  current: unknown,
+  resolveGradingProvider: GradingProviderResolver,
+): Promise<unknown> {
+  if (
+    !saved ||
+    typeof saved !== 'object' ||
+    Array.isArray(saved) ||
+    ('id' in saved && typeof saved.id === 'string') ||
+    isApiProvider(current) ||
+    current == null
+  ) {
+    return current;
+  }
+  if (isProviderTypeMap(current)) {
+    const resolved: Record<string, unknown> = { ...current };
+    for (const type of GRADING_PROVIDER_TYPE_KEYS) {
+      if (current[type] !== undefined) {
+        resolved[type] = await resolveStoredGradingProvider(
+          (saved as Record<string, unknown>)[type],
+          current[type],
+          resolveGradingProvider,
+        );
+      }
+    }
+    return resolved;
+  }
+  const resolved = await resolveGradingProvider(current);
+  return matchesStoredProvider(saved, resolved) ? resolved : current;
+}
+
+async function restoreGradingAssertion(
+  saved: Assertion,
+  current: Assertion | undefined,
+  resolveGradingProvider: GradingProviderResolver,
+): Promise<Assertion> {
+  return restoreRuntimeGradingValues(saved, {
+    ...current,
+    provider: await resolveStoredGradingProvider(
+      saved.provider,
+      current?.provider,
+      resolveGradingProvider,
+    ),
+  }) as Assertion;
+}
 
 function preserveAssertionFunctions(assertion: Assertion): Assertion {
   return {
@@ -44,11 +103,7 @@ function restoreRuntimeGradingValues(saved: unknown, current: unknown): unknown 
   if (typeof current === 'function' && saved === `[Function] ${current.name}`) {
     return current;
   }
-  if (
-    isApiProvider(current) &&
-    (saved === `[${current.constructor?.name ?? 'Object'} Instance]` ||
-      isDeepStrictEqual(saved, sanitizeObject(current, { maxDepth: Number.POSITIVE_INFINITY })))
-  ) {
+  if (matchesStoredProvider(saved, current)) {
     return current;
   }
   if (Array.isArray(saved)) {
@@ -150,8 +205,47 @@ export class EvalEvaluationStore implements EvaluationStore<Eval, EvalResult> {
     response: ProviderResponse,
     savedTest: AtomicTestCase,
     currentTest: AtomicTestCase,
+    resolveGradingProvider: GradingProviderResolver,
   ): Promise<{ providerResponse: ProviderResponse; test: AtomicTestCase }> {
-    const test = restoreRuntimeGradingValues(savedTest, currentTest) as AtomicTestCase;
+    const { assert, options, ...savedValues } = savedTest;
+    const test = restoreRuntimeGradingValues(savedValues, currentTest) as AtomicTestCase;
+    if (options) {
+      test.options = restoreRuntimeGradingValues(options, {
+        ...currentTest.options,
+        provider: await resolveStoredGradingProvider(
+          options.provider,
+          currentTest.options?.provider,
+          resolveGradingProvider,
+        ),
+      }) as AtomicTestCase['options'];
+    }
+    if (assert) {
+      test.assert = await Promise.all(
+        assert.map(async (assertion, index) => {
+          const current = currentTest.assert?.[index];
+          if (assertion.type === 'assert-set') {
+            const { assert: children, ...values } = assertion;
+            return {
+              ...(restoreRuntimeGradingValues(values, current) as Omit<AssertionSet, 'assert'>),
+              assert: await Promise.all(
+                children.map((child, childIndex) =>
+                  restoreGradingAssertion(
+                    child,
+                    current?.type === 'assert-set' ? current.assert[childIndex] : undefined,
+                    resolveGradingProvider,
+                  ),
+                ),
+              ),
+            };
+          }
+          return restoreGradingAssertion(
+            assertion,
+            current?.type === 'assert-set' ? undefined : current,
+            resolveGradingProvider,
+          );
+        }),
+      );
+    }
     if (!response.audio?.blobRef) {
       return { providerResponse: response, test };
     }
