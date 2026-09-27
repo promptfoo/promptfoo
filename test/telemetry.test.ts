@@ -140,7 +140,22 @@ describe('Telemetry', () => {
     vi.useFakeTimers();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    const registry = Reflect.get(process, Symbol.for('promptfoo.telemetry.clients')) as
+      | {
+          clients: Set<{ client: { shutdown(): Promise<void> }; shutdown?: Promise<void> }>;
+          exiting: boolean;
+        }
+      | undefined;
+    if (registry) {
+      await Promise.allSettled(
+        [...registry.clients].map(
+          (record) => (record.shutdown ??= Promise.resolve().then(() => record.client.shutdown())),
+        ),
+      );
+      registry.clients.clear();
+      registry.exiting = false;
+    }
     restoreTelemetryEnv(originalEnv);
     vi.clearAllMocks();
     vi.restoreAllMocks();

@@ -45,10 +45,21 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  const owners = Reflect.get(process, Symbol.for('promptfoo.telemetry.clientOwners')) as
-    | Set<{ shutdown(): Promise<void> }>
+  const registry = Reflect.get(process, Symbol.for('promptfoo.telemetry.clients')) as
+    | {
+        clients: Set<{ client: PostHog; shutdown?: Promise<void> }>;
+        exiting: boolean;
+      }
     | undefined;
-  await Promise.allSettled([...(owners ?? [])].map((owner) => owner.shutdown()));
+  if (registry) {
+    await Promise.allSettled(
+      [...registry.clients].map(
+        (record) => (record.shutdown ??= Promise.resolve().then(() => record.client.shutdown())),
+      ),
+    );
+    registry.clients.clear();
+    registry.exiting = false;
+  }
   restoreEnv();
   Reflect.set(process, hostTestModeKey, previousHostTestMode);
   vi.restoreAllMocks();
@@ -165,33 +176,91 @@ describe('telemetry test-mode environment restrictions', () => {
     expect(nextClient.shutdown).toHaveBeenCalledOnce();
   });
 
-  it('keeps enabled instances independently owned', async () => {
+  it('keeps the shared client available until the last instance releases it', async () => {
     const { Telemetry } = await import('../src/telemetry');
-    const nextClient = {
-      ...client,
-      capture: vi.fn(),
-      shutdown: vi.fn().mockResolvedValue(undefined),
-    };
-    vi.mocked(PostHog)
-      .mockImplementationOnce(function () {
-        return client as unknown as PostHog;
-      })
-      .mockImplementationOnce(function () {
-        return nextClient as unknown as PostHog;
-      });
     const first = new Telemetry();
     const second = new Telemetry();
-    await first.shutdown();
+    await Promise.all([first.shutdown(), first.shutdown()]);
     second.record('eval_ran', {});
-    expect(PostHog).toHaveBeenCalledTimes(2);
-    expect(client.shutdown).toHaveBeenCalledOnce();
-    expect(nextClient.shutdown).not.toHaveBeenCalled();
-    expect(nextClient.capture).toHaveBeenCalledOnce();
+    expect(PostHog).toHaveBeenCalledOnce();
+    expect(client.shutdown).not.toHaveBeenCalled();
+    expect(client.capture).toHaveBeenCalledOnce();
     await second.shutdown();
-    expect(nextClient.shutdown).toHaveBeenCalledOnce();
+    expect(client.shutdown).toHaveBeenCalledOnce();
   });
 
-  it('drains live and closing instances across module reloads at process exit', async () => {
+  it('reuses one client for repeatedly constructed direct instances', async () => {
+    const { Telemetry } = await import('../src/telemetry');
+    const instances = Array.from({ length: 100 }, () => new Telemetry());
+    try {
+      expect(PostHog).toHaveBeenCalledOnce();
+    } finally {
+      await Promise.all(instances.map((instance) => instance.shutdown()));
+    }
+    expect(client.shutdown).toHaveBeenCalledOnce();
+  });
+
+  it('waits for a released instance to flush while another instance keeps using the client', async () => {
+    const { Telemetry } = await import('../src/telemetry');
+    const first = new Telemetry();
+    const second = new Telemetry();
+    const flushing = createDeferred<void>();
+    client.flush.mockReturnValueOnce(flushing.promise);
+    let finished = false;
+    const releasing = first.shutdown().then(() => {
+      finished = true;
+    });
+    try {
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(client.shutdown).not.toHaveBeenCalled();
+      expect(finished).toBe(false);
+      second.record('eval_ran', {});
+      expect(PostHog).toHaveBeenCalledOnce();
+      expect(client.capture).toHaveBeenCalledOnce();
+      flushing.resolve();
+      await releasing;
+      expect(client.shutdown).not.toHaveBeenCalled();
+    } finally {
+      flushing.resolve();
+      await releasing;
+      await second.shutdown();
+    }
+    expect(client.shutdown).toHaveBeenCalledOnce();
+  });
+
+  it('suppresses both transports when another exit listener records during shutdown', async () => {
+    const handlerKey = Symbol.for('promptfoo.telemetry.shutdownHandler');
+    const previousFlag = Reflect.get(process, handlerKey);
+    Reflect.deleteProperty(process, handlerKey);
+    const once = vi.spyOn(process, 'once');
+    const closing = createDeferred<void>();
+    let handler: ((code: number) => void | Promise<void>) | undefined;
+    let exiting: void | Promise<void> = undefined;
+    try {
+      const { Telemetry } = await import('../src/telemetry');
+      const telemetry = new Telemetry();
+      handler = once.mock.calls.find(([event]) => event === 'beforeExit')?.[1];
+      expect(handler).toBeDefined();
+      client.shutdown.mockReturnValueOnce(closing.promise);
+      exiting = handler!(0);
+      await Promise.resolve();
+      telemetry.record('eval_ran', {});
+      new Telemetry().record('eval_ran', {});
+      expect(PostHog).toHaveBeenCalledOnce();
+      expect(client.capture).not.toHaveBeenCalled();
+      expect(request).not.toHaveBeenCalled();
+    } finally {
+      closing.resolve();
+      await exiting;
+      if (handler) {
+        process.removeListener('beforeExit', handler);
+      }
+      Reflect.set(process, handlerKey, previousFlag);
+    }
+  });
+
+  it('drains shared and closing clients across module reloads at process exit', async () => {
     const handlerKey = Symbol.for('promptfoo.telemetry.shutdownHandler');
     const previousFlag = Reflect.get(process, handlerKey);
     Reflect.deleteProperty(process, handlerKey);
@@ -200,29 +269,31 @@ describe('telemetry test-mode environment restrictions', () => {
     let handler: ((code: number) => void | Promise<void>) | undefined;
     try {
       const firstModule = await import('../src/telemetry');
-      firstModule.default.initialize();
       const explicit = new firstModule.Telemetry();
       handler = once.mock.calls.find(([event]) => event === 'beforeExit')?.[1];
       expect(handler).toBeDefined();
       client.shutdown.mockReturnValueOnce(closing.promise);
       const explicitShutdown = explicit.shutdown();
-      const owners = Reflect.get(process, Symbol.for('promptfoo.telemetry.clientOwners')) as
-        | Set<unknown>
-        | undefined;
-      expect(owners?.has(explicit)).toBe(true);
+      firstModule.default.initialize();
       vi.resetModules();
       const secondModule = await import('../src/telemetry');
       new secondModule.Telemetry();
       mockProcessEnv({ IS_TESTING: 'true' });
       new secondModule.Telemetry();
       expect(PostHog).toHaveBeenCalledTimes(3);
-      const exiting = handler!(0);
+      let finished = false;
+      const exiting = Promise.resolve(handler!(0)).then(() => {
+        finished = true;
+      });
       await Promise.resolve();
       expect(client.shutdown).toHaveBeenCalledTimes(3);
-      expect(owners?.has(explicit)).toBe(true);
+      expect(finished).toBe(false);
       closing.resolve();
       await Promise.all([exiting, explicitShutdown]);
-      expect(owners?.size).toBe(0);
+      const registry = Reflect.get(process, Symbol.for('promptfoo.telemetry.clients')) as {
+        clients: Set<unknown>;
+      };
+      expect(registry.clients.size).toBe(0);
     } finally {
       closing.resolve();
       if (handler) {
