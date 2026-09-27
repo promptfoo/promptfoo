@@ -123,6 +123,19 @@ async function createApiProvider(
   // like {{ vars.* }} for per-test customization at callApi() time
   const renderedConfig = options.config ? renderTemplate(options.config) : undefined;
   const renderedId = options.id ? renderTemplate(options.id) : undefined;
+  if (/^(?:google|palm):(?:image:|video:|[^:]*-image)/.test(renderedProviderPath)) {
+    const { GoogleAuthManager } = await import('./google/auth');
+    const mode = GoogleAuthManager.getVertexModeFromEnv(
+      [...(originalEnvLayers ?? [env, options.env])].reverse(),
+      /^(?:google|palm):video:/.test(renderedProviderPath)
+        ? ['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'PALM_API_KEY']
+        : ['GOOGLE_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY', 'GEMINI_API_KEY'],
+    );
+    // Preserve the selected environment mode without overriding explicit provider or prompt config.
+    if (mode !== undefined) {
+      mergedEnv = { ...mergedEnv, GOOGLE_GENAI_USE_VERTEXAI: String(mode) };
+    }
+  }
   if (
     renderedProviderPath.startsWith('vertex:') &&
     renderedConfig?.expressMode === false &&
