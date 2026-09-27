@@ -453,6 +453,66 @@ describe('evaluator', () => {
       },
     );
 
+    it.each(['"corrupt"', '"2"', '-1', 'null', '{}', '1e309'])(
+      'ignores malformed persisted outcome counts (%s) consistently across columns',
+      async (invalidCount) => {
+        const evaluation = await Eval.create({ redteam: {} }, []);
+        const prompts = [
+          createCompletedPrompt('First', {
+            metrics: createPromptMetrics({ testPassCount: 1, testFailCount: 1 }),
+          }),
+          createCompletedPrompt('Second', {
+            metrics: createPromptMetrics({ testPassCount: 1 }),
+          }),
+        ];
+        // Store raw JSON to cover legacy values, including a non-finite JSON number.
+        const storedPrompts = JSON.stringify(prompts).replace(
+          /"testErrorCount":0/g,
+          `"testErrorCount":${invalidCount}`,
+        );
+        const db = await getDb();
+        await db.run(sql`UPDATE ${evalsTable} SET prompts = ${storedPrompts}
+          WHERE id = ${evaluation.id}`);
+
+        expect(await getEvalSummaries(undefined, 'redteam')).toEqual([
+          expect.objectContaining({
+            evalId: evaluation.id,
+            numTests: 2,
+            passRate: (2 / 3) * 100,
+            attackSuccessRate: (1 / 3) * 100,
+          }),
+        ]);
+      },
+    );
+
+    it('uses normalized pass and failure counts for both rates and total runs', async () => {
+      const evaluation = await Eval.create({ redteam: {} }, []);
+      const prompts = [
+        createCompletedPrompt('First', {
+          metrics: createPromptMetrics({ testPassCount: 1, testFailCount: 1 }),
+        }),
+        createCompletedPrompt('Second', {
+          metrics: createPromptMetrics({ testPassCount: 0, testFailCount: -1, testErrorCount: 1 }),
+        }),
+      ];
+      const storedPrompts = JSON.stringify(prompts).replace(
+        '"testPassCount":0',
+        '"testPassCount":"2"',
+      );
+      const db = await getDb();
+      await db.run(sql`UPDATE ${evalsTable} SET prompts = ${storedPrompts}
+        WHERE id = ${evaluation.id}`);
+
+      expect(await getEvalSummaries(undefined, 'redteam')).toEqual([
+        expect.objectContaining({
+          evalId: evaluation.id,
+          numTests: 2,
+          passRate: (1 / 3) * 100,
+          attackSuccessRate: (1 / 3) * 100,
+        }),
+      ]);
+    });
+
     it('returns zero counts and rate when no tests have run', async () => {
       const evaluation = await Eval.create({}, []);
       expect(await getEvalSummaries()).toEqual([

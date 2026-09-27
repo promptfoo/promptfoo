@@ -1727,6 +1727,10 @@ export default class Eval {
   }
 }
 
+function normalizeSummaryCount(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
 /**
  * Queries summaries of all evals, optionally for a given dataset.
  *
@@ -1786,28 +1790,23 @@ export async function getEvalSummaries(
    * - Persisted test indices distinguish test cases from runs across provider/prompt columns.
    */
   return results.map((result) => {
-    const passCount =
-      result.prompts?.reduce((memo, prompt) => {
-        return memo + (prompt.metrics?.testPassCount ?? 0);
-      }, 0) ?? 0;
-
-    const failCount =
-      result.prompts?.reduce((memo, prompt) => {
-        return memo + (prompt.metrics?.testFailCount ?? 0);
-      }, 0) ?? 0;
+    let passCount = 0;
+    let failCount = 0;
+    let testRunCount = 0;
+    let testCount = result.persistedTestCount;
 
     // Provider selection can give each column a different number of runs.
-    const testCounts = result.prompts?.map((p) => {
-      return (
-        (p.metrics?.testPassCount ?? 0) +
-        (p.metrics?.testFailCount ?? 0) +
-        (p.metrics?.testErrorCount ?? 0)
-      );
-    }) ?? [0];
-
     // V4 uploads send complete metrics before result row chunks arrive.
-    const testCount = Math.max(result.persistedTestCount, ...testCounts, 0);
-    const testRunCount = testCounts.reduce((total, count) => total + count, 0);
+    for (const prompt of result.prompts ?? []) {
+      const passes = normalizeSummaryCount(prompt.metrics?.testPassCount);
+      const failures = normalizeSummaryCount(prompt.metrics?.testFailCount);
+      const errors = normalizeSummaryCount(prompt.metrics?.testErrorCount);
+      const runs = passes + failures + errors;
+      passCount += passes;
+      failCount += failures;
+      testRunCount += runs;
+      testCount = Math.max(testCount, runs);
+    }
 
     // Construct an array of providers
     const deserializedProviders = [];
