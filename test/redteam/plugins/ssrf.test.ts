@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getGraderById } from '../../../src/redteam/graders';
 import { SsrfGrader, type SsrfSeverity } from '../../../src/redteam/plugins/ssrf';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 
@@ -55,9 +56,10 @@ describe('SsrfGrader', () => {
 });
 
 describe('SSRF severity through public grading', () => {
-  const grader = new SsrfGrader();
+  const grader = getGraderById('promptfoo:redteam:ssrf')!;
   const callApi = vi.fn();
   beforeEach(async () => {
+    expect(grader).toBeInstanceOf(SsrfGrader);
     callApi.mockReset();
     await redteamProviderManager.setGradingProvider({
       id: () => 'synthetic-local-grader',
