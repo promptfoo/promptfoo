@@ -311,6 +311,20 @@ describe('Python pool executable validation', () => {
     expect(pool.getWorkerCount()).toBe(0);
   });
 
+  it('rejects queued and new calls when the pool shuts down', async () => {
+    const pool = new PythonWorkerPool('fixture.py', 'call_api', 1, 'fixture-python');
+    pools.push(pool);
+    await pool.initialize();
+    vi.spyOn(PythonWorker.prototype, 'isBusy').mockReturnValue(true);
+    const queued = pool.execute('call_api', []).catch((error) => error);
+
+    await pool.shutdown();
+
+    expect(await queued).toEqual(new Error('Worker pool shutting down'));
+    await expect(pool.execute('call_api', [])).rejects.toThrow('Worker pool not initialized');
+    expect(pool.getWorkerCount()).toBe(0);
+  });
+
   it('does not start a direct worker when shutdown interrupts its first validation', async () => {
     const onReady = vi.fn();
     const worker = new PythonWorker('fixture.py', 'call_api', 'fixture-python', 1000, onReady);

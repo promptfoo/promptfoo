@@ -95,13 +95,8 @@ vi.mock('../../src/python/workerPool', async (importOriginal) => {
   };
 });
 
-const originalWorkerCount = process.env.PROMPTFOO_PYTHON_WORKERS;
-afterEach(() => {
-  mockProcessEnv({ PROMPTFOO_PYTHON_WORKERS: originalWorkerCount });
-  vi.restoreAllMocks();
-});
-
 describe('PythonProvider', () => {
+  let restoreEnv: () => void;
   const mockPythonWorkerPool = vi.mocked(PythonWorkerPool);
   const mockGetCache = vi.mocked(getCache);
   const mockIsCacheEnabled = vi.mocked(isCacheEnabled);
@@ -128,9 +123,7 @@ describe('PythonProvider', () => {
     mockPoolInstance.shutdown.mockReset();
     mockPoolInstance.shutdown.mockResolvedValue(undefined);
 
-    // Reset the effective worker-count environment
-
-    mockProcessEnv({ PROMPTFOO_PYTHON_WORKERS: undefined });
+    restoreEnv = mockProcessEnv({ PROMPTFOO_PYTHON_WORKERS: undefined });
 
     // Reset getConfiguredPythonPath mock - default to passthrough behavior
     mockGetConfiguredPythonPath.mockReset();
@@ -149,7 +142,8 @@ describe('PythonProvider', () => {
   });
 
   afterEach(() => {
-    // Ensure cliState is cleaned up after each test
+    restoreEnv();
+    vi.restoreAllMocks();
     cliState.maxConcurrency = undefined;
   });
 
@@ -723,10 +717,6 @@ describe('PythonProvider', () => {
     });
 
     it('should pass pythonExecutable to worker pool', async () => {
-      // Reset mock completely
-
-      mockProcessEnv({ PROMPTFOO_PYTHON_WORKERS: undefined });
-
       // Mock getConfiguredPythonPath to return the config value
       mockGetConfiguredPythonPath.mockReturnValue('/usr/bin/python3');
 
@@ -749,10 +739,6 @@ describe('PythonProvider', () => {
     });
 
     it('should use PROMPTFOO_PYTHON when config.pythonExecutable is not set', async () => {
-      // Reset mocks
-
-      mockProcessEnv({ PROMPTFOO_PYTHON_WORKERS: undefined });
-
       // Mock getConfiguredPythonPath to return the env var value when config is undefined
       mockGetConfiguredPythonPath.mockReturnValue('/venv/bin/python3');
 
@@ -777,10 +763,6 @@ describe('PythonProvider', () => {
     });
 
     it('should prioritize config.pythonExecutable over PROMPTFOO_PYTHON', async () => {
-      // Reset mocks
-
-      mockProcessEnv({ PROMPTFOO_PYTHON_WORKERS: undefined });
-
       // Mock getConfiguredPythonPath to return the config value (simulating priority)
       mockGetConfiguredPythonPath.mockReturnValue('/config/python3');
 
@@ -805,10 +787,6 @@ describe('PythonProvider', () => {
     });
 
     it('should pass undefined to worker pool when neither config nor env var is set', async () => {
-      // Reset mocks
-
-      mockProcessEnv({ PROMPTFOO_PYTHON_WORKERS: undefined });
-
       // Mock getConfiguredPythonPath to return undefined (neither config nor env var set)
       mockGetConfiguredPythonPath.mockReturnValue(undefined);
 
@@ -830,10 +808,6 @@ describe('PythonProvider', () => {
     });
 
     it('should pass timeout to worker pool', async () => {
-      // Reset mock completely
-
-      mockProcessEnv({ PROMPTFOO_PYTHON_WORKERS: undefined });
-
       const provider = new PythonProvider('script.py', {
         config: {
           basePath: process.cwd(),
@@ -853,8 +827,6 @@ describe('PythonProvider', () => {
 
     describe('cliState.maxConcurrency integration', () => {
       it('should use cliState.maxConcurrency when config and env var are not set', async () => {
-        mockProcessEnv({ PROMPTFOO_PYTHON_WORKERS: undefined });
-
         // Set cliState.maxConcurrency (simulating -j flag)
         cliState.maxConcurrency = 8;
 
@@ -890,8 +862,6 @@ describe('PythonProvider', () => {
       });
 
       it('should prioritize config.workers over cliState.maxConcurrency', async () => {
-        mockProcessEnv({ PROMPTFOO_PYTHON_WORKERS: undefined });
-
         // Set cliState.maxConcurrency (simulating -j flag)
         cliState.maxConcurrency = 8;
 
@@ -914,8 +884,6 @@ describe('PythonProvider', () => {
       });
 
       it('should default to 1 worker when cliState.maxConcurrency is undefined', async () => {
-        mockProcessEnv({ PROMPTFOO_PYTHON_WORKERS: undefined });
-
         // Ensure cliState.maxConcurrency is undefined (default state)
         cliState.maxConcurrency = undefined;
 
@@ -932,8 +900,6 @@ describe('PythonProvider', () => {
       });
 
       it('should warn and use 1 when cliState.maxConcurrency is invalid (< 1)', async () => {
-        mockProcessEnv({ PROMPTFOO_PYTHON_WORKERS: undefined });
-
         // Set invalid cliState.maxConcurrency
         cliState.maxConcurrency = 0;
 
@@ -953,8 +919,6 @@ describe('PythonProvider', () => {
       });
 
       it('should warn and use 1 when config.workers is invalid (< 1)', async () => {
-        mockProcessEnv({ PROMPTFOO_PYTHON_WORKERS: undefined });
-
         const provider = new PythonProvider('script.py', {
           config: {
             basePath: process.cwd(),

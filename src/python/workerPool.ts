@@ -102,13 +102,8 @@ export class PythonWorkerPool {
     }
   }
 
-  private getAvailableWorker(): PythonWorker | null {
-    for (const worker of this.workers) {
-      if (worker.isReady() && !worker.isBusy()) {
-        return worker;
-      }
-    }
-    return null;
+  private getAvailableWorker(): PythonWorker | undefined {
+    return this.workers.find((worker) => worker.isReady() && !worker.isBusy());
   }
 
   private processQueue(): void {
@@ -153,19 +148,13 @@ export class PythonWorkerPool {
 
     // Reject any queued requests
     for (const req of this.queue.splice(0)) {
-      try {
-        req.reject(new Error('Worker pool shutting down'));
-      } catch {
-        // Ignore errors from rejecting
-      }
+      req.reject(new Error('Worker pool shutting down'));
     }
 
     // Shutdown all workers in parallel
     await Promise.all(this.workers.map((w) => w.shutdown()));
 
     this.workers = [];
-    this.queue = [];
-    this.isInitialized = false;
 
     logger.debug('Python worker pool shutdown complete');
   }
