@@ -2,6 +2,8 @@
 
 This example demonstrates how to use OpenTelemetry with Python to trace the internal operations of your LLM providers during Promptfoo evaluations. It uses the **protobuf format** for trace export, which is the default and most efficient format for the Python OpenTelemetry SDK.
 
+Requires Python 3.10+ and Node.js >=22.22.0.
+
 ## Quick Start
 
 ```bash
@@ -13,10 +15,10 @@ python3 -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # Install dependencies
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 
 # Run the evaluation
-npx promptfoo@latest eval
+npx promptfoo@latest eval --no-cache
 npx promptfoo@latest view
 ```
 
@@ -50,16 +52,11 @@ This example showcases:
 | `provider.py`          | Python provider with OpenTelemetry instrumentation |
 | `requirements.txt`     | Python dependencies (OpenTelemetry SDK)            |
 
-## Protobuf vs JSON
+## Protobuf export
 
-Python's OpenTelemetry SDK uses **protobuf by default** when using `opentelemetry-exporter-otlp-proto-http`:
-
-| Format   | Content-Type             | Package                                  |
-| -------- | ------------------------ | ---------------------------------------- |
-| Protobuf | `application/x-protobuf` | `opentelemetry-exporter-otlp-proto-http` |
-| JSON     | `application/json`       | `opentelemetry-exporter-otlp-http`       |
-
-Protobuf is more efficient for serialization/deserialization and produces smaller payloads, making it the recommended format for production use.
+The `opentelemetry-exporter-otlp-proto-http` package sends OTLP protobuf over HTTP.
+Promptfoo also accepts OTLP JSON from other clients; the Python example uses
+protobuf throughout.
 
 ## Provider Implementation
 
@@ -179,10 +176,9 @@ Click on any test result to see the "Trace Timeline" section.
 
 | Package                                  | Version  | Purpose                       |
 | ---------------------------------------- | -------- | ----------------------------- |
-| `opentelemetry-api`                      | >=1.28.0 | Core tracing API              |
-| `opentelemetry-sdk`                      | >=1.28.0 | SDK implementation            |
-| `opentelemetry-exporter-otlp-proto-http` | >=1.28.0 | OTLP HTTP exporter (protobuf) |
-| `opentelemetry-semantic-conventions`     | >=0.49b0 | Standard attribute names      |
+| `opentelemetry-api`                      | >=1.44.0 | Core tracing API              |
+| `opentelemetry-sdk`                      | >=1.44.0 | SDK implementation            |
+| `opentelemetry-exporter-otlp-proto-http` | >=1.44.0 | OTLP HTTP exporter (protobuf) |
 
 ## Troubleshooting
 
@@ -198,7 +194,7 @@ Click on any test result to see the "Trace Timeline" section.
 Make sure all dependencies are installed:
 
 ```bash
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
 ### Connection Refused
