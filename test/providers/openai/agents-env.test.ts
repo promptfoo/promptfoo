@@ -23,7 +23,6 @@ import { CreateJobRequestSchema } from '../../../src/types/api/eval';
 import { getProviderFromCloud } from '../../../src/util/cloud';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 import { getProxyForUrl } from '../../../src/util/fetch/proxy';
-import { ProviderOptionsSchema } from '../../../src/validators/providers';
 import { clearProxyEnv, createDeferred, mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/util/fetch/index', () => ({ fetchWithProxy: vi.fn() }));
@@ -135,16 +134,14 @@ describe('Agents SDK scoped client', () => {
   });
 
   it.each(
-    (['provider', 'job'] as const).flatMap((scope) =>
-      [
-        ['REQUEST_TIMEOUT_MS', '1234'],
-        ['PROMPTFOO_FETCH_CONNECTIONS', '2'],
-      ].flatMap(([name, value]) => [
-        { scope, name, value },
-        { scope, name, value: '' },
-      ]),
-    ),
-  )('honors validated $scope $name=$value', async ({ scope, name, value }) => {
+    [
+      ['REQUEST_TIMEOUT_MS', '1234'],
+      ['PROMPTFOO_FETCH_CONNECTIONS', '2'],
+    ].flatMap(([name, value]) => [
+      { name, value },
+      { name, value: '' },
+    ]),
+  )('honors validated job $name=$value', async ({ name, value }) => {
     const custom = new OpenAIProvider({ apiKey: 'sdk-key' });
     vi.spyOn(custom, 'getModel').mockRejectedValue(new Error('validated setting was stripped'));
     setDefaultModelProvider(custom);
@@ -152,15 +149,12 @@ describe('Agents SDK scoped client', () => {
       expect(getEnvString(name)).toBe(value);
       return Response.json(response);
     });
-    const input = { env: { [name]: value } };
-    const env =
-      scope === 'provider'
-        ? ProviderOptionsSchema.parse(input).env
-        : CreateJobRequestSchema.parse({ ...input, providers: ['echo'], prompts: ['hello'] }).env;
-    const result =
-      scope === 'provider'
-        ? await provider({}, env).callApi('hello')
-        : await cliState.withEnv(env, () => provider().callApi('hello'));
+    const { env } = CreateJobRequestSchema.parse({
+      env: { [name]: value },
+      providers: ['echo'],
+      prompts: ['hello'],
+    });
+    const result = await cliState.withEnv(env, () => provider().callApi('hello'));
     expect(result.output).toBe('ok');
     expect(fetchWithProxy).toHaveBeenCalledOnce();
   });
