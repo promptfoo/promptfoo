@@ -428,7 +428,7 @@ describe('evaluation-owned OpenTelemetry', () => {
     expect(localSpans.map((span) => span.name)).toEqual(['remaining eval']);
   });
 
-  it('releases fallback globals so a later host SDK can register', async () => {
+  it('releases owned context while leaving propagation process-wide', async () => {
     await runScoped({}, async () => {
       getGenAITracer().startSpan('owned').end();
     });
@@ -439,6 +439,8 @@ describe('evaluation-owned OpenTelemetry', () => {
       extract: (ctx: typeof import('@opentelemetry/api').ROOT_CONTEXT) => ctx,
     };
     expect(context.setGlobalContextManager(manager)).toBe(true);
+    expect(propagation.fields()).toEqual(['traceparent', 'tracestate']);
+    propagation.disable();
     expect(propagation.setGlobalPropagator(hostPropagator)).toBe(true);
     const key = createContextKey('late-host');
     await context.with(context.active().setValue(key, 'value'), async () => {
@@ -463,7 +465,7 @@ describe('evaluation-owned OpenTelemetry', () => {
       });
       expect(propagation.fields()).toEqual(['traceparent', 'tracestate']);
     });
-    expect(propagation.fields()).toEqual([]);
+    expect(propagation.fields()).toEqual(['traceparent', 'tracestate']);
     const manager = new AsyncLocalStorageContextManager().enable();
     expect(context.setGlobalContextManager(manager)).toBe(true);
   });
@@ -485,6 +487,23 @@ describe('evaluation-owned OpenTelemetry', () => {
     expect(disable).not.toHaveBeenCalled();
     propagation.inject(context.active(), {});
     expect(hostPropagator.inject).toHaveBeenCalledOnce();
+  });
+
+  it('preserves a host propagator that reuses the fallback fields array', async () => {
+    const inject = vi.fn();
+    await runScoped({}, async () => {
+      const fields = propagation.fields();
+      propagation.disable();
+      expect(
+        propagation.setGlobalPropagator({
+          fields: () => fields,
+          inject,
+          extract: (ctx) => ctx,
+        }),
+      ).toBe(true);
+    });
+    propagation.inject(context.active(), {});
+    expect(inject).toHaveBeenCalledOnce();
   });
 
   it.each([{ fields: ['host-header'] }, { fields: [] }])(
@@ -555,6 +574,106 @@ describe('evaluation-owned OpenTelemetry', () => {
       expect(process.listeners(signal)).toEqual([...existingListeners]);
     },
   );
+
+  it.each([
+    ['SIGINT', false],
+    ['SIGTERM', false],
+    ['SIGINT', true],
+    ['SIGTERM', true],
+  ] as const)(
+    're-arms %s during an earlier shutdown (repeated shutdown=%s)',
+    async (signal, repeatShutdown) => {
+      const existing = new Set(process.rawListeners(signal));
+      const pending = createDeferred<void>();
+      const stopped = createDeferred<void>();
+      const realShutdown = NodeTracerProvider.prototype.shutdown;
+      const shutdown = vi
+        .spyOn(NodeTracerProvider.prototype, 'shutdown')
+        .mockImplementationOnce(async function (this: NodeTracerProvider) {
+          await pending.promise;
+          try {
+            await realShutdown.call(this);
+          } finally {
+            stopped.resolve();
+          }
+        });
+      const currentHandler = () =>
+        process.rawListeners(signal).find((listener) => !existing.has(listener));
+      await withOtelContext(async () => {
+        initializeOtel(config);
+        const firstHandler = currentHandler();
+        expect(firstHandler).toBeDefined();
+        try {
+          // Invoke the actual once wrapper without notifying unrelated host listeners.
+          withOtelContext(() => firstHandler!.call(process, signal));
+          expect(shutdown).toHaveBeenCalledOnce();
+          if (repeatShutdown) {
+            await shutdownOtel();
+            expect(shutdown).toHaveBeenCalledOnce();
+          }
+          await runScoped({ serviceName: 'during-shutdown' }, async () => {
+            const nextHandler = currentHandler();
+            expect(nextHandler).toBeDefined();
+            expect(nextHandler).not.toBe(firstHandler);
+            pending.resolve();
+            await stopped.promise;
+            expect(currentHandler()).toBe(nextHandler);
+            getOtelTracer('fixture').startSpan('new owner after old shutdown').end();
+            withOtelContext(() => nextHandler!.call(process, signal));
+            await shutdown.mock.results.at(-1)!.value;
+            expect(shutdown).toHaveBeenCalledTimes(2);
+            expect(isOtelInitialized()).toBe(false);
+          });
+        } finally {
+          pending.resolve();
+          await stopped.promise;
+          await shutdownOtel();
+        }
+      });
+      expect(localSpans.map((span) => span.name)).toEqual(['new owner after old shutdown']);
+      expect(process.rawListeners(signal)).toEqual([...existing]);
+    },
+  );
+
+  it('re-arms beforeExit when a new provider starts during an earlier flush', async () => {
+    const existing = new Set(process.rawListeners('beforeExit'));
+    const pending = createDeferred<void>();
+    const realFlush = NodeTracerProvider.prototype.forceFlush;
+    const flush = vi
+      .spyOn(NodeTracerProvider.prototype, 'forceFlush')
+      .mockImplementationOnce(async function (this: NodeTracerProvider) {
+        await pending.promise;
+        await realFlush.call(this);
+      });
+    const currentHandler = () =>
+      process.rawListeners('beforeExit').find((listener) => !existing.has(listener));
+    await runScoped({}, async () => {
+      const firstHandler = currentHandler();
+      expect(firstHandler).toBeDefined();
+      const flushing = withOtelContext(() => firstHandler!.call(process, 0));
+      try {
+        expect(flush).toHaveBeenCalledOnce();
+        await runScoped({ serviceName: 'during-flush' }, async () => {
+          const nextHandler = currentHandler();
+          expect(nextHandler).toBeDefined();
+          expect(nextHandler).not.toBe(firstHandler);
+          pending.resolve();
+          await flushing;
+          expect(currentHandler()).toBe(nextHandler);
+          getOtelTracer('fixture').startSpan('new provider after earlier flush').end();
+          await withOtelContext(() => nextHandler!.call(process, 0));
+          expect(flush).toHaveBeenCalledTimes(3);
+          expect(new Set(flush.mock.contexts).size).toBe(2);
+          expect(currentHandler()).toBeUndefined();
+        });
+      } finally {
+        pending.resolve();
+        await flushing;
+      }
+    });
+    expect(localSpans.map((span) => span.name)).toEqual(['new provider after earlier flush']);
+    expect(process.rawListeners('beforeExit')).toEqual([...existing]);
+  });
 
   it('removes owned shutdown handlers after a failed operation', async () => {
     const counts = ['SIGINT', 'SIGTERM', 'beforeExit'].map((signal) =>

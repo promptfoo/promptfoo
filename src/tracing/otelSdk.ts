@@ -54,7 +54,6 @@ interface OtelRoutingState {
   provider: TracerProvider;
   owners: Set<NodeTracerProvider>;
   contextManager?: AsyncLocalStorageContextManager;
-  propagatorFields?: string[];
 }
 const globalScopes = globalThis as {
   [OTEL_SCOPE_KEY]?: AsyncLocalStorage<OtelScope>;
@@ -179,12 +178,6 @@ function releaseGlobalTracingRegistrations(provider: NodeTracerProvider): void {
     }
     routingState.contextManager = undefined;
   }
-  if (routingState.propagatorFields) {
-    if (propagation.fields() === routingState.propagatorFields) {
-      propagation.disable();
-    }
-    routingState.propagatorFields = undefined;
-  }
 }
 
 function ensureContextManager(): void {
@@ -269,20 +262,10 @@ export function initializeOtel(config: OtelConfig): void {
   ownedProviders.set(scope.provider, scope);
   routingState.owners.add(scope.provider);
   ensureContextManager();
-  // Keep a stable fields array so cleanup can recognize our registration through
-  // the public API, even if a host later installs another W3C propagator.
+  // Propagation is stateless and process-wide. Per-eval cleanup must not unregister
+  // it: the public API cannot identify a replacement installed by the host.
   if (propagation.fields().length === 0) {
-    const propagator = new W3CTraceContextPropagator();
-    const fields = propagator.fields();
-    if (
-      propagation.setGlobalPropagator({
-        fields: () => fields,
-        inject: propagator.inject.bind(propagator),
-        extract: propagator.extract.bind(propagator),
-      })
-    ) {
-      routingState.propagatorFields = fields;
-    }
+    propagation.setGlobalPropagator(traceContextPropagator);
   }
   ensureGlobalTracerRouting();
   logger.info('[OtelSdk] OpenTelemetry SDK initialized successfully');
@@ -306,20 +289,20 @@ export async function shutdownOtel(): Promise<void> {
 }
 
 async function shutdownProvider(provider: NodeTracerProvider): Promise<void> {
+  const scope = ownedProviders.get(provider);
+  if (scope?.provider === provider) {
+    scope.provider = undefined;
+  }
+  ownedProviders.delete(provider);
+  if (ownedProviders.size === 0) {
+    cleanupShutdownHandlers();
+  }
   try {
     await provider.shutdown();
   } catch (error) {
     logger.error('[OtelSdk] Error shutting down OpenTelemetry SDK', { error });
   } finally {
-    const scope = ownedProviders.get(provider);
-    if (scope?.provider === provider) {
-      scope.provider = undefined;
-    }
-    ownedProviders.delete(provider);
     releaseGlobalTracingRegistrations(provider);
-    if (ownedProviders.size === 0) {
-      cleanupShutdownHandlers();
-    }
   }
 }
 
@@ -361,12 +344,14 @@ async function onBeforeExit(): Promise<void> {
 }
 
 function setupShutdownHandlers(): void {
-  if (ownedProviders.size !== 1) {
-    return;
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+    if (!process.listeners(signal).includes(onShutdown)) {
+      process.once(signal, onShutdown);
+    }
   }
-  process.once('SIGTERM', onShutdown);
-  process.once('SIGINT', onShutdown);
-  process.once('beforeExit', onBeforeExit);
+  if (!process.listeners('beforeExit').includes(onBeforeExit)) {
+    process.once('beforeExit', onBeforeExit);
+  }
 }
 
 function cleanupShutdownHandlers(): void {
