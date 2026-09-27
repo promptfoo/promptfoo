@@ -32,6 +32,8 @@ If you are using the Python `openai-agents` SDK, use the [OpenAI Agents Python S
 
 You can also supply OpenAI credentials and endpoints through provider or top-level `env`, an invocation env file, or `config.apiKey` and `config.apiBaseUrl`. Agents with a custom SDK `Model` object keep that model's client.
 
+Gateways with their own credentials or `apiKeyRequired: false` receive an OpenAI key only when selected through `config.apiKey` or `config.apiKeyEnvar`.
+
 ## Basic Usage
 
 ```yaml
