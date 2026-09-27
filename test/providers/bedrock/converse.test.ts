@@ -726,6 +726,39 @@ describe('AwsBedrockConverseProvider', () => {
       );
     });
 
+    it('preserves the unknown MCP block diagnostic and normalized result envelope', async () => {
+      using debugSpy = vi.spyOn(logger, 'debug');
+      mcpMocks.mockCallTool.mockResolvedValueOnce({
+        content: [{ text: 'known' }, { json: { count: 2 } }, { unknown: 'value' }],
+      });
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+        },
+      });
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('', {
+          toolUse: { id: 'tool-123', name: 'list_resources', input: {} },
+          stopReason: 'tool_use',
+        }),
+      );
+
+      const result = await provider.callApi('List resources');
+
+      expect(result.output).toBe(
+        'MCP Tool Result (list_resources): known\n{"count":2}\n{"unknown":"value"}',
+      );
+      expect(result.error).toBeUndefined();
+      expect(debugSpy).toHaveBeenCalledWith(
+        '[Bedrock Converse] Unknown MCP content shape, serializing as JSON',
+        { keys: ['unknown'] },
+      );
+    });
+
     it('should return MCP tool errors', async () => {
       mcpMocks.mockCallTool.mockResolvedValueOnce({
         content: 'MCP server failed',
