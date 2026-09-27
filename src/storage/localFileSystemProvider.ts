@@ -228,7 +228,10 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
       }
     }
     try {
-      await fsPromises.unlink(metadataPath);
+      // Only remove legacy sidecars, preserving unrelated directories at this path.
+      if (!(await fsPromises.lstat(metadataPath)).isDirectory()) {
+        await fsPromises.unlink(metadataPath);
+      }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         throw error;

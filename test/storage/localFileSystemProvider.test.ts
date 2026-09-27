@@ -1,16 +1,22 @@
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import * as fsPromises from 'fs/promises';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LocalFileSystemProvider } from '../../src/storage/localFileSystemProvider';
 import { createTempDir, removeTempDir } from '../util/utils';
+
+vi.mock('fs/promises', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('fs/promises')>()),
+}));
 
 describe('LocalFileSystemProvider', () => {
   let tempDir: string | undefined;
   const extraFilesToCleanup: string[] = [];
 
   afterEach(() => {
+    vi.restoreAllMocks();
     for (const filePath of extraFilesToCleanup) {
       try {
         fs.rmSync(filePath, { force: true });
@@ -59,13 +65,15 @@ describe('LocalFileSystemProvider', () => {
 
     const retrieved = await provider.retrieve(ref.key);
     expect(retrieved.toString('utf8')).toBe('hello');
+    await expect(provider.delete(ref.key)).resolves.toBeUndefined();
+    await expect(provider.exists(ref.key)).resolves.toBe(false);
   });
   it.each([
     ['audio', 'audio/wav', 'wav'],
     ['image', 'image/png', 'png'],
     ['video', 'video/mp4', 'mp4'],
   ] as const)(
-    'stores %s when the unused sidecar path is a directory',
+    'stores and deletes %s when the unused sidecar path is a nonempty directory',
     async (mediaType, contentType, extension) => {
       tempDir = createTempDir('promptfoo-media-');
       const provider = new LocalFileSystemProvider({ basePath: tempDir });
@@ -74,6 +82,8 @@ describe('LocalFileSystemProvider', () => {
       const key = `${mediaType}/${contentHash.slice(0, 12)}.${extension}`;
       const sidecarPath = path.join(tempDir, `${key}.meta.json`);
       fs.mkdirSync(sidecarPath, { recursive: true });
+      const unrelatedPath = path.join(sidecarPath, 'unrelated.json');
+      fs.writeFileSync(unrelatedPath, 'unrelated data', 'utf8');
       const metadata = { mediaType, contentType, evalId: 'test-eval', originalText: 'source text' };
 
       const stored = await provider.store(payload, metadata);
@@ -99,8 +109,40 @@ describe('LocalFileSystemProvider', () => {
         deduplicated: true,
         ref: { key, metadata },
       });
+
+      await expect(reopened.delete(key)).resolves.toBeUndefined();
+
+      await expect(reopened.exists(key)).resolves.toBe(false);
+      await expect(reopened.findByHash(contentHash)).resolves.toBeNull();
+      const afterDelete = new LocalFileSystemProvider({ basePath: tempDir });
+      await expect(afterDelete.findByHash(contentHash)).resolves.toBeNull();
+      expect(fs.readdirSync(sidecarPath)).toEqual(['unrelated.json']);
+      expect(fs.readFileSync(unrelatedPath, 'utf8')).toBe('unrelated data');
+      await expect(reopened.delete(key)).resolves.toBeUndefined();
     },
   );
+
+  it('propagates failures to delete a legacy sidecar file', async () => {
+    tempDir = createTempDir('promptfoo-media-');
+    const provider = new LocalFileSystemProvider({ basePath: tempDir });
+    const { ref } = await provider.store(Buffer.from('legacy media'), {
+      contentType: 'audio/wav',
+      mediaType: 'audio',
+    });
+    const sidecarPath = path.join(tempDir, `${ref.key}.meta.json`);
+    fs.writeFileSync(sidecarPath, 'legacy metadata', 'utf8');
+    const failure = Object.assign(new Error('Access denied'), { code: 'EACCES' });
+    const unlink = fsPromises.unlink;
+    vi.spyOn(fsPromises, 'unlink').mockImplementation(async (filePath) => {
+      if (filePath === sidecarPath) {
+        throw failure;
+      }
+      return unlink(filePath);
+    });
+
+    await expect(provider.delete(ref.key)).rejects.toBe(failure);
+    expect(fs.readFileSync(sidecarPath, 'utf8')).toBe('legacy metadata');
+  });
 
   it('keeps existing legacy sidecars until the corresponding media is deleted', async () => {
     tempDir = createTempDir('promptfoo-media-');
