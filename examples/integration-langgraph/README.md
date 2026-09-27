@@ -27,7 +27,7 @@ Export the key in your environment, or pass `--env-file .env` to Promptfoo.
 Install Python packages:
 
 ```bash
-python -m pip install -r requirements.txt
+python3 -m pip install -r requirements.txt
 ```
 
 Only LangGraph, its OpenAI integration, and directly imported Pydantic are
@@ -71,7 +71,7 @@ Set `providers[0].config.model` to select another model, or `apiBaseUrl` to use 
 OpenAI-compatible endpoint. Failed model requests are reported as provider errors.
 
 ```bash
-python -m unittest discover -s . -p '*_test.py'
+python3 -m unittest discover -s . -p '*_test.py'
 ```
 
 These tests execute the real graph with a deterministic local model response. A
