@@ -2,7 +2,6 @@ import { createHmac, randomUUID } from 'crypto';
 
 import { getCache, isCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
-import { getEnvOverrides } from '../../envars';
 import logger from '../../logger';
 import {
   type GenAISpanContext,
@@ -179,22 +178,6 @@ export class VertexChatProvider extends GoogleGenericProvider {
       ...options,
       config: { ...options.config, vertexai: true },
     });
-  }
-
-  getApiKey(): string | undefined {
-    if (!this.config.apiKey) {
-      // Select the authentication scope before choosing an API key or scoped ADC.
-      const scopedAuth = [this.env, getEnvOverrides(), getEnvOverrides('file'), process.env].find(
-        (layer) =>
-          ['GOOGLE_APPLICATION_CREDENTIALS', 'VERTEX_API_KEY', 'GOOGLE_API_KEY'].some(
-            (key) => layer?.[key] !== undefined,
-          ),
-      );
-      if (scopedAuth?.GOOGLE_APPLICATION_CREDENTIALS !== undefined) {
-        return undefined;
-      }
-    }
-    return super.getApiKey();
   }
 
   /**

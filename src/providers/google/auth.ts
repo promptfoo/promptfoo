@@ -152,7 +152,8 @@ export class GoogleAuthManager {
   /**
    * Get API key with proper priority order.
    *
-   * Environment scope takes priority; aliases are checked in this order within each scope.
+   * Environment scope takes priority; Vertex ADC wins over API keys in the same scope.
+   * API key aliases are checked in this order within each scope.
    * Priority (aligned with Python SDK):
    * 1. config.apiKey (explicit)
    * 2. VERTEX_API_KEY (Vertex mode only)
@@ -184,8 +185,14 @@ export class GoogleAuthManager {
       env,
       getEnvOverrides(),
       getEnvOverrides('file'),
-      Object.fromEntries(keys.map((key) => [key, getEnvString(key)])),
+      {
+        ...Object.fromEntries(keys.map((key) => [key, getEnvString(key)])),
+        GOOGLE_APPLICATION_CREDENTIALS: getEnvString('GOOGLE_APPLICATION_CREDENTIALS'),
+      },
     ]) {
+      if (isVertexMode && layer?.GOOGLE_APPLICATION_CREDENTIALS !== undefined) {
+        return { apiKey: undefined, source: 'none' };
+      }
       for (const source of keys) {
         const apiKey = layer?.[source];
         if (masked.has(source) || apiKey === undefined) {
