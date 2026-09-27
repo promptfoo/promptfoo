@@ -40,13 +40,7 @@ class ProviderRegistry {
 
       logger.debug(`Received ${signal}, shutting down ${this.providers.size} Python providers...`);
 
-      await Promise.all(
-        Array.from(this.providers).map((p) =>
-          p.shutdown().catch((err) => {
-            logger.error(`Error shutting down provider: ${err}`);
-          }),
-        ),
-      );
+      await this.shutdownAll();
 
       logger.debug('Python provider shutdown complete');
     };
