@@ -7,6 +7,8 @@ import Eval from '../../src/models/eval';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import { resolveConfigs } from '../../src/util/config/load';
 
+vi.mock('../../src/telemetry');
+
 afterEach(() => {
   vi.restoreAllMocks();
   cliState.config = undefined;
