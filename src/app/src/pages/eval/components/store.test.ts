@@ -20,7 +20,8 @@ vi.stubGlobal('crypto', {
   randomUUID: mockRandomUUID,
 });
 
-vi.mock('@app/utils/api', () => ({
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
   callApi: vi.fn(),
   fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
   fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
@@ -100,7 +101,7 @@ const initialTableStoreState = useTableStore.getState();
 describe('useTableStore', () => {
   beforeEach(() => {
     act(() => {
-      useTableStore.setState(initialTableStoreState, true);
+      useTableStore.setState({ ...initialTableStoreState, ratingQueues: new Map() }, true);
     });
     vi.clearAllMocks();
   });

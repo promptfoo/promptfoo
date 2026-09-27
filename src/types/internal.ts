@@ -2,7 +2,12 @@ import type { EventSource } from './eventSource';
 import type { EvaluateOptions, GradingResult } from './index';
 import type { TokenUsage } from './shared';
 
-type NonstandardScoringBaseline = { pass: boolean; score: number };
+type NonstandardScoringBaseline = {
+  pass: boolean;
+  score: number;
+  /** Fresh deferred grading, consumed when persistence updates an active manual baseline. */
+  comparison?: GradingResult;
+};
 const NONSTANDARD_SCORING_BASELINE = Symbol('promptfoo.nonstandardScoringBaseline');
 
 export function setNonstandardScoringBaseline(

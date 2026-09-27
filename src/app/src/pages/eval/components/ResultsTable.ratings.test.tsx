@@ -5,7 +5,7 @@ import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import type { EvaluateTable, GradingResult } from '@promptfoo/types';
@@ -48,7 +48,7 @@ const table: EvaluateTable = {
 
 beforeEach(() => {
   resetCallApiMock();
-  useTableStore.setState(initialTableState, true);
+  useTableStore.setState({ ...initialTableState, ratingQueues: new Map() }, true);
   useResultsViewSettingsStore.setState(initialViewState, true);
 });
 
@@ -74,6 +74,309 @@ function renderRatingTable() {
     </MemoryRouter>,
   );
 }
+
+function holdResponse() {
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  onTestFinished(async () => {
+    await act(async () => release());
+  });
+  return { pending, release };
+}
+
+it.each(['before', 'after'] as const)(
+  'preserves queued comments when a socket read starts %s the latest edit',
+  async (readTiming) => {
+    const user = userEvent.setup();
+    const evalId = `socket-read-${readTiming}`;
+    const query = `/eval/${evalId}/table?offset=0&limit=50&filterMode=all`;
+    const serverTable = structuredClone(table);
+    useTableStore.setState({
+      evalId,
+      table: structuredClone(table),
+      config: {},
+      version: 4,
+      filteredResultsCount: 1,
+      totalResultsCount: 1,
+      tableQuery: { evalId, url: query },
+    });
+    const heldWrites = Array.from({ length: 4 }, holdResponse);
+    const heldRead = holdResponse();
+    const writes: Array<SubmitRatingRequest & GradingResult> = [];
+    const tableResponse = () => ({
+      table: structuredClone(serverTable),
+      config: {},
+      version: 4,
+      filteredCount: 1,
+      totalCount: 1,
+    });
+    const writeRoutes = heldWrites.map((held) => ({
+      path: `/eval/${evalId}/results/result-id/rating`,
+      method: 'POST',
+      response: async (_path: string, options: RequestInit | undefined) => {
+        const body = JSON.parse(String(options?.body)) as SubmitRatingRequest & GradingResult;
+        writes.push(body);
+        const { ratingAction: _action, ratingUpdate: _update, ...gradingResult } = body;
+        Object.assign(serverTable.body[0].outputs[0], {
+          pass: body.pass,
+          score: body.score,
+          failureReason: body.pass ? 0 : 1,
+          gradingResult,
+        });
+        await held.pending;
+        return {
+          id: 'result-id',
+          success: body.pass,
+          score: body.score,
+          failureReason: body.pass ? 0 : 1,
+          gradingResult,
+        };
+      },
+    }));
+    mockCallApiRoutes([
+      writeRoutes[0],
+      {
+        path: query,
+        response: async () => {
+          const snapshot = tableResponse();
+          await heldRead.pending;
+          return snapshot;
+        },
+      },
+      ...writeRoutes.slice(1),
+      { path: query, response: tableResponse },
+    ]);
+    renderRatingTable();
+    await user.click(screen.getByRole('button', { name: 'Mark test failed' }));
+    const read = () =>
+      useTableStore.getState().fetchEvalData(evalId, {
+        skipSettingEvalId: true,
+        skipLoadingState: true,
+      });
+    let pendingRead: ReturnType<typeof read>;
+    if (readTiming === 'before') {
+      await act(async () => {
+        pendingRead = read();
+      });
+    }
+    for (const comment of ['A', 'B']) {
+      await user.click(screen.getByRole('button', { name: 'Edit comment' }));
+      const dialog = within(screen.getByRole('dialog'));
+      await user.clear(dialog.getByRole('textbox'));
+      await user.type(dialog.getByRole('textbox'), comment);
+      await user.click(dialog.getByRole('button', { name: 'Save' }));
+    }
+    if (readTiming === 'after') {
+      await act(async () => {
+        pendingRead = read();
+      });
+    }
+    await act(async () => {
+      heldRead.release();
+      await pendingRead;
+    });
+    await user.click(screen.getByRole('button', { name: 'Edit comment' }));
+    expect.soft(within(screen.getByRole('dialog')).getByRole('textbox')).toHaveValue('B');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await user.click(screen.getByRole('button', { name: 'Mark test passed' }));
+    for (let index = 0; index < heldWrites.length; index += 1) {
+      await waitFor(() => expect(writes).toHaveLength(index + 1));
+      await act(async () => heldWrites[index].release());
+    }
+    await waitFor(() => expect(callApi).toHaveBeenCalledTimes(6));
+    expect.soft(writes.map((write) => write.comment)).toEqual(['', 'A', 'B', 'B']);
+    expect(serverTable.body[0].outputs[0].gradingResult?.comment).toBe('B');
+  },
+);
+
+it('persists the next rating while an obsolete background refresh is still held', async () => {
+  const user = userEvent.setup();
+  const evalId = 'held-refresh-next-write';
+  const query = `/eval/${evalId}/table?offset=0&limit=50&filterMode=all`;
+  useTableStore.setState({
+    evalId,
+    table: structuredClone(table),
+    config: {},
+    version: 4,
+    filteredResultsCount: 1,
+    totalResultsCount: 1,
+    tableQuery: { evalId, url: query },
+  });
+  const heldRead = holdResponse();
+  const writeResponse = {
+    id: 'result-id',
+    success: false,
+    score: 0,
+    failureReason: 1,
+    gradingResult: { pass: false, score: 0, reason: 'Manual result' },
+  };
+  mockCallApiRoutes([
+    { path: `/eval/${evalId}/results/result-id/rating`, method: 'POST', response: writeResponse },
+    {
+      path: query,
+      response: async () => {
+        await heldRead.pending;
+        return { table, config: {}, version: 4, filteredCount: 1, totalCount: 1 };
+      },
+    },
+    { path: `/eval/${evalId}/results/result-id/rating`, method: 'POST', response: writeResponse },
+    { path: query, response: { table, config: {}, version: 4, filteredCount: 1, totalCount: 1 } },
+  ]);
+  renderRatingTable();
+  await user.click(screen.getByRole('button', { name: 'Mark test failed' }));
+  await waitFor(() => expect(callApi).toHaveBeenCalledTimes(2));
+  await user.click(screen.getByRole('button', { name: 'Mark test passed' }));
+  await waitFor(() =>
+    expect(
+      vi.mocked(callApi).mock.calls.filter(([, options]) => options?.method === 'POST'),
+    ).toHaveLength(2),
+  );
+  await act(async () => heldRead.release());
+});
+
+it.each([
+  { changePages: false, refreshStatus: 200 },
+  { changePages: false, refreshStatus: 500 },
+  { changePages: true, refreshStatus: 200 },
+  { changePages: true, refreshStatus: 500 },
+])(
+  'retains completed cells through pending writes and reads (pages: $changePages, refresh: $refreshStatus)',
+  async ({ changePages, refreshStatus }) => {
+    const user = userEvent.setup();
+    const evalId = `completed-cells-${changePages}-${refreshStatus}`;
+    const query = `/eval/${evalId}/table?offset=0&limit=50&filterMode=all`;
+    const serverTable = structuredClone(table);
+    const secondRow = structuredClone(serverTable.body[0]);
+    secondRow.testIdx = 1;
+    secondRow.outputs[0].id = 'second-result';
+    serverTable.body.push(secondRow);
+    useTableStore.setState({
+      evalId,
+      table: structuredClone(serverTable),
+      config: {},
+      version: 4,
+      filteredResultsCount: 2,
+      totalResultsCount: 2,
+      tableQuery: { evalId, url: query },
+    });
+    const firstWrite = holdResponse();
+    const secondWrite = holdResponse();
+    const earlyRead = holdResponse();
+    const foregroundRead = holdResponse();
+    const tableResponse = (body = serverTable.body) => ({
+      table: structuredClone({ ...serverTable, body }),
+      config: {},
+      version: 4,
+      totalCount: 2,
+      filteredCount: 2,
+    });
+    const writeResponse = async (index: number, held: ReturnType<typeof holdResponse>) => {
+      await held.pending;
+      const output = serverTable.body[index].outputs[0];
+      const score = index === 0 ? 0.35 : 0.45;
+      Object.assign(output, {
+        pass: false,
+        score,
+        failureReason: 1,
+        gradingResult: { pass: false, score, reason: 'Persisted result' },
+      });
+      return {
+        id: output.id,
+        success: false,
+        score,
+        failureReason: 1,
+        gradingResult: output.gradingResult,
+      };
+    };
+    mockCallApiRoutes([
+      {
+        path: `/eval/${evalId}/results/result-id/rating`,
+        method: 'POST',
+        response: () => writeResponse(0, firstWrite),
+      },
+      {
+        path: query,
+        response: async () => {
+          const snapshot = tableResponse();
+          await earlyRead.pending;
+          return snapshot;
+        },
+      },
+      {
+        path: `/eval/${evalId}/results/second-result/rating`,
+        method: 'POST',
+        response: () => writeResponse(1, secondWrite),
+      },
+      ...(changePages
+        ? [
+            {
+              path: `/eval/${evalId}/table?offset=1&limit=1&filterMode=all`,
+              response: () => tableResponse([secondRow]),
+            },
+            { path: query, response: () => tableResponse() },
+          ]
+        : []),
+      {
+        path: query,
+        response: async () => {
+          const snapshot = tableResponse();
+          await foregroundRead.pending;
+          return snapshot;
+        },
+      },
+      { path: query, status: refreshStatus, response: () => tableResponse() },
+    ]);
+    renderRatingTable();
+    await user.click(screen.getAllByRole('button', { name: 'Mark test failed' })[0]);
+    await user.click(screen.getAllByRole('button', { name: 'Mark test failed' })[1]);
+    const read = (options = {}) =>
+      useTableStore.getState().fetchEvalData(evalId, {
+        skipSettingEvalId: true,
+        ...options,
+      });
+    let staleRead!: ReturnType<typeof read>;
+    await act(async () => {
+      staleRead = read({ skipLoadingState: true });
+      firstWrite.release();
+    });
+    await waitFor(() => expect(callApi).toHaveBeenCalledTimes(3));
+    await act(async () => {
+      earlyRead.release();
+      await staleRead;
+    });
+    expect.soft(useTableStore.getState().table?.body[0].outputs[0].score).toBe(0.35);
+    expect.soft(useTableStore.getState().table?.body[1].outputs[0].pass).toBe(false);
+    if (changePages) {
+      await act(async () => {
+        await read({ pageIndex: 1, pageSize: 1 });
+      });
+      expect
+        .soft(useTableStore.getState().table?.body[0].outputs[0])
+        .toMatchObject({ id: 'second-result', pass: false });
+      await act(async () => {
+        await read();
+      });
+      expect.soft(useTableStore.getState().table?.body[0].outputs[0].score).toBe(0.35);
+    }
+    let lastRead!: ReturnType<typeof read>;
+    await act(async () => {
+      lastRead = read();
+      secondWrite.release();
+    });
+    await waitFor(() => expect(callApi).toHaveBeenCalledTimes(changePages ? 7 : 5));
+    await act(async () => {
+      foregroundRead.release();
+      await lastRead;
+    });
+    expect(useTableStore.getState().table?.body.map((row) => row.outputs[0].score)).toEqual([
+      0.35, 0.45,
+    ]);
+    expect(useTableStore.getState().isFetching).toBe(false);
+    expect(useTableStore.getState().ratingQueues.size).toBe(refreshStatus === 200 ? 0 : 1);
+  },
+);
 
 it.each(
   (['rating', 'highlight'] as const).flatMap((action) => [
@@ -187,7 +490,7 @@ it.each(
     for (const comment of ['A', 'B']) {
       await saveComment(comment);
     }
-    expect(writes).toHaveLength(1);
+    expect(writes).toHaveLength(pendingRefresh ? 2 : 1);
     await act(async () => (pendingRefresh ? completeRefresh?.() : completeWrites[0]()));
     await waitFor(() => expect(writes).toHaveLength(2));
 
@@ -406,9 +709,16 @@ it.each(
   },
 );
 
-it.each([false, true])(
-  'restores the known baseline after two rejected edits (another page queued: %s)',
-  async (interleaved) => {
+it.each(
+  [false, true].flatMap((interleaved) =>
+    (['rejected', 'timeout-before-commit', 'timeout-after-commit'] as const).map((outcome) => ({
+      interleaved,
+      outcome,
+    })),
+  ),
+)(
+  'uses the confirmed baseline after a rejected rating and $outcome comment (another page queued: $interleaved)',
+  async ({ interleaved, outcome }) => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const user = userEvent.setup();
     useTableStore.setState({
@@ -419,17 +729,16 @@ it.each([false, true])(
       filteredResultsCount: 1,
       totalResultsCount: 1,
     });
-    let completeFirst!: () => void;
+    const firstWrite = holdResponse();
+    let sentComment!: SubmitRatingRequest & GradingResult;
+    let savedComment = '';
     const route = '/eval/double-rejection/results/result-id/rating';
     mockCallApiRoutes([
       {
         path: route,
         method: 'POST',
         status: 400,
-        response: () =>
-          new Promise<void>((resolve) => {
-            completeFirst = resolve;
-          }),
+        response: () => firstWrite.pending,
       },
       ...(interleaved
         ? [
@@ -446,7 +755,21 @@ it.each([false, true])(
             },
           ]
         : []),
-      { path: route, method: 'POST', status: 400 },
+      {
+        path: route,
+        method: 'POST',
+        status: outcome === 'rejected' ? 400 : 200,
+        response: (_path: string, options: RequestInit | undefined) => {
+          sentComment = JSON.parse(String(options?.body));
+          if (outcome === 'timeout-after-commit') {
+            savedComment = sentComment.comment ?? '';
+          }
+          if (outcome !== 'rejected') {
+            throw new Error('Connection lost');
+          }
+          return {};
+        },
+      },
       { path: '/eval/double-rejection/table?offset=0&limit=50&filterMode=all', status: 500 },
     ]);
     renderRatingTable();
@@ -463,12 +786,14 @@ it.each([false, true])(
     await user.click(screen.getByRole('button', { name: 'Edit comment' }));
     await user.type(screen.getByRole('textbox'), 'Queued comment');
     await user.click(screen.getByRole('button', { name: 'Save' }));
-    await act(async () => completeFirst());
+    await act(async () => firstWrite.release());
     expect(callApi).toHaveBeenCalledTimes(interleaved ? 4 : 3);
+    expect(sentComment).toMatchObject({ pass: true, score: 1, comment: 'Queued comment' });
+    expect(savedComment).toBe(outcome === 'timeout-after-commit' ? 'Queued comment' : '');
     expect(useTableStore.getState().table?.body[0].outputs[0]).toMatchObject({
       pass: true,
       score: 1,
-      gradingResult: { comment: '' },
+      gradingResult: { comment: outcome === 'rejected' ? '' : 'Queued comment' },
     });
   },
 );

@@ -12,6 +12,7 @@ import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 
 vi.mock('./store', () => {
+  const ratingQueues = new Map();
   const useTableStore = vi.fn(() => ({
     config: {},
     evalId: '123',
@@ -28,7 +29,9 @@ vi.mock('./store', () => {
     },
   }));
   return {
-    useTableStore: Object.assign(useTableStore, { getState: () => useTableStore() }),
+    useTableStore: Object.assign(useTableStore, {
+      getState: () => ({ ...useTableStore(), ratingQueues }),
+    }),
     useResultsViewSettingsStore: vi.fn(() => ({
       inComparisonMode: false,
       renderMarkdown: true,
@@ -4518,6 +4521,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    useTableStore.getState().ratingQueues.clear();
     vi.mocked(useTableStore).mockReset();
     vi.mocked(useResultsViewSettingsStore).mockReset().mockReturnValue({
       inComparisonMode: false,
@@ -4716,7 +4720,6 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     expect(mockFetchEvalData).toHaveBeenCalledExactlyOnceWith('123', {
       skipSettingEvalId: true,
       skipLoadingState: true,
-      isCurrent: expect.any(Function),
     });
   });
 
@@ -4788,7 +4791,6 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
       expect(mockFetchEvalData).toHaveBeenCalledExactlyOnceWith('123', {
         skipSettingEvalId: true,
         skipLoadingState: true,
-        isCurrent: expect.any(Function),
       }),
     );
 
@@ -5259,7 +5261,6 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
         expect(mockFetchEvalData).toHaveBeenCalledExactlyOnceWith('123', {
           skipSettingEvalId: true,
           skipLoadingState: true,
-          isCurrent: expect.any(Function),
         }),
       );
       expect(mockSetTable).toHaveBeenCalledTimes(1);
@@ -5345,7 +5346,11 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     await user.click(screen.getByRole('button', { name: 'Clear rating' }));
 
     await waitFor(() => expect(mockFetchEvalData).toHaveBeenCalledWith('123', expect.any(Object)));
-    expect(mockSetTable).toHaveBeenCalledTimes(1);
+    expect(useTableStore.getState().table?.body[0].outputs[0]).toMatchObject({
+      pass: false,
+      score: 0.5,
+      gradingResult: { pass: false, score: 0.5, comment: 'test comment' },
+    });
   });
 
   it('refetches the active filtered result set after a persisted rating', async () => {
@@ -5422,7 +5427,6 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
       expect(mockFetchEvalData).toHaveBeenCalledWith('123', {
         skipSettingEvalId: true,
         skipLoadingState: true,
-        isCurrent: expect.any(Function),
       }),
     );
   });
@@ -5518,7 +5522,11 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     await user.click(screen.getByRole('button', { name: 'Clear rating' }));
 
     await waitFor(() => expect(mockFetchEvalData).toHaveBeenCalledTimes(1));
-    expect(mockSetTable).toHaveBeenCalledTimes(1);
+    expect(useTableStore.getState().table?.body[0].outputs[0]).toMatchObject({
+      pass: false,
+      score: 0.5,
+      gradingResult: { pass: false, score: 0.5, comment: 'test comment' },
+    });
   });
 
   it('does not apply a stale success response over newer same-result state', async () => {

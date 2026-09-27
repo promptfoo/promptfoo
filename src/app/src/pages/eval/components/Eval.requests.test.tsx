@@ -6,7 +6,7 @@ import { renderWithProviders } from '@app/utils/testutils';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from 'vitest';
 import Eval from './Eval';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
@@ -69,7 +69,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   resetCallApiMock();
   vi.mocked(getApiBaseUrl).mockReset().mockReturnValue('');
-  useTableStore.setState(initialTableState, true);
+  useTableStore.setState({ ...initialTableState, ratingQueues: new Map() }, true);
   useResultsViewSettingsStore.setState(initialViewState, true);
   filterMode.current = 'all';
 });
@@ -473,45 +473,70 @@ it.each(['eval', 'API'] as const)(
 );
 
 it.each([200, 500])(
-  'ignores an obsolete rating refresh without clearing a pending foreground selection (HTTP %i)',
+  'preserves pending edits and a foreground selection across a background read (HTTP %i)',
   async (status) => {
+    const user = userEvent.setup();
     initializeRatingTable();
-    const currentTable = useTableStore.getState().table;
     const pending: Array<(body: unknown) => void> = [];
     const response = () => new Promise((resolve) => pending.push(resolve));
-    mockCallApiRoutes([
-      { path: '/eval/next-eval/table?offset=0&limit=50&filterMode=all', response },
-      { path: '/eval/rating-eval/table?offset=0&limit=50&filterMode=all', status, response },
-    ]);
-    const switching = useTableStore.getState().fetchEvalData('next-eval');
-    const selection = useTableStore.getState().tableSelectionRequest;
-    let ownsRefresh = true;
-    const refreshing = useTableStore.getState().fetchEvalData('rating-eval', {
-      skipLoadingState: true,
-      skipSettingEvalId: true,
-      isCurrent: () => ownsRefresh,
-    });
-    ownsRefresh = false;
-    pending[1]({
+    const tableData = {
       table: structuredClone(ratingTable),
       config: {},
       version: 4,
       totalCount: 1,
       filteredCount: 1,
+    };
+    const writeData = {
+      id: 'result-id',
+      success: false,
+      score: 0,
+      failureReason: 1,
+      gradingResult: { pass: false, score: 0 },
+    };
+    onTestFinished(async () => {
+      await act(async () => {
+        pending[0]?.(writeData);
+        pending[1]?.(tableData);
+        pending[2]?.(tableData);
+      });
     });
-    expect(await refreshing).toBeUndefined();
-    expect(useTableStore.getState().table).toBe(currentTable);
+    mockCallApiRoutes([
+      { path: '/eval/rating-eval/results/result-id/rating', method: 'POST', response },
+      { path: '/eval/next-eval/table?offset=0&limit=50&filterMode=all', response },
+      { path: '/eval/rating-eval/table?offset=0&limit=50&filterMode=all', status, response },
+    ]);
+    renderWithProviders(ratingView(true));
+    await user.click(screen.getByRole('button', { name: 'Fail result' }));
+    let switching!: ReturnType<ReturnType<typeof useTableStore.getState>['fetchEvalData']>;
+    let refreshing!: typeof switching;
+    await act(async () => {
+      switching = useTableStore.getState().fetchEvalData('next-eval');
+      refreshing = useTableStore.getState().fetchEvalData('rating-eval', {
+        skipLoadingState: true,
+        skipSettingEvalId: true,
+      });
+    });
+    const selection = useTableStore.getState().tableSelectionRequest;
+    await act(async () => {
+      pending[2](tableData);
+      await refreshing;
+    });
+    expect(useTableStore.getState().table?.body[0].outputs[0].score).toBe(0);
     expect(useTableStore.getState().tableSelectionRequest).toBe(selection);
     expect(useTableStore.getState().isFetching).toBe(true);
 
     const nextTable = structuredClone(ratingTable);
     nextTable.body[0].outputs[0].text = 'Next eval';
-    pending[0]({ table: nextTable, config: {}, version: 4, totalCount: 1, filteredCount: 1 });
-    await switching;
+    await act(async () => {
+      pending[1]({ ...tableData, table: nextTable });
+      await switching;
+      pending[0](writeData);
+    });
     expect(useTableStore.getState().evalId).toBe('next-eval');
     expect(useTableStore.getState().table).toBe(nextTable);
     expect(useTableStore.getState().isFetching).toBe(false);
     expect(useTableStore.getState().tableSelectionRequest).toBeNull();
+    expect(callApi).toHaveBeenCalledTimes(3);
   },
 );
 

@@ -1,5 +1,5 @@
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
-import { callApi } from '@app/utils/api';
+import { callApi, getApiBaseUrl } from '@app/utils/api';
 import { Severity } from '@promptfoo/redteam/constants';
 import {
   isPolicyMetric,
@@ -20,6 +20,7 @@ import type {
   EvaluateStats,
   EvaluateSummaryV2,
   EvaluateTable,
+  EvaluateTableOutput,
   PromptMetrics,
   RedteamPluginObject,
   ResultsFile,
@@ -211,9 +212,12 @@ interface FetchEvalOptions {
   searchText?: string;
   skipSettingEvalId?: boolean;
   skipLoadingState?: boolean;
-  /** Whether the caller still owns this background refresh when its response arrives. */
-  isCurrent?: () => boolean;
   filters?: ResultsFilter[];
+}
+
+interface RatingQueue {
+  tail?: { promise: Promise<EvaluateTable | undefined>; settled: boolean };
+  edits: Map<string, { visible: EvaluateTableOutput; completed: EvaluateTableOutput }>;
 }
 
 interface ColumnState {
@@ -306,6 +310,7 @@ interface TableState {
   tableQuery: { evalId: string; url: string } | null;
   tableRequestGeneration: number;
   tableSelectionRequest: { generation: number; evalId: string } | null;
+  ratingQueues: Map<string, RatingQueue>;
   // null is a failed request; undefined means a newer request superseded this one.
   fetchEvalData: (
     id: string,
@@ -633,6 +638,7 @@ export const useTableStore = create<TableState>()(
     tableQuery: null,
     tableRequestGeneration: 0,
     tableSelectionRequest: null,
+    ratingQueues: new Map(),
 
     highlightedResultsCount: 0,
     userRatedResultsCount: 0,
@@ -662,6 +668,11 @@ export const useTableStore = create<TableState>()(
       if (skipSettingEvalId && currentState.evalId !== id) {
         return undefined;
       }
+      const apiBaseUrl = getApiBaseUrl();
+      const ratingKey = JSON.stringify([apiBaseUrl, id]);
+      const ratingsAtStart = currentState.ratingQueues.get(ratingKey);
+      const tailAtStart = ratingsAtStart?.tail;
+      const writesSettledAtStart = tailAtStart?.settled ?? true;
       let url = new URL(
         `/eval/${id}/table`,
         // URL constructor expects a valid url
@@ -704,7 +715,7 @@ export const useTableStore = create<TableState>()(
       const ownsSelectionRequest = () =>
         get().tableSelectionRequest?.generation === requestGeneration;
       const isCurrentRequest = () =>
-        (options.isCurrent?.() ?? true) &&
+        getApiBaseUrl() === apiBaseUrl &&
         (get().tableRequestGeneration === requestGeneration || ownsSelectionRequest()) &&
         (!skipSettingEvalId || get().evalId === id);
       const shouldIgnoreResponse = () => !isCurrentRequest();
@@ -769,16 +780,38 @@ export const useTableStore = create<TableState>()(
             return undefined;
           }
 
+          // Reads from any source must retain accepted edits, including completed cells
+          // while another write is pending. Only a read begun after the final write can
+          // replace this overlay with authoritative server state.
+          const ratings = get().ratingQueues.get(ratingKey);
+          const retainEdits =
+            ratings &&
+            (ratings !== ratingsAtStart || ratings.tail !== tailAtStart || !writesSettledAtStart);
+          const table = retainEdits
+            ? {
+                ...data.table,
+                body: data.table.body.map((row) => ({
+                  ...row,
+                  outputs: row.outputs.map((output) =>
+                    output ? (ratings.edits.get(output.id)?.visible ?? output) : output,
+                  ),
+                })),
+              }
+            : data.table;
+          if (!retainEdits) {
+            get().ratingQueues.delete(ratingKey);
+          }
+
           set((prevState) => {
             const shouldClearLoading =
               !skipLoadingState || prevState.tableSelectionRequest?.evalId === id;
             return {
-              table: data.table,
+              table,
               tableQuery,
               filteredResultsCount: data.filteredCount,
               totalResultsCount: data.totalCount,
-              highlightedResultsCount: computeHighlightCount(data.table),
-              userRatedResultsCount: computeUserRatedCount(data.table),
+              highlightedResultsCount: computeHighlightCount(table),
+              userRatedResultsCount: computeUserRatedCount(table),
               config: data.config,
               version: data.version,
               author: data.author,
@@ -793,7 +826,7 @@ export const useTableStore = create<TableState>()(
               filters: {
                 ...prevState.filters,
                 options: {
-                  metric: computeAvailableMetrics(data.table),
+                  metric: computeAvailableMetrics(table),
                   metadata: [],
                   ...redteamOptions,
                 },
@@ -804,7 +837,7 @@ export const useTableStore = create<TableState>()(
 
           // Metadata keys will be fetched lazily when user opens metadata filter dropdown
 
-          return data;
+          return { ...data, table };
         }
 
         if (shouldIgnoreResponse()) {

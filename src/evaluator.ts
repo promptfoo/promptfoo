@@ -2117,13 +2117,17 @@ function mergeComparisonTokenUsage(
   }
 }
 
-function recordNonstandardScoringBaseline(result: EvaluationStoreResult) {
+function recordNonstandardScoringBaseline(
+  result: EvaluationStoreResult,
+  comparison: GradingResult,
+) {
   if (!result.gradingResult) {
     return;
   }
   setNonstandardScoringBaseline(result.gradingResult, {
     pass: result.success,
     score: result.score,
+    comparison,
   });
 }
 
@@ -2150,7 +2154,7 @@ function mergeSelectBestGradingResult(
     }
     result.gradingResult.componentResults ||= [];
     result.gradingResult.componentResults.push(gradingResult);
-    recordNonstandardScoringBaseline(result);
+    recordNonstandardScoringBaseline(result, gradingResult);
     return;
   }
 
@@ -2163,7 +2167,7 @@ function mergeSelectBestGradingResult(
   if (!gradingResult.pass) {
     result.score = result.gradingResult.score = gradingResult.score;
   }
-  recordNonstandardScoringBaseline(result);
+  recordNonstandardScoringBaseline(result, gradingResult);
 }
 
 function mergeMaxScoreGradingResult(result: EvaluationStoreResult, gradingResult: GradingResult) {
@@ -2197,7 +2201,7 @@ function mergeMaxScoreGradingResult(result: EvaluationStoreResult, gradingResult
   if (!comparisonPassed) {
     result.score = newScore;
   }
-  recordNonstandardScoringBaseline(result);
+  recordNonstandardScoringBaseline(result, gradingResult);
 }
 
 function ensureDefaultTestForExtensions(testSuite: TestSuite) {

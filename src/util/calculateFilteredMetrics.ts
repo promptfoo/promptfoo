@@ -560,31 +560,32 @@ async function aggregateAssertions(
 
   // SQLite query to count assertions from nested JSON
   // This is complex but avoids fetching all results into memory
+  const gradingResult = sql`CASE WHEN json_valid(grading_result) THEN grading_result ELSE '{}' END`;
+  const components = sql`CASE
+    WHEN json_type(${gradingResult}, '$.componentResults') = 'array'
+      THEN json_extract(${gradingResult}, '$.componentResults')
+    ELSE '[]'
+  END`;
+  const countAssertions = (pass: boolean) => sql`(
+    SELECT COUNT(*) FROM json_each(${components})
+    WHERE CASE WHEN json_each.type = 'object'
+      THEN json_type(json_each.value, '$.pass') = ${pass ? 'true' : 'false'}
+      ELSE 0 END
+  ) + CASE
+    WHEN json_extract(${gradingResult}, '$.assertion.type') = 'human'
+      AND json_type(${gradingResult}, '$.pass') = ${pass ? 'true' : 'false'}
+      AND NOT EXISTS (
+        SELECT 1 FROM json_each(${components})
+        WHERE CASE WHEN json_each.type = 'object'
+          THEN json_extract(json_each.value, '$.assertion.type') = 'human'
+          ELSE 0 END
+      )
+    THEN 1 ELSE 0 END`;
   const query = sql`
     SELECT
       prompt_idx,
-      SUM(
-        CASE
-          WHEN json_valid(grading_result) AND json_type(json_extract(grading_result, '$.componentResults')) = 'array' THEN
-            (
-              SELECT COUNT(*)
-              FROM json_each(json_extract(grading_result, '$.componentResults'))
-              WHERE CAST(json_extract(json_each.value, '$.pass') AS INTEGER) = 1
-            )
-          ELSE 0
-        END
-      ) as assert_pass_count,
-      SUM(
-        CASE
-          WHEN json_valid(grading_result) AND json_type(json_extract(grading_result, '$.componentResults')) = 'array' THEN
-            (
-              SELECT COUNT(*)
-              FROM json_each(json_extract(grading_result, '$.componentResults'))
-              WHERE CAST(json_extract(json_each.value, '$.pass') AS INTEGER) = 0
-            )
-          ELSE 0
-        END
-      ) as assert_fail_count
+      SUM(${countAssertions(true)}) as assert_pass_count,
+      SUM(${countAssertions(false)}) as assert_fail_count
     FROM eval_results
     WHERE ${whereSql}
       AND grading_result IS NOT NULL

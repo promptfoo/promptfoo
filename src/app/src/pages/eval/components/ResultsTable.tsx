@@ -1749,11 +1749,6 @@ function ResultsTableHeader({
   );
 }
 
-// Accepted writes must remain ordered across table remounts. Legacy saves replace
-// the whole evaluation, so serialize by eval even when edits affect different cells.
-// Result keys carry each cell's persisted baseline across interleaved edits and pages.
-const pendingRatingRequests = new Map<string, Promise<EvaluateTable | undefined>>();
-
 function ResultsTable({
   maxTextLength,
   columnVisibility,
@@ -1859,7 +1854,6 @@ function ResultsTable({
         return;
       }
       const queueKey = JSON.stringify([apiBaseUrl, evalId]);
-      const resultKey = JSON.stringify([apiBaseUrl, evalId, resultId]);
       const queuedTable = useTableStore.getState().table;
       if (!queuedTable) {
         return;
@@ -1869,8 +1863,6 @@ function ResultsTable({
         return;
       }
       const queuedOutput = queuedLocation.output;
-      const previousRequest = pendingRatingRequests.get(queueKey);
-      const previousResultRequest = pendingRatingRequests.get(resultKey);
       const ratingArgs = { isPass, score, comment };
       const optimisticOutput = buildManualRatingOutput({
         existingOutput: queuedOutput,
@@ -1882,74 +1874,31 @@ function ResultsTable({
         return;
       }
 
-      let currentRequest: Promise<EvaluateTable | undefined>;
+      const queues = useTableStore.getState().ratingQueues;
+      if (!queues.has(queueKey)) {
+        queues.set(queueKey, { edits: new Map() });
+      }
+      const queue = queues.get(queueKey)!;
+      if (!queue.edits.has(resultId)) {
+        queue.edits.set(resultId, { visible: optimisticOutput, completed: queuedOutput });
+      }
+      const edit = queue.edits.get(resultId)!;
+      edit.visible = optimisticOutput;
+      const previousRequest = queue.tail?.promise;
+
       const runRating = async (
         previousTable?: EvaluateTable,
       ): Promise<EvaluateTable | undefined> => {
-        // Persist from completed writes, not the visible table's newer optimistic edits.
-        const previousResultTable =
-          previousResultRequest === previousRequest
-            ? previousTable
-            : await previousResultRequest?.catch(() => undefined);
+        // Legacy writes replace the entire table; carry only completed writes forward.
         const currentTable = (!version || version < 4 ? previousTable : undefined) ?? queuedTable;
         const currentLocation = findRatingOutput(currentTable, resultId);
         if (!currentLocation) {
           return;
         }
-        const existingOutput =
-          (previousResultTable && findRatingOutput(previousResultTable, resultId)?.output) ??
-          currentLocation.output;
+        const existingOutput = edit.completed;
         const executedOutput = buildManualRatingOutput({ existingOutput, ...ratingArgs });
         const newTable = replaceRatingOutput(currentTable, resultId, executedOutput);
-
-        const refreshCurrentPage = async () => {
-          if (!evalId || getApiBaseUrl() !== apiBaseUrl) {
-            return;
-          }
-          // The shared store owns the active eval/query, including while Results is unmounted.
-          await fetchEvalData(evalId, {
-            skipSettingEvalId: true,
-            skipLoadingState: true,
-            isCurrent: () => pendingRatingRequests.get(queueKey) === currentRequest,
-          });
-        };
-
-        const handlePersistedResult = async (persistedOutput: EvaluateTableOutput) => {
-          const latestTable = useTableStore.getState().table;
-          if (isScopeActive() && latestTable) {
-            const latestLocation = findRatingOutput(latestTable, resultId);
-            if (latestLocation?.output === optimisticOutput) {
-              setTable(replaceRatingOutput(latestTable, resultId, persistedOutput));
-            }
-          }
-          // The response contains one result; refresh the active query for prompt metrics
-          // and rows that entered or left its filters, even without a websocket connection.
-          if (pendingRatingRequests.get(queueKey) === currentRequest) {
-            await refreshCurrentPage();
-          }
-        };
-
-        const handlePersistenceError = async (error: unknown) => {
-          console.error('Failed to update table:', error);
-          const latestTable = useTableStore.getState().table;
-          if (isScopeActive() && latestTable && error instanceof ConfirmedRatingPersistenceError) {
-            const latestLocation = findRatingOutput(latestTable, resultId);
-            if (latestLocation?.output === optimisticOutput) {
-              const rolledBackTable = replaceRatingOutput(latestTable, resultId, existingOutput);
-              setTable(rolledBackTable);
-            }
-          }
-
-          if (pendingRatingRequests.get(queueKey) !== currentRequest) {
-            return;
-          }
-          // The server may have committed before the connection or response parsing failed.
-          // Refetch the current page instead of asserting that the optimistic state is wrong.
-          await refreshCurrentPage().catch((refreshError) => {
-            console.error('Failed to refresh table after a rating error:', refreshError);
-          });
-        };
-
+        let persistedTable = newTable;
         try {
           const ratingIntent = getSubmitRatingIntent(isPass, score);
           const persistedResult = await saveManualRating({
@@ -1961,33 +1910,49 @@ function ResultsTable({
             ...ratingIntent,
             table: newTable,
           });
-          const persistedTable = persistedResult
-            ? applyPersistedRatingResult({ table: newTable, resultId, result: persistedResult })
-            : newTable;
-          await handlePersistedResult(
-            persistedTable.body[currentLocation.rowIndex].outputs[currentLocation.promptIndex],
-          );
-          return persistedTable;
+          if (persistedResult) {
+            persistedTable = applyPersistedRatingResult({
+              table: newTable,
+              resultId,
+              result: persistedResult,
+            });
+          }
         } catch (error) {
-          await handlePersistenceError(error);
-          return error instanceof ConfirmedRatingPersistenceError
-            ? replaceRatingOutput(currentTable, resultId, existingOutput)
-            : newTable;
+          console.error('Failed to update table:', error);
+          if (error instanceof ConfirmedRatingPersistenceError) {
+            persistedTable = replaceRatingOutput(currentTable, resultId, existingOutput);
+          }
         }
+        const persistedOutput =
+          persistedTable.body[currentLocation.rowIndex].outputs[currentLocation.promptIndex];
+        edit.completed = persistedOutput;
+        if (edit.visible === optimisticOutput) {
+          edit.visible = persistedOutput;
+        }
+        const latestTable = useTableStore.getState().table;
+        if (isScopeActive() && latestTable) {
+          const latestLocation = findRatingOutput(latestTable, resultId);
+          if (latestLocation?.output === optimisticOutput) {
+            setTable(replaceRatingOutput(latestTable, resultId, persistedOutput));
+          }
+        }
+        return persistedTable;
       };
 
-      currentRequest = previousRequest
-        ? previousRequest.then(runRating, () => runRating())
-        : runRating();
-      pendingRatingRequests.set(queueKey, currentRequest);
-      pendingRatingRequests.set(resultKey, currentRequest);
+      const write = {
+        promise: previousRequest ? previousRequest.then(runRating, () => runRating()) : runRating(),
+        settled: false,
+      };
+      queue.tail = write;
       try {
-        await currentRequest;
+        await write.promise;
       } finally {
-        for (const key of [queueKey, resultKey]) {
-          if (pendingRatingRequests.get(key) === currentRequest) {
-            pendingRatingRequests.delete(key);
-          }
+        write.settled = true;
+        if (queue.tail === write && evalId && getApiBaseUrl() === apiBaseUrl) {
+          // Refresh owns reads independently: a slow GET must not block the next POST.
+          void Promise.resolve(
+            fetchEvalData(evalId, { skipSettingEvalId: true, skipLoadingState: true }),
+          ).catch((error) => console.error('Failed to refresh table after a rating:', error));
         }
       }
     },

@@ -939,6 +939,7 @@ type AutomatedClearComponent = {
   weight: number;
   failedContentSafetyCheck: boolean;
   comparison: boolean;
+  result: GradingResult;
 };
 
 function getFlattenedChildCount(
@@ -989,6 +990,7 @@ function getAutomatedClearComponents(componentResults: unknown): AutomatedClearC
         comparison:
           assertion?.type === 'max-score' ||
           (typeof assertion?.type === 'string' && assertion.type.startsWith('select-')),
+        result: component as unknown as GradingResult,
       });
     }
     // Assertion-set children are flattened after their aggregate parent for display. The
@@ -1002,6 +1004,7 @@ function buildServerOwnedClearGradingResult(
   result: RatingEvalResult,
   current: GradingResult,
   normalized: GradingResult,
+  baseline?: { state: ManualRatingState; comparison: GradingResult },
 ): GradingResult {
   const automatedComponents = getAutomatedClearComponents(normalized.componentResults);
   const executionError = hasExecutionError(result, automatedComponents.length > 0);
@@ -1031,7 +1034,7 @@ function buildServerOwnedClearGradingResult(
     !executionError && normalizeFailureReason(result.failureReason) === ResultFailureReason.NONE;
   const canReconstructAutomatedOutcome =
     automatedComponents.length > 0 && !hasOwn(testCase ?? {}, 'assertScoringFunction');
-  const cleared = {
+  let cleared = {
     ...current,
     // Without private provenance, missing components or custom scoring need a canonical
     // fallback. Retained failures unexplained by the components remain failures: the public
@@ -1059,14 +1062,20 @@ function buildServerOwnedClearGradingResult(
     cleared.pass = false;
     cleared.score = 0;
   }
-  // Match the evaluator's ordered comparison merge: winners preserve the aggregate,
-  // while each failed comparison vetoes success and replaces the current score.
-  for (const component of automatedComponents) {
-    if (component.comparison && !component.pass) {
-      cleared.pass = false;
-      cleared.score = component.score;
-    }
+  if (baseline) {
+    // A streamed manual rating may precede deferred comparisons. Start with the exact
+    // pre-rating aggregate, including custom scoring, rather than the manual outcome.
+    cleared = {
+      ...(restoreOriginalGradingResult(current, baseline.state) ?? { reason: '' }),
+      pass: baseline.state.original.success,
+      score: baseline.state.original.score,
+    };
   }
+  applyClearedComparisons(
+    cleared,
+    baseline ? getAutomatedClearComponents([baseline.comparison]) : automatedComponents,
+    Boolean(baseline),
+  );
   if (hasOwn(normalized, 'componentResults')) {
     cleared.componentResults = normalized.componentResults;
   } else {
@@ -1076,6 +1085,31 @@ function buildServerOwnedClearGradingResult(
     delete cleared.assertion;
   }
   return cleared;
+}
+
+function applyClearedComparisons(
+  cleared: GradingResult,
+  components: AutomatedClearComponent[],
+  restoreMetadata: boolean,
+) {
+  // Match the evaluator's ordered merge: winners preserve the aggregate, while
+  // each failed comparison vetoes success and replaces the current score.
+  for (const component of components) {
+    if (!component.comparison) {
+      continue;
+    }
+    const isMaxScore = component.result.assertion?.type === 'max-score';
+    if (!component.pass) {
+      if (restoreMetadata && (!isMaxScore || cleared.pass)) {
+        cleared.reason = component.result.reason;
+      }
+      cleared.pass = false;
+      cleared.score = component.score;
+    }
+    if (restoreMetadata && isMaxScore) {
+      cleared.assertion = component.result.assertion;
+    }
+  }
 }
 
 function resolveClearingManualRating(
@@ -1960,6 +1994,39 @@ export default class EvalResult {
         nonstandardScoringBaseline,
         this.failureReason,
       );
+    } else if (
+      nonstandardScoringBaseline?.comparison &&
+      this.gradingResult &&
+      this.#manualRatingState?.status === 'active'
+    ) {
+      const baseline = this.#manualRatingState;
+      const gradingResult = buildServerOwnedClearGradingResult(
+        {
+          ...this,
+          error: this.error ?? null,
+          response: this.response ?? null,
+          manualRatingState: baseline,
+        },
+        this.gradingResult,
+        {
+          ...this.gradingResult,
+          componentResults: this.gradingResult.componentResults?.filter(
+            (component) => !isHumanGradingResult(component),
+          ),
+        },
+        { state: baseline, comparison: nonstandardScoringBaseline.comparison },
+      );
+      this.#manualRatingState = captureManualRatingState({
+        gradingResult,
+        success: gradingResult.pass,
+        score: gradingResult.score,
+        failureReason:
+          baseline.original.failureReason === ResultFailureReason.ERROR
+            ? ResultFailureReason.ERROR
+            : gradingResult.pass
+              ? ResultFailureReason.NONE
+              : ResultFailureReason.ASSERT,
+      });
     }
     // Trace linkage and `pluginId` aren't schema columns — `pluginId` is re-derived from
     // testCase metadata in the constructor, and trace linkage travels inside the metadata
@@ -1982,6 +2049,9 @@ export default class EvalResult {
       const result = await db.insert(evalResultsTable).values(persistedValues).returning();
       this.id = result[0].id;
       this.persisted = true;
+    }
+    if (nonstandardScoringBaseline?.comparison) {
+      delete nonstandardScoringBaseline.comparison;
     }
     invalidateEvaluationCache(this.evalId);
   }
