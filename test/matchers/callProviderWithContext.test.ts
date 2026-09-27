@@ -6,11 +6,11 @@ import {
 } from '../../src/scheduler/providerCallExecutionContext';
 import { ProviderGroupedCallQueue } from '../../src/scheduler/providerCallQueue';
 import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
+import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { createMockProvider } from '../factories/provider';
 import { createDeferred } from '../util/utils';
 
 import type { ProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
-import type { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import type {
   ApiProvider,
   ProviderClassificationResponse,
@@ -294,6 +294,70 @@ describe('callGradingProvider', () => {
         pending.reject(new Error('late fixture failure'));
         await settled;
       }
+    },
+  );
+
+  it.each([false, true].flatMap((traced) => [false, true].map((queued) => ({ traced, queued }))))(
+    'retains a cancelled grader request in its scheduler slot, traced=$traced queued=$queued',
+    async ({ traced, queued }) => {
+      const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+      const queue = queued ? new ProviderGroupedCallQueue() : undefined;
+      const controller = new AbortController();
+      const started = createDeferred<void>();
+      const pending = createDeferred<ProviderResponse>();
+      const provider = createProvider();
+      const next = vi.fn(async () => ({ output: 'next result' }));
+      let spanEnded = false;
+      const tracingContext: ProviderCallTracingContext = {
+        getActiveTraceparent: () => undefined,
+        withGraderSpan: async (_options, fn) => fn(),
+        withProviderSpan: async ({ callContext }, fn) => {
+          try {
+            return await fn(callContext);
+          } finally {
+            spanEnded = true;
+          }
+        },
+      };
+      const firstCall = () =>
+        callGradingProvider(provider, 'rubric', () => {
+          started.resolve();
+          return pending.promise;
+        });
+      const first = withProviderCallExecutionContext(
+        { abortSignal: controller.signal, rateLimitRegistry: registry, providerCallQueue: queue },
+        () => (traced ? withProviderCallTracingContext(tracingContext, firstCall) : firstCall()),
+      ).catch((error) => error.name);
+      let queueSettled = false;
+      const dispatch = queue?.run(queue.takeNextGroup()[0]).then(() => {
+        queueSettled = true;
+      });
+      let second: Promise<ProviderResponse> | undefined;
+      try {
+        await started.promise;
+        controller.abort();
+        expect(await first).toBe('AbortError');
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        if (traced) {
+          expect(spanEnded).toBe(true);
+        }
+        if (queued) {
+          expect(queueSettled).toBe(true);
+        }
+        second = withProviderCallExecutionContext({ rateLimitRegistry: registry }, () =>
+          callGradingProvider(provider, 'rubric', next),
+        );
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(next).not.toHaveBeenCalled();
+      } finally {
+        pending.resolve({ output: 'late first result' });
+        await first;
+        await dispatch;
+        await second;
+        registry.dispose();
+      }
+      expect(next).toHaveBeenCalledOnce();
+      await expect(second).resolves.toEqual({ output: 'next result' });
     },
   );
 
