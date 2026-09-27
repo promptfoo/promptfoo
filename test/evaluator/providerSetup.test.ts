@@ -41,7 +41,9 @@ describeEvaluator('provider batch preflight', () => {
   it('preserves a setup failure without spending the row deadline on provider delay', async () => {
     vi.useFakeTimers();
     const sleepMock = vi.mocked(sleep);
-    sleepMock.mockImplementation((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+    const { sleep: actualSleep } =
+      await vi.importActual<typeof import('../../src/util/time')>('../../src/util/time');
+    sleepMock.mockImplementation(actualSleep);
     const provider: ApiProvider = {
       id: () => 'local-scanner',
       delay: 500,
