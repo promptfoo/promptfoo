@@ -315,6 +315,41 @@ describe('MCP evaluation execution contract', () => {
     },
   );
 
+  it('sanitizes provider URLs in multi-provider token summaries', async () => {
+    const log = vi.spyOn(logger, 'info');
+    const requests: string[] = [];
+    server = createServer((request, response) => {
+      requests.push(request.url!);
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(
+        JSON.stringify({ output: 'Hello', tokenUsage: { total: 2, prompt: 1, completion: 1 } }),
+      );
+    });
+    await new Promise<void>((resolve) => server!.listen(0, '127.0.0.1', resolve));
+    const address = server.address() as { port: number };
+    const secret = 'fixture-token-summary-query-secret';
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        providers: ['one', 'two'].map((name) => ({
+          id: `http://127.0.0.1:${address.port}/${name}?api_key=${secret}`,
+          config: { body: { prompt: '{{prompt}}' }, responseParser: 'json.output' },
+        })),
+        prompts: ['Hello'],
+        tests: [{ assert: [{ type: 'equals', value: 'Hello' }] }],
+      }),
+    );
+    const response = await run({ testCaseIndices: 0, write: false });
+    expect(response.success, response.error).toBe(true);
+    expect(response.data.results.stats).toMatchObject({ successes: 2, failures: 0, errors: 0 });
+    expect(requests).toHaveLength(2);
+    const messages = log.mock.calls.map(([message]) => String(message)).join('\n');
+    expect(messages).toContain('Providers:');
+    expect(messages).toContain('/one?');
+    expect(messages).toContain('/two?');
+    expect(messages).not.toContain(secret);
+  });
+
   it.each([
     { command: { generateSuggestions: true }, options: {} },
     { command: {}, options: { generateSuggestions: true } },
@@ -483,6 +518,32 @@ describe('MCP evaluation execution contract', () => {
           'Interactive prompt suggestions are not supported over MCP',
         );
       }
+      expect(cleanup).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each(['test', 'default', 'scenario'])(
+    'cleans resolved %s providers after suggestions reject',
+    async (location) => {
+      const cleanup = vi.spyOn(AwsBedrockConverseProvider.prototype, 'cleanup').mockResolvedValue();
+      const test = {
+        provider: 'bedrock:converse:anthropic.claude-3-5-sonnet-20240620-v1:0',
+        vars: {},
+      };
+      await writeFile(
+        configPath,
+        JSON.stringify({
+          providers: ['echo'],
+          prompts: ['Hello'],
+          tests: location === 'test' ? [test] : [{ vars: {} }],
+          ...(location === 'default' ? { defaultTest: test } : {}),
+          ...(location === 'scenario' ? { scenarios: [{ config: [{}], tests: [test] }] } : {}),
+          evaluateOptions: { generateSuggestions: true },
+        }),
+      );
+      const response = await run({ testCaseIndices: 0, write: false });
+      expect(response.success).toBe(false);
+      expect(response.error).toContain('Interactive prompt suggestions are not supported over MCP');
       expect(cleanup).toHaveBeenCalledOnce();
     },
   );

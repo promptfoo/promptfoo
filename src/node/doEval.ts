@@ -553,7 +553,16 @@ async function doEvalWithEnv(
 
     // Resolution may open connections before evaluation starts. Retain ownership even
     // when application selection removes a provider or a later preflight rejects.
-    ownedProviders.push(...testSuite.providers);
+    ownedProviders.push(
+      ...testSuite.providers,
+      ...[
+        testSuite.defaultTest,
+        ...(testSuite.tests ?? []),
+        ...(testSuite.scenarios?.flatMap((scenario) => scenario.tests) ?? []),
+      ].flatMap((test) =>
+        typeof test === 'object' && isApiProvider(test.provider) ? [test.provider] : [],
+      ),
+    );
 
     // Fill the active scope in place; replacing runEnv would leave it empty.
     Object.assign(runEnv, testSuite.env);
@@ -1361,7 +1370,7 @@ async function doEvalWithEnv(
             return result;
           } finally {
             const cleanupErrors: unknown[] = [];
-            for (const provider of ownedProviders) {
+            for (const provider of new Set(ownedProviders)) {
               if (isApiProvider(provider)) {
                 try {
                   await provider.cleanup?.();

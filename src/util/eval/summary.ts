@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import { formatDuration } from '../../util/formatDuration';
+import { sanitizeProviderIdForLog } from '../provider';
 
 import type { TokenUsage } from '../../types/index';
 import type { TokenUsageTracker } from '../../util/tokenUsage';
@@ -314,7 +315,7 @@ function getProviderUsageLines(tracker: TokenUsageTracker): string[] {
     const separator = details.length > 0 ? '; ' : '';
 
     lines.push(
-      `  ${chalk.gray(`${displayId}:`)} ${chalk.white(
+      `  ${chalk.gray(`${sanitizeProviderIdForLog(displayId)}:`)} ${chalk.white(
         displayTotal.toLocaleString(),
       )} (${requestInfo}${separator}${details.join(', ')})`,
     );
