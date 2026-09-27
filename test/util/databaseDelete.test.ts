@@ -1291,6 +1291,90 @@ describe('database eval deletion', () => {
       });
     });
 
+    it.each([0, 3])(
+      'rebuilds known-ungraded survivor metrics after deleting a stripped grade (response assertions=%s)',
+      async (responseAssertions) => {
+        const evaluation = await EvalFactory.create({ numResults: 2, resultTypes: ['success'] });
+        const [target, survivor] = await EvalResult.findManyByEvalId(evaluation.id);
+        const metrics = evaluation.prompts[0].metrics!;
+        metrics.testPassCount = 1;
+        metrics.testFailCount = 0;
+        metrics.testErrorCount = 1;
+        metrics.assertPassCount = 1;
+        metrics.assertFailCount = 0;
+        metrics.tokenUsage = {
+          total: 4,
+          numRequests: 2,
+          assertions: { total: 7 + responseAssertions, numRequests: responseAssertions ? 2 : 1 },
+          incurredTokenUsage: {
+            total: 4,
+            numRequests: 2,
+            assertions: {
+              total: responseAssertions ? 7 : 5,
+              numRequests: responseAssertions ? 2 : 1,
+            },
+          },
+        };
+        await evaluation.addPrompts(evaluation.prompts);
+        await dbUpdateResult(target.id, {
+          gradingResult: null,
+          response: { output: 'graded', tokenUsage: { total: 2, numRequests: 1 } },
+        });
+        await dbUpdateResult(survivor.id, {
+          gradingResult: null,
+          metadata: { __promptfoo: { originallyUngraded: true } } as unknown as Record<
+            string,
+            string
+          >,
+          success: false,
+          failureReason: 2,
+          error: 'Provider error',
+          response: {
+            error: 'Provider error',
+            tokenUsage: {
+              total: 2,
+              numRequests: 1,
+              incurredTokenUsage: {
+                total: 2,
+                numRequests: 1,
+                assertions: {
+                  total: responseAssertions ? 2 : 0,
+                  numRequests: responseAssertions ? 1 : 0,
+                },
+              },
+              ...(responseAssertions && {
+                assertions: { total: responseAssertions, numRequests: 1 },
+              }),
+            },
+          },
+        });
+        const retained = await EvalResult.findById(survivor.id);
+
+        await deleteEvalResult(evaluation.id, target.id);
+
+        expect((await Eval.findById(evaluation.id))!.prompts[0].metrics).toMatchObject({
+          testPassCount: 0,
+          testErrorCount: 1,
+          assertPassCount: 0,
+          assertFailCount: 0,
+          tokenUsage: {
+            total: 2,
+            numRequests: 1,
+            assertions: { total: responseAssertions, numRequests: responseAssertions ? 1 : 0 },
+            incurredTokenUsage: {
+              total: 2,
+              numRequests: 1,
+              assertions: {
+                total: responseAssertions ? 2 : 0,
+                numRequests: responseAssertions ? 1 : 0,
+              },
+            },
+          },
+        });
+        expect(await EvalResult.findById(survivor.id)).toEqual(retained);
+      },
+    );
+
     it('does not erase assertion token usage when every surviving grading result was stripped', async () => {
       const eval_ = await EvalFactory.create({ numResults: 2, resultTypes: ['success'] });
       const [target, survivor] = await EvalResult.findManyByEvalId(eval_.id);

@@ -670,11 +670,10 @@ async function updatePromptMetricsForDeletedResult(
         id: evalResultsTable.id,
         gradingResult: evalResultsTable.gradingResult,
         namedScores: namedMetricsToRecompute.size ? evalResultsTable.namedScores : sql<null>`NULL`,
-        metadata: namedMetricsToRecompute.size
-          ? sql`json_type(${evalResultsTable.metadata}, '$.__promptfoo.originallyUngraded') = 'true'`.mapWith(
-              (value) => ({ __promptfoo: { originallyUngraded: value === 1 } }),
-            )
-          : sql<null>`NULL`,
+        metadata:
+          sql`json_type(${evalResultsTable.metadata}, '$.__promptfoo.originallyUngraded') = 'true'`.mapWith(
+            (value) => ({ __promptfoo: { originallyUngraded: value === 1 } }),
+          ),
         response: survivingAssertionTokenUsage
           ? sql<
               UsageResult['response']
@@ -691,17 +690,19 @@ async function updatePromptMetricsForDeletedResult(
       .limit(500)
       .all();
     for (const row of batch) {
+      const knownUngraded =
+        row.gradingResult == null && row.metadata?.__promptfoo?.originallyUngraded === true;
       if (survivingAssertionCounts) {
         const counts = getAssertionCounts(row.gradingResult);
         if (counts) {
           survivingAssertionCounts.pass += counts.pass;
           survivingAssertionCounts.fail += counts.fail;
-        } else {
+        } else if (!knownUngraded) {
           survivingAssertionCounts = undefined;
         }
       }
       if (survivingAssertionTokenUsage) {
-        if (hasGradingTokenUsage(row.gradingResult)) {
+        if (knownUngraded || hasGradingTokenUsage(row.gradingResult)) {
           accumulateResultTokenUsage(survivingAssertionTokenUsage, row);
         } else {
           survivingAssertionTokenUsage = undefined;
