@@ -560,6 +560,9 @@ export interface GradingResult {
     // that the criterion was or was not met. `true`-literal so the field is
     // only meaningful when present; never set `false` explicitly.
     graderError?: true;
+    // Server-owned diagnostic on human ratings, retained through public exports so
+    // clearing an imported rating can distinguish execution errors from assertion failures.
+    originalFailureReason?: ResultFailureReason;
     [key: string]: any;
   };
 }

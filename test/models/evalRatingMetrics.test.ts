@@ -342,6 +342,60 @@ describe('prompt metrics after live manual ratings', () => {
     );
   }
 
+  describe.each(['clear', 'rate'] as const)('%s a legacy top-level human rating', (action) => {
+    it.each([undefined, null, 0, 1, 'false', 'true', false, true])(
+      'keeps assertion deltas consistent with canonical counts for pass=%s',
+      async (pass) => {
+        const prompts = [createCompletedPrompt()];
+        const evalRecord = await Eval.create({}, prompts, { id: randomUUID() });
+        await evalRecord.addPrompts(prompts);
+        await evalRecord.addResult(createEvaluateResult({ gradingResult: null }));
+        await evalRecord.addResult(
+          createEvaluateResult({
+            testIdx: 1,
+            success: false,
+            score: 0,
+            failureReason: ResultFailureReason.ASSERT,
+            gradingResult: {
+              ...(pass === undefined ? {} : { pass }),
+              score: 0,
+              reason: 'Imported rating',
+              assertion: { type: 'human' },
+            } as GradingResult,
+          }),
+        );
+        const rows = await EvalResult.findManyByEvalId(evalRecord.id);
+        const sibling = rows.find((row) => row.testIdx === 0)!;
+        const legacy = rows.find((row) => row.testIdx === 1)!;
+        // An unrelated rating makes the next prompt flush recount this column from SQL.
+        for (const siblingAction of ['rate', 'clear'] as const) {
+          await EvalResult.submitRating(
+            evalRecord.id,
+            sibling.id,
+            { pass: true, score: 1, reason: 'Sibling rating' },
+            siblingAction,
+          );
+        }
+        await evalRecord.save();
+        expect(evalRecord.prompts[0].metrics).toMatchObject({
+          assertPassCount: Number(pass === true),
+          assertFailCount: Number(pass === false),
+        });
+
+        await EvalResult.submitRating(
+          evalRecord.id,
+          legacy.id,
+          { pass: false, score: 0, reason: 'Updated rating' },
+          action,
+        );
+        const expected = { assertPassCount: 0, assertFailCount: Number(action === 'rate') };
+        expect((await Eval.findById(evalRecord.id))?.prompts[0].metrics).toMatchObject(expected);
+        await evalRecord.save();
+        expect(evalRecord.prompts[0].metrics).toMatchObject(expected);
+      },
+    );
+  });
+
   it('counts legacy and malformed grading components without duplicating top-level humans', async () => {
     const prompts = [createCompletedPrompt()];
     const evalRecord = await Eval.create({}, prompts, { id: randomUUID() });

@@ -690,6 +690,20 @@ function isHumanGradingResult(value: unknown): value is GradingResult {
   return isHumanAssertion(asRecord(value)?.assertion);
 }
 
+function getManualRatingFailureReason(
+  gradingResult: GradingResult | null,
+): ResultFailureReason | undefined {
+  const human = Array.isArray(gradingResult?.componentResults)
+    ? gradingResult.componentResults.find(isHumanGradingResult)
+    : undefined;
+  const originalFailureReason = (
+    human ?? (isHumanGradingResult(gradingResult) ? gradingResult : undefined)
+  )?.metadata?.originalFailureReason;
+  return typeof originalFailureReason === 'number' && isResultFailureReason(originalFailureReason)
+    ? originalFailureReason
+    : undefined;
+}
+
 function hasOwn(value: object, key: PropertyKey): boolean {
   return Object.prototype.hasOwnProperty.call(value, key);
 }
@@ -728,7 +742,8 @@ function captureManualRatingState(
     original: {
       success: result.success,
       score: result.score,
-      failureReason: normalizeFailureReason(result.failureReason),
+      failureReason:
+        getManualRatingFailureReason(gradingResult) ?? normalizeFailureReason(result.failureReason),
       comparisonCount: getCompletedComparisons(gradingResult).length,
       gradingResult: gradingResult
         ? {
@@ -924,6 +939,7 @@ function normalizeRatingSubmission(
   previous: GradingResult | null,
   submitted: GradingResult,
   previousSuccess: boolean,
+  originalFailureReason: ResultFailureReason,
   ratingAction?: SubmitRatingAction,
 ): {
   gradingResult: GradingResult;
@@ -985,6 +1001,7 @@ function normalizeRatingSubmission(
     pass: submitted.pass,
     score: submitted.score,
     reason: manualReason,
+    metadata: { ...humanSource?.metadata, originalFailureReason },
     assertion: {
       ...(asRecord(humanSource?.assertion) ?? {}),
       type: HUMAN_ASSERTION_TYPE,
@@ -1010,10 +1027,7 @@ function normalizeRatingSubmission(
   return { gradingResult, clearingManualRating: false, hasManualRating: true };
 }
 
-function hasExecutionError(
-  result: RatingEvalResult,
-  automatedComponents: AutomatedClearComponent[],
-): boolean {
+function hasExecutionError(result: RatingEvalResult, hasAutomatedComponents: boolean): boolean {
   const failureReason = normalizeFailureReason(result.failureReason);
   const responseError = asRecord(result.response)?.error;
   if (
@@ -1022,19 +1036,10 @@ function hasExecutionError(
   ) {
     return true;
   }
-  // Native assertion grading retains a response, even when its output is stripped. Exceptions
-  // and timeouts can lose their ERROR category to an imported manual Fail rating.
-  if (failureReason === ResultFailureReason.ASSERT && result.response) {
+  if (failureReason === ResultFailureReason.ASSERT) {
     return false;
   }
-  // Comparisons can run after a provider failure without replacing its error.
-  return (
-    typeof result.error === 'string' &&
-    result.error.length > 0 &&
-    (result.response
-      ? automatedComponents.length === 0
-      : automatedComponents.every((component) => component.comparison))
-  );
+  return !hasAutomatedComponents && typeof result.error === 'string' && result.error.length > 0;
 }
 
 type AutomatedClearComponent = {
@@ -1108,7 +1113,7 @@ function buildServerOwnedClearGradingResult(
   normalized: GradingResult,
 ): GradingResult {
   const automatedComponents = getAutomatedClearComponents(normalized.componentResults);
-  const executionError = hasExecutionError(result, automatedComponents);
+  const executionError = hasExecutionError(result, automatedComponents.length > 0);
   // Comparisons are merged after ordinary assertion aggregation, never weighted into it.
   const ordinaryComponents = automatedComponents.filter((component) => !component.comparison);
   const totalWeight = ordinaryComponents.reduce((sum, component) => sum + component.weight, 0);
@@ -1203,10 +1208,14 @@ function resolveClearingManualRating(
     };
   }
   // Edits normalize the category; legacy clear still needs its retained provenance.
-  const originalResult =
+  const originalFailureReason =
     existingState?.status === 'legacy-active'
-      ? { ...result, failureReason: existingState.original.failureReason }
-      : result;
+      ? existingState.original.failureReason
+      : getManualRatingFailureReason(result.gradingResult);
+  const originalResult =
+    originalFailureReason === undefined
+      ? result
+      : { ...result, failureReason: originalFailureReason };
   const clearedGradingResult = result.gradingResult
     ? buildServerOwnedClearGradingResult(
         originalResult,
@@ -1218,7 +1227,7 @@ function resolveClearingManualRating(
   const score = clearedGradingResult.score;
   const failureReason = hasExecutionError(
     originalResult,
-    getAutomatedClearComponents(clearedGradingResult.componentResults),
+    getAutomatedClearComponents(clearedGradingResult.componentResults).length > 0,
   )
     ? ResultFailureReason.ERROR
     : success
@@ -1318,6 +1327,10 @@ function resolveRatingTransition(
         result.gradingResult,
         submittedGradingResult,
         result.success,
+        previousHasManualRating && existingState && existingState.status !== 'cleared'
+          ? existingState.original.failureReason
+          : (getManualRatingFailureReason(result.gradingResult) ??
+              normalizeFailureReason(result.failureReason)),
         ratingAction,
       );
   let nextState: ManualRatingState | undefined;
@@ -1394,7 +1407,11 @@ export function countGradingAssertions(gradingResult: GradingResult | null | und
     },
     { pass: 0, fail: 0 },
   );
-  if (isHumanAssertion(gradingResult?.assertion) && !componentResults.some(isHumanGradingResult)) {
+  if (
+    isHumanAssertion(gradingResult?.assertion) &&
+    typeof gradingResult?.pass === 'boolean' &&
+    !componentResults.some(isHumanGradingResult)
+  ) {
     counts[gradingResult?.pass ? 'pass' : 'fail'] += 1;
   }
   return counts;

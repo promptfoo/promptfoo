@@ -2721,6 +2721,7 @@ describe('eval routes', () => {
           result.response = providerError === 'response' ? { error: result.error } : undefined;
           await markResultAsError(source, result);
         } else {
+          result.failureReason = ResultFailureReason.ASSERT;
           await result.save();
           await source.save();
         }
@@ -2734,13 +2735,35 @@ describe('eval routes', () => {
         const expectedFailure = providerError
           ? ResultFailureReason.ERROR
           : ResultFailureReason.ASSERT;
-        const rated = await api
-          .post(`/api/eval/${source.id}/results/${result.id}/rating`)
-          .send({ pass: manualPass, score: manualPass ? 1 : 0, ratingAction: 'rate' });
+        const submittedHuman = {
+          pass: manualPass,
+          score: Number(manualPass),
+          assertion: { type: 'human' },
+          metadata: {
+            originalFailureReason: providerError
+              ? ResultFailureReason.ASSERT
+              : ResultFailureReason.ERROR,
+            reviewerNote: 'Keep unrelated metadata',
+          },
+        };
+        const rated = await api.post(`/api/eval/${source.id}/results/${result.id}/rating`).send({
+          pass: manualPass,
+          score: Number(manualPass),
+          ratingAction: 'rate',
+          componentResults: [submittedHuman],
+        });
         expect(rated.status).toBe(200);
         expect(rated.body.failureReason).toBe(
           manualPass ? ResultFailureReason.NONE : ResultFailureReason.ASSERT,
         );
+        expect(
+          rated.body.gradingResult.componentResults.find(
+            (component: GradingResult) => component.assertion?.type === 'human',
+          )?.metadata,
+        ).toEqual({
+          ...submittedHuman.metadata,
+          originalFailureReason: expectedFailure,
+        });
 
         const ratedEval = await Eval.findById(source.id);
         invariant(ratedEval, 'Rated eval is required');
@@ -2771,6 +2794,22 @@ describe('eval routes', () => {
         expect(privateState?.state).toBeNull();
 
         const route = `/api/eval/${importedEval.id}/results/${importedResult.id}/rating`;
+        for (const edit of [
+          { ratingAction: 'rate', componentResults: [submittedHuman] },
+          { ratingAction: 'rate' },
+          { ratingAction: 'update', ratingUpdate: 'comment', comment: 'Still reviewed' },
+          { ratingAction: 'update', ratingUpdate: 'score', score: 0.5 },
+        ]) {
+          const edited = await api
+            .post(route)
+            .send({ pass: manualPass, score: Number(manualPass), ...edit });
+          expect(edited.status).toBe(200);
+          expect(
+            edited.body.gradingResult.componentResults.find(
+              (component: GradingResult) => component.assertion?.type === 'human',
+            )?.metadata?.originalFailureReason,
+          ).toBe(expectedFailure);
+        }
         const clearPayload = { pass: true, score: 1, ratingAction: 'clear' };
         const cleared = await api.post(route).send(clearPayload);
         expect(cleared.status).toBe(200);
@@ -2812,17 +2851,88 @@ describe('eval routes', () => {
       },
     );
 
+    it('captures the latest category for a new rating after clearing', async () => {
+      const source = await EvalFactory.create();
+      testEvalIds.add(source.id);
+      const [result] = await source.getResults();
+      invariant(result.id, 'Result is required');
+      const route = `/api/eval/${source.id}/results/${result.id}/rating`;
+      await api.post(route).send({ pass: false, score: 0, ratingAction: 'rate' });
+      await api.post(route).send({ pass: false, score: 0, ratingAction: 'clear' });
+      const latest = await EvalResult.findById(result.id);
+      invariant(latest, 'Saved result is required');
+      latest.success = false;
+      latest.score = 0;
+      latest.failureReason = ResultFailureReason.ASSERT;
+      latest.error = 'New automated failure';
+      latest.gradingResult = { pass: false, score: 0, reason: latest.error, componentResults: [] };
+      await latest.save();
+      await source.save();
+      const rated = await api.post(route).send({ pass: true, score: 1, ratingAction: 'rate' });
+      expect(rated.status).toBe(200);
+      expect(rated.body.gradingResult.componentResults).toMatchObject([
+        { metadata: { originalFailureReason: ResultFailureReason.ASSERT } },
+      ]);
+      const cleared = await api.post(route).send({ pass: true, score: 1, ratingAction: 'clear' });
+      expect(cleared.body).toMatchObject({
+        success: false,
+        score: 0,
+        failureReason: ResultFailureReason.ASSERT,
+      });
+      expect(cleared.body.gradingResult.componentResults).toEqual([]);
+    });
+
+    it.each([null, '2', 3])(
+      'ignores an invalid imported human diagnostic: %s',
+      async (originalFailureReason) => {
+        const source = await EvalFactory.create();
+        testEvalIds.add(source.id);
+        const results = await source.getResults();
+        const imported = await api.post('/api/eval').send({
+          config: source.config,
+          prompts: source.prompts,
+          results: results.map((row) => ({
+            ...(row as EvalResult).toEvaluateResult(),
+            ...(row.testIdx === 1 && {
+              failureReason: ResultFailureReason.ASSERT,
+              error: 'Original assertion failure',
+              gradingResult: {
+                pass: false,
+                score: 0,
+                reason: 'Legacy manual failure',
+                assertion: { type: 'human' },
+                metadata: { originalFailureReason },
+              },
+            }),
+          })),
+        });
+        expect(imported.status).toBe(200);
+        testEvalIds.add(imported.body.id);
+        const result = (await EvalResult.findManyByEvalId(imported.body.id)).find(
+          (row) => row.testIdx === 1,
+        );
+        invariant(result, 'Imported result is required');
+        const cleared = await api
+          .post(`/api/eval/${imported.body.id}/results/${result.id}/rating`)
+          .send({ pass: true, score: 1, ratingAction: 'clear' });
+        expect(cleared.status).toBe(200);
+        expect(cleared.body.failureReason).toBe(ResultFailureReason.ASSERT);
+      },
+    );
+
     it.each([
-      { comparisonPass: false, manualPass: false },
-      { comparisonPass: false, manualPass: true },
-      { comparisonPass: true, manualPass: false },
-      { comparisonPass: true, manualPass: true },
+      { gradingError: false, comparisonPass: false, manualPass: false },
+      { gradingError: false, comparisonPass: false, manualPass: true },
+      { gradingError: false, comparisonPass: true, manualPass: false },
+      { gradingError: false, comparisonPass: true, manualPass: true },
+      { gradingError: true, comparisonPass: false, manualPass: false },
+      { gradingError: true, comparisonPass: false, manualPass: true },
     ])(
-      'restores an imported provider exception after select-best (comparison pass $comparisonPass, manual pass $manualPass)',
-      async ({ comparisonPass, manualPass }) => {
+      'restores an imported execution error (grading error $gradingError, comparison pass $comparisonPass, manual pass $manualPass)',
+      async ({ gradingError, comparisonPass, manualPass }) => {
         const prompts = [
           { raw: 'First', label: 'First' },
-          { raw: 'Second', label: 'Second' },
+          ...(gradingError ? [] : [{ raw: 'Second', label: 'Second' }]),
         ];
         const source = await Eval.create({}, prompts, { id: crypto.randomUUID() });
         testEvalIds.add(source.id);
@@ -2833,7 +2943,7 @@ describe('eval routes', () => {
               {
                 id: () => 'comparison-error',
                 callApi: async (prompt) => {
-                  if (prompt === 'First') {
+                  if (!gradingError && prompt === 'First') {
                     throw new Error('Provider failed before producing a response');
                   }
                   return { output: 'Valid answer' };
@@ -2842,7 +2952,20 @@ describe('eval routes', () => {
             ],
             tests: [
               {
-                assert: [{ type: 'select-best', value: 'Choose the best answer' }],
+                assert: gradingError
+                  ? [
+                      {
+                        type: 'llm-rubric',
+                        value: 'Grade the answer',
+                        provider: {
+                          id: () => 'throwing-judge',
+                          callApi: async () => {
+                            throw new Error('Grading failed after a successful provider response');
+                          },
+                        },
+                      },
+                    ]
+                  : [{ type: 'select-best', value: 'Choose the best answer' }],
                 options: { provider: 'echo', rubricPrompt: comparisonPass ? '0' : '1' },
               },
             ],
@@ -2857,12 +2980,17 @@ describe('eval routes', () => {
           score: 0,
           failureReason: ResultFailureReason.ERROR,
         });
-        expect(result.response).toBeUndefined();
-        expect(result.gradingResult?.componentResults).toHaveLength(1);
-        expect(result.gradingResult?.componentResults?.[0]).toMatchObject({
-          pass: comparisonPass,
-          assertion: { type: 'select-best' },
-        });
+        if (gradingError) {
+          expect(result.response?.output).toBe('Valid answer');
+          expect(result.gradingResult).toBeNull();
+        } else {
+          expect(result.response).toBeUndefined();
+          expect(result.gradingResult?.componentResults).toHaveLength(1);
+          expect(result.gradingResult?.componentResults?.[0]).toMatchObject({
+            pass: comparisonPass,
+            assertion: { type: 'select-best' },
+          });
+        }
         const originalMetrics = structuredClone(source.prompts[0].metrics);
         const rated = await api
           .post(`/api/eval/${source.id}/results/${result.id}/rating`)
@@ -2892,11 +3020,13 @@ describe('eval routes', () => {
             score: 0,
             failureReason: ResultFailureReason.ERROR,
           });
-          expect(cleared.body.gradingResult.componentResults).toHaveLength(1);
-          expect(cleared.body.gradingResult.componentResults[0]).toMatchObject({
-            pass: comparisonPass,
-            assertion: { type: 'select-best' },
-          });
+          expect(cleared.body.gradingResult.componentResults).toHaveLength(gradingError ? 0 : 1);
+          if (!gradingError) {
+            expect(cleared.body.gradingResult.componentResults[0]).toMatchObject({
+              pass: comparisonPass,
+              assertion: { type: 'select-best' },
+            });
+          }
           const saved = await Eval.findById(imported.body.id);
           invariant(saved, 'Saved eval is required');
           expect(saved.prompts[0].metrics).toEqual(originalMetrics);
@@ -2905,8 +3035,8 @@ describe('eval routes', () => {
             testPassCount: 0,
             testFailCount: 0,
             testErrorCount: 1,
-            assertPassCount: Number(comparisonPass),
-            assertFailCount: Number(!comparisonPass),
+            assertPassCount: gradingError ? 0 : Number(comparisonPass),
+            assertFailCount: gradingError ? 0 : Number(!comparisonPass),
           });
           expect(await getErrorResultIds(imported.body.id)).toEqual([importedResult.id]);
         }
