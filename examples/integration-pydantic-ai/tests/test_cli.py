@@ -124,6 +124,10 @@ class ExampleCliTests(unittest.TestCase):
                         ("OPENAI_", "ANTHROPIC_", "AZURE_", "GOOGLE_")
                     )
                 }
+                # Empty values prevent implicit dotenv from restoring proxies.
+                for proxy in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
+                    env[proxy] = env[proxy.lower()] = ""
+                env["NO_PROXY"] = env["no_proxy"] = "*"
                 env.update(
                     OPENAI_API_KEY="fixture-not-a-real-key",
                     # Dotenv must not restore higher-priority grader endpoints.
