@@ -123,7 +123,7 @@ async function createApiProvider(
     mergedEnv &&
     templateEnv &&
     typeof apiKeyEnvar === 'string' &&
-    Object.hasOwn(templateEnv, apiKeyEnvar)
+    Object.prototype.hasOwnProperty.call(templateEnv, apiKeyEnvar)
   ) {
     mergedEnv[apiKeyEnvar] = templateEnv[apiKeyEnvar];
   }
