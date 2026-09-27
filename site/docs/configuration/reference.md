@@ -1279,6 +1279,8 @@ interface EvaluateResult {
 
 GradingResult is an object that represents the result of grading a test case. It includes whether the test case passed, the score, the reason for the result, the tokens used, and the results of any component assertions.
 
+`namedScores`, `namedScoreWeights`, and `componentResults` may be omitted or `null` to indicate no values.
+
 ```typescript
 interface ResultSuggestion {
   type: string;
@@ -1288,12 +1290,12 @@ interface ResultSuggestion {
 
 interface GradingResult {
   pass: boolean; // did test pass?
-  score: number; // score between 0 and 1
+  score: number; // finite score, usually between 0 and 1
   reason: string; // plaintext reason for outcome
-  namedScores?: Record<string, number>; // labeled metrics attached to this result
-  namedScoreWeights?: Record<string, number>; // weighted denominator for namedScores
+  namedScores?: Record<string, number> | null; // labeled metrics attached to this result
+  namedScoreWeights?: Record<string, number> | null; // weighted denominator for namedScores
   tokensUsed?: TokenUsage; // tokens consumed by the test
-  componentResults?: GradingResult[]; // nested component results
+  componentResults?: GradingResult[] | null; // nested component results
   assertion?: Assertion; // source assertion
   comment?: string; // user comment
   suggestions?: ResultSuggestion[]; // suggested follow-up actions
