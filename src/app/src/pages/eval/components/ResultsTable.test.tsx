@@ -2820,7 +2820,7 @@ describe('ResultsTable Pagination', () => {
       vi.mocked(useTableStore).mockImplementation(() => state);
       const rendered = renderWithProviders(<ResultsTable {...defaultProps} />);
       await user.click(screen.getByLabelText('Results per page'));
-      await user.click(screen.getByRole('option', { name: '10', exact: true }));
+      await user.click(screen.getByRole('option', { name: '10' }));
       for (let currentPage = 1; currentPage < page; currentPage++) {
         await user.click(screen.getByRole('button', { name: 'Next page' }));
       }
@@ -2864,7 +2864,7 @@ describe('ResultsTable Pagination', () => {
     vi.mocked(useTableStore).mockImplementation(() => state);
     const rendered = renderWithProviders(<ResultsTable {...defaultProps} />);
     await user.click(screen.getByLabelText('Results per page'));
-    await user.click(screen.getByRole('option', { name: '10', exact: true }));
+    await user.click(screen.getByRole('option', { name: '10' }));
     await user.click(screen.getByRole('button', { name: 'Next page' }));
     await user.click(screen.getByRole('button', { name: 'Next page' }));
     fetchEvalData.mockClear();
@@ -2880,7 +2880,7 @@ describe('ResultsTable Pagination', () => {
     expect(fetchEvalData).not.toHaveBeenCalled();
 
     await user.click(screen.getByLabelText('Results per page'));
-    await user.click(screen.getByRole('option', { name: '50', exact: true }));
+    await user.click(screen.getByRole('option', { name: '50' }));
     expect(screen.getByLabelText('Go to page')).toHaveValue(2);
     expect(fetchEvalData).toHaveBeenCalledExactlyOnceWith(
       '123',

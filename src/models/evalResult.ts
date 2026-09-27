@@ -860,10 +860,7 @@ function applyLegacyClearedRatingUpdate(
   // Old clients submit the entire grading result without an intent field. Once a clear
   // tombstone exists, accept only the score or comment they could have edited and keep every
   // other field server-owned so a modified delayed clear cannot restore stale grading data.
-  const previousHasComment = previous ? hasOwn(previous, 'comment') : false;
-  const submittedHasComment = hasOwn(submitted, 'comment');
-  const commentChanged =
-    previousHasComment !== submittedHasComment || previous?.comment !== submitted.comment;
+  const commentChanged = (previous?.comment ?? '') !== (submitted.comment ?? '');
   return applyExplicitRatingUpdate(
     previous,
     submitted,
@@ -877,7 +874,6 @@ function normalizeRatingSubmission(
   previous: GradingResult | null,
   submitted: GradingResult,
   previousSuccess: boolean,
-  previousScore: number,
   ratingAction?: SubmitRatingAction,
 ): {
   gradingResult: GradingResult;
@@ -906,13 +902,6 @@ function normalizeRatingSubmission(
         !explicitHumanComponent &&
         !explicitTopLevelHuman));
   const outcomeChanged = previousSuccess !== submitted.pass;
-  const submittedKeys = Object.keys(submitted);
-  const exactMinimalNoopRating =
-    submittedKeys.length === 2 &&
-    submittedKeys.includes('pass') &&
-    submittedKeys.includes('score') &&
-    submitted.pass === previousSuccess &&
-    submitted.score === previousScore;
   const shouldHaveManualRating =
     ratingAction !== 'clear' &&
     !clearingManualRating &&
@@ -920,8 +909,7 @@ function normalizeRatingSubmission(
       Boolean(explicitHumanComponent) ||
       explicitTopLevelHuman ||
       previousHasManualRating ||
-      outcomeChanged ||
-      (ratingAction === undefined && exactMinimalNoopRating));
+      outcomeChanged);
   const gradingResult = { ...(previous ?? {}), ...submitted } as GradingResult;
 
   if (!shouldHaveManualRating) {
@@ -1202,8 +1190,7 @@ function resolveRatingTransition(
     !previousHasManualRating &&
     existingState?.status === 'cleared' &&
     legacyClearRequestHash !== undefined &&
-    !isLegacyRepeatedClear &&
-    submittedGradingResult.pass === result.success;
+    !isLegacyRepeatedClear;
   const effectiveSubmission =
     ratingAction === 'update'
       ? applyExplicitRatingUpdate(
@@ -1225,7 +1212,6 @@ function resolveRatingTransition(
     result.gradingResult,
     effectiveSubmission,
     result.success,
-    result.score,
     ratingAction,
   );
   const stateToRestore =

@@ -2,7 +2,8 @@ import { act } from 'react';
 
 import { mockCallApiRoutes } from '@app/tests/apiMocks';
 import { renderWithProviders } from '@app/utils/testutils';
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, expect, it, vi } from 'vitest';
 import Eval from './Eval';
@@ -24,17 +25,21 @@ vi.mock('./FilterModeProvider', () => ({
 }));
 vi.mock('./ResultsView', async () => {
   const { default: ResultsTable } = await import('./ResultsTable');
+  const tableProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    showStats: false,
+    wordBreak: 'break-word' as const,
+    zoom: 1,
+  };
   return {
     default: () => (
       <ResultsTable
-        columnVisibility={{}}
-        failureFilter={{}}
+        {...tableProps}
+        key={useTableStore((state) => state.evalId)}
         filterMode={filterMode.current}
-        maxTextLength={100}
-        onFailureFilterToggle={vi.fn()}
-        showStats={false}
-        wordBreak="break-word"
-        zoom={1}
       />
     ),
   };
@@ -95,4 +100,71 @@ it('keeps the eval visible when a child filter request supersedes the parent loa
   expect(useTableStore.getState().tableQuery?.url).toContain('filterMode=failures');
   expect(useTableStore.getState().isFetching).toBe(false);
   expect(rendered.container.querySelector('table.results-table')).not.toBeNull();
+});
+
+it('keeps pagination aligned with the initial request when navigating from a small eval', async () => {
+  const user = userEvent.setup();
+  const requests: string[] = [];
+  const pendingLarge: Array<() => void> = [];
+  let holdLarge = true;
+  mockCallApiRoutes([
+    {
+      path: /^\/(?:results$|eval\/(small|large)\/table\?)/,
+      repeat: true,
+      response: (url: string) => {
+        if (url === '/results') {
+          return { data: [{ evalId: 'small' }, { evalId: 'large' }] };
+        }
+        requests.push(url);
+        const parsed = new URL(url, window.location.origin);
+        const id = parsed.pathname.split('/')[2];
+        const count = id === 'small' ? 2 : 80;
+        const offset = Number(parsed.searchParams.get('offset'));
+        const limit = Number(parsed.searchParams.get('limit'));
+        const payload = {
+          table: {
+            head: { prompts: [], vars: ['case'] },
+            body: Array.from({ length: Math.min(limit, count - offset) }, (_, index) => ({
+              outputs: [],
+              test: {},
+              testIdx: offset + index,
+              vars: [`${id} row ${offset + index}`],
+            })),
+          },
+          config: {},
+          version: 4,
+          totalCount: count,
+          filteredCount: count,
+        };
+        return id === 'large' && holdLarge
+          ? new Promise((resolve) => pendingLarge.push(() => resolve(payload)))
+          : payload;
+      },
+    },
+  ]);
+  const element = (id: string) => (
+    <MemoryRouter>
+      <Eval fetchId={id} />
+    </MemoryRouter>
+  );
+  const rendered = renderWithProviders(element('small'));
+  await screen.findByText('small row 0');
+  rendered.rerender(element('large'));
+  await waitFor(() => expect(pendingLarge.length).toBeGreaterThan(0));
+  await act(async () => {
+    holdLarge = false;
+    pendingLarge.forEach((resolve) => resolve());
+  });
+  await screen.findByText('large row 49');
+  expect(rendered.container.querySelectorAll('tbody tr')).toHaveLength(50);
+  expect(screen.getByLabelText('Results per page')).toHaveTextContent('50');
+
+  requests.length = 0;
+  await user.click(screen.getByRole('button', { name: 'Next page' }));
+  await screen.findByText('large row 50');
+  expect(requests).toHaveLength(1);
+  const query = new URL(requests[0], window.location.origin).searchParams;
+  expect(query.get('offset')).toBe('50');
+  expect(query.get('limit')).toBe('50');
+  expect(screen.getByLabelText('Go to page')).toHaveValue(2);
 });

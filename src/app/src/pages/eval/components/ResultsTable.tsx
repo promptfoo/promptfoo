@@ -1849,7 +1849,7 @@ function ResultsTable({
   const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
   const [pagination, setPagination] = React.useState<{ pageIndex: number; pageSize: number }>({
     pageIndex: 0,
-    pageSize: filteredResultsCount > 10 ? 50 : 10,
+    pageSize: 50,
   });
 
   // Persist column sizing state to prevent header resize flicker during pagination.

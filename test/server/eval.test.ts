@@ -916,7 +916,7 @@ describe('eval routes', () => {
       });
     });
 
-    it('canonicalizes an exact minimal same-outcome rating as one manual component', async () => {
+    it('canonicalizes an explicit same-outcome rating as one manual component', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
       const [result] = await eval_.getResults();
@@ -924,7 +924,7 @@ describe('eval routes', () => {
 
       const res = await api
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
-        .send({ pass: result.success, score: result.score });
+        .send({ pass: result.success, score: result.score, ratingAction: 'rate' });
 
       expect(res.status).toBe(200);
       const persistedResult = await EvalResult.findById(result.id);
@@ -940,6 +940,36 @@ describe('eval routes', () => {
         testPassCount: 1,
         testFailCount: 1,
       });
+    });
+
+    it('keeps repeated minimal legacy score updates unrated', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const [result] = await eval_.getResults();
+      invariant(result.id, 'Result ID is required');
+      const originalMetrics = structuredClone(eval_.prompts[result.promptIdx].metrics);
+      invariant(originalMetrics, 'Original metrics are required');
+      const route = `/api/eval/${eval_.id}/results/${result.id}/rating`;
+      const payload = { pass: result.success, score: 0.4 };
+
+      const updated = await api.post(route).send(payload);
+      expect(updated.status).toBe(200);
+      expect(updated.body).toMatchObject({ success: result.success, score: 0.4 });
+      expect(updated.body.gradingResult.componentResults).toEqual(
+        result.gradingResult?.componentResults,
+      );
+      vi.mocked(updateSignalFile).mockClear();
+      const retried = await api.post(route).send(payload);
+      expect(retried.status).toBe(200);
+      expect(retried.body).toEqual(updated.body);
+      expect(updateSignalFile).not.toHaveBeenCalled();
+      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toEqual({
+        ...originalMetrics,
+        score: expect.closeTo(originalMetrics.score + 0.4 - result.score),
+      });
+      const userRated = await api.get(`/api/eval/${eval_.id}/table?filterMode=user-rated`);
+      expect(userRated.status).toBe(200);
+      expect(userRated.body.filteredCount).toBe(0);
     });
 
     it('canonicalizes a top-level human assertion without double counting it', async () => {
@@ -1176,6 +1206,7 @@ describe('eval routes', () => {
       { label: 'comment', comment: 'Legacy annotation', score: 1 },
       { label: 'highlight', comment: '!highlight', score: 1 },
       { label: 'score', comment: undefined, score: 0.4 },
+      { label: 'score with an empty comment', comment: '', score: 0.4 },
     ])('accepts a legacy $label edit after a minimal clear', async ({ comment, score }) => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
@@ -1193,9 +1224,10 @@ describe('eval routes', () => {
       expect(cleared.body.score).toBe(1);
       const legacyUpdate = {
         ...cleared.body.gradingResult,
-        ...(comment === undefined
-          ? { score, reason: 'Manual result (overrides all other grading results)' }
-          : { comment }),
+        ...(score === result.score
+          ? {}
+          : { score, reason: 'Manual result (overrides all other grading results)' }),
+        ...(comment === undefined ? {} : { comment }),
       };
       const updated = await api.post(route).send(legacyUpdate);
       expect(updated.status).toBe(200);
@@ -1209,7 +1241,7 @@ describe('eval routes', () => {
           componentResults: cleared.body.gradingResult.componentResults,
         },
       });
-      expect(updated.body.gradingResult.comment).toBe(comment);
+      expect(updated.body.gradingResult.comment ?? '').toBe(comment ?? '');
       vi.mocked(updateSignalFile).mockClear();
       for (const retry of [legacyUpdate, clearPayload]) {
         const retried = await api.post(route).send(retry);
@@ -1603,13 +1635,15 @@ describe('eval routes', () => {
       });
       await eval_.save();
 
-      const clearResponse = await api
-        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
-        .send({
-          pass: true,
-          score: 999,
-          componentResults: [null, ...automatedComponents],
-        });
+      const route = `/api/eval/${eval_.id}/results/${result.id}/rating`;
+      // Older clients clear using an unweighted mean and require every component to pass.
+      const clearPayload = {
+        pass: false,
+        score: 0.5,
+        componentResults: [null, ...automatedComponents],
+        comment: '',
+      };
+      const clearResponse = await api.post(route).send(clearPayload);
 
       expect(clearResponse.status).toBe(200);
       expect(clearResponse.body).toMatchObject({
@@ -1629,6 +1663,31 @@ describe('eval routes', () => {
         assertPassCount: 1,
         assertFailCount: 2,
       });
+
+      const restoredMetrics = structuredClone(
+        (await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics,
+      );
+      for (const comment of ['Legacy annotation', '!highlight Legacy annotation']) {
+        // The old UI ignores the clear response and retains its incorrect local outcome.
+        const annotated = await api.post(route).send({ ...clearPayload, comment });
+        expect(annotated.status).toBe(200);
+        expect(annotated.body).toMatchObject({
+          success: true,
+          score: 0.9,
+          failureReason: ResultFailureReason.NONE,
+          gradingResult: { comment, componentResults: [null, ...automatedComponents] },
+        });
+        vi.mocked(updateSignalFile).mockClear();
+        for (const retry of [{ ...clearPayload, comment }, clearPayload]) {
+          const repeated = await api.post(route).send(retry);
+          expect(repeated.status).toBe(200);
+          expect(repeated.body).toEqual(annotated.body);
+        }
+        expect(updateSignalFile).not.toHaveBeenCalled();
+        expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toEqual(
+          restoredMetrics,
+        );
+      }
     });
 
     it('restores a durable custom-scoring baseline after the function is stripped', async () => {
