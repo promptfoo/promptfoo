@@ -15,10 +15,11 @@ This project evaluates GPT-4o-mini's zero-shot performance on IMDB movie review 
 
 ## Quick Start
 
-Set your OpenAI API key and run the evaluation:
+Set your OpenAI API key, install Promptfoo and Math.js for the string-derived metrics, and run the evaluation:
 
 ```bash
-promptfoo eval
+npm install promptfoo mathjs@^15.1.1
+npx promptfoo eval --no-cache
 ```
 
 ## Dataset

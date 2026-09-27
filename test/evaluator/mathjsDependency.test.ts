@@ -74,4 +74,35 @@ describeEvaluator('optional derived metric dependency', () => {
     await expect(evaluate(suite, record, {})).rejects.toBe(error);
     expect(mockApiProvider.callApi).not.toHaveBeenCalled();
   });
+
+  it('clears the evaluation deadline when the expression dependency rejects', async () => {
+    const error = new Error('Math.js is unavailable');
+    vi.spyOn(evaluatorHelpers, 'loadMathJs').mockRejectedValue(error);
+    const suite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Expression metrics')],
+      tests: [{}],
+      derivedMetrics: [{ name: 'Count', value: '__count' }],
+    };
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+
+    try {
+      await expect(evaluate(suite, record, { maxEvalTimeMs: 60_000 })).rejects.toBe(error);
+      const deadlineIndex = setTimeoutSpy.mock.calls.findIndex(([, delay]) => delay === 60_000);
+      expect(deadlineIndex).toBeGreaterThanOrEqual(0);
+      expect(clearTimeoutSpy).toHaveBeenCalledWith(setTimeoutSpy.mock.results[deadlineIndex].value);
+      expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+    } finally {
+      // Do not leave a referenced timer behind when this regression fails.
+      setTimeoutSpy.mock.calls.forEach(([, delay], index) => {
+        if (delay === 60_000) {
+          clearTimeout(setTimeoutSpy.mock.results[index].value);
+        }
+      });
+      vi.useRealTimers();
+    }
+  });
 });

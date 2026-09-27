@@ -728,7 +728,7 @@ const suite = {
     { vars: { candidate: 'second' }, assert: [{ type: 'javascript', value: '2', metric: 'Score' }] },
   ],
 };
-const options = { cache: false, maxConcurrency: 1 };
+const options = { cache: false, maxConcurrency: 1, maxEvalTimeMs: 120_000 };
 for (const derivedMetrics of [undefined, [], [{ name: 'Average', value: (scores) => scores.Score / scores.__count }]]) {
   const record = await evaluate({ ...suite, derivedMetrics }, options);
   const { results } = await record.toEvaluateSummary();

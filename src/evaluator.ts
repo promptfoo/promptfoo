@@ -4867,7 +4867,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const mathjsModule = testSuite.derivedMetrics?.some(
       (metric) => typeof metric.value === 'string',
     )
-      ? await loadMathJs()
+      ? await loadMathJs().catch((error: unknown) => {
+          if (globalTimeout) {
+            clearTimeout(globalTimeout);
+          }
+          throw error;
+        })
       : null;
 
     const processingContext: EvalProcessingContext = {

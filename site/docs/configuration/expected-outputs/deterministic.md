@@ -1582,7 +1582,7 @@ assert:
     weight: 0
 ```
 
-Then define derived metrics to calculate precision, recall and F-score:
+Then define derived metrics to calculate precision, recall and F-score. String-derived metrics require [installing Math.js alongside Promptfoo](./index.md#mathematical-expressions):
 
 ```yaml
 derivedMetrics:
