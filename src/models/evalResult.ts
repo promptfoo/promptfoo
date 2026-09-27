@@ -690,15 +690,20 @@ function isHumanGradingResult(value: unknown): value is GradingResult {
   return isHumanAssertion(asRecord(value)?.assertion);
 }
 
-function getManualRatingFailureReason(
-  gradingResult: GradingResult | null,
-): ResultFailureReason | undefined {
+function getHumanGradingResult(
+  gradingResult: GradingResult | null | undefined,
+): GradingResult | undefined {
   const human = Array.isArray(gradingResult?.componentResults)
     ? gradingResult.componentResults.find(isHumanGradingResult)
     : undefined;
-  const originalFailureReason = (
-    human ?? (isHumanGradingResult(gradingResult) ? gradingResult : undefined)
-  )?.metadata?.originalFailureReason;
+  return human ?? (isHumanGradingResult(gradingResult) ? gradingResult : undefined);
+}
+
+function getManualRatingFailureReason(
+  gradingResult: GradingResult | null,
+): ResultFailureReason | undefined {
+  const originalFailureReason =
+    getHumanGradingResult(gradingResult)?.metadata?.originalFailureReason;
   return typeof originalFailureReason === 'number' && isResultFailureReason(originalFailureReason)
     ? originalFailureReason
     : undefined;
@@ -873,11 +878,7 @@ function restoreOriginalGradingResult(
 }
 
 function hasManualRating(gradingResult: GradingResult | null | undefined): boolean {
-  return Boolean(
-    isHumanAssertion(gradingResult?.assertion) ||
-      (Array.isArray(gradingResult?.componentResults) &&
-        gradingResult.componentResults.some(isHumanGradingResult)),
-  );
+  return Boolean(getHumanGradingResult(gradingResult));
 }
 
 function inferLegacyRatingUpdate(
@@ -885,15 +886,13 @@ function inferLegacyRatingUpdate(
   submitted: GradingResult,
 ): SubmitRatingUpdate | undefined {
   if (
-    isHumanAssertion(submitted.assertion) ||
-    submitted.pass !== result.success ||
-    !Array.isArray(result.gradingResult?.componentResults) ||
-    !Array.isArray(submitted.componentResults)
+    (isHumanAssertion(submitted.assertion) && !isHumanAssertion(result.gradingResult?.assertion)) ||
+    submitted.pass !== result.success
   ) {
     return undefined;
   }
-  const previousHuman = result.gradingResult.componentResults.find(isHumanGradingResult);
-  const submittedHuman = submitted.componentResults.find(isHumanGradingResult);
+  const previousHuman = getHumanGradingResult(result.gradingResult);
+  const submittedHuman = getHumanGradingResult(submitted);
   if (
     !previousHuman ||
     !submittedHuman ||

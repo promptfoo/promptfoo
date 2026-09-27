@@ -878,6 +878,73 @@ describe('eval routes', () => {
       },
     );
 
+    it.each([
+      { name: 'legacy comment', comment: 'Old client note' },
+      { name: 'legacy highlight', comment: '!highlight' },
+      { name: 'legacy comment removal', comment: undefined },
+      { name: 'explicit comment', comment: 'New client note', action: 'update' },
+      { name: 'explicit rate', comment: 'Same verdict', action: 'rate' },
+      { name: 'explicit clear', comment: 'Clear this rating', action: 'clear' },
+      { name: 'new top-level vote', comment: 'Same verdict', previousComponent: true },
+    ])('preserves rating intent for a top-level human grade: $name', async (scenario) => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const [, result] = await eval_.getResults();
+      invariant(result instanceof EvalResult, 'Result is required');
+      await markResultAsError(eval_, result);
+      const human: GradingResult = {
+        pass: false,
+        score: 0,
+        reason: 'Manual result (overrides all other grading results)',
+        assertion: { type: 'human' },
+        comment: 'Prior note',
+      };
+      result.gradingResult = scenario.previousComponent
+        ? { ...human, assertion: undefined, componentResults: [human] }
+        : human;
+      await result.save();
+      const originalMetrics = structuredClone(eval_.prompts[result.promptIdx].metrics);
+      invariant(originalMetrics, 'Metrics are required');
+
+      // Old clients retain the top-level verdict and assertion when editing annotations.
+      const updated = await api.post(`/api/eval/${eval_.id}/results/${result.id}/rating`).send({
+        ...result.gradingResult,
+        assertion: { type: 'human' },
+        comment: scenario.comment,
+        ...(scenario.action ? { ratingAction: scenario.action } : {}),
+        ...(scenario.action === 'update' ? { ratingUpdate: 'comment', pass: true, score: 1 } : {}),
+      });
+      const isNewRating = scenario.action === 'rate' || scenario.previousComponent;
+      const expected = {
+        success: false,
+        score: 0,
+        failureReason: isNewRating ? ResultFailureReason.ASSERT : ResultFailureReason.ERROR,
+      };
+      expect(updated.status).toBe(200);
+      expect(updated.body).toMatchObject(expected);
+      const persisted = await EvalResult.findById(result.id);
+      expect(persisted).toMatchObject(expected);
+      expect(persisted?.gradingResult?.comment).toBe(
+        scenario.action === 'clear' ? human.comment : scenario.comment,
+      );
+      if (scenario.action === 'clear') {
+        expect(persisted?.gradingResult?.assertion?.type).not.toBe('human');
+      } else if (isNewRating) {
+        expect(persisted?.gradingResult?.componentResults).toContainEqual(
+          expect.objectContaining({ pass: false, score: 0, assertion: { type: 'human' } }),
+        );
+      } else {
+        expect(persisted?.gradingResult).toEqual({ ...human, comment: scenario.comment });
+      }
+      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toEqual({
+        ...originalMetrics,
+        testFailCount: isNewRating ? 1 : 0,
+        testErrorCount: isNewRating ? 0 : 1,
+        assertFailCount: scenario.action === 'clear' ? 0 : 1,
+      });
+      expect(await getErrorResultIds(eval_.id)).toEqual(isNewRating ? [] : [result.id]);
+    });
+
     it.each(['comment', 'score'])(
       'preserves a stored error category with a human component on %s updates',
       async (ratingUpdate) => {
