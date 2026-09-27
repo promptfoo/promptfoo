@@ -13,7 +13,7 @@ import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { EVAL_ROUTES, MODEL_AUDIT_ROUTES, REDTEAM_ROUTES, ROUTES } from '@app/constants/routes';
 import { cn } from '@app/lib/utils';
 import { Info, Settings } from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router';
 import ApiSettingsModal from './ApiSettingsModal';
 import InfoModal from './InfoModal';
 import Logo from './Logo';

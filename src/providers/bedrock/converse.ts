@@ -32,7 +32,7 @@ import {
   loadProviderCallbackFromFileUrl,
 } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
-import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
+import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from '../mcp/util';
 import { providerRegistry } from '../providerRegistry';
 import {
   isOpenAIToolArray,
@@ -234,41 +234,6 @@ function transformMCPToolsToBedrockConverse(tools: MCPTool[]): BedrockConverseTo
   return result;
 }
 
-function normalizeMCPToolContent(content: unknown): string {
-  if (content == null) {
-    return '';
-  }
-  if (typeof content === 'string') {
-    return content;
-  }
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => {
-        if (typeof part === 'string') {
-          return part;
-        }
-        if (part && typeof part === 'object') {
-          if ('text' in part && (part as { text?: unknown }).text != null) {
-            return String((part as { text?: unknown }).text);
-          }
-          if ('json' in part) {
-            return JSON.stringify((part as { json?: unknown }).json);
-          }
-          if ('data' in part) {
-            return JSON.stringify((part as { data?: unknown }).data);
-          }
-          logger.debug('[Bedrock Converse] Unknown MCP content shape, serializing as JSON', {
-            keys: Object.keys(part as object),
-          });
-          return JSON.stringify(part);
-        }
-        return String(part);
-      })
-      .join('\n');
-  }
-  return JSON.stringify(content);
-}
-
 /**
  * Extract a printable message from an unknown thrown value without losing
  * non-`Error` payloads to `[object Object]`.
@@ -328,7 +293,12 @@ function joinMcpErrors(errors: string[]): string | undefined {
 }
 
 function formatMcpToolResult(name: string, content: unknown): string {
-  return `MCP Tool Result (${name}): ${normalizeMCPToolContent(content)}`;
+  const normalizedContent = normalizeMcpToolContent(content, (part) => {
+    logger.debug('[Bedrock Converse] Unknown MCP content shape, serializing as JSON', {
+      keys: Object.keys(part),
+    });
+  });
+  return `MCP Tool Result (${name}): ${normalizedContent}`;
 }
 
 function formatMcpToolError(name: string, message: string): string {
