@@ -75,9 +75,16 @@ python -m pip install "strands-agents[anthropic]>=1.56.0,<2"
 
 On Windows, run the install command with `.\.venv\Scripts\python.exe -m pip` instead of `python -m pip`. Set `ANTHROPIC_API_KEY` using the syntax for your shell shown above. Then modify `agent.py` to use [`AnthropicModel`](https://strandsagents.com/latest/user-guide/concepts/model-providers/anthropic/) instead of [`OpenAIModel`](https://strandsagents.com/latest/user-guide/concepts/model-providers/openai/).
 
-Amazon Bedrock support is included in the base SDK. To use it, replace
-`OpenAIModel` in `agent.py` with `BedrockModel` and configure AWS credentials; no
-additional Python package is required.
+Amazon Bedrock support is included in the base SDK; no additional Python package is required. Configure AWS credentials, a region, and access to your chosen Bedrock model. In `agent.py`, replace the OpenAI import and model construction with:
+
+```python
+from strands.models import BedrockModel
+
+# Inside create_agent(): Bedrock parameters are top-level keyword arguments.
+model = BedrockModel(model_id=model_id, temperature=0.7)
+```
+
+Set `providers[0].config.model_id` in `promptfooconfig.yaml` to a Bedrock model or inference-profile ID available in your region. Also update the `gpt-4o-mini` defaults in `agent.py` and `agent_provider.py` if you want standalone calls or calls without a configured model to use Bedrock. The optional standalone checks in those files currently require `OPENAI_API_KEY`; remove that OpenAI-specific check when adapting them for AWS credentials. See the [Strands Bedrock guide](https://strandsagents.com/docs/user-guide/sdk/model-providers/amazon-bedrock/) for AWS setup and supported model IDs.
 
 ## Running the example
 
