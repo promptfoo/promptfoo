@@ -320,6 +320,62 @@ describe('Python pool executable validation', () => {
     },
   );
 
+  it.each(['directory', 'write'] as const)(
+    'does not dispatch timed-out %s preparation over a later request',
+    async (stage) => {
+      const preparation = createDeferred<string>();
+      const nextStarted = createDeferred<string>();
+      const create = vi
+        .spyOn(secureTempFiles, 'createSecureTempDirectory')
+        .mockResolvedValue('/fixture/current');
+      const write = vi
+        .spyOn(secureTempFiles, 'writeSecureTempFile')
+        .mockImplementation(async (directory, name) => `${directory}/${name}`);
+      if (stage === 'directory') {
+        create.mockReturnValueOnce(preparation.promise);
+      } else {
+        create.mockResolvedValueOnce('/fixture/stale');
+        write.mockReturnValueOnce(preparation.promise);
+      }
+      const remove = vi.spyOn(secureTempFiles, 'removeSecureTempDirectory').mockResolvedValue();
+      vi.spyOn(fs, 'readFile').mockResolvedValue(
+        JSON.stringify({ type: 'result', data: 'recovered' }),
+      );
+      const worker = new PythonWorker('fixture.py', 'call_api', 'fixture-python', 25);
+      await worker.initialize('fixture-python');
+      const send = vi.spyOn(shells[0], 'send').mockImplementation((command) => {
+        if (command === 'SHUTDOWN') {
+          queueMicrotask(() => shells[0].emit('close'));
+        } else {
+          nextStarted.resolve(command);
+        }
+      });
+      vi.useFakeTimers();
+      const timedOut = worker.call('call_api', ['stale']).catch((error) => error);
+      try {
+        await vi.advanceTimersByTimeAsync(25);
+        expect(await timedOut).toEqual(new Error('Python worker timed out after 25ms'));
+        expect(send).not.toHaveBeenCalled();
+        expect(worker.isBusy()).toBe(false);
+        const next = worker.call('call_api', ['current']).catch((error) => error);
+        const command = await nextStarted.promise;
+        preparation.resolve(
+          stage === 'directory' ? '/fixture/stale' : '/fixture/stale/request.json',
+        );
+        await vi.advanceTimersByTimeAsync(0);
+        expect(send).toHaveBeenCalledOnce();
+        expect(remove).toHaveBeenCalledExactlyOnceWith('/fixture/stale');
+        shells[0].emit('message', `DONE|${command.split('|').at(-1)}`);
+        await expect(next).resolves.toBe('recovered');
+        expect(worker.isBusy()).toBe(false);
+      } finally {
+        preparation.resolve('/fixture/stale');
+        await worker.shutdown();
+        await timedOut;
+      }
+    },
+  );
+
   it('does not restart after shutdown while executable validation is pending', async () => {
     const pool = new PythonWorkerPool('fixture.py', 'call_api', 1, 'fixture-python');
     pools.push(pool);

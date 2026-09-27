@@ -145,10 +145,15 @@ export class PythonWorker {
     }
 
     this.busy = true;
+    const request = new AbortController();
 
     try {
-      return await Promise.race([this.executeCall(functionName, args), this.createTimeout()]);
+      return await Promise.race([
+        this.executeCall(functionName, args, request.signal),
+        this.createTimeout(),
+      ]);
     } finally {
+      request.abort();
       this.busy = false;
       if (this.requestTimeout) {
         clearTimeout(this.requestTimeout);
@@ -157,7 +162,11 @@ export class PythonWorker {
     }
   }
 
-  private async executeCall(functionName: string, args: unknown[]): Promise<unknown> {
+  private async executeCall(
+    functionName: string,
+    args: unknown[],
+    signal: AbortSignal,
+  ): Promise<unknown> {
     const workerProcess = this.process;
     let tempDirectory: string | undefined;
 
@@ -174,6 +183,7 @@ export class PythonWorker {
       // Note: PythonShell.send() adds newline automatically in 'text' mode
       // Using pipe (|) delimiter to avoid conflicts with Windows drive letters (C:)
       const command = `CALL|${functionName}|${requestFile}|${responseFile}`;
+      signal.throwIfAborted();
       if (this.shuttingDown) {
         throw new Error('Worker shutting down');
       }
