@@ -58,8 +58,8 @@ jobs:
         if: matrix.python-version == '3.14'
         working-directory: .
         run: |
-          npm install -g npm@11.18.0
-          npm ci
+          npm install -g npm@11.18.0 --registry=https://registry.npmjs.org/
+          npm ci --registry=https://registry.npmjs.org/
       - name: Exercise persisted retrieval through the original CLI config
         if: matrix.python-version == '3.14'
         working-directory: .
