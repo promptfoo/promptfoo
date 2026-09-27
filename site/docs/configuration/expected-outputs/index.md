@@ -544,6 +544,16 @@ Derived metrics are initialized to 0 and calculated per prompt. Errors are logge
 
 ### Mathematical expressions
 
+String expressions require an explicit Math.js installation alongside Promptfoo:
+
+```bash
+npm install promptfoo mathjs@^15.1.1
+# For a global CLI installation:
+npm install -g promptfoo mathjs@^15.1.1
+```
+
+JavaScript function values supplied through a JavaScript/TypeScript config or the programmatic API do not require Math.js. Missing or incompatible Math.js installations are reported before the eval starts; invalid expressions retain the debug logging behavior described above.
+
 Use [mathjs](https://mathjs.org/) syntax for calculations:
 
 ```yaml

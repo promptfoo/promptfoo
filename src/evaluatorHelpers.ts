@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import * as path from 'path';
 
+import semverSatisfies from 'semver/functions/satisfies.js';
 import cliState from './cliState';
 import { getEnvBool } from './envars';
 import { importModule } from './esm';
@@ -31,6 +32,28 @@ import { transform } from './util/transform';
 import { loadYaml } from './util/yamlLoad';
 
 type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
+
+export async function loadMathJs(): Promise<typeof import('mathjs')> {
+  const installInstructions =
+    'Install it alongside Promptfoo: npm install promptfoo mathjs@^15.1.1. ' +
+    'For a global installation, use npm install -g promptfoo mathjs@^15.1.1.';
+  let math: typeof import('mathjs');
+  try {
+    math = await import('mathjs');
+  } catch (error) {
+    throw Object.assign(
+      new Error('String derived metrics require the "mathjs" package. ' + installInstructions),
+      { cause: error },
+    );
+  }
+  if (!semverSatisfies(math.version, '^15.1.1')) {
+    throw new Error(
+      `String derived metrics require mathjs@^15.1.1; found ${math.version}. ` +
+        installInstructions,
+    );
+  }
+  return math;
+}
 
 export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   logger.debug(`Extracting text from PDF: ${pdfPath}`);

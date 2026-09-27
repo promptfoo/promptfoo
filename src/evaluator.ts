@@ -18,7 +18,12 @@ import { getCache, withCacheNamespace } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
-import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
+import {
+  collectFileMetadata,
+  loadMathJs,
+  renderPrompt,
+  runExtensionHook,
+} from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
 import { getResultIndexKey, sanitizeResultForJsonlArtifact } from './models/evalResult';
@@ -2004,7 +2009,7 @@ function updateDerivedMetrics(
   derivedMetrics: NonNullable<TestSuite['derivedMetrics']>,
   evalStep: RunEvalOptions,
   promptEvalCount: number,
-  math: typeof import('mathjs'),
+  math: typeof import('mathjs') | null,
 ) {
   if (Object.prototype.hasOwnProperty.call(metrics.namedScores, '__count')) {
     logger.warn("Metric name '__count' is reserved for derived metrics and will be overridden.");
@@ -2017,10 +2022,12 @@ function updateDerivedMetrics(
   for (const metric of derivedMetrics) {
     metrics.namedScores[metric.name] ??= 0;
     try {
-      metrics.namedScores[metric.name] =
-        typeof metric.value === 'function'
-          ? metric.value(evalContext, evalStep)
-          : math.evaluate(metric.value, evalContext);
+      if (typeof metric.value === 'function') {
+        metrics.namedScores[metric.name] = metric.value(evalContext, evalStep);
+      } else {
+        invariant(math, 'Expected mathjs to be loaded for string derived metrics');
+        metrics.namedScores[metric.name] = math.evaluate(metric.value, evalContext);
+      }
       evalContext[metric.name] = metrics.namedScores[metric.name];
     } catch (error) {
       logger.debug(
@@ -3505,7 +3512,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     if (derivedMetrics) {
-      invariant(mathjsModule, 'Expected mathjs to be loaded for derived metrics');
       updateDerivedMetrics(metrics, derivedMetrics, evalStep, promptEvalCount, mathjsModule);
     }
 
@@ -4858,7 +4864,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     // Awaiting after accumulating scores lets other rows change the total
     // before derived metrics use this row's __count.
-    const mathjsModule = testSuite.derivedMetrics ? await import('mathjs') : null;
+    const mathjsModule = testSuite.derivedMetrics?.some(
+      (metric) => typeof metric.value === 'string',
+    )
+      ? await loadMathJs()
+      : null;
 
     const processingContext: EvalProcessingContext = {
       assertionTypes,
