@@ -36,7 +36,7 @@ import type {
   ProviderResponse,
 } from '../../types/index';
 import type { OpenAiAgentsSessionClientFactory } from './agents-loader';
-import type { OpenAiAgentsOptions, OpenAiAgentsSessionFactory } from './agents-types';
+import type { OpenAiAgentsOptions, OpenAiAgentsSessionConfig } from './agents-types';
 
 const TRANSPORT_ENV_KEYS = [
   'REQUEST_TIMEOUT_MS',
@@ -56,11 +56,10 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
   readonly handlesOwnRetries = true;
   private agentConfig: OpenAiAgentsOptions;
   private agent?: Agent<any, any>;
-  private readonly defaultSessionState: { session?: Session; initialization?: Promise<Session> } =
-    {};
+  private readonly defaultSessionState: { initialization?: Promise<Session> } = {};
   private readonly scopedSessionStates = new WeakMap<
     object,
-    { session?: Session; initialization?: Promise<Session> }
+    { initialization?: Promise<Session> }
   >();
   private sessionQueues = new WeakMap<Session, Promise<void>>();
 
@@ -625,30 +624,19 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     getClient?: OpenAiAgentsSessionClientFactory,
   ): Promise<Session> {
-    if (typeof this.agentConfig.session === 'function') {
-      const session = await loadSessionDefinition(this.agentConfig.session, context, getClient);
+    let definition = this.agentConfig.session;
+    if (typeof definition === 'string' && definition.startsWith('file://')) {
+      definition = await loadValueFromFile<OpenAiAgentsSessionConfig>(definition, 'session');
+    }
+    const initialize = async () => {
+      const session = await loadSessionDefinition(definition, context, getClient);
       if (!session) {
         throw new Error('Failed to initialize configured session');
       }
       return session;
-    }
-
-    if (
-      typeof this.agentConfig.session === 'string' &&
-      this.agentConfig.session.startsWith('file://')
-    ) {
-      const exportedSession = await loadValueFromFile<unknown>(this.agentConfig.session, 'session');
-      if (typeof exportedSession === 'function') {
-        const session = await loadSessionDefinition(
-          exportedSession as OpenAiAgentsSessionFactory,
-          context,
-          getClient,
-        );
-        if (!session) {
-          throw new Error('Failed to initialize configured session');
-        }
-        return session;
-      }
+    };
+    if (typeof definition === 'function') {
+      return initialize();
     }
 
     const scope = getClient ? cliState.envScope : undefined;
@@ -658,27 +646,11 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       this.scopedSessionStates.set(scope!, state);
     }
     const sessionState = state;
-    if (!sessionState.session) {
-      sessionState.initialization ??= loadSessionDefinition(
-        this.agentConfig.session,
-        context,
-        getClient,
-      )
-        .then((session) => {
-          if (!session) {
-            throw new Error('Failed to initialize configured session');
-          }
-          sessionState.session = session;
-          return session;
-        })
-        .catch((error) => {
-          sessionState.initialization = undefined;
-          throw error;
-        });
-      return await sessionState.initialization;
-    }
-
-    return sessionState.session;
+    sessionState.initialization ??= initialize().catch((error) => {
+      sessionState.initialization = undefined;
+      throw error;
+    });
+    return sessionState.initialization;
   }
 
   private async withSessionLock<T>(session: Session, callback: () => Promise<T>): Promise<T> {

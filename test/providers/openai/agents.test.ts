@@ -1137,28 +1137,31 @@ describe('OpenAiAgentsProvider', () => {
     });
   });
 
-  it('re-runs file-exported session factories for each provider call', async () => {
-    const createSession = vi.fn(async () => new MemorySession());
-    mockImportModule.mockResolvedValue({
-      default: createSession,
-    });
+  it.each(['direct', 'file'] as const)(
+    're-runs %s session factories for each provider call',
+    async (source) => {
+      const createSession = vi.fn(async () => new MemorySession());
+      mockImportModule.mockResolvedValue({
+        default: createSession,
+      });
 
-    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
-      config: {
-        agent: {
-          name: 'Inline Support Agent',
-          instructions: 'Help the user.',
+      const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+        config: {
+          agent: {
+            name: 'Inline Support Agent',
+            instructions: 'Help the user.',
+          },
+          session: source === 'file' ? 'file://./sessions/support-session.ts' : createSession,
         },
-        session: 'file://./sessions/support-session.ts',
-      },
-    });
+      });
 
-    await provider.callApi('first');
-    await provider.callApi('second');
+      await provider.callApi('first');
+      await provider.callApi('second');
 
-    expect(createSession).toHaveBeenCalledTimes(2);
-    expect(mockRun.mock.calls[0][2].session).not.toBe(mockRun.mock.calls[1][2].session);
-  });
+      expect(createSession).toHaveBeenCalledTimes(2);
+      expect(mockRun.mock.calls[0][2].session).not.toBe(mockRun.mock.calls[1][2].session);
+    },
+  );
 
   it('serializes calls that intentionally reuse one shared configured session', async () => {
     const provider = new OpenAiAgentsProvider('gpt-5-mini', {
@@ -1253,24 +1256,41 @@ describe('OpenAiAgentsProvider', () => {
     expect(mockRun.mock.calls[1][2].session).toBe(sharedSession);
   });
 
-  it('reuses one configured session when the first calls start concurrently', async () => {
+  it.each(['inline', 'file'] as const)(
+    'reuses one %s configured session when the first calls start concurrently',
+    async (source) => {
+      const definition = { type: 'memory' as const, sessionId: 'shared-session' };
+      mockImportModule.mockResolvedValue({ default: definition });
+      const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+        config: {
+          agent: { name: 'Inline Support Agent', instructions: 'Help the user.' },
+          session: source === 'file' ? 'file://./sessions/support-session.ts' : definition,
+        },
+      });
+
+      await Promise.all([provider.callApi('first'), provider.callApi('second')]);
+
+      expect(mockRun).toHaveBeenCalledTimes(2);
+      expect(mockRun.mock.calls[0][2].session).toBe(mockRun.mock.calls[1][2].session);
+    },
+  );
+
+  it('retries configured session initialization after an invalid file export', async () => {
+    mockImportModule.mockResolvedValue({ default: {} });
     const provider = new OpenAiAgentsProvider('gpt-5-mini', {
       config: {
-        agent: {
-          name: 'Inline Support Agent',
-          instructions: 'Help the user.',
-        },
-        session: {
-          type: 'memory',
-          sessionId: 'shared-session',
-        },
+        agent: { name: 'Inline Support Agent', instructions: 'Help the user.' },
+        session: 'file://./sessions/support-session.ts',
       },
     });
 
-    await Promise.all([provider.callApi('first'), provider.callApi('second')]);
-
-    expect(mockRun).toHaveBeenCalledTimes(2);
-    expect(mockRun.mock.calls[0][2].session).toBe(mockRun.mock.calls[1][2].session);
+    await expect(provider.callApi('first')).rejects.toThrow('Invalid session configuration');
+    expect(mockRun).not.toHaveBeenCalled();
+    mockImportModule.mockResolvedValue({
+      default: { type: 'memory', sessionId: 'retry-session' },
+    });
+    expect(await provider.callApi('second')).toMatchObject({ output: 'Agent answer' });
+    expect(mockRun.mock.calls[0][2].session).toBeInstanceOf(MemorySession);
   });
 
   it('loads file-exported executable run options', async () => {
