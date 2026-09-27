@@ -284,9 +284,12 @@ describeEvaluator('provider batch preflight', () => {
     'bounds eager setup when the workload timeout is %s',
     async (timeoutMs) => {
       vi.useFakeTimers();
-      const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
-      const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+      const restoreEnv = mockProcessEnv({ CI: 'true' });
+      // Other CI work may schedule a timer with the same duration as the setup deadline.
+      const unrelatedCallback = vi.fn();
+      const unrelatedTimer = setTimeout(unrelatedCallback, 30_000);
       const abort = new AbortController();
+      let setupSignal: AbortSignal | undefined;
       let setupEntered!: () => void;
       const entered = new Promise<void>((resolve) => {
         setupEntered = resolve;
@@ -294,7 +297,8 @@ describeEvaluator('provider batch preflight', () => {
       const provider: ApiProvider = {
         id: () => 'local-scanner',
         checkSetupOnEval: true,
-        checkSetup: vi.fn(() => {
+        checkSetup: vi.fn((_context, options) => {
+          setupSignal = options?.abortSignal;
           setupEntered();
           return new Promise<never>(() => {});
         }),
@@ -318,8 +322,17 @@ describeEvaluator('provider batch preflight', () => {
         await entered;
         await vi.advanceTimersByTimeAsync(29_999);
         expect(settled).toBe(false);
+        expect(setupSignal?.aborted).toBe(false);
+        expect(unrelatedCallback).not.toHaveBeenCalled();
         await vi.advanceTimersByTimeAsync(1);
         expect(settled).toBe(true);
+        expect(setupSignal?.aborted).toBe(true);
+        expect(setupSignal?.reason).toEqual(
+          expect.objectContaining({
+            message: expect.stringContaining('30000ms'),
+          }),
+        );
+        expect(unrelatedCallback).toHaveBeenCalledOnce();
         await pending;
 
         expect(record.results).toHaveLength(1);
@@ -331,16 +344,11 @@ describeEvaluator('provider batch preflight', () => {
         });
         expect(provider.checkSetup).toHaveBeenCalledOnce();
         expect(provider.callApi).not.toHaveBeenCalled();
-        const deadlines = setTimeoutSpy.mock.calls.flatMap(([, delay], index) =>
-          delay === 30_000 ? [setTimeoutSpy.mock.results[index].value] : [],
-        );
-        expect(deadlines).toHaveLength(1);
-        expect(clearTimeoutSpy).toHaveBeenCalledWith(deadlines[0]);
       } finally {
         abort.abort();
         await pending.catch(() => {});
-        setTimeoutSpy.mockRestore();
-        clearTimeoutSpy.mockRestore();
+        clearTimeout(unrelatedTimer);
+        restoreEnv();
       }
     },
   );
