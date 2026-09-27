@@ -11,7 +11,12 @@ import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import { loadStrategy, Strategies } from '../../../src/redteam/strategies/index';
 import { addLayerTestCases } from '../../../src/redteam/strategies/layer';
 
-import type { ApiProvider, CallApiContextParams, ProviderOptions } from '../../../src/types/index';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  Prompt,
+  ProviderOptions,
+} from '../../../src/types/index';
 
 let fixtureDir: string;
 beforeEach(async () => {
@@ -32,6 +37,7 @@ async function attack(
   injectVar = '__prompt',
   layers: string[] = [],
   trusted?: string,
+  promptOptions: { functionType?: 'string' | 'chat' | 'structured'; noInputs?: boolean } = {},
 ) {
   if (['hydra', 'goblin', 'goat'].includes(step)) {
     vi.stubEnv('PROMPTFOO_DISABLE_REMOTE_GENERATION', 'false');
@@ -90,7 +96,9 @@ async function attack(
       return { output: 'Synthetic target response' };
     },
   };
-  const inputs = Object.fromEntries(Object.keys(fields).map((key) => [key, 'Untrusted text']));
+  const inputs = promptOptions.noInputs
+    ? undefined
+    : Object.fromEntries(Object.keys(fields).map((key) => [key, 'Untrusted text']));
   const [test] = await addLayerTestCases(
     [
       {
@@ -129,7 +137,19 @@ async function attack(
     Object.keys(fields)
       .map((key) => `{{${key}}}`)
       .join('|') + (trusted ? '|{{trusted}}' : '');
-  const prompt = { raw, label: raw };
+  const prompt: Prompt = { raw, label: raw };
+  if (promptOptions.functionType) {
+    prompt.function = async ({ vars }) => {
+      const content = String(vars[injectVar]);
+      if (promptOptions.functionType === 'chat') {
+        return [{ role: 'user', content }];
+      }
+      if (promptOptions.functionType === 'structured') {
+        return { prompt: content, config: { temperature: 0.17 } };
+      }
+      return content;
+    };
+  }
   const context = {
     prompt,
     vars: test.vars!,
@@ -231,4 +251,32 @@ describe.each(['jailbreak', 'jailbreak:meta'])('%s layer transform boundary', (s
       expect(call.prompt).toBe('Synthetic plain attack');
     }
   });
+});
+
+describe.each([false, true])('meta transformed prompt functions without inputs=%s', (noInputs) => {
+  it.each([undefined, 'string', 'chat', 'structured'] as const)(
+    'preserves the template boundary for %s prompts',
+    async (functionType) => {
+      const canary = 'OWNED_LAYER_CANARY_MUST_NOT_BE_SENT';
+      vi.stubEnv('SYNTHETIC_LAYER_CANARY', canary);
+      const transformed = '{{ env.SYNTHETIC_LAYER_CANARY }}';
+      const attackText = transformed.replace(/[a-zA-Z]/g, (char) =>
+        String.fromCharCode(char.charCodeAt(0) + (char.toLowerCase() <= 'm' ? 13 : -13)),
+      );
+      const calls = await attack(
+        'jailbreak:meta',
+        { query: attackText },
+        'query',
+        ['rot13'],
+        undefined,
+        { functionType, noInputs },
+      );
+      for (const call of calls) {
+        expect(call.prompt).not.toContain(canary);
+        expect(call.prompt).toContain(
+          functionType ? '{ { env.SYNTHETIC_LAYER_CANARY } }' : transformed,
+        );
+      }
+    },
+  );
 });
