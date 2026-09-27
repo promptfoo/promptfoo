@@ -3,9 +3,10 @@ import {
   createMemoryRouter,
   createRoutesFromElements,
   Navigate,
+  Outlet,
   Route,
-  RouterProvider,
-} from 'react-router-dom';
+} from 'react-router';
+import { RouterProvider } from 'react-router/dom';
 import { describe, expect, it, vi } from 'vitest';
 import PageShell from './components/PageShell';
 import { ToastProvider } from './contexts/ToastContext';
@@ -29,14 +30,11 @@ vi.mock('./pages/model-audit/page', () => ({
 
 // Mock PageShell to properly render child routes
 vi.mock('./components/PageShell', () => ({
-  default: () => {
-    const { Outlet } = require('react-router-dom');
-    return (
-      <div>
-        <Outlet />
-      </div>
-    );
-  },
+  default: () => (
+    <div>
+      <Outlet />
+    </div>
+  ),
 }));
 vi.mock('./contexts/ToastContext', () => ({
   ToastProvider: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,

@@ -103,15 +103,19 @@ export function buildFunctionBody(code: string): string {
   return `return ${trimmed}`;
 }
 
+class JavascriptAssertionValidationError extends Error {}
+
 const validateResult = async (result: unknown): Promise<boolean | number | GradingResult> => {
   result = await Promise.resolve(result);
-  if (typeof result === 'boolean' || typeof result === 'number' || isGradingResult(result)) {
+  if (
+    typeof result === 'boolean' ||
+    (typeof result === 'number' && Number.isFinite(result)) ||
+    isGradingResult(result)
+  ) {
     return result;
   } else {
-    throw new Error(
-      `Custom function must return a boolean, number, or GradingResult object. Got type ${typeof result}: ${JSON.stringify(
-        result,
-      )}`,
+    throw new JavascriptAssertionValidationError(
+      `Custom function must return a boolean, a finite number, or a GradingResult object with finite scores and weights. Got type ${typeof result}.`,
     );
   }
 };
@@ -158,20 +162,26 @@ function normalizeJavascriptAssertionResult(
 ): GradingResult {
   // Preserve metadata getter ordering while grading against the original assertion.
   const normalizedAssertion = normalizeResultAssertion(undefined, assertion);
-  const normalizedResult = normalizeScriptAssertionResult(
+  const normalizedScriptResult = normalizeScriptAssertionResult(
     assertion,
     result,
     inverse,
     { code: 'Custom function', language: 'JavaScript' },
     renderedValue,
   );
-  return {
-    ...normalizedResult,
+  const normalizedResult = {
+    ...normalizedScriptResult,
     assertion:
       typeof result === 'object'
-        ? normalizeResultAssertion(normalizedResult.assertion, assertion)
+        ? normalizeResultAssertion(normalizedScriptResult.assertion, assertion)
         : normalizedAssertion,
   };
+  if (!Number.isFinite(normalizedResult.score)) {
+    throw new JavascriptAssertionValidationError(
+      'Custom function must return a GradingResult object with a finite score.',
+    );
+  }
+  return normalizedResult;
 }
 
 export const handleJavascript = async ({
@@ -231,7 +241,7 @@ export const handleJavascript = async ({
       reason: appendRenderedValueToReason(
         `Custom function threw error: ${(err as Error).message}
 Stack Trace: ${(err as Error).stack}`,
-        renderedValue,
+        err instanceof JavascriptAssertionValidationError ? undefined : renderedValue,
       ),
       assertion: normalizeResultAssertion(undefined, assertion),
     };
