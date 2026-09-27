@@ -782,6 +782,18 @@ describe('provider environment scopes', () => {
     },
   );
 
+  it.each(['google', 'palm'])(
+    'does not apply Interactions-only aliases to an AI Studio %s model',
+    async (prefix) => {
+      const provider = await loadApiProvider(`${prefix}:gemini-omni-1.1-flash-preview`, {
+        env: { GOOGLE_API_KEY: 'suite-key' },
+        options: { env: { GOOGLE_GENERATIVE_AI_API_KEY: 'unrelated-key' } },
+      });
+      expect(provider).not.toBeInstanceOf(GoogleInteractionsProvider);
+      expect(Reflect.get(provider, 'getApiKey').call(provider)).toBe('suite-key');
+    },
+  );
+
   it('parsed provider options retain Foundry and Snowflake endpoints', () => {
     const snowflake = new SnowflakeCortexProvider(
       'fixture',
@@ -888,7 +900,7 @@ describe('provider environment scopes', () => {
     });
   });
 
-  it.each(namedProviders.filter(([name]) => name !== 'Voyage'))(
+  it.each(namedProviders)(
     '%s masks an empty named credential while retaining a missing-name fallback',
     (_name, create) => {
       const vendorEnv = {
@@ -896,6 +908,7 @@ describe('provider environment scopes', () => {
         COHERE_API_KEY: 'vendor-key',
         MISTRAL_API_KEY: 'vendor-key',
         WATSONX_AI_APIKEY: 'vendor-key',
+        VOYAGE_API_KEY: 'vendor-key',
       };
       cliState.withEnv({ ...vendorEnv, AUDIT_NAMED_KEY: 'ambient-key' }, () => {
         expect(
