@@ -356,8 +356,9 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       !this.config.apiKeyEnvar &&
       apiUrl.hostname.toLowerCase() !== 'api.openai.com' &&
       (!this.requiresApiKey() || hasOpenAiGatewayCredentials(config.headers, apiUrl.href));
-    const keyless =
-      !separateEndpoint && (suppressAmbientKey || (!apiKey && !this.requiresApiKey()));
+    const keyless = separateEndpoint
+      ? !apiKey && hasOpenAiGatewayCredentials(undefined, apiUrl.href)
+      : suppressAmbientKey || (!apiKey && !this.requiresApiKey());
     if (
       !separateEndpoint &&
       overrides.apiKey !== undefined &&

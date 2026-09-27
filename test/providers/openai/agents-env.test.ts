@@ -1155,6 +1155,38 @@ describe('Agents SDK scoped client', () => {
     expect(fetchWithProxy).not.toHaveBeenCalled();
   });
 
+  it.each([
+    'https://session.example.invalid/v1?api-key=fixture',
+    'https://session.example.invalid/key_fixturecredential/v1',
+  ])('uses credentials from the session URL itself: %s', async (baseURL) => {
+    const calls: { url: string; authorization: string | null }[] = [];
+    vi.mocked(fetchWithProxy).mockImplementation(async (input, options) => {
+      calls.push({
+        url: String(input),
+        authorization: new Headers(options?.headers).get('authorization'),
+      });
+      return String(input).includes('/items')
+        ? Response.json({ data: [], object: 'list', has_more: false })
+        : Response.json(response);
+    });
+    await provider({
+      apiKey: 'model-key',
+      session: { type: 'openai-conversations', conversationId: 'conv_fixture', baseURL },
+    }).callApi('hello');
+    const sessionCalls = calls.filter((call) => call.url.includes('/items'));
+    expect(sessionCalls.length).toBeGreaterThan(0);
+    for (const call of sessionCalls) {
+      expect(call.authorization).toBeNull();
+      expect(new URL(call.url).searchParams.get('api-key')).toBe(
+        new URL(baseURL).searchParams.get('api-key'),
+      );
+      expect(new URL(call.url).pathname.startsWith(new URL(baseURL).pathname)).toBe(true);
+    }
+    expect(calls.find((call) => call.url.endsWith('/responses'))?.authorization).toBe(
+      'Bearer model-key',
+    );
+  });
+
   it('does not share model keyless mode with a separate session endpoint', async () => {
     await expect(
       provider({
