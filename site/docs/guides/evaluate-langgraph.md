@@ -114,7 +114,7 @@ Now it's time to set up the key Python packages and the promptfoo CLI.
 In your project folder, run:
 
 ```bash
-python -m pip install 'langgraph>=1.2.11,<2' 'langchain-openai>=1.6.2,<2' 'pydantic>=2.13.5,<3'
+python3 -m pip install 'langgraph>=1.2.11,<2' 'langchain-openai>=1.6.2,<2' 'pydantic>=2.13.5,<3'
 npm install -g promptfoo
 ```
 
