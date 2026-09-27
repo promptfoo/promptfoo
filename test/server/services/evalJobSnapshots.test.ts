@@ -436,17 +436,30 @@ describe('eval job result snapshots', () => {
     expect(service.get('job')?.result).toEqual(snapshot('retry'));
   });
 
-  it('keeps the new result when obsolete-file cleanup fails', () => {
+  it('keeps the new result without streaming diagnostics when obsolete-file cleanup fails', async () => {
     service.create('job');
     service.complete('job', snapshot('original'), 'eval');
-    vi.spyOn(fs, 'rmSync').mockImplementationOnce(() => {
-      throw new Error('EPERM old-file');
-    });
-    expect(service.complete('job', snapshot('replacement'), 'new-eval')).toBe(true);
-    expect(service.get('job')).toMatchObject({
-      result: snapshot('replacement'),
-      evalId: 'new-eval',
-    });
+    const [oldFile] = files();
+    fs.unlinkSync(oldFile);
+    fs.mkdirSync(oldFile);
+    fs.writeFileSync(path.join(oldFile, 'owned-child'), 'synthetic cleanup failure');
+    const logs = await import('../../../src/logger');
+    const previous = logs.globalLogCallback;
+    const messages: string[] = [];
+    logs.setLogCallback((message) => messages.push(message));
+    try {
+      logs.default.warn('Public callback control');
+      expect(messages).toEqual(['Public callback control']);
+      messages.length = 0;
+      expect(service.complete('job', snapshot('replacement'), 'new-eval')).toBe(true);
+      expect(service.get('job')).toMatchObject({
+        result: snapshot('replacement'),
+        evalId: 'new-eval',
+      });
+      expect(messages.join('\n')).not.toContain(path.basename(oldFile));
+    } finally {
+      logs.setLogCallback(previous);
+    }
   });
 
   it('preserves JSON serialization semantics and returns independent snapshots', () => {

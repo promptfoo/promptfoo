@@ -3,8 +3,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import logger from '../../logger';
-
 import type { Job } from '../../types/index';
 
 type ResultDirectory = { path: string; dev: number; ino: number };
@@ -95,12 +93,11 @@ function storeResult(result: NonNullable<Job['result']>): ResultSnapshot {
       fs.closeSync(descriptor);
     }
     return snapshot;
-  } catch (error) {
+  } catch {
     // An exclusive-open failure must never remove another snapshot's file.
     if (descriptor !== undefined) {
       removeResult(snapshot);
     }
-    logger.error('Failed to store eval job result snapshot', { error });
     throw new Error('Failed to store eval job result snapshot');
   }
 }
@@ -111,8 +108,8 @@ function removeResult(snapshot: ResultSnapshot | null | undefined): void {
       if (ownsDirectory(snapshot.directory)) {
         fs.rmSync(snapshot.path, { force: true });
       }
-    } catch (error) {
-      logger.warn('Failed to remove obsolete job result snapshot', { error });
+    } catch {
+      // Obsolete snapshot cleanup is best effort.
     }
   }
 }

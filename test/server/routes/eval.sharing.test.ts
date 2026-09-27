@@ -23,12 +23,13 @@ vi.mock('../../../src/models/eval', () => ({
 }));
 vi.mock('../../../src/globalConfig/accounts');
 
-import logger from '../../../src/logger';
+import logger, { globalLogCallback, setLogCallback } from '../../../src/logger';
 import Eval from '../../../src/models/eval';
 import { evaluateWithSource } from '../../../src/node';
 import { createApp } from '../../../src/server/server';
 import { shouldShareResults } from '../../../src/util/sharing';
 
+const originalLogError = logger.error.bind(logger);
 const errorSpy = vi.spyOn(logger, 'error');
 const mockedEvalCreate = vi.mocked(Eval.create);
 const mockedEvalFindById = vi.mocked(Eval.findById);
@@ -78,6 +79,17 @@ describe('Eval Routes - Sharing behavior', () => {
     prompts: ['test prompt'],
     providers: ['echo'],
     tests: [{ vars: { input: 'test' } }],
+  };
+
+  const captureStreamedLogs = () => {
+    const previous = globalLogCallback;
+    const messages: string[] = [];
+    errorSpy.mockImplementation(originalLogError);
+    setLogCallback((message) => messages.push(message));
+    logger.error('Public callback control');
+    expect(messages).toEqual(['Public callback control']);
+    messages.length = 0;
+    return { messages, restore: () => setLogCallback(previous) };
   };
 
   it('does not let a job request change the server file-resolution directory', async () => {
@@ -237,6 +249,7 @@ describe('Eval Routes - Sharing behavior', () => {
       const open = vi.spyOn(fs, 'openSync');
       let snapshotPath: string | undefined;
       let original: string | undefined;
+      let streamed: ReturnType<typeof captureStreamedLogs> | undefined;
       try {
         const created = await postJob(minimalTestSuite);
         const jobUrl = `/api/eval/job/${created.body.id}`;
@@ -261,17 +274,22 @@ describe('Eval Routes - Sharing behavior', () => {
           fs.writeFileSync(snapshotPath, contents[failure]);
         }
 
+        streamed = captureStreamedLogs();
         const response = await api.get(jobUrl).expect(500);
         expect(response.headers['content-type']).toContain('application/json');
         expect(response.body).toEqual({ error: 'Failed to load eval job' });
         expect(response.text).not.toContain(snapshotPath);
         expect(response.text).not.toContain('private malformed snapshot');
+        expect(streamed.messages.join('\n')).not.toMatch(
+          /ZodError|SyntaxError|private|readResult|ENOENT/,
+        );
         fs.writeFileSync(snapshotPath, original, { mode: 0o600 });
         expect((await api.get(jobUrl).expect(200)).body).toMatchObject({
           status: 'complete',
           result: { results: [] },
         });
       } finally {
+        streamed?.restore();
         open.mockRestore();
         if (snapshotPath && original) {
           fs.writeFileSync(snapshotPath, original, { mode: 0o600 });
@@ -281,8 +299,12 @@ describe('Eval Routes - Sharing behavior', () => {
   );
 
   it('publishes a job failure without storage paths when saving its snapshot fails', async () => {
+    const streamed = captureStreamedLogs();
     const write = vi.spyOn(fs, 'writeFileSync').mockImplementationOnce(() => {
-      throw new Error('ENOSPC /private/snapshot/path');
+      throw Object.assign(new Error('ENOSPC /private/snapshot/path'), {
+        code: 'ENOSPC',
+        path: '/private/snapshot/path',
+      });
     });
     try {
       const created = await postJob(minimalTestSuite);
@@ -294,7 +316,9 @@ describe('Eval Routes - Sharing behavior', () => {
         });
         expect(response.text).not.toContain('/private/snapshot/path');
       });
+      expect(streamed.messages.join('\n')).not.toContain('/private/snapshot/path');
     } finally {
+      streamed.restore();
       write.mockRestore();
     }
   });

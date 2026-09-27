@@ -244,8 +244,8 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
         }),
       );
     }
-  } catch (error) {
-    sendError(res, 500, 'Failed to load eval job', error);
+  } catch {
+    sendError(res, 500, 'Failed to load eval job');
   }
 });
 
