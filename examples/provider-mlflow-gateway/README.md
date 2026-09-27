@@ -4,6 +4,8 @@ This example demonstrates how to use [MLflow AI Gateway](https://mlflow.org/docs
 
 To get started:
 
+On Windows (PowerShell), use `npx.cmd` instead of `npx` for the Promptfoo commands in this guide.
+
 ```bash
 npx promptfoo@latest init --example provider-mlflow-gateway
 cd provider-mlflow-gateway
