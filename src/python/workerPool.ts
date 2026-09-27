@@ -124,6 +124,7 @@ export class PythonWorkerPool {
 
   async shutdown(): Promise<void> {
     logger.debug(`Shutting down Python worker pool (${this.workers.length} workers)`);
+    this.isInitialized = false;
 
     // Reject any queued requests
     for (const req of this.queue) {
@@ -139,7 +140,6 @@ export class PythonWorkerPool {
 
     this.workers = [];
     this.queue = [];
-    this.isInitialized = false;
 
     logger.debug('Python worker pool shutdown complete');
   }
