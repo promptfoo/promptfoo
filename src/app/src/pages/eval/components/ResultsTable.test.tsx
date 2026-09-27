@@ -47,14 +47,14 @@ vi.mock('@app/hooks/useShiftKey', () => {
   };
 });
 
-vi.mock('@app/utils/api', async () => ({
-  ...(await vi.importActual('@app/utils/api')),
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
   callApi: vi.fn(() => Promise.resolve({ ok: true })),
 }));
 
 const mockNavigate = vi.fn();
-vi.mock('react-router-dom', async () => ({
-  ...(await vi.importActual('react-router-dom')),
+vi.mock('react-router', async () => ({
+  ...(await vi.importActual('react-router')),
   useNavigate: () => mockNavigate,
 }));
 

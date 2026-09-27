@@ -2,7 +2,7 @@ import React from 'react';
 
 import { Button } from '@app/components/ui/button';
 import Editor from '@app/components/ui/code-editor';
-import Prism from '@app/lib/prism';
+import { highlightJS } from '@app/lib/codeHighlight';
 import { callApi } from '@app/utils/api';
 import dedent from 'dedent';
 import { Play } from 'lucide-react';
@@ -16,18 +16,6 @@ interface RequestTransformTabProps {
   defaultRequestTransform?: string;
   isTargetConfigInvalid?: () => boolean;
 }
-
-const highlightJS = (code: string): string => {
-  try {
-    const grammar = Prism?.languages?.javascript;
-    if (!grammar) {
-      return code;
-    }
-    return Prism.highlight(code, grammar, 'javascript');
-  } catch {
-    return code;
-  }
-};
 
 const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
   selectedTarget,
