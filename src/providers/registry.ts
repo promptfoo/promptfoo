@@ -1638,7 +1638,7 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      const modelName = providerPath.split(':')[2];
+      const modelName = modelNameFromProviderPath(providerPath, 2);
       return new PromptfooModelProvider(modelName, {
         ...providerOptions,
         model: modelName,

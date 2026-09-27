@@ -904,6 +904,12 @@ describe('Provider Registry', () => {
       expect(provider.id()).toContain(modelName);
     });
 
+    it('preserves the full Promptfoo-hosted model ID', async () => {
+      const path = 'promptfoo:model:custom:model:v2';
+      const provider = await loadApiProvider(path);
+      expect(provider.id()).toBe(path);
+    });
+
     it.each(['anthropic:messages', 'anthropic:messages:'])(
       'reports a missing model for %s without sending a request',
       async (path) => {
