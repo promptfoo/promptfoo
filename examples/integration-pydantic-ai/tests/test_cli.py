@@ -126,6 +126,9 @@ class ExampleCliTests(unittest.TestCase):
                 }
                 env.update(
                     OPENAI_API_KEY="fixture-not-a-real-key",
+                    # Dotenv must not restore higher-priority grader endpoints.
+                    OPENAI_API_HOST="",
+                    OPENAI_API_BASE_URL=f"http://127.0.0.1:{server.server_port}/v1",
                     OPENAI_BASE_URL=f"http://127.0.0.1:{server.server_port}/v1",
                     PROMPTFOO_PYTHON=sys.executable,
                     PROMPTFOO_CONFIG_DIR=str(pathlib.Path(directory) / "promptfoo"),
