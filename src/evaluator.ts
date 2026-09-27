@@ -3767,7 +3767,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         let test = step.test;
         const previousNamedScores = row.namedScores;
         const metadataChanged =
-          row.gradingResult?.metadata?.[PROMPTFOO_METADATA_KEY]?.assertionGradingMetadataChanged;
+          result.gradingResult?.metadata?.[PROMPTFOO_METADATA_KEY]?.assertionGradingMetadataChanged;
         row.error = undefined;
         row.failureReason = ResultFailureReason.NONE;
         row.gradingResult = undefined;

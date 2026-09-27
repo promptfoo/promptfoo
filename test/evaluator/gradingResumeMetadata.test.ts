@@ -16,10 +16,12 @@ import type { ApiProvider, ProviderResponse, TestSuite } from '../../src/types/i
 describeEvaluator('interrupted grading after metadata hooks', () => {
   afterEach(() => {
     vi.mocked(runExtensionHook).mockReset();
+    vi.unstubAllEnvs();
   });
 
   it.each([
     'nested response mutation',
+    'stripped grading projection',
     'response replacement',
     'top-level mutation',
     'redaction',
@@ -30,6 +32,7 @@ describeEvaluator('interrupted grading after metadata hooks', () => {
   ])('handles %s without replaying projected inputs', async (mode) => {
     const changed = [
       'nested response mutation',
+      'stripped grading projection',
       'response replacement',
       'top-level mutation',
       'redaction',
@@ -64,6 +67,7 @@ describeEvaluator('interrupted grading after metadata hooks', () => {
       const metadata = result.response!.metadata!;
       switch (mode) {
         case 'nested response mutation':
+        case 'stripped grading projection':
           (metadata.nested as { count: number }).count++;
           break;
         case 'response replacement':
@@ -118,6 +122,9 @@ describeEvaluator('interrupted grading after metadata hooks', () => {
       expect(interrupted.gradingResult?.metadata?.__promptfoo?.assertionGradingInterrupted).toBe(
         true,
       );
+      if (mode === 'stripped grading projection') {
+        vi.stubEnv('PROMPTFOO_STRIP_GRADING_RESULT', 'true');
+      }
       resuming = true;
       cliState.resume = true;
       const saved = (await Eval.findById(record.id))!;
