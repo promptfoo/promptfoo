@@ -75,6 +75,7 @@ jobs:
         run: |
           python -m venv "$RUNNER_TEMP/example-venv"
           "$RUNNER_TEMP/example-venv/bin/python" - <<'PY'
+          import importlib.metadata
           import os
           import pathlib
           import subprocess
@@ -85,7 +86,14 @@ jobs:
           command = [sys.executable, '-m', 'pip', 'install', '--disable-pip-version-check']
           if manifest.parent.name == 'eval-bert-score':
               # BERTScore needs CPU inference; do not download CUDA libraries in CI.
-              command += ['--extra-index-url', 'https://download.pytorch.org/whl/cpu']
+              subprocess.run(
+                  command + ['--index-url', 'https://download.pytorch.org/whl/cpu', 'torch'],
+                  check=True,
+              )
+              # Fail on incompatible requirements instead of replacing CPU Torch from PyPI.
+              constraints = pathlib.Path(os.environ['RUNNER_TEMP']) / 'bert-score-constraints.txt'
+              constraints.write_text('torch==' + importlib.metadata.version('torch') + '\n')
+              command += ['--constraint', str(constraints)]
           if manifest.name == 'pyproject.toml':
               project = tomllib.loads(manifest.read_text())['project']
               extras = ','.join(project.get('optional-dependencies', {}))
