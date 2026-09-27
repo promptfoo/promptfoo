@@ -179,6 +179,7 @@ export class PythonProvider implements ApiProvider {
   private scriptPath: string;
   private functionName: string | null;
   private configResolved = false;
+  private cancelConfigLoading: (() => void) | null = null;
   private poolPromise: Promise<PythonWorkerPool> | null = null;
   private shutdownPromise: Promise<void> | null = null;
   public label: string | undefined;
@@ -225,11 +226,21 @@ export class PythonProvider implements ApiProvider {
       let pool: PythonWorkerPool | undefined;
       try {
         if (!this.configResolved) {
-          this.config = await processConfigFileReferences(
-            this.config,
-            this.options?.config.basePath || '',
-          );
-          this.configResolved = true;
+          try {
+            // User configuration loaders can remain pending indefinitely. Cancel only
+            // this pre-worker wait; a late loader result must not start a new pool.
+            this.config = await new Promise<PythonProviderConfig>((resolve, reject) => {
+              this.cancelConfigLoading = () =>
+                reject(new DOMException('Python provider initialization cancelled', 'AbortError'));
+              processConfigFileReferences(this.config, this.options?.config.basePath || '').then(
+                resolve,
+                reject,
+              );
+            });
+            this.configResolved = true;
+          } finally {
+            this.cancelConfigLoading = null;
+          }
         }
 
         // Initialize worker pool
@@ -418,6 +429,7 @@ export class PythonProvider implements ApiProvider {
 
   async shutdown(): Promise<void> {
     if (!this.shutdownPromise) {
+      this.cancelConfigLoading?.();
       this.shutdownPromise = (async () => {
         try {
           // Failed startup already disposes its pool and reports the error to its callers.

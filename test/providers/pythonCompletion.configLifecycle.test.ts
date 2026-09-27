@@ -1,8 +1,10 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { setImmediate } from 'node:timers/promises';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { providerRegistry } from '../../src/providers/providerRegistry';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 
 const mocks = vi.hoisted(() => ({
@@ -25,6 +27,10 @@ vi.mock('../../src/cache', () => ({
 
 let directory: string;
 const providers: PythonProvider[] = [];
+const releases: Array<() => void> = [];
+const loaderGlobals = globalThis as typeof globalThis & {
+  pythonConfigLifecycleLoader?: () => Promise<{ storageUri: string }>;
+};
 
 beforeEach(async () => {
   mocks.initialize.mockReset().mockResolvedValue(undefined);
@@ -36,6 +42,10 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  for (const release of releases.splice(0)) {
+    release();
+  }
+  delete loaderGlobals.pythonConfigLifecycleLoader;
   await Promise.all(providers.splice(0).map((provider) => provider.shutdown()));
   await rm(directory, { recursive: true, force: true });
   vi.resetAllMocks();
@@ -99,4 +109,57 @@ describe('Python provider configuration lifetime', () => {
     expect(await provider.callApi('retry')).toMatchObject({ output: 'file://store.db' });
     expect(mocks.initialize).toHaveBeenCalledOnce();
   });
+  it.each(['resolve', 'reject'] as const)(
+    'cancels unresolved JavaScript configuration and ignores a late %s after reuse',
+    async (completion) => {
+      let entered!: () => void;
+      const started = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      let resolveConfig!: (value: { storageUri: string }) => void;
+      let rejectConfig!: (error: Error) => void;
+      const pendingConfig = new Promise<{ storageUri: string }>((resolve, reject) => {
+        resolveConfig = resolve;
+        rejectConfig = reject;
+      });
+      releases.push(() => resolveConfig({ storageUri: 'stale' }));
+      loaderGlobals.pythonConfigLifecycleLoader = () => {
+        entered();
+        return pendingConfig;
+      };
+      const filename = path.join(directory, 'pending.mjs');
+      await writeFile(filename, 'export default () => globalThis.pythonConfigLifecycleLoader();');
+      const provider = createProvider(`file://${filename}`);
+      const initializing = provider.initialize().catch((error: Error) => error);
+      const alsoInitializing = provider.initialize().catch((error: Error) => error);
+      await started;
+      let stopped = false;
+      const stopping = providerRegistry.shutdownAll().then(() => {
+        stopped = true;
+      });
+      // No elapsed-time assumption: all cancellation reactions settle before the next event-loop turn.
+      await setImmediate();
+      expect(stopped).toBe(true);
+      await stopping;
+      expect(await initializing).toMatchObject({ name: 'AbortError' });
+      expect(await alsoInitializing).toMatchObject({ name: 'AbortError' });
+      expect(mocks.initialize).not.toHaveBeenCalled();
+
+      loaderGlobals.pythonConfigLifecycleLoader = async () => ({ storageUri: 'current' });
+      await provider.initialize();
+      expect(mocks.initialize).toHaveBeenCalledOnce();
+      if (completion === 'resolve') {
+        resolveConfig({ storageUri: 'stale' });
+      } else {
+        rejectConfig(new Error('late loader failure'));
+      }
+      await setImmediate();
+      expect(provider.config.settings).toEqual({ storageUri: 'current' });
+      expect(await provider.callApi('reuse')).toMatchObject({ output: 'current' });
+      expect(mocks.initialize).toHaveBeenCalledOnce();
+      await providerRegistry.shutdownAll();
+      await provider.initialize();
+      expect(mocks.initialize).toHaveBeenCalledTimes(2);
+    },
+  );
 });

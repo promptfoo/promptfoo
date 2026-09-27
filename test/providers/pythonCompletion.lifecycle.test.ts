@@ -97,11 +97,15 @@ describe('Python provider resource lifetime', () => {
   it('joins initialization before releasing the pool on shutdown', async () => {
     const pool = createPool();
     const ready = deferred();
-    pool.initialize.mockReturnValue(ready.promise);
+    const started = deferred();
+    pool.initialize.mockImplementation(() => {
+      started.resolve();
+      return ready.promise;
+    });
     mocks.createPool.mockReturnValue(pool);
     const provider = createProvider();
     const initializing = provider.initialize();
-    await Promise.resolve();
+    await started.promise;
     expect(pool.initialize).toHaveBeenCalledOnce();
 
     const stopping = provider.shutdown();
@@ -116,32 +120,6 @@ describe('Python provider resource lifetime', () => {
     ready.resolve();
     await Promise.all([initializing, stopping]);
     expect(pool.shutdown).toHaveBeenCalledOnce();
-  });
-
-  it('registers startup before configuration finishes so global cleanup can own it', async () => {
-    const configuring = deferred();
-    mocks.processConfig.mockImplementation(async (config) => {
-      await configuring.promise;
-      return config;
-    });
-    const pool = createPool();
-    mocks.createPool.mockReturnValue(pool);
-    const provider = createProvider();
-    const initializing = provider.initialize();
-    const stopping = providerRegistry.shutdownAll();
-    let stopped = false;
-    void stopping.then(() => {
-      stopped = true;
-    });
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(stopped).toBe(false);
-
-    configuring.resolve();
-    await Promise.all([initializing, stopping]);
-    expect(pool.shutdown).toHaveBeenCalledOnce();
-    await provider.initialize();
-    expect(mocks.createPool).toHaveBeenCalledTimes(2);
   });
 
   it('coalesces shutdown and waits for it before initializing a new pool', async () => {
