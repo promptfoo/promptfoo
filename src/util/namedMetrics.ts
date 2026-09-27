@@ -121,33 +121,50 @@ function getContributingAssertionCounts(
   renderComponentMetric: MetricNameRenderer,
 ): Map<string, number> | undefined {
   const counts = new Map<string, number>();
-  const maxMetricNameLength = Object.keys(namedScores).reduce(
+  const scoreNames = Object.keys(namedScores);
+  const maxMetricNameLength = scoreNames.reduce(
     (longest, name) => Math.max(longest, name.length),
     0,
   );
-  let hasUnresolvedMetric = false;
-  const componentResults = Array.isArray(gradingResult?.componentResults)
-    ? gradingResult.componentResults
-    : [];
-  for (const componentResult of componentResults) {
+  const metricNames = (
+    Array.isArray(gradingResult?.componentResults) ? gradingResult.componentResults : []
+  ).flatMap((component) => {
     if (
-      !isRecord(componentResult) ||
-      !isRecord(componentResult.assertion) ||
-      componentResult.assertion.type === 'select-best' ||
-      componentResult.assertion.type === 'max-score'
+      !isRecord(component) ||
+      !isRecord(component.assertion) ||
+      component.assertion.type === 'select-best' ||
+      component.assertion.type === 'max-score'
     ) {
-      continue;
+      return [];
     }
-    const metric =
-      typeof componentResult.assertion.metric === 'string'
-        ? componentResult.assertion.metric
-        : undefined;
-    const renderedMetric =
-      renderComponentMetric === renderPersistedMetricName
+    const metric = component.assertion.metric;
+    return [typeof metric === 'string' ? metric : undefined];
+  });
+  const passive = renderComponentMetric === renderPersistedMetricName;
+  const renderedNames = new Map<string | undefined, string | undefined>();
+  // Keep expansion work proportional to stored input, with room for short aliases.
+  let remainingNameLength = passive
+    ? Math.max(
+        1024,
+        scoreNames.reduce((total, name) => total + name.length, 0) +
+          metricNames.reduce((total, metric) => total + (metric?.length ?? 0), 0),
+      )
+    : 0;
+  for (const metric of metricNames) {
+    const cached = passive && renderedNames.has(metric);
+    let renderedMetric = cached
+      ? renderedNames.get(metric)
+      : passive
         ? renderPersistedMetricName(metric, testVars, maxMetricNameLength)
         : renderComponentMetric(metric, testVars);
+    if (passive && !cached) {
+      remainingNameLength -= renderedMetric?.length ?? 0;
+      if (remainingNameLength < 0) {
+        return undefined;
+      }
+    }
     if (
-      renderComponentMetric === renderPersistedMetricName &&
+      passive &&
       renderedMetric !== undefined &&
       renderedMetric === metric &&
       /\{[{%#]/.test(renderedMetric) &&
@@ -155,16 +172,22 @@ function getContributingAssertionCounts(
     ) {
       // This component could contribute to any rendered metric, including one
       // already matched by another component. Partial counts are not denominators.
-      hasUnresolvedMetric = true;
+      return undefined;
     }
     if (
       renderedMetric !== undefined &&
-      Object.prototype.hasOwnProperty.call(namedScores, renderedMetric)
+      !Object.prototype.hasOwnProperty.call(namedScores, renderedMetric)
     ) {
+      renderedMetric = undefined;
+    }
+    if (passive && !cached) {
+      renderedNames.set(metric, renderedMetric);
+    }
+    if (renderedMetric !== undefined) {
       counts.set(renderedMetric, (counts.get(renderedMetric) ?? 0) + 1);
     }
   }
-  return hasUnresolvedMetric ? undefined : counts;
+  return counts;
 }
 
 function getOwnFiniteMetricValue(

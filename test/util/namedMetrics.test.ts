@@ -13,6 +13,58 @@ import {
 import { mockProcessEnv } from './utils';
 
 describe('accumulateNamedMetrics', () => {
+  it.each([false, true])(
+    'limits cumulative expansion without losing scores or stored weights (weighted=%s)',
+    (weighted) => {
+      const longKey = 'k'.repeat(8196);
+      const namedScores = { quality: 0.25, [longKey]: 0.5 };
+      const weights = { quality: 4, [longKey]: 2 };
+      const metrics: NamedMetricAccumulator = { namedScores: {}, namedScoresCount: {} };
+      accumulateNamedMetrics(metrics, {
+        namedScores,
+        testVars: { value: 'x'.repeat(8192) },
+        gradingResult: {
+          ...(weighted && { namedScoreWeights: weights }),
+          componentResults: [
+            'quality',
+            'quality',
+            ...Array.from({ length: 32 }, (_, index) => `${index}:{{ value }}`),
+          ].map((metric) => ({ assertion: { metric } })),
+        },
+      });
+      expect(metrics).toEqual({
+        namedScores: weighted ? { quality: 1, [longKey]: 1 } : namedScores,
+        namedScoresCount: {},
+        namedScoreWeights: weighted ? weights : {},
+      });
+    },
+  );
+
+  it('counts repeated long templates and ordinary aliases without exhausting the allowance', () => {
+    for (const [name, templates, testVars] of [
+      [
+        'quality',
+        ['{{a}}', '{{b}}', '{{c}}', '{{d}}', '{{ a }}', '{{a }}'],
+        { a: 'quality', b: 'quality', c: 'quality', d: 'quality' },
+      ],
+      ['q'.repeat(8192), Array.from({ length: 64 }, () => '{{m}}'), { m: 'q'.repeat(8192) }],
+    ] as const) {
+      const metrics: NamedMetricAccumulator = { namedScores: {}, namedScoresCount: {} };
+      accumulateNamedMetrics(metrics, {
+        namedScores: { [name]: templates.length },
+        testVars,
+        gradingResult: {
+          componentResults: templates.map((metric) => ({ assertion: { metric } })),
+        },
+      });
+      expect(metrics).toEqual({
+        namedScores: { [name]: templates.length },
+        namedScoresCount: { [name]: templates.length },
+        namedScoreWeights: { [name]: templates.length },
+      });
+    }
+  });
+
   it('bounds individual and cumulative persisted metric expansion within a small heap', () => {
     const result = spawnSync(
       process.execPath,
@@ -26,10 +78,10 @@ describe('accumulateNamedMetrics', () => {
           import assert from 'node:assert/strict';
           import { accumulateNamedMetrics } from './src/util/namedMetrics.ts';
           const longKey = 'k'.repeat(1024 * 1024 + 4);
-          for (const [value, names, namedScores] of [
-            ['x'.repeat(1024 * 1024), ['{{ value }}'.repeat(256)], { quality: 2 }],
+          for (const [value, names, namedScores, countsKnown] of [
+            ['x'.repeat(1024 * 1024), ['{{ value }}'.repeat(256)], { quality: 2 }, true],
             ['x'.repeat(128 * 1024), Array.from({ length: 192 }, (_, i) =>
-              i + ':' + '{{ value }}'.repeat(8)), { quality: 2, [longKey]: 1 }],
+              i + ':' + '{{ value }}'.repeat(8)), { quality: 2, [longKey]: 1 }, false],
           ]) {
             const metrics = { namedScores: {}, namedScoresCount: {} };
             accumulateNamedMetrics(metrics, {
@@ -39,8 +91,8 @@ describe('accumulateNamedMetrics', () => {
                 ({ assertion: { metric } })) },
             });
             assert.deepEqual(metrics.namedScores, namedScores);
-            assert.deepEqual(metrics.namedScoresCount, namedScores);
-            assert.deepEqual(metrics.namedScoreWeights, namedScores);
+            assert.deepEqual(metrics.namedScoresCount, countsKnown ? namedScores : {});
+            assert.deepEqual(metrics.namedScoreWeights, countsKnown ? namedScores : {});
           }
         `,
       ],
