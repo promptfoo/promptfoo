@@ -77,7 +77,10 @@ CPU or memory limits. SDK or sandbox errors fail the assertion without retrying
 with weaker settings. Generated code runs only inside E2B.
 
 The static pattern check is illustrative, not a complete Python security filter.
-The protected-file test intentionally fails when the precheck rejects its code.
+The protected-file probe intentionally fails when the precheck rejects its code.
+Indirect reads such as `open(path)` may pass that check and execute inside E2B.
+A failed score alone does not prove that the precheck blocked a read: inspect the
+assertion reason to distinguish rejection from executed code with unexpected output.
 The negative factorial test passes only when execution raises `ValueError`. Inspect
 `results.json` and `.promptfoo_results/` to distinguish expected rejections, wrong
 answers, and sandbox failures. API access and E2B credits are required for the live
