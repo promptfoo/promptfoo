@@ -76,6 +76,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  window.history.replaceState({}, '', '/');
 });
 
 it('keeps the eval visible when a child filter request supersedes the parent load', async () => {
@@ -191,6 +192,87 @@ it('keeps pagination aligned with the initial request when navigating from a sma
   expect(query.get('limit')).toBe('50');
   expect(screen.getByLabelText('Go to page')).toHaveValue(2);
 });
+
+it.each(['success', 'HTTP failure', 'network failure'] as const)(
+  'owns the initial load when navigating to a paged eval: %s',
+  async (outcome) => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {});
+    const pending: Array<() => void> = [];
+    const destinationRequests: string[] = [];
+    let holdDestination = true;
+    vi.mocked(callApi).mockImplementation(async (url) => {
+      if (url === '/results') {
+        return createMockResponse({ data: [{ evalId: 'source' }, { evalId: 'destination' }] });
+      }
+      const parsed = new URL(url, window.location.origin);
+      const id = parsed.pathname.split('/')[2];
+      const offset = Number(parsed.searchParams.get('offset'));
+      const response = createMockResponse({
+        table: {
+          head: { prompts: [], vars: ['case'] },
+          body: Array.from({ length: Math.min(50, 80 - offset) }, (_, index) => ({
+            outputs: [],
+            test: {},
+            testIdx: offset + index,
+            vars: [`${id} row ${offset + index}`],
+          })),
+        },
+        config: {},
+        version: 4,
+        totalCount: 80,
+        filteredCount: 80,
+      });
+      if (id === 'destination') {
+        destinationRequests.push(url);
+        if (holdDestination) {
+          return new Promise<Response>((resolve, reject) =>
+            pending.push(() => {
+              if (outcome === 'network failure') {
+                reject(new Error('Connection lost'));
+              } else {
+                resolve(
+                  outcome === 'HTTP failure' ? createMockResponse({}, { status: 404 }) : response,
+                );
+              }
+            }),
+          );
+        }
+      }
+      return response;
+    });
+    const element = (id: string) => (
+      <MemoryRouter>
+        <Eval fetchId={id} />
+      </MemoryRouter>
+    );
+    const rendered = renderWithProviders(element('source'));
+    await screen.findByText('source row 0');
+    window.history.replaceState({}, '', '/eval/destination?rowId=75');
+    rendered.rerender(element('destination'));
+    await waitFor(() => expect(pending.length).toBeGreaterThan(0));
+    expect(screen.queryByText('source row 0')).not.toBeInTheDocument();
+    expect(screen.getByText('Waiting for eval data')).toBeInTheDocument();
+    await act(async () => {
+      holdDestination = false;
+      pending.forEach((complete) => complete());
+    });
+    if (outcome === 'success') {
+      await screen.findByText('destination row 75');
+      expect(screen.getByLabelText('Go to page')).toHaveValue(2);
+      expect(
+        destinationRequests.map((url) =>
+          new URL(url, window.location.origin).searchParams.get('offset'),
+        ),
+      ).toEqual(['0', '50']);
+      expect(screen.queryByText('404 Eval not found')).not.toBeInTheDocument();
+    } else {
+      await screen.findByText('404 Eval not found');
+      expect(useTableStore.getState().table).toBeNull();
+      expect(useTableStore.getState().isFetching).toBe(false);
+    }
+  },
+);
 
 const ratingTable: NonNullable<ReturnType<typeof useTableStore.getState>['table']> = {
   head: { prompts: [{ raw: 'test', label: 'test', provider: 'test' }], vars: [] },

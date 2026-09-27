@@ -1006,13 +1006,11 @@ function buildServerOwnedClearGradingResult(
   const automatedComponents = getAutomatedClearComponents(normalized.componentResults);
   const executionError = hasExecutionError(result, automatedComponents.length > 0);
   const totalWeight = automatedComponents.reduce((sum, component) => sum + component.weight, 0);
-  const automatedScore =
-    totalWeight > 0
-      ? automatedComponents.reduce(
-          (sum, component) => sum + component.score * component.weight,
-          0,
-        ) / totalWeight
-      : 0;
+  const totalScore = automatedComponents.reduce(
+    (sum, component) => sum + component.score * component.weight,
+    0,
+  );
+  const automatedScore = totalWeight > 0 ? totalScore / totalWeight : 0;
   const testCase = asRecord(result.testCase);
   const threshold = testCase?.threshold;
   let automatedPass =
@@ -1058,6 +1056,16 @@ function buildServerOwnedClearGradingResult(
           ? 1
           : 0,
   } as GradingResult;
+  // Match the evaluator's final validation, including overflow hidden by a finite quotient.
+  if (
+    canReconstructAutomatedOutcome &&
+    (!Number.isFinite(totalScore) ||
+      !Number.isFinite(totalWeight) ||
+      !Number.isFinite(automatedScore))
+  ) {
+    cleared.pass = false;
+    cleared.score = 0;
+  }
   cleared.reason = current.reason;
   if (hasOwn(normalized, 'componentResults')) {
     cleared.componentResults = normalized.componentResults;

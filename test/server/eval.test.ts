@@ -2006,6 +2006,75 @@ describe('eval routes', () => {
       );
     });
 
+    it.each([
+      { label: 'weighted-score overflow', score: 1, threshold: undefined, guardrail: false },
+      { label: 'threshold zero', score: 1, threshold: 0, guardrail: false },
+      { label: 'redteam guardrail override', score: 1, threshold: undefined, guardrail: true },
+      {
+        label: 'denominator overflow with a finite quotient',
+        score: 0,
+        threshold: 0,
+        guardrail: false,
+      },
+    ])(
+      'rejects non-finite legacy reconstruction: $label',
+      async ({ score, threshold, guardrail }) => {
+        const eval_ = await EvalFactory.create();
+        testEvalIds.add(eval_.id);
+        const [result] = await eval_.getResults();
+        invariant(result instanceof EvalResult && result.id, 'Result is required');
+        const automatedComponents = [
+          ...Array.from({ length: 2 }, () => ({
+            pass: true,
+            score,
+            reason: 'Weighted pass',
+            assertion: { type: 'equals' as const, value: 'yes', weight: Number.MAX_VALUE },
+          })),
+          {
+            pass: false,
+            score: 0,
+            reason: 'Failed assertion',
+            assertion: guardrail
+              ? { type: 'guardrails' as const, config: { purpose: 'redteam' }, weight: 1 }
+              : { type: 'equals' as const, value: 'no', weight: 1 },
+          },
+        ];
+        result.testCase = { ...result.testCase, threshold };
+        result.gradingResult = {
+          pass: true,
+          score: 1,
+          reason: 'Imported manual pass',
+          componentResults: [
+            ...automatedComponents,
+            { pass: true, score: 1, reason: 'Manual pass', assertion: { type: 'human' } },
+          ],
+        };
+        await result.save();
+        const metrics = eval_.prompts[result.promptIdx].metrics;
+        invariant(metrics, 'Prompt metrics are required');
+        Object.assign(metrics, { assertPassCount: 3, assertFailCount: 2 });
+        await eval_.save();
+
+        const response = await api
+          .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+          .send({ pass: true, score: 1, ratingAction: 'clear' });
+        expect(response.status).toBe(200);
+        expect(response.body).toMatchObject({
+          success: false,
+          score: 0,
+          failureReason: ResultFailureReason.ASSERT,
+        });
+        expect((await EvalResult.findById(result.id))?.score).toBe(0);
+        expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toMatchObject({
+          score: 0,
+          testPassCount: 0,
+          testFailCount: 2,
+          assertPassCount: 2,
+          assertFailCount: 2,
+        });
+      },
+    );
+
     it('fails closed when clearing an unmarked legacy comparison result', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);

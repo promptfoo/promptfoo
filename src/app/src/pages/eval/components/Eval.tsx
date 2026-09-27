@@ -168,6 +168,12 @@ export default function Eval({ fetchId }: EvalOptions) {
       let succeeded = false;
       let superseded = false;
       try {
+        if (!isBackgroundUpdate && useTableStore.getState().evalId !== id) {
+          // The parent owns the new eval's initial load. Do not let the previous table
+          // issue page/filter requests or display results under the new id while it loads.
+          setTable(null);
+          setLoaded(false);
+        }
         // A root-route refresh for a different eval is committed by fetchEvalData only after
         // its response succeeds; eagerly changing evalId would pair the old table with a new id.
         if (!isBackgroundUpdate || isSameEvalBackgroundUpdate) {
@@ -210,7 +216,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         }
       }
     },
-    [fetchEvalData, setFailed, setEvalId, filterMode],
+    [fetchEvalData, setFailed, setEvalId, setTable, filterMode],
   );
 
   const clearEvalState = useCallback(() => {

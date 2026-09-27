@@ -306,7 +306,7 @@ describe('Eval', () => {
     expect(queryByTestId('results-view')).toBeInTheDocument();
   });
 
-  it('should preserve the ResultsView instance when navigating between evals', async () => {
+  it('preserves the ResultsView instance when the selected eval is already loaded', async () => {
     let tableStoreValue = {
       ...baseMockTableStore,
       table: mockTable,
@@ -314,6 +314,7 @@ describe('Eval', () => {
     };
 
     vi.mocked(useTableStore).mockImplementation(() => tableStoreValue as any);
+    (useTableStore as any).getState = vi.fn(() => tableStoreValue);
 
     const { getByTestId, rerender } = render(
       <MemoryRouter>
@@ -736,10 +737,12 @@ describe('Eval', () => {
   });
 
   it('keeps a pinned eval visible when its initial background recents refresh fails', async () => {
-    vi.mocked(useTableStore).mockReturnValue({
+    const tableStoreValue = {
       ...baseMockTableStore,
       evalId: 'selected-eval',
-    });
+    };
+    vi.mocked(useTableStore).mockReturnValue(tableStoreValue);
+    (useTableStore as any).getState = vi.fn(() => tableStoreValue);
     vi.mocked(callApi).mockResolvedValue({
       ok: false,
     } as Response);
