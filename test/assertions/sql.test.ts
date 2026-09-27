@@ -1,8 +1,15 @@
+import * as nodeModule from 'node:module';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleContainsSql, handleIsSql } from '../../src/assertions/sql';
 import * as packageVersion from '../../src/util/packageVersion';
 
 import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index';
+
+vi.mock('node:module', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:module')>();
+  return { ...actual, createRequire: vi.fn(actual.createRequire) };
+});
 
 const assertion: Assertion = {
   type: 'is-sql',
@@ -828,10 +835,12 @@ describe('contains-sql assertion', () => {
 describe('is-sql parser loading', () => {
   beforeEach(() => {
     vi.resetModules();
+    vi.mocked(nodeModule.createRequire).mockReset();
   });
 
   afterEach(() => {
     vi.doUnmock('node-sql-parser');
+    vi.mocked(nodeModule.createRequire).mockReset();
     vi.restoreAllMocks();
     vi.resetModules();
   });
@@ -854,10 +863,14 @@ describe('is-sql parser loading', () => {
     },
   );
 
-  it('should report when node-sql-parser cannot be imported', async () => {
-    vi.doMock('node-sql-parser', () => {
-      throw new Error('module unavailable');
+  it('should report when node-sql-parser cannot be resolved', async () => {
+    const require = nodeModule.createRequire(import.meta.url);
+    vi.spyOn(require, 'resolve').mockImplementationOnce(() => {
+      throw Object.assign(new Error("Cannot find module 'node-sql-parser'"), {
+        code: 'MODULE_NOT_FOUND',
+      });
     });
+    vi.spyOn(nodeModule, 'createRequire').mockReturnValueOnce(require);
 
     await expect(
       handleIsSql({
@@ -869,6 +882,40 @@ describe('is-sql parser loading', () => {
     ).rejects.toThrow(
       'node-sql-parser is not installed. Install it alongside promptfoo with: npm install promptfoo node-sql-parser@^5.4.0',
     );
+  });
+
+  it('preserves errors from malformed parser package metadata', async () => {
+    const error = new SyntaxError('Unexpected token in parser package.json');
+    vi.spyOn(packageVersion, 'getPackageVersion').mockImplementationOnce(() => {
+      throw error;
+    });
+
+    await expect(
+      handleIsSql({
+        assertion,
+        renderedValue: undefined,
+        outputString: 'SELECT 1',
+        inverse: false,
+      } as AssertionParams),
+    ).rejects.toBe(error);
+  });
+
+  it('preserves errors from missing transitive parser dependencies', async () => {
+    const error = Object.assign(new Error("Cannot find module 'parser-internal-dependency'"), {
+      code: 'MODULE_NOT_FOUND',
+    });
+    vi.doMock('node-sql-parser', () => {
+      throw error;
+    });
+
+    await expect(
+      handleIsSql({
+        assertion,
+        renderedValue: undefined,
+        outputString: 'SELECT 1',
+        inverse: false,
+      } as AssertionParams),
+    ).rejects.toMatchObject({ cause: error });
   });
 
   it('should report when node-sql-parser has no Parser export', async () => {
