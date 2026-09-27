@@ -241,18 +241,22 @@ function getReplicateValueSummary(prefix: string, value: unknown): Record<string
 
 export class ReplicateProvider implements ApiProvider {
   modelName: string;
-  #configuredApiKey?: string;
+  // null preserves an explicit public assignment of undefined.
+  #configuredApiKey?: string | null;
   readonly #env?: EnvOverrides;
   get apiKey(): string | undefined {
+    if (this.#configuredApiKey !== undefined) {
+      return this.#configuredApiKey ?? undefined;
+    }
     return resolveProviderApiKey(
-      { apiKey: this.#configuredApiKey },
+      undefined,
       this.#env,
       ['REPLICATE_API_KEY', 'REPLICATE_API_TOKEN'],
       ['REPLICATE_API_TOKEN', 'REPLICATE_API_KEY'],
     );
   }
   set apiKey(value: string | undefined) {
-    this.#configuredApiKey = value;
+    this.#configuredApiKey = value ?? null;
   }
   config: ReplicateCompletionOptions;
 
@@ -263,7 +267,7 @@ export class ReplicateProvider implements ApiProvider {
     const { config, id, env } = options;
     const { apiKey, ...restConfig } = config ?? {};
     this.modelName = modelName;
-    this.apiKey = apiKey;
+    this.#configuredApiKey = apiKey || undefined;
     this.#env = env;
     this.config = restConfig;
     this.id = id ? () => id : this.id;

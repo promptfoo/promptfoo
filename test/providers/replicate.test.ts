@@ -103,6 +103,54 @@ describe('ReplicateProvider', () => {
     expect(JSON.stringify(provider)).not.toContain('assigned-fixture-token');
   });
 
+  it.each(['config', 'provider', 'suite', 'file', 'host'])(
+    'preserves an explicit API key clear after resolving %s credentials',
+    async (source) => {
+      const restore = mockProcessEnv({
+        REPLICATE_API_KEY: undefined,
+        REPLICATE_API_TOKEN: 'host-token',
+      });
+      const env = { REPLICATE_API_TOKEN: 'selected-token' };
+      const provider = new ReplicateProvider('fixture', {
+        ...(source === 'config' ? { config: { apiKey: 'selected-token' } } : {}),
+        ...(source === 'provider' ? { env } : {}),
+      });
+      const check = async () => {
+        expect(provider.getApiKey()).toBe(source === 'host' ? 'host-token' : 'selected-token');
+        provider.apiKey = undefined;
+        expect(provider.getApiKey()).toBeUndefined();
+        await expect(provider.callApi('fixture')).rejects.toThrow('Replicate API key is not set');
+        expect(mockedFetchWithCache).not.toHaveBeenCalled();
+        provider.apiKey = 'replacement-token';
+        expect(provider.getApiKey()).toBe('replacement-token');
+        expect(JSON.stringify(provider)).not.toContain('replacement-token');
+        provider.apiKey = '';
+        expect(provider.getApiKey()).toBe('');
+        await expect(provider.callApi('fixture')).rejects.toThrow('Replicate API key is not set');
+        expect(mockedFetchWithCache).not.toHaveBeenCalled();
+      };
+      try {
+        if (source === 'suite') {
+          await cliState.withEnv(env, check);
+        } else if (source === 'file') {
+          await cliState.withEnvFileOverrides(env, check);
+        } else {
+          await check();
+        }
+      } finally {
+        restore();
+      }
+    },
+  );
+
+  it('preserves constructor fallback for an empty configured API key', () => {
+    const provider = new ReplicateProvider('fixture', {
+      config: { apiKey: '' },
+      env: { REPLICATE_API_TOKEN: 'provider-token' },
+    });
+    expect(provider.getApiKey()).toBe('provider-token');
+  });
+
   it('uses each active scope token when a provider is reused concurrently', async () => {
     mockedFetchWithCache.mockResolvedValue({
       data: { id: 'fixture', status: 'succeeded', output: 'fixture' },
