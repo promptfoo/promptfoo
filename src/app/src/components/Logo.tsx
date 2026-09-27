@@ -1,5 +1,5 @@
 import logoPanda from '@app/assets/logo.svg';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 
 import './Logo.css';
 
