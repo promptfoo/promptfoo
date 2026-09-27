@@ -185,7 +185,7 @@ export type OpenAiAgentsSessionClientFactory = (
     OpenAIConversationsSessionOptions,
     'apiKey' | 'baseURL' | 'organization' | 'project'
   >,
-) => NonNullable<OpenAIConversationsSessionOptions['client']>;
+) => OpenAIConversationsSessionOptions['client'];
 
 /**
  * Load a persistent conversation session from config, file export, or factory.

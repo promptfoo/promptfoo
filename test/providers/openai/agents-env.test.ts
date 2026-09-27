@@ -543,6 +543,51 @@ describe('Agents SDK scoped client', () => {
     expect(fetchWithProxy).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { name: 'unscoped session', session: {}, scopedModel: false, scopedRequests: 0 },
+    {
+      name: 'session key override',
+      session: { apiKey: 'session-key' },
+      scopedModel: false,
+      scopedRequests: 2,
+    },
+    {
+      name: 'session metadata override',
+      session: { project: 'session-project' },
+      scopedModel: false,
+      scopedRequests: 2,
+    },
+    { name: 'scoped model and session', session: {}, scopedModel: true, scopedRequests: 3 },
+  ])(
+    'preserves transport ownership for $name',
+    async ({ session, scopedModel, scopedRequests }) => {
+      clearProxyEnv();
+      mockProcessEnv({ HTTPS_PROXY: 'http://host-proxy.example:8080' });
+      const respond = async (input: string | URL | Request) =>
+        Response.json(
+          String(input).includes('/items')
+            ? { data: [], object: 'list', has_more: false }
+            : response,
+        );
+      const sdkFetch = vi.fn(respond);
+      vi.stubGlobal('fetch', sdkFetch);
+      vi.mocked(fetchWithProxy).mockImplementation(respond);
+      setDefaultModelProvider(new OpenAIProvider());
+      const target = provider({
+        session: { type: 'openai-conversations', conversationId: 'conv_fixture', ...session },
+      });
+      const invoke = () => target.callApi('hello');
+
+      const result = await (scopedModel
+        ? cliState.withEnv({ HTTPS_PROXY: 'http://suite-proxy.example:8080' }, invoke)
+        : invoke());
+
+      expect(result.output).toBe('ok');
+      expect(fetchWithProxy).toHaveBeenCalledTimes(scopedRequests);
+      expect(sdkFetch).toHaveBeenCalledTimes(3 - scopedRequests);
+    },
+  );
+
   it('honors a differently cased organization header without combining values', async () => {
     await provider({
       organization: 'config-org',

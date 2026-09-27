@@ -202,7 +202,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     let modelProvider: OpenAIProvider | undefined;
-    let scopedClient: ReturnType<OpenAiAgentsSessionClientFactory> | undefined;
+    let scopedClient: ReturnType<OpenAiAgentsSessionClientFactory>;
     const useScopedModel = this.hasScopedConnectionSettings();
     const getClient: OpenAiAgentsSessionClientFactory = ({
       apiKey,
@@ -211,9 +211,10 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       project,
     } = {}) => {
       const overrides = { apiKey, baseURL, organization, project };
-      return Object.values(overrides).some((value) => value !== undefined)
-        ? this.createScopedClient(overrides)
-        : (scopedClient ??= this.createScopedClient());
+      if (Object.values(overrides).some((value) => value !== undefined)) {
+        return this.createScopedClient(overrides);
+      }
+      return useScopedModel ? (scopedClient ??= this.createScopedClient()) : undefined;
     };
     try {
       const maxTurns = this.agentConfig.maxTurns === undefined ? 10 : this.agentConfig.maxTurns;
@@ -312,7 +313,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
 
   private createScopedClient(
     overrides: Parameters<OpenAiAgentsSessionClientFactory>[0] = {},
-  ): ReturnType<OpenAiAgentsSessionClientFactory> {
+  ): NonNullable<ReturnType<OpenAiAgentsSessionClientFactory>> {
     const separateEndpoint = overrides.baseURL !== undefined;
     const separateCredentials = separateEndpoint || overrides.apiKey !== undefined;
     const apiKey = overrides.apiKey ?? (separateEndpoint ? undefined : this.getApiKey());
