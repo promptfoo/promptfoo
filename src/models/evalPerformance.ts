@@ -23,6 +23,7 @@ interface CountCacheEntry {
 
 // Simple in-memory cache for counts with 5-minute TTL
 const distinctCountCache = new Map<string, CountCacheEntry>();
+const pendingDistinctCounts = new Map<string, symbol>();
 const totalRowCountCache = new Map<string, CountCacheEntry>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
@@ -61,18 +62,33 @@ export async function getCachedResultsCounts(
   const BATCH_SIZE = 999;
   for (let offset = 0; offset < missingIds.length; offset += BATCH_SIZE) {
     const batch = missingIds.slice(offset, offset + BATCH_SIZE);
-    const rows = await db
-      .select({ evalId: evalResultsTable.evalId, count: sql<number>`COUNT(DISTINCT test_idx)` })
-      .from(evalResultsTable)
-      .where(inArray(evalResultsTable.evalId, batch))
-      .groupBy(evalResultsTable.evalId)
-      .all();
-    const batchCounts = new Map(rows.map((row) => [row.evalId, Number(row.count)]));
-    const timestamp = Date.now();
+    // An invalidation or newer read must prevent this snapshot from refilling the cache.
+    const token = Symbol();
     for (const evalId of batch) {
-      const count = batchCounts.get(evalId) ?? 0;
-      counts.set(evalId, count);
-      distinctCountCache.set(`distinct:${evalId}`, { count, timestamp });
+      pendingDistinctCounts.set(evalId, token);
+    }
+    try {
+      const rows = await db
+        .select({ evalId: evalResultsTable.evalId, count: sql<number>`COUNT(DISTINCT test_idx)` })
+        .from(evalResultsTable)
+        .where(inArray(evalResultsTable.evalId, batch))
+        .groupBy(evalResultsTable.evalId)
+        .all();
+      const batchCounts = new Map(rows.map((row) => [row.evalId, Number(row.count)]));
+      const timestamp = Date.now();
+      for (const evalId of batch) {
+        const count = batchCounts.get(evalId) ?? 0;
+        counts.set(evalId, count);
+        if (pendingDistinctCounts.get(evalId) === token) {
+          distinctCountCache.set(`distinct:${evalId}`, { count, timestamp });
+        }
+      }
+    } finally {
+      for (const evalId of batch) {
+        if (pendingDistinctCounts.get(evalId) === token) {
+          pendingDistinctCounts.delete(evalId);
+        }
+      }
     }
   }
 
@@ -119,9 +135,11 @@ export async function getTotalResultRowCount(evalId: string): Promise<number> {
 export function clearCountCache(evalId?: string) {
   if (evalId) {
     distinctCountCache.delete(`distinct:${evalId}`);
+    pendingDistinctCounts.delete(evalId);
     totalRowCountCache.delete(`total:${evalId}`);
   } else {
     distinctCountCache.clear();
+    pendingDistinctCounts.clear();
     totalRowCountCache.clear();
   }
 }

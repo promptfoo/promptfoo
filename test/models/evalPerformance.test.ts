@@ -9,6 +9,8 @@ import {
   getTotalResultRowCount,
 } from '../../src/models/evalPerformance';
 import { ResultFailureReason } from '../../src/types/index';
+import { createEvaluateResult } from '../factories/eval';
+import { createDeferred } from '../util/utils';
 
 describe('evalPerformance', () => {
   afterEach(() => {
@@ -181,6 +183,105 @@ describe('evalPerformance', () => {
       expect(await getCachedResultsCounts([])).toEqual(new Map());
       expect(execute).not.toHaveBeenCalled();
     });
+
+    it.each(['scoped', 'global'])(
+      'does not cache an older snapshot after %s invalidation while a read is pending',
+      async (scope) => {
+        const active = await createEvalWithResults(1, 1);
+        const unrelated = await createEvalWithResults(1, 1);
+        await getCachedResultsCount(unrelated.eval_.id);
+        const db = await getDb();
+        const execute = db.$client.execute.bind(db.$client);
+        const started = createDeferred<void>();
+        const released = createDeferred<void>();
+        let paused = false;
+        const isCountQuery = (query: string | { sql: string }) =>
+          (typeof query === 'string' ? query : query.sql).includes('COUNT(DISTINCT test_idx)');
+        const spy = vi.spyOn(db.$client, 'execute').mockImplementation(async (query, args) => {
+          const result = await execute(query, args);
+          if (!paused && isCountQuery(query)) {
+            paused = true;
+            started.resolve();
+            await released.promise;
+          }
+          return result;
+        });
+        const pending = getCachedResultsCounts([active.eval_.id, unrelated.eval_.id]);
+        try {
+          await started.promise;
+          await active.eval_.addResult(createEvaluateResult({ testIdx: 1 }));
+          clearCountCache(scope === 'scoped' ? active.eval_.id : undefined);
+          released.resolve();
+          expect((await pending).get(active.eval_.id)).toBe(1);
+
+          spy.mockClear();
+          const fresh = await getCachedResultsCounts([active.eval_.id, unrelated.eval_.id]);
+          expect(fresh.get(active.eval_.id)).toBe(2);
+          expect(fresh.get(unrelated.eval_.id)).toBe(1);
+          const expectedIds =
+            scope === 'scoped' ? [active.eval_.id] : [active.eval_.id, unrelated.eval_.id];
+          expect(spy).toHaveBeenCalledTimes(1);
+          expect(spy).toHaveBeenCalledWith(expect.objectContaining({ args: expectedIds }));
+        } finally {
+          released.resolve();
+          await pending;
+        }
+      },
+    );
+
+    it.each(['older-first', 'newer-first', 'older-error'])(
+      'preserves the newer pending read and cache fill (%s)',
+      async (order) => {
+        const { eval_ } = await createEvalWithResults(1, 1);
+        const db = await getDb();
+        const execute = db.$client.execute.bind(db.$client);
+        const started = [createDeferred<void>(), createDeferred<void>()];
+        const released = [createDeferred<void>(), createDeferred<void>()];
+        let reads = 0;
+        const isCountQuery = (query: string | { sql: string }) =>
+          (typeof query === 'string' ? query : query.sql).includes('COUNT(DISTINCT test_idx)');
+        const spy = vi.spyOn(db.$client, 'execute').mockImplementation(async (query, args) => {
+          const result = await execute(query, args);
+          if (isCountQuery(query) && reads < 2) {
+            const index = reads++;
+            started[index].resolve();
+            await released[index].promise;
+            if (order === 'older-error' && index === 0) {
+              throw new Error('Synthetic count response failure');
+            }
+          }
+          return result;
+        });
+        const older = getCachedResultsCount(eval_.id).then(
+          (value) => ({ value }),
+          (error: unknown) => ({ error }),
+        );
+        let newer: Promise<number> | undefined;
+        try {
+          await started[0].promise;
+          await eval_.addResult(createEvaluateResult({ testIdx: 1 }));
+          newer = getCachedResultsCount(eval_.id);
+          await started[1].promise;
+          if (order === 'newer-first') {
+            released[1].resolve();
+            expect(await newer).toBe(2);
+          }
+          released[0].resolve();
+          expect(await older).toEqual(
+            order === 'older-error' ? { error: expect.any(Error) } : { value: 1 },
+          );
+          released[1].resolve();
+          expect(await newer).toBe(2);
+
+          spy.mockClear();
+          expect(await getCachedResultsCount(eval_.id)).toBe(2);
+          expect(spy).not.toHaveBeenCalled();
+        } finally {
+          released.forEach((gate) => gate.resolve());
+          await Promise.allSettled([older, newer]);
+        }
+      },
+    );
 
     it('refreshes expired entries together using the existing five-minute TTL', async () => {
       const first = await createEvalWithResults(1, 1);
