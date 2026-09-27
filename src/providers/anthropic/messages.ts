@@ -6,7 +6,7 @@ import {
   getScopedCacheKey,
   isCacheEnabled,
 } from '../../cache';
-import { getEnvFloat, getEnvInt } from '../../envars';
+import { getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import {
   type GenAISpanContext,
@@ -847,12 +847,14 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     // instance when the user supplied any of them via config or the
     // ANTHROPIC_TEMPERATURE env var (the built-in default stays silent to avoid
     // spamming every request).
+    const envTemperature = parseEnvFloat(
+      this.env?.ANTHROPIC_TEMPERATURE ?? getEnvString('ANTHROPIC_TEMPERATURE'),
+    );
     const explicitSamplingParam =
       config.temperature != null ||
       config.top_p != null ||
       config.top_k != null ||
-      parseEnvFloat(this.env?.ANTHROPIC_TEMPERATURE) != null ||
-      getEnvFloat('ANTHROPIC_TEMPERATURE') != null;
+      envTemperature != null;
     if (
       samplingParamsDeprecated &&
       explicitSamplingParam &&
@@ -898,10 +900,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       ...(omitTemperature
         ? {}
         : {
-            temperature:
-              config.temperature ??
-              parseEnvFloat(this.env?.ANTHROPIC_TEMPERATURE) ??
-              getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
+            temperature: config.temperature ?? envTemperature ?? 0,
           }),
       ...(resolvedTopP == null || samplingParamsDeprecated ? {} : { top_p: resolvedTopP }),
       // Anthropic docs: top_k is incompatible with extended thinking, and Opus

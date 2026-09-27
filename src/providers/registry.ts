@@ -199,7 +199,7 @@ function getProviderEnvAliasGroups(providerPath: string): readonly (readonly str
       ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION'],
     ];
   }
-  if (/^(?:google|palm):gemini-omni-/.test(providerPath)) {
+  if (/^(?:google|palm):(?:gemini-omni-flash-preview|gemini-omni-1\.1-flash)$/.test(providerPath)) {
     return [['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'PALM_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY']];
   }
   if (/^(?:google|palm):/.test(providerPath)) {

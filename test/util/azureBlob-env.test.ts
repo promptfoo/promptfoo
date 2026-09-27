@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { CreateJobRequestSchema } from '../../src/types/api/eval';
 import { readAzureBlobText } from '../../src/util/azureBlob';
+import { ProviderOptionsSchema } from '../../src/validators/providers';
 import { mockProcessEnv } from './utils';
 
 const principal = {
@@ -40,6 +41,17 @@ afterEach(() => {
 });
 
 describe('Azure Blob authentication scopes with the installed SDK', () => {
+  it.each([connectionString, ''])(
+    'does not advertise test-file credentials as provider overrides: %j',
+    (value) => {
+      const provider = ProviderOptionsSchema.parse({
+        id: 'echo',
+        env: { AZURE_STORAGE_CONNECTION_STRING: value, OPENAI_API_KEY: 'fixture' },
+      });
+      expect(provider.env).toEqual({ OPENAI_API_KEY: 'fixture' });
+    },
+  );
+
   it.each([connectionString, ''])(
     'honors a parsed job connection string override of %j',
     async (value) => {

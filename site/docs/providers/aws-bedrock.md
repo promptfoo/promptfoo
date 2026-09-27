@@ -296,13 +296,15 @@ Credentials are resolved in the following priority order:
 
 The first available credential method is used automatically.
 
-The HTTP Responses, Mantle Chat Completions, and Anthropic Messages adapters use a shared
-bearer-token flow. An explicit `config.apiKey` takes precedence over
-`AWS_BEARER_TOKEN_BEDROCK`. Without a bearer token, they generate short-term tokens from
-AWS credentials: provider `config` takes precedence over provider `env`, then process
-environment and the AWS default credential chain. Credential tuples are kept together;
-an explicit profile overrides ambient access keys. See [OpenAI Models](#openai-models)
-for the refresh behavior. Native InvokeModel, Converse, and Nova Sonic also accept scoped `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` tuples, `AWS_SESSION_TOKEN`, `AWS_PROFILE`, and `AWS_BEARER_TOKEN_BEDROCK`. Keep a credential tuple in one scope; empty or incomplete tuples are rejected. Explicit config precedes provider `env`, suite `env`, invocation env files, and ambient SDK discovery.
+The HTTP Responses, Mantle Chat Completions, and Anthropic Messages adapters use
+`config.apiKey`, then `AWS_BEARER_TOKEN_BEDROCK`, or generate short-term tokens from
+AWS credentials. See [OpenAI Models](#openai-models) for token refresh behavior.
+
+AWS credentials come from provider `config`, provider `env`, suite `env`, invocation
+env files, then the AWS SDK's default credential chain. Set access key, secret key,
+and optional session token together in one scope, or use `AWS_PROFILE`; empty or
+incomplete scoped credentials are rejected. Native InvokeModel, Converse, and Nova
+Sonic also accept these scoped credentials and `AWS_BEARER_TOKEN_BEDROCK`.
 
 Native Bedrock clients and response caches are isolated by provider instance and invocation environment. Video generation requires AWS access credentials or a profile for S3 output; bearer tokens are not supported.
 
