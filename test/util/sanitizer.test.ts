@@ -111,6 +111,44 @@ describe('proxy environment redaction', () => {
     }
   });
 
+  const opaqueCredentials = [
+    `sk-${'x'.repeat(32)}`,
+    `AKIA${'X'.repeat(16)}`,
+    `AIza${'x'.repeat(35)}`,
+  ];
+
+  it.each(['HTTPS_PROXY', 'all_proxy', 'httpsProxy', 'npm_config_proxy'])(
+    'redacts opaque credentials in raw and normalized %s values',
+    (key) => {
+      for (const token of opaqueCredentials) {
+        for (const value of [token, `https://${token}`, new URL(`https://${token}`).href]) {
+          const config = { env: { [key]: value } };
+          expect(sanitizeObject(config).env[key]).toBe('[REDACTED]');
+          expect(sanitizeConfigForOutput(config)).toEqual({ env: { [key]: '[REDACTED]' } });
+        }
+      }
+    },
+  );
+
+  it.each(['http', 'https', 'socks5'])(
+    'redacts an opaque credential used as a %s proxy hostname',
+    (protocol) => {
+      for (const token of opaqueCredentials) {
+        for (const value of [
+          `${protocol}://${token}:8080`,
+          new URL(`${protocol}://${token}:8080`).href,
+        ]) {
+          expect(sanitizeUrl(value)).toBe('[REDACTED]');
+          expect(sanitizeUrlForLogging(value)).toBe('[REDACTED]');
+        }
+      }
+      expect(sanitizeUrl(`${protocol}://proxy.example:8080/health`)).toBe(
+        `${protocol}://proxy.example:8080/health`,
+      );
+      expect(sanitizeUrl('/proxy/health')).toBe('/proxy/health');
+    },
+  );
+
   it('preserves proxy endpoints without credentials and bypass lists', () => {
     const config = { env: { HTTP_PROXY: 'proxy.example:8080', NO_PROXY: 'localhost,.example' } };
     expect(sanitizeObject(config)).toEqual(config);

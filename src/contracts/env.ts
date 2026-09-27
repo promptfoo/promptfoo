@@ -124,7 +124,6 @@ export const ProviderEnvOverridesSchema = z.object({
   PORTKEY_API_BASE_URL: z.string().optional(),
   PORTKEY_API_KEY: z.string().optional(),
   PROMPTFOO_CA_CERT_PATH: z.string().optional(),
-  PROMPTFOO_FETCH_CONNECTIONS: z.string().optional(),
   PROMPTFOO_MAX_CONCURRENCY: z.string().optional(),
   PROMPTFOO_PFX_CERT_PATH: z.string().optional(),
   PROMPTFOO_TRACING_ENABLED: z.string().optional(),
@@ -137,7 +136,6 @@ export const ProviderEnvOverridesSchema = z.object({
   QWAK_TOKEN: z.string().optional(),
   REPLICATE_API_KEY: z.string().optional(),
   REPLICATE_API_TOKEN: z.string().optional(),
-  REQUEST_TIMEOUT_MS: z.string().optional(),
   SHAREPOINT_BASE_URL: z.string().optional(),
   SHAREPOINT_CERT_PATH: z.string().optional(),
   SHAREPOINT_CLIENT_ID: z.string().optional(),
@@ -173,8 +171,10 @@ export const ProviderEnvOverridesSchema = z.object({
   PROMPTFOO_EVAL_TIMEOUT_MS: z.string().optional(),
 });
 
-// Proxy settings apply to the whole evaluation, not an individual provider.
+// These transport settings apply to the whole evaluation, not an individual provider.
 export const EnvOverridesSchema = ProviderEnvOverridesSchema.extend({
+  PROMPTFOO_FETCH_CONNECTIONS: z.string().optional(),
+  REQUEST_TIMEOUT_MS: z.string().optional(),
   ALL_PROXY: z.string().optional(),
   all_proxy: z.string().optional(),
   FTP_PROXY: z.string().optional(),
