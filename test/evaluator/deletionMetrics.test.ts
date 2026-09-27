@@ -6,7 +6,7 @@ import path from 'node:path';
 import { sql } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
-import { EvalRunningError } from '../../src/database/evalRun';
+import { beginEvalRun, EvalRunningError } from '../../src/database/evalRun';
 import { getDb } from '../../src/database/index';
 import { evaluate } from '../../src/evaluator';
 import { runDbMigrations } from '../../src/migrate';
@@ -73,7 +73,7 @@ describe('deleting evaluated results preserves surviving token usage', () => {
       errorPath,
       `module.exports=class {
       id(){return 'hook-error-target'}
-      async callApi(){return {error:'Retryable error'}}
+      async callApi(prompt){return prompt === 'graded' ? {output:prompt} : {error:'Retryable error'}}
     };`,
     );
     errorProvider = `file://${errorPath}`;
@@ -89,6 +89,81 @@ describe('deleting evaluated results preserves surviving token usage', () => {
     }
     vi.restoreAllMocks();
   });
+
+  it.each([false, true])(
+    'recovers saved grading during a failed retry after a header flush failure (legacy=%s)',
+    async (legacy) => {
+      const tests = [
+        { vars: { row: 'error' } },
+        {
+          vars: { row: 'graded' },
+          assert: [
+            {
+              type: 'javascript' as const,
+              value:
+                '({pass:true,score:1,reason:"paid grading",tokensUsed:{total:7,numRequests:1}})',
+            },
+          ],
+        },
+      ];
+      const suite: TestSuite = {
+        prompts: [{ raw: '{{row}}', label: 'Mixed recovery' }],
+        providers: [
+          {
+            id: () => 'hook-error-target',
+            callApi: async (prompt) =>
+              prompt === 'graded' ? { output: prompt } : { error: 'Retryable error' },
+          },
+        ],
+        tests,
+      };
+      const evaluation = await Eval.create(
+        { prompts: ['{{row}}'], providers: [errorProvider], tests },
+        suite.prompts,
+        { id: randomUUID() },
+      );
+      evalIds.push(evaluation.id);
+      const addPrompts = Eval.prototype.addPrompts;
+      vi.spyOn(Eval.prototype, 'addPrompts').mockImplementation(function (this: Eval, prompts) {
+        if (prompts[0].metrics!.testPassCount > 0) {
+          throw new Error('Header flush failed');
+        }
+        return addPrompts.call(this, prompts);
+      });
+      await expect(evaluate(suite, evaluation, { maxConcurrency: 1 })).rejects.toThrow(
+        'Header flush failed',
+      );
+      vi.restoreAllMocks();
+      const before = (await Eval.findById(evaluation.id))!;
+      expect(before.prompts[0].metrics!.assertPassCount).toBe(0);
+      const rows = await EvalResult.findManyByEvalId(evaluation.id);
+      expect(rows).toHaveLength(2);
+      const graded = rows.find((row) => row.testIdx === 1)!;
+      expect(graded.gradingResult!.tokensUsed!.total).toBe(7);
+      if (legacy) {
+        const error = rows.find((row) => row.testIdx === 0)!;
+        error.metadata = {};
+        await error.save();
+        const release = await beginEvalRun(before, () => recalculatePromptMetrics(before));
+        await release();
+        await expect(deleteEvalResult(evaluation.id, graded.id)).rejects.toThrow(
+          'Retry failed results',
+        );
+      }
+
+      await retryCommand(evaluation.id, { maxConcurrency: 1 });
+      const repaired = (await Eval.findById(evaluation.id))!.prompts[0].metrics!;
+      expect(repaired.assertPassCount).toBe(1);
+      expect(repaired.tokenUsage.assertions).toMatchObject({ total: 7, numRequests: 1 });
+      expect((await EvalResult.findManyByEvalId(evaluation.id)).map((row) => row.id)).toContain(
+        graded.id,
+      );
+      await deleteEvalResult(evaluation.id, graded.id);
+      const remaining = (await Eval.findById(evaluation.id))!.prompts[0].metrics!;
+      expect(remaining.assertPassCount).toBe(0);
+      expect(remaining.tokenUsage.assertions).toMatchObject({ total: 0, numRequests: 0 });
+    },
+  );
 
   it.each(['delete', 'retry', 'human-grade', 'legacy-target'] as const)(
     'reverses fresh ungraded hook metrics during %s',
@@ -151,7 +226,7 @@ describe('deleting evaluated results preserves surviving token usage', () => {
             id: () => 'graded-target',
             callApi: async () => ({
               output: 'pass',
-              metadata: { __promptfoo: { ungradedNamedMetrics: true, retained: 'control' } },
+              metadata: { __promptfoo: { originallyUngraded: true, retained: 'control' } },
             }),
           },
         ],

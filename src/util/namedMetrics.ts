@@ -62,8 +62,8 @@ export function getNamedMetricContribution(
   if (
     internal &&
     typeof internal === 'object' &&
-    'ungradedNamedMetrics' in internal &&
-    internal.ungradedNamedMetrics === true
+    'originallyUngraded' in internal &&
+    internal.originallyUngraded === true
   ) {
     // Later comparisons or ratings do not change the original hook contribution.
     return { namedScores: metricValue, namedScoresCount: 1, namedScoreWeights: 1 };

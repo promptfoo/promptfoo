@@ -299,6 +299,7 @@ describeEvaluator('evaluator runtime ports', () => {
       await evaluation;
 
       expect(appendResult).toHaveBeenCalledOnce();
+      expect(appendResult.mock.calls[0][0].metadata?.__promptfoo?.originallyUngraded).toBe(true);
       expect(resultWriter.write).not.toHaveBeenCalled();
       expect(resultWriter.close).toHaveBeenCalledOnce();
     } finally {

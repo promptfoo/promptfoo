@@ -23,6 +23,7 @@ describe('AssertionsResult', () => {
     reason: 'All assertions passed',
     componentResults: [succeedingResult],
     namedScores: {},
+    metadata: { namedMetricCountsKnown: true },
     tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0, numRequests: 0 },
   };
   let assertionsResult: AssertionsResult;

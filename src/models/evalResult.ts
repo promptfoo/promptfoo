@@ -68,7 +68,15 @@ function projectOutputMetadata<T>(
   stripOutput: boolean,
   responseMetadata: ProviderResponse['metadata'],
   testMetadata?: AtomicTestCase['metadata'],
+  stripGradingResult = false,
 ): T {
+  if (stripGradingResult) {
+    const internal = asRecord(asRecord(metadata)?.__promptfoo);
+    if (internal && 'originallyUngraded' in internal) {
+      const { originallyUngraded: _originallyUngraded, ...retained } = internal;
+      metadata = { ...metadata, __promptfoo: retained };
+    }
+  }
   if (!stripOutput || !metadata || !responseMetadata || typeof metadata !== 'object') {
     return metadata;
   }
@@ -750,6 +758,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
           shouldStripResponseOutput,
           redacted.response?.metadata,
           (artifactResult.testCase as AtomicTestCase | undefined)?.metadata,
+          shouldStripGradingResult && redacted.gradingResult != null,
         ),
   } as T;
 }
@@ -1257,6 +1266,7 @@ export default class EvalResult {
             shouldStripResponseOutput,
             this.response?.metadata,
             this.testCase.metadata,
+            shouldStripGradingResult && this.gradingResult != null,
           ),
       failureReason: this.failureReason,
     };

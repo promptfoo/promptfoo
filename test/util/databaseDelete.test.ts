@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { EvalResultDeletionError } from '../../src/database/evalRun';
 import { getDb } from '../../src/database/index';
 import { updateSignalFile, updateSignalFileForDeletedEvals } from '../../src/database/signal';
 import {
@@ -744,6 +745,11 @@ describe('database eval deletion', () => {
         });
       }
       accumulateResponseTokenUsage(seededMetrics.tokenUsage, target.response);
+      if (target.gradingResult?.tokensUsed) {
+        accumulateGradingTokenUsage(seededMetrics.tokenUsage, target.gradingResult.tokensUsed, {
+          cached: target.gradingResult.metadata?.cachedResponse,
+        });
+      }
       const reloaded = await Eval.findById(eval_.id);
       if (!reloaded) {
         throw new Error('expected eval to be findable');
@@ -767,6 +773,7 @@ describe('database eval deletion', () => {
       expect(metrics?.tokenUsage?.prompt ?? 0).toBe(0);
       expect(metrics?.tokenUsage?.completion ?? 0).toBe(0);
       expect(metrics?.tokenUsage?.numRequests ?? 0).toBe(0);
+      expect(metrics?.tokenUsage?.assertions?.total ?? 0).toBe(0);
     });
 
     it('removes weighted named metric keys when grading details were stripped', async () => {
@@ -1396,6 +1403,91 @@ describe('database eval deletion', () => {
       const metrics = after?.prompts[0]?.metrics;
       expect(metrics?.testErrorCount).toBe(0);
       expect(metrics?.cost).toBe(0);
+    });
+
+    it.each([
+      [false, false],
+      [false, true],
+      [true, false],
+      [true, true],
+    ])(
+      'refuses grading underflow atomically (incurred=%s, detail=%s)',
+      async (incurred, detail) => {
+        const evaluation = await EvalFactory.create({ numResults: 1, resultTypes: ['success'] });
+        const [target] = await EvalResult.findManyByEvalId(evaluation.id);
+        const usage = { total: 3, numRequests: 1, completionDetails: { reasoning: 3 } };
+        await dbUpdateResult(target.id, {
+          gradingResult: {
+            pass: true,
+            score: 1,
+            reason: 'Retained paid grade',
+            componentResults: [],
+            tokensUsed: { ...usage, incurredTokenUsage: structuredClone(usage) },
+          },
+        });
+        evaluation.prompts[0].metrics!.tokenUsage = {
+          assertions: structuredClone(usage),
+          incurredTokenUsage: { assertions: structuredClone(usage) },
+        };
+        const insufficient = incurred
+          ? evaluation.prompts[0].metrics!.tokenUsage.incurredTokenUsage!.assertions!
+          : evaluation.prompts[0].metrics!.tokenUsage.assertions!;
+        if (detail) {
+          insufficient.completionDetails!.reasoning = 1;
+        } else {
+          insufficient.total = 1;
+        }
+        await evaluation.addPrompts(evaluation.prompts);
+        const db = await getDb();
+        await db
+          .insert(blobAssetsTable)
+          .values({ hash: 'retained', sizeBytes: 1, mimeType: 'image/png', provider: 'test' });
+        await db.insert(blobReferencesTable).values({
+          id: 'retained-ref',
+          blobHash: 'retained',
+          evalId: evaluation.id,
+          testIdx: target.testIdx,
+          promptIdx: target.promptIdx,
+        });
+        const rows = await db.select().from(evalResultsTable).all();
+        const refs = await db.select().from(blobReferencesTable).all();
+        const prompts = structuredClone((await Eval.findById(evaluation.id))!.prompts);
+        vi.mocked(updateSignalFile).mockClear();
+        await expect(deleteEvalResult(evaluation.id, target.id)).rejects.toBeInstanceOf(
+          EvalResultDeletionError,
+        );
+        expect(await db.select().from(evalResultsTable).all()).toEqual(rows);
+        expect(await db.select().from(blobReferencesTable).all()).toEqual(refs);
+        expect((await Eval.findById(evaluation.id))!.prompts).toEqual(prompts);
+        expect(updateSignalFile).not.toHaveBeenCalled();
+      },
+    );
+
+    it('allows exact survivor reconstruction after an intermediate grading underflow', async () => {
+      const evaluation = await EvalFactory.create({ numResults: 2, resultTypes: ['success'] });
+      const [target, survivor] = await EvalResult.findManyByEvalId(evaluation.id);
+      await dbUpdateResult(target.id, {
+        gradingResult: null,
+        response: { output: 'legacy', tokenUsage: { assertions: { total: 7, numRequests: 1 } } },
+      });
+      await dbUpdateResult(survivor.id, {
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'Known survivor',
+          componentResults: [],
+          tokensUsed: { total: 3, numRequests: 1 },
+        },
+      });
+      evaluation.prompts[0].metrics!.tokenUsage = { assertions: { total: 3, numRequests: 1 } };
+      await evaluation.addPrompts(evaluation.prompts);
+      await deleteEvalResult(evaluation.id, target.id);
+      expect(
+        (await Eval.findById(evaluation.id))!.prompts[0].metrics!.tokenUsage.assertions,
+      ).toMatchObject({
+        total: 3,
+        numRequests: 1,
+      });
     });
 
     it('does not create negative request counts for legacy token usage aggregates', async () => {

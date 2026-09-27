@@ -194,6 +194,40 @@ describe('replaying retained prompt metrics', () => {
     expect(metrics.namedScoreWeights?.quality).toBe(0);
   });
 
+  it.each([false, true])(
+    'retains response-owned grading usage on originally ungraded rows (later grade=%s)',
+    async (hasLaterGrade) => {
+      const evaluation = await saved(
+        { assertPassCount: 99, tokenUsage: { assertions: { total: 99, numRequests: 99 } } },
+        [
+          {
+            metadata: { __promptfoo: { originallyUngraded: true } },
+            response: {
+              output: 'ok',
+              tokenUsage: { total: 5, numRequests: 1, assertions: { total: 3, numRequests: 1 } },
+            },
+            gradingResult: hasLaterGrade
+              ? {
+                  pass: true,
+                  score: 1,
+                  reason: 'Later grading',
+                  componentResults: [{ pass: true, score: 1, reason: 'Later assertion' }],
+                  tokensUsed: { total: 7, numRequests: 1 },
+                }
+              : null,
+          },
+        ],
+      );
+      await recalculatePromptMetrics(evaluation);
+      const metrics = evaluation.prompts[0].metrics!;
+      expect(metrics.assertPassCount).toBe(hasLaterGrade ? 1 : 0);
+      expect(metrics.tokenUsage.assertions).toMatchObject({
+        total: hasLaterGrade ? 10 : 3,
+        numRequests: hasLaterGrade ? 2 : 1,
+      });
+    },
+  );
+
   it('does not invent unavailable named counts, weights, or grading usage', async () => {
     const evaluation = await saved({ tokenUsage: {}, namedScores: {}, namedScoresCount: {} }, [
       { gradingResult: null, namedScores: { quality: 0.5 } },

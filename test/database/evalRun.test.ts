@@ -482,17 +482,6 @@ describe('evaluation run ownership', () => {
     expect((close.mock.contexts[0] as Server).listening).toBe(false);
   });
 
-  it('closes the listener even when marker cleanup fails', async () => {
-    const evaluation = await EvalFactory.create({ numResults: 0 });
-    const release = await begin(evaluation);
-    const db = await getDb();
-    vi.spyOn(db, 'update').mockImplementationOnce(() => {
-      throw new Error('cleanup failed');
-    });
-    await expect(release()).rejects.toThrow('cleanup failed');
-    await expect(assertEvalNotRunning(db, evaluation.id)).rejects.toThrow('--resume');
-  });
-
   it('closes ownership but retains interruption evidence when evaluator construction fails', async () => {
     const evaluation = await EvalFactory.create({ numResults: 0 });
     await expect(

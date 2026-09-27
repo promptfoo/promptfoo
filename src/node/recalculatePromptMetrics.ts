@@ -95,15 +95,17 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
           }
         }
 
+        const knownUngraded =
+          result.gradingResult == null && result.metadata?.__promptfoo?.originallyUngraded === true;
         const counts = getAssertionCounts(result.gradingResult);
         if (counts) {
           metrics.assertPassCount += counts.pass;
           metrics.assertFailCount += counts.fail;
-        } else {
+        } else if (!knownUngraded) {
           state.unknownAssertionCounts = true;
         }
 
-        state.unknownGradingUsage ||= !hasGradingTokenUsage(result.gradingResult);
+        state.unknownGradingUsage ||= !knownUngraded && !hasGradingTokenUsage(result.gradingResult);
         accumulateResultTokenUsage(metrics.tokenUsage, result);
       }
 

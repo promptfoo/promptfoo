@@ -3143,6 +3143,7 @@ function createEvalStepTimeoutResult(
     },
     vars: evalStep.test.vars || {},
     error: `Evaluation timed out after ${timeoutMs}ms: ${String(error)}`,
+    metadata: { __promptfoo: { originallyUngraded: true } },
     success: false,
     failureReason: ResultFailureReason.ERROR,
     score: 0,
@@ -3238,6 +3239,7 @@ function createMaxDurationTimeoutResult(
     },
     vars: evalStep.test.vars || {},
     error: `Evaluation exceeded max duration of ${maxEvalTimeMs}ms`,
+    metadata: { __promptfoo: { originallyUngraded: true } },
     success: false,
     failureReason: ResultFailureReason.ERROR,
     score: 0,
@@ -3619,10 +3621,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         }
       }
 
-      const ungradedNamedMetrics =
-        row.gradingResult == null && Object.keys(row.namedScores).length > 0;
+      const originallyUngraded = row.gradingResult == null;
       const internalMetadata = row.metadata?.__promptfoo;
-      if (ungradedNamedMetrics || internalMetadata?.ungradedNamedMetrics !== undefined) {
+      if (originallyUngraded || internalMetadata?.originallyUngraded !== undefined) {
         row.metadata = {
           ...row.metadata,
           __promptfoo: {
@@ -3631,7 +3632,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
             !Array.isArray(internalMetadata)
               ? internalMetadata
               : {}),
-            ungradedNamedMetrics: ungradedNamedMetrics || undefined,
+            originallyUngraded: originallyUngraded || undefined,
           },
         };
       }

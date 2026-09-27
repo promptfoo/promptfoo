@@ -671,8 +671,8 @@ async function updatePromptMetricsForDeletedResult(
         gradingResult: evalResultsTable.gradingResult,
         namedScores: namedMetricsToRecompute.size ? evalResultsTable.namedScores : sql<null>`NULL`,
         metadata: namedMetricsToRecompute.size
-          ? sql`json_type(${evalResultsTable.metadata}, '$.__promptfoo.ungradedNamedMetrics') = 'true'`.mapWith(
-              (value) => ({ __promptfoo: { ungradedNamedMetrics: value === 1 } }),
+          ? sql`json_type(${evalResultsTable.metadata}, '$.__promptfoo.originallyUngraded') = 'true'`.mapWith(
+              (value) => ({ __promptfoo: { originallyUngraded: value === 1 } }),
             )
           : sql<null>`NULL`,
         response: survivingAssertionTokenUsage
@@ -739,7 +739,9 @@ async function updatePromptMetricsForDeletedResult(
   }
 
   const updatedPrompts: CompletedPrompt[] = prompts.map((p, i) =>
-    i === result.promptIdx && p.metrics ? { ...p, metrics: { ...p.metrics } } : p,
+    i === result.promptIdx && p.metrics
+      ? { ...p, metrics: { ...p.metrics, tokenUsage: structuredClone(p.metrics.tokenUsage) } }
+      : p,
   );
   const updatedPrompt = updatedPrompts[result.promptIdx];
   invariant(updatedPrompt?.metrics, 'cloned prompt is missing metrics');
@@ -756,6 +758,26 @@ async function updatePromptMetricsForDeletedResult(
         delete updatedPrompt.metrics[bucket]?.[metricName];
       } else {
         updatedPrompt.metrics[bucket]![metricName] = value;
+      }
+    }
+  }
+  const previousUsage = prompt.metrics.tokenUsage;
+  const updatedUsage = updatedPrompt.metrics.tokenUsage;
+  for (const [previous, updated] of [
+    [previousUsage?.assertions, updatedUsage?.assertions],
+    [previousUsage?.incurredTokenUsage?.assertions, updatedUsage?.incurredTokenUsage?.assertions],
+  ]) {
+    for (const [before, after] of [
+      [previous, updated],
+      [previous?.completionDetails, updated?.completionDetails],
+    ]) {
+      for (const [key, value] of Object.entries(before ?? {})) {
+        const next = (after as Record<string, unknown> | undefined)?.[key];
+        if (isFiniteNumber(value) && value >= 0 && isFiniteNumber(next) && next < 0) {
+          throw new EvalResultDeletionError(
+            `Evaluation ${evalId} has incomplete grading metrics. Retry failed results before deleting results.`,
+          );
+        }
       }
     }
   }
