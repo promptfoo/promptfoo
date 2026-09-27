@@ -56,11 +56,7 @@ import {
   notifyEvaluationChanged,
   notifyEvaluationsDeleted,
 } from './evalMutation';
-import {
-  getCachedResultsCount,
-  getTotalResultRowCount,
-  queryTestIndicesOptimized,
-} from './evalPerformance';
+import { getCachedResultsCount, getTotalResultRowCount } from './evalPerformance';
 import EvalResult, {
   getResultIndexKey,
   getStripFlags,
@@ -1260,31 +1256,7 @@ export default class Eval {
       testIndices = opts.testIndices;
       filteredCount = testIndices.length;
     } else {
-      // Use optimized query for simple cases, fall back to original for complex filters
-      const hasComplexFilters = opts.filters && opts.filters.length > 0;
-
-      let queryResult;
-      if (hasComplexFilters) {
-        // Fall back to original query for complex filters
-        logger.debug('Using original query for complex filters');
-        queryResult = await this.queryTestIndices({
-          offset: opts.offset,
-          limit: opts.limit,
-          filterMode: opts.filterMode,
-          searchQuery: opts.searchQuery,
-          filters: opts.filters,
-        });
-      } else {
-        // Use optimized query for better performance
-        logger.debug('Using optimized query for table page');
-        queryResult = await queryTestIndicesOptimized(this.id, {
-          offset: opts.offset,
-          limit: opts.limit,
-          filterMode: opts.filterMode,
-          searchQuery: opts.searchQuery,
-          filters: opts.filters,
-        });
-      }
+      const queryResult = await this.queryTestIndices(opts);
 
       testIndices = queryResult.testIndices;
       filteredCount = queryResult.filteredCount;

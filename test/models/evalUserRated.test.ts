@@ -2,7 +2,6 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { HUMAN_ASSERTION_TYPE } from '../../src/constants';
 import { getDb } from '../../src/database/index';
 import { runDbMigrations } from '../../src/migrate';
-import { queryTestIndicesOptimized } from '../../src/models/evalPerformance';
 import { ResultFailureReason } from '../../src/types/index';
 import EvalFactory from '../factories/evalFactory';
 
@@ -342,8 +341,8 @@ describe('User-Rated Filter Feature', () => {
     });
   });
 
-  describe('evalPerformance.queryTestIndicesOptimized user-rated filter', () => {
-    it('should return only user-rated results with optimized query', async () => {
+  describe('Eval.getTablePage user-rated filter', () => {
+    it('should return only user-rated results through getTablePage', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
 
       // Add test data
@@ -378,12 +377,12 @@ describe('User-Rated Filter Feature', () => {
         } as EvaluateResult);
       }
 
-      const { testIndices, filteredCount } = await queryTestIndicesOptimized(eval_.id, {
+      const { body, filteredCount } = await eval_.getTablePage({
         filterMode: 'user-rated',
       });
 
       expect(filteredCount).toBe(2);
-      expect(testIndices).toEqual([0, 2]);
+      expect(body.map((row) => row.testIdx)).toEqual([0, 2]);
     });
 
     it('should handle large datasets efficiently', async () => {
@@ -417,7 +416,7 @@ describe('User-Rated Filter Feature', () => {
       }
 
       const startTime = Date.now();
-      const { testIndices, filteredCount } = await queryTestIndicesOptimized(eval_.id, {
+      const { body, filteredCount } = await eval_.getTablePage({
         filterMode: 'user-rated',
         limit: 10,
       });
@@ -425,7 +424,7 @@ describe('User-Rated Filter Feature', () => {
 
       // Should have 20 user-rated items (0, 5, 10, 15, ...)
       expect(filteredCount).toBe(20);
-      expect(testIndices).toEqual([0, 5, 10, 15, 20, 25, 30, 35, 40, 45]);
+      expect(body.map((row) => row.testIdx)).toEqual([0, 5, 10, 15, 20, 25, 30, 35, 40, 45]);
 
       // Query should be fast (typically under 100ms for 100 items)
       expect(duration).toBeLessThan(500);
@@ -608,7 +607,7 @@ describe('User-Rated Filter Feature', () => {
 
       // Try SQL injection in search query
       const maliciousSearch = "'; DROP TABLE eval_results; --";
-      const { filteredCount } = await queryTestIndicesOptimized(eval_.id, {
+      const { filteredCount } = await eval_.getTablePage({
         filterMode: 'user-rated',
         searchQuery: maliciousSearch,
       });
@@ -617,11 +616,11 @@ describe('User-Rated Filter Feature', () => {
       expect(filteredCount).toBe(0);
 
       // Test that user-rated filter still works after attempted injection
-      const justUserRated = await queryTestIndicesOptimized(eval_.id, {
+      const justUserRated = await eval_.getTablePage({
         filterMode: 'user-rated',
       });
       expect(justUserRated.filteredCount).toBe(1);
-      expect(justUserRated.testIndices).toEqual([0]);
+      expect(justUserRated.body.map((row) => row.testIdx)).toEqual([0]);
     });
   });
 });
