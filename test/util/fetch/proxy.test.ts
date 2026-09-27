@@ -48,6 +48,36 @@ describe('effective proxy environment', () => {
     });
   });
 
+  it.each([
+    'FTP_PROXY',
+    'ftp_proxy',
+    'GOPHER_PROXY',
+    'gopher_proxy',
+    'WS_PROXY',
+    'ws_proxy',
+    'WSS_PROXY',
+    'wss_proxy',
+  ])('preserves parsed %s routing and empty masks', (name) => {
+    const protocol = name.toLowerCase().replace('_proxy', '');
+    const restoreHost = mockProcessEnv({
+      [`${protocol}_proxy`]: 'http://host-proxy.example:8080',
+    });
+    try {
+      for (const selected of ['http://selected-proxy.example:8080', '']) {
+        const job = CreateJobRequestSchema.parse({
+          providers: ['echo'],
+          prompts: ['fixture'],
+          env: { [name]: selected, ALL_PROXY: '', NO_PROXY: '' },
+        });
+        cliState.withEnv(job.env, () => {
+          expect(getProxyForUrl(`${protocol}://external.example`)).toBe(selected);
+        });
+      }
+    } finally {
+      restoreHost();
+    }
+  });
+
   it('resolves suite > file > shell across uppercase and lowercase aliases', () => {
     mockProcessEnv({ https_proxy: 'http://shell.example:8080' });
     cliState.withEnvFileOverrides({ HTTPS_PROXY: 'http://file.example:8080' }, () => {

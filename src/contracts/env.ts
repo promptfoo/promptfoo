@@ -177,12 +177,20 @@ export const ProviderEnvOverridesSchema = z.object({
 export const EnvOverridesSchema = ProviderEnvOverridesSchema.extend({
   ALL_PROXY: z.string().optional(),
   all_proxy: z.string().optional(),
+  FTP_PROXY: z.string().optional(),
+  ftp_proxy: z.string().optional(),
+  GOPHER_PROXY: z.string().optional(),
+  gopher_proxy: z.string().optional(),
   HTTP_PROXY: z.string().optional(),
   http_proxy: z.string().optional(),
   HTTPS_PROXY: z.string().optional(),
   https_proxy: z.string().optional(),
   NO_PROXY: z.string().optional(),
   no_proxy: z.string().optional(),
+  WS_PROXY: z.string().optional(),
+  ws_proxy: z.string().optional(),
+  WSS_PROXY: z.string().optional(),
+  wss_proxy: z.string().optional(),
 });
 
 // The runtime schema silently strips unknown keys at parse time (zod's default
