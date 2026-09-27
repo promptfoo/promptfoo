@@ -139,7 +139,13 @@ function SummaryMetricGroupHeader() {
   );
 }
 
-const MetricsTable = ({ onClose }: { onClose: () => void }) => {
+const MetricsTable = ({
+  onClose,
+  isFilteringActive,
+}: {
+  onClose: () => void;
+  isFilteringActive: boolean;
+}) => {
   const { table, config, filteredMetrics, derivedMetricNamesByPrompt } = useTableStore();
   const applyFilterFromMetric = useApplyFilterFromMetric();
 
@@ -226,7 +232,6 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
     [applyFilterFromMetric, onClose],
   );
 
-  const hasCompleteFilteredMetrics = filteredMetrics?.length === table.head.prompts.length;
   const derivedMetricNames = React.useMemo(
     () =>
       table.head.prompts.map(
@@ -242,11 +247,11 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
       table.head.prompts.map((prompt, idx) =>
         mergeFilteredNamedMetrics(
           prompt.metrics,
-          hasCompleteFilteredMetrics ? (filteredMetrics?.[idx] ?? null) : null,
+          filteredMetrics?.[idx] ?? null,
           derivedMetricNames[idx],
         ),
       ),
-    [derivedMetricNames, filteredMetrics, hasCompleteFilteredMetrics, table.head.prompts],
+    [derivedMetricNames, filteredMetrics, table.head.prompts],
   );
 
   // Extract aggregated metric names from prompts
@@ -328,7 +333,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
                   className="text-sm"
                   title={
                     isTotal
-                      ? `Derived metric from the unfiltered evaluation: ${score}`
+                      ? `Metric from the unfiltered evaluation: ${score}`
                       : hasScore
                         ? String(score)
                         : 'Score unavailable'
@@ -467,13 +472,16 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
           score: score ?? 0,
           total,
           hasScore,
-          isTotal: hasScore && derivedMetricNames[idx].includes(metric),
+          isTotal:
+            hasScore &&
+            (derivedMetricNames[idx].includes(metric) ||
+              (isFilteringActive && !filteredMetrics?.[idx])),
         };
       });
 
       return row;
     });
-  }, [derivedMetricNames, displayMetrics, promptMetricNames]);
+  }, [derivedMetricNames, displayMetrics, filteredMetrics, isFilteringActive, promptMetricNames]);
 
   if (promptMetricNames.length === 0) {
     return null;
@@ -499,8 +507,10 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
 export default function CustomMetricsDialog({
   open,
   onClose,
+  isFilteringActive = false,
 }: {
   open: boolean;
+  isFilteringActive?: boolean;
   onClose: () => void;
 }) {
   return (
@@ -509,7 +519,7 @@ export default function CustomMetricsDialog({
         <DialogHeader>
           <DialogTitle>Custom Metrics</DialogTitle>
         </DialogHeader>
-        <MetricsTable onClose={onClose} />
+        <MetricsTable onClose={onClose} isFilteringActive={isFilteringActive} />
       </DialogContent>
     </Dialog>
   );

@@ -3327,7 +3327,7 @@ describe('ResultsTable Filtered Metrics Display', () => {
 
       expect(screen.getAllByTestId('metric-name-quality').map((el) => el.textContent)).toEqual([
         'quality (total)',
-        'quality',
+        'quality (total)',
       ]);
 
       expect(screen.getAllByTestId('metric-value-quality').map((el) => el.textContent)).toEqual([
@@ -3411,14 +3411,14 @@ describe('ResultsTable Filtered Metrics Display', () => {
     ]);
   });
 
-  it('uses total named metrics when filtered metrics do not cover comparison prompts', () => {
+  it.each([6, 0])('uses filtered base metrics with score %s and comparison totals', (score) => {
     const prompts = [
       {
         ...mockTable.head.prompts[0],
         metrics: {
           ...mockTable.head.prompts[0].metrics,
-          namedScores: { accuracy: 90 },
-          namedScoreWeights: { accuracy: 100 },
+          namedScores: { accuracy: 90, f1: 0.7 },
+          namedScoreWeights: { accuracy: 100, f1: 100 },
         },
       },
       {
@@ -3426,13 +3426,14 @@ describe('ResultsTable Filtered Metrics Display', () => {
         provider: 'comparison-provider',
         metrics: {
           ...mockTable.head.prompts[0].metrics,
-          namedScores: { accuracy: 40 },
-          namedScoreWeights: { accuracy: 50 },
+          namedScores: { accuracy: 40, f1: 0.8 },
+          namedScoreWeights: { accuracy: 50, f1: 50 },
         },
       },
     ];
     vi.mocked(useTableStore).mockReturnValue({
-      config: {},
+      config: { derivedMetrics: [{ name: 'f1', value: '0.7' }] },
+      derivedMetricNamesByPrompt: [['f1'], []],
       evalId: '123',
       setTable: vi.fn(),
       table: {
@@ -3453,8 +3454,8 @@ describe('ResultsTable Filtered Metrics Display', () => {
       },
       filteredMetrics: [
         {
-          namedScores: { accuracy: 6 },
-          namedScoreWeights: { accuracy: 8 },
+          namedScores: { accuracy: score, f1: 1 },
+          namedScoreWeights: { accuracy: 8, f1: 8 },
         },
       ],
     } as any);
@@ -3462,12 +3463,22 @@ describe('ResultsTable Filtered Metrics Display', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
 
     expect(screen.getByRole('status')).toHaveTextContent(
-      'Filtered named metrics are unavailable. Named metrics show evaluation totals.',
+      'Filtered named metrics are unavailable for some columns. Those columns show evaluation totals.',
     );
 
     expect(
       screen.getAllByTestId('metric-value-accuracy').map((element) => element.textContent),
-    ).toEqual(['90.00% (90.00/100.00)', '80.00% (40.00/50.00)']);
+    ).toEqual([
+      `${((score / 8) * 100).toFixed(2)}% (${score.toFixed(2)}/8.00)`,
+      '80.00% (40.00/50.00)',
+    ]);
+    expect(
+      screen.getAllByTestId('metric-name-accuracy').map((element) => element.textContent),
+    ).toEqual(['accuracy', 'accuracy (total)']);
+    expect(screen.getAllByTestId('metric-value-f1').map((element) => element.textContent)).toEqual([
+      '0.70',
+      '1.60% (0.80/50.00)',
+    ]);
   });
 });
 

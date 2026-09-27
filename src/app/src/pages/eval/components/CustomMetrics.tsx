@@ -140,7 +140,7 @@ const MetricList = ({
                 <div className="space-y-2 max-w-[400px]">
                   {tooltipContent}
                   {totalMetric ? (
-                    <p className="text-sm">Derived metric from the unfiltered evaluation.</p>
+                    <p className="text-sm">Metric from the unfiltered evaluation.</p>
                   ) : null}
                   <p className="text-sm font-medium">Click to filter by this {filterTargetLabel}</p>
                 </div>

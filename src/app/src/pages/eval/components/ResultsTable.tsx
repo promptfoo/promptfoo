@@ -1138,7 +1138,7 @@ function PromptColumnHeader({
   numGoodAsserts,
   testCounts,
   passingTestCounts,
-  hasCompleteFilteredMetrics,
+  isFilteringActive,
   derivedMetricNames,
   config,
   filterMode,
@@ -1159,7 +1159,7 @@ function PromptColumnHeader({
   numGoodAsserts: number[];
   testCounts: PromptSummaryMetric[];
   passingTestCounts: PromptSummaryMetric[];
-  hasCompleteFilteredMetrics: boolean;
+  isFilteringActive: boolean;
   derivedMetricNames: string[];
   config: ReturnType<typeof useTableStore.getState>['config'];
   filterMode: EvalResultsFilterMode;
@@ -1171,13 +1171,10 @@ function PromptColumnHeader({
 }) {
   const columnId = `Prompt ${idx + 1}`;
   const { total: metrics, filtered: filteredMetrics } = getMetrics(idx);
-  const displayMetrics = mergeFilteredNamedMetrics(
-    metrics,
-    hasCompleteFilteredMetrics ? filteredMetrics : null,
-    derivedMetricNames,
-  );
-  const totalMetricNames = derivedMetricNames.filter((metricName) =>
-    Object.prototype.hasOwnProperty.call(metrics?.namedScores ?? {}, metricName),
+  const displayMetrics = mergeFilteredNamedMetrics(metrics, filteredMetrics, derivedMetricNames);
+  const totalMetricNames = Object.keys(metrics?.namedScores ?? {}).filter(
+    (metricName) =>
+      derivedMetricNames.includes(metricName) || (isFilteringActive && !filteredMetrics),
   );
   const metricTotals = getNamedMetricTotals(displayMetrics);
 
@@ -1702,7 +1699,7 @@ function ResultsTable({
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
-  const hasCompleteFilteredMetrics = filteredMetrics?.length === head.prompts.length;
+  const hasUnavailableFilteredMetrics = head.prompts.some((_, idx) => !filteredMetrics?.[idx]);
 
   const isRedteam = React.useMemo(() => {
     return config?.redteam !== undefined;
@@ -2198,7 +2195,7 @@ function ResultsTable({
                 numGoodAsserts={numGoodAsserts}
                 testCounts={testCounts}
                 passingTestCounts={passingTestCounts}
-                hasCompleteFilteredMetrics={hasCompleteFilteredMetrics}
+                isFilteringActive={isFilteringActive}
                 derivedMetricNames={
                   derivedMetricNamesByPrompt?.[idx] ??
                   config?.derivedMetrics?.map((metric) => metric.name) ??
@@ -2270,7 +2267,7 @@ function ResultsTable({
     handleRating,
     head,
     head.prompts,
-    hasCompleteFilteredMetrics,
+    isFilteringActive,
     derivedMetricNamesByPrompt,
     isRedteam,
     maxTextLength,
@@ -2512,9 +2509,10 @@ function ResultsTable({
     // of this component. This ensures that the pagination footer is always pinned to the bottom
     // of the viewport (because the parent container is a flexbox).
     <>
-      {isFilteringActive && !hasCompleteFilteredMetrics && !isFetching && (
+      {isFilteringActive && hasUnavailableFilteredMetrics && !isFetching && (
         <p className="text-sm text-muted-foreground" role="status">
-          Filtered named metrics are unavailable. Named metrics show evaluation totals.
+          Filtered named metrics are unavailable for some columns. Those columns show evaluation
+          totals.
         </p>
       )}
       {filteredResultsCount === 0 && !isFetching && isFilteringActive && (
@@ -2711,6 +2709,7 @@ function ResultsTable({
       </div>
       <CustomMetricsDialog
         open={customMetricsDialogOpen}
+        isFilteringActive={isFilteringActive}
         onClose={() => setCustomMetricsDialogOpen(false)}
       />
     </>
