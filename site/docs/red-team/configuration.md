@@ -364,7 +364,7 @@ If `redteam.maxCharsPerMessage` is set, it applies to every plugin and strategy 
 
 ### Plugins
 
-[Plugins](/docs/red-team/plugins/) are specified as an array of either strings (plugin IDs) or objects with `id` and optional `numTests` properties. They must exactly match the plugin IDs available in the red team system.
+[Plugins](/docs/red-team/plugins/) are specified as an array of either strings (plugin IDs) or objects with `id` and optional `numTests`, `severity`, and `config` properties. They must exactly match the plugin IDs available in the red team system.
 
 See [Plugins](/docs/red-team/plugins/) for more information.
 
@@ -373,7 +373,7 @@ See [Plugins](/docs/red-team/plugins/) for more information.
 - As a string: `"plugin-id"`
 - As an object: `{ id: "plugin-id", numTests: 10 }`
 
-If `numTests` is not specified for a plugin, it will use the global `numTests` value.
+If `numTests` is not specified for a plugin, it will use the global `numTests` value. The web setup preserves these per-plugin settings when importing, editing, exporting, and running a configuration.
 
 #### Available Plugins
 

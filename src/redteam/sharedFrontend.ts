@@ -75,9 +75,10 @@ export function getUnifiedConfig(
         if (typeof plugin === 'string') {
           return { id: plugin };
         }
+        const { config: pluginConfig, ...pluginOptions } = plugin;
         return {
-          id: plugin.id,
-          ...(plugin.config && Object.keys(plugin.config).length > 0 && { config: plugin.config }),
+          ...pluginOptions,
+          ...(pluginConfig && Object.keys(pluginConfig).length > 0 && { config: pluginConfig }),
         };
       }),
       strategies: config.strategies.map((strategy) => {

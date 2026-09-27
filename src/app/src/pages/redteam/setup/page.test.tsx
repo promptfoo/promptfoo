@@ -3,12 +3,14 @@ import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { load as loadYaml } from 'js-yaml';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from './hooks/useRedTeamTargetConfigValidation';
 import { useSetupState } from './hooks/useSetupState';
 import RedTeamSetupPage from './page';
+import { generateOrderedYaml } from './utils/yamlHelpers';
 
 // Define these variables outside the test
 const mockNavigate = vi.fn();
@@ -252,6 +254,50 @@ describe('RedTeamSetupPage', () => {
   });
 
   describe('YAML file import', () => {
+    it('preserves plugin overrides through import, editing, and YAML export', async () => {
+      const user = userEvent.setup();
+      render(
+        <MemoryRouter initialEntries={['/redteam/setup']}>
+          <RedTeamSetupPage />
+        </MemoryRouter>,
+      );
+      await user.click(screen.getByRole('button', { name: /Load Config/i }));
+      const plugin = {
+        id: 'bola',
+        numTests: 17,
+        severity: 'critical',
+        config: { targetSystems: ['documents'] },
+      };
+      const file = new File(
+        [
+          JSON.stringify({
+            description: 'Plugin override round trip',
+            prompts: ['{{prompt}}'],
+            targets: [{ id: 'echo', config: {} }],
+            redteam: { numTests: 5, plugins: [plugin], strategies: ['basic'] },
+          }),
+        ],
+        'config.yaml',
+        { type: 'text/yaml' },
+      );
+      await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file);
+      await waitFor(() => expect(useRedTeamConfig.getState().config.plugins).toEqual([plugin]));
+
+      act(() =>
+        useRedTeamConfig
+          .getState()
+          .updatePlugins([{ id: 'bola', config: { targetSystems: ['edited'] } }]),
+      );
+      const exported = loadYaml(generateOrderedYaml(useRedTeamConfig.getState().config));
+      expect(exported).toMatchObject({
+        redteam: {
+          numTests: 5,
+          plugins: [{ ...plugin, config: { targetSystems: ['edited'] } }],
+          strategies: [{ id: 'basic' }],
+        },
+      });
+    });
+
     it('normalizes an object target with an omitted config while importing YAML', async () => {
       const user = userEvent.setup();
       const showToast = vi.fn();
