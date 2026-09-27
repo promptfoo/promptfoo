@@ -111,8 +111,6 @@ export function summarizeImageResponse(value: unknown): string {
 }
 
 export class AzureImageProvider extends AzureGenericProvider {
-  readonly handlesOwnRetries: boolean = true;
-
   declare config: AzureImageOptions;
 
   constructor(deploymentName: string, options: AzureProviderOptions<AzureImageOptions> = {}) {

@@ -44,8 +44,6 @@ const VALID_RESOLUTIONS = ['540p', '720p'];
 // =============================================================================
 
 export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements ApiProvider {
-  readonly handlesOwnRetries: boolean = true;
-
   videoConfig: LumaRayVideoOptions;
   providerId?: string;
 

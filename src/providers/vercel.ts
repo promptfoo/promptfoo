@@ -266,8 +266,6 @@ function handleApiError(
  * Example: vercel:openai/gpt-4o-mini, vercel:anthropic/claude-sonnet-4.5
  */
 export class VercelAiProvider implements ApiProvider {
-  readonly handlesOwnRetries: boolean = true;
-
   public modelName: string;
   public config: VercelAiConfig;
   public env?: EnvOverrides;

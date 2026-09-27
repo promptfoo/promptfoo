@@ -2809,8 +2809,6 @@ export function getHandlerForModel(
 }
 
 export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider implements ApiProvider {
-  readonly handlesOwnRetries: boolean = true;
-
   static AWS_BEDROCK_COMPLETION_MODELS = Object.keys(AWS_BEDROCK_MODELS);
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {

@@ -8,7 +8,7 @@ import httpZ from 'http-z';
 import { LRUCache } from 'lru-cache';
 import { Agent, type Dispatcher, interceptors } from 'undici';
 import { z } from 'zod';
-import { fetchWithCache } from '../cache';
+import { fetchWithCache, isCacheEnabled } from '../cache';
 import cliState from '../cliState';
 import {
   HttpProviderConfigFieldsSchema,
@@ -1748,7 +1748,16 @@ export class HttpProvider implements ApiProvider {
   private readonly hasCustomRetryLogic: boolean;
 
   get handlesOwnRetries(): boolean {
-    return !this.hasCustomRetryLogic && !this.config.auth && !this.config.session;
+    // Cache and request-setup failures can need recovery outside fetch retries.
+    return (
+      !isCacheEnabled() &&
+      !this.hasCustomRetryLogic &&
+      !this.config.auth &&
+      !this.config.signatureAuth &&
+      !this.config.session &&
+      !this.config.tls &&
+      !this.config.multipart
+    );
   }
 
   url: string;

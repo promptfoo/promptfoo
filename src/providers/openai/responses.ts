@@ -725,11 +725,6 @@ async function coalesceBackgroundResponse(
 }
 
 export class OpenAiResponsesProvider extends OpenAiGenericProvider {
-  get handlesOwnRetries(): boolean {
-    // Gateways can return retryable errors in successful HTTP response bodies.
-    return !this.usesGatewayErrorFormat();
-  }
-
   private functionCallbackHandler = new FunctionCallbackHandler();
   private processor: ResponsesProcessor;
   private readonly backgroundCacheScope = `provider:${++nextBackgroundProviderScope}`;

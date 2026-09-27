@@ -51,8 +51,6 @@ type OpenAiAssistantOptions = OpenAiSharedOptions & {
 };
 
 export class OpenAiAssistantProvider extends OpenAiGenericProvider {
-  readonly handlesOwnRetries: boolean = true;
-
   assistantId: string;
   assistantConfig: OpenAiAssistantOptions;
   private loadedFunctionCallbacks: Record<string, Function> = {};

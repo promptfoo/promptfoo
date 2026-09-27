@@ -707,8 +707,6 @@ function extractTextFromContentBlocks(
  * AWS Bedrock Converse API Provider
  */
 export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implements ApiProvider {
-  readonly handlesOwnRetries: boolean = true;
-
   declare config: BedrockConverseOptions;
   private mcpClient: MCPClient | null = null;
   private initializationPromise: Promise<void> | null = null;

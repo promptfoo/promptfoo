@@ -73,8 +73,6 @@ export class AwsBedrockKnowledgeBaseProvider
   extends AwsBedrockGenericProvider
   implements ApiProvider
 {
-  readonly handlesOwnRetries: boolean = true;
-
   knowledgeBaseClient?: BedrockAgentRuntimeClient;
   kbConfig: BedrockKnowledgeBaseOptions;
 

@@ -197,8 +197,6 @@ function rateLimitFromSdkError(error: unknown): HttpRateLimitError | null {
 }
 
 export class AzureFoundryAgentProvider extends AzureGenericProvider {
-  readonly handlesOwnRetries: boolean = true;
-
   assistantConfig: AzureAssistantOptions;
   private loadedFunctionCallbacks: Record<string, Function> = {};
   private processor: ResponsesProcessor;

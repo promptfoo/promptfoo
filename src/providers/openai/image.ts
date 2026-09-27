@@ -857,8 +857,6 @@ export async function processApiResponse(
 }
 
 export class OpenAiImageProvider extends OpenAiGenericProvider {
-  readonly handlesOwnRetries: boolean = true;
-
   config: OpenAiImageOptions;
 
   constructor(

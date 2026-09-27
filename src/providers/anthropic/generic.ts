@@ -179,8 +179,6 @@ export function hashAnthropicCacheValue(value: unknown): string {
  * check and then produce a less useful error for every test case.
  */
 export class AnthropicGenericProvider implements ApiProvider {
-  readonly handlesOwnRetries: boolean = true;
-
   /**
    * Subclasses that can authenticate via a Claude Code OAuth session
    * should override this to `true`. The base class's constructor reads the

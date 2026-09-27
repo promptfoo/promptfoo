@@ -35,8 +35,6 @@ const VIDEO_FPS = 24;
 // =============================================================================
 
 export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements ApiProvider {
-  readonly handlesOwnRetries: boolean = true;
-
   videoConfig: NovaReelVideoOptions;
   providerId?: string;
 

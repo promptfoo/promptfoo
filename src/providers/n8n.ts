@@ -326,7 +326,13 @@ function getSafeProviderId(url: string, config?: N8nProviderConfig): string {
  * ```
  */
 export class N8nProvider implements ApiProvider {
-  readonly handlesOwnRetries: boolean = true;
+  get handlesOwnRetries(): boolean {
+    // Preserve the webhook's existing no-replay policy for stateful methods.
+    // Idempotent methods still need scheduler recovery for parsed body errors.
+    return !['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(
+      (this.config.method || 'POST').toUpperCase(),
+    );
+  }
 
   private webhookUrl: string;
   config: N8nProviderConfig;

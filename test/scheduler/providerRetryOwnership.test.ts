@@ -353,7 +353,7 @@ describe('provider operation retry ownership', () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
-  it('keeps HTTP ownership aligned with the captured validator when config is mutated', () => {
+  it('keeps HTTP ownership aligned with the captured validator when config is mutated', async () => {
     const validated = new HttpProvider('https://retry.fixture.test/validated', {
       config: { method: 'GET', validateStatus: 'status === 200' },
     });
@@ -362,8 +362,10 @@ describe('provider operation retry ownership', () => {
     });
     validated.config.validateStatus = undefined;
     defaultValidation.config.validateStatus = 'status === 200';
-    expect(validated.handlesOwnRetries).toBe(false);
-    expect(defaultValidation.handlesOwnRetries).toBe(true);
+    expect(await withCacheEnabled(false, async () => validated.handlesOwnRetries)).toBe(false);
+    expect(await withCacheEnabled(false, async () => defaultValidation.handlesOwnRetries)).toBe(
+      true,
+    );
     defaultValidation.config.session = {
       method: 'POST',
       url: 'https://retry.fixture.test/session',
@@ -372,23 +374,7 @@ describe('provider operation retry ownership', () => {
     expect(defaultValidation.handlesOwnRetries).toBe(false);
   });
 
-  it('rechecks endpoint-dependent ownership and recognizes OpenRouter subclasses', () => {
-    const provider = new OpenAiChatCompletionProvider('fixture', {
-      config: { apiKey: 'fixture', apiBaseUrl: 'https://api.openai.com/v1' },
-    });
-    expect(provider.handlesOwnRetries).toBe(true);
-    provider.config.apiBaseUrl = 'https://gateway.fixture.test/v1';
-    expect(provider.handlesOwnRetries).toBe(false);
-    provider.config.apiBaseUrl = 'https://api.openai.com/v1';
-    expect(provider.handlesOwnRetries).toBe(true);
-    // OpenRouter's response parser remains active even with a custom endpoint.
-    const openRouter = new OpenRouterProvider('fixture', {
-      config: { apiKey: 'fixture', apiBaseUrl: 'https://api.openai.com/v1' },
-    });
-    expect(openRouter.handlesOwnRetries).toBe(false);
-  });
-
-  it('does not restart an OpenAI conversation after its request retry budget', async () => {
+  it('retains OpenAI scheduler recovery until all response phases own retries', async () => {
     const fetch = vi.fn().mockImplementation(async () => throttled());
     vi.stubGlobal('fetch', fetch);
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
@@ -396,7 +382,7 @@ describe('provider operation retry ownership', () => {
     });
     const result = await invoke(provider);
     expect(result.error).toContain('429');
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledTimes(4);
   });
 
   it.each(['POST', 'PATCH'] as const)(
@@ -412,19 +398,18 @@ describe('provider operation retry ownership', () => {
     },
   );
 
-  it('leaves the real Anthropic SDK retry count unchanged after exhaustion', async () => {
+  it('retains Anthropic outer recovery as well as the SDK retry budget', async () => {
     const fetch = vi.fn().mockImplementation(async () => throttled());
     vi.stubGlobal('fetch', fetch);
-    const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', {
-      config: { apiKey: 'fixture', apiBaseUrl: 'https://retry.fixture.test' },
-    });
+    const config = { apiKey: 'fixture', apiBaseUrl: 'https://retry.fixture.test', maxRetries: 1 };
+    const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', { config });
     const result = await invoke(provider);
     expect(result.error).toContain('429');
-    // The SDK's existing default is two retries, independent of scheduler defaults.
-    expect(fetch).toHaveBeenCalledTimes(3);
+    // The SDK's two retries and the scheduler's one retry remain separate.
+    expect(fetch).toHaveBeenCalledTimes(6);
   });
 
-  it('does not create another billable Agents session after a later polling failure', async () => {
+  it('retains Agents session replay until terminal job failures have local recovery', async () => {
     const requests: { path: string; method: string }[] = [];
     vi.stubGlobal(
       'fetch',
@@ -452,9 +437,9 @@ describe('provider operation retry ownership', () => {
     expect(result.error).toContain('429');
     expect(
       requests.filter(({ path, method }) => path.endsWith('/sessions') && method === 'POST'),
-    ).toHaveLength(1);
-    expect(requests.filter(({ path }) => path.endsWith('/turns'))).toHaveLength(2);
-    expect(requests.filter(({ method }) => method === 'DELETE')).toHaveLength(1);
+    ).toHaveLength(2);
+    expect(requests.filter(({ path }) => path.endsWith('/turns'))).toHaveLength(4);
+    expect(requests.filter(({ method }) => method === 'DELETE')).toHaveLength(2);
   });
 
   it('preserves transport retries when adaptive scheduling is disabled', async () => {

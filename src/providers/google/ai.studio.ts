@@ -59,8 +59,6 @@ function shouldBustCache(context?: CallApiContextParams): boolean {
  * authentication management, and resource cleanup.
  */
 export class AIStudioChatProvider extends GoogleGenericProvider {
-  readonly handlesOwnRetries: boolean = true;
-
   constructor(modelName: string, options: GoogleProviderOptions = {}) {
     if (!CHAT_MODELS.includes(modelName)) {
       logger.debug(`Using unknown Google chat model: ${modelName}`);

@@ -15,8 +15,6 @@ import type {
 } from '../../types/index';
 
 export class AzureCompletionProvider extends AzureGenericProvider {
-  readonly handlesOwnRetries: boolean = true;
-
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
