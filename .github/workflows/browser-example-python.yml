@@ -4,11 +4,17 @@ on:
   pull_request:
     paths:
       - 'examples/integration-browser/headless/**'
+      - 'src/providers/browser.ts'
+      - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/browser-example-python.yml'
   push:
     branches: [main]
     paths:
       - 'examples/integration-browser/headless/**'
+      - 'src/providers/browser.ts'
+      - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/browser-example-python.yml'
 
 permissions:
