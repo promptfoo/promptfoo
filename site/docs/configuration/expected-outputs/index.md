@@ -307,9 +307,9 @@ type ScoringFunction = (
 
 When assertions use `weight`, each named score passed into the scoring function is already normalized as a weighted average. Eval outputs also include `namedScoreWeights` so downstream consumers can recover the weighted denominator when needed.
 
-Custom scoring functions must return finite numbers for `score` and any values in `namedScores` or `namedScoreWeights`, including nested `componentResults`. Nonfinite values such as `NaN` or `Infinity` cause a scoring function error.
+Custom scoring results must use finite numbers for `score` and values in `namedScores` and `namedScoreWeights`, including nested `componentResults`. `NaN` and infinities cause a scoring function error.
 
-Finite inputs can still overflow during aggregation. A named metric whose accumulated score or weight overflows reaches JavaScript scoring functions as `NaN`; normalization can also produce an infinity. Python scoring functions receive these nonfinite values as `None`. Overflow in the accumulated score or total weight invalidates the default aggregate score; a valid custom scoring result can override it. If the final score or a named score or weight is nonfinite after custom scoring, the test fails with score 0 and an aggregation error. Invalid metric/weight pairs are omitted; valid metrics and component results remain available.
+JavaScript scoring functions may receive `NaN` or infinity from aggregation; Python functions receive `None`. Custom scoring can replace invalid aggregate values. Any nonfinite score or weight remaining afterward fails the test with score 0 and an aggregation error. Invalid metric/weight pairs are omitted; valid metrics and component results are retained.
 
 See the [custom assertion scoring example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-assertion-scoring-override) for complete implementations in JavaScript and Python.
 
