@@ -187,7 +187,10 @@ describe('PythonProvider with file references', () => {
       expect.objectContaining(mockConfig),
       expect.any(String),
     );
-    expect(provider['isInitialized']).toBeFalsy();
+    expect(mockPoolInstance.initialize).not.toHaveBeenCalled();
+    vi.mocked(processConfigFileReferences).mockResolvedValue({ settings: {} });
+    await provider.initialize();
+    expect(mockPoolInstance.initialize).toHaveBeenCalledOnce();
   });
 
   it('should process config references before calling API', async () => {

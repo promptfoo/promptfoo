@@ -1006,11 +1006,8 @@ describe('PythonProvider', () => {
       });
 
       await provider.initialize();
-      expect((provider as any).pool).not.toBeNull();
-
       await provider.shutdown();
-      expect((provider as any).pool).toBeNull();
-      expect(mockPoolInstance.shutdown).toHaveBeenCalled();
+      expect(mockPoolInstance.shutdown).toHaveBeenCalledOnce();
     });
 
     it('should register provider for global cleanup', async () => {
@@ -1027,18 +1024,6 @@ describe('PythonProvider', () => {
 
       // Should be unregistered
       expect((providerRegistry as any).providers.has(provider)).toBe(false);
-    });
-
-    it('should set isInitialized to false after shutdown', async () => {
-      const provider = new PythonProvider('script.py', {
-        config: { basePath: process.cwd() },
-      });
-
-      await provider.initialize();
-      expect((provider as any).isInitialized).toBe(true);
-
-      await provider.shutdown();
-      expect((provider as any).isInitialized).toBe(false);
     });
   });
 });

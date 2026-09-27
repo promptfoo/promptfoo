@@ -178,10 +178,9 @@ export class PythonProvider implements ApiProvider {
 
   private scriptPath: string;
   private functionName: string | null;
-  private isInitialized: boolean = false;
-  private initializationPromise: Promise<void> | null = null;
+  private poolPromise: Promise<PythonWorkerPool> | null = null;
+  private shutdownPromise: Promise<void> | null = null;
   public label: string | undefined;
-  private pool: PythonWorkerPool | null = null;
 
   constructor(
     runPath: string,
@@ -208,18 +207,21 @@ export class PythonProvider implements ApiProvider {
    * @returns A promise that resolves when all file references have been processed
    */
   public async initialize(): Promise<void> {
-    // If already initialized, return immediately
-    if (this.isInitialized) {
-      return;
+    await this.getPool();
+  }
+
+  private async getPool(): Promise<PythonWorkerPool> {
+    while (this.shutdownPromise) {
+      await this.shutdownPromise;
+    }
+    if (this.poolPromise) {
+      return this.poolPromise;
     }
 
-    // If initialization is in progress, return the existing promise
-    if (this.initializationPromise != null) {
-      return this.initializationPromise;
-    }
-
-    // Start initialization and store the promise
-    this.initializationPromise = (async () => {
+    // Register before startup so shutdownAll also owns an initializing provider.
+    providerRegistry.register(this);
+    this.poolPromise = (async () => {
+      let pool: PythonWorkerPool | undefined;
       try {
         this.config = await processConfigFileReferences(
           this.config,
@@ -232,7 +234,7 @@ export class PythonProvider implements ApiProvider {
           path.join(this.options?.config.basePath || '', this.scriptPath),
         );
 
-        this.pool = new PythonWorkerPool(
+        pool = new PythonWorkerPool(
           absPath,
           this.functionName || 'call_api',
           workerCount,
@@ -240,21 +242,20 @@ export class PythonProvider implements ApiProvider {
           this.config.timeout,
         );
 
-        await this.pool.initialize();
-
-        // Register for cleanup
-        providerRegistry.register(this);
-
-        this.isInitialized = true;
+        await pool.initialize();
         logger.debug(`Initialized Python provider ${this.id()} with ${workerCount} workers`);
+        return pool;
       } catch (error) {
-        // Reset the initialization promise so future calls can retry
-        this.initializationPromise = null;
+        await pool?.shutdown().catch((cleanupError) => {
+          logger.warn('Failed to clean up Python provider startup', { error: cleanupError });
+        });
+        this.poolPromise = null;
+        providerRegistry.unregister(this);
         throw error;
       }
     })();
 
-    return this.initializationPromise;
+    return this.poolPromise;
   }
 
   /**
@@ -320,9 +321,7 @@ export class PythonProvider implements ApiProvider {
     context: CallApiContextParams | undefined,
     apiType: PythonApiType,
   ): Promise<any> {
-    if (!this.isInitialized || !this.pool) {
-      await this.initialize();
-    }
+    const pool = await this.getPool();
 
     const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
     logger.debug(`Computing file hash for script ${absPath}`);
@@ -380,7 +379,7 @@ export class PythonProvider implements ApiProvider {
 
       const functionName = this.functionName || apiType;
       // Use worker pool instead of runPython
-      const result = await this.pool!.execute(functionName, args);
+      const result = await pool.execute(functionName, args);
 
       validatePythonScriptResult(apiType, functionName, result);
 
@@ -402,32 +401,31 @@ export class PythonProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
     return this.executePythonScript(prompt, context, 'call_api');
   }
 
   async callEmbeddingApi(prompt: string): Promise<ProviderEmbeddingResponse> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
     return this.executePythonScript(prompt, undefined, 'call_embedding_api');
   }
 
   async callClassificationApi(prompt: string): Promise<ProviderClassificationResponse> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
     return this.executePythonScript(prompt, undefined, 'call_classification_api');
   }
 
   async shutdown(): Promise<void> {
-    if (this.pool) {
-      await this.pool.shutdown();
-      this.pool = null;
+    if (!this.shutdownPromise) {
+      this.shutdownPromise = (async () => {
+        try {
+          // Failed startup already disposes its pool and reports the error to its callers.
+          const pool = await this.poolPromise?.catch(() => null);
+          await pool?.shutdown();
+        } finally {
+          this.poolPromise = null;
+          providerRegistry.unregister(this);
+          this.shutdownPromise = null;
+        }
+      })();
     }
-    providerRegistry.unregister(this);
-    this.isInitialized = false;
+    return this.shutdownPromise;
   }
 }
