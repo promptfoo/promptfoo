@@ -5,7 +5,6 @@ import {
   GUARDRAIL_BLOCKED_REASON,
 } from '../../src/assertions/assertionsResult';
 import { getEnvBool } from '../../src/envars';
-import { getNonstandardScoringBaseline } from '../../src/types/internal';
 import {
   accumulateGradingRequest,
   accumulateGradingTokenUsage,
@@ -602,9 +601,7 @@ describe('AssertionsResult', () => {
         namedScores: { quality: 0.75 },
         namedScoreWeights: { quality: 1 },
       };
-      const result = await assertionsResult.testResult(() => customResult);
-      expect(result).toMatchObject(customResult);
-      expect(getNonstandardScoringBaseline(result)).toEqual({ pass: true, score: 2 });
+      expect(await assertionsResult.testResult(() => customResult)).toMatchObject(customResult);
     });
 
     it('still rejects invalid inherited metrics after a finite score override', async () => {
@@ -615,18 +612,9 @@ describe('AssertionsResult', () => {
         metric: 'quality',
         weight: 2,
       });
-      const result = await assertionsResult.testResult(() => ({
-        pass: true,
-        score: 2,
-        reason: 'Custom',
-      }));
-      expect(result).toMatchObject({
-        pass: false,
-        score: 0,
-        namedScores: {},
-        namedScoreWeights: {},
-      });
-      expect(getNonstandardScoringBaseline(result)).toEqual({ pass: false, score: 0 });
+      expect(
+        await assertionsResult.testResult(() => ({ pass: true, score: 2, reason: 'Custom' })),
+      ).toMatchObject({ pass: false, score: 0, namedScores: {}, namedScoreWeights: {} });
     });
 
     it('should calculate final result with threshold', async () => {
@@ -795,11 +783,6 @@ describe('AssertionsResult', () => {
       expect(result.pass).toBe(true);
       expect(result.score).toBe(0.9);
       expect(result.reason).toBe('Custom scoring');
-      expect(getNonstandardScoringBaseline(result)).toEqual({
-        pass: true,
-        score: 0.9,
-      });
-      expect(result.metadata).toBeUndefined();
       expect(scoringFunction).toHaveBeenCalledWith(
         {},
         {
@@ -1053,11 +1036,6 @@ describe('AssertionsResult', () => {
       expect(result.pass).toBe(false);
       expect(result.score).toBe(0);
       expect(result.reason).toBe('Scoring function error: Scoring failed');
-      expect(getNonstandardScoringBaseline(result)).toEqual({
-        pass: false,
-        score: 0,
-      });
-      expect(result.metadata).toBeUndefined();
     });
 
     it.each(['namedScores', 'namedScoreWeights'] as const)(
@@ -1088,7 +1066,6 @@ describe('AssertionsResult', () => {
           namedScores: {},
           namedScoreWeights: {},
         });
-        expect(getNonstandardScoringBaseline(result)).toEqual({ pass: false, score: 0 });
         expect(JSON.parse(JSON.stringify(result))).toEqual(result);
         expect(await assertionsResult.testResult()).toBe(result);
       },

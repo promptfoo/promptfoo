@@ -675,7 +675,7 @@ it.each(['eval', 'API'] as const)(
     await waitFor(() => expect(callApi).toHaveBeenCalledTimes(2));
     const queue = [...useTableStore.getState().ratingQueues.values()][0];
     expect(queue.tail?.settled).toBe(true);
-    expect(queue.edits.get('result-id')?.completed.pass).toBe(false);
+    expect(queue.edits.get(JSON.stringify(['result', 'result-id']))?.completed.pass).toBe(false);
     expect(useTableStore.getState().ratingQueues.size).toBe(1);
 
     if (changedScope === 'eval') {

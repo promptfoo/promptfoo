@@ -1,44 +1,6 @@
 import type { EventSource } from './eventSource';
-import type { EvaluateOptions, GradingResult } from './index';
+import type { EvaluateOptions } from './index';
 import type { TokenUsage } from './shared';
-
-type NonstandardScoringBaseline = {
-  pass: boolean;
-  score: number;
-  /** Fresh deferred grading, consumed when persistence updates an active manual baseline. */
-  comparison?: GradingResult;
-};
-const NONSTANDARD_SCORING_BASELINE = Symbol('promptfoo.nonstandardScoringBaseline');
-
-export function setNonstandardScoringBaseline(
-  gradingResult: GradingResult,
-  baseline: NonstandardScoringBaseline,
-): void {
-  Object.defineProperty(gradingResult, NONSTANDARD_SCORING_BASELINE, {
-    configurable: true,
-    enumerable: false,
-    value: baseline,
-    writable: true,
-  });
-}
-
-export function getNonstandardScoringBaseline(
-  gradingResult: GradingResult | null | undefined,
-): NonstandardScoringBaseline | undefined {
-  const baseline = gradingResult
-    ? (
-        gradingResult as GradingResult & {
-          [NONSTANDARD_SCORING_BASELINE]?: NonstandardScoringBaseline;
-        }
-      )[NONSTANDARD_SCORING_BASELINE]
-    : undefined;
-  return baseline &&
-    typeof baseline.pass === 'boolean' &&
-    typeof baseline.score === 'number' &&
-    Number.isFinite(baseline.score)
-    ? baseline
-    : undefined;
-}
 
 /**
  * Internal orchestration metadata that should not be accepted from reusable

@@ -6,7 +6,6 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { ResultFailureReason } from '../../src/types/index';
-import { setNonstandardScoringBaseline } from '../../src/types/internal';
 import {
   createCompletedPrompt,
   createEvaluateResult,
@@ -36,7 +35,6 @@ describe('prompt metrics after live manual ratings', () => {
           { pass: true, score: 1, reason: 'Match', assertion: { type: 'equals' } },
         ],
       };
-      setNonstandardScoringBaseline(passing, { pass: true, score: 0.6 });
       const prompts = [
         createCompletedPrompt('recovery', {
           metrics: createPromptMetrics({
@@ -54,12 +52,19 @@ describe('prompt metrics after live manual ratings', () => {
       await evalRecord.addPrompts(prompts);
       await evalRecord.addResult(createEvaluateResult({ score: 0.6, gradingResult: passing }));
       const [persisted] = await EvalResult.findManyByEvalId(evalRecord.id);
-      if (rated) {
+      await EvalResult.submitRating(
+        evalRecord.id,
+        persisted.id,
+        { pass: true, score: 1, reason: 'Manual pass' },
+        'rate',
+      );
+      if (!rated) {
+        // Cleared rating history must still trigger canonical reconciliation.
         await EvalResult.submitRating(
           evalRecord.id,
           persisted.id,
-          { pass: true, score: 1, reason: 'Manual pass' },
-          'rate',
+          { pass: true, score: 1, reason: 'Clear manual pass' },
+          'clear',
         );
       }
       const originalPass = compared;

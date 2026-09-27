@@ -86,6 +86,107 @@ function holdResponse() {
   return { pending, release };
 }
 
+it.each([true, false])(
+  'retains two pending ID-less cells through a legacy refresh (test indices: %s)',
+  async (hasTestIndices) => {
+    const user = userEvent.setup();
+    const evalId = `legacy-overlay-${hasTestIndices}`;
+    const query = `/eval/${evalId}/table?offset=0&limit=50&filterMode=all`;
+    let serverTable = structuredClone(table);
+    serverTable.head.prompts.push(structuredClone(serverTable.head.prompts[0]));
+    serverTable.body.push(structuredClone(serverTable.body[0]));
+    serverTable.body.forEach((row, rowIndex) => {
+      row.testIdx = rowIndex;
+      if (!hasTestIndices) {
+        delete (row as Partial<typeof row>).testIdx;
+      }
+      row.outputs.push(structuredClone(row.outputs[0]));
+      row.outputs.forEach((output) => delete (output as Partial<typeof output>).id);
+    });
+    useTableStore.setState({
+      evalId,
+      table: structuredClone(serverTable),
+      config: {},
+      version: 3,
+      filteredResultsCount: 2,
+      totalResultsCount: 2,
+      tableQuery: { evalId, url: query },
+    });
+    const firstWrite = holdResponse();
+    const writes: EvaluateTable[] = [];
+    const read = () => ({
+      table: structuredClone(serverTable),
+      config: {},
+      version: 3,
+      totalCount: 2,
+      filteredCount: 2,
+    });
+    const write = async (_path: string, options: RequestInit | undefined) => {
+      const { table: submitted } = JSON.parse(String(options?.body)) as { table: EvaluateTable };
+      writes.push(submitted);
+      if (writes.length === 1) {
+        await firstWrite.pending;
+      }
+      serverTable = submitted;
+      return {};
+    };
+    mockCallApiRoutes([
+      { path: `/eval/${evalId}`, method: 'PATCH', response: write },
+      { path: query, response: read },
+      { path: `/eval/${evalId}`, method: 'PATCH', response: write },
+      { path: query, response: read },
+    ]);
+    const view = renderRatingTable();
+    await user.click(screen.getAllByRole('button', { name: 'Mark test failed' })[3]);
+    await user.click(screen.getAllByRole('button', { name: 'Mark test failed' })[0]);
+    expect(writes).toHaveLength(1);
+    expect(writes[0].body.map((row) => row.outputs.map((output) => output.pass))).toEqual([
+      [true, true],
+      [true, false],
+    ]);
+    // A real store GET returns untouched server rows while both edits are accepted.
+    if (hasTestIndices) {
+      serverTable.body.reverse();
+    }
+    await act(async () => {
+      await useTableStore.getState().fetchEvalData(evalId, {
+        skipLoadingState: true,
+        skipSettingEvalId: true,
+      });
+    });
+    expect(
+      useTableStore.getState().table?.body.map((row) => row.outputs.map((output) => output.pass)),
+    ).toEqual(
+      hasTestIndices
+        ? [
+            [true, false],
+            [false, true],
+          ]
+        : [
+            [false, true],
+            [true, false],
+          ],
+    );
+    expect([...useTableStore.getState().ratingQueues.values()][0].edits.size).toBe(2);
+    view.unmount();
+    renderRatingTable();
+    expect(screen.getAllByRole('button', { name: 'Mark test failed', pressed: true })).toHaveLength(
+      2,
+    );
+    await act(async () => firstWrite.release());
+    await waitFor(() => expect(writes).toHaveLength(2));
+    await waitFor(() => expect(useTableStore.getState().ratingQueues.size).toBe(0));
+    expect(writes[1].body.map((row) => row.outputs.map((output) => output.pass))).toEqual([
+      [false, true],
+      [true, false],
+    ]);
+    expect(
+      writes.every((write) => write.body.every((row) => row.outputs.every((output) => !output.id))),
+    ).toBe(true);
+    expect(callApi).toHaveBeenCalledTimes(4);
+  },
+);
+
 it.each(['before', 'after'] as const)(
   'preserves queued comments when a socket read starts %s the latest edit',
   async (readTiming) => {

@@ -78,7 +78,9 @@ import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
 import {
   getNamedMetricTotals,
+  getRatingCellKey,
   parseEvalOutputPromptHash,
+  type RatingCoordinates,
   setEvalDetailsHash,
   useEvalDetailsHash,
 } from './utils';
@@ -1034,9 +1036,14 @@ function buildManualRatingOutput(args: {
   };
 }
 
-function findRatingOutput(table: EvaluateTable, resultId: string) {
+function findRatingOutput(table: EvaluateTable, cellKey: string) {
   for (let rowIndex = 0; rowIndex < table.body.length; rowIndex++) {
-    const promptIndex = table.body[rowIndex].outputs.findIndex((output) => output?.id === resultId);
+    const row = table.body[rowIndex];
+    const promptIndex = row.outputs.findIndex(
+      (output, promptIndex) =>
+        output &&
+        getRatingCellKey(output.id, { rowIndex, promptIndex, testIdx: row.testIdx }) === cellKey,
+    );
     if (promptIndex !== -1) {
       const output = table.body[rowIndex].outputs[promptIndex];
       if (output) {
@@ -1049,10 +1056,10 @@ function findRatingOutput(table: EvaluateTable, resultId: string) {
 
 function replaceRatingOutput(
   table: EvaluateTable,
-  resultId: string,
+  cellKey: string,
   output: EvaluateTableOutput,
 ): EvaluateTable {
-  const location = findRatingOutput(table, resultId);
+  const location = findRatingOutput(table, cellKey);
   if (!location) {
     return table;
   }
@@ -1067,17 +1074,17 @@ function replaceRatingOutput(
 
 function applyPersistedRatingResult({
   table,
-  resultId,
+  cellKey,
   result,
 }: {
   table: EvaluateTable;
-  resultId: string;
+  cellKey: string;
   result: PersistedRatingResult;
 }): EvaluateTable {
-  const location = findRatingOutput(table, resultId);
+  const location = findRatingOutput(table, cellKey);
   const output = location?.output;
   invariant(output, 'Cannot apply a rating response to a missing output');
-  return replaceRatingOutput(table, resultId, {
+  return replaceRatingOutput(table, cellKey, {
     ...output,
     pass: result.success,
     score: result.score,
@@ -1832,9 +1839,8 @@ function ResultsTable({
 
   const handleRating = React.useCallback(
     async (
-      _rowIndex: number,
-      _promptIndex: number,
       resultId: string,
+      coordinates: RatingCoordinates,
       isPass?: boolean | null,
       score?: number,
       comment?: string,
@@ -1850,15 +1856,16 @@ function ResultsTable({
           getApiBaseUrl() === apiBaseUrl
         );
       };
-      if (!isScopeActive()) {
+      if (!isScopeActive() || (!resultId && version && version >= 4)) {
         return;
       }
+      const cellKey = getRatingCellKey(resultId, coordinates);
       const queueKey = JSON.stringify([apiBaseUrl, evalId]);
       const queuedTable = useTableStore.getState().table;
       if (!queuedTable) {
         return;
       }
-      const queuedLocation = findRatingOutput(queuedTable, resultId);
+      const queuedLocation = findRatingOutput(queuedTable, cellKey);
       if (!queuedLocation) {
         return;
       }
@@ -1868,7 +1875,7 @@ function ResultsTable({
         existingOutput: queuedOutput,
         ...ratingArgs,
       });
-      setTable(replaceRatingOutput(queuedTable, resultId, optimisticOutput));
+      setTable(replaceRatingOutput(queuedTable, cellKey, optimisticOutput));
       if (inComparisonMode) {
         showToast('Ratings are not saved in comparison mode', 'warning');
         return;
@@ -1879,10 +1886,10 @@ function ResultsTable({
         queues.set(queueKey, { edits: new Map() });
       }
       const queue = queues.get(queueKey)!;
-      if (!queue.edits.has(resultId)) {
-        queue.edits.set(resultId, { visible: optimisticOutput, completed: queuedOutput });
+      if (!queue.edits.has(cellKey)) {
+        queue.edits.set(cellKey, { visible: optimisticOutput, completed: queuedOutput });
       }
-      const edit = queue.edits.get(resultId)!;
+      const edit = queue.edits.get(cellKey)!;
       edit.visible = optimisticOutput;
       const previousRequest = queue.tail?.promise;
 
@@ -1891,13 +1898,13 @@ function ResultsTable({
       ): Promise<EvaluateTable | undefined> => {
         // Legacy writes replace the entire table; carry only completed writes forward.
         const currentTable = (!version || version < 4 ? previousTable : undefined) ?? queuedTable;
-        const currentLocation = findRatingOutput(currentTable, resultId);
+        const currentLocation = findRatingOutput(currentTable, cellKey);
         if (!currentLocation) {
           return;
         }
         const existingOutput = edit.completed;
         const executedOutput = buildManualRatingOutput({ existingOutput, ...ratingArgs });
-        const newTable = replaceRatingOutput(currentTable, resultId, executedOutput);
+        const newTable = replaceRatingOutput(currentTable, cellKey, executedOutput);
         let persistedTable = newTable;
         try {
           const ratingIntent = getSubmitRatingIntent(isPass, score);
@@ -1913,14 +1920,14 @@ function ResultsTable({
           if (persistedResult) {
             persistedTable = applyPersistedRatingResult({
               table: newTable,
-              resultId,
+              cellKey,
               result: persistedResult,
             });
           }
         } catch (error) {
           console.error('Failed to update table:', error);
           if (error instanceof ConfirmedRatingPersistenceError) {
-            persistedTable = replaceRatingOutput(currentTable, resultId, existingOutput);
+            persistedTable = replaceRatingOutput(currentTable, cellKey, existingOutput);
           }
         }
         const persistedOutput =
@@ -1931,9 +1938,9 @@ function ResultsTable({
         }
         const latestTable = useTableStore.getState().table;
         if (isScopeActive() && latestTable) {
-          const latestLocation = findRatingOutput(latestTable, resultId);
+          const latestLocation = findRatingOutput(latestTable, cellKey);
           if (latestLocation?.output === optimisticOutput) {
-            setTable(replaceRatingOutput(latestTable, resultId, persistedOutput));
+            setTable(replaceRatingOutput(latestTable, cellKey, persistedOutput));
           }
         }
         return persistedTable;
@@ -2372,12 +2379,11 @@ function ResultsTable({
                       output.originalRowPositionIndex ?? output.originalRowIndex ?? info.row.index
                     }
                     promptIndex={idx}
-                    onRating={handleRating.bind(
-                      null,
-                      output.originalRowIndex ?? info.row.index,
-                      output.originalPromptIndex ?? idx,
-                      output.id,
-                    )}
+                    onRating={handleRating.bind(null, output.id, {
+                      rowIndex: output.originalRowIndex ?? info.row.index,
+                      promptIndex: output.originalPromptIndex ?? idx,
+                      testIdx: info.row.original.testIdx,
+                    })}
                     firstOutput={getFirstOutput(info.row.index)}
                     showDiffs={filterMode === 'different' && visiblePromptCount > 1}
                     searchText={debouncedSearchText}

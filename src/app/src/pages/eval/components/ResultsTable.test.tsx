@@ -5315,6 +5315,107 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     await act(async () => resolveSecond({ ok: true }));
   });
 
+  it.each([true, false])(
+    'queues edits to ID-less legacy cells (test indices: %s)',
+    async (hasTestIndices) => {
+      const user = userEvent.setup();
+      const mockTable = createMockTableWithHumanAssertion();
+      mockTable.head.prompts.push(structuredClone(mockTable.head.prompts[0]));
+      mockTable.body.push(structuredClone(mockTable.body[0]));
+      mockTable.body.forEach((row, rowIndex) => {
+        row.testIdx = rowIndex + 10;
+        if (!hasTestIndices) {
+          delete (row as Partial<typeof row>).testIdx;
+        }
+        row.outputs.push(structuredClone(row.outputs[0]));
+        row.outputs.forEach((output) => {
+          delete (output as Partial<typeof output>).id;
+        });
+      });
+      const { response: firstResponse, resolve: resolveFirst } = deferRatingResponse();
+      mockCallApi.mockReturnValueOnce(firstResponse).mockResolvedValueOnce({ ok: true });
+      const mockFetchEvalData = vi.fn();
+      vi.mocked(useTableStore).mockReturnValue({
+        config: {},
+        evalId: 'legacy',
+        setTable: mockSetTable,
+        table: mockTable,
+        version: 3,
+        fetchEvalData: mockFetchEvalData,
+        filteredResultsCount: 2,
+        filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+      });
+
+      const { unmount } = renderWithProviders(<ResultsTable {...defaultProps} />);
+      await user.click(screen.getAllByRole('button', { name: 'Clear rating' })[3]);
+      expect(mockCallApi).toHaveBeenCalledTimes(1);
+      const firstPayload = JSON.parse(mockCallApi.mock.calls[0][1].body);
+      expect(mockCallApi.mock.calls[0][0]).toBe('/eval/legacy');
+      expect(mockCallApi.mock.calls[0][1].method).toBe('PATCH');
+      expect(
+        firstPayload.table.body.map((row: { outputs: Array<{ pass: boolean; id?: string }> }) =>
+          row.outputs.map((output: { pass: boolean; id?: string }) => output.pass),
+        ),
+      ).toEqual([
+        [true, true],
+        [true, false],
+      ]);
+
+      // A refresh can replace headers and reorder rows with stable test indices.
+      const refreshedTable = structuredClone(useTableStore.getState().table)!;
+      if (hasTestIndices) {
+        refreshedTable.body.reverse();
+      }
+      useTableStore.getState().setTable(refreshedTable);
+      unmount();
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+      await user.click(
+        screen.getAllByRole('button', { name: 'Clear rating' })[hasTestIndices ? 3 : 1],
+      );
+      expect(mockCallApi).toHaveBeenCalledTimes(1);
+      resolveFirst({ ok: true });
+      await waitFor(() => expect(mockCallApi).toHaveBeenCalledTimes(2));
+      const secondPayload = JSON.parse(mockCallApi.mock.calls[1][1].body);
+      expect(
+        secondPayload.table.body.map((row: { outputs: Array<{ pass: boolean; id?: string }> }) =>
+          row.outputs.map((output: { pass: boolean; id?: string }) => output.pass),
+        ),
+      ).toEqual([
+        [true, false],
+        [true, false],
+      ]);
+      expect(
+        secondPayload.table.body
+          .flatMap((row: { outputs: Array<{ pass: boolean; id?: string }> }) => row.outputs)
+          .every((output: { pass: boolean; id?: string }) => !output.id),
+      ).toBe(true);
+      await waitFor(() =>
+        expect(mockFetchEvalData).toHaveBeenCalledWith('legacy', expect.any(Object)),
+      );
+    },
+  );
+
+  it('does not submit a modern rating without a result ID', async () => {
+    const user = userEvent.setup();
+    const mockTable = createMockTableWithHumanAssertion();
+    delete (mockTable.body[0].outputs[0] as Partial<(typeof mockTable.body)[0]['outputs'][0]>).id;
+    vi.mocked(useTableStore).mockReturnValue({
+      config: {},
+      evalId: 'modern',
+      setTable: mockSetTable,
+      table: mockTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 1,
+      filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+    });
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: 'Clear rating' }));
+    expect(mockCallApi).not.toHaveBeenCalled();
+    expect(mockSetTable).not.toHaveBeenCalled();
+  });
+
   it('refetches instead of rolling back after an ambiguous successful response', async () => {
     const user = userEvent.setup();
     const mockTable = createMockTableWithHumanAssertion();

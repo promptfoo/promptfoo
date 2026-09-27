@@ -12,7 +12,7 @@ import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable
 import { create } from 'zustand';
 import { persist, subscribeWithSelector } from 'zustand/middleware';
 import logger from '../../../../../logger';
-import { hasHumanRating } from './utils';
+import { getRatingCellKey, hasHumanRating } from './utils';
 import type { Policy, PolicyObject } from '@promptfoo/redteam/types';
 import type {
   EvalResultsFilterMode,
@@ -803,10 +803,18 @@ export const useTableStore = create<TableState>()(
           const table = retainEdits
             ? {
                 ...data.table,
-                body: data.table.body.map((row) => ({
+                body: data.table.body.map((row, rowIndex) => ({
                   ...row,
-                  outputs: row.outputs.map((output) =>
-                    output ? (ratings.edits.get(output.id)?.visible ?? output) : output,
+                  outputs: row.outputs.map((output, promptIndex) =>
+                    output
+                      ? (ratings.edits.get(
+                          getRatingCellKey(output.id, {
+                            rowIndex,
+                            promptIndex,
+                            testIdx: row.testIdx,
+                          }),
+                        )?.visible ?? output)
+                      : output,
                   ),
                 })),
               }

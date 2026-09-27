@@ -25,7 +25,6 @@ import {
   ResultFailureReason,
   type TraceData,
 } from '../types/index';
-import { getNonstandardScoringBaseline, setNonstandardScoringBaseline } from '../types/internal';
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
 import { isSecretField, REDACTED, sanitizeObject } from '../util/sanitizer';
@@ -656,11 +655,13 @@ const MANUAL_RATING_REASON = 'Manual result (overrides all other grading results
 
 const ManualRatingStateSchema = z.object({
   version: z.literal(1),
+  // Retain the previous private baseline shape when reading already persisted results.
   status: z.enum(['baseline', 'active', 'legacy-active', 'cleared']),
   original: z.object({
     success: z.boolean(),
     score: z.number(),
     failureReason: z.union([z.literal(0), z.literal(1), z.literal(2)]),
+    comparisonCount: z.number().int().nonnegative().optional(),
     gradingResult: z
       .object({
         pass: z.boolean(),
@@ -728,6 +729,7 @@ function captureManualRatingState(
       success: result.success,
       score: result.score,
       failureReason: normalizeFailureReason(result.failureReason),
+      comparisonCount: getCompletedComparisons(gradingResult).length,
       gradingResult: gradingResult
         ? {
             pass: gradingResult.pass,
@@ -743,20 +745,74 @@ function captureManualRatingState(
   };
 }
 
-function captureNonstandardScoringState(
-  gradingResult: GradingResult | null,
-  baseline: { pass: boolean; score: number },
-  failureReason: number,
+function getCompletedComparisons(gradingResult: GradingResult | null): GradingResult[] {
+  if (!Array.isArray(gradingResult?.componentResults)) {
+    return [];
+  }
+  return gradingResult.componentResults.filter((component) => {
+    const record = asRecord(component);
+    const type = asRecord(record?.assertion)?.type;
+    return (
+      (type === 'max-score' || type === 'select-best') &&
+      typeof record?.pass === 'boolean' &&
+      Number.isFinite(record.score)
+    );
+  });
+}
+
+function includeLaterComparisons(
+  state: ManualRatingState,
+  gradingResult: GradingResult,
 ): ManualRatingState {
-  return {
-    ...captureManualRatingState({
-      failureReason,
-      gradingResult,
-      score: baseline.score,
-      success: baseline.pass,
-    }),
-    status: 'baseline',
+  // Older private states do not record which comparisons preceded the rating.
+  if (state.original.comparisonCount === undefined) {
+    return state;
+  }
+  const comparisons = getCompletedComparisons(gradingResult);
+  // Comparisons already present at capture may have been followed by an intentional
+  // score edit. Only replay verdicts that completed while the rating was active.
+  const laterComparisons = comparisons.slice(state.original.comparisonCount);
+  if (laterComparisons.length === 0) {
+    return state;
+  }
+  const original = {
+    ...state.original,
+    comparisonCount: comparisons.length,
+    gradingResult: state.original.gradingResult
+      ? { ...state.original.gradingResult }
+      : {
+          pass: state.original.success,
+          score: state.original.score,
+          reason:
+            laterComparisons[0].assertion?.type === 'select-best' ? laterComparisons[0].reason : '',
+          assertion: laterComparisons[0].assertion,
+          hadReason: true,
+          hadAssertion: true,
+          hadComponentResults: true,
+        },
   };
+  original.gradingResult.hadComponentResults = true;
+  for (const comparison of laterComparisons) {
+    const previousPass = original.success;
+    if (!comparison.pass) {
+      original.success = original.gradingResult.pass = false;
+      original.score = original.gradingResult.score = comparison.score;
+      if (previousPass) {
+        original.failureReason = ResultFailureReason.ASSERT;
+      }
+      if (previousPass || comparison.assertion?.type === 'select-best') {
+        original.gradingResult.reason = comparison.reason;
+        original.gradingResult.hadReason = true;
+      }
+    }
+    if (comparison.assertion?.type === 'max-score') {
+      original.gradingResult.reason ??= '';
+      original.gradingResult.hadReason = true;
+      original.gradingResult.assertion = comparison.assertion;
+      original.gradingResult.hadAssertion = true;
+    }
+  }
+  return { ...state, original };
 }
 
 function restoreOriginalGradingResult(
@@ -809,21 +865,57 @@ function hasManualRating(gradingResult: GradingResult | null | undefined): boole
   );
 }
 
-function applyExplicitRatingUpdate(
+function inferLegacyRatingUpdate(
+  result: RatingEvalResult,
+  submitted: GradingResult,
+): SubmitRatingUpdate | undefined {
+  if (
+    isHumanAssertion(submitted.assertion) ||
+    submitted.pass !== result.success ||
+    !Array.isArray(result.gradingResult?.componentResults) ||
+    !Array.isArray(submitted.componentResults)
+  ) {
+    return undefined;
+  }
+  const previousHuman = result.gradingResult.componentResults.find(isHumanGradingResult);
+  const submittedHuman = submitted.componentResults.find(isHumanGradingResult);
+  if (
+    !previousHuman ||
+    !submittedHuman ||
+    previousHuman.pass !== submittedHuman.pass ||
+    previousHuman.score !== submittedHuman.score ||
+    !isDeepStrictEqual(previousHuman.reason, submittedHuman.reason)
+  ) {
+    return undefined;
+  }
+  if (submitted.score === result.score) {
+    return 'comment';
+  }
+  return submitted.reason === MANUAL_RATING_REASON ? 'score' : undefined;
+}
+
+function applyRatingFieldUpdate(
   previous: GradingResult | null,
   submitted: GradingResult,
   previousSuccess: boolean,
   previousScore: number,
   ratingUpdate: SubmitRatingUpdate,
+  preserveHumanScore: boolean,
 ): GradingResult {
+  const changes =
+    ratingUpdate === 'score' ? { score: submitted.score } : { comment: submitted.comment };
   const updated = {
-    ...(previous ?? { pass: previousSuccess, score: previousScore }),
+    ...previous,
+    pass: previousSuccess,
+    score: previousScore,
+    ...changes,
   } as GradingResult;
-  updated.pass = previousSuccess;
-  updated.score = ratingUpdate === 'score' ? submitted.score : previousScore;
-  if (ratingUpdate === 'comment') {
-    // Keep an explicit undefined so normalization cannot restore the previous comment.
-    updated.comment = submitted.comment;
+  if (Array.isArray(previous?.componentResults)) {
+    updated.componentResults = previous.componentResults.map((component) =>
+      isHumanGradingResult(component) && !(ratingUpdate === 'score' && preserveHumanScore)
+        ? { ...component, ...changes }
+        : component,
+    );
   }
   return updated;
 }
@@ -833,7 +925,6 @@ function normalizeRatingSubmission(
   submitted: GradingResult,
   previousSuccess: boolean,
   ratingAction?: SubmitRatingAction,
-  ratingUpdate?: SubmitRatingUpdate,
 ): {
   gradingResult: GradingResult;
   clearingManualRating: boolean;
@@ -894,17 +985,6 @@ function normalizeRatingSubmission(
     pass: submitted.pass,
     score: submitted.score,
     reason: manualReason,
-    // Deferred comparisons can change the aggregate without changing the human vote.
-    // Annotation and score edits must preserve that vote's independent outcome.
-    ...(ratingUpdate &&
-      humanSource &&
-      applyExplicitRatingUpdate(
-        humanSource,
-        submitted,
-        humanSource.pass,
-        humanSource.score,
-        ratingUpdate,
-      )),
     assertion: {
       ...(asRecord(humanSource?.assertion) ?? {}),
       type: HUMAN_ASSERTION_TYPE,
@@ -951,7 +1031,6 @@ type AutomatedClearComponent = {
   weight: number;
   failedContentSafetyCheck: boolean;
   comparison: boolean;
-  result: GradingResult;
 };
 
 function getFlattenedChildCount(
@@ -1002,7 +1081,6 @@ function getAutomatedClearComponents(componentResults: unknown): AutomatedClearC
         comparison:
           assertion?.type === 'max-score' ||
           (typeof assertion?.type === 'string' && assertion.type.startsWith('select-')),
-        result: component as unknown as GradingResult,
       });
     }
     // Assertion-set children are flattened after their aggregate parent for display. The
@@ -1016,7 +1094,6 @@ function buildServerOwnedClearGradingResult(
   result: RatingEvalResult,
   current: GradingResult,
   normalized: GradingResult,
-  baseline?: { state: ManualRatingState; comparison: GradingResult },
 ): GradingResult {
   const automatedComponents = getAutomatedClearComponents(normalized.componentResults);
   const executionError = hasExecutionError(result, automatedComponents.length > 0);
@@ -1046,8 +1123,9 @@ function buildServerOwnedClearGradingResult(
     !executionError && normalizeFailureReason(result.failureReason) === ResultFailureReason.NONE;
   const canReconstructAutomatedOutcome =
     automatedComponents.length > 0 && !hasOwn(testCase ?? {}, 'assertScoringFunction');
-  let cleared = {
+  const cleared = {
     ...current,
+    reason: current.reason === MANUAL_RATING_REASON ? 'Manual rating cleared' : current.reason,
     // Without private provenance, missing components or custom scoring need a canonical
     // fallback. Retained failures unexplained by the components remain failures: the public
     // export may have stripped the custom scorer that produced them.
@@ -1074,20 +1152,14 @@ function buildServerOwnedClearGradingResult(
     cleared.pass = false;
     cleared.score = 0;
   }
-  if (baseline) {
-    // A streamed manual rating may precede deferred comparisons. Start with the exact
-    // pre-rating aggregate, including custom scoring, rather than the manual outcome.
-    cleared = {
-      ...(restoreOriginalGradingResult(current, baseline.state) ?? { reason: '' }),
-      pass: baseline.state.original.success,
-      score: baseline.state.original.score,
-    };
+  // Match the evaluator's ordered comparison merge: winners preserve the aggregate,
+  // while each failed comparison vetoes success and replaces the current score.
+  for (const component of automatedComponents) {
+    if (component.comparison && !component.pass) {
+      cleared.pass = false;
+      cleared.score = component.score;
+    }
   }
-  applyClearedComparisons(
-    cleared,
-    baseline ? getAutomatedClearComponents([baseline.comparison]) : automatedComponents,
-    Boolean(baseline),
-  );
   if (hasOwn(normalized, 'componentResults')) {
     cleared.componentResults = normalized.componentResults;
   } else {
@@ -1099,49 +1171,35 @@ function buildServerOwnedClearGradingResult(
   return cleared;
 }
 
-function applyClearedComparisons(
-  cleared: GradingResult,
-  components: AutomatedClearComponent[],
-  restoreMetadata: boolean,
-) {
-  // Match the evaluator's ordered merge: winners preserve the aggregate, while
-  // each failed comparison vetoes success and replaces the current score.
-  for (const component of components) {
-    if (!component.comparison) {
-      continue;
-    }
-    const isMaxScore = component.result.assertion?.type === 'max-score';
-    if (!component.pass) {
-      if (restoreMetadata && (!isMaxScore || cleared.pass)) {
-        cleared.reason = component.result.reason;
-      }
-      cleared.pass = false;
-      cleared.score = component.score;
-    }
-    if (restoreMetadata && isMaxScore) {
-      cleared.assertion = component.result.assertion;
-    }
-  }
-}
-
 function resolveClearingManualRating(
   result: RatingEvalResult,
   existingState: ManualRatingState | undefined,
   clearRestoreBase: GradingResult,
-  clearedGradingResult: GradingResult,
+  normalizedGradingResult: GradingResult,
 ) {
   if (existingState?.status === 'active') {
+    const restoredState = includeLaterComparisons(existingState, clearRestoreBase);
     return {
-      gradingResult: restoreOriginalGradingResult(clearRestoreBase, existingState),
-      success: existingState.original.success,
-      score: existingState.original.score,
-      failureReason: existingState.original.failureReason,
+      gradingResult: restoreOriginalGradingResult(clearRestoreBase, restoredState),
+      success: restoredState.original.success,
+      score: restoredState.original.score,
+      failureReason: restoredState.original.failureReason,
       nextState: {
-        ...existingState,
+        ...restoredState,
         status: 'cleared' as const,
       },
     };
   }
+  const clearedGradingResult = result.gradingResult
+    ? buildServerOwnedClearGradingResult(
+        // Edits normalize the category; legacy clear still needs its retained provenance.
+        existingState?.status === 'legacy-active'
+          ? { ...result, failureReason: existingState.original.failureReason }
+          : result,
+        result.gradingResult,
+        normalizedGradingResult,
+      )
+    : normalizedGradingResult;
   const success = clearedGradingResult.pass;
   const score = clearedGradingResult.score;
   const preservedLegacyError =
@@ -1199,7 +1257,11 @@ function resolveRatingTransition(
     (hasOwn(submittedGradingResult, 'comment') ||
       Array.isArray(submittedGradingResult.componentResults) ||
       submittedGradingResult.reason === MANUAL_RATING_REASON);
-  let update = ratingAction === 'update' ? (ratingUpdate ?? 'comment') : undefined;
+  const legacyUpdate =
+    ratingAction === undefined
+      ? inferLegacyRatingUpdate(result, submittedGradingResult)
+      : undefined;
+  let update = ratingAction === 'update' ? (ratingUpdate ?? 'comment') : legacyUpdate;
   if (isLegacyClearedUpdate) {
     // Old clients retain stale outcomes after clearing. Only their annotations and marked
     // score edits are meaningful in these full payloads. Bare API pass/score edits retain
@@ -1230,22 +1292,25 @@ function resolveRatingTransition(
       manualRatingState: existingState ?? null,
     };
   }
-  const effectiveSubmission = update
-    ? applyExplicitRatingUpdate(
+  const normalized = update
+    ? {
+        gradingResult: applyRatingFieldUpdate(
+          result.gradingResult,
+          submittedGradingResult,
+          result.success,
+          result.score,
+          update,
+          legacyUpdate === 'score',
+        ),
+        clearingManualRating: false,
+        hasManualRating: previousHasManualRating,
+      }
+    : normalizeRatingSubmission(
         result.gradingResult,
         submittedGradingResult,
         result.success,
-        result.score,
-        update,
-      )
-    : submittedGradingResult;
-  const normalized = normalizeRatingSubmission(
-    result.gradingResult,
-    effectiveSubmission,
-    result.success,
-    ratingAction,
-    update,
-  );
+        ratingAction,
+      );
   let nextState: ManualRatingState | undefined;
   let gradingResult: GradingResult | null = normalized.gradingResult;
   let success = gradingResult.pass;
@@ -1261,27 +1326,14 @@ function resolveRatingTransition(
     result.gradingResult && isClearingManualRating
       ? result.gradingResult
       : normalized.gradingResult;
-  const serverOwnedClearGradingResult =
-    result.gradingResult && isClearingManualRating
-      ? buildServerOwnedClearGradingResult(
-          // Edits normalize the category; legacy clear still needs its retained provenance.
-          existingState?.status === 'legacy-active'
-            ? { ...result, failureReason: existingState.original.failureReason }
-            : result,
-          result.gradingResult,
-          normalized.gradingResult,
-        )
-      : normalized.gradingResult;
-
-  if (stateToRestore) {
-    gradingResult = restoreOriginalGradingResult(clearRestoreBase, stateToRestore);
-    success = stateToRestore.original.success;
-    score = stateToRestore.original.score;
-    failureReason = stateToRestore.original.failureReason;
-    nextState = {
-      ...stateToRestore,
-      status: 'cleared',
-    };
+  if (stateToRestore || normalized.clearingManualRating) {
+    const cleared = resolveClearingManualRating(
+      result,
+      existingState,
+      clearRestoreBase,
+      normalized.gradingResult,
+    );
+    ({ gradingResult, success, score, failureReason, nextState } = cleared);
   } else if (
     !previousHasManualRating &&
     existingState?.status === 'cleared' &&
@@ -1296,14 +1348,6 @@ function resolveRatingTransition(
         ? undefined
         : existingState
       : { ...captureManualRatingState(result), status: 'legacy-active' };
-  } else if (normalized.clearingManualRating) {
-    const cleared = resolveClearingManualRating(
-      result,
-      existingState,
-      clearRestoreBase,
-      serverOwnedClearGradingResult,
-    );
-    ({ gradingResult, success, score, failureReason, nextState } = cleared);
   }
 
   if (gradingResult) {
@@ -1660,13 +1704,7 @@ export default class EvalResult {
       testIdx: result.testIdx,
       promptIdx: result.promptIdx,
     });
-    const nonstandardScoringBaseline = getNonstandardScoringBaseline(gradingResult);
     const sanitizedGradingResult = sanitizeForDb(gradingResult || null);
-    if (nonstandardScoringBaseline && sanitizedGradingResult) {
-      // `sanitizeForDb` returns a serializable clone. Reattach the private in-memory marker so
-      // an unpersisted EvalResult can retain it until a later `save()` call.
-      setNonstandardScoringBaseline(sanitizedGradingResult, nonstandardScoringBaseline);
-    }
 
     // Sanitize all JSON fields to remove circular references and non-serializable values.
     // `testCase` and `prompt` can contain a resolved runtime provider under
@@ -1693,13 +1731,7 @@ export default class EvalResult {
       latencyMs,
       cost,
       metadata: sanitizeForDb(persistedMetadata),
-      manualRatingState: nonstandardScoringBaseline
-        ? captureNonstandardScoringState(
-            sanitizedGradingResult,
-            nonstandardScoringBaseline,
-            failureReason,
-          )
-        : null,
+      manualRatingState: null,
       failureReason,
     };
     if (persist) {
@@ -1713,15 +1745,6 @@ export default class EvalResult {
       args.response = redacted.response;
       args.gradingResult = redacted.gradingResult;
       args.metadata = redacted.metadata;
-      if (nonstandardScoringBaseline) {
-        // Private provenance must be derived from the same redacted grading result that is
-        // written to the database; otherwise it could become a side channel around redaction.
-        args.manualRatingState = captureNonstandardScoringState(
-          args.gradingResult,
-          nonstandardScoringBaseline,
-          failureReason,
-        );
-      }
       const dbResult = await db.insert(evalResultsTable).values(args).returning();
       clearCountCache(evalId);
       return new EvalResult({ ...dbResult[0], persisted: true });
@@ -1992,6 +2015,16 @@ export default class EvalResult {
     } = surfaceTraceMetadata(opts.metadata));
     this.#manualRatingState =
       opts.persisted === true ? parseManualRatingState(opts.manualRatingState) : undefined;
+    if (
+      this.#manualRatingState?.status === 'active' &&
+      this.#manualRatingState.original.comparisonCount === undefined
+    ) {
+      // Historical states cannot distinguish comparisons already in their snapshot. Start
+      // at the loaded boundary so future evaluator appends still participate in a clear.
+      this.#manualRatingState.original.comparisonCount = getCompletedComparisons(
+        this.gradingResult,
+      ).length;
+    }
     this.failureReason = isResultFailureReason(opts.failureReason)
       ? opts.failureReason
       : ResultFailureReason.NONE;
@@ -2001,47 +2034,6 @@ export default class EvalResult {
 
   async save() {
     const db = await getDb();
-    const nonstandardScoringBaseline = getNonstandardScoringBaseline(this.gradingResult);
-    if (nonstandardScoringBaseline && this.gradingResult && !hasManualRating(this.gradingResult)) {
-      this.#manualRatingState = captureNonstandardScoringState(
-        this.gradingResult,
-        nonstandardScoringBaseline,
-        this.failureReason,
-      );
-    } else if (
-      nonstandardScoringBaseline?.comparison &&
-      this.gradingResult &&
-      this.#manualRatingState?.status === 'active'
-    ) {
-      const baseline = this.#manualRatingState;
-      const gradingResult = buildServerOwnedClearGradingResult(
-        {
-          ...this,
-          error: this.error ?? null,
-          response: this.response ?? null,
-          manualRatingState: baseline,
-        },
-        this.gradingResult,
-        {
-          ...this.gradingResult,
-          componentResults: this.gradingResult.componentResults?.filter(
-            (component) => !isHumanGradingResult(component),
-          ),
-        },
-        { state: baseline, comparison: nonstandardScoringBaseline.comparison },
-      );
-      this.#manualRatingState = captureManualRatingState({
-        gradingResult,
-        success: gradingResult.pass,
-        score: gradingResult.score,
-        failureReason:
-          baseline.original.failureReason === ResultFailureReason.ERROR
-            ? ResultFailureReason.ERROR
-            : gradingResult.pass
-              ? ResultFailureReason.NONE
-              : ResultFailureReason.ASSERT,
-      });
-    }
     // Trace linkage and `pluginId` aren't schema columns — `pluginId` is re-derived from
     // testCase metadata in the constructor, and trace linkage travels inside the metadata
     // JSON via persistTraceMetadata. Drizzle would drop them silently, but excluding them
@@ -2063,9 +2055,6 @@ export default class EvalResult {
       const result = await db.insert(evalResultsTable).values(persistedValues).returning();
       this.id = result[0].id;
       this.persisted = true;
-    }
-    if (nonstandardScoringBaseline?.comparison) {
-      delete nonstandardScoringBaseline.comparison;
     }
     invalidateEvaluationCache(this.evalId);
   }

@@ -5,6 +5,25 @@ import type { EvaluateTableOutput, PromptMetrics } from '@promptfoo/types';
 
 const EVAL_OUTPUT_PROMPT_HASH_PATTERN = /^#details-row-(\d+)-prompt-(\d+)$/;
 
+export interface RatingCoordinates {
+  rowIndex: number;
+  promptIndex: number;
+  testIdx?: number;
+}
+
+// Legacy tables omit result IDs. Keep their cell identity separate from persisted IDs,
+// and prefer stable test indices so refreshes can reorder rows without moving edits.
+export function getRatingCellKey(
+  resultId: string | undefined,
+  { rowIndex, promptIndex, testIdx }: RatingCoordinates,
+): string {
+  return JSON.stringify(
+    resultId
+      ? ['result', resultId]
+      : [testIdx === undefined ? 'row' : 'test', testIdx ?? rowIndex, promptIndex],
+  );
+}
+
 export interface EvalOutputPromptHashTarget {
   rowIndex: number;
   promptIndex: number;
