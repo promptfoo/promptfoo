@@ -124,6 +124,9 @@ abstract class SageMakerGenericProvider {
   }
   set sagemakerRuntime(client: any) {
     this.injectedRuntime = client;
+    if (client === undefined) {
+      this.getSdkState.reset();
+    }
   }
   config: SageMakerConfig;
   endpointName: string;

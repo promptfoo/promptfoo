@@ -1,5 +1,7 @@
+import { BedrockAgentRuntimeClient } from '@aws-sdk/client-bedrock-agent-runtime';
 import { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { withCacheEnabled } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock';
 import { AwsBedrockAgentsProvider } from '../../src/providers/bedrock/agents';
@@ -7,6 +9,7 @@ import { AwsBedrockKnowledgeBaseProvider } from '../../src/providers/bedrock/kno
 import { NovaSonicProvider } from '../../src/providers/bedrock/nova-sonic';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { SageMakerCompletionProvider } from '../../src/providers/sagemaker';
+import { createEnvironmentScopedState } from '../../src/providers/scopedState';
 import { createDeferred, mockProcessEnv } from '../util/utils';
 
 let restore: () => void;
@@ -42,6 +45,138 @@ const providers = [
 ] as const;
 
 describe('SDK client lifecycle', () => {
+  const mutableClients = [
+    ['bedrock', providers[0][1], 'getBedrockInstance', 'bedrock'],
+    ['sagemaker', providers[1][1], 'getSageMakerRuntimeInstance', 'sagemakerRuntime'],
+    ['knowledge-base', providers[3][1], 'getKnowledgeBaseClient', 'knowledgeBaseClient'],
+  ] as const;
+
+  it.each(mutableClients)(
+    'resets only the active %s client and cache, retaining cleanup ownership',
+    async (_name, create, method, field) => {
+      const provider = create();
+      const getClient = () => Reflect.get(provider, method).call(provider);
+      await cliState.withEnv({}, async () => {
+        const outer = await getClient();
+        await cliState.withEnv({}, async () => {
+          const previous = await getClient();
+          const previousDestroy = vi.spyOn(previous, 'destroy');
+          const namespace = Reflect.get(provider, 'responseCacheNamespace');
+          const injected = { destroy: vi.fn() };
+          Reflect.set(provider, field, injected);
+          expect(await getClient()).toBe(injected);
+          Reflect.set(provider, field, undefined);
+          expect(Reflect.get(provider, field)).toBeUndefined();
+          const next = await getClient();
+          const nextDestroy = vi.spyOn(next, 'destroy');
+          expect(next).not.toBe(previous);
+          expect(Reflect.get(provider, 'responseCacheNamespace')).not.toBe(namespace);
+          expect(previousDestroy).not.toHaveBeenCalled();
+          await providerRegistry.shutdownAll(cliState.envScope);
+          expect(previousDestroy).toHaveBeenCalledOnce();
+          expect(nextDestroy).toHaveBeenCalledOnce();
+          expect(injected.destroy).not.toHaveBeenCalled();
+        });
+        expect(await getClient()).toBe(outer);
+        await providerRegistry.shutdownAll(cliState.envScope);
+      });
+    },
+  );
+
+  it.each(mutableClients)(
+    'keeps a reset %s initialization from publishing over its replacement',
+    async (_name, create, method, field) => {
+      const provider = create();
+      const credentials = createDeferred<{ accessKeyId: string; secretAccessKey: string }>();
+      vi.spyOn(provider, 'getCredentials').mockReturnValueOnce(credentials.promise);
+      const getClient = () => Reflect.get(provider, method).call(provider);
+      await cliState.withEnv({}, async () => {
+        const pending = getClient();
+        const namespace = Reflect.get(provider, 'responseCacheNamespace');
+        Reflect.set(provider, field, undefined);
+        try {
+          expect(Reflect.get(provider, 'responseCacheNamespace')).not.toBe(namespace);
+          const next = await getClient();
+          const nextDestroy = vi.spyOn(next, 'destroy');
+          credentials.resolve({ accessKeyId: 'retired', secretAccessKey: 'retired' });
+          const retired = await pending;
+          const retiredDestroy = vi.spyOn(retired, 'destroy');
+          expect(retired).not.toBe(next);
+          expect(await getClient()).toBe(next);
+          await providerRegistry.shutdownAll(cliState.envScope);
+          expect(retiredDestroy).toHaveBeenCalledOnce();
+          expect(nextDestroy).toHaveBeenCalledOnce();
+        } finally {
+          credentials.resolve({ accessKeyId: 'retired', secretAccessKey: 'retired' });
+          await pending;
+        }
+      });
+    },
+  );
+
+  it('keeps a pending Knowledge Base response in its retired cache namespace', async () => {
+    const provider = new AwsBedrockKnowledgeBaseProvider('fixture', {
+      config: { knowledgeBaseId: 'fixture' },
+    });
+    const credentials = createDeferred<{ accessKeyId: string; secretAccessKey: string }>();
+    vi.spyOn(provider, 'getCredentials').mockReturnValueOnce(credentials.promise);
+    const send = vi
+      .spyOn(BedrockAgentRuntimeClient.prototype, 'send')
+      .mockResolvedValueOnce({ output: { text: 'retired' } } as never)
+      .mockResolvedValueOnce({ output: { text: 'current' } } as never);
+    await cliState.withEnv({ PROMPTFOO_CACHE_TYPE: 'memory' }, () =>
+      withCacheEnabled(true, async () => {
+        const pending = provider.callApi('same prompt');
+        provider.knowledgeBaseClient = undefined;
+        credentials.resolve({ accessKeyId: 'retired', secretAccessKey: 'retired' });
+        expect(await pending).toMatchObject({ output: 'retired' });
+        expect(await provider.callApi('same prompt')).toMatchObject({ output: 'current' });
+        expect(await provider.callApi('same prompt')).toMatchObject({
+          output: 'current',
+          cached: true,
+        });
+        expect(send).toHaveBeenCalledTimes(2);
+        await providerRegistry.shutdownAll(cliState.envScope);
+      }),
+    );
+  });
+
+  it('does not let a retired cleanup owner remove its replacement state', async () => {
+    const register = vi.spyOn(providerRegistry, 'register');
+    const cleanup = vi.fn();
+    const state = createEnvironmentScopedState(() => ({}), cleanup);
+    await cliState.withEnv({}, async () => {
+      const previous = state();
+      const previousOwner = register.mock.calls.at(-1)![0];
+      state.reset();
+      const next = state();
+      await previousOwner.shutdown();
+      expect(cleanup).toHaveBeenCalledWith(previous);
+      expect(state()).toBe(next);
+      providerRegistry.unregister(previousOwner);
+      await providerRegistry.shutdownAll(cliState.envScope);
+      expect(cleanup).toHaveBeenCalledTimes(2);
+      expect(cleanup).toHaveBeenLastCalledWith(next);
+    });
+  });
+
+  it('does not let a rejected retired initialization clear its replacement', async () => {
+    const provider = new AwsBedrockCompletionProvider('fixture');
+    const credentials = createDeferred<{ accessKeyId: string; secretAccessKey: string }>();
+    vi.spyOn(provider, 'getCredentials').mockReturnValueOnce(credentials.promise);
+    await cliState.withEnv({}, async () => {
+      const pending = provider.getBedrockInstance();
+      provider.bedrock = undefined;
+      const next = await provider.getBedrockInstance();
+      credentials.reject(new Error('retired initialization'));
+      await expect(pending).rejects.toThrow('retired initialization');
+      expect(await provider.getBedrockInstance()).toBe(next);
+      const destroy = vi.spyOn(next, 'destroy');
+      await providerRegistry.shutdownAll(cliState.envScope);
+      expect(destroy).toHaveBeenCalledOnce();
+    });
+  });
+
   it('closes nested environment clients with their evaluation lifetime', async () => {
     const provider = new AwsBedrockCompletionProvider('fixture');
     const destroy = vi.spyOn(BedrockRuntime.prototype, 'destroy');

@@ -55,14 +55,20 @@ async function doDebug(options: DebugOptions): Promise<void> {
       arch: os.arch(),
       nodeVersion: process.version,
     },
-    env: cliState.withEnv(configEnv ?? cliState.env, () => ({
-      NODE_ENV: getEnvString('NODE_ENV'),
-      ...getProxyEnvironment(),
-      nodeExtra: getEnvString('NODE_EXTRA_CA_CERTS'),
-      nodeTls: getEnvString('NODE_TLS_REJECT_UNAUTHORIZED'),
-      telemetryDisabled: getEnvBool('PROMPTFOO_DISABLE_TELEMETRY'),
-      telemetryDebug: getEnvBool('PROMPTFOO_TELEMETRY_DEBUG'),
-    })),
+    env: cliState.withEnv(configEnv ?? cliState.env, () => {
+      const proxies = getProxyEnvironment();
+      return {
+        NODE_ENV: getEnvString('NODE_ENV'),
+        httpProxy: proxies.http_proxy,
+        httpsProxy: proxies.https_proxy,
+        allProxy: proxies.all_proxy,
+        noProxy: proxies.no_proxy,
+        nodeExtra: getEnvString('NODE_EXTRA_CA_CERTS'),
+        nodeTls: getEnvString('NODE_TLS_REJECT_UNAUTHORIZED'),
+        telemetryDisabled: getEnvBool('PROMPTFOO_DISABLE_TELEMETRY'),
+        telemetryDebug: getEnvBool('PROMPTFOO_TELEMETRY_DEBUG'),
+      };
+    }),
     configInfo,
   };
 

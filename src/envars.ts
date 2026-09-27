@@ -299,6 +299,9 @@ type EnvVars = {
   AZURE_TENANT_ID?: string;
   AZURE_TOKEN_SCOPE?: string;
 
+  // Azure Blob Storage test references
+  AZURE_STORAGE_CONNECTION_STRING?: string;
+
   // Azure Content Safety params
   AZURE_CONTENT_SAFETY_API_KEY?: string;
   AZURE_CONTENT_SAFETY_API_VERSION?: string;

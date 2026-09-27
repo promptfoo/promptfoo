@@ -66,10 +66,11 @@ describe('proxy diagnostics', () => {
       );
       const output = capture.info.mock.calls.find(([message]) => message.startsWith('{'))?.[0];
       expect(JSON.parse(output).env).toMatchObject({
-        https_proxy: 'http://***:***@config.example:8080',
-        no_proxy: '',
+        httpsProxy: 'http://***:***@config.example:8080',
+        noProxy: '',
         telemetryDisabled: true,
       });
+      expect(JSON.parse(output).env).not.toHaveProperty('https_proxy');
       expect(output).not.toContain('fixture-password');
       expect(cliState.env).toBe(previousEnv);
       expect(process.env.https_proxy).toBe('http://host.example:8080');
@@ -84,7 +85,7 @@ describe('proxy diagnostics', () => {
     await program.parseAsync(['debug', '-c', 'fixture.yaml'], { from: 'user' });
     const output = capture.info.mock.calls.find(([message]) => message.startsWith('{'))?.[0];
     const info = JSON.parse(output);
-    expect(info.env.https_proxy).toBe('http://host.example:8080');
+    expect(info.env.httpsProxy).toBe('http://host.example:8080');
     expect(info.configInfo.configContent).toContain('fixture config failure');
   });
 
