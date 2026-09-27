@@ -866,7 +866,7 @@ async function updatePromptMetricsForDeletedResult(
     if (batch.length < 500) {
       break;
     }
-    afterId = batch.at(-1)!.id;
+    afterId = batch[batch.length - 1].id;
   }
 
   const updatedPrompts: CompletedPrompt[] = prompts.map((p, i) =>
