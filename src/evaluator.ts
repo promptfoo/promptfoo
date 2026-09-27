@@ -1323,7 +1323,9 @@ async function applyProviderDelayIfNeeded(
     getProviderCallExecutionContext()?.providerDelay?.state?.handled;
   if (!response.cached && !handlesDelay && delay > 0) {
     logger.debug(`Sleeping for ${delay}ms`);
-    await (abortSignal ? sleepWithAbort(delay, abortSignal) : sleep(delay));
+    await (abortSignal
+      ? waitForProviderCall(sleepWithAbort(delay, abortSignal), abortSignal)
+      : sleep(delay));
   } else if (response.cached) {
     logger.debug(`Skipping delay because response is cached`);
   }
@@ -1968,7 +1970,8 @@ async function runEvalInContext(
         )
       : await runExecution();
   } catch (err) {
-    if (abortSignal?.aborted) {
+    const aborted = isAbortError(err);
+    if (abortSignal?.aborted && aborted) {
       // Interrupted work stays incomplete for resume or the evaluator's timeout result.
       return [];
     }
@@ -1981,8 +1984,7 @@ async function runEvalInContext(
     });
 
     // Don't log AbortError - these are expected when scan is aborted (e.g., target unavailable)
-    const isAbortError = err instanceof Error && err.name === 'AbortError';
-    if (!isAbortError) {
+    if (!aborted) {
       logger.error('Provider call failed during eval', logContext);
     }
 

@@ -70,6 +70,24 @@ module.exports = class FixtureGrader {
     removeTempDir(directory);
   });
 
+  it.each(['value', 'transform', 'contextTransform', 'assertScoringFunction'] as const)(
+    'preserves a literal function-marker string in %s',
+    async (field) => {
+      const literal = '[Function] literal fixture';
+      const current: AtomicTestCase =
+        field === 'assertScoringFunction'
+          ? { assertScoringFunction: literal }
+          : { assert: [{ type: 'javascript', value: 'true', [field]: literal }] };
+      const inputs = await store.resolveGradingInputs(
+        { output: 'target' },
+        current,
+        current,
+        resolveGrader,
+      );
+      expect(inputs.test).toEqual(current);
+    },
+  );
+
   it.each(
     (['assertion', 'options', 'assert-set'] as const).flatMap((slot) =>
       (['string', 'options'] as const).map((descriptor) => ({ slot, descriptor })),

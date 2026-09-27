@@ -503,6 +503,8 @@ export function callGradingProvider(
   options?: CallApiOptionsParams,
 ): Promise<ProviderResponse> {
   const signal = getProviderCallAbortSignal(options?.abortSignal);
+  // The enclosing call races cancellation while retaining the actual request.
+  const waitSignal = getProviderCallExecutionContext()?.providerCallOwned ? undefined : signal;
   const callOptions = signal ? { ...options, abortSignal: signal } : options;
   const invoke = async (context?: CallApiContextParams) => {
     signal?.throwIfAborted();
@@ -510,7 +512,7 @@ export function callGradingProvider(
       callOptions === undefined
         ? provider.callApi(prompt, context)
         : provider.callApi(prompt, context, callOptions);
-    return waitForProviderCall(result, signal);
+    return waitForProviderCall(result, waitSignal);
   };
   const tracingContext = getProviderCallTracingContext();
   if (!tracingContext) {
