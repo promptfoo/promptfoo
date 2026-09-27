@@ -651,6 +651,21 @@ describe('Provider override tests', () => {
       );
     });
 
+    it.each(['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'PALM_API_KEY'] as const)(
+      'does not let a blank %s hide lower scoped ADC',
+      async (name) => {
+        await cliState.withEnvFileOverrides(
+          { GOOGLE_APPLICATION_CREDENTIALS: '/fixture/adc.json' },
+          async () => {
+            const providers = await getDefaultProviders({ [name]: ' \t ' });
+            expect(providers.gradingProvider).toBeInstanceOf(VertexChatProvider);
+            expect(providers.embeddingProvider).toBeInstanceOf(VertexEmbeddingProvider);
+            expect(hasGoogleDefaultCredentials).not.toHaveBeenCalled();
+          },
+        );
+      },
+    );
+
     it('keeps explicitly empty scoped ADC on the ADC path', async () => {
       mockProcessEnv({ GOOGLE_API_KEY: 'host-key' });
       const providers = await getDefaultProviders({ GOOGLE_APPLICATION_CREDENTIALS: '' });

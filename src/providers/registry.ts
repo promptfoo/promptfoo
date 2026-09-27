@@ -272,7 +272,15 @@ export function mergeProviderEnv(
         aliases.includes('AWS_ACCESS_KEY_ID') ||
         aliases.includes('AZURE_CLIENT_ID') ||
         aliases.some((key) => key.endsWith('_PROXY'));
-      if (aliases.some((key) => (selectsScope ? layer[key] !== undefined : layer[key]))) {
+      if (
+        aliases.some((key) =>
+          selectsScope
+            ? layer[key] !== undefined
+            : /^(?:google|palm|vertex):/.test(providerPath) && key.endsWith('API_KEY')
+              ? layer[key]?.trim()
+              : layer[key],
+        )
+      ) {
         for (const key of aliases) {
           delete merged[key];
         }

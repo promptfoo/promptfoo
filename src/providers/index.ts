@@ -147,6 +147,17 @@ async function createApiProvider(
     mergedEnv.GOOGLE_APPLICATION_CREDENTIALS = templateEnv.GOOGLE_APPLICATION_CREDENTIALS;
   }
 
+  // Named selectors use the complete namespace, not implicit native-alias pruning.
+  const apiKeyEnvar = renderedConfig?.apiKeyEnvar;
+  if (
+    mergedEnv &&
+    templateEnv &&
+    typeof apiKeyEnvar === 'string' &&
+    Object.hasOwn(templateEnv, apiKeyEnvar)
+  ) {
+    mergedEnv[apiKeyEnvar] = templateEnv[apiKeyEnvar];
+  }
+
   const providerOptions: ProviderOptions = {
     id: renderedId,
     config: {

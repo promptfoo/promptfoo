@@ -6,6 +6,7 @@ import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureModerationProvider } from './azure/moderation';
 import { resolveProviderApiKey } from './credentials';
 import { AIStudioEmbeddingProvider, getGoogleAiStudioProviders } from './google/ai.studio';
+import { GoogleAuthManager } from './google/auth';
 import { hasGoogleDefaultCredentials } from './google/util';
 import { getGoogleVertexEmbeddingProvider, getGoogleVertexProviders } from './google/vertex';
 import { MistralEmbeddingProvider as MistralEmbeddingApiProvider } from './mistral';
@@ -44,7 +45,7 @@ function hasScopedGoogleAdc(env?: EnvOverrides): boolean {
         continue;
       }
       masked.add(key);
-      if (value) {
+      if (value.trim()) {
         return false;
       }
     }
@@ -70,7 +71,7 @@ async function getEmbeddingProviderForAzureDefaults(env?: EnvOverrides): Promise
 
   // A chat deployment is not an embedding deployment. Prefer configured embedding
   // API credentials before probing ADC, without changing Azure's chat selection.
-  if (resolveProviderApiKey(undefined, env, ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'PALM_API_KEY'])) {
+  if (GoogleAuthManager.getApiKey({}, env).apiKey) {
     return new AIStudioEmbeddingProvider('gemini-embedding-001', { env });
   }
   if (resolveProviderApiKey(undefined, env, ['MISTRAL_API_KEY'])) {
@@ -104,10 +105,7 @@ async function getDefaultProviderPreferences(
   const hasOpenAiCredentials = Boolean(resolveProviderApiKey(undefined, env, ['OPENAI_API_KEY']));
   const hasScopedAdc = hasScopedGoogleAdc(env);
   const hasGoogleAiStudioCredentials =
-    !hasScopedAdc &&
-    Boolean(
-      resolveProviderApiKey(undefined, env, ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'PALM_API_KEY']),
-    );
+    !hasScopedAdc && Boolean(GoogleAuthManager.getApiKey({}, env).apiKey);
   const hasAzureApiKey = resolveProviderApiKey(undefined, env, [
     'AZURE_API_KEY',
     'AZURE_OPENAI_API_KEY',

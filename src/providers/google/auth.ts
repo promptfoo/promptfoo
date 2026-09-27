@@ -143,6 +143,7 @@ export interface ApiKeyResult {
     | 'GOOGLE_API_KEY'
     | 'GEMINI_API_KEY'
     | 'PALM_API_KEY'
+    | 'GOOGLE_GENERATIVE_AI_API_KEY'
     | 'none';
 }
 
@@ -196,6 +197,15 @@ export class GoogleAuthManager {
     return this.resolveApiKey(config, env, ['GOOGLE_API_KEY', 'GEMINI_API_KEY'], 'scoped');
   }
 
+  static getImageApiKey(config: CompletionOptions, env?: EnvOverrides): ApiKeyResult {
+    return this.resolveApiKey(
+      config,
+      env,
+      ['GOOGLE_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY', 'GEMINI_API_KEY'],
+      'none',
+    );
+  }
+
   private static resolveApiKey(
     config: CompletionOptions,
     env: EnvOverrides | undefined,
@@ -224,7 +234,7 @@ export class GoogleAuthManager {
           continue;
         }
         masked.add(source);
-        if (!apiKey) {
+        if (!apiKey.trim()) {
           continue;
         }
         if (source === 'VERTEX_API_KEY') {
@@ -339,7 +349,7 @@ export class GoogleAuthManager {
           if (value === 'false' || value === '0') {
             return false;
           }
-        } else if (name === 'GOOGLE_APPLICATION_CREDENTIALS' || value) {
+        } else if (name === 'GOOGLE_APPLICATION_CREDENTIALS' || value.trim()) {
           return (
             name === 'GOOGLE_APPLICATION_CREDENTIALS' || GOOGLE_PROJECT_ENV_KEYS.includes(name)
           );
