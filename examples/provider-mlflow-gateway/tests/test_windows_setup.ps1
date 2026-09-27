@@ -61,3 +61,6 @@ try {
     if (Test-Path 'server.stderr.log') { Get-Content 'server.stderr.log' }
     Pop-Location
 }
+# taskkill can report an already-exited child after successfully stopping the tree.
+# A setup or health exception still terminates above; only a successful check reaches here.
+exit 0
