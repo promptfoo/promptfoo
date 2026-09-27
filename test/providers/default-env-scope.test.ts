@@ -10,7 +10,15 @@ import {
 import { AnthropicMessagesProvider } from '../../src/providers/anthropic/messages';
 import { getDefaultProviders } from '../../src/providers/defaults';
 import { hasGoogleDefaultCredentials } from '../../src/providers/google/util';
+import {
+  DefaultGradingProvider as defaultMistralGrader,
+  getMistralProviders,
+} from '../../src/providers/mistral/defaults';
 import { hasCodexDefaultCredentials } from '../../src/providers/openai/codexDefaults';
+import {
+  DefaultGradingProvider as defaultOpenAiGrader,
+  getOpenAiProviders,
+} from '../../src/providers/openai/defaults';
 import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/providers/google/util', async (importOriginal) => ({
@@ -211,6 +219,28 @@ describe('default provider environment ownership', () => {
       });
     },
   );
+  it.each([
+    ['OpenAI', getOpenAiProviders, defaultOpenAiGrader, 'OPENAI_API_KEY'],
+    ['Mistral', getMistralProviders, defaultMistralGrader, 'MISTRAL_API_KEY'],
+  ] as const)(
+    'preserves %s defaults while binding every explicit bundle member',
+    (_name, getProviders, defaultGrader, key) => {
+      const defaults = getProviders();
+      const bound = getProviders({ [key]: 'fixture-key' });
+      expect(defaults.gradingProvider).toBe(defaultGrader);
+      expect(getProviders().gradingProvider).toBe(defaultGrader);
+      expect(getProviders()).not.toBe(defaults);
+      for (const [role, provider] of Object.entries(bound)) {
+        const defaultProvider = Reflect.get(defaults, role);
+        expect(provider).not.toBe(defaultProvider);
+        expect(provider.id()).toBe(defaultProvider.id());
+        expect(provider.config).toEqual(defaultProvider.config);
+        expect(provider.getApiKey()).toBe('fixture-key');
+      }
+      expect(bound.gradingJsonProvider.config.response_format).toEqual({ type: 'json_object' });
+    },
+  );
+
   it('prefers explicit Azure default deployment names to ambient deployments', async () => {
     await cliState.withEnv(
       {

@@ -1,4 +1,4 @@
-import { type EnvVarKey, getEnvOverrides, getEnvString } from '../envars';
+import { resolveProviderEnv } from './env';
 
 interface CredentialOptions {
   apiKey?: string;
@@ -16,21 +16,5 @@ export function resolveProviderApiKey(
     return config.apiKey;
   }
   const envars = config?.apiKeyEnvar ? [config.apiKeyEnvar] : defaultEnvars;
-  const masked = new Set<string>();
-  const ambient = Object.fromEntries(envars.map((key) => [key, getEnvString(key as EnvVarKey)]));
-  for (const layer of [env, getEnvOverrides(), getEnvOverrides('file'), ambient]) {
-    // Preserve providers whose legacy shell aliases use a different preference order.
-    const aliases = layer === ambient && !config?.apiKeyEnvar ? ambientEnvars : envars;
-    for (const envar of aliases) {
-      const value = layer?.[envar];
-      if (masked.has(envar) || value === undefined) {
-        continue;
-      }
-      masked.add(envar);
-      if (value) {
-        return value;
-      }
-    }
-  }
-  return undefined;
+  return resolveProviderEnv(env, envars, config?.apiKeyEnvar ? envars : ambientEnvars)?.value;
 }
