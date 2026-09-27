@@ -27,6 +27,7 @@ import {
   withOtelContext,
 } from '../../src/tracing/otelSdk';
 import { withGraderSpan, withTargetSpan } from '../../src/tracing/targetTracer';
+import { createDeferred } from '../util/utils';
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
 
 import type { OtelConfig } from '../../src/tracing/otelConfig';
@@ -49,14 +50,6 @@ vi.mock('@opentelemetry/exporter-trace-otlp-http', async () => {
     },
   };
 });
-
-function deferred() {
-  let resolve!: () => void;
-  const promise = new Promise<void>((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
-}
 
 const config: OtelConfig = {
   enabled: true,
@@ -162,8 +155,8 @@ describe('evaluation-owned OpenTelemetry', () => {
   });
 
   it('isolates concurrent exporters and lets a peer keep recording after shutdown', async () => {
-    const ready = deferred();
-    const release = deferred();
+    const ready = createDeferred<void>();
+    const release = createDeferred<void>();
     const first = runScoped(
       { serviceName: 'first', endpoint: 'https://first.invalid' },
       async () => {
@@ -220,8 +213,8 @@ describe('evaluation-owned OpenTelemetry', () => {
   it('routes a cached global tracer through sequential, overlapping, and disabled scopes', async () => {
     const custom = trace.getTracer('custom-provider-before-initialization');
     custom.startSpan('outside before').end();
-    const entered = deferred();
-    const release = deferred();
+    const entered = createDeferred<void>();
+    const release = createDeferred<void>();
     const first = runScoped({ serviceName: 'first' }, async () => {
       await custom.startActiveSpan('first parent', async (parent) => {
         custom.startSpan('first child').end();

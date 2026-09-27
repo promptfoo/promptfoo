@@ -8,6 +8,7 @@ import Eval from '../../src/models/eval';
 import { VercelAiProvider } from '../../src/providers/vercel';
 import { getGenAITracer } from '../../src/tracing/genaiTracer';
 import { getTraceStore } from '../../src/tracing/store';
+import { createDeferred } from '../util/utils';
 
 import type { ApiProvider, TestSuite } from '../../src/types/index';
 
@@ -17,14 +18,6 @@ vi.mock('ai', async (importOriginal) => ({
   createGateway: () => () => ({ modelId: 'fixture' }),
   generateText,
 }));
-
-function deferred() {
-  let resolve!: () => void;
-  const promise = new Promise<void>((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
-}
 
 async function run(serviceName: string, provider: ApiProvider, enabled = true, localExport = true) {
   const suite: TestSuite = {
@@ -94,8 +87,8 @@ describe('real evaluation tracing lifecycle', () => {
   });
 
   it('lets an overlapping evaluation finish without shutting down its peer', async () => {
-    const entered = deferred();
-    const release = deferred();
+    const entered = createDeferred<void>();
+    const release = createDeferred<void>();
     const first = run(
       'first',
       localProvider(async () => {
@@ -120,8 +113,8 @@ describe('real evaluation tracing lifecycle', () => {
   });
 
   it('keeps an untraced evaluation and local-export opt-out isolated from an active traced eval', async () => {
-    const entered = deferred();
-    const release = deferred();
+    const entered = createDeferred<void>();
+    const release = createDeferred<void>();
     const first = run(
       'traced',
       localProvider(async () => {
@@ -162,8 +155,8 @@ describe('real evaluation tracing lifecycle', () => {
   });
 
   it('passes each evaluation tracer into Vercel SDK telemetry and preserves its parent', async () => {
-    const entered = deferred();
-    const release = deferred();
+    const entered = createDeferred<void>();
+    const release = createDeferred<void>();
     let calls = 0;
     generateText.mockImplementation(
       async ({ experimental_telemetry }: { experimental_telemetry: { tracer: Tracer } }) => {
