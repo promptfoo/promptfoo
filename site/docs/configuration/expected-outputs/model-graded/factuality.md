@@ -18,7 +18,7 @@ assert:
     value: The Earth orbits around the Sun
 ```
 
-`model-graded-factuality` is an alias for `factuality`; both names use the same grader and options.
+`model-graded-factuality` is an alias for `factuality`; both names use the same grader and options. Prefix either name with `not-` to invert the verdict and score (`1 - score`, clamped to 0–1). Grader errors and malformed responses remain failures.
 
 For non-English evaluation output, see the [multilingual evaluation guide](/docs/configuration/expected-outputs/model-graded#non-english-evaluation).
 
