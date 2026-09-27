@@ -5,6 +5,7 @@ on:
     paths:
       - 'examples/provider-mlflow-gateway/**'
       - 'src/providers/mlflow-gateway.ts'
+      - 'src/providers/openai/**'
       - '.nvmrc'
       - 'package.json'
       - 'package-lock.json'
@@ -14,6 +15,7 @@ on:
     paths:
       - 'examples/provider-mlflow-gateway/**'
       - 'src/providers/mlflow-gateway.ts'
+      - 'src/providers/openai/**'
       - '.nvmrc'
       - 'package.json'
       - 'package-lock.json'
