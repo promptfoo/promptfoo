@@ -290,6 +290,8 @@ function reconcileOpenRouterReasoning(
 }
 
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
+  readonly handlesOwnRetries: boolean = true;
+
   private usesOpenRouter(): boolean {
     const system = this.getGenAISystem();
     return (

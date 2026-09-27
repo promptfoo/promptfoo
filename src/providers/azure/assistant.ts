@@ -169,6 +169,8 @@ function getAuthHeadersCacheIdentity(authHeaders: Record<string, string>) {
 }
 
 export class AzureAssistantProvider extends AzureGenericProvider {
+  readonly handlesOwnRetries: boolean = true;
+
   assistantConfig: AzureAssistantOptions;
   private functionCallbackHandler = new FunctionCallbackHandler();
 

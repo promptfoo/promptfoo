@@ -71,6 +71,8 @@ const IMAGEN_COSTS: Record<string, number> = {
 };
 
 export class GoogleImageProvider implements ApiProvider {
+  readonly handlesOwnRetries: boolean = true;
+
   modelName: string;
   config: CompletionOptions;
   env?: EnvOverrides;

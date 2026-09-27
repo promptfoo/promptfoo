@@ -181,6 +181,8 @@ function getInFlightCacheKey(cacheKey: string, signal?: AbortSignal): string {
 }
 
 export class OpenAiTtsProvider extends OpenAiGenericProvider {
+  readonly handlesOwnRetries: boolean = true;
+
   static OPENAI_TTS_MODEL_NAMES = OPENAI_TTS_MODELS.map((model) => model.id);
 
   config: OpenAiTtsOptions;

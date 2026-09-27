@@ -179,6 +179,8 @@ interface BedrockAgentsOptions {
  * ```
  */
 export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implements ApiProvider {
+  readonly handlesOwnRetries: boolean = true;
+
   private agentRuntimeClient?: BedrockAgentRuntimeClient;
   config: BedrockAgentsOptions; // Make public to match base class
 

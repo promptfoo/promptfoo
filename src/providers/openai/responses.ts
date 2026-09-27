@@ -725,6 +725,8 @@ async function coalesceBackgroundResponse(
 }
 
 export class OpenAiResponsesProvider extends OpenAiGenericProvider {
+  readonly handlesOwnRetries: boolean = true;
+
   private functionCallbackHandler = new FunctionCallbackHandler();
   private processor: ResponsesProcessor;
   private readonly backgroundCacheScope = `provider:${++nextBackgroundProviderScope}`;

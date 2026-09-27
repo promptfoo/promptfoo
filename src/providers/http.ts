@@ -1745,6 +1745,8 @@ async function createHttpsAgent(
 }
 
 export class HttpProvider implements ApiProvider {
+  readonly handlesOwnRetries: boolean = true;
+
   url: string;
   config: HttpProviderConfig;
   private transformResponse: Promise<

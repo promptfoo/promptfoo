@@ -42,6 +42,8 @@ import type {
 import type { AzureChatResponsesOptions, AzureProviderOptions } from './types';
 
 export class AzureChatCompletionProvider extends AzureGenericProvider {
+  readonly handlesOwnRetries: boolean = true;
+
   declare config: AzureChatResponsesOptions;
 
   private mcpClient: MCPClient | null = null;

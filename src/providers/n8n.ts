@@ -326,6 +326,8 @@ function getSafeProviderId(url: string, config?: N8nProviderConfig): string {
  * ```
  */
 export class N8nProvider implements ApiProvider {
+  readonly handlesOwnRetries: boolean = true;
+
   private webhookUrl: string;
   config: N8nProviderConfig;
   private providerId: string;

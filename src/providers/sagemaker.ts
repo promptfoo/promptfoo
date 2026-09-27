@@ -90,6 +90,8 @@ interface SageMakerOptions extends ProviderOptions {
  * Base class for SageMaker providers with common functionality
  */
 abstract class SageMakerGenericProvider {
+  readonly handlesOwnRetries: boolean = true;
+
   env?: EnvOverrides;
   sagemakerRuntime?: any; // SageMaker runtime client
   private initializedRuntime?: { client: any; region: string };

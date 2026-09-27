@@ -415,6 +415,8 @@ function renderConfigTemplates(
 
 /** Managed Codex sessions, distinct from the local @openai/agents SDK provider. */
 export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
+  readonly handlesOwnRetries: boolean = true;
+
   declare config: AgentsApiOptions;
   private readonly modelOverride: string;
   private credentials: string[] = [];

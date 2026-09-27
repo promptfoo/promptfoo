@@ -26,6 +26,8 @@ import type { AzureChatResponsesOptions, AzureProviderOptions } from './types';
 const AZURE_RESPONSES_API_VERSION = 'preview';
 
 export class AzureResponsesProvider extends AzureGenericProvider {
+  readonly handlesOwnRetries: boolean = true;
+
   declare config: AzureChatResponsesOptions;
 
   private functionCallbackHandler = new FunctionCallbackHandler();

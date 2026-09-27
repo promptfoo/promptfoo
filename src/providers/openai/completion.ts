@@ -22,6 +22,8 @@ import type {
 import type { OpenAiCompletionOptions } from './types';
 
 export class OpenAiCompletionProvider extends OpenAiGenericProvider {
+  readonly handlesOwnRetries: boolean = true;
+
   static OPENAI_COMPLETION_MODELS = OPENAI_COMPLETION_MODELS;
 
   static OPENAI_COMPLETION_MODEL_NAMES = OPENAI_COMPLETION_MODELS.map((model) => model.id);

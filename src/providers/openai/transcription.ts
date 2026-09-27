@@ -46,6 +46,8 @@ export interface OpenAiTranscriptionOptions extends OpenAiSharedOptions {
 }
 
 export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
+  readonly handlesOwnRetries: boolean = true;
+
   static OPENAI_TRANSCRIPTION_MODEL_NAMES = OPENAI_TRANSCRIPTION_MODELS.map((model) => model.id);
 
   config: OpenAiTranscriptionOptions;
