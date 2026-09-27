@@ -17,11 +17,24 @@ which installs only the model provider used by this example. PydanticAI 2.46 or
 newer manages the OpenAI SDK dependency; Pydantic is listed explicitly because
 the example defines its output schema with `BaseModel`.
 
+On macOS/Linux:
+
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+source .venv/bin/activate
 python -m pip install -r requirements.txt
 export OPENAI_API_KEY=your_openai_api_key_here
+npx promptfoo@latest eval --no-cache
+npx promptfoo@latest view
+```
+
+On Windows (PowerShell):
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+$env:OPENAI_API_KEY = "your_openai_api_key_here"
 npx promptfoo@latest eval --no-cache
 npx promptfoo@latest view
 ```
