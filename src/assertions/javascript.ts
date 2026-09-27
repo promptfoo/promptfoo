@@ -157,17 +157,17 @@ function normalizeJavascriptAssertionResult(
   renderedValue?: string,
 ): GradingResult {
   const normalizedAssertion = normalizeResultAssertion(undefined, assertion);
-  const normalizedResult =
-    typeof result === 'object'
-      ? { ...result, assertion: normalizeResultAssertion(result.assertion, assertion) }
-      : result;
-  return normalizeScriptAssertionResult(
+  const normalizedResult = normalizeScriptAssertionResult(
     normalizedAssertion,
-    normalizedResult,
+    result,
     inverse,
     { code: 'Custom function', language: 'JavaScript' },
     renderedValue,
   );
+  return {
+    ...normalizedResult,
+    assertion: normalizeResultAssertion(normalizedResult.assertion, assertion),
+  };
 }
 
 export const handleJavascript = async ({

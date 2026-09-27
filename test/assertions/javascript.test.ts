@@ -936,6 +936,64 @@ describe('JavaScript file references', () => {
     },
   );
 
+  it.each(['prototype', 'non-enumerable'] as const)(
+    'preserves %s grading fields from frozen custom results',
+    async (storage) => {
+      for (const rawPass of [false, true]) {
+        for (const inverse of [false, true]) {
+          class CustomResult {
+            score = 0.4;
+            namedScores = { safety: 0.7 };
+            tokensUsed = { total: 3 };
+            get pass() {
+              return rawPass;
+            }
+            get reason() {
+              return 'Custom reason';
+            }
+            get assertion(): Assertion {
+              return { type: 'javascript', value: () => false };
+            }
+          }
+          const grading = new CustomResult();
+          if (storage === 'non-enumerable') {
+            Object.defineProperties(grading, {
+              pass: { value: rawPass },
+              reason: { value: 'Custom reason' },
+            });
+          }
+          Object.freeze(grading);
+          const assertion: Assertion = {
+            type: inverse ? 'not-javascript' : 'javascript',
+            value: () => grading,
+          };
+          const result = await runAssertion({
+            prompt: 'Some prompt',
+            provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+            assertion,
+            test: {} as AtomicTestCase,
+            providerResponse: { output: 'Expected output' },
+          });
+          expect(result).toMatchObject({
+            pass: rawPass !== inverse,
+            score: 0.4,
+            reason: inverse
+              ? rawPass
+                ? 'Custom function returned true'
+                : 'Assertion passed'
+              : 'Custom reason',
+            namedScores: { safety: 0.7 },
+            tokensUsed: { total: 3 },
+            assertion: { type: 'javascript', value: '() => false' },
+          });
+          expect(Object.isFrozen(grading)).toBe(true);
+          expect(grading.pass).toBe(rawPass);
+          expect(grading.reason).toBe('Custom reason');
+        }
+      }
+    },
+  );
+
   const inverseStringAssertionCases: [string, Assertion, boolean, number, string][] = [
     [
       'boolean results for not-javascript assertions',
