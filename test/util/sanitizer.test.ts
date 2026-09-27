@@ -92,6 +92,9 @@ describe('proxy environment redaction', () => {
     'npm_config_http_proxy',
     'NPM_CONFIG_HTTPS_PROXY',
     'npm_config_https_proxy',
+    'httpProxy',
+    'httpsProxy',
+    'allProxy',
   ])('redacts credentials in %s from logs and output', (key) => {
     for (const proxy of [
       'http://fixture-user:fixture-password@proxy.example:8080',
