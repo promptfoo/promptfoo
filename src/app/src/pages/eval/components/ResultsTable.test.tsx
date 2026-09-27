@@ -2796,6 +2796,101 @@ describe('ResultsTable Pagination', () => {
     atInitialVerticalScrollPosition: true,
   };
 
+  it.each([
+    { count: 59, nextCount: 58, page: 2, expectedPage: 2 },
+    { count: 21, nextCount: 20, page: 3, expectedPage: 2 },
+    { count: 11, nextCount: 0, page: 2, expectedPage: 1 },
+  ])(
+    'preserves page size and clamps page $page to $expectedPage when the count changes from $count to $nextCount',
+    async ({ count, nextCount, page, expectedPage }) => {
+      const user = userEvent.setup();
+      const fetchEvalData = vi.fn();
+      const state = {
+        config: {},
+        evalId: '123',
+        setTable: vi.fn(),
+        table: { head: { prompts: [], vars: [] }, body: [] },
+        version: 4,
+        fetchEvalData,
+        isFetching: false,
+        filteredResultsCount: count,
+        totalResultsCount: count,
+        filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+      };
+      vi.mocked(useTableStore).mockImplementation(() => state);
+      const rendered = renderWithProviders(<ResultsTable {...defaultProps} />);
+      await user.click(screen.getByLabelText('Results per page'));
+      await user.click(screen.getByRole('option', { name: '10', exact: true }));
+      for (let currentPage = 1; currentPage < page; currentPage++) {
+        await user.click(screen.getByRole('button', { name: 'Next page' }));
+      }
+      expect(screen.getByLabelText('Go to page')).toHaveValue(page);
+      fetchEvalData.mockClear();
+
+      state.filteredResultsCount = nextCount;
+      rendered.rerender(<ResultsTable {...defaultProps} zoom={1.01} />);
+
+      expect(screen.getByLabelText('Results per page')).toHaveTextContent('10');
+      expect(screen.getByLabelText('Go to page')).toHaveValue(expectedPage);
+      if (page === expectedPage) {
+        expect(fetchEvalData).not.toHaveBeenCalled();
+      } else {
+        expect(fetchEvalData).toHaveBeenCalledExactlyOnceWith(
+          '123',
+          expect.objectContaining({
+            pageIndex: expectedPage - 1,
+            pageSize: 10,
+          }),
+        );
+      }
+    },
+  );
+
+  it('waits for loaded counts and keeps a larger page size within the available pages', async () => {
+    const user = userEvent.setup();
+    const fetchEvalData = vi.fn();
+    const state = {
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: { head: { prompts: [], vars: [] }, body: [] },
+      version: 4,
+      fetchEvalData,
+      isFetching: false,
+      filteredResultsCount: 59,
+      totalResultsCount: 59,
+      filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+    };
+    vi.mocked(useTableStore).mockImplementation(() => state);
+    const rendered = renderWithProviders(<ResultsTable {...defaultProps} />);
+    await user.click(screen.getByLabelText('Results per page'));
+    await user.click(screen.getByRole('option', { name: '10', exact: true }));
+    await user.click(screen.getByRole('button', { name: 'Next page' }));
+    await user.click(screen.getByRole('button', { name: 'Next page' }));
+    fetchEvalData.mockClear();
+
+    state.isFetching = true;
+    state.filteredResultsCount = 0;
+    rendered.rerender(<ResultsTable {...defaultProps} zoom={1.01} />);
+    expect(screen.getByLabelText('Go to page')).toHaveValue(3);
+    state.isFetching = false;
+    state.filteredResultsCount = 59;
+    rendered.rerender(<ResultsTable {...defaultProps} zoom={1.02} />);
+    expect(screen.getByLabelText('Go to page')).toHaveValue(3);
+    expect(fetchEvalData).not.toHaveBeenCalled();
+
+    await user.click(screen.getByLabelText('Results per page'));
+    await user.click(screen.getByRole('option', { name: '50', exact: true }));
+    expect(screen.getByLabelText('Go to page')).toHaveValue(2);
+    expect(fetchEvalData).toHaveBeenCalledExactlyOnceWith(
+      '123',
+      expect.objectContaining({
+        pageIndex: 1,
+        pageSize: 50,
+      }),
+    );
+  });
+
   it('should render pagination controls when totalResultsCount is greater than 10', () => {
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
@@ -4538,9 +4633,10 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     });
   });
 
-  it('reconciles a cleared rating from the persisted server outcome', async () => {
+  it('reconciles a cleared rating and refreshes unfiltered summary metrics', async () => {
     const user = userEvent.setup();
     const mockTable = createMockTableWithHumanAssertion();
+    const mockFetchEvalData = vi.fn().mockResolvedValue(null);
     mockCallApi.mockResolvedValueOnce({
       ok: true,
       json: vi.fn().mockResolvedValue({
@@ -4565,7 +4661,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
       table: mockTable,
       version: 4,
       renderMarkdown: true,
-      fetchEvalData: vi.fn(),
+      fetchEvalData: mockFetchEvalData,
       isFetching: false,
       filteredResultsCount: 1,
       filters: {
@@ -4590,6 +4686,10 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
         reason: 'Original execution error',
         componentResults: [],
       },
+    });
+    expect(mockFetchEvalData).toHaveBeenCalledExactlyOnceWith('123', {
+      skipSettingEvalId: true,
+      skipLoadingState: true,
     });
   });
 
@@ -4870,6 +4970,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     rendered.rerender(<ResultsTable {...defaultProps} zoom={1.01} />);
     await user.click(screen.getByRole('button', { name: 'Update score' }));
     await waitFor(() => expect(mockCallApi).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mockFetchEvalData).toHaveBeenCalledTimes(1));
     expect(mockSetTable).toHaveBeenCalledTimes(2);
 
     await act(async () => {
@@ -4884,10 +4985,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     ]);
     // Completion of the first server's writes must not replace or refresh the second server's table.
     expect(mockSetTable).toHaveBeenCalledTimes(2);
-    expect(mockFetchEvalData).not.toHaveBeenCalledWith(
-      '123',
-      expect.objectContaining({ skipLoadingState: true }),
-    );
+    expect(mockFetchEvalData).toHaveBeenCalledTimes(1);
   });
 
   it('persists a queued v4 rating when its result leaves the current page', async () => {
@@ -5107,6 +5205,59 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     },
   );
 
+  it.each([3, 4])(
+    'refreshes a remounted eval after a previous mount finishes its v%i rating',
+    async (version) => {
+      const user = userEvent.setup();
+      const table = createMockTableWithHumanAssertion();
+      const mockFetchEvalData = vi.fn().mockResolvedValue(null);
+      let resolveRating!: (response: any) => void;
+      mockCallApi.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveRating = resolve;
+        }),
+      );
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        setTable: mockSetTable,
+        table,
+        version,
+        fetchEvalData: mockFetchEvalData,
+        isFetching: false,
+        filteredResultsCount: 1,
+        filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+      }));
+
+      const firstMount = renderWithProviders(<ResultsTable {...defaultProps} />);
+      await user.click(screen.getByRole('button', { name: 'Clear rating' }));
+      firstMount.unmount();
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+      expect(mockFetchEvalData).not.toHaveBeenCalled();
+
+      await act(async () => {
+        resolveRating({
+          ok: true,
+          json: vi.fn().mockResolvedValue({
+            id: 'test-output-1',
+            success: false,
+            score: 0.35,
+            failureReason: 2,
+            gradingResult: { pass: false, score: 0.35 },
+          }),
+        });
+      });
+
+      await waitFor(() =>
+        expect(mockFetchEvalData).toHaveBeenCalledExactlyOnceWith('123', {
+          skipSettingEvalId: true,
+          skipLoadingState: true,
+        }),
+      );
+      expect(mockSetTable).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('serializes v3 full-table rating writes across different results', async () => {
     const user = userEvent.setup();
     const mockTable = createMockTableWithHumanAssertion();
@@ -5219,7 +5370,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     await waitFor(() => expect(mockFetchEvalData).toHaveBeenCalledWith('123', expect.any(Object)));
   });
 
-  it('uses the latest filter when a pending rating triggers a refresh', async () => {
+  it('refreshes the store query without reconstructing filters from stale rating props', async () => {
     const user = userEvent.setup();
     const mockTable = createMockTableWithHumanAssertion();
     const mockFetchEvalData = vi.fn().mockResolvedValue(null);
@@ -5257,10 +5408,10 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     });
 
     await waitFor(() =>
-      expect(mockFetchEvalData).toHaveBeenCalledWith(
-        '123',
-        expect.objectContaining({ filterMode: 'user-rated' }),
-      ),
+      expect(mockFetchEvalData).toHaveBeenCalledWith('123', {
+        skipSettingEvalId: true,
+        skipLoadingState: true,
+      }),
     );
   });
 

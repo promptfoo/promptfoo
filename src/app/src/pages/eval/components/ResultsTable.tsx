@@ -1807,9 +1807,28 @@ function ResultsTable({
   latestTableRef.current = table;
   const ratingScopeRef = useRef({ evalId, generation: 0, mounted: false });
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: observe pending writes only when this eval mounts; fetchEvalData is a stable store action.
   React.useEffect(() => {
     const generation = ratingScopeRef.current.generation + 1;
     ratingScopeRef.current = { evalId, generation, mounted: true };
+    const apiBaseUrl = getApiBaseUrl();
+    const queueKey = JSON.stringify([apiBaseUrl, evalId]);
+    const pending = pendingRatingRequests.get(queueKey);
+    const refreshAfterRemount = async () => {
+      const latest = pendingRatingRequests.get(queueKey);
+      if (
+        evalId &&
+        ratingScopeRef.current.generation === generation &&
+        getApiBaseUrl() === apiBaseUrl &&
+        (!latest || latest === pending)
+      ) {
+        await fetchEvalData(evalId, { skipSettingEvalId: true, skipLoadingState: true });
+      }
+    };
+    // A write accepted by a previous mount can finish after this mount loaded its table.
+    void pending?.then(refreshAfterRemount, refreshAfterRemount).catch((error) => {
+      console.error('Failed to refresh table after a pending rating:', error);
+    });
     return () => {
       if (ratingScopeRef.current.generation === generation) {
         ratingScopeRef.current = { evalId, generation: generation + 1, mounted: false };
@@ -1832,30 +1851,22 @@ function ResultsTable({
     pageIndex: 0,
     pageSize: filteredResultsCount > 10 ? 50 : 10,
   });
-  const currentRatingQuery = {
-    pageIndex: pagination.pageIndex,
-    pageSize: pagination.pageSize,
-    filterMode,
-    searchText: debouncedSearchText,
-    filters: Object.values(filters.values).filter(isAppliedResultFilter),
-  };
-  const latestRatingQueryRef = useRef(currentRatingQuery);
-  latestRatingQueryRef.current = currentRatingQuery;
 
   // Persist column sizing state to prevent header resize flicker during pagination.
   // Without this, column widths reset when columns memo recalculates (due to deps like passRates changing).
   const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
   const tableRef = useRef<HTMLDivElement>(null);
 
-  /**
-   * Reset the pagination state when the filtered results count changes.
-   */
+  // Ratings and background refreshes can remove the last page without changing the query.
   React.useEffect(() => {
-    setPagination({
-      pageIndex: 0,
-      pageSize: filteredResultsCount > 10 ? 50 : 10,
+    if (isFetching) {
+      return;
+    }
+    setPagination((prev) => {
+      const lastPage = Math.max(0, Math.ceil(filteredResultsCount / prev.pageSize) - 1);
+      return prev.pageIndex > lastPage ? { ...prev, pageIndex: lastPage } : prev;
     });
-  }, [filteredResultsCount]);
+  }, [filteredResultsCount, isFetching]);
 
   const toggleLightbox = (url?: string) => {
     setLightboxImage(url || null);
@@ -1949,9 +1960,7 @@ function ResultsTable({
           if (!evalId || !isScopeActive()) {
             return;
           }
-          const query = latestRatingQueryRef.current;
           const refreshed = await fetchEvalData(evalId, {
-            ...query,
             skipSettingEvalId: true,
             skipLoadingState: true,
           });
@@ -1976,16 +1985,9 @@ function ResultsTable({
             latestTableRef.current = reconciledTable;
             setTable(reconciledTable);
           }
-          const query = latestRatingQueryRef.current;
-          const stalePersistedResponse = persistedResult && !ownsOptimisticOutput;
-          if (
-            persistedResult &&
-            pendingRatingRequests.get(queueKey) === currentRequest &&
-            (stalePersistedResponse ||
-              query.filterMode !== 'all' ||
-              Boolean(query.searchText) ||
-              query.filters.length > 0)
-          ) {
+          // The response contains one result; refresh the active query for prompt metrics
+          // and rows that entered or left its filters, even without a websocket connection.
+          if (pendingRatingRequests.get(queueKey) === currentRequest) {
             await refreshCurrentPage();
           }
         };
@@ -2005,35 +2007,16 @@ function ResultsTable({
               );
               latestTableRef.current = rolledBackTable;
               setTable(rolledBackTable);
-            } else {
-              await refreshCurrentPage().catch((refreshError) => {
-                console.error('Failed to refresh table after a rejected rating:', refreshError);
-              });
+              if (pendingRatingRequests.get(queueKey) !== currentRequest) {
+                return;
+              }
             }
-            const query = latestRatingQueryRef.current;
-            if (
-              optimisticOutput !== undefined &&
-              latestLocation?.output === optimisticOutput &&
-              pendingRatingRequests.get(queueKey) === currentRequest &&
-              (query.filterMode !== 'all' || Boolean(query.searchText) || query.filters.length > 0)
-            ) {
-              await refreshCurrentPage().catch((refreshError) => {
-                console.error(
-                  'Failed to refresh filtered ratings after a rejection:',
-                  refreshError,
-                );
-              });
-            }
-            return;
           }
 
           // The server may have committed before the connection or response parsing failed.
           // Refetch the current page instead of asserting that the optimistic state is wrong.
           await refreshCurrentPage().catch((refreshError) => {
-            console.error(
-              'Failed to refresh table after an ambiguous rating response:',
-              refreshError,
-            );
+            console.error('Failed to refresh table after a rating error:', refreshError);
           });
         };
 
@@ -2852,9 +2835,11 @@ function ResultsTable({
             <Select
               value={String(pagination.pageSize)}
               onValueChange={(value) => {
+                const pageSize = Number(value);
+                const lastPage = Math.max(0, Math.ceil(filteredResultsCount / pageSize) - 1);
                 setPagination((prev) => ({
-                  ...prev,
-                  pageSize: Number(value),
+                  pageIndex: Math.min(prev.pageIndex, lastPage),
+                  pageSize,
                 }));
                 window.scrollTo(0, 0);
               }}

@@ -321,10 +321,8 @@ export const SubmitRatingRequestSchema = z
   });
 
 /**
- * Response is the persisted EvalResult row. The route returns the updated
- * record so external SDKs/CLIs can read refreshed metrics without a follow-up
- * fetch. The shape is permissive because EvalResult does not have a Zod
- * schema — only the most commonly-read fields are validated.
+ * The persisted EvalResult, with private rating state omitted. Only the fields
+ * used to reconcile the rated cell are validated; other result fields remain permissive.
  */
 export const SubmitRatingResponseSchema = z
   .object({
