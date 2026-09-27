@@ -4,6 +4,8 @@ This example demonstrates how to evaluate [PydanticAI](https://ai.pydantic.dev/)
 
 You can run this example with:
 
+On Windows (PowerShell), use `npx.cmd` instead of `npx` for the Promptfoo commands in this guide.
+
 ```bash
 npx promptfoo@latest init --example integration-pydantic-ai
 cd integration-pydantic-ai
@@ -32,11 +34,11 @@ On Windows (PowerShell):
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+$env:PROMPTFOO_PYTHON = (Resolve-Path .\.venv\Scripts\python.exe).Path
 $env:OPENAI_API_KEY = "your_openai_api_key_here"
-npx promptfoo@latest eval --no-cache
-npx promptfoo@latest view
+npx.cmd promptfoo@latest eval --no-cache
+npx.cmd promptfoo@latest view
 ```
 
 ## What This Shows
