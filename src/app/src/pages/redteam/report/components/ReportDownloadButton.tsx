@@ -12,6 +12,7 @@ import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { getActualPrompt } from '@app/utils/providerResponse';
 import { displayNameOverrides } from '@promptfoo/redteam/constants';
 import { stringify } from 'csv-stringify/browser/esm/sync';
 import { getPluginIdFromResult, getStrategyIdFromTest } from '../components/shared';
@@ -54,6 +55,8 @@ const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButto
         Strategy: getStrategyIdFromTest(result.testCase as any),
         Target: result.provider.label || result.provider.id || '',
         Prompt:
+          getActualPrompt(result.response) ||
+          (result.metadata?.redteamFinalPrompt as string) ||
           result.vars.query?.toString() ||
           result.vars.prompt?.toString() ||
           result.prompt.raw ||
