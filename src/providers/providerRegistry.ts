@@ -13,20 +13,31 @@ interface CleanupProvider {
  */
 class ProviderRegistry {
   private providers: Set<CleanupProvider> = new Set();
-  private shutdownRegistered: boolean = false;
+  private shutdownHandlers: Record<'SIGINT' | 'SIGTERM' | 'beforeExit', () => void> | null = null;
+  private pendingShutdowns = 0;
   private shutdownPromise: Promise<void> | null = null;
 
   register(provider: CleanupProvider): void {
     this.providers.add(provider);
 
-    if (!this.shutdownRegistered) {
+    if (!this.shutdownHandlers) {
       this.registerShutdownHandlers();
-      this.shutdownRegistered = true;
     }
   }
 
   unregister(provider: CleanupProvider): void {
     this.providers.delete(provider);
+    this.removeIdleShutdownHandlers();
+  }
+
+  private removeIdleShutdownHandlers(): void {
+    if (this.providers.size || this.pendingShutdowns || !this.shutdownHandlers) {
+      return;
+    }
+    for (const [event, handler] of Object.entries(this.shutdownHandlers)) {
+      process.removeListener(event, handler);
+    }
+    this.shutdownHandlers = null;
   }
 
   private registerShutdownHandlers(): void {
@@ -45,10 +56,15 @@ class ProviderRegistry {
       logger.debug('Python provider shutdown complete');
     };
 
-    process.once('SIGINT', () => void shutdown('SIGINT'));
-    process.once('SIGTERM', () => void shutdown('SIGTERM'));
-    // Use beforeExit for async cleanup (exit event cannot await)
-    process.once('beforeExit', () => void shutdown('beforeExit'));
+    this.shutdownHandlers = {
+      SIGINT: () => void shutdown('SIGINT'),
+      SIGTERM: () => void shutdown('SIGTERM'),
+      // Use beforeExit for async cleanup (exit event cannot await).
+      beforeExit: () => void shutdown('beforeExit'),
+    };
+    for (const [event, handler] of Object.entries(this.shutdownHandlers)) {
+      process.once(event, handler);
+    }
   }
 
   async shutdownAll(): Promise<void> {
@@ -57,6 +73,9 @@ class ProviderRegistry {
     // a later lifetime and must remain available to the next shutdownAll call.
     this.providers.clear();
     const previousShutdown = this.shutdownPromise;
+    // A provider may unregister synchronously inside shutdown(). Keep ownership
+    // before invoking it, until this cleanup and any earlier cleanup have settled.
+    this.pendingShutdowns++;
     const shutdown = (async () => {
       const results = await Promise.allSettled([
         ...(previousShutdown ? [previousShutdown] : []),
@@ -78,6 +97,8 @@ class ProviderRegistry {
       if (this.shutdownPromise === shutdown) {
         this.shutdownPromise = null;
       }
+      this.pendingShutdowns--;
+      this.removeIdleShutdownHandlers();
     }
   }
 }
