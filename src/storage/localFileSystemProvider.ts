@@ -167,22 +167,6 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
     this.hashIndex.set(contentHash, key);
     await this.saveHashIndex();
 
-    // Write metadata alongside
-    const metadataPath = `${filePath}.meta.json`;
-    await fsPromises.writeFile(
-      metadataPath,
-      JSON.stringify(
-        {
-          ...metadata,
-          contentHash,
-          sizeBytes: data.length,
-          createdAt: new Date().toISOString(),
-        },
-        null,
-        2,
-      ),
-    );
-
     logger.debug(`[LocalStorage] Stored media: ${key} (${data.length} bytes)`);
 
     const ref: MediaStorageRef = {
