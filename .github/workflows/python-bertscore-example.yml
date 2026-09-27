@@ -6,6 +6,7 @@ on:
       - 'examples/eval-bert-score/**'
       - '.github/workflows/python-bertscore-example.yml'
       - 'src/assertions/python.ts'
+      - 'src/evaluator.ts'
       - 'src/python/**'
       - 'package.json'
       - 'package-lock.json'
@@ -17,6 +18,7 @@ on:
       - 'examples/eval-bert-score/**'
       - '.github/workflows/python-bertscore-example.yml'
       - 'src/assertions/python.ts'
+      - 'src/evaluator.ts'
       - 'src/python/**'
       - 'package.json'
       - 'package-lock.json'
@@ -62,17 +64,14 @@ jobs:
         run: python -m unittest discover -s examples/eval-bert-score -p '*_test.py' -v
 
       - name: Use Node for real scorer CLI smoke
-        if: matrix.python-version == '3.14'
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version-file: '.nvmrc'
 
       - name: Install CLI dependencies
-        if: matrix.python-version == '3.14'
         run: |
           npm install -g npm@11.18.0 --registry=https://registry.npmjs.org/
           npm ci --registry=https://registry.npmjs.org/
 
       - name: Exercise real BERTScore through both CLI configs
-        if: matrix.python-version == '3.14'
         run: python examples/eval-bert-score/tests/smoke_cli.py
