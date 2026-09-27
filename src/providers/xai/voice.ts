@@ -1,4 +1,3 @@
-import { resolveProviderEnv } from '../env';
 /**
  * xAI Voice Agent API Provider
  *
@@ -14,6 +13,7 @@ import WebSocket from 'ws';
 import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { resolveProviderApiKey } from '../credentials';
+import { resolveProviderEnv } from '../env';
 import { convertG711ToPcm16, convertPcm16ToWav } from '../openai/audio';
 
 import type { EnvOverrides } from '../../types/env';
