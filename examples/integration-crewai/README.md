@@ -29,8 +29,16 @@ For the default OpenAI model, set the OpenAI API key. Choose one of these method
 
 ### Option 1: Environment Variable (Recommended)
 
+On macOS/Linux:
+
 ```bash
 export OPENAI_API_KEY=your-api-key-here
+```
+
+On Windows (PowerShell):
+
+```powershell
+$env:OPENAI_API_KEY = "your-api-key-here"
 ```
 
 ### Option 2: .env File
@@ -48,9 +56,19 @@ No extra Python package is needed.
 
 Create an isolated environment and install the example's only direct dependency:
 
+On macOS/Linux:
+
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+On Windows (PowerShell):
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 ```
 
