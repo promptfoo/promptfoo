@@ -415,9 +415,7 @@ describe('runEvaluation tool', () => {
 
       expect(result.isError).toBe(true);
       const logger = (await import('../../../../src/logger')).default;
-      expect(logger.error).toHaveBeenCalledWith(
-        'Evaluation execution failed: You must provide at least 1 prompt',
-      );
+      expect(logger.error).toHaveBeenCalledWith('Evaluation execution failed');
     });
   });
 });

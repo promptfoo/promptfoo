@@ -379,7 +379,9 @@ export function registerRunEvaluationTool(server: McpServer) {
         return createToolResponse('run_evaluation', true, evalData);
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-        logger.error(`Evaluation execution failed: ${errorMessage}`);
+        // Errors can include credential-bearing provider URLs or user-supplied filters.
+        // Keep the detailed response on the requesting MCP connection, out of shared logs.
+        logger.error('Evaluation execution failed');
 
         return createToolResponse('run_evaluation', false, undefined, errorMessage);
       }

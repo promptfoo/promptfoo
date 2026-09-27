@@ -863,6 +863,11 @@ async function doEvalWithEnv(
     if (!resumeEval) {
       Object.assign(options, resolveSuggestionOptions(cmdObj, commandLineOptions, options));
     }
+    if (isMcpInvocation && options.generateSuggestions) {
+      throw new Error(
+        'Interactive prompt suggestions are not supported over MCP. Disable generateSuggestions or run this evaluation in an interactive terminal.',
+      );
+    }
     // load scenarios or tests from an external file
     if (testSuite.scenarios) {
       testSuite.scenarios = (await maybeLoadFromExternalFile(testSuite.scenarios)) as Scenario[];

@@ -9,10 +9,14 @@ import { enableCache, isCacheEnabled } from '../../../../src/cache';
 import cliState from '../../../../src/cliState';
 import { registerRunEvaluationTool } from '../../../../src/commands/mcp/tools/runEvaluation';
 import * as accounts from '../../../../src/globalConfig/accounts';
+import logger from '../../../../src/logger';
 import { runDbMigrations } from '../../../../src/migrate';
 import Eval from '../../../../src/models/eval';
+import { doEval } from '../../../../src/node/doEval';
 import { createShareableUrl, isSharingEnabled } from '../../../../src/share';
+import * as suggestions from '../../../../src/suggestions';
 import { BAD_EMAIL_RESULT, EMAIL_OK_STATUS } from '../../../../src/types/email';
+import * as readline from '../../../../src/util/readline';
 import { mockProcessEnv } from '../../../util/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -97,6 +101,115 @@ describe('MCP evaluation execution contract', () => {
     expect(response.data.results.stats).toMatchObject({ successes: 3, failures: 0, errors: 0 });
     expect(await Eval.findById(response.data.eval.id)).toBeUndefined();
     expect(createShareableUrl).not.toHaveBeenCalled();
+  });
+
+  describe.each(['evaluateOptions', 'commandLineOptions'])('%s prompt suggestions', (source) => {
+    it.each(selections)(
+      'rejects interactive suggestions before generation for $label',
+      async ({ filters }) => {
+        const generate = vi
+          .spyOn(suggestions, 'generatePrompts')
+          .mockResolvedValue({ prompts: ['Suggested prompt'], tokensUsed: {} });
+        const prompt = vi.spyOn(readline, 'promptYesNo').mockResolvedValue(false);
+        await writeFile(
+          configPath,
+          JSON.stringify({
+            providers: ['echo'],
+            prompts: ['Hello'],
+            tests: [{ vars: {} }],
+            [source]: { generateSuggestions: true },
+          }),
+        );
+        const response = await run(filters);
+        expect(response.success).toBe(false);
+        expect(response.error).toContain(
+          'Interactive prompt suggestions are not supported over MCP',
+        );
+        expect(generate).not.toHaveBeenCalled();
+        expect(prompt).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  it.each(selections)(
+    'honors explicit false over enabled suggestion defaults for $label',
+    async ({ filters }) => {
+      const generate = vi.spyOn(suggestions, 'generatePrompts');
+      await writeFile(
+        configPath,
+        JSON.stringify({
+          providers: ['echo'],
+          prompts: ['Hello'],
+          tests: [{ vars: {} }],
+          evaluateOptions: { generateSuggestions: true },
+          commandLineOptions: { generateSuggestions: false },
+        }),
+      );
+      const response = await run(filters);
+      expect(response.success, response.error).toBe(true);
+      expect(response.data.results.totalEvals).toBe(1);
+      expect(generate).not.toHaveBeenCalled();
+    },
+  );
+
+  it('keeps detailed filter errors out of logs when provider URLs contain credentials', async () => {
+    const log = vi.spyOn(logger, 'error');
+    const providerId =
+      'https://fixture-user:fixture-password@example.test/eval?api_key=fixture-query-secret';
+    const filter = 'unmatched-filter-secret';
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        providers: [{ id: providerId, config: { body: { prompt: '{{prompt}}' } } }],
+        prompts: ['Hello'],
+        tests: [{ vars: {} }],
+      }),
+    );
+    const response = await run({ providerFilter: filter });
+    expect(response.success).toBe(false);
+    expect(response.error).toContain(`No providers matched filter: ${filter}`);
+    expect(response.error).toContain(`Available providers: ${providerId}`);
+    expect(log).toHaveBeenCalled();
+    const logs = JSON.stringify(log.mock.calls);
+    for (const secret of ['fixture-user', 'fixture-password', 'fixture-query-secret', filter]) {
+      expect(logs).not.toContain(secret);
+    }
+  });
+
+  it.each([
+    { command: { generateSuggestions: true }, options: {} },
+    { command: {}, options: { generateSuggestions: true } },
+    { command: { suggestPrompts: 1, generateSuggestions: false }, options: {} },
+  ])('rejects effective caller suggestion options for MCP: %j', async ({ command, options }) => {
+    const generate = vi
+      .spyOn(suggestions, 'generatePrompts')
+      .mockResolvedValue({ prompts: ['Suggested prompt'], tokensUsed: {} });
+    const prompt = vi.spyOn(readline, 'promptYesNo').mockResolvedValue(false);
+    await expect(
+      doEval({ config: [configPath], write: false, share: false, ...command }, {}, undefined, {
+        eventSource: 'mcp',
+        showProgressBar: false,
+        ...options,
+      }),
+    ).rejects.toThrow('Interactive prompt suggestions are not supported over MCP');
+    expect(generate).not.toHaveBeenCalled();
+    expect(prompt).not.toHaveBeenCalled();
+  });
+
+  it('allows an explicit caller false to override enabled suggestions for MCP', async () => {
+    const generate = vi.spyOn(suggestions, 'generatePrompts');
+    const result = await doEval(
+      { config: [configPath], write: false, share: false, generateSuggestions: false },
+      {},
+      undefined,
+      {
+        eventSource: 'mcp',
+        showProgressBar: false,
+        generateSuggestions: true,
+      },
+    );
+    expect((await result.toEvaluateSummary()).stats.successes).toBe(1);
+    expect(generate).not.toHaveBeenCalled();
   });
 
   it.each(selections)('honors explicit sharing for $label runs', async ({ filters }) => {
