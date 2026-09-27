@@ -16,12 +16,15 @@ import { runDbMigrations } from '../../../../src/migrate';
 import Eval from '../../../../src/models/eval';
 import { doEval } from '../../../../src/node/doEval';
 import { AwsBedrockConverseProvider } from '../../../../src/providers/bedrock/converse';
+import { EchoProvider } from '../../../../src/providers/echo';
 import { GeminiImageProvider } from '../../../../src/providers/google/gemini-image';
 import { GoogleImageProvider } from '../../../../src/providers/google/image';
 import { GoogleLiveProvider } from '../../../../src/providers/google/live';
 import { VertexLiveProvider } from '../../../../src/providers/google/vertexLive';
 import { HuggingfaceTextGenerationProvider } from '../../../../src/providers/huggingface';
 import { OpenCodeSDKProvider } from '../../../../src/providers/opencode-sdk';
+import { PythonProvider } from '../../../../src/providers/pythonCompletion';
+import { PythonWorker } from '../../../../src/python/worker';
 import { createShareableUrl, isSharingEnabled } from '../../../../src/share';
 import * as suggestions from '../../../../src/suggestions';
 import { BAD_EMAIL_RESULT, EMAIL_OK_STATUS } from '../../../../src/types/email';
@@ -141,6 +144,90 @@ describe('MCP evaluation execution contract', () => {
         expect(prompt).not.toHaveBeenCalled();
       },
     );
+  });
+
+  it.each([undefined, 9])(
+    'preserves later Python worker allocation after rejection with prior concurrency %s',
+    async (priorConcurrency) => {
+      const originalConcurrency = cliState.maxConcurrency;
+      const initialize = vi.spyOn(PythonWorker.prototype, 'initialize').mockResolvedValue();
+      const python = new PythonProvider('unused-worker-fixture.py');
+      vi.stubEnv('PROMPTFOO_PYTHON_WORKERS', undefined);
+      try {
+        cliState.maxConcurrency = priorConcurrency;
+        await writeFile(
+          configPath,
+          JSON.stringify({
+            providers: ['echo'],
+            prompts: ['Hello'],
+            tests: [{ vars: {} }],
+            evaluateOptions: { generateSuggestions: true },
+          }),
+        );
+        const response = await run({ testCaseIndices: 0, maxConcurrency: 20, write: false });
+        expect(response.success).toBe(false);
+        expect(response.error).toContain('Interactive prompt suggestions are not supported');
+        await python.initialize();
+        expect(initialize).toHaveBeenCalledTimes(priorConcurrency ?? 1);
+        expect(cliState.maxConcurrency).toBe(priorConcurrency);
+      } finally {
+        await python.shutdown();
+        cliState.maxConcurrency = originalConcurrency;
+      }
+    },
+  );
+
+  it('isolates concurrency while overlapping requests finish in reverse order', async () => {
+    const originalConcurrency = cliState.maxConcurrency;
+    const deferred = () => {
+      let resolve!: () => void;
+      const promise = new Promise<void>((complete) => {
+        resolve = complete;
+      });
+      return { promise, resolve };
+    };
+    const gates = {
+      A: { started: deferred(), resume: deferred() },
+      B: { started: deferred(), resume: deferred() },
+    };
+    const observations: Record<string, (number | undefined)[]> = {};
+    vi.spyOn(EchoProvider.prototype, 'callApi').mockImplementation(async (prompt) => {
+      const gate = gates[prompt as keyof typeof gates];
+      observations[prompt] = [cliState.maxConcurrency];
+      gate.started.resolve();
+      await gate.resume.promise;
+      observations[prompt].push(cliState.maxConcurrency);
+      return { output: prompt };
+    });
+    await writeFile(
+      configPath,
+      JSON.stringify({ providers: ['echo'], prompts: ['A', 'B'], tests: [{ vars: {} }] }),
+    );
+    const pending: Promise<unknown>[] = [];
+    try {
+      cliState.maxConcurrency = undefined;
+      const first = run({ promptFilter: '0', maxConcurrency: 2, write: false });
+      pending.push(first);
+      await gates.A.started.promise;
+      const second = run({ promptFilter: '1', maxConcurrency: 7, write: false });
+      pending.push(second);
+      await gates.B.started.promise;
+      const outsideConcurrency = cliState.maxConcurrency;
+      gates.B.resume.resolve();
+      const secondResult = await second;
+      gates.A.resume.resolve();
+      const firstResult = await first;
+      expect(firstResult.success, firstResult.error).toBe(true);
+      expect(secondResult.success, secondResult.error).toBe(true);
+      expect(outsideConcurrency).toBeUndefined();
+      expect(observations).toEqual({ A: [2, 2], B: [7, 7] });
+      expect(cliState.maxConcurrency).toBeUndefined();
+    } finally {
+      gates.A.resume.resolve();
+      gates.B.resume.resolve();
+      await Promise.allSettled(pending);
+      cliState.maxConcurrency = originalConcurrency;
+    }
   });
 
   it.each(selections)(

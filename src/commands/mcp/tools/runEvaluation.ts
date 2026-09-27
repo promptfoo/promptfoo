@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { z } from 'zod';
+import cliState from '../../../cliState';
 import logger from '../../../logger';
 import { doEval } from '../../../node/doEval';
 import { loadDefaultConfig } from '../../../util/config/default';
@@ -300,12 +301,8 @@ export function registerRunEvaluationTool(server: McpServer) {
         };
         logger.debug(`Running evaluation with config: ${configPath || 'promptfooconfig.yaml'}`);
         const startTime = Date.now();
-        const evalResult = await doEval(
-          cmdObj,
-          defaultConfig,
-          defaultConfigPath,
-          evaluateOptions,
-          prepareTestSuite,
+        const evalResult = await cliState.withMaxConcurrency(maxConcurrency, () =>
+          doEval(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions, prepareTestSuite),
         );
         const endTime = Date.now();
 
