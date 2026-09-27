@@ -91,3 +91,43 @@ describe.each(['yaml', 'yml', 'json'])('default .%s config freshness', (extensio
     );
   });
 });
+
+describe.each(['cjs', 'mjs', 'js'])('deleted executable .%s configs', (extension) => {
+  let directory: string;
+
+  beforeEach(async () => {
+    directory = await fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-default-module-'));
+    await fs.writeFile(path.join(directory, 'package.json'), '{"type":"module"}');
+  });
+
+  afterEach(async () => {
+    await fs.rm(directory, { recursive: true, force: true });
+  });
+
+  it.each([false, true])('rediscovers config after deletion with fallback=%s', async (fallback) => {
+    const configPath = path.join(directory, `promptfooconfig.${extension}`);
+    const fallbackPath = path.join(directory, 'promptfooconfig.ts');
+    const assignment = extension === 'mjs' ? 'export default' : 'module.exports =';
+    await fs.writeFile(
+      configPath,
+      `${assignment} { description: 'removed', providers: ['echo'], prompts: ['Hello'] };`,
+    );
+    if (fallback) {
+      await fs.writeFile(
+        fallbackPath,
+        "export default { description: 'fallback', providers: ['echo'], prompts: ['Hello'] };",
+      );
+    }
+    expect((await loadDefaultConfig(directory)).defaultConfig.description).toBe('removed');
+    await fs.unlink(configPath);
+
+    expect(await loadDefaultConfig(directory)).toEqual(
+      fallback
+        ? {
+            defaultConfig: { description: 'fallback', providers: ['echo'], prompts: ['Hello'] },
+            defaultConfigPath: fallbackPath,
+          }
+        : { defaultConfig: {}, defaultConfigPath: undefined },
+    );
+  });
+});

@@ -38,20 +38,7 @@ describe('default config discovery logging', () => {
         defaultConfigPath: undefined,
       });
 
-      if (level === 'info') {
-        expect(logCallback).not.toHaveBeenCalled();
-      } else {
-        for (const extension of ['cjs', 'cts', 'js', 'mjs', 'mts', 'ts']) {
-          expect(logCallback).toHaveBeenCalledWith(
-            expect.stringContaining(`promptfooconfig.${extension}`),
-          );
-        }
-        expect(logCallback).not.toHaveBeenCalledWith(
-          expect.stringMatching(
-            /ERR_MODULE_NOT_FOUND|Cannot find module|ESM import failed|\n\s+at /,
-          ),
-        );
-      }
+      expect(logCallback).not.toHaveBeenCalled();
     },
   );
 
