@@ -377,7 +377,13 @@ export function isRateLimited(response: Response): boolean {
   invariant(response.headers, 'Response headers are missing');
   invariant(response.status, 'Response status is missing');
 
-  return response.status === 429;
+  return (
+    response.status === 429 ||
+    (!response.ok &&
+      (response.headers.get('X-RateLimit-Remaining') === '0' ||
+        response.headers.get('x-ratelimit-remaining-requests') === '0' ||
+        response.headers.get('x-ratelimit-remaining-tokens') === '0'))
+  );
 }
 
 /**
@@ -651,7 +657,7 @@ function urlForLog(url: RequestInfo): string {
   return sanitizeUrlForLogging(raw);
 }
 
-/** Classify an HTTP 429 and either fail with a structured error or wait to retry. */
+/** Classify HTTP throttling and either fail or wait to retry. */
 async function handleRateLimitedResponse(
   response: Response,
   url: RequestInfo,
@@ -664,13 +670,16 @@ async function handleRateLimitedResponse(
   // Classify a 429 up front: `HttpRateLimitError` derives `kind` from the body
   // code / type and the Retry-After downgrade, so the fail-fast decision below
   // sees the same classification callers do.
-  const { body, code, type } = await peekRateLimitBody(response);
-  const rateLimitError = buildHttpRateLimitError(response, body, code, type);
+  let rateLimitError: HttpRateLimitError | undefined;
+  if (response.status === 429) {
+    const { body, code, type } = await peekRateLimitBody(response);
+    rateLimitError = buildHttpRateLimitError(response, body, code, type);
+  }
 
   // Hard quota failures (e.g. insufficient_quota) won't resolve on retry. Fail
   // fast with a structured error so the caller can stop instead of amplifying
   // load against an exhausted account.
-  if (rateLimitError.kind === 'quota') {
+  if (rateLimitError?.kind === 'quota') {
     logger.debug(
       `Quota exhausted on URL ${safeUrl}: HTTP ${response.status} (code: ${rateLimitError.code}), failing fast.`,
     );
@@ -678,10 +687,15 @@ async function handleRateLimitedResponse(
   }
 
   if (attempt >= maxRetries) {
-    logger.debug(
-      `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`,
+    if (rateLimitError) {
+      logger.debug(
+        `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`,
+      );
+      throw rateLimitError;
+    }
+    throw new Error(
+      `Rate limited: ${response.status} ${response.statusText} after ${maxRetries + 1} attempts`,
     );
-    throw rateLimitError;
   }
 
   logger.debug(
