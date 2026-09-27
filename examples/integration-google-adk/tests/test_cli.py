@@ -107,11 +107,17 @@ class GoogleAdkCliTest(unittest.TestCase):
                     if not key.startswith(("GOOGLE_", "GEMINI_", "ADK_", "OTEL_"))
                     and key.lower() not in ("all_proxy", "http_proxy", "https_proxy")
                 }
+                # Empty values prevent implicit dotenv from restoring proxies.
+                for proxy in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
+                    env[proxy] = env[proxy.lower()] = ""
+                env["NO_PROXY"] = env["no_proxy"] = "*"
                 env.update(
                     GOOGLE_API_KEY="local-test-key",
                     # Existing values also prevent root dotenv from changing routing.
                     ADK_MODEL="gemini-2.5-flash",
                     GOOGLE_GENAI_USE_VERTEXAI="false",
+                    GOOGLE_GENAI_USE_ENTERPRISE="false",
+                    PROMPTFOO_ENABLE_OTEL="false",
                     GOOGLE_GEMINI_BASE_URL=f"http://127.0.0.1:{server.server_port}",
                     PROMPTFOO_PYTHON=sys.executable,
                     PROMPTFOO_CONFIG_DIR=str(work / "promptfoo"),
