@@ -111,8 +111,10 @@
     "prepare": "husky || exit 0"
   },
   "overrides": {
+    "nunjucks": {
+      "chokidar": "$chokidar"
+    },
     "uri-js": "npm:uri-js-replace",
-    "chokidar": "5.0.0",
     "whatwg-url": "16.0.1",
     "esbuild": "0.28.2",
     "jsdom": {
@@ -124,6 +126,9 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-is": "^19.2.4",
+    "react-router-config": {
+      "react-router": "^5.3.4"
+    },
     "@ai-sdk/provider-utils": {
       "undici": "$undici"
     },
@@ -160,7 +165,6 @@
     },
     "serialize-javascript": ">=7.0.5",
     "gaxios": "^8.0.0",
-    "https-proxy-agent": "^9.0.0",
     "ip-address": "10.7.2",
     "mongoose": {
       "gcp-metadata": "^9.0.2"
@@ -223,14 +227,14 @@
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.273",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
+    "@aws/bedrock-token-generator": "^1.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.1045.0",
     "@aws-sdk/credential-provider-sso": "^3.972.16",
     "@aws-sdk/types": "^3.973.5",
-    "@aws/bedrock-token-generator": "^1.1.0",
-    "@azure/identity": "^4.13.0",
+    "@azure/identity": "^4.13.3",
     "@azure/openai-assistants": "^1.0.0-beta.6",
     "@biomejs/biome": "2.5.13",
     "@fal-ai/client": "~1.10.1",
@@ -256,7 +260,7 @@
     "concurrently": "^9.2.3",
     "drizzle-kit": "^0.31.10",
     "husky": "^9.1.7",
-    "ibm-cloud-sdk-core": "^5.6.1",
+    "ibm-cloud-sdk-core": "^5.6.2",
     "knip": "~6.27.0",
     "langium": "4.4.0",
     "node-sql-parser": "^5.4.0",
@@ -287,7 +291,7 @@
     "@aws-sdk/client-sagemaker-runtime": "^3.1045.0",
     "@aws-sdk/credential-provider-sso": "^3.972.16",
     "@azure/ai-projects": "^2.1.1",
-    "@azure/identity": "^4.13.0",
+    "@azure/identity": "^4.13.3",
     "@azure/msal-node": "^6.0.0",
     "@azure/openai-assistants": "^1.0.0-beta.6",
     "@azure/storage-blob": "^12.31.0",
@@ -301,18 +305,11 @@
     "@openai/codex-sdk": "^0.156.1",
     "@openai/codex-security": "^0.1.28",
     "@opencode-ai/sdk": "^1.18.30",
-    "@rollup/rollup-linux-x64-gnu": "^4.63.3",
     "@slack/web-api": "^8.1.1",
     "@smithy/node-http-handler": "^4.4.14",
-    "@swc/core": "^1.16.2",
-    "@swc/core-darwin-arm64": "^1.16.2",
-    "@swc/core-darwin-x64": "^1.16.2",
-    "@swc/core-linux-x64-gnu": "^1.16.2",
-    "@swc/core-linux-x64-musl": "^1.16.2",
-    "@swc/core-win32-x64-msvc": "^1.16.2",
     "google-auth-library": "^11.0.2",
     "hono": "^4.13.7",
-    "ibm-cloud-sdk-core": "^5.6.1",
+    "ibm-cloud-sdk-core": "^5.6.2",
     "jks-js": "^1.1.5",
     "natural": "^8.1.1",
     "node-sql-parser": "^5.4.0",
@@ -380,7 +377,7 @@
     "mathjs": "^15.1.1",
     "minimatch": "^10.2.4",
     "nunjucks": "^3.2.4",
-    "openai": "^7.1.0",
+    "openai": "^7.20.0",
     "opener": "^1.5.2",
     "ora": "^9.3.0",
     "parse5": "^8.0.0",
@@ -390,7 +387,6 @@
     "proxy-from-env": "^2.1.0",
     "python-shell": "^5.0.0",
     "rfdc": "^1.4.1",
-    "rxjs": "^7.8.2",
     "saxes": "^6.0.0",
     "semver": "^7.7.4",
     "simple-git": "^3.33.0",
@@ -416,7 +412,6 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "@huggingface/transformers",
-      "@swc/core",
       "core-js",
       "core-js-pure",
       "esbuild",
