@@ -132,7 +132,7 @@ describe.each(['google:live:gemini-3.8-live', 'palm:live:gemini-3.8-live'])(
               ? new GoogleLiveProvider('gemini-3.8-live', options)
               : ((await loadApiProvider(id, { options })) as GoogleLiveProvider);
           await expect(connection(provider)).rejects.toThrow(
-            'Google authentication is not configured',
+            'Scoped GOOGLE_APPLICATION_CREDENTIALS is empty',
           );
           expect(GoogleAuth).not.toHaveBeenCalled();
         });
