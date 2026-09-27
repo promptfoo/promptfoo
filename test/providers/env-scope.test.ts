@@ -889,6 +889,46 @@ describe('provider environment scopes', () => {
     });
   });
 
+  it.each(['AZURE_CONTENT_SAFETY_API_KEY', 'AZURE_API_KEY', 'AZURE_OPENAI_API_KEY'])(
+    'Azure Content Safety falls back to %s when its named key is absent',
+    (name) => {
+      vi.spyOn(AzureGenericProvider.prototype, 'initialize').mockResolvedValue();
+      cliState.withEnv({ [name]: 'vendor-key' }, () => {
+        const target = new AzureModerationProvider('text-content-safety', {
+          config: { apiKeyEnvar: 'MISSING_SAFETY_KEY' },
+        });
+        expect(target.getContentSafetyApiKey()).toBe('vendor-key');
+      });
+    },
+  );
+
+  it.each(namedProviders)('%s honors its explicit named credential namespace', (_name, create) => {
+    cliState.withEnv({ AUDIT_NAMED_KEY: 'selected-key' }, () => {
+      const target = create({
+        config: { apiKeyEnvar: 'AUDIT_NAMED_KEY' },
+        env: {
+          AI21_API_KEY: 'other-key',
+          COHERE_API_KEY: 'other-key',
+          MISTRAL_API_KEY: 'other-key',
+          WATSONX_AI_APIKEY: 'other-key',
+          VOYAGE_API_KEY: 'other-key',
+        },
+      });
+      expect(apiKey(target)).toBe('selected-key');
+    });
+  });
+
+  it('retains an explicitly selected named namespace after loading Mistral', async () => {
+    const target = await loadApiProvider('mistral:mistral-small-latest', {
+      env: { AUDIT_NAMED_KEY: 'selected-key' },
+      options: {
+        config: { apiKeyEnvar: 'AUDIT_NAMED_KEY' },
+        env: { MISTRAL_API_KEY: 'other-key' },
+      },
+    });
+    expect(apiKey(target)).toBe('selected-key');
+  });
+
   it('Azure Content Safety masks an empty named credential', () => {
     vi.spyOn(AzureGenericProvider.prototype, 'initialize').mockResolvedValue();
     cliState.withEnv({ SAFETY_KEY: 'ambient-key', AZURE_API_KEY: 'vendor-key' }, () => {
