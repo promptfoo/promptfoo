@@ -27,7 +27,8 @@
  *   - First test may be slower due to browser launch and ChatKit initialization
  *
  * Troubleshooting:
- *   - "Playwright not found": Run `npx playwright install chromium`
+ *   - Missing Playwright package: Run `npm install promptfoo "playwright@^1.63.0"`
+ *   - Missing Chromium binary: Run `npx playwright install chromium`
  *   - Timeout errors: Increase timeout config or use --max-concurrency 1
  *   - Empty responses: The workflow may not generate text for some inputs
  */
