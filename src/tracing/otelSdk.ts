@@ -6,6 +6,7 @@ import {
   DiagConsoleLogger,
   DiagLogLevel,
   defaultTextMapGetter,
+  defaultTextMapSetter,
   diag,
   ProxyTracerProvider,
   propagation,
@@ -31,6 +32,13 @@ const traceContextPropagator = new W3CTraceContextPropagator();
 /** Explicit traceparent values use W3C format independently of the host's propagator. */
 export function extractTraceparentContext(traceparent: string) {
   return traceContextPropagator.extract(ROOT_CONTEXT, { traceparent }, defaultTextMapGetter);
+}
+
+/** W3C-only transport headers, independent of the host's propagator and baggage. */
+export function getTraceContextHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
+  traceContextPropagator.inject(context.active(), headers, defaultTextMapSetter);
+  return headers;
 }
 
 interface OtelScope {
