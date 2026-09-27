@@ -48,6 +48,10 @@ export function createProviderRateLimitOptions(
 ): RateLimitExecuteOptions<ProviderResponse> {
   return {
     handlesOwnRetries: originalProvider?.handlesOwnRetries,
+    // Provider errors are values carrying output, usage and HTTP metadata.
+    // Keep that evidence when the scheduler has no retries left.
+    onRateLimitExhausted: (result, error) =>
+      result.error ? result : { ...result, error: error.message },
     // A hard quota is not retried, so its headers must not feed the shared
     // rate-limit state either: a billing 429 that also carries
     // `x-ratelimit-remaining-*: 0` and a reset timestamp would otherwise

@@ -4,7 +4,11 @@ import { getEnvBool, getEnvInt } from '../envars';
 import logger from '../logger';
 import { withFetchRetryContext } from '../util/fetch/retryContext';
 import { sanitizeProviderIdForLog } from '../util/provider';
-import { type ProviderMetrics, ProviderRateLimitState } from './providerRateLimitState';
+import {
+  type ProviderMetrics,
+  ProviderRateLimitState,
+  RateLimitExhaustedError,
+} from './providerRateLimitState';
 import { getRateLimitKey } from './rateLimitKey';
 
 import type { ApiProvider } from '../types/providers';
@@ -93,6 +97,9 @@ export class RateLimitRegistry extends EventEmitter {
         requestId,
         error: String(error),
       });
+      if (error instanceof RateLimitExhaustedError && options?.onRateLimitExhausted) {
+        return options.onRateLimitExhausted(error.result as T, error);
+      }
       throw error;
     }
   }

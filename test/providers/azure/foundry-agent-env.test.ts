@@ -124,6 +124,7 @@ describe('Foundry invocation ownership', () => {
       }
     });
     expect(fixtures.clients).toHaveBeenCalledTimes(1);
+    expect(fixtures.lookup).toHaveBeenCalledTimes(1);
   });
 
   it('allows retry after client initialization fails', async () => {
