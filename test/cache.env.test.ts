@@ -244,6 +244,45 @@ describe('invocation-scoped cache settings', () => {
     expect(generation(secondEnv)).toBe(secondGeneration);
   });
 
+  it('keeps an unlabeled provider cache reusable across overlapping backends', async () => {
+    const { AnthropicMessagesProvider } = await import('../src/providers/anthropic/messages');
+    const { getEnvString } = await import('../src/envars');
+    const provider = new AnthropicMessagesProvider('claude-3-5-sonnet-20241022', {
+      config: { apiKey: 'synthetic-fixture-key' },
+    });
+    const firstPath = path.join(tempDir, 'first');
+    const secondPath = path.join(tempDir, 'second');
+    const entered = createDeferred<void>();
+    const release = createDeferred<void>();
+    const create = vi.spyOn(provider.anthropic.messages, 'create').mockImplementation((async () => {
+      const selected = getEnvString('PROMPTFOO_CACHE_PATH');
+      if (selected === firstPath) {
+        entered.resolve();
+        await release.promise;
+      }
+      return { content: [{ type: 'text', text: selected }] };
+    }) as never);
+    const call = (cachePath: string) =>
+      cliState.withEnv(disk(cachePath), () => provider.callApi('same prompt'));
+    const first = call(firstPath);
+    await entered.promise;
+    try {
+      expect(await call(secondPath)).toMatchObject({ output: secondPath });
+    } finally {
+      release.resolve();
+    }
+    expect(await first).toMatchObject({ output: firstPath });
+    for (const cachePath of [firstPath, secondPath, firstPath]) {
+      expect(await call(cachePath)).toMatchObject({ output: cachePath, cached: true });
+    }
+    expect(create).toHaveBeenCalledTimes(2);
+
+    await cliState.withEnv(disk(firstPath), () => cache.getCache().clear());
+    expect(await call(firstPath)).toMatchObject({ output: firstPath });
+    expect(await call(secondPath)).toMatchObject({ output: secondPath, cached: true });
+    expect(create).toHaveBeenCalledTimes(3);
+  });
+
   it.each(['memory', 'disk'])('keeps concurrent TTL defaults on one %s store', async (type) => {
     // Freeze Date only: disk writes still use their ordinary short debounce timer.
     vi.useFakeTimers({ toFake: ['Date'] });

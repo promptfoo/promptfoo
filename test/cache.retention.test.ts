@@ -17,6 +17,24 @@ it('releases unused backends, TTL instances, and namespace wrappers', () => {
       const ttlRefs = [];
       const namespaceRefs = [];
       const customPath = ${JSON.stringify(directory)} + '/0';
+      const pendingEnv = {
+        PROMPTFOO_CACHE_TYPE: 'disk',
+        PROMPTFOO_CACHE_PATH: ${JSON.stringify(directory)} + '/pending',
+      };
+      let releaseWrite;
+      const writeGate = new Promise(resolve => { releaseWrite = resolve; });
+      let pendingStoreRef;
+      const pendingWrite = cliState.withEnv(pendingEnv, () => {
+        const selected = cache.getCache();
+        const store = selected.stores[0].opts.store;
+        pendingStoreRef = new WeakRef(store);
+        const set = store.set.bind(store);
+        store.set = async (...args) => {
+          await writeGate;
+          return set(...args);
+        };
+        return selected.set('pending-result', 'preserved');
+      });
       await cliState.withEnv({ PROMPTFOO_CACHE_TYPE: 'disk', PROMPTFOO_CACHE_PATH: customPath },
         () => cache.getCache().set('previous-result', 'stale'));
       for (let index = 0; index < 80; index++) {
@@ -37,6 +55,11 @@ it('releases unused backends, TTL instances, and namespace wrappers', () => {
         await setImmediate();
         global.gc();
       }
+      const returned = cliState.withEnv(pendingEnv, () => cache.getCache());
+      const pendingWriterShared = returned.stores[0].opts.store === pendingStoreRef.deref();
+      releaseWrite();
+      await pendingWrite;
+      const pendingResult = await returned.get('pending-result');
       await cache.clearCache(customPath);
       const customResult = await cliState.withEnv({
         PROMPTFOO_CACHE_TYPE: 'disk', PROMPTFOO_CACHE_PATH: customPath,
@@ -46,6 +69,8 @@ it('releases unused backends, TTL instances, and namespace wrappers', () => {
         ttls: ttlRefs.filter(ref => ref.deref()).length,
         namespaces: namespaceRefs.filter(ref => ref.deref()).length,
         customCleared: customResult === undefined,
+        pendingWriterShared,
+        pendingResult,
       }));
     `;
     const child = spawnSync(
@@ -63,6 +88,8 @@ it('releases unused backends, TTL instances, and namespace wrappers', () => {
     expect(retained.ttls).toBeLessThanOrEqual(16);
     expect(retained.namespaces).toBe(0);
     expect(retained.customCleared).toBe(true);
+    expect(retained.pendingWriterShared).toBe(true);
+    expect(retained.pendingResult).toBe('preserved');
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }
