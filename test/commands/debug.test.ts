@@ -89,6 +89,47 @@ describe('proxy diagnostics', () => {
     expect(info.configInfo.configContent).toContain('fixture config failure');
   });
 
+  it.each([
+    [
+      'protocol',
+      {
+        HTTPS_PROXY: 'http://fixture-user:fixture-password@selected.example:8080',
+        ALL_PROXY: 'http://fallback.example:8080',
+      },
+      'http://***:***@selected.example:8080/',
+    ],
+    [
+      'bypass',
+      {
+        HTTPS_PROXY: 'http://fixture-user:fixture-password@selected.example:8080',
+        NO_PROXY: 'health.example',
+      },
+      '',
+    ],
+    [
+      'fallback',
+      { HTTPS_PROXY: '', ALL_PROXY: 'fixture-user:fixture-password@fallback.example:8443' },
+      'https://***:***@fallback.example:8443/',
+    ],
+  ] as const)(
+    'reports the selected %s route in health diagnostics',
+    async (_name, env, selectedProxy) => {
+      vi.mocked(fetchWithTimeout).mockResolvedValue({
+        ok: true,
+        json: async () => ({ status: 'OK' }),
+      } as Response);
+      await cliState.withEnv(env, () => checkRemoteHealth('https://health.example/health'));
+      const output = capture.debug.mock.calls.find(([message]) =>
+        message.startsWith('[CheckRemoteHealth] Checking'),
+      )?.[0];
+      const details = JSON.parse(output.slice(output.indexOf('{')));
+      expect(details.selectedProxy).toBe(selectedProxy);
+      expect(details.env).toHaveProperty('https_proxy');
+      expect(output).not.toContain('fixture-user');
+      expect(output).not.toContain('fixture-password');
+    },
+  );
+
   it.each(['suite', 'file'] as const)(
     'redacts proxy credentials from %s diagnostics',
     async (scope) => {
