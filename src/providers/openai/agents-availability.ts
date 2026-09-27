@@ -24,7 +24,7 @@ export async function loadOpenAiAgentsModule<T>(load: () => Promise<T>): Promise
     return await load();
   } catch (error) {
     if (isMissingPackageImportError(error, '@openai/agents')) {
-      throw new Error(missingPackageMessage, { cause: error });
+      throw new Error(missingPackageMessage);
     }
     throw error;
   }
