@@ -179,7 +179,7 @@ function getProviderEnvAliasGroups(providerPath: string): readonly (readonly str
   }
   if (/^(?:google|palm):video:/.test(providerPath)) {
     return [
-      ['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'PALM_API_KEY', 'VERTEX_API_KEY'],
+      ['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'PALM_API_KEY'],
       ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'],
     ];
   }
