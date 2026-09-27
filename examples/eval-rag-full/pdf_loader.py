@@ -8,8 +8,11 @@ from langchain_core.documents import Document
 from pypdf import PdfReader
 
 
-def load_pdf_pages(url: str) -> list[Document]:
-    with requests.get(url) as response:
+def load_pdf_pages(
+    url: str, *, timeout: tuple[float, float] = (10, 60)
+) -> list[Document]:
+    """Load pages with finite connection and read-inactivity timeouts, in seconds."""
+    with requests.get(url, timeout=timeout) as response:
         if response.status_code != 200:
             raise ValueError(
                 f"Check the url of your file; returned status code {response.status_code}"
@@ -34,6 +37,7 @@ def load_pdf_pages(url: str) -> list[Document]:
                         value.replace("'", ""), "D:%Y%m%d%H%M%S%z"
                     ).isoformat("T")
                 except ValueError:
+                    # Preserve unparseable date metadata as its original string.
                     pass
             elif key not in ("page_count", "file_path") and isinstance(value, str):
                 value = value.strip()

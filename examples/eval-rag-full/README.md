@@ -33,6 +33,8 @@ To get started:
 
 1. Run `ingest.py` to create the vector database: `python ingest.py`
 
+PDF downloads use a 10-second connection timeout and a 60-second read-inactivity timeout. Ingestion logs failed downloads and continues with the remaining files.
+
 Now we're ready to go.
 
 - Edit `promptfooconfig.yaml` to your liking to configure the questions you'd like to ask in your tests. Then run:

@@ -8,6 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
 from unittest.mock import patch
 
+import requests
 from pdf_loader import load_pdf_pages
 from pypdf import PdfWriter
 from pypdf.errors import PdfReadError
@@ -63,6 +64,7 @@ class PDFLoaderTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         pdf = make_pdf()
         cls.request_paths = []
+        cls.release_stalled_request = threading.Event()
 
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *_args) -> None:
@@ -70,6 +72,9 @@ class PDFLoaderTest(unittest.TestCase):
 
             def do_GET(self) -> None:
                 cls.request_paths.append(self.path)
+                if self.path == "/stalled.pdf":
+                    cls.release_stalled_request.wait(timeout=5)
+                    return
                 if self.path == "/redirect.pdf":
                     self.send_response(302)
                     self.send_header("Location", "/report%20one.pdf")
@@ -103,7 +108,9 @@ class PDFLoaderTest(unittest.TestCase):
 
     def test_page_text_and_metadata(self) -> None:
         url = self.base_url + "report%20one.pdf"
-        pages = load_pdf_pages(url)
+        with patch("pdf_loader.requests.get", wraps=requests.get) as request:
+            pages = load_pdf_pages(url)
+        self.assertEqual(request.call_args.kwargs["timeout"], (10, 60))
         self.assertEqual(
             [page.page_content for page in pages], ["First page", "Second page", ""]
         )
@@ -142,6 +149,13 @@ class PDFLoaderTest(unittest.TestCase):
         with self.assertRaises(PdfReadError):
             load_pdf_pages(self.base_url + "invalid.pdf")
 
+    def test_stalled_download_times_out(self) -> None:
+        try:
+            with self.assertRaises(requests.exceptions.ReadTimeout):
+                load_pdf_pages(self.base_url + "stalled.pdf", timeout=(1, 0.05))
+        finally:
+            self.release_stalled_request.set()
+
     def test_ingestion_keeps_filename_and_page_metadata(self) -> None:
         with patch.dict(os.environ, {"OPENAI_API_KEY": "local-test-key"}):
             ingest = importlib.import_module("ingest")
@@ -162,6 +176,17 @@ class PDFLoaderTest(unittest.TestCase):
             with self.assertLogs(level="ERROR"):
                 self.assertEqual(
                     ingest.process_single_pdf("missing.pdf"), ("missing.pdf", [])
+                )
+            with (
+                patch.object(
+                    ingest,
+                    "load_pdf_pages",
+                    side_effect=requests.exceptions.ReadTimeout("Download stalled"),
+                ),
+                self.assertLogs(level="ERROR"),
+            ):
+                self.assertEqual(
+                    ingest.process_single_pdf("stalled.pdf"), ("stalled.pdf", [])
                 )
 
 
