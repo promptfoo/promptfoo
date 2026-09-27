@@ -156,6 +156,7 @@ describe('AwsBedrockAgentsProvider', () => {
 
       expect(ProxyAgentMock).toHaveBeenCalled();
       expect(NodeHttpHandlerMock).toHaveBeenCalledWith({
+        httpAgent: expect.any(Object),
         httpsAgent: expect.any(Object),
         requestTimeout: 300000,
       });
