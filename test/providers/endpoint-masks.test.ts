@@ -12,7 +12,6 @@ import { FireworksEmbeddingProvider } from '../../src/providers/fireworks/embedd
 import { AIStudioChatProvider } from '../../src/providers/google/ai.studio';
 import { GoogleAuthManager } from '../../src/providers/google/auth';
 import { GoogleInteractionsProvider } from '../../src/providers/google/interactions';
-import { GoogleProvider } from '../../src/providers/google/provider';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../../src/providers/google/vertex';
 import { VertexLiveProvider } from '../../src/providers/google/vertexLive';
 import { createLiteLLMProvider } from '../../src/providers/litellm';
@@ -138,7 +137,6 @@ const requiredEndpoints = [
   ],
 ] as const;
 const studioProviders = [
-  ['Google', (options: Options) => new GoogleProvider('gemini-2.5-flash', options)],
   ['AI Studio', (options: Options) => new AIStudioChatProvider('gemini-2.5-flash', options)],
 ] as const;
 
@@ -284,14 +282,6 @@ describe('provider endpoint environment precedence', () => {
     },
   );
   it.each([
-    [
-      'Google Vertex',
-      (options: Options) =>
-        new GoogleProvider('gemini-2.5-flash', {
-          ...options,
-          config: { ...options.config, vertexai: true },
-        }),
-    ],
     ['Vertex chat', (options: Options) => new VertexChatProvider('gemini-2.5-flash', options)],
     [
       'Vertex embedding',
