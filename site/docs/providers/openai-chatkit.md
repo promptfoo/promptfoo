@@ -321,10 +321,25 @@ npx promptfoo eval --max-concurrency 4
 ### Playwright not installed
 
 ```text
+This provider requires the optional Playwright package.
+```
+
+Install the SDK alongside Promptfoo in the same project:
+
+```bash
+npm install promptfoo "playwright@^1.63.0"
+npx playwright install chromium
+```
+
+For a global CLI, use `npm install -g promptfoo "playwright@^1.63.0"` and then `playwright install chromium`.
+
+### Chromium not installed
+
+```text
 Error: Playwright browser not installed
 ```
 
-Run `npx playwright install chromium`
+The SDK is available, but its matching browser binary is missing. Run `npx playwright install chromium` in the project, or `playwright install chromium` for a global installation.
 
 ### Timeout errors
 
