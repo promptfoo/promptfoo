@@ -111,6 +111,32 @@ describe('Python pool executable validation', () => {
     expect(execFileAsync).toHaveBeenCalledTimes(2);
   });
 
+  it.each(['starting', 'ready'] as const)(
+    'cleans up a %s peer before retrying failed pool initialization',
+    async (peerState) => {
+      const pool = new PythonWorkerPool('fixture.py', 'call_api', 2, 'fixture-python');
+      pools.push(pool);
+      signals.autoReady = false;
+      const initialized = pool.initialize().catch((error) => error);
+      await setImmediate();
+      expect(shells).toHaveLength(2);
+      const peerSend = vi.spyOn(shells[1], 'send');
+      if (peerState === 'ready') {
+        shells[1].emit('message', 'READY');
+      }
+      shells[0].emit('close');
+      expect(await initialized).toEqual(new Error('Worker exited before becoming ready'));
+      expect(peerSend).toHaveBeenCalledWith('SHUTDOWN');
+      expect(pool.getWorkerCount()).toBe(0);
+
+      signals.autoReady = true;
+      await pool.initialize();
+      expect(pool.getWorkerCount()).toBe(2);
+      expect(shells).toHaveLength(4);
+      expect(execFileAsync).toHaveBeenCalledTimes(2);
+    },
+  );
+
   it('revalidates the executable when a worker restarts after a crash', async () => {
     const pool = new PythonWorkerPool('fixture.py', 'call_api', 2, 'fixture-python');
     pools.push(pool);

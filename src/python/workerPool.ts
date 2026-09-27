@@ -72,7 +72,13 @@ export class PythonWorkerPool {
       this.workers.push(worker);
     }
 
-    await Promise.all(initPromises);
+    try {
+      await Promise.all(initPromises);
+    } catch (error) {
+      // Failed startup must release both ready and still-starting peers before retrying.
+      await Promise.all(this.workers.splice(0).map((worker) => worker.shutdown()));
+      throw error;
+    }
     if (this.shuttingDown) {
       throw new Error('Worker pool shutting down');
     }

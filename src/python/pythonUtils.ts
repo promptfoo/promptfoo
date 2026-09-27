@@ -177,31 +177,14 @@ export async function getSysExecutable(): Promise<string | null> {
  * @returns The validated path if successful, or null if invalid.
  */
 export async function tryPath(path: string): Promise<string | null> {
-  let timeoutId: NodeJS.Timeout | undefined;
-
   try {
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error('Command timed out')), 2500);
+    const result = await execFileAsync(path, ['--version'], {
+      env: getProcessEnv(),
+      timeout: 2500,
+      killSignal: 'SIGKILL',
     });
-
-    const result = await Promise.race([
-      execFileAsync(path, ['--version'], { env: getProcessEnv() }),
-      timeoutPromise,
-    ]);
-
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-
-    const versionOutput = (result as { stdout: string }).stdout.trim();
-    if (versionOutput.startsWith('Python')) {
-      return path;
-    }
-    return null;
+    return result.stdout.trim().startsWith('Python') ? path : null;
   } catch {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
     return null;
   }
 }
