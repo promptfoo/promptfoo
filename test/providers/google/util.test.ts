@@ -286,6 +286,48 @@ describe('util', () => {
       expect(() => validateFunctionCall(output, mockFunctions)).not.toThrow();
     });
 
+    it.each([true, false])(
+      'validates against the canonical schema across tool entries (canonical first: %s)',
+      (canonicalFirst) => {
+        const camelTool: Tool = {
+          functionDeclarations: [
+            {
+              name: 'lookup',
+              parameters: {
+                type: 'OBJECT',
+                properties: { code: { type: 'STRING' } },
+                required: ['code'],
+              },
+            },
+          ],
+        };
+        const snakeTool: Tool = {
+          function_declarations: [
+            { name: 'otherFunction' },
+            {
+              name: 'lookup',
+              parameters: {
+                type: 'OBJECT',
+                properties: { id: { type: 'NUMBER' } },
+                required: ['id'],
+              },
+            },
+          ],
+        };
+        const tools = canonicalFirst ? [camelTool, snakeTool] : [snakeTool, camelTool];
+
+        expect(() =>
+          validateFunctionCall([{ functionCall: { name: 'lookup', args: { code: 'A' } } }], tools),
+        ).not.toThrow();
+        expect(() =>
+          validateFunctionCall([{ functionCall: { name: 'lookup', args: { id: 1 } } }], tools),
+        ).toThrow(/does not match schema/);
+        expect(() =>
+          validateFunctionCall([{ functionCall: { name: 'otherFunction', args: {} } }], tools),
+        ).not.toThrow();
+      },
+    );
+
     it('should validate empty function args', () => {
       const output = [
         {
@@ -2241,6 +2283,91 @@ describe('util', () => {
         expect(tools).toEqual(original);
       },
     );
+
+    it.each([true, false])(
+      'prefers camel-case declarations across tool entries (canonical first: %s)',
+      (canonicalFirst) => {
+        const canonical = {
+          name: 'lookup',
+          behavior: 'NON_BLOCKING' as const,
+          parameters: {
+            type: 'OBJECT' as const,
+            properties: { code: { type: 'STRING' as const, default: 'ignored' } },
+            additionalProperties: false,
+          },
+        };
+        const camelTool = { functionDeclarations: [canonical, { name: 'camelOnly' }] };
+        const snakeTool = {
+          function_declarations: [
+            { name: 'lookup', behavior: 'BLOCKING' as const },
+            { name: 'snakeOnly' },
+          ],
+        };
+        const tools = canonicalFirst ? [camelTool, snakeTool] : [snakeTool, camelTool];
+        const original = structuredClone(tools);
+        const normalized = normalizeTools(tools);
+        const expectedCamelTool = {
+          functionDeclarations: [
+            {
+              ...canonical,
+              parameters: { type: 'OBJECT', properties: { code: { type: 'STRING' } } },
+            },
+            { name: 'camelOnly', parameters: undefined },
+          ],
+        };
+        const expectedSnakeTool = {
+          functionDeclarations: [{ name: 'snakeOnly', parameters: undefined }],
+        };
+
+        expect(normalized).toEqual(
+          canonicalFirst
+            ? [expectedCamelTool, expectedSnakeTool]
+            : [expectedSnakeTool, expectedCamelTool],
+        );
+        expect(normalizeTools(normalized)).toEqual(normalized);
+        expect(tools).toEqual(original);
+      },
+    );
+
+    it.each(['functionDeclarations', 'function_declarations'] as const)(
+      'keeps the first %s declaration for each name within and across entries',
+      (key) => {
+        const first = { name: 'lookup', description: 'First declaration' };
+        const duplicate = { name: 'lookup', description: 'Conflicting declaration' };
+        const tools = [
+          { [key]: [first, duplicate] },
+          { [key]: [duplicate] },
+          { [key]: [{ name: 'distinct' }] },
+        ];
+        const original = structuredClone(tools);
+        const normalized = normalizeTools(tools);
+
+        expect(normalized).toEqual([
+          { functionDeclarations: [{ ...first, parameters: undefined }] },
+          { functionDeclarations: [{ name: 'distinct', parameters: undefined }] },
+        ]);
+        expect(normalizeTools(normalized)).toEqual(normalized);
+        expect(tools).toEqual(original);
+      },
+    );
+
+    it('preserves built-in tools when their duplicate declarations are removed', () => {
+      const tools = [
+        { function_declarations: [{ name: 'lookup' }], googleSearch: {} },
+        { functionDeclarations: [{ name: 'lookup' }] },
+        { functionDeclarations: [{ name: 'lookup' }], codeExecution: {} },
+      ];
+      const original = structuredClone(tools);
+      const normalized = normalizeTools(tools);
+
+      expect(normalized).toEqual([
+        { googleSearch: {} },
+        { functionDeclarations: [{ name: 'lookup', parameters: undefined }] },
+        { codeExecution: {} },
+      ]);
+      expect(normalizeTools(normalized)).toEqual(normalized);
+      expect(tools).toEqual(original);
+    });
 
     it('should convert snake_case to camelCase for tool properties', () => {
       const tools = [

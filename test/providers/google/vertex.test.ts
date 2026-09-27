@@ -3142,6 +3142,43 @@ describe('VertexChatProvider.callClaudeApi', () => {
     expect(mockRequest.mock.calls[0][0].data.temperature).toBeUndefined();
   });
 
+  it.each([
+    { thinking: { type: 'disabled' as const }, effort: 'low' as const },
+    { thinking: { type: 'disabled' as const }, effort: undefined },
+    { thinking: { type: 'enabled' as const, budget_tokens: 1024 }, effort: 'high' as const },
+  ])(
+    'Claude Opus 5.5 on Vertex normalizes thinking %j and omits sampling params',
+    async ({ thinking, effort }) => {
+      const model = 'claude-opus-5-5';
+      provider = new VertexChatProvider(model, {
+        config: { temperature: 0.5, top_p: 0.9, top_k: 40, thinking, effort },
+      });
+      const mockRequest = mockVertexRequest({
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model,
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 5, output_tokens: 1 },
+      });
+
+      await provider.callClaudeApi('test prompt');
+
+      const sentBody = mockRequest.mock.calls[0][0].data as Record<string, unknown>;
+      expect(sentBody.temperature).toBeUndefined();
+      expect(sentBody.top_p).toBeUndefined();
+      expect(sentBody.top_k).toBeUndefined();
+      // Opus 5.5 rejects `disabled` at every effort level (unlike Opus 5), and thinking
+      // always consumes max_tokens, so the default gets thinking headroom.
+      expect(sentBody.thinking).toEqual(
+        thinking.type === 'enabled' ? { type: 'adaptive' } : undefined,
+      );
+      expect(sentBody.max_tokens).toBe(2048);
+    },
+  );
+
   it('omits temperature for Claude Opus 4.7 on Vertex', async () => {
     provider = new VertexChatProvider('claude-opus-4-7', {
       config: { max_tokens: 32, temperature: 0.5 },

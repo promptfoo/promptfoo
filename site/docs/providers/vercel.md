@@ -62,8 +62,8 @@ providers:
   - id: vercel:anthropic/claude-sonnet-4.5
     config:
       # Authentication
-      apiKey: ${VERCEL_AI_GATEWAY_API_KEY}
-      apiKeyEnvar: CUSTOM_API_KEY_VAR # Use a custom env var name
+      apiKey: '{{env.VERCEL_AI_GATEWAY_API_KEY}}'
+      # Or omit apiKey and set apiKeyEnvar: CUSTOM_API_KEY_VAR
 
       # Model settings
       temperature: 0.7
@@ -73,7 +73,7 @@ providers:
       frequencyPenalty: 0.5
       presencePenalty: 0.3
       stopSequences:
-        - '\n\n'
+        - "\n\n"
 
       # Request settings
       timeout: 60000
@@ -86,22 +86,23 @@ providers:
 
 ### Configuration Parameters
 
-| Parameter          | Type     | Description                                  |
-| ------------------ | -------- | -------------------------------------------- |
-| `apiKey`           | string   | Vercel AI Gateway API key                    |
-| `apiKeyEnvar`      | string   | Custom environment variable name for API key |
-| `temperature`      | number   | Controls randomness (0.0 to 1.0)             |
-| `maxTokens`        | number   | Maximum number of tokens to generate         |
-| `topP`             | number   | Nucleus sampling parameter                   |
-| `topK`             | number   | Top-k sampling parameter                     |
-| `frequencyPenalty` | number   | Penalizes frequent tokens                    |
-| `presencePenalty`  | number   | Penalizes tokens based on presence           |
-| `stopSequences`    | string[] | Sequences where generation stops             |
-| `timeout`          | number   | Request timeout in milliseconds              |
-| `headers`          | object   | Additional HTTP headers                      |
-| `streaming`        | boolean  | Enable streaming responses                   |
-| `responseSchema`   | object   | JSON schema for structured output            |
-| `baseUrl`          | string   | Override the AI Gateway base URL             |
+| Parameter          | Type     | Description                                     |
+| ------------------ | -------- | ----------------------------------------------- |
+| `apiKey`           | string   | Vercel AI Gateway API key                       |
+| `apiKeyEnvar`      | string   | Custom environment variable name for API key    |
+| `temperature`      | number   | Controls randomness; range depends on the model |
+| `maxTokens`        | number   | Maximum number of tokens to generate            |
+| `maxRetries`       | number   | Retry attempts for a failed request             |
+| `topP`             | number   | Nucleus sampling parameter                      |
+| `topK`             | number   | Top-k sampling parameter                        |
+| `frequencyPenalty` | number   | Penalizes frequent tokens                       |
+| `presencePenalty`  | number   | Penalizes tokens based on presence              |
+| `stopSequences`    | string[] | Sequences where generation stops                |
+| `timeout`          | number   | Request timeout in milliseconds                 |
+| `headers`          | object   | Additional HTTP headers                         |
+| `streaming`        | boolean  | Use the streaming API for text generation       |
+| `responseSchema`   | object   | JSON schema for structured output               |
+| `baseUrl`          | string   | Override the AI Gateway base URL                |
 
 ## Structured Output
 
@@ -126,6 +127,7 @@ providers:
         required:
           - sentiment
           - confidence
+          - keywords
 
 prompts:
   - 'Analyze the sentiment of this text: {{text}}'
@@ -140,7 +142,7 @@ tests:
 
 ## Streaming
 
-Enable streaming for real-time responses:
+Use Vercel's streaming API for text generation. Promptfoo collects the chunks and runs assertions on the completed response:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -149,6 +151,8 @@ providers:
       streaming: true
       maxTokens: 2000
 ```
+
+The provider normalizes the AI SDK's `tool-calls` and `content-filter` finish reasons to `tool_calls` and `content_filter`. Use the [`finish-reason` assertion](/docs/configuration/expected-outputs/deterministic/#finish-reason) with these values, or `stop` and `length`, for both streaming and non-streaming responses.
 
 ## Supported Providers
 
@@ -171,18 +175,28 @@ For a complete list, see the [Vercel AI Gateway documentation](https://vercel.co
 
 Generate embeddings for text similarity, search, and RAG applications:
 
+Set the embedding provider for the `similar` assertion under `defaultTest.options.provider.embedding`:
+
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - vercel:embedding:openai/text-embedding-3-small
+  - vercel:openai/gpt-5.6-luna
 
 prompts:
-  - 'Generate embedding for: {{text}}'
+  - 'Answer concisely: {{question}}'
+
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: vercel:embedding:openai/text-embedding-3-small
 
 tests:
   - vars:
-      text: 'Hello world'
+      question: 'What is the capital of France?'
     assert:
-      - type: is-valid-embedding
+      - type: similar
+        value: Paris
+        threshold: 0.8
 ```
 
 Supported embedding models:
@@ -241,6 +255,7 @@ providers:
         required:
           - summary
           - topics
+          - wordCount
 
 prompts:
   - 'Analyze this article and return a structured summary: {{article}}'
@@ -255,10 +270,11 @@ tests:
 
 ## Environment Variables
 
-| Variable                     | Description                 |
-| ---------------------------- | --------------------------- |
-| `VERCEL_AI_GATEWAY_API_KEY`  | API key for AI Gateway      |
-| `VERCEL_AI_GATEWAY_BASE_URL` | Override the AI Gateway URL |
+| Variable                     | Description                                                                   |
+| ---------------------------- | ----------------------------------------------------------------------------- |
+| `VERCEL_AI_GATEWAY_API_KEY`  | API key for AI Gateway                                                        |
+| `AI_GATEWAY_API_KEY`         | Fallback from the shell environment when `VERCEL_AI_GATEWAY_API_KEY` is unset |
+| `VERCEL_AI_GATEWAY_BASE_URL` | Override the AI Gateway URL                                                   |
 
 ## Troubleshooting
 
