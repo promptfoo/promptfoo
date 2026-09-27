@@ -10,7 +10,6 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import Eval from './Eval';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
-import type { EvaluateTable, EvaluateTableOutput } from '@promptfoo/types';
 
 const { filterMode, showToast } = vi.hoisted(() => ({
   filterMode: { current: 'all' as 'all' | 'failures' },
@@ -31,7 +30,7 @@ vi.mock('./EvalOutputCell', () => ({
     output,
     onRating,
   }: {
-    output: EvaluateTableOutput;
+    output: { score: number };
     onRating: (pass: boolean | undefined, score: number) => void;
   }) => (
     <div>
@@ -193,7 +192,7 @@ it('keeps pagination aligned with the initial request when navigating from a sma
   expect(screen.getByLabelText('Go to page')).toHaveValue(2);
 });
 
-const ratingTable: EvaluateTable = {
+const ratingTable: NonNullable<ReturnType<typeof useTableStore.getState>['table']> = {
   head: { prompts: [{ raw: 'test', label: 'test', provider: 'test' }], vars: [] },
   body: [
     {
