@@ -356,6 +356,7 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
       // Store to blob storage
       const { ref } = await storeBlob(buffer, 'video/mp4', {
         evalId: context?.evaluationId,
+        isCancelled: context?.isCancelled,
         kind: 'video',
         location: 'response.video',
         promptIdx: context?.promptIdx,

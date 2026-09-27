@@ -6,7 +6,11 @@ import {
   getAssertionCounts,
   recomputeDerivedMetrics,
 } from '../util/promptMetrics';
-import { accumulateResultTokenUsage, hasGradingTokenUsage } from '../util/tokenUsageUtils';
+import {
+  accumulateResultTokenUsage,
+  cloneTokenUsageBreakdown,
+  hasGradingTokenUsage,
+} from '../util/tokenUsageUtils';
 
 import type Eval from '../models/eval';
 
@@ -119,6 +123,16 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
   for (const [promptIdx, state] of promptMetrics.entries()) {
     const { metrics: newMetrics } = state;
     const previous = evalRecord.prompts[promptIdx].metrics;
+    const previousCount =
+      (previous?.testPassCount ?? 0) +
+      (previous?.testFailCount ?? 0) +
+      (previous?.testErrorCount ?? 0);
+    const savedCount =
+      newMetrics.testPassCount + newMetrics.testFailCount + newMetrics.testErrorCount;
+    // Failed inserts can leave accounted work only in the header.
+    if (Number.isFinite(previousCount) && previousCount > savedCount) {
+      continue;
+    }
     // Stripped and historical rows cannot replace retained totals with guessed contributions.
     if (state.unknownAssertionCounts) {
       newMetrics.assertPassCount = previous?.assertPassCount ?? 0;
@@ -128,7 +142,9 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
       newMetrics.tokenUsage.assertions = previous?.tokenUsage?.assertions;
       const incurredAssertions = previous?.tokenUsage?.incurredTokenUsage?.assertions;
       if (incurredAssertions || newMetrics.tokenUsage.incurredTokenUsage) {
-        newMetrics.tokenUsage.incurredTokenUsage ||= {};
+        newMetrics.tokenUsage.incurredTokenUsage ||= cloneTokenUsageBreakdown(
+          newMetrics.tokenUsage,
+        );
         newMetrics.tokenUsage.incurredTokenUsage.assertions = incurredAssertions;
       }
     }

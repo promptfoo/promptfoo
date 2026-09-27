@@ -784,6 +784,7 @@ export class HydraProvider implements ApiProvider {
         const beforeOutput = targetResponse.output;
         targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
           evalId: context?.evaluationId,
+          isCancelled: context?.isCancelled,
           testIdx: context?.testIdx,
           promptIdx: context?.promptIdx,
         });

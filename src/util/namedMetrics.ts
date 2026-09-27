@@ -129,8 +129,9 @@ export function subtractNamedMetric(
 
   for (const bucket of Object.keys(contribution) as (keyof NamedMetricAccumulator)[]) {
     const delta = contribution[bucket];
-    if (delta !== undefined && accumulator[bucket]) {
-      accumulator[bucket][metricName] = (accumulator[bucket][metricName] ?? delta) - delta;
+    const current = accumulator[bucket]?.[metricName];
+    if (delta !== undefined && isFiniteNumber(current)) {
+      accumulator[bucket]![metricName] = current - delta;
     }
   }
 

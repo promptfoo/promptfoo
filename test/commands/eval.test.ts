@@ -1888,7 +1888,7 @@ describe('evalCommand', () => {
         { filterProviders: 'selected-target' },
         latestEval.config,
       );
-      expect(deleteErrorResults).toHaveBeenCalledWith(['result-1', 'result-2']);
+      expect(deleteErrorResults).toHaveBeenCalledWith(['result-1', 'result-2'], latestEval);
       expect(recalculatePromptMetrics).toHaveBeenCalledWith(latestEval);
     } finally {
       latestSpy.mockRestore();

@@ -965,7 +965,7 @@ async function doEvalWithEnv(
         const errorResultIds = cliState._retryErrorResultIds;
         retryMetricsSaved = false;
         try {
-          await deleteErrorResults(errorResultIds);
+          await deleteErrorResults(errorResultIds, ret);
           await recalculatePromptMetrics(ret);
           retryMetricsSaved = true;
           logger.debug(

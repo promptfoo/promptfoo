@@ -27,23 +27,20 @@ import {
   type EvaluateSummaryV2,
   type EvaluateTable,
   type EvalWithMetadata,
-  type PromptMetrics,
   type PromptWithMetadata,
-  ResultFailureReason,
   type ResultsFile,
   type TestCasesWithMetadata,
   type TestCasesWithMetadataPrompt,
-  type TokenUsage,
   type UnifiedConfig,
 } from '../types/index';
 import invariant from '../util/invariant';
 import { sha256 } from './createHash';
+import { getNamedMetricContribution, type NamedMetricAccumulator } from './namedMetrics';
 import {
-  getNamedMetricContribution,
-  type NamedMetricAccumulator,
-  subtractNamedMetric,
-} from './namedMetrics';
-import { getAssertionCounts, recomputeDerivedMetrics } from './promptMetrics';
+  getAssertionCounts,
+  recomputeDerivedMetrics,
+  subtractResultFromPromptMetrics,
+} from './promptMetrics';
 import { restoreAzureBlobSasTokens, sanitizeTracingConfigForPersistence } from './sanitizer';
 import {
   getCachedStandaloneEvals,
@@ -54,7 +51,6 @@ import {
   accumulateResultTokenUsage,
   createEmptyTokenUsage,
   hasGradingTokenUsage,
-  subtractTokenUsage,
 } from './tokenUsageUtils';
 
 import type { StandaloneEval } from './standaloneEvalCache';
@@ -499,13 +495,6 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
-function subtractTrackedMetric(current: number | undefined, delta: unknown): number {
-  if (!isFiniteNumber(delta)) {
-    return current ?? 0;
-  }
-  return current === undefined ? 0 : current - delta;
-}
-
 type BlobUsageResult = typeof evalResultsTable.$inferSelect;
 type DatabaseTransaction = Parameters<
   Parameters<Awaited<ReturnType<typeof getDb>>['transaction']>[0]
@@ -862,72 +851,6 @@ async function cleanupBlobReferencesForDeletedResult(
         .delete(blobReferencesTable)
         .where(eq(blobReferencesTable.id, blobReference.id))
         .run();
-    }
-  }
-}
-
-function subtractResultFromPromptMetrics(
-  metrics: PromptMetrics,
-  result: typeof evalResultsTable.$inferSelect,
-  survivingAssertionCounts?: { pass: number; fail: number },
-  survivingAssertionTokenUsage?: TokenUsage,
-): void {
-  if (result.success) {
-    metrics.testPassCount = Math.max(0, subtractTrackedMetric(metrics.testPassCount, 1));
-  } else if (result.failureReason === ResultFailureReason.ERROR) {
-    metrics.testErrorCount = Math.max(0, subtractTrackedMetric(metrics.testErrorCount, 1));
-  } else {
-    metrics.testFailCount = Math.max(0, subtractTrackedMetric(metrics.testFailCount, 1));
-  }
-
-  const assertionCounts = getAssertionCounts(result.gradingResult);
-  if (survivingAssertionCounts) {
-    metrics.assertPassCount = survivingAssertionCounts.pass;
-    metrics.assertFailCount = survivingAssertionCounts.fail;
-  } else if (assertionCounts) {
-    metrics.assertPassCount = Math.max(
-      0,
-      subtractTrackedMetric(metrics.assertPassCount, assertionCounts.pass),
-    );
-    metrics.assertFailCount = Math.max(
-      0,
-      subtractTrackedMetric(metrics.assertFailCount, assertionCounts.fail),
-    );
-  }
-
-  metrics.score = subtractTrackedMetric(metrics.score, result.score);
-  metrics.totalLatencyMs = subtractTrackedMetric(metrics.totalLatencyMs, result.latencyMs);
-  metrics.cost = subtractTrackedMetric(metrics.cost, result.cost);
-  if (metrics.incurredCost !== undefined) {
-    metrics.incurredCost = subtractTrackedMetric(
-      metrics.incurredCost,
-      result.response?.incurredCost ?? (result.response?.cached ? 0 : result.cost),
-    );
-  }
-
-  for (const [metricName, metricValue] of Object.entries(result.namedScores ?? {})) {
-    if (isFiniteNumber(metricValue)) {
-      subtractNamedMetric(metrics, {
-        metricName,
-        metricValue,
-        gradingResult: result.gradingResult,
-      });
-    }
-  }
-
-  if (metrics.tokenUsage) {
-    const delta: TokenUsage = metrics.tokenUsage.incurredTokenUsage
-      ? { incurredTokenUsage: {} }
-      : {};
-    accumulateResultTokenUsage(delta, result);
-    subtractTokenUsage(metrics.tokenUsage, delta);
-    if (survivingAssertionTokenUsage) {
-      // Rebuild only when every survivor retains its grading usage.
-      metrics.tokenUsage.assertions = survivingAssertionTokenUsage.assertions;
-      if (metrics.tokenUsage.incurredTokenUsage) {
-        metrics.tokenUsage.incurredTokenUsage.assertions =
-          survivingAssertionTokenUsage.incurredTokenUsage?.assertions;
-      }
     }
   }
 }

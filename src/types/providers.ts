@@ -110,6 +110,8 @@ export interface CallApiContextParams {
    */
   promptIdx?: number;
   repeatIndex?: number;
+  /** Prevent media reference persistence after this evaluation step times out. */
+  isCancelled?: () => boolean;
 }
 
 export interface CallApiOptionsParams {

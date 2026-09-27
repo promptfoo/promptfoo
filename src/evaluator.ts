@@ -848,6 +848,7 @@ async function callProviderForRunEval({
   rateLimitRegistry,
   renderedPrompt,
   repeatIndex,
+  isCancelled,
   test,
   testIndex,
   testSuite,
@@ -864,6 +865,7 @@ async function callProviderForRunEval({
   | 'test'
   | 'testSuite'
 > & {
+  isCancelled?: () => boolean;
   filters: RunEvalOptions['nunjucksFilters'];
   promptForRender: Prompt;
   renderedPrompt: string;
@@ -897,6 +899,7 @@ async function callProviderForRunEval({
         rateLimitRegistry,
         renderedPrompt,
         repeatIndex,
+        isCancelled,
         test,
         testIndex,
         testSuite,
@@ -1007,6 +1010,7 @@ async function callActiveProvider({
   rateLimitRegistry,
   renderedPrompt,
   repeatIndex,
+  isCancelled,
   test,
   testIndex,
   testSuite,
@@ -1016,6 +1020,7 @@ async function callActiveProvider({
   RunEvalOptions,
   'abortSignal' | 'evalId' | 'provider' | 'rateLimitRegistry' | 'repeatIndex' | 'test' | 'testSuite'
 > & {
+  isCancelled?: () => boolean;
   filters: RunEvalOptions['nunjucksFilters'];
   onProviderInvoked: () => void;
   promptForRender: Prompt;
@@ -1037,6 +1042,7 @@ async function callActiveProvider({
     originalProvider,
     promptForRender,
     repeatIndex,
+    isCancelled,
     test,
     testIndex,
     traceContext,
@@ -1078,12 +1084,14 @@ function buildCallApiContext({
   originalProvider,
   promptForRender,
   repeatIndex,
+  isCancelled,
   test,
   testIndex,
   traceContext,
   vars,
 }: {
   evalId?: string;
+  isCancelled?: () => boolean;
   filters: RunEvalOptions['nunjucksFilters'];
   originalProvider: ApiProvider;
   promptForRender: Prompt;
@@ -1102,6 +1110,7 @@ function buildCallApiContext({
     logger: logger as unknown as winston.Logger,
     getCache,
     repeatIndex,
+    isCancelled,
     testIdx: testIndex,
   };
 
@@ -1274,6 +1283,7 @@ async function applyRunEvalResponseOutcome({
   renderedPrompt,
   response,
   ret,
+  shouldSkipStaleRows,
   test,
   testIdx,
   testSuite,
@@ -1293,6 +1303,7 @@ async function applyRunEvalResponseOutcome({
   renderedPrompt: string;
   response: ProviderResponse;
   ret: EvaluateResult;
+  shouldSkipStaleRows?: () => boolean;
   test: AtomicTestCase;
   testIdx: number;
   testSuite?: TestSuite;
@@ -1324,6 +1335,7 @@ async function applyRunEvalResponseOutcome({
     renderedPrompt,
     response,
     ret,
+    shouldSkipStaleRows,
     test,
     testIdx,
     testSuite,
@@ -1355,6 +1367,7 @@ async function gradeRunEvalResponse({
   renderedPrompt,
   response,
   ret,
+  shouldSkipStaleRows,
   test,
   testIdx,
   testSuite,
@@ -1373,6 +1386,7 @@ async function gradeRunEvalResponse({
   renderedPrompt: string;
   response: ProviderResponse;
   ret: EvaluateResult;
+  shouldSkipStaleRows?: () => boolean;
   test: AtomicTestCase;
   testIdx: number;
   testSuite?: TestSuite;
@@ -1385,6 +1399,7 @@ async function gradeRunEvalResponse({
     promptIdx,
     provider,
     response,
+    shouldSkipStaleRows,
     test,
     testIdx,
     vars,
@@ -1453,6 +1468,7 @@ async function transformRunEvalResponse({
   promptIdx,
   provider,
   response,
+  shouldSkipStaleRows,
   test,
   testIdx,
   vars,
@@ -1462,6 +1478,7 @@ async function transformRunEvalResponse({
   promptIdx: number;
   provider: ApiProvider;
   response: ProviderResponse;
+  shouldSkipStaleRows?: () => boolean;
   test: AtomicTestCase;
   testIdx: number;
   vars: Vars;
@@ -1492,6 +1509,7 @@ async function transformRunEvalResponse({
     evalId,
     testIdx,
     promptIdx,
+    isCancelled: shouldSkipStaleRows,
   });
 
   return {
@@ -1587,7 +1605,8 @@ async function runEvalInternal({
   evalId,
   providerCallQueue,
   rateLimitRegistry,
-}: RunEvalOptions): Promise<EvaluateResult[]> {
+  shouldSkipStaleRows,
+}: RunEvalOptions & { shouldSkipStaleRows?: () => boolean }): Promise<EvaluateResult[]> {
   provider.delay ??= delay ?? getEnvInt('PROMPTFOO_DELAY_MS', 0);
   invariant(
     typeof provider.delay === 'number',
@@ -1660,6 +1679,7 @@ async function runEvalInternal({
             rateLimitRegistry,
             renderedPrompt: rendered.renderedPrompt,
             repeatIndex,
+            isCancelled: shouldSkipStaleRows,
             test,
             testIndex,
             testSuite,
@@ -1724,6 +1744,7 @@ async function runEvalInternal({
             renderedPrompt: rendered.renderedPrompt,
             response,
             ret,
+            shouldSkipStaleRows,
             test,
             testIdx: testIndex,
             testSuite,
@@ -3496,6 +3517,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
             deferGrading,
             onRowsReady,
             providerCallQueue,
+            shouldSkipStaleRows,
             testSuite: context.testSuite,
           }));
 
@@ -3513,11 +3535,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       deferGrading,
       onRowsReady,
       providerCallQueue,
+      shouldSkipStaleRows,
       testSuite,
     }: {
       deferGrading: boolean;
       onRowsReady?: () => void;
       providerCallQueue?: ProviderCallQueue;
+      shouldSkipStaleRows?: () => boolean;
       testSuite: TestSuite;
     },
   ) {
@@ -3530,6 +3554,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       ...evalStep,
       deferGrading,
       providerCallQueue: deferGrading ? providerCallQueue : undefined,
+      shouldSkipStaleRows,
     });
     onRowsReady?.();
     return rows;

@@ -219,6 +219,7 @@ export class ModelsLabImageProvider implements ApiProvider {
       const mimeType = response.headers.get('content-type')?.split(';')[0] || 'image/png';
       const { ref } = await storeBlob(buffer, mimeType, {
         evalId: context?.evaluationId,
+        isCancelled: context?.isCancelled,
         location: 'response.output',
         kind: 'image',
         promptIdx: context?.promptIdx,

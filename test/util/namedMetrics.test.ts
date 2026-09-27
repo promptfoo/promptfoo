@@ -193,6 +193,24 @@ describe('backfillNamedScoreWeights', () => {
 });
 
 describe('subtractNamedMetric', () => {
+  it('preserves an absent metric weight inside a tracked map', () => {
+    const metrics = {
+      namedScores: { quality: 2 },
+      namedScoresCount: { quality: 2 },
+      namedScoreWeights: {},
+    };
+    subtractNamedMetric(metrics, {
+      metricName: 'quality',
+      metricValue: 1,
+      gradingResult: { pass: true, score: 1, reason: 'Imported score', componentResults: [] },
+    });
+    expect(metrics).toEqual({
+      namedScores: { quality: 1 },
+      namedScoresCount: { quality: 1 },
+      namedScoreWeights: {},
+    });
+  });
+
   it('removes legacy metric keys after the final debit without creating count buckets', () => {
     const metrics = {
       namedScores: { accuracy: 1 },

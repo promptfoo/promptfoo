@@ -447,6 +447,7 @@ export async function runMetaAgentRedteam({
       initialTargetResponse,
       {
         evalId: context?.evaluationId,
+        isCancelled: context?.isCancelled,
         testIdx: context?.testIdx,
         promptIdx: context?.promptIdx,
       },

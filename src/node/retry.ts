@@ -3,7 +3,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import cliState from '../cliState';
 import { beginEvalRun } from '../database/evalRun';
 import { getDb } from '../database/index';
-import { evalResultsTable } from '../database/tables';
+import { evalResultsTable, evalsTable } from '../database/tables';
 import { evaluate } from '../evaluator';
 import logger from '../logger';
 import Eval from '../models/eval';
@@ -18,9 +18,11 @@ import {
 } from '../util/eval/filterProviders';
 import { writeMultipleOutputs } from '../util/output';
 import { getOutputFileFormat } from '../util/outputFormats';
+import { subtractResultFromPromptMetrics } from '../util/promptMetrics';
 import { shouldShareResults } from '../util/sharing';
 import { recalculatePromptMetrics } from './recalculatePromptMetrics';
 
+import type { CompletedPrompt } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
 
 export interface RetryCommandOptions {
@@ -135,26 +137,52 @@ export async function getErrorResultIds(evalId: string): Promise<string[]> {
   return errorResults.map((r) => r.id);
 }
 
-/**
- * Deletes ERROR results after successful retry.
- * Uses batch delete for better performance.
- */
-export async function deleteErrorResults(resultIds: string[]): Promise<void> {
+/** Delete replaced retry rows and debit their known contributions atomically. */
+export async function deleteErrorResults(
+  resultIds: string[],
+  evalRecord?: Pick<Eval, 'id' | 'prompts'>,
+): Promise<void> {
   if (resultIds.length === 0) {
     return;
   }
 
   const db = await getDb();
-  const affectedEvals = await db
-    .selectDistinct({ evalId: evalResultsTable.evalId })
-    .from(evalResultsTable)
-    .where(inArray(evalResultsTable.id, resultIds))
-    .all();
+  const promptsByEval = new Map<string, CompletedPrompt[] | null>();
+  await db.transaction(async (tx) => {
+    for (let offset = 0; offset < resultIds.length; offset += 500) {
+      const ids = resultIds.slice(offset, offset + 500);
+      const rows = await tx
+        .select()
+        .from(evalResultsTable)
+        .where(inArray(evalResultsTable.id, ids))
+        .all();
+      for (const row of rows) {
+        if (!promptsByEval.has(row.evalId)) {
+          const evaluation = await tx
+            .select({ prompts: evalsTable.prompts })
+            .from(evalsTable)
+            .where(eq(evalsTable.id, row.evalId))
+            .get();
+          promptsByEval.set(row.evalId, evaluation?.prompts ?? null);
+        }
+        const metrics = promptsByEval.get(row.evalId)?.[row.promptIdx]?.metrics;
+        if (metrics) {
+          subtractResultFromPromptMetrics(metrics, row);
+        }
+      }
+      await tx.delete(evalResultsTable).where(inArray(evalResultsTable.id, ids)).run();
+    }
+    for (const [evalId, prompts] of promptsByEval) {
+      if (prompts) {
+        await tx.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, evalId)).run();
+      }
+    }
+  });
 
-  // Use batch delete with inArray for better performance
-  await db.delete(evalResultsTable).where(inArray(evalResultsTable.id, resultIds)).run();
-
-  for (const { evalId } of affectedEvals) {
+  if (evalRecord) {
+    evalRecord.prompts = promptsByEval.get(evalRecord.id) ?? evalRecord.prompts;
+  }
+  for (const evalId of promptsByEval.keys()) {
     notifyEvaluationChanged(evalId);
   }
 
@@ -264,7 +292,7 @@ async function retryWithConfig(
 
     let errorRowsDeleted = false;
     try {
-      await deleteErrorResults(errorResultIds);
+      await deleteErrorResults(errorResultIds, retriedEval);
       errorRowsDeleted = true;
       await recalculatePromptMetrics(retriedEval);
       accountingComplete = true;

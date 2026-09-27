@@ -5264,3 +5264,97 @@ describe('ResultsTable default column sizing', () => {
     expect(promptWidth).toBeLessThanOrEqual(360);
   });
 });
+
+describe('ResultsTable surviving transform display variables', () => {
+  const output = (values: Record<string, string | number | boolean> = {}) => ({
+    pass: true,
+    score: 1,
+    text: 'metadata output',
+    metadata: { transformDisplayVars: values },
+  });
+  let outputs: Array<ReturnType<typeof output> | null>;
+  const props = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 1000,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: false,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  beforeEach(() => {
+    vi.mocked(useResultsViewSettingsStore).mockReturnValue({
+      inComparisonMode: false,
+      renderMarkdown: false,
+    });
+    outputs = [];
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: 'transform-display',
+      setTable: vi.fn(),
+      table: {
+        head: { vars: [], prompts: [{ provider: 'first' }, { provider: 'second' }] },
+        body: [{ outputs, test: {}, vars: [] }],
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+    }));
+  });
+
+  it('switches to surviving metadata after the first output is deleted', () => {
+    const survivor = output({ fetchPrompt: 'Surviving fetch prompt', webPageUrl: 'survivor URL' });
+    outputs = [output({ fetchPrompt: 'First fetch prompt', webPageUrl: 'first URL' }), survivor];
+    const { rerender } = renderWithProviders(<ResultsTable {...props} />);
+    expect(screen.getByText('First fetch prompt')).toBeInTheDocument();
+    expect(screen.queryByText('Surviving fetch prompt')).not.toBeInTheDocument();
+
+    outputs = [null, survivor];
+    // The mocked store cannot notify React.memo when its snapshot changes.
+    rerender(<ResultsTable {...props} onSearchTextChange={vi.fn()} />);
+
+    expect(screen.getByText('Surviving fetch prompt')).toBeInTheDocument();
+    expect(screen.getByText('survivor URL')).toBeInTheDocument();
+    expect(screen.queryByText('First fetch prompt')).not.toBeInTheDocument();
+  });
+
+  it.each([null, output()])(
+    'sizes displayed metadata after a missing leading value (%j)',
+    (first) => {
+      const longPrompt = 'A long surviving transformed prompt '.repeat(8);
+      outputs = [first, output({ fetchPrompt: longPrompt, webPageUrl: 'short' })];
+      renderWithProviders(<ResultsTable {...props} />);
+
+      expect(screen.getByText(longPrompt.trim())).toBeInTheDocument();
+      const fetchWidth = Number.parseFloat(
+        screen.getByText('fetchPrompt').closest('th')!.style.width,
+      );
+      const urlWidth = Number.parseFloat(screen.getByText('webPageUrl').closest('th')!.style.width);
+      expect(fetchWidth).toBeGreaterThan(urlWidth);
+    },
+  );
+
+  it('preserves present empty and falsy values while resolving each missing key', () => {
+    outputs = [
+      output({ empty: '', zero: 0, disabled: false }),
+      output({ empty: 'later empty', zero: 'later zero', disabled: 'later false', extra: 'found' }),
+    ];
+    renderWithProviders(<ResultsTable {...props} />);
+
+    const cells = document.querySelectorAll('#results-table-container tbody td');
+    expect(cells[0]).toHaveTextContent(/^$/);
+    expect(cells[1]).toHaveTextContent('0');
+    expect(cells[2]).toHaveTextContent('false');
+    expect(cells[3]).toHaveTextContent('found');
+    expect(screen.queryByText(/later/)).not.toBeInTheDocument();
+  });
+});

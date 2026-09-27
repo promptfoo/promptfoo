@@ -290,6 +290,19 @@ function TableHeader({
   );
 }
 
+function getTransformDisplayVar(row: EvaluateTableRow, varName: string): string | undefined {
+  for (const output of row.outputs || []) {
+    const transformVars = output?.metadata?.transformDisplayVars as
+      | Record<string, string>
+      | undefined;
+    const value = transformVars?.[varName];
+    if (value !== undefined && value !== null) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
 function getVariableCellValue({
   row,
   varName,
@@ -317,16 +330,7 @@ function getVariableCellValue({
     return value;
   }
 
-  for (const output of row.outputs || []) {
-    const transformVars = output?.metadata?.transformDisplayVars as
-      | Record<string, string>
-      | undefined;
-    if (transformVars?.[varName]) {
-      return transformVars[varName];
-    }
-  }
-
-  return value;
+  return getTransformDisplayVar(row, varName) ?? value;
 }
 
 function renderMediaVariableCell({
@@ -1844,12 +1848,7 @@ function ResultsTable({
         varName,
         estimateMetadataColumnSize(
           varName.replace(/^__/, ''),
-          tableBody.map((row) => {
-            const transformVars = row.outputs?.[0]?.metadata?.transformDisplayVars as
-              | Record<string, string>
-              | undefined;
-            return transformVars?.[varName] || '';
-          }),
+          tableBody.map((row) => getTransformDisplayVar(row, varName) ?? ''),
         ),
       ]),
     ) as Record<string, number>;
@@ -2109,14 +2108,7 @@ function ResultsTable({
         header: () => <span className="font-bold">Variables</span>,
         columns: transformDisplayVarKeys.map((varName) =>
           columnHelper.accessor(
-            (row: EvaluateTableRow) => {
-              // Get the value from the first output's transformDisplayVars
-              const output = row.outputs?.[0];
-              const transformVars = output?.metadata?.transformDisplayVars as
-                | Record<string, string>
-                | undefined;
-              return transformVars?.[varName] || '';
-            },
+            (row: EvaluateTableRow) => getTransformDisplayVar(row, varName) ?? '',
             {
               id: `TransformVar_${varName}`,
               header: () => (

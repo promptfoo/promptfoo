@@ -23,20 +23,15 @@ const dbMocks = vi.hoisted(() => {
   const affectedEvalRowsAll = vi.fn(async () => affectedEvalRows);
   const deleteRun = vi.fn(async () => undefined);
   const db = {
-    select: vi.fn(() => ({
+    select: vi.fn((fields?: unknown) => ({
       from: vi.fn(() => ({
         where: vi.fn(() => ({
-          all: errorRowsAll,
+          all: fields ? errorRowsAll : affectedEvalRowsAll,
+          get: vi.fn(async () => undefined),
         })),
       })),
     })),
-    selectDistinct: vi.fn(() => ({
-      from: vi.fn(() => ({
-        where: vi.fn(() => ({
-          all: affectedEvalRowsAll,
-        })),
-      })),
-    })),
+    transaction: vi.fn(async (callback: (tx: unknown) => Promise<void>) => callback(db)),
     delete: vi.fn(() => ({
       where: vi.fn(() => ({
         run: deleteRun,
@@ -172,7 +167,7 @@ describe('retryCommand', () => {
   it('skips database work when there are no error result ids to delete', async () => {
     await deleteErrorResults([]);
 
-    expect(dbMocks.db.selectDistinct).not.toHaveBeenCalled();
+    expect(dbMocks.db.transaction).not.toHaveBeenCalled();
     expect(dbMocks.db.delete).not.toHaveBeenCalled();
   });
 
