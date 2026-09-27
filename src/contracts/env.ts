@@ -31,7 +31,6 @@ export const ProviderEnvOverridesSchema = z.object({
   AZURE_OPENAI_BASE_URL: z.string().optional(),
   AZURE_OPENAI_DEPLOYMENT_NAME: z.string().optional(),
   AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: z.string().optional(),
-  AZURE_STORAGE_CONNECTION_STRING: z.string().optional(),
   AZURE_TENANT_ID: z.string().optional(),
   AZURE_TOKEN_SCOPE: z.string().optional(),
   CDP_DOMAIN: z.string().optional(),
@@ -171,10 +170,14 @@ export const ProviderEnvOverridesSchema = z.object({
   PROMPTFOO_EVAL_TIMEOUT_MS: z.string().optional(),
 });
 
+// These settings apply to the whole evaluation, not an individual provider.
+export const EnvOverridesSchema = ProviderEnvOverridesSchema.extend({
+  AZURE_STORAGE_CONNECTION_STRING: z.string().optional(),
+});
+
 // The runtime schema silently strips unknown keys at parse time (zod's default
 // `z.object` mode). The type widens with `Record<string, string | undefined>`
 // so downstream code can read arbitrary template variables (e.g.,
 // `{{ env.MY_CUSTOM_VAR }}`) without a cast; callers that need to preserve
 // unknown keys must read them off the unparsed source object.
-export type EnvOverrides = z.infer<typeof ProviderEnvOverridesSchema> &
-  Record<string, string | undefined>;
+export type EnvOverrides = z.infer<typeof EnvOverridesSchema> & Record<string, string | undefined>;
