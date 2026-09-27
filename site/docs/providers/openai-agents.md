@@ -214,6 +214,8 @@ Supported inline session types are:
 | `openai-conversations`        | Server-managed OpenAI Conversations API history                          |
 | `openai-responses-compaction` | Responses API history with automatic compaction over an underlying store |
 
+If the model URL contains credentials, set `session.baseURL` when supplying a separate session `apiKey`.
+
 For more control, export an SDK `Session` instance or a factory from a file:
 
 ```yaml

@@ -27,6 +27,7 @@ import {
 import { resolveModelSettings } from './agents-model-settings';
 import { OTLPTracingExporter } from './agents-tracing';
 import { OpenAiGenericProvider } from './index';
+import { hasOpenAiGatewayCredentials } from './util';
 import type { Agent, AgentInputItem, OpenAIProviderOptions, Session } from '@openai/agents';
 
 import type { EnvOverrides } from '../../types/env';
@@ -350,6 +351,15 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     }
     const organization = this.getOrganization(config);
     const apiUrl = new URL(config.apiBaseUrl);
+    if (
+      !separateEndpoint &&
+      overrides.apiKey !== undefined &&
+      hasOpenAiGatewayCredentials(undefined, apiUrl.href)
+    ) {
+      throw new Error(
+        'Set session.baseURL when overriding apiKey for a model URL containing credentials.',
+      );
+    }
     const query = apiUrl.search.slice(1);
     apiUrl.search = '';
     apiUrl.hash = '';

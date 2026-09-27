@@ -107,17 +107,28 @@ describe('Agents SDK scoped client', () => {
     expect(request().headers.get('openai-organization')).toBe('provider-org');
   });
 
-  it.each([
-    ['OPENAI_API_HOST', 'gateway.example.invalid'],
-    ['OPENAI_API_BASE_URL', 'https://gateway.example.invalid/v1'],
-    ['OPENAI_BASE_URL', 'https://gateway.example.invalid/v1'],
-  ])('honors process-only %s', async (name, value) => {
-    mockProcessEnv({ [name]: value });
+  it.each(
+    (['suite', 'file', 'process'] as const).flatMap((scope) =>
+      [
+        ['OPENAI_API_HOST', 'gateway.example.invalid'],
+        ['OPENAI_API_BASE_URL', 'https://gateway.example.invalid/v1'],
+        ['OPENAI_BASE_URL', 'https://gateway.example.invalid/v1'],
+      ].map(([name, value]) => ({ scope, name, value })),
+    ),
+  )('honors call-time $scope $name on an unbound provider', async ({ scope, name, value }) => {
     const custom = new OpenAIProvider({ apiKey: 'sdk-key' });
     vi.spyOn(custom, 'getModel').mockRejectedValue(new Error('default provider bypassed gateway'));
     setDefaultModelProvider(custom);
-
-    await provider().callApi('hello');
+    const target = provider();
+    const invoke = () => target.callApi('hello');
+    if (scope === 'process') {
+      mockProcessEnv({ [name]: value });
+      await invoke();
+    } else if (scope === 'suite') {
+      await cliState.withEnv({ [name]: value }, invoke);
+    } else {
+      await cliState.withEnvFileOverrides({ [name]: value }, invoke);
+    }
     expect(request().url).toBe('https://gateway.example.invalid/v1/responses');
     expect(request().headers.get('authorization')).toBe('Bearer host-key');
   });
@@ -742,6 +753,76 @@ describe('Agents SDK scoped client', () => {
     expect(url).toContain('https://session.example.invalid/v1/conversations/conv_owned/items');
     expect(new Headers(options.headers).get('authorization')).toBe('Bearer owned-session-key');
   });
+
+  it.each([
+    'https://fixture.example.invalid/v1?api-key=model-gateway-secret',
+    'https://model-user:model-password@fixture.example.invalid/v1',
+    'https://fixture.example.invalid/key_modelcredential/v1',
+  ])(
+    'requires a session endpoint when a separate key would inherit URL credentials: %s',
+    async (apiBaseUrl) => {
+      vi.mocked(fetchWithProxy).mockImplementation(async (input) =>
+        String(input).includes('/items')
+          ? Response.json({ data: [], object: 'list', has_more: false })
+          : Response.json(response),
+      );
+      await expect(
+        provider({
+          apiBaseUrl,
+          apiKey: 'model-key',
+          session: {
+            type: 'openai-conversations',
+            conversationId: 'conv_fixture',
+            apiKey: 'session-key',
+          },
+        }).callApi('hello'),
+      ).rejects.toThrow('session.baseURL');
+      expect(fetchWithProxy).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    {
+      modelURL:
+        'https://fixture.example.invalid/v1?route=fixture&scope=read&scope=write&label=a%20b',
+      sessionURL: undefined,
+    },
+    {
+      modelURL: 'https://fixture.example.invalid/v1?api-key=model-secret',
+      sessionURL: 'https://session.example.invalid/v1?api-key=session-secret',
+    },
+  ])(
+    'preserves deliberately configured session routing for $sessionURL',
+    async ({ modelURL, sessionURL }) => {
+      vi.mocked(fetchWithProxy).mockImplementation(async (input) =>
+        String(input).includes('/items')
+          ? Response.json({ data: [], object: 'list', has_more: false })
+          : Response.json(response),
+      );
+      await provider({
+        apiBaseUrl: modelURL,
+        apiKey: 'model-key',
+        session: {
+          type: 'openai-conversations',
+          conversationId: 'conv_fixture',
+          apiKey: 'session-key',
+          baseURL: sessionURL,
+        },
+      }).callApi('hello');
+      const calls = vi.mocked(fetchWithProxy).mock.calls;
+      expect(calls.some(([input]) => String(input).includes('/items'))).toBe(true);
+      for (const [input, options] of calls) {
+        const actual = new URL(String(input));
+        const session = actual.pathname.includes('/items');
+        const expected = new URL(session ? (sessionURL ?? modelURL) : modelURL);
+        expect(actual.origin).toBe(expected.origin);
+        expect(actual.search.slice(0, expected.search.length)).toBe(expected.search);
+        expect(new Headers(options?.headers).get('authorization')).toBe(
+          `Bearer ${session ? 'session-key' : 'model-key'}`,
+        );
+      }
+    },
+  );
 
   it('preserves explicit inline session connection settings', async () => {
     const calls: { url: string; auth: string | null; org: string | null }[] = [];
