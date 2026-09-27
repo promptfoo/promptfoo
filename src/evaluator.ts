@@ -2162,6 +2162,7 @@ function mergeSelectBestGradingResult(
   result.gradingResult = {
     ...gradingResult,
     pass: newPass,
+    componentResults: [gradingResult],
   };
   result.success = newPass;
   if (!gradingResult.pass) {
@@ -4608,7 +4609,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     varNames: Set<string>;
     vars: Set<string>;
   }) {
-    await this.store.appendPrompts(prompts);
     cleanupProgressReporters(progressBarManager, ciProgressReporter);
 
     if (globalTimeout) {
@@ -4624,6 +4624,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       });
     }
 
+    await this.store.appendPrompts(prompts);
     this.store.setVars(Array.from(vars));
     await this.runAfterAllExtensions(testSuite);
     this.recordEvalTelemetry({

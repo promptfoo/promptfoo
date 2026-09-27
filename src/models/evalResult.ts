@@ -1319,7 +1319,7 @@ function resolveRatingTransition(
   };
 }
 
-function countGradingAssertions(gradingResult: GradingResult | null | undefined): {
+export function countGradingAssertions(gradingResult: GradingResult | null | undefined): {
   pass: number;
   fail: number;
 } {

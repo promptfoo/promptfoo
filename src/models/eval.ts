@@ -36,6 +36,7 @@ import {
 } from '../types/index';
 import {
   calculateFilteredMetrics,
+  type RatingMetrics,
   reconcileManualRatingMetrics,
 } from '../util/calculateFilteredMetrics';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
@@ -65,6 +66,7 @@ import {
   queryTestIndicesOptimized,
 } from './evalPerformance';
 import EvalResult, {
+  countGradingAssertions,
   getResultIndexKey,
   getStripFlags,
   PROMPTFOO_METADATA_KEY,
@@ -1374,7 +1376,12 @@ export default class Eval {
     const reconciled = await db.transaction(async (tx) => {
       const prompts = this.useOldResults()
         ? incoming
-        : await reconcileManualRatingMetrics(tx, this.id, incoming);
+        : await reconcileManualRatingMetrics(
+            tx,
+            this.id,
+            incoming,
+            await this.getRetainedResultMetrics(tx),
+          );
       await tx
         .update(evalsTable)
         .set({ ...update, prompts })
@@ -1385,6 +1392,52 @@ export default class Eval {
     if (this.prompts === incoming) {
       this.prompts = reconciled;
     }
+  }
+
+  private async getRetainedResultMetrics(db: Pick<Awaited<ReturnType<typeof getDb>>, 'all'>) {
+    const metrics = new Map<number, RatingMetrics>();
+    if (this.failedResults.size === 0) {
+      return metrics;
+    }
+    const failed = Array.from(this.failedResults);
+    // Only index pairs cross this query boundary. A later successful write for the same
+    // pair owns the outcome, just as it does when assembling comparison inputs.
+    const persisted = await db.all<{ testIdx: number; promptIdx: number }>(sql`
+      SELECT test_idx AS testIdx, prompt_idx AS promptIdx FROM eval_results
+      WHERE eval_id = ${this.id} AND (test_idx, prompt_idx) IN (
+        SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]')
+        FROM json_each(${JSON.stringify(failed.map(([, row]) => [row.testIdx, row.promptIdx]))})
+      )
+    `);
+    const persistedKeys = new Set(persisted.map(getResultIndexKey));
+    for (const [key, original] of failed) {
+      if (persistedKeys.has(key)) {
+        continue;
+      }
+      // Comparisons mutate the cached reconstruction; its outcome supersedes the raw row.
+      const row = this.failedEvalResults.get(key) ?? original;
+      const counts = metrics.get(row.promptIdx) ?? {
+        score: 0,
+        testPassCount: 0,
+        testFailCount: 0,
+        testErrorCount: 0,
+        assertPassCount: 0,
+        assertFailCount: 0,
+      };
+      counts.score += row.score;
+      if (row.success) {
+        counts.testPassCount++;
+      } else if (row.failureReason === ResultFailureReason.ERROR) {
+        counts.testErrorCount++;
+      } else {
+        counts.testFailCount++;
+      }
+      const assertions = countGradingAssertions(row.gradingResult);
+      counts.assertPassCount += assertions.pass;
+      counts.assertFailCount += assertions.fail;
+      metrics.set(row.promptIdx, counts);
+    }
+    return metrics;
   }
 
   async setResults(results: EvalResult[]) {

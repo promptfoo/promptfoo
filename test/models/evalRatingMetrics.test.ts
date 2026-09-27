@@ -6,6 +6,7 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { ResultFailureReason } from '../../src/types/index';
+import { setNonstandardScoringBaseline } from '../../src/types/internal';
 import {
   createCompletedPrompt,
   createEvaluateResult,
@@ -18,6 +19,149 @@ describe('prompt metrics after live manual ratings', () => {
   beforeAll(async () => {
     await runDbMigrations();
   });
+
+  it.each([
+    { rated: false, compared: false },
+    { rated: true, compared: false },
+    { rated: false, compared: true },
+    { rated: true, compared: true },
+  ])(
+    'retains unpersisted failures (rated: $rated, compared: $compared)',
+    async ({ rated, compared }) => {
+      const passing: GradingResult = {
+        pass: true,
+        score: 0.6,
+        reason: 'Custom passing score',
+        componentResults: [
+          { pass: true, score: 1, reason: 'Match', assertion: { type: 'equals' } },
+        ],
+      };
+      setNonstandardScoringBaseline(passing, { pass: true, score: 0.6 });
+      const prompts = [
+        createCompletedPrompt('recovery', {
+          metrics: createPromptMetrics({
+            score: 0.8,
+            testPassCount: 1,
+            testFailCount: 1,
+            testErrorCount: 1,
+            assertPassCount: compared ? 2 : 1,
+            assertFailCount: 1,
+            totalLatencyMs: 300,
+          }),
+        }),
+      ];
+      const evalRecord = await Eval.create({}, prompts, { id: randomUUID() });
+      await evalRecord.addPrompts(prompts);
+      await evalRecord.addResult(createEvaluateResult({ score: 0.6, gradingResult: passing }));
+      const [persisted] = await EvalResult.findManyByEvalId(evalRecord.id);
+      if (rated) {
+        await EvalResult.submitRating(
+          evalRecord.id,
+          persisted.id,
+          { pass: true, score: 1, reason: 'Manual pass' },
+          'rate',
+        );
+      }
+      const originalPass = compared;
+      const failed = createEvaluateResult({
+        testIdx: 1,
+        success: originalPass,
+        score: originalPass ? 1 : 0.2,
+        failureReason: originalPass ? ResultFailureReason.NONE : ResultFailureReason.ASSERT,
+        gradingResult: {
+          pass: originalPass,
+          score: originalPass ? 1 : 0.2,
+          reason: 'Original assertion',
+          componentResults: [
+            {
+              pass: originalPass,
+              score: originalPass ? 1 : 0.2,
+              reason: 'Original assertion',
+              assertion: { type: 'equals' },
+            },
+          ],
+        },
+      });
+      evalRecord.recordResultPersistenceFailure(failed);
+      evalRecord.recordResultPersistenceFailure(
+        createEvaluateResult({
+          testIdx: 2,
+          success: false,
+          score: 0,
+          failureReason: ResultFailureReason.ERROR,
+          error: 'Provider failed',
+          gradingResult: null,
+        }),
+      );
+      if (compared) {
+        // Comparison passes mutate the cached reconstruction, not the original failed row.
+        const [latest] = await evalRecord.getFailedResultsByTestIdx(1);
+        latest.success = latest.gradingResult!.pass = false;
+        latest.score = latest.gradingResult!.score = 0.2;
+        latest.failureReason = ResultFailureReason.ASSERT;
+        latest.gradingResult!.componentResults!.push({
+          pass: false,
+          score: 0.2,
+          reason: 'Lost comparison',
+          assertion: { type: 'max-score' },
+        });
+      }
+      const expected = {
+        score: rated ? 1.2 : 0.8,
+        testPassCount: 1,
+        testFailCount: 1,
+        testErrorCount: 1,
+        assertPassCount: 1 + Number(compared) + Number(rated),
+        assertFailCount: 1,
+        totalLatencyMs: 300,
+      };
+      await evalRecord.addPrompts(prompts);
+      expect(evalRecord.prompts[0].metrics).toMatchObject(expected);
+      expect(evalRecord.getStats()).toMatchObject({ successes: 1, failures: 1, errors: 1 });
+      await evalRecord.save();
+      expect((await Eval.findById(evalRecord.id))?.prompts[0].metrics).toMatchObject(expected);
+      if (rated) {
+        await EvalResult.submitRating(
+          evalRecord.id,
+          persisted.id,
+          { pass: true, score: 1, reason: 'Clear manual pass' },
+          'clear',
+        );
+        await evalRecord.save();
+        expect(evalRecord.prompts[0].metrics).toMatchObject({
+          ...expected,
+          score: 0.8,
+          assertPassCount: 1 + Number(compared),
+        });
+      }
+
+      // A later successful write for the same key owns the outcome; the retained fallback
+      // must not count twice or override the now-persisted recovery result.
+      await evalRecord.addResult(
+        createEvaluateResult({
+          testIdx: 1,
+          score: 0.9,
+          gradingResult: {
+            pass: true,
+            score: 0.9,
+            reason: 'Recovered',
+            componentResults: [
+              { pass: true, score: 0.9, reason: 'Recovered', assertion: { type: 'equals' } },
+            ],
+          },
+        }),
+      );
+      await evalRecord.save();
+      expect(evalRecord.prompts[0].metrics).toMatchObject({
+        score: 1.5,
+        testPassCount: 2,
+        testFailCount: 0,
+        testErrorCount: 1,
+        assertPassCount: 2,
+        assertFailCount: 0,
+      });
+    },
+  );
 
   it('retains each incoming prompt snapshot when prompt flushes overlap', async () => {
     const initial = [createCompletedPrompt('initial')];

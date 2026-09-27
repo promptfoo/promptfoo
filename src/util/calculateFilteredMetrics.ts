@@ -29,6 +29,16 @@ import { ResultFailureReason } from '../types/index';
 
 import type { CompletedPrompt, PromptMetrics } from '../types/index';
 
+export type RatingMetrics = Pick<
+  PromptMetrics,
+  | 'score'
+  | 'testPassCount'
+  | 'testFailCount'
+  | 'testErrorCount'
+  | 'assertPassCount'
+  | 'assertFailCount'
+>;
+
 export interface FilteredMetricsOptions {
   evalId: string;
   numPrompts: number;
@@ -602,6 +612,7 @@ export async function reconcileManualRatingMetrics(
   db: Pick<Awaited<ReturnType<typeof getDb>>, 'all'>,
   evalId: string,
   prompts: CompletedPrompt[],
+  retainedMetrics: ReadonlyMap<number, RatingMetrics>,
 ): Promise<CompletedPrompt[]> {
   const ratedPrompts = await db.all<{ prompt_idx: number }>(sql`
     SELECT DISTINCT prompt_idx FROM eval_results
@@ -610,17 +621,7 @@ export async function reconcileManualRatingMetrics(
   if (ratedPrompts.length === 0) {
     return prompts;
   }
-  const rows = await db.all<
-    Pick<
-      PromptMetrics,
-      | 'score'
-      | 'testPassCount'
-      | 'testFailCount'
-      | 'testErrorCount'
-      | 'assertPassCount'
-      | 'assertFailCount'
-    > & { prompt_idx: number }
-  >(sql`
+  const rows = await db.all<RatingMetrics & { prompt_idx: number }>(sql`
     SELECT prompt_idx,
       COALESCE(SUM(score), 0) AS score,
       SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) AS testPassCount,
@@ -644,6 +645,12 @@ export async function reconcileManualRatingMetrics(
   for (const { prompt_idx, ...metrics } of rows) {
     const prompt = prompts[prompt_idx];
     if (prompt?.metrics) {
+      const retained = retainedMetrics.get(prompt_idx);
+      if (retained) {
+        for (const key of Object.keys(retained) as Array<keyof RatingMetrics>) {
+          metrics[key] += retained[key];
+        }
+      }
       // Do not mutate the evaluator's array: it still accumulates its own metrics.
       reconciled[prompt_idx] = { ...prompt, metrics: { ...prompt.metrics, ...metrics } };
     }
