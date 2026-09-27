@@ -1,6 +1,8 @@
+import { once } from 'node:events';
+import { connect } from 'node:net';
 import * as http from 'http';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
 import {
   cleanAssistantResponse,
@@ -18,27 +20,33 @@ vi.mock('playwright', () => ({ chromium: { launch: browserMocks.launch } }));
 vi.mock('http', () => ({ createServer: browserMocks.createServer }));
 
 function resetBrowserMocks() {
-  browserMocks.launch.mockResolvedValue({
-    newContext: vi.fn().mockResolvedValue({
-      newPage: vi.fn().mockResolvedValue({
-        goto: vi.fn().mockResolvedValue(undefined),
-        waitForFunction: vi.fn().mockResolvedValue(undefined),
-        waitForTimeout: vi.fn().mockResolvedValue(undefined),
-        evaluate: vi.fn().mockResolvedValue(undefined),
-        reload: vi.fn().mockResolvedValue(undefined),
-        frames: vi.fn().mockReturnValue([]),
-        on: vi.fn(),
-      }),
-      close: vi.fn().mockResolvedValue(undefined),
-    }),
+  const page = {
+    goto: vi.fn().mockResolvedValue(undefined),
+    waitForFunction: vi.fn().mockResolvedValue(undefined),
+    waitForTimeout: vi.fn().mockResolvedValue(undefined),
+    evaluate: vi.fn().mockResolvedValue(undefined),
+    reload: vi.fn().mockResolvedValue(undefined),
+    frames: vi.fn().mockReturnValue([]),
+    on: vi.fn(),
+  };
+  const context = {
+    newPage: vi.fn().mockResolvedValue(page),
     close: vi.fn().mockResolvedValue(undefined),
-  });
-  browserMocks.createServer.mockReturnValue({
+  };
+  const browser = {
+    newContext: vi.fn().mockResolvedValue(context),
+    close: vi.fn().mockResolvedValue(undefined),
+  };
+  const server = {
     listen: vi.fn((_port: number, callback: () => void) => callback()),
     address: vi.fn().mockReturnValue({ port: 3000 }),
-    close: vi.fn(),
+    close: vi.fn((callback?: (error?: Error) => void) => callback?.()),
+    closeAllConnections: vi.fn(),
     once: vi.fn(),
-  });
+  };
+  browserMocks.launch.mockResolvedValue(browser);
+  browserMocks.createServer.mockReturnValue(server);
+  return { page, context, browser, server };
 }
 
 // Helper to access the generated HTML (we test via the provider's internal HTML generation)
@@ -272,9 +280,11 @@ describe('OpenAiChatKitProvider', () => {
       [true, 'Session failed: 401 Invalid API key'],
       [false, 'ChatKit component failed to initialize'],
       [true, 'ChatKit component failed to initialize'],
+      [false, 'Session failed: 401 Invalid API key', true],
+      [true, 'Session failed: 401 Invalid API key', true],
     ])(
-      'preserves initialization errors and cleans up (stateful=%s, error=%s)',
-      async (stateful, error) => {
+      'preserves initialization errors and cleans up (stateful=%s, error=%s, closeFailure=%s)',
+      async (stateful, error, closeFailure = false) => {
         const page = {
           goto: vi.fn().mockResolvedValue(undefined),
           waitForFunction: vi
@@ -291,6 +301,9 @@ describe('OpenAiChatKitProvider', () => {
           newContext: vi.fn().mockResolvedValue(context),
           close: vi.fn().mockResolvedValue(undefined),
         };
+        if (closeFailure) {
+          context.close.mockRejectedValueOnce(new Error('Context disconnected'));
+        }
         browserMocks.launch.mockResolvedValueOnce(browser);
         const provider = new OpenAiChatKitProvider('wf_test', {
           config: { apiKey: 'test-key', usePool: stateful, stateful },
@@ -323,6 +336,112 @@ describe('OpenAiChatKitProvider', () => {
   });
 
   describe('cleanup', () => {
+    it('closes unfinished HTTP requests before completing cleanup', async () => {
+      const { createServer } = await vi.importActual<typeof http>('http');
+      const server = createServer((_request, response) => response.end('ChatKit fixture'));
+      const provider = new OpenAiChatKitProvider('wf_test', {
+        config: { apiKey: 'test-key' },
+      });
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+      const address = server.address() as { port: number };
+      const connected = once(server, 'connection');
+      const socket = connect(address.port, '127.0.0.1');
+      const closed = once(socket, 'close');
+      onTestFinished(() => {
+        socket.destroy();
+        server.closeAllConnections();
+        server.close(() => {});
+      });
+      const [connection] = await connected;
+      const received = once(connection, 'data');
+      socket.write('GET / HTTP/1.1\r\nHost: localhost\r\n');
+      await received;
+      (provider as any).server = server;
+
+      await provider.cleanup();
+      await closed;
+
+      expect(server.listening).toBe(false);
+      expect((provider as any).server).toBeNull();
+    });
+
+    it('releases every resource and resets state when browser closes fail', async () => {
+      const provider = new OpenAiChatKitProvider('wf_test', {
+        config: { apiKey: 'test-key' },
+      });
+      await (provider as any).initialize();
+      const { context, browser, server } = provider as any;
+      context.close.mockRejectedValue(new Error('Context disconnected'));
+      browser.close.mockRejectedValue(new Error('Browser disconnected'));
+
+      await expect(provider.cleanup()).resolves.toBeUndefined();
+
+      expect(context.close).toHaveBeenCalledOnce();
+      expect(browser.close).toHaveBeenCalledOnce();
+      expect(server.close).toHaveBeenCalledOnce();
+      expect(provider).toMatchObject({
+        context: null,
+        page: null,
+        browser: null,
+        server: null,
+        serverPort: 0,
+        initialized: false,
+      });
+      await provider.cleanup();
+      expect(server.close).toHaveBeenCalledOnce();
+    });
+
+    it.each(['callback', 'throw'])('resets state when server close fails via %s', async (mode) => {
+      const provider = new OpenAiChatKitProvider('wf_test', {
+        config: { apiKey: 'test-key' },
+      });
+      await (provider as any).initialize();
+      const server = (provider as any).server;
+      server.close.mockImplementation((callback?: (error?: Error) => void) => {
+        const error = new Error('Server close failed');
+        if (mode === 'throw') {
+          throw error;
+        }
+        callback?.(error);
+      });
+
+      await expect(provider.cleanup()).resolves.toBeUndefined();
+      expect(provider).toMatchObject({ server: null, serverPort: 0, initialized: false });
+      await provider.cleanup();
+      expect(server.close).toHaveBeenCalledOnce();
+    });
+
+    it('waits for server closure and allows a fresh retry', async () => {
+      const { browser, server } = resetBrowserMocks();
+      const provider = new OpenAiChatKitProvider('wf_test', {
+        config: { apiKey: 'test-key', usePool: false },
+      });
+      await (provider as any).initialize();
+      let finishClose: () => void = () => {};
+      const closing = new Promise<void>((resolve) => {
+        server.close.mockImplementation((callback?: () => void) => {
+          finishClose = () => callback?.();
+          resolve();
+        });
+      });
+      const cleanup = provider.cleanup();
+      await closing;
+      let settled = false;
+      void cleanup.then(() => {
+        settled = true;
+      });
+      await Promise.resolve();
+      expect(settled).toBe(false);
+      finishClose();
+      await cleanup;
+
+      resetBrowserMocks();
+      await (provider as any).initialize();
+      expect((provider as any).initialized).toBe(true);
+      expect((provider as any).browser).not.toBe(browser);
+      await provider.cleanup();
+    });
+
     it('should close browser resources', async () => {
       const provider = new OpenAiChatKitProvider('wf_test', {
         config: { apiKey: 'test-key' },

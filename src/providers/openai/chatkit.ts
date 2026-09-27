@@ -902,20 +902,34 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
    * Clean up browser resources
    */
   async cleanup(): Promise<void> {
-    if (this.context) {
-      await this.context.close();
-      this.context = null;
-      this.page = null;
-    }
-    if (this.browser) {
-      await this.browser.close();
-      this.browser = null;
-    }
-    if (this.server) {
-      this.server.close();
-      this.server = null;
-    }
+    const { context, browser, server } = this;
+    this.context = null;
+    this.page = null;
+    this.browser = null;
+    this.server = null;
+    this.serverPort = 0;
     this.initialized = false;
+
+    for (const [name, resource] of [
+      ['context', context],
+      ['browser', browser],
+    ] as const) {
+      try {
+        await resource?.close();
+      } catch (error) {
+        logger.debug('[ChatKitProvider] Cleanup failed', { resource: name, error });
+      }
+    }
+    if (server) {
+      try {
+        await new Promise<void>((resolve, reject) => {
+          server.close((error) => (error ? reject(error) : resolve()));
+          server.closeAllConnections();
+        });
+      } catch (error) {
+        logger.debug('[ChatKitProvider] Cleanup failed', { resource: 'server', error });
+      }
+    }
   }
 
   /**
@@ -1077,9 +1091,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
         }
       }
       if (!this.initialized) {
-        await this.cleanup().catch((cleanupError) => {
-          logger.debug('[ChatKitProvider] Initialization cleanup failed', { error: cleanupError });
-        });
+        await this.cleanup();
       }
       if (stateError) {
         return { error: `ChatKit workflow error: ${stateError}` };
