@@ -1,0 +1,39 @@
+name: Google ADK example
+
+on:
+  pull_request:
+    paths:
+      - 'examples/integration-google-adk/**'
+      - 'src/python/**'
+      - '.github/workflows/google-adk-example.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'examples/integration-google-adk/**'
+      - 'src/python/**'
+      - '.github/workflows/google-adk-example.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  provider-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Install example dependencies
+        run: |
+          python -m pip install -r examples/integration-google-adk/requirements.txt
+          python -m pip check
+      - name: Test provider loading and helpers without API credentials
+        run: python -m unittest discover -s examples/integration-google-adk -p '*_test.py' -v
