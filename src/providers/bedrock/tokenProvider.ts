@@ -184,7 +184,7 @@ export class BedrockTokenProvider {
         };
       }
       const profile = value('profile');
-      if (source.profile !== undefined && !profile) {
+      if (scoped && source.profile !== undefined && !profile) {
         throw new Error(
           'Scoped AWS_PROFILE is empty. Supply a profile name or remove the scoped override.',
         );
