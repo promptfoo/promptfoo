@@ -734,11 +734,15 @@ export const useTableStore = create<TableState>()(
             shouldHighlightSearchText: searchText !== '',
             // Store filtered metrics from backend (null when no filters or feature disabled)
             filteredMetrics: data.filteredMetrics || null,
-            // Legacy comparison responses cannot apply the base config to other evals' columns.
+            // Legacy filtered metrics identify the base columns; other evals' definitions are unknown.
             derivedMetricNamesByPrompt:
               data.derivedMetricNamesByPrompt ??
               (url.searchParams.has('comparisonEvalIds')
-                ? data.table.head.prompts.map(() => [])
+                ? data.table.head.prompts.map((_, idx) =>
+                    idx < (data.filteredMetrics?.length ?? 0)
+                      ? (data.config?.derivedMetrics?.map((metric) => metric.name) ?? [])
+                      : [],
+                  )
                 : null),
             // Store evaluation-level stats including durationMs
             stats: data.stats || null,

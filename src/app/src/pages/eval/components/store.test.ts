@@ -2379,12 +2379,35 @@ describe('useTableStore', () => {
 
   describe('derived metric ownership', () => {
     it.each([
-      { comparisons: [], metadata: undefined, expected: null },
-      { comparisons: ['comparison'], metadata: undefined, expected: [[], []] },
-      { comparisons: ['comparison'], metadata: [['quality'], []], expected: [['quality'], []] },
+      { comparisons: [], metadata: undefined, basePromptCount: 0, expected: null },
+      { comparisons: [], metadata: undefined, basePromptCount: 2, expected: null },
+      {
+        comparisons: ['comparison'],
+        metadata: undefined,
+        basePromptCount: 0,
+        expected: [[], [], []],
+      },
+      {
+        comparisons: ['comparison'],
+        metadata: undefined,
+        basePromptCount: 1,
+        expected: [['quality', 'Rows'], [], []],
+      },
+      {
+        comparisons: ['comparison'],
+        metadata: undefined,
+        basePromptCount: 2,
+        expected: [['quality', 'Rows'], ['quality', 'Rows'], []],
+      },
+      {
+        comparisons: ['comparison'],
+        metadata: [[], [], ['comparisonTotal']],
+        basePromptCount: 2,
+        expected: [[], [], ['comparisonTotal']],
+      },
     ])(
-      'handles comparison metadata $metadata with comparisons $comparisons',
-      async ({ comparisons, metadata, expected }) => {
+      'handles metadata $metadata with comparisons $comparisons and $basePromptCount filtered base columns',
+      async ({ comparisons, metadata, basePromptCount, expected }) => {
         const previousIds = useResultsViewSettingsStore.getState().comparisonEvalIds;
         useResultsViewSettingsStore.setState({ comparisonEvalIds: comparisons });
         try {
@@ -2396,14 +2419,25 @@ describe('useTableStore', () => {
                   prompts: [
                     { raw: 'a', label: 'a', provider: 'echo' },
                     { raw: 'b', label: 'b', provider: 'echo' },
+                    { raw: 'c', label: 'c', provider: 'echo' },
                   ],
                   vars: [],
                 },
                 body: [],
               },
-              config: { derivedMetrics: [{ name: 'quality', value: '1' }] },
+              config: {
+                derivedMetrics: [
+                  { name: 'quality', value: '1' },
+                  { name: 'Rows', value: '2' },
+                ],
+              },
               derivedMetricNamesByPrompt: metadata,
-              filteredMetrics: null,
+              filteredMetrics: basePromptCount
+                ? Array.from({ length: basePromptCount }, () => ({
+                    ...baseMetrics,
+                    namedScores: { quality: 0.5 },
+                  }))
+                : null,
               totalCount: 0,
               filteredCount: 0,
             }),
