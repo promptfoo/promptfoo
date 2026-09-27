@@ -71,42 +71,170 @@ describeEvaluator('provider batch preflight', () => {
     expect((await record.toEvaluateSummary()).stats.errors).toBe(0);
   });
 
-  it.each(['user cancellation', 'evaluation deadline'])(
-    'interrupts a hung setup check on %s',
-    async (cause) => {
+  it.each([
+    { cause: 'user cancellation', timeoutMs: 20_000 },
+    { cause: 'evaluation deadline', timeoutMs: 20_000 },
+    { cause: 'evaluation deadline', timeoutMs: undefined },
+  ])(
+    'finalizes eager setup on $cause with test timeout $timeoutMs',
+    async ({ cause, timeoutMs }) => {
       vi.useFakeTimers();
+      const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+      const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
       const abort = new AbortController();
-      let setupEntered!: () => void;
-      const entered = new Promise<void>((resolve) => {
-        setupEntered = resolve;
-      });
+      const entered = createDeferred<void>();
+      let setupSignal: AbortSignal | undefined;
       const provider: ApiProvider = {
         id: () => 'local-scanner',
         checkSetupOnEval: true,
-        checkSetup: vi.fn(() => {
-          setupEntered();
+        checkSetup: vi.fn((_context, options) => {
+          setupSignal = options?.abortSignal;
+          entered.resolve();
           return new Promise<never>(() => {});
         }),
         callApi: vi.fn<ApiProvider['callApi']>(),
       };
+      const record = createInMemoryRecord();
+      record.persisted = true;
+      const store = new InMemoryEvaluationStore(record);
+      const save = vi.spyOn(store, 'save');
+      const writer = { write: vi.fn(), close: vi.fn().mockResolvedValue(undefined) };
       const pending = evaluate(
-        { providers: [provider], prompts: [toPrompt('Review')], tests: [{}] },
-        createInMemoryRecord(),
-        { silent: true, abortSignal: abort.signal, maxEvalTimeMs: 1000, timeoutMs: 20_000 },
-        inMemoryRuntime,
+        {
+          providers: [provider],
+          prompts: [toPrompt('First review'), toPrompt('Second review')],
+          tests: [{ vars: { topic: 'first' } }, { vars: { topic: 'second' } }],
+        },
+        record,
+        { silent: true, abortSignal: abort.signal, maxEvalTimeMs: 1000, timeoutMs },
+        { createEvaluationStore: () => store, createResultWriters: () => [writer] },
       );
-      const rejected = expect(pending).rejects.toThrow('Operation cancelled');
-      await entered;
-      if (cause === 'user cancellation') {
+      const settled = pending.then(
+        (value) => ({ value }),
+        (error: unknown) => ({ error }),
+      );
+      try {
+        await entered.promise;
+        if (cause === 'user cancellation') {
+          abort.abort();
+        } else {
+          await vi.advanceTimersByTimeAsync(1000);
+        }
+        expect(await settled).toEqual({ value: record });
+        expect(setupSignal?.aborted).toBe(true);
+        expect(provider.checkSetup).toHaveBeenCalledOnce();
+        expect(provider.callApi).not.toHaveBeenCalled();
+        expect(writer.close).toHaveBeenCalledOnce();
+        expect(record.vars).toEqual(['topic']);
+        if (cause === 'evaluation deadline') {
+          expect(record.results).toHaveLength(4);
+          expect(new Set(record.results.map((row) => `${row.testIdx}:${row.promptIdx}`)).size).toBe(
+            4,
+          );
+          for (const row of record.results) {
+            expect(row).toMatchObject({
+              success: false,
+              error: 'Evaluation exceeded max duration of 1000ms',
+            });
+          }
+          expect(save).toHaveBeenCalledOnce();
+        } else {
+          expect(record.results).toEqual([]);
+          expect(save).not.toHaveBeenCalled();
+        }
+        for (const prompt of record.prompts) {
+          expect(prompt.metrics).toMatchObject({
+            testErrorCount: cause === 'evaluation deadline' ? 2 : 0,
+            cost: 0,
+            tokenUsage: { total: 0, numRequests: 0 },
+          });
+        }
+        for (const duration of [1000, timeoutMs ?? 30_000]) {
+          const index = setTimeoutSpy.mock.calls.findIndex(([, delay]) => delay === duration);
+          expect(index).toBeGreaterThanOrEqual(0);
+          expect(clearTimeoutSpy).toHaveBeenCalledWith(setTimeoutSpy.mock.results[index].value);
+        }
+      } finally {
         abort.abort();
-      } else {
-        await vi.advanceTimersByTimeAsync(1000);
+        await pending.catch(() => {});
+        setTimeoutSpy.mockRestore();
+        clearTimeoutSpy.mockRestore();
       }
-      await rejected;
-      expect(provider.callApi).not.toHaveBeenCalled();
-      expect(vi.getTimerCount()).toBe(0);
     },
   );
+
+  it('preserves original setup ordering before serial and concurrent workloads are regrouped', async () => {
+    const events: string[] = [];
+    const provider: ApiProvider = {
+      id: () => 'local-scanner',
+      config: { repository: '{{topic}}' },
+      checkSetupOnEval: true,
+      checkSetup: vi.fn(async (context) => {
+        events.push(`setup:${context?.vars.topic}`);
+        return { success: true, message: 'Ready' };
+      }),
+      callApi: vi.fn(async (_prompt, context) => {
+        events.push(`workload:${context?.vars.topic}`);
+        return { output: 'completed' };
+      }),
+    };
+    await evaluate(
+      {
+        providers: [provider],
+        prompts: [toPrompt('Review')],
+        tests: [
+          { vars: { topic: 'concurrent' } },
+          { vars: { topic: 'serial' }, options: { runSerially: true } },
+        ],
+      },
+      createInMemoryRecord(),
+      { silent: true, maxConcurrency: 1 },
+      inMemoryRuntime,
+    );
+    expect(events).toEqual([
+      'setup:concurrent',
+      'setup:serial',
+      'workload:serial',
+      'workload:concurrent',
+    ]);
+  });
+
+  it('cleans the global deadline and writer when eager setup throws a non-abort error', async () => {
+    vi.useFakeTimers();
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+    const provider: ApiProvider = {
+      id: () => 'local-scanner',
+      checkSetupOnEval: true,
+      checkSetup: vi.fn(async () => ({
+        success: false,
+        message: 'Invalid setup response',
+        response: { metadata: { nonserializable: () => {} } },
+      })),
+      callApi: vi.fn<ApiProvider['callApi']>(),
+    };
+    const record = createInMemoryRecord();
+    const writer = { write: vi.fn(), close: vi.fn().mockResolvedValue(undefined) };
+    try {
+      await expect(
+        evaluate(
+          { providers: [provider], prompts: [toPrompt('Review')], tests: [{}] },
+          record,
+          { silent: true, maxEvalTimeMs: 60_000 },
+          { ...inMemoryRuntime, createResultWriters: () => [writer] },
+        ),
+      ).rejects.toThrow(/clone/);
+      const index = setTimeoutSpy.mock.calls.findIndex(([, delay]) => delay === 60_000);
+      expect(index).toBeGreaterThanOrEqual(0);
+      expect(clearTimeoutSpy).toHaveBeenCalledWith(setTimeoutSpy.mock.results[index].value);
+      expect(provider.callApi).not.toHaveBeenCalled();
+      expect(record.results).toEqual([]);
+      expect(writer.close).toHaveBeenCalledOnce();
+    } finally {
+      setTimeoutSpy.mockRestore();
+      clearTimeoutSpy.mockRestore();
+    }
+  });
 
   it('bounds eager setup by the configured test timeout and records no model request', async () => {
     vi.useFakeTimers();
@@ -402,7 +530,8 @@ describeEvaluator('provider batch preflight', () => {
           { silent: true, maxEvalTimeMs: 60_000, abortSignal: abort.signal },
           inMemoryRuntime,
         ),
-      ).rejects.toThrow('Operation cancelled');
+      ).resolves.toBe(record);
+      expect(record.results).toEqual([]);
       const deadlineIndex = setTimeoutSpy.mock.calls.findIndex(([, delay]) => delay === 60_000);
       expect(deadlineIndex).toBeGreaterThanOrEqual(0);
       expect(clearTimeoutSpy).toHaveBeenCalledWith(setTimeoutSpy.mock.results[deadlineIndex].value);

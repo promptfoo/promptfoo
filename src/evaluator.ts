@@ -3934,6 +3934,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     processedIndices,
     progressBarManager,
     prompts,
+    runEvalOptions,
     serialRunEvalOptions,
     shouldGroupGradingByProvider,
   }: {
@@ -3951,10 +3952,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     processedIndices: Set<number>;
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
+    runEvalOptions: RunEvalOptions[];
     serialRunEvalOptions: RunEvalOptions[];
     shouldGroupGradingByProvider: boolean;
   }): Promise<TEvaluation | undefined> {
     try {
+      // Setup shares interruption/finalization with execution and keeps the original step order.
+      await prepareProviderSetup(runEvalOptions, checkAbort);
       if (shouldGroupGradingByProvider) {
         await this.runGroupedEvalSteps({
           checkAbort,
@@ -3986,6 +3990,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       }
     } catch (err) {
       if (!combinedAbortSignal.aborted) {
+        clearTimeout(globalTimeout);
         cleanupProgressAfterError(progressBarManager, ciProgressReporter, err);
         throw err;
       }
@@ -4950,11 +4955,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const repeatCacheContextByTestIdx = buildRepeatCacheContextByTestIdx(runEvalOptions);
     await filterCompletedResumeSteps(runEvalOptions, this.store);
 
-    await prepareProviderSetup(runEvalOptions, checkAbort).catch((error) => {
-      clearTimeout(globalTimeout);
-      throw error;
-    });
-
     const concurrencySettings = adjustConcurrencyForSerialFeatures({
       concurrency,
       prompts,
@@ -5089,6 +5089,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       processedIndices,
       progressBarManager,
       prompts,
+      runEvalOptions,
       serialRunEvalOptions,
       shouldGroupGradingByProvider,
     });
