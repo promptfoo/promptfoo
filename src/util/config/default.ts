@@ -6,14 +6,6 @@ import { maybeReadConfig } from './load';
 import type { UnifiedConfig } from '../../types/index';
 
 /**
- * Cache to store loaded configurations for different directories.
- */
-export const configCache = new Map<
-  string,
-  { defaultConfig: Partial<UnifiedConfig>; defaultConfigPath: string | undefined }
->();
-
-/**
  * Loads the default configuration file from the specified directory.
  *
  * @param dir - The directory to search for configuration files. Defaults to the current working directory.
@@ -30,12 +22,6 @@ export async function loadDefaultConfig(
 }> {
   dir = dir || process.cwd();
 
-  // Check if the result is already cached
-  const cacheKey = `${dir}:${configName}`;
-  if (configCache.has(cacheKey)) {
-    return configCache.get(cacheKey)!;
-  }
-
   let defaultConfig: Partial<UnifiedConfig> = {};
   let defaultConfigPath: string | undefined;
 
@@ -49,11 +35,5 @@ export async function loadDefaultConfig(
     }
   }
 
-  const result = { defaultConfig, defaultConfigPath };
-  configCache.set(cacheKey, result);
-  return result;
-}
-
-export function clearConfigCache() {
-  configCache.clear();
+  return { defaultConfig, defaultConfigPath };
 }
