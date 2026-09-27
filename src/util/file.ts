@@ -114,13 +114,29 @@ export function maybeLoadFromExternalFile(
     return renderedFilePath;
   }
 
-  // In vars contexts, preserve all file:// references for test case expansion
-  // This prevents premature file loading - JS/Python files should be executed at runtime
-  // by renderPrompt in evaluatorHelpers.ts, and glob patterns should be expanded by
-  // generateVarCombinations in evaluator.ts
+  // In vars contexts, preserve glob patterns and JS/Python files for test case
+  // expansion and runtime execution (by renderPrompt in evaluatorHelpers.ts and
+  // generateVarCombinations in evaluator.ts). All other file:// refs are resolved
+  // to content immediately, including nested ones inside complex objects —
+  // see promptfoo#1613.
   if (context === 'vars') {
-    logger.debug(`Preserving file reference in vars context: ${renderedFilePath}`);
-    return renderedFilePath;
+    // Only preserve glob patterns and JS/Python files for test case expansion
+    // and runtime execution. All other file:// refs must be resolved to content
+    // so they work in nested objects — see promptfoo#1613.
+    const isGlob = /[*?[]/.test(renderedFilePath);
+    const isCodeFile = cleanPath.endsWith('.py') || isJavascriptFile(cleanPath);
+    if (isGlob || isCodeFile) {
+      logger.debug(`Preserving file reference in vars context: ${renderedFilePath}`);
+      return renderedFilePath;
+    }
+    try {
+      return await readFile(cleanPath);
+    } catch (err) {
+      logger.error(
+        `Warning: could not load file reference ${renderedFilePath} in vars: ${err}`
+      );
+      return renderedFilePath;
+    }
   }
 
   // For Python/JS files with function names, return the original string unchanged

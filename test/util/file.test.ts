@@ -962,7 +962,75 @@ describe('file utilities', () => {
     });
 
     describe('maybeLoadConfigFromExternalFile with vars context', () => {
-      it('should preserve glob patterns in vars field for test case expansion', () => {
+      it('should resolve nested file:// references inside complex vars objects (promptfoo#1613)', () => {
+        // Regression test for promptfoo#1613: file:// references nested inside
+        // complex objects in vars were not being resolved to file content.
+        // Only glob patterns and JS/Python files should be preserved in vars context.
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('file content loaded');
+        const config = {
+          vars: {
+            reporting_period: {
+              current: { period: '2023-12-31' },
+              previous: {
+                period: '2024-02-15',
+                report: 'file://data/mixed_report_tables.html.txt',
+              },
+            },
+          },
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        // Nested file:// ref should be resolved to file content
+        expect(result.vars.reporting_period.previous.report).toBe('file content loaded');
+        expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+        expect(fs.readFileSync).toHaveBeenCalledWith('data/mixed_report_tables.html.txt', 'utf8');
+      });
+
+      it('should preserve glob patterns in vars context for test case expansion', () => {
+        const config = {
+          vars: {
+            input: 'file://./inputs/*.txt',
+          },
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.vars.input).toBe('file://./inputs/*.txt');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should preserve JS file references in top-level vars (non-nested)', () => {
+        const config = {
+          vars: {
+            getContent: 'file://./scripts/generateContent.js',
+          },
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.vars.getContent).toBe('file://./scripts/generateContent.js');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should preserve top-level file:// refs in vars (plain text files are resolved)', () => {
+        // Top-level file:// refs that are NOT globs or code files should be
+        // resolved to content. This matches the behavior for nested refs.
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('top level content');
+        const config = {
+          vars: {
+            content: 'file://data/top_level.txt',
+          },
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.vars.content).toBe('top level content');
+        expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+      });
+
+      it('should not resolve file:// refs that fail to load (preserving for error handling)', () => {
+        const config = {
+          vars: {
+            missing: 'file://nonexistent/file.txt',
+          },
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        // When file doesn't exist, preserve the reference (fallback behavior)
+        expect(result.vars.missing).toBe('file://nonexistent/file.txt');
+      });
         const config = {
           vars: {
             text: 'file://./resources/tests/*.json',
@@ -1000,20 +1068,19 @@ describe('file utilities', () => {
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
 
-      it('should preserve non-glob file references in vars for runtime loading by renderPrompt', () => {
+      it('should preserve non-glob JS/Python file references in vars for runtime loading by renderPrompt', () => {
+        // JS/Python files are preserved for runtime execution by renderPrompt
         const config = {
           vars: {
-            content: 'file://content.txt', // No glob pattern - still preserved
+            content: 'file://generateContent.js', // JS file - preserved
           },
         };
         const result = maybeLoadConfigFromExternalFile(config);
-        // File references in vars should be preserved for runtime loading
-        // JS/Python files will be executed by renderPrompt in evaluatorHelpers.ts
-        expect(result.vars.content).toBe('file://content.txt');
+        expect(result.vars.content).toBe('file://generateContent.js');
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
 
-      it('should preserve JS file references in vars for runtime execution', () => {
+      it('should preserve JS file references in top-level vars (non-nested, simple)', () => {
         const config = {
           vars: {
             dynamicContent: 'file://generateContent.js',
@@ -1035,7 +1102,7 @@ describe('file utilities', () => {
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
 
-      it('should preserve all file references in nested test cases loaded from external files', () => {
+      it('should preserve Python/JS file references in nested test cases loaded from external files', () => {
         // This tests the scenario from PR #6393 where test cases are loaded
         // from an external YAML file and contain JS/Python file references in vars
         const testCasesFromExternalFile = [
@@ -1065,9 +1132,11 @@ describe('file utilities', () => {
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
 
-      it('should preserve plain text file references in vars for consistent runtime loading', () => {
-        // Plain text files are also preserved for runtime loading by renderPrompt
-        // This ensures consistent behavior across all file types
+      it('should resolve plain text file references in vars to content (promptfoo#1613)', () => {
+        // Plain text files (txt, json, html, etc.) are now resolved to content
+        // in vars context, including in nested test cases. This matches the
+        // behavior for top-level vars — see promptfoo#1613.
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('resolved content');
         const config = {
           tests: [
             {
@@ -1081,9 +1150,9 @@ describe('file utilities', () => {
 
         const result = maybeLoadConfigFromExternalFile(config);
 
-        expect(result.tests[0].vars.content).toBe('file://content.txt');
-        expect(result.tests[0].vars.data).toBe('file://data.json');
-        expect(fs.readFileSync).not.toHaveBeenCalled();
+        expect(result.tests[0].vars.content).toBe('resolved content');
+        expect(result.tests[0].vars.data).toBe('resolved content');
+        expect(fs.readFileSync).toHaveBeenCalledTimes(2);
       });
     });
   });
