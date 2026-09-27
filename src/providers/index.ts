@@ -117,6 +117,17 @@ async function createApiProvider(
   const renderedConfig = options.config ? renderTemplate(options.config) : undefined;
   const renderedId = options.id ? renderTemplate(options.id) : undefined;
 
+  // Named selectors use the complete namespace, not implicit native-alias pruning.
+  const apiKeyEnvar = renderedConfig?.apiKeyEnvar;
+  if (
+    mergedEnv &&
+    templateEnv &&
+    typeof apiKeyEnvar === 'string' &&
+    Object.hasOwn(templateEnv, apiKeyEnvar)
+  ) {
+    mergedEnv[apiKeyEnvar] = templateEnv[apiKeyEnvar];
+  }
+
   const providerOptions: ProviderOptions = {
     id: renderedId,
     config: {
