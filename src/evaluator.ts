@@ -88,6 +88,7 @@ import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/jso
 import { accumulateNamedMetric, backfillNamedScoreWeights } from './util/namedMetrics';
 import { filterFiniteScores } from './util/numeric';
 import { isPromptAllowed } from './util/promptMatching';
+import { createDefaultPromptMetrics } from './util/promptMetrics';
 import {
   getProviderIdentifier,
   isAnthropicProvider,
@@ -2106,6 +2107,7 @@ function mergeSelectBestGradingResult(
   result.gradingResult = {
     ...gradingResult,
     pass: newPass,
+    componentResults: [gradingResult],
   };
   result.success = newPass;
   if (!gradingResult.pass) {
@@ -2212,23 +2214,6 @@ async function maybeAddGeneratedPrompts(testSuite: TestSuite, options: InternalE
     return false;
   }
   throw new PromptSuggestionsRejectedError();
-}
-
-function createDefaultPromptMetrics(): PromptMetrics {
-  return {
-    score: 0,
-    testPassCount: 0,
-    testFailCount: 0,
-    testErrorCount: 0,
-    assertPassCount: 0,
-    assertFailCount: 0,
-    totalLatencyMs: 0,
-    tokenUsage: createEmptyTokenUsage(),
-    namedScores: {},
-    namedScoresCount: {},
-    namedScoreWeights: {},
-    cost: 0,
-  };
 }
 
 function buildExistingPromptsMap(store: EvaluationStore) {
@@ -3610,10 +3595,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
       await this.persistEvalRow(row);
 
-      if (this.abortIfTargetUnavailable(row, context)) {
-        break;
-      }
-
       const metrics = context.prompts[row.promptIdx].metrics;
       invariant(metrics, 'Expected prompt.metrics to be set');
       this.updatePromptMetricsForRow({
@@ -3624,6 +3605,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         promptEvalCount: reservePromptEvalCount(context, row.promptIdx),
         row,
       });
+
+      if (this.abortIfTargetUnavailable(row, context)) {
+        break;
+      }
 
       context.options.progressCallback?.(
         context.numComplete,
@@ -4051,21 +4036,35 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     prompts: CompletedPrompt[];
   }) {
     let lastPromptsFlush = 0;
-    await async.forEachOfLimit(
-      concurrentRunEvalOptions,
-      processingContext.concurrency,
-      async (evalStep) => {
-        checkAbort();
-        const idx = evalStepIndexMap.get(evalStep)!;
-        await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
-        processedIndices.add(idx);
-        const now = Date.now();
-        if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {
-          lastPromptsFlush = now;
-          await this.store.appendPrompts(prompts);
-        }
-      },
-    );
+    const pending = new Set<Promise<void>>();
+    try {
+      await async.forEachOfLimit(
+        concurrentRunEvalOptions,
+        processingContext.concurrency,
+        async (evalStep) => {
+          const work = (async () => {
+            checkAbort();
+            const idx = evalStepIndexMap.get(evalStep)!;
+            await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
+            processedIndices.add(idx);
+            const now = Date.now();
+            if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {
+              lastPromptsFlush = now;
+              await this.store.appendPrompts(prompts);
+            }
+          })();
+          pending.add(work);
+          try {
+            await work;
+          } finally {
+            pending.delete(work);
+          }
+        },
+      );
+    } finally {
+      // async stops scheduling on the first error without waiting for the other callbacks.
+      await Promise.allSettled(pending);
+    }
   }
 
   private async saveInterruptedEval({
@@ -5151,6 +5150,7 @@ export function evaluate<
           const resolvedRuntime =
             runtime ?? (nodeEvaluatorRuntime as unknown as EvaluatorRuntime<TEvaluation, TResult>);
           const release = await resolvedRuntime.acquireEvaluationRun?.(evalRecord);
+          let completed = false;
           try {
             const runtimeTestSuite =
               resolvedRuntime.resolveRuntimeTestSuite?.(testSuite) ??
@@ -5163,9 +5163,11 @@ export function evaluate<
               options,
               resolvedRuntime,
             );
-            return await ev.evaluate();
+            const result = await ev.evaluate();
+            completed = true;
+            return result;
           } finally {
-            await release?.();
+            await release?.(completed);
           }
         },
         testSuite.providers.map((provider) => ({ id: provider.id(), config: provider.config })),

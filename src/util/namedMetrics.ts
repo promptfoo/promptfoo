@@ -6,11 +6,7 @@ export interface NamedMetricAccumulator {
   namedScoreWeights?: Record<string, number>;
 }
 
-interface NamedMetricContribution {
-  assertionCount: number;
-  metricWeightTotal: number;
-  weightedScoreTotal: number;
-}
+type NamedMetricContribution = Record<keyof NamedMetricAccumulator, number | undefined>;
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
@@ -42,39 +38,38 @@ function getContributingAssertionCount(
   return count || 1;
 }
 
-export function hasNamedMetricContribution(
-  gradingResult: GradingResult | null | undefined,
-  metricName: string,
-): boolean {
-  return getContributingAssertionCount(gradingResult, metricName) !== undefined;
-}
-
-function getNamedMetricContribution({
-  metricName,
-  metricValue,
-  gradingResult,
-}: {
-  metricName: string;
-  metricValue: number;
-  gradingResult: GradingResult | null | undefined;
-}): NamedMetricContribution {
-  const assertionCount = getContributingAssertionCount(gradingResult, metricName) ?? 1;
+export function getNamedMetricContribution(
+  {
+    metricName,
+    metricValue,
+    gradingResult,
+  }: {
+    metricName: string;
+    metricValue: number;
+    gradingResult: GradingResult | null | undefined;
+  },
+  fallbackAssertionCount?: number,
+): NamedMetricContribution {
+  const assertionCount =
+    getContributingAssertionCount(gradingResult, metricName) ?? fallbackAssertionCount;
   const namedScoreWeights = gradingResult?.namedScoreWeights;
   const hasNamedScoreWeight = Object.prototype.hasOwnProperty.call(
     namedScoreWeights ?? {},
     metricName,
   );
   const namedScoreWeight = namedScoreWeights?.[metricName];
-  const metricWeightTotal = hasNamedScoreWeight
-    ? isFiniteNumber(namedScoreWeight)
-      ? namedScoreWeight
-      : assertionCount
-    : assertionCount;
+  const metricWeightTotal = isFiniteNumber(namedScoreWeight) ? namedScoreWeight : assertionCount;
 
   return {
-    assertionCount,
-    metricWeightTotal,
-    weightedScoreTotal: hasNamedScoreWeight ? metricValue * metricWeightTotal : metricValue,
+    namedScoresCount: assertionCount,
+    namedScoreWeights: metricWeightTotal,
+    namedScores: hasNamedScoreWeight
+      ? metricWeightTotal === undefined
+        ? undefined
+        : metricValue * metricWeightTotal
+      : Array.isArray(gradingResult?.componentResults) || fallbackAssertionCount !== undefined
+        ? metricValue
+        : undefined,
   };
 }
 
@@ -90,21 +85,19 @@ export function accumulateNamedMetric(
     gradingResult: GradingResult | null | undefined;
   },
 ): void {
-  const { assertionCount, metricWeightTotal, weightedScoreTotal } = getNamedMetricContribution({
-    metricName,
-    metricValue,
-    gradingResult,
-  });
-
-  accumulator.namedScores[metricName] =
-    (accumulator.namedScores[metricName] ?? 0) + weightedScoreTotal;
-  accumulator.namedScoresCount ||= {};
-  accumulator.namedScoresCount[metricName] =
-    (accumulator.namedScoresCount[metricName] ?? 0) + assertionCount;
-
-  accumulator.namedScoreWeights ||= {};
-  accumulator.namedScoreWeights[metricName] =
-    (accumulator.namedScoreWeights[metricName] ?? 0) + metricWeightTotal;
+  const contribution = getNamedMetricContribution(
+    {
+      metricName,
+      metricValue,
+      gradingResult,
+    },
+    1,
+  );
+  for (const bucket of Object.keys(contribution) as (keyof NamedMetricAccumulator)[]) {
+    accumulator[bucket] ||= {};
+    accumulator[bucket][metricName] =
+      (accumulator[bucket][metricName] ?? 0) + contribution[bucket]!;
+  }
 }
 
 /** Remove a row contribution while preserving absent legacy count and weight maps. */
@@ -121,21 +114,17 @@ export function subtractNamedMetric(
   },
 ): void {
   accumulator.namedScores ||= {};
-  const { assertionCount, metricWeightTotal, weightedScoreTotal } = getNamedMetricContribution({
+  const contribution = getNamedMetricContribution({
     metricName,
     metricValue,
     gradingResult,
   });
 
-  accumulator.namedScores[metricName] =
-    (accumulator.namedScores[metricName] ?? weightedScoreTotal) - weightedScoreTotal;
-  if (accumulator.namedScoresCount) {
-    accumulator.namedScoresCount[metricName] =
-      (accumulator.namedScoresCount[metricName] ?? assertionCount) - assertionCount;
-  }
-  if (accumulator.namedScoreWeights) {
-    accumulator.namedScoreWeights[metricName] =
-      (accumulator.namedScoreWeights[metricName] ?? metricWeightTotal) - metricWeightTotal;
+  for (const bucket of Object.keys(contribution) as (keyof NamedMetricAccumulator)[]) {
+    const delta = contribution[bucket];
+    if (delta !== undefined && accumulator[bucket]) {
+      accumulator[bucket][metricName] = (accumulator[bucket][metricName] ?? delta) - delta;
+    }
   }
 
   const score = accumulator.namedScores[metricName] ?? 0;

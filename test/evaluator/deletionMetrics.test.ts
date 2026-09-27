@@ -3,13 +3,16 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
+import { sql } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { EvalRunningError } from '../../src/database/evalRun';
+import { getDb } from '../../src/database/index';
 import { evaluate } from '../../src/evaluator';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
+import { recalculatePromptMetrics } from '../../src/node/recalculatePromptMetrics';
 import { deleteEval, deleteEvalResult } from '../../src/util/database';
 import { createDeferred } from '../util/utils';
 
@@ -19,6 +22,7 @@ describe('deleting evaluated results preserves surviving token usage', () => {
   const evalIds: string[] = [];
   let fixtureDir: string;
   let comparisonProvider: string;
+  let nestedMetricAssertion: string;
 
   beforeAll(async () => {
     await runDbMigrations();
@@ -42,6 +46,15 @@ describe('deleting evaluated results preserves surviving token usage', () => {
     `,
     );
     comparisonProvider = `file://${providerPath}`;
+    const assertionPath = path.join(fixtureDir, 'nested-metric.cjs');
+    await writeFile(
+      assertionPath,
+      `module.exports = () => ({pass:true,score:1,reason:'parent',componentResults:[
+      {pass:true,score:1,reason:'first'},
+      {pass:true,score:1,reason:'second',assertion:{type:'contains',metric:'{{ env.PF9868_METRIC }}'},metadata:{custom:true}}
+    ]});`,
+    );
+    nestedMetricAssertion = `file://${assertionPath}`;
   });
 
   afterAll(async () => {
@@ -53,6 +66,211 @@ describe('deleting evaluated results preserves surviving token usage', () => {
       await deleteEval(evalId);
     }
     vi.restoreAllMocks();
+  });
+
+  it('carries rendered metric names into inherited custom assertion components', async () => {
+    const suite: TestSuite = {
+      env: { PF9868_METRIC: 'quality' } as TestSuite['env'],
+      providers: [{ id: () => 'nested-metric', callApi: async () => ({ output: 'ok' }) }],
+      prompts: [{ raw: 'ok', label: 'Nested metric' }],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'javascript',
+              metric: '{{ env.PF9868_METRIC }}',
+              value: nestedMetricAssertion,
+            },
+          ],
+        },
+      ],
+    };
+    const evaluation = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    evalIds.push(evaluation.id);
+    await evaluate(suite, evaluation, {});
+    const [result] = await EvalResult.findManyByEvalId(evaluation.id);
+    expect((await Eval.findById(evaluation.id))!.prompts[0].metrics!.namedScoresCount).toEqual({
+      quality: 3,
+    });
+    expect(
+      result.gradingResult!.componentResults!.map(
+        (component) => component.metadata?.renderedMetric,
+      ),
+    ).toEqual(['quality', 'quality', 'quality']);
+    expect(result.gradingResult!.componentResults![2].metadata?.custom).toBe(true);
+    await deleteEvalResult(evaluation.id, result.id);
+    expect((await Eval.findById(evaluation.id))!.prompts[0].metrics!.namedScoresCount).toEqual({});
+  });
+
+  it('keeps tokenless response requests consistent across retry and deletion', async () => {
+    const suite: TestSuite = {
+      providers: [
+        {
+          id: () => 'retry-requests',
+          callApi: async (prompt) => ({
+            output: prompt,
+            ...(prompt === 'counted' && { tokenUsage: { total: 1, numRequests: 1 } }),
+          }),
+        },
+      ],
+      prompts: [{ raw: '{{ row }}', label: 'Retry requests' }],
+      tests: [{ vars: { row: 'tokenless' } }, { vars: { row: 'counted' } }],
+    };
+    const evaluation = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    evalIds.push(evaluation.id);
+    await evaluate(suite, evaluation, { maxConcurrency: 1 });
+    await recalculatePromptMetrics(evaluation);
+    expect((await Eval.findById(evaluation.id))!.prompts[0].metrics!.tokenUsage.numRequests).toBe(
+      2,
+    );
+    const target = (await EvalResult.findManyByEvalId(evaluation.id)).find(
+      (row) => row.testIdx === 0,
+    )!;
+    await deleteEvalResult(evaluation.id, target.id);
+    expect((await Eval.findById(evaluation.id))!.prompts[0].metrics!.tokenUsage.numRequests).toBe(
+      1,
+    );
+  });
+
+  it.each([false, true])(
+    'retains the verdict and usage of a selected provider error (cached=%s)',
+    async (cachedComparison) => {
+      const suite: TestSuite = {
+        providers: [
+          {
+            id: () => 'selected-error',
+            callApi: async (prompt) =>
+              prompt === 'error' ? { error: 'provider failed' } : { output: 'survivor' },
+          },
+          { id: () => 'other-output', callApi: async () => ({ output: 'other' }) },
+        ],
+        prompts: [{ raw: '{{ row }}', label: 'Comparison verdict' }],
+        tests: [
+          {
+            vars: { row: 'error', cachedComparison },
+            assert: [{ type: 'select-best', value: 'first', provider: comparisonProvider }],
+          },
+          {
+            vars: { row: 'survivor' },
+            assert: [
+              {
+                type: 'javascript',
+                value:
+                  '({pass:false,score:0,reason:"survivor",tokensUsed:{total:3,numRequests:1}})',
+              },
+            ],
+          },
+        ],
+      };
+      const evaluation = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      evalIds.push(evaluation.id);
+      await evaluate(suite, evaluation, { maxConcurrency: 1 });
+      const target = (await EvalResult.findManyByEvalId(evaluation.id)).find(
+        (row) => row.promptIdx === 0 && row.testIdx === 0,
+      )!;
+      expect(target.success).toBe(false);
+      expect(target.gradingResult!.componentResults![0].pass).toBe(true);
+      await recalculatePromptMetrics(evaluation);
+      expect(
+        (await Eval.findById(evaluation.id))!.prompts[0].metrics!.tokenUsage.assertions!
+          .numRequests,
+      ).toBe(1);
+      await deleteEvalResult(evaluation.id, target.id);
+      expect((await Eval.findById(evaluation.id))!.prompts[0].metrics).toMatchObject({
+        assertPassCount: 0,
+        assertFailCount: 1,
+        tokenUsage: { assertions: { total: 3, numRequests: 1 } },
+      });
+    },
+  );
+
+  it('accounts for a non-transient target error before stopping the evaluation', async () => {
+    const suite: TestSuite = {
+      providers: [
+        {
+          id: () => 'http403-target',
+          callApi: async (prompt) =>
+            prompt === 'good'
+              ? { output: 'ok', cost: 1, tokenUsage: { total: 1, numRequests: 1 } }
+              : {
+                  error: 'HTTP403',
+                  cost: 10,
+                  tokenUsage: { total: 10, numRequests: 1 },
+                  metadata: { http: { status: 403, statusText: 'Forbidden' } },
+                },
+        },
+      ],
+      prompts: [{ raw: '{{ row }}', label: 'HTTP403' }],
+      tests: [{ vars: { row: 'good' } }, { vars: { row: 'forbidden' } }],
+    };
+    const evaluation = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    evalIds.push(evaluation.id);
+    await evaluate(suite, evaluation, { maxConcurrency: 1 });
+    expect((await Eval.findById(evaluation.id))!.prompts[0].metrics).toMatchObject({
+      cost: 11,
+      testPassCount: 1,
+      testErrorCount: 1,
+    });
+    const target = (await EvalResult.findManyByEvalId(evaluation.id)).find(
+      (row) => row.testIdx === 1,
+    )!;
+    await deleteEvalResult(evaluation.id, target.id);
+    expect((await Eval.findById(evaluation.id))!.prompts[0].metrics).toMatchObject({
+      cost: 1,
+      testPassCount: 1,
+      testErrorCount: 0,
+      tokenUsage: { total: 1, numRequests: 1 },
+    });
+  });
+
+  it('retains completed work missing from SQL when a persisted row is deleted', async () => {
+    const suite: TestSuite = {
+      derivedMetrics: [{ name: 'Rows', value: '__count' }],
+      providers: [
+        {
+          id: () => 'failed-write',
+          callApi: async (prompt) =>
+            prompt === 'target' ? { error: 'recoverable provider error' } : { output: 'ok' },
+        },
+      ],
+      prompts: [{ raw: '{{ row }}', label: 'Retained work' }],
+      tests: ['target', 'failed-write', 'survivor'].map((row) => ({
+        vars: { row },
+        assert: [
+          {
+            type: 'javascript',
+            value: '({pass:true,score:1,reason:"known",tokensUsed:{total:3,numRequests:1}})',
+          },
+        ],
+      })),
+    };
+    const evaluation = await Eval.create({ derivedMetrics: suite.derivedMetrics }, suite.prompts, {
+      id: randomUUID(),
+    });
+    evalIds.push(evaluation.id);
+    const db = await getDb();
+    await db.run(
+      sql`CREATE TRIGGER deletion_reject_second BEFORE INSERT ON eval_results WHEN NEW.test_idx = 1 BEGIN SELECT RAISE(FAIL, 'intentional result persistence failure'); END`,
+    );
+    try {
+      await evaluate(suite, evaluation, { maxConcurrency: 1 });
+    } finally {
+      await db.run(sql`DROP TRIGGER deletion_reject_second`);
+    }
+    const rows = await EvalResult.findManyByEvalId(evaluation.id);
+    expect(rows.map((row) => row.testIdx).sort()).toEqual([0, 2]);
+    expect((await Eval.findById(evaluation.id))!.prompts[0].metrics).toMatchObject({
+      assertPassCount: 2,
+      namedScores: { Rows: 3 },
+      tokenUsage: { assertions: { total: 6 } },
+    });
+    await deleteEvalResult(evaluation.id, rows.find((row) => row.testIdx === 0)!.id);
+    expect((await Eval.findById(evaluation.id))!.prompts[0].metrics).toMatchObject({
+      testPassCount: 2,
+      assertPassCount: 2,
+      namedScores: { Rows: 2 },
+      tokenUsage: { assertions: { total: 6 } },
+    });
   });
 
   it('deletes the resolved contribution of environment-dependent metric names', async () => {

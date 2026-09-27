@@ -5,6 +5,7 @@ import * as path from 'path';
 
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beginEvalRun } from '../../src/database/evalRun';
 import { getDb } from '../../src/database/index';
 import { updateSignalFile } from '../../src/database/signal';
 import { evalResultsTable } from '../../src/database/tables';
@@ -12,14 +13,13 @@ import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { getTotalResultRowCount } from '../../src/models/evalPerformance';
-import {
-  deleteErrorResults,
-  getErrorResultIds,
-  recalculatePromptMetrics,
-  retryCommand,
-} from '../../src/node/retry';
+import { generateIdFromPrompt } from '../../src/models/prompt';
+import { recalculatePromptMetrics } from '../../src/node/recalculatePromptMetrics';
+import { deleteErrorResults, getErrorResultIds, retryCommand } from '../../src/node/retry';
 import { ResultFailureReason } from '../../src/types/index';
+import { deleteEvalResult } from '../../src/util/database';
 import { shouldShareResults } from '../../src/util/sharing';
+import { createCompletedPrompt, createPromptMetrics } from '../factories/eval';
 
 vi.mock('../../src/database/signal', async () => {
   const actual = await vi.importActual('../../src/database/signal');
@@ -32,6 +32,21 @@ vi.mock('../../src/database/signal', async () => {
 /** Generate a unique eval ID to avoid UNIQUE constraint collisions when tests run in the same second */
 function uniqueEvalId(): string {
   return `eval-test-${randomUUID()}`;
+}
+
+async function saveErrorPrompt(
+  evaluation: Eval,
+  prompt: { raw: string; label: string },
+  count = 1,
+) {
+  await evaluation.addPrompts([
+    createCompletedPrompt(prompt.raw, {
+      ...prompt,
+      id: generateIdFromPrompt(prompt),
+      provider: 'echo',
+      metrics: createPromptMetrics({ score: 0, testPassCount: 0, testErrorCount: count }),
+    }),
+  ]);
 }
 
 describe('retry command', () => {
@@ -265,6 +280,7 @@ describe('retry command', () => {
         ].join('\n'),
       );
       const originalAddPrompts = Eval.prototype.addPrompts;
+      await saveErrorPrompt(evalRecord, prompt);
       let addPromptsCalls = 0;
       vi.spyOn(Eval.prototype, 'addPrompts').mockImplementation(async function (
         this: Eval,
@@ -309,6 +325,20 @@ describe('retry command', () => {
             testIdx: 0,
           }),
         );
+        await expect(deleteEvalResult(evalRecord.id, persistedRows[0].id)).rejects.toThrow(
+          /interrupted progress/,
+        );
+        const reloaded = (await Eval.findById(evalRecord.id))!;
+        const releaseRepair = await beginEvalRun(reloaded, () =>
+          recalculatePromptMetrics(reloaded),
+        );
+        await releaseRepair();
+        expect((await Eval.findById(evalRecord.id))!.prompts[0].metrics).toMatchObject({
+          testPassCount: 1,
+          testErrorCount: 0,
+        });
+        await deleteEvalResult(evalRecord.id, persistedRows[0].id);
+        expect(await getTotalResultRowCount(evalRecord.id)).toBe(0);
       } finally {
         fs.rmSync(jsonlOutputPath, { force: true });
         fs.rmSync(jsonOutputPath, { force: true });
@@ -367,6 +397,7 @@ describe('retry command', () => {
       const addResultSpy = vi
         .spyOn(Eval.prototype, 'addResult')
         .mockRejectedValueOnce(new Error('simulated result persistence failure'));
+      await saveErrorPrompt(evalRecord, prompt);
 
       try {
         await expect(retryCommand(evalRecord.id, { config: configPath })).rejects.toThrow(
@@ -375,6 +406,9 @@ describe('retry command', () => {
 
         expect(addResultSpy).toHaveBeenCalledTimes(1);
         expect(await getErrorResultIds(evalRecord.id)).toEqual([staleResultId]);
+        await expect(deleteEvalResult(evalRecord.id, staleResultId)).rejects.toThrow(
+          /interrupted progress/,
+        );
         const artifactRows = fs
           .readFileSync(jsonlOutputPath, 'utf8')
           .split(/\r?\n/)
@@ -447,6 +481,7 @@ describe('retry command', () => {
         ].join('\n'),
       );
       const originalAddResult = Eval.prototype.addResult;
+      await saveErrorPrompt(evalRecord, prompt, 2);
       vi.spyOn(Eval.prototype, 'addResult')
         .mockImplementationOnce(function (this: Eval, result) {
           return originalAddResult.call(this, result);
@@ -525,6 +560,7 @@ describe('retry command', () => {
       vi.spyOn(Eval.prototype, 'addResult').mockRejectedValueOnce(
         new Error('simulated result persistence failure'),
       );
+      await saveErrorPrompt(evalRecord, prompt);
       vi.spyOn(Eval.prototype, 'fetchResultsBatched').mockImplementationOnce(async function* () {
         throw new Error('simulated artifact restore failure');
       });

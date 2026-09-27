@@ -689,7 +689,7 @@ export function createServerOpenApiRegistry() {
       204: noContent('Eval result deleted'),
       400: validationError(),
       404: notFound('Eval result not found'),
-      409: errorResponse('Evaluation is still running'),
+      409: errorResponse('Evaluation is running or its metrics need recovery'),
       500: serverError(),
     },
   });

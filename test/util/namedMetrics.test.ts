@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   accumulateNamedMetric,
   backfillNamedScoreWeights,
-  hasNamedMetricContribution,
+  getNamedMetricContribution,
   subtractNamedMetric,
 } from '../../src/util/namedMetrics';
 
@@ -110,36 +110,38 @@ describe('accumulateNamedMetric', () => {
   });
 });
 
-describe('hasNamedMetricContribution', () => {
+describe('getNamedMetricContribution', () => {
   it('treats missing components and unresolved templates as unavailable accounting', () => {
-    expect(hasNamedMetricContribution(null, 'accuracy')).toBe(false);
-    expect(hasNamedMetricContribution({ pass: true, score: 1, reason: 'legacy' }, 'accuracy')).toBe(
-      false,
-    );
+    const contribution = (
+      gradingResult: Parameters<typeof getNamedMetricContribution>[0]['gradingResult'],
+    ) => getNamedMetricContribution({ gradingResult, metricName: 'accuracy', metricValue: 1 });
+    expect(contribution(null).namedScoresCount).toBeUndefined();
     expect(
-      hasNamedMetricContribution(
-        {
-          pass: true,
-          score: 1,
-          reason: 'legacy',
-          componentResults: [
-            {
-              pass: true,
-              score: 1,
-              reason: 'legacy',
-              assertion: { type: 'contains', metric: '{{ env.METRIC }}' },
-            },
-          ],
-        },
-        'accuracy',
-      ),
-    ).toBe(false);
+      contribution({ pass: true, score: 1, reason: 'legacy' }).namedScoresCount,
+    ).toBeUndefined();
+    expect(
+      contribution({
+        pass: true,
+        score: 1,
+        reason: 'legacy',
+        componentResults: [
+          {
+            pass: true,
+            score: 1,
+            reason: 'legacy',
+            assertion: { type: 'contains', metric: '{{ env.METRIC }}' },
+          },
+        ],
+      }).namedScoresCount,
+    ).toBeUndefined();
   });
 
   it('keeps matching persisted names literal even when they contain template delimiters', () => {
     expect(
-      hasNamedMetricContribution(
-        {
+      getNamedMetricContribution({
+        metricName: '{{ literal }}',
+        metricValue: 1,
+        gradingResult: {
           pass: true,
           score: 1,
           reason: 'literal',
@@ -152,9 +154,8 @@ describe('hasNamedMetricContribution', () => {
             },
           ],
         },
-        '{{ literal }}',
-      ),
-    ).toBe(true);
+      }).namedScoresCount,
+    ).toBe(1);
   });
 });
 
@@ -204,7 +205,7 @@ describe('subtractNamedMetric', () => {
     subtractNamedMetric(metrics as any, {
       metricName: 'accuracy',
       metricValue: 1,
-      gradingResult: null,
+      gradingResult: { pass: true, score: 1, reason: 'Legacy', componentResults: [] },
     });
 
     expect(metrics).toEqual({
@@ -224,7 +225,7 @@ describe('subtractNamedMetric', () => {
     subtractNamedMetric(metrics as any, {
       metricName: 'accuracy',
       metricValue: 0.5,
-      gradingResult: null,
+      gradingResult: { pass: true, score: 1, reason: 'Legacy', componentResults: [] },
     });
 
     expect(metrics).toEqual({
@@ -232,7 +233,7 @@ describe('subtractNamedMetric', () => {
     });
   });
 
-  it('treats malformed componentResults as having no contributing assertions', () => {
+  it('preserves unavailable contributions when componentResults are malformed', () => {
     const metrics = {
       namedScores: { accuracy: 1 },
       namedScoresCount: { accuracy: 1 },
@@ -251,9 +252,9 @@ describe('subtractNamedMetric', () => {
     });
 
     expect(metrics).toEqual({
-      namedScores: {},
-      namedScoresCount: {},
-      namedScoreWeights: {},
+      namedScores: { accuracy: 1 },
+      namedScoresCount: { accuracy: 1 },
+      namedScoreWeights: { accuracy: 1 },
     });
   });
 

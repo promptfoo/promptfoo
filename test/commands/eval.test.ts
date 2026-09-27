@@ -31,11 +31,8 @@ import {
   EvalRunError,
   showRedteamProviderLabelMissingWarning,
 } from '../../src/node/doEval';
-import {
-  deleteErrorResults,
-  getErrorResultIds,
-  recalculatePromptMetrics,
-} from '../../src/node/retry';
+import { recalculatePromptMetrics } from '../../src/node/recalculatePromptMetrics';
+import { deleteErrorResults, getErrorResultIds } from '../../src/node/retry';
 import { ClaudeCodeSDKProvider } from '../../src/providers/claude-agent-sdk';
 import { loadApiProvider } from '../../src/providers/index';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
@@ -72,6 +69,8 @@ vi.mock('../../src/migrate');
 vi.mock('../../src/node/retry', () => ({
   deleteErrorResults: vi.fn(),
   getErrorResultIds: vi.fn(),
+}));
+vi.mock('../../src/node/recalculatePromptMetrics', () => ({
   recalculatePromptMetrics: vi.fn(),
 }));
 vi.mock('../../src/providers');

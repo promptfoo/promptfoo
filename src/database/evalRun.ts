@@ -2,8 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { connect, createServer } from 'node:net';
 
 import { eq, sql } from 'drizzle-orm';
+import logger from '../logger';
 import { getDb } from './index';
-import { evalsTable } from './tables';
+import { evalResultsTable, evalsTable } from './tables';
 
 import type { CompletedPrompt } from '../types/index';
 
@@ -11,26 +12,38 @@ export const EVAL_ACTIVE_RUNS_KEY = '__promptfooActiveRuns';
 const runsPath = `$.${EVAL_ACTIVE_RUNS_KEY}`;
 const resultsObject = sql`CASE WHEN json_valid(${evalsTable.results}) AND json_type(${evalsTable.results}) = 'object' THEN ${evalsTable.results} ELSE '{}' END`;
 
-export class EvalRunningError extends Error {
+export class EvalResultDeletionError extends Error {}
+
+export class EvalRunningError extends EvalResultDeletionError {
   constructor(evalId: string) {
     super(`Evaluation ${evalId} is still running. Wait for it to finish before deleting results.`);
     this.name = 'EvalRunningError';
   }
 }
 
-// A nonce distinguishes a live run from an unrelated process that reused its port after a crash.
+function interruptedRunError(evalId: string): EvalResultDeletionError {
+  return new EvalResultDeletionError(
+    `Evaluation ${evalId} has interrupted progress. Run promptfoo eval --resume ${evalId} to rebuild saved metrics before deleting results.`,
+  );
+}
+
+function runSocketPath(nonce: string): string {
+  if (process.platform === 'win32') {
+    return `\\\\.\\pipe\\promptfoo-eval-${nonce}`;
+  }
+  // Keep Unix paths short and independent of each process's TMPDIR.
+  return process.platform === 'linux'
+    ? `\0promptfoo-eval-${nonce}`
+    : `/tmp/promptfoo-eval-${nonce}.sock`;
+}
+
+// The endpoint belongs to one nonce, so an unrelated service cannot inherit a crashed run's port.
 function isRunActive(nonce: string, marker: unknown): Promise<boolean> {
-  const port = (marker as { port?: unknown } | null)?.port;
-  if (
-    !/^[\da-f-]{36}$/.test(nonce) ||
-    !Number.isInteger(port) ||
-    Number(port) < 1 ||
-    Number(port) > 65535
-  ) {
+  if (!/^[\da-f-]{36}$/.test(nonce) || marker !== 'ipc') {
     return Promise.resolve(true);
   }
   return new Promise((resolve) => {
-    const socket = connect({ host: '127.0.0.1', port: Number(port) });
+    const socket = connect({ path: runSocketPath(nonce) });
     let received = '';
     let settled = false;
     const finish = (active: boolean) => {
@@ -52,7 +65,9 @@ function isRunActive(nonce: string, marker: unknown): Promise<boolean> {
       }
     });
     socket.once('end', () => finish(received === nonce));
-    socket.once('error', (error: NodeJS.ErrnoException) => finish(error.code !== 'ECONNREFUSED'));
+    socket.once('error', (error: NodeJS.ErrnoException) =>
+      finish(error.code !== 'ECONNREFUSED' && error.code !== 'ENOENT'),
+    );
     socket.once('close', () => finish(true));
   });
 }
@@ -74,66 +89,137 @@ export async function assertEvalNotRunning(
     if (active.some(Boolean)) {
       throw new EvalRunningError(evalId);
     }
+    if (active.length) {
+      throw interruptedRunError(evalId);
+    }
   }
 }
 
-export async function beginEvalRun(evaluation: {
-  id: string;
-  prompts: CompletedPrompt[];
-}): Promise<() => Promise<void>> {
+export async function beginEvalRun(
+  evaluation: { id: string; prompts: CompletedPrompt[] },
+  recoverInterrupted?: () => Promise<void>,
+): Promise<(completed?: boolean) => Promise<void>> {
   const nonce = randomUUID();
   const server = createServer((socket) => {
     socket.on('error', () => {});
     socket.end(nonce, () => socket.destroy());
   });
   const close = () => new Promise<void>((resolve) => server.close(() => resolve()));
+  let release: ((completed?: boolean) => Promise<void>) | undefined;
   try {
     await new Promise<void>((resolve, reject) => {
       server.once('error', reject);
-      server.listen(0, '127.0.0.1', resolve);
+      server.listen(runSocketPath(nonce), resolve);
     });
     server.unref();
-    const address = server.address();
-    if (!address || typeof address === 'string') {
-      throw new Error('Evaluation run listener did not bind a local port');
-    }
     const db = await getDb();
     const runMap = sql`CASE WHEN json_type(${resultsObject}, ${runsPath}) = 'object' THEN json_extract(${resultsObject}, ${runsPath}) ELSE '{}' END`;
-    const row = await db.transaction((tx) =>
-      tx
+    const { stale, needsRepair } = await db.transaction(async (tx) => {
+      const row = await tx
+        .select({ results: evalsTable.results, prompts: evalsTable.prompts })
+        .from(evalsTable)
+        .where(eq(evalsTable.id, evaluation.id))
+        .get();
+      if (!row) {
+        throw new Error(`Evaluation ${evaluation.id} not found`);
+      }
+      const runs = (row.results as Record<string, unknown> | undefined)?.[EVAL_ACTIVE_RUNS_KEY];
+      const states = await Promise.all(
+        Object.entries(runs && typeof runs === 'object' ? runs : {}).map(
+          async ([nonce, marker]) => ({
+            nonce,
+            active: await isRunActive(nonce, marker),
+          }),
+        ),
+      );
+      const stale = states.filter((state) => !state.active).map((state) => state.nonce);
+      const counts = await tx
+        .select({ promptIdx: evalResultsTable.promptIdx, count: sql<number>`count(*)` })
+        .from(evalResultsTable)
+        .where(eq(evalResultsTable.evalId, evaluation.id))
+        .groupBy(evalResultsTable.promptIdx)
+        .all();
+      const needsRepair =
+        stale.length > 0 ||
+        counts.some(({ promptIdx, count }) => {
+          const metrics = row.prompts?.[promptIdx]?.metrics;
+          const accounted = [
+            metrics?.testPassCount,
+            metrics?.testFailCount,
+            metrics?.testErrorCount,
+          ].reduce<number>(
+            (total, value) =>
+              total + (typeof value === 'number' && Number.isFinite(value) ? value : 0),
+            0,
+          );
+          return accounted < count;
+        });
+      if (needsRepair && states.some((state) => state.active)) {
+        throw new EvalRunningError(evaluation.id);
+      }
+      if (needsRepair && !recoverInterrupted) {
+        throw interruptedRunError(evaluation.id);
+      }
+      await tx
         .update(evalsTable)
         .set({
-          results: sql`json_set(${resultsObject}, ${runsPath}, json_set(${runMap}, ${`$."${nonce}"`}, json(${JSON.stringify({ port: address.port })})))`,
+          results: sql`json_set(${resultsObject}, ${runsPath}, json_set(${runMap}, ${`$."${nonce}"`}, 'ipc'))`,
         })
         .where(eq(evalsTable.id, evaluation.id))
-        .returning({ prompts: evalsTable.prompts })
-        .get(),
-    );
-    if (!row) {
-      throw new Error(`Evaluation ${evaluation.id} not found`);
-    }
-    // A deletion that committed before registration must also be reflected in a resumed run.
-    evaluation.prompts = row.prompts ?? [];
+        .run();
+      // Include deletions that committed before registration in resumed prompt metrics.
+      evaluation.prompts = row.prompts ?? [];
+      return { stale, needsRepair };
+    });
     let released = false;
-    return async () => {
+    release = async (completed = true) => {
       if (released) {
         return;
       }
       released = true;
       try {
-        await db
-          .update(evalsTable)
-          .set({
-            results: sql`json_remove(${evalsTable.results}, ${`${runsPath}."${nonce}"`})`,
-          })
-          .where(eq(evalsTable.id, evaluation.id))
-          .run();
+        if (completed) {
+          await db
+            .update(evalsTable)
+            .set({
+              results: sql`json_remove(${evalsTable.results}, ${`${runsPath}."${nonce}"`})`,
+            })
+            .where(eq(evalsTable.id, evaluation.id))
+            .run();
+        }
       } finally {
         await close();
       }
     };
+    if (needsRepair) {
+      await recoverInterrupted!();
+      if (stale.length) {
+        await db
+          .update(evalsTable)
+          .set({
+            results: sql`json_remove(${evalsTable.results}, ${sql.join(
+              stale.map((key) => sql`${`${runsPath}."${key}"`}`),
+              sql`, `,
+            )})`,
+          })
+          .where(eq(evalsTable.id, evaluation.id))
+          .run();
+      }
+    }
+    return release;
   } catch (error) {
-    await close();
+    try {
+      if (release) {
+        await release(false);
+      } else {
+        await close();
+      }
+    } catch (cleanupError) {
+      logger.error('Failed to release evaluation run after recovery error', {
+        evalId: evaluation.id,
+        error: cleanupError,
+      });
+    }
     throw error;
   }
 }

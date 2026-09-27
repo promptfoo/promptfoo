@@ -5,6 +5,64 @@ import {
   type TokenUsage,
 } from '../types/shared';
 
+import type { GradingResult, ProviderResponse } from '../types/index';
+
+export function hasGradingTokenUsage(
+  grade: GradingResult | null | undefined,
+): grade is GradingResult & { tokensUsed: TokenUsage } {
+  return Boolean(
+    grade &&
+      typeof grade === 'object' &&
+      !Array.isArray(grade) &&
+      grade.tokensUsed &&
+      typeof grade.tokensUsed === 'object' &&
+      !Array.isArray(grade.tokensUsed),
+  );
+}
+
+/** Replay the ordinary and comparison phases retained in a persisted result. */
+export function accumulateResultTokenUsage(
+  usage: TokenUsage,
+  result: { response?: ProviderResponse | null; gradingResult?: GradingResult | null },
+): void {
+  accumulateResponseTokenUsage(usage, result.response ?? undefined);
+  const grade = result.gradingResult;
+  if (!hasGradingTokenUsage(grade)) {
+    return;
+  }
+  const comparisons = Array.isArray(grade.componentResults)
+    ? grade.componentResults.filter(
+        (r) => r?.assertion?.type === 'select-best' && hasGradingTokenUsage(r),
+      )
+    : grade.assertion?.type === 'select-best'
+      ? [grade]
+      : [];
+  if (grade.assertion?.type !== 'select-best') {
+    const initialTokens = structuredClone(grade.tokensUsed);
+    const initialUsage: TokenUsage = {
+      assertions: initialTokens,
+      ...(initialTokens.incurredTokenUsage && {
+        incurredTokenUsage: { assertions: initialTokens.incurredTokenUsage },
+      }),
+    };
+    for (const comparison of comparisons) {
+      const comparisonUsage: TokenUsage = initialTokens.incurredTokenUsage
+        ? { incurredTokenUsage: {} }
+        : {};
+      accumulateComparisonTokenUsage(comparisonUsage, comparison.tokensUsed!, {
+        cached: comparison.metadata?.cachedResponse,
+      });
+      subtractTokenUsage(initialUsage, comparisonUsage);
+    }
+    accumulateGradingTokenUsage(usage, initialTokens, { cached: grade.metadata?.cachedResponse });
+  }
+  for (const comparison of comparisons) {
+    accumulateComparisonTokenUsage(usage, comparison.tokensUsed!, {
+      cached: comparison.metadata?.cachedResponse,
+    });
+  }
+}
+
 /**
  * Safely extract token usage carried by a thrown value.
  */

@@ -9,11 +9,12 @@ import {
   getShareAuthorizedBlob,
   resetBlobStorageProvider,
   setBlobStorageProvider,
+  storeBlob,
 } from '../../src/blobs';
 import { FilesystemBlobStorageProvider } from '../../src/blobs/filesystemProvider';
 import { importCommand } from '../../src/commands/import';
 import { getDb } from '../../src/database';
-import { blobReferencesTable } from '../../src/database/tables';
+import { blobReferencesTable, spansTable, tracesTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
@@ -92,11 +93,24 @@ describe('result deletion blob provenance', () => {
     return (await createOutputData(evaluation!, null, { includeMedia: true })).blobAssets ?? [];
   }
 
-  async function importMedia(trace: boolean) {
+  async function importMedia(
+    location: 'response' | 'prompt' | 'deep-response' | 'trace' | 'trace-hash' | 'span-hash',
+  ) {
     const id = randomUUID();
     const data = Buffer.from(`portable media ${id}`);
     const hash = sha256(data);
     const uri = `promptfoo://blob/${hash}`;
+    const survivor = result(1, { output: location === 'response' ? uri : 'control' });
+    if (location === 'prompt') {
+      survivor.prompt.raw = `User media: ${uri}`;
+    } else if (location === 'deep-response') {
+      let nested: unknown = uri;
+      for (let depth = 0; depth < 12; depth++) {
+        nested = { child: nested };
+      }
+      survivor.response!.output = nested;
+    }
+    const trace = location === 'trace' || location === 'trace-hash' || location === 'span-hash';
     const file = path.join(directory, 'import.json');
     writeFileSync(
       file,
@@ -107,14 +121,34 @@ describe('result deletion blob provenance', () => {
           version: 3,
           timestamp: new Date().toISOString(),
           prompts: [{ raw: 'blob', label: 'blob', provider: 'echo' }],
-          results: [result(0, { output: uri }), result(1, { output: trace ? 'control' : uri })],
+          results: [result(0, { output: uri }), survivor],
         },
         blobAssets: [
           { hash, mimeType: 'audio/wav', sizeBytes: data.length, data: data.toString('base64') },
         ],
         ...(trace && {
           traces: [
-            { traceId: randomUUID(), testCaseId: 'retained-trace', metadata: { uri }, spans: [] },
+            {
+              traceId: randomUUID(),
+              testCaseId: 'retained-trace',
+              metadata:
+                location === 'trace'
+                  ? { uri }
+                  : location === 'trace-hash'
+                    ? { attachment: { hash } }
+                    : {},
+              spans:
+                location === 'span-hash'
+                  ? [
+                      {
+                        spanId: randomUUID(),
+                        name: 'Imported media',
+                        startTime: 1,
+                        attributes: { attachment: { hash } },
+                      },
+                    ]
+                  : [],
+            },
           ],
         }),
       }),
@@ -129,7 +163,7 @@ describe('result deletion blob provenance', () => {
   }
 
   it('keeps imported URI-only media after deleting its original cell', async () => {
-    const { id, hash, data, rows } = await importMedia(false);
+    const { id, hash, data, rows } = await importMedia('response');
     expect(await references(id)).toEqual([
       expect.objectContaining({ testIdx: 0, promptIdx: 0, kind: null, location: 'import' }),
     ]);
@@ -140,15 +174,108 @@ describe('result deletion blob provenance', () => {
     expect(await getShareAuthorizedBlob(hash, id)).toBeNull();
   });
 
-  it('preserves imported provenance when only a retained trace uses the media', async () => {
-    const { id, hash, data, rows } = await importMedia(true);
-    await deleteEvalResult(id, rows.find((row) => row.testIdx === 0)!.id);
-    expect(await references(id)).toEqual([
-      expect.objectContaining({ testIdx: null, promptIdx: null, kind: null, location: 'import' }),
-    ]);
-    expect((await getShareAuthorizedBlob(hash, id))?.data).toEqual(data);
-    expect(await exportedAssets(id)).toEqual([expect.objectContaining({ hash })]);
-  });
+  it.each(['prompt', 'deep-response'] as const)(
+    'preserves imported media used in a surviving %s',
+    async (location) => {
+      const { id, hash, data, rows } = await importMedia(location);
+      await deleteEvalResult(id, rows.find((row) => row.testIdx === 0)!.id);
+      expect((await getShareAuthorizedBlob(hash, id))?.data).toEqual(data);
+      expect(await exportedAssets(id)).toEqual([expect.objectContaining({ hash })]);
+      await deleteEvalResult(id, rows.find((row) => row.testIdx === 1)!.id);
+      expect(await getShareAuthorizedBlob(hash, id)).toBeNull();
+    },
+  );
+
+  it.each(['trace', 'trace-hash', 'span-hash'] as const)(
+    'preserves imported provenance for a retained %s',
+    async (location) => {
+      const { id, hash, data, rows } = await importMedia(location);
+      await deleteEvalResult(id, rows.find((row) => row.testIdx === 0)!.id);
+      expect(await references(id)).toEqual([
+        expect.objectContaining({ testIdx: null, promptIdx: null, kind: null, location: 'import' }),
+      ]);
+      expect((await getShareAuthorizedBlob(hash, id))?.data).toEqual(data);
+      expect(await exportedAssets(id)).toEqual([expect.objectContaining({ hash })]);
+    },
+  );
+
+  it.each(['trace-hash', 'span-hash'] as const)(
+    'finds imported %s media beyond the first trace scan batch',
+    async (location) => {
+      const { id, hash, data, rows } = await importMedia(location);
+      const db = await getDb();
+      const trace = await db
+        .select()
+        .from(tracesTable)
+        .where(eq(tracesTable.evaluationId, id))
+        .get();
+      expect(trace).toBeDefined();
+      // Deterministic IDs put the retained hash after a full batch of unrelated records.
+      if (location === 'trace-hash') {
+        await db.insert(tracesTable).values(
+          Array.from({ length: 500 }, (_, index) => ({
+            id: `!${id}-${index.toString().padStart(3, '0')}`,
+            traceId: randomUUID(),
+            evaluationId: id,
+            testCaseId: 'unrelated',
+            metadata: {},
+          })),
+        );
+      } else {
+        await db.insert(spansTable).values(
+          Array.from({ length: 500 }, (_, index) => ({
+            id: `!${id}-${index.toString().padStart(3, '0')}`,
+            traceId: trace!.traceId,
+            spanId: randomUUID(),
+            name: 'Unrelated imported span',
+            startTime: index,
+            attributes: {},
+          })),
+        );
+      }
+      await deleteEvalResult(id, rows.find((row) => row.testIdx === 0)!.id);
+      expect((await getShareAuthorizedBlob(hash, id))?.data).toEqual(data);
+      expect(await exportedAssets(id)).toEqual([expect.objectContaining({ hash })]);
+    },
+  );
+
+  it.each(['testIdx', 'promptIdx'] as const)(
+    'cleans provider references scoped only by %s after the last matching result',
+    async (coordinate) => {
+      const evaluation = await EvalFactory.create({ numResults: 0 });
+      evaluations.push(evaluation);
+      const data = Buffer.from(`partial provider media ${evaluation.id}`);
+      const { ref } = await storeBlob(data, 'video/mp4', {
+        evalId: evaluation.id,
+        [coordinate]: 0,
+        location: 'response.video',
+        kind: 'video',
+      });
+      for (let index = 0; index < 2; index++) {
+        const row = result(coordinate === 'testIdx' ? 0 : index, { output: ref.uri });
+        row.promptIdx = coordinate === 'promptIdx' ? 0 : index;
+        await evaluation.addResult(row);
+      }
+      // A copied URI outside the recorded coordinate cannot keep this reference alive.
+      const outsideScope = result(2, { output: ref.uri });
+      outsideScope.promptIdx = 2;
+      await evaluation.addResult(outsideScope);
+      const rows = await EvalResult.findManyByEvalId(evaluation.id);
+      expect(await references(evaluation.id)).toEqual([
+        expect.objectContaining({
+          testIdx: coordinate === 'testIdx' ? 0 : null,
+          promptIdx: coordinate === 'promptIdx' ? 0 : null,
+        }),
+      ]);
+      const scopedRows = rows.filter((row) => row[coordinate] === 0);
+      await deleteEvalResult(evaluation.id, scopedRows[0].id);
+      expect((await getShareAuthorizedBlob(ref.hash, evaluation.id))?.data).toEqual(data);
+      await deleteEvalResult(evaluation.id, scopedRows[1].id);
+      expect(await references(evaluation.id)).toEqual([]);
+      expect(await getShareAuthorizedBlob(ref.hash, evaluation.id)).toBeNull();
+      expect(await exportedAssets(evaluation.id)).toEqual([]);
+    },
+  );
 
   it('does not transfer classified media provenance to copied trace attributes', async () => {
     const evaluation = await EvalFactory.create({ numResults: 0 });

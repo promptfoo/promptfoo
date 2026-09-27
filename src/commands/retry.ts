@@ -46,11 +46,11 @@ export function setupRetryCommand(program: Command) {
     });
 }
 
+export { recalculatePromptMetrics } from '../node/recalculatePromptMetrics';
 // Preserve established command-module imports while the implementation lives in the node layer.
 export {
   deleteErrorResults,
   getErrorResultIds,
-  recalculatePromptMetrics,
   retryCommand,
 } from '../node/retry';
 

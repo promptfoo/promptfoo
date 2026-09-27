@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { EvalRunningError } from '../../database/evalRun';
+import { EvalResultDeletionError } from '../../database/evalRun';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
@@ -853,7 +853,7 @@ evalRouter.delete('/:evalId/results/:id', async (req: Request, res: Response): P
     await deleteEvalResult(evalId, id);
     res.status(204).send();
   } catch (error) {
-    if (error instanceof EvalRunningError) {
+    if (error instanceof EvalResultDeletionError) {
       res.status(409).json({ error: error.message });
       return;
     }

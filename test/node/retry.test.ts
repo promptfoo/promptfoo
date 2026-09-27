@@ -6,12 +6,8 @@ import { evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { notifyEvaluationChanged } from '../../src/models/evalMutation';
-import {
-  deleteErrorResults,
-  getErrorResultIds,
-  recalculatePromptMetrics,
-  retryCommand,
-} from '../../src/node/retry';
+import { recalculatePromptMetrics } from '../../src/node/recalculatePromptMetrics';
+import { deleteErrorResults, getErrorResultIds, retryCommand } from '../../src/node/retry';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
 import { ResultFailureReason } from '../../src/types/index';
 import { resolveConfigs } from '../../src/util/config/load';
@@ -114,7 +110,7 @@ function mockResolvedConfig({
 }
 
 describe('retryCommand', () => {
-  const releaseRun = vi.fn<() => Promise<void>>();
+  const releaseRun = vi.fn<(completed?: boolean) => Promise<void>>();
   beforeEach(() => {
     vi.resetAllMocks();
     releaseRun.mockResolvedValue(undefined);
@@ -505,6 +501,31 @@ describe('retryCommand', () => {
     );
   });
 
+  it('rebuilds formula metrics while preserving unevaluated runtime metric values', async () => {
+    const runtimeMetric = vi.fn(() => 99);
+    const prompts = [{ metrics: { namedScores: { Runtime: 42 } } }] as any[];
+    const evaluation = createEval({
+      prompts,
+      config: {
+        derivedMetrics: [
+          { name: 'Rows', value: '__count' },
+          { name: 'Runtime', value: runtimeMetric },
+        ],
+      } as UnifiedConfig,
+      fetchResultsBatched: vi.fn(async function* () {
+        yield [
+          { id: 'one', promptIdx: 0, success: true },
+          { id: 'two', promptIdx: 0, success: true },
+        ] as any[];
+      }),
+    });
+
+    await recalculatePromptMetrics(evaluation);
+
+    expect(prompts[0].metrics.namedScores).toEqual({ Rows: 2, Runtime: 42 });
+    expect(runtimeMetric).not.toHaveBeenCalled();
+  });
+
   it('retries from the saved config, cleans up old errors, and shares the result', async () => {
     const originalEval = createEval({
       config: { sharing: false } as UnifiedConfig,
@@ -544,8 +565,9 @@ describe('retryCommand', () => {
     );
     expect(dbMocks.deleteRun).toHaveBeenCalledTimes(1);
     expect(notifyEvaluationChanged).toHaveBeenCalledWith(originalEval.id);
-    expect(beginEvalRun).toHaveBeenCalledWith(originalEval);
+    expect(beginEvalRun).toHaveBeenCalledWith(originalEval, expect.any(Function));
     expect(releaseRun).toHaveBeenCalledTimes(1);
+    expect(releaseRun).toHaveBeenCalledWith(true);
     expect(releaseRun.mock.invocationCallOrder[0]).toBeGreaterThan(
       vi.mocked(retriedEval.addPrompts).mock.invocationCallOrder[0],
     );
@@ -660,6 +682,7 @@ describe('retryCommand', () => {
     await expect(retryCommand(originalEval.id, {})).rejects.toThrow('provider unavailable');
 
     expect(releaseRun).toHaveBeenCalledTimes(1);
+    expect(releaseRun).toHaveBeenCalledWith(false);
     expect(dbMocks.deleteRun).not.toHaveBeenCalled();
     expect(cliState.resume).toBe(false);
     expect(cliState.retryMode).toBe(false);
@@ -683,6 +706,7 @@ describe('retryCommand', () => {
     expect(writeMultipleOutputs).toHaveBeenCalledWith(['results.jsonl'], retriedEval, null);
     expect(retriedEval.resultPersistenceFailed).toBe(true);
     expect(dbMocks.deleteRun).not.toHaveBeenCalled();
+    expect(releaseRun).toHaveBeenCalledWith(false);
   });
 
   it.each([false, true])(
@@ -763,6 +787,7 @@ describe('retryCommand', () => {
     dbMocks.deleteRun.mockRejectedValueOnce(new Error('database unavailable'));
 
     await expect(retryCommand(originalEval.id, {})).resolves.toBe(retriedEval);
+    expect(releaseRun).toHaveBeenCalledWith(false);
 
     expect(logger.warn).toHaveBeenCalledWith(
       'Post-retry cleanup had issues. Retry results are saved.',

@@ -359,6 +359,10 @@ export class AssertionsResult {
           ...result.componentResults.map((subResult) => ({
             ...subResult,
             assertion: subResult.assertion || result.assertion,
+            ...((!subResult.assertion || subResult.assertion.metric === result.assertion?.metric) &&
+              result.metadata?.renderedMetric !== undefined && {
+                metadata: { ...subResult.metadata, renderedMetric: result.metadata.renderedMetric },
+              }),
           })),
         ];
       } else {

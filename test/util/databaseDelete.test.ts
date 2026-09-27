@@ -393,6 +393,8 @@ describe('database eval deletion', () => {
       async ({ grade, expected }) => {
         const eval_ = await EvalFactory.create({ numResults: grade === undefined ? 1 : 2 });
         const [target, survivor] = await EvalResult.findManyByEvalId(eval_.id);
+        eval_.prompts[0].metrics!.testPassCount = grade === undefined ? 1 : 2;
+        eval_.prompts[0].metrics!.testFailCount = 0;
         eval_.prompts[0].metrics!.assertPassCount = 5;
         eval_.prompts[0].metrics!.assertFailCount = 0;
         await eval_.addPrompts(eval_.prompts);
@@ -465,6 +467,8 @@ describe('database eval deletion', () => {
       const eval_ = await EvalFactory.create({ numResults: 3 });
       const rows = await EvalResult.findManyByEvalId(eval_.id);
       Object.assign(eval_.prompts[0].metrics!, {
+        testPassCount: 3,
+        testFailCount: 0,
         assertPassCount: 3,
         assertFailCount: 1,
         namedScores: { quality: 3 },
@@ -490,9 +494,49 @@ describe('database eval deletion', () => {
       });
     });
 
+    it('debits retained metric weights without guessing historical template assertion counts', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 2 });
+      const rows = await EvalResult.findManyByEvalId(eval_.id);
+      Object.assign(eval_.prompts[0].metrics!, {
+        namedScores: { quality: 1 },
+        namedScoresCount: { quality: 2 },
+        namedScoreWeights: { quality: 4 },
+      });
+      await eval_.addPrompts(eval_.prompts);
+      for (const [index, row] of rows.entries()) {
+        await dbUpdateResult(row.id, {
+          namedScores: { quality: index },
+          gradingResult: {
+            pass: true,
+            score: 1,
+            reason: 'Historical weighted metric',
+            namedScoreWeights: { quality: index ? 1 : 3 },
+            componentResults: [
+              {
+                pass: true,
+                score: 1,
+                reason: 'Historical metric name',
+                assertion: { type: 'contains', metric: '{{ env.METRIC }}' },
+              },
+            ],
+          },
+        });
+      }
+
+      await deleteEvalResult(eval_.id, rows[0].id);
+
+      expect((await Eval.findById(eval_.id))!.prompts[0].metrics).toMatchObject({
+        namedScores: { quality: 1 },
+        namedScoresCount: { quality: 2 },
+        namedScoreWeights: { quality: 1 },
+      });
+    });
+
     it('does not debit asserted siblings for historical no-assertion rows', async () => {
       const eval_ = await EvalFactory.create({ numResults: 3 });
       const rows = await EvalResult.findManyByEvalId(eval_.id);
+      eval_.prompts[0].metrics!.testPassCount = 3;
+      eval_.prompts[0].metrics!.testFailCount = 0;
       eval_.prompts[0].metrics!.assertPassCount = 1;
       await eval_.addPrompts(eval_.prompts);
       for (const row of rows.slice(0, 2)) {
@@ -538,6 +582,8 @@ describe('database eval deletion', () => {
       const eval_ = await EvalFactory.create({ numResults: 502 });
       const rows = await EvalResult.findManyByEvalId(eval_.id);
       const sorted = rows.slice().sort((a, b) => a.id.localeCompare(b.id));
+      eval_.prompts[0].metrics!.testPassCount = 502;
+      eval_.prompts[0].metrics!.testFailCount = 0;
       eval_.prompts[0].metrics!.assertPassCount = 502;
       await eval_.addPrompts(eval_.prompts);
       await dbUpdateResult(sorted[0].id, { gradingResult: null });
@@ -678,7 +724,7 @@ describe('database eval deletion', () => {
       // the test pins inverse symmetry rather than encoding hand-computed expectations.
       const seededMetrics: PromptMetrics = {
         score: 0,
-        testPassCount: 0,
+        testPassCount: 1,
         testFailCount: 0,
         testErrorCount: 0,
         assertPassCount: 0,
@@ -739,6 +785,8 @@ describe('database eval deletion', () => {
           ...reloaded.prompts[0],
           metrics: {
             ...reloaded.prompts[0].metrics!,
+            testPassCount: 1,
+            testFailCount: 0,
             namedScores: { accuracy: 4 },
             namedScoresCount: { accuracy: 1 },
             namedScoreWeights: { accuracy: 4 },
@@ -1161,6 +1209,7 @@ describe('database eval deletion', () => {
           metrics: {
             ...reloaded.prompts[0].metrics!,
             testPassCount: 1,
+            testFailCount: 0,
             assertPassCount: 1,
             assertFailCount: 0,
           },
@@ -1293,6 +1342,7 @@ describe('database eval deletion', () => {
           metrics: {
             ...reloaded.prompts[0].metrics!,
             testFailCount: 1,
+            testPassCount: 0,
             assertPassCount: 1,
             assertFailCount: 1,
           },
@@ -1319,18 +1369,14 @@ describe('database eval deletion', () => {
       expect(metrics?.assertFailCount).toBe(0);
     });
 
-    it('defaults legacy aggregate fields before debiting error rows and cost', async () => {
+    it('defaults missing legacy cost before debiting error rows', async () => {
       const eval_ = await EvalFactory.create({ numResults: 1, resultTypes: ['error'] });
       const [target] = await EvalResult.findManyByEvalId(eval_.id);
       const reloaded = await Eval.findById(eval_.id);
       if (!reloaded) {
         throw new Error('expected eval to be findable');
       }
-      const {
-        cost: _cost,
-        testErrorCount: _testErrorCount,
-        ...legacyMetrics
-      } = reloaded.prompts[0].metrics!;
+      const { cost: _cost, ...legacyMetrics } = reloaded.prompts[0].metrics!;
       reloaded.prompts = [
         {
           ...reloaded.prompts[0],
@@ -1338,6 +1384,7 @@ describe('database eval deletion', () => {
             ...legacyMetrics,
             testPassCount: 0,
             testFailCount: 0,
+            testErrorCount: 1,
           } as PromptMetrics,
         },
       ];
@@ -1388,6 +1435,7 @@ describe('database eval deletion', () => {
           metrics: {
             ...reloaded.prompts[0].metrics!,
             testPassCount: 1,
+            testFailCount: 0,
             assertPassCount: 1,
             assertFailCount: 0,
           },
@@ -1796,7 +1844,7 @@ describe('database eval deletion', () => {
       { resultType: 'failure' as const, touched: ['testFailCount', 'assertFailCount'] as const },
       { resultType: 'error' as const, touched: ['testErrorCount'] as const },
     ])(
-      'clamps result-count buckets at zero when deleting a $resultType row from an under-credited legacy aggregate',
+      'requires repair before deleting a $resultType row from an under-credited legacy aggregate',
       async ({ resultType, touched }) => {
         const eval_ = await EvalFactory.create({ numResults: 1, resultTypes: [resultType] });
         const [target] = await EvalResult.findManyByEvalId(eval_.id);
@@ -1819,7 +1867,8 @@ describe('database eval deletion', () => {
         ];
         await reloaded.save();
 
-        await deleteEvalResult(eval_.id, target.id);
+        await expect(deleteEvalResult(eval_.id, target.id)).rejects.toThrow(/Resume/);
+        expect(await EvalResult.findById(target.id)).not.toBeNull();
 
         const metrics = (await Eval.findById(eval_.id))?.prompts[0]?.metrics;
         for (const bucket of touched) {
