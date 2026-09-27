@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as huggingfaceDatasets from '../../../src/integrations/huggingfaceDatasets';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
-import { UnsafeBenchGrader } from '../../../src/redteam/plugins/unsafebench';
-import { VLGuardGrader } from '../../../src/redteam/plugins/vlguard';
+import { UnsafeBenchGrader, UnsafeBenchPlugin } from '../../../src/redteam/plugins/unsafebench';
+import {
+  VLGuardDatasetManager,
+  VLGuardGrader,
+  VLGuardPlugin,
+} from '../../../src/redteam/plugins/vlguard';
 import {
   CATEGORY_GUIDANCE,
   CATEGORY_NAMES,
@@ -76,7 +81,6 @@ describe('VLGuard active grading', () => {
     expect(rubric).toContain('AI should NOT provide detailed descriptions');
     expect(rubric).toContain('<purpose>');
     expect(rubric).toContain(purpose);
-    expect(rubric).toContain(`<UserQuery>\n${prompt}\n</UserQuery>`);
   });
 
   it.each([
@@ -173,7 +177,6 @@ describe('UnsafeBench active grading', () => {
     expect(rubric).toContain(`category: ${category ?? 'Unknown'}`);
     expect(rubric).toContain('AI should acknowledge unsafe nature without details');
     expect(rubric).toContain('"score": 1/0, "pass": true/false');
-    expect(rubric).toContain(`<UserQuery>\n${prompt}\n</UserQuery>`);
   });
 
   it.each([
@@ -315,4 +318,53 @@ describe('VLSU generated assertions and active grading', () => {
     expect(rubric).toContain('Provides a helpful, accurate response');
     expect(rubric).not.toContain('INDIVIDUALLY SAFE but become UNSAFE');
   });
+});
+
+describe.each(['prompt', 'image'])('generated images injected into %s', (injectVar) => {
+  const imageData = `data:image/png;base64,${'AAECAwQFBgcICQ=='.repeat(2048)}`;
+
+  it.each(['vlguard', 'unsafebench'])(
+    'keeps %s image data out of rubric text',
+    async (pluginId) => {
+      vi.spyOn(VLGuardDatasetManager.getInstance(), 'getFilteredRecords').mockResolvedValue([
+        {
+          image: imageData,
+          category: 'Risky Behavior',
+          subcategory: 'Violence',
+          question: 'Fixture query',
+          safe: false,
+        },
+      ]);
+      vi.spyOn(huggingfaceDatasets, 'fetchHuggingFaceDataset').mockResolvedValue([
+        { vars: { image: imageData, category: 'Violence', safety_label: 'unsafe' } },
+      ]);
+      const provider = createMockProvider();
+      const plugin =
+        pluginId === 'vlguard'
+          ? new VLGuardPlugin(provider, purpose, injectVar)
+          : new UnsafeBenchPlugin(provider, purpose, injectVar);
+      const grader = pluginId === 'vlguard' ? new VLGuardGrader() : new UnsafeBenchGrader();
+      const [generated] = await plugin.generateTests(1);
+      expect(generated.vars?.[injectVar]).toBe(imageData);
+      const assertion = generated.assert?.[0];
+      const result = await grader.getResult(
+        imageData,
+        output,
+        {
+          ...generated,
+          metadata: { ...generated.metadata, purpose },
+        },
+        undefined,
+        assertion && 'value' in assertion ? assertion.value : undefined,
+      );
+
+      expect(result.grade).toEqual(grade);
+      expect(result.rubric).toContain('Avoid detailed descriptions of violence');
+      expect(result.rubric).toContain(purpose);
+      expect(result.rubric).not.toContain(imageData);
+      expect(result.rubric.length).toBeLessThan(5000);
+      expect(matchesLlmRubric).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(matchesLlmRubric).mock.calls[0][0]).toBe(result.rubric);
+    },
+  );
 });

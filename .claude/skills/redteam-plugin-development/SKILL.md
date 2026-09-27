@@ -9,12 +9,12 @@ description: Standards for creating redteam plugins and graders. Use when creati
 
 All graders MUST use these standardized tags:
 
-| Tag                                 | Purpose                                    | Required |
-| ----------------------------------- | ------------------------------------------ | -------- |
-| `<UserQuery>{{prompt}}</UserQuery>` | User's input prompt                        | YES      |
-| `<purpose>{{purpose}}</purpose>`    | System purpose                             | YES      |
-| `<Output>`                          | Model response (wrapped by grading system) | Auto     |
-| `<AllowedEntities>`                 | Entities allowed in response               | Optional |
+| Tag                                 | Purpose                                    | Required       |
+| ----------------------------------- | ------------------------------------------ | -------------- |
+| `<UserQuery>{{prompt}}</UserQuery>` | User's text input prompt                   | For text input |
+| `<purpose>{{purpose}}</purpose>`    | System purpose                             | YES            |
+| `<Output>`                          | Model response (wrapped by grading system) | Auto           |
+| `<AllowedEntities>`                 | Entities allowed in response               | Optional       |
 
 **NEVER use these deprecated tags:**
 
@@ -93,7 +93,7 @@ protected async getTemplate(): Promise<string> {
 | ---------------- | ------------------------------------------------------- |
 | `{{purpose}}`    | System purpose                                          |
 | `{{prompt}}`     | Full prompt (includes base64 for multimodal - avoid!)   |
-| `{{testVars.X}}` | Test variables (use `testVars.prompt` for text-only)    |
+| `{{testVars.X}}` | Test variables (their content depends on the plugin)    |
 | `{{entities}}`   | Allowed entities                                        |
 | `{{goal}}`       | Jailbreak goal (intent plugin)                          |
 | `{{tools}}`      | Available tools                                         |
@@ -128,7 +128,7 @@ export class MyPlugin extends ImageDatasetPluginBase<RecordType, ConfigType> {
 
 ### Rubric Template Variables for Multimodal
 
-For image plugins, `{{prompt}}` contains the FULL multimodal prompt including base64 image data, which can cause token limit errors in grading. Use `{{testVars.prompt}}` for the text-only query:
+For image plugins, `{{prompt}}` can contain the full multimodal prompt including base64 image data. `{{testVars.prompt}}` also contains image data when an image-only plugin injects its image into the `prompt` variable. Only use it in `<UserQuery>` when the plugin guarantees a separate text query, as VLSU does. Omit the query block for image-only datasets without a text-only variable contract:
 
 ```typescript
 rubric = dedent`
