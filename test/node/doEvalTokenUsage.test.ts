@@ -1,9 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { doEval } from '../../src/node/doEval';
-import { mockProcessEnv, stripAnsi } from '../util/utils';
+import { stripAnsi } from '../util/utils';
 
 import type { ProviderFunction } from '../../src/types/providers';
+
+vi.mock('../../src/telemetry', () => ({
+  default: { record: vi.fn(), send: vi.fn() },
+}));
 
 function provider(id: string, tokens: number, ready?: Promise<void>) {
   return Object.assign(
@@ -33,16 +37,12 @@ async function run(providers: ProviderFunction[]) {
 }
 
 describe('evaluation provider token summaries', () => {
-  let restoreEnv: () => void;
-
   beforeEach(() => {
-    restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: 'true' });
     vi.spyOn(logger, 'info').mockImplementation(() => logger);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    restoreEnv();
   });
 
   function output() {
