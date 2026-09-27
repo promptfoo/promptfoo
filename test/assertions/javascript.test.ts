@@ -838,6 +838,76 @@ describe('JavaScript file references', () => {
     expect(JSON.parse(JSON.stringify(result)).score).toBe(1);
   });
 
+  it.each([Number.POSITIVE_INFINITY, Number.NaN])(
+    'rejects a score that becomes %s when the result is normalized',
+    async (score) => {
+      let reads = 0;
+      const result = await runAssertion({
+        assertion: {
+          type: 'javascript',
+          value: () => ({
+            pass: true,
+            get score() {
+              return ++reads === 1 ? 1 : score;
+            },
+            reason: 'Custom grade',
+          }),
+        },
+        test: {},
+        providerResponse: { output: 'Test output' },
+      });
+
+      expect(result).toMatchObject({ pass: false, score: 0 });
+      expect(result.reason).toContain('GradingResult object with a finite score');
+      expect(reads).toBe(2);
+      expect(JSON.parse(JSON.stringify(result)).score).toBe(0);
+    },
+  );
+
+  it.each(['Infinity', 'NaN'])(
+    'omits inline source when a normalized score becomes %s',
+    async (score) => {
+      const value = `let reads = 0;\nreturn { pass: true, get score() { return ++reads === 1 ? 1 : ${score}; }, reason: 'normalized-score-placeholder' };`;
+      const result = await runAssertion({
+        assertion: { type: 'javascript', value },
+        test: {},
+        providerResponse: { output: 'Test output' },
+      });
+
+      expect(result).toMatchObject({ pass: false, score: 0 });
+      expect(result.reason).toContain('GradingResult object with a finite score');
+      expect(result.reason).not.toContain('normalized-score-placeholder');
+      expect(result.assertion?.value).toBe(value);
+    },
+  );
+
+  it.each([Number.POSITIVE_INFINITY, Number.NaN])(
+    'rejects a file assertion score that becomes %s during normalization',
+    async (score) => {
+      let reads = 0;
+      vi.mocked(path.resolve).mockReturnValue('/mocked/path/to/assert.js');
+      vi.mocked(path.extname).mockReturnValue('.js');
+      vi.mocked(isPackagePath).mockReturnValue(false);
+      vi.mocked(importModule).mockResolvedValue(() => ({
+        pass: true,
+        get score() {
+          return ++reads === 1 ? 1 : score;
+        },
+        reason: 'File grade',
+      }));
+
+      const result = await runAssertion({
+        assertion: { type: 'javascript', value: 'file:///path/to/assert.js' },
+        test: {},
+        providerResponse: { output: 'Test output' },
+      });
+
+      expect(result).toMatchObject({ pass: false, score: 0 });
+      expect(result.reason).toContain('GradingResult object with a finite score');
+      expect(reads).toBe(2);
+    },
+  );
+
   it.each([
     ['true', () => true, true, 1],
     ['false', () => false, false, 0],

@@ -189,7 +189,7 @@ function normalizeJavascriptAssertionResult(
   }
 
   const pass = result.pass !== inverse;
-  return {
+  const normalizedResult = {
     ...result,
     pass,
     reason:
@@ -200,6 +200,12 @@ function normalizeJavascriptAssertionResult(
           : `Custom function returned ${result.pass ? 'true' : 'false'}`,
     assertion: normalizeResultAssertion(result.assertion, assertion),
   };
+  if (!Number.isFinite(normalizedResult.score)) {
+    throw new JavascriptAssertionValidationError(
+      'Custom function must return a GradingResult object with a finite score.',
+    );
+  }
+  return normalizedResult;
 }
 
 export const handleJavascript = async ({
