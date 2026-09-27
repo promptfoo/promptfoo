@@ -51,9 +51,13 @@ describe('SDK client lifecycle', () => {
     ['knowledge-base', providers[3][1], 'getKnowledgeBaseClient', 'knowledgeBaseClient'],
   ] as const;
 
-  it.each(mutableClients)(
-    'resets only the active %s client and cache, retaining cleanup ownership',
-    async (_name, create, method, field) => {
+  const resetCases = mutableClients.flatMap(([name, create, method, field]) =>
+    [undefined, null, false, 0, ''].map((value) => ({ name, create, method, field, value })),
+  );
+
+  it.each(resetCases)(
+    'resets only the active $name client and cache for $value, retaining cleanup ownership',
+    async ({ create, method, field, value }) => {
       const provider = create();
       const getClient = () => Reflect.get(provider, method).call(provider);
       await cliState.withEnv({}, async () => {
@@ -65,7 +69,7 @@ describe('SDK client lifecycle', () => {
           const injected = { destroy: vi.fn() };
           Reflect.set(provider, field, injected);
           expect(await getClient()).toBe(injected);
-          Reflect.set(provider, field, undefined);
+          Reflect.set(provider, field, value);
           expect(Reflect.get(provider, field)).toBeUndefined();
           const next = await getClient();
           const nextDestroy = vi.spyOn(next, 'destroy');
@@ -83,9 +87,9 @@ describe('SDK client lifecycle', () => {
     },
   );
 
-  it.each(mutableClients)(
-    'keeps a reset %s initialization from publishing over its replacement',
-    async (_name, create, method, field) => {
+  it.each(resetCases)(
+    'keeps a $name initialization cleared with $value from publishing over its replacement',
+    async ({ create, method, field, value }) => {
       const provider = create();
       const credentials = createDeferred<{ accessKeyId: string; secretAccessKey: string }>();
       vi.spyOn(provider, 'getCredentials').mockReturnValueOnce(credentials.promise);
@@ -93,7 +97,7 @@ describe('SDK client lifecycle', () => {
       await cliState.withEnv({}, async () => {
         const pending = getClient();
         const namespace = Reflect.get(provider, 'responseCacheNamespace');
-        Reflect.set(provider, field, undefined);
+        Reflect.set(provider, field, value);
         try {
           expect(Reflect.get(provider, 'responseCacheNamespace')).not.toBe(namespace);
           const next = await getClient();

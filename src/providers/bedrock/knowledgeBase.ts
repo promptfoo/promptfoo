@@ -81,8 +81,8 @@ export class AwsBedrockKnowledgeBaseProvider
     return this.injectedClient ?? this.getClientState().client;
   }
   set knowledgeBaseClient(client: BedrockAgentRuntimeClient | undefined) {
-    this.injectedClient = client;
-    if (client === undefined) {
+    this.injectedClient = client || undefined;
+    if (!client) {
       this.getClientState.reset();
     }
   }
