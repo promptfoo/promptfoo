@@ -40,7 +40,7 @@ jobs:
 
           changed = subprocess.check_output([
               'git', 'diff', '--name-only', '-z', '--diff-filter=ACMR',
-              os.environ['BASE_SHA'], os.environ['HEAD_SHA'], '--', 'examples/',
+              os.environ['BASE_SHA'] + '...' + os.environ['HEAD_SHA'], '--', 'examples/',
           ]).decode().split('\0')
           manifests = sorted(path for path in changed if path and pathlib.Path(path).is_file()
               and (pathlib.Path(path).match('requirements*.txt')
@@ -87,7 +87,9 @@ jobs:
               # BERTScore needs CPU inference; do not download CUDA libraries in CI.
               command += ['--extra-index-url', 'https://download.pytorch.org/whl/cpu']
           if manifest.name == 'pyproject.toml':
-              command += tomllib.loads(manifest.read_text())['project']['dependencies']
+              project = tomllib.loads(manifest.read_text())['project']
+              extras = ','.join(project.get('optional-dependencies', {}))
+              command += ['.[' + extras + ']' if extras else '.']
           else:
               command += ['-r', str(manifest)]
           subprocess.run(command, cwd=manifest.parent, check=True)
