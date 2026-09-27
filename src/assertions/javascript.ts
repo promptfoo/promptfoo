@@ -1,6 +1,7 @@
 import { type GradingResult, isGradingResult } from '../types/index';
 import invariant from '../util/invariant';
 import { getProcessShim } from '../util/processShim';
+import { normalizeScriptAssertionResult } from './scriptResultNormalization';
 
 import type { AssertionParams } from '../types/index';
 
@@ -156,46 +157,17 @@ function normalizeJavascriptAssertionResult(
   renderedValue?: string,
 ): GradingResult {
   const normalizedAssertion = normalizeResultAssertion(undefined, assertion);
-  const getFailureReason = (rawPass: boolean) => {
-    return appendRenderedValueToReason(
-      `Custom function returned ${rawPass ? 'true' : 'false'}`,
-      renderedValue,
-    );
-  };
-
-  if (typeof result === 'boolean') {
-    const pass = result !== inverse;
-    return {
-      pass,
-      score: pass ? 1 : 0,
-      reason: pass ? 'Assertion passed' : getFailureReason(result),
-      assertion: normalizedAssertion,
-    };
-  }
-
-  if (typeof result === 'number') {
-    const rawPass = assertion.threshold === undefined ? result > 0 : result >= assertion.threshold;
-    const pass = rawPass !== inverse;
-    return {
-      pass,
-      score: result,
-      reason: pass ? 'Assertion passed' : getFailureReason(rawPass),
-      assertion: normalizedAssertion,
-    };
-  }
-
-  const pass = result.pass !== inverse;
-  return {
-    ...result,
-    pass,
-    reason:
-      pass === result.pass
-        ? result.reason
-        : pass
-          ? 'Assertion passed'
-          : `Custom function returned ${result.pass ? 'true' : 'false'}`,
-    assertion: normalizeResultAssertion(result.assertion, assertion),
-  };
+  const normalizedResult =
+    typeof result === 'object'
+      ? { ...result, assertion: normalizeResultAssertion(result.assertion, assertion) }
+      : result;
+  return normalizeScriptAssertionResult(
+    normalizedAssertion,
+    normalizedResult,
+    inverse,
+    { code: 'Custom function', language: 'JavaScript' },
+    renderedValue,
+  );
 }
 
 export const handleJavascript = async ({
