@@ -261,6 +261,9 @@
         "AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME": {
           "type": "string"
         },
+        "AZURE_STORAGE_CONNECTION_STRING": {
+          "type": "string"
+        },
         "AZURE_TENANT_ID": {
           "type": "string"
         },

@@ -762,11 +762,7 @@ tests: az://myaccount/evals/tests.json
 
 Use `az://<account>/<container>/<blob>`. Promptfoo supports CSV, JSON, JSONL, YAML, and YML test-set blobs. Blob names may keep the original extension and append a suffix, such as `tests.json.<sha256>`.
 
-Authentication uses the first available option:
-
-1. A SAS query string on the URI, such as `az://myaccount/evals/tests.json?<sas-token>`
-2. `AZURE_STORAGE_CONNECTION_STRING`
-3. Azure identity credentials through `DefaultAzureCredential`, such as Azure CLI login, managed identity, or service principal environment variables
+A SAS query string on the URI takes precedence. Otherwise, authentication comes from suite `env`, then invocation env files, then the shell. Within a scope, `AZURE_STORAGE_CONNECTION_STRING` takes precedence over service principal credentials. Without either, Promptfoo uses `DefaultAzureCredential`, such as Azure CLI login or managed identity.
 
 When using `AZURE_STORAGE_CONNECTION_STRING`, the storage account comes from the connection string. Keep the `az://` account segment aligned with that account so the URI remains self-describing; Promptfoo rejects clearly mismatched `AccountName` values. Query strings are interpreted as SAS tokens and must include `sig`.
 

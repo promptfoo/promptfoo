@@ -5,10 +5,10 @@ import { providerRegistry } from './providerRegistry';
 export function createEnvironmentScopedState<T>(
   create: () => T,
   cleanup?: (state: T) => void | Promise<void>,
-): () => T {
+): (() => T) & { reset: () => void } {
   const lifetimes = new WeakMap<object, WeakMap<object, T>>();
   const fallbackScope = {};
-  return () => {
+  const getState = () => {
     const scope = cliState.envScope ?? fallbackScope;
     const lifetime = providerRegistry.currentScope ?? scope;
     let states = lifetimes.get(lifetime);
@@ -26,7 +26,9 @@ export function createEnvironmentScopedState<T>(
           {
             async shutdown() {
               // New calls must not reuse a client whose shutdown has started.
-              states.delete(scope);
+              if (states.get(scope) === owned) {
+                states.delete(scope);
+              }
               await cleanup(owned);
             },
           },
@@ -36,4 +38,12 @@ export function createEnvironmentScopedState<T>(
     }
     return state;
   };
+  return Object.assign(getState, {
+    reset() {
+      const scope = cliState.envScope ?? fallbackScope;
+      const lifetime = providerRegistry.currentScope ?? scope;
+      // Retired clients retain cleanup ownership until the resource lifetime ends.
+      lifetimes.get(lifetime)?.delete(scope);
+    },
+  });
 }
