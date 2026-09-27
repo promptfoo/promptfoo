@@ -2,7 +2,6 @@ import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { toDataUri } from '../../util/dataUrl';
-import { resolveProviderApiKey } from '../credentials';
 import { getRequestTimeoutMs } from '../shared';
 import { GoogleAuthManager } from './auth';
 import {
@@ -118,11 +117,7 @@ export class GeminiImageProvider implements ApiProvider {
   }
 
   private getApiKey(): string | undefined {
-    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
-      'GOOGLE_API_KEY',
-      'GOOGLE_GENERATIVE_AI_API_KEY',
-      'GEMINI_API_KEY',
-    ]);
+    return GoogleAuthManager.getImageApiKey(this.config, this.env).apiKey;
   }
 
   /**

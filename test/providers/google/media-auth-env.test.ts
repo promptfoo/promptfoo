@@ -127,6 +127,12 @@ describe.each(routes)('%s authentication mode', (id, Provider, model) => {
     ['same-layer project', { ...lowerVertex, GOOGLE_API_KEY: 'fixture-key' }, {}, {}],
     ['explicit Vertex', { GOOGLE_API_KEY: 'fixture-key' }, lowerVertex, { vertexai: true }],
     ['empty key mask', { GOOGLE_API_KEY: '' }, { ...lowerVertex, GEMINI_API_KEY: 'lower-key' }, {}],
+    [
+      'blank key mask',
+      { GOOGLE_API_KEY: ' \t ' },
+      { ...lowerVertex, GEMINI_API_KEY: 'lower-key' },
+      {},
+    ],
   ] satisfies [string, EnvOverrides, EnvOverrides, ProviderOptions['config']][])(
     'preserves %s selection',
     async (_name, env, suite, config) => {
@@ -134,6 +140,23 @@ describe.each(routes)('%s authentication mode', (id, Provider, model) => {
         const provider = await loadApiProvider(id, { options: { env, config } });
         await expectRoute(provider, true);
       });
+    },
+  );
+
+  it.each(['direct', 'loaded'] as const)(
+    'uses a different usable alias after a blank key for a %s provider',
+    async (kind) => {
+      await cliState.withEnv(
+        { GOOGLE_API_KEY: 'masked-key', GEMINI_API_KEY: 'fixture-key' },
+        async () => {
+          const options = { env: { GOOGLE_API_KEY: ' \t ' } };
+          const provider =
+            kind === 'direct'
+              ? new Provider(model, options)
+              : await loadApiProvider(id, { options });
+          await expectRoute(provider, false);
+        },
+      );
     },
   );
 

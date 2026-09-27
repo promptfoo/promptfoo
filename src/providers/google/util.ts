@@ -1012,11 +1012,11 @@ export async function getGoogleAccessToken(
   credentials?: string,
   env?: EnvOverrides,
 ): Promise<string | undefined> {
+  const scopedAdc =
+    env?.GOOGLE_APPLICATION_CREDENTIALS ??
+    getEnvOverrides()?.GOOGLE_APPLICATION_CREDENTIALS ??
+    getEnvOverrides('file')?.GOOGLE_APPLICATION_CREDENTIALS;
   try {
-    const scopedAdc =
-      env?.GOOGLE_APPLICATION_CREDENTIALS ??
-      getEnvOverrides()?.GOOGLE_APPLICATION_CREDENTIALS ??
-      getEnvOverrides('file')?.GOOGLE_APPLICATION_CREDENTIALS;
     const resolvedCredentials = GoogleAuthManager.loadCredentials(credentials);
     const inputs = [
       resolvedCredentials,
@@ -1055,6 +1055,9 @@ export async function getGoogleAccessToken(
     const tokenResponse = await client.getAccessToken();
     return tokenResponse.token || undefined;
   } catch (error) {
+    if (scopedAdc !== undefined) {
+      throw error;
+    }
     logger.debug('[GoogleAuth] Could not get access token', {
       error: error instanceof Error ? error.message : String(error),
     });

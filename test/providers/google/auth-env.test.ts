@@ -61,6 +61,32 @@ afterEach(() => {
 });
 
 describe('Google scoped ADC inputs', () => {
+  it.each(['vertex:gemini-2.5-flash', 'google:live:gemini-3.8-live'])(
+    '%s retains lower ADC after a loaded higher blank key',
+    async (route) => {
+      const provider = await loadApiProvider(route, {
+        env: {
+          GOOGLE_APPLICATION_CREDENTIALS: 'scoped.json',
+          VERTEX_API_KEY: 'lower-vertex-key',
+          GEMINI_API_KEY: 'lower-studio-key',
+        },
+        options: { env: { GOOGLE_API_KEY: ' \t ' } },
+      });
+      if (provider instanceof VertexChatProvider) {
+        expect(provider.getApiKey()).toBeUndefined();
+        expect(await provider.getAuthHeaders()).not.toHaveProperty('x-goog-api-key');
+        await provider.getClientWithCredentials();
+      } else {
+        const result = await Reflect.get(provider, 'getConnection').call(provider, provider.config);
+        expect(new URL(result.url).searchParams.get('access_token')).toBe('scoped.json');
+        expect(new URL(result.url).searchParams.has('key')).toBe(false);
+      }
+      expect(GoogleAuth).toHaveBeenCalledWith(
+        expect.objectContaining({ keyFilename: 'scoped.json' }),
+      );
+    },
+  );
+
   it.each([
     ['provider Google mask', { GOOGLE_API_KEY: '' }, {}, { VERTEX_API_KEY: 'file-key' }],
     ['suite Google mask', {}, { GOOGLE_API_KEY: '' }, { VERTEX_API_KEY: 'file-key' }],
@@ -253,10 +279,40 @@ describe('Google scoped ADC inputs', () => {
       } as unknown as GoogleAuth;
     });
     await cliState.withEnv({ GOOGLE_APPLICATION_CREDENTIALS: 'scoped.json' }, async () => {
-      expect(await getGoogleAccessToken()).toBeUndefined();
+      await expect(getGoogleAccessToken()).rejects.toThrow('temporary credentials failure');
       expect(await getGoogleAccessToken()).toBe('scoped.json');
       expect(await getGoogleAccessToken()).toBe('scoped.json');
       expect(GoogleAuth).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it.each(['provider', 'suite', 'file'] as const)(
+    'preserves invalid %s ADC diagnostics for Live connections',
+    async (scope) => {
+      const { GoogleLiveProvider } = await import('../../../src/providers/google/live');
+      for (const [filename, error] of [
+        ['', 'Scoped GOOGLE_APPLICATION_CREDENTIALS is empty'],
+        ['missing.json', 'fixture absent'],
+      ]) {
+        const env = { GOOGLE_APPLICATION_CREDENTIALS: filename };
+        const provider = new GoogleLiveProvider('gemini-3.8-live', {
+          env: scope === 'provider' ? env : undefined,
+        });
+        await cliState.withEnvFileOverrides(scope === 'file' ? env : {}, () =>
+          cliState.withEnv(scope === 'suite' ? env : {}, async () => {
+            await expect(
+              Reflect.get(provider, 'getConnection').call(provider, provider.config),
+            ).rejects.toThrow(error);
+          }),
+        );
+      }
+    },
+  );
+
+  it('keeps ambient ADC discovery failures optional for Live', async () => {
+    mockProcessEnv({ GOOGLE_APPLICATION_CREDENTIALS: 'missing.json' });
+    await cliState.withEnv({}, async () => {
+      expect(await getGoogleAccessToken()).toBeUndefined();
     });
   });
 
@@ -265,9 +321,9 @@ describe('Google scoped ADC inputs', () => {
       expect(
         await getGoogleAccessToken(undefined, { GOOGLE_APPLICATION_CREDENTIALS: 'scoped.json' }),
       ).toBe('scoped.json');
-      expect(
-        await getGoogleAccessToken(undefined, { GOOGLE_APPLICATION_CREDENTIALS: '' }),
-      ).toBeUndefined();
+      await expect(
+        getGoogleAccessToken(undefined, { GOOGLE_APPLICATION_CREDENTIALS: '' }),
+      ).rejects.toThrow('Scoped GOOGLE_APPLICATION_CREDENTIALS is empty');
       expect(GoogleAuth).toHaveBeenCalledOnce();
     });
   });
@@ -279,9 +335,9 @@ describe('Google scoped ADC inputs', () => {
     });
     await cliState.withEnv({}, async () => {
       expect(await getGoogleAccessToken()).toBe('discovered');
-      expect(
-        await getGoogleAccessToken(undefined, { GOOGLE_APPLICATION_CREDENTIALS: '' }),
-      ).toBeUndefined();
+      await expect(
+        getGoogleAccessToken(undefined, { GOOGLE_APPLICATION_CREDENTIALS: '' }),
+      ).rejects.toThrow('Scoped GOOGLE_APPLICATION_CREDENTIALS is empty');
       expect(GoogleAuth).toHaveBeenCalledOnce();
     });
   });
