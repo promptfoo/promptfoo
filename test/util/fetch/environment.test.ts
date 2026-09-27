@@ -6,6 +6,7 @@ import cliState from '../../../src/cliState';
 import logger from '../../../src/logger';
 import { CreateJobRequestSchema } from '../../../src/types/api/eval';
 import { clearAgentCache, fetchWithProxy } from '../../../src/util/fetch/index';
+import { ProviderOptionsSchema } from '../../../src/validators/providers';
 import { mockProcessEnv, PROXY_ENV_KEYS } from '../utils';
 
 vi.mock('undici', () => {
@@ -157,6 +158,17 @@ describe('HTTP agent configuration ownership', () => {
           );
         },
       );
+    },
+  );
+
+  it.each(['REQUEST_TIMEOUT_MS', 'PROMPTFOO_FETCH_CONNECTIONS'])(
+    'keeps evaluation-only %s out of the provider contract',
+    (name) => {
+      const parsed = ProviderOptionsSchema.parse({
+        id: 'http',
+        env: { [name]: '3', OPENAI_API_KEY: 'fixture-key' },
+      });
+      expect(parsed.env).toEqual({ OPENAI_API_KEY: 'fixture-key' });
     },
   );
 

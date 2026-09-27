@@ -130,13 +130,15 @@ describe('proxy diagnostics', () => {
     },
   );
 
-  it.each(['suite', 'file'] as const)(
-    'redacts proxy credentials from %s diagnostics',
-    async (scope) => {
+  it.each(['suite', 'file'].flatMap((scope) => [false, true].map((opaque) => ({ scope, opaque }))))(
+    'redacts $scope proxy diagnostics (opaque=$opaque)',
+    async ({ scope, opaque }) => {
+      const token = `sk-${'x'.repeat(32)}`;
+      const proxy = opaque ? token : 'fixture-user:fixture-password@proxy.example:8080';
       const env = {
-        HTTP_PROXY: 'http://fixture-user:fixture-password@proxy.example:8080',
-        HTTPS_PROXY: 'http://fixture-user:fixture-password@proxy.example:8080',
-        ALL_PROXY: 'fixture-user:fixture-password@proxy.example:8080',
+        HTTP_PROXY: opaque ? proxy : `http://${proxy}`,
+        HTTPS_PROXY: opaque ? proxy : `http://${proxy}`,
+        ALL_PROXY: proxy,
       };
       vi.mocked(resolveConfigs).mockResolvedValue({
         config: { env },
@@ -159,7 +161,8 @@ describe('proxy diagnostics', () => {
       const debugOutput = JSON.stringify(capture.info.mock.calls);
       const healthOutput = JSON.stringify(capture.debug.mock.calls);
       for (const output of [debugOutput, healthOutput]) {
-        expect(output).toContain('proxy.example:8080');
+        expect(output).toContain(opaque ? '[REDACTED]' : 'proxy.example:8080');
+        expect(output).not.toContain(token);
         expect(output).not.toContain('fixture-user');
         expect(output).not.toContain('fixture-password');
       }
