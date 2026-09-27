@@ -791,7 +791,11 @@ async function runRedteamConversation({
         // Track the final prompt sent to target for UI display (e.g., fetchPrompt for indirect-web-pwn)
         lastFinalAttackPrompt = finalInjectVar;
 
-        const currentRenderInputVars: Record<string, string> = {};
+        // Build updated vars - handle multi-input mode
+        const updatedVars: Record<string, VarValue> = {
+          ...iterationVars,
+          [injectVar]: finalInjectVar,
+        };
 
         // If inputs is defined, extract individual keys from the attack prompt JSON
         if (inputs && Object.keys(inputs).length > 0) {
@@ -799,7 +803,7 @@ async function runRedteamConversation({
             try {
               const parsed = JSON.parse(newInjectVar);
               Object.assign(
-                currentRenderInputVars,
+                updatedVars,
                 buildRemoteMaterializedInputVariables(
                   { inputMaterialization, materializationHandled, materializedVars },
                   parsed,
@@ -820,25 +824,19 @@ async function runRedteamConversation({
                   provider: redteamProvider,
                   purpose: test?.metadata?.purpose as string | undefined,
                 });
-              Object.assign(currentRenderInputVars, localMaterializedVars);
+              Object.assign(updatedVars, localMaterializedVars);
             } catch {
               // If parsing fails, it's plain text - keep original vars
             }
           }
         }
 
-        const updatedVars: Record<string, VarValue> = {
-          ...iterationVars,
-          [injectVar]: finalInjectVar,
-          ...currentRenderInputVars,
-        };
-
         const targetPrompt = await renderPrompt(
           prompt,
           updatedVars,
           filters,
           targetProvider,
-          [injectVar, ...Object.keys(currentRenderInputVars)], // Keep generated fields literal.
+          [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
         );
 
         let targetResponse = await getTargetResponse(
@@ -1221,7 +1219,11 @@ async function runRedteamConversation({
     bestPrompt = extractedBestPrompt;
   }
 
-  const finalRenderInputVars: Record<string, string> = {};
+  // Build final vars - handle multi-input mode
+  const finalUpdatedVars: Record<string, VarValue> = {
+    ...vars,
+    [injectVar]: bestPrompt,
+  };
 
   // If inputs is defined, extract individual keys from the best prompt JSON
   if (inputs && Object.keys(inputs).length > 0) {
@@ -1235,7 +1237,7 @@ async function runRedteamConversation({
         };
         if (remoteBestNodeMaterialization.materializationHandled) {
           Object.assign(
-            finalRenderInputVars,
+            finalUpdatedVars,
             buildRemoteMaterializedInputVariables(remoteBestNodeMaterialization, parsed, inputs)
               .vars,
           );
@@ -1251,25 +1253,19 @@ async function runRedteamConversation({
             purpose: test?.metadata?.purpose as string | undefined,
           },
         );
-        Object.assign(finalRenderInputVars, materializedVars);
+        Object.assign(finalUpdatedVars, materializedVars);
       }
     } catch {
       // If parsing fails, it's plain text - keep original vars
     }
   }
 
-  const finalUpdatedVars: Record<string, VarValue> = {
-    ...vars,
-    [injectVar]: bestPrompt,
-    ...finalRenderInputVars,
-  };
-
   const finalTargetPrompt = await renderPrompt(
     prompt,
     finalUpdatedVars,
     filters,
     targetProvider,
-    [injectVar, ...Object.keys(finalRenderInputVars)], // Keep generated fields literal.
+    [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
   );
 
   const finalTargetResponse = await getTargetResponse(

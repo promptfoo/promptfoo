@@ -414,10 +414,6 @@ export async function runMetaAgentRedteam({
       ...iterationVars,
       [injectVar]: escapedAttackPrompt,
       ...(currentRenderInputVars || {}),
-      ...(perTurnLayers.length > 0 && {
-        // Function results become template source, so retain their existing escaping.
-        [injectVar]: prompt.function ? escapedAttackPrompt : finalAttackPrompt,
-      }),
     };
 
     const targetPrompt = await renderPrompt(
@@ -425,7 +421,7 @@ export async function runMetaAgentRedteam({
       updatedVars,
       filters,
       targetProvider,
-      [injectVar, ...Object.keys(currentRenderInputVars || {})], // Treat all generated fields as literal values.
+      [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
     );
 
     logger.debug('[IterativeMeta] Calling target with agent-generated prompt', {

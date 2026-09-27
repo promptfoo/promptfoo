@@ -5,7 +5,7 @@ import { addIterativeJailbreaks } from './iterative';
 import { withPersistableGenerationProvider } from './types';
 import { pluginMatchesStrategyTargets } from './util';
 
-import type { TestCase, TestCaseWithPlugin } from '../../types/index';
+import type { ProviderOptions, TestCase, TestCaseWithPlugin } from '../../types/index';
 import type { LayerConfig } from '../shared/runtimeTransform';
 import type { Strategy, StrategyRuntimeContext } from './types';
 
@@ -115,40 +115,52 @@ export async function addLayerTestCases(
         'promptfoo:redteam:iterative:meta',
         'promptfoo:redteam:iterative:tree',
       ].includes(providerId);
-      const options = {
-        scanId: crypto.randomUUID(),
-        ...(persistProvider
-          ? withPersistableGenerationProvider(stepObj.config || {}, runtimeContext)
-          : stepObj.config),
-        ...remoteGenerationContextPayload(
-          typeof config?.targetId === 'string' ? config.targetId : undefined,
-        ),
-        ...(perTurnLayers.length > 0 && { _perTurnLayers: perTurnLayers }),
-      };
-      const generated = await stepAction(
-        applicable.map((test) => (test.vars ? test : { ...test, vars: {} })),
-        injectVar,
-        options,
-        actionId,
-        runtimeContext,
-      );
+      const scanId = crypto.randomUUID();
       const label = typeof config?.label === 'string' ? config.label : undefined;
       const strategyId = getStrategyId(stepObj.id, perTurnLayers, label);
       const metricSuffix = getMetricSuffix(stepObj.id);
+      const action = stepAction;
 
-      return generated.map((test, index) => ({
-        ...test,
-        vars: applicable[index].vars,
-        assert: applicable[index].assert?.map((assertion) => ({
-          ...assertion,
-          metric: assertion.metric ? `${assertion.metric}/${metricSuffix}` : assertion.metric,
-        })),
-        metadata: {
-          ...test.metadata,
-          strategyId,
-          originalText: String(applicable[index].vars?.[injectVar] ?? ''),
-        },
-      }));
+      return Promise.all(
+        applicable.map(async (originalTest) => {
+          const options: Record<string, unknown> = {
+            scanId,
+            ...(persistProvider
+              ? withPersistableGenerationProvider(stepObj.config || {}, runtimeContext)
+              : stepObj.config),
+            ...remoteGenerationContextPayload(
+              typeof config?.targetId === 'string' ? config.targetId : undefined,
+            ),
+            ...(perTurnLayers.length > 0 && { _perTurnLayers: perTurnLayers }),
+          };
+          const [test] = await action(
+            [originalTest.vars ? originalTest : { ...originalTest, vars: {} }],
+            injectVar,
+            options,
+            actionId,
+            runtimeContext,
+          );
+          // Layers retain explicit step inputs; plugin metadata does not enable provider inputs.
+          const providerConfig = (test.provider as ProviderOptions).config!;
+          delete providerConfig.inputs;
+          if (Object.prototype.hasOwnProperty.call(options, 'inputs')) {
+            providerConfig.inputs = options.inputs;
+          }
+          return {
+            ...test,
+            vars: originalTest.vars,
+            assert: originalTest.assert?.map((assertion) => ({
+              ...assertion,
+              metric: assertion.metric ? `${assertion.metric}/${metricSuffix}` : assertion.metric,
+            })),
+            metadata: {
+              ...test.metadata,
+              strategyId,
+              originalText: String(originalTest.vars?.[injectVar] ?? ''),
+            },
+          };
+        }),
+      );
     }
 
     const stepConfig = { ...(stepObj.config || {}), ...(config || {}) };

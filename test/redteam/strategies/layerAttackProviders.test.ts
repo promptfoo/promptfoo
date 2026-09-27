@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Strategies } from '../../../src/redteam/strategies/index';
 
 import type { StrategyRuntimeContext } from '../../../src/redteam/strategies/types';
-import type { TestCaseWithPlugin } from '../../../src/types/index';
+import type { ProviderOptions, TestCaseWithPlugin } from '../../../src/types/index';
 
 const inputs = { query: 'User question', document: 'Untrusted document' };
 const example: TestCaseWithPlugin = {
@@ -45,15 +45,31 @@ describe('registered layer attack adapters', () => {
     'jailbreak:meta',
     'promptfoo:redteam:iterative:meta',
     'jailbreak:tree',
-  ])('preserves multi-input plugin context for %s', async (id) => {
+  ])('keeps metadata input schemas out of the provider configuration for %s', async (id) => {
     const result = await layer([example], { steps: [id] });
 
     expect(result).toHaveLength(1);
-    expect(result[0].provider).toEqual(
-      expect.objectContaining({ config: expect.objectContaining({ inputs }) }),
-    );
+    expect((result[0].provider as ProviderOptions).config?.inputs).toBeUndefined();
     expect(result[0].vars).toEqual(example.vars);
     expect(result[0].metadata?.pluginConfig).toEqual({ inputs });
+  });
+
+  it.each([
+    'hydra',
+    'goblin',
+    'crescendo',
+    'goat',
+    'jailbreak',
+    'jailbreak:meta',
+    'jailbreak:tree',
+  ])('preserves explicit step inputs ahead of metadata for %s', async (id) => {
+    const explicitInputs = { document: 'Explicit document' };
+    const [result] = await layer([example], {
+      steps: [{ id, config: { inputs: explicitInputs } }],
+    });
+    expect((result.provider as ProviderOptions).config?.inputs).toEqual(explicitInputs);
+    expect(result.metadata?.pluginConfig).toEqual({ inputs });
+    expect(result.vars).toEqual(example.vars);
   });
 
   it.each(['hydra', 'jailbreak:hydra', 'promptfoo:redteam:hydra'])(
@@ -70,6 +86,31 @@ describe('registered layer attack adapters', () => {
       expect(await layer([excluded], { steps: [id, 'audio'] })).toEqual([]);
     },
   );
+
+  it('evaluates JavaScript step config accessors once for each generated test', async () => {
+    let inputReads = 0;
+    let iterationReads = 0;
+    const config = {
+      get inputs() {
+        return { [`input${++inputReads}`]: 'Explicit input' };
+      },
+      get maxIterations() {
+        return ++iterationReads;
+      },
+    };
+    const results = await layer([example, example], {
+      steps: [{ id: 'jailbreak:meta', config }],
+    });
+
+    expect(inputReads).toBe(2);
+    expect(iterationReads).toBe(2);
+    expect(results.map((test) => (test.provider as ProviderOptions).config)).toEqual([
+      expect.objectContaining({ inputs: { input1: 'Explicit input' }, maxIterations: 1 }),
+      expect.objectContaining({ inputs: { input2: 'Explicit input' }, maxIterations: 2 }),
+    ]);
+    expect(crypto.randomUUID).toHaveBeenCalledTimes(1);
+    expect(Object.getOwnPropertyDescriptor(config, 'inputs')?.get).toBeTypeOf('function');
+  });
 
   it('honors an exclusion written using the configured step alias', async () => {
     const excluded = {
