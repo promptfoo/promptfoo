@@ -111,8 +111,10 @@
     "prepare": "husky || exit 0"
   },
   "overrides": {
+    "nunjucks": {
+      "chokidar": "$chokidar"
+    },
     "uri-js": "npm:uri-js-replace",
-    "chokidar": "5.0.0",
     "whatwg-url": "16.0.1",
     "esbuild": "0.28.2",
     "jsdom": {
@@ -160,7 +162,6 @@
     },
     "serialize-javascript": ">=7.0.5",
     "gaxios": "^8.0.0",
-    "https-proxy-agent": "^9.0.0",
     "ip-address": "10.7.2",
     "mongoose": {
       "gcp-metadata": "^9.0.2"
@@ -300,15 +301,8 @@
     "@openai/codex-security": "^0.1.28",
     "@opencode-ai/sdk": "^1.18.30",
     "@playwright/browser-chromium": "^1.63.0",
-    "@rollup/rollup-linux-x64-gnu": "^4.63.3",
     "@slack/web-api": "^8.1.1",
     "@smithy/node-http-handler": "^4.4.14",
-    "@swc/core": "^1.16.2",
-    "@swc/core-darwin-arm64": "^1.16.2",
-    "@swc/core-darwin-x64": "^1.16.2",
-    "@swc/core-linux-x64-gnu": "^1.16.2",
-    "@swc/core-linux-x64-musl": "^1.16.2",
-    "@swc/core-win32-x64-msvc": "^1.16.2",
     "google-auth-library": "^11.0.2",
     "hono": "^4.13.7",
     "ibm-cloud-sdk-core": "^5.6.2",
@@ -381,7 +375,7 @@
     "lru-cache": "^11.3.0",
     "minimatch": "^10.2.4",
     "nunjucks": "^3.2.4",
-    "openai": "^7.1.0",
+    "openai": "^7.20.0",
     "opener": "^1.5.2",
     "ora": "^9.3.0",
     "parse5": "^8.0.0",
@@ -391,7 +385,6 @@
     "proxy-from-env": "^2.1.0",
     "python-shell": "^5.0.0",
     "rfdc": "^1.4.1",
-    "rxjs": "^7.8.2",
     "saxes": "^6.0.0",
     "semver": "^7.7.4",
     "simple-git": "^3.33.0",
@@ -418,7 +411,6 @@
     "onlyBuiltDependencies": [
       "@huggingface/transformers",
       "@playwright/browser-chromium",
-      "@swc/core",
       "core-js",
       "core-js-pure",
       "esbuild",
