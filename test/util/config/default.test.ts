@@ -3,17 +3,14 @@ import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadDefaultConfig } from '../../../src/util/config/default';
 import { maybeReadConfig } from '../../../src/util/config/load';
-import { pathExists } from '../../../src/util/file';
 
 vi.mock('../../../src/util/config/load', () => ({
   maybeReadConfig: vi.fn(),
 }));
-vi.mock('../../../src/util/file', () => ({ pathExists: vi.fn() }));
 
 describe('loadDefaultConfig', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(pathExists).mockResolvedValue(true);
     vi.spyOn(process, 'cwd').mockImplementation(() => '/test/path');
   });
 
@@ -136,14 +133,6 @@ describe('loadDefaultConfig', () => {
     vi.mocked(maybeReadConfig).mockRejectedValue(new Error('Permission denied'));
 
     await expect(loadDefaultConfig()).rejects.toThrow('Permission denied');
-  });
-
-  it('preserves permission errors while checking candidate paths', async () => {
-    const error = Object.assign(new Error('Permission denied'), { code: 'EACCES' });
-    vi.mocked(pathExists).mockRejectedValue(error);
-
-    await expect(loadDefaultConfig()).rejects.toBe(error);
-    expect(maybeReadConfig).not.toHaveBeenCalled();
   });
 
   it('should handle various config names', async () => {

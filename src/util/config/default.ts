@@ -1,6 +1,5 @@
 import path from 'path';
 
-import { pathExists } from '../file';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
 import { maybeReadConfig } from './load';
 
@@ -28,9 +27,6 @@ export async function loadDefaultConfig(
 
   for (const ext of DEFAULT_CONFIG_EXTENSIONS) {
     const configPath = path.join(dir, `${configName}.${ext}`);
-    if (!(await pathExists(configPath))) {
-      continue;
-    }
     const maybeConfig = await maybeReadConfig(configPath);
     if (maybeConfig) {
       defaultConfig = maybeConfig;

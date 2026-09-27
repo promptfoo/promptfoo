@@ -145,13 +145,12 @@ declare const BUILD_FORMAT: 'esm' | 'cjs' | undefined;
 
 let tsxLoaderPromise: Promise<unknown> | undefined;
 
-async function ensureTypescriptLoader(modulePath: string): Promise<void> {
+export async function ensureTypescriptLoader(modulePath: string): Promise<void> {
   if (!/\.[cm]?ts$/.test(modulePath)) {
     return;
   }
 
   if (!tsxLoaderPromise) {
-    logger.debug('TypeScript module detected, registering tsx loader');
     // Use the same loader entrypoint as `NODE_OPTIONS=--import tsx` so package-less
     // providers can resolve extensionless transitive TypeScript imports.
     // @ts-ignore: tsx's loader entrypoint does not publish declaration files.
