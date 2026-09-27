@@ -17,7 +17,7 @@ import { LocalSpanExporter } from '../../src/tracing/localSpanExporter';
 import { initializeOtel, shutdownOtel, withOtelContext } from '../../src/tracing/otelSdk';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { createDeferred, mockProcessEnv } from '../util/utils';
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace-node';
 
 import type { CallApiContextParams } from '../../src/types/index';
 

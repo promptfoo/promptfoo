@@ -11,7 +11,7 @@ import { providerRegistry } from '../../src/providers/providerRegistry';
 import { LocalSpanExporter } from '../../src/tracing/localSpanExporter';
 import { initializeOtel, shutdownOtel, withOtelContext } from '../../src/tracing/otelSdk';
 import { mockProcessEnv } from '../util/utils';
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace-node';
 
 const mocks = vi.hoisted(() => ({
   spawn: vi.fn(),
