@@ -58,10 +58,10 @@
     "postcss": "^8.5.26",
     "posthog-js": "1.379.1",
     "prismjs": "^1.30.0",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
     "react-error-boundary": "^6.1.1",
-    "react-is": "^19.2.4",
+    "react-is": "^19.3.0",
     "react-markdown": "^10.1.0",
     "react-router": "^8.4.0",
     "react-simple-code-editor": "^0.14.1",
@@ -96,6 +96,6 @@
     "@radix-ui/react-switch": "^1.2.6",
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
-    "@tanstack/react-virtual": "^3.13.22"
+    "@tanstack/react-virtual": "^3.14.13"
   }
 }
