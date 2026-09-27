@@ -106,7 +106,7 @@ export function withProviderCallTracingContext<T>(
   return providerCallTracingContext.run(tracingContext, fn);
 }
 
-const providerCallQueues = new WeakMap<object, WeakMap<ApiProvider, Promise<void>>>();
+const providerCallQueues = new WeakMap<object, WeakMap<ApiProvider, Promise<number>>>();
 
 function providerAbortError(): DOMException {
   return new DOMException('Provider call cancelled', 'AbortError');
@@ -143,6 +143,7 @@ export async function callProviderWithContext(
   const callOptions = signal ? { ...options, abortSignal: signal } : options;
   const delay = getProviderDelay(provider);
   const handlesDelay = provider.handlesOwnDelay && provider.delay != null;
+  let nextStartAt = 0;
   const invoke = async () => {
     if (signal?.aborted) {
       throw providerAbortError();
@@ -155,7 +156,9 @@ export async function callProviderWithContext(
         )
       : await provider.callApi(prompt, context, callOptions);
     if (!response.cached && !handlesDelay && delay && delay > 0) {
+      nextStartAt = Date.now() + delay;
       await (signal ? sleepWithAbort(delay, signal) : sleep(delay));
+      nextStartAt = 0;
     }
     const scopedDelay = executionContext?.providerDelay;
     if (scopedDelay?.provider === provider && scopedDelay.state) {
@@ -178,14 +181,22 @@ export async function callProviderWithContext(
     queues = new WeakMap();
     providerCallQueues.set(scope, queues);
   }
-  const result = (queues.get(queueKey) ?? Promise.resolve()).then(invoke);
+  const result = (queues.get(queueKey) ?? Promise.resolve(0)).then(async (previousDeadline) => {
+    // Cancellation ends this caller's wait, but the next live call still owes the interval.
+    nextStartAt = previousDeadline;
+    const remaining = nextStartAt - Date.now();
+    if (remaining > 0) {
+      await (signal ? sleepWithAbort(remaining, signal) : sleep(remaining));
+    }
+    return invoke();
+  });
   const tail = result.then(
-    () => {},
-    () => {},
+    () => nextStartAt,
+    () => nextStartAt,
   );
   queues.set(queueKey, tail);
-  void tail.then(() => {
-    if (queues.get(queueKey) === tail) {
+  void tail.then((deadline) => {
+    if (queues.get(queueKey) === tail && deadline <= Date.now()) {
       queues.delete(queueKey);
     }
   });
