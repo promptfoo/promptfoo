@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 
-import { transformSync } from '@swc/core';
+import { transformSync } from 'esbuild';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockProcessEnv } from '../util/utils';
 
@@ -29,12 +29,10 @@ function loadExample(file: string): new (options: ProviderOptions) => ApiProvide
   const filename = path.resolve('examples/provider-custom', file);
   const source = fs.readFileSync(filename, 'utf8');
   const { code } = transformSync(source, {
-    filename,
-    jsc: {
-      parser: { syntax: file.endsWith('.ts') ? 'typescript' : 'ecmascript' },
-      target: 'es2022',
-    },
-    module: { type: 'commonjs' },
+    sourcefile: filename,
+    loader: file.endsWith('.ts') ? 'ts' : 'js',
+    target: 'es2022',
+    format: 'cjs',
   });
   const exports = {};
   const module = { exports };
@@ -48,17 +46,13 @@ function loadExample(file: string): new (options: ProviderOptions) => ApiProvide
     },
     require: (name: string) => {
       expect(name).toBe('promptfoo');
-      return {
-        __esModule: true,
-        default: {
-          cache: {
-            fetchWithCache: async (...args: unknown[]) => {
-              request(...args);
-              return { data: response };
-            },
-          },
+      const cache = {
+        fetchWithCache: async (...args: unknown[]) => {
+          request(...args);
+          return { data: response };
         },
       };
+      return { __esModule: true, cache, default: { cache } };
     },
   });
   return (
