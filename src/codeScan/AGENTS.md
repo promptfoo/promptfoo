@@ -12,6 +12,8 @@ access through MCP, GitHub PR context, and the hosted scanner service.
 - Keep filesystem MCP roots absolute and normalized. Do not widen the root beyond the
   repository being scanned, and always stop child processes on success, failure, or
   abort.
+- On Windows, launch trusted npm JS entrypoints through Node or use a trusted native
+  executable. Never enable a shell around repository-controlled paths.
 - Preserve npm/npx environment sanitization when spawning tool installers or MCP
   servers. When adding install paths, make the registry/cwd/env explicit and cover
   PR-controlled npm config in tests.
