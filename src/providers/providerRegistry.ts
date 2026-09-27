@@ -115,8 +115,13 @@ class ProviderRegistry {
       const results = await Promise.allSettled([
         ...(previousShutdown ? [previousShutdown] : []),
         ...providers.map(async (provider) => {
-          await provider.shutdown();
-          this.beforeExitAttempts.delete(provider);
+          try {
+            await provider.shutdown();
+            this.beforeExitAttempts.delete(provider);
+          } catch (error) {
+            this.providers.add(provider);
+            throw error;
+          }
         }),
       ]);
 

@@ -55,7 +55,6 @@ describe('provider registry signal ownership', () => {
       shutdown: vi.fn(async () => {
         await Promise.resolve();
         if (rejectCleanup) {
-          registry.register(provider);
           throw new Error('cleanup failed');
         }
       }),
@@ -82,7 +81,6 @@ describe('provider registry signal ownership', () => {
   it('gives a new owner beforeExit cleanup after an earlier owner failed', async () => {
     const failed = {
       shutdown: vi.fn(async () => {
-        registry.register(failed);
         throw new Error('cleanup failed');
       }),
     };
@@ -101,6 +99,30 @@ describe('provider registry signal ownership', () => {
     expect(failed.shutdown).toHaveBeenCalledOnce();
     registry.unregister(failed);
   });
+
+  it.each(['synchronous', 'asynchronous'])(
+    'retains a failed %s signal owner for explicit cleanup without self-registration',
+    async (failure) => {
+      const provider = {
+        shutdown: vi
+          .fn()
+          .mockImplementationOnce(() => {
+            if (failure === 'synchronous') {
+              throw new Error('owned cleanup failure');
+            }
+            return Promise.reject(new Error('owned cleanup failure'));
+          })
+          .mockResolvedValue(undefined),
+      };
+      registry.register(provider);
+      const signal = addedListeners('SIGTERM')[0];
+      signal();
+      await vi.waitFor(() => expect(addedListeners('SIGTERM')[0]).not.toBe(signal));
+      await registry.shutdownAll();
+      expect(provider.shutdown).toHaveBeenCalledTimes(2);
+      expect(addedListeners('SIGTERM')).toHaveLength(0);
+    },
+  );
 
   it('removes only its own listeners when the last provider unregisters and rearms on reuse', () => {
     const hostListener = vi.fn();

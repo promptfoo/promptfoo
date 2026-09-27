@@ -57,13 +57,14 @@ export class PythonWorker {
     );
     startup.signal.throwIfAborted();
 
-    this.process = new PythonShell(wrapperPath, {
+    const workerProcess = new PythonShell(wrapperPath, {
       mode: 'text',
       pythonPath: resolvedPythonPath,
       env: getProcessEnv(),
       args: [this.scriptPath, this.functionName],
       stdio: ['pipe', 'pipe', 'pipe'],
     });
+    this.process = workerProcess;
 
     // Listen for READY signal
     return new Promise((resolve, reject) => {
@@ -91,7 +92,10 @@ export class PythonWorker {
       };
       startup.signal.addEventListener('abort', cancelStartup, { once: true });
 
-      this.process!.on('message', (message: string) => {
+      workerProcess.on('message', (message: string) => {
+        if (this.process !== workerProcess) {
+          return;
+        }
         if (message.trim() === 'READY') {
           finishStartup();
           this.ready = true;
@@ -110,19 +114,26 @@ export class PythonWorker {
         finishStartup();
         reject(err);
       };
-      this.process!.on('error', startupError);
-      this.process!.on('pythonError', startupError);
+      workerProcess.on('error', startupError);
+      workerProcess.on('pythonError', startupError);
 
-      this.process!.on('close', () => {
+      workerProcess.on('close', () => {
+        if (this.process !== workerProcess) {
+          return;
+        }
+        // This child has actually closed. Cleanup must not await another close,
+        // and late events from it must not affect a replacement child.
+        this.process = null;
         this.flushStderr();
         if (!this.ready) {
           startupError(new Error('Worker exited before becoming ready'));
-        } else if (!this.shuttingDown) {
+        }
+        if (!this.shuttingDown && (this.ready || this.crashCount > 0)) {
           this.handleCrash();
         }
       });
 
-      this.process!.stderr?.on('data', (data) => {
+      workerProcess.stderr?.on('data', (data) => {
         this.handleStderr(data);
       });
     });
