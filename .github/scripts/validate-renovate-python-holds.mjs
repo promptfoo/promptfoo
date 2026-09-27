@@ -8,13 +8,24 @@ import { pathToFileURL } from 'node:url';
 const renovateDir = process.argv[2];
 assert.ok(renovateDir, 'Pass the installed Renovate package directory');
 const load = (file) => import(pathToFileURL(path.resolve(renovateDir, 'dist', file)).href);
-const [{ migrateConfig }, { extractPackageFile }, { applyPackageRules }, { api: pep440 }] =
-  await Promise.all([
-    load('config/migration.js'),
-    load('modules/manager/pip_requirements/extract.js'),
-    load('util/package-rules/index.js'),
-    load('modules/versioning/pep440/index.js'),
-  ]);
+const [
+  { migrateConfig },
+  { extractPackageFile },
+  { applyPackageRules },
+  { api: pep440 },
+  { regexEngineStatus },
+] = await Promise.all([
+  load('config/migration.js'),
+  load('modules/manager/pip_requirements/extract.js'),
+  load('util/package-rules/index.js'),
+  load('modules/versioning/pep440/index.js'),
+  load('util/regex.js'),
+]);
+assert.equal(
+  regexEngineStatus.type,
+  'available',
+  'Install native RE2 so validation uses the same regex engine as Renovate',
+);
 
 const configFile = process.argv[3] ?? new URL('../../renovate.json', import.meta.url);
 const config = JSON.parse(await readFile(configFile, 'utf8'));

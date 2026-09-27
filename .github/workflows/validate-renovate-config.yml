@@ -38,7 +38,7 @@ jobs:
       - name: Install Renovate validation tools
         run: >-
           npm install --prefix "$RUNNER_TEMP/renovate-tool"
-          --ignore-scripts --no-package-lock --no-audit --no-fund
+          --no-package-lock --no-audit --no-fund
           --registry=https://registry.npmjs.org/ renovate@44.90.0
 
       - name: Validate renovate.json
