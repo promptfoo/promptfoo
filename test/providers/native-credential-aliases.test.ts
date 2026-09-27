@@ -57,6 +57,36 @@ describe('native credential alias scopes', () => {
     );
   });
 
+  describe.each(routes.filter(([route]) => route.startsWith('replicate:')))(
+    '%s credential masks',
+    (route) => {
+      it.each([
+        [{ REPLICATE_API_KEY: '', REPLICATE_API_TOKEN: '' }, undefined],
+        [{ REPLICATE_API_TOKEN: '' }, 'host-key'],
+        [{ REPLICATE_API_KEY: '' }, 'host-token'],
+        [
+          { REPLICATE_API_KEY: 'provider-key', REPLICATE_API_TOKEN: 'provider-token' },
+          'provider-key',
+        ],
+        [{}, 'host-token'],
+      ])('preserves per-name masks and legacy alias order: %j', async (env, expected) => {
+        mockProcessEnv({ REPLICATE_API_KEY: 'host-key', REPLICATE_API_TOKEN: 'host-token' });
+        const provider = await loadApiProvider(route, {
+          options: ProviderOptionsSchema.parse({ env }),
+        });
+        expect(apiKey(provider)).toBe(expected);
+      });
+
+      it('does not revive the only available host alias after an empty mask', async () => {
+        mockProcessEnv({ REPLICATE_API_KEY: 'host-key' });
+        const provider = await loadApiProvider(route, {
+          options: ProviderOptionsSchema.parse({ env: { REPLICATE_API_KEY: '' } }),
+        });
+        expect(apiKey(provider)).toBeUndefined();
+      });
+    },
+  );
+
   it.each(['chat', 'completion', 'embedding'])(
     'reuses an unbound Nscale %s provider across native credential aliases',
     async (mode) => {
