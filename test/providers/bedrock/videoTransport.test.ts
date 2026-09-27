@@ -17,6 +17,14 @@ import { NovaReelVideoProvider } from '../../../src/providers/bedrock/nova-reel'
 import type { CallApiContextParams } from '../../../src/types/providers';
 
 vi.mock('../../../src/blobs', () => ({ storeBlob: vi.fn() }));
+vi.mock('path', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('path')>();
+  return { ...actual, resolve: vi.fn(actual.resolve), normalize: vi.fn(actual.normalize) };
+});
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return { ...actual, existsSync: vi.fn(actual.existsSync) };
+});
 
 describe.each([
   { Provider: LumaRayVideoProvider, label: 'Luma Ray', limit: 600000, imageKey: 'startImage' },
@@ -29,6 +37,9 @@ describe.each([
   };
 
   beforeEach(() => {
+    vi.mocked(path.resolve).mockReset();
+    vi.mocked(path.normalize).mockReset();
+    vi.mocked(fs.existsSync).mockReset();
     vi.useFakeTimers();
     directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-video-'));
     vi.mocked(storeBlob)
@@ -127,6 +138,24 @@ describe.each([
     expect(bedrock).toHaveBeenCalledTimes(1 + limit / 10000);
     expect(credentials).toHaveBeenCalledTimes(2);
   });
+
+  it.each(['//./..', '//?/..'])(
+    'preserves Windows namespace-root rejection for %s before filesystem access',
+    async (imagePath) => {
+      const { provider, bedrock } = setup({ [imageKey]: `file://${imagePath}` });
+      vi.mocked(path.resolve).mockImplementation(path.win32.resolve);
+      vi.mocked(path.normalize).mockImplementation(path.win32.normalize);
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+
+      const response = await provider.callApi('video');
+
+      expect(response.error).toContain(
+        `Invalid image path (path traversal detected): ${imagePath}`,
+      );
+      expect(fs.existsSync).not.toHaveBeenCalled();
+      expect(bedrock).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([1, 2, 3])(
     'keeps credential failure %i inside its operation error boundary',
