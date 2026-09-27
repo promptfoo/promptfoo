@@ -102,6 +102,7 @@ describeEvaluator('optional derived metric dependency', () => {
           clearTimeout(setTimeoutSpy.mock.results[index].value);
         }
       });
+      vi.restoreAllMocks();
       vi.useRealTimers();
     }
   });
