@@ -652,6 +652,37 @@ describe('OpenAICodexSecurityProvider', () => {
       return handle;
     }
 
+    it.each(['completed', 'failed'])(
+      'counts a %s report import as a logical invocation without incurring a model request',
+      async (status) => {
+        const raw = createScanResult().toJSON();
+        const { file } = await saveReport({
+          ...raw,
+          manifest: { ...raw.manifest, scan: { ...raw.manifest.scan, status } },
+        });
+        const response = await new OpenAICodexSecurityProvider({
+          config: { report_file: file },
+        }).callApi('Import');
+        const usage = createEmptyTokenUsage();
+
+        accumulateResponseTokenUsage(usage, response);
+
+        expect(usage).toMatchObject({
+          total: 0,
+          numRequests: 1,
+          incurredTokenUsage: { total: 0, numRequests: 0 },
+        });
+        expect(response.tokenUsage).toEqual({ incurredTokenUsage: { numRequests: 0 } });
+        expect(response.incurredCost).toBe(0);
+        expect(response.metadata?.codexSecurity).toMatchObject({
+          status,
+          cost: { baselineUsd: 0.012 },
+          usage: { total: 140 },
+        });
+        expect(importModule).not.toHaveBeenCalled();
+      },
+    );
+
     it('replays runtime-only evidence without duplicating the canonical payload in metadata', async () => {
       vi.mocked(resolvePackageEntryPoint).mockReturnValue(
         '/packages/@openai/codex-security/dist/index.js',
@@ -692,7 +723,7 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(imported.incurredCost).toBe(0);
       expect(imported.retryable).toBe(false);
       expect(imported.cost).toBeUndefined();
-      expect(imported.tokenUsage).toBeUndefined();
+      expect(imported.tokenUsage).toEqual({ incurredTokenUsage: { numRequests: 0 } });
       expect(importModule).not.toHaveBeenCalled();
     });
 
@@ -732,7 +763,7 @@ describe('OpenAICodexSecurityProvider', () => {
         expect(imported.raw).toBeUndefined();
         expect(imported.incurredCost).toBe(0);
         expect(imported.cost).toBeUndefined();
-        expect(imported.tokenUsage).toBeUndefined();
+        expect(imported.tokenUsage).toEqual({ incurredTokenUsage: { numRequests: 0 } });
         expect(imported.metadata?.codexSecurity).toMatchObject({
           status: cancel ? 'canceled' : 'failed',
           findings: null,
@@ -782,7 +813,7 @@ describe('OpenAICodexSecurityProvider', () => {
             result: imported.metadata?.codexSecurity,
           });
           expect(imported.cost).toBeUndefined();
-          expect(imported.tokenUsage).toBeUndefined();
+          expect(imported.tokenUsage).toEqual({ incurredTokenUsage: { numRequests: 0 } });
           expect(call).toHaveBeenCalledOnce();
           expect(importModule).not.toHaveBeenCalled();
           expect(Object.values(registry.getMetrics())[0]).toMatchObject({
@@ -810,6 +841,7 @@ describe('OpenAICodexSecurityProvider', () => {
           error: expect.stringContaining('missing-429.json'),
           retryable: false,
           incurredCost: 0,
+          tokenUsage: { incurredTokenUsage: { numRequests: 0 } },
           metadata: { codexSecurity: { source: { kind: 'saved-report' }, status: 'failed' } },
         });
         expect(open).toHaveBeenCalledOnce();
@@ -831,6 +863,7 @@ describe('OpenAICodexSecurityProvider', () => {
       const failed = await provider.checkSetup({ ...context, vars: {} });
       expect(failed.response).toMatchObject({
         incurredCost: 0,
+        tokenUsage: { incurredTokenUsage: { numRequests: 0 } },
         metadata: {
           codexSecurity: {
             source: { kind: 'saved-report' },
@@ -857,7 +890,7 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(response.raw).toEqual(raw);
       expect(response).toMatchObject({ format: 'json', incurredCost: 0 });
       expect(response.cost).toBeUndefined();
-      expect(response.tokenUsage).toBeUndefined();
+      expect(response.tokenUsage).toEqual({ incurredTokenUsage: { numRequests: 0 } });
       expect(response.latencyMs).toBeUndefined();
       expect(response.metadata?.codexSecurity).toMatchObject({
         source: {
@@ -969,6 +1002,7 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(response.error).toContain(`configuration: ${field}`);
       expect(response).toMatchObject({
         incurredCost: 0,
+        tokenUsage: { incurredTokenUsage: { numRequests: 0 } },
         metadata: { codexSecurity: { source: { kind: 'saved-report' }, status: 'failed' } },
       });
       expect(importModule).not.toHaveBeenCalled();
@@ -986,6 +1020,7 @@ describe('OpenAICodexSecurityProvider', () => {
         expect(response.error).toBeDefined();
         expect(response).toMatchObject({
           incurredCost: 0,
+          tokenUsage: { incurredTokenUsage: { numRequests: 0 } },
           metadata: { codexSecurity: { source: { kind: 'saved-report' }, status: 'failed' } },
         });
         expect(response.metadata?.codexSecurity?.operation).toBeNull();
@@ -1071,7 +1106,7 @@ describe('OpenAICodexSecurityProvider', () => {
         elapsedMs: null,
       });
       expect(response.cost).toBeUndefined();
-      expect(response.tokenUsage).toBeUndefined();
+      expect(response.tokenUsage).toEqual({ incurredTokenUsage: { numRequests: 0 } });
       expect(response.latencyMs).toBeUndefined();
     });
 
@@ -1193,6 +1228,7 @@ describe('OpenAICodexSecurityProvider', () => {
       }).callApi('Compare');
 
       expect(response.error).toBeTruthy();
+      expect(response.tokenUsage).toEqual({ incurredTokenUsage: { numRequests: 0 } });
       expect(response.output).toBeUndefined();
       expect(response.metadata?.codexSecurity).toMatchObject({
         source: { kind: 'saved-report', file },
@@ -1211,6 +1247,7 @@ describe('OpenAICodexSecurityProvider', () => {
       }).callApi('Compare');
 
       expect(response.error).toBeTruthy();
+      expect(response.tokenUsage).toEqual({ incurredTokenUsage: { numRequests: 0 } });
       expect(response.metadata?.codexSecurity?.source.kind).toBe('saved-report');
       expect(mockRun).not.toHaveBeenCalled();
       expect(importModule).not.toHaveBeenCalled();
@@ -1254,6 +1291,7 @@ describe('OpenAICodexSecurityProvider', () => {
           config: { report_file: file },
         }).callApi('Compare');
         expect(response.error).toBeTruthy();
+        expect(response.tokenUsage).toEqual({ incurredTokenUsage: { numRequests: 0 } });
         expect(response.metadata?.codexSecurity).toMatchObject({
           source: { kind: 'saved-report', file },
           status: 'failed',
@@ -1361,6 +1399,7 @@ describe('OpenAICodexSecurityProvider', () => {
             : await provider.callApi('Compare', undefined, { abortSignal: controller.signal });
 
         expect(response.error).toContain('aborted');
+        expect(response.tokenUsage).toEqual({ incurredTokenUsage: { numRequests: 0 } });
         expect(response.metadata?.codexSecurity).toMatchObject({
           status: 'canceled',
           source: { kind: 'saved-report' },
@@ -1385,6 +1424,8 @@ describe('OpenAICodexSecurityProvider', () => {
       }).checkSetup(undefined, { abortSignal: controller.signal });
 
       expect(response.error).toContain('aborted');
+      expect(response.tokenUsage).toEqual({ incurredTokenUsage: { numRequests: 0 } });
+      expect(setup.response?.tokenUsage).toEqual({ incurredTokenUsage: { numRequests: 0 } });
       expect(setup.response?.metadata?.codexSecurity).toMatchObject({
         status: 'canceled',
         source: { kind: 'saved-report' },
