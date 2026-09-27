@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 
-import { and, count, eq, gte, inArray, lt, ne } from 'drizzle-orm';
+import { and, count, eq, gte, inArray, lt, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { extractBlobHashesFromValue } from '../blobs/blobRefs';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
@@ -1991,7 +1991,7 @@ export default class EvalResult {
   failureReason: ResultFailureReason;
   persisted: boolean;
   pluginId?: string;
-  #manualRatingState?: ManualRatingState;
+  #legacyComparisonCount?: number;
 
   constructor(opts: {
     id: string;
@@ -2038,17 +2038,15 @@ export default class EvalResult {
       traceId: this.traceId,
       evaluationId: this.evaluationId,
     } = surfaceTraceMetadata(opts.metadata));
-    this.#manualRatingState =
+    const manualRatingState =
       opts.persisted === true ? parseManualRatingState(opts.manualRatingState) : undefined;
     if (
-      this.#manualRatingState?.status === 'active' &&
-      this.#manualRatingState.original.comparisonCount === undefined
+      manualRatingState?.status === 'active' &&
+      manualRatingState.original.comparisonCount === undefined
     ) {
       // Historical states cannot distinguish comparisons already in their snapshot. Start
       // at the loaded boundary so future evaluator appends still participate in a clear.
-      this.#manualRatingState.original.comparisonCount = getCompletedComparisons(
-        this.gradingResult,
-      ).length;
+      this.#legacyComparisonCount = getCompletedComparisons(this.gradingResult).length;
     }
     this.failureReason = isResultFailureReason(opts.failureReason)
       ? opts.failureReason
@@ -2067,17 +2065,31 @@ export default class EvalResult {
     const persistedValues = {
       ...rest,
       metadata: persistTraceMetadata(this.metadata, this.traceId, this.evaluationId),
-      manualRatingState: this.#manualRatingState ?? null,
     };
     //check if this exists in the db
     if (this.persisted) {
       await db
         .update(evalResultsTable)
-        .set({ ...persistedValues, updatedAt: getCurrentTimestamp() })
+        .set({
+          ...persistedValues,
+          // Rating transactions own the baseline. Only initialize a missing historical
+          // comparison boundary, without replacing any concurrently updated state.
+          ...(this.#legacyComparisonCount !== undefined && {
+            manualRatingState: sql`
+              CASE WHEN json_extract(${evalResultsTable.manualRatingState}, '$.status') = 'active'
+                THEN json_insert(${evalResultsTable.manualRatingState}, '$.original.comparisonCount', ${this.#legacyComparisonCount})
+                ELSE ${evalResultsTable.manualRatingState}
+              END`,
+          }),
+          updatedAt: getCurrentTimestamp(),
+        })
         .where(eq(evalResultsTable.id, this.id))
         .run();
     } else {
-      const result = await db.insert(evalResultsTable).values(persistedValues).returning();
+      const result = await db
+        .insert(evalResultsTable)
+        .values({ ...persistedValues, manualRatingState: null })
+        .returning();
       this.id = result[0].id;
       this.persisted = true;
     }

@@ -1936,8 +1936,9 @@ function ResultsTable({
         if (edit.visible === optimisticOutput) {
           edit.visible = persistedOutput;
         }
-        const latestTable = useTableStore.getState().table;
-        if (isScopeActive() && latestTable) {
+        // The shared table still belongs to this eval when its Results tab is unmounted.
+        const { table: latestTable, evalId: latestEvalId } = useTableStore.getState();
+        if (latestEvalId === evalId && getApiBaseUrl() === apiBaseUrl && latestTable) {
           const latestLocation = findRatingOutput(latestTable, cellKey);
           if (latestLocation?.output === optimisticOutput) {
             setTable(replaceRatingOutput(latestTable, cellKey, persistedOutput));

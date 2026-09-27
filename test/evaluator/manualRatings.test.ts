@@ -2,7 +2,10 @@ import './setup';
 
 import { randomUUID } from 'crypto';
 
+import { eq, sql } from 'drizzle-orm';
 import { expect, it, vi } from 'vitest';
+import { getDb } from '../../src/database';
+import { evalResultsTable } from '../../src/database/tables';
 import { evaluate } from '../../src/evaluator';
 import * as comparisons from '../../src/matchers/comparison';
 import Eval from '../../src/models/eval';
@@ -85,6 +88,23 @@ describeEvaluator('manual ratings during deferred comparison grading', () => {
       retainedScore: 0.55,
     },
     {
+      name: 'new baseline during comparison',
+      compare: ['select-best'],
+      comparisonPass: true,
+      custom: true,
+      fail: true,
+      retainedScoreDuringGrading: 0.55,
+    },
+    {
+      name: 'new baseline during comparison with historical state',
+      compare: ['select-best'],
+      comparisonPass: true,
+      custom: true,
+      fail: true,
+      retainedScoreDuringGrading: 0.55,
+      oldState: true,
+    },
+    {
       name: 'execution error and loser',
       compare: ['select-best'],
       comparisonPass: false,
@@ -95,14 +115,33 @@ describeEvaluator('manual ratings during deferred comparison grading', () => {
       type === 'max-score'
         ? (scenario.maxPass ?? scenario.comparisonPass)
         : scenario.comparisonPass;
-    const selectBest = vi.spyOn(comparisons, 'matchesSelectBest').mockResolvedValue([
-      {
-        pass: scenario.comparisonPass,
-        score: scenario.comparisonPass ? 1 : 0.3,
-        reason: 'Select-best outcome',
-      },
-      { pass: true, score: 1, reason: 'Other result' },
-    ]);
+    const selectBest = vi.spyOn(comparisons, 'matchesSelectBest').mockImplementation(async () => {
+      // The evaluator has loaded its result instances before awaiting the comparison grader.
+      if (scenario.retainedScoreDuringGrading !== undefined) {
+        for (const [ratingAction, score] of [
+          ['clear', 1],
+          ['update', scenario.retainedScoreDuringGrading],
+          ['rate', 1],
+        ] as const) {
+          const rating = await EvalResult.submitRating(
+            evalRecord.id,
+            ratedId!,
+            { pass: true, score, reason: 'Edit while comparison grader is pending' },
+            ratingAction,
+            ratingAction === 'update' ? 'score' : undefined,
+          );
+          expect(rating.status).toBe('updated');
+        }
+      }
+      return [
+        {
+          pass: scenario.comparisonPass,
+          score: scenario.comparisonPass ? 1 : 0.3,
+          reason: 'Select-best outcome',
+        },
+        { pass: true, score: 1, reason: 'Other result' },
+      ];
+    });
     const maxScore = vi.spyOn(comparisons, 'selectMaxScore').mockResolvedValue([
       {
         pass: comparisonPass('max-score'),
@@ -191,6 +230,14 @@ describeEvaluator('manual ratings during deferred comparison grading', () => {
         'rate',
       );
       expect(rating.status).toBe('updated');
+      if (scenario.oldState) {
+        await (await getDb())
+          .update(evalResultsTable)
+          .set({
+            manualRatingState: sql`json_remove(${evalResultsTable.manualRatingState}, '$.original.comparisonCount')`,
+          })
+          .where(eq(evalResultsTable.id, result.id));
+      }
     });
     try {
       await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
@@ -258,6 +305,7 @@ describeEvaluator('manual ratings during deferred comparison grading', () => {
       const expectedPass = baselinePass && scenario.compare.every(comparisonPass);
       const lastFailure = scenario.compare.filter((type) => !comparisonPass(type)).at(-1);
       const expectedScore =
+        scenario.retainedScoreDuringGrading ??
         scenario.retainedScore ??
         (lastFailure === undefined ? baselineScore : lastFailure === 'max-score' ? 0.2 : 0.3);
       expect(result).toMatchObject({

@@ -5077,49 +5077,6 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     consoleError.mockRestore();
   });
 
-  it('does not reconcile a rating through an unmounted component', async () => {
-    const user = userEvent.setup();
-    const mockTable = createMockTableWithHumanAssertion();
-
-    const { response, resolve: resolveResponse } = deferRatingResponse();
-    mockCallApi.mockReturnValueOnce(response);
-
-    vi.mocked(useTableStore).mockImplementation(() => ({
-      config: {},
-      evalId: '123',
-      inComparisonMode: false,
-      setTable: mockSetTable,
-      table: mockTable,
-      version: 4,
-      renderMarkdown: true,
-      fetchEvalData: vi.fn(),
-      isFetching: false,
-      filteredResultsCount: 1,
-      filters: { values: {}, appliedCount: 0, options: { metric: [] } },
-    }));
-
-    const rendered = renderWithProviders(<ResultsTable {...defaultProps} />);
-    await user.click(screen.getByRole('button', { name: 'Clear rating' }));
-    expect(mockSetTable).toHaveBeenCalledTimes(1);
-    rendered.unmount();
-    await act(async () => {
-      resolveResponse({
-        ok: true,
-        json: vi.fn().mockResolvedValue({
-          id: 'test-output-1',
-          success: false,
-          score: 0.35,
-          failureReason: 2,
-          gradingResult: { pass: false, score: 0.35 },
-        }),
-      });
-      await response;
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-
-    expect(mockSetTable).toHaveBeenCalledTimes(1);
-  });
-
   it.each([3, 4])('persists all accepted edits after unmounting (v%s)', async (version) => {
     const user = userEvent.setup();
     const table = createMockTableWithHumanAssertion();
@@ -5143,13 +5100,16 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     await user.click(screen.getByRole('button', { name: 'Clear rating' }));
     await user.click(screen.getByRole('button', { name: 'Update score' }));
     expect(mockCallApi).toHaveBeenCalledTimes(1);
-    const uiUpdatesBeforeUnmount = mockSetTable.mock.calls.length;
     rendered.unmount();
     await act(async () => {
       resolveFirst({ ok: true });
     });
     await waitFor(() => expect(mockCallApi).toHaveBeenCalledTimes(3));
-    expect(mockSetTable).toHaveBeenCalledTimes(uiUpdatesBeforeUnmount);
+    expect(useTableStore.getState().table?.body[0].outputs[0]).toMatchObject({
+      pass: false,
+      score: 0.25,
+      gradingResult: { comment: 'score comment' },
+    });
     const lastPayload = JSON.parse(mockCallApi.mock.calls[2][1].body);
     if (version === 4) {
       expect(lastPayload).toMatchObject({
@@ -5263,7 +5223,11 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
           skipLoadingState: true,
         }),
       );
-      expect(mockSetTable).toHaveBeenCalledTimes(1);
+      expect(useTableStore.getState().table?.body[0].outputs[0]).toMatchObject(
+        version === 4
+          ? { pass: false, score: 0.35, failureReason: 2 }
+          : { pass: false, score: 0.5 },
+      );
     },
   );
 

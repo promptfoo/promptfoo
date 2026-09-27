@@ -86,6 +86,101 @@ function holdResponse() {
   return { pending, release };
 }
 
+it.each(['success', 'confirmed failure'] as const)(
+  'reconciles an off-screen clear after %s even when its refresh fails',
+  async (outcome) => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const user = userEvent.setup();
+    const evalId = `off-screen-clear-${outcome}`;
+    const query = `/eval/${evalId}/table?offset=0&limit=50&filterMode=all`;
+    const ratedTable = structuredClone(table);
+    ratedTable.body[0].test.threshold = 0.7;
+    const automatedComponents: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Weighted assertion passed',
+        assertion: { type: 'contains', value: 'test', weight: 4 },
+      },
+      {
+        pass: false,
+        score: 0,
+        reason: 'Lower-weight assertion failed',
+        assertion: { type: 'contains', value: 'absent', weight: 1 },
+      },
+    ];
+    Object.assign(ratedTable.body[0].outputs[0], {
+      pass: false,
+      score: 0,
+      failureReason: 1,
+      gradingResult: {
+        pass: false,
+        score: 0,
+        reason: 'Manual result (overrides all other grading results)',
+        componentResults: [
+          ...automatedComponents,
+          { pass: false, score: 0, reason: 'Manual failure', assertion: { type: 'human' } },
+        ],
+      },
+    });
+    useTableStore.setState({
+      evalId,
+      table: ratedTable,
+      config: {},
+      version: 4,
+      filteredResultsCount: 1,
+      totalResultsCount: 1,
+      tableQuery: { evalId, url: query },
+    });
+    const held = holdResponse();
+    mockCallApiRoutes([
+      {
+        path: `/eval/${evalId}/results/result-id/rating`,
+        method: 'POST',
+        status: outcome === 'success' ? 200 : 400,
+        response: async () => {
+          await held.pending;
+          return {
+            id: 'result-id',
+            success: true,
+            score: 0.8,
+            failureReason: 0,
+            gradingResult: {
+              pass: true,
+              score: 0.8,
+              reason: 'Aggregate score 0.80 meets threshold 0.7',
+              componentResults: automatedComponents,
+            },
+          };
+        },
+      },
+      { path: query, status: 500 },
+    ]);
+    const view = renderRatingTable();
+    await user.click(screen.getByRole('button', { name: 'Mark test failed' }));
+    expect(useTableStore.getState().table?.body[0].outputs[0]).toMatchObject({
+      pass: false,
+      score: 0.5,
+    });
+    view.unmount();
+    await act(async () => held.release());
+    const expected =
+      outcome === 'success'
+        ? { pass: true, score: 0.8, failureReason: 0 }
+        : { pass: false, score: 0, failureReason: 1 };
+    await waitFor(() => expect(callApi).toHaveBeenCalledTimes(2));
+    expect(useTableStore.getState().table?.body[0].outputs[0]).toMatchObject(expected);
+    expect(useTableStore.getState().isFetching).toBe(false);
+    renderRatingTable();
+    expect(screen.getByRole('button', { name: 'Mark test failed' })).toHaveAttribute(
+      'aria-pressed',
+      outcome === 'success' ? 'false' : 'true',
+    );
+    await user.click(screen.getByRole('button', { name: 'Set test score' }));
+    expect(screen.getByLabelText('Score (0.0 - 1.0)')).toHaveValue(expected.score);
+  },
+);
+
 it.each([true, false])(
   'retains two pending ID-less cells through a legacy refresh (test indices: %s)',
   async (hasTestIndices) => {
