@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvInt } from '../../envars';
 import logger from '../../logger';
@@ -80,9 +82,13 @@ export class AwsBedrockKnowledgeBaseProvider
   }
   set knowledgeBaseClient(client: BedrockAgentRuntimeClient | undefined) {
     this.injectedClient = client;
+    if (client === undefined) {
+      this.getClientState.reset();
+    }
   }
   private readonly getClientState = createEnvironmentScopedState(
     () => ({
+      namespace: randomUUID(),
       client: undefined as BedrockAgentRuntimeClient | undefined,
       initialization: undefined as Promise<BedrockAgentRuntimeClient> | undefined,
     }),
@@ -92,6 +98,9 @@ export class AwsBedrockKnowledgeBaseProvider
       state.client?.destroy();
     },
   );
+  protected get responseCacheNamespace(): string {
+    return this.getClientState().namespace;
+  }
   kbConfig: BedrockKnowledgeBaseOptions;
 
   constructor(
@@ -202,6 +211,7 @@ export class AwsBedrockKnowledgeBaseProvider
       };
     }
 
+    const cacheNamespace = this.responseCacheNamespace;
     const client = await this.getKnowledgeBaseClient();
 
     // Prepare the request parameters
@@ -265,7 +275,7 @@ export class AwsBedrockKnowledgeBaseProvider
 
     const configStr = JSON.stringify(cacheConfig, Object.keys(cacheConfig).sort());
     // Earlier cached results did not apply configured generation parameters.
-    const cacheKey = `bedrock-kb:v2:${this.responseCacheNamespace}:${this.kbConfig.knowledgeBaseId}:${modelArn}:${this.getRegion()}:${sha256(
+    const cacheKey = `bedrock-kb:v2:${cacheNamespace}:${this.kbConfig.knowledgeBaseId}:${modelArn}:${this.getRegion()}:${sha256(
       JSON.stringify({
         configStr,
         prompt,

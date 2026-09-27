@@ -605,16 +605,18 @@ export class GoogleAuthManager {
       GOOGLE_CLOUD_QUOTA_PROJECT:
         env?.GOOGLE_CLOUD_QUOTA_PROJECT ?? getEnvString('GOOGLE_CLOUD_QUOTA_PROJECT'),
     };
-    const settings = JSON.stringify(resolvedEnv);
+    const scopedFilename =
+      env?.GOOGLE_APPLICATION_CREDENTIALS ??
+      getEnvOverrides()?.GOOGLE_APPLICATION_CREDENTIALS ??
+      getEnvOverrides('file')?.GOOGLE_APPLICATION_CREDENTIALS;
+    const settings = JSON.stringify({ ...resolvedEnv, scopedFilename });
     const cached = scope ? this.credentialProbes.get(scope) : undefined;
     if (cached?.settings === settings) {
       return cached.result;
     }
     const result = (async () => {
       try {
-        await suppressExpectedGcpMetadataLookupWarning(() =>
-          this.getOAuthClient({ env: resolvedEnv }),
-        );
+        await suppressExpectedGcpMetadataLookupWarning(() => this.getOAuthClient({ env }));
         return true;
       } catch {
         return false;
