@@ -19,7 +19,7 @@ You need:
   python -m pip install 'inspect-evals[osworld]>=0.21,<0.23' 'openai>=3.19.2,<4'
   ```
 
-- For an Anthropic model, install `anthropic>=1.8,<2` instead of the OpenAI SDK.
+- For an Anthropic model, install `anthropic>=1.7.0,<2` instead of the OpenAI SDK.
 - The traced commands below additionally need the optional tracing packages:
 
   ```bash
