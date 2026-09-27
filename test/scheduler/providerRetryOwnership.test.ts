@@ -384,22 +384,66 @@ describe('provider operation retry ownership', () => {
     const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', { config });
     const sdkErrors: string[] = [];
     const create = provider.anthropic.messages.create;
-    const sdk = provider.anthropic as unknown as {
-      makeRequest: (...args: unknown[]) => Promise<unknown>;
-    };
-    const makeRequest = sdk.makeRequest.bind(sdk);
-    vi.spyOn(sdk, 'makeRequest').mockImplementation((...args) => {
-      const request = makeRequest(...args);
-      // Observe the native promise without starting APIPromise's lazy response parsing.
-      void request.catch((error) => {
-        sdkErrors.push(error instanceof Error ? error.stack || error.message : String(error));
+    const session = new Session();
+    const scripts: { scriptId: string; url: string }[] = [];
+    const post = <T = void>(method: string, params = {}) =>
+      new Promise<T>((resolve, reject) => {
+        session.post(method, params, (error, result) =>
+          error ? reject(error) : resolve(result as T),
+        );
       });
-      return request;
+    session.connect();
+    session.on('Debugger.scriptParsed', ({ params }) => {
+      if (params.url.replaceAll('\\', '/').endsWith('/src/providers/anthropic/messages.ts')) {
+        scripts.push(params);
+      }
     });
-    const result = await invoke(provider);
+    session.on('Debugger.paused', ({ params }) => {
+      session.post(
+        'Debugger.evaluateOnCallFrame',
+        {
+          callFrameId: params.callFrames[0].callFrameId,
+          expression: 'err instanceof Error ? err.stack : String(err)',
+          returnByValue: true,
+        },
+        (error, result) => {
+          sdkErrors.push(error?.message ?? String(result?.result.value));
+          session.post('Debugger.resume');
+        },
+      );
+    });
+    let result: ProviderResponse;
+    try {
+      // Observe the original error after its stack unwinds, without wrapping SDK promises.
+      // Resolve the catch location from Vite's actual emitted source, not TS line numbers.
+      await post('Debugger.enable');
+      let breakpoints = 0;
+      for (const { scriptId } of scripts) {
+        const { scriptSource } = await post<{ scriptSource: string }>('Debugger.getScriptSource', {
+          scriptId,
+        });
+        const lineNumber = scriptSource
+          .split('\n')
+          .findIndex((line) => line.includes('Anthropic Messages API call error:'));
+        if (lineNumber >= 0) {
+          await post('Debugger.setBreakpoint', { location: { scriptId, lineNumber } });
+          breakpoints++;
+        }
+      }
+      expect(breakpoints).toBeGreaterThan(0);
+      result = await invoke(provider);
+    } finally {
+      try {
+        await post('Debugger.disable');
+      } finally {
+        session.disconnect();
+      }
+    }
     const diagnostics = JSON.stringify({ fetchCount: fetch.mock.calls.length, sdkErrors });
     expect(provider.anthropic.messages.create).toBe(create);
-    expect(sdkErrors, diagnostics).not.toHaveLength(0);
+    expect(sdkErrors, diagnostics).toEqual(
+      expect.arrayContaining([expect.stringContaining('429')]),
+    );
     expect(result.error, diagnostics).toContain('429');
     // The SDK's two retries and the scheduler's one retry remain separate.
     expect(fetch, diagnostics).toHaveBeenCalledTimes(6);
@@ -577,3 +621,5 @@ describe('provider operation retry ownership', () => {
     expect(calls).toBe(2);
   });
 });
+
+import { Session } from 'node:inspector';
