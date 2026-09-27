@@ -80,13 +80,22 @@ function resolveOwnPrimitivePath(
 export function renderPersistedMetricName(
   metric: string | undefined,
   vars: Record<string, unknown>,
+  maxLength = Infinity,
 ): string | undefined {
   if (!metric || !metric.includes('{') || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
     return metric;
   }
 
-  const remainder = metric.replace(SIMPLE_METRIC_PLACEHOLDER, '');
+  let safe = true;
+  let renderedLength = metric.length;
+  const remainder = metric.replace(SIMPLE_METRIC_PLACEHOLDER, (placeholder, path: string) => {
+    const resolved = resolveOwnPrimitivePath(vars, path);
+    safe &&= resolved.safe;
+    renderedLength += resolved.value.length - placeholder.length;
+    return '';
+  });
   if (
+    !safe ||
     remainder.includes('{{') ||
     remainder.includes('}}') ||
     remainder.includes('{%') ||
@@ -96,15 +105,13 @@ export function renderPersistedMetricName(
   ) {
     return metric;
   }
-
-  let safe = true;
-  const rendered = metric.replace(SIMPLE_METRIC_PLACEHOLDER, (_placeholder, path: string) => {
-    const resolved = resolveOwnPrimitivePath(vars, path);
-    safe &&= resolved.safe;
-    return resolved.value;
-  });
-
-  return safe ? rendered : metric;
+  if (renderedLength > maxLength) {
+    return undefined;
+  }
+  return metric.replace(
+    SIMPLE_METRIC_PLACEHOLDER,
+    (_placeholder, path: string) => resolveOwnPrimitivePath(vars, path).value,
+  );
 }
 
 function getContributingAssertionCounts(
@@ -114,6 +121,10 @@ function getContributingAssertionCounts(
   renderComponentMetric: MetricNameRenderer,
 ): Map<string, number> | undefined {
   const counts = new Map<string, number>();
+  const maxMetricNameLength = Object.keys(namedScores).reduce(
+    (longest, name) => Math.max(longest, name.length),
+    0,
+  );
   let hasUnresolvedMetric = false;
   const componentResults = Array.isArray(gradingResult?.componentResults)
     ? gradingResult.componentResults
@@ -131,7 +142,10 @@ function getContributingAssertionCounts(
       typeof componentResult.assertion.metric === 'string'
         ? componentResult.assertion.metric
         : undefined;
-    const renderedMetric = renderComponentMetric(metric, testVars);
+    const renderedMetric =
+      renderComponentMetric === renderPersistedMetricName
+        ? renderPersistedMetricName(metric, testVars, maxMetricNameLength)
+        : renderComponentMetric(metric, testVars);
     if (
       renderComponentMetric === renderPersistedMetricName &&
       renderedMetric !== undefined &&
@@ -143,7 +157,10 @@ function getContributingAssertionCounts(
       // already matched by another component. Partial counts are not denominators.
       hasUnresolvedMetric = true;
     }
-    if (renderedMetric !== undefined) {
+    if (
+      renderedMetric !== undefined &&
+      Object.prototype.hasOwnProperty.call(namedScores, renderedMetric)
+    ) {
       counts.set(renderedMetric, (counts.get(renderedMetric) ?? 0) + 1);
     }
   }

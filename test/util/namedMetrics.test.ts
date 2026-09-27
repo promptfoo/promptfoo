@@ -1,3 +1,6 @@
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
 import { describe, expect, it, vi } from 'vitest';
 import {
   accumulateNamedMetrics,
@@ -7,8 +10,107 @@ import {
   renderPersistedMetricName,
   wereNamedMetricsSeededFromPreviousRun,
 } from '../../src/util/namedMetrics';
+import { mockProcessEnv } from './utils';
 
 describe('accumulateNamedMetrics', () => {
+  it('bounds individual and cumulative persisted metric expansion within a small heap', () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        '--max-old-space-size=128',
+        '--import',
+        'tsx',
+        '--input-type=module',
+        '--eval',
+        String.raw`
+          import assert from 'node:assert/strict';
+          import { accumulateNamedMetrics } from './src/util/namedMetrics.ts';
+          const longKey = 'k'.repeat(1024 * 1024 + 4);
+          for (const [value, names, namedScores] of [
+            ['x'.repeat(1024 * 1024), ['{{ value }}'.repeat(256)], { quality: 2 }],
+            ['x'.repeat(128 * 1024), Array.from({ length: 192 }, (_, i) =>
+              i + ':' + '{{ value }}'.repeat(8)), { quality: 2, [longKey]: 1 }],
+          ]) {
+            const metrics = { namedScores: {}, namedScoresCount: {} };
+            accumulateNamedMetrics(metrics, {
+              namedScores,
+              testVars: { value },
+              gradingResult: { componentResults: [...names, 'quality', 'quality'].map(metric =>
+                ({ assertion: { metric } })) },
+            });
+            assert.deepEqual(metrics.namedScores, namedScores);
+            assert.deepEqual(metrics.namedScoresCount, namedScores);
+            assert.deepEqual(metrics.namedScoreWeights, namedScores);
+          }
+        `,
+      ],
+      {
+        cwd: fileURLToPath(new URL('../..', import.meta.url)),
+        encoding: 'utf8',
+        env: { ...process.env, PROMPTFOO_DISABLE_TEMPLATING: 'false' },
+        timeout: 20_000,
+      },
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stderr).toBe(0);
+  });
+
+  it.each(['{{ env.SECRET }}', '{{ accessor }}', '{{ value | upper }}'])(
+    'preserves unresolved and literal semantics after an oversized prefix: %s',
+    (suffix) => {
+      const metric = '{{ value }}'.repeat(8) + suffix;
+      const accessor = vi.fn(() => 'secret');
+      const testVars = Object.defineProperty({ value: 'x'.repeat(20) }, 'accessor', {
+        get: accessor,
+      });
+      const componentResults = [
+        { assertion: { metric } },
+        { assertion: { metric } },
+        { assertion: { metric: 'quality' } },
+      ];
+      const metrics: NamedMetricAccumulator = { namedScores: {}, namedScoresCount: {} };
+      accumulateNamedMetrics(metrics, {
+        namedScores: { quality: 0.5 },
+        testVars,
+        gradingResult: { componentResults, namedScoreWeights: { quality: 3 } },
+      });
+      expect(metrics).toEqual({
+        namedScores: { quality: 1.5 },
+        namedScoresCount: {},
+        namedScoreWeights: { quality: 3 },
+      });
+
+      const literal: NamedMetricAccumulator = { namedScores: {}, namedScoresCount: {} };
+      accumulateNamedMetrics(literal, {
+        namedScores: { [metric]: 2 },
+        testVars,
+        gradingResult: { componentResults },
+      });
+      expect(literal.namedScoresCount).toEqual({ [metric]: 2 });
+      expect(literal.namedScoreWeights).toEqual({ [metric]: 2 });
+      expect(accessor).not.toHaveBeenCalled();
+    },
+  );
+
+  it('counts literal score keys when templating is disabled', () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
+    try {
+      const metric = '{{ value }}{{ value }}';
+      const metrics: NamedMetricAccumulator = { namedScores: {}, namedScoresCount: {} };
+      accumulateNamedMetrics(metrics, {
+        namedScores: { [metric]: 2 },
+        testVars: { value: 'x'.repeat(100) },
+        gradingResult: {
+          componentResults: [{ assertion: { metric } }, { assertion: { metric } }],
+        },
+      });
+      expect(metrics.namedScoresCount).toEqual({ [metric]: 2 });
+      expect(metrics.namedScoreWeights).toEqual({ [metric]: 2 });
+    } finally {
+      restoreEnv();
+    }
+  });
+
   it('excludes deferred comparisons from legacy metric counts and weights', () => {
     const metrics: NamedMetricAccumulator = { namedScores: {}, namedScoresCount: {} };
     accumulateNamedMetrics(metrics, {
@@ -402,6 +504,18 @@ describe('accumulateNamedMetrics', () => {
 });
 
 describe('renderPersistedMetricName', () => {
+  it.each([
+    ['{{ value }}{{ value }}', { value: 'ab' }, 4, 'abab'],
+    ['{{ value }}{{ value }}', { value: 'ab' }, 3, undefined],
+    ['{{ value }}' + '{{ missing }}'.repeat(100), { value: 'quality' }, 7, 'quality'],
+    ['{{ missing }}', {}, 0, ''],
+  ])(
+    'measures the complete expansion before applying the limit: %s',
+    (metric, vars, limit, name) => {
+      expect(renderPersistedMetricName(metric, vars, limit)).toBe(name);
+    },
+  );
+
   it.each([
     ['true', 'true'],
     ['false', 'false'],
