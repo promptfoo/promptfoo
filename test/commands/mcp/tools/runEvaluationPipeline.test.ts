@@ -794,7 +794,8 @@ describe('MCP evaluation execution contract', () => {
   );
 
   it('reports missing redteam email without opening an interactive prompt', async () => {
-    mockProcessEnv({ CI: 'false', PROMPTFOO_DISABLE_REMOTE_GENERATION: 'false' });
+    mockProcessEnv({ PROMPTFOO_DISABLE_REMOTE_GENERATION: 'false' });
+    vi.spyOn(envars, 'isCI').mockReturnValue(false);
     const prompt = vi
       .spyOn(accounts, 'promptForEmailUnverified')
       .mockRejectedValue(new Error('Unexpected interactive prompt'));
@@ -817,7 +818,8 @@ describe('MCP evaluation execution contract', () => {
   it.each([BAD_EMAIL_RESULT, EMAIL_OK_STATUS] as const)(
     'checks existing redteam email without interaction: %s',
     async (status) => {
-      mockProcessEnv({ CI: 'false', PROMPTFOO_DISABLE_REMOTE_GENERATION: 'false' });
+      mockProcessEnv({ PROMPTFOO_DISABLE_REMOTE_GENERATION: 'false' });
+      vi.spyOn(envars, 'isCI').mockReturnValue(false);
       const prompt = vi
         .spyOn(accounts, 'promptForEmailUnverified')
         .mockRejectedValue(new Error('Unexpected interactive prompt'));
