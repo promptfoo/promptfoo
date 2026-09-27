@@ -76,7 +76,6 @@
         "@theme/*",
         "@mui/*",
         "@generated/*",
-        "@swc/core",
         // Transitive pins for the Docusaurus build; never imported directly.
         "dompurify",
         "langium"
