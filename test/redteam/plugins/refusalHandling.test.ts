@@ -1,3 +1,7 @@
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import { AegisGrader } from '../../../src/redteam/plugins/aegis';
@@ -25,6 +29,17 @@ const refusalWithDisclosure = `${refusal} However, the synthetic secret is AUDIT
 const image = { data: 'fixture-image-data', format: 'png' };
 const failingGrade = { pass: false, score: 0, reason: 'The complete response violates the rubric' };
 
+function createRejectingToolFixture() {
+  const directory = mkdtempSync(path.join(os.tmpdir(), 'promptfoo-refusal-tools-'));
+  const marker = path.join(directory, 'called.txt');
+  const file = path.join(directory, 'tools.cjs');
+  writeFileSync(
+    file,
+    `exports.getTools = () => { require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'called'); throw new Error('Tool factory must not run for a legacy refusal'); };`,
+  );
+  return { directory, marker, tools: `file://${file}:getTools` };
+}
+
 beforeEach(() => {
   vi.mocked(matchesLlmRubric).mockReset().mockResolvedValue(failingGrade);
   vi.spyOn(redteamProviderManager, 'getGradingProvider').mockResolvedValue(createMockProvider());
@@ -49,6 +64,44 @@ describe.each([
   beforeEach(() => {
     grader = new Grader();
     test = { metadata: { purpose: 'Protect the synthetic fixture marker' } };
+  });
+
+  it.each([
+    { name: 'basic refusal with purpose', output: refusal, hasPurpose: true, loadTools: false },
+    { name: 'basic refusal without purpose', output: refusal, hasPurpose: false, loadTools: false },
+    { name: 'empty output', output: '', hasPurpose: true, loadTools: true },
+    { name: 'normal output', output: 'A normal response', hasPurpose: true, loadTools: true },
+    { name: 'explicit grading', output: refusal, hasPurpose: true, loadTools: true, skip: true },
+    { name: 'image output', output: refusal, hasPurpose: true, loadTools: true, image: true },
+  ])('preserves external tool setup behavior for $name', async (scenario) => {
+    const fixture = createRejectingToolFixture();
+    const provider = createMockProvider({ config: { tools: fixture.tools } });
+    try {
+      const result = grader.getResult(
+        'fixture request',
+        scenario.output,
+        scenario.hasPurpose ? test : {},
+        provider,
+        undefined,
+        undefined,
+        'skip' in scenario && scenario.skip,
+        'image' in scenario && scenario.image ? { imageOutputs: [image] } : undefined,
+      );
+      if (scenario.loadTools) {
+        await expect(result).rejects.toThrow('Tool factory must not run for a legacy refusal');
+        expect(readFileSync(fixture.marker, 'utf8')).toBe('called');
+      } else {
+        expect((await result).grade).toEqual({
+          pass: true,
+          score: 1,
+          reason: 'Model refused the request',
+        });
+        expect(existsSync(fixture.marker)).toBe(false);
+      }
+      expect(matchesLlmRubric).not.toHaveBeenCalled();
+    } finally {
+      rmSync(fixture.directory, { recursive: true, force: true });
+    }
   });
 
   it.each([refusal, ''])('keeps the text-only shortcut for %j', async (output) => {
@@ -193,6 +246,23 @@ describe.each([
       expect.any(Object),
     );
   });
+});
+
+it.each([refusal, ''])('preserves inherited grader tool rendering for %j', async (output) => {
+  const fixture = createRejectingToolFixture();
+  try {
+    await expect(
+      new PiiGrader().getResult(
+        'fixture request',
+        output,
+        { metadata: { purpose: 'Protect the synthetic fixture' } },
+        createMockProvider({ config: { tools: fixture.tools } }),
+      ),
+    ).rejects.toThrow('Tool factory must not run for a legacy refusal');
+    expect(readFileSync(fixture.marker, 'utf8')).toBe('called');
+  } finally {
+    rmSync(fixture.directory, { recursive: true, force: true });
+  }
 });
 
 it('keeps Beavertails category guidance when rendering a refusal', async () => {

@@ -487,7 +487,11 @@ export abstract class RedteamGraderBase {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
 
     const providerId = provider?.id?.();
-    const providerTools = provider?.config?.tools;
+    // Legacy basic refusals did not execute target tool factories.
+    const providerTools =
+      this.acceptsRefusalWithoutPurpose && shouldUseRefusalShortcut && isBasicRefusal(llmOutput)
+        ? undefined
+        : provider?.config?.tools;
     const tools =
       providerTools && !isMcpToolNameFilter(providerTools)
         ? providerId?.startsWith('openai:agents:')
