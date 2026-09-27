@@ -274,6 +274,32 @@ describe('BedrockTokenProvider', () => {
     }
   });
 
+  it.each(
+    ['', ' \t '].flatMap((profile) => [false, true].map((hasKeys) => ({ profile, hasKeys }))),
+  )(
+    'ignores blank ambient profiles ($profile), with static keys: $hasKeys',
+    async ({ profile, hasKeys }) => {
+      const restore = mockProcessEnv({
+        AWS_PROFILE: profile,
+        AWS_ACCESS_KEY_ID: hasKeys ? 'ambient-key' : undefined,
+        AWS_SECRET_ACCESS_KEY: hasKeys ? 'ambient-secret' : undefined,
+      });
+      try {
+        await expect(new BedrockTokenProvider({}, undefined, 'us-east-1').getToken()).resolves.toBe(
+          'generated-token',
+        );
+        expect(getTokenProvider).toHaveBeenCalledExactlyOnceWith({
+          region: 'us-east-1',
+          ...(hasKeys && {
+            credentials: { accessKeyId: 'ambient-key', secretAccessKey: 'ambient-secret' },
+          }),
+        });
+      } finally {
+        restore();
+      }
+    },
+  );
+
   it('rejects a partial config tuple instead of filling it from another source', async () => {
     const provider = new BedrockTokenProvider(
       { accessKeyId: 'explicit' },
