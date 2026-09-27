@@ -6,6 +6,8 @@ on:
       - 'examples/**/requirements*.txt'
       - 'examples/**/pyproject.toml'
       - '.github/workflows/python-example-dependencies.yml'
+      - '.github/scripts/python_example_manifests.py'
+      - '.github/scripts/test_python_example_manifests.py'
 
 permissions:
   contents: read
@@ -26,37 +28,17 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Test manifest selection
+        run: python3 -m unittest discover -s .github/scripts -p test_python_example_manifests.py -v
       - name: Find changed Python manifests
         id: manifests
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          python3 - <<'PY'
-          import json
-          import os
-          import pathlib
-          import subprocess
-
-          workflow = '.github/workflows/python-example-dependencies.yml'
-          changed = subprocess.check_output([
-              'git', 'diff', '--name-only', '-z', '--diff-filter=ACMR',
-              os.environ['BASE_SHA'] + '...' + os.environ['HEAD_SHA'], '--', 'examples/', workflow,
-          ]).decode().split('\0')
-          if workflow in changed:
-              # Exercise every installer path when its selection or install logic changes.
-              changed = subprocess.check_output([
-                  'git', 'ls-files', '-z', '--', 'examples/',
-              ]).decode().split('\0')
-          manifests = sorted(path for path in changed if path and pathlib.Path(path).is_file()
-              and (pathlib.Path(path).match('requirements*.txt')
-                   or pathlib.Path(path).name == 'pyproject.toml'))
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              output.write('matrix=' + json.dumps({'include': [
-                  {'manifest': path} for path in manifests
-              ]}) + '\n')
-              output.write('any=' + str(bool(manifests)).lower() + '\n')
-          PY
+        run: python3 .github/scripts/python_example_manifests.py
 
   install:
     needs: changed-manifests
