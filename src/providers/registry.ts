@@ -146,6 +146,12 @@ function getProviderEnvAliasGroups(providerPath: string): readonly (readonly str
   if (providerPath.startsWith('huggingface:') || providerPath.startsWith('hf:')) {
     return [['HF_TOKEN', 'HF_API_TOKEN']];
   }
+  if (providerPath.startsWith('replicate:')) {
+    return [['REPLICATE_API_KEY', 'REPLICATE_API_TOKEN']];
+  }
+  if (providerPath.startsWith('nscale:')) {
+    return [['NSCALE_SERVICE_TOKEN', 'NSCALE_API_KEY']];
+  }
   const awsAuth = [
     'AWS_ACCESS_KEY_ID',
     'AWS_SECRET_ACCESS_KEY',
