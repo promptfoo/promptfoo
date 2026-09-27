@@ -3,6 +3,11 @@ import { loadYaml } from '../util/yamlLoad';
 
 import type { ApiProvider } from '../types/index';
 
+/** Returns the complete model suffix after the given number of provider/type segments. */
+export function modelNameFromProviderPath(providerPath: string, segments: number): string {
+  return providerPath.split(':').slice(segments).join(':');
+}
+
 /**
  * The default timeout for API requests in milliseconds.
  */
