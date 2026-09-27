@@ -70,8 +70,8 @@ jobs:
       - name: Install CLI dependencies
         if: matrix.python-version == '3.14'
         run: |
-          npm install -g npm@11.18.0
-          npm ci
+          npm install -g npm@11.18.0 --registry=https://registry.npmjs.org/
+          npm ci --registry=https://registry.npmjs.org/
 
       - name: Exercise real BERTScore through both CLI configs
         if: matrix.python-version == '3.14'
