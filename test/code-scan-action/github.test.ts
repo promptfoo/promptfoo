@@ -257,10 +257,7 @@ diff --git "a/src/caf\303\251.ts" "b/src/caf\303\251.ts"
 -old
 +new
 `;
-      const get = vi.fn().mockResolvedValue({ data: diff });
-      mocks.Octokit.mockImplementation(function () {
-        return { pulls: { get } } as unknown as Octokit;
-      });
+      mocks.pulls.get.mockResolvedValue({ data: diff });
 
       const result = await partitionReviewCommentsByDiff('fake-token', mockContext, [
         { file: 'src/tab\tfile.ts', line: 99, finding: 'Tab filename' },
@@ -273,7 +270,7 @@ diff --git "a/src/caf\303\251.ts" "b/src/caf\303\251.ts"
       ]);
       expect(result.invalidLineComments).toEqual([]);
       expect(result.generalComments).toEqual([]);
-      expect(get).toHaveBeenCalledWith({
+      expect(mocks.pulls.get).toHaveBeenCalledWith({
         owner: 'test-owner',
         repo: 'test-repo',
         pull_number: 123,
