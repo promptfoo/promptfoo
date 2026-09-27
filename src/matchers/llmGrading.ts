@@ -425,7 +425,10 @@ export async function matchesClosedQa(
     } else if (resp.output.trimEnd().endsWith('N')) {
       reason = `The submission does not meet the criterion:\n${resp.output}`;
     } else {
-      reason = `Model grader produced a malformed response:\n${resp.output}`;
+      return graderFail(
+        `Model grader produced a malformed response:\n${resp.output}`,
+        resp.tokenUsage,
+      );
     }
     return {
       pass,

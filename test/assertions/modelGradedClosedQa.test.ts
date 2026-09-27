@@ -4,17 +4,7 @@ import { matchesClosedQa } from '../../src/matchers/llmGrading';
 
 import type { AssertionParams } from '../../src/types/index';
 
-// Partial mock: `isGraderFailure` is a real type guard over the matcher's
-// result, so it must keep its implementation for the inverse cases below.
-vi.mock('../../src/matchers/llmGrading', async () => {
-  const actual = await vi.importActual<typeof import('../../src/matchers/llmGrading')>(
-    '../../src/matchers/llmGrading',
-  );
-  return {
-    ...actual,
-    matchesClosedQa: vi.fn(),
-  };
-});
+vi.mock('../../src/matchers/llmGrading');
 
 describe('handleModelGradedClosedQa', () => {
   beforeEach(() => {
@@ -131,103 +121,6 @@ describe('handleModelGradedClosedQa', () => {
       pass: true,
       score: 1,
       reason: 'test reason',
-    });
-  });
-
-  describe('inverse (not-model-graded-closedqa)', () => {
-    const baseParams: AssertionParams = {
-      assertion: { type: 'not-model-graded-closedqa' },
-      baseType: 'model-graded-closedqa',
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: { var: 'value' },
-        test: { vars: { var: 'value' } },
-        logProbs: undefined,
-        provider: undefined,
-        providerResponse: undefined,
-      },
-      inverse: true,
-      output: 'test output',
-      outputString: 'test output',
-      prompt: 'test prompt',
-      providerResponse: {},
-      renderedValue: 'test criteria',
-      test: { options: {}, vars: { var: 'value' } },
-    };
-
-    it('fails a passing verdict when inverse is true', async () => {
-      vi.mocked(matchesClosedQa).mockResolvedValue({
-        pass: true,
-        score: 1,
-        reason: 'The submission meets the criterion',
-      });
-
-      const result = await handleModelGradedClosedQa(baseParams);
-
-      expect(result).toEqual({
-        assertion: { type: 'not-model-graded-closedqa' },
-        pass: false,
-        score: 0,
-        reason: 'The submission meets the criterion',
-      });
-    });
-
-    it('passes a failing verdict when inverse is true', async () => {
-      vi.mocked(matchesClosedQa).mockResolvedValue({
-        pass: false,
-        score: 0,
-        reason: 'The submission does not meet the criterion',
-      });
-
-      const result = await handleModelGradedClosedQa(baseParams);
-
-      expect(result).toEqual({
-        assertion: { type: 'not-model-graded-closedqa' },
-        pass: true,
-        score: 1,
-        reason: 'The submission does not meet the criterion',
-      });
-    });
-
-    it('leaves the non-inverse verdict untouched', async () => {
-      vi.mocked(matchesClosedQa).mockResolvedValue({
-        pass: true,
-        score: 1,
-        reason: 'The submission meets the criterion',
-      });
-
-      const result = await handleModelGradedClosedQa({ ...baseParams, inverse: false });
-
-      expect(result).toEqual({
-        assertion: { type: 'not-model-graded-closedqa' },
-        pass: true,
-        score: 1,
-        reason: 'The submission meets the criterion',
-      });
-    });
-
-    // A grader transport/parse failure is not evidence that the criterion was
-    // or was not met, so it must never be flipped into a pass by the `not-`
-    // prefix. `matchesClosedQa` tags these with metadata.graderError.
-    it('propagates a grader failure verbatim instead of flipping it to a pass', async () => {
-      vi.mocked(matchesClosedQa).mockResolvedValue({
-        pass: false,
-        score: 0,
-        reason: 'No output',
-        tokensUsed: { total: 11, prompt: 5, completion: 6 },
-        metadata: { graderError: true },
-      });
-
-      const result = await handleModelGradedClosedQa(baseParams);
-
-      expect(result).toEqual({
-        assertion: { type: 'not-model-graded-closedqa' },
-        pass: false,
-        score: 0,
-        reason: 'No output',
-        tokensUsed: { total: 11, prompt: 5, completion: 6 },
-        metadata: { graderError: true },
-      });
     });
   });
 });

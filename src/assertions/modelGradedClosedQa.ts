@@ -30,15 +30,11 @@ export const handleModelGradedClosedQa = async ({
     providerCallContext,
   );
 
-  // A grading provider/parse failure is not evidence about the submission, so
-  // never flip it into a pass for `not-model-graded-closedqa` — propagate it
-  // verbatim (mirrors the inverse-aware llm-rubric/g-eval handlers).
+  // Grader failures must remain failures under negation.
   if (isGraderFailure(resp)) {
     return { ...resp, assertion };
   }
 
-  // `not-model-graded-closedqa` asserts the opposite outcome; flip pass/score
-  // for the inverse case.
   return {
     ...resp,
     pass: resp.pass !== inverse,
