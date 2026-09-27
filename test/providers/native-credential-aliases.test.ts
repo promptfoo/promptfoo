@@ -29,8 +29,8 @@ describe('native credential alias scopes', () => {
   let restoreEnv: () => void;
   let directory: string;
   beforeEach(() => {
-    restoreEnv = mockProcessEnv({}, { clear: true });
     directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-native-alias-'));
+    restoreEnv = mockProcessEnv({}, { clear: true });
   });
   afterEach(() => {
     restoreEnv();
