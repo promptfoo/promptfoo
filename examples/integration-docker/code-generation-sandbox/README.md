@@ -1,6 +1,6 @@
 # integration-docker/code-generation-sandbox (Docker Code Generation Sandbox)
 
-In Windows PowerShell, use `npx.cmd` in place of `npx` in the commands below.
+On Windows, run all commands in WSL 2 with Docker Desktop’s WSL integration enabled. Install Node.js and Python inside WSL; native Windows Python is not supported by Epicbox.
 
 You can run this example with:
 
@@ -11,29 +11,14 @@ cd integration-docker/code-generation-sandbox
 
 ## Usage
 
-Use Python 3.10 or later and a running Docker daemon:
-
-On macOS or Linux:
+Use Python 3.10 or later and a running Docker daemon for Linux containers:
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 docker pull python:3.9-alpine
 ```
-
-On Windows PowerShell, call the virtual environment's Python directly:
-
-```powershell
-py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-$env:PROMPTFOO_PYTHON = (Resolve-Path .\.venv\Scripts\python.exe).Path
-docker pull python:3.9-alpine
-```
-
-Keep `PROMPTFOO_PYTHON` set in the same PowerShell session when running
-`npx.cmd promptfoo@latest eval --no-cache` after configuring your model credentials.
-No activation script or execution-policy change is needed.
 
 The requirements use the official Epicbox 1.1.1 GitHub release with a SHA-256 hash.
 This release fixes compatibility with urllib3 2; PyPI still serves Epicbox 1.1.0.
@@ -45,10 +30,4 @@ Run the sandbox integration tests with Docker available:
 
 ```bash
 python -m unittest discover -p 'test_*.py' -v
-```
-
-In Windows PowerShell:
-
-```powershell
-.\.venv\Scripts\python.exe -m unittest discover -p 'test_*.py' -v
 ```

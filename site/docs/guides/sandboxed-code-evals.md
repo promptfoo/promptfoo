@@ -24,11 +24,9 @@ Make sure you have the following installed:
 - Docker
 - promptfoo (`npm install -g promptfoo`)
 
-In Windows PowerShell, use `npm.cmd` and `promptfoo.cmd` in place of `npm` and `promptfoo`.
+On Windows, run this tutorial in WSL 2 with Docker Desktop’s WSL integration enabled. Install Node.js and Python inside WSL; native Windows Python is not supported by Epicbox.
 
 Create a virtual environment in your project directory and install the [example's Python requirements](https://github.com/promptfoo/promptfoo/blob/main/examples/integration-docker/code-generation-sandbox/requirements.txt).
-
-On macOS or Linux:
 
 ```bash
 python3 -m venv .venv
@@ -36,15 +34,7 @@ source .venv/bin/activate
 python -m pip install -r https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-docker/code-generation-sandbox/requirements.txt
 ```
 
-On Windows PowerShell, use the environment's Python directly:
-
-```powershell
-py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-docker/code-generation-sandbox/requirements.txt
-$env:PROMPTFOO_PYTHON = (Resolve-Path .\.venv\Scripts\python.exe).Path
-```
-
-Run the evaluation in this same shell, keeping the virtual environment active on macOS/Linux or `PROMPTFOO_PYTHON` set on Windows. PowerShell activation scripts are not needed.
+Keep the virtual environment active in the same shell when running the evaluation.
 
 These use the official Epicbox 1.1.1 GitHub release, verified by a SHA-256 hash, and retain transport security minimums. Epicbox 1.1.0 on PyPI is incompatible with urllib3 2.
 
