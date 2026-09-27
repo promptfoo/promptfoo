@@ -1,0 +1,38 @@
+name: Python MCP Server Example
+
+on:
+  pull_request:
+    paths:
+      - 'examples/redteam-mcp-agent/**'
+      - '.github/workflows/mcp-example-python.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'examples/redteam-mcp-agent/**'
+      - '.github/workflows/mcp-example-python.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  mcp-server:
+    name: FastMCP on Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.14']
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install FastMCP
+        run: |
+          python -m pip install 'fastmcp>=4.0.5,<5'
+          python -m pip check
+      - name: Test MCP tool calls without model requests
+        run: python -m unittest discover -s examples/redteam-mcp-agent -p 'server_test.py' -v
