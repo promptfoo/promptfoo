@@ -79,9 +79,9 @@ interface GradingResult {
 
 If `componentResults` is set, a table of assertion details will be shown in the test output modal in the Eval view.
 
-Numeric results and the `score`, `namedScores`, and `namedScoreWeights` values in a `GradingResult` must be finite numbers, including in nested `componentResults`. Returning `NaN` or an infinity fails the assertion. Finite scores outside 0–1 are accepted. An empty `reason` does not turn `pass: false` into a passing result.
+Numeric returns, `score`, and all values in `namedScores` and `namedScoreWeights` must be finite, including in nested `componentResults`. `NaN` or infinity fails the assertion; finite scores outside 0–1 are accepted. `pass: false` still fails when `reason` is empty.
 
-Optional `namedScores`, `namedScoreWeights`, and `componentResults` fields may be `null` to indicate no values. A `componentResults` array must contain a valid grading result at every index; sparse arrays are rejected.
+A `componentResults` array must contain a valid grading result at every index; sparse arrays are rejected.
 
 ## Multiline functions
 
