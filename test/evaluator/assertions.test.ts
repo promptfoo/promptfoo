@@ -54,7 +54,11 @@ describeEvaluator('evaluator assertions', () => {
       const row = summary.results[0];
       expect(row.success).toBe(false);
       expect(row.failureReason).toBe(ResultFailureReason.ERROR);
-      expect(row.error).toContain('Grading interrupted');
+      if (outcome === 'aborted') {
+        expect(row.error).toMatch(/^Aborted: /);
+      } else {
+        expect(row.error).toContain('Grading interrupted');
+      }
       expect(row.response?.output).toBe('Hello.');
       expect(row.response?.audio?.blobRef).toBeDefined();
       expect(row.response?.audio?.data).toBeUndefined();

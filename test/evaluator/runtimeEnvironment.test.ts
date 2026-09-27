@@ -7,6 +7,7 @@ import * as comparisonMatchers from '../../src/matchers/comparison';
 import Eval from '../../src/models/eval';
 import { EchoProvider } from '../../src/providers/echo';
 import { SageMakerCompletionProvider } from '../../src/providers/sagemaker';
+import { SequenceProvider } from '../../src/providers/sequence';
 import * as targetWrapping from '../../src/redteam/mcpTargetProvider';
 import {
   callTargetProvider,
@@ -33,6 +34,66 @@ function createProvider(id = 'offline'): ApiProvider {
 }
 
 describeEvaluator('evaluation environment defaults', () => {
+  it.each([
+    { providerDelay: undefined, evalDelay: undefined, cached: false, expected: 7 },
+    { providerDelay: undefined, evalDelay: 5, cached: false, expected: 5 },
+    { providerDelay: 3, evalDelay: 5, cached: false, expected: 3 },
+    { providerDelay: 0, evalDelay: 5, cached: false, expected: 0 },
+    { providerDelay: undefined, evalDelay: 5, cached: true, expected: 0 },
+  ])('paces sequence inputs exactly once without a trailing delay: %j', async (testCase) => {
+    const events: string[] = [];
+    const target = new EchoProvider({ delay: testCase.providerDelay });
+    const echo = target.callApi.bind(target);
+    const call = vi.spyOn(target, 'callApi').mockImplementation(async (...args) => {
+      events.push(`call:${args[0]}`);
+      return testCase.cached ? { output: args[0], cached: true } : echo(...args);
+    });
+    const suite = createSuite(target, { PROMPTFOO_DELAY_MS: '7' });
+    suite.tests = [{ provider: new SequenceProvider({ config: { inputs: ['first', 'second'] } }) }];
+    const record = new Eval({});
+    try {
+      await vi.mocked(sleep).withImplementation(
+        async (delay) => {
+          events.push(`sleep:${delay}`);
+        },
+        () => evaluate(suite, record, { delay: testCase.evalDelay }),
+      );
+      expect(events).toEqual(
+        testCase.expected > 0
+          ? [
+              'call:first',
+              `sleep:${testCase.expected}`,
+              'call:second',
+              `sleep:${testCase.expected}`,
+            ]
+          : ['call:first', 'call:second'],
+      );
+      expect(target.delay).toBe(testCase.providerDelay);
+      expect((await record.getResults())[0]).toMatchObject({
+        success: true,
+        response: { output: 'first\n---\nsecond' },
+      });
+    } finally {
+      call.mockRestore();
+    }
+  });
+
+  it('retains the outer delay for an independent replacement', async () => {
+    const target = new EchoProvider();
+    const targetCall = vi.spyOn(target, 'callApi');
+    const replacement = createProvider('independent-replacement');
+    const suite = createSuite(target, { PROMPTFOO_DELAY_MS: '7' });
+    suite.tests = [{ provider: replacement }];
+    try {
+      await evaluate(suite, new Eval({}), {});
+      expect(sleep).toHaveBeenCalledExactlyOnceWith(7);
+      expect(targetCall).not.toHaveBeenCalled();
+      expect(replacement.callApi).toHaveBeenCalledOnce();
+    } finally {
+      targetCall.mockRestore();
+    }
+  });
+
   it('forwards evaluation cancellation through a provider that delegates without options', async () => {
     const controller = new AbortController();
     const started = createDeferred<void>();
@@ -181,13 +242,7 @@ describeEvaluator('evaluation environment defaults', () => {
 
     expect(events).toEqual(
       testCase.expected > 0
-        ? [
-            'call',
-            `sleep:${testCase.expected}`,
-            'call',
-            `sleep:${testCase.expected}`,
-            `sleep:${testCase.expected}`,
-          ]
+        ? ['call', `sleep:${testCase.expected}`, 'call', `sleep:${testCase.expected}`]
         : ['call', 'call'],
     );
     expect(target.delay).toBe(testCase.providerDelay);
@@ -212,7 +267,7 @@ describeEvaluator('evaluation environment defaults', () => {
     const record = new Eval({});
     await evaluate(suite, record, {});
     expect((await record.getResults())[0]).toMatchObject({ success: true });
-    expect(sleep).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenCalledTimes(2);
     expect(target.delay).toBeUndefined();
   });
 
@@ -277,7 +332,7 @@ describeEvaluator('evaluation environment defaults', () => {
         .mocked(sleep)
         .mock.calls.map(([delay]) => delay)
         .sort(),
-    ).toEqual([2, 2, 2, 4, 4, 4]);
+    ).toEqual([2, 2, 4, 4]);
     expect(target.delay).toBeUndefined();
     expect(getProviderDelay(target)).toBeUndefined();
   });

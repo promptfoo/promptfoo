@@ -1094,6 +1094,7 @@ async function callActiveProvider({
           provider: originalProvider,
           delay: getProviderDelay(provider),
           queueKey: provider,
+          state: getProviderCallExecutionContext()?.providerDelay?.state,
         },
       },
       () => {
@@ -1220,7 +1221,9 @@ async function applyProviderDelayIfNeeded(
   abortSignal?: AbortSignal,
 ) {
   // A provider only handles a delay that it owns. Evaluation defaults stay local.
-  const handlesDelay = provider.handlesOwnDelay && provider.delay != null;
+  const handlesDelay =
+    (provider.handlesOwnDelay && provider.delay != null) ||
+    getProviderCallExecutionContext()?.providerDelay?.state?.handled;
   if (!response.cached && !handlesDelay && delay > 0) {
     logger.debug(`Sleeping for ${delay}ms`);
     await (abortSignal ? sleepWithAbort(delay, abortSignal) : sleep(delay));
@@ -1634,7 +1637,10 @@ function runEvalInternal(options: InternalRunEvalOptions): Promise<EvaluateResul
     options.evaluateOptions,
   );
   return withProviderCallExecutionContext(
-    { ...getProviderCallExecutionContext(), providerDelay: { provider: options.provider, delay } },
+    {
+      ...getProviderCallExecutionContext(),
+      providerDelay: { provider: options.provider, delay, state: { handled: false } },
+    },
     () => runEvalInContext({ ...options, delay: delay ?? 0 }),
   );
 }
