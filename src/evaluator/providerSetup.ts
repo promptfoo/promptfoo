@@ -30,6 +30,8 @@ export async function waitForProviderSetup<T>(
   if (abortSignal?.aborted) {
     throw new Error('Operation cancelled');
   }
+  const setupTimeoutMs =
+    timeoutMs !== undefined && Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 30_000;
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let onAbort: () => void = () => {};
@@ -39,13 +41,11 @@ export async function waitForProviderSetup<T>(
       reject(new Error('Operation cancelled'));
     };
     abortSignal?.addEventListener('abort', onAbort, { once: true });
-    if (timeoutMs !== undefined && Number.isFinite(timeoutMs) && timeoutMs > 0) {
-      timer = setTimeout(() => {
-        const message = `Provider local setup check timed out after ${timeoutMs}ms. No workload was started.`;
-        controller.abort(new Error(message));
-        resolve(onTimeout(message));
-      }, timeoutMs);
-    }
+    timer = setTimeout(() => {
+      const message = `Provider local setup check timed out after ${setupTimeoutMs}ms. No workload was started.`;
+      controller.abort(new Error(message));
+      resolve(onTimeout(message));
+    }, setupTimeoutMs);
   });
   try {
     // Attach rejection handlers before invoking third-party code; late settlements are consumed.

@@ -42,7 +42,7 @@ For **SDK operation**, choose a security operation, repository path, model, reas
 
 For native operations, **Check setup** uses SDK preflight without starting an operation or sending results to a remote grader. It checks concrete configuration and paths, but does not verify Python/runtime startup, credentials, account permissions, or model availability. For validation, it checks directories and any finding file's presence, not the candidate's validity. Resolve row-variable templates to concrete values before checking setup. Older SDK releases without preflight support report that limitation.
 
-The standalone **Check setup** request and `promptfoo validate target` setup checks have a 30-second deadline. The browser request also cancels setup on disconnect. Evaluation setup checks use the evaluation's configured test and overall deadlines.
+The standalone **Check setup** request and `promptfoo validate target` setup checks have a 30-second deadline. The browser request also cancels setup on disconnect. Evaluation setup checks use a positive configured test timeout, otherwise a 30-second setup deadline, even when workload timeouts are disabled. The overall evaluation deadline and cancellation still apply.
 
 To rerun Codex Security, use the evaluation configuration. Generic **Edit & Replay** is unavailable for both native runs and saved reports because it cannot preserve the operation, scope, and report-file overrides.
 

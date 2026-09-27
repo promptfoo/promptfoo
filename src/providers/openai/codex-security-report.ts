@@ -110,6 +110,15 @@ function payloadSummary(raw: unknown, source: CodexSecurityResult['source']) {
   ) {
     throw new Error('Codex Security report_file contains mismatched scan IDs.');
   }
+  if (scan?.success) {
+    const findingIds = new Set<string>();
+    for (const { findingId } of scan.data.findings.findings) {
+      if (findingIds.has(findingId)) {
+        throw new Error('Codex Security report_file contains duplicate finding IDs.');
+      }
+      findingIds.add(findingId);
+    }
+  }
   const summary = normalizeCodexSecurityResult(raw, {
     source,
     // Coverage describes the target, not the operation that produced it. For example,

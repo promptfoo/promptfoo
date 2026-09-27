@@ -90,6 +90,44 @@ describe('Codex Security replay evidence validation', () => {
     await expect(load(envelope)).rejects.toThrow('payload hash does not match');
   });
 
+  it.each(['raw scan', 'replay envelope'] as const)(
+    'rejects duplicate finding IDs in a %s even when payload and metadata agree',
+    async (format) => {
+      const payload = scanPayload();
+      payload.findings.findings.push({
+        ...payload.findings.findings[0],
+        severity: { level: 'high' },
+      });
+      const result = normalizeCodexSecurityResult(payload, { source: { kind: 'sdk' } });
+      const input =
+        format === 'raw scan'
+          ? payload
+          : { ...createCodexSecurityReplayHeader(payload, result), payload };
+
+      await expect(load(input)).rejects.toThrow('contains duplicate finding IDs');
+    },
+  );
+
+  it.each(['raw scan', 'replay envelope'] as const)(
+    'preserves distinct finding IDs with otherwise identical evidence in a %s',
+    async (format) => {
+      const payload = scanPayload();
+      payload.findings.findings.push({
+        ...payload.findings.findings[0],
+        findingId: 'another-recorded-finding',
+      });
+      const result = normalizeCodexSecurityResult(payload, { source: { kind: 'sdk' } });
+      const input =
+        format === 'raw scan'
+          ? payload
+          : { ...createCodexSecurityReplayHeader(payload, result), payload };
+
+      const imported = await load(input);
+      expect(imported.raw).toEqual(payload);
+      expect(imported.summary.findings).toMatchObject({ total: 2, bySeverity: { medium: 2 } });
+    },
+  );
+
   it('rejects scan payloads labeled as validation even when the SDK omits the operation', async () => {
     const envelope = replay();
     envelope.result.operation = 'validation';

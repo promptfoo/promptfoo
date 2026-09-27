@@ -77,7 +77,7 @@ export async function testProviderConnectivity({
   prompt = 'Hello World!',
   inputs,
   abortSignal,
-  setupTimeoutMs = 30_000,
+  setupTimeoutMs,
 }: {
   /** The provider to test */
   provider: ApiProvider;
@@ -93,11 +93,9 @@ export async function testProviderConnectivity({
   // Some providers represent expensive workloads rather than single completions.
   // Their setup checks must bypass evaluation and remote response analysis entirely.
   if (provider.checkSetup) {
-    const timeoutMs =
-      Number.isFinite(setupTimeoutMs) && setupTimeoutMs > 0 ? setupTimeoutMs : 30_000;
     const result = await waitForProviderSetup(
       (signal) => provider.checkSetup!(undefined, { abortSignal: signal }),
-      { abortSignal, timeoutMs },
+      { abortSignal, timeoutMs: setupTimeoutMs },
       (message) => ({ success: false, message, error: message }),
     );
     return {

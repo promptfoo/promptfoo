@@ -151,6 +151,63 @@ describeEvaluator('provider batch preflight', () => {
     clearTimeoutSpy.mockRestore();
   });
 
+  it.each([undefined, 0])(
+    'bounds eager setup when the workload timeout is %s',
+    async (timeoutMs) => {
+      vi.useFakeTimers();
+      const abort = new AbortController();
+      let setupEntered!: () => void;
+      const entered = new Promise<void>((resolve) => {
+        setupEntered = resolve;
+      });
+      const provider: ApiProvider = {
+        id: () => 'local-scanner',
+        checkSetupOnEval: true,
+        checkSetup: vi.fn(() => {
+          setupEntered();
+          return new Promise<never>(() => {});
+        }),
+        callApi: vi.fn<ApiProvider['callApi']>(),
+      };
+      const record = createInMemoryRecord();
+      const pending = evaluate(
+        { providers: [provider], prompts: [toPrompt('Review')], tests: [{}] },
+        record,
+        { silent: true, timeoutMs, abortSignal: abort.signal },
+        inMemoryRuntime,
+      );
+      let settled = false;
+      void pending.then(
+        () => {
+          settled = true;
+        },
+        () => {},
+      );
+      try {
+        await entered;
+        await vi.advanceTimersByTimeAsync(29_999);
+        expect(settled).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(settled).toBe(true);
+        await pending;
+
+        expect(record.results).toHaveLength(1);
+        expect(record.results[0].response).toMatchObject({
+          error: expect.stringContaining('30000ms'),
+          incurredCost: 0,
+          tokenUsage: { numRequests: 0 },
+          metadata: { providerSetup: { workloadStarted: false, timedOut: true } },
+        });
+        expect(provider.checkSetup).toHaveBeenCalledOnce();
+        expect(provider.callApi).not.toHaveBeenCalled();
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        abort.abort();
+        await pending.catch(() => {});
+      }
+    },
+  );
+
   it('checks filesystem preparation after each lifecycle hook without reusing stale failures or successes', async () => {
     const events: string[] = [];
     let ready = false;

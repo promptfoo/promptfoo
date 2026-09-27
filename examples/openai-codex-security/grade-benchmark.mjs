@@ -82,6 +82,19 @@ export function gradeBenchmark(output, context) {
         result.status === 'completed',
       'need a completed, non-mocked saved scan',
     );
+    const raw = typeof output === 'string' ? JSON.parse(output) : output;
+    requireEvidence(
+      [null, 'security-scan', 'deep-security-scan', 'security-diff-scan'].includes(
+        result.operation,
+      ) &&
+        result.findings != null &&
+        result.validation === null &&
+        raw?.manifest?.documentType === 'codex-security.scan-manifest' &&
+        raw.manifest.schemaVersion === '1.0' &&
+        nonempty(result.scanId) &&
+        raw.manifest.scan?.id === result.scanId,
+      'need canonical scan evidence; validation results cannot be scored',
+    );
     const benchmark = loadBenchmark(context);
     const definition = benchmark?.definition;
     requireEvidence(
@@ -119,7 +132,6 @@ export function gradeBenchmark(output, context) {
       review.ineligibleReason || 'source-reading protocol or run provenance was not verified',
     );
 
-    const raw = typeof output === 'string' ? JSON.parse(output) : output;
     const ids = raw?.findings?.findings?.map((finding) => finding.findingId);
     requireEvidence(
       uniqueStrings(ids),

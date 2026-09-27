@@ -57,7 +57,11 @@ function fixture() {
     metadata: {
       codexSecurity: {
         version: 1,
+        operation: 'security-scan' as string | null,
         status: 'completed',
+        scanId: 'recorded-scan',
+        findings: { total: 1, bySeverity: {} },
+        validation: null,
         source: { kind: 'saved-report', mocked: false, sha256: reportHash },
         target: { revision: definition.revision },
         scope: {
@@ -70,7 +74,19 @@ function fixture() {
     },
     vars: { benchmark },
   };
-  const output = { findings: { findings: [{ findingId: 'first' }] } };
+  const output = {
+    manifest: {
+      documentType: 'codex-security.scan-manifest',
+      schemaVersion: '1.0',
+      scan: { id: 'recorded-scan', status: 'completed' },
+    },
+    findings: {
+      documentType: 'codex-security.findings',
+      schemaVersion: '1.0',
+      scanId: 'recorded-scan',
+      findings: [{ findingId: 'first' }],
+    },
+  };
   const resign = () => {
     benchmark.definitionSha256 = helper.evidenceHash(definition);
     review.definitionSha256 = benchmark.definitionSha256;
@@ -95,6 +111,40 @@ describe('Codex Security example benchmark grading', () => {
       metadata: { quality: { status: 'scored', expectedCount: 2 } },
     });
   });
+
+  it('leaves validation results with extra findings and matching review evidence unscored', () => {
+    const f = fixture();
+    Object.assign(f.context.metadata.codexSecurity, {
+      operation: 'validation',
+      validation: { disposition: 'reportable' },
+    });
+    const output = {
+      disposition: 'reportable',
+      report: 'Recorded validation decision',
+      findings: f.output.findings,
+    };
+
+    const result = helper.gradeBenchmark(output, f.context);
+
+    expect(result).toMatchObject({
+      pass: false,
+      metadata: { quality: { status: 'not-scored', curatedRecall: null, precision: null } },
+    });
+    expect(result.namedScores).toBeUndefined();
+  });
+
+  it.each(['security-scan', 'deep-security-scan', 'security-diff-scan', null])(
+    'scores canonical scan-shaped reports with operation %s',
+    (operation) => {
+      const f = fixture();
+      f.context.metadata.codexSecurity.operation = operation;
+
+      expect(helper.gradeBenchmark(f.output, f.context)).toMatchObject({
+        namedScores: { CuratedRecall: 0.5 },
+        metadata: { quality: { status: 'scored' } },
+      });
+    },
+  );
 
   it('loads independent grading evidence from an explicit file without prompt variables', () => {
     const f = fixture();
@@ -167,6 +217,7 @@ describe('Codex Security example benchmark grading', () => {
     const f = fixture();
     f.review.findings.second = structuredClone(f.review.findings.first);
     f.output.findings.findings.push({ findingId: 'second' });
+    f.context.metadata.codexSecurity.findings.total = 2;
     f.resign();
     expect(helper.gradeBenchmark(f.output, f.context)).toMatchObject({
       namedScores: { CuratedRecall: 0.5 },
@@ -202,6 +253,7 @@ describe('Codex Security example benchmark grading', () => {
   it('measures zero recall for an eligible empty report while precision remains undefined', () => {
     const f = fixture();
     f.output.findings.findings = [];
+    f.context.metadata.codexSecurity.findings.total = 0;
     f.review.findings = {};
     f.resign();
     expect(helper.gradeBenchmark(f.output, f.context)).toMatchObject({
@@ -216,6 +268,38 @@ describe('Codex Security example benchmark grading', () => {
   });
 
   it.each([
+    [
+      'validation operation on a scan-shaped output',
+      (f: ReturnType<typeof fixture>) => {
+        f.context.metadata.codexSecurity.operation = 'validation';
+      },
+    ],
+    [
+      'missing normalized scan findings',
+      (f: ReturnType<typeof fixture>) => {
+        Object.assign(f.context.metadata.codexSecurity, { findings: null });
+      },
+    ],
+    [
+      'validation disposition on a scan-shaped output',
+      (f: ReturnType<typeof fixture>) => {
+        Object.assign(f.context.metadata.codexSecurity, {
+          validation: { disposition: 'reportable' },
+        });
+      },
+    ],
+    [
+      'missing canonical scan manifest',
+      (f: ReturnType<typeof fixture>) => {
+        Object.assign(f.output, { manifest: undefined });
+      },
+    ],
+    [
+      'mismatched scan identity',
+      (f: ReturnType<typeof fixture>) => {
+        f.output.manifest.scan.id = 'different-scan';
+      },
+    ],
     [
       'changed revision',
       (f: ReturnType<typeof fixture>) => {
