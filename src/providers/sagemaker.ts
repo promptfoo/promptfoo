@@ -123,8 +123,8 @@ abstract class SageMakerGenericProvider {
     return this.injectedRuntime ?? this.getSdkState().client;
   }
   set sagemakerRuntime(client: any) {
-    this.injectedRuntime = client;
-    if (client === undefined) {
+    this.injectedRuntime = client || undefined;
+    if (!client) {
       this.getSdkState.reset();
     }
   }
