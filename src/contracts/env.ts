@@ -31,7 +31,6 @@ export const ProviderEnvOverridesSchema = z.object({
   AZURE_OPENAI_BASE_URL: z.string().optional(),
   AZURE_OPENAI_DEPLOYMENT_NAME: z.string().optional(),
   AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: z.string().optional(),
-  AZURE_STORAGE_CONNECTION_STRING: z.string().optional(),
   AZURE_TENANT_ID: z.string().optional(),
   AZURE_TOKEN_SCOPE: z.string().optional(),
   CDP_DOMAIN: z.string().optional(),
@@ -171,8 +170,9 @@ export const ProviderEnvOverridesSchema = z.object({
   PROMPTFOO_EVAL_TIMEOUT_MS: z.string().optional(),
 });
 
-// These transport settings apply to the whole evaluation, not an individual provider.
+// These settings apply to the whole evaluation, not an individual provider.
 export const EnvOverridesSchema = ProviderEnvOverridesSchema.extend({
+  AZURE_STORAGE_CONNECTION_STRING: z.string().optional(),
   PROMPTFOO_FETCH_CONNECTIONS: z.string().optional(),
   REQUEST_TIMEOUT_MS: z.string().optional(),
   ALL_PROXY: z.string().optional(),

@@ -177,7 +177,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
   } = await getDefaultProviderPreferences(env);
 
   const openAiProviders = getOpenAiProviders(env);
-  const mistralProviders = getMistralProviders(env);
 
   let providers: Pick<DefaultProviders, keyof DefaultProviders>;
 
@@ -229,6 +228,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     };
   } else if (useMistralDefaults) {
     logger.debug('Using Mistral default providers');
+    const mistralProviders = getMistralProviders(env);
     providers = {
       embeddingProvider: mistralProviders.embeddingProvider,
       gradingJsonProvider: mistralProviders.gradingJsonProvider,
