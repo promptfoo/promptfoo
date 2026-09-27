@@ -39,6 +39,7 @@ import {
 import {
   getProviderCallExecutionContext,
   getProviderDelay,
+  waitForProviderCall,
   withProviderCallExecutionContext,
   withProviderCallTracingContext,
 } from './scheduler/providerCallExecutionContext';
@@ -626,7 +627,7 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
 
 const ABORTED_GRADING_PREFIX = 'Aborted: ';
 
-function applyGradingError(row: EvaluateResult, error: unknown, abortSignal?: AbortSignal) {
+function applyGradingError(row: EvaluationStoreResult, error: unknown, abortSignal?: AbortSignal) {
   const errorAsError = error instanceof Error ? error : undefined;
   // Require both signals: a third-party SDK that throws `AbortError` during a
   // non-aborted run is a real bug, and a real SyntaxError caught microseconds
@@ -1098,7 +1099,14 @@ async function callActiveProvider({
         },
       },
       () => {
-        onProviderInvoked();
+        const invokeProvider = (context?: CallApiContextParams) => {
+          abortSignal?.throwIfAborted();
+          onProviderInvoked();
+          return waitForProviderCall(
+            activeProvider.callApi(renderedPrompt, context, callApiOptions),
+            abortSignal,
+          );
+        };
         const invoke = () =>
           traceContext?.traceparent
             ? withTracedProviderCall(
@@ -1109,17 +1117,20 @@ async function callActiveProvider({
                   evalId: callApiContext.evaluationId,
                   testIndex,
                 },
-                async (context) => activeProvider.callApi(renderedPrompt, context, callApiOptions),
+                invokeProvider,
               )
-            : activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
+            : invokeProvider(callApiContext);
         return testSuite?.tracing
           ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
           : invoke();
       },
     );
-  const response = rateLimitRegistry
-    ? await rateLimitRegistry.execute(activeProvider, callApi, createProviderRateLimitOptions())
-    : await callApi();
+  const response = await waitForProviderCall(
+    rateLimitRegistry
+      ? rateLimitRegistry.execute(activeProvider, callApi, createProviderRateLimitOptions())
+      : callApi(),
+    abortSignal,
+  );
 
   logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
   logger.debug(`Provider response cached property explicitly: ${response.cached}`);
@@ -4357,34 +4368,74 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       repeatCacheContext,
     );
     const originalProvider = callApiContext.originalProvider;
-    const gradingResults = await withCacheNamespace(
-      repeatCacheContext
-        ? getRepeatCacheNamespace(
-            repeatCacheContext.repeatIndex,
-            repeatCacheContext.evaluateOptions,
-          )
-        : undefined,
-      () =>
-        withProviderCallExecutionContext(
-          {
-            abortSignal: providerAbortSignal,
-            rateLimitRegistry: this.rateLimitRegistry,
-            providerDelay: originalProvider
-              ? {
-                  provider: originalProvider,
-                  delay: resolveInvocationDelay(originalProvider, this.options.delay, this.options),
-                }
-              : undefined,
-          },
-          () =>
-            runCompareAssertion(
-              resultsToCompare[0].testCase,
-              compareAssertion,
-              outputs,
-              callApiContext,
-            ),
-        ),
-    );
+    let gradingResults: GradingResult[];
+    try {
+      if (providerAbortSignal?.aborted) {
+        throw new DOMException('Comparison grading cancelled', 'AbortError');
+      }
+      gradingResults = await withCacheNamespace(
+        repeatCacheContext
+          ? getRepeatCacheNamespace(
+              repeatCacheContext.repeatIndex,
+              repeatCacheContext.evaluateOptions,
+            )
+          : undefined,
+        () =>
+          withProviderCallExecutionContext(
+            {
+              abortSignal: providerAbortSignal,
+              rateLimitRegistry: this.rateLimitRegistry,
+              providerDelay: originalProvider
+                ? {
+                    provider: originalProvider,
+                    delay: resolveInvocationDelay(
+                      originalProvider,
+                      this.options.delay,
+                      this.options,
+                    ),
+                  }
+                : undefined,
+            },
+            () =>
+              runCompareAssertion(
+                resultsToCompare[0].testCase,
+                compareAssertion,
+                outputs,
+                callApiContext,
+              ),
+          ),
+      );
+    } catch (error) {
+      if (!providerAbortSignal?.aborted || !isAbortError(error)) {
+        throw error;
+      }
+      for (const result of resultsToCompare) {
+        if (result.failureReason === ResultFailureReason.ERROR) {
+          continue;
+        }
+        const wasSuccess = result.success;
+        const wasScore = result.score;
+        applyGradingError(result, error, providerAbortSignal);
+        mergeSelectBestGradingResult(
+          result,
+          { pass: false, score: 0, reason: result.error!, assertion: compareAssertion },
+          this.stats.tokenUsage,
+        );
+        this.stats[wasSuccess ? 'successes' : 'failures']--;
+        this.stats.errors++;
+        const metrics = prompts[result.promptIdx]?.metrics;
+        if (metrics) {
+          metrics[wasSuccess ? 'testPassCount' : 'testFailCount']--;
+          metrics.testErrorCount++;
+          metrics.score -= wasScore;
+        }
+        this.trackFinalJsonlResult(result);
+        if (this.store.persisted && !this.store.hasResultPersistenceFailure(result)) {
+          await this.store.saveResult(result);
+        }
+      }
+      return;
+    }
 
     for (let index = 0; index < resultsToCompare.length; index++) {
       await this.applySelectBestGradingResult({
