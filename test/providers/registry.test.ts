@@ -882,6 +882,19 @@ describe('Provider Registry', () => {
       expect(provider.id()).toBe(path);
     });
 
+    it('keeps colons inside the model id', async () => {
+      const path = 'anthropic:messages:anthropic.claude-3-5-sonnet-20241022-v2:0';
+      const factory = providerMap.find((f) => f.test(path));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(
+        path,
+        { ...mockProviderOptions, id: undefined },
+        mockContext,
+      );
+      expect(provider.id()).toBe('anthropic:anthropic.claude-3-5-sonnet-20241022-v2:0');
+    });
+
     it('should handle anthropic providers correctly', async () => {
       const factory = providerMap.find((f) => f.test('anthropic:messages:claude-3'));
       expect(factory).toBeDefined();

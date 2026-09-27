@@ -100,6 +100,7 @@ import { RubyProvider } from './rubyCompletion';
 import { createScriptBasedProviderFactory } from './scriptBasedProvider';
 import { ScriptCompletionProvider } from './scriptCompletion';
 import { SequenceProvider } from './sequence';
+import { modelNameFromProviderPath } from './shared';
 import { SimulatedUser } from './simulatedUser';
 import { createSnowflakeProvider } from './snowflake';
 import { createTogetherAiProvider } from './togetherai';
@@ -200,7 +201,7 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      const modelName = providerPath.split(':')[1];
+      const modelName = modelNameFromProviderPath(providerPath, 1);
       return new AI21ChatCompletionProvider(modelName, providerOptions);
     },
   },
@@ -300,7 +301,7 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
-      const modelName = splits[2];
+      const modelName = modelNameFromProviderPath(providerPath, 2);
 
       if (modelType === 'messages') {
         return new AnthropicMessagesProvider(modelName, providerOptions);
@@ -353,7 +354,7 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
-      const deploymentName = splits[2];
+      const deploymentName = modelNameFromProviderPath(providerPath, 2);
 
       // Azure model types that have no sensible default deployment must name one in
       // the provider path (`azure:<type>:<name>`). Without this, the registry would
@@ -1399,7 +1400,10 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      return new VoyageEmbeddingProvider(providerPath.split(':')[1], providerOptions);
+      return new VoyageEmbeddingProvider(
+        modelNameFromProviderPath(providerPath, 1) as string,
+        providerOptions,
+      );
     },
   },
   {

@@ -7,6 +7,7 @@ import {
   isOpenAIToolArray,
   isOpenAIToolChoice,
   isPromptfooSampleTarget,
+  modelNameFromProviderPath,
   openaiToolChoiceToAnthropic,
   openaiToolChoiceToBedrock,
   openaiToolChoiceToGoogle,
@@ -31,6 +32,34 @@ describe('Shared Provider Functions', () => {
     });
     vi.mocked(getEnvInt).mockImplementation(function (_key, defaultValue) {
       return defaultValue ?? 0;
+    });
+  });
+
+  describe('modelNameFromProviderPath', () => {
+    it('keeps colons that belong to the model id', () => {
+      expect(
+        modelNameFromProviderPath(
+          'anthropic:messages:anthropic.claude-3-5-sonnet-20241022-v2:0',
+          2,
+        ),
+      ).toBe('anthropic.claude-3-5-sonnet-20241022-v2:0');
+    });
+
+    it('reads a two segment path', () => {
+      expect(modelNameFromProviderPath('voyage:voyage-3-large', 1)).toBe('voyage-3-large');
+    });
+
+    it('keeps colons in a two segment path', () => {
+      expect(modelNameFromProviderPath('voyage:some:model:v2', 1)).toBe('some:model:v2');
+    });
+
+    it('returns undefined when there is no model name', () => {
+      expect(modelNameFromProviderPath('anthropic:messages', 2)).toBeUndefined();
+      expect(modelNameFromProviderPath('voyage', 1)).toBeUndefined();
+    });
+
+    it('keeps an empty trailing segment rather than dropping it', () => {
+      expect(modelNameFromProviderPath('anthropic:messages:model:', 2)).toBe('model:');
     });
   });
 
