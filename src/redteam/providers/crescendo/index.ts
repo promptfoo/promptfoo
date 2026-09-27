@@ -1124,7 +1124,7 @@ export class CrescendoProvider implements ApiProvider {
       updatedVars,
       filters,
       provider,
-      [this.config.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
+      [this.config.injectVar, ...Object.keys(currentRenderInputVars || {})], // Keep generated fields literal.
     );
 
     const pendingMessages: Message[] = [];

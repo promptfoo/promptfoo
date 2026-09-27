@@ -437,6 +437,7 @@ export async function runRedteamConversation({
       ...iterationVars,
       [injectVar]: finalInjectVar,
       ...(currentRenderInputVars || {}),
+      ...(perTurnLayers.length > 0 && { [injectVar]: finalInjectVar }),
     };
 
     targetPrompt = await renderPrompt(
@@ -444,7 +445,7 @@ export async function runRedteamConversation({
       updatedVars,
       filters,
       targetProvider,
-      [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
+      [injectVar, ...Object.keys(currentRenderInputVars || {})], // Treat all generated fields as literal values.
     );
 
     const iterationStart = Date.now();

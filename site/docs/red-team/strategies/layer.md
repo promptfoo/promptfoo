@@ -43,7 +43,7 @@ When the **first step** is an agentic strategy (hydra, crescendo, goat, jailbrea
 2. **Per-Turn Transforms**: Remaining steps (e.g., audio, image) are applied to each turn dynamically
 3. **Multi-Modal Attacks**: Combine conversation-based attacks with audio/image delivery
 
-Agentic steps use the same attack adapters as standalone strategies, including support for plugin `inputs` schemas. Layer steps also honor plugin targeting and `excludeStrategies`; you can exclude an agentic step using its registered strategy ID (for example, `jailbreak:hydra`) or the alias used in `steps`.
+Agentic steps use the same attack adapters as standalone strategies, including support for plugin `inputs` schemas. Generated input fields remain literal attack text rather than being interpreted as local file references or templates. Layer steps also honor plugin targeting and `excludeStrategies`; you can exclude an agentic step using its registered strategy ID (for example, `jailbreak:hydra`) or the alias used in `steps`.
 
 ```yaml title="promptfooconfig.yaml"
 providers:
