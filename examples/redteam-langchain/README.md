@@ -30,6 +30,6 @@ npx promptfoo@latest redteam run
 
 See the [LangChain Red Team Guide](https://promptfoo.dev/blog/red-team-langchain) for details.
 
-Keep the virtual environment active so Promptfoo uses its Python packages, or set `PROMPTFOO_PYTHON` to the absolute path of `venv/bin/python`. The provider reports token counts returned by the API and omits them when the API supplies no usage.
+Keep the virtual environment active so Promptfoo uses its Python packages, or set `PROMPTFOO_PYTHON` to the absolute path of `venv/bin/python`. The provider reports token counts returned by the API, including the reasoning breakdown when supplied, and omits usage when the API supplies none.
 
 Run the offline provider checks with `python -m unittest discover -p '*_test.py'`.

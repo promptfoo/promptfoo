@@ -24,6 +24,11 @@ def call_api(prompt, options, context):
                 "prompt": result.usage_metadata["input_tokens"],
                 "completion": result.usage_metadata["output_tokens"],
             }
+            reasoning = result.usage_metadata.get("output_token_details", {}).get(
+                "reasoning"
+            )
+            if reasoning is not None:
+                response["tokenUsage"]["completionDetails"] = {"reasoning": reasoning}
         return response
     except Exception as error:  # noqa: BLE001 - Surface package failures in the result.
         return {"error": str(error), "output": None}
