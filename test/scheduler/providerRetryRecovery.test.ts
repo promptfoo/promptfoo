@@ -293,6 +293,29 @@ describe('scheduler recovery outside provider transport retries', () => {
     expect(fetch).toHaveBeenCalledOnce();
   });
 
+  it.each(['GET', 'PUT', 'POST', 'PATCH', 'get'])(
+    'does not replay n8n %s after a response body stream failure',
+    async (method) => {
+      const fetch = vi.fn().mockImplementation(
+        async () =>
+          new Response(
+            new ReadableStream({
+              start(controller) {
+                controller.error(new Error('ECONNRESET during body read'));
+              },
+            }),
+            { status: 200 },
+          ),
+      );
+      vi.stubGlobal('fetch', fetch);
+      const result = await invoke(
+        new N8nProvider('https://retry.fixture.test/n8n', { config: { method, maxRetries: 3 } }),
+      );
+      expect(result.error).toContain('ECONNRESET during body read');
+      expect(fetch).toHaveBeenCalledOnce();
+    },
+  );
+
   it('preserves a TTS throttle reported in a non-429 error body', async () => {
     const fetch = vi
       .fn()

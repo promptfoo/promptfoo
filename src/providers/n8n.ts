@@ -571,13 +571,8 @@ export class N8nProvider implements ApiProvider {
     let latencyMs: number | undefined;
 
     try {
-      // n8n webhooks are stateful — the workflow may have already accepted the request and dispatched
-      // side-effects (sending messages, writing to a database) before the
-      // transport-level failure surfaces. The default `fetchWithRetries`
-      // budget of 4 would silently re-deliver those side-effects. Pass
-      // maxRetries=0 so transient failures fail through to the caller (who
-      // can re-run the eval if appropriate). HTTP method semantics do not
-      // prove the workflow itself is safe to replay.
+      // Webhooks can dispatch side effects before either the request or body read fails.
+      // Disable both retry layers, even for nominally idempotent HTTP methods.
       const maxRetries = 0;
 
       // Webhook URLs and session-bearing requests can be sensitive and stateful.
@@ -586,7 +581,7 @@ export class N8nProvider implements ApiProvider {
         fetchOptions,
         timeout,
         'text',
-        true,
+        { bust: true, retryBody: false },
         maxRetries,
       );
 

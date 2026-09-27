@@ -364,7 +364,7 @@ describe('provider operation retry ownership', () => {
     expect(fetch).toHaveBeenCalledTimes(4);
   });
 
-  it.each(['GET', 'PUT', 'POST', 'PATCH'] as const)(
+  it.each(['GET', 'HEAD', 'PUT', 'POST', 'PATCH'] as const)(
     'does not replay a stateful n8n webhook %s with request-local zero retries',
     async (method) => {
       const fetch = vi.fn().mockImplementation(async () => throttled());
@@ -382,22 +382,7 @@ describe('provider operation retry ownership', () => {
     vi.stubGlobal('fetch', fetch);
     const config = { apiKey: 'fixture', apiBaseUrl: 'https://retry.fixture.test', maxRetries: 1 };
     const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', { config });
-    const pending = withCacheEnabled(false, () =>
-      wrapProviderWithRateLimiting(provider, registry).callApi('hello', {
-        vars: {},
-        prompt: { raw: 'hello', label: 'fixture' },
-      }),
-    );
-    const handled = pending.catch((error: Error) => ({ error: error.message }));
-    // The SDK installs a request timeout alongside its retry timers. Draining every
-    // fake timer also fires that unrelated timeout and recursively retries the aborted
-    // request on macOS. Stop as soon as the two scheduler attempts have exhausted the
-    // SDK's three-request budget.
-    for (let i = 0; i < 10 && fetch.mock.calls.length < 6; i++) {
-      await vi.advanceTimersToNextTimerAsync();
-    }
-    expect(fetch).toHaveBeenCalledTimes(6);
-    const result = await handled;
+    const result = await invoke(provider);
     expect(result.error).toContain('429');
     // The SDK's two retries and the scheduler's one retry remain separate.
     expect(fetch).toHaveBeenCalledTimes(6);

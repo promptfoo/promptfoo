@@ -1604,6 +1604,51 @@ describe('fetchWithCache', () => {
     });
   });
 
+  describe.each([true, false])('body retry policy with cache enabled=%s', (cacheEnabled) => {
+    it.each(['GET', 'PUT'])('does not replay %s when body retries are disabled', async (method) => {
+      mockFetchWithRetries.mockImplementation(
+        async () =>
+          new Response(
+            new ReadableStream({
+              start(controller) {
+                controller.error(new Error('ECONNRESET during body read'));
+              },
+            }),
+          ),
+      );
+
+      await expect(
+        withCacheEnabled(cacheEnabled, () =>
+          fetchWithCache(url, { method }, 1000, 'json', { retryBody: false }, 0),
+        ),
+      ).rejects.toThrow('ECONNRESET during body read');
+      expect(mockFetchWithRetries).toHaveBeenCalledOnce();
+    });
+  });
+
+  it('does not coalesce requests with different body retry policies', async () => {
+    let rejectBody!: (error: Error) => void;
+    const pendingBody = new Promise<string>((_resolve, reject) => {
+      rejectBody = reject;
+    });
+    mockFetchWithRetries
+      .mockResolvedValueOnce({
+        ...mockFetchWithRetriesResponse(true, response),
+        text: () => pendingBody,
+      })
+      .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, response));
+
+    const noRetry = fetchWithCache(url, {}, 1000, 'json', { retryBody: false });
+    const failed = expect(noRetry).rejects.toThrow('ECONNRESET during body read');
+    const retry = fetchWithCache(url, {}, 1000);
+    await vi.waitFor(() => expect(mockFetchWithRetries).toHaveBeenCalledTimes(2));
+    rejectBody(new Error('ECONNRESET during body read'));
+
+    await failed;
+    expect((await retry).data).toEqual(response);
+    expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+  });
+
   describe('with cache disabled', () => {
     // Mirrors fetchAndReadBody's idempotent body-read policy: one initial read
     // plus two transient-error retries.
@@ -1659,37 +1704,40 @@ describe('fetchWithCache', () => {
       expect((error as Error).message).toContain('Received text: error code: 1006');
     });
 
-    it('should retry on transient body-read error then succeed', async () => {
-      const responseText = JSON.stringify(response);
-      const textMockFail = vi
-        .fn<() => Promise<string>>()
-        .mockRejectedValue(new Error('ECONNRESET during body read'));
-      const textMockSuccess = vi.fn<() => Promise<string>>().mockResolvedValue(responseText);
+    it.each([undefined, 0])(
+      'should retry transient body reads with maxRetries=%s',
+      async (maxRetries) => {
+        const responseText = JSON.stringify(response);
+        const textMockFail = vi
+          .fn<() => Promise<string>>()
+          .mockRejectedValue(new Error('ECONNRESET during body read'));
+        const textMockSuccess = vi.fn<() => Promise<string>>().mockResolvedValue(responseText);
 
-      mockFetchWithRetries.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        text: textMockFail,
-        headers: new Headers({ 'content-type': 'application/json' }),
-      } as unknown as Response);
-      // Second fetch (after body retry): succeeds
-      mockFetchWithRetries.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        text: textMockSuccess,
-        headers: new Headers({ 'content-type': 'application/json' }),
-      } as unknown as Response);
+        mockFetchWithRetries.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          text: textMockFail,
+          headers: new Headers({ 'content-type': 'application/json' }),
+        } as unknown as Response);
+        // Second fetch (after body retry): succeeds
+        mockFetchWithRetries.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          text: textMockSuccess,
+          headers: new Headers({ 'content-type': 'application/json' }),
+        } as unknown as Response);
 
-      const result = await fetchWithCache(url, {}, 1000);
+        const result = await fetchWithCache(url, {}, 1000, 'json', false, maxRetries);
 
-      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
-      expect(textMockFail).toHaveBeenCalledTimes(1);
-      expect(textMockSuccess).toHaveBeenCalledTimes(1);
-      expect(result.data).toEqual(response);
-      expect(result.cached).toBe(false);
-    });
+        expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+        expect(textMockFail).toHaveBeenCalledTimes(1);
+        expect(textMockSuccess).toHaveBeenCalledTimes(1);
+        expect(result.data).toEqual(response);
+        expect(result.cached).toBe(false);
+      },
+    );
 
     it('should throw after exhausting body-read retries', async () => {
       // All fetches return responses whose text() fails with transient error

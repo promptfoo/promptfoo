@@ -9,4 +9,6 @@ export type CacheOptions = {
   repeatIndex?: number;
   /** Precomputed, credential-free cache identity for callers with tenant-scoped keys. */
   cacheKey?: string;
+  /** Allow transient body-read retries for idempotent HTTP methods (default: true). */
+  retryBody?: boolean;
 };

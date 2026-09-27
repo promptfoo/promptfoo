@@ -109,7 +109,7 @@ describe('N8nProvider', () => {
         expect.objectContaining({ method: 'HEAD' }),
         expect.any(Number),
         'text',
-        true,
+        { bust: true, retryBody: false },
         0,
       );
       expect(vi.mocked(fetchWithCache).mock.calls[0][1]).not.toHaveProperty('body');
@@ -131,7 +131,7 @@ describe('N8nProvider', () => {
         },
         expect.any(Number),
         'text',
-        true,
+        { bust: true, retryBody: false },
         0,
       );
 
@@ -229,7 +229,7 @@ describe('N8nProvider', () => {
         }),
         expect.any(Number),
         'text',
-        true,
+        { bust: true, retryBody: false },
         0,
       );
     });
@@ -261,7 +261,7 @@ describe('N8nProvider', () => {
         }),
         expect.any(Number),
         'text',
-        true,
+        { bust: true, retryBody: false },
         0,
       );
     });
@@ -285,7 +285,7 @@ describe('N8nProvider', () => {
         }),
         expect.any(Number),
         'text',
-        true,
+        { bust: true, retryBody: false },
         0,
       );
     });
@@ -311,7 +311,7 @@ describe('N8nProvider', () => {
         }),
         expect.any(Number),
         'text',
-        true,
+        { bust: true, retryBody: false },
         0,
       );
     });
@@ -346,7 +346,7 @@ describe('N8nProvider', () => {
         }),
         expect.any(Number),
         'text',
-        true,
+        { bust: true, retryBody: false },
         0,
       );
     });
@@ -363,7 +363,7 @@ describe('N8nProvider', () => {
         expect.objectContaining({ signal: abortController.signal }),
         expect.any(Number),
         'text',
-        true,
+        { bust: true, retryBody: false },
         0,
       );
     });
@@ -386,7 +386,7 @@ describe('N8nProvider', () => {
         },
         expect.any(Number),
         'text',
-        true,
+        { bust: true, retryBody: false },
         0,
       );
     });
@@ -408,7 +408,7 @@ describe('N8nProvider', () => {
         }),
         expect.any(Number),
         'text',
-        true,
+        { bust: true, retryBody: false },
         0,
       );
     });
@@ -504,7 +504,7 @@ describe('N8nProvider', () => {
         }),
         expect.any(Number),
         'text',
-        true,
+        { bust: true, retryBody: false },
         0,
       );
     });
@@ -535,7 +535,7 @@ describe('N8nProvider', () => {
         }),
         expect.any(Number),
         'text',
-        true,
+        { bust: true, retryBody: false },
         0,
       );
     });
@@ -565,7 +565,7 @@ describe('N8nProvider', () => {
         }),
         expect.any(Number),
         'text',
-        true,
+        { bust: true, retryBody: false },
         0,
       );
     });
@@ -598,7 +598,7 @@ describe('N8nProvider', () => {
         }),
         expect.any(Number),
         'text',
-        true,
+        { bust: true, retryBody: false },
         0,
       );
     });
@@ -631,7 +631,7 @@ describe('N8nProvider', () => {
         }),
         expect.any(Number),
         'text',
-        true,
+        { bust: true, retryBody: false },
         0,
       );
     });
@@ -709,7 +709,7 @@ describe('N8nProvider', () => {
         expect.any(Object),
         expect.any(Number),
         'text',
-        true,
+        { bust: true, retryBody: false },
         0,
       );
     });
@@ -748,7 +748,7 @@ describe('N8nProvider', () => {
         expect.any(Object),
         expect.any(Number),
         'text',
-        true,
+        { bust: true, retryBody: false },
         0,
       );
     });
