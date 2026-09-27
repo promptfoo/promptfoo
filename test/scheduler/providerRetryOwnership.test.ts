@@ -382,10 +382,21 @@ describe('provider operation retry ownership', () => {
     vi.stubGlobal('fetch', fetch);
     const config = { apiKey: 'fixture', apiBaseUrl: 'https://retry.fixture.test', maxRetries: 1 };
     const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', { config });
+    const sdkErrors: string[] = [];
+    const create = provider.anthropic.messages.create.bind(provider.anthropic.messages);
+    vi.spyOn(provider.anthropic.messages, 'create').mockImplementation((...args) => {
+      const request = create(...args);
+      // Preserve the real SDK promise while retaining errors before provider normalization.
+      void request.catch((error) => {
+        sdkErrors.push(error instanceof Error ? error.stack || error.message : String(error));
+      });
+      return request;
+    });
     const result = await invoke(provider);
-    expect(result.error).toContain('429');
+    const diagnostics = JSON.stringify({ fetchCount: fetch.mock.calls.length, sdkErrors });
+    expect(result.error, diagnostics).toContain('429');
     // The SDK's two retries and the scheduler's one retry remain separate.
-    expect(fetch).toHaveBeenCalledTimes(6);
+    expect(fetch, diagnostics).toHaveBeenCalledTimes(6);
   });
 
   it('retains Agents session replay until terminal job failures have local recovery', async () => {
