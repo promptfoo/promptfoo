@@ -1,4 +1,5 @@
-import { PostHog } from 'posthog-node';
+import { createRequire } from 'node:module';
+
 import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, R_ENDPOINT, VERSION } from './constants';
 import { POSTHOG_KEY } from './constants/build';
 import {
@@ -12,12 +13,15 @@ import {
 import { getUserAuthInfo, getUserId } from './globalConfig/accounts';
 import logger from './logger';
 import { fetchWithProxy, fetchWithTimeout } from './util/fetch/index';
+import type { PostHog } from 'posthog-node';
 
 import type { EventProperties, TelemetryEventTypes } from './telemetryEvents';
 
 export { TELEMETRY_EVENTS, TelemetryEventSchema } from './telemetryEvents';
 
 export type { EventProperties, TelemetryEventTypes } from './telemetryEvents';
+
+const require = createRequire(import.meta.url);
 
 interface ClientRecord {
   client: PostHog;
@@ -101,6 +105,8 @@ export class Telemetry {
     if (!this.clientRecord && POSTHOG_KEY) {
       if (!sharedClient || sharedClient.shutdown) {
         try {
+          // Keep capture synchronous without loading the SDK when telemetry is disabled.
+          const { PostHog } = require('posthog-node') as typeof import('posthog-node');
           sharedClient = {
             client: new PostHog(POSTHOG_KEY, {
               host: EVENTS_ENDPOINT,

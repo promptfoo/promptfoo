@@ -15,6 +15,21 @@ const client = vi.hoisted(() => ({
 }));
 
 const request = vi.hoisted(() => vi.fn());
+const loadPostHog = vi.hoisted(() => vi.fn());
+
+vi.mock('node:module', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:module')>();
+  return {
+    ...actual,
+    createRequire: (url: string | URL) => {
+      const require = actual.createRequire(url);
+      return Object.assign(
+        (id: string) => (id === 'posthog-node' ? loadPostHog() : require(id)),
+        require,
+      );
+    },
+  };
+});
 
 vi.mock('posthog-node', () => ({ PostHog: vi.fn() }));
 vi.mock('../src/constants/build', () => ({ POSTHOG_KEY: 'fixture-key' }));
@@ -35,6 +50,7 @@ beforeEach(() => {
   previousHostTestMode = Reflect.get(process, hostTestModeKey);
   Reflect.deleteProperty(process, hostTestModeKey);
   vi.resetModules();
+  loadPostHog.mockReturnValue({ PostHog });
   vi.mocked(PostHog).mockImplementation(function () {
     return client as unknown as PostHog;
   });
@@ -67,6 +83,31 @@ afterEach(async () => {
 });
 
 describe('telemetry test-mode environment restrictions', () => {
+  it('loads the SDK only for enabled use and reuses it across borrowers', async () => {
+    const { default: cliState } = await import('../src/cliState');
+    const { Telemetry } = await import('../src/telemetry');
+    const telemetry = new Telemetry(false);
+    await telemetry.shutdown();
+    expect(loadPostHog).not.toHaveBeenCalled();
+
+    for (const env of [{ IS_TESTING: 'true' }, { PROMPTFOO_DISABLE_TELEMETRY: 'true' }]) {
+      await cliState.withEnv(env, async () => {
+        telemetry.record('eval_ran', {});
+        await telemetry.shutdown();
+      });
+      expect(loadPostHog).not.toHaveBeenCalled();
+    }
+
+    telemetry.record('eval_ran', {});
+    const peer = new Telemetry();
+    expect(loadPostHog).toHaveBeenCalledOnce();
+    expect(PostHog).toHaveBeenCalledOnce();
+    await telemetry.shutdown();
+    expect(client.shutdown).not.toHaveBeenCalled();
+    await peer.shutdown();
+    expect(client.shutdown).toHaveBeenCalledOnce();
+  });
+
   it('drains an in-flight SDK flush when the last two borrowers shut down together', async () => {
     const { PostHog: ActualPostHog } =
       await vi.importActual<typeof import('posthog-node')>('posthog-node');
