@@ -39,6 +39,44 @@ describe('getStrategyId', () => {
 });
 
 describe('getEstimatedProbes', () => {
+  it.each([
+    { plugins: [{ id: 'bola', numTests: 500 }], numTests: 5, expected: 500 },
+    { plugins: [{ id: 'bola', numTests: 2 }], numTests: 50, expected: 2 },
+    {
+      plugins: ['bola', { id: 'bfla' }, { id: 'ssrf', numTests: 17 }],
+      numTests: 5,
+      expected: 27,
+    },
+    {
+      plugins: ['bola', { id: 'bfla' }, { id: 'ssrf', numTests: 17 }],
+      numTests: undefined,
+      expected: 27,
+    },
+    {
+      plugins: [
+        { id: 'bola', numTests: 2 },
+        { id: 'bfla', numTests: 17 },
+      ],
+      numTests: 5,
+      expected: 19,
+    },
+    { plugins: [], numTests: 5, expected: 0 },
+  ])('uses effective plugin counts for $plugins', ({ plugins, numTests, expected }) => {
+    const config = { ...baseConfig, plugins, numTests, strategies: [] } as Config;
+    expect(getEstimatedProbes(config)).toBe(expected);
+  });
+
+  it('applies strategy and language factors to each plugin override', () => {
+    const config = {
+      ...baseConfig,
+      numTests: 5,
+      plugins: ['bola', { id: 'bfla', numTests: 17 }],
+      strategies: ['basic', { id: 'jailbreak' }],
+      language: ['en', 'es'],
+    } as Config;
+    expect(getEstimatedProbes(config)).toBe(528); // (5 + 17) * (1 + 1 + 10) * 2
+  });
+
   it('should calculate basic probes without strategies', () => {
     const config = {
       ...baseConfig,
@@ -235,6 +273,20 @@ describe('isStrategyConfigured', () => {
 });
 
 describe('getEstimatedDuration', () => {
+  it('uses the overridden probe workload while preserving the duration heuristic', () => {
+    const config = {
+      ...baseConfig,
+      numTests: 5,
+      plugins: [{ id: 'bola', numTests: 500 }],
+      strategies: ['basic'],
+      maxConcurrency: 10,
+    } as Config;
+    expect(getEstimatedDuration(config)).toBe('~6m'); // 8s generation + 300s probes
+    expect(getEstimatedDuration({ ...config, plugins: [{ id: 'bola', numTests: 2 }] })).toBe(
+      '~10s',
+    );
+  });
+
   it('should return duration in seconds for very short runs', () => {
     const config = {
       ...baseConfig,

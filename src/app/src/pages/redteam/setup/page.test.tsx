@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event';
 import { load as loadYaml } from 'js-yaml';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { getEstimatedDuration, getEstimatedProbes } from './components/strategies/utils';
 import { useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from './hooks/useRedTeamTargetConfigValidation';
 import { useSetupState } from './hooks/useSetupState';
@@ -274,7 +275,7 @@ describe('RedTeamSetupPage', () => {
             description: 'Plugin override round trip',
             prompts: ['{{prompt}}'],
             targets: [{ id: 'echo', config: {} }],
-            redteam: { numTests: 5, plugins: [plugin], strategies: ['basic'] },
+            redteam: { numTests: 5, maxConcurrency: 10, plugins: [plugin], strategies: ['basic'] },
           }),
         ],
         'config.yaml',
@@ -282,12 +283,16 @@ describe('RedTeamSetupPage', () => {
       );
       await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file);
       await waitFor(() => expect(useRedTeamConfig.getState().config.plugins).toEqual([plugin]));
+      expect(getEstimatedProbes(useRedTeamConfig.getState().config)).toBe(34);
+      expect(getEstimatedDuration(useRedTeamConfig.getState().config)).toBe('~19s');
 
       act(() =>
         useRedTeamConfig
           .getState()
           .updatePlugins([{ id: 'bola', config: { targetSystems: ['edited'] } }]),
       );
+      expect(getEstimatedProbes(useRedTeamConfig.getState().config)).toBe(34);
+      expect(getEstimatedDuration(useRedTeamConfig.getState().config)).toBe('~19s');
       const exported = loadYaml(generateOrderedYaml(useRedTeamConfig.getState().config));
       expect(exported).toMatchObject({
         redteam: {

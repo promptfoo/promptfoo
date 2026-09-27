@@ -102,7 +102,11 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
 
 export function getEstimatedProbes(config: Config) {
   const numTests = config.numTests ?? 5;
-  const baseProbes = numTests * config.plugins.length;
+  const baseProbes = config.plugins.reduce((total, plugin) => {
+    const pluginNumTests =
+      typeof plugin === 'object' && 'numTests' in plugin ? plugin.numTests : undefined;
+    return total + (pluginNumTests ?? numTests);
+  }, 0);
 
   // Calculate total multiplier for all active strategies
   const strategyMultiplier = config.strategies.reduce((total, strategy) => {
