@@ -236,6 +236,29 @@ describe('matchesFactuality', () => {
         prompt: expect.any(Number),
         completion: expect.any(Number),
       }),
+      // An uninterpretable grader response is a grader failure, not evidence
+      // that the answer is not factual: inverse-aware callers
+      // (e.g. not-model-graded-factuality) must propagate it verbatim.
+      metadata: { graderError: true },
+    });
+  });
+
+  it('should tag a grading provider error as a grader failure', async () => {
+    const mockCallApi = vi.fn().mockResolvedValue({ error: 'Grader provider unavailable' });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    await expect(
+      matchesFactuality('Input text', 'Expected output', 'Sample output', {}),
+    ).resolves.toEqual({
+      pass: false,
+      score: 0,
+      reason: 'Grader provider unavailable',
+      tokensUsed: expect.objectContaining({
+        total: expect.any(Number),
+        prompt: expect.any(Number),
+        completion: expect.any(Number),
+      }),
+      metadata: { graderError: true },
     });
   });
 

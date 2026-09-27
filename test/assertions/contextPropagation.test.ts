@@ -25,8 +25,21 @@ import { createMockProvider } from '../factories/provider';
 
 import type { AssertionParams, CallApiContextParams } from '../../src/types/index';
 
+// Partial mock: `isGraderFailure` is a real type guard over the matcher's
+// result, so it must keep its implementation for the not- cases below.
 vi.mock('../../src/matchers/comparison');
-vi.mock('../../src/matchers/llmGrading');
+vi.mock('../../src/matchers/llmGrading', async () => {
+  const actual = await vi.importActual<typeof import('../../src/matchers/llmGrading')>(
+    '../../src/matchers/llmGrading',
+  );
+  return {
+    ...actual,
+    matchesClosedQa: vi.fn(),
+    matchesFactuality: vi.fn(),
+    matchesGEval: vi.fn(),
+    matchesLlmRubric: vi.fn(),
+  };
+});
 vi.mock('../../src/matchers/rag');
 vi.mock('../../src/assertions/contextUtils', () => ({
   resolveContext: vi.fn().mockResolvedValue('mocked context'),
@@ -135,6 +148,91 @@ describe('Context Propagation in Model-Graded Assertions', () => {
         { testVar: 'value' },
         mockCallApiContext,
       );
+    });
+
+    describe('inverse (not-model-graded-factuality)', () => {
+      const inverseParams = {
+        ...baseParams,
+        assertion: { type: 'not-model-graded-factuality' as const },
+        baseType: 'model-graded-factuality' as const,
+        renderedValue: 'expected answer',
+        inverse: true,
+      };
+
+      it('fails a passing verdict when inverse is true', async () => {
+        vi.mocked(matchesFactuality).mockResolvedValue({
+          pass: true,
+          score: 1,
+          reason: 'The submitted answer is a subset of the expert answer',
+        });
+
+        const result = await handleFactuality(inverseParams);
+
+        expect(result).toEqual({
+          assertion: { type: 'not-model-graded-factuality' },
+          pass: false,
+          score: 0,
+          reason: 'The submitted answer is a subset of the expert answer',
+        });
+      });
+
+      it('passes a failing verdict when inverse is true', async () => {
+        vi.mocked(matchesFactuality).mockResolvedValue({
+          pass: false,
+          score: 0,
+          reason: 'There is a disagreement between the submitted answer and the expert answer',
+        });
+
+        const result = await handleFactuality(inverseParams);
+
+        expect(result).toEqual({
+          assertion: { type: 'not-model-graded-factuality' },
+          pass: true,
+          score: 1,
+          reason: 'There is a disagreement between the submitted answer and the expert answer',
+        });
+      });
+
+      it('leaves the non-inverse verdict untouched', async () => {
+        vi.mocked(matchesFactuality).mockResolvedValue({
+          pass: true,
+          score: 1,
+          reason: 'The submitted answer is a subset of the expert answer',
+        });
+
+        const result = await handleFactuality({ ...inverseParams, inverse: false });
+
+        expect(result).toEqual({
+          assertion: { type: 'not-model-graded-factuality' },
+          pass: true,
+          score: 1,
+          reason: 'The submitted answer is a subset of the expert answer',
+        });
+      });
+
+      // A grader transport/parse failure is not evidence that the answer was
+      // or was not factual, so it must never be flipped into a pass by the
+      // `not-` prefix. `matchesFactuality` tags these with metadata.graderError.
+      it('propagates a grader failure verbatim instead of flipping it to a pass', async () => {
+        vi.mocked(matchesFactuality).mockResolvedValue({
+          pass: false,
+          score: 0,
+          reason: 'No output',
+          tokensUsed: { total: 11, prompt: 5, completion: 6 },
+          metadata: { graderError: true },
+        });
+
+        const result = await handleFactuality(inverseParams);
+
+        expect(result).toEqual({
+          assertion: { type: 'not-model-graded-factuality' },
+          pass: false,
+          score: 0,
+          reason: 'No output',
+          tokensUsed: { total: 11, prompt: 5, completion: 6 },
+          metadata: { graderError: true },
+        });
+      });
     });
   });
 
