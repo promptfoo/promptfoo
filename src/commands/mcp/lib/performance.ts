@@ -1,49 +1,3 @@
-import { LRUCache } from 'lru-cache';
-
-import type { EvalSummary } from '../../../types/index';
-
-/**
- * Performance utilities for MCP server operations
- */
-
-/**
- * Simple in-memory cache for evaluation results
- */
-export class EvaluationCache {
-  private cache: LRUCache<string, EvalSummary[]>;
-
-  constructor(maxSize: number = 100, ttlMs: number = 5 * 60 * 1000) {
-    // 5 minutes default
-    this.cache = new LRUCache<string, EvalSummary[]>({
-      max: maxSize,
-      ttl: ttlMs,
-    });
-  }
-
-  get(key: string) {
-    return this.cache.get(key);
-  }
-
-  set(key: string, value: EvalSummary[]): void {
-    this.cache.set(key, value);
-  }
-
-  has(key: string): boolean {
-    return this.cache.has(key);
-  }
-
-  clear(): void {
-    this.cache.clear();
-  }
-
-  getStats() {
-    return {
-      size: this.cache.size,
-      calculatedSize: this.cache.calculatedSize,
-    };
-  }
-}
-
 /**
  * Pagination helper for large result sets
  */
@@ -178,8 +132,3 @@ export async function* streamProcess<T, R>(
     yield result;
   }
 }
-
-/**
- * Default cache instances
- */
-export const evaluationCache = new EvaluationCache();
