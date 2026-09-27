@@ -9,7 +9,7 @@ import { createCache } from 'cache-manager';
 import { Keyv } from 'keyv';
 import { KeyvFile } from 'keyv-file';
 import { LRUCache } from 'lru-cache';
-import { getEnvBool, getEnvInt, getEnvString } from './envars';
+import { getEnvBool, getEnvInt, getEnvOverrides, getEnvString } from './envars';
 import logger from './logger';
 import { getRequestTimeoutMs } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
@@ -182,13 +182,15 @@ function getCacheBackend(
   const cacheType =
     getEnvString('PROMPTFOO_CACHE_TYPE') ||
     (getEnvString('NODE_ENV') === 'test' ? 'memory' : 'disk');
+  const scopedConfigDirectory =
+    getEnvOverrides()?.PROMPTFOO_CONFIG_DIR ?? getEnvOverrides('file')?.PROMPTFOO_CONFIG_DIR;
   const filePath =
     cachePath !== undefined || (cacheType === 'disk' && cacheEnabled)
       ? resolveCachePath(
           path.join(
             cachePath ??
               (getEnvString('PROMPTFOO_CACHE_PATH') ||
-                path.join(getConfigDirectoryPath(), 'cache')),
+                path.join(scopedConfigDirectory || getConfigDirectoryPath(), 'cache')),
             'cache.json',
           ),
         )

@@ -43,6 +43,83 @@ describe('invocation-scoped cache settings', () => {
     PROMPTFOO_CACHE_PATH: cachePath,
   });
 
+  it.each(['suite', 'file'] as const)(
+    'isolates caches under %s config directories without moving global persistence',
+    async (scope) => {
+      const config = await import('../src/util/config/manage');
+      const previous = config.getConfigDirectoryPath();
+      const globalDirectory = path.join(tempDir, 'global');
+      config.setConfigDirectoryPath(globalDirectory);
+      const ready = createDeferred<void>();
+      let entered = 0;
+      try {
+        await Promise.all(
+          ['first', 'second'].map((name) => {
+            const directory = path.join(tempDir, name);
+            const settings = { PROMPTFOO_CONFIG_DIR: directory };
+            return cliState.withEnvFileOverrides(scope === 'file' ? settings : {}, () =>
+              cliState.withEnv(
+                { ...disk(''), ...(scope === 'suite' ? settings : {}) },
+                async () => {
+                  const handle = cache.getCache();
+                  await handle.set('same-key', name);
+                  if (++entered === 2) {
+                    ready.resolve();
+                  }
+                  await ready.promise;
+                  expect(await handle.get('same-key')).toBe(name);
+                  expect(fs.existsSync(path.join(directory, 'cache'))).toBe(true);
+                  expect(config.getConfigDirectoryPath()).toBe(globalDirectory);
+                },
+              ),
+            );
+          }),
+        );
+        expect(fs.existsSync(path.join(globalDirectory, 'cache'))).toBe(false);
+      } finally {
+        config.setConfigDirectoryPath(previous);
+      }
+    },
+  );
+
+  it('keeps an explicit cache path ahead of a scoped config directory', async () => {
+    const cachePath = path.join(tempDir, 'explicit');
+    const configPath = path.join(tempDir, 'config');
+    await cliState.withEnv({ ...disk(cachePath), PROMPTFOO_CONFIG_DIR: configPath }, async () => {
+      await cache.getCache().set('fixture', 'value');
+      expect(fs.existsSync(cachePath)).toBe(true);
+      expect(fs.existsSync(configPath)).toBe(false);
+    });
+  });
+
+  it('prefers suite config directories and lets an empty suite value mask the file', async () => {
+    const config = await import('../src/util/config/manage');
+    const previous = config.getConfigDirectoryPath();
+    const globalDirectory = path.join(tempDir, 'global');
+    config.setConfigDirectoryPath(globalDirectory);
+    try {
+      await cliState.withEnvFileOverrides(
+        { PROMPTFOO_CONFIG_DIR: path.join(tempDir, 'file') },
+        async () => {
+          for (const name of ['suite', '']) {
+            const directory = name ? path.join(tempDir, name) : globalDirectory;
+            await cliState.withEnv(
+              { ...disk(''), PROMPTFOO_CONFIG_DIR: name ? directory : '' },
+              async () => {
+                await cache.getCache().set('fixture', directory);
+                expect(fs.existsSync(path.join(directory, 'cache'))).toBe(true);
+                expect(config.getConfigDirectoryPath()).toBe(globalDirectory);
+              },
+            );
+          }
+        },
+      );
+      expect(fs.existsSync(path.join(tempDir, 'file'))).toBe(false);
+    } finally {
+      config.setConfigDirectoryPath(previous);
+    }
+  });
+
   it('keeps disabled cache handles out of shared memory and disk backends', async () => {
     await cliState.withEnv(memory, async () => {
       await cache.getCache().set('shared', 'enabled');
