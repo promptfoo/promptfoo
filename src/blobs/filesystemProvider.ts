@@ -65,7 +65,7 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
     return targetPath;
   }
 
-  private hashToPath(hash: string): string {
+  getFilePath(hash: string): string {
     this.assertValidHash(hash);
 
     const dirRelative = path.join(hash.slice(0, 2), hash.slice(2, 4));
@@ -88,7 +88,7 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
   async store(data: Buffer, mimeType: string): Promise<BlobStoreResult> {
     const hash = computeHash(data);
     await this.ensureHashDir(hash);
-    const filePath = this.hashToPath(hash);
+    const filePath = this.getFilePath(hash);
 
     // Check if file already exists (deduplication)
     try {
@@ -123,7 +123,7 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
   }
 
   async getByHash(hash: string): Promise<StoredBlob> {
-    const filePath = this.hashToPath(hash);
+    const filePath = this.getFilePath(hash);
 
     let data: Buffer;
     try {
@@ -149,7 +149,7 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
 
   async exists(hash: string): Promise<boolean> {
     try {
-      const filePath = this.hashToPath(hash);
+      const filePath = this.getFilePath(hash);
       await fsPromises.access(filePath);
       return true;
     } catch {
@@ -160,7 +160,7 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
   async deleteByHash(hash: string): Promise<void> {
     let filePath: string;
     try {
-      filePath = this.hashToPath(hash);
+      filePath = this.getFilePath(hash);
     } catch {
       // Invalid hashes and path traversal attempts remain a no-op.
       return;
