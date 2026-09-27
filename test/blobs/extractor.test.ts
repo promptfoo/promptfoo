@@ -310,6 +310,51 @@ describe('Local blob extraction', () => {
     expect(result).toEqual(response);
   });
 
+  it('retries a failed JSON image store when metadata contains the same bytes', async () => {
+    const bytes = Buffer.alloc(2000, 7);
+    const base64 = bytes.toString('base64');
+    const response: ProviderResponse = {
+      output: JSON.stringify({ data: [{ b64_json: base64 }] }),
+      metadata: { preview: `data:image/png;base64,${base64}` },
+    };
+    mockStoreBlob.mockRejectedValueOnce(new Error('temporary write failure'));
+
+    const result = await extractAndStoreBinaryData(response);
+
+    expect(result?.output).toBe(response.output);
+    expect(result?.metadata?.preview).toBe('promptfoo://blob/abc123def456');
+    expect(mockStoreBlob).toHaveBeenCalledTimes(2);
+    expect(mockStoreBlob).toHaveBeenNthCalledWith(2, bytes, 'image/png', {
+      location: 'response.metadata.preview',
+      kind: 'image',
+    });
+    expect(response.metadata?.preview).toContain('data:image/png;base64,');
+  });
+
+  it('keeps audio and image references distinct for identical bytes', async () => {
+    const bytes = Buffer.alloc(2000, 9);
+    const base64 = bytes.toString('base64');
+    const context = { evalId: 'media-kinds', testIdx: 2, promptIdx: 3 };
+    const response: ProviderResponse = {
+      audio: { data: base64, format: 'wav' },
+      images: [{ data: `data:image/jpeg;base64,${base64}`, mimeType: 'image/png' }],
+    };
+
+    await extractAndStoreBinaryData(response, context);
+
+    expect(mockStoreBlob).toHaveBeenCalledTimes(2);
+    expect(mockStoreBlob).toHaveBeenNthCalledWith(1, bytes, 'audio/wav', {
+      ...context,
+      location: 'response.audio.data',
+      kind: 'audio',
+    });
+    expect(mockStoreBlob).toHaveBeenNthCalledWith(2, bytes, 'image/jpeg', {
+      ...context,
+      location: 'response.images[0].data',
+      kind: 'image',
+    });
+  });
+
   it('should handle mixed images: externalize data URIs but keep existing blobRefs', async () => {
     const largeBase64 = Buffer.alloc(2000).toString('base64');
     const response: ProviderResponse = {

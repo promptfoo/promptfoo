@@ -110,35 +110,6 @@ function parseBinary(
   }
 }
 
-async function maybeStore(
-  base64OrDataUrl: string,
-  defaultMimeType: string,
-  context: BlobContext,
-  location: string,
-  kind: BlobKind,
-  minSizeBytes = BLOB_MIN_SIZE,
-): Promise<BlobRef | null> {
-  const parsed = parseBinary(base64OrDataUrl, defaultMimeType);
-  if (!parsed || !shouldExternalize(parsed.buffer, minSizeBytes)) {
-    return null;
-  }
-
-  if (!isBlobStorageEnabled()) {
-    return null;
-  }
-
-  const mimeType = parsed.mimeType || 'application/octet-stream';
-
-  // Blob extraction is local-only. Remote synchronization happens when an eval is shared.
-  const { ref } = await storeBlob(parsed.buffer, mimeType, {
-    ...context,
-    location,
-    kind,
-  });
-
-  return ref;
-}
-
 /**
  * Per-response store-once function: returns the same `BlobRef` for byte-identical
  * payloads regardless of how the input is encoded (raw base64 vs. `data:` URL) or
@@ -155,7 +126,7 @@ type StoreOnce = (
 ) => Promise<BlobRef | null>;
 
 function createStoreOnce(blobContext: BlobContext): StoreOnce {
-  const cache = new Map<string, Promise<BlobRef | null>>();
+  const cache = new Map<string, Promise<BlobRef>>();
   return async (base64OrDataUrl, defaultMimeType, location, kind, minSizeBytes) => {
     // Canonicalize the cache key on the parsed bytes (not the raw input string)
     // so a `data:image/png;base64,XYZ` URL and the bare `XYZ` base64 hit the
@@ -171,22 +142,20 @@ function createStoreOnce(blobContext: BlobContext): StoreOnce {
       return existing;
     }
 
-    const pendingStore = maybeStore(
-      base64OrDataUrl,
-      defaultMimeType,
-      blobContext,
+    if (!isBlobStorageEnabled()) {
+      return null;
+    }
+
+    // Blob extraction is local-only. Remote synchronization happens when an eval is shared.
+    const pendingStore = storeBlob(parsed.buffer, parsed.mimeType || 'application/octet-stream', {
+      ...blobContext,
       location,
       kind,
-      minSizeBytes,
-    );
+    }).then(({ ref }) => ref);
     cache.set(cacheKey, pendingStore);
 
     try {
-      const stored = await pendingStore;
-      if (!stored) {
-        cache.delete(cacheKey);
-      }
-      return stored;
+      return await pendingStore;
     } catch (error) {
       cache.delete(cacheKey);
       throw error;
@@ -354,8 +323,7 @@ async function externalizeMetadataAudio(
     return { value: metadata, mutated: false };
   }
 
-  // Routing through `storeOnce` (instead of calling `maybeStore` directly) means
-  // a metadata-mirrored audio payload reuses the blob written for any other
+  // Routing through `storeOnce` means a metadata-mirrored audio payload reuses the blob for any other
   // path (`response.audio.data`, `turns[N].audio.data`, etc.) when the bytes
   // match — one store.
   const stored = await storeOnce(
