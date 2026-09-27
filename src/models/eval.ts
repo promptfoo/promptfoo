@@ -58,6 +58,7 @@ import {
 } from './evalMutation';
 import {
   getCachedResultsCount,
+  getCachedResultsCounts,
   getTotalResultRowCount,
   queryTestIndicesOptimized,
 } from './evalPerformance';
@@ -1785,83 +1786,83 @@ export async function getEvalSummaries(
    * - Outcome counts come from V4 prompt metrics, including partially uploaded evals.
    * - Persisted test indices distinguish test cases from runs across provider/prompt columns.
    */
-  return Promise.all(
-    results.map(async (result) => {
-      let passCount = 0;
-      let failCount = 0;
-      let testRunCount = 0;
-      let testCount = await getCachedResultsCount(result.evalId);
+  const distinctCounts = await getCachedResultsCounts(results.map((result) => result.evalId));
+  return results.map((result) => {
+    let passCount = 0;
+    let failCount = 0;
+    let testRunCount = 0;
+    let testCount = distinctCounts.get(result.evalId) ?? 0;
 
-      // Provider selection can give each column a different number of runs.
-      // V4 uploads send complete metrics before result row chunks arrive.
-      for (const prompt of result.prompts ?? []) {
-        const passes = normalizeSummaryCount(prompt.metrics?.testPassCount);
-        const failures = normalizeSummaryCount(prompt.metrics?.testFailCount);
-        const errors = normalizeSummaryCount(prompt.metrics?.testErrorCount);
-        const runs = passes + failures + errors;
-        passCount += passes;
-        failCount += failures;
-        testRunCount += runs;
-        testCount = Math.max(testCount, runs);
-      }
+    // Provider selection can give each column a different number of runs.
+    // Before all V4 result chunks arrive, column counts provide only a lower bound
+    // on distinct tests: overlapping and disjoint selections can have identical metrics.
+    for (const prompt of result.prompts ?? []) {
+      const passes = normalizeSummaryCount(prompt.metrics?.testPassCount);
+      const failures = normalizeSummaryCount(prompt.metrics?.testFailCount);
+      const errors = normalizeSummaryCount(prompt.metrics?.testErrorCount);
+      const runs = passes + failures + errors;
+      passCount += passes;
+      failCount += failures;
+      testRunCount += runs;
+      testCount = Math.max(testCount, runs);
+    }
 
-      // Construct an array of providers
-      const deserializedProviders = [];
-      const providers = result.config?.providers;
+    // Construct an array of providers
+    const deserializedProviders = [];
+    const providers = result.config?.providers;
 
-      if (includeProviders) {
-        if (typeof providers === 'string') {
-          // `providers: string`
-          deserializedProviders.push({
-            id: providers,
-            label: null,
-          });
-        } else if (Array.isArray(providers)) {
-          providers.forEach((p) => {
-            if (typeof p === 'string') {
-              // `providers: string[]`
+    if (includeProviders) {
+      if (typeof providers === 'string') {
+        // `providers: string`
+        deserializedProviders.push({
+          id: providers,
+          label: null,
+        });
+      } else if (Array.isArray(providers)) {
+        providers.forEach((p) => {
+          if (typeof p === 'string') {
+            // `providers: string[]`
+            deserializedProviders.push({
+              id: p,
+              label: null,
+            });
+          } else if (typeof p === 'object' && p) {
+            // Check if it's a declarative provider (record format)
+            // e.g., { 'openai:gpt-4': { config: {...} } }
+            const keys = Object.keys(p);
+            if (keys.length === 1 && !('id' in p)) {
+              // This is a declarative provider
+              const providerId = keys[0];
+              // biome-ignore lint/suspicious/noExplicitAny: FIXME this should use Object.keys or something to keep it type safe
+              const providerConfig = (p as any)[providerId];
               deserializedProviders.push({
-                id: p,
-                label: null,
+                id: providerId,
+                label: providerConfig.label ?? null,
               });
-            } else if (typeof p === 'object' && p) {
-              // Check if it's a declarative provider (record format)
-              // e.g., { 'openai:gpt-4': { config: {...} } }
-              const keys = Object.keys(p);
-              if (keys.length === 1 && !('id' in p)) {
-                // This is a declarative provider
-                const providerId = keys[0];
-                // biome-ignore lint/suspicious/noExplicitAny: FIXME this should use Object.keys or something to keep it type safe
-                const providerConfig = (p as any)[providerId];
-                deserializedProviders.push({
-                  id: providerId,
-                  label: providerConfig.label ?? null,
-                });
-              } else {
-                // `providers: ProviderOptions[]` with explicit id
-                deserializedProviders.push({
-                  id: p.id ?? 'unknown',
-                  label: p.label ?? null,
-                });
-              }
+            } else {
+              // `providers: ProviderOptions[]` with explicit id
+              deserializedProviders.push({
+                id: p.id ?? 'unknown',
+                label: p.label ?? null,
+              });
             }
-          });
-        }
+          }
+        });
       }
+    }
 
-      return {
-        evalId: result.evalId,
-        createdAt: result.createdAt,
-        description: result.description,
-        numTests: testCount,
-        datasetId: result.datasetId,
-        isRedteam: Boolean(result.isRedteam),
-        passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
-        label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
-        providers: deserializedProviders,
-        attackSuccessRate:
-          type === 'redteam' ? calculateAttackSuccessRate(testRunCount, failCount) : undefined,
-      };
-    }),
-  );
+    return {
+      evalId: result.evalId,
+      createdAt: result.createdAt,
+      description: result.description,
+      numTests: testCount,
+      datasetId: result.datasetId,
+      isRedteam: Boolean(result.isRedteam),
+      passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
+      label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
+      providers: deserializedProviders,
+      attackSuccessRate:
+        type === 'redteam' ? calculateAttackSuccessRate(testRunCount, failCount) : undefined,
+    };
+  });
 }

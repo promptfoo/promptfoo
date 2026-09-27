@@ -545,7 +545,7 @@ describe('evaluator', () => {
             expect.objectContaining({ evalId: active.id, numTests: 1 }),
           ]),
         );
-        expect(countQueries()).toBe(2);
+        expect(countQueries()).toBe(1);
 
         execute.mockClear();
         await getEvalSummaries();

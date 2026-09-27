@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { inArray, sql } from 'drizzle-orm';
 import { HUMAN_ASSERTION_TYPE } from '../constants';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
@@ -34,33 +34,49 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
  * (which may be higher when there are multiple prompts/providers per test case).
  */
 export async function getCachedResultsCount(evalId: string): Promise<number> {
-  const cacheKey = `distinct:${evalId}`;
-  const cached = distinctCountCache.get(cacheKey);
+  return (await getCachedResultsCounts([evalId])).get(evalId) ?? 0;
+}
 
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    logger.debug(`Using cached distinct count for eval ${evalId}: ${cached.count}`);
-    return cached.count;
+/** Get distinct test counts together, querying only cache misses in bounded batches. */
+export async function getCachedResultsCounts(
+  evalIds: readonly string[],
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  const missingIds: string[] = [];
+  for (const evalId of new Set(evalIds)) {
+    const cached = distinctCountCache.get(`distinct:${evalId}`);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      counts.set(evalId, cached.count);
+    } else {
+      missingIds.push(evalId);
+    }
+  }
+
+  if (missingIds.length === 0) {
+    return counts;
   }
 
   const db = await getDb();
-  const start = Date.now();
+  // Stay within SQLite's conservative bound-parameter limit, including older databases.
+  const BATCH_SIZE = 999;
+  for (let offset = 0; offset < missingIds.length; offset += BATCH_SIZE) {
+    const batch = missingIds.slice(offset, offset + BATCH_SIZE);
+    const rows = await db
+      .select({ evalId: evalResultsTable.evalId, count: sql<number>`COUNT(DISTINCT test_idx)` })
+      .from(evalResultsTable)
+      .where(inArray(evalResultsTable.evalId, batch))
+      .groupBy(evalResultsTable.evalId)
+      .all();
+    const batchCounts = new Map(rows.map((row) => [row.evalId, Number(row.count)]));
+    const timestamp = Date.now();
+    for (const evalId of batch) {
+      const count = batchCounts.get(evalId) ?? 0;
+      counts.set(evalId, count);
+      distinctCountCache.set(`distinct:${evalId}`, { count, timestamp });
+    }
+  }
 
-  // Count distinct test indices (unique test cases) - this is what the UI shows as "results"
-  const result = await db
-    .select({ count: sql<number>`COUNT(DISTINCT test_idx)` })
-    .from(evalResultsTable)
-    .where(sql`eval_id = ${evalId}`)
-    .all();
-
-  const count = Number(result[0]?.count ?? 0);
-  const duration = Date.now() - start;
-
-  logger.debug(`Distinct count query for eval ${evalId}: ${count} in ${duration}ms`);
-
-  // Cache the result
-  distinctCountCache.set(cacheKey, { count, timestamp: Date.now() });
-
-  return count;
+  return counts;
 }
 
 /**
