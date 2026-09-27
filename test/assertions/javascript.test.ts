@@ -827,9 +827,8 @@ describe('JavaScript file references', () => {
 
     const result = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion,
-      test: {} as AtomicTestCase,
+      test: {},
       providerResponse: { output: 'Expected output' },
     });
 
@@ -950,7 +949,12 @@ describe('JavaScript file references', () => {
     '({ pass: true, score: 1, reason: "Custom", namedScores: { quality: NaN } })',
     '({ pass: true, score: 1, reason: "Custom", namedScoreWeights: { quality: Infinity } })',
     '({ pass: true, score: 1, reason: "Custom", componentResults: [{ pass: true, score: Infinity, reason: "Nested" }] })',
-  ])('rejects nonfinite inline results: %s', async (value) => {
+    '({ pass: true, score: 1, reason: "Custom", namedScores: new Date(0) })',
+    '({ pass: true, score: 1, reason: "Custom", namedScoreWeights: new Map([["quality", 1]]) })',
+    '({ pass: true, score: 1, reason: "Custom", namedScores: new Set([1]) })',
+    '({ pass: true, score: 1, reason: "Custom", namedScores: Object.defineProperty([1], Symbol.toStringTag, { value: "Object" }) })',
+    '({ pass: true, score: 1, reason: "Custom", namedScoreWeights: Object.defineProperty(new Map([["quality", 1]]), Symbol.toStringTag, { value: "Object" }) })',
+  ])('rejects invalid inline assertion results: %s', async (value) => {
     const result = await runAssertion({
       prompt: 'Some prompt',
       assertion: { type: 'javascript', value },
@@ -1033,26 +1037,6 @@ describe('JavaScript file references', () => {
     expect(result).toMatchObject({ pass: false, score: 0 });
     expect(result.reason).toContain(value);
     expect(result.assertion?.value).toBe(value);
-  });
-
-  it.each([
-    '({ pass: true, score: 1, reason: "Custom", namedScores: new Date(0) })',
-    '({ pass: true, score: 1, reason: "Custom", namedScoreWeights: new Map([["quality", 1]]) })',
-    '({ pass: true, score: 1, reason: "Custom", namedScores: new Set([1]) })',
-    '({ pass: true, score: 1, reason: "Custom", namedScores: Object.defineProperty([1], Symbol.toStringTag, { value: "Object" }) })',
-    '({ pass: true, score: 1, reason: "Custom", namedScoreWeights: Object.defineProperty(new Map([["quality", 1]]), Symbol.toStringTag, { value: "Object" }) })',
-  ])('rejects built-in containers instead of numeric records: %s', async (value) => {
-    const result = await runAssertion({
-      prompt: 'Some prompt',
-      assertion: { type: 'javascript', value },
-      test: {},
-      providerResponse: { output: 'Test output' },
-    });
-
-    expect(result).toMatchObject({ pass: false, score: 0 });
-    expect(result.reason).toContain('Custom function threw error:');
-    expect(result.namedScores).toBeUndefined();
-    expect(result.namedScoreWeights).toBeUndefined();
   });
 
   it.each(['namedScores', 'namedScoreWeights', 'componentResults'])(
