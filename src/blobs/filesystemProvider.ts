@@ -94,13 +94,17 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
     try {
       await fsPromises.access(filePath);
       const meta = await this.readMetadata(filePath);
-      const ref = this.buildRef(
-        hash,
-        meta?.mimeType ?? mimeType,
-        meta?.sizeBytes ?? data.length,
-        meta?.provider ?? this.providerId,
-      );
-      return { ref, deduplicated: true };
+      if (meta) {
+        const ref = this.buildRef(
+          hash,
+          meta.mimeType ?? mimeType,
+          meta.sizeBytes ?? data.length,
+          meta.provider ?? this.providerId,
+        );
+        return { ref, deduplicated: true };
+      }
+      // A concurrent delete may remove metadata before staged bytes are published.
+      // Republish incomplete blobs instead of making missing metadata permanent.
     } catch {
       // File doesn't exist, proceed with storing
     }
@@ -112,7 +116,7 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
       provider: this.providerId,
       key: filePath,
     };
-    // A discoverable hash path must contain complete bytes and have complete metadata.
+    // Stage complete bytes and metadata before publishing either file.
     // Each writer owns a staging directory on the same filesystem, including across processes.
     const stagingDir = await fsPromises.mkdtemp(`${filePath}.`);
     try {
@@ -123,7 +127,7 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
         flag: 'wx',
       });
       await fsPromises.rename(stagedMetadata, this.metadataPath(filePath));
-      // Publish bytes last: existence is the completion marker used by deduplication.
+      // Publish bytes last so readers never observe partially written data.
       await fsPromises.rename(stagedData, filePath);
     } finally {
       try {

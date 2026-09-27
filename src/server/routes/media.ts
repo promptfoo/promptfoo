@@ -8,7 +8,7 @@ import express from 'express';
 import { isSafeInlineBlobMimeType } from '../../blobs';
 import logger from '../../logger';
 import { getMediaStorage, mediaExists, retrieveMedia } from '../../storage';
-import { LegacyMediaParamsSchema, MediaSchemas } from '../../types/api/media';
+import { MediaRouteParamsSchema, MediaSchemas } from '../../types/api/media';
 import { replyValidationError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
@@ -46,7 +46,7 @@ mediaRouter.get('/stats', async (_req: Request, res: Response): Promise<void> =>
  */
 mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Promise<void> => {
   const paramsResult = (
-    req.params.type === 'blob' ? MediaSchemas.Info.Params : LegacyMediaParamsSchema
+    req.params.type === 'blob' ? MediaRouteParamsSchema : MediaSchemas.Info.Params
   ).safeParse(req.params);
   if (!paramsResult.success) {
     replyValidationError(res, paramsResult.error);
@@ -91,7 +91,7 @@ mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Pr
  */
 mediaRouter.get('/:type/:filename', async (req: Request, res: Response): Promise<void> => {
   const paramsResult = (
-    req.params.type === 'blob' ? MediaSchemas.Get.Params : LegacyMediaParamsSchema
+    req.params.type === 'blob' ? MediaRouteParamsSchema : MediaSchemas.Get.Params
   ).safeParse(req.params);
   if (!paramsResult.success) {
     replyValidationError(res, paramsResult.error);

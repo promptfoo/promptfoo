@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FilesystemBlobStorageProvider } from '../../src/blobs/filesystemProvider';
@@ -46,6 +47,68 @@ function createProvider() {
 }
 
 describe('completed media blob publication', () => {
+  it('repairs missing blob metadata through the media adapter after restart', async () => {
+    const first = await createProvider().store(data, metadata);
+    const url = await createProvider().getUrl(first.ref.key);
+    expect(url).not.toBeNull();
+    await realFs.unlink(`${fileURLToPath(url!)}.meta.json`);
+    const restarted = createProvider();
+    expect((await restarted.store(data, metadata)).deduplicated).toBe(false);
+    expect(await restarted.retrieveWithMetadata(first.ref.key)).toEqual({
+      data,
+      contentType: 'image/jpeg',
+    });
+  });
+
+  it('repairs metadata removed by a delete between publication renames', async () => {
+    const provider = new FilesystemBlobStorageProvider({ basePath: directory });
+    const metadataPublished = createDeferred<void>();
+    const resumePublication = createDeferred<void>();
+    vi.mocked(fs.rename).mockImplementation(async (source, destination) => {
+      await realFs.rename(source, destination);
+      if (String(destination).endsWith('.meta.json')) {
+        metadataPublished.resolve();
+        await resumePublication.promise;
+      }
+    });
+    const writing = provider.store(data, 'image/jpeg');
+    await metadataPublished.promise;
+    try {
+      await new FilesystemBlobStorageProvider({ basePath: directory }).deleteByHash(hash);
+    } finally {
+      resumePublication.resolve();
+      await writing;
+    }
+    expect((await provider.getByHash(hash)).data).toEqual(data);
+    vi.mocked(fs.rename).mockImplementation(realFs.rename);
+
+    const restarted = new FilesystemBlobStorageProvider({ basePath: directory });
+    const retry = await restarted.store(data, 'image/jpeg');
+    expect(retry.deduplicated).toBe(false);
+    expect(await restarted.getByHash(hash)).toMatchObject({
+      data,
+      metadata: { mimeType: 'image/jpeg', sizeBytes: data.length },
+    });
+    expect((await restarted.store(data, 'video/mp4')).ref.mimeType).toBe('image/jpeg');
+  });
+
+  it.each(['missing', 'malformed'] as const)(
+    'repairs %s metadata before deduplicating stored data',
+    async (state) => {
+      const provider = new FilesystemBlobStorageProvider({ basePath: directory });
+      await provider.store(data, 'image/jpeg');
+      const sidecar = `${provider.getFilePath(hash)}.meta.json`;
+      if (state === 'missing') {
+        await realFs.unlink(sidecar);
+      } else {
+        await realFs.writeFile(sidecar, 'not json');
+      }
+      expect((await provider.getByHash(hash)).metadata.mimeType).toBe('application/octet-stream');
+      expect((await provider.store(data, 'image/jpeg')).deduplicated).toBe(false);
+      expect((await provider.getByHash(hash)).metadata.mimeType).toBe('image/jpeg');
+    },
+  );
+
   it('retries a partial failed write after restart instead of deduplicating truncated bytes', async () => {
     const writeFile = realFs.writeFile;
     const failure = Object.assign(new Error('fixture disk full'), { code: 'ENOSPC' });

@@ -3,13 +3,13 @@ import { GetBlobParamsSchema } from './blobs';
 
 // GET /api/media/:type/:filename
 
-export const LegacyMediaParamsSchema = z.object({
+export const MediaParamsSchema = z.object({
   type: z.enum(['audio', 'image', 'video']),
   filename: z.string().regex(/^[a-f0-9]{12}\.[a-z0-9]+$/i, 'Invalid media filename'),
 });
 
-export const MediaParamsSchema = z.discriminatedUnion('type', [
-  LegacyMediaParamsSchema,
+export const MediaRouteParamsSchema = z.discriminatedUnion('type', [
+  MediaParamsSchema,
   z.object({
     type: z.literal('blob'),
     filename: GetBlobParamsSchema.shape.hash,

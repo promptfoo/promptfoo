@@ -121,7 +121,7 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
 
     // Check for existing file with same hash (deduplication)
     const existingKey = await this.findByHash(contentHash);
-    if (existingKey) {
+    if (existingKey && !existingKey.startsWith('blob/')) {
       logger.debug(`[LocalStorage] Deduplicated media: ${existingKey}`);
       return {
         ref: {
