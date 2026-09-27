@@ -10,8 +10,8 @@ import {
   wrapError,
 } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
-import { resolveProviderApiKey } from '../credentials';
 import { withGenAIToolSpan } from '../tracing';
+import { GoogleAuthManager } from './auth';
 import { GOOGLE_MODELS } from './shared';
 import {
   calculateGoogleCost,
@@ -296,11 +296,7 @@ export class GoogleLiveProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    // Priority aligned with Python SDK: GOOGLE_API_KEY > GEMINI_API_KEY
-    return resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, [
-      'GOOGLE_API_KEY',
-      'GEMINI_API_KEY',
-    ]);
+    return GoogleAuthManager.getLiveApiKey(this.config, this.env).apiKey;
   }
 
   /**

@@ -6,6 +6,7 @@ import path from 'path';
 import { getEnvString } from '../../envars';
 import { getDirectory, resolvePackageEntryPoint } from '../../esm';
 import logger from '../../logger';
+import { resolveProviderApiKey } from '../credentials';
 import { providerRegistry } from '../providerRegistry';
 import { OpenAICodexSDKProvider } from './codex-sdk';
 
@@ -86,7 +87,7 @@ const evictedCodexDefaultProviderBundles = new Set<ManagedCodexDefaultProviderBu
 const codexSdkAvailabilityByBaseDir = new Map<string, boolean>();
 
 function getCodexEnvString(env: EnvOverrides | undefined, key: string): string | undefined {
-  return env?.[key] || getEnvString(key);
+  return env?.[key] ?? getEnvString(key);
 }
 
 function getCodexHome(env?: EnvOverrides): string {
@@ -150,7 +151,7 @@ export function hasCodexDefaultCredentials(env?: EnvOverrides): boolean {
   // getCodexDefaultProvidersCacheKey() so callers that gate on this helper are consistent
   // with what actually reaches the provider.
   const hasApiKey = Boolean(
-    getCodexEnvString(env, 'CODEX_API_KEY') || getCodexEnvString(env, 'OPENAI_API_KEY'),
+    resolveProviderApiKey(undefined, env, ['OPENAI_API_KEY', 'CODEX_API_KEY']),
   );
   return (hasApiKey || hasCodexAuthFile(env)) && canLoadCodexSdkPackage();
 }
@@ -192,8 +193,7 @@ function getCodexDefaultProvidersCacheKey(env?: EnvOverrides): string {
   // Match OpenAICodexSDKProvider.getApiKey() resolution order: OPENAI_API_KEY first,
   // then CODEX_API_KEY. Partitioning by the resolved key (rather than both raw slots)
   // avoids wasteful cache misses when only the ignored fallback slot rotates.
-  const resolvedApiKey =
-    getCodexEnvString(env, 'OPENAI_API_KEY') || getCodexEnvString(env, 'CODEX_API_KEY');
+  const resolvedApiKey = resolveProviderApiKey(undefined, env, ['OPENAI_API_KEY', 'CODEX_API_KEY']);
 
   return JSON.stringify({
     CODEX_HOME: getCodexEnvString(env, 'CODEX_HOME'),

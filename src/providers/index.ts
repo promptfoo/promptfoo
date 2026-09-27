@@ -110,7 +110,12 @@ async function createApiProvider(
   const renderTemplate = <T>(value: T): T =>
     cliState.withEnv(templateEnv, () => renderEnvOnlyInObject(value, templateEnv));
   const renderedProviderPath = renderTemplate(providerPath);
-  let mergedEnv = mergeProviderEnv(renderedProviderPath, env, options.env);
+  let mergedEnv = mergeProviderEnv(
+    renderedProviderPath,
+    ...(originalEnvLayers && /^(?:google|palm):live:/.test(renderedProviderPath)
+      ? originalEnvLayers
+      : [env, options.env]),
+  );
 
   // Render ONLY environment variable templates at load time (e.g., {{ env.AZURE_ENDPOINT }})
   // This allows constructors to access real env values while preserving runtime templates

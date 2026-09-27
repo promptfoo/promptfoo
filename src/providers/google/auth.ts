@@ -31,7 +31,7 @@ const GOOGLE_MODE_ENV_KEYS = [
   ...GOOGLE_PROJECT_ENV_KEYS,
   'GOOGLE_APPLICATION_CREDENTIALS',
 ];
-const GOOGLE_API_KEY_ENV_KEYS = ['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'PALM_API_KEY'];
+const GOOGLE_API_KEY_ENV_KEYS = ['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'PALM_API_KEY'] as const;
 
 // gcp-metadata (8.x) emits a `MetadataLookupWarning` of the form
 // `received unexpected error = ${err.message} code = ${code}` when the optional ADC probe cannot
@@ -183,26 +183,39 @@ export class GoogleAuthManager {
     env?: EnvOverrides,
     isVertexMode: boolean = false,
   ): ApiKeyResult {
-    // 1. Explicit config always wins
+    return this.resolveApiKey(
+      config,
+      env,
+      isVertexMode ? ['VERTEX_API_KEY', 'GOOGLE_API_KEY'] : GOOGLE_API_KEY_ENV_KEYS,
+      isVertexMode ? 'all' : 'none',
+    );
+  }
+
+  /** Explicit scoped ADC wins in Live; incidental host ADC must not hide an API key. */
+  static getLiveApiKey(config: CompletionOptions, env?: EnvOverrides): ApiKeyResult {
+    return this.resolveApiKey(config, env, ['GOOGLE_API_KEY', 'GEMINI_API_KEY'], 'scoped');
+  }
+
+  private static resolveApiKey(
+    config: CompletionOptions,
+    env: EnvOverrides | undefined,
+    keys: readonly Exclude<ApiKeyResult['source'], 'config' | 'none'>[],
+    adcPriority: 'none' | 'scoped' | 'all',
+  ): ApiKeyResult {
     if (config.apiKey) {
       return { apiKey: config.apiKey, source: 'config' };
     }
-
-    const keys = isVertexMode
-      ? (['VERTEX_API_KEY', 'GOOGLE_API_KEY'] as const)
-      : (['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'PALM_API_KEY'] as const);
+    const ambient: EnvOverrides = {
+      ...Object.fromEntries(keys.map((key) => [key, getEnvString(key)])),
+      GOOGLE_APPLICATION_CREDENTIALS: getEnvString('GOOGLE_APPLICATION_CREDENTIALS'),
+    };
     // Select the scope before the alias; an empty value masks that name in lower scopes.
     const masked = new Set<string>();
-    for (const layer of [
-      env,
-      getEnvOverrides(),
-      getEnvOverrides('file'),
-      {
-        ...Object.fromEntries(keys.map((key) => [key, getEnvString(key)])),
-        GOOGLE_APPLICATION_CREDENTIALS: getEnvString('GOOGLE_APPLICATION_CREDENTIALS'),
-      },
-    ]) {
-      if (isVertexMode && layer?.GOOGLE_APPLICATION_CREDENTIALS !== undefined) {
+    for (const layer of [env, getEnvOverrides(), getEnvOverrides('file'), ambient]) {
+      if (
+        (adcPriority === 'all' || (adcPriority === 'scoped' && layer !== ambient)) &&
+        layer?.GOOGLE_APPLICATION_CREDENTIALS !== undefined
+      ) {
         return { apiKey: undefined, source: 'none' };
       }
       for (const source of keys) {
@@ -224,7 +237,7 @@ export class GoogleAuthManager {
           logger.debug(
             '[Google] GEMINI_API_KEY is not a standard SDK env var. Consider using GOOGLE_API_KEY.',
           );
-        } else if (!isVertexMode && layer?.GEMINI_API_KEY) {
+        } else if (adcPriority !== 'all' && layer?.GEMINI_API_KEY) {
           logger.debug(
             '[Google] Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.',
           );

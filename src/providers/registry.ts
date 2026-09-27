@@ -169,7 +169,7 @@ function getProviderEnvAliasGroups(providerPath: string): readonly (readonly str
     return [awsAuth];
   }
   if (/^(?:google|palm):live:/.test(providerPath)) {
-    return [['GOOGLE_API_KEY', 'GEMINI_API_KEY']];
+    return [['GOOGLE_APPLICATION_CREDENTIALS', 'GOOGLE_API_KEY', 'GEMINI_API_KEY']];
   }
   if (/^(?:google|palm):(?:image:|[^:]*-image)/.test(providerPath)) {
     return [
