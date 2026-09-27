@@ -630,6 +630,37 @@ describe('Agents SDK scoped client', () => {
     expect(request().headers.get('x-gateway-auth')).toBe('fixture');
   });
 
+  it.each([
+    { headers: { 'X-Gateway-Auth': 'fixture' } },
+    { apiBaseUrl: 'https://gateway.example.invalid/v1?api-key=fixture' },
+    { apiKeyRequired: false },
+  ])('keeps the ambient key off an independently authenticated gateway: %j', async (config) => {
+    await provider({ apiBaseUrl: 'https://gateway.example.invalid/v1', ...config }).callApi(
+      'hello',
+    );
+    expect(request().headers.has('authorization')).toBe(false);
+  });
+
+  it.each([{ apiKey: 'explicit-key' }, { apiKeyEnvar: 'OPENAI_API_KEY' }])(
+    'keeps explicitly selected gateway API keys: %j',
+    async (config) => {
+      await provider({
+        apiBaseUrl: 'https://gateway.example.invalid/v1',
+        apiKeyRequired: false,
+        headers: { 'X-Gateway-Auth': 'fixture' },
+        ...config,
+      }).callApi('hello');
+      expect(request().headers.get('authorization')).toBe(
+        `Bearer ${'apiKey' in config ? config.apiKey : 'host-key'}`,
+      );
+    },
+  );
+
+  it('keeps ambient authentication for the OpenAI API', async () => {
+    await provider({ headers: { 'X-Gateway-Auth': 'fixture' } }).callApi('hello');
+    expect(request().headers.get('authorization')).toBe('Bearer host-key');
+  });
+
   it.each(['openai-conversations', 'openai-responses-compaction'] as const)(
     'scopes owned %s session requests with model requests',
     async (type) => {

@@ -316,7 +316,6 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     const separateEndpoint = overrides.baseURL !== undefined;
     const separateCredentials = separateEndpoint || overrides.apiKey !== undefined;
     const apiKey = overrides.apiKey ?? (separateEndpoint ? undefined : this.getApiKey());
-    const keyless = !separateEndpoint && !apiKey && !this.requiresApiKey();
     const config = {
       ...this.config,
       apiHost: undefined,
@@ -351,6 +350,14 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     }
     const organization = this.getOrganization(config);
     const apiUrl = new URL(config.apiBaseUrl);
+    const suppressAmbientKey =
+      overrides.apiKey === undefined &&
+      !this.config.apiKey &&
+      !this.config.apiKeyEnvar &&
+      apiUrl.hostname.toLowerCase() !== 'api.openai.com' &&
+      (!this.requiresApiKey() || hasOpenAiGatewayCredentials(config.headers, apiUrl.href));
+    const keyless =
+      !separateEndpoint && (suppressAmbientKey || (!apiKey && !this.requiresApiKey()));
     if (
       !separateEndpoint &&
       overrides.apiKey !== undefined &&
