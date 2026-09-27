@@ -1,3 +1,4 @@
+import { getEventListeners } from 'node:events';
 import fs from 'fs';
 import path from 'path';
 
@@ -81,11 +82,23 @@ const { mockPythonShellInstance, MockPythonShell } = vi.hoisted(() => {
   const instance = {
     stdout: { on: vi.fn() },
     stderr: { on: vi.fn() },
+    on: vi.fn(),
+    childProcess: { once: vi.fn(), kill: vi.fn() },
     end: vi.fn(),
   };
   // Create a proper class that can be used with 'new'
   const MockPythonShell = vi.fn(function (this: typeof instance) {
     Object.assign(this, instance);
+    // PythonShell's end callback follows process exit; native close follows it.
+    this.end = vi.fn((callback: (error: Error | null) => void) =>
+      instance.end((error: Error | null) => {
+        callback(error);
+        const close = instance.childProcess.once.mock.calls.find(
+          ([event]) => event === 'close',
+        )?.[1];
+        close?.();
+      }),
+    );
     return this;
   }) as unknown as typeof import('python-shell').PythonShell;
   return { mockPythonShellInstance: instance, MockPythonShell };
@@ -108,6 +121,9 @@ describe('Python Utils', () => {
     mockPythonShellInstance.stdout.on.mockReset();
     mockPythonShellInstance.stderr.on.mockReset();
     mockPythonShellInstance.end.mockReset();
+    mockPythonShellInstance.on.mockReset();
+    mockPythonShellInstance.childProcess.once.mockReset();
+    mockPythonShellInstance.childProcess.kill.mockReset();
     // Set default mock return values
     vi.mocked(getEnvString).mockReturnValue('');
     vi.mocked(getEnvBool).mockReturnValue(false);
@@ -554,6 +570,123 @@ describe('Python Utils', () => {
   });
 
   describe('runPython', () => {
+    it('does not spawn or create temporary files when already canceled', async () => {
+      const controller = new AbortController();
+      controller.abort();
+      await expect(
+        pythonUtils.runPython('script.py', 'get_config', [], { signal: controller.signal }),
+      ).rejects.toBe(controller.signal.reason);
+      expect(PythonShell).not.toHaveBeenCalled();
+      expect(createSecureTempDirectory).not.toHaveBeenCalled();
+      expect(mockExecFileAsync).not.toHaveBeenCalled();
+    });
+
+    it.each(['validation', 'temporary directory'] as const)(
+      'does not spawn after cancellation during %s creation',
+      async (stage) => {
+        const controller = new AbortController();
+        let resume!: () => void;
+        if (stage === 'validation') {
+          mockExecFileAsync.mockImplementationOnce(
+            () =>
+              new Promise((resolve) => {
+                resume = () => resolve({ stdout: 'Python 3.11.0', stderr: '' });
+              }),
+          );
+        } else {
+          pythonUtils.state.cachedPythonPath = 'python';
+          vi.mocked(createSecureTempDirectory).mockImplementationOnce(
+            () =>
+              new Promise((resolve) => {
+                resume = () => resolve('/tmp/owned-canceled-config');
+              }),
+          );
+        }
+        const running = pythonUtils.runPython('script.py', 'get_config', [], {
+          signal: controller.signal,
+        });
+        const rejected = running.catch((error: Error) => error);
+        await vi.waitFor(() => expect(resume).toBeDefined());
+        controller.abort();
+        resume();
+        // The reason is assigned by abort(), so assert it after awaiting completion.
+        expect(await rejected).toBe(controller.signal.reason);
+        expect(PythonShell).not.toHaveBeenCalled();
+        if (stage === 'temporary directory') {
+          expect(removeSecureTempDirectory).toHaveBeenCalledWith('/tmp/owned-canceled-config');
+        }
+      },
+    );
+
+    it('honors cancellation while reading output from an already closed child', async () => {
+      pythonUtils.state.cachedPythonPath = 'python';
+      const controller = new AbortController();
+      let finishRead!: (value: string) => void;
+      vi.mocked(fs.readFileSync).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishRead = resolve;
+          }) as never,
+      );
+      mockPythonShellInstance.end.mockImplementation((callback: (error: Error | null) => void) =>
+        callback(null),
+      );
+      const running = pythonUtils
+        .runPython('script.py', 'get_config', [], { signal: controller.signal })
+        .catch((error: Error) => error);
+      await vi.waitFor(() => expect(finishRead).toBeDefined());
+      controller.abort();
+      finishRead(JSON.stringify({ type: 'final_result', data: 'too late' }));
+      expect(await running).toBe(controller.signal.reason);
+      expect(removeSecureTempDirectory).toHaveBeenCalledOnce();
+    });
+
+    it.each(['abort', 'spawn error'] as const)(
+      'retains temporary files and waits for native close after %s',
+      async (failure) => {
+        pythonUtils.state.cachedPythonPath = 'python';
+        const controller = new AbortController();
+        let settled = false;
+        const running = pythonUtils
+          .runPython('script.py', 'get_config', [], { signal: controller.signal })
+          .catch((error: Error) => error)
+          .finally(() => {
+            settled = true;
+          });
+        await vi.waitFor(() => expect(mockPythonShellInstance.end).toHaveBeenCalledOnce());
+        const error = Object.assign(new Error('spawn ENOENT'), { code: 'ENOENT' });
+        if (failure === 'abort') {
+          controller.abort();
+        }
+        const onError = mockPythonShellInstance.on.mock.calls.find(
+          ([event]) => event === 'error',
+        )?.[1];
+        onError?.(failure === 'abort' ? controller.signal.reason : error);
+        await Promise.resolve();
+        expect(settled).toBe(false);
+        expect(removeSecureTempDirectory).not.toHaveBeenCalled();
+        const onClose = mockPythonShellInstance.childProcess.once.mock.calls.find(
+          ([event]) => event === 'close',
+        )?.[1];
+        onClose?.();
+        const result = await running;
+        if (failure === 'abort') {
+          expect(result).toBe(controller.signal.reason);
+        } else {
+          expect(result).toMatchObject({ message: expect.stringContaining('spawn ENOENT') });
+        }
+        expect(removeSecureTempDirectory).toHaveBeenCalledOnce();
+        expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
+        if (failure === 'abort') {
+          expect(mockPythonShellInstance.childProcess.kill).toHaveBeenCalledExactlyOnceWith(
+            'SIGKILL',
+          );
+        } else {
+          expect(mockPythonShellInstance.childProcess.kill).not.toHaveBeenCalled();
+        }
+      },
+    );
+
     it('passes file defaults to one-shot Python calls without changing process.env', async () => {
       const restore = mockProcessEnv({ PROMPTFOO_REVIEW_ENV_PROBE: 'host' });
       vi.mocked(fs.readFileSync).mockReturnValue(

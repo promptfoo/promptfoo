@@ -158,7 +158,9 @@ describe('fileReference utility functions', () => {
 
       const result = await loadFileReference(fileRef);
 
-      expect(runPython).toHaveBeenCalledWith('/path/to/config.py', 'get_config', []);
+      expect(runPython).toHaveBeenCalledWith('/path/to/config.py', 'get_config', [], {
+        signal: undefined,
+      });
       expect(result).toEqual(pythonOutput);
     });
 
@@ -170,7 +172,9 @@ describe('fileReference utility functions', () => {
 
       const result = await loadFileReference(fileRef);
 
-      expect(runPython).toHaveBeenCalledWith('/path/to/config.py', 'custom_func', []);
+      expect(runPython).toHaveBeenCalledWith('/path/to/config.py', 'custom_func', [], {
+        signal: undefined,
+      });
       expect(result).toEqual(pythonOutput);
     });
 
@@ -214,6 +218,57 @@ describe('fileReference utility functions', () => {
   });
 
   describe('processConfigFileReferences', () => {
+    it('passes cancellation through nested arrays and objects to Python execution', async () => {
+      const controller = new AbortController();
+      await processConfigFileReferences(
+        { nested: [{ settings: 'file:///path/to/config.py' }] },
+        '',
+        controller.signal,
+      );
+      expect(runPython).toHaveBeenCalledWith('/path/to/config.py', 'get_config', [], {
+        signal: controller.signal,
+      });
+    });
+
+    it('removes its JavaScript abort listener after successful loading', async () => {
+      const controller = new AbortController();
+      const add = vi.spyOn(controller.signal, 'addEventListener');
+      const remove = vi.spyOn(controller.signal, 'removeEventListener');
+      importModule.mockResolvedValue(() => ({ value: 'loaded' }));
+      vi.mocked(isJavascriptFile).mockReturnValue(true);
+      try {
+        expect(await loadFileReference('file:///path/to/config.js', '', controller.signal)).toEqual(
+          { value: 'loaded' },
+        );
+        const listener = add.mock.calls.find(([event]) => event === 'abort')?.[1];
+        expect(listener).toBeDefined();
+        expect(remove).toHaveBeenCalledWith('abort', listener);
+        controller.abort();
+      } finally {
+        add.mockRestore();
+        remove.mockRestore();
+      }
+    });
+
+    it('does not invoke JavaScript after cancellation during module loading', async () => {
+      const controller = new AbortController();
+      let finish!: (value: unknown) => void;
+      importModule.mockReturnValue(
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+      );
+      vi.mocked(isJavascriptFile).mockReturnValue(true);
+      const loader = vi.fn();
+      const pending = loadFileReference('file:///path/to/config.js', '', controller.signal).catch(
+        (error: Error) => error,
+      );
+      controller.abort();
+      finish(loader);
+      expect(await pending).toBe(controller.signal.reason);
+      expect(loader).not.toHaveBeenCalled();
+    });
+
     it('should return primitive values as is', async () => {
       await expect(processConfigFileReferences(42)).resolves.toBe(42);
       await expect(processConfigFileReferences('test')).resolves.toBe('test');

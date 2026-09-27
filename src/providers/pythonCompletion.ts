@@ -179,7 +179,7 @@ export class PythonProvider implements ApiProvider {
   private scriptPath: string;
   private functionName: string | null;
   private configResolved = false;
-  private cancelConfigLoading: (() => void) | null = null;
+  private configAbortController: AbortController | null = null;
   private poolPromise: Promise<PythonWorkerPool> | null = null;
   private failedPool: PythonWorkerPool | null = null;
   private shutdownPromise: Promise<void> | null = null;
@@ -232,20 +232,18 @@ export class PythonProvider implements ApiProvider {
       let pool: PythonWorkerPool | undefined;
       try {
         if (!this.configResolved) {
+          this.configAbortController = new AbortController();
           try {
-            // User configuration loaders can remain pending indefinitely. Cancel only
-            // this pre-worker wait; a late loader result must not start a new pool.
-            this.config = await new Promise<PythonProviderConfig>((resolve, reject) => {
-              this.cancelConfigLoading = () =>
-                reject(new DOMException('Python provider initialization cancelled', 'AbortError'));
-              processConfigFileReferences(this.config, this.options?.config.basePath || '').then(
-                resolve,
-                reject,
-              );
-            });
+            const config = await processConfigFileReferences(
+              this.config,
+              this.options?.config.basePath || '',
+              this.configAbortController.signal,
+            );
+            this.configAbortController.signal.throwIfAborted();
+            this.config = config;
             this.configResolved = true;
           } finally {
-            this.cancelConfigLoading = null;
+            this.configAbortController = null;
           }
         }
 
@@ -439,7 +437,7 @@ export class PythonProvider implements ApiProvider {
 
   async shutdown(): Promise<void> {
     if (!this.shutdownPromise) {
-      this.cancelConfigLoading?.();
+      this.configAbortController?.abort();
       this.shutdownPromise = (async () => {
         try {
           // Startup reports its own error; any partial pool whose cleanup failed

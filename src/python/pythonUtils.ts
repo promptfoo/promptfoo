@@ -299,14 +299,16 @@ export async function runPython<T = unknown>(
   scriptPath: string,
   method: string,
   args: (string | number | object | undefined)[],
-  options: { pythonExecutable?: string } = {},
+  options: { pythonExecutable?: string; signal?: AbortSignal } = {},
 ): Promise<T> {
+  options.signal?.throwIfAborted();
   const absPath = path.resolve(scriptPath);
   const customPath = getConfiguredPythonPath(options.pythonExecutable);
   let pythonPath = customPath || 'python';
   let tempDirectory: string | undefined;
 
   pythonPath = await validatePythonPath(pythonPath, typeof customPath === 'string');
+  options.signal?.throwIfAborted();
 
   try {
     tempDirectory = await createSecureTempDirectory('promptfoo-python-');
@@ -326,12 +328,38 @@ export async function runPython<T = unknown>(
       ...(getEnvBool('PROMPTFOO_PYTHON_DEBUG_ENABLED') && { stdio: 'inherit' }),
     };
 
+    options.signal?.throwIfAborted();
     logger.debug('[Python] Running script', { scriptPath: absPath, method });
 
     await new Promise<void>((resolve, reject) => {
       try {
         const pyshell = new PythonShell('wrapper.py', pythonOptions);
         const stderrLogger = new PythonStderrLogger();
+        const onAbort = () => {
+          pyshell.childProcess.kill('SIGKILL');
+        };
+        let processError: Error | undefined;
+        pyshell.on('error', (error) => {
+          processError = error;
+        });
+        // Native close also covers failed spawn and waits for the child and its
+        // stdio to close. Abort/error notification alone does not release ownership.
+        pyshell.childProcess.once('close', () => {
+          options.signal?.removeEventListener('abort', onAbort);
+          stderrLogger.flush();
+          if (options.signal?.aborted) {
+            reject(options.signal.reason);
+          } else if (processError) {
+            reject(processError);
+          } else {
+            resolve();
+          }
+        });
+
+        options.signal?.addEventListener('abort', onAbort, { once: true });
+        if (options.signal?.aborted) {
+          onAbort();
+        }
 
         pyshell.stdout?.on('data', (chunk: Buffer) => {
           logger.debug(chunk.toString('utf-8').trim());
@@ -342,11 +370,8 @@ export async function runPython<T = unknown>(
         });
 
         pyshell.end((err) => {
-          stderrLogger.flush();
           if (err) {
-            reject(err);
-          } else {
-            resolve();
+            processError = err;
           }
         });
       } catch (error) {
@@ -355,6 +380,7 @@ export async function runPython<T = unknown>(
     });
 
     const output = await fs.readFile(outputPath, 'utf-8');
+    options.signal?.throwIfAborted();
     logger.debug('[Python] Script returned a result', { scriptPath: absPath });
 
     let result: { type: 'final_result'; data: T } | undefined;
@@ -373,6 +399,7 @@ export async function runPython<T = unknown>(
 
     return result.data;
   } catch (error) {
+    options.signal?.throwIfAborted();
     const message = `Error running Python script: ${(error as Error).message}\nStack Trace: ${
       (error as Error).stack?.replace('--- Python Traceback ---', 'Python Traceback: ') ||
       'No Python traceback available'

@@ -984,12 +984,30 @@ async function doEvalWithEnv(
           cliState.retryMode = false;
         }
       }
-    } finally {
-      cleanupHandler(); // Always cleanup, even if evaluate() throws
-    }
 
-    // Clear resume flag after run completes
-    cliState.resume = false;
+      // Clear resume flag after run completes
+      cliState.resume = false;
+    } finally {
+      try {
+        // Providers outside the registry also own resources. Release them before
+        // returning a paused/canceled eval, reporting results, or starting watch.
+        const cleanupResults = await Promise.allSettled(
+          testSuite.providers.map(async (provider) => {
+            if (isApiProvider(provider)) {
+              await provider.cleanup?.();
+            }
+          }),
+        );
+        // A cleanup failure must not mask an evaluation failure or prevent other
+        // providers from releasing their resources.
+        const failure = cleanupResults.find((result) => result.status === 'rejected');
+        if (ret && failure?.status === 'rejected') {
+          throw failure.reason;
+        }
+      } finally {
+        cleanupHandler();
+      }
+    }
 
     // A cancelled run must not start sharing, output reporting, or watch mode.
     if (paused) {
@@ -1302,18 +1320,6 @@ async function doEvalWithEnv(
     }
     if (testSuite.redteam) {
       showRedteamProviderLabelMissingWarning(testSuite);
-    }
-
-    // Clean up any WebSocket connections
-    if (testSuite.providers.length > 0) {
-      for (const provider of testSuite.providers) {
-        if (isApiProvider(provider)) {
-          const cleanup = provider?.cleanup?.();
-          if (cleanup instanceof Promise) {
-            await cleanup;
-          }
-        }
-      }
     }
 
     return ret;

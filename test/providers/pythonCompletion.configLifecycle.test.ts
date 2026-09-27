@@ -109,6 +109,60 @@ describe('Python provider configuration lifetime', () => {
     expect(await provider.callApi('retry')).toMatchObject({ output: 'file://store.db' });
     expect(mocks.initialize).toHaveBeenCalledOnce();
   });
+  it.each([false, true])(
+    'closes a Python configuration child before shutdown (ignore TERM=%s)',
+    async (ignoreTerm) => {
+      const filename = path.join(directory, 'blocking.py');
+      const pidFile = path.join(directory, 'blocking.pid');
+      await writeFile(
+        filename,
+        `import os, signal, time
+from pathlib import Path
+def get_config():
+ ${ignoreTerm ? 'signal.signal(signal.SIGTERM, signal.SIG_IGN)' : 'pass'}
+ Path(__file__).with_suffix('.pid').write_text(str(os.getpid()))
+ while True: time.sleep(1)
+`,
+      );
+      const provider = createProvider(`file://${filename}`);
+      const initializing = provider.initialize().catch((error: Error) => error);
+      let pid: number | undefined;
+      const alive = () => {
+        if (!pid) {
+          return false;
+        }
+        try {
+          process.kill(pid, 0);
+          return true;
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ESRCH') {
+            return false;
+          }
+          throw error;
+        }
+      };
+      try {
+        await vi.waitFor(async () => {
+          pid = Number(await readFile(pidFile, 'utf8'));
+          expect(pid).toBeGreaterThan(0);
+        });
+        expect(alive()).toBe(true);
+        await providerRegistry.shutdownAll();
+        expect(await initializing).toMatchObject({ name: 'AbortError' });
+        expect(alive()).toBe(false);
+        expect(mocks.initialize).not.toHaveBeenCalled();
+        await writeFile(filename, "def get_config():\n return {'storageUri': 'retry-ok'}\n");
+        expect(await provider.callApi('retry')).toMatchObject({ output: 'retry-ok' });
+        expect(mocks.initialize).toHaveBeenCalledOnce();
+      } finally {
+        if (pid && alive()) {
+          process.kill(pid, 'SIGKILL');
+        }
+        await vi.waitFor(() => expect(alive()).toBe(false));
+      }
+    },
+  );
+
   it.each(['resolve', 'reject'] as const)(
     'cancels unresolved JavaScript configuration and ignores a late %s after reuse',
     async (completion) => {

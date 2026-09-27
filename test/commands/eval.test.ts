@@ -1698,6 +1698,23 @@ describe('evalCommand', () => {
         }
         return process;
       });
+      let finishCleanup!: () => void;
+      const cleanup = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            finishCleanup = resolve;
+          }),
+      );
+      const provider = {
+        id: () => 'owned-resource',
+        callApi: async () => ({ output: 'ok' }),
+        cleanup,
+      };
+      vi.mocked(resolveConfigs).mockResolvedValueOnce({
+        config: {} as UnifiedConfig,
+        testSuite: { prompts: [], providers: [provider] },
+        basePath: path.resolve('/'),
+      });
       const previousExitCode = process.exitCode;
       vi.mocked(isSharingEnabled).mockReturnValue(true);
       chokidarMocks.watch.mockImplementation(() => {
@@ -1709,7 +1726,8 @@ describe('evalCommand', () => {
       });
 
       try {
-        await doEval(
+        let returned = false;
+        const running = doEval(
           {
             write: false,
             watch: true,
@@ -1721,6 +1739,17 @@ describe('evalCommand', () => {
           defaultConfigPath,
           { eventSource: 'cli' },
         );
+
+        running.then(() => {
+          returned = true;
+        });
+        try {
+          await vi.waitFor(() => expect(cleanup).toHaveBeenCalledOnce());
+          expect(returned).toBe(false);
+        } finally {
+          finishCleanup?.();
+          await running;
+        }
 
         expect(terminationHandler).toBeDefined();
         expect(chokidarMocks.watch).not.toHaveBeenCalled();
@@ -2258,6 +2287,63 @@ describe('evalCommand', () => {
       process.exitCode = previousExitCode;
     }
   });
+
+  it.each([false, true])(
+    'cleans every provider and preserves error precedence (evaluation failed=%s)',
+    async (evaluationFailed) => {
+      const previousResume = cliState.resume;
+      let resumedAfter: boolean | undefined;
+      const evaluationError = new Error('evaluation failed first');
+      const cleanupError = new Error('first provider cleanup failed');
+      let finishCleanup!: () => void;
+      const secondCleanup = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            finishCleanup = resolve;
+          }),
+      );
+      const firstCleanup = vi.fn(() => {
+        throw cleanupError;
+      });
+      vi.mocked(resolveConfigs).mockResolvedValueOnce({
+        config: {} as UnifiedConfig,
+        testSuite: {
+          prompts: [],
+          providers: [firstCleanup, secondCleanup].map((cleanup, index) => ({
+            id: () => `cleanup-${index}`,
+            callApi: async () => ({ output: 'ok' }),
+            cleanup,
+          })),
+        },
+        basePath: path.resolve('/'),
+      });
+      vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => {
+        cliState.resume = true;
+        if (evaluationFailed) {
+          throw evaluationError;
+        }
+        return record as Eval;
+      });
+      let settled = false;
+      const running = doEval({}, defaultConfig, defaultConfigPath, {})
+        .catch((error: Error) => error)
+        .finally(() => {
+          settled = true;
+        });
+      try {
+        await vi.waitFor(() => expect(secondCleanup).toHaveBeenCalledOnce());
+        expect(settled).toBe(false);
+      } finally {
+        finishCleanup?.();
+        await running;
+        resumedAfter = cliState.resume;
+        cliState.resume = previousResume;
+      }
+      expect(await running).toBe(evaluationFailed ? evaluationError : cleanupError);
+      expect(resumedAfter).toBe(evaluationFailed);
+      expect(firstCleanup).toHaveBeenCalledOnce();
+    },
+  );
 
   it('should await async provider cleanup after evaluation', async () => {
     const cleanup = vi.fn().mockResolvedValue(undefined);

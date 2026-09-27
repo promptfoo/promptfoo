@@ -135,6 +135,25 @@ describe('PythonProvider with file references', () => {
     providers.length = 0;
   });
 
+  it('does not commit final config or spawn a pool when its last read finishes after cancellation', async () => {
+    const original = { settings: 'file://last.json' };
+    let finish!: (value: unknown) => void;
+    vi.mocked(processConfigFileReferences).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const provider = new PythonProvider('test.py', { config: original });
+    providers.push(provider);
+    const starting = provider.initialize().catch((error: Error) => error);
+    const stopping = provider.shutdown();
+    finish({ settings: { value: 'late' } });
+    await stopping;
+    expect(await starting).toMatchObject({ name: 'AbortError' });
+    expect(provider.config).toBe(original);
+    expect(mocks.PythonWorkerPoolMock).not.toHaveBeenCalled();
+  });
+
   it('should call processConfigFileReferences when initializing config references', async () => {
     const mockConfig = {
       settings: 'file://settings.json',
@@ -162,6 +181,7 @@ describe('PythonProvider with file references', () => {
     expect(processConfigFileReferences).toHaveBeenCalledWith(
       expect.objectContaining(mockConfig),
       '/base/path',
+      expect.any(AbortSignal),
     );
     expect(provider.config).toEqual(mockProcessedConfig);
   });
@@ -186,6 +206,7 @@ describe('PythonProvider with file references', () => {
     expect(processConfigFileReferences).toHaveBeenCalledWith(
       expect.objectContaining(mockConfig),
       expect.any(String),
+      expect.any(AbortSignal),
     );
     expect(mockPoolInstance.initialize).not.toHaveBeenCalled();
     vi.mocked(processConfigFileReferences).mockResolvedValue({ settings: {} });
@@ -218,6 +239,7 @@ describe('PythonProvider with file references', () => {
     expect(processConfigFileReferences).toHaveBeenCalledWith(
       expect.objectContaining(mockConfig),
       '/base/path',
+      expect.any(AbortSignal),
     );
     expect(provider.config).toEqual(mockProcessedConfig);
   });
@@ -275,6 +297,7 @@ describe('PythonProvider with file references', () => {
     expect(processConfigFileReferences).toHaveBeenCalledWith(
       expect.objectContaining(mockConfig),
       '/base/path',
+      expect.any(AbortSignal),
     );
     expect(provider.config).toEqual(mockProcessedConfig);
   });
@@ -344,6 +367,7 @@ describe('PythonProvider with file references', () => {
     expect(processConfigFileReferences).toHaveBeenCalledWith(
       expect.objectContaining(mockOriginalConfig),
       '/base/path',
+      expect.any(AbortSignal),
     );
 
     // Verify the processed config is stored on the provider
