@@ -123,9 +123,9 @@
     "storybook": {
       "esbuild": "0.28.2"
     },
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
-    "react-is": "^19.2.4",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-is": "^19.3.0",
     "react-router-config": {
       "react-router": "^5.3.4"
     },
@@ -136,8 +136,8 @@
       "whatwg-url": "16.0.1",
       "chokidar": "5.0.0",
       "esbuild": "0.28.2",
-      "react": "^19.2.7",
-      "react-dom": "^19.2.7"
+      "react": "^19.3.0",
+      "react-dom": "^19.3.0"
     },
     "@opentelemetry/exporter-trace-otlp-http": {
       "@opentelemetry/core": "2.11.0"
