@@ -21,7 +21,7 @@ The example includes:
 ## Prerequisites
 
 - Node.js >=22.22.0 (Node.js 24 LTS recommended)
-- Python 3.8+ (for the Python MCP server example)
+- Python 3.10+ (for the optional Python MCP server example)
 - OpenAI API key
 
 ## Environment Variables
