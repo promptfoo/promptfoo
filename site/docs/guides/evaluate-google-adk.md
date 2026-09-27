@@ -9,7 +9,7 @@ sidebar_position: 27
 Use Google ADK's Python SDK with Promptfoo by wrapping your app as a Python provider. That keeps the ADK runtime in process, so Promptfoo can inspect the same sessions, artifacts, and native OpenTelemetry spans that the agent produced.
 
 :::note
-This guide targets stable ADK 1.x. Google's public docs also advertise ADK Python 2.0 beta releases, but those releases have breaking API and session-schema changes. Validate a 2.0 integration separately before moving production evals onto it.
+This guide targets ADK 2.x and requires Python 3.10 or later. The bundled example uses in-memory sessions and artifacts; check ADK's migration guidance separately before upgrading a persisted production app.
 :::
 
 ## Quick Start
@@ -20,7 +20,7 @@ cd integration-google-adk
 
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 
 export GOOGLE_API_KEY=your_google_api_key_here
 npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
@@ -28,10 +28,11 @@ npx promptfoo@latest eval -c promptfooconfig.workflow.yaml --no-cache
 npx promptfoo@latest view
 ```
 
-The example defaults to `gemini-2.5-flash`. If you want to use another ADK-supported model, set `ADK_MODEL`. Provider-style model strings such as `openai/gpt-5.4-mini` require the optional ADK extensions:
+The example defaults to `gemini-2.5-flash`. If you want to use another ADK-supported model, set `ADK_MODEL`. Provider-style model strings such as `openai/gpt-5.4-mini` require the optional LiteLLM adapter:
 
 ```bash
-pip install 'google-adk[extensions]>=1.32.0,<2'
+python -m pip install 'litellm>=1.101,<2'
+export OPENAI_API_KEY=your_openai_api_key_here
 export ADK_MODEL=openai/gpt-5.4-mini
 ```
 
@@ -66,7 +67,7 @@ Pick the HTTP provider when the deployed HTTP contract itself is what you want t
 
 ## How Native ADK Tracing Fits Promptfoo
 
-ADK 1.x already emits OpenTelemetry spans such as:
+ADK 2.x emits OpenTelemetry spans such as:
 
 - `invocation`
 - `invoke_agent weather_agent`
@@ -160,7 +161,7 @@ The provider pattern is unchanged — `_run_workflow_provider` still calls `runn
 
 ## Structured Outputs, Memory, And Advanced Tools
 
-The same provider shape covers the rest of the stable ADK 1.x surface. Map each ADK feature to the assertion type that proves it works:
+The same provider shape covers the other ADK features. Map each ADK feature to the assertion type that proves it works:
 
 | ADK feature                          | Assertion to add                                                           |
 | ------------------------------------ | -------------------------------------------------------------------------- |
@@ -178,7 +179,7 @@ ADK ships its own `adk eval` stack — use it for ADK-native eval sets and ADK-s
 - Keep the provider span small. ADK emits the framework spans; the wrapper only has to preserve Promptfoo's parent trace and flush before the worker exits.
 - The bundled example uses in-memory services so runs are deterministic. Swap in your real `SessionService`, `ArtifactService`, or `MemoryService` when persistence is part of the behavior under test.
 - Reach for state and artifact assertions first; reserve model-graded assertions for outcomes that actually require semantics (tone, factuality, refusal quality).
-- The optional `google-adk[extensions]` set adds hundreds of MB of LiteLLM and provider SDKs. Install it only when you need provider-prefixed model strings (`openai/...`, `anthropic/...`), and expect upstream warnings unrelated to your eval.
+- The optional LiteLLM adapter adds provider dependencies. Install it only when you need provider-prefixed model strings (`openai/...`, `anthropic/...`), and expect upstream warnings unrelated to your eval.
 
 ## Source References
 
