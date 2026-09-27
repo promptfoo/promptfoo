@@ -124,6 +124,68 @@ describe('invocation-scoped cache settings', () => {
     ]);
   });
 
+  it.each(['backend', 'namespace'])(
+    'waits for an already-started store write before clearing the %s',
+    async (kind) => {
+      await cliState.withEnv(disk(path.join(tempDir, 'pending-write')), () =>
+        cache.withCacheNamespace(kind === 'namespace' ? 'fixture' : undefined, async () => {
+          const store = cache.getCache().stores[0];
+          const set = store.set.bind(store);
+          const entered = createDeferred<void>();
+          const release = createDeferred<void>();
+          vi.spyOn(store, 'set').mockImplementationOnce(async (...args) => {
+            entered.resolve();
+            await release.promise;
+            return set(...args);
+          });
+          vi.mocked(fetchWithRetries)
+            .mockResolvedValueOnce(Response.json('old'))
+            .mockResolvedValueOnce(Response.json('new'));
+          const call = () => cache.fetchWithCache('https://cache-fixture.invalid/pending-write');
+          const first = call();
+          await entered.promise;
+          let cleared = false;
+          const clearing = cache
+            .getCache()
+            .clear()
+            .then(() => {
+              cleared = true;
+            });
+          try {
+            await new Promise(setImmediate);
+            expect(cleared).toBe(false);
+          } finally {
+            release.resolve();
+            await Promise.all([first, clearing]);
+          }
+          expect(await call()).toMatchObject({ data: 'new', cached: false });
+          expect(fetchWithRetries).toHaveBeenCalledTimes(2);
+        }),
+      );
+    },
+  );
+
+  it('shares a physical cache and usage claims through hard-linked file paths', async () => {
+    const firstPath = path.join(tempDir, 'first');
+    const secondPath = path.join(tempDir, 'second');
+    const first = cliState.withEnv(disk(firstPath), () => cache.getCache());
+    await first.set('seed', 'seed');
+    fs.mkdirSync(secondPath);
+    fs.linkSync(path.join(firstPath, 'cache.json'), path.join(secondPath, 'cache.json'));
+    const second = cliState.withEnv(disk(secondPath), () => cache.getCache());
+    expect(second.stores[0]).toBe(first.stores[0]);
+    await Promise.all([first.set('first', 'one'), second.set('second', 'two')]);
+    const persisted = new Keyv({
+      store: new KeyvFile({ filename: path.join(secondPath, 'cache.json') }),
+    });
+    expect(await persisted.get('first')).toBe('one');
+    expect(await persisted.get('second')).toBe('two');
+    expect(cliState.withEnv(disk(firstPath), () => cache.claimCacheKeyOnce('usage'))).toBe(true);
+    expect(cliState.withEnv(disk(secondPath), () => cache.claimCacheKeyOnce('usage'))).toBe(false);
+    await cache.clearCache(secondPath);
+    expect(await first.get('first')).toBeUndefined();
+  });
+
   it('preserves explicit API and nested invocation overrides', async () => {
     cache.disableCache();
     await cliState.withEnv({ PROMPTFOO_CACHE_ENABLED: 'true' }, async () => {
