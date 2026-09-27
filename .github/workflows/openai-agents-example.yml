@@ -1,0 +1,41 @@
+name: OpenAI Agents example
+
+on:
+  pull_request:
+    paths:
+      - 'examples/openai-agents/**'
+      - 'src/python/**'
+      - '.github/workflows/openai-agents-example.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'examples/openai-agents/**'
+      - 'src/python/**'
+      - '.github/workflows/openai-agents-example.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  provider-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Install example dependencies
+        run: |
+          python -m pip install -r examples/openai-agents/requirements.txt
+          python -m pip check
+      - name: Test against the real SDK without API credentials
+        run: python -m unittest discover -s examples/openai-agents/tests -v
+      - name: Run isolated provider and tracing unit tests
+        run: python -m unittest discover -s examples/openai-agents -p '*_test.py' -v
