@@ -608,7 +608,7 @@ export async function resolveTeamId(
   }
   if (teams.length === 0) {
     throw new Error(
-      `No accessible teams in organization '${currentOrganizationId}'. Run 'promptfoo auth teams set <team>' to select a team in another organization.`,
+      `No accessible teams in organization '${currentOrganizationId}'. Log in with an API key for the organization you want to use: 'promptfoo auth login --api-key <apiKey>'.`,
     );
   }
   const defaultTeam = getOldestTeam(teams);
