@@ -7,13 +7,21 @@ afterEach(() => {
 });
 
 describe('derived metric Math.js loading', () => {
-  it('explains local and global installation when the package cannot load', async () => {
+  it.each([
+    new Error('Math.js initialization failed'),
+    Object.assign(
+      new Error("Cannot find package 'decimal.js' imported from /node_modules/mathjs"),
+      {
+        code: 'ERR_MODULE_NOT_FOUND',
+      },
+    ),
+  ])('preserves unexpected package loading errors: %s', async (error) => {
     vi.doMock('mathjs', () => {
-      throw new Error('Cannot find package mathjs');
+      throw error;
     });
 
-    await expect(loadMathJs()).rejects.toThrow('npm install promptfoo mathjs@^15.1.1');
-    await expect(loadMathJs()).rejects.toThrow('npm install -g promptfoo mathjs@^15.1.1');
+    // Vitest wraps a failing mock factory with the original exception as its cause.
+    await expect(loadMathJs()).rejects.toHaveProperty('cause', error);
   });
 
   it.each(['14.8.1', '16.0.0', 'invalid'])(

@@ -27,6 +27,7 @@ import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/
 import { renderVarsInObject } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
+import { isMissingPackageImportError } from './util/packageImportErrors';
 import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
 import { loadYaml } from './util/yamlLoad';
@@ -41,10 +42,13 @@ export async function loadMathJs(): Promise<typeof import('mathjs')> {
   try {
     math = await import('mathjs');
   } catch (error) {
-    throw Object.assign(
-      new Error('String derived metrics require the "mathjs" package. ' + installInstructions),
-      { cause: error },
-    );
+    if (isMissingPackageImportError(error, 'mathjs')) {
+      throw Object.assign(
+        new Error('String derived metrics require the "mathjs" package. ' + installInstructions),
+        { cause: error },
+      );
+    }
+    throw error;
   }
   if (!semverSatisfies(math.version, '^15.1.1')) {
     throw new Error(
