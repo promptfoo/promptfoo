@@ -205,14 +205,11 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         (p) => typeof p === 'object' && p.id === 'intent',
       );
 
-      // Create new plugins array, preserving configs from existing plugins
-      const newPluginsArray: Config['plugins'] = Array.from(newSelectedPlugins).map((plugin) => {
-        const existing = config.plugins.find((p) => (typeof p === 'string' ? p : p.id) === plugin);
-        if (existing && typeof existing === 'object' && existing.config) {
-          return existing; // Preserve existing config
-        }
-        return plugin;
-      });
+      // Preserve every option of plugins that remain selected.
+      const newPluginsArray: Config['plugins'] = Array.from(newSelectedPlugins).map(
+        (plugin) =>
+          config.plugins.find((p) => (typeof p === 'string' ? p : p.id) === plugin) ?? plugin,
+      );
 
       // Combine all plugins and update store
       const allPlugins = [...newPluginsArray, ...policyPlugins, ...intentPlugins];

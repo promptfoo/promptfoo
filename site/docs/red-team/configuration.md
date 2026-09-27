@@ -79,7 +79,7 @@ targets:
       message: 'The user message to process'
 
 redteam:
-  plugins: Array<string | { id: string, numTests?: number, config?: Record<string, any> }>
+  plugins: Array<string | { id: string, numTests?: number, severity?: "critical" | "high" | "medium" | "low" | "informational", config?: Record<string, any> }>
   strategies: Array<string | { id: string }>
   numTests: number
   maxCharsPerMessage: number
