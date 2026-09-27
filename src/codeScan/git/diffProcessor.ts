@@ -22,8 +22,7 @@ import { isInDenylist, MAX_BLOB_SIZE_BYTES, MAX_PATCH_SIZE_BYTES } from '../cons
 import { annotateDiffWithLineRanges } from './diffAnnotator';
 import { parseRawDiff } from './rawDiffParser';
 
-import type { FileRecord } from '../../types/codeScan';
-import type { LineRange } from '../util/diffLineRanges';
+import type { FileRecord, LineRange } from '../../types/codeScan';
 
 interface NumstatEntry {
   linesAdded: number;
