@@ -12,7 +12,7 @@ export const MediaRouteParamsSchema = z.discriminatedUnion('type', [
   MediaParamsSchema,
   z.object({
     type: z.literal('blob'),
-    filename: GetBlobParamsSchema.shape.hash,
+    filename: GetBlobParamsSchema.shape.hash.toLowerCase(),
   }),
 ]);
 

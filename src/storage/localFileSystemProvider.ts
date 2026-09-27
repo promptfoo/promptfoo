@@ -269,6 +269,7 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
   async getStats(): Promise<{ fileCount: number; totalSizeBytes: number }> {
     let fileCount = 0;
     let totalSizeBytes = 0;
+    const blobBase = path.join(this.basePath, 'blob-data') + path.sep;
 
     const walkDir = async (dir: string): Promise<void> => {
       let entries: fs.Dirent[];
@@ -283,6 +284,10 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
       for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
+          // Blob writers reserve hash-prefixed directories for unpublished staging files.
+          if (fullPath.startsWith(blobBase) && /^[a-f0-9]{64}\./i.test(entry.name)) {
+            continue;
+          }
           await walkDir(fullPath);
         } else if (!entry.name.endsWith('.json')) {
           // Skip metadata files
