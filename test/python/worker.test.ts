@@ -3,8 +3,10 @@ import os from 'os';
 import path from 'path';
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import logger from '../../src/logger';
 import { MAX_STDERR_BUFFER_LENGTH, PythonWorker } from '../../src/python/worker';
+import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/logger', () => ({
   default: {
@@ -306,6 +308,35 @@ describe('PythonWorker completion markers', () => {
 });
 
 describeOrSkip('PythonWorker', () => {
+  it('keeps file defaults separate for concurrent Python workers', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-worker-env-'));
+    const scriptPath = path.join(directory, 'provider.py');
+    fs.writeFileSync(
+      scriptPath,
+      'import os\ndef call_api(*args):\n    return os.environ.get("PROMPTFOO_REVIEW_ENV_PROBE")\n',
+    );
+    const restore = mockProcessEnv({ PROMPTFOO_REVIEW_ENV_PROBE: 'host' });
+    const workers = ['first', 'second'].map(() => new PythonWorker(scriptPath, 'call_api'));
+    try {
+      const outputs = await Promise.all(
+        workers.map((worker, index) =>
+          cliState.withEnvFileOverrides(
+            { PROMPTFOO_REVIEW_ENV_PROBE: ['first', 'second'][index] },
+            async () => {
+              await worker.initialize();
+              return worker.call('call_api', []);
+            },
+          ),
+        ),
+      );
+      expect(outputs).toEqual(['first', 'second']);
+      expect(process.env.PROMPTFOO_REVIEW_ENV_PROBE).toBe('host');
+    } finally {
+      await Promise.all(workers.map((worker) => worker.shutdown()));
+      restore();
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
   let sharedWorker: PythonWorker;
   let multiApiWorker: PythonWorker;
   let errorWorker: PythonWorker;

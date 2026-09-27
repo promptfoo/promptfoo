@@ -1,32 +1,45 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Opus-tier coding — Opus 5 vs Opus 4.8 at xhigh effort
+description: Opus-tier coding — Opus 5.5, Opus 5, and Opus 4.8 compared by effort
 
 prompts:
   - |
     {{task}}
 
 providers:
-  # Opus 5 — the current Opus. Same $5/$25 pricing as 4.8, so this is a like-for-like
-  # comparison on capability rather than cost.
+  # Opus 5.5 costs $4/$20 per MTok, less than Opus 5 and 4.8 ($5/$25).
+  - id: anthropic:messages:claude-opus-5-5
+    label: opus-5-5-xhigh
+    config:
+      # Thinking is always on for Opus 5.5: `thinking: { type: disabled }` and manual
+      # budgets are rejected, so there is no `thinking` block here. `effort` is the only
+      # control, and its API default is `medium` (one level below Opus 5's `high`), so
+      # set it explicitly when comparing models.
+      effort: xhigh
+      # max_tokens caps thinking PLUS the answer. At a given effort level Opus 5.5 thinks
+      # more than Opus 5: at xhigh on the code-generation task below, a 16k budget
+      # truncated the answer (finishReason: length). Stream so the larger cap doesn't hit
+      # the SDK's non-streaming timeout guard.
+      max_tokens: 32000
+      stream: true
+
+  # Opus 5.5 at the bottom of the effort ladder. Effort is the main cost/latency lever
+  # because thinking cannot be turned off; sweep it on your own tasks.
+  - id: anthropic:messages:claude-opus-5-5
+    label: opus-5-5-low
+    config:
+      effort: low
+      max_tokens: 16000
+
   - id: anthropic:messages:claude-opus-5
     label: opus-5-xhigh
     config:
-      # Opus 5 deprecates manual sampling controls (temperature/top_p/top_k) at the
-      # model level — promptfoo omits them automatically, so don't set them here.
+      # Opus 5, Opus 5.5, and Opus 4.8 all reject manual sampling controls
+      # (temperature/top_p/top_k) — promptfoo omits them automatically.
       #
       # No `thinking` block on purpose: unlike Opus 4.8, Opus 5 runs adaptive thinking
-      # by default. `max_tokens` caps thinking PLUS the answer, so leave real headroom —
-      # at xhigh on these tasks thinking alone used ~4.4k tokens, and an 8k budget
-      # truncated the answer mid-sentence (finishReason: length).
-      effort: xhigh # Recommended starting point for coding/agentic work
-      max_tokens: 16000
-
-  # Opus 5 at the bottom of the effort ladder. Sweep this against xhigh on your own
-  # tasks — effort is the main cost/latency lever, and low is unusually strong here.
-  - id: anthropic:messages:claude-opus-5
-    label: opus-5-low
-    config:
-      effort: low
+      # by default. At xhigh on these tasks thinking alone used ~4.4k tokens, and an 8k
+      # budget truncated the answer mid-sentence (finishReason: length).
+      effort: xhigh
       max_tokens: 16000
 
   - id: anthropic:messages:claude-opus-4-8

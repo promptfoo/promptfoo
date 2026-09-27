@@ -6,7 +6,7 @@ description: Use Google Vertex AI models including Gemini, Claude, Llama, and sp
 
 # Google Vertex
 
-The `vertex` provider enables integration with Google's [Vertex AI](https://cloud.google.com/vertex-ai) platform, which provides access to foundation models including Gemini, Llama, Claude, and specialized models for text, code, and embeddings.
+The `vertex` provider connects to Google's [Vertex AI](https://cloud.google.com/vertex-ai). It supports Gemini, Llama, Claude, and other models for text, code, and embeddings.
 
 :::info Provider Selection
 Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `google:` for Google AI Studio (API key authentication).
@@ -77,7 +77,7 @@ Anthropic's Claude models are available with the following versions:
 - `vertex:claude-fable-5` - Claude Fable 5 with a 1M-token context window and always-on adaptive thinking
 
 Promptfoo omits unsupported `temperature`, `top_p`, and `top_k` values for the adaptive-only
-Claude models — Fable 5, Mythos 5, Opus 5, Sonnet 5, and Opus 4.7/4.8 (see their entries below).
+Claude models — Fable 5, Mythos 5, Opus 5.5, Opus 5, Sonnet 5, and Opus 4.7/4.8 (see their entries below).
 Regional and multi-region Vertex endpoints carry a
 [10% price premium](https://cloud.google.com/blog/products/ai-machine-learning/global-endpoint-for-claude-models-generally-available-on-vertex-ai)
 over the global endpoint for Claude 4.5 and later models (Sonnet 4.5+, Haiku 4.5,
@@ -102,6 +102,10 @@ and the model ID because Google does not publish one in its public model catalog
 **Claude 4.8:**
 
 - `vertex:claude-opus-4-8` - Claude 4.8 Opus, Anthropic's most capable model for complex reasoning and agentic coding. Use `config.region: global` for the global endpoint; US and EU multi-region endpoints are also supported where enabled on your project. Like Opus 4.7, promptfoo automatically omits `temperature`, `top_p`, and `top_k` (deprecated for this model).
+
+**Claude Opus 5.5:**
+
+- `vertex:claude-opus-5-5` - Claude Opus 5.5, priced at $4 / $20 per million input / output tokens, with a 1M-token context window. Use `config.region: global` for the global endpoint. Thinking is always on: promptfoo removes `thinking: { type: 'disabled' }` and turns manual thinking budgets into adaptive thinking. When `effort` is unset, the API uses `medium` instead of `high`.
 
 **Claude Opus 5:**
 
@@ -509,7 +513,7 @@ The following environment variables can be used to configure the Vertex AI provi
 | Variable                         | Description                         | Default        | Required |
 | -------------------------------- | ----------------------------------- | -------------- | -------- |
 | `GOOGLE_CLOUD_PROJECT`           | Google Cloud project ID             | None           | Yes\*    |
-| `GOOGLE_CLOUD_LOCATION`          | Region for Vertex AI                | `us-central1`  | No       |
+| `GOOGLE_CLOUD_LOCATION`          | Region for Vertex AI                | `global`†      | No       |
 | `GOOGLE_API_KEY`                 | API key for express mode            | None           | No\*     |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path to service account credentials | None           | No\*     |
 | `VERTEX_PUBLISHER`               | Model publisher                     | `google`       | No       |
@@ -518,13 +522,16 @@ The following environment variables can be used to configure the Vertex AI provi
 
 \*At least one authentication method is required (ADC, service account, or API key)
 
+†The default region is `global` when authenticating with ADC or a service account, and
+`us-central1` in express mode (API key).
+
 ### Region Selection
 
 Different models are available in different regions. Common regions include:
 
-- `global` - Supported by Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite
+- `global` - Default with ADC or service account credentials. Supported by Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite
 - `us`, `eu` - Multi-region endpoints supported by Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite (10% pricing premium)
-- `us-central1` - Default, most models available
+- `us-central1` - Default in express mode (API key), most models available
 - `us-east4` - Additional capacity
 - `us-east5` - Claude models available
 - `europe-west1` - EU region, Claude models available
@@ -762,32 +769,34 @@ defaultTest:
 
 ### Configuration Reference
 
-| Option                             | Description                                                        | Default                              |
-| ---------------------------------- | ------------------------------------------------------------------ | ------------------------------------ |
-| `apiKey`                           | GCloud API token                                                   | None                                 |
-| `apiHost`                          | API host override                                                  | `{region}-aiplatform.googleapis.com` |
-| `apiVersion`                       | API version                                                        | `v1`                                 |
-| `credentials`                      | Service account credentials (JSON or file path)                    | None                                 |
-| `projectId`                        | GCloud project ID                                                  | `GOOGLE_CLOUD_PROJECT` env var       |
-| `region`                           | GCloud region                                                      | `us-central1`                        |
-| `publisher`                        | Model publisher                                                    | `google`                             |
-| `context`                          | Model context                                                      | None                                 |
-| `cost`                             | Legacy per-token override applied to both input and output pricing | None                                 |
-| `inputCost`                        | Override input token pricing in promptfoo cost estimates           | None                                 |
-| `outputCost`                       | Override output token pricing in promptfoo cost estimates          | None                                 |
-| `service_tier`                     | Gemini inference tier: `standard`, `flex`, or `priority`           | `standard`                           |
-| `examples`                         | Few-shot examples                                                  | None                                 |
-| `safetySettings`                   | Content filtering                                                  | None                                 |
-| `generationConfig.temperature`     | Randomness control                                                 | None                                 |
-| `generationConfig.maxOutputTokens` | Max tokens to generate                                             | None                                 |
-| `generationConfig.topP`            | Nucleus sampling                                                   | None                                 |
-| `generationConfig.topK`            | Sampling diversity                                                 | None                                 |
-| `generationConfig.stopSequences`   | Generation stop triggers                                           | `[]`                                 |
-| `responseSchema`                   | JSON schema for structured output (supports `file://`)             | None                                 |
-| `toolConfig`                       | Tool/function calling config                                       | None                                 |
-| `systemInstruction`                | System prompt (supports `{{var}}` and `file://`)                   | None                                 |
-| `expressMode`                      | Set to `false` to force OAuth/ADC even with API key                | auto (API key → `true`)              |
-| `streaming`                        | Use streaming API (`streamGenerateContent`)                        | `false`                              |
+| Option                             | Description                                                        | Default                        |
+| ---------------------------------- | ------------------------------------------------------------------ | ------------------------------ |
+| `apiKey`                           | GCloud API token                                                   | None                           |
+| `apiHost`                          | API host override                                                  | Derived from `region`‡         |
+| `apiVersion`                       | API version                                                        | `v1`                           |
+| `credentials`                      | Service account credentials (JSON or file path)                    | None                           |
+| `projectId`                        | GCloud project ID                                                  | `GOOGLE_CLOUD_PROJECT` env var |
+| `region`                           | GCloud region                                                      | `global`‡                      |
+| `publisher`                        | Model publisher                                                    | `google`                       |
+| `context`                          | Model context                                                      | None                           |
+| `cost`                             | Legacy per-token override applied to both input and output pricing | None                           |
+| `inputCost`                        | Override input token pricing in promptfoo cost estimates           | None                           |
+| `outputCost`                       | Override output token pricing in promptfoo cost estimates          | None                           |
+| `service_tier`                     | Gemini inference tier: `standard`, `flex`, or `priority`           | `standard`                     |
+| `examples`                         | Few-shot examples                                                  | None                           |
+| `safetySettings`                   | Content filtering                                                  | None                           |
+| `generationConfig.temperature`     | Randomness control                                                 | None                           |
+| `generationConfig.maxOutputTokens` | Max tokens to generate                                             | None                           |
+| `generationConfig.topP`            | Nucleus sampling                                                   | None                           |
+| `generationConfig.topK`            | Sampling diversity                                                 | None                           |
+| `generationConfig.stopSequences`   | Generation stop triggers                                           | `[]`                           |
+| `responseSchema`                   | JSON schema for structured output (supports `file://`)             | None                           |
+| `toolConfig`                       | Tool/function calling config                                       | None                           |
+| `systemInstruction`                | System prompt (supports `{{var}}` and `file://`)                   | None                           |
+| `expressMode`                      | Set to `false` to force OAuth/ADC even with API key                | auto (API key → `true`)        |
+| `streaming`                        | Use streaming API (`streamGenerateContent`)                        | `false`                        |
+
+‡With ADC or service account credentials the default region is `global` and the host is `aiplatform.googleapis.com`. In express mode (API key) the default region is `us-central1` and the host is `{region}-aiplatform.googleapis.com`.
 
 :::note
 Not all models support all parameters. See [Google's documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/overview) for model-specific details.
@@ -1236,7 +1245,7 @@ When using Search grounding, the API response includes additional metadata:
 - Results may be subject to Google Search rate limits
 - Search will only be performed when the model determines it's necessary
 
-For more details, see the [Google documentation on Grounding with Google Search](https://ai.google.dev/docs/gemini_api/grounding).
+For more details, see the [Google Cloud documentation on Grounding with Google Search](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/grounding/grounding-with-google-search).
 
 ### Maps Grounding
 
@@ -1358,6 +1367,26 @@ For more details, see:
 - [Testing Google Cloud Model Armor Guide](/docs/guides/google-cloud-model-armor/) - Complete guide on testing Model Armor with Promptfoo
 - [Model Armor Documentation](https://cloud.google.com/security-command-center/docs/model-armor-overview) - Official Google Cloud docs
 
+## Live API
+
+Use `vertex:live:<model>` for Vertex's WebSocket-based Live API. This is separate from the `google:live:` Gemini API endpoint and the `vertex:` REST chat provider.
+
+```yaml
+providers:
+  - id: vertex:live:gemini-live-2.5-flash-native-audio
+    config:
+      projectId: my-project # Or set GOOGLE_CLOUD_PROJECT / VERTEX_PROJECT_ID
+      region: us-central1 # Or set GOOGLE_CLOUD_LOCATION / VERTEX_REGION
+```
+
+Authenticate with `gcloud auth application-default login`, `GOOGLE_APPLICATION_CREDENTIALS`, or `config.credentials`. Live uses Google Cloud OAuth, not Gemini API keys or Vertex express-mode API keys. The project must have the Vertex AI API enabled and permission to use the selected model. The default location is `us-central1`; `apiVersion` accepts `v1` (default) or `v1beta1`.
+
+The provider returns audio in `response.audio` and a transcript in `output.text`. It requests audio and output transcription by default; requesting `TEXT` also uses audio plus transcription and is billed at audio rates. Use `transform: output.text` on text assertions. It shares the [Google Live configuration options](/docs/providers/google#google-live-api) for speech, system instructions, function callbacks, and finite PCM audio input. Consecutive user messages in a JSON prompt run in the same Live session.
+
+The adapter also accepts `vertex:live:gemini-3.8-live` and `vertex:live:gemini-3.8-live-extended-thinking`, including the latter's `NON_BLOCKING` tools and `IDLE` completion handling. Google names Vertex in the [model card](https://deepmind.google/models/model-cards/gemini-3-8-audio/), but these models are not yet listed in the [Cloud Live model catalog](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/live-api#supported-models). Availability must be confirmed for your project and location; use `google:live:` for Gemini API access. A model-not-found or access-denied response is an error, not a fallback to another model or API.
+
+See the [Vertex Live example](https://github.com/promptfoo/promptfoo/tree/main/examples/vertex-live) for a runnable transcript eval.
+
 ## Supported Features
 
 The Vertex AI provider supports core functionality for LLM evaluation:
@@ -1374,11 +1403,11 @@ The Vertex AI provider supports core functionality for LLM evaluation:
 | Files API                | ❌        | Upload/manage files not supported                                                         |
 | Caching API              | ⚠️        | Reference existing caches with `passthrough.cachedContent`; creation/manage not supported |
 | Implicit cache usage     | ✅        | Cached tokens and their cost are tracked                                                  |
-| Live/Realtime API        | ❌        | No Live WebSocket adapter in this provider                                                |
+| Live/Realtime API        | ✅        | Use `vertex:live:` with Google Cloud OAuth                                                |
 | Video generation         | ✅        | Use `vertex:video:` provider                                                              |
 | Image generation         | ⚠️        | [Gemini image and Imagen adapters](#image-generation-models) with `config.projectId`      |
 
-These are promptfoo provider capabilities. Google Cloud offers a separate [Gemini Live API](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/live-api); the `vertex:` provider does not currently implement its WebSocket protocol. Embedding support here covers the [text embedding request format](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/embeddings/get-text-embeddings), not every model or modality in the cloud catalog. See [image generation models](#image-generation-models) for the Imagen adapter and native Gemini image routes.
+These are promptfoo provider capabilities. [Live API](#live-api) model availability varies by project and location. Embedding support here covers the [text embedding request format](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/embeddings/get-text-embeddings), not every model or modality in the cloud catalog. See [image generation models](#image-generation-models) for the Imagen adapter and native Gemini image routes.
 
 ## See Also
 
