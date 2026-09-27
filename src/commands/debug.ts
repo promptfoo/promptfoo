@@ -1,6 +1,7 @@
 import * as os from 'os';
 
 import chalk from 'chalk';
+import cliState from '../cliState';
 import { getEnvBool, getEnvString } from '../envars';
 import logger from '../logger';
 import { resolveConfigs } from '../util/config/load';
@@ -20,6 +21,32 @@ interface DebugOptions {
 }
 
 async function doDebug(options: DebugOptions): Promise<void> {
+  let configEnv = options.defaultConfig.env;
+  const configInfo = {
+    defaultConfigPath: options.defaultConfigPath,
+    specifiedConfigPath: options.config,
+    configExists: false,
+    configContent: null as unknown,
+  };
+
+  // Try to load config if available
+  const configPath = options.config || options.defaultConfigPath;
+  if (configPath && (await pathExists(configPath))) {
+    configInfo.configExists = true;
+    try {
+      const resolved = await resolveConfigs(
+        {
+          config: [configPath],
+        },
+        options.defaultConfig,
+      );
+      configInfo.configContent = resolved;
+      configEnv = resolved.config.env;
+    } catch (err) {
+      configInfo.configContent = `Error loading config: ${err}`;
+    }
+  }
+
   const debugInfo = {
     version: VERSION,
     platform: {
@@ -28,38 +55,16 @@ async function doDebug(options: DebugOptions): Promise<void> {
       arch: os.arch(),
       nodeVersion: process.version,
     },
-    env: {
+    env: cliState.withEnv(configEnv ?? cliState.env, () => ({
       NODE_ENV: getEnvString('NODE_ENV'),
       ...getProxyEnvironment(),
       nodeExtra: getEnvString('NODE_EXTRA_CA_CERTS'),
       nodeTls: getEnvString('NODE_TLS_REJECT_UNAUTHORIZED'),
       telemetryDisabled: getEnvBool('PROMPTFOO_DISABLE_TELEMETRY'),
       telemetryDebug: getEnvBool('PROMPTFOO_TELEMETRY_DEBUG'),
-    },
-    configInfo: {
-      defaultConfigPath: options.defaultConfigPath,
-      specifiedConfigPath: options.config,
-      configExists: false,
-      configContent: null as any,
-    },
+    })),
+    configInfo,
   };
-
-  // Try to load config if available
-  const configPath = options.config || options.defaultConfigPath;
-  if (configPath && (await pathExists(configPath))) {
-    debugInfo.configInfo.configExists = true;
-    try {
-      const resolved = await resolveConfigs(
-        {
-          config: [configPath],
-        },
-        options.defaultConfig,
-      );
-      debugInfo.configInfo.configContent = resolved;
-    } catch (err) {
-      debugInfo.configInfo.configContent = `Error loading config: ${err}`;
-    }
-  }
 
   printBorder();
   logger.info(chalk.bold('Promptfoo Debug Information'));
