@@ -127,7 +127,7 @@ export function registerRunEvaluationTool(server: McpServer) {
           promptFilter,
           providerFilter,
           maxConcurrency = 4,
-          timeoutMs = 30000,
+          timeoutMs,
           repeat = 1,
           delay,
           cache = true,
@@ -294,7 +294,7 @@ export function registerRunEvaluationTool(server: McpServer) {
         };
         const evaluateOptions: InternalEvaluateOptions = {
           maxConcurrency,
-          timeoutMs,
+          timeoutMs: timeoutMs ?? 30000,
           eventSource: 'mcp',
           showProgressBar: false,
         };
@@ -353,7 +353,7 @@ export function registerRunEvaluationTool(server: McpServer) {
               : {}),
             options: {
               maxConcurrency,
-              timeoutMs,
+              timeoutMs: timeoutMs ?? evalResult.config.evaluateOptions?.timeoutMs ?? 30000,
               repeat,
               delay,
               cache,

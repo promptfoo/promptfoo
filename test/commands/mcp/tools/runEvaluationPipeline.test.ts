@@ -5,12 +5,15 @@ import path from 'node:path';
 import type { Server } from 'node:http';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { enableCache } from '../../../../src/cache';
+import { enableCache, isCacheEnabled } from '../../../../src/cache';
 import cliState from '../../../../src/cliState';
 import { registerRunEvaluationTool } from '../../../../src/commands/mcp/tools/runEvaluation';
+import * as accounts from '../../../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../../../src/migrate';
 import Eval from '../../../../src/models/eval';
 import { createShareableUrl, isSharingEnabled } from '../../../../src/share';
+import { BAD_EMAIL_RESULT, EMAIL_OK_STATUS } from '../../../../src/types/email';
+import { mockProcessEnv } from '../../../util/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 vi.mock('../../../../src/telemetry', () => ({
@@ -33,6 +36,7 @@ const selections = [
 ];
 
 describe('MCP evaluation execution contract', () => {
+  let restoreEnv: () => void;
   let directory: string;
   let configPath: string;
   let originalState: Record<string, unknown>;
@@ -40,6 +44,7 @@ describe('MCP evaluation execution contract', () => {
   let responseTimer: ReturnType<typeof setTimeout> | undefined;
 
   beforeEach(async () => {
+    restoreEnv = mockProcessEnv();
     originalState = Object.fromEntries(
       Object.entries(cliState).filter(
         ([key]) => Object.getOwnPropertyDescriptor(cliState, key)?.writable,
@@ -73,6 +78,7 @@ describe('MCP evaluation execution contract', () => {
     enableCache();
     Object.assign(cliState, originalState);
     vi.restoreAllMocks();
+    restoreEnv();
     await rm(directory, { recursive: true, force: true });
   });
 
@@ -224,6 +230,104 @@ describe('MCP evaluation execution contract', () => {
     expect(calls[1] - calls[0]).toBeGreaterThanOrEqual(25);
     expect(calls[2] - calls[1]).toBeGreaterThanOrEqual(25);
   });
+
+  it.each([false, true])(
+    'keeps no-cache local to each request with filtering=%s',
+    async (filtered) => {
+      const calls = await httpConfig();
+      const filters = filtered ? { testCaseIndices: 0 } : {};
+      for (const cache of [false, true, true]) {
+        const response = await run({ ...filters, cache });
+        expect(response.success, response.error).toBe(true);
+      }
+      expect(calls).toHaveLength(2);
+      expect(isCacheEnabled()).toBe(true);
+    },
+  );
+
+  it.each([false, true])(
+    'uses configured timeout when the request omits it with filtering=%s',
+    async (filtered) => {
+      const calls = await httpConfig(2000, 1000);
+      const response = await run(filtered ? { testCaseIndices: 0 } : {});
+      expect(response.success, response.error).toBe(true);
+      expect(response.data.results.stats).toMatchObject({ successes: 0, errors: 1 });
+      expect(calls).toHaveLength(1);
+    },
+  );
+
+  it.each([{ testCaseIndices: [1] }, { promptFilter: '0' }])(
+    'keeps explicit MCP selection independent of configured ranges: %j',
+    async (filters) => {
+      await writeFile(
+        configPath,
+        JSON.stringify({
+          providers: ['echo'],
+          prompts: ['Hello {{name}}'],
+          tests: [{ vars: { name: 'Ada' } }, { vars: { name: 'Grace' } }],
+          evaluateOptions: { filterRange: '1:2' },
+        }),
+      );
+      const response = await run(filters);
+      expect(response.success, response.error).toBe(true);
+      expect(
+        response.data.results.results.map(
+          (row: { response: { output: string } }) => row.response.output,
+        ),
+      ).toEqual('testCaseIndices' in filters ? ['Hello Grace'] : ['Hello Ada', 'Hello Grace']);
+    },
+  );
+
+  it('reports missing redteam email without opening an interactive prompt', async () => {
+    mockProcessEnv({ CI: 'false', PROMPTFOO_DISABLE_REMOTE_GENERATION: 'false' });
+    const prompt = vi
+      .spyOn(accounts, 'promptForEmailUnverified')
+      .mockRejectedValue(new Error('Unexpected interactive prompt'));
+    vi.spyOn(accounts, 'getUserEmail').mockReturnValue(null);
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        providers: ['echo'],
+        prompts: ['Hello'],
+        tests: [{ vars: {} }],
+        redteam: { plugins: ['harmful:hate'] },
+      }),
+    );
+    const response = await run({ testCaseIndices: 0 });
+    expect(response.success).toBe(false);
+    expect(response.error).toContain('email verification');
+    expect(prompt).not.toHaveBeenCalled();
+  });
+
+  it.each([BAD_EMAIL_RESULT, EMAIL_OK_STATUS] as const)(
+    'checks existing redteam email without interaction: %s',
+    async (status) => {
+      mockProcessEnv({ CI: 'false', PROMPTFOO_DISABLE_REMOTE_GENERATION: 'false' });
+      const prompt = vi
+        .spyOn(accounts, 'promptForEmailUnverified')
+        .mockRejectedValue(new Error('Unexpected interactive prompt'));
+      vi.spyOn(accounts, 'getUserEmail').mockReturnValue('fixture@example.test');
+      vi.spyOn(accounts, 'getUserEmailNeedsValidation').mockReturnValue(true);
+      vi.spyOn(accounts, 'getUserEmailValidated').mockReturnValue(false);
+      const check = vi.spyOn(accounts, 'checkEmailStatusAndMaybeExit').mockResolvedValue(status);
+      await writeFile(
+        configPath,
+        JSON.stringify({
+          providers: ['echo'],
+          prompts: ['Hello'],
+          tests: [{ vars: {} }],
+          redteam: { plugins: ['harmful:hate'] },
+        }),
+      );
+      const response = await run({ testCaseIndices: 0 });
+      expect(response.success).toBe(status === EMAIL_OK_STATUS);
+      if (status !== EMAIL_OK_STATUS) {
+        expect(response.error).toContain('valid work email');
+      }
+      expect(check).toHaveBeenCalledExactlyOnceWith({ validate: true });
+      expect(prompt).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([false, true])(
     'honors explicit timeout over config with filtering=%s',

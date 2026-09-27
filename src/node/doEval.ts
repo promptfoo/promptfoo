@@ -6,7 +6,7 @@ import chokidar from 'chokidar';
 import dedent from 'dedent';
 import ora from 'ora';
 import { z } from 'zod';
-import { disableCache } from '../cache';
+import { disableCache, withCacheEnabled } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
@@ -15,6 +15,9 @@ import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,
   getAuthor,
+  getUserEmail,
+  getUserEmailNeedsValidation,
+  getUserEmailValidated,
   promptForEmailUnverified,
 } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
@@ -306,6 +309,7 @@ async function doEvalWithEnv(
   prepareTestSuite?: (testSuite: TestSuite) => TestSuite,
 ): Promise<Eval> {
   const isCliInvocation = isCliEventSource(evaluateOptions);
+  const isMcpInvocation = evaluateOptions.eventSource === 'mcp';
 
   let config: Partial<UnifiedConfig> | undefined = undefined;
   let testSuite: TestSuite | undefined = undefined;
@@ -651,7 +655,9 @@ async function doEvalWithEnv(
 
     if (cache === false) {
       logger.info('Cache is disabled.');
-      disableCache();
+      if (!isMcpInvocation) {
+        disableCache();
+      }
     }
 
     // Propagate maxConcurrency to cliState for providers (e.g., Python worker pool)
@@ -693,9 +699,12 @@ async function doEvalWithEnv(
         `Ignoring --filter-range ${cmdObj.filterRange}: resuming ${resumeEval.id} with stored range ${resumeFilterRange ?? '(none)'} to preserve test indices.`,
       );
     }
-    const filterRange = resumeEval
-      ? resumeFilterRange
-      : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
+    // Application selection owns the resolved inputs; do not reindex them with config filters.
+    const filterRange = prepareTestSuite
+      ? undefined
+      : resumeEval
+        ? resumeFilterRange
+        : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
     const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
     const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
     const hasActiveTestFilter =
@@ -710,8 +719,8 @@ async function doEvalWithEnv(
     const shouldApplyFiltersToImplicitDefaultTest =
       hasActiveTestFilter && canSynthesizeImplicitDefaultTest && !testSuite.tests?.length;
 
-    // Apply filtering only when not resuming, to preserve test indices
-    if (!resumeEval) {
+    // Preserve indices for replay and application-selected inputs.
+    if (!resumeEval && !prepareTestSuite) {
       if (shouldApplyFiltersToImplicitDefaultTest) {
         const defaultMetadata =
           typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.metadata : undefined;
@@ -745,11 +754,23 @@ async function doEvalWithEnv(
       testSuite.tests &&
       testSuite.tests.length > 0
     ) {
+      if (isMcpInvocation && !isCI() && !getUserEmail()) {
+        throw new Error(
+          'Redteam evals require email verification. Run this evaluation in an interactive terminal to configure your work email, then retry.',
+        );
+      }
       let hasValidEmail = false;
       while (!hasValidEmail) {
-        const { emailNeedsValidation } = await promptForEmailUnverified();
+        const emailNeedsValidation = isMcpInvocation
+          ? getUserEmailNeedsValidation() && !getUserEmailValidated()
+          : (await promptForEmailUnverified()).emailNeedsValidation;
         const res = await checkEmailStatusAndMaybeExit({ validate: emailNeedsValidation });
         hasValidEmail = res === EMAIL_OK_STATUS;
+        if (isMcpInvocation && !hasValidEmail) {
+          throw new Error(
+            'Redteam evals require a valid work email. Update your email before retrying.',
+          );
+        }
       }
     }
 
@@ -961,12 +982,14 @@ async function doEvalWithEnv(
     // Run the evaluation!!!!!!
     let ret;
     try {
-      ret = await evaluate(testSuite, evalRecord, {
-        ...options,
-        filterRange: hasScenarios || resumeEval ? filterRange : undefined,
-        abortSignal: evaluateOptions.abortSignal,
-        isRedteam: Boolean(config.redteam),
-      });
+      ret = await withCacheEnabled(cache === false ? false : undefined, () =>
+        evaluate(testSuite!, evalRecord, {
+          ...options,
+          filterRange: hasScenarios || resumeEval ? filterRange : undefined,
+          abortSignal: evaluateOptions.abortSignal,
+          isRedteam: Boolean(config?.redteam),
+        }),
+      );
 
       // Post-evaluation cleanup for retry-errors mode
       // SUCCESS: Now it's safe to delete the old ERROR results and recalculate metrics
