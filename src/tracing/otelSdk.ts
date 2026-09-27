@@ -52,6 +52,7 @@ const globalScopes = globalThis as {
   [OTEL_ROUTING_KEY]?: OtelRoutingState;
 };
 const otelScope = (globalScopes[OTEL_SCOPE_KEY] ??= new AsyncLocalStorage<OtelScope>());
+const noopProvider = new ProxyTracerProvider();
 const routingState = (globalScopes[OTEL_ROUTING_KEY] ??= {
   provider: createRoutingProvider(),
   owners: new Set<NodeTracerProvider>(),
@@ -70,7 +71,24 @@ function getOtelScope(): OtelScope | undefined {
 
 /** Use the evaluation's provider without replacing a host application's global provider. */
 export function getOtelTracer(name: string, version?: string): Tracer {
-  return getOtelScope()?.provider?.getTracer(name, version) ?? trace.getTracer(name, version);
+  const scope = getOtelScope();
+  if (!scope) {
+    return trace.getTracer(name, version);
+  }
+  if (scope.provider) {
+    return scope.provider.getTracer(name, version);
+  }
+  const globalProvider = trace.getTracerProvider();
+  if (isProxyTracerProvider(globalProvider)) {
+    // A disabled turn can outlive its async scope. Capture only a real host
+    // delegate; a dynamic router could later select another evaluation.
+    const hostTracer =
+      globalProvider.getDelegate() === routingState.provider
+        ? undefined
+        : globalProvider.getDelegateTracer(name, version);
+    return hostTracer ?? noopProvider.getTracer(name, version);
+  }
+  return trace.getTracer(name, version);
 }
 
 function isProxyTracerProvider(
@@ -87,7 +105,6 @@ function isProxyTracerProvider(
 }
 
 function createRoutingProvider(): TracerProvider {
-  const noopProvider = new ProxyTracerProvider();
   return {
     getTracer(name, version, options) {
       // A custom provider can cache this tracer before the first evaluation.

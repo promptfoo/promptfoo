@@ -261,6 +261,44 @@ describe('evaluation-owned OpenTelemetry', () => {
     );
   });
 
+  it.each([false, true])(
+    'keeps a disabled turn tracer disabled when used by a peer scope, peer already active=%s',
+    async (peerAlreadyActive) => {
+      const earlyTracer = peerAlreadyActive
+        ? undefined
+        : withOtelContext(() => getOtelTracer('disabled-turn'));
+      await runScoped({ serviceName: 'peer' }, async () => {
+        const captured = earlyTracer ?? withOtelContext(() => getOtelTracer('disabled-turn'));
+        // A reused connection can deliver this turn's notifications on the peer's async resource.
+        captured.startSpan('disabled notification').end();
+        captured.startActiveSpan('disabled active notification', (span) => span.end());
+        getOtelTracer('peer').startSpan('peer control').end();
+      });
+      expect(localSpans.map((span) => span.name)).toEqual(['peer control']);
+    },
+  );
+
+  it('retains a real host tracer captured by a disabled evaluation', async () => {
+    const hostExporter = new InMemorySpanExporter();
+    const host = new NodeTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor(hostExporter)],
+    });
+    expect(trace.setGlobalTracerProvider(host)).toBe(true);
+    try {
+      const captured = withOtelContext(() => getOtelTracer('host-owned-disabled-turn'));
+      await runScoped({ serviceName: 'peer' }, async () => {
+        captured.startSpan('host notification').end();
+        getOtelTracer('peer').startSpan('peer control').end();
+      });
+      expect(hostExporter.getFinishedSpans().map((span) => span.name)).toEqual([
+        'host notification',
+      ]);
+      expect(localSpans.map((span) => span.name)).toEqual(['peer control']);
+    } finally {
+      await host.shutdown();
+    }
+  });
+
   it('does not let a nested untraced scope inherit its parent provider', async () => {
     await runScoped({}, async () => {
       getGenAITracer().startSpan('traced before').end();
