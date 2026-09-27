@@ -12,13 +12,7 @@
 import { annotateDiffWithLineRanges } from '../git/diffAnnotator';
 import { parseHunkHeader } from './diffHunkParser';
 
-/**
- * Represents a range of valid line numbers in a file's diff
- */
-export interface LineRange {
-  start: number;
-  end: number;
-}
+import type { LineRange } from '../../types/codeScan';
 
 /**
  * Map of file paths to their valid line ranges in the diff
