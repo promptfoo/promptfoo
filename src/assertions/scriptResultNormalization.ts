@@ -61,7 +61,9 @@ export function normalizeScriptAssertionResult(
         ? result.reason
         : pass
           ? 'Assertion passed'
-          : `${labels.code} returned ${result.pass ? 'true' : 'false'}`,
+          : // Inverted failure: keep the caller's reason when present instead
+            // of the generic "returned true".
+            (result.reason ?? `${labels.code} returned ${result.pass ? 'true' : 'false'}`),
     assertion: result.assertion ?? assertion,
   };
 }

@@ -1326,11 +1326,9 @@ describe('JavaScript file references', () => {
           expect(result).toMatchObject({
             pass: rawPass !== inverse,
             score: 0.4,
-            reason: inverse
-              ? rawPass
-                ? 'Custom function returned true'
-                : 'Assertion passed'
-              : 'Custom reason',
+            // Inverted failure now keeps the caller's reason, same as the
+            // non-inverted path; only an inverted pass reads 'Assertion passed'.
+            reason: inverse && !rawPass ? 'Assertion passed' : 'Custom reason',
             namedScores: { safety: 0.7 },
             tokensUsed: { total: 3 },
             assertion: { type: 'javascript', value: '() => false' },
