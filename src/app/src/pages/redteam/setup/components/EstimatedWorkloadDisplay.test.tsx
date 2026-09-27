@@ -9,6 +9,31 @@ import type { Config } from '../types';
 afterEach(cleanup);
 
 describe('workload previews with plugin overrides', () => {
+  it('ignores the test override when displaying configured intents', () => {
+    const config: Config = {
+      description: 'Imported intent override',
+      prompts: ['{{prompt}}'],
+      target: { id: 'echo', config: {} },
+      applicationDefinition: {},
+      entities: [],
+      numTests: 2,
+      maxConcurrency: 1,
+      plugins: [
+        { id: 'intent', numTests: 100, config: { intent: ['first intent', 'second intent'] } },
+      ],
+      strategies: ['basic'],
+    };
+    render(
+      <TooltipProvider>
+        <EstimatedProbesDisplay config={config} />
+        <EstimatedDurationDisplay config={config} />
+      </TooltipProvider>,
+    );
+    expect(screen.getByText('4')).toBeInTheDocument();
+    expect(screen.getByText('~15s')).toBeInTheDocument();
+    expect(screen.queryByText('200')).not.toBeInTheDocument();
+  });
+
   it('renders and updates both estimates using the real calculation', () => {
     const config: Config = {
       description: 'Imported plugin override',

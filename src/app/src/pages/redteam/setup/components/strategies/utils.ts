@@ -1,4 +1,5 @@
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
+import { countSelectedCustomIntents } from '../../utils/plugins';
 import type { Strategy } from '@promptfoo/redteam/constants';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
 
@@ -103,10 +104,13 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
 export function getEstimatedProbes(config: Config) {
   const numTests = config.numTests ?? 5;
   const baseProbes = config.plugins.reduce((total, plugin) => {
+    if ((typeof plugin === 'string' ? plugin : plugin.id) === 'intent') {
+      return total;
+    }
     const pluginNumTests =
       typeof plugin === 'object' && 'numTests' in plugin ? plugin.numTests : undefined;
     return total + (pluginNumTests ?? numTests);
-  }, 0);
+  }, countSelectedCustomIntents(config));
 
   // Calculate total multiplier for all active strategies
   const strategyMultiplier = config.strategies.reduce((total, strategy) => {

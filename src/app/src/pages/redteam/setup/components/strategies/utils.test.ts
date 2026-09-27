@@ -66,6 +66,38 @@ describe('getEstimatedProbes', () => {
     expect(getEstimatedProbes(config)).toBe(expected);
   });
 
+  it.each([
+    { intent: ['first', 'second'], expected: 2 },
+    { intent: 'one intent', expected: 1 },
+    { intent: [['first step', 'second step']], expected: 1 },
+    { intent: ['single', ['step one', 'step two']], expected: 2 },
+    { intent: 'file://external-intents.yaml', expected: 1 },
+    { intent: [], expected: 0 },
+  ])('counts intent entries before overrides: $intent', ({ intent, expected }) => {
+    const config = {
+      ...baseConfig,
+      numTests: 2,
+      plugins: [{ id: 'intent', numTests: 100, config: { intent } }],
+      strategies: [],
+    } as Config;
+    expect(getEstimatedProbes(config)).toBe(expected);
+  });
+
+  it('combines intents with ordinary overrides before strategy and language factors', () => {
+    const config = {
+      ...baseConfig,
+      numTests: 2,
+      plugins: [
+        { id: 'intent', numTests: 100, config: { intent: ['first', 'second'] } },
+        { id: 'bola', numTests: 3 },
+        { id: 'intent', config: { intent: [['step one', 'step two']] } },
+      ],
+      strategies: ['basic', 'jailbreak'],
+      language: ['en', 'es'],
+    } as Config;
+    expect(getEstimatedProbes(config)).toBe(144); // (2 + 3 + 1) * (1 + 1 + 10) * 2
+  });
+
   it('applies strategy and language factors to each plugin override', () => {
     const config = {
       ...baseConfig,

@@ -4,7 +4,7 @@ import { callApi } from '@app/utils/api';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { load as loadYaml } from 'js-yaml';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { getEstimatedDuration, getEstimatedProbes } from './components/strategies/utils';
 import { useRedTeamConfig } from './hooks/useRedTeamConfig';
@@ -23,9 +23,9 @@ const mockLocation = {
   key: 'default',
 };
 
-// Mock react-router-dom
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
+// Mock react-router
+vi.mock('react-router', async () => {
+  const actual = await vi.importActual('react-router');
   return {
     ...actual,
     useNavigate: () => mockNavigate,
