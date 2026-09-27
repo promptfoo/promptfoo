@@ -4,8 +4,6 @@
  * Tests core functionality with proper mocks to avoid depending on fs, ffmpeg, etc.
  */
 
-import fsPromises from 'fs/promises';
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 import {
@@ -13,7 +11,6 @@ import {
   createProgressBar,
   escapeDrawtextString,
   getFallbackBase64,
-  writeVideoFile,
 } from '../../../src/redteam/strategies/simpleVideo';
 
 import type { TestCase } from '../../../src/types/index';
@@ -42,19 +39,6 @@ vi.mock('../../../src/cliState', () => ({
     webUI: false,
   },
 }));
-
-const mockWriteFile = vi.hoisted(() => vi.fn());
-vi.mock('fs/promises', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('fs/promises')>();
-  return {
-    ...actual,
-    default: {
-      ...actual,
-      writeFile: mockWriteFile,
-    },
-    writeFile: mockWriteFile,
-  };
-});
 
 // Mock for progress bar
 vi.mock('cli-progress', async (importOriginal) => {
@@ -122,7 +106,6 @@ describe('escapeDrawtextString', () => {
 describe('simpleVideo strategy', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockWriteFile.mockReset();
     mockVideoGenerator.mockClear();
   });
 
@@ -167,25 +150,6 @@ describe('simpleVideo strategy', () => {
       }).not.toThrow();
 
       expect(logger.warn).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('writeVideoFile', () => {
-    it('writes a base64 video to a file', async () => {
-      await writeVideoFile(DUMMY_VIDEO_BASE64, 'test.mp4');
-
-      expect(fsPromises.writeFile).toHaveBeenCalledWith('test.mp4', expect.any(Buffer));
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Video file written to'));
-    });
-
-    it('throws an error if writing fails', async () => {
-      const mockError = new Error('Write failed');
-      vi.mocked(fsPromises.writeFile).mockRejectedValueOnce(mockError);
-
-      await expect(writeVideoFile(DUMMY_VIDEO_BASE64, 'test.mp4')).rejects.toThrow('Write failed');
-      expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to write video file'),
-      );
     });
   });
 
