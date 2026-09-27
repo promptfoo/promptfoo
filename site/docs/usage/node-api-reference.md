@@ -909,8 +909,10 @@ const evalRecord = await evaluate({
           value: (output, context) => {
             // Access token usage from provider response
             const tokens = context.providerResponse?.tokenUsage?.total || 0;
+            const pass = tokens < 100;
             return {
-              pass: tokens < 100,
+              pass,
+              score: pass ? 1 : 0,
               reason: `Used ${tokens} tokens`,
             };
           },

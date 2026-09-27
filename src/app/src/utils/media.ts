@@ -99,8 +99,8 @@ export function resolveBlobUri(uri?: string | null): string | undefined {
   }
 
   if (uri.startsWith(STORAGE_REF_PREFIX)) {
-    const path = uri.slice(STORAGE_REF_PREFIX.length);
-    return path ? withApiBase(`/api/media/${normalizePath(path)}`) : undefined;
+    const path = normalizePath(uri.slice(STORAGE_REF_PREFIX.length));
+    return path ? withApiBase(`/api/media/${path}`) : undefined;
   }
 
   // Only allow safe internal paths and data URIs
