@@ -2,6 +2,8 @@
 
 Run evals against an existing Foundry agent:
 
+## Setup
+
 ```bash
 npx promptfoo@latest init --example azure/foundry-agent
 cd azure/foundry-agent
@@ -38,7 +40,7 @@ npx tsx scripts/azureFoundryLiveQa.ts --dry-run \
   --agent your-existing-agent
 ```
 
-Sign in with `az login` or another supported identity, then replace `--dry-run` with `--live`. Each run saves sanitized JSON results, callback counts, and local traces in a new directory. It uses the local CLI with `--no-cache` and stops on a provider error. Inspect the results and `summary.json` for failed assertions or errors.
+Sign in with `az login` or another supported identity, then replace `--dry-run` with `--live`. Each run saves sanitized JSON results, callback counts, and local traces in a new directory. It uses the local CLI with `--no-cache` and stops on a provider error. Inspect the generated results and summary for failed assertions or errors.
 
 The endpoint must use HTTPS on port 443, the hostname `<resource>.services.ai.azure.com` or `<resource>.services.ai.azure.us` ([Azure Government](https://learn.microsoft.com/en-us/azure/foundry/concepts/foundry-azure-government)), and the path `/api/projects/<project>`. For Private Link, use the normal resource hostname with [private DNS configured](https://learn.microsoft.com/en-us/azure/foundry/how-to/configure-private-link#apply-dns-changes-for-private-endpoints).
 
