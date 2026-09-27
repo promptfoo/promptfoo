@@ -22,6 +22,9 @@ This example demonstrates how to:
 
 Ensure you have Python 3.10 or later and Node.js installed on your system.
 
+In Windows PowerShell, use `npm.cmd` and `npx.cmd` in place of `npm` and `npx`
+in the commands below. This avoids PowerShell script execution-policy restrictions.
+
 1. **Install Node.js dependencies**:
 
 ```bash
@@ -30,10 +33,19 @@ npm install playwright @playwright/browser-chromium playwright-extra puppeteer-e
 
 2. **Install Python dependencies** (for the demo application):
 
+On macOS or Linux:
+
 ```bash
 python -m venv .venv
-source .venv/bin/activate # Windows: .venv\Scripts\activate
+source .venv/bin/activate
 python -m pip install -r requirements.txt
+```
+
+On Windows PowerShell, call the virtual environment's Python directly:
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
 That's it! No additional setup scripts or configuration needed.
@@ -49,9 +61,15 @@ packages installed above; the Python Playwright package is not needed.
 python gradio_demo.py
 ```
 
+In Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe gradio_demo.py
+```
+
 This starts a local server at http://localhost:7860
 
-2. **Run the browser automation tests**:
+2. **Run the browser automation tests** in a second terminal, from the same example directory:
 
 ```bash
 npx promptfoo@latest eval -c promptfooconfig.yaml
