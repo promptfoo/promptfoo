@@ -67,6 +67,51 @@ afterEach(async () => {
 });
 
 describe('telemetry test-mode environment restrictions', () => {
+  it('drains an in-flight SDK flush when the last two borrowers shut down together', async () => {
+    const { PostHog: ActualPostHog } =
+      await vi.importActual<typeof import('posthog-node')>('posthog-node');
+    vi.mocked(PostHog).mockImplementation(function (key, options) {
+      return new ActualPostHog(key, { ...options, disableCompression: true });
+    });
+    const entered = createDeferred<void>();
+    const release = createDeferred<void>();
+    const events: { event: string; properties: { fixture?: string } }[] = [];
+    request.mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/batch/')) {
+        events.push(...JSON.parse(options.body).batch);
+        entered.resolve();
+        await release.promise;
+      }
+      return Response.json({ status: 1 });
+    });
+    const { Telemetry } = await import('../src/telemetry');
+    const first = new Telemetry();
+    const last = new Telemetry();
+    let drained = false;
+    try {
+      await entered.promise;
+      first.record('eval_ran', { fixture: 'first' });
+      const firstClosing = first.shutdown();
+      last.record('eval_ran', { fixture: 'last' });
+      const lastClosing = last.shutdown().then(() => {
+        drained = true;
+      });
+      await new Promise(setImmediate);
+      expect(PostHog).toHaveBeenCalledOnce();
+      expect(drained).toBe(false);
+      release.resolve();
+      await Promise.all([firstClosing, lastClosing]);
+      expect(
+        events
+          .filter(({ event }) => event === 'eval_ran')
+          .map(({ properties }) => properties.fixture),
+      ).toEqual(['first', 'last']);
+    } finally {
+      release.resolve();
+      await Promise.all([first.shutdown(), last.shutdown()]);
+    }
+  });
+
   it.each(['false', '0', ''])(
     'keeps host test mode when suite and file overrides are %j',
     async (override) => {
