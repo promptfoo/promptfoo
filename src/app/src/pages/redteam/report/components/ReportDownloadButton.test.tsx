@@ -9,7 +9,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import ReportDownloadButton from './ReportDownloadButton';
 
 type ResultsFile = ComponentProps<typeof ReportDownloadButton>['evalData'];
-type EvaluateResult = ResultsFile['results']['results'][number];
 
 vi.mock('@app/hooks/useTelemetry', () => ({
   useTelemetry: () => ({ recordEvent: vi.fn() }),
@@ -29,7 +28,8 @@ describe('ReportDownloadButton', () => {
 
   it('exports actual attack prompts to CSV while preserving original results in JSON', async () => {
     const chat = [{ role: 'user' as const, content: 'final chat attack' }];
-    const cases: { result: Partial<EvaluateResult>; expected: string }[] = [
+    // Historical JSON can contain structured legacy metadata beyond the current string type.
+    const cases: { result: Record<string, unknown>; expected: string }[] = [
       {
         result: { response: { output: 'answer', prompt: 'final, "quoted"\nattack' } },
         expected: 'final, "quoted"\nattack',
@@ -66,6 +66,56 @@ describe('ReportDownloadButton', () => {
       { result: {}, expected: 'seed prompt' },
       { result: { response: { output: 'answer', prompt: '' } }, expected: 'seed prompt' },
       { result: { vars: {} }, expected: 'rendered prompt' },
+      {
+        result: { metadata: { redteamFinalPrompt: { query: 'historic' } } },
+        expected: '[object Object]',
+      },
+      {
+        result: { metadata: { redteamFinalPrompt: ['historic', 'array'] } },
+        expected: 'historic,array',
+      },
+      { result: { metadata: { redteamFinalPrompt: 37 } }, expected: '37' },
+      { result: { metadata: { redteamFinalPrompt: true } }, expected: 'true' },
+      { result: { metadata: { redteamFinalPrompt: 0 } }, expected: 'seed prompt' },
+      { result: { metadata: { redteamFinalPrompt: false } }, expected: 'seed prompt' },
+      { result: { metadata: { redteamFinalPrompt: [] } }, expected: 'rendered prompt' },
+      { result: { metadata: { redteamFinalPrompt: null } }, expected: 'seed prompt' },
+      {
+        result: {
+          response: { output: 'answer', metadata: { redteamFinalPrompt: { query: 'historic' } } },
+        },
+        expected: '[object Object]',
+      },
+      {
+        result: {
+          response: { output: 'answer', metadata: { redteamFinalPrompt: ['historic', 'array'] } },
+        },
+        expected: 'historic,array',
+      },
+      {
+        result: { response: { output: 'answer', metadata: { redteamFinalPrompt: 37 } } },
+        expected: '37',
+      },
+      {
+        result: { response: { output: 'answer', metadata: { redteamFinalPrompt: true } } },
+        expected: 'true',
+      },
+      {
+        result: { response: { output: 'answer', metadata: { redteamFinalPrompt: 0 } } },
+        expected: 'seed prompt',
+      },
+      {
+        result: { response: { output: 'answer', metadata: { redteamFinalPrompt: false } } },
+        expected: 'seed prompt',
+      },
+      {
+        result: { response: { output: 'answer', metadata: { redteamFinalPrompt: [] } } },
+        expected: 'rendered prompt',
+      },
+      {
+        result: { response: { output: 'answer', metadata: { redteamFinalPrompt: null } } },
+        expected: 'seed prompt',
+      },
     ];
     const evalData = {
       version: 4,
@@ -90,7 +140,7 @@ describe('ReportDownloadButton', () => {
           ...result,
         })),
       },
-    } as ResultsFile;
+    } as unknown as ResultsFile;
     const original = structuredClone(evalData);
     for (const result of evalData.results.results) {
       Object.freeze(result.vars);

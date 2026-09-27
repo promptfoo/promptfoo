@@ -46,6 +46,7 @@ import {
   type SharedResults,
 } from '@promptfoo/types';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
+import { getActualPrompt } from '@promptfoo/util/providerResponse';
 import { AlertTriangle, Filter, ListOrdered, Printer, Settings, X } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import FrameworkCompliance from './FrameworkCompliance';
@@ -202,8 +203,10 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
         const injectVar = evalData.config.redteam?.injectVar ?? 'prompt';
         const injectVarValue =
           result.vars[injectVar]?.toString() || result.vars['query']?.toString();
+        const actualPrompt =
+          getActualPrompt(result.response) || result.metadata?.redteamFinalPrompt;
         failures[pluginId].push({
-          prompt: injectVarValue || result.prompt.raw,
+          prompt: (actualPrompt ? actualPrompt.toString() : injectVarValue) || result.prompt.raw,
           output: result.response?.output,
           gradingResult: result.gradingResult || undefined,
           result,
@@ -249,9 +252,14 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
         if (!passes[pluginId]) {
           passes[pluginId] = [];
         }
+        const actualPrompt =
+          getActualPrompt(result.response) || result.metadata?.redteamFinalPrompt;
         passes[pluginId].push({
           prompt:
-            result.vars.query?.toString() || result.vars.prompt?.toString() || result.prompt.raw,
+            (actualPrompt
+              ? actualPrompt.toString()
+              : result.vars.query?.toString() || result.vars.prompt?.toString()) ||
+            result.prompt.raw,
           output: result.response?.output,
           gradingResult: result.gradingResult || undefined,
           result,

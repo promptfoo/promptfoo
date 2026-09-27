@@ -12,8 +12,8 @@ import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import { getActualPrompt } from '@app/utils/providerResponse';
 import { displayNameOverrides } from '@promptfoo/redteam/constants';
+import { getActualPrompt } from '@promptfoo/util/providerResponse';
 import { stringify } from 'csv-stringify/browser/esm/sync';
 import { getPluginIdFromResult, getStrategyIdFromTest } from '../components/shared';
 import type { EvaluateResult, ResultsFile } from '@promptfoo/types';
@@ -46,6 +46,7 @@ const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButto
         }
       }
 
+      const actualPrompt = getActualPrompt(result.response) || result.metadata?.redteamFinalPrompt;
       return {
         'Test ID': index + 1,
         Plugin: pluginDisplayName,
@@ -55,10 +56,9 @@ const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButto
         Strategy: getStrategyIdFromTest(result.testCase as any),
         Target: result.provider.label || result.provider.id || '',
         Prompt:
-          getActualPrompt(result.response) ||
-          (result.metadata?.redteamFinalPrompt as string) ||
-          result.vars.query?.toString() ||
-          result.vars.prompt?.toString() ||
+          (actualPrompt
+            ? actualPrompt.toString()
+            : result.vars.query?.toString() || result.vars.prompt?.toString()) ||
           result.prompt.raw ||
           '',
         Response: result.response?.output || '',
