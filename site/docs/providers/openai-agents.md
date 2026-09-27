@@ -540,6 +540,7 @@ For sessions, tracing assertions, sandbox agents, and skills, see the runnable [
 ```bash
 npx promptfoo@latest init --example openai-agents-advanced
 cd openai-agents-advanced
+npm install
 npx promptfoo eval -c promptfooconfig.yaml --no-cache -j 1
 npx promptfoo eval -c promptfooconfig.sandbox.yaml --no-cache
 ```
