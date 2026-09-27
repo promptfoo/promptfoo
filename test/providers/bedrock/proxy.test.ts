@@ -53,6 +53,18 @@ describe('Bedrock effective proxy settings', () => {
     },
   );
 
+  it('uses the captured proxy resolver for custom HTTP endpoints', async () => {
+    await cliState.withEnv({ HTTP_PROXY: 'http://fixture.example:8080' }, async () => {
+      await createBedrockRequestHandler();
+    });
+    const options = handlerOptions.mock.calls[0][0];
+    expect(options.httpAgent).toBeDefined();
+    expect(options.httpAgent).toBe(options.httpsAgent);
+    const resolver = proxyOptions.mock.calls[0][0].getProxyForUrl;
+    expect(resolver('http://bedrock.internal.example')).toBe('http://fixture.example:8080');
+    expect(resolver('https://bedrock.internal.example')).toBe('');
+  });
+
   it('does not create a proxy agent when only NO_PROXY is configured', async () => {
     await cliState.withEnvFileOverrides({ NO_PROXY: '*' }, async () => {
       expect(hasProxyEnv()).toBe(false);
