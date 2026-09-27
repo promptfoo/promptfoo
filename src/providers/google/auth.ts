@@ -269,7 +269,7 @@ export class GoogleAuthManager {
     // Vertex mode requires either API key or project ID
     if (vertexai && !apiKey && !projectId && !cloudProject && !credentials) {
       const hasAdc = Boolean(
-        env?.GOOGLE_APPLICATION_CREDENTIALS || getEnvString('GOOGLE_APPLICATION_CREDENTIALS'),
+        env?.GOOGLE_APPLICATION_CREDENTIALS ?? getEnvString('GOOGLE_APPLICATION_CREDENTIALS'),
       );
       if (!hasAdc) {
         logger.debug(
