@@ -51,6 +51,34 @@ async function writeLegacy() {
 }
 
 describe('local media blob adapter', () => {
+  it('serves uppercase blob hashes through media and info routes', async () => {
+    await provider.store(payload, metadata);
+    const uppercaseKey = `blob/${hash.toUpperCase()}`;
+    const response = await request(app).get(`/api/media/${uppercaseKey}`);
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(payload);
+    expect(response.headers['content-type']).toBe('image/jpeg');
+    const info = await request(app).get(`/api/media/info/${uppercaseKey}`);
+    expect(info.status).toBe(200);
+    expect(info.body.data.key).toBe(key);
+    expect(await fs.readFile(fileURLToPath(info.body.data.url))).toEqual(payload);
+  });
+
+  it('excludes abandoned blob staging directories without excluding legacy files', async () => {
+    await provider.store(payload, metadata);
+    const storedPath = fileURLToPath((await provider.getUrl(key))!);
+    const staging = await fs.mkdtemp(`${storedPath}.`);
+    await fs.writeFile(path.join(staging, 'data'), payload);
+    await fs.writeFile(path.join(staging, 'metadata.json'), '{}');
+    const legacyDirectory = path.join(directory, 'image', `${hash}.legacy`);
+    await fs.mkdir(legacyDirectory, { recursive: true });
+    await fs.writeFile(path.join(legacyDirectory, 'kept.png'), payload);
+    expect(await provider.getStats()).toEqual({ fileCount: 2, totalSizeBytes: payload.length * 2 });
+    await provider.delete(key);
+    expect(await provider.getStats()).toEqual({ fileCount: 1, totalSizeBytes: payload.length });
+    expect(await fs.readFile(path.join(staging, 'data'))).toEqual(payload);
+  });
+
   it.each(['delete', 'stale lookup'] as const)(
     'preserves later legacy index entries during %s from an older snapshot',
     async (operation) => {
