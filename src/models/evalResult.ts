@@ -1010,7 +1010,10 @@ function normalizeRatingSubmission(
   return { gradingResult, clearingManualRating: false, hasManualRating: true };
 }
 
-function hasExecutionError(result: RatingEvalResult, hasAutomatedComponents: boolean): boolean {
+function hasExecutionError(
+  result: RatingEvalResult,
+  automatedComponents: AutomatedClearComponent[],
+): boolean {
   const failureReason = normalizeFailureReason(result.failureReason);
   const responseError = asRecord(result.response)?.error;
   if (
@@ -1024,7 +1027,14 @@ function hasExecutionError(result: RatingEvalResult, hasAutomatedComponents: boo
   if (failureReason === ResultFailureReason.ASSERT && result.response) {
     return false;
   }
-  return !hasAutomatedComponents && typeof result.error === 'string' && result.error.length > 0;
+  // Comparisons can run after a provider failure without replacing its error.
+  return (
+    typeof result.error === 'string' &&
+    result.error.length > 0 &&
+    (result.response
+      ? automatedComponents.length === 0
+      : automatedComponents.every((component) => component.comparison))
+  );
 }
 
 type AutomatedClearComponent = {
@@ -1098,7 +1108,7 @@ function buildServerOwnedClearGradingResult(
   normalized: GradingResult,
 ): GradingResult {
   const automatedComponents = getAutomatedClearComponents(normalized.componentResults);
-  const executionError = hasExecutionError(result, automatedComponents.length > 0);
+  const executionError = hasExecutionError(result, automatedComponents);
   // Comparisons are merged after ordinary assertion aggregation, never weighted into it.
   const ordinaryComponents = automatedComponents.filter((component) => !component.comparison);
   const totalWeight = ordinaryComponents.reduce((sum, component) => sum + component.weight, 0);
@@ -1208,7 +1218,7 @@ function resolveClearingManualRating(
   const score = clearedGradingResult.score;
   const failureReason = hasExecutionError(
     originalResult,
-    getAutomatedClearComponents(clearedGradingResult.componentResults).length > 0,
+    getAutomatedClearComponents(clearedGradingResult.componentResults),
   )
     ? ResultFailureReason.ERROR
     : success

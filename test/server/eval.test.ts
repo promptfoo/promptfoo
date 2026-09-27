@@ -7,6 +7,7 @@ import { AssertionsResult } from '../../src/assertions/assertionsResult';
 import { getDb } from '../../src/database';
 import { updateSignalFile } from '../../src/database/signal';
 import { evalResultsTable } from '../../src/database/tables';
+import { evaluate } from '../../src/evaluator';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
@@ -2706,7 +2707,6 @@ describe('eval routes', () => {
               ? 'Provider request failed'
               : 'Assertion failed';
         if (components === 'comparison') {
-          result.response = undefined;
           result.gradingResult = {
             pass: false,
             score: 0,
@@ -2809,6 +2809,107 @@ describe('eval routes', () => {
         expect((await Eval.findById(importedEval.id))?.prompts[result.promptIdx].metrics).toEqual(
           originalMetrics,
         );
+      },
+    );
+
+    it.each([
+      { comparisonPass: false, manualPass: false },
+      { comparisonPass: false, manualPass: true },
+      { comparisonPass: true, manualPass: false },
+      { comparisonPass: true, manualPass: true },
+    ])(
+      'restores an imported provider exception after select-best (comparison pass $comparisonPass, manual pass $manualPass)',
+      async ({ comparisonPass, manualPass }) => {
+        const prompts = [
+          { raw: 'First', label: 'First' },
+          { raw: 'Second', label: 'Second' },
+        ];
+        const source = await Eval.create({}, prompts, { id: crypto.randomUUID() });
+        testEvalIds.add(source.id);
+        await evaluate(
+          {
+            prompts,
+            providers: [
+              {
+                id: () => 'comparison-error',
+                callApi: async (prompt) => {
+                  if (prompt === 'First') {
+                    throw new Error('Provider failed before producing a response');
+                  }
+                  return { output: 'Valid answer' };
+                },
+              },
+            ],
+            tests: [
+              {
+                assert: [{ type: 'select-best', value: 'Choose the best answer' }],
+                options: { provider: 'echo', rubricPrompt: comparisonPass ? '0' : '1' },
+              },
+            ],
+          },
+          source,
+          { maxConcurrency: 1 },
+        );
+        const result = (await source.getResults()).find((row) => row.promptIdx === 0);
+        invariant(result?.id, 'Result is required');
+        expect(result).toMatchObject({
+          success: false,
+          score: 0,
+          failureReason: ResultFailureReason.ERROR,
+        });
+        expect(result.response).toBeUndefined();
+        expect(result.gradingResult?.componentResults).toHaveLength(1);
+        expect(result.gradingResult?.componentResults?.[0]).toMatchObject({
+          pass: comparisonPass,
+          assertion: { type: 'select-best' },
+        });
+        const originalMetrics = structuredClone(source.prompts[0].metrics);
+        const rated = await api
+          .post(`/api/eval/${source.id}/results/${result.id}/rating`)
+          .send({ pass: manualPass, score: Number(manualPass), ratingAction: 'rate' });
+        expect(rated.status).toBe(200);
+        const ratedEval = await Eval.findById(source.id);
+        invariant(ratedEval, 'Rated eval is required');
+        const exported = await ratedEval.toResultsFile();
+        const imported = await api.post('/api/eval').send({
+          config: exported.config,
+          prompts: exported.prompts,
+          results: exported.results.results,
+        });
+        expect(imported.status).toBe(200);
+        testEvalIds.add(imported.body.id);
+        const importedResult = (await EvalResult.findManyByEvalId(imported.body.id)).find(
+          (row) => row.promptIdx === 0,
+        );
+        invariant(importedResult, 'Imported result is required');
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const cleared = await api
+            .post(`/api/eval/${imported.body.id}/results/${importedResult.id}/rating`)
+            .send({ pass: true, score: 1, ratingAction: 'clear' });
+          expect(cleared.status).toBe(200);
+          expect(cleared.body).toMatchObject({
+            success: false,
+            score: 0,
+            failureReason: ResultFailureReason.ERROR,
+          });
+          expect(cleared.body.gradingResult.componentResults).toHaveLength(1);
+          expect(cleared.body.gradingResult.componentResults[0]).toMatchObject({
+            pass: comparisonPass,
+            assertion: { type: 'select-best' },
+          });
+          const saved = await Eval.findById(imported.body.id);
+          invariant(saved, 'Saved eval is required');
+          expect(saved.prompts[0].metrics).toEqual(originalMetrics);
+          expect((await saved.getFilteredMetrics({ filterMode: 'all' }))[0]).toMatchObject({
+            score: 0,
+            testPassCount: 0,
+            testFailCount: 0,
+            testErrorCount: 1,
+            assertPassCount: Number(comparisonPass),
+            assertFailCount: Number(!comparisonPass),
+          });
+          expect(await getErrorResultIds(imported.body.id)).toEqual([importedResult.id]);
+        }
       },
     );
 
