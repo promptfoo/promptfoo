@@ -1,4 +1,5 @@
 import { isGraderFailure } from '../matchers/llmGrading';
+import { invertScore } from '../matchers/shared';
 
 import type { GradingResult } from '../types/index';
 
@@ -15,6 +16,6 @@ export function applyRagInverse(
   return {
     ...result,
     pass: !result.pass,
-    score: 1 - result.score,
+    score: invertScore(result.score),
   };
 }
