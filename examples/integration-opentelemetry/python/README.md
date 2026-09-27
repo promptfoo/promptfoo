@@ -206,10 +206,18 @@ Click on any test result to see the "Trace Timeline" section.
 
 ### Import Errors
 
-Make sure all dependencies are installed:
+Install dependencies into the same virtual environment used by Promptfoo.
+
+On macOS/Linux:
 
 ```bash
-python -m pip install -r requirements.txt
+.venv/bin/python -m pip install -r requirements.txt
+```
+
+On Windows (PowerShell):
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
 ### Connection Refused
