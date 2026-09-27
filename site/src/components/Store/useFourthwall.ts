@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import type {
-  FourthwallAttributeValue,
-  FourthwallCart,
-  FourthwallCollection,
-  FourthwallProduct,
-  PaginatedResponse,
-} from './types';
+import type { FourthwallAttributeValue, FourthwallCart, FourthwallProduct } from './types';
 
 // Public storefront token - this is INTENTIONALLY public and client-facing.
 // Fourthwall storefront tokens are designed to be exposed in frontend code.
@@ -84,22 +78,6 @@ async function apiFetch<T>(endpoint: string, options?: RequestInit): Promise<T> 
   return response.json();
 }
 
-// Fetch all collections
-export function useCollections() {
-  const [collections, setCollections] = useState<FourthwallCollection[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    apiFetch<PaginatedResponse<FourthwallCollection>>('/collections')
-      .then((data) => setCollections(data.results))
-      .catch((err) => setError(err.message))
-      .finally(() => setIsLoading(false));
-  }, []);
-
-  return { collections, isLoading, error };
-}
-
 // Fetch all products from a collection (handles pagination)
 export function useProducts(collectionSlug: string = 'all') {
   const [products, setProducts] = useState<FourthwallProduct[]>([]);
@@ -150,28 +128,6 @@ export function useProducts(collectionSlug: string = 'all') {
   }, [collectionSlug]);
 
   return { products, isLoading, error };
-}
-
-// Fetch a single product
-export function useProduct(slug: string | null) {
-  const [product, setProduct] = useState<FourthwallProduct | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!slug) {
-      setProduct(null);
-      return;
-    }
-
-    setIsLoading(true);
-    apiFetch<FourthwallProduct>(`/products/${slug}`)
-      .then(setProduct)
-      .catch((err) => setError(err.message))
-      .finally(() => setIsLoading(false));
-  }, [slug]);
-
-  return { product, isLoading, error };
 }
 
 // Cart operations
@@ -340,88 +296,16 @@ export function formatPrice(money: { value: number; currency: string }): string 
   }).format(money.value);
 }
 
-// Common HTML entities for SSR decoding
-const HTML_ENTITIES: Record<string, string> = {
-  '&amp;': '&',
-  '&lt;': '<',
-  '&gt;': '>',
-  '&quot;': '"',
-  '&#39;': "'",
-  '&apos;': "'",
-  '&nbsp;': ' ',
-  '&copy;': '©',
-  '&reg;': '®',
-  '&trade;': '™',
-};
-
-/**
- * Strip HTML tags from a string using indexOf (no regex for tag stripping).
- * Uses DOMParser in browser (safe), string-based fallback for SSR.
- * SSR fallback processes trusted Fourthwall API content only.
- */
+/** Strip product description HTML after the product modal opens in the browser. */
 export function stripHtml(html: string): string {
-  if (!html) return '';
-
-  // Browser: Use DOMParser (safe, handles all edge cases)
-  if (typeof document !== 'undefined') {
-    const doc = new DOMParser().parseFromString(html, 'text/html');
-    // Remove script and style elements before getting textContent
-    doc.querySelectorAll('script, style').forEach((el) => el.remove());
-    return doc.body.textContent || '';
+  if (!html) {
+    return '';
   }
 
-  // SSR fallback: String-based stripping for trusted Fourthwall API content.
-  // Uses indexOf/substring instead of regex to avoid CodeQL js/bad-tag-filter alerts.
-  // The browser path (above) uses safe DOMParser for client-side rendering.
-  let result = html;
-
-  // Remove script/style tags and contents using indexOf (no regex)
-  for (const tag of ['script', 'style']) {
-    let safety = 0;
-    while (safety++ < 100) {
-      const openTag = result.toLowerCase().indexOf(`<${tag}`);
-      if (openTag === -1) break;
-      const closeTag = result.toLowerCase().indexOf(`</${tag}`, openTag);
-      if (closeTag === -1) break;
-      const closeEnd = result.indexOf('>', closeTag);
-      if (closeEnd === -1) break;
-      result = result.substring(0, openTag) + result.substring(closeEnd + 1);
-    }
-  }
-
-  // Remove remaining HTML tags using indexOf (no regex)
-  let safety = 0;
-  while (safety++ < 1000) {
-    const start = result.indexOf('<');
-    if (start === -1) break;
-    const end = result.indexOf('>', start);
-    if (end === -1) break;
-    result = result.substring(0, start) + result.substring(end + 1);
-  }
-
-  // Decode common HTML entities (using string split/join, not regex)
-  for (const [entity, char] of Object.entries(HTML_ENTITIES)) {
-    result = result.split(entity).join(char);
-  }
-
-  // Decode numeric entities (&#123; format) - simple parsing without regex
-  let numericSafety = 0;
-  while (numericSafety++ < 500) {
-    const start = result.indexOf('&#');
-    if (start === -1) break;
-    const end = result.indexOf(';', start);
-    if (end === -1 || end - start > 10) break;
-    const numStr = result.substring(start + 2, end);
-    const isHex = numStr.toLowerCase().startsWith('x');
-    const num = isHex ? Number.parseInt(numStr.substring(1), 16) : Number.parseInt(numStr, 10);
-    if (!Number.isNaN(num) && num > 0 && num < 0x10ffff) {
-      result = result.substring(0, start) + String.fromCodePoint(num) + result.substring(end + 1);
-    } else {
-      break; // Invalid entity, stop processing
-    }
-  }
-
-  return result.trim();
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  // Remove script and style elements before getting textContent
+  doc.querySelectorAll('script, style').forEach((el) => el.remove());
+  return doc.body.textContent || '';
 }
 
 // Check if variant is in stock
