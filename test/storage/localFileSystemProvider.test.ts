@@ -82,8 +82,11 @@ describe('LocalFileSystemProvider', () => {
       const key = `${mediaType}/${contentHash.slice(0, 12)}.${extension}`;
       const sidecarPath = path.join(tempDir, `${key}.meta.json`);
       fs.mkdirSync(sidecarPath, { recursive: true });
-      const unrelatedPath = path.join(sidecarPath, 'unrelated.json');
+      const unrelatedPath = path.join(sidecarPath, 'unrelated.txt');
       fs.writeFileSync(unrelatedPath, 'unrelated data', 'utf8');
+      const nestedPath = path.join(sidecarPath, 'nested');
+      fs.mkdirSync(nestedPath);
+      fs.writeFileSync(path.join(nestedPath, 'payload.bin'), 'nested unrelated data');
       const metadata = { mediaType, contentType, evalId: 'test-eval', originalText: 'source text' };
 
       const stored = await provider.store(payload, metadata);
@@ -116,8 +119,12 @@ describe('LocalFileSystemProvider', () => {
       await expect(reopened.findByHash(contentHash)).resolves.toBeNull();
       const afterDelete = new LocalFileSystemProvider({ basePath: tempDir });
       await expect(afterDelete.findByHash(contentHash)).resolves.toBeNull();
-      expect(fs.readdirSync(sidecarPath)).toEqual(['unrelated.json']);
+      await expect(afterDelete.getStats()).resolves.toEqual({ fileCount: 0, totalSizeBytes: 0 });
+      expect(fs.readdirSync(sidecarPath).sort()).toEqual(['nested', 'unrelated.txt']);
       expect(fs.readFileSync(unrelatedPath, 'utf8')).toBe('unrelated data');
+      expect(fs.readFileSync(path.join(nestedPath, 'payload.bin'), 'utf8')).toBe(
+        'nested unrelated data',
+      );
       await expect(reopened.delete(key)).resolves.toBeUndefined();
     },
   );

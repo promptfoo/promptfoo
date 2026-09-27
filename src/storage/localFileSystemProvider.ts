@@ -291,6 +291,9 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
         throw error;
       }
       for (const entry of entries) {
+        if (entry.name.endsWith('.meta.json')) {
+          continue;
+        }
         const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
           await walkDir(fullPath);
