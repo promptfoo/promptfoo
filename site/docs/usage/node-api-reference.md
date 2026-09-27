@@ -544,6 +544,8 @@ console.log(result.data); // the fetched data
 **Configuration:**
 Set cache location and TTL via environment variables:
 
+Without `PROMPTFOO_CACHE_PATH`, the cache uses `<PROMPTFOO_CONFIG_DIR>/cache` (normally `~/.promptfoo/cache`). An eval's scoped `PROMPTFOO_CONFIG_DIR` changes its cache location; the database keeps its startup directory.
+
 ```bash
 # Cache directory (default: ~/.promptfoo/cache)
 export PROMPTFOO_CACHE_PATH=/path/to/cache
