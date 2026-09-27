@@ -5320,7 +5320,7 @@ describe('ResultsTable surviving transform display variables', () => {
 
     outputs = [null, survivor];
     // The mocked store cannot notify React.memo when its snapshot changes.
-    rerender(<ResultsTable {...props} onSearchTextChange={vi.fn()} />);
+    rerender(<ResultsTable {...props} onFailureFilterToggle={vi.fn()} />);
 
     expect(screen.getByText('Surviving fetch prompt')).toBeInTheDocument();
     expect(screen.getByText('survivor URL')).toBeInTheDocument();
