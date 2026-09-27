@@ -135,7 +135,6 @@ The associated edge baseline records these intentional consumers:
 | legacy-contracts → contracts      | Describe progress in the evaluation API and callback options.                      |
 | legacy-runtime → contracts        | Validate provider progress and type setup failures.                                |
 | legacy-runtime → legacy-contracts | Use existing provider/context types for preflight.                                 |
-| legacy-runtime → node             | Reuse configuration variable rendering before setup checks.                        |
 | node → legacy-runtime             | Share bounded setup checks between connectivity tests and evaluation.              |
 | providers → contracts             | Normalize and validate security reports and replay evidence.                       |
 | view-server → contracts           | Validate and type bounded progress stored in evaluation jobs.                      |

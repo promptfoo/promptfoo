@@ -8,7 +8,7 @@ import {
   type InMemoryEvaluation,
   InMemoryEvaluationStore,
 } from '../../src/evaluator/inMemoryStore';
-import { createProviderSetupCheck } from '../../src/evaluator/providerSetup';
+import { checkProviderSetup } from '../../src/evaluator/providerSetup';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
 import { createDeferred, mockProcessEnv } from '../util/utils';
@@ -194,7 +194,9 @@ describeEvaluator('provider batch preflight', () => {
     expect(events).toEqual([
       'setup:concurrent',
       'setup:serial',
+      'setup:serial',
       'workload:serial',
+      'setup:concurrent',
       'workload:concurrent',
     ]);
   });
@@ -580,6 +582,7 @@ describeEvaluator('provider batch preflight', () => {
       'setup:good',
       'setup:bad',
       'setup:bad',
+      'setup:good',
       'workload',
       'setup:bad',
     ]);
@@ -624,14 +627,16 @@ describeEvaluator('provider batch preflight', () => {
     expect(events).toEqual([
       'setup:default.json',
       'setup:row.json',
+      'setup:default.json',
       'import:default.json',
+      'setup:row.json',
       'import:row.json',
     ]);
     expect((await record.toEvaluateSummary()).stats.errors).toBe(0);
   });
 
   it('uses prompt overrides and rechecks changed configuration instead of caching only provider identity', async () => {
-    const check = createProviderSetupCheck();
+    const check = checkProviderSetup;
     const provider: ApiProvider = {
       id: () => 'local-scanner',
       config: { repository: '{{repo}}' },
@@ -647,24 +652,32 @@ describeEvaluator('provider batch preflight', () => {
       ...context,
       prompt: { ...context.prompt!, config: { repository: 'three' } },
     });
-    expect(provider.checkSetup).toHaveBeenCalledTimes(3);
+    expect(provider.checkSetup).toHaveBeenCalledTimes(4);
   });
 
-  it('deduplicates concurrent checks without sharing mutable failure responses across rows or evaluations', async () => {
+  it('isolates mutable failure responses across independent concurrent checks', async () => {
+    const sharedResponse = { error: 'Setup failed', metadata: { evidence: { phase: 'setup' } } };
     const provider: ApiProvider = {
       id: () => 'local-scanner',
       checkSetupOnEval: true,
       callApi: vi.fn<ApiProvider['callApi']>(),
-      checkSetup: vi.fn(async () => ({ success: false, message: 'Setup failed' })),
+      checkSetup: vi.fn(async () => ({
+        success: false,
+        message: 'Setup failed',
+        response: sharedResponse,
+      })),
     };
     const context = { vars: {}, prompt: toPrompt('Review') };
-    const check = createProviderSetupCheck();
+    const check = checkProviderSetup;
     const [first, second] = await Promise.all([check(provider, context), check(provider, context)]);
-    expect(provider.checkSetup).toHaveBeenCalledTimes(1);
-    first!.error = 'mutated';
-    expect(second?.error).toBe('Setup failed');
-    await createProviderSetupCheck()(provider, context);
     expect(provider.checkSetup).toHaveBeenCalledTimes(2);
+    first!.error = 'mutated';
+    first!.metadata!.evidence.phase = 'mutated';
+    expect(second?.error).toBe('Setup failed');
+    expect(second?.metadata?.evidence.phase).toBe('setup');
+    expect(sharedResponse.metadata.evidence.phase).toBe('setup');
+    await checkProviderSetup(provider, context);
+    expect(provider.checkSetup).toHaveBeenCalledTimes(3);
   });
 
   it('does not preflight providers that have not opted in', async () => {
@@ -673,7 +686,7 @@ describeEvaluator('provider batch preflight', () => {
       callApi: vi.fn<ApiProvider['callApi']>(),
       checkSetup: vi.fn(async () => ({ success: true, message: 'Ready' })),
     };
-    await createProviderSetupCheck()(provider, { vars: {}, prompt: toPrompt('Review') });
+    await checkProviderSetup(provider, { vars: {}, prompt: toPrompt('Review') });
     expect(provider.checkSetup).not.toHaveBeenCalled();
   });
 

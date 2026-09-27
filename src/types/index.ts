@@ -220,7 +220,7 @@ export type EvalConversations = Record<
 export type EvalRegisters = Record<string, VarValue>;
 
 export interface RunEvalOptions {
-  /** Evaluation-local setup cache, shared with the preflight pass. */
+  /** Local setup validation with per-call cancellation and deadlines. */
   providerSetup?: (
     provider: ApiProvider,
     context: CallApiContextParams,

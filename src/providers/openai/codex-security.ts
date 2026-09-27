@@ -154,6 +154,18 @@ function parseConfig(
   config: unknown = {},
   options: { stripUnknownKeys?: boolean } = {},
 ): OpenAICodexSecurityConfig {
+  // Import mode uses no native SDK settings, including their types and templates.
+  if (
+    config &&
+    typeof config === 'object' &&
+    'report_file' in config &&
+    config.report_file !== undefined
+  ) {
+    config = {
+      report_file: config.report_file,
+      basePath: 'basePath' in config ? config.basePath : undefined,
+    };
+  }
   const schema = options.stripUnknownKeys
     ? CodexSecurityMergedPromptConfigSchema
     : CodexSecurityConfigSchema;
@@ -290,7 +302,9 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
   constructor(
     options: { id?: string; config?: OpenAICodexSecurityConfig; env?: EnvOverrides } = {},
   ) {
-    this.config = parseConfig(options.config);
+    // Preserve dormant settings for rows that explicitly switch back to native mode.
+    // resolveConfig validates them once that mode is active.
+    this.config = { ...options.config, ...parseConfig(options.config) };
     this.env = options.env;
     this.providerId = options.id ?? 'openai:codex-security';
     providerRegistry.register(this);
@@ -358,13 +372,10 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
     const renderedConfig =
       mergedConfig.report_file === undefined
         ? renderVarsInObject(mergedConfig, context?.vars)
-        : {
-            ...mergedConfig,
-            ...renderVarsInObject(
-              { report_file: mergedConfig.report_file, basePath: mergedConfig.basePath },
-              context?.vars,
-            ),
-          };
+        : renderVarsInObject(
+            { report_file: mergedConfig.report_file, basePath: mergedConfig.basePath },
+            context?.vars,
+          );
     return parseConfig(renderedConfig, { stripUnknownKeys: true });
   }
 

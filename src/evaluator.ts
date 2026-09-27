@@ -19,7 +19,7 @@ import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { createProviderProgressReporter } from './evaluator/providerProgress';
-import { createProviderSetupCheck } from './evaluator/providerSetup';
+import { checkProviderSetup } from './evaluator/providerSetup';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
@@ -2566,14 +2566,12 @@ async function applyInputTransform(
 }
 
 async function prepareProviderSetup(runEvalOptions: RunEvalOptions[], checkAbort: () => void) {
-  const providerSetup = createProviderSetupCheck();
-  const setupAfterHooks = createProviderSetupCheck({ cache: false });
   for (const step of runEvalOptions) {
     checkAbort();
     // Hooks can create or replace files without changing provider configuration.
     // Check their resulting state for each row, inside its timeout boundary.
     const hasExtensions = Boolean(step.testSuite?.extensions?.length);
-    step.providerSetup = hasExtensions ? setupAfterHooks : providerSetup;
+    step.providerSetup = checkProviderSetup;
     const activeProvider = isApiProvider(step.test.provider) ? step.test.provider : step.provider;
     if (hasExtensions || step.test.providerOutput || !activeProvider.checkSetupOnEval) {
       continue;
@@ -2584,7 +2582,7 @@ async function prepareProviderSetup(runEvalOptions: RunEvalOptions[], checkAbort
       repeatIndex: step.repeatIndex,
       testIndex: step.testIdx,
     });
-    const setupFailure = await providerSetup(
+    const setupFailure = await checkProviderSetup(
       activeProvider,
       {
         vars: { ...step.test.vars, ...step.registers, ...runtimeVars },

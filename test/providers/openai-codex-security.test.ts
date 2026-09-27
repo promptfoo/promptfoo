@@ -937,7 +937,11 @@ describe('OpenAICodexSecurityProvider', () => {
           python_path: '{{pythonPath}}',
           finding_file: '{{findingFile}}',
           knowledge_base_paths: ['{{knowledgeBase}}'],
-        },
+          operation: '{{operation}}',
+          model_reasoning_effort: '{{effort}}',
+          max_cost_usd: '{{budget}}',
+          auth: '{{auth}}',
+        } as never,
       });
 
       expect((await provider.checkSetup()).success).toBe(true);
@@ -969,6 +973,9 @@ describe('OpenAICodexSecurityProvider', () => {
             report_file: '{{reportName}}',
             basePath: '{{reportDirectory}}',
             paths: ['{{scope}}'],
+            operation: '{{operation}}',
+            model_reasoning_effort: '{{effort}}',
+            max_cost_usd: '{{budget}}',
             timeout: 30_000,
           },
         },
@@ -988,34 +995,107 @@ describe('OpenAICodexSecurityProvider', () => {
       ['repository', 42],
       ['paths', [null]],
       ['model', false],
-    ])('still rejects malformed dormant %s settings', async (field, value) => {
+      ['operation', '{{operation}}'],
+      ['model_reasoning_effort', '{{effort}}'],
+    ])('ignores dormant %s settings when importing a report', async (field, value) => {
       const { file } = await saveReport(createScanResult().toJSON());
-      const response = await new OpenAICodexSecurityProvider().callApi('Compare', {
+      const provider = new OpenAICodexSecurityProvider();
+      const context = {
         prompt: {
           raw: 'Compare',
           label: 'Compare',
           config: { report_file: file, [field as string]: value },
         },
         vars: {},
-      });
+      };
 
-      expect(response.error).toContain(`configuration: ${field}`);
+      expect((await provider.checkSetup(context)).success).toBe(true);
+      const response = await provider.callApi('Compare', context);
+
+      expect(response.error).toBeUndefined();
       expect(response).toMatchObject({
         incurredCost: 0,
         tokenUsage: { incurredTokenUsage: { numRequests: 0 } },
-        metadata: { codexSecurity: { source: { kind: 'saved-report' }, status: 'failed' } },
+        metadata: {
+          codexSecurity: { source: { kind: 'saved-report', file }, status: 'completed' },
+        },
       });
+      expect(importModule).not.toHaveBeenCalled();
+      expect(mockPreflight).not.toHaveBeenCalled();
+      expect(mockRun).not.toHaveBeenCalled();
+      expect(mockValidate).not.toHaveBeenCalled();
+    });
+
+    it('validates dormant settings when switching a report provider back to native mode', async () => {
+      const { file } = await saveReport(createScanResult().toJSON());
+      const provider = new OpenAICodexSecurityProvider({
+        config: { report_file: file, operation: '{{operation}}', max_cost_usd: -1 } as never,
+      });
+      expect((await provider.checkSetup()).success).toBe(true);
+      const context = {
+        prompt: { raw: 'Scan', label: 'Scan', config: { report_file: undefined } },
+        vars: { operation: 'security-scan' },
+      };
+
+      const setup = await provider.checkSetup(context);
+      const response = await provider.callApi('Scan', context);
+
+      expect(setup.success).toBe(false);
+      expect(setup.response?.error).toContain('max_cost_usd');
+      expect(response.error).toContain('max_cost_usd');
+      expect(response.metadata?.codexSecurity?.source.kind).toBe('sdk');
       expect(importModule).not.toHaveBeenCalled();
       expect(mockRun).not.toHaveBeenCalled();
     });
 
-    it.each(['{{missingReport}}', '{{report | unusedFilter}}', 42])(
+    it.each(['missing', 'malformed'])(
+      'fails closed for a %s report despite dormant native templates',
+      async (kind) => {
+        const file = path.join(reportDirectory, `${kind}.json`);
+        if (kind === 'malformed') {
+          await fs.writeFile(file, JSON.stringify({ manifest: {} }));
+        }
+        const provider = new OpenAICodexSecurityProvider({
+          config: {
+            report_file: file,
+            operation: '{{operation}}',
+            model_reasoning_effort: '{{effort}}',
+          } as never,
+        });
+
+        const setup = await provider.checkSetup();
+        const response = await provider.callApi('Compare');
+
+        expect(setup.success).toBe(false);
+        for (const failure of [setup.response, response]) {
+          expect(failure?.error).toBeTruthy();
+          expect(failure?.error).not.toContain(
+            'Invalid OpenAI Codex Security provider configuration',
+          );
+          expect(failure?.output).toBeUndefined();
+          expect(failure?.metadata?.codexSecurity).toMatchObject({
+            source: { kind: 'saved-report', file },
+            status: 'failed',
+          });
+        }
+        expect(importModule).not.toHaveBeenCalled();
+        expect(mockPreflight).not.toHaveBeenCalled();
+        expect(mockRun).not.toHaveBeenCalled();
+        expect(mockValidate).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(['{{missingReport}}', '{{report | unusedFilter}}', '', null, 42])(
       'keeps import provenance when a report override cannot render or validate: %s',
       async (reportFile) => {
-        const response = await new OpenAICodexSecurityProvider().callApi('Compare', {
+        const provider = new OpenAICodexSecurityProvider();
+        const context = {
           prompt: { raw: 'Compare', label: 'Compare', config: { report_file: reportFile } },
           vars: {},
-        });
+        };
+
+        expect((await provider.checkSetup(context)).success).toBe(false);
+        const response = await provider.callApi('Compare', context);
 
         expect(response.error).toBeDefined();
         expect(response).toMatchObject({
@@ -1029,12 +1109,29 @@ describe('OpenAICodexSecurityProvider', () => {
       },
     );
 
+    it.each([
+      { report_file: '' },
+      { report_file: null },
+      { report_file: 42 },
+      { report_file: 'report.json', basePath: false },
+    ])('validates active report inputs in the constructor: %j', (config) => {
+      expect(
+        () =>
+          new OpenAICodexSecurityProvider({
+            config: { operation: '{{operation}}', ...config } as never,
+          }),
+      ).toThrow('Invalid OpenAI Codex Security provider configuration');
+      expect(importModule).not.toHaveBeenCalled();
+    });
+
     it('renders native inputs when a per-test override removes saved-report mode', async () => {
       const { file } = await saveReport(createScanResult().toJSON());
       vi.mocked(resolvePackageEntryPoint).mockReturnValue(
         '/packages/@openai/codex-security/dist/index.js',
       );
-      const provider = new OpenAICodexSecurityProvider({ config: { report_file: file } });
+      const provider = new OpenAICodexSecurityProvider({
+        config: { report_file: file, operation: 'deep-security-scan', max_cost_usd: 2 },
+      });
       const response = await provider.callApi('Scan', {
         prompt: {
           raw: 'Scan',
@@ -1046,6 +1143,7 @@ describe('OpenAICodexSecurityProvider', () => {
 
       expect(response.error).toBeUndefined();
       expect(response.metadata?.codexSecurity?.source.kind).toBe('sdk');
+      expect(response.metadata?.codexSecurity?.operation).toBe('deep-security-scan');
       expect(mockRun).toHaveBeenCalledWith('/repos/example', expect.any(Object));
     });
 

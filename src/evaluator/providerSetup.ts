@@ -1,5 +1,3 @@
-import { renderVarsInObject } from '../util/render';
-
 import type { ProviderResponse } from '../contracts/providers';
 import type { ApiProvider, CallApiContextParams } from '../types/providers';
 
@@ -74,71 +72,25 @@ function waitForSetup(
   }));
 }
 
-/** Per-evaluation only: neither configuration keys nor results are written to the disk cache. */
-export function createProviderSetupCheck({ cache = true }: { cache?: boolean } = {}) {
-  const checks = new WeakMap<ApiProvider, Map<string, Promise<ProviderResponse | undefined>>>();
-  return async (
-    provider: ApiProvider,
-    context: CallApiContextParams,
-    options: SetupWaitOptions = {},
-  ) => {
-    if (!provider.checkSetupOnEval || !provider.checkSetup) {
-      return undefined;
-    }
-    const check = () =>
-      waitForSetup(async (signal) => {
-        try {
-          const result = await provider.checkSetup!(context, { abortSignal: signal });
-          return result.success
-            ? undefined
-            : blockedResponse(result.error ?? result.message, result.response);
-        } catch {
-          return blockedResponse('Provider local setup check failed. No workload was started.');
-        }
-      }, options);
-
-    if (!cache) {
-      return check();
-    }
-    let key: string;
+/** Check current row state every time; setup can depend on arbitrary context or external state. */
+export async function checkProviderSetup(
+  provider: ApiProvider,
+  context: CallApiContextParams,
+  options: SetupWaitOptions = {},
+): Promise<ProviderResponse | undefined> {
+  if (!provider.checkSetupOnEval || !provider.checkSetup) {
+    return undefined;
+  }
+  const response = await waitForSetup(async (signal) => {
     try {
-      const config = { ...provider.config, ...context.prompt?.config };
-      delete config.provider;
-      key = JSON.stringify({
-        config: renderVarsInObject(config, context.vars),
-        // These can be provider inputs even when absent from the explicit config.
-        repository: context.vars.repository,
-        finding: context.vars.finding,
-      });
+      const result = await provider.checkSetup!(context, { abortSignal: signal });
+      return result.success
+        ? undefined
+        : blockedResponse(result.error ?? result.message, result.response);
     } catch {
-      // Leave configuration diagnostics to the provider; never reuse an ambiguous key.
-      return check();
+      return blockedResponse('Provider local setup check failed. No workload was started.');
     }
-    let providerChecks = checks.get(provider);
-    if (!providerChecks) {
-      providerChecks = new Map();
-      checks.set(provider, providerChecks);
-    }
-    const previous = providerChecks.get(key);
-    if (previous) {
-      // A concurrent waiter still owns its cancellation and deadline.
-      const result = await waitForSetup(() => previous, options);
-      return result ? structuredClone(result) : undefined;
-    }
-    const pending = check();
-    providerChecks.set(key, pending);
-    try {
-      const result = await pending;
-      if (result) {
-        // Earlier workloads can create missing files. Only successful checks remain reusable.
-        providerChecks.delete(key);
-      }
-      // Later grading hooks may mutate responses. Each skipped attempt keeps its own evidence.
-      return result ? structuredClone(result) : undefined;
-    } catch (error) {
-      // Cancellation is not reusable setup evidence for a later attempt.
-      providerChecks.delete(key);
-      throw error;
-    }
-  };
+  }, options);
+  // A provider may return the same response object to multiple callers.
+  return response ? structuredClone(response) : undefined;
 }
