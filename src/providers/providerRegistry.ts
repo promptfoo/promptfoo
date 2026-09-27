@@ -13,20 +13,30 @@ interface CleanupProvider {
  */
 class ProviderRegistry {
   private providers: Set<CleanupProvider> = new Set();
-  private shutdownHandlers: Record<'SIGINT' | 'SIGTERM' | 'beforeExit', () => void> | null = null;
+  private shutdownHandlers: Partial<
+    Record<'SIGINT' | 'SIGTERM' | 'beforeExit', () => void>
+  > | null = null;
+  private beforeExitAttempts = new WeakSet<CleanupProvider>();
   private pendingShutdowns = 0;
   private shutdownPromise: Promise<void> | null = null;
 
   register(provider: CleanupProvider): void {
     this.providers.add(provider);
 
-    if (!this.shutdownHandlers) {
+    if (
+      !this.shutdownHandlers ||
+      (!this.pendingShutdowns &&
+        !this.shutdownHandlers.beforeExit &&
+        !this.beforeExitAttempts.has(provider))
+    ) {
+      this.removeShutdownHandlers();
       this.registerShutdownHandlers();
     }
   }
 
   unregister(provider: CleanupProvider): void {
     this.providers.delete(provider);
+    this.beforeExitAttempts.delete(provider);
     this.removeIdleShutdownHandlers();
   }
 
@@ -34,7 +44,11 @@ class ProviderRegistry {
     if (this.providers.size || this.pendingShutdowns || !this.shutdownHandlers) {
       return;
     }
-    for (const [event, handler] of Object.entries(this.shutdownHandlers)) {
+    this.removeShutdownHandlers();
+  }
+
+  private removeShutdownHandlers(): void {
+    for (const [event, handler] of Object.entries(this.shutdownHandlers ?? {})) {
       process.removeListener(event, handler);
     }
     this.shutdownHandlers = null;
@@ -52,16 +66,13 @@ class ProviderRegistry {
       logger.debug(`Received ${signal}, shutting down ${this.providers.size} Python providers...`);
 
       try {
-        await this.shutdownAll();
+        await this.shutdownAll(signal === 'beforeExit');
         logger.debug('Python provider shutdown complete');
       } finally {
         // A once handler has been consumed. New registrations during cleanup
         // must receive a fresh set without removing any host-owned listeners.
         if (this.shutdownHandlers === handlers) {
-          for (const [event, handler] of Object.entries(handlers)) {
-            process.removeListener(event, handler);
-          }
-          this.shutdownHandlers = null;
+          this.removeShutdownHandlers();
           if (this.providers.size || this.pendingShutdowns) {
             this.registerShutdownHandlers();
           }
@@ -72,8 +83,11 @@ class ProviderRegistry {
     const handlers = {
       SIGINT: () => void shutdown('SIGINT'),
       SIGTERM: () => void shutdown('SIGTERM'),
-      // Use beforeExit for async cleanup (exit event cannot await).
-      beforeExit: () => void shutdown('beforeExit'),
+      // A failed owner remains available to explicit cleanup and signals, but
+      // cannot repeatedly keep Node alive by scheduling work from beforeExit.
+      ...(Array.from(this.providers).some((provider) => !this.beforeExitAttempts.has(provider))
+        ? { beforeExit: () => void shutdown('beforeExit') }
+        : {}),
     };
     this.shutdownHandlers = handlers;
     for (const [event, handler] of Object.entries(handlers)) {
@@ -81,11 +95,18 @@ class ProviderRegistry {
     }
   }
 
-  async shutdownAll(): Promise<void> {
-    const providers = Array.from(this.providers);
+  async shutdownAll(beforeExit = false): Promise<void> {
+    const providers = Array.from(this.providers).filter(
+      (provider) => !beforeExit || !this.beforeExitAttempts.has(provider),
+    );
     // Release only this snapshot. Providers registered during cleanup belong to
     // a later lifetime and must remain available to the next shutdownAll call.
-    this.providers.clear();
+    for (const provider of providers) {
+      this.providers.delete(provider);
+      if (beforeExit) {
+        this.beforeExitAttempts.add(provider);
+      }
+    }
     const previousShutdown = this.shutdownPromise;
     // A provider may unregister synchronously inside shutdown(). Keep ownership
     // before invoking it, until this cleanup and any earlier cleanup have settled.
@@ -93,7 +114,10 @@ class ProviderRegistry {
     const shutdown = (async () => {
       const results = await Promise.allSettled([
         ...(previousShutdown ? [previousShutdown] : []),
-        ...providers.map((provider) => provider.shutdown()),
+        ...providers.map(async (provider) => {
+          await provider.shutdown();
+          this.beforeExitAttempts.delete(provider);
+        }),
       ]);
 
       // Log any failures but don't throw - cleanup should be defensive.

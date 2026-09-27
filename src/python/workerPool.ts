@@ -57,13 +57,9 @@ export class PythonWorkerPool {
       this.workers.push(worker);
     }
 
-    // Keep ownership of every started worker until startup settles, including
-    // when one fails, so the caller can safely shut down the partial pool.
-    const results = await Promise.allSettled(initPromises);
-    const failure = results.find((result) => result.status === 'rejected');
-    if (failure) {
-      throw failure.reason;
-    }
+    // Report the first failure so the owner can cancel every started worker.
+    // The workers array retains the complete partial pool for that cleanup.
+    await Promise.all(initPromises);
     this.isInitialized = true;
     logger.debug(`Python worker pool initialized with ${this.workerCount} workers`);
   }

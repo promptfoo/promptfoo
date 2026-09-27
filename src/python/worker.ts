@@ -31,6 +31,7 @@ export class PythonWorker {
     reject: (error: Error) => void;
   } | null = null;
   private requestTimeout: NodeJS.Timeout | null = null;
+  private startupCancellation: AbortController | null = null;
 
   constructor(
     private scriptPath: string,
@@ -45,6 +46,8 @@ export class PythonWorker {
   }
 
   private async startWorker(): Promise<void> {
+    const startup = new AbortController();
+    this.startupCancellation = startup;
     const wrapperPath = path.join(getWrapperDir('python'), 'persistent_wrapper.py');
 
     // Validate and resolve Python path using smart detection (tries python3, then python)
@@ -52,6 +55,7 @@ export class PythonWorker {
       this.pythonPath || 'python',
       typeof this.pythonPath === 'string',
     );
+    startup.signal.throwIfAborted();
 
     this.process = new PythonShell(wrapperPath, {
       mode: 'text',
@@ -64,6 +68,7 @@ export class PythonWorker {
     // Listen for READY signal
     return new Promise((resolve, reject) => {
       const readyTimeout = setTimeout(() => {
+        finishStartup();
         // Kill the process to prevent orphaned Python processes
         // and avoid triggering handleCrash() which would retry
         this.shuttingDown = true;
@@ -73,10 +78,22 @@ export class PythonWorker {
         }
         reject(new Error('Worker failed to become ready within timeout'));
       }, 30000);
+      const cancelStartup = () => {
+        finishStartup();
+        reject(startup.signal.reason);
+      };
+      const finishStartup = () => {
+        clearTimeout(readyTimeout);
+        startup.signal.removeEventListener('abort', cancelStartup);
+        if (this.startupCancellation === startup) {
+          this.startupCancellation = null;
+        }
+      };
+      startup.signal.addEventListener('abort', cancelStartup, { once: true });
 
       this.process!.on('message', (message: string) => {
         if (message.trim() === 'READY') {
-          clearTimeout(readyTimeout);
+          finishStartup();
           this.ready = true;
           logger.debug(`Python worker ready for ${this.scriptPath}`);
           // Notify pool that worker is ready (triggers queue processing)
@@ -89,14 +106,18 @@ export class PythonWorker {
         }
       });
 
-      this.process!.on('error', (err) => {
-        clearTimeout(readyTimeout);
+      const startupError = (err: Error) => {
+        finishStartup();
         reject(err);
-      });
+      };
+      this.process!.on('error', startupError);
+      this.process!.on('pythonError', startupError);
 
       this.process!.on('close', () => {
         this.flushStderr();
-        if (!this.shuttingDown) {
+        if (!this.ready) {
+          startupError(new Error('Worker exited before becoming ready'));
+        } else if (!this.shuttingDown) {
           this.handleCrash();
         }
       });
@@ -274,6 +295,8 @@ export class PythonWorker {
   }
 
   async shutdown(): Promise<void> {
+    this.startupCancellation?.abort(new Error('Worker initialization cancelled'));
+    this.startupCancellation = null;
     if (!this.process) {
       return;
     }

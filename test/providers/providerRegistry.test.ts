@@ -20,6 +20,20 @@ afterEach(async () => {
 });
 
 describe('provider registry cleanup ownership', () => {
+  it('continues cleanup after a provider throws before returning a promise', async () => {
+    const first = {
+      shutdown: vi.fn(() => {
+        throw new Error('synchronous cleanup failure');
+      }),
+    };
+    const second = { shutdown: vi.fn().mockResolvedValue(undefined) };
+    providerRegistry.register(first);
+    providerRegistry.register(second);
+
+    await expect(providerRegistry.shutdownAll()).resolves.toBeUndefined();
+    expect(second.shutdown).toHaveBeenCalledOnce();
+  });
+
   it('makes concurrent callers wait for cleanup already in progress', async () => {
     const closing = deferred();
     const provider = { shutdown: vi.fn(() => closing.promise) };

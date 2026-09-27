@@ -49,6 +49,59 @@ function deferred() {
 }
 
 describe('provider registry signal ownership', () => {
+  it('does not automatically retry a failed beforeExit owner but retains signal cleanup', async () => {
+    let rejectCleanup = true;
+    const provider = {
+      shutdown: vi.fn(async () => {
+        await Promise.resolve();
+        if (rejectCleanup) {
+          registry.register(provider);
+          throw new Error('cleanup failed');
+        }
+      }),
+    };
+    registry.register(provider);
+    addedListeners('beforeExit')[0]();
+    await vi.waitFor(() => {
+      expect(addedListeners('beforeExit')).toHaveLength(0);
+      expect(addedListeners('SIGTERM')).toHaveLength(1);
+    });
+    expect(provider.shutdown).toHaveBeenCalledOnce();
+
+    rejectCleanup = false;
+    addedListeners('SIGTERM')[0]();
+    await vi.waitFor(() => {
+      expect(provider.shutdown).toHaveBeenCalledTimes(2);
+      expect(addedListeners('SIGTERM')).toHaveLength(0);
+    });
+
+    registry.register(provider);
+    expect(addedListeners('beforeExit')).toHaveLength(1);
+  });
+
+  it('gives a new owner beforeExit cleanup after an earlier owner failed', async () => {
+    const failed = {
+      shutdown: vi.fn(async () => {
+        registry.register(failed);
+        throw new Error('cleanup failed');
+      }),
+    };
+    registry.register(failed);
+    addedListeners('beforeExit')[0]();
+    await vi.waitFor(() => expect(addedListeners('beforeExit')).toHaveLength(0));
+
+    const fresh = { shutdown: vi.fn().mockResolvedValue(undefined) };
+    registry.register(fresh);
+    expect(addedListeners('beforeExit')).toHaveLength(1);
+    addedListeners('beforeExit')[0]();
+    await vi.waitFor(() => {
+      expect(fresh.shutdown).toHaveBeenCalledOnce();
+      expect(addedListeners('beforeExit')).toHaveLength(0);
+    });
+    expect(failed.shutdown).toHaveBeenCalledOnce();
+    registry.unregister(failed);
+  });
+
   it('removes only its own listeners when the last provider unregisters and rearms on reuse', () => {
     const hostListener = vi.fn();
     process.on('SIGTERM', hostListener);
