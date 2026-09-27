@@ -772,7 +772,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       Object.entries(config.cli_env ?? {}).map(([key, value]) => [key, String(value)]),
     );
     const env: Record<string, string> = {
-      ...(inheritProcessEnv ? (getProcessEnv() as Record<string, string>) : getMinimalProcessEnv()),
+      ...(inheritProcessEnv
+        ? (getProcessEnv() as Record<string, string>)
+        : getMinimalProcessEnv(getProcessEnv())),
       ...cliEnv,
     };
 

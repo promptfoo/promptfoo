@@ -1,8 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 
-import { getProcessEnv } from '../../envars';
-
 const MINIMAL_CLI_ENV_KEYS = [
   'PATH',
   'Path',
@@ -36,9 +34,8 @@ export const COMMON_OPTIONAL_PROCESS_ENV_KEYS = [
   'GIT_SSH_COMMAND',
 ] as const;
 
-export function getMinimalProcessEnv(): Record<string, string> {
+export function getMinimalProcessEnv(processEnv: NodeJS.ProcessEnv): Record<string, string> {
   const env: Record<string, string> = {};
-  const processEnv = getProcessEnv();
   for (const key of MINIMAL_CLI_ENV_KEYS) {
     const value = processEnv[key];
     if (typeof value === 'string' && value.length > 0) {

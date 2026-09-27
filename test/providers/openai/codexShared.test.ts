@@ -198,6 +198,7 @@ for (const [name, Class, abortMessage] of [
       expect(provider.prepareEnvironment({ cli_env: { EXPLICIT: 'A' } })).toEqual({
         HOME: '/fixture/home',
         PATH: '/fixture/bin',
+        ...(process.platform === 'win32' ? { Path: '/fixture/bin' } : {}),
         TERM: 'xterm',
         EXPLICIT: 'A',
       });
