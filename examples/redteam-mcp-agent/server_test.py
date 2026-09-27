@@ -1,6 +1,7 @@
 import unittest
 
 from fastmcp import Client
+
 from server import mcp
 
 
