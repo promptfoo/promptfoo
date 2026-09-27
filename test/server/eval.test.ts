@@ -2116,6 +2116,81 @@ describe('eval routes', () => {
       },
     );
 
+    it.each([
+      { failureReason: ResultFailureReason.ASSERT, shape: 'component' },
+      { failureReason: ResultFailureReason.ASSERT, shape: 'top-level' },
+      { failureReason: ResultFailureReason.ERROR, shape: 'component' },
+      { failureReason: ResultFailureReason.ERROR, shape: 'top-level' },
+    ])(
+      'restores legacy $shape failure category $failureReason after a pass rating',
+      async ({ failureReason, shape }) => {
+        const eval_ = await EvalFactory.create();
+        testEvalIds.add(eval_.id);
+        const [, result] = await eval_.getResults();
+        invariant(result instanceof EvalResult, 'Result is required');
+        result.success = false;
+        result.score = 0;
+        result.failureReason = failureReason;
+        result.error =
+          failureReason === ResultFailureReason.ASSERT
+            ? 'Expected output to equal expected'
+            : 'Provider request failed';
+        const human = {
+          pass: false,
+          score: 0,
+          reason: 'Legacy manual failure',
+          assertion: { type: 'human' },
+        } satisfies GradingResult;
+        result.gradingResult =
+          shape === 'top-level'
+            ? human
+            : { ...human, assertion: undefined, componentResults: [human] };
+        await result.save();
+        const metrics = eval_.prompts[result.promptIdx].metrics;
+        invariant(metrics, 'Prompt metrics are required');
+        if (failureReason === ResultFailureReason.ERROR) {
+          metrics.testFailCount -= 1;
+          metrics.testErrorCount += 1;
+        }
+        await eval_.save();
+        const expectedMetrics = {
+          score: metrics.score,
+          testPassCount: metrics.testPassCount,
+          testFailCount: metrics.testFailCount,
+          testErrorCount: metrics.testErrorCount,
+          assertPassCount: metrics.assertPassCount,
+          // The original legacy human assertion is removed by clearing.
+          assertFailCount: metrics.assertFailCount - 1,
+        };
+        const route = `/api/eval/${eval_.id}/results/${result.id}/rating`;
+        const rated = await api.post(route).send({ pass: true, score: 1, ratingAction: 'rate' });
+        expect(rated.status).toBe(200);
+        expect(rated.body).toMatchObject({
+          success: true,
+          failureReason: ResultFailureReason.NONE,
+        });
+
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const cleared = await api
+            .post(route)
+            .send({ pass: true, score: 1, ratingAction: 'clear' });
+          expect(cleared.status).toBe(200);
+          expect(cleared.body).toMatchObject({ success: false, score: 0, failureReason });
+          expect(await EvalResult.findById(result.id)).toMatchObject({
+            success: false,
+            score: 0,
+            failureReason,
+          });
+          const saved = await Eval.findById(eval_.id);
+          invariant(saved, 'Eval is required');
+          expect(saved.prompts[result.promptIdx].metrics).toMatchObject(expectedMetrics);
+          expect(
+            (await saved.getFilteredMetrics({ filterMode: 'all' }))[result.promptIdx],
+          ).toMatchObject(expectedMetrics);
+        }
+      },
+    );
+
     it('preserves a recoverable ERROR category when clearing a legacy rating', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);

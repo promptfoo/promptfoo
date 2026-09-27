@@ -1190,31 +1190,28 @@ function resolveClearingManualRating(
       },
     };
   }
+  // Edits normalize the category; legacy clear still needs its retained provenance.
+  const originalResult =
+    existingState?.status === 'legacy-active'
+      ? { ...result, failureReason: existingState.original.failureReason }
+      : result;
   const clearedGradingResult = result.gradingResult
     ? buildServerOwnedClearGradingResult(
-        // Edits normalize the category; legacy clear still needs its retained provenance.
-        existingState?.status === 'legacy-active'
-          ? { ...result, failureReason: existingState.original.failureReason }
-          : result,
+        originalResult,
         result.gradingResult,
         normalizedGradingResult,
       )
     : normalizedGradingResult;
   const success = clearedGradingResult.pass;
   const score = clearedGradingResult.score;
-  const preservedLegacyError =
-    existingState?.status === 'legacy-active' &&
-    existingState.original.failureReason === ResultFailureReason.ERROR;
-  const failureReason =
-    preservedLegacyError ||
-    hasExecutionError(
-      result,
-      getAutomatedClearComponents(clearedGradingResult.componentResults).length > 0,
-    )
-      ? ResultFailureReason.ERROR
-      : success
-        ? ResultFailureReason.NONE
-        : ResultFailureReason.ASSERT;
+  const failureReason = hasExecutionError(
+    originalResult,
+    getAutomatedClearComponents(clearedGradingResult.componentResults).length > 0,
+  )
+    ? ResultFailureReason.ERROR
+    : success
+      ? ResultFailureReason.NONE
+      : ResultFailureReason.ASSERT;
   return {
     gradingResult: clearedGradingResult,
     success,
