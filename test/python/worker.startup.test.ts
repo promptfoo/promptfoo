@@ -18,7 +18,14 @@ vi.mock('python-shell', () => ({
 function makeShell() {
   const created = Object.assign(new EventEmitter(), {
     stderr: new EventEmitter(),
-    childProcess: new EventEmitter(),
+    childProcess: Object.assign(new EventEmitter(), {
+      kill: vi.fn().mockReturnValue(true),
+      exitCode: null as number | null,
+      signalCode: null as NodeJS.Signals | null,
+      stdin: { destroy: vi.fn() },
+      stdout: { destroy: vi.fn() },
+      stderr: { destroy: vi.fn() },
+    }),
     send: vi.fn(),
     kill: vi.fn(),
   });
@@ -45,6 +52,183 @@ afterEach(() => {
 });
 
 describe('Python worker startup cancellation', () => {
+  it('waits for native close after forcing a worker that ignores graceful shutdown', async () => {
+    const onReady = vi.fn();
+    const worker = new PythonWorker('fixture.py', 'call_api', undefined, undefined, onReady);
+    const initialized = worker.initialize().catch((error: Error) => error.message);
+    await Promise.resolve();
+    shell.send.mockImplementation(() => {});
+    let settled = false;
+    const cleanup = worker.shutdown().then(() => {
+      settled = true;
+    });
+    const concurrent = worker.shutdown();
+    try {
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(shell.childProcess.kill).toHaveBeenCalledExactlyOnceWith('SIGKILL');
+      expect(settled).toBe(false);
+      expect(shell.send).toHaveBeenCalledOnce();
+      shell.emit('message', 'READY');
+      expect(worker.isReady()).toBe(false);
+      expect(onReady).not.toHaveBeenCalled();
+      shell.childProcess.emit('close', null, 'SIGKILL');
+      await cleanup;
+      await concurrent;
+      expect(settled).toBe(true);
+      expect(await initialized).toContain('initialization cancelled');
+    } finally {
+      shell.childProcess.emit('close', null, 'SIGKILL');
+      await cleanup;
+      await concurrent;
+    }
+  });
+
+  it('retires inherited pipes after forced termination while still waiting for native close', async () => {
+    const worker = new PythonWorker('fixture.py', 'call_api');
+    const initialized = worker.initialize().catch((error: Error) => error.message);
+    await Promise.resolve();
+    shell.send.mockImplementation(() => {});
+    const order: string[] = [];
+    shell.childProcess.kill.mockImplementation(() => {
+      order.push('kill');
+      return true;
+    });
+    for (const name of ['stdin', 'stdout', 'stderr'] as const) {
+      shell.childProcess[name].destroy.mockImplementation(() => {
+        order.push(name);
+      });
+    }
+    let settled = false;
+    const cleanup = worker.shutdown().then(() => {
+      settled = true;
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(order).toEqual(['kill', 'stdin', 'stdout', 'stderr']);
+      expect(settled).toBe(false);
+      shell.childProcess.emit('close', null, 'SIGKILL');
+      await cleanup;
+      expect(await initialized).toContain('initialization cancelled');
+    } finally {
+      shell.childProcess.emit('close', null, 'SIGKILL');
+      await cleanup;
+    }
+  });
+
+  it('retires inherited pipes when the direct worker has already exited gracefully', async () => {
+    const worker = new PythonWorker('fixture.py', 'call_api');
+    const initialized = worker.initialize();
+    await Promise.resolve();
+    shell.emit('message', 'READY');
+    await initialized;
+    shell.send.mockImplementation(() => {
+      shell.childProcess.exitCode = 0;
+      shell.childProcess.emit('exit', 0, null);
+    });
+    shell.childProcess.kill.mockReturnValue(false);
+    let outcome = 'pending';
+    const cleanup = worker.shutdown().then(
+      () => {
+        outcome = 'resolved';
+      },
+      (error: Error) => {
+        outcome = error.message;
+      },
+    );
+    try {
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(outcome).toBe('pending');
+      expect(shell.childProcess.kill).not.toHaveBeenCalled();
+      for (const name of ['stdin', 'stdout', 'stderr'] as const) {
+        expect(shell.childProcess[name].destroy).toHaveBeenCalledOnce();
+      }
+      shell.childProcess.emit('close', 0, null);
+      await cleanup;
+      expect(outcome).toBe('resolved');
+    } finally {
+      shell.childProcess.emit('close', 0, null);
+      await cleanup;
+    }
+  });
+
+  it('retains a worker when forced termination fails so cleanup can be retried', async () => {
+    const worker = new PythonWorker('fixture.py', 'call_api');
+    const initialized = worker.initialize().catch((error: Error) => error.message);
+    await Promise.resolve();
+    shell.send.mockImplementation(() => {});
+    shell.childProcess.kill.mockReturnValueOnce(false).mockReturnValue(true);
+    const first = worker.shutdown().then(
+      () => 'resolved',
+      (error: Error) => error.message,
+    );
+    await vi.advanceTimersByTimeAsync(5000);
+    try {
+      expect(await first).toContain('Failed to terminate Python worker');
+      for (const name of ['stdin', 'stdout', 'stderr'] as const) {
+        expect(shell.childProcess[name].destroy).not.toHaveBeenCalled();
+      }
+      const second = worker.shutdown();
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(shell.childProcess.kill).toHaveBeenCalledTimes(2);
+      for (const name of ['stdin', 'stdout', 'stderr'] as const) {
+        expect(shell.childProcess[name].destroy).toHaveBeenCalledOnce();
+      }
+      shell.childProcess.emit('close', null, 'SIGKILL');
+      await second;
+      expect(await initialized).toContain('initialization cancelled');
+    } finally {
+      shell.childProcess.emit('close', null, 'SIGKILL');
+    }
+  });
+
+  it('forces a startup timeout without abandoning the child before native close', async () => {
+    const worker = new PythonWorker('fixture.py', 'call_api');
+    const initialized = worker.initialize().catch((error: Error) => error.message);
+    await Promise.resolve();
+    shell.send.mockImplementation(() => {});
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(await initialized).toContain('failed to become ready');
+    let settled = false;
+    const cleanup = worker.shutdown().then(() => {
+      settled = true;
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(shell.childProcess.kill).toHaveBeenCalledWith('SIGKILL');
+      expect(settled).toBe(false);
+      expect(shell.send).toHaveBeenCalledOnce();
+      shell.childProcess.emit('close', null, 'SIGKILL');
+      await cleanup;
+    } finally {
+      shell.childProcess.emit('close', null, 'SIGKILL');
+      await cleanup;
+    }
+  });
+
+  it('still waits for native close when sending SHUTDOWN throws', async () => {
+    const worker = new PythonWorker('fixture.py', 'call_api');
+    const initialized = worker.initialize().catch((error: Error) => error.message);
+    await Promise.resolve();
+    shell.send.mockImplementation(() => {
+      throw new Error('closed stdin');
+    });
+    let settled = false;
+    const cleanup = worker.shutdown().then(() => {
+      settled = true;
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(shell.childProcess.kill).toHaveBeenCalledExactlyOnceWith('SIGKILL');
+      expect(settled).toBe(false);
+      shell.childProcess.emit('close', null, 'SIGKILL');
+      await cleanup;
+      expect(await initialized).toContain('initialization cancelled');
+    } finally {
+      shell.childProcess.emit('close', null, 'SIGKILL');
+      await cleanup;
+    }
+  });
+
   it.each(['before cleanup', 'during cleanup'])(
     'settles a failed spawn whose native close occurs %s without a PythonShell close',
     async (timing) => {

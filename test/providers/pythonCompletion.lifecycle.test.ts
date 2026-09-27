@@ -94,31 +94,76 @@ describe('Python provider resource lifetime', () => {
     },
   );
 
-  it('joins initialization before releasing the pool on shutdown', async () => {
+  it('stops an initializing pool before waiting for readiness', async () => {
     const pool = createPool();
     const ready = deferred();
     const started = deferred();
+    const startupError = new Error('worker startup cancelled');
+    let rejectStartup!: (error: Error) => void;
+    const cancelled = new Promise<void>((_resolve, reject) => {
+      rejectStartup = reject;
+    });
     pool.initialize.mockImplementation(() => {
       started.resolve();
-      return ready.promise;
+      return Promise.race([ready.promise, cancelled]);
+    });
+    pool.shutdown.mockImplementation(async () => {
+      rejectStartup(startupError);
     });
     mocks.createPool.mockReturnValue(pool);
     const provider = createProvider();
-    const initializing = provider.initialize();
+    const initializing = provider.initialize().catch((error) => error);
     await started.promise;
     expect(pool.initialize).toHaveBeenCalledOnce();
 
     const stopping = provider.shutdown();
+    try {
+      await vi.waitFor(() => expect(pool.shutdown).toHaveBeenCalledOnce());
+      await stopping;
+      expect(await initializing).toBe(startupError);
+    } finally {
+      ready.resolve();
+      await Promise.all([initializing, stopping]);
+    }
+    expect(pool.shutdown).toHaveBeenCalledOnce();
+  });
+
+  it('shares pending readiness without disposing the owned pool', async () => {
+    const pool = createPool();
+    const ready = deferred();
+    pool.initialize.mockReturnValue(ready.promise);
+    mocks.createPool.mockReturnValue(pool);
+    const provider = createProvider();
+    const first = provider.initialize();
+    await vi.waitFor(() => expect(pool.initialize).toHaveBeenCalledOnce());
+    const second = provider.initialize();
+    await Promise.resolve();
+    expect(pool.shutdown).not.toHaveBeenCalled();
+    ready.resolve();
+    await Promise.all([first, second]);
+    expect(mocks.createPool).toHaveBeenCalledOnce();
+  });
+
+  it('shares failed-startup cleanup with an overlapping explicit shutdown', async () => {
+    const pool = createPool();
+    const closed = deferred();
+    const startupError = new Error('startup failed');
+    pool.initialize.mockRejectedValue(startupError);
+    pool.shutdown.mockReturnValue(closed.promise);
+    mocks.createPool.mockReturnValue(pool);
+    const provider = createProvider();
+    const initializing = provider.initialize().catch((error) => error);
+    await vi.waitFor(() => expect(pool.shutdown).toHaveBeenCalledOnce());
     let stopped = false;
-    void stopping.then(() => {
+    const stopping = provider.shutdown().then(() => {
       stopped = true;
     });
     await Promise.resolve();
-    expect(pool.shutdown).not.toHaveBeenCalled();
     expect(stopped).toBe(false);
-
-    ready.resolve();
-    await Promise.all([initializing, stopping]);
+    expect(pool.shutdown).toHaveBeenCalledOnce();
+    closed.resolve();
+    await stopping;
+    expect(await initializing).toBe(startupError);
     expect(pool.shutdown).toHaveBeenCalledOnce();
   });
 
@@ -190,8 +235,9 @@ describe('Python provider resource lifetime', () => {
     'retains the existing pool for retry when %s shutdown fails',
     async (mode) => {
       const pool = createPool();
+      const replacement = createPool();
       pool.shutdown.mockRejectedValueOnce(new Error('worker kill failed'));
-      mocks.createPool.mockReturnValue(pool);
+      mocks.createPool.mockReturnValueOnce(pool).mockReturnValueOnce(replacement);
       const provider = createProvider();
       await provider.initialize();
 
@@ -200,13 +246,13 @@ describe('Python provider resource lifetime', () => {
       } else {
         await providerRegistry.shutdownAll();
       }
-      await provider.initialize();
-      expect(mocks.createPool).toHaveBeenCalledOnce();
-
-      await providerRegistry.shutdownAll();
+      await provider.callApi('after failed shutdown');
       expect(pool.shutdown).toHaveBeenCalledTimes(2);
-      await provider.initialize();
       expect(mocks.createPool).toHaveBeenCalledTimes(2);
+      expect(pool.execute).not.toHaveBeenCalled();
+      expect(replacement.execute).toHaveBeenCalledOnce();
+      await providerRegistry.shutdownAll();
+      expect(replacement.shutdown).toHaveBeenCalledOnce();
     },
   );
 

@@ -32,6 +32,7 @@ export class PythonWorker {
   } | null = null;
   private requestTimeout: NodeJS.Timeout | null = null;
   private startupCancellation: AbortController | null = null;
+  private shutdownPromise: Promise<void> | null = null;
 
   constructor(
     private scriptPath: string,
@@ -70,13 +71,10 @@ export class PythonWorker {
     return new Promise((resolve, reject) => {
       const readyTimeout = setTimeout(() => {
         finishStartup();
-        // Kill the process to prevent orphaned Python processes
-        // and avoid triggering handleCrash() which would retry
-        this.shuttingDown = true;
-        if (this.process) {
-          this.process.kill('SIGTERM');
-          this.process = null;
-        }
+        // Share cleanup with callers without replacing the startup timeout error.
+        void this.shutdown().catch((error) => {
+          logger.error('Error terminating timed-out Python worker', { error });
+        });
         reject(new Error('Worker failed to become ready within timeout'));
       }, 30000);
       const cancelStartup = () => {
@@ -93,7 +91,7 @@ export class PythonWorker {
       startup.signal.addEventListener('abort', cancelStartup, { once: true });
 
       workerProcess.on('message', (message: string) => {
-        if (this.process !== workerProcess) {
+        if (this.process !== workerProcess || this.shuttingDown) {
           return;
         }
         if (message.trim() === 'READY') {
@@ -305,42 +303,64 @@ export class PythonWorker {
     return this.busy;
   }
 
-  async shutdown(): Promise<void> {
+  shutdown(): Promise<void> {
+    if (this.shutdownPromise) {
+      return this.shutdownPromise;
+    }
     this.startupCancellation?.abort(new Error('Worker initialization cancelled'));
     this.startupCancellation = null;
-    if (!this.process) {
-      return;
+    const workerProcess = this.process;
+    if (!workerProcess) {
+      return Promise.resolve();
     }
 
-    try {
-      this.shuttingDown = true;
-
-      // Reject any in-flight request promptly
-      if (this.pendingRequest) {
-        this.pendingRequest.reject(new Error('Worker shutting down'));
-        this.pendingRequest = null;
-      }
-
-      // Note: PythonShell.send() adds newline automatically in 'text' mode
-      this.process.send('SHUTDOWN');
-
-      // Wait for exit (5s timeout)
-      await Promise.race([
-        new Promise<void>((resolve) => {
-          this.process!.childProcess.once('close', () => resolve());
-        }),
-        new Promise<void>((resolve) => setTimeout(resolve, 5000).unref()),
-      ]);
-    } catch (error) {
-      logger.error(`Error during worker shutdown: ${error}`);
-    } finally {
-      if (this.process) {
-        this.process.kill('SIGTERM');
-        this.process = null;
-      }
-      this.ready = false;
-      this.busy = false;
-      this.shuttingDown = false;
+    this.shuttingDown = true;
+    this.ready = false;
+    this.busy = false;
+    if (this.pendingRequest) {
+      this.pendingRequest.reject(new Error('Worker shutting down'));
+      this.pendingRequest = null;
     }
+
+    let forceKillTimer: NodeJS.Timeout;
+    let onClose: () => void;
+    const shutdown = new Promise<void>((resolve, reject) => {
+      onClose = resolve;
+      workerProcess.childProcess.once('close', onClose);
+      const forceKill = () => {
+        try {
+          const child = workerProcess.childProcess;
+          if (child.exitCode === null && child.signalCode === null && !child.kill('SIGKILL')) {
+            throw new Error('Failed to terminate Python worker');
+          }
+          // Descendants can keep inherited pipes open after the worker exits.
+          // Retire only our endpoints, then still wait for native child close.
+          child.stdin?.destroy();
+          child.stdout?.destroy();
+          child.stderr?.destroy();
+        } catch (error) {
+          reject(error);
+        }
+      };
+      // Give the protocol its existing grace period, then wait for actual exit.
+      forceKillTimer = setTimeout(forceKill, 5000);
+      forceKillTimer.unref();
+      try {
+        workerProcess.send('SHUTDOWN');
+      } catch {
+        forceKill();
+      }
+    }).finally(() => {
+      clearTimeout(forceKillTimer);
+      workerProcess.childProcess.removeListener('close', onClose);
+      if (!this.process) {
+        this.shuttingDown = false;
+      }
+      if (this.shutdownPromise === shutdown) {
+        this.shutdownPromise = null;
+      }
+    });
+    this.shutdownPromise = shutdown;
+    return shutdown;
   }
 }

@@ -336,7 +336,14 @@ export async function runPython<T = unknown>(
         const pyshell = new PythonShell('wrapper.py', pythonOptions);
         const stderrLogger = new PythonStderrLogger();
         const onAbort = () => {
-          pyshell.childProcess.kill('SIGKILL');
+          const child = pyshell.childProcess;
+          if (child.exitCode !== null || child.signalCode !== null || child.kill('SIGKILL')) {
+            // Descendants can retain inherited pipes after the owned child exits.
+            // Only retire our endpoints; inherited host stdio is null here.
+            child.stdin?.destroy();
+            child.stdout?.destroy();
+            child.stderr?.destroy();
+          }
         };
         let processError: Error | undefined;
         pyshell.on('error', (error) => {

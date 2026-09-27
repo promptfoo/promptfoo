@@ -181,7 +181,7 @@ export class PythonProvider implements ApiProvider {
   private configResolved = false;
   private configAbortController: AbortController | null = null;
   private poolPromise: Promise<PythonWorkerPool> | null = null;
-  private failedPool: PythonWorkerPool | null = null;
+  private ownedPool: PythonWorkerPool | null = null;
   private shutdownPromise: Promise<void> | null = null;
   public label: string | undefined;
 
@@ -217,19 +217,19 @@ export class PythonProvider implements ApiProvider {
     while (this.shutdownPromise) {
       await this.shutdownPromise;
     }
-    // A failed startup may still own workers if its cleanup rejected. Dispose
-    // those workers before retrying; a partial pool is never ready for calls.
-    if (this.failedPool) {
-      await this.shutdown();
-    }
     if (this.poolPromise) {
       return this.poolPromise;
+    }
+    // A failed startup may still own workers if its cleanup rejected. Dispose
+    // those workers before retrying; a partial pool is never ready for calls.
+    if (this.ownedPool) {
+      await this.shutdown();
+      return this.getPool();
     }
 
     // Register before startup so shutdownAll also owns an initializing provider.
     providerRegistry.register(this);
     this.poolPromise = (async () => {
-      let pool: PythonWorkerPool | undefined;
       try {
         if (!this.configResolved) {
           this.configAbortController = new AbortController();
@@ -253,26 +253,27 @@ export class PythonProvider implements ApiProvider {
           path.join(this.options?.config.basePath || '', this.scriptPath),
         );
 
-        pool = new PythonWorkerPool(
+        const pool = new PythonWorkerPool(
           absPath,
           this.functionName || 'call_api',
           workerCount,
           getConfiguredPythonPath(this.config.pythonExecutable),
           this.config.timeout,
         );
-
+        this.ownedPool = pool;
         await pool.initialize();
         logger.debug(`Initialized Python provider ${this.id()} with ${workerCount} workers`);
         return pool;
       } catch (error) {
-        await pool?.shutdown().catch((cleanupError) => {
-          this.failedPool = pool ?? null;
-          providerRegistry.register(this);
-          logger.warn('Failed to clean up Python provider startup', { error: cleanupError });
-        });
+        // Also let synchronous construction failures finish assigning poolPromise.
+        await Promise.resolve();
         this.poolPromise = null;
-        if (!this.failedPool) {
-          providerRegistry.unregister(this);
+        // An explicit shutdown already owns cleanup and joins this readiness
+        // promise. Awaiting it here would make the two promises wait on each other.
+        if (!this.shutdownPromise) {
+          await this.shutdown().catch((cleanupError) => {
+            logger.warn('Failed to clean up Python provider startup', { error: cleanupError });
+          });
         }
         throw error;
       }
@@ -438,14 +439,16 @@ export class PythonProvider implements ApiProvider {
   async shutdown(): Promise<void> {
     if (!this.shutdownPromise) {
       this.configAbortController?.abort();
-      this.shutdownPromise = (async () => {
+      const initializing = this.poolPromise;
+      this.poolPromise = null;
+      this.shutdownPromise = Promise.resolve().then(async () => {
         try {
-          // Startup reports its own error; any partial pool whose cleanup failed
-          // remains owned separately from the promise for a ready pool.
-          const pool = (await this.poolPromise?.catch(() => null)) ?? this.failedPool;
-          await pool?.shutdown();
+          // Stop owned workers before joining startup, which may be waiting for
+          // their READY message. Keep ownership if stopping the workers fails.
+          await this.ownedPool?.shutdown();
+          this.ownedPool = null;
+          await initializing?.catch(() => null);
           this.poolPromise = null;
-          this.failedPool = null;
           providerRegistry.unregister(this);
         } catch (error) {
           // Global cleanup releases its snapshot before awaiting providers. A pool
@@ -455,7 +458,7 @@ export class PythonProvider implements ApiProvider {
         } finally {
           this.shutdownPromise = null;
         }
-      })();
+      });
     }
     return this.shutdownPromise;
   }

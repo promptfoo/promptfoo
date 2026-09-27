@@ -953,6 +953,7 @@ async function doEvalWithEnv(
 
     // Run the evaluation!!!!!!
     let ret;
+    let cleanupFailure: PromiseRejectedResult | undefined;
     try {
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
@@ -1000,10 +1001,7 @@ async function doEvalWithEnv(
         );
         // A cleanup failure must not mask an evaluation failure or prevent other
         // providers from releasing their resources.
-        const failure = cleanupResults.find((result) => result.status === 'rejected');
-        if (ret && failure?.status === 'rejected') {
-          throw failure.reason;
-        }
+        cleanupFailure = cleanupResults.find((result) => result.status === 'rejected');
       } finally {
         cleanupHandler();
       }
@@ -1011,6 +1009,9 @@ async function doEvalWithEnv(
 
     // A cancelled run must not start sharing, output reporting, or watch mode.
     if (paused) {
+      if (cleanupFailure) {
+        throw cleanupFailure.reason;
+      }
       if (cmdObj.write !== false) {
         printBorder();
         logger.info(`${chalk.yellow('⏸')} Evaluation paused. ID: ${chalk.cyan(evalRecord.id)}`);
@@ -1322,6 +1323,11 @@ async function doEvalWithEnv(
       showRedteamProviderLabelMissingWarning(testSuite);
     }
 
+    // Preserve completed exports and the existing pass-rate early return before
+    // surfacing a cleanup error. Evaluation errors still take precedence above.
+    if (cleanupFailure) {
+      throw cleanupFailure.reason;
+    }
     return ret;
   };
 

@@ -83,7 +83,15 @@ const { mockPythonShellInstance, MockPythonShell } = vi.hoisted(() => {
     stdout: { on: vi.fn() },
     stderr: { on: vi.fn() },
     on: vi.fn(),
-    childProcess: { once: vi.fn(), kill: vi.fn() },
+    childProcess: {
+      once: vi.fn(),
+      kill: vi.fn(),
+      exitCode: null as number | null,
+      signalCode: null as NodeJS.Signals | null,
+      stdin: null as { destroy(): void } | null,
+      stdout: null as { destroy(): void } | null,
+      stderr: null as { destroy(): void } | null,
+    },
     end: vi.fn(),
   };
   // Create a proper class that can be used with 'new'
@@ -123,7 +131,12 @@ describe('Python Utils', () => {
     mockPythonShellInstance.end.mockReset();
     mockPythonShellInstance.on.mockReset();
     mockPythonShellInstance.childProcess.once.mockReset();
-    mockPythonShellInstance.childProcess.kill.mockReset();
+    mockPythonShellInstance.childProcess.kill.mockReset().mockReturnValue(true);
+    mockPythonShellInstance.childProcess.exitCode = null;
+    mockPythonShellInstance.childProcess.signalCode = null;
+    mockPythonShellInstance.childProcess.stdin = { destroy: vi.fn() };
+    mockPythonShellInstance.childProcess.stdout = { destroy: vi.fn() };
+    mockPythonShellInstance.childProcess.stderr = { destroy: vi.fn() };
     // Set default mock return values
     vi.mocked(getEnvString).mockReturnValue('');
     vi.mocked(getEnvBool).mockReturnValue(false);
@@ -640,6 +653,59 @@ describe('Python Utils', () => {
       expect(await running).toBe(controller.signal.reason);
       expect(removeSecureTempDirectory).toHaveBeenCalledOnce();
     });
+
+    it.each(['running', 'exited', 'kill failed', 'inherited stdio'] as const)(
+      'retires only canceled child-owned pipes and still waits for close (%s)',
+      async (state) => {
+        pythonUtils.state.cachedPythonPath = 'python';
+        const controller = new AbortController();
+        const child = mockPythonShellInstance.childProcess;
+        if (state === 'exited') {
+          child.exitCode = 0;
+        } else if (state === 'kill failed') {
+          child.kill.mockReturnValue(false);
+        } else if (state === 'inherited stdio') {
+          vi.mocked(getEnvBool).mockReturnValue(true);
+          child.stdin = child.stdout = child.stderr = null;
+        }
+        let settled = false;
+        const running = pythonUtils
+          .runPython('script.py', 'get_config', [], { signal: controller.signal })
+          .catch((error: unknown) => error)
+          .finally(() => {
+            settled = true;
+          });
+        await vi.waitFor(() => expect(mockPythonShellInstance.end).toHaveBeenCalledOnce());
+        controller.abort();
+        try {
+          await Promise.resolve();
+          expect(settled).toBe(false);
+          expect(removeSecureTempDirectory).not.toHaveBeenCalled();
+          for (const stream of [child.stdin, child.stdout, child.stderr]) {
+            if (stream) {
+              expect(stream.destroy).toHaveBeenCalledTimes(state === 'kill failed' ? 0 : 1);
+            }
+          }
+          if (state === 'exited') {
+            expect(child.kill).not.toHaveBeenCalled();
+          } else {
+            expect(child.kill).toHaveBeenCalledExactlyOnceWith('SIGKILL');
+          }
+          if (state === 'inherited stdio') {
+            expect(PythonShell).toHaveBeenCalledWith(
+              'wrapper.py',
+              expect.objectContaining({ stdio: 'inherit' }),
+            );
+          }
+        } finally {
+          child.once.mock.calls.find(([event]) => event === 'close')?.[1]();
+          await running;
+        }
+        expect(await running).toBe(controller.signal.reason);
+        expect(removeSecureTempDirectory).toHaveBeenCalledOnce();
+        expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
+      },
+    );
 
     it.each(['abort', 'spawn error'] as const)(
       'retains temporary files and waits for native close after %s',
