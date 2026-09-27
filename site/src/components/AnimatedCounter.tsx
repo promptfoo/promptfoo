@@ -21,11 +21,12 @@ export default function AnimatedCounter({
     const end = Number.parseInt(target.replace(/,/g, ''), 10);
     let frame: number | undefined;
     let started = false;
+    let disposed = false;
     let observer: IntersectionObserver | undefined;
     setCount(0);
 
     const start = () => {
-      if (started) {
+      if (started || disposed) {
         return;
       }
       started = true;
@@ -71,6 +72,7 @@ export default function AnimatedCounter({
     }
 
     return () => {
+      disposed = true;
       observer?.disconnect();
       if (frame !== undefined) {
         cancelAnimationFrame(frame);

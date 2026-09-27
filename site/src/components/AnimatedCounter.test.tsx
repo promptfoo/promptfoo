@@ -127,6 +127,37 @@ describe('AnimatedCounter', () => {
     expect(screen.getByText('2,000!')).toBeInTheDocument();
   });
 
+  it('ignores an intersection callback queued before unmount', () => {
+    const { unmount } = render(<AnimatedCounter target="500" />);
+    const queuedIntersection = intersect;
+    unmount();
+    queuedIntersection(true);
+    expect(requestAnimationFrame).not.toHaveBeenCalled();
+    expect(frames.size).toBe(0);
+  });
+
+  it.each([false, true])(
+    'ignores the previous target observer with reduced motion %s',
+    (reducedMotion) => {
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn(() => ({ matches: reducedMotion }) as MediaQueryList),
+      );
+      const { rerender } = render(<AnimatedCounter target="500" />);
+      const queuedIntersection = intersect;
+      rerender(<AnimatedCounter target="2,000" />);
+      queuedIntersection(true);
+      expect(frames.size).toBe(0);
+      expect(screen.getByText('0')).toBeInTheDocument();
+      intersect(true);
+      if (!reducedMotion) {
+        advance(100);
+        advance(3600);
+      }
+      expect(screen.getByText('2,000')).toBeInTheDocument();
+    },
+  );
+
   it('still reaches its target without IntersectionObserver support', () => {
     vi.stubGlobal('IntersectionObserver', undefined);
     render(<AnimatedCounter target="500" suffix="+" />);
