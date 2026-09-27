@@ -10,6 +10,8 @@ CrewAI is a framework for orchestrating role-playing, autonomous AI agents. By f
 
 You can run this example with:
 
+On Windows (PowerShell), use `npx.cmd` instead of `npx` for the Promptfoo commands in this guide.
+
 ```bash
 npx promptfoo@latest init --example integration-crewai
 cd integration-crewai
@@ -68,8 +70,8 @@ On Windows (PowerShell):
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+$env:PROMPTFOO_PYTHON = (Resolve-Path .\.venv\Scripts\python.exe).Path
 ```
 
 CrewAI installs the OpenAI SDK, Pydantic, and its other runtime dependencies.
