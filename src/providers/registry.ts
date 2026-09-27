@@ -102,6 +102,7 @@ import { RubyProvider } from './rubyCompletion';
 import { createScriptBasedProviderFactory } from './scriptBasedProvider';
 import { ScriptCompletionProvider } from './scriptCompletion';
 import { SequenceProvider } from './sequence';
+import { modelNameFromProviderPath } from './shared';
 import { SimulatedUser } from './simulatedUser';
 import { createSnowflakeProvider } from './snowflake';
 import { createTogetherAiProvider } from './togetherai';
@@ -198,7 +199,7 @@ function getProviderEnvAliasGroups(providerPath: string): readonly (readonly str
       ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION'],
     ];
   }
-  if (/^(?:google|palm):gemini-omni-/.test(providerPath)) {
+  if (/^(?:google|palm):(?:gemini-omni-flash-preview|gemini-omni-1\.1-flash)$/.test(providerPath)) {
     return [['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'PALM_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY']];
   }
   if (/^(?:google|palm):/.test(providerPath)) {
@@ -327,7 +328,7 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      const modelName = providerPath.split(':')[1];
+      const modelName = modelNameFromProviderPath(providerPath, 1);
       return new AI21ChatCompletionProvider(modelName, providerOptions);
     },
   },
@@ -427,7 +428,7 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
-      const modelName = splits[2];
+      const modelName = modelNameFromProviderPath(providerPath, 2);
 
       if (modelType === 'messages') {
         return new AnthropicMessagesProvider(modelName, providerOptions);
@@ -436,7 +437,10 @@ export const providerMap: ProviderFactory[] = [
         return new AnthropicCompletionProvider(modelName, providerOptions);
       }
       if (AnthropicCompletionProvider.ANTHROPIC_COMPLETION_MODELS.includes(modelType)) {
-        return new AnthropicCompletionProvider(modelType, providerOptions);
+        return new AnthropicCompletionProvider(
+          modelNameFromProviderPath(providerPath, 1),
+          providerOptions,
+        );
       }
 
       // The second part is a model name: route it to the Messages API. Catalogued ids
@@ -446,7 +450,10 @@ export const providerMap: ProviderFactory[] = [
       // not_found_error if the id is not real.
       const modelIds = ANTHROPIC_MODELS.map((model) => model.id);
       if (modelIds.includes(modelType) || looksLikeClaudeModelId(modelType)) {
-        return new AnthropicMessagesProvider(modelType, providerOptions);
+        return new AnthropicMessagesProvider(
+          modelNameFromProviderPath(providerPath, 1),
+          providerOptions,
+        );
       }
 
       throw new Error(
@@ -480,7 +487,7 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
-      const deploymentName = splits[2];
+      const deploymentName = modelNameFromProviderPath(providerPath, 2);
 
       // Azure model types that have no sensible default deployment must name one in
       // the provider path (`azure:<type>:<name>`). Without this, the registry would
@@ -1513,7 +1520,7 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       return new VoyageEmbeddingProvider(
-        providerPath.split(':')[1],
+        modelNameFromProviderPath(providerPath, 1),
         providerOptions.config,
         providerOptions.env,
       );
@@ -1745,7 +1752,7 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      const modelName = providerPath.split(':')[2];
+      const modelName = modelNameFromProviderPath(providerPath, 2);
       return new PromptfooModelProvider(modelName, {
         ...providerOptions,
         model: modelName,
