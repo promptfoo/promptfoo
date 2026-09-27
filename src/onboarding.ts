@@ -468,15 +468,16 @@ export async function createDummyFiles(
     }
 
     const choices: { name: string; value: (string | ProviderOptions)[] }[] = [
-      { name: `I'll choose later`, value: ['openai:gpt-5.6-luna', 'openai:gpt-5.6-terra'] },
+      { name: `I'll choose later`, value: ['openai:gpt-6-luna', 'openai:gpt-6-sol'] },
       {
-        name: '[OpenAI] GPT-5.6 Luna, Terra, Sol, GPT-6 Astra, ...',
+        name: action === 'agent' ? '[OpenAI] GPT-6 Sol' : '[OpenAI] GPT-6 Luna and Sol',
         value:
           action === 'agent'
             ? [
                 {
-                  id: 'openai:chat:gpt-5.6-terra',
+                  id: 'openai:chat:gpt-6-sol',
                   config: {
+                    reasoning_effort: 'none',
                     tools: [
                       {
                         type: 'function',
@@ -499,13 +500,13 @@ export async function createDummyFiles(
                   },
                 },
               ]
-            : ['openai:gpt-5.6-luna', 'openai:gpt-5.6-terra'],
+            : ['openai:gpt-6-luna', 'openai:gpt-6-sol'],
       },
       {
         name: '[Anthropic] Claude Fable, Opus, Sonnet, Haiku, ...',
         value: [
           'anthropic:messages:claude-fable-5',
-          'anthropic:messages:claude-opus-5',
+          'anthropic:messages:claude-opus-5-5',
           'anthropic:messages:claude-opus-4-8',
           'anthropic:messages:claude-sonnet-5',
           'anthropic:messages:claude-sonnet-4-6',
@@ -648,8 +649,8 @@ export async function createDummyFiles(
         });
       }
     } else {
-      providers.push('openai:gpt-5.6-luna');
-      providers.push('openai:gpt-5.6-terra');
+      providers.push('openai:gpt-6-luna');
+      providers.push('openai:gpt-6-sol');
     }
 
     if (action === 'compare') {
@@ -687,8 +688,8 @@ export async function createDummyFiles(
     language = 'not_sure';
     prompts.push(`Write a tweet about {{topic}}`);
     prompts.push(`Write a concise, funny tweet about {{topic}}`);
-    providers.push('openai:gpt-5.6-luna');
-    providers.push('openai:gpt-5.6-terra');
+    providers.push('openai:gpt-6-luna');
+    providers.push('openai:gpt-6-sol');
   }
 
   const nunjucks = getNunjucksEngine();

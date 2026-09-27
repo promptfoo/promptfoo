@@ -1,4 +1,5 @@
 ---
+title: Anthropic
 sidebar_position: 2
 description: "Deploy Anthropic's Claude models including Opus, Sonnet, and Haiku for advanced reasoning and conversational AI applications"
 ---
@@ -59,6 +60,7 @@ These models currently resolve on the Anthropic Messages API:
 | `anthropic:messages:claude-mythos-5-1`                              | Claude Mythos 5.1 |
 | `anthropic:messages:claude-fable-5`                                 | Claude Fable 5    |
 | `anthropic:messages:claude-mythos-5`                                | Claude Mythos 5   |
+| `anthropic:messages:claude-opus-5-5`                                | Claude Opus 5.5   |
 | `anthropic:messages:claude-opus-5`                                  | Claude Opus 5     |
 | `anthropic:messages:claude-opus-4-8`                                | Claude 4.8 Opus   |
 | `anthropic:messages:claude-opus-4-7`                                | Claude 4.7 Opus   |
@@ -74,10 +76,15 @@ the same `not_found_error` a retired model returns.
 
 ### Retired on the Anthropic API
 
-These IDs return `404 not_found_error` from Anthropic. Promptfoo still accepts them — they
-remain valid on AWS Bedrock, GCP Vertex, and OpenAI-compatible gateways, which set their own
-lifecycle dates, and cost attribution for historical evals needs the rates — but a direct
-`anthropic:messages:` call will fail.
+These IDs return `404 not_found_error` from Anthropic, so a direct `anthropic:messages:`
+call will fail. Promptfoo still keeps their pricing, because cost attribution on historical
+evals needs it and because partner platforms set their own lifecycle dates.
+
+Availability elsewhere is per-model, not a blanket rule — check the row in
+[Cross-Platform Model Availability](#cross-platform-model-availability) before assuming a
+retired ID still works somewhere. Three of these are withdrawn from Bedrock as well
+(`claude-3-opus-20240229`, `claude-opus-4-20250514`, `claude-3-5-haiku-20241022`) and are
+rejected locally with `Unknown Amazon Bedrock model`.
 
 | Model ID                     | Description            | Suggested replacement |
 | ---------------------------- | ---------------------- | --------------------- |
@@ -114,6 +121,7 @@ Claude models are available across multiple platforms. Here's how the model name
 | Claude Mythos 5.1 | claude-mythos-5-1                              | claude-mythos-5-1 (limited)                                           | anthropic.claude-mythos-5-1 (limited)             | claude-mythos-5-1 (limited)                    |
 | Claude Fable 5    | claude-fable-5                                 | claude-fable-5                                                        | anthropic.claude-fable-5                          | claude-fable-5                                 |
 | Claude Mythos 5   | claude-mythos-5                                | Not available                                                         | anthropic.claude-mythos-5 (limited)               | Limited availability; ID not public            |
+| Claude Opus 5.5   | claude-opus-5-5                                | claude-opus-5-5                                                       | anthropic.claude-opus-5-5                         | claude-opus-5-5                                |
 | Claude Opus 5     | claude-opus-5                                  | claude-opus-5                                                         | anthropic.claude-opus-5                           | claude-opus-5                                  |
 | Claude 4.8 Opus   | claude-opus-4-8                                | claude-opus-4-8                                                       | anthropic.claude-opus-4-8                         | claude-opus-4-8                                |
 | Claude 4.7 Opus   | claude-opus-4-7                                | claude-opus-4-7                                                       | anthropic.claude-opus-4-7                         | claude-opus-4-7                                |
@@ -124,41 +132,41 @@ Claude models are available across multiple platforms. Here's how the model name
 | Claude 4.5 Sonnet | claude-sonnet-4-5-20250929 (claude-sonnet-4-5) | claude-sonnet-4-5-20250929                                            | anthropic.claude-sonnet-4-5-20250929-v1:0         | claude-sonnet-4-5@20250929                     |
 | Claude 4.5 Haiku  | claude-haiku-4-5-20251001 (claude-haiku-4-5)   | claude-haiku-4-5-20251001                                             | anthropic.claude-haiku-4-5-20251001-v1:0          | claude-haiku-4-5@20251001                      |
 | Claude 4.1 Opus   | Retired on the direct API                      | claude-opus-4-1-20250805                                              | anthropic.claude-opus-4-1-20250805-v1:0           | claude-opus-4-1@20250805                       |
-| Claude 4 Opus     | Retired on the direct API                      | claude-opus-4-20250514                                                | anthropic.claude-opus-4-20250514-v1:0             | claude-opus-4@20250514                         |
+| Claude 4 Opus     | Retired on the direct API                      | claude-opus-4-20250514                                                | Withdrawn from Bedrock                            | claude-opus-4@20250514                         |
 | Claude 4 Sonnet   | Retired on the direct API                      | claude-sonnet-4-20250514                                              | anthropic.claude-sonnet-4-20250514-v1:0           | claude-sonnet-4@20250514                       |
 | Claude 3.7 Sonnet | Retired on the direct API                      | claude-3-7-sonnet-20250219                                            | anthropic.claude-3-7-sonnet-20250219-v1:0         | claude-3-7-sonnet@20250219                     |
 | Claude 3.5 Sonnet | Retired on the direct API                      | claude-3-5-sonnet-20241022                                            | anthropic.claude-3-5-sonnet-20241022-v2:0         | claude-3-5-sonnet-v2@20241022                  |
-| Claude 3.5 Haiku  | Retired on the direct API                      | claude-3-5-haiku-20241022                                             | anthropic.claude-3-5-haiku-20241022-v1:0          | claude-3-5-haiku@20241022                      |
-| Claude 3 Opus     | Retired on the direct API                      | claude-3-opus-20240229                                                | anthropic.claude-3-opus-20240229-v1:0             | claude-3-opus@20240229                         |
+| Claude 3.5 Haiku  | Retired on the direct API                      | claude-3-5-haiku-20241022                                             | Withdrawn from Bedrock                            | claude-3-5-haiku@20241022                      |
+| Claude 3 Opus     | Retired on the direct API                      | claude-3-opus-20240229                                                | Withdrawn from Bedrock                            | claude-3-opus@20240229                         |
 | Claude 3 Haiku    | Retired on the direct API                      | claude-3-haiku-20240307                                               | anthropic.claude-3-haiku-20240307-v1:0            | claude-3-haiku@20240307                        |
 
 ### Supported Parameters
 
-| Config Property | Environment Variable  | Description                                                                                       |
-| --------------- | --------------------- | ------------------------------------------------------------------------------------------------- |
-| apiKey          | ANTHROPIC_API_KEY     | Your API key from Anthropic                                                                       |
-| apiKeyRequired  | -                     | Skip the API key preflight and authenticate via a local Claude Code session                       |
-| apiBaseUrl      | ANTHROPIC_BASE_URL    | The base URL for requests to the Anthropic API                                                    |
-| temperature     | ANTHROPIC_TEMPERATURE | Controls the randomness of the output (default: 0). Omitted when `top_p` is set.                  |
-| max_tokens      | ANTHROPIC_MAX_TOKENS  | The maximum length of the generated text (default: 1024, or 2048 on models that think by default) |
-| cost            | -                     | Legacy per-token override applied to both input and output pricing                                |
-| inputCost       | -                     | Override input token pricing in promptfoo cost estimates                                          |
-| outputCost      | -                     | Override output token pricing in promptfoo cost estimates                                         |
-| top_p           | -                     | Controls nucleus sampling. Mutually exclusive with `temperature`.                                 |
-| top_k           | -                     | Only sample from the top K options for each subsequent token                                      |
-| stop_sequences  | -                     | Array of strings that will stop generation when encountered                                       |
-| stream          | -                     | Enable streaming (required when `max_tokens` > 21,333)                                            |
-| tools           | -                     | An array of tool or function definitions for the model to call                                    |
-| tool_choice     | -                     | An object specifying the tool to call                                                             |
-| effort          | -                     | Output effort level: `low`, `medium`, `high`, `xhigh`, or `max`                                   |
-| output_format   | -                     | JSON schema configuration for structured outputs                                                  |
-| thinking        | -                     | Configuration for Claude's extended thinking (`enabled`, `adaptive`, or `disabled`)               |
-| showThinking    | -                     | Whether to include thinking content in the output (default: true)                                 |
-| cache_control   | -                     | Auto-apply cache_control to the last cacheable block in the request                               |
-| metadata        | -                     | Request metadata such as `user_id` for tracking purposes                                          |
-| service_tier    | -                     | Priority tier: `auto` (default) or `standard_only`                                                |
-| headers         | -                     | Additional headers to be sent with the API request                                                |
-| extra_body      | -                     | Additional parameters to be included in the API request body                                      |
+| Config Property | Environment Variable  | Description                                                                                                                                                                           |
+| --------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| apiKey          | ANTHROPIC_API_KEY     | Your API key from Anthropic                                                                                                                                                           |
+| apiKeyRequired  | -                     | Skip the API key preflight and authenticate via a local Claude Code session                                                                                                           |
+| apiBaseUrl      | ANTHROPIC_BASE_URL    | The base URL for requests to the Anthropic API                                                                                                                                        |
+| temperature     | ANTHROPIC_TEMPERATURE | Controls the randomness of the output (default: 0). Omitted when `top_p` is set.                                                                                                      |
+| max_tokens      | ANTHROPIC_MAX_TOKENS  | The maximum length of the generated text (default: 1024, or 2048 whenever thinking will consume output tokens — either because you enabled it or because the model thinks by default) |
+| cost            | -                     | Legacy per-token override applied to both input and output pricing                                                                                                                    |
+| inputCost       | -                     | Override input token pricing in promptfoo cost estimates                                                                                                                              |
+| outputCost      | -                     | Override output token pricing in promptfoo cost estimates                                                                                                                             |
+| top_p           | -                     | Controls nucleus sampling. Mutually exclusive with `temperature`.                                                                                                                     |
+| top_k           | -                     | Only sample from the top K options for each subsequent token                                                                                                                          |
+| stop_sequences  | -                     | Array of strings that will stop generation when encountered                                                                                                                           |
+| stream          | -                     | Enable streaming (required when `max_tokens` > 21,333)                                                                                                                                |
+| tools           | -                     | An array of tool or function definitions for the model to call                                                                                                                        |
+| tool_choice     | -                     | An object specifying the tool to call                                                                                                                                                 |
+| effort          | -                     | Output effort level: `low`, `medium`, `high`, `xhigh`, or `max`                                                                                                                       |
+| output_format   | -                     | JSON schema configuration for structured outputs                                                                                                                                      |
+| thinking        | -                     | Configuration for Claude's extended thinking (`enabled`, `adaptive`, or `disabled`)                                                                                                   |
+| showThinking    | -                     | Whether to include thinking content in the output (default: true)                                                                                                                     |
+| cache_control   | -                     | Auto-apply cache_control to the last cacheable block in the request                                                                                                                   |
+| metadata        | -                     | Request metadata such as `user_id` for tracking purposes                                                                                                                              |
+| service_tier    | -                     | Priority tier: `auto` (default) or `standard_only`                                                                                                                                    |
+| headers         | -                     | Additional headers to be sent with the API request                                                                                                                                    |
+| extra_body      | -                     | Additional parameters to be included in the API request body                                                                                                                          |
 
 ### Prompt Template
 
@@ -243,6 +251,8 @@ An Anthropic safety-classifier refusal can arrive as a successful Messages respo
 Promptfoo currently requires `stop_details` to create the top-level `guardrails` signal. A model-written refusal or `stop_reason: refusal` without details is therefore not the same assertion result. Treat the optional `stop_details.category` and `stop_details.explanation` as diagnostic evidence. API validation errors remain provider errors and skip assertions.
 
 In a stream, the terminal refusal reason can arrive after partial text in the final message delta. Promptfoo merges those details before returning the provider response, and cached structured refusals preserve the signal. Use [`not-guardrails`](/docs/configuration/expected-outputs/guardrails#inverse-assertion-not-guardrails) to require the structured classifier signal. Use [`is-refusal`](/docs/configuration/expected-outputs/deterministic#is-refusal) for model-written refusal text.
+
+Cost estimates follow [Anthropic's refusal billing rules](https://platform.claude.com/docs/en/build-with-claude/refusals-and-fallback#how-refusals-are-billed): refusals before any output cost zero unless the category is `bio`, `frontier_llm`, or `reasoning_extraction`. Those categories and refusals after output begins use normal token pricing.
 
 ### Metadata
 
@@ -522,7 +532,7 @@ Common use cases for caching:
 
 Cache read and creation token counts are tracked in the response's token usage details.
 
-See [Anthropic's Prompt Caching Guide](https://docs.anthropic.com/claude/docs/prompt-caching) for more details on requirements, pricing, and best practices.
+See [Anthropic's Prompt Caching Guide](https://docs.claude.com/en/docs/build-with-claude/prompt-caching) for more details on requirements, pricing, and best practices.
 
 ### Citations
 
@@ -617,6 +627,32 @@ which Promptfoo excludes from the output.
 Both models use a 1M-token context window, support up to 128K output tokens, and are
 priced at $10 per million input tokens and $50 per million output tokens. Mythos 5
 access is limited through Project Glasswing and may require provider approval. Both model IDs are pinned.
+
+### Claude Opus 5.5 notes
+
+Opus 5.5 is priced below Opus 5 and has the same context window, maximum output, and tokenizer.
+Its request rules match Fable 5.1's, and promptfoo adjusts requests to follow them:
+
+- **Thinking is always on.** Opus 5.5 rejects `thinking: { type: 'disabled' }` at every effort
+  level, so promptfoo removes it and logs a warning once. Manual
+  `thinking: { type: 'enabled', budget_tokens: N }` configs become `thinking: { type: 'adaptive' }`.
+- **`effort` defaults to `medium`**, one level below Opus 5's `high`. Set `effort` explicitly
+  when you compare the two. It is the only way to control how much the model thinks.
+- **Forced tool use and sampling controls are rejected.** Promptfoo omits `tool_choice` values
+  of type `any` or `tool` (use `auto` or `none`) and all of `temperature`, `top_p`, and `top_k`.
+
+Opus 5.5 costs a flat **$4 per million input tokens and $20 per million output tokens** across
+its 1M-token context window. Cache reads cost **$0.20 per million tokens**, and promptfoo's cost
+estimates include that rate. To track Anthropic's fast mode, set `inputCost: 8 / 1e6` and
+`outputCost: 40 / 1e6`.
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: anthropic:messages:claude-opus-5-5
+    config:
+      effort: high
+      max_tokens: 16000
+```
 
 ### Claude Opus 5 notes
 
@@ -766,7 +802,7 @@ When thinking is enabled or adaptive:
 - Previous turn thinking blocks are ignored and not counted as input tokens
 - `temperature` and `top_k` are incompatible with thinking and will be omitted with a warning
 - `top_p` is clamped to the range [0.95, 1.0] when thinking is enabled
-- Forced tool use (`tool_choice` type `any` or `tool`) is incompatible with thinking and will be omitted with a warning; use `auto` instead
+- Forced tool use (`tool_choice` type `any` or `tool`) is incompatible with `thinking: { type: 'enabled' }` (a manual budget) and with Claude Fable 5.1, Mythos 5.1, and Opus 5.5; in those cases it is omitted with a warning, so use `auto` instead. Adaptive thinking on other models accepts a forced `tool_choice`.
 
 Example response with thinking enabled:
 
@@ -832,6 +868,7 @@ providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
       max_tokens: 64000 # Claude 4 Sonnet supports up to 64K output tokens
+      stream: true # required when max_tokens is greater than 21,333
       thinking:
         type: 'enabled'
         budget_tokens: 32000
@@ -859,6 +896,8 @@ providers:
 ```
 
 Claude Opus 4.7 introduces the `xhigh` level between `high` and `max`, giving finer control over reasoning/latency on hard problems. For coding and agentic use cases, Anthropic recommends starting with `high` or `xhigh`.
+
+When `effort` is unset, the API uses `high` on most models but `medium` on Claude Opus 5.5.
 
 This can be combined with other features like structured outputs:
 

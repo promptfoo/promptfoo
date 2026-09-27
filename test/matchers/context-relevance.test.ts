@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_RAG_ASSERTION_THRESHOLD } from '../../src/assertions/ragDefaults';
 import { matchesContextRelevance } from '../../src/matchers/rag';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
@@ -11,6 +12,23 @@ describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('should tag provider failures as grader errors rather than a plain failure', async () => {
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      error: 'grading provider unavailable',
+    } as any);
+
+    const result = await matchesContextRelevance(
+      'What is X?',
+      'Some context',
+      DEFAULT_RAG_ASSERTION_THRESHOLD,
+    );
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toBe('grading provider unavailable');
+    expect(result.metadata).toEqual({ graderError: true });
   });
 
   it('should calculate relevance using line-based sentence splitting', async () => {
@@ -436,6 +454,26 @@ This policy excludes all staff going on any outgoing structured programs, short 
       expect(result.score).toBeGreaterThan(0);
       expect(result.metadata?.totalContextSentences).toBeGreaterThan(0);
       expect(result.metadata?.relevantSentenceCount).toBe(1);
+    });
+
+    it('should tag a non-grounded grader response as a grader error', async () => {
+      // A refusal/apology that quotes nothing from the context is not a genuine
+      // low-relevance verdict. It must be tagged as a grader error (score 0,
+      // pass false) so an inverse assertion cannot turn it into a spurious pass.
+      const query = 'What is the capital of France?';
+      const context = 'Paris is the capital of France. France is in Europe.';
+
+      const mockCallApi = vi.fn().mockResolvedValue({
+        output: 'I am sorry, but I cannot answer that from the provided context.',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+      const result = await matchesContextRelevance(query, context, DEFAULT_RAG_ASSERTION_THRESHOLD);
+
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
+      expect(result.metadata?.graderError).toBe(true);
     });
   });
 });

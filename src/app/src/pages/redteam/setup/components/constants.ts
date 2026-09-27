@@ -1,8 +1,8 @@
 import type { RedteamUITarget } from '../types';
 
-export const DEFAULT_OPENAI_TARGET_ID = 'openai:gpt-5.6-terra';
-export const OPENAI_TARGET_PLACEHOLDER =
-  'openai:gpt-5.6-luna, openai:gpt-5.6-terra, openai:gpt-5.6-sol, openai:gpt-6-astra';
+export const DEFAULT_OPENAI_TARGET_ID = 'openai:gpt-6-sol';
+export const DEFAULT_BEDROCK_TARGET_ID = 'bedrock:responses:openai.gpt-5.6-sol';
+export const OPENAI_TARGET_PLACEHOLDER = 'openai:gpt-6-sol, openai:gpt-6-luna, openai:gpt-6-astra';
 export const DEFAULT_GOOGLE_TARGET_ID = 'google:gemini-3.8-flash';
 export const DEFAULT_VERTEX_TARGET_ID = 'vertex:gemini-3.8-flash';
 
@@ -12,9 +12,11 @@ export const predefinedTargets: RedteamUITarget[] = [
   { value: 'websocket', label: 'WebSocket Endpoint' },
   { value: 'browser', label: 'Web Browser Automation' },
   { value: 'openai:gpt-6-astra', label: 'OpenAI GPT-6 Astra' },
+  { value: DEFAULT_OPENAI_TARGET_ID, label: 'OpenAI GPT-6 Sol' },
+  { value: 'openai:gpt-6-luna', label: 'OpenAI GPT-6 Luna' },
   { value: 'openai:gpt-5.6', label: 'OpenAI GPT-5.6 (Sol alias)' },
   { value: 'openai:gpt-5.6-sol', label: 'OpenAI GPT-5.6 Sol' },
-  { value: DEFAULT_OPENAI_TARGET_ID, label: 'OpenAI GPT-5.6 Terra' },
+  { value: 'openai:gpt-5.6-terra', label: 'OpenAI GPT-5.6 Terra' },
   { value: 'openai:gpt-5.6-luna', label: 'OpenAI GPT-5.6 Luna' },
   { value: 'openai:gpt-5.5', label: 'OpenAI GPT-5.5' },
   { value: 'openai:gpt-5.5-pro', label: 'OpenAI GPT-5.5 Pro' },
@@ -27,6 +29,7 @@ export const predefinedTargets: RedteamUITarget[] = [
   { value: 'claude-fable-5-1', label: 'Anthropic Claude Fable 5.1' },
   { value: 'claude-mythos-5-1', label: 'Anthropic Claude Mythos 5.1 (limited access)' },
   { value: 'claude-fable-5', label: 'Anthropic Claude Fable 5' },
+  { value: 'claude-opus-5-5', label: 'Anthropic Claude Opus 5.5' },
   { value: 'claude-opus-5', label: 'Anthropic Claude Opus 5' },
   { value: 'claude-opus-4-8', label: 'Anthropic Claude 4.8 Opus' },
   { value: 'claude-sonnet-5', label: 'Anthropic Claude Sonnet 5' },
