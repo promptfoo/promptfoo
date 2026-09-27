@@ -4,6 +4,7 @@ import http.server
 import json
 import os
 import pathlib
+import signal
 import subprocess
 import sys
 import tempfile
@@ -131,7 +132,7 @@ class ExampleCliTests(unittest.TestCase):
                     PROMPTFOO_DISABLE_TELEMETRY="1",
                     PROMPTFOO_DISABLE_REMOTE_GENERATION="true",
                 )
-                completed = subprocess.run(
+                process = subprocess.Popen(
                     [
                         "npm",
                         "run",
@@ -141,6 +142,7 @@ class ExampleCliTests(unittest.TestCase):
                         "-c",
                         "examples/integration-pydantic-ai/promptfooconfig.yaml",
                         "--no-cache",
+                        "--no-share",
                         "-j",
                         "1",
                         "-o",
@@ -148,10 +150,15 @@ class ExampleCliTests(unittest.TestCase):
                     ],
                     cwd=repo,
                     env=env,
-                    timeout=120,
-                    check=False,
+                    start_new_session=True,
                 )
-                self.assertEqual(completed.returncode, 0)
+                try:
+                    process.wait(timeout=120)
+                except subprocess.TimeoutExpired:
+                    os.killpg(process.pid, signal.SIGKILL)
+                    process.wait()
+                    raise
+                self.assertEqual(process.returncode, 0)
                 data = json.loads(output.read_text())["results"]
                 self.assertEqual(data["stats"]["errors"], 0)
                 rows = data["results"]

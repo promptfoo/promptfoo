@@ -6,6 +6,7 @@ on:
       - 'examples/integration-pydantic-ai/**'
       - 'src/python/**'
       - 'src/providers/pythonCompletion.ts'
+      - '.nvmrc'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/pydantic-ai-example.yml'
@@ -15,6 +16,7 @@ on:
       - 'examples/integration-pydantic-ai/**'
       - 'src/python/**'
       - 'src/providers/pythonCompletion.ts'
+      - '.nvmrc'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/pydantic-ai-example.yml'
@@ -42,7 +44,9 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install Promptfoo
-        run: npm ci --registry=https://registry.npmjs.org/
+        run: |
+          npm install -g npm@11.19.0 --registry=https://registry.npmjs.org/
+          npm ci --registry=https://registry.npmjs.org/
       - name: Install example dependencies
         run: |
           python -m pip install -r examples/integration-pydantic-ai/requirements.txt
