@@ -3737,6 +3737,27 @@ describe('OpenClaw Provider', () => {
       expect(provider.id()).toBe('openclaw:my-custom-agent');
     });
 
+    it.each([
+      ['responses', OpenClawResponsesProvider],
+      ['embedding', OpenClawEmbeddingProvider],
+      ['embeddings', OpenClawEmbeddingProvider],
+      ['agent', OpenClawAgentProvider],
+    ] as const)('preserves the full agent ID for openclaw:%s', (type, Provider) => {
+      const provider = createOpenClawProvider(`openclaw:${type}:team:agent:v2`);
+      expect(provider).toBeInstanceOf(Provider);
+      expect(provider.id()).toBe(
+        `openclaw:${type === 'embeddings' ? 'embedding' : type}:team:agent:v2`,
+      );
+    });
+
+    it.each(['responses', 'embedding', 'embeddings', 'agent'])(
+      'uses the default agent for openclaw:%s with an empty suffix',
+      (type) => {
+        const provider = createOpenClawProvider(`openclaw:${type}:`);
+        expect(provider.id()).toBe(`openclaw:${type === 'embeddings' ? 'embedding' : type}`);
+      },
+    );
+
     it('should create responses provider for openclaw:responses', () => {
       const provider = createOpenClawProvider('openclaw:responses');
       expect(provider).toBeInstanceOf(OpenClawResponsesProvider);
