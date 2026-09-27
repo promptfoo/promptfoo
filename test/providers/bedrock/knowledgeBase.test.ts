@@ -161,7 +161,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     await provider.getKnowledgeBaseClient();
 
     // client-bedrock-agent-runtime already defaults to HTTP/1.1,
-    // so no custom handler is needed without proxy or apiKey
+    // so no custom handler is needed without a proxy
     expect(NodeHttpHandlerMock).not.toHaveBeenCalled();
     expect(BedrockAgentRuntimeClient).toHaveBeenCalledWith({
       region: 'us-east-1',
@@ -737,7 +737,8 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
         config: {
           knowledgeBaseId: 'kb-123',
           region: 'us-east-1',
-          apiKey: 'SECRET_API_KEY',
+          accessKeyId: 'SECRET_ACCESS_KEY',
+          secretAccessKey: 'SECRET_SECRET_KEY',
           modelArn: 'custom:model:arn',
         },
       },
@@ -757,9 +758,10 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     const debugLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
 
     expect(cacheKey).not.toContain('SECRET_PROMPT_VALUE');
-    expect(cacheKey).not.toContain('SECRET_API_KEY');
+    expect(cacheKey).not.toContain('SECRET_ACCESS_KEY');
+    expect(cacheKey).not.toContain('SECRET_SECRET_KEY');
     // Credentials are owned by the initialized client; they must not enter the cache fingerprint.
-    provider.kbConfig.apiKey = 'DIFFERENT_UNUSED_KEY';
+    provider.kbConfig.accessKeyId = 'DIFFERENT_UNUSED_KEY';
     mockGet.mockResolvedValueOnce(JSON.stringify({ output: 'cached response', citations: [] }));
     await provider.callApi('SECRET_PROMPT_VALUE');
     expect(mockGet.mock.calls[1][0]).toBe(cacheKey);
@@ -771,7 +773,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     mockIsCacheEnabled.mockReturnValue(false);
   });
 
-  it('should create knowledge base client with API key authentication from config', async () => {
+  it('rejects unsupported Knowledge Base API key authentication from config', async () => {
     const provider = new AwsBedrockKnowledgeBaseProvider(
       'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
       {
@@ -783,17 +785,14 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
       },
     );
 
-    await provider.getKnowledgeBaseClient();
-
-    expect(BedrockAgentRuntimeClient).toHaveBeenCalledWith({
-      region: 'us-east-1',
-      retryMode: 'adaptive',
-      maxAttempts: 10,
-      requestHandler: expect.any(Object),
-    });
+    await expect(provider.getKnowledgeBaseClient()).rejects.toThrow(
+      'Knowledge Bases do not support bearer',
+    );
+    expect(BedrockAgentRuntimeClient).not.toHaveBeenCalled();
+    expect(NodeHttpHandlerMock).not.toHaveBeenCalled();
   });
 
-  it('should create knowledge base client with API key authentication from environment', async () => {
+  it('rejects unsupported Knowledge Base API key authentication from environment', async () => {
     mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'test-env-api-key' });
 
     const provider = new AwsBedrockKnowledgeBaseProvider(
@@ -806,14 +805,11 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
       },
     );
 
-    await provider.getKnowledgeBaseClient();
-
-    expect(BedrockAgentRuntimeClient).toHaveBeenCalledWith({
-      region: 'us-east-1',
-      retryMode: 'adaptive',
-      maxAttempts: 10,
-      requestHandler: expect.any(Object),
-    });
+    await expect(provider.getKnowledgeBaseClient()).rejects.toThrow(
+      'Knowledge Bases do not support bearer',
+    );
+    expect(BedrockAgentRuntimeClient).not.toHaveBeenCalled();
+    expect(NodeHttpHandlerMock).not.toHaveBeenCalled();
 
     mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
   });

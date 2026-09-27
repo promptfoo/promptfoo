@@ -129,11 +129,13 @@ export class AwsBedrockKnowledgeBaseProvider
     }
     const state = this.getClientState();
     return (state.initialization ??= (async () => {
-      // client-bedrock-agent-runtime already defaults to HTTP/1.1, so we only
-      // need a custom handler for proxy or API key authentication.
-      const apiKey = this.getApiKey();
-      const handler =
-        hasProxyEnv() || apiKey ? await createBedrockRequestHandler({ apiKey }) : undefined;
+      if (this.getApiKey()) {
+        throw new Error(
+          'Bedrock Knowledge Bases do not support bearer token authentication. Configure AWS credentials or a profile instead.',
+        );
+      }
+      // The Agent Runtime SDK uses SigV4; a custom handler is only needed for proxies.
+      const handler = hasProxyEnv() ? await createBedrockRequestHandler() : undefined;
 
       const credentials = await this.getCredentials();
       try {

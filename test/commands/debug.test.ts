@@ -30,6 +30,8 @@ beforeEach(() => {
     https_proxy: undefined,
     ALL_PROXY: undefined,
     all_proxy: undefined,
+    NO_PROXY: undefined,
+    no_proxy: undefined,
   });
   setLogger(capture);
 });
@@ -41,6 +43,51 @@ afterEach(() => {
 });
 
 describe('proxy diagnostics', () => {
+  it.each(['specified', 'default'] as const)(
+    'reports the resolved %s config environment without an external scope',
+    async (source) => {
+      mockProcessEnv({ https_proxy: 'http://host.example:8080', no_proxy: 'host.example' });
+      const env = {
+        HTTPS_PROXY: 'http://fixture-user:fixture-password@config.example:8080',
+        NO_PROXY: '',
+        PROMPTFOO_DISABLE_TELEMETRY: 'true',
+      };
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        config: { env },
+        testSuite: { prompts: [], providers: [] },
+        basePath: '',
+      });
+      const program = new Command();
+      debugCommand(program, {}, source === 'default' ? 'fixture.yaml' : undefined);
+      const previousEnv = cliState.env;
+      await program.parseAsync(
+        source === 'specified' ? ['debug', '-c', 'fixture.yaml'] : ['debug'],
+        { from: 'user' },
+      );
+      const output = capture.info.mock.calls.find(([message]) => message.startsWith('{'))?.[0];
+      expect(JSON.parse(output).env).toMatchObject({
+        https_proxy: 'http://***:***@config.example:8080',
+        no_proxy: '',
+        telemetryDisabled: true,
+      });
+      expect(output).not.toContain('fixture-password');
+      expect(cliState.env).toBe(previousEnv);
+      expect(process.env.https_proxy).toBe('http://host.example:8080');
+    },
+  );
+
+  it('reports ambient settings and the error when config resolution fails', async () => {
+    mockProcessEnv({ HTTPS_PROXY: 'http://host.example:8080' });
+    vi.mocked(resolveConfigs).mockRejectedValue(new Error('fixture config failure'));
+    const program = new Command();
+    debugCommand(program, {}, undefined);
+    await program.parseAsync(['debug', '-c', 'fixture.yaml'], { from: 'user' });
+    const output = capture.info.mock.calls.find(([message]) => message.startsWith('{'))?.[0];
+    const info = JSON.parse(output);
+    expect(info.env.https_proxy).toBe('http://host.example:8080');
+    expect(info.configInfo.configContent).toContain('fixture config failure');
+  });
+
   it.each(['suite', 'file'] as const)(
     'redacts proxy credentials from %s diagnostics',
     async (scope) => {

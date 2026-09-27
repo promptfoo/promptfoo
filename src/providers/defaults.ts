@@ -32,12 +32,24 @@ let defaultCompletionProvider: ApiProvider;
 let defaultEmbeddingProvider: ApiProvider;
 
 function hasScopedGoogleAdc(env?: EnvOverrides): boolean {
-  const authScope = [env, getEnvOverrides(), getEnvOverrides('file')].find((layer) =>
-    ['GOOGLE_APPLICATION_CREDENTIALS', 'GEMINI_API_KEY', 'GOOGLE_API_KEY', 'PALM_API_KEY'].some(
-      (key) => layer?.[key] !== undefined,
-    ),
-  );
-  return authScope?.GOOGLE_APPLICATION_CREDENTIALS !== undefined;
+  const masked = new Set<string>();
+  for (const layer of [env, getEnvOverrides(), getEnvOverrides('file')]) {
+    // Explicit ADC, including an empty value, selects its own validation path.
+    if (layer?.GOOGLE_APPLICATION_CREDENTIALS !== undefined) {
+      return true;
+    }
+    for (const key of ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'PALM_API_KEY']) {
+      const value = layer?.[key];
+      if (masked.has(key) || value === undefined) {
+        continue;
+      }
+      masked.add(key);
+      if (value) {
+        return false;
+      }
+    }
+  }
+  return false;
 }
 
 async function getEmbeddingProviderForAzureDefaults(env?: EnvOverrides): Promise<ApiProvider> {
