@@ -211,6 +211,8 @@ interface FetchEvalOptions {
   searchText?: string;
   skipSettingEvalId?: boolean;
   skipLoadingState?: boolean;
+  /** Whether the caller still owns this background refresh when its response arrives. */
+  isCurrent?: () => boolean;
   filters?: ResultsFilter[];
 }
 
@@ -702,6 +704,7 @@ export const useTableStore = create<TableState>()(
       const ownsSelectionRequest = () =>
         get().tableSelectionRequest?.generation === requestGeneration;
       const isCurrentRequest = () =>
+        (options.isCurrent?.() ?? true) &&
         (get().tableRequestGeneration === requestGeneration || ownsSelectionRequest()) &&
         (!skipSettingEvalId || get().evalId === id);
       const shouldIgnoreResponse = () => !isCurrentRequest();

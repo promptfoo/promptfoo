@@ -472,6 +472,49 @@ it.each(['eval', 'API'] as const)(
   },
 );
 
+it.each([200, 500])(
+  'ignores an obsolete rating refresh without clearing a pending foreground selection (HTTP %i)',
+  async (status) => {
+    initializeRatingTable();
+    const currentTable = useTableStore.getState().table;
+    const pending: Array<(body: unknown) => void> = [];
+    const response = () => new Promise((resolve) => pending.push(resolve));
+    mockCallApiRoutes([
+      { path: '/eval/next-eval/table?offset=0&limit=50&filterMode=all', response },
+      { path: '/eval/rating-eval/table?offset=0&limit=50&filterMode=all', status, response },
+    ]);
+    const switching = useTableStore.getState().fetchEvalData('next-eval');
+    const selection = useTableStore.getState().tableSelectionRequest;
+    let ownsRefresh = true;
+    const refreshing = useTableStore.getState().fetchEvalData('rating-eval', {
+      skipLoadingState: true,
+      skipSettingEvalId: true,
+      isCurrent: () => ownsRefresh,
+    });
+    ownsRefresh = false;
+    pending[1]({
+      table: structuredClone(ratingTable),
+      config: {},
+      version: 4,
+      totalCount: 1,
+      filteredCount: 1,
+    });
+    expect(await refreshing).toBeUndefined();
+    expect(useTableStore.getState().table).toBe(currentTable);
+    expect(useTableStore.getState().tableSelectionRequest).toBe(selection);
+    expect(useTableStore.getState().isFetching).toBe(true);
+
+    const nextTable = structuredClone(ratingTable);
+    nextTable.body[0].outputs[0].text = 'Next eval';
+    pending[0]({ table: nextTable, config: {}, version: 4, totalCount: 1, filteredCount: 1 });
+    await switching;
+    expect(useTableStore.getState().evalId).toBe('next-eval');
+    expect(useTableStore.getState().table).toBe(nextTable);
+    expect(useTableStore.getState().isFetching).toBe(false);
+    expect(useTableStore.getState().tableSelectionRequest).toBeNull();
+  },
+);
+
 it.each([
   { first: 'refresh', refreshFails: false, switchFails: false },
   { first: 'switch', refreshFails: false, switchFails: false },

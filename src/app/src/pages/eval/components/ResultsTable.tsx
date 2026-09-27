@@ -1019,37 +1019,18 @@ function buildManualGradingResult({
   return gradingResult;
 }
 
-function buildRatingTableUpdate({
-  head,
-  body,
-  rowIndex,
-  promptIndex,
-  ratingUpdate,
-  gradingResult,
-}: {
-  head: EvaluateTable['head'];
-  body: EvaluateTable['body'];
-  rowIndex: number;
-  promptIndex: number;
-  ratingUpdate: ManualRatingUpdate;
-  gradingResult: GradingResult;
-}): EvaluateTable {
-  const updatedData = [...body];
-  const updatedRow = { ...updatedData[rowIndex] };
-  const updatedOutputs = [...updatedRow.outputs];
-
-  updatedOutputs[promptIndex] = {
-    ...updatedOutputs[promptIndex],
+function buildManualRatingOutput(args: {
+  existingOutput: EvaluateTableOutput;
+  isPass?: boolean | null;
+  score?: number;
+  comment?: string;
+}): EvaluateTableOutput & { gradingResult: GradingResult } {
+  const ratingUpdate = getManualRatingUpdate(args);
+  return {
+    ...args.existingOutput,
     pass: ratingUpdate.pass,
     score: ratingUpdate.score,
-    gradingResult,
-  };
-  updatedRow.outputs = updatedOutputs;
-  updatedData[rowIndex] = updatedRow;
-
-  return {
-    head,
-    body: updatedData,
+    gradingResult: buildManualGradingResult({ ...args, ratingUpdate }),
   };
 }
 
@@ -1770,6 +1751,7 @@ function ResultsTableHeader({
 
 // Accepted writes must remain ordered across table remounts. Legacy saves replace
 // the whole evaluation, so serialize by eval even when edits affect different cells.
+// Result keys carry each cell's persisted baseline across interleaved edits and pages.
 const pendingRatingRequests = new Map<string, Promise<EvaluateTable | undefined>>();
 
 function ResultsTable({
@@ -1877,6 +1859,7 @@ function ResultsTable({
         return;
       }
       const queueKey = JSON.stringify([apiBaseUrl, evalId]);
+      const resultKey = JSON.stringify([apiBaseUrl, evalId, resultId]);
       const queuedTable = useTableStore.getState().table;
       if (!queuedTable) {
         return;
@@ -1886,57 +1869,38 @@ function ResultsTable({
         return;
       }
       const queuedOutput = queuedLocation.output;
+      const previousRequest = pendingRatingRequests.get(queueKey);
+      const previousResultRequest = pendingRatingRequests.get(resultKey);
+      const ratingArgs = { isPass, score, comment };
+      const optimisticOutput = buildManualRatingOutput({
+        existingOutput: queuedOutput,
+        ...ratingArgs,
+      });
+      setTable(replaceRatingOutput(queuedTable, resultId, optimisticOutput));
+      if (inComparisonMode) {
+        showToast('Ratings are not saved in comparison mode', 'warning');
+        return;
+      }
+
       let currentRequest: Promise<EvaluateTable | undefined>;
       const runRating = async (
         previousTable?: EvaluateTable,
       ): Promise<EvaluateTable | undefined> => {
-        // Accepted writes outlive the mounted table. Carry prior queued edits forward
-        // for legacy full-table saves without touching the newly selected eval's state.
-        const currentTable =
-          previousTable && (!isScopeActive() || !version || version < 4)
+        // Persist from completed writes, not the visible table's newer optimistic edits.
+        const previousResultTable =
+          previousResultRequest === previousRequest
             ? previousTable
-            : isScopeActive()
-              ? (useTableStore.getState().table ?? queuedTable)
-              : queuedTable;
+            : await previousResultRequest?.catch(() => undefined);
+        const currentTable = (!version || version < 4 ? previousTable : undefined) ?? queuedTable;
         const currentLocation = findRatingOutput(currentTable, resultId);
-        if (!currentLocation && (!version || version < 4)) {
+        if (!currentLocation) {
           return;
         }
-        const existingOutput = currentLocation?.output ?? queuedOutput;
-        const ratingUpdate = getManualRatingUpdate({
-          existingOutput,
-          isPass,
-          score,
-          comment,
-        });
-        const gradingResult = buildManualGradingResult({
-          existingOutput,
-          ratingUpdate,
-          isPass,
-          score,
-          comment,
-        });
-        const newTable = currentLocation
-          ? buildRatingTableUpdate({
-              head: currentTable.head,
-              body: currentTable.body,
-              rowIndex: currentLocation.rowIndex,
-              promptIndex: currentLocation.promptIndex,
-              ratingUpdate,
-              gradingResult,
-            })
-          : currentTable;
-        const optimisticOutput = currentLocation
-          ? newTable.body[currentLocation.rowIndex].outputs[currentLocation.promptIndex]
-          : undefined;
-
-        if (optimisticOutput && isScopeActive()) {
-          setTable(newTable);
-        }
-        if (inComparisonMode) {
-          showToast('Ratings are not saved in comparison mode', 'warning');
-          return;
-        }
+        const existingOutput =
+          (previousResultTable && findRatingOutput(previousResultTable, resultId)?.output) ??
+          currentLocation.output;
+        const executedOutput = buildManualRatingOutput({ existingOutput, ...ratingArgs });
+        const newTable = replaceRatingOutput(currentTable, resultId, executedOutput);
 
         const refreshCurrentPage = async () => {
           if (!evalId || getApiBaseUrl() !== apiBaseUrl) {
@@ -1946,22 +1910,16 @@ function ResultsTable({
           await fetchEvalData(evalId, {
             skipSettingEvalId: true,
             skipLoadingState: true,
+            isCurrent: () => pendingRatingRequests.get(queueKey) === currentRequest,
           });
         };
 
-        const handlePersistedResult = async (persistedResult?: PersistedRatingResult) => {
+        const handlePersistedResult = async (persistedOutput: EvaluateTableOutput) => {
           const latestTable = useTableStore.getState().table;
           if (isScopeActive() && latestTable) {
             const latestLocation = findRatingOutput(latestTable, resultId);
-            const ownsOptimisticOutput =
-              optimisticOutput !== undefined && latestLocation?.output === optimisticOutput;
-            if (persistedResult && ownsOptimisticOutput) {
-              const reconciledTable = applyPersistedRatingResult({
-                table: latestTable,
-                resultId,
-                result: persistedResult,
-              });
-              setTable(reconciledTable);
+            if (latestLocation?.output === optimisticOutput) {
+              setTable(replaceRatingOutput(latestTable, resultId, persistedOutput));
             }
           }
           // The response contains one result; refresh the active query for prompt metrics
@@ -1976,15 +1934,15 @@ function ResultsTable({
           const latestTable = useTableStore.getState().table;
           if (isScopeActive() && latestTable && error instanceof ConfirmedRatingPersistenceError) {
             const latestLocation = findRatingOutput(latestTable, resultId);
-            if (optimisticOutput && latestLocation?.output === optimisticOutput) {
+            if (latestLocation?.output === optimisticOutput) {
               const rolledBackTable = replaceRatingOutput(latestTable, resultId, existingOutput);
               setTable(rolledBackTable);
-              if (pendingRatingRequests.get(queueKey) !== currentRequest) {
-                return;
-              }
             }
           }
 
+          if (pendingRatingRequests.get(queueKey) !== currentRequest) {
+            return;
+          }
           // The server may have committed before the connection or response parsing failed.
           // Refetch the current page instead of asserting that the optimistic state is wrong.
           await refreshCurrentPage().catch((refreshError) => {
@@ -1999,30 +1957,37 @@ function ResultsTable({
             evalId,
             resultId,
             version,
-            gradingResult,
+            gradingResult: executedOutput.gradingResult,
             ...ratingIntent,
             table: newTable,
           });
-          await handlePersistedResult(persistedResult);
-          return persistedResult && currentLocation
+          const persistedTable = persistedResult
             ? applyPersistedRatingResult({ table: newTable, resultId, result: persistedResult })
             : newTable;
+          await handlePersistedResult(
+            persistedTable.body[currentLocation.rowIndex].outputs[currentLocation.promptIndex],
+          );
+          return persistedTable;
         } catch (error) {
           await handlePersistenceError(error);
-          return error instanceof ConfirmedRatingPersistenceError ? currentTable : newTable;
+          return error instanceof ConfirmedRatingPersistenceError
+            ? replaceRatingOutput(currentTable, resultId, existingOutput)
+            : newTable;
         }
       };
 
-      const previousRequest = pendingRatingRequests.get(queueKey);
       currentRequest = previousRequest
         ? previousRequest.then(runRating, () => runRating())
         : runRating();
       pendingRatingRequests.set(queueKey, currentRequest);
+      pendingRatingRequests.set(resultKey, currentRequest);
       try {
         await currentRequest;
       } finally {
-        if (pendingRatingRequests.get(queueKey) === currentRequest) {
-          pendingRatingRequests.delete(queueKey);
+        for (const key of [queueKey, resultKey]) {
+          if (pendingRatingRequests.get(key) === currentRequest) {
+            pendingRatingRequests.delete(key);
+          }
         }
       }
     },
