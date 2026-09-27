@@ -10,7 +10,7 @@ import type { ApiProvider, AtomicTestCase, TestSuite } from '../../src/types';
 
 const config = yaml.parse(
   readFileSync(path.resolve(__dirname, '../../examples/eval-f-score/promptfooconfig.yaml'), 'utf8'),
-) as Pick<TestSuite, 'defaultTest' | 'derivedMetrics'>;
+) as { defaultTest: AtomicTestCase; derivedMetrics: NonNullable<TestSuite['derivedMetrics']> };
 const provider: ApiProvider = {
   id: () => 'f-score-example-test',
   callApi: async () => ({ output: '' }),
@@ -21,13 +21,13 @@ async function grade(predicted: string, expected: string) {
     prompt: 'Classify a movie review',
     provider,
     providerResponse: { output: { sentiment: predicted } },
-    test: { ...config.defaultTest, vars: { sentiment: expected } } as AtomicTestCase,
+    test: { ...config.defaultTest, vars: { sentiment: expected } },
   });
 }
 
 function derive(namedScores: Record<string, number>) {
   const scores = { ...namedScores };
-  for (const metric of config.derivedMetrics!) {
+  for (const metric of config.derivedMetrics) {
     scores[metric.name] = evaluate(metric.value as string, scores);
   }
   return scores;
