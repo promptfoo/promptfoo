@@ -37,6 +37,10 @@ within the 2.x release series, with Google GenAI and the three OpenTelemetry
 packages imported directly by the provider. ADK 2 keeps optional integrations
 out of its default installation.
 
+ADK 2.9.2 still supports `SequentialAgent`, but deprecates it in favor of
+`Workflow`. This example retains the original sequential-agent trace contract;
+new graph-based apps should use [ADK workflows](https://adk.dev/workflows/).
+
 To use OpenAI GPT-5 models, install the optional LiteLLM adapter and keep the
 provider prefix so ADK selects the compatible adapter:
 
@@ -57,9 +61,16 @@ PROMPTFOO_PYTHON=.venv/bin/python npx promptfoo@latest eval -c promptfooconfig.y
 - `agent.py`: ADK app builders, tools, callback, plugin, and workflow agent graph
 - `provider.py`: Promptfoo Python provider plus ADK-to-Promptfoo trace propagation
 - `provider_test.py`: focused tests for provider helpers
+- `tests/`: real-SDK CLI regressions with local Gemini and optional LiteLLM fixtures
 - `promptfooconfig.yaml`: conversational multi-turn eval with state, artifacts, and trajectory assertions
 - `promptfooconfig.workflow.yaml`: workflow-agent eval with `SequentialAgent`
 - `requirements.txt`: Python dependencies
+
+Repository CI runs these regressions in the shared `Examples` workflow: the
+minimal installation on Python 3.12/3.14, declared minimum dependencies on Python
+3.10, and LiteLLM in its own environment. Both original configs must pass their
+state, artifact, tool, and trace assertions; model errors and wrong tool arguments
+must fail. No hosted model credentials are used.
 
 ## What The Conversational Eval Covers
 

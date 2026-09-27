@@ -1,5 +1,6 @@
 google-adk>=2.9.2,<3
 google-genai>=2.19,<3
-opentelemetry-api>=1.39,<2
-opentelemetry-sdk>=1.39,<2
-opentelemetry-exporter-otlp-proto-http>=1.39,<2
+# ADK 2.9 imports MCP semantic attributes absent from OpenTelemetry 1.39.
+opentelemetry-api>=1.40,<2
+opentelemetry-sdk>=1.40,<2
+opentelemetry-exporter-otlp-proto-http>=1.40,<2

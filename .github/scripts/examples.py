@@ -25,6 +25,7 @@ class Example:
     docker_images: tuple[str, ...] = ()
     minimums: bool = False
     seed: tuple[str, ...] = ()
+    extra_requirements: tuple[str, ...] = ()
     check_dependencies: bool = True
 
 
@@ -59,6 +60,26 @@ EXAMPLES = {
         ("3.14",),
         ((".", "dependencies_test.py"),),
         minimums=True,
+    ),
+    "google-adk": Example(
+        "examples/integration-google-adk",
+        ("3.12", "3.14"),
+        ((".", "*_test.py"), ("tests", "test_cli.py")),
+        node=True,
+    ),
+    "google-adk-minimums": Example(
+        "examples/integration-google-adk",
+        ("3.10",),
+        ((".", "*_test.py"), ("tests", "test_cli.py")),
+        node=True,
+        minimums=True,
+    ),
+    "google-adk-litellm": Example(
+        "examples/integration-google-adk",
+        ("3.12",),
+        ((".", "*_test.py"), ("tests", "test_litellm.py")),
+        node=True,
+        extra_requirements=("litellm>=1.101,<2",),
     ),
 }
 
@@ -184,7 +205,8 @@ def run_example(name: str) -> None:
         if example.seed:
             run(*pip, *example.seed)
         requirements = ROOT / example.directory / "requirements.txt"
-        install = [*pip, "-r", str(requirements)]
+        # Resolve optional adapters together with the example's own bounds.
+        install = [*pip, "-r", str(requirements), *example.extra_requirements]
         if example.minimums:
             constraints = Path(temporary) / "minimums.txt"
             constraints.write_text(minimum_constraints(requirements.read_text()))
