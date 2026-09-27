@@ -31,20 +31,20 @@ python -m venv .venv
 .\.venv\Scripts\mlflow.exe server --host 127.0.0.1 --port 5000
 ```
 
-2. Create a gateway endpoint in the MLflow UI at http://localhost:5000 (AI Gateway → Create Endpoint), select its model, and configure that model provider's credentials. Name the endpoint `my-chat-endpoint` to use the example unchanged.
+2. Create a gateway endpoint in the MLflow UI at http://127.0.0.1:5000 (AI Gateway → Create Endpoint), select its model, and configure that model provider's credentials. Name the endpoint `my-chat-endpoint` to use the example unchanged.
 
 3. In another terminal, open the example directory and set the gateway URL:
 
 On macOS/Linux:
 
 ```bash
-export MLFLOW_GATEWAY_URL=http://localhost:5000
+export MLFLOW_GATEWAY_URL=http://127.0.0.1:5000
 ```
 
 On Windows (PowerShell):
 
 ```powershell
-$env:MLFLOW_GATEWAY_URL = "http://localhost:5000"
+$env:MLFLOW_GATEWAY_URL = "http://127.0.0.1:5000"
 ```
 
 4. Run the evaluation:

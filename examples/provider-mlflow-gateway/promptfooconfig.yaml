@@ -7,7 +7,7 @@ description: Evaluate models through MLflow AI Gateway
 # Setup:
 #   python -m pip install --upgrade 'mlflow[genai]>=3.16.1,<4'
 #   mlflow server --host 127.0.0.1 --port 5000
-#   export MLFLOW_GATEWAY_URL=http://localhost:5000
+#   export MLFLOW_GATEWAY_URL=http://127.0.0.1:5000
 
 prompts:
   - 'You are a helpful assistant. Answer the following question concisely: {{question}}'

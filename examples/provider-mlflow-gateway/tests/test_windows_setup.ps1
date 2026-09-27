@@ -22,7 +22,7 @@ try {
     & .\.venv\Scripts\python.exe -m pip check
     if ($LASTEXITCODE -ne 0) { throw 'Installed MLflow dependencies are incompatible' }
     & ([scriptblock]::Create($blocks[1]))
-    if ($env:MLFLOW_GATEWAY_URL -ne 'http://localhost:5000') { throw 'Unexpected documented gateway URL' }
+    if ($env:MLFLOW_GATEWAY_URL -ne 'http://127.0.0.1:5000') { throw 'Unexpected documented gateway URL' }
     # Fail if another listener could satisfy the health check for this server.
     $portCheck = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::IPv6Any, 5000)
     $portCheck.Server.DualMode = $true
