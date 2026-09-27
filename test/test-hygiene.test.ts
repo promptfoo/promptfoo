@@ -201,7 +201,6 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'providers/google/gemini-mcp-integration.test.ts',
   'providers/google/image.test.ts',
   'providers/google/live.test.ts',
-  'providers/google/provider.test.ts',
   'providers/google/util.test.ts',
   'providers/google/vertex.test.ts',
   'providers/google/video.test.ts',
