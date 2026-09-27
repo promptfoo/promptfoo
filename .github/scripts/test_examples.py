@@ -1,0 +1,274 @@
+"""Regression tests for example selection, isolation, and the required CI check."""
+
+import itertools
+import subprocess
+import sys
+import tempfile
+import types
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+from examples import (
+    EXAMPLES,
+    ROOT,
+    changed_paths,
+    check_gate,
+    minimum_constraints,
+    run_example,
+    select_examples,
+    validate_registry,
+)
+
+SCRIPT = Path(__file__).with_name("examples.py")
+
+
+class SelectionTests(unittest.TestCase):
+    def test_full_run_preserves_every_registered_runtime(self):
+        rows = select_examples(None)
+        self.assertEqual(len(rows), 4)
+        self.assertEqual(
+            [(row["example"], row["python"]) for row in rows],
+            [
+                ("docker-sandbox", "3.10"),
+                ("docker-sandbox", "3.14"),
+                ("python-provider-upgrade", "3.10"),
+                ("python-provider-minimums", "3.14"),
+            ],
+        )
+
+    def test_example_changes_select_only_its_profiles(self):
+        rows = select_examples(["examples/provider-python/provider.py"])
+        self.assertEqual(
+            [row["example"] for row in rows],
+            ["python-provider-upgrade", "python-provider-minimums"],
+        )
+        self.assertTrue(all(not row["node"] for row in rows))
+
+    def test_shared_changes_run_all_profiles(self):
+        for path in (
+            "src/python/wrapper.py",
+            "src/evaluator.ts",
+            "src/tracing/store.ts",
+            ".github/scripts/examples.py",
+            ".github/workflows/examples.yml",
+            "package-lock.json",
+            ".nvmrc",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(select_examples([path]), select_examples(None))
+
+    def test_unrelated_paths_and_empty_diffs_select_nothing(self):
+        for paths in (
+            [],
+            ["site/docs/index.md"],
+            ["examples/provider-python-other/a.py"],
+        ):
+            self.assertEqual(select_examples(paths), [])
+
+    def test_missing_registered_files_fail(self):
+        validate_registry()
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ValueError, "Missing requirements"):
+                validate_registry(Path(directory))
+
+    def test_missing_suites_fail(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for example in EXAMPLES.values():
+                path = root / example.directory
+                path.mkdir(parents=True, exist_ok=True)
+                (path / "requirements.txt").touch()
+            with self.assertRaisesRegex(ValueError, "No tests registered"):
+                validate_registry(root)
+
+    def test_empty_test_discovery_is_not_a_pass(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "test", directory, "test_*.py"],
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("No example tests discovered", result.stderr)
+
+    def test_partial_revision_arguments_fail(self):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "plan", "--base", "0" * 40],
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Provide both", result.stderr)
+
+    def test_entirely_skipped_suite_is_not_a_pass(self):
+        with tempfile.TemporaryDirectory() as directory:
+            (Path(directory) / "test_skipped.py").write_text(
+                "import unittest\n"
+                "@unittest.skip('fixture')\n"
+                "class Skipped(unittest.TestCase):\n"
+                "    def test_skipped(self): pass\n"
+            )
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "test", directory, "test_*.py"],
+                capture_output=True,
+                text=True,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("All example tests were skipped", result.stderr)
+
+
+class GitSelectionTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.git("init", "-q", "-b", "main")
+        self.git("config", "user.name", "Example CI fixture")
+        self.git("config", "user.email", "fixture@example.test")
+        self.write("examples/provider-python/old test.py")
+        self.write("examples/integration-docker/code-generation-sandbox/removed.py")
+        self.base = self.commit()
+
+    def git(self, *args):
+        return subprocess.check_output(
+            [
+                "git",
+                "-c",
+                "core.hooksPath=/dev/null",
+                "-c",
+                "commit.gpgsign=false",
+                *args,
+            ],
+            cwd=self.root,
+            text=True,
+        ).strip()
+
+    def write(self, path):
+        target = self.root / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("fixture\n")
+
+    def commit(self):
+        self.git("add", ".")
+        self.git("commit", "-qm", "Fixture")
+        return self.git("rev-parse", "HEAD")
+
+    def test_merge_base_renames_deletions_and_unusual_filenames(self):
+        old = self.root / "examples/provider-python/old test.py"
+        old.rename(old.with_name("new\ntest.py"))
+        removed = "examples/integration-docker/code-generation-sandbox/removed.py"
+        (self.root / removed).unlink()
+        head = self.commit()
+        self.git("checkout", "-qb", "base-tip", self.base)
+        self.write("src/base-only.ts")
+        base_tip = self.commit()
+        self.git("checkout", "-q", head)
+        paths = changed_paths(base_tip, head, self.root)
+        self.assertEqual(
+            set(paths),
+            {
+                "examples/provider-python/old test.py",
+                "examples/provider-python/new\ntest.py",
+                removed,
+            },
+        )
+        self.assertEqual(select_examples(paths), select_examples(None))
+        self.assertEqual(changed_paths(head, head, self.root), [])
+
+    def test_invalid_or_missing_revisions_fail_closed(self):
+        with self.assertRaises(ValueError):
+            changed_paths("--help", self.base, self.root)
+        with self.assertRaises(subprocess.CalledProcessError):
+            changed_paths("0" * 40, self.base, self.root)
+
+
+class RunnerTests(unittest.TestCase):
+    def test_minimums_retain_original_bounds(self):
+        self.assertEqual(
+            minimum_constraints("# comment\nanyio>=4.14.2,<5\nopenai>=3.19.2,<4\n"),
+            "anyio==4.14.2\nopenai==3.19.2\n",
+        )
+        for requirements in ("", "# empty", "openai", "openai~=3.19"):
+            with self.subTest(requirements=requirements), self.assertRaises(ValueError):
+                minimum_constraints(requirements)
+
+    def test_upgrade_preserves_legacy_environment_and_uses_isolated_python(self):
+        version = types.SimpleNamespace(major=3, minor=10)
+        with (
+            patch("examples.sys.version_info", version),
+            patch("examples.venv.EnvBuilder.create") as create,
+            patch("examples.subprocess.run") as run,
+        ):
+            run_example("python-provider-upgrade")
+        environment = create.call_args.args[0]
+        calls = run.call_args_list
+        self.assertIn("openai==2.3.0", calls[0].args[0])
+        self.assertIn("-r", calls[1].args[0])
+        self.assertIn("test", calls[2].args[0])
+        self.assertEqual(len(calls), 3)
+        for call in calls:
+            self.assertTrue(str(call.args[0][0]).startswith(str(environment)))
+            self.assertEqual(call.kwargs["env"]["PROMPTFOO_PYTHON"], call.args[0][0])
+            self.assertEqual(call.kwargs["cwd"], ROOT)
+            self.assertTrue(call.kwargs["check"])
+        self.assertFalse(environment.exists())
+
+    def test_fresh_environments_require_dependency_consistency(self):
+        self.assertEqual(
+            [
+                name
+                for name, example in EXAMPLES.items()
+                if not example.check_dependencies
+            ],
+            ["python-provider-upgrade"],
+        )
+        with (
+            patch(
+                "examples.sys.version_info", types.SimpleNamespace(major=3, minor=14)
+            ),
+            patch("examples.venv.EnvBuilder.create"),
+            patch("examples.subprocess.run") as run,
+        ):
+            run_example("python-provider-minimums")
+        calls = run.call_args_list
+        self.assertIn("-c", calls[0].args[0])
+        self.assertEqual(calls[1].args[0][1:], ("-m", "pip", "check"))
+        self.assertIn("test", calls[2].args[0])
+
+    def test_install_failure_stops_before_tests(self):
+        with (
+            patch(
+                "examples.sys.version_info", types.SimpleNamespace(major=3, minor=10)
+            ),
+            patch("examples.venv.EnvBuilder.create"),
+            patch(
+                "examples.subprocess.run",
+                side_effect=subprocess.CalledProcessError(1, "pip"),
+            ) as run,
+        ):
+            with self.assertRaises(subprocess.CalledProcessError):
+                run_example("python-provider-upgrade")
+        self.assertEqual(run.call_count, 1)
+
+
+class GateTests(unittest.TestCase):
+    def test_only_success_and_explicit_empty_selection_pass(self):
+        results = ("success", "failure", "cancelled", "skipped", "")
+        for selection, selected, tests in itertools.product(
+            results, ("true", "false", ""), results
+        ):
+            with self.subTest(selection=selection, selected=selected, tests=tests):
+                valid = selection == "success" and (
+                    (selected == "true" and tests == "success")
+                    or (selected == "false" and tests == "skipped")
+                )
+                if valid:
+                    check_gate(selection, selected, tests)
+                else:
+                    with self.assertRaises(ValueError):
+                        check_gate(selection, selected, tests)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,5 +1,6 @@
 """Integration checks for the example's real Docker sandbox."""
 
+import os
 import unittest
 from unittest.mock import patch
 
@@ -10,6 +11,35 @@ from validate_and_run_code import DOCKER_IMAGE, get_assert
 
 
 class SandboxTest(unittest.TestCase):
+    def test_docker_endpoint_uses_explicit_host_or_epicbox_default(self) -> None:
+        for endpoint in (None, "unix:///tmp/example-docker.sock"):
+            with (
+                self.subTest(endpoint=endpoint),
+                patch.dict(
+                    os.environ,
+                    {"DOCKER_HOST": endpoint} if endpoint else {},
+                    clear=True,
+                ),
+                patch.object(epicbox, "configure") as configure,
+                patch.object(
+                    epicbox,
+                    "run",
+                    return_value={"exit_code": 0, "stdout": b"10", "stderr": b""},
+                ),
+            ):
+                result = get_assert(
+                    "```python\ndef check(x):\n    return x * 2\n```",
+                    {
+                        "vars": {
+                            "function_name": "check",
+                            "test_input": "5",
+                            "expected_output": 10,
+                        }
+                    },
+                )
+                self.assertTrue(result["pass"])
+                self.assertEqual(configure.call_args.kwargs["docker_url"], endpoint)
+
     def test_missing_code_is_rejected(self) -> None:
         self.assertEqual(
             get_assert("No Python code", {}),

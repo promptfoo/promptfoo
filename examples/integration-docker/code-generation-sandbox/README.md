@@ -20,6 +20,10 @@ python -m pip install -r requirements.txt
 docker pull python:3.9-alpine
 ```
 
+If your local Docker daemon uses a non-default Unix socket (for example, Colima),
+set `DOCKER_HOST` to that socket before running the example or tests. Epicbox does
+not automatically read Docker CLI contexts.
+
 The requirements use the official Epicbox 1.1.1 GitHub release with a SHA-256 hash.
 This release fixes compatibility with urllib3 2; PyPI still serves Epicbox 1.1.0.
 The transport dependencies retain security minimums for existing environments.
@@ -31,3 +35,7 @@ Run the sandbox integration tests with Docker available:
 ```bash
 python -m unittest discover -p 'test_*.py' -v
 ```
+
+Repository contributors can run these tests plus the three original CLI cases,
+using deterministic model fixtures and real containers, through the shared
+[example CI runner](../../../.github/EXAMPLES.md).
