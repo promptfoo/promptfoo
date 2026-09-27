@@ -14,6 +14,7 @@ import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { recalculatePromptMetrics } from '../../src/node/recalculatePromptMetrics';
 import { deleteEval, deleteEvalResult } from '../../src/util/database';
+import { streamEvalCsv } from '../../src/util/eval/evalTableUtils';
 import { createDeferred } from '../util/utils';
 
 import type { ApiProvider, Assertion, TestSuite } from '../../src/types/index';
@@ -67,6 +68,50 @@ describe('deleting evaluated results preserves surviving token usage', () => {
     }
     vi.restoreAllMocks();
   });
+
+  it.each(['delete', 'recalculate'])(
+    'excludes late comparison metrics during %s',
+    async (operation) => {
+      const suite: TestSuite = {
+        providers: [
+          { id: () => 'comparison-metric', callApi: async (prompt) => ({ output: prompt }) },
+        ],
+        prompts: [
+          { raw: 'ok A', label: 'A' },
+          { raw: 'ok B', label: 'B' },
+        ],
+        tests: Array.from({ length: 2 }, () => ({
+          assert: [
+            { type: 'contains' as const, value: 'ok', metric: 'quality' },
+            { type: 'max-score' as const, metric: 'quality' },
+          ],
+        })),
+      };
+      const evaluation = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      evalIds.push(evaluation.id);
+      await evaluate(suite, evaluation, {});
+      expect(evaluation.prompts[0].metrics!.namedScoresCount.quality).toBe(2);
+      if (operation === 'delete') {
+        const target = (await EvalResult.findManyByEvalId(evaluation.id)).find(
+          (row) => row.testIdx === 0 && row.promptIdx === 0,
+        )!;
+        await deleteEvalResult(evaluation.id, target.id);
+      } else {
+        await recalculatePromptMetrics(evaluation);
+      }
+      const reloaded = (await Eval.findById(evaluation.id))!;
+      expect(reloaded.prompts[0].metrics!.namedScoresCount.quality).toBe(
+        operation === 'delete' ? 1 : 2,
+      );
+      let csv = '';
+      await streamEvalCsv(reloaded, {
+        write: (chunk) => {
+          csv += chunk;
+        },
+      });
+      expect(csv.split('\n')[0].match(/Metric: quality/g)).toHaveLength(2);
+    },
+  );
 
   it('carries rendered metric names into inherited custom assertion components', async () => {
     const suite: TestSuite = {

@@ -20,6 +20,7 @@ import { ResultFailureReason } from '../../src/types/index';
 import { deleteEvalResult } from '../../src/util/database';
 import { shouldShareResults } from '../../src/util/sharing';
 import { createCompletedPrompt, createPromptMetrics } from '../factories/eval';
+import { createGradingResult } from '../factories/gradingResult';
 
 vi.mock('../../src/database/signal', async () => {
   const actual = await vi.importActual('../../src/database/signal');
@@ -978,6 +979,7 @@ describe('retry command', () => {
           score: 1,
           failureReason: ResultFailureReason.NONE,
           namedScores: { accuracy: 0.9, relevance: 0.8 },
+          gradingResult: createGradingResult({ componentResults: [] }),
         },
         {
           id: `${evalRecord.id}-named-2`,
@@ -991,6 +993,7 @@ describe('retry command', () => {
           score: 1,
           failureReason: ResultFailureReason.NONE,
           namedScores: { accuracy: 0.7, relevance: 0.9 },
+          gradingResult: createGradingResult({ componentResults: [] }),
         },
       ]);
 
@@ -1081,6 +1084,7 @@ describe('retry command', () => {
           cost: 0.01,
           failureReason: ResultFailureReason.NONE,
           namedScores: { accuracy: 0.9 },
+          gradingResult: createGradingResult({ componentResults: [] }),
         },
         {
           id: `${evalRecord.id}-batch1-2`,
@@ -1096,6 +1100,7 @@ describe('retry command', () => {
           cost: 0.01,
           failureReason: ResultFailureReason.NONE,
           namedScores: { accuracy: 0.8 },
+          gradingResult: createGradingResult({ componentResults: [] }),
         },
         // Batch 2 (testIdx 1000-1999)
         {
@@ -1112,6 +1117,7 @@ describe('retry command', () => {
           cost: 0.02,
           failureReason: ResultFailureReason.ASSERT,
           namedScores: { accuracy: 0.5 },
+          gradingResult: createGradingResult({ componentResults: [] }),
         },
         {
           id: `${evalRecord.id}-batch2-2`,
@@ -1127,6 +1133,7 @@ describe('retry command', () => {
           cost: 0.02,
           failureReason: ResultFailureReason.ERROR,
           namedScores: { accuracy: 0.3 },
+          gradingResult: createGradingResult({ componentResults: [] }),
         },
         // Batch 3 (testIdx 2000-2999)
         {
@@ -1143,6 +1150,7 @@ describe('retry command', () => {
           cost: 0.015,
           failureReason: ResultFailureReason.NONE,
           namedScores: { accuracy: 1.0 },
+          gradingResult: createGradingResult({ componentResults: [] }),
         },
       ]);
 
@@ -1180,6 +1188,7 @@ describe('retry command', () => {
           score: 1,
           failureReason: ResultFailureReason.NONE,
           namedScores: { boundary_test: 0.5 },
+          gradingResult: createGradingResult({ componentResults: [] }),
         },
         {
           id: `${evalRecord.id}-boundary-2`,
@@ -1193,6 +1202,7 @@ describe('retry command', () => {
           score: 1,
           failureReason: ResultFailureReason.NONE,
           namedScores: { boundary_test: 0.5 },
+          gradingResult: createGradingResult({ componentResults: [] }),
         },
       ]);
 
@@ -1227,6 +1237,7 @@ describe('retry command', () => {
           cost: 0.005,
           failureReason: ResultFailureReason.NONE,
           namedScores: { quality: 0.9 },
+          gradingResult: createGradingResult({ componentResults: [] }),
         },
       ]);
 

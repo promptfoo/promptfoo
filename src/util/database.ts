@@ -1,5 +1,5 @@
 import { and, desc, eq, gt, inArray, isNull, ne, or, sql } from 'drizzle-orm';
-import { BLOB_SCAN_MAX_STRING_LENGTH, collectBlobHashes } from '../blobs/blobRefs';
+import { collectBlobHashes } from '../blobs/blobRefs';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { assertEvalNotRunning, EvalResultDeletionError } from '../database/evalRun';
@@ -514,11 +514,7 @@ type DatabaseTransaction = Parameters<
 const BLOB_SURVIVOR_SCAN_BATCH_SIZE = 500;
 
 function mentionsBlobHash(value: unknown, blobHash: string): boolean {
-  return collectBlobHashes(value, {
-    // Match portable imports, including nested provider outputs and rendered prompts.
-    maxDepth: 64,
-    maxStringLength: BLOB_SCAN_MAX_STRING_LENGTH,
-  }).has(blobHash.toLowerCase());
+  return collectBlobHashes(value).has(blobHash.toLowerCase());
 }
 
 async function traceUsesBlobHash(
@@ -811,6 +807,11 @@ async function cleanupBlobReferencesForDeletedResult(
   if (blobReferences.length === 0) {
     return;
   }
+  const evalRow = await tx
+    .select({ prompts: evalsTable.prompts })
+    .from(evalsTable)
+    .where(eq(evalsTable.id, evalId))
+    .get();
 
   for (const blobReference of blobReferences) {
     const isEvalLevelReference = blobReference.testIdx === null && blobReference.promptIdx === null;
@@ -842,7 +843,8 @@ async function cleanupBlobReferencesForDeletedResult(
       }
     } else if (
       isImportedReference &&
-      (await traceUsesBlobHash(tx, evalId, blobReference.blobHash))
+      (mentionsBlobHash(evalRow?.prompts, blobReference.blobHash) ||
+        (await traceUsesBlobHash(tx, evalId, blobReference.blobHash)))
     ) {
       if (!isEvalLevelReference) {
         await tx

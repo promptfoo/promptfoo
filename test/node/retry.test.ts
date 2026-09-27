@@ -212,6 +212,13 @@ describe('retryCommand', () => {
             score: 0,
             latencyMs: 0,
             namedScores: {},
+            gradingResult: {
+              pass: false,
+              score: 0,
+              reason: 'No assertions ran',
+              componentResults: [],
+              tokensUsed: { total: 0, numRequests: 0 },
+            },
           },
           {
             id: 'failed-result',

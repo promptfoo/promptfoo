@@ -1,15 +1,14 @@
 import logger from '../logger';
 import { ResultFailureReason } from '../types/index';
-import { accumulateNamedMetric } from '../util/namedMetrics';
+import { getNamedMetricContribution, type NamedMetricAccumulator } from '../util/namedMetrics';
 import {
   createDefaultPromptMetrics,
   getAssertionCounts,
   recomputeDerivedMetrics,
 } from '../util/promptMetrics';
-import { accumulateResultTokenUsage } from '../util/tokenUsageUtils';
+import { accumulateResultTokenUsage, hasGradingTokenUsage } from '../util/tokenUsageUtils';
 
 import type Eval from '../models/eval';
-import type { PromptMetrics } from '../types/index';
 
 // Batch size of 1000 balances memory usage vs. database query overhead for large evals (40K+ results)
 const RECALCULATE_BATCH_SIZE = 1000;
@@ -28,13 +27,12 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
     ? evalRecord.config.derivedMetrics
     : undefined;
 
-  // Create a map to track metrics by promptIdx
-  const promptMetricsMap = new Map<number, PromptMetrics>();
-
-  // Initialize metrics for each prompt
-  for (const [promptIdx] of evalRecord.prompts.entries()) {
-    promptMetricsMap.set(promptIdx, createDefaultPromptMetrics());
-  }
+  const promptMetrics = evalRecord.prompts.map(() => ({
+    metrics: createDefaultPromptMetrics(),
+    unknownAssertionCounts: false,
+    unknownGradingUsage: false,
+    unknownNamedMetrics: new Map<string, Set<keyof NamedMetricAccumulator>>(),
+  }));
 
   // Stream results in batches to avoid OOM with large evaluations
   let currentResultId: string | undefined;
@@ -45,16 +43,16 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
 
       for (const result of batch) {
         currentResultId = result.id;
-        const metrics = promptMetricsMap.get(result.promptIdx);
-        if (!metrics) {
+        const state = promptMetrics[result.promptIdx];
+        if (!state) {
           logger.debug(`Skipping result with invalid promptIdx: ${result.promptIdx}`, {
             resultId: result.id,
             evalId: evalRecord.id,
           });
           continue;
         }
+        const { metrics } = state;
 
-        // Update test counts
         if (result.success) {
           metrics.testPassCount++;
         } else if (result.failureReason === ResultFailureReason.ERROR) {
@@ -63,7 +61,6 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
           metrics.testFailCount++;
         }
 
-        // Update scores and other metrics
         metrics.score += result.score ?? 0;
         metrics.totalLatencyMs += result.latencyMs || 0;
         const incurredCost =
@@ -75,20 +72,33 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
         metrics.cost += result.cost || 0;
 
         for (const [key, value] of Object.entries(result.namedScores || {})) {
-          accumulateNamedMetric(metrics, {
+          const contribution = getNamedMetricContribution({
             metricName: key,
             metricValue: value,
             gradingResult: result.gradingResult,
           });
+          for (const bucket of Object.keys(contribution) as (keyof NamedMetricAccumulator)[]) {
+            const delta = contribution[bucket];
+            if (delta === undefined) {
+              const unknown = state.unknownNamedMetrics.get(key) ?? new Set();
+              unknown.add(bucket);
+              state.unknownNamedMetrics.set(key, unknown);
+            } else {
+              metrics[bucket] ||= {};
+              metrics[bucket][key] = (metrics[bucket][key] ?? 0) + delta;
+            }
+          }
         }
 
-        // Update assertion counts
         const counts = getAssertionCounts(result.gradingResult);
         if (counts) {
           metrics.assertPassCount += counts.pass;
           metrics.assertFailCount += counts.fail;
+        } else {
+          state.unknownAssertionCounts = true;
         }
 
+        state.unknownGradingUsage ||= !hasGradingTokenUsage(result.gradingResult);
         accumulateResultTokenUsage(metrics.tokenUsage, result);
       }
 
@@ -106,22 +116,45 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
     throw error;
   }
 
-  // Update prompt metrics with recalculated values
-  for (const [promptIdx, newMetrics] of promptMetricsMap.entries()) {
-    if (promptIdx < evalRecord.prompts.length) {
-      for (const metric of derivedMetrics ?? []) {
-        const previous = evalRecord.prompts[promptIdx].metrics?.namedScores?.[metric.name];
-        if (typeof metric.value !== 'string' && previous !== undefined) {
-          newMetrics.namedScores[metric.name] = previous;
+  for (const [promptIdx, state] of promptMetrics.entries()) {
+    const { metrics: newMetrics } = state;
+    const previous = evalRecord.prompts[promptIdx].metrics;
+    // Stripped and historical rows cannot replace retained totals with guessed contributions.
+    if (state.unknownAssertionCounts) {
+      newMetrics.assertPassCount = previous?.assertPassCount ?? 0;
+      newMetrics.assertFailCount = previous?.assertFailCount ?? 0;
+    }
+    if (state.unknownGradingUsage) {
+      newMetrics.tokenUsage.assertions = previous?.tokenUsage?.assertions;
+      const incurredAssertions = previous?.tokenUsage?.incurredTokenUsage?.assertions;
+      if (incurredAssertions || newMetrics.tokenUsage.incurredTokenUsage) {
+        newMetrics.tokenUsage.incurredTokenUsage ||= {};
+        newMetrics.tokenUsage.incurredTokenUsage.assertions = incurredAssertions;
+      }
+    }
+    for (const [name, buckets] of state.unknownNamedMetrics) {
+      for (const bucket of buckets) {
+        const value = previous?.[bucket]?.[name];
+        if (value === undefined) {
+          delete newMetrics[bucket]?.[name];
+        } else {
+          newMetrics[bucket] ||= {};
+          newMetrics[bucket][name] = value;
         }
       }
-      await recomputeDerivedMetrics(
-        newMetrics,
-        derivedMetrics,
-        newMetrics.testPassCount + newMetrics.testFailCount + newMetrics.testErrorCount,
-      );
-      evalRecord.prompts[promptIdx].metrics = newMetrics;
     }
+    for (const metric of derivedMetrics ?? []) {
+      const previousValue = previous?.namedScores?.[metric.name];
+      if (typeof metric.value !== 'string' && previousValue !== undefined) {
+        newMetrics.namedScores[metric.name] = previousValue;
+      }
+    }
+    await recomputeDerivedMetrics(
+      newMetrics,
+      derivedMetrics,
+      newMetrics.testPassCount + newMetrics.testFailCount + newMetrics.testErrorCount,
+    );
+    evalRecord.prompts[promptIdx].metrics = newMetrics;
   }
 
   // Save the updated prompt metrics

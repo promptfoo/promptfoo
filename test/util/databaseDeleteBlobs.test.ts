@@ -94,7 +94,15 @@ describe('result deletion blob provenance', () => {
   }
 
   async function importMedia(
-    location: 'response' | 'prompt' | 'deep-response' | 'trace' | 'trace-hash' | 'span-hash',
+    location:
+      | 'response'
+      | 'prompt'
+      | 'header'
+      | 'long-response'
+      | 'deep-response'
+      | 'trace'
+      | 'trace-hash'
+      | 'span-hash',
   ) {
     const id = randomUUID();
     const data = Buffer.from(`portable media ${id}`);
@@ -103,9 +111,11 @@ describe('result deletion blob provenance', () => {
     const survivor = result(1, { output: location === 'response' ? uri : 'control' });
     if (location === 'prompt') {
       survivor.prompt.raw = `User media: ${uri}`;
+    } else if (location === 'long-response') {
+      survivor.response!.output = `${'x'.repeat(100_001)} ${uri}`;
     } else if (location === 'deep-response') {
       let nested: unknown = uri;
-      for (let depth = 0; depth < 12; depth++) {
+      for (let depth = 0; depth < 80; depth++) {
         nested = { child: nested };
       }
       survivor.response!.output = nested;
@@ -120,7 +130,7 @@ describe('result deletion blob provenance', () => {
         results: {
           version: 3,
           timestamp: new Date().toISOString(),
-          prompts: [{ raw: 'blob', label: 'blob', provider: 'echo' }],
+          prompts: [{ raw: location === 'header' ? uri : 'blob', label: 'blob', provider: 'echo' }],
           results: [result(0, { output: uri }), survivor],
         },
         blobAssets: [
@@ -174,7 +184,7 @@ describe('result deletion blob provenance', () => {
     expect(await getShareAuthorizedBlob(hash, id)).toBeNull();
   });
 
-  it.each(['prompt', 'deep-response'] as const)(
+  it.each(['prompt', 'deep-response', 'long-response'] as const)(
     'preserves imported media used in a surviving %s',
     async (location) => {
       const { id, hash, data, rows } = await importMedia(location);
@@ -185,6 +195,19 @@ describe('result deletion blob provenance', () => {
       expect(await getShareAuthorizedBlob(hash, id)).toBeNull();
     },
   );
+
+  it('preserves imported media in a retained header after all its results are deleted', async () => {
+    const { id, hash, uri, data, rows } = await importMedia('header');
+    for (const row of rows) {
+      await deleteEvalResult(id, row.id);
+      expect((await getShareAuthorizedBlob(hash, id))?.data).toEqual(data);
+      expect(await exportedAssets(id)).toEqual([expect.objectContaining({ hash })]);
+    }
+    expect((await Eval.findById(id))!.prompts[0].raw).toBe(uri);
+    expect(await references(id)).toEqual([
+      expect.objectContaining({ testIdx: null, promptIdx: null, location: 'import' }),
+    ]);
+  });
 
   it.each(['trace', 'trace-hash', 'span-hash'] as const)(
     'preserves imported provenance for a retained %s',
@@ -328,7 +351,7 @@ describe('result deletion blob provenance', () => {
     },
   );
 
-  it.each(['output', 'audio', 'metadata', 'testCase'] as const)(
+  it.each(['output', 'audio', 'metadata', 'testCase', 'prompt-header'] as const)(
     'does not transfer a classified reference to a copied envelope in %s',
     async (location) => {
       const evaluation = await EvalFactory.create({ numResults: 0 });
@@ -346,6 +369,9 @@ describe('result deletion blob provenance', () => {
         survivor.response!.audio = { blobRef: { ...blobRef } };
       } else if (location === 'metadata') {
         survivor.metadata = { copied: { ...blobRef } };
+      } else if (location === 'prompt-header') {
+        evaluation.prompts[0].raw = blobRef.uri;
+        await evaluation.addPrompts(evaluation.prompts);
       } else {
         survivor.testCase.vars = { copied: { ...blobRef } };
       }

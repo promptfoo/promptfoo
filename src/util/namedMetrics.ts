@@ -21,6 +21,13 @@ function getContributingAssertionCount(
   }
   let count = 0;
   for (const component of gradingResult.componentResults) {
+    // Comparisons run after named metrics have been credited.
+    if (
+      component?.assertion?.type === 'select-best' ||
+      component?.assertion?.type === 'max-score'
+    ) {
+      continue;
+    }
     const renderedMetric = component?.metadata?.renderedMetric;
     const metric =
       typeof renderedMetric === 'string' ? renderedMetric : component?.assertion?.metric;
