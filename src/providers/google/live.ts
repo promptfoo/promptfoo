@@ -297,6 +297,11 @@ export class GoogleLiveProvider implements ApiProvider {
     return this.config.apiKey || getEnvString('GOOGLE_API_KEY') || getEnvString('GEMINI_API_KEY');
   }
 
+  requiresApiKey(): boolean {
+    // OAuth and Application Default Credentials are validated when connecting.
+    return false;
+  }
+
   /**
    * Gets an OAuth2 access token from Google credentials for the Generative Language API.
    * Returns undefined if credentials are not available or if there's an error.

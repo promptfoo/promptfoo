@@ -255,6 +255,8 @@ export interface OpenCodeSDKConfig {
    * Falls back to provider-specific environment variables
    */
   apiKey?: string;
+  /** Allow keyless local providers when starting an OpenCode server. */
+  apiKeyRequired?: boolean;
 
   /**
    * LLM provider ID (e.g., 'anthropic', 'openai', 'google', 'ollama')
@@ -871,6 +873,11 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
   id(): string {
     return this.providerId;
+  }
+
+  requiresApiKey(): boolean {
+    // Existing servers manage their own authentication.
+    return !this.config.baseUrl && this.config.apiKeyRequired !== false;
   }
 
   /**

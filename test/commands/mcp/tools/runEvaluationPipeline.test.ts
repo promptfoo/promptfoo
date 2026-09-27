@@ -4,15 +4,20 @@ import os from 'node:os';
 import path from 'node:path';
 import type { Server } from 'node:http';
 
+import input from '@inquirer/input';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { enableCache, isCacheEnabled } from '../../../../src/cache';
 import cliState from '../../../../src/cliState';
 import { registerRunEvaluationTool } from '../../../../src/commands/mcp/tools/runEvaluation';
+import * as envars from '../../../../src/envars';
 import * as accounts from '../../../../src/globalConfig/accounts';
 import logger from '../../../../src/logger';
 import { runDbMigrations } from '../../../../src/migrate';
 import Eval from '../../../../src/models/eval';
 import { doEval } from '../../../../src/node/doEval';
+import { GoogleLiveProvider } from '../../../../src/providers/google/live';
+import { VertexLiveProvider } from '../../../../src/providers/google/vertexLive';
+import { OpenCodeSDKProvider } from '../../../../src/providers/opencode-sdk';
 import { createShareableUrl, isSharingEnabled } from '../../../../src/share';
 import * as suggestions from '../../../../src/suggestions';
 import { BAD_EMAIL_RESULT, EMAIL_OK_STATUS } from '../../../../src/types/email';
@@ -23,6 +28,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 vi.mock('../../../../src/telemetry', () => ({
   default: { record: vi.fn(), send: vi.fn() },
 }));
+vi.mock('@inquirer/input', () => ({ default: vi.fn() }));
 vi.mock('../../../../src/util/config/default', () => ({
   loadDefaultConfig: vi.fn(async () => ({ defaultConfig: {}, defaultConfigPath: undefined })),
 }));
@@ -46,6 +52,7 @@ describe('MCP evaluation execution contract', () => {
   let originalState: Record<string, unknown>;
   let server: Server | undefined;
   let responseTimer: ReturnType<typeof setTimeout> | undefined;
+  const originalIsTTY = process.stdout.isTTY;
 
   beforeEach(async () => {
     restoreEnv = mockProcessEnv();
@@ -80,6 +87,7 @@ describe('MCP evaluation execution contract', () => {
       server = undefined;
     }
     enableCache();
+    process.stdout.isTTY = originalIsTTY;
     Object.assign(cliState, originalState);
     vi.restoreAllMocks();
     restoreEnv();
@@ -217,9 +225,126 @@ describe('MCP evaluation execution contract', () => {
     expect(response.success, response.error).toBe(true);
     expect(createShareableUrl).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({ id: response.data.eval.id }),
-      { silent: true },
+      { silent: true, interactive: false },
     );
   });
+
+  it.each([false, true])(
+    'completes real self-hosted sharing without a TTY prompt with filtering=%s',
+    async (filtered) => {
+      const actualShare =
+        await vi.importActual<typeof import('../../../../src/share')>('../../../../src/share');
+      vi.mocked(createShareableUrl).mockImplementation(actualShare.createShareableUrl);
+      vi.spyOn(accounts, 'getAuthor').mockReturnValue(null);
+      vi.spyOn(accounts, 'getUserEmail').mockReturnValue(null);
+      vi.spyOn(envars, 'isCI').mockReturnValue(false);
+      vi.stubEnv('PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST', undefined);
+      vi.mocked(input).mockReset().mockRejectedValue(new Error('Unexpected interactive prompt'));
+      process.stdout.isTTY = true;
+      const requests: string[] = [];
+      server = createServer(async (request, response) => {
+        for await (const _chunk of request) {
+          /* Consume upload before responding. */
+        }
+        requests.push(request.url!);
+        response.setHeader('Content-Type', 'application/json');
+        response.end(JSON.stringify({ id: 'shared-fixture' }));
+      });
+      await new Promise<void>((resolve) => server!.listen(0, '127.0.0.1', resolve));
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Expected TCP address');
+      }
+      const localUrl = `http://127.0.0.1:${address.port}`;
+      await writeFile(
+        configPath,
+        JSON.stringify({
+          providers: ['echo'],
+          prompts: ['Hello'],
+          tests: [{ assert: [{ type: 'equals', value: 'Hello' }] }],
+          sharing: { apiBaseUrl: localUrl, appBaseUrl: localUrl },
+        }),
+      );
+      const response = await run({
+        ...(filtered ? { testCaseIndices: 0 } : {}),
+        share: true,
+        write: false,
+      });
+      expect(response.success, response.error).toBe(true);
+      expect(input).not.toHaveBeenCalled();
+      expect(requests).toContain('/api/eval');
+    },
+  );
+
+  describe.each([
+    {
+      id: 'opencode:sdk',
+      config: { baseUrl: 'http://127.0.0.1:12345' },
+      prototype: OpenCodeSDKProvider.prototype,
+    },
+    {
+      id: 'opencode:sdk',
+      config: { apiKeyRequired: false },
+      prototype: OpenCodeSDKProvider.prototype,
+    },
+    {
+      id: 'google:live:gemini-2.0-flash-live-001',
+      config: { credentials: { client_email: 'fixture@example.com', private_key: 'fixture' } },
+      prototype: GoogleLiveProvider.prototype,
+    },
+    {
+      id: 'google:live:gemini-2.0-flash-live-001',
+      config: {},
+      prototype: GoogleLiveProvider.prototype,
+    },
+    {
+      id: 'vertex:live:gemini-2.0-flash-live-001',
+      config: { projectId: 'fixture-project' },
+      prototype: VertexLiveProvider.prototype,
+    },
+  ])('$id supported keyless authentication', ({ id, config, prototype }) => {
+    it.each([false, true])('reaches the provider with filtering=%s', async (filtered) => {
+      for (const key of [
+        'ANTHROPIC_API_KEY',
+        'OPENAI_API_KEY',
+        'GOOGLE_API_KEY',
+        'GEMINI_API_KEY',
+      ]) {
+        vi.stubEnv(key, undefined);
+      }
+      const call = vi.spyOn(prototype, 'callApi').mockResolvedValue({ output: 'Hello' });
+      await writeFile(
+        configPath,
+        JSON.stringify({
+          providers: [{ id, config }],
+          prompts: ['Hello'],
+          tests: [{ assert: [{ type: 'equals', value: 'Hello' }] }],
+        }),
+      );
+      const response = await run({ ...(filtered ? { testCaseIndices: 0 } : {}), write: false });
+      expect(response.success, response.error).toBe(true);
+      expect(response.data.results.stats).toMatchObject({ successes: 1, failures: 0, errors: 0 });
+      expect(call).toHaveBeenCalledOnce();
+    });
+  });
+
+  it.each([false, true])(
+    'still rejects missing required OpenCode keys with filtering=%s',
+    async (filtered) => {
+      for (const key of ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY']) {
+        vi.stubEnv(key, undefined);
+      }
+      const call = vi.spyOn(OpenCodeSDKProvider.prototype, 'callApi');
+      await writeFile(
+        configPath,
+        JSON.stringify({ providers: ['opencode:sdk'], prompts: ['Hello'], tests: [{ vars: {} }] }),
+      );
+      const response = await run({ ...(filtered ? { testCaseIndices: 0 } : {}), write: false });
+      expect(response.success).toBe(false);
+      expect(response.error).toContain('Missing required API keys');
+      expect(call).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([false, true])('persists only when requested with filtering=%s', async (filtered) => {
     const response = await run({ ...(filtered ? { testCaseIndices: 0 } : {}), write: true });

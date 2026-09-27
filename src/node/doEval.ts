@@ -1061,7 +1061,10 @@ async function doEvalWithEnv(
     let sharePromise: Promise<string | null> | null = null;
     if (willShare) {
       // Start the share operation in background with silent mode (no progress bar)
-      sharePromise = createShareableUrl(evalRecord, { silent: true });
+      sharePromise = createShareableUrl(evalRecord, {
+        silent: true,
+        ...(isMcpInvocation ? { interactive: false } : {}),
+      });
     }
 
     let successes = 0;
