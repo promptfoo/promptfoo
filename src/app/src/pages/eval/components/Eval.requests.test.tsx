@@ -1,6 +1,6 @@
 import { act } from 'react';
 
-import { createMockResponse, mockCallApiRoutes } from '@app/tests/apiMocks';
+import { mockCallApiRoutes, resetCallApiMock } from '@app/tests/apiMocks';
 import { callApi, getApiBaseUrl } from '@app/utils/api';
 import { renderWithProviders } from '@app/utils/testutils';
 import { screen, waitFor } from '@testing-library/react';
@@ -67,7 +67,7 @@ const initialViewState = useResultsViewSettingsStore.getState();
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(callApi).mockReset();
+  resetCallApiMock();
   vi.mocked(getApiBaseUrl).mockReset().mockReturnValue('');
   useTableStore.setState(initialTableState, true);
   useResultsViewSettingsStore.setState(initialViewState, true);
@@ -201,14 +201,14 @@ it.each(['success', 'HTTP failure', 'network failure'] as const)(
     const pending: Array<() => void> = [];
     const destinationRequests: string[] = [];
     let holdDestination = true;
-    vi.mocked(callApi).mockImplementation(async (url) => {
+    const response = async (url: string) => {
       if (url === '/results') {
-        return createMockResponse({ data: [{ evalId: 'source' }, { evalId: 'destination' }] });
+        return { data: [{ evalId: 'source' }, { evalId: 'destination' }] };
       }
       const parsed = new URL(url, window.location.origin);
       const id = parsed.pathname.split('/')[2];
       const offset = Number(parsed.searchParams.get('offset'));
-      const response = createMockResponse({
+      const payload = {
         table: {
           head: { prompts: [], vars: ['case'] },
           body: Array.from({ length: Math.min(50, 80 - offset) }, (_, index) => ({
@@ -222,25 +222,30 @@ it.each(['success', 'HTTP failure', 'network failure'] as const)(
         version: 4,
         totalCount: 80,
         filteredCount: 80,
-      });
+      };
       if (id === 'destination') {
         destinationRequests.push(url);
         if (holdDestination) {
-          return new Promise<Response>((resolve, reject) =>
+          return new Promise((resolve, reject) =>
             pending.push(() => {
               if (outcome === 'network failure') {
                 reject(new Error('Connection lost'));
               } else {
-                resolve(
-                  outcome === 'HTTP failure' ? createMockResponse({}, { status: 404 }) : response,
-                );
+                resolve(payload);
               }
             }),
           );
         }
       }
-      return response;
-    });
+      return payload;
+    };
+    mockCallApiRoutes([
+      {
+        path: /^\/(?:results$|eval\/(source|destination)\/table\?)/,
+        repeat: true,
+        response,
+      },
+    ]);
     const element = (id: string) => (
       <MemoryRouter>
         <Eval fetchId={id} />
@@ -248,6 +253,11 @@ it.each(['success', 'HTTP failure', 'network failure'] as const)(
     );
     const rendered = renderWithProviders(element('source'));
     await screen.findByText('source row 0');
+    if (outcome === 'HTTP failure') {
+      mockCallApiRoutes([
+        { path: /^\/eval\/destination\/table\?/, repeat: true, status: 404, response },
+      ]);
+    }
     window.history.replaceState({}, '', '/eval/destination?rowId=75');
     rendered.rerender(element('destination'));
     await waitFor(() => expect(pending.length).toBeGreaterThan(0));
@@ -310,6 +320,7 @@ const ratingTableProps = {
   zoom: 1,
 };
 const ratingQuery = '/eval/rating-eval/table?offset=0&limit=50&filterMode=all&search=test';
+const ratingRoute = '/eval/rating-eval/results/result-id/rating';
 
 function initializeRatingTable() {
   useTableStore.setState({
@@ -349,42 +360,48 @@ it.each([
     });
     let writeCount = 0;
     const reads: string[] = [];
-    vi.mocked(callApi).mockImplementation(async (url, options) => {
-      if (options?.method === 'POST') {
-        writeCount += 1;
-        if (writeCount === 1) {
-          await firstWrite;
-        } else if (outcome === 'confirmed failure') {
-          return createMockResponse({}, { status: 400 });
-        }
-        const score = writeCount === 1 ? 0 : 0.25;
-        serverTable = structuredClone(serverTable);
-        Object.assign(serverTable.body[0].outputs[0], {
-          pass: false,
-          score,
-          failureReason: 1,
-          gradingResult: { pass: false, score },
-        });
-        if (writeCount === 2 && outcome === 'ambiguous failure') {
-          throw new Error('Connection lost after commit');
-        }
-        return createMockResponse({
-          id: 'result-id',
-          success: false,
-          score,
-          failureReason: 1,
-          gradingResult: { pass: false, score },
-        });
+    const writeResponse = async () => {
+      writeCount += 1;
+      if (writeCount === 1) {
+        await firstWrite;
+      } else if (outcome === 'confirmed failure') {
+        return {};
       }
-      reads.push(url);
-      return createMockResponse({
-        table: serverTable,
-        config: {},
-        version: 4,
-        totalCount: 1,
-        filteredCount: 1,
+      const score = writeCount === 1 ? 0 : 0.25;
+      serverTable = structuredClone(serverTable);
+      Object.assign(serverTable.body[0].outputs[0], {
+        pass: false,
+        score,
+        failureReason: 1,
+        gradingResult: { pass: false, score },
       });
-    });
+      if (writeCount === 2 && outcome === 'ambiguous failure') {
+        throw new Error('Connection lost after commit');
+      }
+      return {
+        id: 'result-id',
+        success: false,
+        score,
+        failureReason: 1,
+        gradingResult: { pass: false, score },
+      };
+    };
+    mockCallApiRoutes([
+      { path: ratingRoute, method: 'POST', response: writeResponse },
+      {
+        path: ratingRoute,
+        method: 'POST',
+        status: outcome === 'confirmed failure' ? 400 : 200,
+        response: writeResponse,
+      },
+      {
+        path: ratingQuery,
+        response: (url: string) => {
+          reads.push(url);
+          return { table: serverTable, config: {}, version: 4, totalCount: 1, filteredCount: 1 };
+        },
+      },
+    ]);
 
     const rendered = renderWithProviders(ratingView(true));
     await user.click(screen.getByRole('button', { name: 'Fail result' }));
@@ -415,12 +432,17 @@ it.each(['eval', 'API'] as const)(
   async (changedScope) => {
     const user = userEvent.setup();
     initializeRatingTable();
-    let resolveWrite!: (response: Response) => void;
-    vi.mocked(callApi).mockReturnValue(
-      new Promise<Response>((resolve) => {
-        resolveWrite = resolve;
-      }),
-    );
+    let resolveWrite!: (body: unknown) => void;
+    mockCallApiRoutes([
+      {
+        path: ratingRoute,
+        method: 'POST',
+        response: () =>
+          new Promise((resolve) => {
+            resolveWrite = resolve;
+          }),
+      },
+    ]);
     const rendered = renderWithProviders(ratingView(true));
     await user.click(screen.getByRole('button', { name: 'Fail result' }));
     rendered.rerender(ratingView(false));
@@ -436,15 +458,13 @@ it.each(['eval', 'API'] as const)(
       }
     });
     await act(async () =>
-      resolveWrite(
-        createMockResponse({
-          id: 'result-id',
-          success: false,
-          score: 0,
-          failureReason: 1,
-          gradingResult: { pass: false, score: 0 },
-        }),
-      ),
+      resolveWrite({
+        id: 'result-id',
+        success: false,
+        score: 0,
+        failureReason: 1,
+        gradingResult: { pass: false, score: 0 },
+      }),
     );
     expect(callApi).toHaveBeenCalledTimes(1);
     expect(useTableStore.getState().table).toBe(otherTable);
@@ -461,10 +481,12 @@ it.each([
   'preserves pending eval selection ($first first, refresh failure $refreshFails, switch failure $switchFails)',
   async ({ first, refreshFails, switchFails }) => {
     initializeRatingTable();
-    const pending = new Map<string, (response: Response) => void>();
-    vi.mocked(callApi).mockImplementation(
-      (url) => new Promise<Response>((resolve) => pending.set(url, resolve)),
-    );
+    const pending = new Map<string, (body: unknown) => void>();
+    const response = (url: string) => new Promise((resolve) => pending.set(url, resolve));
+    mockCallApiRoutes([
+      { path: /^\/eval\/next-eval\/table\?/, status: switchFails ? 500 : 200, response },
+      { path: ratingQuery, status: refreshFails ? 500 : 200, response },
+    ]);
     const switching = useTableStore
       .getState()
       .fetchEvalData('next-eval', { skipLoadingState: true });
@@ -480,18 +502,13 @@ it.each([
     const complete = async (which: string) => {
       const isSwitch = which === 'switch';
       const url = isSwitch ? [...pending.keys()][0] : ratingQuery;
-      pending.get(url)!(
-        createMockResponse(
-          {
-            table: isSwitch ? nextTable : ratingTable,
-            config: {},
-            version: 4,
-            totalCount: 1,
-            filteredCount: 1,
-          },
-          { status: (isSwitch ? switchFails : refreshFails) ? 500 : 200 },
-        ),
-      );
+      pending.get(url)!({
+        table: isSwitch ? nextTable : ratingTable,
+        config: {},
+        version: 4,
+        totalCount: 1,
+        filteredCount: 1,
+      });
       await (isSwitch ? switching : refreshing);
     };
     await complete(first);
@@ -513,25 +530,20 @@ it.each([
   'only the newest selection can replace the eval ($foreground foreground, failure $newestFails)',
   async ({ foreground, newestFails }) => {
     initializeRatingTable();
-    const pending: Array<(response: Response) => void> = [];
-    vi.mocked(callApi).mockImplementation(
-      () => new Promise<Response>((resolve) => pending.push(resolve)),
-    );
+    const pending: Array<(body: unknown) => void> = [];
+    const response = () => new Promise((resolve) => pending.push(resolve));
+    mockCallApiRoutes([
+      { path: /^\/eval\/older-eval\/table\?/, response },
+      { path: /^\/eval\/newest-eval\/table\?/, status: newestFails ? 500 : 200, response },
+    ]);
     const older = useTableStore.getState().fetchEvalData('older-eval', { skipLoadingState: true });
     const newer = useTableStore
       .getState()
       .fetchEvalData('newest-eval', { skipLoadingState: !foreground });
-    const response = () =>
-      createMockResponse({
-        table: ratingTable,
-        config: {},
-        version: 4,
-        totalCount: 1,
-        filteredCount: 1,
-      });
-    pending[1](newestFails ? createMockResponse({}, { status: 500 }) : response());
+    const payload = { table: ratingTable, config: {}, version: 4, totalCount: 1, filteredCount: 1 };
+    pending[1](payload);
     await newer;
-    pending[0](response());
+    pending[0](payload);
     expect(await older).toBeUndefined();
     expect(useTableStore.getState().evalId).toBe(newestFails ? 'rating-eval' : 'newest-eval');
     expect(useTableStore.getState().isFetching).toBe(false);
@@ -551,21 +563,19 @@ it.each([
     initializeRatingTable();
     const user = userEvent.setup();
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    let resolveWrite!: (response: Response) => void;
-    let resolveJson!: (body: unknown) => void;
-    const json = vi.fn(
-      () =>
-        new Promise((resolve) => {
-          resolveJson = resolve;
-        }),
-    );
-    vi.mocked(callApi).mockImplementation(async (_url, options) =>
-      options?.method === 'POST'
-        ? new Promise<Response>((resolve) => {
+    let resolveWrite!: (body: unknown) => void;
+    mockCallApiRoutes([
+      {
+        path: ratingRoute,
+        method: 'POST',
+        status: rejected ? 400 : 200,
+        response: () =>
+          new Promise((resolve) => {
             resolveWrite = resolve;
-          })
-        : createMockResponse({}, { status: 500 }),
-    );
+          }),
+      },
+      { path: ratingQuery, status: 500 },
+    ]);
     renderWithProviders(ratingView(true));
     await user.click(screen.getByRole('button', { name: 'Fail result' }));
     const newTable = structuredClone(ratingTable);
@@ -573,25 +583,22 @@ it.each([
       newTable.body[0].outputs[0].id = 'different-result';
     }
     newTable.body[0].outputs[0].score = 0.75;
-    if (rejected) {
-      resolveWrite(createMockResponse({}, { status: 400 }));
-    } else {
-      resolveWrite({ ok: true, json } as unknown as Response);
-      await waitFor(() => expect(json).toHaveBeenCalledTimes(1));
-      resolveJson({
-        id: 'result-id',
-        success: false,
-        score: 0,
-        failureReason: 1,
-        gradingResult: { pass: false, score: 0 },
-      });
-    }
-    // Settle the request and then advance Zustand before the rating continuation and React render.
-    queueMicrotask(() =>
+    resolveWrite({
+      id: 'result-id',
+      success: false,
+      score: 0,
+      failureReason: 1,
+      gradingResult: { pass: false, score: 0 },
+    });
+    const publishNewTable = () =>
       useTableStore.setState({
         table: newTable,
         ...(changed === 'eval' && { evalId: 'other-eval' }),
-      }),
+      });
+    // Advance Zustand after response delivery (and JSON parsing on success), but before
+    // rating reconciliation and React's render. The helper awaits the deferred body first.
+    queueMicrotask(() =>
+      queueMicrotask(() => (rejected ? publishNewTable() : queueMicrotask(publishNewTable))),
     );
     await waitFor(() => expect(useTableStore.getState().table).toBe(newTable));
     await waitFor(() => expect(callApi).toHaveBeenCalledTimes(changed === 'eval' ? 1 : 2));
@@ -604,10 +611,12 @@ it.each([false, true])(
   'keeps the pending destination load as a fallback when its refresh fails (%s)',
   async (refreshFails) => {
     initializeRatingTable();
-    const pending: Array<(response: Response) => void> = [];
-    vi.mocked(callApi).mockImplementation(
-      () => new Promise<Response>((resolve) => pending.push(resolve)),
-    );
+    const pending: Array<(body: unknown) => void> = [];
+    const response = () => new Promise((resolve) => pending.push(resolve));
+    mockCallApiRoutes([
+      { path: /^\/eval\/next-eval\/table\?/, response },
+      { path: /^\/eval\/next-eval\/table\?/, status: refreshFails ? 500 : 200, response },
+    ]);
     const selection = useTableStore
       .getState()
       .fetchEvalData('next-eval', { skipLoadingState: true });
@@ -616,11 +625,16 @@ it.each([false, true])(
     olderTable.body[0].outputs[0].score = 0.25;
     const newerTable = structuredClone(ratingTable);
     newerTable.body[0].outputs[0].score = 0.75;
-    const response = (table: typeof ratingTable) =>
-      createMockResponse({ table, config: {}, version: 4, totalCount: 1, filteredCount: 1 });
-    pending[1](refreshFails ? createMockResponse({}, { status: 500 }) : response(newerTable));
+    const payload = (table: typeof ratingTable) => ({
+      table,
+      config: {},
+      version: 4,
+      totalCount: 1,
+      filteredCount: 1,
+    });
+    pending[1](payload(newerTable));
     await refresh;
-    pending[0](response(olderTable));
+    pending[0](payload(olderTable));
     await selection;
     expect(useTableStore.getState().evalId).toBe('next-eval');
     expect(useTableStore.getState().table).toEqual(refreshFails ? olderTable : newerTable);
