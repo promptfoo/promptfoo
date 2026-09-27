@@ -61,6 +61,32 @@ afterEach(() => {
 });
 
 describe('Google scoped ADC inputs', () => {
+  it.each(['vertex:gemini-2.5-flash', 'google:live:gemini-3.8-live'])(
+    '%s retains lower ADC after a loaded higher blank key',
+    async (route) => {
+      const provider = await loadApiProvider(route, {
+        env: {
+          GOOGLE_APPLICATION_CREDENTIALS: 'scoped.json',
+          VERTEX_API_KEY: 'lower-vertex-key',
+          GEMINI_API_KEY: 'lower-studio-key',
+        },
+        options: { env: { GOOGLE_API_KEY: ' \t ' } },
+      });
+      if (provider instanceof VertexChatProvider) {
+        expect(provider.getApiKey()).toBeUndefined();
+        expect(await provider.getAuthHeaders()).not.toHaveProperty('x-goog-api-key');
+        await provider.getClientWithCredentials();
+      } else {
+        const result = await Reflect.get(provider, 'getConnection').call(provider, provider.config);
+        expect(new URL(result.url).searchParams.get('access_token')).toBe('scoped.json');
+        expect(new URL(result.url).searchParams.has('key')).toBe(false);
+      }
+      expect(GoogleAuth).toHaveBeenCalledWith(
+        expect.objectContaining({ keyFilename: 'scoped.json' }),
+      );
+    },
+  );
+
   it.each([
     ['provider Google mask', { GOOGLE_API_KEY: '' }, {}, { VERTEX_API_KEY: 'file-key' }],
     ['suite Google mask', {}, { GOOGLE_API_KEY: '' }, { VERTEX_API_KEY: 'file-key' }],

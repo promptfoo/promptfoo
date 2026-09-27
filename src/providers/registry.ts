@@ -264,7 +264,15 @@ export function mergeProviderEnv(
       // credential field, including an empty mask, must never borrow a lower tuple.
       const credentialTuple =
         aliases.includes('AWS_ACCESS_KEY_ID') || aliases.includes('AZURE_CLIENT_ID');
-      if (aliases.some((key) => (credentialTuple ? layer[key] !== undefined : layer[key]))) {
+      if (
+        aliases.some((key) =>
+          credentialTuple
+            ? layer[key] !== undefined
+            : /^(?:google|palm|vertex):/.test(providerPath) && key.endsWith('API_KEY')
+              ? layer[key]?.trim()
+              : layer[key],
+        )
+      ) {
         for (const key of aliases) {
           delete merged[key];
         }
