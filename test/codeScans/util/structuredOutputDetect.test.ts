@@ -1,11 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { requestsStructuredCodeScanOutput } from '../../../src/codeScan/util/structuredOutputDetect';
 
-const node = 'node';
-const cli = '/path/to/main.js';
-
 function argv(...rest: string[]): string[] {
-  return [node, cli, ...rest];
+  return rest;
 }
 
 describe('requestsStructuredCodeScanOutput', () => {
@@ -21,13 +18,32 @@ describe('requestsStructuredCodeScanOutput', () => {
     expect(requestsStructuredCodeScanOutput(argv('code-scans', 'run', '--json', '.'))).toBe(true);
   });
 
+  it.each(['--env-file', '--env-path'])(
+    'skips %s values before finding the root command',
+    (option) => {
+      expect(
+        requestsStructuredCodeScanOutput(argv(option, 'code-scans', 'code-scans', 'run', '--json')),
+      ).toBe(true);
+      expect(requestsStructuredCodeScanOutput(argv(option, 'code-scans', 'eval', '--json'))).toBe(
+        false,
+      );
+      expect(
+        requestsStructuredCodeScanOutput(argv('eval', option, 'code-scans', 'run', '--json')),
+      ).toBe(false);
+    },
+  );
+
   it.each([
     ['--env-file', 'settings.env'],
     ['--env-path=settings.env'],
     ['--verbose'],
+    ['-vv'],
     ['-v', '--env-file', 'first.env', '--env-file=second.env'],
   ])('accepts parent command options %j before run', (...options) => {
     expect(requestsStructuredCodeScanOutput(argv('code-scans', ...options, 'run', '--json'))).toBe(
+      true,
+    );
+    expect(requestsStructuredCodeScanOutput(argv(...options, 'code-scans', 'run', '--json'))).toBe(
       true,
     );
   });

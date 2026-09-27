@@ -43,6 +43,68 @@ describe('invocation-scoped cache settings', () => {
     PROMPTFOO_CACHE_PATH: cachePath,
   });
 
+  it('keeps disabled cache handles out of shared memory and disk backends', async () => {
+    await cliState.withEnv(memory, async () => {
+      await cache.getCache().set('shared', 'enabled');
+    });
+    await cliState.withEnv(disk(path.join(tempDir, 'disabled')), () =>
+      cache.withCacheEnabled(false, async () => {
+        const handle = cache.getCache();
+        expect(await handle.get('shared')).toBeUndefined();
+        await handle.set('shared', 'disabled');
+        expect(await handle.get('shared')).toBe('disabled');
+        expect(await cache.getCache().get('shared')).toBeUndefined();
+      }),
+    );
+    await cliState.withEnv(memory, async () => {
+      expect(await cache.getCache().get('shared')).toBe('enabled');
+    });
+    expect(fs.existsSync(path.join(tempDir, 'disabled'))).toBe(false);
+  });
+
+  it.each(['backend', 'namespace'])(
+    'does not let a response from before %s clearing overwrite or detach a newer request',
+    async (kind) => {
+      const entered = [createDeferred<void>(), createDeferred<void>()];
+      const responses = [createDeferred<Response>(), createDeferred<Response>()];
+      const fetch = vi
+        .mocked(fetchWithRetries)
+        .mockImplementation(async () => Response.json('unexpected'));
+      for (let index = 0; index < responses.length; index++) {
+        fetch.mockImplementationOnce(async () => {
+          entered[index].resolve();
+          return responses[index].promise;
+        });
+      }
+      await cliState.withEnv(memory, () =>
+        cache.withCacheNamespace(kind === 'namespace' ? 'fixture' : undefined, async () => {
+          const call = () => cache.fetchWithCache('https://cache-fixture.invalid/clear');
+          const first = call();
+          await entered[0].promise;
+          try {
+            await cache.getCache().clear();
+            const second = call();
+            await new Promise(setImmediate);
+            expect(fetch).toHaveBeenCalledTimes(2);
+            responses[0].resolve(Response.json('old'));
+            expect((await first).data).toBe('old');
+            const third = call();
+            await new Promise(setImmediate);
+            expect(fetch).toHaveBeenCalledTimes(2);
+            responses[1].resolve(Response.json('new'));
+            expect(await second).toMatchObject({ data: 'new', cached: false });
+            expect(await third).toMatchObject({ data: 'new', coalesced: true });
+            expect(await call()).toMatchObject({ data: 'new', cached: true });
+          } finally {
+            responses[0].resolve(Response.json('old'));
+            responses[1].resolve(Response.json('new'));
+            await first;
+          }
+        }),
+      );
+    },
+  );
+
   it('reads late env-file and suite enablement without replacing module state', async () => {
     cliState.withEnvFileOverrides({ PROMPTFOO_CACHE_ENABLED: 'false' }, () => {
       expect(cache.isCacheEnabled()).toBe(false);

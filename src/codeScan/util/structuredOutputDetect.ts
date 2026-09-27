@@ -22,42 +22,40 @@ const CODE_SCANS_RUN_VALUE_FLAGS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Detect whether `code-scans run` is being invoked with structured output (`--json`,
+ * Detect whether CLI arguments (without node/script paths) invoke `code-scans run`
+ * with structured output (`--json`,
  * `--format json`, `--format sarif`, `-f json`, `-f sarif`, or their `=value` forms).
  *
  * Mirrors Commander's "last wins" semantics for repeated --format, so we track all
  * candidates across the argv and decide at the end rather than returning eagerly.
  */
 export function requestsStructuredCodeScanOutput(argv: readonly string[]): boolean {
-  const codeScansIndex = argv.indexOf('code-scans');
-  if (codeScansIndex === -1) {
-    return false;
-  }
-
-  let runIndex = codeScansIndex + 1;
-  while (runIndex < argv.length) {
-    const arg = argv[runIndex];
-    if (arg === '--env-file' || arg === '--env-path') {
-      runIndex += 2;
-    } else if (
-      arg === '-v' ||
-      arg === '--verbose' ||
-      arg.startsWith('--env-file=') ||
-      arg.startsWith('--env-path=')
-    ) {
-      runIndex++;
-    } else {
-      break;
+  let index = 0;
+  for (const command of ['code-scans', 'run']) {
+    while (index < argv.length) {
+      const arg = argv[index];
+      if (arg === '--env-file' || arg === '--env-path') {
+        index += 2;
+      } else if (
+        /^-v+$/.test(arg) ||
+        arg === '--verbose' ||
+        arg.startsWith('--env-file=') ||
+        arg.startsWith('--env-path=')
+      ) {
+        index++;
+      } else {
+        break;
+      }
     }
-  }
-  if (argv[runIndex] !== 'run') {
-    return false;
+    if (argv[index++] !== command) {
+      return false;
+    }
   }
 
   let jsonFlag = false;
   let lastFormat: string | undefined;
 
-  for (let index = runIndex + 1; index < argv.length; index++) {
+  for (; index < argv.length; index++) {
     const arg = argv[index];
     if (arg === '--') {
       // Conventional positional separator; nothing past it is a flag.

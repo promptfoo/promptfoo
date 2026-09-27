@@ -167,7 +167,7 @@ function getCacheBackend(
         )
       : undefined;
   const identity = JSON.stringify(filePath ?? null);
-  let backend = cacheBackends.get(identity);
+  let backend = cacheEnabled ? cacheBackends.get(identity) : undefined;
   if (!backend) {
     backend = {
       filePath,
@@ -176,7 +176,9 @@ function getCacheBackend(
       claims: new Set(),
       inflight: new Map(),
     };
-    cacheBackends.set(identity, backend);
+    if (cacheEnabled) {
+      cacheBackends.set(identity, backend);
+    }
   }
   return backend;
 }
@@ -217,9 +219,9 @@ function getCacheInstance(backend = getCacheBackend()) {
     }
     const clear = cacheInstance.clear.bind(cacheInstance);
     cacheInstance.clear = async () => {
+      backend.clearGeneration = nextCacheClearGeneration++;
       backend.inflight.clear();
       const result = await clear();
-      backend.clearGeneration = nextCacheClearGeneration++;
       backend.claims.clear();
       if (backend.filePath) {
         fs.rmSync(getClaimsPath(backend.filePath), { force: true, recursive: true });
@@ -303,6 +305,7 @@ function getUnscopedCacheKey(cacheKey: string, namespace: string) {
 
 async function clearNamespacedCache(cache: Cache, namespace: string, backend: CacheBackend) {
   const namespacePrefix = `${namespace}:`;
+  backend.clearGeneration = nextCacheClearGeneration++;
 
   for (const store of cache.stores) {
     if (!store.iterator) {
@@ -335,7 +338,6 @@ async function clearNamespacedCache(cache: Cache, namespace: string, backend: Ca
     }
   }
 
-  backend.clearGeneration = nextCacheClearGeneration++;
   return true;
 }
 
@@ -1019,6 +1021,7 @@ export async function fetchWithCache<T = unknown>(
   const backend = getCacheBackend();
   const cache = getCacheInstance(backend);
   const inflightFetchResponses = backend.inflight;
+  const clearGeneration = backend.clearGeneration;
 
   const cachedResponse = await cache.get<SerializedFetchResponse>(cacheKey);
   if (cachedResponse != null) {
@@ -1028,7 +1031,7 @@ export async function fetchWithCache<T = unknown>(
     return deserializeFetchResponse<T>(cachedResponse, true, cache, cacheKey);
   }
 
-  const inflightCacheKey = getInflightFetchCacheKey(cacheKey, url, fetchOptions);
+  const inflightCacheKey = `${clearGeneration}:${getInflightFetchCacheKey(cacheKey, url, fetchOptions)}`;
   let inflightResponse = inflightFetchResponses.get(inflightCacheKey);
   const coalesced = inflightResponse !== undefined;
   if (!inflightResponse) {
@@ -1041,7 +1044,7 @@ export async function fetchWithCache<T = unknown>(
         isIdempotent,
         format,
       );
-      if (preparedResponse.cacheable) {
+      if (preparedResponse.cacheable && backend.clearGeneration === clearGeneration) {
         await cache.set(cacheKey, preparedResponse.response);
       }
       return preparedResponse.response;
