@@ -292,7 +292,7 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
     }
 
     eval_.author = author;
-    await eval_.save();
+    await eval_.save({ updatePrompts: false });
 
     // NOTE: Side effect. If user email is not set, set it to the author's email
     if (!getUserEmail()) {

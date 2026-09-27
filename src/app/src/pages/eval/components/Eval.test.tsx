@@ -177,7 +177,7 @@ describe('Eval', () => {
     restoreTestTimers({ runPending: true });
   });
 
-  it('should call resetFilters when navigating from one eval to another', async () => {
+  it('preserves unchanged URL filters while selecting a different eval', async () => {
     vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
 
     const { rerender } = render(
@@ -186,7 +186,7 @@ describe('Eval', () => {
       </MemoryRouter>,
     );
 
-    expect(baseMockTableStore.resetFilters).toHaveBeenCalledTimes(1);
+    expect(baseMockTableStore.resetFilters).not.toHaveBeenCalled();
 
     await act(async () => {
       rerender(
@@ -196,32 +196,8 @@ describe('Eval', () => {
       );
     });
 
-    expect(baseMockTableStore.resetFilters).toHaveBeenCalledTimes(2);
-  });
-
-  it('should not call resetFilters unnecessarily when other dependencies change', async () => {
-    vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
-
-    const fetchId = 'test-eval-id';
-
-    const { rerender } = render(
-      <MemoryRouter>
-        <Eval fetchId={fetchId} />
-      </MemoryRouter>,
-    );
-
-    expect(baseMockTableStore.resetFilters).toHaveBeenCalledTimes(1);
-    baseMockTableStore.resetFilters.mockClear();
-
-    await act(async () => {
-      rerender(
-        <MemoryRouter>
-          <Eval fetchId={fetchId} />
-        </MemoryRouter>,
-      );
-    });
-
     expect(baseMockTableStore.resetFilters).not.toHaveBeenCalled();
+    expect(baseMockTableStore.fetchEvalData).toHaveBeenCalledWith('eval-2', expect.anything());
   });
 
   it('should handle null fetchId gracefully without fetching data', async () => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { Spinner } from '@app/components/ui/spinner';
@@ -84,6 +84,8 @@ export default function Eval({ fetchId }: EvalOptions) {
   } = useTableStore();
 
   const { filterMode } = useFilterMode();
+  const filterParam = new URLSearchParams(location.search).get('filter');
+  const urlFilters = useMemo(() => parseFiltersParam(filterParam), [filterParam]);
 
   const { setInComparisonMode, setComparisonEvalIds } = useResultsViewSettingsStore();
 
@@ -406,31 +408,32 @@ export default function Eval({ fetchId }: EvalOptions) {
     return () => unsubscribe();
   }, [replaceSearchParams]);
 
-  // Selection follows the API and route; ResultsTable owns filter and pagination requests.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: effect events read the current query without reloading the selection
+  // Report drill-downs can change filters without selecting a different eval.
   useEffect(() => {
-    const _searchParams = new URLSearchParams(window.location.search);
-
-    // API changes can retire settled queues even when the new server never sends an init.
-    useTableStore.getState().pruneInactiveRatingQueues();
-    // Use getState() to avoid adding functions to dependencies
-    const { resetFilters: doResetFilters, addFilter: doAddFilter } = useTableStore.getState();
-
-    // Read search params
-    const filters = parseFiltersParam(_searchParams.get('filter'));
+    const { filters, resetFilters, addFilter } = useTableStore.getState();
+    // The subscription already wrote these values to the URL; preserve their UI identities.
+    if ((filterParam || '[]') === JSON.stringify(Object.values(filters.values))) {
+      return;
+    }
 
     isHydratingFiltersRef.current = true;
     try {
-      doResetFilters();
-      filters?.forEach((filter) => {
-        doAddFilter(filter);
-      });
+      resetFilters();
+      urlFilters?.forEach(addFilter);
     } finally {
       isHydratingFiltersRef.current = false;
     }
-
-    if (!filters) {
+    if (!urlFilters) {
       showToast('Invalid filter parameter in URL: filters must be valid JSON', 'error');
+    }
+  }, [filterParam, urlFilters, showToast]);
+
+  // Selection follows the API and route; ResultsTable owns filter and pagination requests.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: URL hydration and table effects own query changes
+  useEffect(() => {
+    // API changes can retire settled queues even when the new server never sends an init.
+    useTableStore.getState().pruneInactiveRatingQueues();
+    if (!urlFilters) {
       return;
     }
 
@@ -475,7 +478,6 @@ export default function Eval({ fetchId }: EvalOptions) {
     setDefaultEvalId,
     setInComparisonMode,
     setComparisonEvalIds,
-    // Note: resetFilters and addFilter are accessed via getState() to avoid dependency issues
   ]);
 
   // The websocket only needs to be rebuilt when its connection target (apiBaseUrl) changes.

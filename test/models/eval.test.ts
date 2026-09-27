@@ -1147,6 +1147,22 @@ describe('evaluator', () => {
   });
 
   describe('save with duration fields', () => {
+    it('saves duration metadata without rewriting prompt metrics', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      const prompts = structuredClone(eval_.prompts);
+      eval_.prompts = [];
+      eval_.setDurationMs(5000);
+      eval_.setGenerationDurationMs(10000);
+
+      await eval_.save({ updatePrompts: false });
+
+      const persisted = await Eval.findById(eval_.id);
+      expect(persisted?.durationMs).toBe(15000);
+      expect(persisted?.generationDurationMs).toBe(10000);
+      expect(persisted?.evaluationDurationMs).toBe(5000);
+      expect(persisted?.prompts).toEqual(prompts);
+    });
+
     it('should persist all three duration fields in results JSON', async () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
 

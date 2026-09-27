@@ -678,7 +678,7 @@ export default class Eval {
     this.oldResults.table = table;
   }
 
-  async save() {
+  async save({ updatePrompts = true }: { updatePrompts?: boolean } = {}) {
     const updateObj: Record<string, unknown> = {
       config: sanitizeTracingConfigForPersistence(this.config),
       isRedteam: this.config.redteam !== undefined,
@@ -712,7 +712,13 @@ export default class Eval {
       }
       updateObj.results = expr;
     }
-    await this.persistWithPrompts(updateObj, this.prompts);
+    if (updatePrompts) {
+      await this.persistWithPrompts(updateObj, this.prompts);
+    } else {
+      // Reloaded metadata edits do not have the evaluator's retained, unpersisted results.
+      const db = await getDb();
+      await db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
+    }
     notifyEvaluationChanged(this.id);
     this.persisted = true;
   }

@@ -2153,11 +2153,17 @@ function ResultsTable({
       return;
     }
 
-    // Skip fetching if this is the first render for a new evalId
-    // Data should already be loaded by Eval.tsx
+    // Reuse the parent's initial load unless a report drill-down changed the mode
+    // while this table was unmounted.
     if (pagination.pageIndex === 0 && evalId !== previousEvalIdRef.current) {
       previousEvalIdRef.current = evalId;
-      return;
+      const query = useTableStore.getState().tableQuery;
+      if (
+        query?.evalId !== evalId ||
+        new URL(query.url, window.location.origin).searchParams.get('filterMode') === filterMode
+      ) {
+        return;
+      }
     }
 
     fetchEvalData(evalId, {

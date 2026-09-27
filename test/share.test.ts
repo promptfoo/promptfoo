@@ -633,7 +633,7 @@ describe('createShareableUrl', () => {
     // getUserEmail must have been consulted since no author was set.
     expect(getUserEmail).toHaveBeenCalled();
     expect(mockEval.author).toBe('stored@example.com');
-    expect(mockEval.save).toHaveBeenCalled();
+    expect(mockEval.save).toHaveBeenCalledWith({ updatePrompts: false });
   });
 
   describe('chunked sending', () => {

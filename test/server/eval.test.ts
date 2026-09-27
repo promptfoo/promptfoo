@@ -11,9 +11,11 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { createApp } from '../../src/server/server';
-import { ResultFailureReason } from '../../src/types';
+import { type GradingResult, ResultFailureReason } from '../../src/types';
+import { setNonstandardScoringBaseline } from '../../src/types/internal';
 import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
 import invariant from '../../src/util/invariant';
+import { createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 
 vi.mock('../../src/database/signal', async () => {
@@ -163,6 +165,111 @@ describe('eval routes', () => {
     prompt.metrics.testErrorCount += 1;
     await eval_.save();
   }
+
+  describe('PATCH eval metadata', () => {
+    it('still saves legacy table edits in the results column', async () => {
+      const stored = await EvalFactory.createOldResult();
+      testEvalIds.add(stored.id);
+      const eval_ = await Eval.findById(stored.id);
+      invariant(eval_?.oldResults, 'Legacy results are required');
+      const table = structuredClone(eval_.oldResults.table);
+      table.body[0].outputs[0].text = 'Updated legacy output';
+
+      const response = await api.patch(`/api/eval/${eval_.id}`).send({ table });
+
+      expect(response.status).toBe(200);
+      expect((await Eval.findById(eval_.id))?.oldResults?.table).toEqual(table);
+    });
+
+    it.each([
+      { field: 'author', concurrentRating: false },
+      { field: 'author', concurrentRating: true },
+      { field: 'description', concurrentRating: false },
+      { field: 'description', concurrentRating: true },
+    ])(
+      'preserves retained result metrics when updating $field (concurrent rating: $concurrentRating)',
+      async ({ field, concurrentRating }) => {
+        const eval_ = await EvalFactory.create({ numResults: 0 });
+        testEvalIds.add(eval_.id);
+        const gradingResult: GradingResult = {
+          pass: true,
+          score: 0.6,
+          reason: 'Custom score',
+          componentResults: [
+            { pass: true, score: 1, reason: 'Match', assertion: { type: 'equals' } },
+          ],
+        };
+        setNonstandardScoringBaseline(gradingResult, { pass: true, score: 0.6 });
+        await eval_.addResult(createEvaluateResult({ score: 0.6, gradingResult }));
+        eval_.recordResultPersistenceFailure(
+          createEvaluateResult({
+            testIdx: 1,
+            success: false,
+            score: 0.2,
+            failureReason: ResultFailureReason.ASSERT,
+            gradingResult: {
+              pass: false,
+              score: 0.2,
+              reason: 'Retained failure',
+              componentResults: [
+                { pass: false, score: 0, reason: 'Mismatch', assertion: { type: 'equals' } },
+              ],
+            },
+          }),
+        );
+        await eval_.save();
+        expect((await Eval.findById(eval_.id))?.prompts[0].metrics).toMatchObject({
+          score: 0.8,
+          testPassCount: 1,
+          testFailCount: 1,
+          assertPassCount: 1,
+          assertFailCount: 1,
+        });
+
+        if (concurrentRating) {
+          const [result] = await EvalResult.findManyByEvalId(eval_.id);
+          const save = Eval.prototype.save;
+          vi.spyOn(Eval.prototype, 'save').mockImplementationOnce(async function (
+            this: Eval,
+            ...args
+          ) {
+            // The metadata route has loaded its stale prompt snapshot before the rating commits.
+            const rating = await api
+              .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+              .send(createManualRatingPayload(result, false));
+            expect(rating.status).toBe(200);
+            return save.apply(this, args);
+          });
+        }
+
+        vi.mocked(updateSignalFile).mockClear();
+        const response = await api
+          .patch(`/api/eval/${eval_.id}${field === 'author' ? '/author' : ''}`)
+          .send(
+            field === 'author'
+              ? { author: 'reviewer@example.com' }
+              : { config: { ...eval_.config, description: 'Updated description' } },
+          );
+        expect(response.status).toBe(200);
+        const updated = await Eval.findById(eval_.id);
+        expect(updated?.author).toBe(field === 'author' ? 'reviewer@example.com' : eval_.author);
+        expect(updated?.config.description).toBe(
+          field === 'description' ? 'Updated description' : eval_.config.description,
+        );
+        expect(updated?.prompts[0].metrics?.score).toBeCloseTo(concurrentRating ? 0.2 : 0.8);
+        expect(updated?.prompts[0].metrics).toMatchObject({
+          testPassCount: concurrentRating ? 0 : 1,
+          testFailCount: concurrentRating ? 2 : 1,
+          testErrorCount: 0,
+          assertPassCount: 1,
+          assertFailCount: concurrentRating ? 2 : 1,
+          totalLatencyMs: 200,
+        });
+        expect(await EvalResult.findManyByEvalId(eval_.id)).toHaveLength(1);
+        expect(updateSignalFile).toHaveBeenCalledWith(eval_.id);
+      },
+    );
+  });
 
   describe('POST /', () => {
     it('returns 500 when v4 prompt persistence fails', async () => {
