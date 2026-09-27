@@ -125,7 +125,12 @@ mediaRouter.get('/:type/:filename', async (req: Request, res: Response): Promise
       }
       res.setHeader('X-Content-Type-Options', 'nosniff');
       res.setHeader('Content-Length', data.length);
-      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      res.setHeader(
+        'Cache-Control',
+        mimeType === 'application/octet-stream'
+          ? 'no-store'
+          : 'public, max-age=31536000, immutable',
+      );
       res.send(data);
       return;
     }

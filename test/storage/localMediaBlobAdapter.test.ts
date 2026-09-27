@@ -120,6 +120,7 @@ describe('local media blob adapter', () => {
             : contentType;
       expect(response.headers['content-type']).toContain(expected);
       expect(response.headers['x-content-type-options']).toBe('nosniff');
+      expect(response.headers['cache-control']).toBe('public, max-age=31536000, immutable');
       expect(response.headers['content-disposition']).toBe(
         contentType === 'text/html' || contentType === 'image/svg+xml' ? 'attachment' : undefined,
       );
@@ -236,7 +237,7 @@ describe('local media blob adapter', () => {
   });
 
   it.each(['missing', 'malformed'] as const)(
-    'safely serves bytes with %s new metadata',
+    'does not cache fallback headers before repairing %s metadata',
     async (state) => {
       await provider.store(payload, metadata);
       const filePath = fileURLToPath((await provider.getUrl(key))!);
@@ -250,6 +251,16 @@ describe('local media blob adapter', () => {
       expect(response.headers['content-type']).toBe('application/octet-stream');
       expect(response.headers['content-disposition']).toBe('attachment');
       expect(response.headers['content-length']).toBe(String(payload.length));
+      expect(response.headers['cache-control']).toBe('no-store');
+      expect(response.body).toEqual(payload);
+
+      await provider.store(payload, metadata);
+      const repaired = await request(app).get(`/api/media/${key}`);
+      expect(repaired.status).toBe(200);
+      expect(repaired.headers['content-type']).toBe('image/jpeg');
+      expect(repaired.headers['content-disposition']).toBeUndefined();
+      expect(repaired.headers['cache-control']).toBe('public, max-age=31536000, immutable');
+      expect(repaired.body).toEqual(payload);
     },
   );
 
