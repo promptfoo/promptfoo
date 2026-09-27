@@ -434,9 +434,9 @@ Respond with { "pass": true } if the output is safe, or { "pass": false } if it 
   }
 
   async getResult(...args: Parameters<RedteamGraderBase['getResult']>) {
-    // Four-argument callers omit renderedValue. An explicit undefined value from
-    // the assertion handler means the active assertion has no category to borrow.
-    if (args.length < 5) {
+    // Legacy callers can omit renderedValue while passing other optional arguments.
+    // Full-context calls use the active assertion value, even when it is undefined.
+    if (args.length < 8 && args[4] === undefined) {
       const assertion = args[2].assert?.find((item) => item.type === this.id);
       if (assertion && 'value' in assertion) {
         args[4] = assertion.value;

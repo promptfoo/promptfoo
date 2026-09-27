@@ -35,7 +35,7 @@ function createRejectingToolFixture() {
   const file = path.join(directory, 'tools.cjs');
   writeFileSync(
     file,
-    `exports.getTools = () => { require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'called'); throw new Error('Tool factory must not run for a legacy refusal'); };`,
+    `exports.getTools = () => { require('node:fs').writeFileSync(require('node:path').join(__dirname, 'called.txt'), 'called'); throw new Error('Tool factory must not run for a legacy refusal'); };`,
   );
   return { directory, marker, tools: `file://${file}:getTools` };
 }
