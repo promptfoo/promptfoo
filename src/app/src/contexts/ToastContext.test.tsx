@@ -1,17 +1,19 @@
 import { useToast } from '@app/hooks/useToast';
-import { act, cleanup, fireEvent, renderHook, screen } from '@testing-library/react';
+import { restoreTestTimers, useTestTimers } from '@app/tests/timers';
+import { act, cleanup, renderHook, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from './ToastContext';
 
 import type { ToastSeverity } from './ToastContextDef';
 
 beforeEach(() => {
-  vi.useFakeTimers();
+  useTestTimers();
 });
 
 afterEach(() => {
   cleanup();
-  vi.useRealTimers();
+  restoreTestTimers();
 });
 
 function setup(reactStrictMode = false) {
@@ -66,23 +68,33 @@ describe('ToastProvider notification lifetime', () => {
     expectOpen(false);
   });
 
-  it.each([0, -1])('keeps duration %s visible until explicitly dismissed', (duration) => {
+  it.each([0, -1])('keeps duration %s visible until explicitly dismissed', async (duration) => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const { result } = setup();
     act(() => result.current.showToast('First'));
     act(() => vi.advanceTimersByTime(1900));
     act(() => result.current.showToast('Persistent', 'warning', duration));
     act(() => vi.advanceTimersByTime(10000));
     expectOpen(true);
-    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    await act(async () => {
+      const click = user.click(screen.getByRole('button', { name: 'Dismiss' }));
+      await vi.advanceTimersByTimeAsync(0);
+      await click;
+    });
     expectOpen(false);
     expect(screen.getByText('Persistent')).toBeInTheDocument();
   });
 
-  it('dismisses immediately and does not let an old timer close the next notification', () => {
+  it('dismisses immediately and does not let an old timer close the next notification', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const { result } = setup();
     act(() => result.current.showToast('First'));
     act(() => vi.advanceTimersByTime(1900));
-    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    await act(async () => {
+      const click = user.click(screen.getByRole('button', { name: 'Dismiss' }));
+      await vi.advanceTimersByTimeAsync(0);
+      await click;
+    });
     expectOpen(false);
     act(() => result.current.showToast('Next'));
     act(() => vi.advanceTimersByTime(100));
