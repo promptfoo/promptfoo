@@ -163,7 +163,7 @@ function releaseGlobalTracingRegistrations(provider: NodeTracerProvider): void {
     isProxyTracerProvider(globalProvider) &&
     globalProvider.getDelegate() === routingState.provider
   ) {
-    // Release only our router so a host can register its SDK after evaluation.
+    // Release only our router so a host can register its tracer provider later.
     // Cached tracers still route through the same shared state on later calls.
     trace.disable();
   }
