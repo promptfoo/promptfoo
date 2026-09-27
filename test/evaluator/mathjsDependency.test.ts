@@ -6,6 +6,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import * as evaluatorHelpers from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
+import * as suggestions from '../../src/suggestions';
 import { mockApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
@@ -73,6 +74,61 @@ describeEvaluator('optional derived metric dependency', () => {
 
     await expect(evaluate(suite, record, {})).rejects.toBe(error);
     expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it.each(['missing', 'incompatible'])(
+    'rejects a %s dependency before generating prompt suggestions',
+    async (dependencyState) => {
+      const error = new Error(`Math.js is ${dependencyState}`);
+      vi.spyOn(evaluatorHelpers, 'loadMathJs').mockRejectedValue(error);
+      const generatePrompts = vi
+        .spyOn(suggestions, 'generatePrompts')
+        .mockRejectedValue(new Error('Suggestion generation must not run'));
+      const suite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Expression metrics')],
+        tests: [{}],
+        derivedMetrics: [{ name: 'Count', value: '__count' }],
+      };
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+
+      await expect(evaluate(suite, record, { generateSuggestions: true })).rejects.toBe(error);
+      expect(generatePrompts).not.toHaveBeenCalled();
+      expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+    },
+  );
+
+  it('uses metrics replaced by beforeAll before deciding whether Math.js is required', async () => {
+    const loader = vi
+      .spyOn(evaluatorHelpers, 'loadMathJs')
+      .mockRejectedValue(new Error('unavailable'));
+    vi.mocked(evaluatorHelpers.runExtensionHook).mockImplementation(
+      async (_extensions, hookName, context) => {
+        if (hookName === 'beforeAll') {
+          const { suite } = context as { suite: TestSuite };
+          return {
+            ...context,
+            suite: {
+              ...suite,
+              derivedMetrics: [{ name: 'Count', value: () => 7 }],
+            },
+          };
+        }
+        return context;
+      },
+    );
+    const suite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Hook-derived metrics')],
+      tests: [{}],
+      derivedMetrics: [{ name: 'Count', value: '__count' }],
+    };
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+
+    await evaluate(suite, record, {});
+
+    expect(record.prompts[0].metrics?.namedScores.Count).toBe(7);
+    expect(loader).not.toHaveBeenCalled();
   });
 
   it('clears the evaluation deadline when the expression dependency rejects', async () => {

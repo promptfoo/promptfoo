@@ -4818,6 +4818,19 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
     testSuite = beforeAllOut.suite;
 
+    // Validate hook-adjusted metrics before prompt generation or variable preparation.
+    // Load once before rows accumulate scores so concurrent totals remain consistent.
+    const mathjsModule = testSuite.derivedMetrics?.some(
+      (metric) => typeof metric.value === 'string',
+    )
+      ? await loadMathJs().catch((error: unknown) => {
+          if (globalTimeout) {
+            clearTimeout(globalTimeout);
+          }
+          throw error;
+        })
+      : null;
+
     if (!(await maybeAddGeneratedPrompts(testSuite, options))) {
       return this.store.evaluation;
     }
@@ -4861,19 +4874,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
     concurrency = concurrencySettings.concurrency;
     const { usesConversationVar } = concurrencySettings;
-
-    // Awaiting after accumulating scores lets other rows change the total
-    // before derived metrics use this row's __count.
-    const mathjsModule = testSuite.derivedMetrics?.some(
-      (metric) => typeof metric.value === 'string',
-    )
-      ? await loadMathJs().catch((error: unknown) => {
-          if (globalTimeout) {
-            clearTimeout(globalTimeout);
-          }
-          throw error;
-        })
-      : null;
 
     const processingContext: EvalProcessingContext = {
       assertionTypes,
