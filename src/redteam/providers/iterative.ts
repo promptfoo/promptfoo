@@ -887,6 +887,7 @@ export async function runRedteamConversation({
 }
 
 class RedteamIterativeProvider implements ApiProvider {
+  readonly usesOriginalProvider = true;
   private readonly redteamProvider: RedteamFileConfig['provider'];
   private readonly injectVar: string;
   private readonly numIterations: number;

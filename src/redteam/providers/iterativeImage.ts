@@ -601,6 +601,7 @@ async function runRedteamConversation({
 }
 
 class RedteamIterativeProvider implements ApiProvider {
+  readonly usesOriginalProvider = true;
   private readonly redteamProvider: RedteamFileConfig['provider'];
 
   constructor(readonly config: Record<string, VarValue>) {

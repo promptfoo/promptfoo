@@ -234,6 +234,7 @@ class VoiceMemorySystem {
  * Implements multi-turn voice conversation attacks with gradual escalation.
  */
 export class VoiceCrescendoProvider implements ApiProvider {
+  readonly usesOriginalProvider = true;
   readonly config: VoiceCrescendoConfig;
   private readonly nunjucks: ReturnType<typeof getNunjucksEngine>;
   private memory: VoiceMemorySystem;

@@ -56,6 +56,7 @@ type AgentProviderOptions = ProviderOptions & {
  * Redteam and Non-Redteam SimulatedUser Providers. Address this in a follow-up PR.
  */
 export class SimulatedUser implements ApiProvider {
+  readonly usesOriginalProvider = true;
   private readonly identifier: string;
   private readonly maxTurns: number;
   private readonly rawInstructions: string;

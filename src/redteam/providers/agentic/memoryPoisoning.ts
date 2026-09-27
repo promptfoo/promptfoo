@@ -27,6 +27,7 @@ interface MemoryPoisoningConfig extends ProviderOptions {
 }
 
 export class MemoryPoisoningProvider implements ApiProvider {
+  readonly usesOriginalProvider = true;
   constructor(readonly config: MemoryPoisoningConfig) {}
 
   private get targetId(): string | undefined {

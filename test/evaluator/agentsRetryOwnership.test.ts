@@ -2,8 +2,12 @@ import { Agent, setTracingDisabled, tool } from '@openai/agents';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { runEval } from '../../src/evaluator';
+import { callProviderWithContext } from '../../src/matchers/providers';
 import { OpenAiAgentsProvider } from '../../src/providers/openai/agents';
+import { PromptfooSimulatedUserProvider } from '../../src/providers/promptfoo';
 import { SequenceProvider } from '../../src/providers/sequence';
+import { SimulatedUser } from '../../src/providers/simulatedUser';
+import { withProviderCallExecutionContext } from '../../src/scheduler/providerCallExecutionContext';
 import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { fetchWithProxy } from '../../src/util/fetch/index';
@@ -74,14 +78,31 @@ function evaluateWithReplacement(provider: ApiProvider, replacement: ApiProvider
   });
 }
 
+// Stop when this call settles instead of draining the SDK's recurring tracing timers.
+async function settleWithTimers<T>(promise: Promise<T>): Promise<T> {
+  let settled = false;
+  void promise.then(
+    () => {
+      settled = true;
+    },
+    () => {
+      settled = true;
+    },
+  );
+  await vi.waitFor(() => expect(settled).toBe(true));
+  return promise;
+}
+
 describe('retry ownership through test-level providers', () => {
-  it.each([
-    { schedulerDisabled: false, maxRetries: 1 },
-    { schedulerDisabled: true, maxRetries: 1 },
-    { schedulerDisabled: false, maxRetries: 0 },
-  ])(
-    'does not replay completed sequence tools ($schedulerDisabled, $maxRetries)',
-    async ({ schedulerDisabled, maxRetries }) => {
+  it.each(
+    [
+      { schedulerDisabled: false, maxRetries: 1 },
+      { schedulerDisabled: true, maxRetries: 1 },
+      { schedulerDisabled: false, maxRetries: 0 },
+    ].flatMap((settings) => ['sequence', 'simulated-user'].map((kind) => ({ ...settings, kind }))),
+  )(
+    'does not replay completed $kind tools ($schedulerDisabled, $maxRetries)',
+    async ({ schedulerDisabled, maxRetries, kind }) => {
       mockProcessEnv({ PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER: String(schedulerDisabled) });
       const execute = vi.fn(async () => 'recorded');
       const target = new OpenAiAgentsProvider('fixture', {
@@ -102,8 +123,14 @@ describe('retry ownership through test-level providers', () => {
           }),
         },
       });
-      const sequence = new SequenceProvider({
-        config: { inputs: ['record-first', 'fail-second'] },
+      const replacement =
+        kind === 'sequence'
+          ? new SequenceProvider({ config: { inputs: ['record-first', 'fail-second'] } })
+          : new SimulatedUser({
+              config: { maxTurns: 1, initialMessages: [{ role: 'user', content: 'record-first' }] },
+            });
+      vi.spyOn(PromptfooSimulatedUserProvider.prototype, 'callApi').mockResolvedValue({
+        output: 'fail-second',
       });
       vi.mocked(fetchWithProxy).mockImplementation(async (_url, options) => {
         const body = JSON.parse(options?.body as string);
@@ -131,9 +158,9 @@ describe('retry ownership through test-level providers', () => {
               },
         );
       });
-      const result = evaluateWithReplacement(target, sequence);
+      const result = evaluateWithReplacement(target, replacement);
       await vi.waitFor(() => expect(fetchWithProxy).toHaveBeenCalled());
-      await vi.runAllTimersAsync();
+      await settleWithTimers(result);
       expect((await result)[0]).toMatchObject({
         success: false,
         error: expect.stringContaining('fixture too many requests'),
@@ -148,10 +175,19 @@ describe('retry ownership through test-level providers', () => {
     const targetCall = vi.spyOn(target, 'callApi');
     const callApi = vi
       .fn<ApiProvider['callApi']>()
-      .mockResolvedValueOnce({ error: '429 retry after 0' })
+      .mockResolvedValueOnce({
+        error: '429 retry after 0',
+        metadata: {
+          http: {
+            status: 429,
+            statusText: 'Too Many Requests',
+            headers: { 'retry-after-ms': '0' },
+          },
+        },
+      })
       .mockResolvedValueOnce({ output: 'replacement succeeded' });
     const result = evaluateWithReplacement(target, { id: () => 'independent', callApi });
-    await vi.runAllTimersAsync();
+    await settleWithTimers(result);
     expect((await result)[0]).toMatchObject({
       success: true,
       response: { output: 'replacement succeeded' },
@@ -160,62 +196,76 @@ describe('retry ownership through test-level providers', () => {
     expect(targetCall).not.toHaveBeenCalled();
   });
 
-  it('keeps scheduler retries for sequence targets without internal retry ownership', async () => {
-    const callApi = vi
-      .fn<ApiProvider['callApi']>()
-      .mockResolvedValueOnce({ error: '429 retry after 0' })
-      .mockResolvedValueOnce({ output: 'target succeeded' });
-    const sequence = new SequenceProvider({ config: { inputs: ['fixture'] } });
-    const result = evaluateWithReplacement({ id: () => 'ordinary', callApi }, sequence);
-    await vi.runAllTimersAsync();
-    expect((await result)[0]).toMatchObject({
-      success: true,
-      response: { output: 'target succeeded' },
-    });
-    expect(callApi).toHaveBeenCalledTimes(2);
-  });
-
-  it.each([false, true])(
-    'the rate-limit helper honors declared delegation (%s)',
-    async (delegates) => {
-      const error = new Error('429 retry after 0');
-      const target: ApiProvider = {
-        id: () => 'internally-retried',
-        handlesOwnRetries: true,
-        callApi: vi.fn<ApiProvider['callApi']>().mockRejectedValue(error),
-      };
-      const replacement: ApiProvider = {
-        id: () => 'independent',
-        callApi: vi
-          .fn<ApiProvider['callApi']>()
-          .mockRejectedValueOnce(error)
-          .mockResolvedValueOnce({ output: 'replacement succeeded' }),
-      };
-      registry = new RateLimitRegistry({ maxConcurrency: 1 });
-      const wrapped = wrapProviderWithRateLimiting(
-        delegates ? new SequenceProvider({ config: { inputs: ['fixture'] } }) : replacement,
-        registry,
-      );
-      const result = wrapped
-        .callApi('fixture', {
-          originalProvider: target,
-          vars: {},
-          prompt: { raw: 'fixture', label: 'fixture' },
-        })
-        .then(
-          (value) => ({ value }),
-          (failure: Error) => ({ error: failure }),
-        );
-      await vi.runAllTimersAsync();
-      if (delegates) {
-        expect(await result).toEqual({ error });
-        expect(target.callApi).toHaveBeenCalledOnce();
-        expect(replacement.callApi).not.toHaveBeenCalled();
-      } else {
-        expect(await result).toEqual({ value: { output: 'replacement succeeded' } });
-        expect(target.callApi).not.toHaveBeenCalled();
-        expect(replacement.callApi).toHaveBeenCalledTimes(2);
-      }
+  it.each(['sequence', 'simulated-user'])(
+    'keeps scheduler retries for %s targets without internal retry ownership',
+    async (kind) => {
+      // Throw to retain the immediate retry hint through either wrapper's response shape.
+      const callApi = vi
+        .fn<ApiProvider['callApi']>()
+        .mockRejectedValueOnce(new Error('429 retry after 0'))
+        .mockResolvedValueOnce({ output: 'target succeeded' });
+      const wrapper =
+        kind === 'sequence'
+          ? new SequenceProvider({ config: { inputs: ['fixture'] } })
+          : new SimulatedUser({
+              config: { maxTurns: 0, initialMessages: [{ role: 'user', content: 'fixture' }] },
+            });
+      const result = evaluateWithReplacement({ id: () => 'ordinary', callApi }, wrapper);
+      await settleWithTimers(result);
+      expect((await result)[0]).toMatchObject({
+        success: true,
+        response: { output: expect.stringContaining('target succeeded') },
+      });
+      expect(callApi).toHaveBeenCalledTimes(2);
     },
   );
+
+  it.each(
+    ['rate-limit', 'grading'].flatMap((path) =>
+      [false, true].map((delegates) => ({ path, delegates })),
+    ),
+  )('the $path helper honors declared delegation ($delegates)', async ({ path, delegates }) => {
+    const error = new Error('429 retry after 0');
+    const target: ApiProvider = {
+      id: () => 'internally-retried',
+      handlesOwnRetries: true,
+      callApi: vi.fn<ApiProvider['callApi']>().mockRejectedValue(error),
+    };
+    const replacement: ApiProvider = {
+      id: () => 'independent',
+      callApi: vi
+        .fn<ApiProvider['callApi']>()
+        .mockRejectedValueOnce(error)
+        .mockResolvedValueOnce({ output: 'replacement succeeded' }),
+    };
+    registry = new RateLimitRegistry({ maxConcurrency: 1 });
+    const provider = delegates
+      ? new SequenceProvider({ config: { inputs: ['fixture'] } })
+      : replacement;
+    const context = {
+      originalProvider: target,
+      vars: {},
+      prompt: { raw: 'fixture', label: 'fixture' },
+    };
+    const result = (
+      path === 'grading'
+        ? withProviderCallExecutionContext({ rateLimitRegistry: registry }, () =>
+            callProviderWithContext(provider, 'fixture', 'fixture', {}, context),
+          )
+        : wrapProviderWithRateLimiting(provider, registry).callApi('fixture', context)
+    ).then(
+      (value) => ({ value }),
+      (failure: Error) => ({ error: failure }),
+    );
+    await settleWithTimers(result);
+    if (delegates) {
+      expect(await result).toEqual({ error });
+      expect(target.callApi).toHaveBeenCalledOnce();
+      expect(replacement.callApi).not.toHaveBeenCalled();
+    } else {
+      expect(await result).toEqual({ value: { output: 'replacement succeeded' } });
+      expect(target.callApi).not.toHaveBeenCalled();
+      expect(replacement.callApi).toHaveBeenCalledTimes(2);
+    }
+  });
 });

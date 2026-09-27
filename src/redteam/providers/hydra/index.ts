@@ -191,6 +191,7 @@ function extractAgentMessage(output: unknown): string | undefined {
 }
 
 export class HydraProvider implements ApiProvider {
+  readonly usesOriginalProvider = true;
   readonly config: HydraConfig;
   private readonly providerOptions: HydraProviderOptions;
   private scanId?: string;
