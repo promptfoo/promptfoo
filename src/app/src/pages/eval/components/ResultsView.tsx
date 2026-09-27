@@ -24,7 +24,7 @@ import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 import invariant from '@promptfoo/util/invariant';
 import { BarChart, Copy, Edit, Eye, Play, Settings, Share, Trash2, X } from 'lucide-react';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { useDebouncedCallback } from 'use-debounce';
 import { ColumnSelector } from './ColumnSelector';
 import CompareEvalMenuItem from './CompareEvalMenuItem';
