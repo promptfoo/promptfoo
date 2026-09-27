@@ -302,6 +302,140 @@ describe('invocation-scoped cache settings', () => {
     },
   );
 
+  it.each([
+    { cleared: undefined, active: undefined },
+    { cleared: undefined, active: 'fixture' },
+    { cleared: 'fixture', active: 'fixture' },
+    { cleared: 'fixture', active: 'fixture:child' },
+  ])('retains fetches started during a clear of $cleared ($active)', async (scenario) => {
+    await cliState.withEnv(disk(path.join(tempDir, 'post-clear-write')), async () => {
+      const store = cache.getCache().stores[0];
+      const set = store.set.bind(store);
+      const entered = createDeferred<void>();
+      const release = createDeferred<void>();
+      vi.spyOn(store, 'set').mockImplementationOnce(async (...args) => {
+        entered.resolve();
+        await release.promise;
+        return set(...args);
+      });
+      vi.mocked(fetchWithRetries)
+        .mockResolvedValueOnce(Response.json('old'))
+        .mockImplementation(async () => Response.json('new'));
+      const call = () =>
+        cache.withCacheNamespace(scenario.active, () =>
+          cache.fetchWithCache('https://cache-fixture.invalid/post-clear-write'),
+        );
+      const first = call();
+      await entered.promise;
+      const clearing = cache.withCacheNamespace(scenario.cleared, () => cache.getCache().clear());
+      const next = call();
+      try {
+        await new Promise(setImmediate);
+      } finally {
+        release.resolve();
+        await Promise.all([first, clearing, next]);
+      }
+      expect(await call()).toMatchObject({ data: 'new', cached: true });
+      expect(fetchWithRetries).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('waits for overlapping clears before admitting a later fetch', async () => {
+    await cliState.withEnv(memory, async () => {
+      const store = cache.getCache().stores[0];
+      const set = store.set.bind(store);
+      const entered = createDeferred<void>();
+      const release = createDeferred<void>();
+      vi.spyOn(store, 'set').mockImplementationOnce(async (...args) => {
+        entered.resolve();
+        await release.promise;
+        return set(...args);
+      });
+      vi.mocked(fetchWithRetries).mockImplementation(async () => Response.json('fresh'));
+      const call = () =>
+        cache.withCacheNamespace('parent:child', () =>
+          cache.fetchWithCache('https://cache-fixture.invalid/overlapping'),
+        );
+      const first = call();
+      await entered.promise;
+      const parentClear = cache.withCacheNamespace('parent', () => cache.getCache().clear());
+      const between = call();
+      const childClear = cache.withCacheNamespace('parent:child', () => cache.getCache().clear());
+      const last = call();
+      try {
+        await cache.withCacheNamespace('sibling', async () => {
+          expect(await cache.fetchWithCache('https://cache-fixture.invalid/sibling')).toMatchObject(
+            { cached: false, data: 'fresh' },
+          );
+        });
+      } finally {
+        release.resolve();
+        await Promise.all([first, parentClear, between, childClear, last]);
+      }
+      expect(await call()).toMatchObject({ cached: true, data: 'fresh' });
+      expect(fetchWithRetries).toHaveBeenCalledTimes(4);
+    });
+  });
+
+  it('does not return a stale hit while the store is clearing', async () => {
+    await cliState.withEnv(memory, async () => {
+      vi.mocked(fetchWithRetries)
+        .mockResolvedValueOnce(Response.json('old'))
+        .mockResolvedValueOnce(Response.json('fresh'));
+      const call = () => cache.fetchWithCache('https://cache-fixture.invalid/old-hit');
+      await call();
+      const store = cache.getCache().stores[0];
+      const clear = store.clear.bind(store);
+      const entered = createDeferred<void>();
+      const release = createDeferred<void>();
+      vi.spyOn(store, 'clear').mockImplementationOnce(async () => {
+        entered.resolve();
+        await release.promise;
+        return clear();
+      });
+      const clearing = cache.getCache().clear();
+      await entered.promise;
+      const next = call();
+      try {
+        await new Promise(setImmediate);
+      } finally {
+        release.resolve();
+        await clearing;
+      }
+      expect(await next).toMatchObject({ cached: false, data: 'fresh' });
+      expect(await call()).toMatchObject({ cached: true, data: 'fresh' });
+      expect(fetchWithRetries).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('releases waiting fetches when namespace deletion fails', async () => {
+    await cliState.withEnv(memory, () =>
+      cache.withCacheNamespace('fixture', async () => {
+        const store = cache.getCache().stores[0];
+        const entered = createDeferred<void>();
+        const release = createDeferred<void>();
+        vi.spyOn(store, 'iterator').mockImplementationOnce(async function* () {
+          entered.resolve();
+          await release.promise;
+          throw new Error('fixture deletion failure');
+        });
+        vi.mocked(fetchWithRetries).mockImplementation(async () => Response.json('fresh'));
+        const clearing = cache
+          .getCache()
+          .clear()
+          .catch((error) => error);
+        await entered.promise;
+        const call = () => cache.fetchWithCache('https://cache-fixture.invalid/failed-clear');
+        const next = call();
+        release.resolve();
+        expect(await clearing).toEqual(new Error('fixture deletion failure'));
+        expect(await next).toMatchObject({ cached: false, data: 'fresh' });
+        expect(await call()).toMatchObject({ cached: true, data: 'fresh' });
+        expect(fetchWithRetries).toHaveBeenCalledOnce();
+      }),
+    );
+  });
+
   it('clears a namespace without waiting for another namespace to begin its store write', async () => {
     await cliState.withEnv(disk(path.join(tempDir, 'independent-namespaces')), async () => {
       const first = await cache.withCacheNamespace('first', async () => cache.getCache());

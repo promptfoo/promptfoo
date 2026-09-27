@@ -39,6 +39,7 @@ interface CacheBackend {
   claims: Set<string>;
   inflight: Map<string, Promise<string>>;
   writes: Map<Promise<unknown>, string>;
+  clears: Map<Promise<boolean>, string | undefined>;
 }
 
 // Bound idle retention while preserving identity for callers that still hold a
@@ -217,6 +218,7 @@ function getCacheBackend(
       claims: new Set(),
       inflight: new Map(),
       writes: new Map(),
+      clears: new Map(),
     };
     if (cacheEnabled) {
       cacheBackends.set(identity, backend);
@@ -260,20 +262,15 @@ function getCacheInstance(backend = getCacheBackend()) {
       }
     }
     const clear = cacheInstance.clear.bind(cacheInstance);
-    cacheInstance.clear = async () => {
-      backend.clearGeneration = nextCacheClearGeneration++;
-      for (const state of backend.namespaces.values()) {
-        state.clearGeneration = backend.clearGeneration;
-      }
-      backend.inflight.clear();
-      await Promise.allSettled(backend.writes.keys());
-      const result = await clear();
-      backend.claims.clear();
-      if (backend.filePath) {
-        fs.rmSync(getClaimsPath(backend.filePath), { force: true, recursive: true });
-      }
-      return result;
-    };
+    cacheInstance.clear = () =>
+      clearBackendCache(backend, undefined, async () => {
+        const result = await clear();
+        backend.claims.clear();
+        if (backend.filePath) {
+          fs.rmSync(getClaimsPath(backend.filePath), { force: true, recursive: true });
+        }
+        return result;
+      });
     backend.instances.set(ttl, cacheInstance);
   }
   return cacheInstance;
@@ -363,52 +360,70 @@ function getUnscopedCacheKey(cacheKey: string, namespace: string) {
   return cacheKey.startsWith(namespacePrefix) ? cacheKey.slice(namespacePrefix.length) : cacheKey;
 }
 
-async function clearNamespacedCache(cache: Cache, namespace: string, backend: CacheBackend) {
-  const namespacePrefix = `${namespace}:`;
-  const clearGeneration = nextCacheClearGeneration++;
+function clearBackendCache(
+  backend: CacheBackend,
+  namespace: string | undefined,
+  clear: () => Promise<boolean>,
+): Promise<boolean> {
+  const prefix = namespace ? `${namespace}:` : undefined;
+  const generation = nextCacheClearGeneration++;
+  if (!prefix) {
+    backend.clearGeneration = generation;
+    backend.inflight.clear();
+  }
   for (const state of backend.namespaces.values()) {
-    if (state.namespace === namespace || state.namespace.startsWith(namespacePrefix)) {
-      state.clearGeneration = clearGeneration;
+    if (!prefix || state.namespace === namespace || state.namespace.startsWith(prefix)) {
+      state.clearGeneration = generation;
     }
   }
-  await Promise.allSettled(
+  // Drain started writes; later fetches wait for deletion before reading or writing.
+  const clearing = Promise.allSettled(
     [...backend.writes]
-      .filter(([, key]) => key.startsWith(namespacePrefix))
+      .filter(([, key]) => !prefix || key.startsWith(prefix))
       .map(([write]) => write),
-  );
+  )
+    .then(clear)
+    .finally(() => backend.clears.delete(clearing));
+  backend.clears.set(clearing, prefix);
+  return clearing;
+}
 
-  for (const store of cache.stores) {
-    if (!store.iterator) {
-      throw new Error(
-        `[Cache] Cannot clear namespace ${namespace} because a cache store does not support key iteration.`,
-      );
-    }
+function clearNamespacedCache(cache: Cache, namespace: string, backend: CacheBackend) {
+  return clearBackendCache(backend, namespace, async () => {
+    const namespacePrefix = `${namespace}:`;
+    for (const store of cache.stores) {
+      if (!store.iterator) {
+        throw new Error(
+          `[Cache] Cannot clear namespace ${namespace} because a cache store does not support key iteration.`,
+        );
+      }
 
-    const keysToDelete: string[] = [];
-    for await (const [key] of store.iterator(undefined)) {
-      if (typeof key === 'string' && key.startsWith(namespacePrefix)) {
-        keysToDelete.push(key);
+      const keysToDelete: string[] = [];
+      for await (const [key] of store.iterator(undefined)) {
+        if (typeof key === 'string' && key.startsWith(namespacePrefix)) {
+          keysToDelete.push(key);
+        }
+      }
+
+      if (keysToDelete.length === 0) {
+        continue;
+      }
+
+      try {
+        if (store.deleteMany) {
+          await store.deleteMany(keysToDelete);
+        } else {
+          await Promise.all(keysToDelete.map((key) => store.delete(key)));
+        }
+      } catch (err) {
+        throw new Error(
+          `[Cache] Failed to clear ${keysToDelete.length} keys for namespace "${namespace}": ${(err as Error).message}`,
+        );
       }
     }
 
-    if (keysToDelete.length === 0) {
-      continue;
-    }
-
-    try {
-      if (store.deleteMany) {
-        await store.deleteMany(keysToDelete);
-      } else {
-        await Promise.all(keysToDelete.map((key) => store.delete(key)));
-      }
-    } catch (err) {
-      throw new Error(
-        `[Cache] Failed to clear ${keysToDelete.length} keys for namespace "${namespace}": ${(err as Error).message}`,
-      );
-    }
-  }
-
-  return true;
+    return true;
+  });
 }
 
 /**
@@ -1093,6 +1108,11 @@ export async function fetchWithCache<T = unknown>(
   const inflightFetchResponses = backend.inflight;
   const generationState = getCacheGeneration(backend);
   const clearGeneration = generationState.clearGeneration;
+  await Promise.allSettled(
+    [...backend.clears]
+      .filter(([, prefix]) => !prefix || cacheKey.startsWith(prefix))
+      .map(([clearing]) => clearing),
+  );
 
   const cachedResponse = await cache.get<SerializedFetchResponse>(cacheKey);
   if (cachedResponse != null) {
