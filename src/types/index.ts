@@ -30,7 +30,6 @@ export {
   isCliEventSource,
 } from './eventSource';
 
-import type { BlobRef } from '../blobs/types';
 import type { EnvOverrides } from '../contracts/env';
 import type { Prompt, PromptFunction } from '../contracts/prompts';
 import type {
@@ -444,31 +443,8 @@ export interface EvaluateTableOutput {
   text: string;
   tokenUsage?: Partial<TokenUsage>;
   error?: string | null;
-  audio?: {
-    id?: string;
-    expiresAt?: number;
-    data?: string; // base64 encoded audio data
-    blobRef?: BlobRef;
-    transcript?: string;
-    format?: string;
-    sampleRate?: number;
-    channels?: number;
-    duration?: number;
-  };
-  video?: {
-    id?: string; // Provider video ID (e.g., Sora job ID, Veo operation name)
-    blobRef?: BlobRef; // Blob storage reference for video data (Veo)
-    storageRef?: { key?: string }; // Storage reference for video file (Sora)
-    url?: string; // Storage ref URL (e.g., storageRef:video/abc123.mp4) or blob URI
-    format?: string; // 'mp4'
-    size?: string; // '1280x720', '720x1280', '1792x1024', or '1024x1792'
-    duration?: number; // Seconds
-    thumbnail?: string; // Storage ref URL for thumbnail (Sora)
-    spritesheet?: string; // Storage ref URL for spritesheet (Sora)
-    model?: string; // Model used (e.g., 'sora-2', 'veo-3.1-generate-preview')
-    aspectRatio?: string; // '16:9' or '9:16' (Veo)
-    resolution?: string; // '720p' or '1080p' (Veo)
-  };
+  audio?: ProviderResponse['audio'];
+  video?: ProviderResponse['video'];
   images?: ImageOutput[];
 }
 

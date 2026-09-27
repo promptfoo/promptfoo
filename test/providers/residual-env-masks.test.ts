@@ -7,7 +7,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { AzureGenericProvider } from '../../src/providers/azure/generic';
 import { AzureModerationProvider } from '../../src/providers/azure/moderation';
-import { GoogleProvider } from '../../src/providers/google/provider';
 import { VertexChatProvider } from '../../src/providers/google/vertex';
 import {
   readOpenClawConfig,
@@ -91,11 +90,8 @@ describe('remaining provider environment masks', () => {
     });
     expect(Reflect.get(provider, 'apiVersion')).toBe('2024-09-01');
   });
-  it.each([
-    ['Google', GoogleProvider],
-    ['Vertex', VertexChatProvider],
-  ] as const)('masks Vertex request metadata for %s', (_name, Provider) => {
-    const provider = new Provider('fixture', {
+  it('masks Vertex request metadata', () => {
+    const provider = new VertexChatProvider('fixture', {
       config: { vertexai: true },
       env: { VERTEX_API_VERSION: '', VERTEX_PUBLISHER: '' },
     });

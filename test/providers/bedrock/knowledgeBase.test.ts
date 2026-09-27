@@ -80,7 +80,7 @@ vi.mock('../../../src/cache', async (importOriginal) => {
   };
 });
 
-let restoreProxyEnv = () => {};
+let restoreEnv = () => {};
 
 describe('AwsBedrockKnowledgeBaseProvider', () => {
   beforeAll(async () => {
@@ -90,37 +90,23 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
   });
 
   beforeEach(() => {
-    restoreProxyEnv = mockProcessEnv(
-      Object.fromEntries(PROXY_ENV_KEYS.map((key) => [key, undefined])),
+    restoreEnv = mockProcessEnv(
+      Object.fromEntries(
+        [...PROXY_ENV_KEYS, 'AWS_BEDROCK_MAX_RETRIES', 'AWS_BEARER_TOKEN_BEDROCK'].map((key) => [
+          key,
+          undefined,
+        ]),
+      ),
     );
     vi.clearAllMocks();
     mockGet.mockReset();
     mockSet.mockReset();
     mockIsCacheEnabled.mockReset().mockReturnValue(false);
-    mockProcessEnv({ AWS_BEDROCK_MAX_RETRIES: undefined });
-    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
-    mockProcessEnv({ HTTPS_PROXY: undefined });
-    mockProcessEnv({ https_proxy: undefined });
-    mockProcessEnv({ HTTP_PROXY: undefined });
-    mockProcessEnv({ http_proxy: undefined });
-    mockProcessEnv({ npm_config_https_proxy: undefined });
-    mockProcessEnv({ npm_config_http_proxy: undefined });
-    mockProcessEnv({ npm_config_proxy: undefined });
-    mockProcessEnv({ all_proxy: undefined });
   });
 
   afterEach(() => {
     vi.clearAllMocks();
-    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
-    mockProcessEnv({ HTTPS_PROXY: undefined });
-    mockProcessEnv({ https_proxy: undefined });
-    mockProcessEnv({ HTTP_PROXY: undefined });
-    mockProcessEnv({ http_proxy: undefined });
-    mockProcessEnv({ npm_config_https_proxy: undefined });
-    mockProcessEnv({ npm_config_http_proxy: undefined });
-    mockProcessEnv({ npm_config_proxy: undefined });
-    mockProcessEnv({ all_proxy: undefined });
-    restoreProxyEnv();
+    restoreEnv();
   });
 
   it('should throw an error if knowledgeBaseId is not provided', () => {
@@ -810,8 +796,6 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     );
     expect(BedrockAgentRuntimeClient).not.toHaveBeenCalled();
     expect(NodeHttpHandlerMock).not.toHaveBeenCalled();
-
-    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
   });
 
   it('should prioritize explicit credentials over API key for knowledge base', async () => {
