@@ -46,7 +46,7 @@ function validateDockerInstallCommands(dockerfile: string): void {
       expect(args.some((arg) => arg.startsWith('--ignore-scripts='))).toBe(false);
     } else if (command === 'rebuild') {
       // Package names and globs can rebuild untrusted nested dependencies.
-      expect(args).toEqual(['./node_modules/esbuild', './node_modules/@swc/core']);
+      expect(args).toEqual(['./node_modules/esbuild']);
     }
   }
 }
@@ -105,13 +105,7 @@ describe('package manifests', () => {
     ['src/app/package.json', ['@vitest/browser', 'dedent', 'fast-deep-equal', 'zod']],
     [
       'site/package.json',
-      [
-        '@docusaurus/plugin-content-blog',
-        '@docusaurus/theme-common',
-        '@docusaurus/types',
-        '@swc/core',
-        'ajv',
-      ],
+      ['@docusaurus/plugin-content-blog', '@docusaurus/theme-common', '@docusaurus/types', 'ajv'],
     ],
   ] as const)('declares direct imports in their owning workspace: %s', (manifest, dependencies) => {
     const workspace = readPackageJson<PackageManifest>(manifest);
@@ -407,8 +401,7 @@ describe('package manifests', () => {
     'RUN node /usr/local/lib/node_modules/npm/bin/npm-cli.js ci',
     'RUN <<EOF\nnpm ci\nEOF',
   ])('rejects an additional unsafe Docker command: %s', (unsafeCommand) => {
-    const safeCommands =
-      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+    const safeCommands = 'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild';
     expect(() => validateDockerInstallCommands(`${safeCommands}\n${unsafeCommand}`)).toThrow();
     expect(() =>
       validateDockerInstallCommands(`${safeCommands} && ${unsafeCommand.replace('RUN ', '')}`),
@@ -458,18 +451,11 @@ describe('package manifests', () => {
     }
   });
 
-  it('lets consumers omit separately installed features and platform binaries', () => {
+  it('lets consumers omit separately installed features', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const sitePackageJson = readPackageJson<PackageManifest>('site/package.json');
     const packageLock =
       readPackageJson<PackageLockManifest<{ optional?: boolean }>>('package-lock.json');
-    const platformBindings = Object.keys({
-      ...packageJson.dependencies,
-      ...packageJson.optionalDependencies,
-    }).filter((dependency) =>
-      ['@rollup/rollup-', '@swc/core-'].some((prefix) => dependency.startsWith(prefix)),
-    );
-
     for (const dependency of [
       '@alcalzone/ansi-tokenize',
       '@anthropic-ai/claude-agent-sdk',
@@ -478,12 +464,10 @@ describe('package manifests', () => {
       '@openai/codex-security',
       '@opencode-ai/sdk',
       '@slack/web-api',
-      '@swc/core',
       'hono',
       'ibm-cloud-sdk-core',
       'read-excel-file',
       'sharp',
-      ...platformBindings,
     ]) {
       expect(packageJson.optionalDependencies, dependency).toHaveProperty(dependency);
       expect(packageJson.dependencies, dependency).not.toHaveProperty(dependency);
@@ -498,7 +482,6 @@ describe('package manifests', () => {
       '@alcalzone/ansi-tokenize',
       '@openai/codex-security',
       '@opencode-ai/sdk',
-      '@rollup/rollup-linux-x64-gnu',
       '@slack/web-api',
     ]) {
       expect(packageLock.packages[`node_modules/${dependency}`]?.optional, dependency).toBe(true);

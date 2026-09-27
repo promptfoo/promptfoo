@@ -9,6 +9,7 @@ import {
   getOAuthTokenWithExpiry,
   isMcpErrorResult,
   isMcpToolNameFilter,
+  normalizeMcpToolContent,
   renderAuthVars,
 } from '../../../src/providers/mcp/util';
 
@@ -33,6 +34,69 @@ it('resolves MCP auth from file defaults unless explicit vars replace them', () 
 vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: (...args: unknown[]) => mockFetch(...args),
 }));
+
+describe('normalizeMcpToolContent', () => {
+  it.each([
+    { name: 'null', content: null, expected: '' },
+    { name: 'undefined', content: undefined, expected: '' },
+    { name: 'literal text', content: '{{secret}}', expected: '{{secret}}' },
+    { name: 'number', content: 42, expected: '42' },
+    { name: 'object', content: { text: 'whole object' }, expected: '{"text":"whole object"}' },
+    { name: 'empty array', content: [], expected: '' },
+    {
+      name: 'mixed blocks and property precedence',
+      content: [
+        'literal',
+        { text: 0, json: 'ignored', data: 'ignored' },
+        { text: false },
+        { text: '', data: 'ignored' },
+        { text: null, json: { count: 2 }, data: 'ignored' },
+        { data: ['value'] },
+        { resource: { uri: 'file:///literal.txt' } },
+        null,
+        undefined,
+      ],
+      expected:
+        'literal\n0\nfalse\n\n{"count":2}\n["value"]\n{"resource":{"uri":"file:///literal.txt"}}\nnull\nundefined',
+    },
+    {
+      name: 'undefined property values and sparse entries',
+      content: [{ json: undefined, data: 'ignored' }, , { data: undefined }],
+      expected: '\n\n',
+    },
+  ])('renders $name without changing content semantics', ({ content, expected }) => {
+    expect(normalizeMcpToolContent(content)).toBe(expected);
+  });
+
+  it('only reports unknown object blocks, before serializing each block', () => {
+    const events: string[] = [];
+    const unknown = {
+      toJSON: () => {
+        events.push('serialize');
+        return 'serialized';
+      },
+    };
+    const onUnknownContent = vi.fn(() => {
+      events.push('diagnostic');
+    });
+
+    expect(
+      normalizeMcpToolContent(
+        [{ text: 'known' }, { json: 1 }, { data: 2 }, unknown, 'plain', 3],
+        onUnknownContent,
+      ),
+    ).toBe('known\n1\n2\n"serialized"\nplain\n3');
+    expect(onUnknownContent).toHaveBeenCalledExactlyOnceWith(unknown);
+    expect(events).toEqual(['diagnostic', 'serialize']);
+  });
+
+  it('preserves serialization failures for the provider error handler', () => {
+    const cyclic: { self?: unknown } = {};
+    cyclic.self = cyclic;
+    expect(() => normalizeMcpToolContent([{ json: cyclic }])).toThrow(TypeError);
+    expect(() => normalizeMcpToolContent([{ data: 1n }])).toThrow(TypeError);
+  });
+});
 
 describe('isMcpToolNameFilter', () => {
   it('identifies plain tool names as MCP filters', () => {
