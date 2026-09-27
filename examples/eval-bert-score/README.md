@@ -70,4 +70,12 @@ Run the offline assertion checks with:
 python -m unittest discover -p '*_test.py'
 ```
 
+In a repository checkout with Node dependencies and this example's Python requirements installed, run the Linux/macOS integration smoke from the repository root:
+
+```sh
+python examples/eval-bert-score/tests/smoke_cli.py
+```
+
+It builds a tiny local model, runs the real scorer through both configs with an echo provider, and checks that multiple references stay together. No API credentials or model downloads are needed. This validates integration behavior, not semantic quality of the randomly initialized model.
+
 [Learn more about BERTScore](https://arxiv.org/abs/1904.09675).
