@@ -27,7 +27,6 @@ import {
 } from '../types/index';
 import { getNonstandardScoringBaseline, setNonstandardScoringBaseline } from '../types/internal';
 import { isApiProvider, isProviderOptions } from '../types/providers';
-import { sha256 } from '../util/createHash';
 import { safeJsonStringify } from '../util/json';
 import { isSecretField, REDACTED, sanitizeObject } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
@@ -674,8 +673,6 @@ const ManualRatingStateSchema = z.object({
       })
       .nullable(),
   }),
-  clearRequestHash: z.string().optional(),
-  lastLegacyUpdateHash: z.string().optional(),
 });
 
 type ManualRatingState = z.infer<typeof ManualRatingStateSchema>;
@@ -694,26 +691,6 @@ function isHumanGradingResult(value: unknown): value is GradingResult {
 
 function hasOwn(value: object, key: PropertyKey): boolean {
   return Object.prototype.hasOwnProperty.call(value, key);
-}
-
-function getLegacyClearRequestHash(gradingResult: GradingResult): string | undefined {
-  if (
-    !Array.isArray(gradingResult.componentResults) ||
-    gradingResult.componentResults.some(isHumanGradingResult) ||
-    isHumanAssertion(gradingResult.assertion)
-  ) {
-    return undefined;
-  }
-  return sha256(
-    JSON.stringify([
-      gradingResult.pass,
-      gradingResult.score,
-      // Old UI score edits use a manual reason; clears use the automated reason.
-      gradingResult.reason,
-      hasOwn(gradingResult, 'comment'),
-      gradingResult.comment,
-    ]),
-  );
 }
 
 function parseManualRatingState(value: unknown): ManualRatingState | undefined {
@@ -849,25 +826,6 @@ function applyExplicitRatingUpdate(
     updated.comment = submitted.comment;
   }
   return updated;
-}
-
-function applyLegacyClearedRatingUpdate(
-  previous: GradingResult | null,
-  submitted: GradingResult,
-  previousSuccess: boolean,
-  previousScore: number,
-): GradingResult {
-  // Old clients submit the entire grading result without an intent field. Once a clear
-  // tombstone exists, accept only the score or comment they could have edited and keep every
-  // other field server-owned so a modified delayed clear cannot restore stale grading data.
-  const commentChanged = (previous?.comment ?? '') !== (submitted.comment ?? '');
-  return applyExplicitRatingUpdate(
-    previous,
-    submitted,
-    previousSuccess,
-    previousScore,
-    commentChanged ? 'comment' : 'score',
-  );
 }
 
 function normalizeRatingSubmission(
@@ -1114,7 +1072,6 @@ function resolveClearingManualRating(
   existingState: ManualRatingState | undefined,
   clearRestoreBase: GradingResult,
   clearedGradingResult: GradingResult,
-  legacyClearRequestHash: string | undefined,
 ) {
   if (existingState?.status === 'active') {
     return {
@@ -1125,7 +1082,6 @@ function resolveClearingManualRating(
       nextState: {
         ...existingState,
         status: 'cleared' as const,
-        clearRequestHash: legacyClearRequestHash,
       },
     };
   }
@@ -1160,7 +1116,6 @@ function resolveClearingManualRating(
             success,
           })),
       status: 'cleared' as const,
-      clearRequestHash: legacyClearRequestHash,
     },
   };
 }
@@ -1179,49 +1134,60 @@ function resolveRatingTransition(
 } {
   const previousHasManualRating = hasManualRating(result.gradingResult);
   const existingState = parseManualRatingState(result.manualRatingState);
-  const legacyClearRequestHash = getLegacyClearRequestHash(submittedGradingResult);
-  const isLegacyRepeatedClear =
-    ratingAction === undefined &&
-    legacyClearRequestHash !== undefined &&
-    (legacyClearRequestHash === existingState?.clearRequestHash ||
-      legacyClearRequestHash === existingState?.lastLegacyUpdateHash);
   const isLegacyClearedUpdate =
     ratingAction === undefined &&
     !previousHasManualRating &&
     existingState?.status === 'cleared' &&
-    legacyClearRequestHash !== undefined &&
-    !isLegacyRepeatedClear;
-  const effectiveSubmission =
-    ratingAction === 'update'
-      ? applyExplicitRatingUpdate(
-          result.gradingResult,
-          submittedGradingResult,
-          result.success,
-          result.score,
-          ratingUpdate ?? 'comment',
-        )
-      : isLegacyClearedUpdate
-        ? applyLegacyClearedRatingUpdate(
-            result.gradingResult,
-            submittedGradingResult,
-            result.success,
-            result.score,
-          )
-        : submittedGradingResult;
+    !hasManualRating(submittedGradingResult) &&
+    (hasOwn(submittedGradingResult, 'comment') ||
+      Array.isArray(submittedGradingResult.componentResults) ||
+      submittedGradingResult.reason === MANUAL_RATING_REASON);
+  let update = ratingAction === 'update' ? (ratingUpdate ?? 'comment') : undefined;
+  if (isLegacyClearedUpdate) {
+    // Old clients retain stale outcomes after clearing. Only their annotations and marked
+    // score edits are meaningful in these full payloads. Bare API pass/score edits retain
+    // their inferred behavior; callers can also provide a human assertion or explicit intent.
+    // Payload equality cannot distinguish a delayed clear from an intentional comment revert.
+    if ((result.gradingResult?.comment ?? '') !== (submittedGradingResult.comment ?? '')) {
+      update = 'comment';
+    } else if (
+      submittedGradingResult.reason === MANUAL_RATING_REASON &&
+      submittedGradingResult.score !== result.score
+    ) {
+      update = 'score';
+    }
+  }
+  const stateToRestore =
+    !previousHasManualRating && existingState?.status === 'active' && ratingAction === 'clear'
+      ? existingState
+      : undefined;
+  if (
+    (isLegacyClearedUpdate && !update) ||
+    (!previousHasManualRating && ratingAction === 'clear' && !stateToRestore)
+  ) {
+    return {
+      gradingResult: result.gradingResult,
+      success: result.success,
+      score: result.score,
+      failureReason: normalizeFailureReason(result.failureReason),
+      manualRatingState: existingState ?? null,
+    };
+  }
+  const effectiveSubmission = update
+    ? applyExplicitRatingUpdate(
+        result.gradingResult,
+        submittedGradingResult,
+        result.success,
+        result.score,
+        update,
+      )
+    : submittedGradingResult;
   const normalized = normalizeRatingSubmission(
     result.gradingResult,
     effectiveSubmission,
     result.success,
     ratingAction,
   );
-  const stateToRestore =
-    !previousHasManualRating && existingState?.status === 'active' && ratingAction === 'clear'
-      ? existingState
-      : undefined;
-  const isRepeatedClear =
-    !previousHasManualRating &&
-    existingState?.status === 'cleared' &&
-    (ratingAction === 'clear' || isLegacyRepeatedClear);
   let nextState: ManualRatingState | undefined;
   let gradingResult: GradingResult | null = normalized.gradingResult;
   let success = gradingResult.pass;
@@ -1248,18 +1214,7 @@ function resolveRatingTransition(
         )
       : normalized.gradingResult;
 
-  if (
-    isRepeatedClear ||
-    (!previousHasManualRating && ratingAction === 'clear' && !stateToRestore)
-  ) {
-    // The rating is already absent. Keep the authoritative current baseline rather than
-    // rebuilding it from a stale retry payload, which may contain obsolete comments.
-    gradingResult = result.gradingResult;
-    success = result.success;
-    score = result.score;
-    failureReason = normalizeFailureReason(result.failureReason);
-    nextState = existingState;
-  } else if (stateToRestore) {
+  if (stateToRestore) {
     gradingResult = restoreOriginalGradingResult(clearRestoreBase, stateToRestore);
     success = stateToRestore.original.success;
     score = stateToRestore.original.score;
@@ -1267,29 +1222,13 @@ function resolveRatingTransition(
     nextState = {
       ...stateToRestore,
       status: 'cleared',
-      clearRequestHash: legacyClearRequestHash ?? stateToRestore.clearRequestHash,
     };
   } else if (
     !previousHasManualRating &&
     existingState?.status === 'cleared' &&
     !normalized.hasManualRating
   ) {
-    // A score/comment edit changes the restored automated baseline, but the tombstone must
-    // survive so a delayed retry of the old clear cannot be reinterpreted as a new rating.
-    nextState = {
-      ...captureManualRatingState({
-        ...result,
-        failureReason,
-        gradingResult,
-        score,
-        success,
-      }),
-      status: 'cleared',
-      clearRequestHash: existingState.clearRequestHash,
-      lastLegacyUpdateHash: isLegacyClearedUpdate
-        ? legacyClearRequestHash
-        : existingState.lastLegacyUpdateHash,
-    };
+    nextState = existingState;
   } else if (!previousHasManualRating && normalized.hasManualRating) {
     nextState = captureManualRatingState(result);
   } else if (previousHasManualRating && normalized.hasManualRating) {
@@ -1304,7 +1243,6 @@ function resolveRatingTransition(
       existingState,
       clearRestoreBase,
       serverOwnedClearGradingResult,
-      legacyClearRequestHash,
     );
     ({ gradingResult, success, score, failureReason, nextState } = cleared);
   }

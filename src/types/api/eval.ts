@@ -292,6 +292,13 @@ function exceedsRatingRequestDepth(value: unknown): boolean {
   return false;
 }
 
+/**
+ * Explicit intent makes clears idempotent and distinguishes new ratings from field edits.
+ * After clearing, old UI payloads with comments/components apply the latest comment, or a
+ * score marked with its manual-rating reason, while preserving the server's outcome. Bare
+ * pass/score API edits retain inferred behavior. Legacy comment reversions and delayed clears
+ * are indistinguishable; retry-safe clears require ratingAction: 'clear'.
+ */
 export const SubmitRatingRequestSchema = z
   .object({
     pass: z.boolean(),

@@ -148,6 +148,8 @@ describe('eval routes', () => {
           ? scores.reduce((sum: number, score: number) => sum + score, 0) / scores.length
           : payload.score;
       payload.reason = componentResults[0].reason;
+    } else if (payload.reason === 'Manual result (overrides all other grading results)') {
+      payload.reason = 'Manual rating cleared';
     }
     return payload;
   }
@@ -1152,7 +1154,7 @@ describe('eval routes', () => {
       expect(commentResponse.status).toBe(200);
       const delayedClearResponse = await api
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
-        .send(legacyClearPayload);
+        .send({ ...legacyClearPayload, ratingAction: 'clear' });
       expect(delayedClearResponse.status).toBe(200);
       const persistedResult = await EvalResult.findById(result.id);
       expect(persistedResult?.score).toBe(0.4);
@@ -1164,7 +1166,7 @@ describe('eval routes', () => {
       expect(persistedEval?.prompts[result.promptIdx].metrics?.score).toBeCloseTo(0.4);
     });
 
-    it('lets an old client restore the cleared score while retaining clear retry protection', async () => {
+    it('accepts legacy score edits and the latest annotation after clearing', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
       const [result] = await eval_.getResults();
@@ -1195,8 +1197,9 @@ describe('eval routes', () => {
       vi.mocked(updateSignalFile).mockClear();
       const retried = await api.post(route).send(clearPayload);
       expect(retried.body.score).toBe(0.6);
-      expect(retried.body.gradingResult.comment).toBe('Newer annotation');
-      expect(updateSignalFile).not.toHaveBeenCalled();
+      // An old clear and an intentional return to the original comment have the same body.
+      expect(retried.body.gradingResult.comment).toBe(clearPayload.comment);
+      expect(updateSignalFile).toHaveBeenCalledOnce();
       expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics?.score).toBeCloseTo(
         0.6,
       );
@@ -1253,6 +1256,125 @@ describe('eval routes', () => {
         ...originalMetrics,
         score: expect.closeTo(originalMetrics.score + score - result.score),
       });
+    });
+
+    it('accepts assertion-less old UI annotations and scores after clearing', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const [result] = await eval_.getResults();
+      invariant(result instanceof EvalResult && result.id, 'Result is required');
+      result.gradingResult = null;
+      await result.save();
+      const route = `/api/eval/${eval_.id}/results/${result.id}/rating`;
+      expect((await api.post(route).send(createManualRatingPayload(result, false))).status).toBe(
+        200,
+      );
+      // With no automated assertions, the old UI retains the manual outcome locally.
+      const localClear = {
+        pass: false,
+        score: 0,
+        reason: 'Manual rating cleared',
+        comment: '',
+        componentResults: [],
+      };
+      const cleared = await api.post(route).send(localClear);
+      expect(cleared.body).toMatchObject({ success: true, score: 1, gradingResult: null });
+      const originalMetrics = structuredClone(
+        (await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics,
+      );
+      invariant(originalMetrics, 'Restored metrics are required');
+      // Its next edit omits the empty componentResults array and ignores the clear response.
+      for (const comment of ['!highlight', '', 'A', 'B', 'A', '']) {
+        const annotated = await api.post(route).send({
+          pass: false,
+          score: 0,
+          reason: localClear.reason,
+          comment,
+        });
+        expect(annotated.status).toBe(200);
+        expect(annotated.body).toMatchObject({
+          success: true,
+          score: 1,
+          failureReason: ResultFailureReason.NONE,
+          gradingResult: { pass: true, score: 1, comment },
+        });
+        expect(annotated.body.gradingResult.componentResults).toBeUndefined();
+        expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toEqual(
+          originalMetrics,
+        );
+      }
+      const scored = await api.post(route).send({
+        pass: false,
+        score: 0.4,
+        reason: 'Manual result (overrides all other grading results)',
+      });
+      expect(scored.body).toMatchObject({
+        success: true,
+        score: 0.4,
+        gradingResult: { pass: true, score: 0.4, comment: '' },
+      });
+      expect(scored.body.gradingResult.componentResults).toBeUndefined();
+      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toEqual({
+        ...originalMetrics,
+        score: expect.closeTo(originalMetrics.score - 0.6),
+      });
+    });
+
+    it.each([
+      { label: 'bare API pass/score', fields: {} },
+      { label: 'explicit intent', fields: { ratingAction: 'rate' } },
+      { label: 'top-level human assertion', fields: { assertion: { type: 'human' } } },
+      {
+        label: 'human component',
+        fields: { componentResults: [{ pass: false, score: 0, assertion: { type: 'human' } }] },
+      },
+    ])('accepts a new rating with $label after clearing', async ({ fields }) => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const [result] = await eval_.getResults();
+      invariant(result.id, 'Result ID is required');
+      const route = `/api/eval/${eval_.id}/results/${result.id}/rating`;
+      await api.post(route).send({ pass: false, score: 0, ratingAction: 'rate' });
+      const cleared = await api.post(route).send({ pass: false, score: 0, ratingAction: 'clear' });
+      vi.mocked(updateSignalFile).mockClear();
+      const rated = await api.post(route).send({ pass: false, score: 0, ...fields });
+      expect(rated.status).toBe(200);
+      expect(rated.body).toMatchObject({
+        success: false,
+        score: 0,
+        failureReason: ResultFailureReason.ASSERT,
+        gradingResult: {
+          componentResults: expect.arrayContaining([
+            expect.objectContaining({ assertion: { type: 'human' } }),
+          ]),
+        },
+      });
+      expect(
+        (await api.post(route).send({ pass: false, score: 0, ratingAction: 'clear' })).body,
+      ).toEqual(cleared.body);
+    });
+
+    it('accepts and repeats a bare API score edit after clearing without adding a rating', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const [result] = await eval_.getResults();
+      invariant(result.id, 'Result ID is required');
+      const route = `/api/eval/${eval_.id}/results/${result.id}/rating`;
+      await api.post(route).send({ pass: false, score: 0, ratingAction: 'rate' });
+      await api.post(route).send({ pass: false, score: 0, ratingAction: 'clear' });
+      const updated = await api.post(route).send({ pass: true, score: 0.4 });
+      expect(updated.status).toBe(200);
+      expect(updated.body).toMatchObject({ success: true, score: 0.4 });
+      expect(updated.body.gradingResult.componentResults).not.toContainEqual(
+        expect.objectContaining({ assertion: { type: 'human' } }),
+      );
+      vi.mocked(updateSignalFile).mockClear();
+      const repeated = await api.post(route).send({ pass: true, score: 0.4 });
+      expect(repeated.body).toEqual(updated.body);
+      expect(updateSignalFile).not.toHaveBeenCalled();
+      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics?.score).toBeCloseTo(
+        0.4,
+      );
     });
 
     it.each([
@@ -1455,7 +1577,6 @@ describe('eval routes', () => {
         .get();
       expect(firstClearState?.manualRatingState).toMatchObject({
         status: 'cleared',
-        clearRequestHash: expect.stringMatching(/^[a-f0-9]{64}$/),
       });
       expect(JSON.stringify(firstClearState?.manualRatingState)).not.toContain(
         'Stale client comment',
@@ -1464,7 +1585,7 @@ describe('eval routes', () => {
 
       const retryResponse = await api
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
-        .send(poisonedOutcomeClearPayload);
+        .send({ ...poisonedOutcomeClearPayload, ratingAction: 'clear' });
 
       expect(retryResponse.status).toBe(200);
       expect(retryResponse.body.gradingResult).toMatchObject({
@@ -1504,7 +1625,7 @@ describe('eval routes', () => {
       vi.mocked(updateSignalFile).mockClear();
       const delayedClearResponse = await api
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
-        .send(poisonedOutcomeClearPayload);
+        .send({ ...poisonedOutcomeClearPayload, ratingAction: 'clear' });
       expect(delayedClearResponse.status).toBe(200);
       expect(delayedClearResponse.body.gradingResult?.comment).toBe('Updated by a legacy client');
       expect(updateSignalFile).not.toHaveBeenCalled();
@@ -1515,6 +1636,7 @@ describe('eval routes', () => {
           ...delayedClearResponse.body.gradingResult,
           pass: false,
           score: 0.4,
+          reason: 'Manual result (overrides all other grading results)',
         });
       expect(scoreResponse.status).toBe(200);
       expect(scoreResponse.body.score).toBe(0.4);
@@ -1667,7 +1789,7 @@ describe('eval routes', () => {
       const restoredMetrics = structuredClone(
         (await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics,
       );
-      for (const comment of ['Legacy annotation', '!highlight Legacy annotation']) {
+      for (const comment of ['!highlight', '', 'A', 'B', 'A']) {
         // The old UI ignores the clear response and retains its incorrect local outcome.
         const annotated = await api.post(route).send({ ...clearPayload, comment });
         expect(annotated.status).toBe(200);
@@ -1678,7 +1800,10 @@ describe('eval routes', () => {
           gradingResult: { comment, componentResults: [null, ...automatedComponents] },
         });
         vi.mocked(updateSignalFile).mockClear();
-        for (const retry of [{ ...clearPayload, comment }, clearPayload]) {
+        for (const retry of [
+          { ...clearPayload, comment },
+          { ...clearPayload, ratingAction: 'clear' },
+        ]) {
           const repeated = await api.post(route).send(retry);
           expect(repeated.status).toBe(200);
           expect(repeated.body).toEqual(annotated.body);
