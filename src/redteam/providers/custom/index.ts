@@ -7,7 +7,7 @@ import invariant from '../../../util/invariant';
 import { extractFirstJsonObject } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
-import { TokenUsageTracker } from '../../../util/tokenUsage';
+import { trackResponseUsage } from '../../../util/tokenUsage';
 import {
   accumulateAttackerTokenUsage,
   accumulateGradingResponseTokenUsage,
@@ -834,7 +834,7 @@ export class CustomProvider implements ApiProvider {
       options,
     );
     accumulateAttackerTokenUsage(totalTokenUsage, response);
-    TokenUsageTracker.getInstance().trackResponseUsage(redTeamingChat.id(), response);
+    trackResponseUsage(redTeamingChat.id(), response);
     if (redTeamingChat.delay) {
       logger.debug(`[Custom] Sleeping for ${redTeamingChat.delay}ms`);
       await sleep(redTeamingChat.delay);
@@ -1095,7 +1095,7 @@ export class CustomProvider implements ApiProvider {
       },
       options,
     );
-    TokenUsageTracker.getInstance().trackResponseUsage(scoringProvider.id(), refusalResponse);
+    trackResponseUsage(scoringProvider.id(), refusalResponse);
     accumulateGradingResponseTokenUsage(tokenUsage, refusalResponse);
     if (scoringProvider.delay) {
       logger.debug(`[Custom] Sleeping for ${scoringProvider.delay}ms`);
@@ -1159,7 +1159,7 @@ export class CustomProvider implements ApiProvider {
       },
       options,
     );
-    TokenUsageTracker.getInstance().trackResponseUsage(scoringProvider.id(), evalResponse);
+    trackResponseUsage(scoringProvider.id(), evalResponse);
     accumulateGradingResponseTokenUsage(tokenUsage, evalResponse);
     if (scoringProvider.delay) {
       logger.debug(`[Custom] Sleeping for ${scoringProvider.delay}ms`);

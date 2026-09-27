@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 import logger from '../logger';
 import { sanitizeProviderIdForLog } from './provider';
 import {
@@ -8,123 +10,48 @@ import {
 
 import type { TokenUsage } from '../types/shared';
 
-/**
- * A utility class for tracking token usage across an evaluation.
- *
- * @deprecated Use OpenTelemetry tracing instead for per-call token tracking.
- * This class provides only cumulative totals and will be removed in a future version.
- *
- * For new implementations, use the OTEL-based tracing infrastructure:
- * - Enable tracing with `PROMPTFOO_OTEL_ENABLED=true`
- * - Token usage is automatically captured as GenAI semantic convention span attributes
- *
- * @see src/tracing/genaiTracer.ts for the new tracing implementation
- */
-export class TokenUsageTracker {
-  private static instance: TokenUsageTracker;
-  private providersMap: Map<string, TokenUsage> = new Map();
+const evaluationUsage = new WeakMap<object, Map<string, TokenUsage>>();
+const activeUsage = new AsyncLocalStorage<{
+  providers: Map<string, TokenUsage>;
+  active: boolean;
+}>();
 
-  private constructor() {}
-
-  /**
-   * Get the singleton instance of TokenUsageTracker
-   */
-  public static getInstance(): TokenUsageTracker {
-    if (!TokenUsageTracker.instance) {
-      TokenUsageTracker.instance = new TokenUsageTracker();
-    }
-    return TokenUsageTracker.instance;
+/** Own provider accounting for one evaluation, including its async cleanup. */
+export async function withTokenUsageTracking<T extends object>(run: () => Promise<T>): Promise<T> {
+  const state = { providers: new Map<string, TokenUsage>(), active: true };
+  try {
+    const evaluation = await activeUsage.run(state, run);
+    evaluationUsage.set(evaluation, state.providers);
+    return evaluation;
+  } finally {
+    // Timed-out provider work can outlive the evaluation and inherit its context.
+    state.active = false;
   }
+}
 
-  /**
-   * Track token usage for a provider
-   * @param provider The provider to track usage for
-   * @param usage The token usage to track
-   */
-  public trackUsage(providerId: string, usage: TokenUsage = { numRequests: 1 }): void {
-    const current = this.providersMap.get(providerId) ?? createEmptyTokenUsage();
-    // Create a copy and accumulate the usage
-    const updated = { ...current };
-    accumulateTokenUsage(updated, usage);
-    this.providersMap.set(providerId, updated);
-    logger.debug(
-      `Tracked token usage for ${sanitizeProviderIdForLog(providerId)}: total=${usage.total ?? 0}, cached=${usage.cached ?? 0}`,
-    );
+export function getProviderTokenUsage(evaluation: object): ReadonlyMap<string, TokenUsage> {
+  return evaluationUsage.get(evaluation) ?? new Map();
+}
+
+/** Retain the response-aware incurred/cached accounting used by provider summaries. */
+export function trackResponseUsage(
+  providerId: string,
+  response: { cached?: boolean; tokenUsage?: TokenUsage } | undefined,
+): void {
+  const state = activeUsage.getStore();
+  if (!state?.active) {
+    return;
   }
-
-  /**
-   * Track token usage from one provider response while preserving the shared
-   * response-aware request-counting contract.
-   */
-  public trackResponseUsage(
-    providerId: string,
-    response: { cached?: boolean; tokenUsage?: TokenUsage } | undefined,
-  ): void {
-    const current = this.providersMap.get(providerId) ?? createEmptyTokenUsage();
-    const updated = { ...current };
-    const accounting = createEmptyTokenUsage();
-    accumulateResponseTokenUsage(accounting, response);
-    accumulateTokenUsage(updated, {
-      ...(accounting.incurredTokenUsage ?? accounting),
-      cached: accounting.cached,
-    });
-    this.providersMap.set(providerId, updated);
-    logger.debug(
-      `Tracked response usage for ${sanitizeProviderIdForLog(providerId)}: total=${response?.tokenUsage?.total ?? 0}, cached=${response?.tokenUsage?.cached ?? 0}`,
-    );
-  }
-
-  /**
-   * Get the cumulative token usage for a specific provider
-   * @param providerId The ID of the provider to get usage for
-   * @returns The token usage for the provider
-   */
-  public getProviderUsage(providerId: string): TokenUsage | undefined {
-    return this.providersMap.get(providerId);
-  }
-
-  /**
-   * Get all provider IDs that have token usage tracked
-   * @returns Array of provider IDs
-   */
-  public getProviderIds(): string[] {
-    return Array.from(this.providersMap.keys());
-  }
-
-  /**
-   * Get aggregated token usage across all providers
-   * @returns Aggregated token usage
-   */
-  public getTotalUsage(): TokenUsage {
-    const result: TokenUsage = createEmptyTokenUsage();
-
-    // Accumulate totals from all providers
-    for (const usage of this.providersMap.values()) {
-      accumulateTokenUsage(result, usage);
-    }
-
-    return result;
-  }
-
-  /**
-   * Reset token usage for a specific provider
-   * @param providerId The ID of the provider to reset
-   */
-  public resetProviderUsage(providerId: string): void {
-    this.providersMap.delete(providerId);
-  }
-
-  /**
-   * Reset token usage for all providers
-   */
-  public resetAllUsage(): void {
-    this.providersMap.clear();
-  }
-
-  /**
-   * Cleanup method to prevent memory leaks
-   */
-  public cleanup(): void {
-    this.providersMap.clear();
-  }
+  const current = state.providers.get(providerId) ?? createEmptyTokenUsage();
+  const updated = { ...current };
+  const accounting = createEmptyTokenUsage();
+  accumulateResponseTokenUsage(accounting, response);
+  accumulateTokenUsage(updated, {
+    ...(accounting.incurredTokenUsage ?? accounting),
+    cached: accounting.cached,
+  });
+  state.providers.set(providerId, updated);
+  logger.debug(
+    `Tracked response usage for ${sanitizeProviderIdForLog(providerId)}: total=${response?.tokenUsage?.total ?? 0}, cached=${response?.tokenUsage?.cached ?? 0}`,
+  );
 }
