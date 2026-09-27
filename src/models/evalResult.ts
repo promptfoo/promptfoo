@@ -1028,7 +1028,10 @@ function buildServerOwnedClearGradingResult(
   const hasUnreconstructableRetainedFailure =
     !executionError && automatedPass && typeof result.error === 'string' && result.error.length > 0;
   const fallbackPass =
-    !executionError && normalizeFailureReason(result.failureReason) === ResultFailureReason.NONE;
+    !executionError &&
+    normalizeFailureReason(result.failureReason) === ResultFailureReason.NONE &&
+    // Comparisons run after aggregate scoring; a failed comparison always fails the result.
+    !automatedComponents.some((component) => component.nonstandardScoring && !component.pass);
   const hasNonstandardScoring =
     hasOwn(testCase ?? {}, 'assertScoringFunction') ||
     automatedComponents.some((component) => component.nonstandardScoring);

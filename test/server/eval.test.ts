@@ -2077,6 +2077,108 @@ describe('eval routes', () => {
       });
     });
 
+    it.each([
+      { type: 'max-score' as const, threshold: undefined },
+      { type: 'max-score' as const, threshold: 0 },
+      { type: 'select-best' as const, threshold: undefined },
+      { type: 'select-best' as const, threshold: 0 },
+    ])(
+      'restores imported $type failures after clearing (threshold $threshold)',
+      async ({ type, threshold }) => {
+        const sourceEval = await EvalFactory.create();
+        testEvalIds.add(sourceEval.id);
+        const [result] = await sourceEval.getResults();
+        invariant(result instanceof EvalResult && result.id, 'Result is required');
+        const automatedComponents = [
+          {
+            pass: true,
+            score: 1,
+            reason: 'Ordinary pass',
+            assertion: { type: 'equals' as const, value: 'yes' },
+          },
+          {
+            pass: false,
+            score: 0,
+            reason: 'Comparison failed',
+            assertion: { type, value: 'metric' },
+          },
+        ];
+        result.testCase = {
+          ...result.testCase,
+          threshold,
+          assert: automatedComponents.map(({ assertion }) => assertion),
+        };
+        result.success = false;
+        result.score = 0;
+        result.failureReason = ResultFailureReason.ASSERT;
+        result.error = 'Comparison failed';
+        result.gradingResult = {
+          pass: false,
+          score: 0,
+          reason: result.error,
+          componentResults: automatedComponents,
+        };
+        await result.save();
+        const metrics = sourceEval.prompts[result.promptIdx].metrics;
+        invariant(metrics, 'Prompt metrics are required');
+        Object.assign(metrics, {
+          score: 0,
+          testPassCount: 0,
+          testFailCount: 2,
+          assertPassCount: 1,
+          assertFailCount: 2,
+        });
+        await sourceEval.save();
+
+        const rated = await api
+          .post(`/api/eval/${sourceEval.id}/results/${result.id}/rating`)
+          .send({ pass: true, score: 1, ratingAction: 'rate' });
+        expect(rated.status).toBe(200);
+        expect(rated.body.failureReason).toBe(ResultFailureReason.NONE);
+        const ratedEval = await Eval.findById(sourceEval.id);
+        invariant(ratedEval, 'Rated eval is required');
+        const exported = await ratedEval.toResultsFile();
+        const payload = JSON.parse(
+          JSON.stringify({
+            config: exported.config,
+            prompts: exported.prompts,
+            results: exported.results.results,
+          }),
+        );
+        expect(payload.results[result.testIdx]).not.toHaveProperty('manualRatingState');
+        const imported = await api.post('/api/eval').send(payload);
+        expect(imported.status).toBe(200);
+        testEvalIds.add(imported.body.id);
+        const importedEval = await Eval.findById(imported.body.id);
+        invariant(importedEval, 'Imported eval is required');
+        const importedResult = (await importedEval.getResults()).find(
+          (item) => item.testIdx === result.testIdx,
+        );
+        invariant(importedResult?.id, 'Imported result is required');
+        expect(importedResult.failureReason).toBe(ResultFailureReason.NONE);
+        const dbRow = await (await getDb())
+          .select({ state: evalResultsTable.manualRatingState })
+          .from(evalResultsTable)
+          .where(eq(evalResultsTable.id, importedResult.id))
+          .get();
+        expect(dbRow?.state).toBeNull();
+
+        const cleared = await api
+          .post(`/api/eval/${importedEval.id}/results/${importedResult.id}/rating`)
+          .send({ pass: true, score: 1, ratingAction: 'clear' });
+        expect(cleared.status).toBe(200);
+        expect(cleared.body).toMatchObject({
+          success: false,
+          score: 0,
+          failureReason: ResultFailureReason.ASSERT,
+        });
+        expect(cleared.body.gradingResult.componentResults).toEqual(automatedComponents);
+        expect(
+          (await Eval.findById(importedEval.id))?.prompts[result.promptIdx].metrics,
+        ).toMatchObject(metrics);
+      },
+    );
+
     it('discards caller-supplied automated components when no server baseline exists', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);

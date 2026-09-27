@@ -602,7 +602,9 @@ describe('AssertionsResult', () => {
         namedScores: { quality: 0.75 },
         namedScoreWeights: { quality: 1 },
       };
-      expect(await assertionsResult.testResult(() => customResult)).toMatchObject(customResult);
+      const result = await assertionsResult.testResult(() => customResult);
+      expect(result).toMatchObject(customResult);
+      expect(getNonstandardScoringBaseline(result)).toEqual({ pass: true, score: 2 });
     });
 
     it('still rejects invalid inherited metrics after a finite score override', async () => {
@@ -613,9 +615,18 @@ describe('AssertionsResult', () => {
         metric: 'quality',
         weight: 2,
       });
-      expect(
-        await assertionsResult.testResult(() => ({ pass: true, score: 2, reason: 'Custom' })),
-      ).toMatchObject({ pass: false, score: 0, namedScores: {}, namedScoreWeights: {} });
+      const result = await assertionsResult.testResult(() => ({
+        pass: true,
+        score: 2,
+        reason: 'Custom',
+      }));
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        namedScores: {},
+        namedScoreWeights: {},
+      });
+      expect(getNonstandardScoringBaseline(result)).toEqual({ pass: false, score: 0 });
     });
 
     it('should calculate final result with threshold', async () => {
@@ -1077,6 +1088,7 @@ describe('AssertionsResult', () => {
           namedScores: {},
           namedScoreWeights: {},
         });
+        expect(getNonstandardScoringBaseline(result)).toEqual({ pass: false, score: 0 });
         expect(JSON.parse(JSON.stringify(result))).toEqual(result);
         expect(await assertionsResult.testResult()).toBe(result);
       },

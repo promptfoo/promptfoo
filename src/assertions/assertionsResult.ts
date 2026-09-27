@@ -426,13 +426,6 @@ export class AssertionsResult {
         this.result.score = 0;
         this.result.reason = `Scoring function error: ${(err as Error).message}`;
       }
-      // Function-valued test-case fields are intentionally stripped before persistence. Attach
-      // only an in-memory aggregate for the persistence layer to move into private provenance;
-      // never serialize or re-execute the scoring function itself.
-      setNonstandardScoringBaseline(this.result, {
-        pass: this.result.pass,
-        score: this.result.score,
-      });
     }
 
     // Finite inputs can overflow when weighted or accumulated. Check the final
@@ -449,7 +442,7 @@ export class AssertionsResult {
       this.result.reason = 'Assertion aggregation error: unable to read scores or weights';
       this.result.namedScores = {};
       this.result.namedScoreWeights = {};
-      return this.result;
+      metricEntries = { namedScores: [], namedScoreWeights: [] };
     }
 
     const invalidMetrics = new Set<string>();
@@ -473,6 +466,14 @@ export class AssertionsResult {
       }
     }
 
+    if (scoringFunction) {
+      // Function-valued test-case fields are stripped before persistence. Retain only the
+      // validated aggregate for the persistence layer to move into private provenance.
+      setNonstandardScoringBaseline(this.result, {
+        pass: this.result.pass,
+        score: this.result.score,
+      });
+    }
     return this.result;
   }
 }
