@@ -78,6 +78,48 @@ describe('eval job result snapshots', () => {
     expect(fs.existsSync(directory())).toBe(false);
   });
 
+  it('recovers in a fresh private directory after temporary-file cleanup', () => {
+    service.create('old');
+    service.complete('old', snapshot('old result'), 'old-eval');
+    const previousDirectory = directory();
+    fs.rmSync(previousDirectory, { recursive: true });
+
+    const another = new Service();
+    another.create('new');
+    expect(another.complete('new', snapshot('new result'), 'new-eval')).toBe(true);
+    const replacement = directorySpy.mock.results.at(-1)!.value as string;
+    expect(replacement).not.toBe(previousDirectory);
+    expect(fs.existsSync(previousDirectory)).toBe(false);
+    expect(another.get('new')).toMatchObject({
+      result: snapshot('new result'),
+      evalId: 'new-eval',
+    });
+    expect(() => service.get('old')).toThrow();
+    expect(directorySpy).toHaveBeenCalledTimes(2);
+    expect(cleanups).toHaveLength(1);
+    const [filename] = fs.readdirSync(replacement);
+    if (process.platform !== 'win32') {
+      expect(fs.statSync(replacement).mode & 0o777).toBe(0o700);
+      expect(fs.statSync(path.join(replacement, filename)).mode & 0o777).toBe(0o600);
+    }
+    cleanups[0]();
+    expect(fs.existsSync(replacement)).toBe(false);
+  });
+
+  it('preserves the existing result when checking its directory fails', () => {
+    service.create('job');
+    service.complete('job', snapshot('original'), 'eval');
+    const before = service.get('job');
+    vi.spyOn(fs, 'statSync').mockImplementationOnce(() => {
+      throw Object.assign(new Error('Synthetic permission failure'), { code: 'EACCES' });
+    });
+    expect(() => service.complete('job', snapshot('replacement'), 'new-eval')).toThrow(
+      'Failed to store eval job result snapshot',
+    );
+    expect(directorySpy).toHaveBeenCalledTimes(1);
+    expect(service.get('job')).toEqual(before);
+  });
+
   it('removes obsolete files when replacing, clearing, or recreating a job', () => {
     service.create('job');
     service.complete('job', snapshot('first'), 'eval-first');

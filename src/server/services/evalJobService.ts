@@ -10,13 +10,14 @@ import type { Job } from '../../types/index';
 type StoredJob = Omit<Job, 'result'> & { resultPath: string | null };
 
 let resultDirectory: string | undefined;
+let cleanupRegistered = false;
 
 function storeResult(result: NonNullable<Job['result']>): string {
   const serialized = serializeResult(result);
   let resultPath: string | undefined;
   let descriptor: number | undefined;
   try {
-    if (!resultDirectory) {
+    if (!resultDirectory || !fs.statSync(resultDirectory, { throwIfNoEntry: false })) {
       const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-job-results-'));
       try {
         if (process.platform !== 'win32') {
@@ -27,15 +28,20 @@ function storeResult(result: NonNullable<Job['result']>): string {
         throw error;
       }
       resultDirectory = directory;
-      // One directory and exit listener per process, shared across service instances.
-      // Abrupt termination can leave this private temporary directory behind.
-      process.once('exit', () => {
-        try {
-          fs.rmSync(directory, { recursive: true, force: true });
-        } catch {
-          // Cleanup at process exit is best effort.
-        }
-      });
+      // Temporary-file cleanup may remove a prior directory. Allocate a new private
+      // path, and keep one exit listener that cleans the current directory.
+      if (!cleanupRegistered) {
+        process.once('exit', () => {
+          try {
+            if (resultDirectory) {
+              fs.rmSync(resultDirectory, { recursive: true, force: true });
+            }
+          } catch {
+            // Cleanup at process exit is best effort.
+          }
+        });
+        cleanupRegistered = true;
+      }
     }
     resultPath = path.join(resultDirectory, `${randomUUID()}.json`);
     descriptor = fs.openSync(resultPath, 'wx', 0o600);
