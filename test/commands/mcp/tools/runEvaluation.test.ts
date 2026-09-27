@@ -12,7 +12,8 @@ vi.mock('../../../../src/telemetry', () => ({
 }));
 
 // Mock dependencies before importing the module
-vi.mock('../../../../src/logger', () => ({
+vi.mock('../../../../src/logger', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../src/logger')>()),
   default: {
     debug: vi.fn(),
     info: vi.fn(),
@@ -37,32 +38,6 @@ vi.mock('../../../../src/util/config/load', async (importOriginal) => ({
       providers: [{ id: 'test-provider' }],
       tests: [{ vars: { input: 'test' } }],
     },
-  }),
-}));
-
-vi.mock('../../../../src/node/doEval', () => ({
-  doEval: vi.fn().mockResolvedValue({
-    id: 'test-eval-123',
-    toEvaluateSummary: vi.fn().mockResolvedValue({
-      version: 3,
-      stats: { successes: 1, failures: 0, errors: 0 },
-      results: [
-        {
-          testCase: { description: 'test case 1', assert: [] },
-          vars: { input: 'test' },
-          prompt: { label: 'test-prompt', raw: 'What is 2+2?' },
-          provider: { id: 'test-provider', label: 'Test Provider' },
-          response: { output: 'The answer is 4' },
-          success: true,
-          score: 1,
-          namedScores: {},
-          tokenUsage: { total: 10 },
-          cost: 0.001,
-          latencyMs: 100,
-        },
-      ],
-      prompts: [{ label: 'test-prompt', provider: 'test-provider', metrics: {} }],
-    }),
   }),
 }));
 

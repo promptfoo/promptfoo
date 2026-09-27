@@ -1,0 +1,242 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import os from 'node:os';
+import path from 'node:path';
+import type { Server } from 'node:http';
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { enableCache } from '../../../../src/cache';
+import cliState from '../../../../src/cliState';
+import { registerRunEvaluationTool } from '../../../../src/commands/mcp/tools/runEvaluation';
+import { runDbMigrations } from '../../../../src/migrate';
+import Eval from '../../../../src/models/eval';
+import { createShareableUrl, isSharingEnabled } from '../../../../src/share';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+
+vi.mock('../../../../src/telemetry', () => ({
+  default: { record: vi.fn(), send: vi.fn() },
+}));
+vi.mock('../../../../src/util/config/default', () => ({
+  loadDefaultConfig: vi.fn(async () => ({ defaultConfig: {}, defaultConfigPath: undefined })),
+}));
+vi.mock('../../../../src/share', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../src/share')>()),
+  createShareableUrl: vi.fn(),
+  isSharingEnabled: vi.fn(),
+}));
+
+const selections = [
+  { label: 'unfiltered', filters: {} },
+  { label: 'test index', filters: { testCaseIndices: 0 } },
+  { label: 'prompt index', filters: { promptFilter: '0' } },
+  { label: 'provider', filters: { providerFilter: 'echo' } },
+];
+
+describe('MCP evaluation execution contract', () => {
+  let directory: string;
+  let configPath: string;
+  let originalState: Record<string, unknown>;
+  let server: Server | undefined;
+  let responseTimer: ReturnType<typeof setTimeout> | undefined;
+
+  beforeEach(async () => {
+    originalState = Object.fromEntries(
+      Object.entries(cliState).filter(
+        ([key]) => Object.getOwnPropertyDescriptor(cliState, key)?.writable,
+      ),
+    );
+    vi.mocked(createShareableUrl).mockReset().mockResolvedValue('https://example.test/eval');
+    vi.mocked(isSharingEnabled).mockReset().mockReturnValue(true);
+    directory = await mkdtemp(path.join(os.tmpdir(), 'mcp-evaluation-pipeline-'));
+    configPath = path.join(directory, 'promptfooconfig.json');
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        providers: ['echo'],
+        prompts: ['Hello {{name}}'],
+        tests: [{ vars: { name: 'Ada' }, assert: [{ type: 'equals', value: 'Hello Ada' }] }],
+      }),
+    );
+    await runDbMigrations();
+  });
+
+  afterEach(async () => {
+    if (responseTimer) {
+      clearTimeout(responseTimer);
+      responseTimer = undefined;
+    }
+    if (server) {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server!.close(() => resolve()));
+      server = undefined;
+    }
+    enableCache();
+    Object.assign(cliState, originalState);
+    vi.restoreAllMocks();
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  async function run(options: Record<string, unknown>) {
+    const tool = vi.fn();
+    registerRunEvaluationTool({ tool } as unknown as McpServer);
+    const handler = tool.mock.calls[0][2];
+    const result = await handler({ configPath, cache: false, share: false, ...options });
+    return JSON.parse(result.content[0].text);
+  }
+
+  it.each(selections)('honors repeat and no-write for $label runs', async ({ filters }) => {
+    const response = await run({ ...filters, repeat: 3, write: false });
+    expect(response.success, response.error).toBe(true);
+    expect(response.data.results.totalEvals).toBe(3);
+    expect(response.data.results.stats).toMatchObject({ successes: 3, failures: 0, errors: 0 });
+    expect(await Eval.findById(response.data.eval.id)).toBeUndefined();
+    expect(createShareableUrl).not.toHaveBeenCalled();
+  });
+
+  it.each(selections)('honors explicit sharing for $label runs', async ({ filters }) => {
+    const response = await run({ ...filters, share: true, write: false });
+    expect(response.success, response.error).toBe(true);
+    expect(createShareableUrl).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ id: response.data.eval.id }),
+      { silent: true },
+    );
+  });
+
+  it.each([false, true])('persists only when requested with filtering=%s', async (filtered) => {
+    const response = await run({ ...(filtered ? { testCaseIndices: 0 } : {}), write: true });
+    expect(response.success, response.error).toBe(true);
+    const stored = await Eval.findById(response.data.eval.id);
+    expect(stored).toBeDefined();
+    try {
+      expect((await stored!.getResults()).map((row) => row.response?.output)).toEqual([
+        'Hello Ada',
+      ]);
+    } finally {
+      await stored?.delete();
+    }
+  });
+
+  it.each([
+    [{ promptFilter: ['0', 'Hello'] }, 'Cannot mix numeric indices and regex patterns'],
+    [{ promptFilter: '4' }, 'Invalid prompt indices: 4'],
+    [{ promptFilter: 'absent' }, 'No prompts found after applying filter'],
+    [{ providerFilter: 'absent' }, 'No providers matched filter'],
+    [{ testCaseIndices: 4 }, 'Test case index 4 is out of range'],
+    [{ testCaseIndices: [0, 4] }, 'Invalid test case indices: 4'],
+    [{ testCaseIndices: { start: 1, end: 0 } }, 'Invalid range: start=1, end=0'],
+  ])('preserves filter errors without terminating the host: %j', async (filters, message) => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('MCP must not exit the host');
+    });
+    const exitCode = process.exitCode;
+    const response = await run(filters);
+    expect(response.success).toBe(false);
+    expect(response.error).toContain(message);
+    expect(exit).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(exitCode);
+  });
+
+  it('preserves numeric prompt order, duplicates and result pagination', async () => {
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        providers: ['echo'],
+        prompts: ['first', 'second'],
+        tests: [{ vars: {} }, { vars: {} }],
+      }),
+    );
+    const response = await run({
+      promptFilter: ['1', '0', '1'],
+      testCaseIndices: [1],
+      resultLimit: 2,
+      resultOffset: 1,
+    });
+    expect(response.success, response.error).toBe(true);
+    expect(response.data.configuration.testCases).toMatchObject({ total: 2, filtered: 1 });
+    expect(response.data.configuration.prompts).toMatchObject({
+      total: 2,
+      filtered: 3,
+      labels: ['second', 'first', 'second'],
+    });
+    expect(response.data.results.totalEvals).toBe(3);
+    expect(response.data.results.results).toHaveLength(2);
+    expect(response.data.results.pagination).toMatchObject({
+      offset: 1,
+      limit: 2,
+      returnedCount: 2,
+    });
+  });
+
+  async function httpConfig(responseDelay = 0, configTimeout?: number) {
+    const calls: number[] = [];
+    server = createServer((_request, response) => {
+      calls.push(Date.now());
+      const send = () => {
+        response.setHeader('Content-Type', 'application/json');
+        response.end(JSON.stringify({ output: 'PONG' }));
+      };
+      if (responseDelay) {
+        responseTimer = setTimeout(send, responseDelay);
+      } else {
+        send();
+      }
+    });
+    await new Promise<void>((resolve) => server!.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+      throw new Error('Expected a TCP server address');
+    }
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        providers: [
+          {
+            id: 'http',
+            config: {
+              url: `http://127.0.0.1:${address.port}/fixture`,
+              method: 'POST',
+              body: { prompt: '{{prompt}}' },
+              transformResponse: 'json.output',
+            },
+          },
+        ],
+        prompts: ['Hello'],
+        evaluateOptions: { timeoutMs: configTimeout },
+        tests: [{ assert: [{ type: 'equals', value: 'PONG' }] }],
+      }),
+    );
+    return calls;
+  }
+
+  it.each([false, true])('honors cache and delay with filtering=%s', async (filtered) => {
+    const calls = await httpConfig();
+    const response = await run({
+      ...(filtered ? { testCaseIndices: 0 } : {}),
+      repeat: 3,
+      cache: false,
+      delay: 35,
+      maxConcurrency: 4,
+      write: false,
+    });
+    expect(response.success, response.error).toBe(true);
+    expect(response.data.results.stats).toMatchObject({ successes: 3, errors: 0 });
+    expect(calls).toHaveLength(3);
+    expect(calls[1] - calls[0]).toBeGreaterThanOrEqual(25);
+    expect(calls[2] - calls[1]).toBeGreaterThanOrEqual(25);
+  });
+
+  it.each([false, true])(
+    'honors explicit timeout over config with filtering=%s',
+    async (filtered) => {
+      const calls = await httpConfig(2000, 10000);
+      const response = await run({
+        ...(filtered ? { testCaseIndices: 0 } : {}),
+        timeoutMs: 1000,
+        write: false,
+      });
+      expect(response.success, response.error).toBe(true);
+      expect(response.data.results.stats).toMatchObject({ successes: 0, errors: 1 });
+      expect(calls).toHaveLength(1);
+    },
+  );
+});

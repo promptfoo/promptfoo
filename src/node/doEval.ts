@@ -273,25 +273,37 @@ export function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
   }
 }
 
+type DoEvalCommandOptions = Partial<CommandLineOptions & Command> &
+  Pick<InternalEvaluateOptions, 'timeoutMs'>;
+
 export async function doEval(
-  cmdObj: Partial<CommandLineOptions & Command>,
+  cmdObj: DoEvalCommandOptions,
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
   evaluateOptions: InternalEvaluateOptions,
+  prepareTestSuite?: (testSuite: TestSuite) => TestSuite,
 ): Promise<Eval> {
   const envFileOverrides = isCliEventSource(evaluateOptions) ? undefined : {};
   setupEnv(cmdObj.envPath, { processEnv: envFileOverrides });
   return cliState.withEnvFileOverrides(envFileOverrides, () =>
-    doEvalWithEnv(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions, envFileOverrides),
+    doEvalWithEnv(
+      cmdObj,
+      defaultConfig,
+      defaultConfigPath,
+      evaluateOptions,
+      envFileOverrides,
+      prepareTestSuite,
+    ),
   );
 }
 
 async function doEvalWithEnv(
-  cmdObj: Partial<CommandLineOptions & Command>,
+  cmdObj: DoEvalCommandOptions,
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
   evaluateOptions: InternalEvaluateOptions,
   envFileOverrides: EnvOverrides | undefined,
+  prepareTestSuite?: (testSuite: TestSuite) => TestSuite,
 ): Promise<Eval> {
   const isCliInvocation = isCliEventSource(evaluateOptions);
 
@@ -535,6 +547,12 @@ async function doEvalWithEnv(
     Object.assign(runEnv, testSuite.env);
     cliState.basePath = _basePath;
 
+    // Application callers can select resolved inputs inside the evaluation's env scope.
+    // Keep this callback separate from options loaded from user configuration.
+    if (prepareTestSuite) {
+      testSuite = prepareTestSuite(testSuite);
+    }
+
     const describeReplayAction = (isRetryErrors: boolean | undefined) =>
       isRetryErrors ? 'retrying errors for' : 'resuming';
 
@@ -774,6 +792,7 @@ async function doEvalWithEnv(
       evaluateOptions as InternalEvaluateOptions & { providerFilter?: unknown };
     const options: InternalEvaluateOptions = {
       ...safeEvaluateOptions,
+      timeoutMs: cmdObj.timeoutMs ?? evaluateOptions.timeoutMs,
       showProgressBar:
         getLogLevel() === 'debug'
           ? false
