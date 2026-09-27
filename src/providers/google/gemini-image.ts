@@ -115,16 +115,6 @@ export class GeminiImageProvider implements ApiProvider {
     return `[Google Gemini Image Generation Provider ${this.modelName}]`;
   }
 
-  requiresApiKey(): boolean {
-    return !(
-      this.config.projectId ||
-      getEnvString('GOOGLE_CLOUD_PROJECT') ||
-      getEnvString('GOOGLE_PROJECT_ID') ||
-      this.env?.GOOGLE_CLOUD_PROJECT ||
-      this.env?.GOOGLE_PROJECT_ID
-    );
-  }
-
   private getApiKey(): string | undefined {
     return (
       this.config.apiKey ||
@@ -164,7 +154,15 @@ export class GeminiImageProvider implements ApiProvider {
       return { error: sizeError };
     }
 
-    if (!this.requiresApiKey()) {
+    // Check if we should use Vertex AI (when projectId is provided)
+    const projectId =
+      this.config.projectId ||
+      getEnvString('GOOGLE_CLOUD_PROJECT') ||
+      getEnvString('GOOGLE_PROJECT_ID') ||
+      this.env?.GOOGLE_CLOUD_PROJECT ||
+      this.env?.GOOGLE_PROJECT_ID;
+
+    if (projectId) {
       return this.callVertexApi(prompt, context);
     }
 

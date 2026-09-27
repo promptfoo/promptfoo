@@ -15,6 +15,7 @@ import logger from '../../../../src/logger';
 import { runDbMigrations } from '../../../../src/migrate';
 import Eval from '../../../../src/models/eval';
 import { doEval } from '../../../../src/node/doEval';
+import { AwsBedrockConverseProvider } from '../../../../src/providers/bedrock/converse';
 import { GeminiImageProvider } from '../../../../src/providers/google/gemini-image';
 import { GoogleImageProvider } from '../../../../src/providers/google/image';
 import { GoogleLiveProvider } from '../../../../src/providers/google/live';
@@ -279,12 +280,134 @@ describe('MCP evaluation execution contract', () => {
     },
   );
 
+  it('runs a selected test without requiring keys for its excluded providers', async () => {
+    vi.stubEnv('OPENAI_API_KEY', undefined);
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        providers: ['echo', 'openai:gpt-4.1'],
+        prompts: ['Hello'],
+        tests: [{ providers: ['echo'], assert: [{ type: 'equals', value: 'Hello' }] }],
+      }),
+    );
+    const response = await run({ testCaseIndices: 0, write: false });
+    expect(response.success, response.error).toBe(true);
+    expect(response.data.results.stats).toMatchObject({ successes: 1, failures: 0, errors: 0 });
+  });
+
+  it.each(['Authorization', 'authorization'])(
+    'preserves filtered TTS gateway authentication through the %s header',
+    async (header) => {
+      vi.stubEnv('OPENAI_API_KEY', undefined);
+      const requests: string[] = [];
+      server = createServer(async (request, response) => {
+        for await (const _chunk of request) {
+          /* Consume the TTS request. */
+        }
+        requests.push(request.headers.authorization!);
+        response.writeHead(200, { 'content-type': 'audio/wav' });
+        response.end(Buffer.from('RIFF0000WAVEowned-local-audio'));
+      });
+      await new Promise<void>((resolve) => server!.listen(0, '127.0.0.1', resolve));
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Expected TCP address');
+      }
+      await writeFile(
+        configPath,
+        JSON.stringify({
+          providers: [
+            {
+              id: 'openai:tts:tts-1',
+              config: {
+                apiBaseUrl: `http://127.0.0.1:${address.port}/v1`,
+                headers: { [header]: 'Bearer owned-synthetic-header' },
+              },
+            },
+          ],
+          prompts: ['Hello'],
+          tests: [{ vars: {} }],
+        }),
+      );
+      const response = await run({ testCaseIndices: 0, write: false });
+      expect(response.success, response.error).toBe(true);
+      expect(response.data.results.stats).toMatchObject({ successes: 1, failures: 0, errors: 0 });
+      expect(requests).toEqual(['Bearer owned-synthetic-header']);
+    },
+  );
+
+  it.each([false, true])(
+    'cleans providers removed by selection after suggestions=%s',
+    async (generateSuggestions) => {
+      const cleanup = vi.spyOn(AwsBedrockConverseProvider.prototype, 'cleanup').mockResolvedValue();
+      await writeFile(
+        configPath,
+        JSON.stringify({
+          providers: ['echo', 'bedrock:converse:anthropic.claude-3-5-sonnet-20240620-v1:0'],
+          prompts: ['Hello'],
+          tests: [{ vars: {} }],
+          evaluateOptions: { generateSuggestions },
+        }),
+      );
+      const response = await run({ providerFilter: 'echo', write: false });
+      expect(response.success).toBe(!generateSuggestions);
+      if (generateSuggestions) {
+        expect(response.error).toContain(
+          'Interactive prompt suggestions are not supported over MCP',
+        );
+      }
+      expect(cleanup).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('preserves the original evaluation failure when provider cleanup rejects', async () => {
+    const cleanup = vi
+      .spyOn(AwsBedrockConverseProvider.prototype, 'cleanup')
+      .mockResolvedValue()
+      .mockRejectedValueOnce(new Error('Owned cleanup failure'));
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        providers: [
+          'echo',
+          'bedrock:converse:anthropic.claude-3-5-sonnet-20240620-v1:0',
+          'bedrock:converse:anthropic.claude-3-haiku-20240307-v1:0',
+        ],
+        prompts: ['Hello'],
+        tests: [{ vars: {} }],
+        evaluateOptions: { generateSuggestions: true },
+      }),
+    );
+    const response = await run({ providerFilter: 'echo', write: false });
+    expect(response.success).toBe(false);
+    expect(response.error).toContain('Interactive prompt suggestions are not supported over MCP');
+    expect(cleanup).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports cleanup failures after a successful run', async () => {
+    const cleanup = vi
+      .spyOn(AwsBedrockConverseProvider.prototype, 'cleanup')
+      .mockRejectedValue(new Error('Owned cleanup failure'));
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        providers: ['echo', 'bedrock:converse:anthropic.claude-3-5-sonnet-20240620-v1:0'],
+        prompts: ['Hello'],
+        tests: [{ vars: {} }],
+      }),
+    );
+    const response = await run({ providerFilter: 'echo', write: false });
+    expect(response.success).toBe(false);
+    expect(response.error).toContain('Owned cleanup failure');
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
   describe.each([
     { id: 'google:gemini-3.1-flash-image', prototype: GeminiImageProvider.prototype },
     { id: 'google:image:imagen-3.0-generate-002', prototype: GoogleImageProvider.prototype },
   ])('$id missing image authentication', ({ id, prototype }) => {
     it.each([false, true])(
-      'fails preflight without calling the provider with filtering=%s',
+      'preserves preflight versus runtime authentication with filtering=%s',
       async (filtered) => {
         for (const key of [
           'GOOGLE_API_KEY',
@@ -295,7 +418,7 @@ describe('MCP evaluation execution contract', () => {
         ]) {
           vi.stubEnv(key, undefined);
         }
-        const call = vi.spyOn(prototype, 'callApi').mockResolvedValue({ output: 'Hello' });
+        const call = vi.spyOn(prototype, 'callApi');
         await writeFile(
           configPath,
           JSON.stringify({
@@ -305,9 +428,15 @@ describe('MCP evaluation execution contract', () => {
           }),
         );
         const response = await run({ ...(filtered ? { testCaseIndices: 0 } : {}), write: false });
-        expect(response.success).toBe(false);
-        expect(response.error).toContain('Missing required API keys');
-        expect(call).not.toHaveBeenCalled();
+        if (filtered) {
+          expect(response.success, response.error).toBe(true);
+          expect(response.data.results.stats).toMatchObject({ successes: 0, errors: 1 });
+          expect(call).toHaveBeenCalledOnce();
+        } else {
+          expect(response.success).toBe(false);
+          expect(response.error).toContain('Missing required API keys');
+          expect(call).not.toHaveBeenCalled();
+        }
       },
     );
   });
@@ -353,8 +482,8 @@ describe('MCP evaluation execution contract', () => {
       config: { projectId: 'fixture-project' },
       prototype: VertexLiveProvider.prototype,
     },
-  ])('$id supported keyless authentication', ({ id, config, prototype }) => {
-    it.each([false, true])('reaches the provider with filtering=%s', async (filtered) => {
+  ])('$id historical authentication dispatch', ({ id, config, prototype }) => {
+    it.each([false, true])('preserves provider dispatch with filtering=%s', async (filtered) => {
       for (const key of [
         'ANTHROPIC_API_KEY',
         'OPENAI_API_KEY',
@@ -376,29 +505,36 @@ describe('MCP evaluation execution contract', () => {
         }),
       );
       const response = await run({ ...(filtered ? { testCaseIndices: 0 } : {}), write: false });
-      expect(response.success, response.error).toBe(true);
-      expect(response.data.results.stats).toMatchObject({ successes: 1, failures: 0, errors: 0 });
-      expect(call).toHaveBeenCalledOnce();
+      if (filtered || ('apiKeyRequired' in config && config.apiKeyRequired === false)) {
+        expect(response.success, response.error).toBe(true);
+        expect(response.data.results.stats).toMatchObject({ successes: 1, failures: 0, errors: 0 });
+        expect(call).toHaveBeenCalledOnce();
+      } else {
+        expect(response.success).toBe(false);
+        expect(response.error).toContain('Missing required API keys');
+        expect(call).not.toHaveBeenCalled();
+      }
     });
   });
 
-  it.each([false, true])(
-    'still rejects missing required OpenCode keys with filtering=%s',
-    async (filtered) => {
-      for (const key of ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY']) {
-        vi.stubEnv(key, undefined);
-      }
-      const call = vi.spyOn(OpenCodeSDKProvider.prototype, 'callApi');
-      await writeFile(
-        configPath,
-        JSON.stringify({ providers: ['opencode:sdk'], prompts: ['Hello'], tests: [{ vars: {} }] }),
-      );
-      const response = await run({ ...(filtered ? { testCaseIndices: 0 } : {}), write: false });
-      expect(response.success).toBe(false);
-      expect(response.error).toContain('Missing required API keys');
-      expect(call).not.toHaveBeenCalled();
-    },
-  );
+  it('preserves unfiltered OpenCode missing-key preflight', async () => {
+    for (const key of ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY']) {
+      vi.stubEnv(key, undefined);
+    }
+    const call = vi.spyOn(OpenCodeSDKProvider.prototype, 'callApi');
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        providers: ['opencode:sdk'],
+        prompts: ['Hello'],
+        tests: [{ vars: {} }],
+      }),
+    );
+    const response = await run({ write: false });
+    expect(response.success).toBe(false);
+    expect(response.error).toContain('Missing required API keys');
+    expect(call).not.toHaveBeenCalled();
+  });
 
   it.each([false, true])('persists only when requested with filtering=%s', async (filtered) => {
     const response = await run({ ...(filtered ? { testCaseIndices: 0 } : {}), write: true });
