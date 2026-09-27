@@ -446,6 +446,71 @@ describe('Foundry SDK cancellation and retries', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it('does not reuse a timed-out credential acquisition for a tool continuation', async () => {
+    const stalledToken = createDeferred<{ token: string; expiresOnTimestamp: number }>();
+    const getToken = vi
+      .fn()
+      .mockReturnValueOnce(stalledToken.promise)
+      .mockImplementation(async () => ({
+        token: 'synthetic-recovered-token',
+        expiresOnTimestamp: Date.now() + 86400000,
+      }));
+    client = new AIProjectClient(projectUrl, { getToken });
+    vi.spyOn(client.agents, 'get').mockResolvedValue(agent as any);
+    const getClient = vi.spyOn(client, 'getOpenAIClient');
+    fetchMock.mockResolvedValueOnce(
+      Response.json({
+        ...responseBody,
+        id: 'tool_response',
+        output: [{ type: 'function_call', name: 'lookup', call_id: 'call_1', arguments: '{}' }],
+      }),
+    );
+    const lookup = vi.fn().mockResolvedValue('tool result');
+    const controller = new AbortController();
+    const completed = vi.fn();
+    const pending = provider({
+      timeoutMs: 10,
+      retryOptions: { maxRetries: 1 },
+      functionToolCallbacks: { lookup },
+    })
+      .callApi('hello', undefined, { abortSignal: controller.signal })
+      .then(completed);
+    void pending.catch(() => undefined);
+    try {
+      // One credential timeout and one backoff; the continuation must not
+      // inherit the first client's still-pending bearer-token promise.
+      await vi.advanceTimersByTimeAsync(510);
+      expect(completed).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          output: 'ok',
+          tokenUsage: expect.objectContaining({ total: 30, numRequests: 2 }),
+          metadata: expect.objectContaining({ transportRetries: 1 }),
+        }),
+      );
+      expect(lookup).toHaveBeenCalledOnce();
+      expect(getClient).toHaveBeenCalledTimes(3);
+      expect(new Set(getClient.mock.results.map(({ value }) => value)).size).toBe(3);
+      expect(getToken).toHaveBeenCalledTimes(3);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({
+        previous_response_id: 'tool_response',
+        agent_reference: { name: 'test-agent', type: 'agent_reference' },
+        input: [{ type: 'function_call_output', call_id: 'call_1', output: 'tool result' }],
+      });
+    } finally {
+      controller.abort();
+      stalledToken.resolve({
+        token: 'synthetic-late-token',
+        expiresOnTimestamp: Date.now() + 86400000,
+      });
+      await pending.catch(() => undefined);
+      await vi.advanceTimersByTimeAsync(0);
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it.each(['connection', 'timeout'])('retries the bundled SDK %s error class', async (kind) => {
     if (kind === 'connection') {
       fetchMock.mockRejectedValueOnce(new TypeError('fixture connection failure'));
@@ -476,7 +541,7 @@ describe('Foundry SDK cancellation and retries', () => {
   it.each([429, 503])('honors retry headers when a %s error body stalls', async (status) => {
     const sdkClient = client.getOpenAIClient();
     const originalFetch = sdkClient.fetchWithTimeout;
-    vi.spyOn(client, 'getOpenAIClient').mockReturnValue(sdkClient);
+    const getClient = vi.spyOn(client, 'getOpenAIClient').mockReturnValueOnce(sdkClient);
     stallNextResponse(status, { 'retry-after': '2' });
     const controller = new AbortController();
     const pending = provider({ timeoutMs: 10, retryOptions: { maxRetries: 1 } }).callApi(
@@ -500,6 +565,10 @@ describe('Foundry SDK cancellation and retries', () => {
       });
     }
     expect(sdkClient.fetchWithTimeout).toBe(originalFetch);
+    expect(getClient).toHaveBeenCalledTimes(2);
+    const retryClient = getClient.mock.results[1].value;
+    expect(retryClient).not.toBe(sdkClient);
+    expect(retryClient.fetchWithTimeout).toBe(originalFetch);
     expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
     expect(vi.getTimerCount()).toBe(0);
   });

@@ -150,9 +150,8 @@ Promptfoo passes a W3C trace context to providers via the `traceparent` field. U
 
 ```javascript
 const { trace, context, propagation, SpanStatusCode } = require('@opentelemetry/api');
-const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
+const { NodeTracerProvider, SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-node');
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
-const { SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-base');
 const { resourceFromAttributes } = require('@opentelemetry/resources');
 
 // Initialize tracer (SDK 2.x API - pass spanProcessors to constructor)
@@ -701,7 +700,7 @@ span.setAttributes({
 Reduce overhead in high-volume scenarios:
 
 ```javascript
-const { TraceIdRatioBasedSampler } = require('@opentelemetry/sdk-trace-base');
+const { TraceIdRatioBasedSampler } = require('@opentelemetry/sdk-trace-node');
 
 const provider = new NodeTracerProvider({
   sampler: new TraceIdRatioBasedSampler(0.1), // Sample 10% of traces

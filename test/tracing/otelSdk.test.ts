@@ -12,8 +12,11 @@ import {
 } from '@opentelemetry/api';
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
 import { ExportResultCode } from '@opentelemetry/core';
-import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import {
+  InMemorySpanExporter,
+  NodeTracerProvider,
+  SimpleSpanProcessor,
+} from '@opentelemetry/sdk-trace-node';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { getGenAITracer, withGenAISpan } from '../../src/tracing/genaiTracer';
@@ -28,25 +31,26 @@ import {
 } from '../../src/tracing/otelSdk';
 import { withGraderSpan, withTargetSpan } from '../../src/tracing/targetTracer';
 import { createDeferred } from '../util/utils';
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace-node';
 
 import type { OtelConfig } from '../../src/tracing/otelConfig';
 
-const remoteExports = vi.hoisted(() => new Map<string, unknown[]>());
-vi.mock('@opentelemetry/exporter-trace-otlp-http', async () => {
-  const { InMemorySpanExporter } = await import('@opentelemetry/sdk-trace-base');
+const { remoteExports, loadOtlpExporter } = vi.hoisted(() => ({
+  remoteExports: new Map<string, unknown[]>(),
+  loadOtlpExporter: vi.fn(),
+}));
+
+vi.mock('node:module', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:module')>();
   return {
-    OTLPTraceExporter: class extends InMemorySpanExporter {
-      constructor({ url }: { url: string }) {
-        super();
-        const spans: unknown[] = [];
-        remoteExports.set(url, spans);
-        const exportSpans = this.export.bind(this);
-        this.export = (batch, callback) => {
-          spans.push(...batch);
-          exportSpans(batch, callback);
-        };
-      }
+    ...actual,
+    createRequire: (url: string | URL) => {
+      const require = actual.createRequire(url);
+      return Object.assign(
+        (id: string) =>
+          id === '@opentelemetry/exporter-trace-otlp-http' ? loadOtlpExporter() : require(id),
+        require,
+      );
     },
   };
 });
@@ -75,6 +79,20 @@ beforeEach(() => {
   context.disable();
   propagation.disable();
   remoteExports.clear();
+  loadOtlpExporter.mockReset().mockReturnValue({
+    OTLPTraceExporter: class extends InMemorySpanExporter {
+      constructor({ url }: { url: string }) {
+        super();
+        const spans: unknown[] = [];
+        remoteExports.set(url, spans);
+        const exportSpans = this.export.bind(this);
+        this.export = (batch, callback) => {
+          spans.push(...batch);
+          exportSpans(batch, callback);
+        };
+      }
+    },
+  });
   localSpans = [];
   vi.spyOn(LocalSpanExporter.prototype, 'export').mockImplementation((spans, callback) => {
     localSpans.push(...spans);
@@ -91,6 +109,15 @@ afterEach(() => {
 });
 
 describe('evaluation-owned OpenTelemetry', () => {
+  it('loads the external exporter only when an endpoint is configured', async () => {
+    await runScoped({ enabled: false }, async () => {});
+    await runScoped({}, async () => {});
+    expect(loadOtlpExporter).not.toHaveBeenCalled();
+
+    await runScoped({ endpoint: 'http://localhost:4318/v1/traces' }, async () => {});
+    expect(loadOtlpExporter).toHaveBeenCalledOnce();
+  });
+
   it('links explicit W3C parents while preserving a non-W3C host propagator', async () => {
     const inject = vi.fn();
     propagation.setGlobalPropagator({
