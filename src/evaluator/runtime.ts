@@ -1,4 +1,11 @@
-import type { CompletedPrompt, EvaluateResult, TestSuite, UnifiedConfig } from '../types/index';
+import type {
+  AtomicTestCase,
+  CompletedPrompt,
+  EvaluateResult,
+  ProviderResponse,
+  TestSuite,
+  UnifiedConfig,
+} from '../types/index';
 
 export type EvaluationStoreResult = Pick<
   EvaluateResult,
@@ -50,6 +57,12 @@ export interface EvaluationStore<
   readFailedResultsByTestIdx(testIdx: number): Promise<TResult[]>;
   readResults(): Promise<Array<TResult | EvaluateResult>>;
   readResultsByTestIdx(testIdx: number): Promise<TResult[]>;
+  /** Restore transient grading inputs within this store's serialization and authorization boundary. */
+  resolveGradingInputs?(
+    response: ProviderResponse,
+    savedTest: AtomicTestCase,
+    currentTest: AtomicTestCase,
+  ): Promise<{ providerResponse: ProviderResponse; test: AtomicTestCase }>;
   recordFinalResult(result: EvaluateResult): void;
   recordResultPersistenceFailure(result: EvaluateResult): void;
   save(): Promise<void>;

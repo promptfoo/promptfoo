@@ -7,6 +7,7 @@ import {
   getProviderCallExecutionContext,
   getProviderCallTracingContext,
   waitForProviderCall,
+  withProviderCallExecutionContext,
 } from '../scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
 import invariant from '../util/invariant';
@@ -68,7 +69,10 @@ export function callGradingProvider<T extends ProviderResponse>(
       context: CallApiContextParams | undefined,
     ): Promise<T> => {
       signal?.throwIfAborted();
-      providerCall = Promise.resolve(invoke(context));
+      providerCall = withProviderCallExecutionContext(
+        { ...executionContext, providerCallOwned: true },
+        () => Promise.resolve(invoke(context)),
+      );
       return waitForProviderCall(providerCall, signal);
     };
     const result = tracingContext

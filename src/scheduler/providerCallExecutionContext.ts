@@ -21,6 +21,8 @@ import type { ProviderCallQueue } from './providerCallQueue';
  */
 export interface ProviderCallExecutionContext {
   abortSignal?: AbortSignal;
+  /** An enclosing call retains the real provider promise after cancellation. */
+  providerCallOwned?: boolean;
   /** Evaluation-local pacing for this target, without changing a reusable provider. */
   providerDelay?: {
     provider: ApiProvider;
@@ -139,6 +141,8 @@ export async function callProviderWithContext(
 ): Promise<ProviderResponse> {
   const executionContext = getProviderCallExecutionContext();
   const signal = getProviderCallAbortSignal(options?.abortSignal);
+  // The owning boundary races cancellation without releasing its scheduler slot.
+  const waitSignal = executionContext?.providerCallOwned ? undefined : signal;
   const callOptions = signal ? { ...options, abortSignal: signal } : options;
   const delay = getProviderDelay(provider);
   const handlesDelay = provider.handlesOwnDelay && provider.delay != null;
@@ -165,7 +169,7 @@ export async function callProviderWithContext(
   };
 
   if (!delay || delay <= 0) {
-    return waitForProviderCall(invoke(), signal);
+    return waitForProviderCall(invoke(), waitSignal);
   }
 
   const scopedDelay = executionContext?.providerDelay;
@@ -188,5 +192,5 @@ export async function callProviderWithContext(
       queues.delete(queueKey);
     }
   });
-  return waitForProviderCall(result, signal);
+  return waitForProviderCall(result, waitSignal);
 }
