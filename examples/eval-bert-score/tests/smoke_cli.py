@@ -79,7 +79,9 @@ def main():
 
     # Force the physical path to contain "t5" so removing the safe alias regresses.
     with (
-        tempfile.TemporaryDirectory(prefix="promptfoo-bertscore-smoke-t5-") as directory,
+        tempfile.TemporaryDirectory(
+            prefix="promptfoo-bertscore-smoke-t5-"
+        ) as directory,
         local_model_alias(Path(directory) / "model") as model_type,
     ):
         root = Path(directory)
