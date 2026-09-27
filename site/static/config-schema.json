@@ -195,6 +195,9 @@
         "ANTHROPIC_CUSTOM_HEADERS": {
           "type": "string"
         },
+        "ANTHROPIC_TEMPERATURE": {
+          "type": "string"
+        },
         "ATLASCLOUD_API_KEY": {
           "type": "string"
         },
@@ -532,6 +535,12 @@
           "type": "string"
         },
         "PROMPTFOO_CA_CERT_PATH": {
+          "type": "string"
+        },
+        "PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS": {
+          "type": "string"
+        },
+        "PROMPTFOO_DISABLE_TEMPLATING": {
           "type": "string"
         },
         "PROMPTFOO_MAX_CONCURRENCY": {
