@@ -1,7 +1,11 @@
+import { ClientSecretCredential } from '@azure/identity';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import { getEnvString } from '../../../src/envars';
 import { AzureFoundryAgentProvider } from '../../../src/providers/azure/foundry-agent';
+import { loadApiProvider } from '../../../src/providers/index';
+import { mockProcessEnv } from '../../util/utils';
+import type { AIProjectClient } from '@azure/ai-projects';
 
 const fixtures = vi.hoisted(() => ({
   cache: new Map<string, unknown>(),
@@ -135,4 +139,96 @@ describe('Foundry invocation ownership', () => {
     });
     expect(fixtures.clients).toHaveBeenCalledTimes(2);
   });
+});
+
+describe('Foundry SDK endpoint scopes', () => {
+  const initialUrl = 'https://initial.services.ai.azure.com/api/projects/initial';
+  let restoreEnv: () => void;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    fixtures.cache.clear();
+    restoreEnv = mockProcessEnv({ AZURE_AI_PROJECT_URL: initialUrl });
+  });
+
+  afterEach(() => {
+    restoreEnv();
+    vi.restoreAllMocks();
+  });
+
+  function client(provider: AzureFoundryAgentProvider): Promise<AIProjectClient> {
+    return Reflect.get(provider, 'initializeClient').call(provider);
+  }
+
+  it.each([false, true])(
+    'matches endpoint and principal on reused providers (concurrent: %s)',
+    async (concurrent) => {
+      const provider = new AzureFoundryAgentProvider('agent-name');
+      const seen: AIProjectClient[] = [];
+      const run = async (tenant: string) => {
+        const url = `https://${tenant}.services.ai.azure.com/api/projects/${tenant}`;
+        await cliState.withEnv(
+          { ...scopeEnv(tenant), AZURE_TENANT_ID: tenant, AZURE_AI_PROJECT_URL: url },
+          async () => {
+            const selected = await client(provider);
+            expect(selected.endpoint).toBe(url);
+            const credential = Reflect.get(selected, '_credential');
+            expect(credential).toBeInstanceOf(ClientSecretCredential);
+            expect(credential.tenantId).toBe(tenant);
+            expect(await client(provider)).toBe(selected);
+            seen.push(selected);
+          },
+        );
+      };
+      if (concurrent) {
+        await Promise.all([run('first'), run('second')]);
+      } else {
+        await run('first');
+        await run('second');
+      }
+      expect(new Set(seen).size).toBe(2);
+    },
+  );
+
+  it('honors an invocation-file endpoint after construction', async () => {
+    const provider = new AzureFoundryAgentProvider('agent-name');
+    const url = 'https://file.services.ai.azure.com/api/projects/file';
+    await cliState.withEnvFileOverrides(
+      { ...scopeEnv('file'), AZURE_AI_PROJECT_URL: url },
+      async () => {
+        expect((await client(provider)).endpoint).toBe(url);
+      },
+    );
+  });
+
+  it('rejects a later empty scoped endpoint without falling back to the construction URL', async () => {
+    const provider = new AzureFoundryAgentProvider('agent-name');
+    await expect(
+      cliState.withEnv({ ...scopeEnv('masked'), AZURE_AI_PROJECT_URL: '' }, () => client(provider)),
+    ).rejects.toThrow('Azure AI Project URL must be provided');
+  });
+
+  it.each(['config', 'provider', 'loaded'] as const)(
+    'retains an explicit %s endpoint over invocation scopes',
+    async (binding) => {
+      const url = 'https://bound.services.ai.azure.com/api/projects/bound';
+      const provider =
+        binding === 'loaded'
+          ? ((await loadApiProvider('azure:foundry-agent:agent-name', {
+              env: { AZURE_AI_PROJECT_URL: url },
+            })) as AzureFoundryAgentProvider)
+          : new AzureFoundryAgentProvider(
+              'agent-name',
+              binding === 'config'
+                ? {
+                    config: { projectUrl: url },
+                    env: { AZURE_AI_PROJECT_URL: 'https://lower.example.invalid' },
+                  }
+                : { env: { AZURE_AI_PROJECT_URL: url } },
+            );
+      await cliState.withEnv({ ...scopeEnv('active'), AZURE_AI_PROJECT_URL: '' }, async () => {
+        expect((await client(provider)).endpoint).toBe(url);
+      });
+    },
+  );
 });

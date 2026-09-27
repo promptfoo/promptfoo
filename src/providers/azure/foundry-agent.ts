@@ -202,10 +202,9 @@ function rateLimitFromSdkError(error: unknown): HttpRateLimitError | null {
 }
 
 export class AzureFoundryAgentProvider extends AzureGenericProvider {
-  assistantConfig: AzureAssistantOptions;
+  assistantConfig: NonNullable<AzureAssistantProviderOptions['config']>;
   private loadedFunctionCallbacks: Record<string, Function> = {};
   private processor: ResponsesProcessor;
-  private projectUrl: string;
   private readonly getClientState = createEnvironmentScopedState<FoundryClientState>(() => ({
     cacheNamespace: randomUUID(),
   }));
@@ -218,15 +217,8 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   constructor(deploymentName: string, options: AzureAssistantProviderOptions = {}) {
     super(deploymentName, options);
     this.assistantConfig = options.config || {};
-    this.projectUrl =
-      options.config?.projectUrl ||
-      (options.env?.AZURE_AI_PROJECT_URL ?? getEnvString('AZURE_AI_PROJECT_URL') ?? '');
-
-    if (!this.projectUrl) {
-      throw new Error(
-        'Azure AI Project URL must be provided via projectUrl option or AZURE_AI_PROJECT_URL environment variable',
-      );
-    }
+    // Validate at construction while resolving ambient endpoints in each invocation.
+    this.getProjectUrl();
 
     this.processor = new ResponsesProcessor({
       modelName: this.assistantConfig.modelName || deploymentName,
@@ -260,6 +252,18 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     }
   }
 
+  private getProjectUrl(): string {
+    const projectUrl =
+      this.assistantConfig.projectUrl ||
+      (this.env?.AZURE_AI_PROJECT_URL ?? getEnvString('AZURE_AI_PROJECT_URL'));
+    if (!projectUrl) {
+      throw new Error(
+        'Azure AI Project URL must be provided via projectUrl option or AZURE_AI_PROJECT_URL environment variable',
+      );
+    }
+    return projectUrl;
+  }
+
   private async initializeClient(): Promise<AzureAIProjectClient> {
     const state = this.getClientState();
     state.projectClient ??= this.createProjectClient().catch((error) => {
@@ -274,7 +278,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       const { AIProjectClient } = await import('@azure/ai-projects');
 
       const projectClient = new AIProjectClient(
-        this.projectUrl,
+        this.getProjectUrl(),
         await createAzureCredential(this.config, this.env),
       ) as AzureAIProjectClient;
       logger.debug('Azure AI Project client initialized successfully');
@@ -313,7 +317,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     }
 
     throw new Error(
-      `Azure Foundry agent '${this.deploymentName}' was not found by name or legacy ID in project '${this.projectUrl}'. The Azure AI Projects v2 SDK resolves agents by name. Update the provider to use azure:foundry-agent:<agent-name>, or keep using the legacy ID format and ensure the agent still exists in this project.`,
+      `Azure Foundry agent '${this.deploymentName}' was not found by name or legacy ID in project '${this.getProjectUrl()}'. The Azure AI Projects v2 SDK resolves agents by name. Update the provider to use azure:foundry-agent:<agent-name>, or keep using the legacy ID format and ensure the agent still exists in this project.`,
     );
   }
 
@@ -672,7 +676,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         error: 'Azure Foundry agent maxPollTimeMs must be a finite, non-negative number.',
       };
     }
-    const projectScope = hashFoundryAgentCacheValue(this.projectUrl);
+    const projectScope = hashFoundryAgentCacheValue(this.getProjectUrl());
     const cacheKey = `azure_foundry_agent:${this.deploymentName}:${this.getClientState().cacheNamespace}:${projectScope}:${hashFoundryAgentCacheValue(body)}`;
 
     // Client-side tool behavior is absent from the serialized request body.
