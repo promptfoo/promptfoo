@@ -98,18 +98,19 @@ describe.each(['Python', 'Ruby'] as const)('%s executable validation', (language
         );
       await check('/fixture/first');
       await check('/fixture/second');
-      expect(execFileAsync).toHaveBeenNthCalledWith(1, 'fixture', ['--version'], {
-        env: expect.objectContaining({
-          PATH: '/fixture/first',
-          PROMPTFOO_INTERPRETER_PROBE: 'file',
-        }),
-      });
-      expect(execFileAsync).toHaveBeenNthCalledWith(2, 'fixture', ['--version'], {
-        env: expect.objectContaining({
-          PATH: '/fixture/second',
-          PROMPTFOO_INTERPRETER_PROBE: 'file',
-        }),
-      });
+      for (const [index, name] of ['first', 'second'].entries()) {
+        expect(execFileAsync).toHaveBeenNthCalledWith(
+          index + 1,
+          'fixture',
+          ['--version'],
+          expect.objectContaining({
+            env: expect.objectContaining({
+              PATH: `/fixture/${name}`,
+              PROMPTFOO_INTERPRETER_PROBE: 'file',
+            }),
+          }),
+        );
+      }
       expect(process.env.PROMPTFOO_INTERPRETER_PROBE).toBe('host');
     } finally {
       restore();

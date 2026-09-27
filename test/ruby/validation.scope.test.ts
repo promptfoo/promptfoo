@@ -86,6 +86,22 @@ describe('Ruby validation within an environment invocation', () => {
     expect(execFileAsync).toHaveBeenCalledTimes(2);
   });
 
+  it('bounds probe lifetime and retries after timeout within the same invocation', async () => {
+    execFileAsync.mockRejectedValueOnce(
+      Object.assign(new Error('Command killed'), { killed: true, signal: 'SIGKILL' }),
+    );
+    await cliState.withEnv(undefined, async () => {
+      await expect(validateRubyPath('ruby', true)).rejects.toThrow('not found');
+      expect(execFileAsync).toHaveBeenCalledWith(
+        'ruby',
+        ['--version'],
+        expect.objectContaining({ timeout: 2500, killSignal: 'SIGKILL' }),
+      );
+      expect(await validateRubyPath('ruby', true)).toBe('ruby');
+    });
+    expect(execFileAsync).toHaveBeenCalledTimes(2);
+  });
+
   it('does not retain validation outside an invocation', async () => {
     expect(await validateRubyPath('ruby', true)).toBe('ruby');
     execFileAsync.mockRejectedValueOnce(new Error('Executable missing'));
