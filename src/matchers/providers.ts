@@ -62,17 +62,27 @@ export function callGradingProvider<T extends ProviderResponse>(
   const executionContext = getProviderCallExecutionContext();
   const tracingContext = getProviderCallTracingContext();
   const signal = executionContext?.abortSignal;
-  const invokeWithCancellation = async (context: CallApiContextParams | undefined): Promise<T> => {
-    signal?.throwIfAborted();
-    return waitForProviderCall(invoke(context), signal);
-  };
-  const callProvider = (): Promise<T> =>
-    tracingContext
+  const callProvider = (): Promise<T> => {
+    let providerCall: Promise<T> | undefined;
+    const invokeWithCancellation = async (
+      context: CallApiContextParams | undefined,
+    ): Promise<T> => {
+      signal?.throwIfAborted();
+      providerCall = Promise.resolve(invoke(context));
+      return waitForProviderCall(providerCall, signal);
+    };
+    const result = tracingContext
       ? (tracingContext.withProviderSpan(
           { provider, callContext, operationName, role: 'grader', promptLabel: label },
           invokeWithCancellation,
         ) as Promise<T>)
       : invokeWithCancellation(callContext);
+    return result.finally(async () => {
+      // Settle cancellation and its span promptly, but retain scheduler ownership
+      // until the underlying request finishes.
+      await providerCall?.catch(() => {});
+    });
+  };
 
   const executeCall = () => {
     if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
@@ -87,7 +97,9 @@ export function callGradingProvider<T extends ProviderResponse>(
   };
 
   const result = executionContext?.providerCallQueue
-    ? executionContext.providerCallQueue.enqueue(provider.id(), executeCall)
+    ? executionContext.providerCallQueue.enqueue(provider.id(), () =>
+        waitForProviderCall(executeCall(), signal),
+      )
     : executeCall();
   return waitForProviderCall(result, signal);
 }

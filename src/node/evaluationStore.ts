@@ -43,7 +43,10 @@ export class EvalEvaluationStore implements EvaluationStore<Eval, EvalResult> {
     return this.evaluation.hasResultPersistenceFailure(result);
   }
 
-  readCompletedIndexPairs(options?: { excludeErrors?: boolean }): Promise<Set<string>> {
+  readCompletedIndexPairs(options?: {
+    excludeErrors?: boolean;
+    interruptedGradingOnly?: boolean;
+  }): Promise<Set<string>> {
     return EvalResult.getCompletedIndexPairs(this.id, options);
   }
 

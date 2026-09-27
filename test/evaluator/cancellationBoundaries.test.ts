@@ -8,6 +8,11 @@ import { evaluate } from '../../src/evaluator';
 import * as comparisonMatchers from '../../src/matchers/comparison';
 import { callProviderWithContext } from '../../src/matchers/providers';
 import Eval from '../../src/models/eval';
+import {
+  asEvaluateResult,
+  getStripFlags,
+  sanitizeResultForJsonlArtifact,
+} from '../../src/models/evalResult';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import * as evaluatorTracing from '../../src/tracing/evaluatorTracing';
 import * as targetTracer from '../../src/tracing/targetTracer';
@@ -195,6 +200,17 @@ describeEvaluator('cancellation at target and comparison boundaries', () => {
             (row) => row.failureReason === ResultFailureReason.ERROR,
           ),
         ).toBe(true);
+        const stripFlags = getStripFlags({ PROMPTFOO_STRIP_GRADING_RESULT: 'true' });
+        for (const row of await record.getResults()) {
+          for (const projection of [
+            asEvaluateResult(row, stripFlags),
+            sanitizeResultForJsonlArtifact(asEvaluateResult(row), stripFlags),
+          ]) {
+            expect(projection.gradingResult).toBeNull();
+            expect(JSON.stringify(projection.metadata)).not.toContain('comparisonBeforeAbort');
+            expect(JSON.stringify(projection.metadata)).not.toContain('ordinary assertion');
+          }
+        }
         compare.mockResolvedValue([
           { pass: true, score: 1, reason: 'selected' },
           { pass: false, score: 0, reason: 'not selected' },
@@ -213,6 +229,9 @@ describeEvaluator('cancellation at target and comparison boundaries', () => {
         );
         expect(rows.every((row) => !row.error?.startsWith('Aborted: '))).toBe(true);
         expect(JSON.stringify(rows.map((row) => row.gradingResult))).not.toContain('Aborted: ');
+        expect(JSON.stringify(rows.map((row) => row.gradingResult))).not.toContain(
+          'comparisonBeforeAbort',
+        );
         expect(rows.every((row) => !row.metadata?.__promptfoo?.comparisonBeforeAbort)).toBe(true);
         expect(provider.callApi).toHaveBeenCalledTimes(2);
         expect(resumed!.getStats()).toMatchObject({

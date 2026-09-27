@@ -1571,6 +1571,40 @@ describe('EvalResult', () => {
   });
 
   describe('getCompletedIndexPairs', () => {
+    it('selects only interrupted grading pairs without loading unrelated result payloads', async () => {
+      const evalId = 'test-interrupted-grading-pairs';
+      for (const [testIdx, failureReason, interrupted] of [
+        [0, ResultFailureReason.ERROR, true],
+        [1, ResultFailureReason.ERROR, false],
+        [2, ResultFailureReason.NONE, true],
+        [3, ResultFailureReason.ASSERT, false],
+        [4, ResultFailureReason.ERROR, null],
+      ] as const) {
+        await EvalResult.createFromEvaluateResult(evalId, {
+          ...mockEvaluateResult,
+          testIdx,
+          promptIdx: 0,
+          failureReason,
+          gradingResult:
+            interrupted === null
+              ? null
+              : {
+                  pass: false,
+                  score: 0,
+                  reason: 'fixture',
+                  metadata: { __promptfoo: { assertionGradingInterrupted: interrupted } },
+                },
+        });
+      }
+      expect(
+        await EvalResult.getCompletedIndexPairs(evalId, { interruptedGradingOnly: true }),
+      ).toEqual(new Set(['0:0']));
+      expect((await EvalResult.getCompletedIndexPairs(evalId)).size).toBe(5);
+      expect(await EvalResult.getCompletedIndexPairs(evalId, { excludeErrors: true })).toEqual(
+        new Set(['2:0', '3:0']),
+      );
+    });
+
     it('should return all completed pairs by default', async () => {
       const evalId = 'test-completed-pairs-all';
 

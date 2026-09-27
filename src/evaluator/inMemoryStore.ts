@@ -83,10 +83,20 @@ export class InMemoryEvaluationStore
     return this.failedResultsByIndex.has(getResultIndexKey(result));
   }
 
-  async readCompletedIndexPairs(options?: { excludeErrors?: boolean }): Promise<Set<string>> {
+  async readCompletedIndexPairs(options?: {
+    excludeErrors?: boolean;
+    interruptedGradingOnly?: boolean;
+  }): Promise<Set<string>> {
     const completedPairs = new Set<string>();
     for (const result of this.evaluation.results) {
       if (options?.excludeErrors && result.failureReason === ERROR_FAILURE_REASON) {
+        continue;
+      }
+      if (
+        options?.interruptedGradingOnly &&
+        (result.failureReason !== ERROR_FAILURE_REASON ||
+          result.gradingResult?.metadata?.__promptfoo?.assertionGradingInterrupted !== true)
+      ) {
         continue;
       }
       completedPairs.add(getResultIndexKey(result));
