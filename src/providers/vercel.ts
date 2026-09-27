@@ -93,26 +93,13 @@ function resolveBaseUrl(config: VercelAiConfig, env?: EnvOverrides): string | un
   );
 }
 
-/**
- * Creates a Vercel AI Gateway instance.
- */
-async function createGatewayInstance(
-  config: VercelAiConfig,
-  env?: EnvOverrides,
-): Promise<ReturnType<typeof import('ai').createGateway>> {
-  try {
-    const { createGateway } = await import('ai');
-
-    return createGateway({
-      apiKey: config.apiKey,
-      baseURL: resolveBaseUrl(config, env),
-      headers: config.headers,
-    });
-  } catch (error) {
-    throw new Error(
-      `Failed to load Vercel AI SDK. Please install it with: npm install ai\n${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
+async function createGatewayInstance(config: VercelAiConfig, env?: EnvOverrides) {
+  const { createGateway } = await import('ai');
+  return createGateway({
+    apiKey: config.apiKey,
+    baseURL: resolveBaseUrl(config, env),
+    headers: config.headers,
+  });
 }
 
 /**
