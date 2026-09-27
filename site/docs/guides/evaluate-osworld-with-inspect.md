@@ -90,7 +90,7 @@ The provider treats three states differently:
 
 ## Prerequisites
 
-Use Python 3.11 or newer. For Anthropic models, install `anthropic>=1.8,<2`
+Use Python 3.11 or newer. For Anthropic models, install `anthropic>=1.7.0,<2`
 instead of the OpenAI SDK. Python OpenTelemetry packages are optional unless
 `PROMPTFOO_ENABLE_OTEL=true` is enabled.
 
