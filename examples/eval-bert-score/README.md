@@ -41,16 +41,23 @@ npx promptfoo@latest eval -c promptfooconfig-advanced.yaml --no-cache
 The assertion returns BERTScore F1, and Promptfoo compares it with the configured threshold. The basic example uses one reference string; the advanced example compares against several valid references in one scoring call and uses the best match:
 
 ```yaml
-options:
-  disableVarExpansion: true
-vars:
-  reference:
-    - An optimization algorithm that adjusts parameters to minimize error
-    - A method for finding a minimum by moving in the direction of steepest descent
-assert:
-  - type: python
-    value: file://bertscore_check.py
-    threshold: 0.75
+prompts:
+  - 'Explain: {{topic}}'
+providers:
+  - openai:gpt-4.1-nano
+defaultTest:
+  options:
+    disableVarExpansion: true
+tests:
+  - vars:
+      topic: gradient descent
+      reference:
+        - An optimization algorithm that adjusts parameters to minimize error
+        - A method for finding a minimum by moving in the direction of steepest descent
+    assert:
+      - type: python
+        value: file://bertscore_check.py
+        threshold: 0.75
 ```
 
 Each Python assertion runs in a separate process and loads its own scorer. The advanced example scores its references together in one call. Missing references and model/scoring failures produce failed assertions with an explanatory reason, rather than silently reporting a low similarity score.
