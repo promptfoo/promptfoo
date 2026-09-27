@@ -110,7 +110,7 @@ describe('N8nProvider', () => {
         expect.any(Number),
         'text',
         true,
-        undefined,
+        0,
       );
       expect(vi.mocked(fetchWithCache).mock.calls[0][1]).not.toHaveProperty('body');
     });
@@ -387,7 +387,7 @@ describe('N8nProvider', () => {
         expect.any(Number),
         'text',
         true,
-        undefined,
+        0,
       );
     });
 
@@ -409,7 +409,7 @@ describe('N8nProvider', () => {
         expect.any(Number),
         'text',
         true,
-        undefined,
+        0,
       );
     });
 
@@ -775,7 +775,7 @@ describe('N8nProvider', () => {
       expect(result.metadata).toBeUndefined();
     });
 
-    it('passes maxRetries=0 to fetchWithCache for non-idempotent methods (POST/PATCH)', async () => {
+    it('passes maxRetries=0 to fetchWithCache for every webhook method', async () => {
       const mockResponse = createMockResponse({ output: 'ok' });
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
@@ -793,18 +793,14 @@ describe('N8nProvider', () => {
       await patchProvider.callApi('Hello');
       const [, , , , , patchMaxRetries] = vi.mocked(fetchWithCache).mock.calls[0];
       expect(patchMaxRetries).toBe(0);
-    });
 
-    it('lets fetchWithCache use the default retry budget for idempotent methods (GET/PUT)', async () => {
-      const mockResponse = createMockResponse({ output: 'ok' });
-      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
-
+      vi.mocked(fetchWithCache).mockClear();
       const getProvider = new N8nProvider('https://n8n.example.com/webhook/agent', {
         config: { method: 'GET' },
       });
       await getProvider.callApi('Hello');
       const [, , , , , getMaxRetries] = vi.mocked(fetchWithCache).mock.calls[0];
-      expect(getMaxRetries).toBeUndefined();
+      expect(getMaxRetries).toBe(0);
 
       vi.mocked(fetchWithCache).mockClear();
       const putProvider = new N8nProvider('https://n8n.example.com/webhook/agent', {
@@ -812,7 +808,7 @@ describe('N8nProvider', () => {
       });
       await putProvider.callApi('Hello');
       const [, , , , , putMaxRetries] = vi.mocked(fetchWithCache).mock.calls[0];
-      expect(putMaxRetries).toBeUndefined();
+      expect(putMaxRetries).toBe(0);
     });
   });
 });
@@ -956,7 +952,7 @@ describe('createN8nProvider', () => {
     // misses, buildGetUrl() is skipped, and the body is sent with a GET
     // request — undici rejects with "Request with GET/HEAD method cannot
     // have body". Normalizing also routes the request through the correct
-    // (idempotent vs non-idempotent) retry policy.
+    // GET-vs-body policy.
     const mockResponse = createMockResponse({ output: 'ok' });
     vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
@@ -970,8 +966,8 @@ describe('createN8nProvider', () => {
     expect((fetchOpts as RequestInit).body).toBeUndefined();
     expect(url).toContain('?');
     expect(url).toContain('message=hello');
-    // GET is idempotent → default retry budget (undefined).
-    expect(maxRetries).toBeUndefined();
+    // n8n workflows can have side effects regardless of HTTP method.
+    expect(maxRetries).toBe(0);
 
     vi.mocked(fetchWithCache).mockClear();
     const mixedCasePost = new N8nProvider('https://n8n.example.com/webhook/agent', {
@@ -979,7 +975,7 @@ describe('createN8nProvider', () => {
     });
     await mixedCasePost.callApi('hello');
     const [, , , , , postMaxRetries] = vi.mocked(fetchWithCache).mock.calls[0];
-    // POST is non-idempotent → maxRetries=0 to avoid double-delivery.
+    // Webhooks are never retried to avoid double-delivery.
     expect(postMaxRetries).toBe(0);
   });
 

@@ -327,11 +327,9 @@ function getSafeProviderId(url: string, config?: N8nProviderConfig): string {
  */
 export class N8nProvider implements ApiProvider {
   get handlesOwnRetries(): boolean {
-    // Preserve the webhook's existing no-replay policy for stateful methods.
-    // Idempotent methods still need scheduler recovery for parsed body errors.
-    return !['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(
-      (this.config.method || 'POST').toUpperCase(),
-    );
+    // A webhook workflow can perform side effects for any HTTP method, even
+    // methods that are nominally idempotent. Never let the scheduler replay it.
+    return true;
   }
 
   private webhookUrl: string;
@@ -573,17 +571,14 @@ export class N8nProvider implements ApiProvider {
     let latencyMs: number | undefined;
 
     try {
-      // n8n webhooks for non-idempotent methods (POST/PATCH) are stateful —
-      // the workflow may have already accepted the request and dispatched
+      // n8n webhooks are stateful — the workflow may have already accepted the request and dispatched
       // side-effects (sending messages, writing to a database) before the
       // transport-level failure surfaces. The default `fetchWithRetries`
       // budget of 4 would silently re-deliver those side-effects. Pass
-      // maxRetries=0 for non-idempotent methods so transient failures fail
-      // through to the caller (who can re-run the eval if appropriate).
-      // Idempotent methods (GET/HEAD/OPTIONS/PUT/DELETE) keep the default
-      // retry budget.
-      const isIdempotent = ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(method);
-      const maxRetries = isIdempotent ? undefined : 0;
+      // maxRetries=0 so transient failures fail through to the caller (who
+      // can re-run the eval if appropriate). HTTP method semantics do not
+      // prove the workflow itself is safe to replay.
+      const maxRetries = 0;
 
       // Webhook URLs and session-bearing requests can be sensitive and stateful.
       const response = await fetchWithCache<string>(
