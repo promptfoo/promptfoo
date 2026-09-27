@@ -1,4 +1,5 @@
 import type {
+  ApiProvider,
   AtomicTestCase,
   CompletedPrompt,
   EvaluateResult,
@@ -6,6 +7,8 @@ import type {
   TestSuite,
   UnifiedConfig,
 } from '../types/index';
+
+export type GradingProviderResolver = (provider: unknown) => Promise<ApiProvider | null>;
 
 export type EvaluationStoreResult = Pick<
   EvaluateResult,
@@ -62,6 +65,7 @@ export interface EvaluationStore<
     response: ProviderResponse,
     savedTest: AtomicTestCase,
     currentTest: AtomicTestCase,
+    resolveGradingProvider: GradingProviderResolver,
   ): Promise<{ providerResponse: ProviderResponse; test: AtomicTestCase }>;
   recordFinalResult(result: EvaluateResult): void;
   recordResultPersistenceFailure(result: EvaluateResult): void;

@@ -21,6 +21,7 @@ import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from 
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
+import { getGradingProvider } from './matchers/providers';
 import {
   getResultIndexKey,
   PROMPTFOO_METADATA_KEY,
@@ -3778,6 +3779,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
                       result.response!,
                       result.testCase,
                       step.test,
+                      (provider) => getGradingProvider('text', provider, null),
                     );
                     test = inputs?.test ?? result.testCase;
                     const providerResponse = inputs?.providerResponse ?? result.response!;
