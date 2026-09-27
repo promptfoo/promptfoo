@@ -1,3 +1,4 @@
+import fs from 'node:fs/promises';
 import { setImmediate } from 'node:timers/promises';
 import type { EventEmitter } from 'node:events';
 
@@ -5,11 +6,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { PythonWorker } from '../../src/python/worker';
 import { PythonWorkerPool } from '../../src/python/workerPool';
+import * as secureTempFiles from '../../src/util/secureTempFiles';
+import { createDeferred } from '../util/utils';
 import type { Options } from 'python-shell';
+import type { MockInstance } from 'vitest';
 
 const { execFileAsync, shells, signals } = vi.hoisted(() => ({
   execFileAsync: vi.fn(),
-  shells: [] as Array<EventEmitter & { options: Options }>,
+  shells: [] as Array<EventEmitter & { options: Options; send(command: string): void }>,
   signals: { autoReady: true },
 }));
 
@@ -211,6 +215,84 @@ describe('Python pool executable validation', () => {
     await expect(queued).resolves.toEqual({ output: 'healthy' });
     await expect(pool.execute('call_api', [])).resolves.toEqual({ output: 'healthy' });
   });
+
+  it.each(['revalidating', 'starting', 'ready', 'shutdown'] as const)(
+    'does not dispatch a prepared request after its worker changes (%s)',
+    async (state) => {
+      const preparation = createDeferred<string>();
+      const validation = createDeferred<{ stdout: string; stderr: string }>();
+      vi.spyOn(secureTempFiles, 'createSecureTempDirectory')
+        .mockResolvedValue('/fixture/temporary')
+        .mockReturnValueOnce(preparation.promise);
+      vi.spyOn(secureTempFiles, 'writeSecureTempFile').mockImplementation(
+        async (_directory, name) => `/fixture/${name}`,
+      );
+      const remove = vi.spyOn(secureTempFiles, 'removeSecureTempDirectory').mockResolvedValue();
+      vi.spyOn(fs, 'readFile').mockResolvedValue(
+        JSON.stringify({ type: 'result', data: 'recovered' }),
+      );
+      const worker = new PythonWorker('fixture.py', 'call_api', 'fixture-python', 1000);
+      await worker.initialize('fixture-python');
+      const originalSend = vi.spyOn(shells[0], 'send');
+      const result = worker.call('call_api', []).catch((error) => error);
+      let replacementSend: MockInstance<(command: string) => void> | undefined;
+      try {
+        if (state === 'shutdown') {
+          await worker.shutdown();
+        } else {
+          if (state === 'revalidating') {
+            execFileAsync.mockReturnValueOnce(validation.promise);
+          }
+          signals.autoReady = state === 'ready';
+          shells[0].emit('close');
+          await setImmediate();
+          if (state !== 'revalidating') {
+            expect(shells).toHaveLength(2);
+            replacementSend = vi.spyOn(shells[1], 'send').mockImplementation(() => {
+              throw new Error('Unexpected stale dispatch');
+            });
+            expect(worker.isReady()).toBe(state === 'ready');
+          }
+        }
+        preparation.resolve('/fixture/temporary');
+        expect(await result).toEqual(
+          new Error(
+            state === 'shutdown'
+              ? 'Worker shutting down'
+              : 'Worker changed while preparing request',
+          ),
+        );
+        expect(originalSend.mock.calls.some(([command]) => command.startsWith('CALL|'))).toBe(
+          false,
+        );
+        if (replacementSend) {
+          expect(replacementSend).not.toHaveBeenCalled();
+        }
+        expect(remove).toHaveBeenCalledExactlyOnceWith('/fixture/temporary');
+        expect(worker.isBusy()).toBe(false);
+
+        if (state === 'ready') {
+          replacementSend!.mockRestore();
+          replacementSend = vi.spyOn(shells[1], 'send').mockImplementation((command: string) => {
+            queueMicrotask(() =>
+              command === 'SHUTDOWN'
+                ? shells[1].emit('close')
+                : shells[1].emit('message', `DONE|${command.split('|').at(-1)}`),
+            );
+          });
+          await expect(worker.call('call_api', [])).resolves.toBe('recovered');
+          expect(replacementSend).toHaveBeenCalledOnce();
+        }
+      } finally {
+        preparation.resolve('/fixture/temporary');
+        replacementSend?.mockRestore();
+        await worker.shutdown();
+        validation.resolve({ stdout: 'Python 3.12.0', stderr: '' });
+        await result;
+        await setImmediate();
+      }
+    },
+  );
 
   it('does not restart after shutdown while executable validation is pending', async () => {
     const pool = new PythonWorkerPool('fixture.py', 'call_api', 1, 'fixture-python');

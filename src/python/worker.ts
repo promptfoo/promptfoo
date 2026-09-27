@@ -158,6 +158,7 @@ export class PythonWorker {
   }
 
   private async executeCall(functionName: string, args: unknown[]): Promise<unknown> {
+    const workerProcess = this.process;
     let tempDirectory: string | undefined;
 
     try {
@@ -173,7 +174,13 @@ export class PythonWorker {
       // Note: PythonShell.send() adds newline automatically in 'text' mode
       // Using pipe (|) delimiter to avoid conflicts with Windows drive letters (C:)
       const command = `CALL|${functionName}|${requestFile}|${responseFile}`;
-      this.process!.send(command);
+      if (this.shuttingDown) {
+        throw new Error('Worker shutting down');
+      }
+      if (!workerProcess || this.process !== workerProcess || !this.ready) {
+        throw new Error('Worker changed while preparing request');
+      }
+      workerProcess.send(command);
 
       // Wait for DONE
       await new Promise<unknown>((resolve, reject) => {
