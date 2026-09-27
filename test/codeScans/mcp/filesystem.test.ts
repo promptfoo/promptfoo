@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { EventEmitter } from 'events';
 import type { ChildProcess } from 'child_process';
 
@@ -132,5 +135,135 @@ describe('filesystem MCP server management', () => {
 
     await vi.advanceTimersByTimeAsync(1000);
     await expectation;
+  });
+});
+
+describe('filesystem MCP Windows launcher', () => {
+  const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+  const originalExecPath = Object.getOwnPropertyDescriptor(process, 'execPath')!;
+  let fixture: string;
+  let rootDir: string;
+  let nodeDir: string;
+  let restoreEnv: () => void;
+
+  const installNpx = (directory: string) => {
+    const cli = path.join(directory, 'node_modules', 'npm', 'bin', 'npx-cli.js');
+    fs.mkdirSync(path.dirname(cli), { recursive: true });
+    fs.writeFileSync(cli, '// npm entrypoint fixture');
+    fs.writeFileSync(path.join(directory, 'npx.cmd'), '@echo off');
+    return fs.realpathSync(cli);
+  };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-npx-launcher-'));
+    rootDir = path.join(fixture, 'repo with spaces & percent%');
+    nodeDir = path.join(fixture, 'trusted-node');
+    fs.mkdirSync(rootDir);
+    fs.mkdirSync(nodeDir);
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    Object.defineProperty(process, 'execPath', {
+      value: path.join(nodeDir, 'node.exe'),
+      configurable: true,
+    });
+    restoreEnv = mockProcessEnv({ PATH: '' });
+    mocks.spawn.mockReturnValue(createFakeProcess());
+  });
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', originalPlatform);
+    Object.defineProperty(process, 'execPath', originalExecPath);
+    restoreEnv();
+    vi.restoreAllMocks();
+    fs.rmSync(fixture, { recursive: true, force: true });
+  });
+
+  it('starts npm through Node without a shell and preserves the literal repository argument', () => {
+    const cli = installNpx(nodeDir);
+    startFilesystemMcpServer(rootDir);
+
+    expect(mocks.spawn).toHaveBeenCalledWith(
+      process.execPath,
+      [cli, '-y', '@modelcontextprotocol/server-filesystem', rootDir],
+      expect.objectContaining({ cwd: rootDir, windowsHide: true, shell: false }),
+    );
+  });
+
+  it('finds a separate npm install on an absolute PATH', () => {
+    const npmDir = path.join(fixture, 'trusted-npm');
+    const cli = installNpx(npmDir);
+    const restorePath = mockProcessEnv({ PATH: npmDir });
+    try {
+      startFilesystemMcpServer(rootDir);
+      expect(mocks.spawn.mock.calls[0]?.[1]?.[0]).toBe(cli);
+    } finally {
+      restorePath();
+    }
+  });
+
+  it('ignores relative and repository-owned PATH installs', () => {
+    installNpx(rootDir);
+    const cli = installNpx(path.join(fixture, 'trusted-npm'));
+    const restorePath = mockProcessEnv({
+      PATH: ['.', rootDir, path.dirname(path.dirname(path.dirname(path.dirname(cli))))].join(
+        path.delimiter,
+      ),
+    });
+    try {
+      startFilesystemMcpServer(rootDir);
+      expect(mocks.spawn.mock.calls[0]?.[1]?.[0]).toBe(cli);
+    } finally {
+      restorePath();
+    }
+  });
+
+  it('rejects an npm entrypoint symlink into the scanned repository', () => {
+    const cli = installNpx(rootDir);
+    const npmDir = path.join(fixture, 'untrusted-npm');
+    fs.mkdirSync(npmDir);
+    fs.writeFileSync(path.join(npmDir, 'npx.cmd'), '@echo off');
+    const redirectedNpm = path.join(npmDir, 'node_modules', 'npm');
+    fs.mkdirSync(path.dirname(redirectedNpm), { recursive: true });
+    fs.symlinkSync(path.dirname(path.dirname(cli)), redirectedNpm, 'junction');
+    const restorePath = mockProcessEnv({ PATH: npmDir });
+    try {
+      expect(() => startFilesystemMcpServer(rootDir)).toThrow(/npm.*not found/i);
+      expect(mocks.spawn).not.toHaveBeenCalled();
+    } finally {
+      restorePath();
+    }
+  });
+
+  it('preserves a trusted native npx executable without an npm script layout', () => {
+    const npmDir = path.join(fixture, 'native-npx');
+    fs.mkdirSync(npmDir);
+    const executable = path.join(npmDir, 'npx.exe');
+    fs.writeFileSync(executable, 'native executable fixture');
+    const restorePath = mockProcessEnv({ PATH: npmDir });
+    try {
+      startFilesystemMcpServer(rootDir);
+      expect(mocks.spawn).toHaveBeenCalledWith(
+        executable,
+        ['-y', '@modelcontextprotocol/server-filesystem', rootDir],
+        expect.objectContaining({ shell: false, windowsHide: true }),
+      );
+    } finally {
+      restorePath();
+    }
+  });
+
+  it('reports a missing npm install before spawning', () => {
+    expect(() => startFilesystemMcpServer(rootDir)).toThrow(/npm.*not found/i);
+    expect(mocks.spawn).not.toHaveBeenCalled();
+  });
+
+  it('keeps the POSIX npx invocation unchanged', () => {
+    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+    startFilesystemMcpServer(rootDir);
+    expect(mocks.spawn).toHaveBeenCalledWith(
+      'npx',
+      ['-y', '@modelcontextprotocol/server-filesystem', rootDir],
+      expect.objectContaining({ cwd: rootDir }),
+    );
   });
 });
