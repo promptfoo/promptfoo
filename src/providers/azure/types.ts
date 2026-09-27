@@ -192,6 +192,8 @@ export type AzureAssistantOptions = AzureCompletionOptions & {
    * Maximum time in milliseconds to poll for a run to complete before timing out
    */
   maxPollTimeMs?: number;
+  /** Foundry: maximum callback batches; defaults to 8 (valid range 1–64). */
+  maxToolIterations?: number;
   /**
    * Configuration for network request retry behavior
    */
