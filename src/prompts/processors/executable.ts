@@ -1,5 +1,6 @@
 import { execFile } from 'child_process';
 import { stat as fsStat, readFile } from 'fs/promises';
+import { promisify } from 'util';
 
 import { getCache, isCacheEnabled } from '../../cache';
 import { getProcessEnv } from '../../envars';
@@ -8,6 +9,8 @@ import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 
 import type { ApiProvider, Prompt, PromptFunctionContext, VarValue } from '../../types/index';
+
+const execFileAsync = promisify(execFile);
 
 const ANSI_ESCAPE = /\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 
@@ -60,43 +63,32 @@ export const executablePromptFunction = async (
     }
   }
 
-  return new Promise<string>((resolve, reject) => {
-    const command = scriptParts.shift();
-    invariant(command, 'No command found in script path');
+  const command = scriptParts.shift();
+  invariant(command, 'No command found in script path');
 
-    // Pass context as JSON argument to the script
-    const scriptArgs = scriptParts.concat([safeJsonStringify(transformedContext) as string]);
+  // Pass context as JSON argument to the script
+  const scriptArgs = scriptParts.concat([safeJsonStringify(transformedContext) as string]);
 
-    const options = {
-      cwd: context.config?.basePath,
-      env: getProcessEnv(),
-      timeout: context.config?.timeout || 60000, // Default 60 second timeout
-    };
+  const options = {
+    cwd: context.config?.basePath,
+    env: getProcessEnv(),
+    timeout: context.config?.timeout || 60000, // Default 60 second timeout
+  };
 
-    execFile(command, scriptArgs, options, async (error, stdout, stderr) => {
-      if (error) {
-        reject(error);
-        return;
-      }
+  const { stdout, stderr } = await execFileAsync(command, scriptArgs, options);
+  const standardOutput = stripText(Buffer.from(stdout).toString('utf8').trim());
+  const errorOutput = stripText(Buffer.from(stderr).toString('utf8').trim());
 
-      const standardOutput = stripText(Buffer.from(stdout).toString('utf8').trim());
-      const errorOutput = stripText(Buffer.from(stderr).toString('utf8').trim());
+  if (errorOutput && !standardOutput) {
+    throw new Error(errorOutput);
+  }
 
-      if (errorOutput) {
-        if (!standardOutput) {
-          reject(new Error(errorOutput));
-          return;
-        }
-      }
+  if (fileHashes.length > 0 && isCacheEnabled()) {
+    const cache = getCache();
+    await cache.set(cacheKey, standardOutput);
+  }
 
-      if (fileHashes.length > 0 && isCacheEnabled()) {
-        const cache = getCache();
-        await cache.set(cacheKey, standardOutput);
-      }
-
-      resolve(standardOutput);
-    });
-  });
+  return standardOutput;
 };
 
 /**
