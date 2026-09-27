@@ -152,6 +152,7 @@ def main():
                     str(root / "promptfooconfig.yaml"),
                     "--no-cache",
                     "--no-write",
+                    "--no-share",
                     "-o",
                     str(output),
                 ],
