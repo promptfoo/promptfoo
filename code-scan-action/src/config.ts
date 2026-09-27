@@ -24,7 +24,7 @@ export function generateConfigFile(minimumSeverity: string, guidance?: string): 
   const config: ScanConfig = {
     minimumSeverity: validatedSeverity,
     diffsOnly: false, // Always enable full repo exploration for GitHub Actions (never diffs-only)
-    guidance,
+    guidance: guidance === '' ? undefined : guidance,
   };
 
   // Validate the entire config object for additional safety
@@ -34,17 +34,8 @@ export function generateConfigFile(minimumSeverity: string, guidance?: string): 
   const tempDir = os.tmpdir();
   const configPath = path.join(tempDir, `code-scan-config-${randomUUID()}.yaml`);
 
-  // Write YAML
-  let yamlContent = `minimumSeverity: ${validatedConfig.minimumSeverity}\ndiffsOnly: ${validatedConfig.diffsOnly}\n`;
-  if (guidance) {
-    // Properly escape YAML string using literal block scalar
-    const guidanceYaml = guidance.includes('\n')
-      ? `guidance: |\n  ${guidance.split('\n').join('\n  ')}\n`
-      : `guidance: ${JSON.stringify(guidance)}\n`;
-    yamlContent += guidanceYaml;
-  }
-
-  fs.writeFileSync(configPath, yamlContent, 'utf8');
+  // JSON is valid YAML and preserves guidance whitespace without block-scalar rules.
+  fs.writeFileSync(configPath, JSON.stringify(validatedConfig), 'utf8');
 
   return configPath;
 }
