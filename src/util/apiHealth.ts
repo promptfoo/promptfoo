@@ -2,7 +2,8 @@ import { getEnvString } from '../envars';
 import { CloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { fetchWithTimeout } from './fetch/index';
-import { getProxyEnvironment } from './fetch/proxy';
+import { getProxyEnvironment, getProxyForUrl } from './fetch/proxy';
+import { sanitizeUrl } from './sanitizer';
 
 interface HealthResponse {
   status: string;
@@ -15,10 +16,12 @@ interface HealthResponse {
  * @returns A promise that resolves to the health check response.
  */
 export async function checkRemoteHealth(url: string): Promise<HealthResponse> {
+  const proxyEnvironment = getProxyEnvironment();
   logger.debug('[CheckRemoteHealth] Checking API health', {
     url,
+    selectedProxy: sanitizeUrl(getProxyForUrl(url, proxyEnvironment)),
     env: {
-      ...getProxyEnvironment(),
+      ...proxyEnvironment,
       nodeExtra: getEnvString('NODE_EXTRA_CA_CERTS'),
       nodeTls: getEnvString('NODE_TLS_REJECT_UNAUTHORIZED'),
     },
