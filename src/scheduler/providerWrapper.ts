@@ -40,11 +40,14 @@ export function isRateLimitWrapped(provider: ApiProvider): boolean {
 }
 
 /**
- * Create rate limit detection options for ProviderResponse.
+ * Create rate-limit detection and retry options for ProviderResponse.
  * Shared between providerWrapper and evaluator for consistency.
  */
-export function createProviderRateLimitOptions(): RateLimitExecuteOptions<ProviderResponse> {
+export function createProviderRateLimitOptions(
+  originalProvider?: ApiProvider,
+): RateLimitExecuteOptions<ProviderResponse> {
   return {
+    handlesOwnRetries: originalProvider?.handlesOwnRetries,
     // A hard quota is not retried, so its headers must not feed the shared
     // rate-limit state either: a billing 429 that also carries
     // `x-ratelimit-remaining-*: 0` and a reset timestamp would otherwise
@@ -120,7 +123,9 @@ export function wrapProviderWithRateLimiting(
       return registry.execute(
         provider,
         () => originalCallApi(prompt, context, options),
-        createProviderRateLimitOptions(),
+        createProviderRateLimitOptions(
+          provider.usesOriginalProvider ? context?.originalProvider : undefined,
+        ),
       );
     },
   };
