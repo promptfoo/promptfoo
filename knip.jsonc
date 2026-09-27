@@ -36,7 +36,6 @@
         // Imported by test/code-scan-action/*.test.ts; declared in
         // code-scan-action/package.json rather than the root manifest.
         "@actions/*",
-        "@octokit/rest",
         // Install-side-effect git-hook tool; never imported.
         "block-no-verify",
         // Transitive pin for google-auth-library behavior (see comments in
@@ -53,8 +52,7 @@
       "entry": ["index.html"],
       "project": ["src/**/*.{js,ts,tsx}"],
       "ignoreDependencies": [
-        // Build-tool/CSS deps invisible to import analysis (Tailwind v4 pipeline).
-        "lightningcss",
+        // Tailwind v4 is loaded through the CSS/PostCSS pipeline.
         "tailwindcss"
       ],
       "paths": {
