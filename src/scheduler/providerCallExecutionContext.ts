@@ -69,6 +69,14 @@ export function getProviderCallExecutionContext(): ProviderCallExecutionContext 
   return providerCallExecutionContext.getStore();
 }
 
+/** Include evaluation cancellation in a provider's optional caller signal. */
+export function getProviderCallAbortSignal(signal?: AbortSignal): AbortSignal | undefined {
+  const evaluationSignal = getProviderCallExecutionContext()?.abortSignal;
+  return signal && evaluationSignal
+    ? AbortSignal.any([signal, evaluationSignal])
+    : (signal ?? evaluationSignal);
+}
+
 /** Resolve an explicit provider delay or the delay for its active invocation. */
 export function getProviderDelay(provider?: ApiProvider): number | undefined {
   if (!provider) {
@@ -130,10 +138,7 @@ export async function callProviderWithContext(
   options?: CallApiOptionsParams,
 ): Promise<ProviderResponse> {
   const executionContext = getProviderCallExecutionContext();
-  const signal =
-    options?.abortSignal && executionContext?.abortSignal
-      ? AbortSignal.any([options.abortSignal, executionContext.abortSignal])
-      : (options?.abortSignal ?? executionContext?.abortSignal);
+  const signal = getProviderCallAbortSignal(options?.abortSignal);
   const callOptions = signal ? { ...options, abortSignal: signal } : options;
   const delay = getProviderDelay(provider);
   const handlesDelay = provider.handlesOwnDelay && provider.delay != null;
