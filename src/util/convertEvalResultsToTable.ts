@@ -1,8 +1,77 @@
 import logger from '../logger';
-import { type EvaluateTable, type EvaluateTableRow, type ResultsFile } from '../types/index';
+import {
+  type EvaluateResult,
+  type EvaluateTable,
+  type EvaluateTableRow,
+  type ResultsFile,
+} from '../types/index';
 import invariant from '../util/invariant';
 import { getActualPrompt } from '../util/providerResponse';
 import { convertEvalResultToTableCell } from './exportToFile/index';
+
+/** Build display-only variables without changing stored evaluation results. */
+export function getDisplayVars(result: Pick<EvaluateResult, 'vars' | 'response' | 'metadata'>) {
+  let displayVars = result.vars ? { ...result.vars } : undefined;
+
+  // Get the actual prompt from response.prompt (provider-reported) or legacy redteamFinalPrompt
+  // Check both result.response.metadata and result.metadata for legacy compatibility
+  const actualPrompt =
+    getActualPrompt(result.response) || (result.metadata?.redteamFinalPrompt as string);
+
+  if (displayVars && actualPrompt) {
+    const varKeys = Object.keys(displayVars);
+    if (varKeys.length === 1 && varKeys[0] !== 'harmCategory') {
+      displayVars[varKeys[0]] = actualPrompt;
+    } else if (varKeys.length > 1) {
+      // NOTE: This is a hack. We should use config.redteam.injectVar to determine which key to update but we don't have access to the config here
+      const targetKeys = ['prompt', 'query', 'question'];
+      const keyToUpdate = targetKeys.find((key) => displayVars?.[key]);
+      if (keyToUpdate) {
+        displayVars[keyToUpdate] = actualPrompt;
+      }
+    }
+  }
+
+  // Copy sessionId from metadata to vars for display if not already present
+  // Multi-turn strategies (IterativeMeta, Crescendo, etc.) store multiple sessionIds in metadata.sessionIds array
+  // Single-turn strategies store a single sessionId in metadata.sessionId
+  if (!displayVars?.sessionId) {
+    const metadataSessionIds = result.metadata?.sessionIds;
+    if (Array.isArray(metadataSessionIds) && metadataSessionIds.length > 0) {
+      displayVars = displayVars || {};
+      displayVars.sessionId = metadataSessionIds
+        .filter((id) => id != null && id !== '')
+        .map(String)
+        .join('\n');
+    } else if (result.metadata?.sessionId) {
+      displayVars = displayVars || {};
+      displayVars.sessionId = result.metadata.sessionId;
+    }
+  }
+
+  // Copy transformDisplayVars from response metadata to vars for display
+  // This handles layer mode where embeddedInjection is set at runtime, not in test case vars
+  const transformDisplayVars = result.response?.metadata?.transformDisplayVars as
+    | Record<string, string>
+    | undefined;
+  if (transformDisplayVars) {
+    displayVars = displayVars || {};
+    for (const [key, value] of Object.entries(transformDisplayVars)) {
+      // Use `key in` so a legitimate falsy value (empty string, 0, false)
+      // is not silently overwritten by the transform display value.
+      if (!(key in displayVars)) {
+        displayVars[key] = value;
+      } else if (displayVars[key] !== value) {
+        // Leave a breadcrumb for users debugging a "missing" display var.
+        logger.debug(
+          `[convertResultsToTable] transformDisplayVars key '${key}' collides with result.vars; preserving original value`,
+        );
+      }
+    }
+  }
+
+  return displayVars;
+}
 
 /**
  * Converts evaluation results from a ResultsFile into a table format for display.
@@ -37,11 +106,6 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
 
   const rowMap: Record<number, EvaluateTableRow> = {};
   for (const result of results.results) {
-    // vars
-    for (const varName of Object.keys(result.vars || {})) {
-      varsForHeader.add(varName);
-    }
-
     // row.vars is reassigned later from `orderedVars`; initialize empty.
     const row = rowMap[result.testIdx] || {
       description: result.description || undefined,
@@ -50,66 +114,9 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
       test: result.testCase,
     };
 
-    let displayVars = result.vars ? { ...result.vars } : undefined;
-
-    // Get the actual prompt from response.prompt (provider-reported) or legacy redteamFinalPrompt
-    // Check both result.response.metadata and result.metadata for legacy compatibility
-    const actualPrompt =
-      getActualPrompt(result.response) || (result.metadata?.redteamFinalPrompt as string);
-
-    if (displayVars && actualPrompt) {
-      const varKeys = Object.keys(displayVars);
-      if (varKeys.length === 1 && varKeys[0] !== 'harmCategory') {
-        displayVars[varKeys[0]] = actualPrompt;
-      } else if (varKeys.length > 1) {
-        // NOTE: This is a hack. We should use config.redteam.injectVar to determine which key to update but we don't have access to the config here
-        const targetKeys = ['prompt', 'query', 'question'];
-        const keyToUpdate = targetKeys.find((key) => displayVars?.[key]);
-        if (keyToUpdate) {
-          displayVars[keyToUpdate] = actualPrompt;
-        }
-      }
-    }
-
-    // Copy sessionId from metadata to vars for display if not already present
-    // Multi-turn strategies (IterativeMeta, Crescendo, etc.) store multiple sessionIds in metadata.sessionIds array
-    // Single-turn strategies store a single sessionId in metadata.sessionId
-    if (!displayVars?.sessionId) {
-      const metadataSessionIds = result.metadata?.sessionIds;
-      if (Array.isArray(metadataSessionIds) && metadataSessionIds.length > 0) {
-        displayVars = displayVars || {};
-        displayVars.sessionId = metadataSessionIds
-          .filter((id) => id != null && id !== '')
-          .map(String)
-          .join('\n');
-        varsForHeader.add('sessionId');
-      } else if (result.metadata?.sessionId) {
-        displayVars = displayVars || {};
-        displayVars.sessionId = result.metadata.sessionId;
-        varsForHeader.add('sessionId');
-      }
-    }
-
-    // Copy transformDisplayVars from response metadata to vars for display
-    // This handles layer mode where embeddedInjection is set at runtime, not in test case vars
-    const transformDisplayVars = result.response?.metadata?.transformDisplayVars as
-      | Record<string, string>
-      | undefined;
-    if (transformDisplayVars) {
-      displayVars = displayVars || {};
-      for (const [key, value] of Object.entries(transformDisplayVars)) {
-        // Use `key in` so a legitimate falsy value (empty string, 0, false)
-        // is not silently overwritten by the transform display value.
-        if (!(key in displayVars)) {
-          displayVars[key] = value;
-          varsForHeader.add(key);
-        } else if (displayVars[key] !== value) {
-          // Leave a breadcrumb for users debugging a "missing" display var.
-          logger.debug(
-            `[convertResultsToTable] transformDisplayVars key '${key}' collides with result.vars; preserving original value`,
-          );
-        }
-      }
+    const displayVars = getDisplayVars(result);
+    for (const varName of Object.keys(displayVars || {})) {
+      varsForHeader.add(varName);
     }
 
     varValuesForRow.set(result.testIdx, displayVars as Record<string, string>);

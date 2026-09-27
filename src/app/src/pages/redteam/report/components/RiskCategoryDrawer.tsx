@@ -62,7 +62,7 @@ function getPromptDisplayString(prompt: string): string {
     const parsedPrompt = JSON.parse(prompt);
     if (Array.isArray(parsedPrompt)) {
       const lastPrompt = parsedPrompt[parsedPrompt.length - 1];
-      if (lastPrompt.content) {
+      if (typeof lastPrompt?.content === 'string' && lastPrompt.content) {
         return lastPrompt.content || '-';
       }
     }

@@ -117,6 +117,42 @@ describe('ReportDownloadButton', () => {
         expected: 'seed prompt',
       },
     ];
+    for (const result of [
+      { vars: {}, response: { prompt: 'stripped secret', output: 'answer' } },
+      { vars: {}, response: { metadata: { redteamFinalPrompt: 'stripped secret' } } },
+      { vars: {}, metadata: { redteamFinalPrompt: 'stripped secret' } },
+      { vars: { harmCategory: 'harm' }, response: { prompt: 'unselected actual' } },
+      {
+        vars: { custom: 'custom seed', other: 'other' },
+        response: { prompt: 'unselected actual' },
+      },
+    ]) {
+      cases.push({
+        result: {
+          ...result,
+          response: { output: 'answer', ...result.response },
+          prompt: { raw: '[prompt stripped]' },
+        },
+        expected: '[prompt stripped]',
+      });
+    }
+    cases.push({
+      result: {
+        vars: { query: 'selected query', prompt: 'other prompt' },
+        response: { output: 'answer', prompt: 'actual replaces prompt only' },
+      },
+      expected: 'selected query',
+    });
+    cases.push({
+      result: {
+        vars: {},
+        response: {
+          output: 'answer',
+          metadata: { transformDisplayVars: { prompt: 'runtime injection' } },
+        },
+      },
+      expected: 'runtime injection',
+    });
     const evalData = {
       version: 4,
       createdAt: '2026-01-01T00:00:00.000Z',

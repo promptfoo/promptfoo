@@ -1207,6 +1207,73 @@ describe('Report attack prompt groupings', () => {
     expect(groups.failuresByPlugin.raw[0].prompt).toBe('raw fallback');
   });
 
+  it.each([
+    { vars: {}, response: { prompt: 'stripped secret' }, expected: '[prompt stripped]' },
+    {
+      vars: {},
+      response: { metadata: { redteamFinalPrompt: 'stripped secret' } },
+      expected: '[prompt stripped]',
+    },
+    {
+      vars: {},
+      metadata: { redteamFinalPrompt: 'stripped secret' },
+      expected: '[prompt stripped]',
+    },
+    {
+      vars: { harmCategory: 'harm' },
+      response: { prompt: 'unselected actual' },
+      expected: '[prompt stripped]',
+    },
+    {
+      vars: { custom: 'custom seed', other: 'other' },
+      response: { prompt: 'unselected actual' },
+      expected: '[prompt stripped]',
+    },
+    {
+      vars: { query: '', prompt: '' },
+      response: { prompt: 'unselected actual' },
+      expected: '[prompt stripped]',
+    },
+  ])(
+    'retains prompt display eligibility for $vars',
+    async ({ vars, response, metadata, expected }) => {
+      const results = [false, true].map((pass, testIdx) => ({
+        ...createComponentMockResult(0, 'plugin1', pass),
+        testIdx,
+        vars: Object.freeze(vars as EvaluateResult['vars']),
+        response: { output: 'safe output', ...response },
+        prompt: { raw: '[prompt stripped]', label: 'stripped' },
+        metadata: { pluginId: 'plugin1', ...metadata },
+      })) as EvaluateResult[];
+      mockCallApiResponse({ data: createComponentMockEvalData(1, results) });
+      renderWithProviders(<App />);
+      await screen.findByTestId('overview-total');
+      const groups = reportGroupings.mock.lastCall![0];
+      expect(groups.failuresByPlugin.plugin1[0].prompt).toBe(expected);
+      expect(groups.passesByPlugin.plugin1[0].prompt).toBe(expected);
+      expect(results.map((result) => result.vars)).toEqual([vars, vars]);
+    },
+  );
+
+  it('uses runtime transform display variables without changing saved variables', async () => {
+    const results = [false, true].map((pass, testIdx) => ({
+      ...createComponentMockResult(0, 'plugin1', pass),
+      testIdx,
+      vars: Object.freeze({}),
+      response: {
+        output: 'safe output',
+        metadata: { transformDisplayVars: { prompt: 'runtime injection' } },
+      },
+    }));
+    mockCallApiResponse({ data: createComponentMockEvalData(1, results) });
+    renderWithProviders(<App />);
+    await screen.findByTestId('overview-total');
+    const groups = reportGroupings.mock.lastCall![0];
+    expect(groups.failuresByPlugin.plugin1[0].prompt).toBe('runtime injection');
+    expect(groups.passesByPlugin.plugin1[0].prompt).toBe('runtime injection');
+    expect(results.map((result) => result.vars)).toEqual([{}, {}]);
+  });
+
   it('searches actual attacks after switching targets and returning', async () => {
     const user = userEvent.setup();
     const results = [0, 1].flatMap((promptIdx) =>
