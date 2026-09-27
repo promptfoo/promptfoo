@@ -1255,7 +1255,7 @@ describe('JavaScript file references', () => {
       },
       false,
       0.75,
-      'Custom function returned true',
+      'Custom reason',
     ],
   ];
 
@@ -1378,7 +1378,7 @@ describe('JavaScript file references', () => {
       },
       false,
       0.75,
-      'Custom function returned true',
+      'Custom reason',
     ],
   ];
 
