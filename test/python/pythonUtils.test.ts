@@ -177,10 +177,11 @@ describe('Python Utils', () => {
       const result = await pythonUtils.getSysExecutable();
 
       expect(result).toBe('/usr/bin/python3.8');
-      expect(mockExecFileAsync).toHaveBeenCalledWith('python3', [
-        '-c',
-        'import sys; print(sys.executable)',
-      ]);
+      expect(mockExecFileAsync).toHaveBeenCalledWith(
+        'python3',
+        ['-c', 'import sys; print(sys.executable)'],
+        { timeout: 2500, killSignal: 'SIGKILL' },
+      );
 
       // Restore original platform
       Object.defineProperty(process, 'platform', { value: originalPlatform });
@@ -210,7 +211,10 @@ describe('Python Utils', () => {
 
       // Should skip WindowsApps and use the real Python installation
       expect(result).toBe('C:\\Python39\\python.exe');
-      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python']);
+      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python'], {
+        timeout: 2500,
+        killSignal: 'SIGKILL',
+      });
       // Verify that the non-WindowsApps path was validated
       expect(mockExecFileAsync).toHaveBeenCalledWith('C:\\Python39\\python.exe', ['--version'], {
         timeout: 2500,
@@ -239,12 +243,16 @@ describe('Python Utils', () => {
       const result = await pythonUtils.getSysExecutable();
 
       expect(result).toBe('C:\\Python39\\python.exe');
-      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python']);
+      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python'], {
+        timeout: 2500,
+        killSignal: 'SIGKILL',
+      });
       // Verify py launcher fallback was used
-      expect(mockExecFileAsync).toHaveBeenCalledWith('py', [
-        '-c',
-        'import sys; print(sys.executable)',
-      ]);
+      expect(mockExecFileAsync).toHaveBeenCalledWith(
+        'py',
+        ['-c', 'import sys; print(sys.executable)'],
+        { timeout: 2500, killSignal: 'SIGKILL' },
+      );
 
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     });
@@ -268,7 +276,10 @@ describe('Python Utils', () => {
       const result = await pythonUtils.getSysExecutable();
 
       expect(result).toBe('python');
-      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python']);
+      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python'], {
+        timeout: 2500,
+        killSignal: 'SIGKILL',
+      });
       // Verify the final fallback python --version was called
       expect(mockExecFileAsync).toHaveBeenCalledWith('python', ['--version'], {
         timeout: 2500,
@@ -318,12 +329,16 @@ describe('Python Utils', () => {
       const result = await pythonUtils.getSysExecutable();
 
       expect(result).toBe('C:\\Python39\\python.exe');
-      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python']);
+      expect(mockExecFileAsync).toHaveBeenCalledWith('where', ['python'], {
+        timeout: 2500,
+        killSignal: 'SIGKILL',
+      });
       // Verify py launcher fallback was used when where returned empty
-      expect(mockExecFileAsync).toHaveBeenCalledWith('py', [
-        '-c',
-        'import sys; print(sys.executable)',
-      ]);
+      expect(mockExecFileAsync).toHaveBeenCalledWith(
+        'py',
+        ['-c', 'import sys; print(sys.executable)'],
+        { timeout: 2500, killSignal: 'SIGKILL' },
+      );
 
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     });

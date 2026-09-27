@@ -66,7 +66,10 @@ export const state: {
  */
 async function tryWindowsWhere(): Promise<string | null> {
   try {
-    const result = await execFileAsync('where', ['python']);
+    const result = await execFileAsync('where', ['python'], {
+      timeout: 2500,
+      killSignal: 'SIGKILL',
+    });
     const output = result.stdout.trim();
 
     // Handle empty output
@@ -109,7 +112,10 @@ async function tryWindowsWhere(): Promise<string | null> {
 async function tryPythonCommands(commands: string[]): Promise<string | null> {
   for (const cmd of commands) {
     try {
-      const result = await execFileAsync(cmd, ['-c', 'import sys; print(sys.executable)']);
+      const result = await execFileAsync(cmd, ['-c', 'import sys; print(sys.executable)'], {
+        timeout: 2500,
+        killSignal: 'SIGKILL',
+      });
       const executablePath = result.stdout.trim();
       if (executablePath && executablePath !== 'None') {
         // On Windows, ensure .exe suffix if missing (but only for Windows-style paths)
