@@ -57,19 +57,21 @@ describe('effective proxy environment', () => {
     'ws_proxy',
     'WSS_PROXY',
     'wss_proxy',
-  ])('preserves parsed %s routing and empty masks', (name) => {
+  ])('excludes unsupported %s from config while retaining resolver compatibility', (name) => {
     const protocol = name.toLowerCase().replace('_proxy', '');
     const restoreHost = mockProcessEnv({
       [`${protocol}_proxy`]: 'http://host-proxy.example:8080',
     });
     try {
       for (const selected of ['http://selected-proxy.example:8080', '']) {
+        const env = { [name]: selected, ALL_PROXY: '', NO_PROXY: '' };
         const job = CreateJobRequestSchema.parse({
           providers: ['echo'],
           prompts: ['fixture'],
-          env: { [name]: selected, ALL_PROXY: '', NO_PROXY: '' },
+          env,
         });
-        cliState.withEnv(job.env, () => {
+        expect(job.env).toEqual({ ALL_PROXY: '', NO_PROXY: '' });
+        cliState.withEnv(env, () => {
           expect(getProxyForUrl(`${protocol}://external.example`)).toBe(selected);
         });
       }
