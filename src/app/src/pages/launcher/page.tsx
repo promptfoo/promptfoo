@@ -11,7 +11,7 @@ import { usePageMeta } from '@app/hooks/usePageMeta';
 import { cn } from '@app/lib/utils';
 import useApiConfig from '@app/stores/apiConfig';
 import { CheckCircle } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import ThemeSelector from '../../components/ThemeSelector';
 
 const DEFAULT_LOCAL_API_URL = 'http://localhost:15500';
