@@ -211,6 +211,12 @@ describe.each([
 });
 
 describe.each(['jailbreak', 'jailbreak:meta'])('%s layer transform boundary', (step) => {
+  it('preserves literal template delimiters through an attack transformation', async () => {
+    const calls = await attack(step, { query: '{{ 7 * 7 }} {% set x = 1 %}' }, 'query', ['rot13']);
+    for (const call of calls) {
+      expect(call.prompt).toBe('{"dhrel":"{{ 7 * 7 }} {% frg k = 1 %}"}');
+    }
+  });
   it('retains the full attack transformation when inputs contains injectVar', async () => {
     const fields = { query: 'Synthetic plain attack' };
     const calls = await attack(step, fields, 'query', ['base64']);

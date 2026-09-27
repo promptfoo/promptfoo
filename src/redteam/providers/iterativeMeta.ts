@@ -414,7 +414,7 @@ export async function runMetaAgentRedteam({
       ...iterationVars,
       [injectVar]: escapedAttackPrompt,
       ...(currentRenderInputVars || {}),
-      ...(perTurnLayers.length > 0 && { [injectVar]: escapedAttackPrompt }),
+      ...(perTurnLayers.length > 0 && { [injectVar]: finalAttackPrompt }),
     };
 
     const targetPrompt = await renderPrompt(
