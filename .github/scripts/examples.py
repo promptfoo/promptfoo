@@ -25,11 +25,11 @@ class Example:
     docker_images: tuple[str, ...] = ()
     minimums: bool = False
     seed: tuple[str, ...] = ()
-    extra_requirements: tuple[str, ...] = ()
     check_dependencies: bool = True
+    extra_requirements: tuple[str, ...] = ()
 
 
-# Register deterministic tests here; keep example-specific assertions beside the example.
+# Keep small helpers beside examples and larger CLI harnesses under scripts/tests.
 EXAMPLES = {
     "docker-sandbox": Example(
         "examples/integration-docker/code-generation-sandbox",
@@ -60,6 +60,44 @@ EXAMPLES = {
         ("3.14",),
         ((".", "dependencies_test.py"),),
         minimums=True,
+    ),
+    "openai-agents": Example(
+        "examples/openai-agents",
+        ("3.12", "3.14"),
+        (
+            ("tests", "test_sdk.py"),
+            (".", "*_test.py"),
+            ("../../.github/scripts/tests/openai_agents", "test_cli.py"),
+        ),
+        node=True,
+    ),
+    "openai-agents-minimums": Example(
+        "examples/openai-agents",
+        ("3.10",),
+        (
+            ("tests", "test_sdk.py"),
+            (".", "*_test.py"),
+            ("../../.github/scripts/tests/openai_agents", "test_cli.py"),
+        ),
+        node=True,
+        minimums=True,
+        extra_requirements=("openai>=3.0,<4",),
+    ),
+    "openai-agents-otel": Example(
+        "examples/openai-agents",
+        ("3.12",),
+        (
+            ("tests", "test_sdk.py"),
+            (".", "*_test.py"),
+            ("../../.github/scripts/tests/openai_agents", "test_cli.py"),
+        ),
+        node=True,
+        minimums=True,
+        extra_requirements=(
+            "opentelemetry-api>=1.44,<2",
+            "opentelemetry-sdk>=1.44,<2",
+            "opentelemetry-exporter-otlp-proto-http>=1.44,<2",
+        ),
     ),
     "google-adk": Example(
         "examples/integration-google-adk",
@@ -198,7 +236,9 @@ def run_example(name: str) -> None:
         python = environment / (
             "Scripts/python.exe" if os.name == "nt" else "bin/python"
         )
-        env = dict(os.environ, PROMPTFOO_PYTHON=str(python))
+        env = dict(
+            os.environ, PROMPTFOO_PYTHON=str(python), PROMPTFOO_EXAMPLE_PROFILE=name
+        )
 
         def run(*command: str) -> None:
             print(f"+ {shlex.join(command)}", flush=True)
@@ -212,7 +252,13 @@ def run_example(name: str) -> None:
         install = [*pip, "-r", str(requirements), *example.extra_requirements]
         if example.minimums:
             constraints = Path(temporary) / "minimums.txt"
-            constraints.write_text(minimum_constraints(requirements.read_text()))
+            constraints.write_text(
+                minimum_constraints(
+                    requirements.read_text()
+                    + "\n"
+                    + "\n".join(example.extra_requirements)
+                )
+            )
             install.extend(("-c", str(constraints)))
         run(*install)
         if example.check_dependencies:

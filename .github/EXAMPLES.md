@@ -2,7 +2,8 @@
 
 `workflows/examples.yml` runs credential-free example regressions, with one isolated
 job per registered example/runtime and one aggregate `Examples` status check. It
-replaces the Docker-only, Python-provider-only, and Google ADK workflows. Core Python wrapper
+replaces the Docker-only, Python-provider-only, OpenAI Agents, and Google ADK
+workflows. Core Python wrapper
 tests stay in `main.yml`.
 
 PRs run the affected registered examples. Changes to `src/`, build scripts/config,
@@ -83,3 +84,32 @@ The NUL-delimited merge-base selector follows the approach in PR #11173. That PR
 broader manifest-installation checks are separate from these behavior tests; an
 installation pass does not demonstrate that an example runs correctly. As other
 example PRs land, register their tests here instead of adding another workflow.
+
+## OpenAI Agents
+
+After building the local CLI, run the SDK example profiles:
+
+```bash
+python3.12 .github/scripts/examples.py run openai-agents
+python3.14 .github/scripts/examples.py run openai-agents
+python3.10 .github/scripts/examples.py run openai-agents-minimums
+python3.12 .github/scripts/examples.py run openai-agents-otel
+```
+
+Default profiles install only the example's SDK requirement. The minimum profile
+pins the declared SDK floor and its OpenAI 3.0 lower bound. The optional profile
+independently pins the SDK and all three documented OpenTelemetry 1.44 floors.
+Constructor/session tests run in a separate process from the helper tests, which
+stub SDK modules. The larger CLI harness lives in `scripts/tests/openai_agents`.
+
+The real SDK calls a loopback Responses fixture, then runs the actual tools,
+handoffs, SQLite conversation history, Unix-local workspace, and allowlisted skill
+commands. All six original cases and 65 assertions run unchanged, including the
+goal-success judge (also routed locally). HTTP errors, failed/incomplete responses,
+SDK refusals, and wrong tool arguments must fail. SDK JSON spans and optional
+wrapper protobuf spans are forwarded to the real Promptfoo OTLP receiver.
+
+These checks prove runtime contracts, not hosted-model quality or an OS security
+boundary. The Unix-local workflow executes commands on the test host. The harness
+uses synthetic files, an allowlisted environment, dummy credentials, local model
+and trace endpoints, an isolated copy/database, and bounded child process groups.
