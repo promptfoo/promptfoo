@@ -1280,8 +1280,8 @@ function getProviderMetricsForErrorResponse(
 
   // A response transform may be responsible for sanitizing provider output. If it throws,
   // retain accounting and session context without persisting the untransformed payload.
-  const { cached, cost, latencyMs, metadata, sessionId, tokenUsage } = response;
-  return { cached, cost, latencyMs, metadata, sessionId, tokenUsage };
+  const { cached, cost, incurredCost, latencyMs, metadata, sessionId, tokenUsage } = response;
+  return { cached, cost, incurredCost, latencyMs, metadata, sessionId, tokenUsage };
 }
 
 /** Persist both the logical evaluation footprint and the work actually incurred. */
@@ -1848,6 +1848,7 @@ async function runEvalInternal({
             }
           : metadata,
         cost: ret?.cost,
+        ...(ret?.incurredCost !== undefined && { incurredCost: ret.incurredCost }),
         tokenUsage: ret?.tokenUsage,
         response: getProviderMetricsForErrorResponse(ret?.response),
         ...getTraceLinkage(traceContext, evalId),

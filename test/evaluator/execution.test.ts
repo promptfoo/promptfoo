@@ -823,6 +823,8 @@ describeEvaluator('evaluator execution control', () => {
         response: expect.objectContaining({
           cached: true,
           cost: 0.05,
+          // A cache hit incurs nothing, even though it reports what the call cost.
+          incurredCost: 0,
           latencyMs: 321,
           sessionId: 'provider-response-session',
           tokenUsage: expectedUsage,
@@ -845,6 +847,7 @@ describeEvaluator('evaluator execution control', () => {
             testErrorCount: 1,
             totalLatencyMs: 321,
             cost: 0.05,
+            incurredCost: 0,
             tokenUsage: expectedUsage,
           }),
         }),
