@@ -290,30 +290,16 @@ describeEvaluator('evaluator prompt and provider routing', () => {
       const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
       await evaluate(testSuite, evalRecord, {});
 
-      expect(firstProvider.callApi).toHaveBeenNthCalledWith(
-        1,
+      // Each column is its own conversation group, so turns within a column stay
+      // ordered while the two columns may interleave with each other.
+      expect(vi.mocked(firstProvider.callApi).mock.calls.map(([prompt]) => prompt)).toEqual([
         'now=first',
-        expect.anything(),
-        undefined,
-      );
-      expect(secondProvider.callApi).toHaveBeenNthCalledWith(
-        1,
-        'now=first',
-        expect.anything(),
-        undefined,
-      );
-      expect(firstProvider.callApi).toHaveBeenNthCalledWith(
-        2,
         'prior=First provider output now=second',
-        expect.anything(),
-        undefined,
-      );
-      expect(secondProvider.callApi).toHaveBeenNthCalledWith(
-        2,
+      ]);
+      expect(vi.mocked(secondProvider.callApi).mock.calls.map(([prompt]) => prompt)).toEqual([
+        'now=first',
         'prior=Second provider output now=second',
-        expect.anything(),
-        undefined,
-      );
+      ]);
     },
   );
 
@@ -341,10 +327,15 @@ describeEvaluator('evaluator prompt and provider routing', () => {
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
 
-    expect(provider.callApi.mock.calls.map(([prompt]) => prompt)).toEqual([
+    const renderedPrompts = provider.callApi.mock.calls.map(([prompt]) => String(prompt));
+    // Each prompt column is its own conversation group, so turns within a column stay
+    // ordered while the two columns may interleave with each other.
+    expect(renderedPrompts.filter((prompt) => prompt.startsWith('first'))).toEqual([
       'first now=one',
-      'second now=one',
       'first prior=first now=one now=two',
+    ]);
+    expect(renderedPrompts.filter((prompt) => prompt.startsWith('second'))).toEqual([
+      'second now=one',
       'second prior=second now=one now=two',
     ]);
   });

@@ -315,27 +315,37 @@ describeEvaluator('evaluator scenarios and conversations', () => {
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(4);
 
+    const renderedPrompts = mockApiProvider.callApi.mock.calls.map(([prompt]) => String(prompt));
+
     // First scenario, first question - no history
-    const firstCall = mockApiProvider.callApi.mock.calls[0][0];
+    const firstCall = renderedPrompts.find((prompt) =>
+      prompt.includes('Current: Recommend a sci-fi book'),
+    );
     expect(firstCall).toContain('Current: Recommend a sci-fi book');
     expect(firstCall).not.toContain('Previous:');
 
     // First scenario, second question - should have first scenario's history
-    const secondCall = mockApiProvider.callApi.mock.calls[1][0];
+    const secondCall = renderedPrompts.find((prompt) =>
+      prompt.includes('Current: Tell me more about it'),
+    );
     expect(secondCall).toContain('Previous: ');
     expect(secondCall).toContain('Recommend a sci-fi book');
     expect(secondCall).toContain('Current: Tell me more about it');
 
     // Second scenario, first question - should NOT have first scenario's history
     // This is the key assertion that verifies the fix for issue #384
-    const thirdCall = mockApiProvider.callApi.mock.calls[2][0];
+    const thirdCall = renderedPrompts.find((prompt) =>
+      prompt.includes('Current: Suggest a pasta recipe'),
+    );
     expect(thirdCall).toContain('Current: Suggest a pasta recipe');
     expect(thirdCall).not.toContain('Previous:');
     expect(thirdCall).not.toContain('sci-fi');
     expect(thirdCall).not.toContain('Recommend');
 
     // Second scenario, second question - should only have second scenario's history
-    const fourthCall = mockApiProvider.callApi.mock.calls[3][0];
+    const fourthCall = renderedPrompts.find((prompt) =>
+      prompt.includes('Current: How long does it take?'),
+    );
     expect(fourthCall).toContain('Previous: ');
     expect(fourthCall).toContain('Suggest a pasta recipe');
     expect(fourthCall).toContain('Current: How long does it take?');
