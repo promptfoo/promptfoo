@@ -26,7 +26,7 @@ SCRIPT = Path(__file__).with_name("examples.py")
 class SelectionTests(unittest.TestCase):
     def test_full_run_preserves_every_registered_runtime(self):
         rows = select_examples(None)
-        self.assertEqual(len(rows), 8)
+        self.assertEqual(len(rows), 10)
         self.assertEqual(
             [(row["example"], row["python"]) for row in rows],
             [
@@ -38,6 +38,8 @@ class SelectionTests(unittest.TestCase):
                 ("openai-agents", "3.14"),
                 ("openai-agents-minimums", "3.10"),
                 ("openai-agents-otel", "3.12"),
+                ("f-score", "3.10"),
+                ("f-score", "3.14"),
             ],
         )
 
@@ -69,6 +71,19 @@ class SelectionTests(unittest.TestCase):
                 (ROOT / example.directory / example.suites[2][0]).resolve(),
                 ROOT / ".github/scripts/tests/openai_agents",
             )
+
+    def test_fscore_changes_select_its_python_only_dependency_suite(self):
+        for filename in ("prepare_data.py", "dependencies_test.py", "requirements.txt"):
+            with self.subTest(filename=filename):
+                self.assertEqual(
+                    select_examples([f"examples/eval-f-score/{filename}"]),
+                    [
+                        {"example": "f-score", "python": "3.10", "node": False},
+                        {"example": "f-score", "python": "3.14", "node": False},
+                    ],
+                )
+        self.assertEqual(EXAMPLES["f-score"].suites, ((".", "dependencies_test.py"),))
+        self.assertEqual(select_examples(["examples/eval-f-score-other/file.py"]), [])
 
     def test_shared_changes_run_all_profiles(self):
         for path in (

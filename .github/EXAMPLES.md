@@ -93,3 +93,18 @@ These checks prove runtime contracts, not hosted-model quality or an OS security
 boundary. The Unix-local workflow executes commands on the test host. The harness
 uses synthetic files, an allowlisted environment, dummy credentials, local model
 and trace endpoints, an isolated copy/database, and bounded child process groups.
+
+## F-Score
+
+Run the offline dataset preparation and local metadata path regressions without a
+Node build or model credentials:
+
+```bash
+python3.10 .github/scripts/examples.py run f-score
+python3.14 .github/scripts/examples.py run f-score
+```
+
+Both runtimes install the example requirements, check dependency consistency, and
+run the two existing Python tests. The three TypeScript metric regressions in
+`test/examples/evalFScore.test.ts` remain part of the normal repository test suite;
+they are not run by this Python-only profile.

@@ -99,6 +99,11 @@ EXAMPLES = {
             "opentelemetry-exporter-otlp-proto-http>=1.44,<2",
         ),
     ),
+    "f-score": Example(
+        "examples/eval-f-score",
+        ("3.10", "3.14"),
+        ((".", "dependencies_test.py"),),
+    ),
 }
 
 # Shared runtime changes can break examples without changing their own directories.
