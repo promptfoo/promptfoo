@@ -26,7 +26,7 @@ SCRIPT = Path(__file__).with_name("examples.py")
 class SelectionTests(unittest.TestCase):
     def test_full_run_preserves_every_registered_runtime(self):
         rows = select_examples(None)
-        self.assertEqual(len(rows), 4)
+        self.assertEqual(len(rows), 8)
         self.assertEqual(
             [(row["example"], row["python"]) for row in rows],
             [
@@ -34,6 +34,10 @@ class SelectionTests(unittest.TestCase):
                 ("docker-sandbox", "3.14"),
                 ("python-provider-upgrade", "3.10"),
                 ("python-provider-minimums", "3.14"),
+                ("openai-agents", "3.12"),
+                ("openai-agents", "3.14"),
+                ("openai-agents-minimums", "3.10"),
+                ("openai-agents-otel", "3.12"),
             ],
         )
 
@@ -45,12 +49,34 @@ class SelectionTests(unittest.TestCase):
         )
         self.assertTrue(all(not row["node"] for row in rows))
 
+    def test_agents_changes_select_all_isolated_profiles(self):
+        rows = select_examples(["examples/openai-agents/requirements.txt"])
+        self.assertEqual(
+            [(row["example"], row["python"]) for row in rows],
+            [
+                ("openai-agents", "3.12"),
+                ("openai-agents", "3.14"),
+                ("openai-agents-minimums", "3.10"),
+                ("openai-agents-otel", "3.12"),
+            ],
+        )
+        self.assertTrue(all(row["node"] for row in rows))
+        for name in ("openai-agents", "openai-agents-minimums", "openai-agents-otel"):
+            example = EXAMPLES[name]
+            self.assertEqual(example.suites[0], ("tests", "test_sdk.py"))
+            self.assertEqual(example.suites[1], (".", "*_test.py"))
+            self.assertEqual(
+                (ROOT / example.directory / example.suites[2][0]).resolve(),
+                ROOT / ".github/scripts/tests/openai_agents",
+            )
+
     def test_shared_changes_run_all_profiles(self):
         for path in (
             "src/python/wrapper.py",
             "src/evaluator.ts",
             "src/tracing/store.ts",
             ".github/scripts/examples.py",
+            ".github/scripts/tests/openai_agents/fixture.py",
             ".github/workflows/examples.yml",
             "package-lock.json",
             ".nvmrc",
@@ -177,7 +203,10 @@ class GitSelectionTests(unittest.TestCase):
                 removed,
             },
         )
-        self.assertEqual(select_examples(paths), select_examples(None))
+        self.assertEqual(
+            {row["example"] for row in select_examples(paths)},
+            {"docker-sandbox", "python-provider-upgrade", "python-provider-minimums"},
+        )
         self.assertEqual(changed_paths(head, head, self.root), [])
 
     def test_invalid_or_missing_revisions_fail_closed(self):
@@ -188,6 +217,34 @@ class GitSelectionTests(unittest.TestCase):
 
 
 class RunnerTests(unittest.TestCase):
+    def test_agents_optional_requirements_do_not_leak_into_default(self):
+        for name in ("openai-agents", "openai-agents-minimums", "openai-agents-otel"):
+            with (
+                self.subTest(name=name),
+                patch(
+                    "examples.sys.version_info",
+                    types.SimpleNamespace(
+                        major=3, minor=10 if name.endswith("minimums") else 12
+                    ),
+                ),
+                patch("examples.venv.EnvBuilder.create"),
+                patch("examples.subprocess.run") as run,
+                patch("examples.Path.is_file", return_value=True),
+            ):
+                run_example(name)
+            commands = [call.args[0] for call in run.call_args_list]
+            self.assertEqual(len(commands), 5)
+            self.assertEqual(commands[1][1:], ("-m", "pip", "check"))
+            self.assertEqual(
+                [command[-1] for command in commands[2:]],
+                ["test_sdk.py", "*_test.py", "test_cli.py"],
+            )
+            self.assertEqual(
+                any("opentelemetry-sdk" in arg for arg in commands[0]),
+                name.endswith("otel"),
+            )
+            self.assertEqual("-c" in commands[0], name != "openai-agents")
+
     def test_minimums_retain_original_bounds(self):
         self.assertEqual(
             minimum_constraints("# comment\nanyio>=4.14.2,<5\nopenai>=3.19.2,<4\n"),
