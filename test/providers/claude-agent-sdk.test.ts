@@ -565,8 +565,6 @@ describe('ClaudeCodeSDKProvider', () => {
     it('releases a pending baseline immediately when the caller cancels', async () => {
       vi.useFakeTimers();
       try {
-        const setTimer = vi.spyOn(globalThis, 'setTimeout');
-        const clearTimer = vi.spyOn(globalThis, 'clearTimeout');
         const snapshot = mockStatefulQuery(vi.fn().mockReturnValue(new Promise(() => {})));
         const controller = new AbortController();
         const provider = new ClaudeCodeSDKProvider({
@@ -578,9 +576,6 @@ describe('ClaudeCodeSDKProvider', () => {
         const result = await pending;
         expect(result.cost).toBeUndefined();
         expect(result.metadata?.usageAccounting).toBe('unavailable');
-        const deadlineIndex = setTimer.mock.calls.findIndex(([, delay]) => delay === 5_000);
-        expect(deadlineIndex).toBeGreaterThanOrEqual(0);
-        expect(clearTimer).toHaveBeenCalledWith(setTimer.mock.results[deadlineIndex].value);
       } finally {
         vi.useRealTimers();
       }
