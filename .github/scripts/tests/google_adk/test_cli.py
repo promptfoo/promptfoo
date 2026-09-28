@@ -18,9 +18,68 @@ ROOT = Path(__file__).resolve().parents[4]
 EXAMPLE = ROOT / "examples/integration-google-adk"
 
 
+def isolated_environment_paths(work: Path) -> dict[str, str]:
+    home = work / "home"
+    state = home / ".local" / "state"
+    state.mkdir(parents=True)
+    temporary = work / "tmp"
+    temporary.mkdir()
+    env_file = work / "empty.env"
+    env_file.touch()
+    return {
+        "HOME": str(home),
+        "USERPROFILE": str(home),
+        "XDG_STATE_HOME": str(state),
+        "TMPDIR": str(temporary),
+        # envars loads defaults before main processes the explicit --env-file flag.
+        "DOTENV_PATH": str(env_file),
+    }
+
+
 class GoogleAdkCliTest(unittest.TestCase):
     backend = "gemini"
     cli = ("node", str(ROOT / "dist/src/entrypoint.js"))
+
+    def test_import_time_defaults_cannot_reload_checkout_settings(self):
+        with tempfile.TemporaryDirectory(prefix="promptfoo-adk-env-") as directory:
+            work = Path(directory)
+            checkout = work / "synthetic-checkout"
+            checkout.mkdir()
+            (checkout / ".env").write_text(
+                "PROMPTFOO_QA_SYNTHETIC_SECRET=fixture-secret\n"
+                "OPENAI_API_HOST=fixture.invalid/v1\n"
+            )
+            env = {"PATH": os.environ["PATH"], **isolated_environment_paths(work)}
+            for key in ("HOME", "USERPROFILE", "XDG_STATE_HOME", "TMPDIR"):
+                self.assertTrue(Path(env[key]).is_relative_to(work))
+                self.assertTrue(Path(env[key]).is_dir())
+            command = [
+                "node",
+                "--import",
+                str(ROOT / "node_modules/tsx/dist/loader.mjs"),
+                "--input-type=module",
+                "-e",
+                "import {pathToFileURL} from 'node:url'; "
+                "await import(pathToFileURL(process.argv[1]).href); "
+                "process.stdout.write(JSON.stringify({"
+                "secret: process.env.PROMPTFOO_QA_SYNTHETIC_SECRET ?? null, "
+                "host: process.env.OPENAI_API_HOST ?? null}));",
+                str(ROOT / "src/envars.ts"),
+            ]
+            result = subprocess.check_output(
+                command, cwd=checkout, env=env, text=True, timeout=20
+            )
+            self.assertEqual(json.loads(result), {"secret": None, "host": None})
+
+            # The old startup defaults import both values from this same fixture.
+            del env["DOTENV_PATH"]
+            control = subprocess.check_output(
+                command, cwd=checkout, env=env, text=True, timeout=20
+            )
+            self.assertEqual(
+                json.loads(control),
+                {"secret": "fixture-secret", "host": "fixture.invalid/v1"},
+            )
 
     def run_configs(self, failure=None) -> None:
         requests = []
@@ -180,15 +239,15 @@ class GoogleAdkCliTest(unittest.TestCase):
                 env = {
                     key: value
                     for key, value in os.environ.items()
-                    if key in ("PATH", "HOME", "SYSTEMROOT", "TMPDIR", "LANG", "LC_ALL")
+                    if key in ("PATH", "SYSTEMROOT", "LANG", "LC_ALL")
                 }
+                env.update(isolated_environment_paths(work))
                 # No inherited SDK credentials, model routing, proxies or trace exporters.
                 for proxy in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
                     env[proxy] = env[proxy.lower()] = ""
                 env["NO_PROXY"] = env["no_proxy"] = "*"
                 env.update(
                     GOOGLE_API_KEY="local-test-key",
-                    # Existing values also prevent root dotenv from changing routing.
                     ADK_MODEL=(
                         "gemini-2.5-flash"
                         if backend == "gemini"
@@ -211,8 +270,6 @@ class GoogleAdkCliTest(unittest.TestCase):
                     PROMPTFOO_DISABLE_SHARING="true",
                     PROMPTFOO_PASS_RATE_THRESHOLD="100",
                 )
-                env_file = work / "empty.env"
-                env_file.touch()
                 for name in ("promptfooconfig.yaml", "promptfooconfig.workflow.yaml"):
                     with self.subTest(config=name):
                         with socket.socket() as available:
@@ -242,7 +299,7 @@ class GoogleAdkCliTest(unittest.TestCase):
                                 "--no-cache",
                                 "--no-share",
                                 "--env-file",
-                                str(env_file),
+                                env["DOTENV_PATH"],
                                 "-j",
                                 "1",
                                 "-o",
