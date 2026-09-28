@@ -1,13 +1,17 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Compare AI models with AI/ML API
 
-providers:
-  - aimlapi:chat:deepseek-r1
-  - aimlapi:chat:openai/gpt-5-mini
-  - aimlapi:chat:anthropic/claude-4-sonnet
-
 prompts:
   - 'Tell me a joke about {{topic}}'
+
+providers:
+  - aimlapi:chat:deepseek/deepseek-v4-pro
+  - aimlapi:chat:openai/gpt-5.6-luna
+  - aimlapi:chat:anthropic/claude-sonnet-5
+
+defaultTest:
+  options:
+    provider: aimlapi:chat:openai/gpt-5.6-luna
 
 tests:
   - vars:

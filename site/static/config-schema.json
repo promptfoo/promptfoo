@@ -264,6 +264,12 @@
         "AZURE_TOKEN_SCOPE": {
           "type": "string"
         },
+        "CDP_DOMAIN": {
+          "type": "string"
+        },
+        "CDP_TOKEN": {
+          "type": "string"
+        },
         "CLAUDE_CODE_USE_BEDROCK": {
           "type": "string"
         },
@@ -300,6 +306,9 @@
         "DATABRICKS_WORKSPACE_URL": {
           "type": "string"
         },
+        "DEEPSEEK_API_KEY": {
+          "type": "string"
+        },
         "DOCKER_MODEL_RUNNER_BASE_URL": {
           "type": "string"
         },
@@ -307,6 +316,18 @@
           "type": "string"
         },
         "ELEVENLABS_API_KEY": {
+          "type": "string"
+        },
+        "ENVOY_API_BASE_URL": {
+          "type": "string"
+        },
+        "ENVOY_API_KEY": {
+          "type": "string"
+        },
+        "F5_API_BASE_URL": {
+          "type": "string"
+        },
+        "F5_API_KEY": {
           "type": "string"
         },
         "FAL_KEY": {
@@ -382,6 +403,9 @@
           "type": "string"
         },
         "LITELLM_API_BASE": {
+          "type": "string"
+        },
+        "LITELLM_API_KEY": {
           "type": "string"
         },
         "LLAMA_BASE_URL": {
@@ -517,6 +541,9 @@
           "type": "string"
         },
         "QUIVERAI_API_KEY": {
+          "type": "string"
+        },
+        "QWAK_TOKEN": {
           "type": "string"
         },
         "REPLICATE_API_KEY": {

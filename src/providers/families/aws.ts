@@ -227,16 +227,11 @@ export const awsProviderFactories: ProviderFactory[] = [
         return new SageMakerCompletionProvider(modelType, providerOptions);
       }
 
-      // Handle 'sagemaker:<model-type>:<endpoint>'. JumpStart models are selected
-      // either by the explicit `jumpstart` model type or by an endpoint name
-      // containing 'jumpstart'; every other model type passes through unchanged.
-      const resolvedModelType =
-        endpointName.includes('jumpstart') || modelType === 'jumpstart' ? 'jumpstart' : modelType;
       return new SageMakerCompletionProvider(endpointName, {
         ...providerOptions,
         config: {
           ...providerOptions.config,
-          modelType: resolvedModelType,
+          modelType,
         },
       });
     },

@@ -153,7 +153,7 @@ async function processPrompt(
     for (const globbedFilePath of globbedPath) {
       const rawPath = functionName ? `${globbedFilePath}:${functionName}` : globbedFilePath;
       const processedPrompts = await processPrompt(
-        { raw: rawPath },
+        { raw: rawPath, config: prompt.config },
         basePath,
         maxRecursionDepth - 1,
       );

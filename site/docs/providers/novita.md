@@ -48,15 +48,10 @@ tests:
       topic: retrieval augmented generation
 ```
 
-Standard OpenAI-compatible provider options such as `temperature`, `max_tokens`,
-and `top_p` are forwarded through the shared provider implementation.
+Novita accepts OpenAI options such as `temperature`, `max_tokens`, and `top_p`.
+Chat and completion requests default to `temperature: 1`; set it to `0` for less variation.
 
-:::note
-For chat and completion models, Novita defaults `temperature` to `1` when you do not set it —
-unlike most providers, which default to `0`. Set `temperature: 0` explicitly for reproducible
-evals.
-::: Promptfoo
-uses Novita's documented `https://api.novita.ai/openai/v1` base URL by default.
+Promptfoo uses `https://api.novita.ai/openai/v1` by default.
 For an OpenAI-compatible proxy or test server, set `apiBaseUrl` explicitly:
 
 ```yaml

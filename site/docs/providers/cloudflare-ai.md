@@ -7,8 +7,6 @@ description: Configure Cloudflare Workers AI chat and embedding models for evals
 
 This provider connects to Cloudflare Workers AI [text-generation and embedding models](https://developers.cloudflare.com/workers-ai/models/) through its OpenAI-compatible API.
 
-The provider uses Cloudflare's OpenAI-compatible API endpoints, making it easy to migrate between OpenAI and Cloudflare AI or use them interchangeably.
-
 ## Required Configuration
 
 Set your Cloudflare account ID and API key as environment variables:

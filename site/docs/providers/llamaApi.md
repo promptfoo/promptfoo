@@ -24,7 +24,7 @@ but requests to the retired endpoint will not succeed.
 
 ## Migrating an existing config
 
-Model names and credentials are not portable between hosts, so set both:
+Replace `llamaapi:` with the new host's model ID and set that host's credentials. For Groq, set `GROQ_API_KEY`:
 
 ```yaml
 providers:
@@ -32,6 +32,4 @@ providers:
   - id: groq:<model-from-groq-catalog>
 ```
 
-Pick the model id from your chosen host's catalog — each host names Llama models differently, and
-availability varies by account tier. See the [provider list](./index.md) for every host that
-serves Llama models.
+Use the model ID from your chosen host's catalog. See the [provider list](./index.md) for more options.

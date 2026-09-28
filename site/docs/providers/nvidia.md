@@ -41,9 +41,7 @@ providers:
   - nvidia:nvidia/nemotron-3-super-120b-a12b
 ```
 
-There is no subtype segment. Unlike some other providers, `nvidia:chat:<model>` is rejected, as are
-`completion`, `embedding`, `embeddings`, `image`, `moderation`, `realtime`, and `responses`. Each
-fails with `Unsupported NVIDIA NIM provider subtype`.
+Use `nvidia:<model>` without a subtype. `nvidia:chat:<model>`, `nvidia:embedding:<model>`, and other subtype forms are rejected.
 
 Standard OpenAI-compatible parameters are passed through:
 

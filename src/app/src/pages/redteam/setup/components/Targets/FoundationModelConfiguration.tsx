@@ -333,8 +333,8 @@ const FoundationModelConfiguration = ({
       },
       openrouter: {
         name: 'OpenRouter',
-        defaultModel: 'openrouter:openai/gpt-5.4',
-        placeholder: 'openrouter:openai/gpt-5.4, openrouter:anthropic/claude-opus-4.7',
+        defaultModel: 'openrouter:openai/gpt-6-sol',
+        placeholder: 'openrouter:openai/gpt-6-sol, openrouter:anthropic/claude-opus-4.7',
         docUrl: 'https://www.promptfoo.dev/docs/providers/openrouter',
         envVar: 'OPENROUTER_API_KEY',
       },

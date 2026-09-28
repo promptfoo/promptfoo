@@ -13,6 +13,7 @@ import {
   getAuthQueryParams,
   getOAuthTokenWithExpiry,
   renderAuthVars,
+  sanitizeMcpToolData,
 } from './util';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
@@ -442,8 +443,9 @@ export class MCPClient {
   }
 
   async callTool(name: string, args: Record<string, unknown>): Promise<MCPToolResult> {
-    return await withGenAIToolSpan({ name, arguments: args, resultFormat: 'mcp' }, () =>
-      this.callToolInternal(name, args),
+    return await withGenAIToolSpan(
+      { name, arguments: sanitizeMcpToolData(args), resultFormat: 'mcp' },
+      () => this.callToolInternal(name, args),
     );
   }
 
