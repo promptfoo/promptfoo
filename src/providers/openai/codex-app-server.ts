@@ -840,10 +840,12 @@ function resolveCodexLaunch(
   if (process.platform !== 'win32') {
     return { command, args };
   }
+  // Search PATH like a shell, skipping relative entries that would resolve against the cwd.
   const resolved =
-    path.basename(command) === command && !path.extname(command)
+    path.basename(command) === command
       ? (env.PATH ?? env.Path ?? '')
           .split(path.delimiter)
+          .filter((dir) => path.isAbsolute(dir))
           .flatMap((dir) => ['.com', '.exe', '.cmd'].map((ext) => path.join(dir, command + ext)))
           .find((candidate) => fs.existsSync(candidate))
       : command;

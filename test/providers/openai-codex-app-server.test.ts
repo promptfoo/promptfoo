@@ -637,6 +637,18 @@ describe('OpenAICodexAppServerProvider', () => {
 
       expect(command).toBe('codex');
     });
+
+    it('ignores relative PATH entries that would resolve against the cwd', async () => {
+      const cwd = process.cwd();
+      process.chdir(npmBinDir);
+      try {
+        const [command] = await getSpawnCall({ working_dir: cwd, cli_env: { PATH: '.' } });
+
+        expect(command).toBe('codex');
+      } finally {
+        process.chdir(cwd);
+      }
+    });
   });
 
   it('emits a protocol turn span with nested usage when no turn/started notification arrives', async () => {
