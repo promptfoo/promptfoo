@@ -28,9 +28,10 @@ const throttled = () =>
 describe('provider operation retry ownership', () => {
   let registry: RateLimitRegistry;
   beforeEach(() => {
+    // Fake timers keep jittered retries fast without mocking Math.random, which
+    // source-map also uses to choose quicksort pivots while formatting SDK errors.
     vi.useFakeTimers();
     vi.stubEnv('PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER', 'false');
-    vi.spyOn(Math, 'random').mockReturnValue(0);
     registry = new RateLimitRegistry({ maxConcurrency: 4 });
   });
   afterEach(() => {
@@ -41,7 +42,10 @@ describe('provider operation retry ownership', () => {
     vi.unstubAllEnvs();
   });
 
-  async function invoke(provider: ApiProvider): Promise<ProviderResponse> {
+  async function invoke(
+    provider: ApiProvider,
+    advanceTimersByMs?: number,
+  ): Promise<ProviderResponse> {
     const pending = withCacheEnabled(false, () =>
       wrapProviderWithRateLimiting(provider, registry).callApi('hello', {
         vars: {},
@@ -49,7 +53,11 @@ describe('provider operation retry ownership', () => {
       }),
     );
     const handled = pending.catch((error: Error) => ({ error: error.message }));
-    await vi.runAllTimersAsync();
+    if (advanceTimersByMs === undefined) {
+      await vi.runAllTimersAsync();
+    } else {
+      await vi.advanceTimersByTimeAsync(advanceTimersByMs);
+    }
     return handled;
   }
 
@@ -382,7 +390,7 @@ describe('provider operation retry ownership', () => {
     vi.stubGlobal('fetch', fetch);
     const config = { apiKey: 'fixture', apiBaseUrl: 'https://retry.fixture.test', maxRetries: 1 };
     const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', { config });
-    const result = await invoke(provider);
+    const result = await invoke(provider, 120_000);
     expect(result.error).toContain('429');
     // The SDK's two retries and the scheduler's one retry remain separate.
     expect(fetch).toHaveBeenCalledTimes(6);
