@@ -577,7 +577,6 @@ export class N8nProvider implements ApiProvider {
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(
           `Error reading n8n response body: ${message}. HTTP ${response.status} ${response.statusText}`,
-          { cause: error },
         );
       }
       data = parseN8nResponseBody(rawText);
