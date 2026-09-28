@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
+import { beginEvalRun } from '../database/evalRun';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
 import { evaluate, PromptSuggestionsRejectedError } from '../evaluator';
 import {
@@ -60,7 +61,8 @@ import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { isUuid } from '../util/uuid';
-import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
+import { recalculatePromptMetrics } from './recalculatePromptMetrics';
+import { deleteErrorResults, getErrorResultIds } from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { FSWatcher } from 'chokidar';
 import type { Command } from 'commander';
@@ -939,24 +941,33 @@ async function doEvalWithEnv(
       process.on('SIGINT', sigintHandler);
     }
 
-    // Run the evaluation!!!!!!
     let ret;
+    let releaseRetryRun: ((completed?: boolean) => Promise<void>) | undefined;
+    let retryMetricsSaved = false;
     try {
+      if (retryErrors && evalRecord.persisted) {
+        releaseRetryRun = await beginEvalRun(evalRecord, () =>
+          recalculatePromptMetrics(evalRecord),
+        );
+      }
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
         filterRange: hasScenarios || resumeEval ? filterRange : undefined,
         abortSignal: evaluateOptions.abortSignal,
         isRedteam: Boolean(config.redteam),
       });
+      retryMetricsSaved = true;
 
       // Post-evaluation cleanup for retry-errors mode
       // SUCCESS: Now it's safe to delete the old ERROR results and recalculate metrics
       // Skip if evaluation was paused - no point cleaning up incomplete retry
       if (retryErrors && cliState._retryErrorResultIds && !paused) {
         const errorResultIds = cliState._retryErrorResultIds;
+        retryMetricsSaved = false;
         try {
-          await deleteErrorResults(errorResultIds);
+          await deleteErrorResults(errorResultIds, ret);
           await recalculatePromptMetrics(ret);
+          retryMetricsSaved = true;
           logger.debug(
             `Cleaned up ${errorResultIds.length} old ERROR results after successful retry`,
           );
@@ -974,6 +985,7 @@ async function doEvalWithEnv(
       }
     } finally {
       cleanupHandler(); // Always cleanup, even if evaluate() throws
+      await releaseRetryRun?.(retryMetricsSaved);
     }
 
     // Clear resume flag after run completes

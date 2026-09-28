@@ -1,6 +1,7 @@
-import { and, desc, eq, type SQL, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, type SQL, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
+import { EVAL_ACTIVE_RUNS_KEY } from '../database/evalRun';
 import { getDb } from '../database/index';
 import {
   datasetsTable,
@@ -96,6 +97,8 @@ interface MetadataKeyResult {
 export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
 }
+
+const EVAL_SUMMARY_TEST_COUNT_BATCH_SIZE = 500;
 
 /** Result from queries extracting variable keys with eval IDs */
 export interface VarKeyWithEvalIdResult {
@@ -672,22 +675,30 @@ export default class Eval {
     this.oldResults.table = table;
   }
 
-  async save() {
+  async save({ updatePrompts = true }: { updatePrompts?: boolean } = {}) {
     const db = await getDb();
     const updateObj: Record<string, unknown> = {
       config: sanitizeTracingConfigForPersistence(this.config),
       isRedteam: this.config.redteam !== undefined,
-      prompts: this.prompts,
       description: this.config.description,
       author: this.author,
       updatedAt: getCurrentTimestamp(),
       vars: Array.from(this.vars),
       runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),
     };
+    if (updatePrompts) {
+      updateObj.prompts = this.prompts;
+    }
 
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
-      updateObj.results = this.oldResults;
+      // Run ownership belongs to the database, including when a legacy table is replaced.
+      const runsPath = `$.${EVAL_ACTIVE_RUNS_KEY}`;
+      const results = JSON.stringify(this.oldResults);
+      updateObj.results = sql`CASE
+        WHEN json_valid(${evalsTable.results}) AND json_type(${evalsTable.results}, ${runsPath}) = 'object'
+        THEN json_set(${results}, ${runsPath}, json_extract(${evalsTable.results}, ${runsPath}))
+        ELSE json_remove(${results}, ${runsPath}) END`;
     } else if (
       this.durationMs !== undefined ||
       this.generationDurationMs !== undefined ||
@@ -1774,6 +1785,26 @@ export async function getEvalSummaries(
     .orderBy(desc(evalsTable.createdAt), desc(evalsTable.id))
     .all();
 
+  const distinctTestCountsByEvalId = new Map<string, number>();
+  for (let start = 0; start < results.length; start += EVAL_SUMMARY_TEST_COUNT_BATCH_SIZE) {
+    const evalIdBatch = results
+      .slice(start, start + EVAL_SUMMARY_TEST_COUNT_BATCH_SIZE)
+      .map((result) => result.evalId);
+    const rows = await db
+      .select({
+        evalId: evalResultsTable.evalId,
+        testCount: sql<number>`count(distinct ${evalResultsTable.testIdx})`,
+      })
+      .from(evalResultsTable)
+      .where(inArray(evalResultsTable.evalId, evalIdBatch))
+      .groupBy(evalResultsTable.evalId)
+      .all();
+
+    for (const row of rows) {
+      distinctTestCountsByEvalId.set(row.evalId, Number(row.testCount));
+    }
+  }
+
   /**
    * Deserialize the evals. A few things to note:
    *
@@ -1800,11 +1831,12 @@ export async function getEvalSummaries(
       );
     }) ?? [0];
 
-    // Derive the number of tests from the first prompt.
-    const testCount = testCounts.length > 0 ? testCounts[0] : 0;
-
-    // Test count * prompt count
-    const testRunCount = testCount * (result.prompts?.length ?? 0);
+    const metricDerivedTestCount = testCounts.length > 0 ? Math.max(...testCounts) : 0;
+    const testCount = Math.max(
+      distinctTestCountsByEvalId.get(result.evalId) ?? 0,
+      metricDerivedTestCount,
+    );
+    const testRunCount = testCounts.reduce((sum, count) => sum + count, 0);
 
     // Construct an array of providers
     const deserializedProviders = [];

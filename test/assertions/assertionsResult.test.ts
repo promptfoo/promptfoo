@@ -28,6 +28,7 @@ describe('AssertionsResult', () => {
         pass: true,
         score: 1,
         reason: 'No assertions',
+        componentResults: [],
         tokensUsed: DEFAULT_TOKENS_USED,
       });
     });
@@ -178,7 +179,7 @@ describe('AssertionsResult', () => {
         numRequests: 1,
         incurredTokenUsage: { total: 0, numRequests: 0 },
       });
-      expect(result.metadata).toEqual({ cachedResponse: true });
+      expect(result.metadata).toEqual({ cachedResponse: true, namedMetricCountsKnown: true });
       expect(usage.numRequests).toBe(0);
     });
 

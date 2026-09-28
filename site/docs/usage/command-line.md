@@ -434,9 +434,12 @@ Show details of a specific resource. If no ID is provided, promptfoo shows the m
 
 Deletes a specific resource.
 
-| Option      | Description                                     |
-| ----------- | ----------------------------------------------- |
-| `eval <id>` | Delete an eval by ID; accepts `latest` or `all` |
+| Option             | Description                                                                |
+| ------------------ | -------------------------------------------------------------------------- |
+| `eval <id>`        | Delete an eval by ID; accepts `latest` or `all`                            |
+| `eval-result <id>` | Delete a single result row within an eval session, leaving the rest intact |
+
+Result deletion is blocked while its eval is running. Wait for the run to finish or stop it first. If the run crashed before saving its totals, use `promptfoo eval --resume <evalId>` before deleting results. Resume rebuilds totals from saved results and preserves historical aggregates whose grading details are unavailable. If deletion reports incomplete grading metrics, use `promptfoo retry <evalId>` to retry failed results before deleting. Work that was never saved cannot be recovered.
 
 ## `promptfoo retry <evalId>`
 

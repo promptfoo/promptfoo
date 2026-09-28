@@ -990,14 +990,12 @@ function renderStatusBlock({
 
 function renderPromptBlock({
   showPrompts,
-  firstOutput,
   prompt,
 }: {
   showPrompts: boolean;
-  firstOutput?: EvaluateTableOutput | null;
   prompt: EvaluateTableOutput['prompt'];
 }): React.ReactNode {
-  if (!showPrompts || !firstOutput?.prompt) {
+  if (!showPrompts || !prompt) {
     return null;
   }
 
@@ -1611,7 +1609,7 @@ function EvalOutputCell({
         showPassReasons,
         passReasons,
       })}
-      {renderPromptBlock({ showPrompts, firstOutput, prompt: output.prompt })}
+      {renderPromptBlock({ showPrompts, prompt: output.prompt })}
       {renderResponseAudioPlayer(responseAudioSource)}
       <div
         className={!showPassFail && !showPrompts ? 'content-needs-action-clearance' : undefined}

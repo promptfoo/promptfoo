@@ -1,16 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
+import { beginEvalRun } from '../../src/database/evalRun';
 import { getEnvBool } from '../../src/envars';
 import { evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { notifyEvaluationChanged } from '../../src/models/evalMutation';
-import {
-  deleteErrorResults,
-  getErrorResultIds,
-  recalculatePromptMetrics,
-  retryCommand,
-} from '../../src/node/retry';
+import { recalculatePromptMetrics } from '../../src/node/recalculatePromptMetrics';
+import { deleteErrorResults, getErrorResultIds, retryCommand } from '../../src/node/retry';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
 import { ResultFailureReason } from '../../src/types/index';
 import { resolveConfigs } from '../../src/util/config/load';
@@ -26,20 +23,15 @@ const dbMocks = vi.hoisted(() => {
   const affectedEvalRowsAll = vi.fn(async () => affectedEvalRows);
   const deleteRun = vi.fn(async () => undefined);
   const db = {
-    select: vi.fn(() => ({
+    select: vi.fn((fields?: unknown) => ({
       from: vi.fn(() => ({
         where: vi.fn(() => ({
-          all: errorRowsAll,
+          all: fields ? errorRowsAll : affectedEvalRowsAll,
+          get: vi.fn(async () => undefined),
         })),
       })),
     })),
-    selectDistinct: vi.fn(() => ({
-      from: vi.fn(() => ({
-        where: vi.fn(() => ({
-          all: affectedEvalRowsAll,
-        })),
-      })),
-    })),
+    transaction: vi.fn(async (callback: (tx: unknown) => Promise<void>) => callback(db)),
     delete: vi.fn(() => ({
       where: vi.fn(() => ({
         run: deleteRun,
@@ -58,6 +50,7 @@ const dbMocks = vi.hoisted(() => {
 vi.mock('../../src/database/index', () => ({
   getDb: vi.fn(async () => dbMocks.db),
 }));
+vi.mock('../../src/database/evalRun');
 vi.mock('../../src/evaluator');
 vi.mock('../../src/logger');
 vi.mock('../../src/models/eval');
@@ -112,8 +105,11 @@ function mockResolvedConfig({
 }
 
 describe('retryCommand', () => {
+  const releaseRun = vi.fn<(completed?: boolean) => Promise<void>>();
   beforeEach(() => {
     vi.resetAllMocks();
+    releaseRun.mockResolvedValue(undefined);
+    vi.mocked(beginEvalRun).mockResolvedValue(releaseRun);
     dbMocks.errorRows.splice(0);
     dbMocks.affectedEvalRows.splice(0);
     cliState.resume = false;
@@ -171,7 +167,7 @@ describe('retryCommand', () => {
   it('skips database work when there are no error result ids to delete', async () => {
     await deleteErrorResults([]);
 
-    expect(dbMocks.db.selectDistinct).not.toHaveBeenCalled();
+    expect(dbMocks.db.transaction).not.toHaveBeenCalled();
     expect(dbMocks.db.delete).not.toHaveBeenCalled();
   });
 
@@ -211,6 +207,13 @@ describe('retryCommand', () => {
             score: 0,
             latencyMs: 0,
             namedScores: {},
+            gradingResult: {
+              pass: false,
+              score: 0,
+              reason: 'No assertions ran',
+              componentResults: [],
+              tokensUsed: { total: 0, numRequests: 0 },
+            },
           },
           {
             id: 'failed-result',
@@ -500,12 +503,37 @@ describe('retryCommand', () => {
     );
   });
 
+  it('rebuilds formula metrics while preserving unevaluated runtime metric values', async () => {
+    const runtimeMetric = vi.fn(() => 99);
+    const prompts = [{ metrics: { namedScores: { Runtime: 42 } } }] as any[];
+    const evaluation = createEval({
+      prompts,
+      config: {
+        derivedMetrics: [
+          { name: 'Rows', value: '__count' },
+          { name: 'Runtime', value: runtimeMetric },
+        ],
+      } as UnifiedConfig,
+      fetchResultsBatched: vi.fn(async function* () {
+        yield [
+          { id: 'one', promptIdx: 0, success: true },
+          { id: 'two', promptIdx: 0, success: true },
+        ] as any[];
+      }),
+    });
+
+    await recalculatePromptMetrics(evaluation);
+
+    expect(prompts[0].metrics.namedScores).toEqual({ Rows: 2, Runtime: 42 });
+    expect(runtimeMetric).not.toHaveBeenCalled();
+  });
+
   it('retries from the saved config, cleans up old errors, and shares the result', async () => {
     const originalEval = createEval({
       config: { sharing: false } as UnifiedConfig,
       runtimeOptions: { providerFilter: 'selected-target' },
     });
-    const retriedEval = createEval();
+    const retriedEval = createEval({ persisted: true });
     vi.mocked(Eval.findById).mockResolvedValue(originalEval);
     dbMocks.errorRows.push({ id: 'error-result-1' });
     dbMocks.affectedEvalRows.push({ evalId: originalEval.id });
@@ -539,6 +567,12 @@ describe('retryCommand', () => {
     );
     expect(dbMocks.deleteRun).toHaveBeenCalledTimes(1);
     expect(notifyEvaluationChanged).toHaveBeenCalledWith(originalEval.id);
+    expect(beginEvalRun).toHaveBeenCalledWith(originalEval, expect.any(Function));
+    expect(releaseRun).toHaveBeenCalledTimes(1);
+    expect(releaseRun).toHaveBeenCalledWith(true);
+    expect(releaseRun.mock.invocationCallOrder[0]).toBeGreaterThan(
+      vi.mocked(retriedEval.addPrompts).mock.invocationCallOrder[0],
+    );
     expect(shouldShareResults).toHaveBeenCalledWith({
       cliShare: undefined,
       configShare: true,
@@ -649,6 +683,8 @@ describe('retryCommand', () => {
 
     await expect(retryCommand(originalEval.id, {})).rejects.toThrow('provider unavailable');
 
+    expect(releaseRun).toHaveBeenCalledTimes(1);
+    expect(releaseRun).toHaveBeenCalledWith(false);
     expect(dbMocks.deleteRun).not.toHaveBeenCalled();
     expect(cliState.resume).toBe(false);
     expect(cliState.retryMode).toBe(false);
@@ -672,6 +708,7 @@ describe('retryCommand', () => {
     expect(writeMultipleOutputs).toHaveBeenCalledWith(['results.jsonl'], retriedEval, null);
     expect(retriedEval.resultPersistenceFailed).toBe(true);
     expect(dbMocks.deleteRun).not.toHaveBeenCalled();
+    expect(releaseRun).toHaveBeenCalledWith(false);
   });
 
   it.each([false, true])(
@@ -752,6 +789,7 @@ describe('retryCommand', () => {
     dbMocks.deleteRun.mockRejectedValueOnce(new Error('database unavailable'));
 
     await expect(retryCommand(originalEval.id, {})).resolves.toBe(retriedEval);
+    expect(releaseRun).toHaveBeenCalledWith(false);
 
     expect(logger.warn).toHaveBeenCalledWith(
       'Post-retry cleanup had issues. Retry results are saved.',

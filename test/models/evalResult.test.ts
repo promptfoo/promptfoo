@@ -1,7 +1,10 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
-import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
+import EvalResult, {
+  sanitizeProvider,
+  sanitizeResultForJsonlArtifact,
+} from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
 import { WebSocketProvider } from '../../src/providers/websocket';
 import {
@@ -1213,6 +1216,56 @@ describe('EvalResult', () => {
   });
 
   describe('toEvaluateResult', () => {
+    it.each(['model', 'jsonl'] as const)(
+      'projects originally ungraded evidence when stripping later grades (%s)',
+      (serializer) => {
+        for (const hasLaterGrade of [false, true]) {
+          for (const shouldStripGradingResult of [false, true]) {
+            const metadata = {
+              __promptfoo: { originallyUngraded: true, retained: 'sibling' },
+              public: 'retained',
+            };
+            const result = new EvalResult({
+              ...mockEvaluateResult,
+              id: 'test-id',
+              evalId: 'test-eval-id',
+              response: null,
+              metadata,
+              gradingResult: hasLaterGrade
+                ? {
+                    pass: true,
+                    score: 1,
+                    reason: 'Later comparison',
+                    assertion: { type: 'select-best' },
+                    tokensUsed: { total: 7, numRequests: 1 },
+                  }
+                : null,
+            });
+            const flags = {
+              shouldStripPromptText: false,
+              shouldStripResponseOutput: false,
+              shouldStripTestVars: false,
+              shouldStripMetadata: false,
+              shouldStripGradingResult,
+            };
+            const projected =
+              serializer === 'model'
+                ? result.toEvaluateResult(flags)
+                : sanitizeResultForJsonlArtifact(result, flags);
+            expect(projected.metadata).toEqual({
+              __promptfoo: {
+                ...(hasLaterGrade && shouldStripGradingResult ? {} : { originallyUngraded: true }),
+                retained: 'sibling',
+              },
+              public: 'retained',
+            });
+            expect(metadata.__promptfoo.originallyUngraded).toBe(true);
+            expect(result.metadata?.__promptfoo?.originallyUngraded).toBe(true);
+          }
+        }
+      },
+    );
+
     it('should convert EvalResult to EvaluateResult format', async () => {
       const result = await EvalResult.createFromEvaluateResult('test-eval-id', mockEvaluateResult);
 

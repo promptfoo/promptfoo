@@ -399,6 +399,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
     const response = await getTargetResponse(targetProvider, prompt, context);
     return externalizeResponseForRedteamHistory(response, {
       evalId: context?.evaluationId,
+      isCancelled: context?.isCancelled,
       testIdx: context?.testIdx,
       promptIdx: context?.promptIdx,
     });

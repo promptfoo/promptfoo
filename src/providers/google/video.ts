@@ -751,6 +751,7 @@ export class GoogleVideoProvider implements ApiProvider {
       // Store to blob storage
       const { ref } = await storeBlob(buffer, 'video/mp4', {
         evalId: context?.evaluationId,
+        isCancelled: context?.isCancelled,
         kind: 'video',
         location: 'response.video',
         promptIdx: context?.promptIdx,
@@ -792,6 +793,7 @@ export class GoogleVideoProvider implements ApiProvider {
       const buffer = Buffer.from(await response.arrayBuffer());
       const { ref } = await storeBlob(buffer, 'video/mp4', {
         evalId: context?.evaluationId,
+        isCancelled: context?.isCancelled,
         kind: 'video',
         location: 'response.video',
         promptIdx: context?.promptIdx,
@@ -821,6 +823,7 @@ export class GoogleVideoProvider implements ApiProvider {
       // Store to blob storage
       const { ref, deduplicated } = await storeBlob(buffer, 'video/mp4', {
         evalId: context?.evaluationId,
+        isCancelled: context?.isCancelled,
         kind: 'video',
         location: 'response.video',
         promptIdx: context?.promptIdx,

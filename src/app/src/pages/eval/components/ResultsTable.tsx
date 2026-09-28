@@ -290,6 +290,31 @@ function TableHeader({
   );
 }
 
+function getTransformDisplayVar(row: EvaluateTableRow, varName: string): string | undefined {
+  for (const output of row.outputs || []) {
+    const transformVars = output?.metadata?.transformDisplayVars as
+      | Record<string, string>
+      | undefined;
+    const value = transformVars?.[varName];
+    if (value !== undefined && value !== null) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function getFileMetadata(row: EvaluateTableRow, varName: string) {
+  for (const output of row.outputs || []) {
+    const fileMetadata = output?.metadata?.[FILE_METADATA_KEY] as
+      | Record<string, { path: string; type: string; format?: string }>
+      | undefined;
+    if (fileMetadata?.[varName]) {
+      return fileMetadata[varName];
+    }
+  }
+  return undefined;
+}
+
 function getVariableCellValue({
   row,
   varName,
@@ -317,20 +342,10 @@ function getVariableCellValue({
     return value;
   }
 
-  for (const output of row.outputs || []) {
-    const transformVars = output?.metadata?.transformDisplayVars as
-      | Record<string, string>
-      | undefined;
-    if (transformVars?.[varName]) {
-      return transformVars[varName];
-    }
-  }
-
-  return value;
+  return getTransformDisplayVar(row, varName) ?? value;
 }
 
 function renderMediaVariableCell({
-  output,
   mediaMetadata,
   value,
   lightboxOpen,
@@ -338,7 +353,6 @@ function renderMediaVariableCell({
   maxTextLength,
   toggleLightbox,
 }: {
-  output: EvaluateTableOutput | null;
   mediaMetadata?: { path: string; type: string; format?: string };
   value: string | object;
   lightboxOpen: boolean;
@@ -346,7 +360,7 @@ function renderMediaVariableCell({
   maxTextLength: number;
   toggleLightbox?: (url?: string) => void;
 }): React.ReactNode | null {
-  if (!output || !mediaMetadata || typeof value !== 'string') {
+  if (!mediaMetadata || typeof value !== 'string') {
     return null;
   }
 
@@ -511,13 +525,8 @@ function renderVariableCell({
     fallbackValue: info.getValue(),
   });
 
-  const output = row.outputs && row.outputs.length > 0 ? row.outputs[0] : null;
-  const fileMetadata = output?.metadata?.[FILE_METADATA_KEY] as
-    | Record<string, { path: string; type: string; format?: string }>
-    | undefined;
   const mediaCell = renderMediaVariableCell({
-    output,
-    mediaMetadata: fileMetadata?.[varName],
+    mediaMetadata: getFileMetadata(row, varName),
     value,
     lightboxOpen,
     lightboxImage,
@@ -1303,26 +1312,6 @@ function getVariableNameForColumn(columnId: string, headVars: string[]): string 
   return undefined;
 }
 
-function hasFileMetadataForColumn({
-  columnId,
-  row,
-  headVars,
-}: {
-  columnId: string;
-  row: Row<EvaluateTableRow>;
-  headVars: string[];
-}): boolean {
-  const varName = getVariableNameForColumn(columnId, headVars);
-  if (!varName) {
-    return false;
-  }
-
-  const fileMetadata = row.original.outputs?.[0]?.metadata?.[FILE_METADATA_KEY] as
-    | Record<string, unknown>
-    | undefined;
-  return Boolean(fileMetadata?.[varName]);
-}
-
 function getImageSourceForCell({
   columnId,
   value,
@@ -1336,11 +1325,11 @@ function getImageSourceForCell({
   headVars: string[];
   injectVarName: string;
 }): string | undefined {
-  if (typeof value !== 'string' || hasFileMetadataForColumn({ columnId, row, headVars })) {
+  const varName = getVariableNameForColumn(columnId, headVars);
+  if (typeof value !== 'string' || (varName && getFileMetadata(row.original, varName))) {
     return undefined;
   }
 
-  const varName = getVariableNameForColumn(columnId, headVars);
   const imageValue = varName
     ? getVariableCellValue({
         row: row.original,
@@ -1844,12 +1833,7 @@ function ResultsTable({
         varName,
         estimateMetadataColumnSize(
           varName.replace(/^__/, ''),
-          tableBody.map((row) => {
-            const transformVars = row.outputs?.[0]?.metadata?.transformDisplayVars as
-              | Record<string, string>
-              | undefined;
-            return transformVars?.[varName] || '';
-          }),
+          tableBody.map((row) => getTransformDisplayVar(row, varName) ?? ''),
         ),
       ]),
     ) as Record<string, number>;
@@ -2109,14 +2093,7 @@ function ResultsTable({
         header: () => <span className="font-bold">Variables</span>,
         columns: transformDisplayVarKeys.map((varName) =>
           columnHelper.accessor(
-            (row: EvaluateTableRow) => {
-              // Get the value from the first output's transformDisplayVars
-              const output = row.outputs?.[0];
-              const transformVars = output?.metadata?.transformDisplayVars as
-                | Record<string, string>
-                | undefined;
-              return transformVars?.[varName] || '';
-            },
+            (row: EvaluateTableRow) => getTransformDisplayVar(row, varName) ?? '',
             {
               id: `TransformVar_${varName}`,
               header: () => (

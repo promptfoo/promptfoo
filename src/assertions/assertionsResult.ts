@@ -225,6 +225,7 @@ export class AssertionsResult {
       pass: true,
       score: 1,
       reason: 'No assertions',
+      componentResults: [],
       tokensUsed: { ...DEFAULT_TOKENS_USED },
     };
   }
@@ -271,6 +272,10 @@ export class AssertionsResult {
   }) {
     this.totalScore += result.score * weight;
     this.totalWeight += weight;
+    // Persist the resolved identity so later accounting never needs to render a template.
+    if (metric !== undefined && result.assertion?.metric !== undefined) {
+      result = { ...result, metadata: { ...result.metadata, renderedMetric: metric } };
+    }
     this.componentResults[index] = result;
 
     const isRedteamGuardrail =
@@ -354,6 +359,10 @@ export class AssertionsResult {
           ...result.componentResults.map((subResult) => ({
             ...subResult,
             assertion: subResult.assertion || result.assertion,
+            ...((!subResult.assertion || subResult.assertion.metric === result.assertion?.metric) &&
+              result.metadata?.renderedMetric !== undefined && {
+                metadata: { ...subResult.metadata, renderedMetric: result.metadata.renderedMetric },
+              }),
           })),
         ];
       } else {
@@ -420,6 +429,9 @@ export class AssertionsResult {
         this.result.reason = `Scoring function error: ${(err as Error).message}`;
       }
     }
+
+    // Fresh runtime metric names are literal; retain that provenance for inverse accounting.
+    this.result.metadata = { ...this.result.metadata, namedMetricCountsKnown: true };
 
     // Finite inputs can overflow when weighted or accumulated. Check the final
     // output after custom scoring has had an opportunity to replace those values.

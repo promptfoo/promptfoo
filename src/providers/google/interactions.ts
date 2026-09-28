@@ -626,6 +626,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
       try {
         ({ ref: blobRef } = await storeBlob(videoBuffer, video.mime_type || 'video/mp4', {
           evalId: context?.evaluationId,
+          isCancelled: context?.isCancelled,
           kind: 'video',
           location: 'response.video',
           promptIdx: context?.promptIdx,

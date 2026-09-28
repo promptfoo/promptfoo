@@ -45,6 +45,7 @@ import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
+import type { BlobContext } from '../../blobs';
 import type { TraceContextData } from '../../tracing/traceContext';
 import type { ProviderOptions } from '../../types/providers';
 import type { TransformContext, TransformFunction } from '../../types/transform';
@@ -957,7 +958,7 @@ export type TurnBacktrackingStopReason = SharedBacktrackingStopReason | 'Max tur
  */
 export async function externalizeResponseForRedteamHistory<T extends ProviderResponse>(
   response: T,
-  context?: { evalId?: string; testIdx?: number; promptIdx?: number },
+  context?: BlobContext,
 ): Promise<T> {
   if (!isBlobStorageEnabled() && !shouldAttemptRemoteBlobUpload()) {
     return response;

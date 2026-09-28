@@ -463,6 +463,7 @@ export async function runRedteamConversation({
     // Externalize blobs before they hit history/prompts
     targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
       evalId: context?.evaluationId,
+      isCancelled: context?.isCancelled,
       testIdx: context?.testIdx,
       promptIdx: context?.promptIdx,
     });

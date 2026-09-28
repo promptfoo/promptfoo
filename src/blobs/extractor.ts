@@ -4,15 +4,9 @@ import logger from '../logger';
 import { sha256 } from '../util/createHash';
 import { extractBlobHashesFromValue } from './blobRefs';
 import { BLOB_MAX_SIZE, BLOB_MIN_SIZE, BLOB_SCHEME } from './constants';
-import { type BlobRef, recordBlobReference, storeBlob } from './index';
+import { type BlobContext, type BlobRef, recordBlobReference, storeBlob } from './index';
 
 import type { ProviderResponse } from '../types/providers';
-
-interface BlobContext {
-  evalId?: string;
-  testIdx?: number;
-  promptIdx?: number;
-}
 
 type BlobKind = 'audio' | 'image';
 

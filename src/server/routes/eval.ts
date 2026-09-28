@@ -1,13 +1,20 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { HUMAN_ASSERTION_TYPE } from '../../constants';
+import { EvalResultDeletionError } from '../../database/evalRun';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
 import { EvalSchemas } from '../../types/api/eval';
-import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
+import {
+  deleteEval,
+  deleteEvalResult,
+  deleteEvals,
+  EvalResultNotFoundError,
+  updateResult,
+  writeResultsToDatabase,
+} from '../../util/database';
 import {
   ComparisonEvalNotFoundError,
   evalTableToJson,
@@ -294,7 +301,7 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
     }
 
     eval_.author = author;
-    await eval_.save();
+    await eval_.save({ updatePrompts: false });
 
     // NOTE: Side effect. If user email is not set, set it to the author's email
     if (!getUserEmail()) {
@@ -717,78 +724,20 @@ evalRouter.post(
       const { evalId, id } = paramsResult.data;
       // Double-cast needed: Zod's .passthrough() adds index signature that doesn't overlap with GradingResult
       const gradingResult = bodyResult.data as unknown as GradingResult;
-      const result = await EvalResult.findById(id);
-      if (!result || result.evalId !== evalId) {
+      const ratingResult = await EvalResult.submitRating(evalId, id, gradingResult);
+      if (ratingResult.status === 'result-not-found') {
         res.status(404).json({ error: 'Result not found' });
         return;
       }
-
-      const eval_ = await Eval.findById(evalId);
-      if (!eval_) {
+      if (ratingResult.status === 'eval-not-found') {
         res.status(404).json({ error: 'Eval not found' });
         return;
       }
-
-      // Capture the current state before we change it
-      const hasExistingManualOverride = Boolean(
-        result.gradingResult?.componentResults?.some(
-          (r) => r.assertion?.type === HUMAN_ASSERTION_TYPE,
-        ),
-      );
-      const successChanged = result.success !== gradingResult.pass;
-      const scoreChange = gradingResult.score - result.score;
-
-      // Update the result
-      result.gradingResult = gradingResult;
-      result.success = gradingResult.pass;
-      result.score = gradingResult.score;
-
-      // Update the prompt metrics
-      const prompt = eval_.prompts[result.promptIdx];
-      invariant(prompt, 'Prompt not found');
-      if (!prompt.metrics) {
-        logger.error(
-          `[${id}] This is not normal. Prompt metrics not found for prompt ${result.promptIdx}`,
-        );
-
+      if (ratingResult.status === 'prompt-metrics-not-found') {
         res.status(400).json({ error: 'Prompt metrics not found' });
         return;
       }
-
-      if (successChanged) {
-        if (result.success) {
-          // Result changed from fail to pass
-          prompt.metrics.testPassCount += 1;
-          prompt.metrics.testFailCount -= 1;
-          prompt.metrics.assertPassCount += 1;
-          prompt.metrics.score += scoreChange;
-          if (hasExistingManualOverride) {
-            // If there was an existing manual override, we need to decrement the assertFailCount because it changed from fail to pass
-            prompt.metrics.assertFailCount -= 1;
-          }
-        } else {
-          prompt.metrics.testPassCount -= 1;
-          prompt.metrics.testFailCount += 1;
-          prompt.metrics.assertFailCount += 1;
-          prompt.metrics.score += scoreChange;
-          if (hasExistingManualOverride) {
-            // If there was an existing manual override, we need to decrement the assertPassCount because it changed from pass to fail
-            prompt.metrics.assertPassCount -= 1;
-          }
-        }
-      } else if (!hasExistingManualOverride) {
-        // Nothing changed, so the user just added an assertion
-        if (result.success) {
-          prompt.metrics.assertPassCount += 1;
-        } else {
-          prompt.metrics.assertFailCount += 1;
-        }
-      }
-
-      await result.save();
-      await eval_.save();
-
-      res.json(EvalSchemas.SubmitRating.Response.parse(result));
+      res.json(EvalSchemas.SubmitRating.Response.parse(ratingResult.result));
     } catch (error) {
       sendError(res, 500, 'Failed to submit rating', error);
     }
@@ -889,6 +838,30 @@ evalRouter.delete('/', async (req: Request, res: Response) => {
     res.status(204).send();
   } catch {
     res.status(500).json({ error: 'Failed to delete evals' });
+  }
+});
+
+evalRouter.delete('/:evalId/results/:id', async (req: Request, res: Response): Promise<void> => {
+  const paramsResult = EvalSchemas.DeleteResult.Params.safeParse(req.params);
+  if (!paramsResult.success) {
+    replyValidationError(res, paramsResult.error);
+    return;
+  }
+
+  const { evalId, id } = paramsResult.data;
+  try {
+    await deleteEvalResult(evalId, id);
+    res.status(204).send();
+  } catch (error) {
+    if (error instanceof EvalResultDeletionError) {
+      res.status(409).json({ error: error.message });
+      return;
+    }
+    if (error instanceof EvalResultNotFoundError) {
+      res.status(404).json({ error: 'Eval result not found' });
+      return;
+    }
+    sendError(res, 500, 'Failed to delete eval result', error);
   }
 });
 

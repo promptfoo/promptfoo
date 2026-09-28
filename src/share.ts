@@ -761,7 +761,7 @@ async function handleEmailCollection(evalRecord: Eval): Promise<void> {
   }
 
   evalRecord.author = email;
-  await evalRecord.save();
+  await evalRecord.save({ updatePrompts: false });
 }
 
 async function getApiConfig(evalRecord: Eval): Promise<{

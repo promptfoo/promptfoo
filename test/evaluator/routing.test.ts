@@ -488,7 +488,7 @@ describeEvaluator('evaluator prompt and provider routing', () => {
         }),
       },
     ];
-    evalRecord.persisted = true;
+    await evalRecord.save();
 
     cliState.resume = true;
     await evaluate(testSuite, evalRecord, {});

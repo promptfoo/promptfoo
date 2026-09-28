@@ -334,6 +334,7 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
       // Store to blob storage
       const { ref } = await storeBlob(buffer, 'video/mp4', {
         evalId: context?.evaluationId,
+        isCancelled: context?.isCancelled,
         kind: 'video',
         location: 'response.video',
         promptIdx: context?.promptIdx,

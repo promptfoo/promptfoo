@@ -1,9 +1,11 @@
+import { beginEvalRun } from '../database/evalRun';
 import { getProcessEnv, isTemplateProcessEnvDisabled } from '../envars';
 import { JsonlFileWriter } from '../util/exportToFile/writeToFile';
 import { getOutputFileFormat } from '../util/outputFormats';
 import { renderEnvOnlyInObject } from '../util/render';
 import { preserveTracingCredentialReferences } from '../util/sanitizer';
 import { EvalEvaluationStore } from './evaluationStore';
+import { recalculatePromptMetrics } from './recalculatePromptMetrics';
 
 import type {
   EvaluatorResultWriter,
@@ -21,6 +23,11 @@ function getJsonlOutputPaths(outputPath: string | string[] | undefined): string[
 }
 
 export const nodeEvaluatorRuntime: EvaluatorRuntime<Eval, EvalResult> = {
+  async acquireEvaluationRun(evaluation) {
+    return evaluation.persisted
+      ? beginEvalRun(evaluation, () => recalculatePromptMetrics(evaluation))
+      : undefined;
+  },
   resolveRuntimeTestSuite(testSuite) {
     if (!testSuite.tracing?.provider) {
       return testSuite;
