@@ -1,10 +1,11 @@
 ---
+title: Helicone AI Gateway
 description: Monitor and optimize LLM usage through Helicone's AI gateway with unified access, caching, and comprehensive observability
 ---
 
 # Helicone AI Gateway
 
-[Helicone AI Gateway](https://github.com/Helicone/ai-gateway) is an open-source, self-hosted AI gateway that provides a unified OpenAI-compatible interface for 100+ LLM providers. The Helicone provider in promptfoo allows you to route requests through a locally running Helicone AI Gateway instance.
+The Helicone provider routes Promptfoo requests through a local [Helicone AI Gateway](https://github.com/Helicone/ai-gateway), an open-source gateway with an OpenAI-compatible API.
 
 ## Benefits
 

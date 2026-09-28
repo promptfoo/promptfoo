@@ -54,7 +54,7 @@ export GROQ_API_KEY=your_groq_key
 
 ### Using BYOK (Bring Your Own Keys)
 
-If you've configured [BYOK in Cloudflare](https://developers.cloudflare.com/ai-gateway/configuration/byok/), you can omit provider API keys entirely. Cloudflare will use the keys stored in your gateway configuration.
+If you've configured [BYOK in Cloudflare](https://developers.cloudflare.com/ai-gateway/configuration/bring-your-own-keys/), you can omit provider API keys entirely. Cloudflare will use the keys stored in your gateway configuration.
 
 ```yaml
 providers:
@@ -72,7 +72,7 @@ BYOK works best with OpenAI-compatible providers. Anthropic requires an API key 
 
 ### Authenticated Gateways
 
-If your gateway has [Authenticated Gateway](https://developers.cloudflare.com/ai-gateway/configuration/authenticated-gateway/) enabled, you must provide the `cfAigToken`:
+If your gateway has [Authenticated Gateway](https://developers.cloudflare.com/ai-gateway/configuration/authentication/) enabled, you must provide the `cfAigToken`:
 
 ```sh
 export CF_AIG_TOKEN=your_gateway_token_here

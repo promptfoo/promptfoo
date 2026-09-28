@@ -547,6 +547,11 @@ describe('calculateAzureCost', () => {
     },
   );
 
+  it('calculates cached input cost for claude-opus-5-5 at $0.20 per million cache reads', () => {
+    // 500 uncached * $4 + 500 cached * $0.20 + 500 output * $20, per 1e6
+    expect(calculateAzureCost('claude-opus-5-5', {}, 1000, 500, 500)).toBeCloseTo(0.0121, 8);
+  });
+
   it('returns undefined for unknown model', () => {
     const cost = calculateAzureCost('unknown-model', {}, 100, 50);
     expect(cost).toBeUndefined();
