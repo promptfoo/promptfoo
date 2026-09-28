@@ -124,60 +124,25 @@ export async function transformMCPConfigToClaudeCode(
     return {};
   }
 
-  const serverConfigs = [...(config.servers ?? [])];
-  if (config.server) {
-    serverConfigs.push(config.server);
-  }
-
-  // An explicit `name` owns its key, so two servers sharing one is a config error.
-  // Checked before transforming, which would otherwise fetch OAuth tokens for a
-  // configuration we are about to reject.
-  const names = serverConfigs.flatMap((server) => server.name ?? []);
-  const duplicateName = names.find((name, index) => names.indexOf(name) !== index);
-  if (duplicateName) {
-    throw new Error(
-      `Duplicate Claude Agent SDK MCP server \`${duplicateName}\`; give each configured server a unique \`name\`.`,
-    );
-  }
-
+  const serverConfigs = getServerConfigs(config);
   const servers = await Promise.all(
     serverConfigs.map((server) => transformMCPServerConfigToClaudeCode(server)),
   );
-
-  // An unnamed server falls back to a coarse identifier that several servers can
-  // share, so suffix collisions instead of letting `Object.fromEntries` drop one.
-  // The key becomes the SDK's server name — it lands in `mcp__<key>__<tool>` and in
-  // debug logs — so it deliberately carries no `args`, `env`, or auth values.
-  const taken = new Set(names);
-  const entries = servers.map((server, index) => {
-    const { name, url, command } = serverConfigs[index];
-    if (name) {
-      return [name, server] as const;
-    }
-    const fallback = url ? getUrlServerKey(url) : (command ?? 'default');
-    let key = fallback;
-    for (let suffix = 2; taken.has(key); suffix++) {
-      key = `${fallback}_${suffix}`;
-    }
-    taken.add(key);
-    return [key, server] as const;
-  });
-
-  return Object.fromEntries(entries);
+  return Object.fromEntries(
+    servers.map((server, index) => [getClaudeCodeServerName(serverConfigs[index]), server]),
+  );
 }
 
-// A URL can carry credentials in its userinfo, query, or fragment. Drop them from the key;
-// a URL without them keeps its original key, so existing `mcp__<url>__<tool>` rules match.
-function getUrlServerKey(url: string): string {
-  try {
-    const parsed = new URL(url);
-    if (parsed.username || parsed.password || parsed.search || parsed.hash) {
-      return `${parsed.origin}${parsed.pathname}`;
-    }
-  } catch {
-    // Not a parseable URL; the transform reports that separately.
-  }
-  return url;
+function getServerConfigs(config: McpConfigParsed): MCPServerConfig[] {
+  return [...(config.servers ?? []), ...(config.server ? [config.server] : [])];
+}
+
+/**
+ * The SDK server name, which prefixes the server's tools as `mcp__<name>__<tool>`. Unnamed
+ * servers keep the name they have always had, so existing tool allow and deny rules match.
+ */
+function getClaudeCodeServerName({ name, url, command }: MCPServerConfig): string {
+  return name ?? url ?? command ?? 'default';
 }
 
 export function validateMCPConfigForClaudeCode(input: unknown): McpConfigParsed {
@@ -196,6 +161,22 @@ export function validateMCPConfigForClaudeCode(input: unknown): McpConfigParsed 
   if (config.tools !== undefined || hasUnsupportedExclusions) {
     throw new Error(
       'Claude Agent SDK MCP integration does not support MCP tool allowlists or non-empty exclusions; remove `tools`/`exclude_tools` or disable MCP for this provider.',
+    );
+  }
+
+  // Servers reach the SDK keyed by name, so a shared name would silently drop one. Rejecting
+  // instead of renaming keeps every existing `mcp__<name>__<tool>` rule on the same server.
+  const servers = getServerConfigs(config);
+  const names = servers.map(getClaudeCodeServerName);
+  const duplicate = servers.find((_, index) => names.indexOf(names[index]) !== index);
+  if (duplicate) {
+    // A url can carry credentials, so it is described rather than echoed.
+    const shared =
+      duplicate.name === undefined && duplicate.url
+        ? 'the same `url`'
+        : `the name \`${getClaudeCodeServerName(duplicate)}\``;
+    throw new Error(
+      `Two Claude Agent SDK MCP servers resolve to ${shared}; give each server a unique \`name\`.`,
     );
   }
   return config;

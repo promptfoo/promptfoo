@@ -383,10 +383,10 @@ providers:
 ```
 
 Each server's `name` becomes its SDK server name, so its tools are exposed as `mcp__<name>__<tool>`
-(the form `append_allowed_tools` and `disallowed_tools` match). Names must be unique. A server
-without a `name` is named after its `url` (minus any credentials) or `command` (`default` for a
-`path` server), and unnamed servers that share one are numbered in config order (`npx`, `npx_2`),
-so set `name` on any server whose tools you reference.
+(the form `append_allowed_tools` and `disallowed_tools` match). A server without a `name` is named
+after its `url` or `command` (`default` for a `path` server). Names must be unique, so set `name`
+when two servers would otherwise share one. Also set it when the `url` carries a credential, because
+the name appears in tool names and debug logs.
 
 This direct SDK integration cannot enforce the shared MCP `tools` allowlist or non-empty
 `exclude_tools` filters, so those configurations fail closed instead of silently exposing a broader

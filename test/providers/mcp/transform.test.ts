@@ -4,6 +4,7 @@ import {
   transformMCPToolsToAnthropic,
   transformMCPToolsToGoogle,
   transformMCPToolsToOpenAi,
+  validateMCPConfigForClaudeCode,
 } from '../../../src/providers/mcp/transform';
 import type Anthropic from '@anthropic-ai/sdk';
 
@@ -287,111 +288,91 @@ describe('transformMCPConfigToClaudeCode', () => {
     ).resolves.toEqual({});
   });
 
-  it('rejects duplicate server keys instead of silently dropping a server', async () => {
-    await expect(
-      transformMCPConfigToClaudeCode({
-        enabled: true,
-        server: { name: 'shared', command: 'single-server' },
-        servers: [{ name: 'shared', command: 'plural-server' }],
-      }),
-    ).rejects.toThrow('Duplicate Claude Agent SDK MCP server `shared`');
-  });
-
   it('rejects duplicate names before any OAuth token is fetched', async () => {
     // OAuth here has neither tokenUrl nor a discoverable endpoint, so reaching the
     // token fetch at all would surface that error instead of the duplicate.
+    const oauth = {
+      type: 'oauth' as const,
+      grantType: 'client_credentials' as const,
+      clientId: 'id',
+      clientSecret: 'secret',
+    };
     await expect(
       transformMCPConfigToClaudeCode({
         enabled: true,
         servers: [
-          {
-            name: 'shared',
-            url: 'https://a.example.com/mcp',
-            auth: {
-              type: 'oauth',
-              grantType: 'client_credentials',
-              clientId: 'id',
-              clientSecret: 'secret',
-            },
-          },
-          {
-            name: 'shared',
-            url: 'https://b.example.com/mcp',
-            auth: {
-              type: 'oauth',
-              grantType: 'client_credentials',
-              clientId: 'id',
-              clientSecret: 'secret',
-            },
-          },
+          { name: 'shared', url: 'https://a.example.com/mcp', auth: oauth },
+          { name: 'shared', url: 'https://b.example.com/mcp', auth: oauth },
         ],
       }),
-    ).rejects.toThrow('Duplicate Claude Agent SDK MCP server `shared`');
+    ).rejects.toThrow('Two Claude Agent SDK MCP servers resolve to the name `shared`');
   });
 
-  it('numbers unnamed servers that share a fallback key instead of dropping one', async () => {
-    // The first server keeps the legacy key, so existing `mcp__npx__<tool>` rules still match.
-    await expect(
-      transformMCPConfigToClaudeCode({
-        enabled: true,
+  // Main kept only the last of these, so renaming either one would move an existing
+  // `mcp__<name>__<tool>` allow or deny rule onto a different server.
+  it.each([
+    [
+      'explicit names',
+      { server: { name: 'npx', command: 'a' }, servers: [{ name: 'npx', command: 'b' }] },
+      'the name `npx`',
+    ],
+    [
+      'an explicit name and a command',
+      { servers: [{ name: 'npx', command: 'a' }, { command: 'npx' }] },
+      'the name `npx`',
+    ],
+    [
+      'path servers',
+      { servers: [{ path: 'first.js' }, { path: 'second.js' }] },
+      'the name `default`',
+    ],
+    [
+      'commands with different args',
+      {
         servers: [
-          { path: 'first.js' },
-          { path: 'second.js' },
-          { command: 'npx', args: ['-y', 'first-server'] },
-          { command: 'npx', args: ['-y', 'second-server'] },
+          { command: 'npx', args: ['a'] },
+          { command: 'npx', args: ['b'] },
         ],
-      }),
-    ).resolves.toEqual({
-      default: { type: 'stdio', command: process.execPath, args: ['first.js'] },
-      default_2: { type: 'stdio', command: process.execPath, args: ['second.js'] },
-      npx: { type: 'stdio', command: 'npx', args: ['-y', 'first-server'] },
-      npx_2: { type: 'stdio', command: 'npx', args: ['-y', 'second-server'] },
-    });
+      },
+      'the name `npx`',
+    ],
+    // The url may carry credentials, so the error does not echo it.
+    [
+      'urls',
+      {
+        servers: [
+          { url: 'https://h.example.com/mcp?token=secret' },
+          { url: 'https://h.example.com/mcp?token=secret' },
+        ],
+      },
+      'the same `url`',
+    ],
+  ])('rejects %s that resolve to the same server name', (_, servers, shared) => {
+    expect(() => validateMCPConfigForClaudeCode({ enabled: true, ...servers })).toThrow(
+      `Two Claude Agent SDK MCP servers resolve to ${shared}; give each server a unique \`name\`.`,
+    );
   });
 
-  it('keeps args and URL credentials out of derived keys', async () => {
-    // The key becomes the SDK server name, which the Claude Agent SDK provider logs
-    // verbatim (`Object.keys(options.mcpServers)`) in an unsanitized message.
-    const servers = await transformMCPConfigToClaudeCode({
-      enabled: true,
-      servers: [
-        { command: 'npx', args: ['some-server', '--api-key', 'sk-secret-value'] },
-        { url: 'https://mcp.example.com/v1?token=url-secret' },
-        {
-          url: 'https://mcp.example.com/v1',
-          auth: { type: 'api_key', api_key: 'auth-secret', placement: 'query' },
-        },
-        { url: 'https://user:password@other.example.com/mcp#fragment' },
-      ],
-    });
-
-    expect(Object.keys(servers)).toEqual([
-      'npx',
-      'https://mcp.example.com/v1',
-      'https://mcp.example.com/v1_2',
-      'https://other.example.com/mcp',
-    ]);
-    // Connections still use the configured URL and auth.
-    expect(servers['https://mcp.example.com/v1']).toMatchObject({
-      url: 'https://mcp.example.com/v1?token=url-secret',
-    });
-    expect(servers['https://mcp.example.com/v1_2']).toMatchObject({
-      url: 'https://mcp.example.com/v1?X-API-Key=auth-secret',
-    });
-  });
-
-  it('does not let a derived key steal an explicit name', async () => {
+  it('keeps the existing name for each unnamed server', async () => {
     await expect(
       transformMCPConfigToClaudeCode({
         enabled: true,
         servers: [
-          { command: 'npx', args: ['first'] },
-          { name: 'npx', command: 'other' },
+          { command: 'npx', args: ['-y', 'some-server'] },
+          { url: 'https://mcp.example.com/v1?token=abc' },
+          { path: 'server.js' },
+          { name: '', command: 'named-empty' },
         ],
       }),
     ).resolves.toEqual({
-      npx: { type: 'stdio', command: 'other', args: [] },
-      npx_2: { type: 'stdio', command: 'npx', args: ['first'] },
+      npx: { type: 'stdio', command: 'npx', args: ['-y', 'some-server'] },
+      'https://mcp.example.com/v1?token=abc': {
+        type: 'http',
+        url: 'https://mcp.example.com/v1?token=abc',
+        headers: {},
+      },
+      default: { type: 'stdio', command: process.execPath, args: ['server.js'] },
+      '': { type: 'stdio', command: 'named-empty', args: [] },
     });
   });
 
