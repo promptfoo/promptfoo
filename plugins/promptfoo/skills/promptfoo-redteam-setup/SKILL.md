@@ -13,6 +13,10 @@ Create a focused scan that tests the real application's security boundaries.
 Read `references/redteam-setup-patterns.md` for configs and generation recipes.
 If the target connection is missing or broken, use `promptfoo-provider-setup`.
 
+Before running a Node.js helper or CLI command, follow the
+[shared prerequisite check](../promptfoo-provider-setup/references/local-prerequisites.md)
+for Node/npm and Promptfoo. Reuse an already verified environment and its CLI invocation.
+
 ## 1. Map the target and scope
 
 For white-box planning, trace the selected entrypoint through prompts, tool
@@ -101,9 +105,8 @@ initial cases and results justify it.
 
 ## 4. Validate and generate
 
-Use `npx promptfoo` to resolve the installed CLI; in its repository align Node with
-`source ~/.nvm/nvm.sh && nvm use` and substitute `npm run local --` below.
-Install or upgrade with `npx promptfoo@latest` only when needed.
+Use the CLI invocation verified by the shared prerequisite check in place of
+`npx promptfoo` below.
 
 ```bash
 npx promptfoo validate config -c path/to/promptfooconfig.yaml
