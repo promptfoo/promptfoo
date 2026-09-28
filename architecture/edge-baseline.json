@@ -25,7 +25,7 @@
   "legacy-runtime -> contracts": 2,
   "legacy-runtime -> core": 12,
   "legacy-runtime -> legacy-contracts": 70,
-  "legacy-runtime -> node": 102,
+  "legacy-runtime -> node": 103,
   "legacy-runtime -> providers": 15,
   "legacy-runtime -> redteam": 6,
   "node -> core": 8,
@@ -47,7 +47,7 @@
   "view-server -> core": 1,
   "view-server -> legacy-contracts": 21,
   "view-server -> legacy-runtime": 35,
-  "view-server -> node": 44,
+  "view-server -> node": 45,
   "view-server -> providers": 3,
   "view-server -> redteam": 13
 }
