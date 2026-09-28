@@ -74,7 +74,7 @@ export async function readTestFiles(
 
   const ret: Record<string, string | string[] | object> = {};
   for (const pathOrGlob of pathOrGlobs) {
-    const resolvedPath = path.resolve(basePath, pathOrGlob);
+    const resolvedPath = path.resolve(basePath, pathOrGlob.replace(/^file:\/\//, ''));
 
     const paths = globSync(resolvedPath, {
       windowsPathsNoEscape: true,
@@ -1033,8 +1033,8 @@ export function resolveTestsWatchPaths(
     }
     if ('vars' in entry && entry.vars) {
       // `vars` may be a file reference, or a list of them, rather than a mapping, e.g.
-      // `{ vars: 'vars/*.yaml' }`. loadTestWithVars() hands both forms straight to
-      // readTestFiles(), so they carry no file:// scheme and resolve as written.
+      // `{ vars: 'file://vars/*.yaml' }`. loadTestWithVars() hands both forms to
+      // readTestFiles(), which accepts them with or without the file:// scheme.
       if (typeof entry.vars === 'string' || Array.isArray(entry.vars)) {
         const references = Array.isArray(entry.vars) ? entry.vars : [entry.vars];
         return references.flatMap((value) =>

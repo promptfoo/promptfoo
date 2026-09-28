@@ -1892,6 +1892,17 @@ describe('readVarsFiles', () => {
     expect(result).toEqual({ var1: 'value1', var2: 'value2' });
   });
 
+  it('should resolve file:// references relative to the base path', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue('var1: value1');
+    vi.mocked(globSync).mockImplementation((pattern) =>
+      pattern === path.resolve('/base', 'vars/*.yaml') ? ['/base/vars/a.yaml'] : [],
+    );
+
+    const result = await readTestFiles('file://vars/*.yaml', '/base');
+
+    expect(result).toEqual({ var1: 'value1' });
+  });
+
   it('should read variables from multiple YAML files', async () => {
     const yamlContent1 = 'var1: value1';
     const yamlContent2 = 'var2: value2';

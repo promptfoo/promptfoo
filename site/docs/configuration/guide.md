@@ -179,7 +179,7 @@ Test files can be defined in YAML/JSON, JSONL, [CSV](/docs/configuration/test-ca
 
 ## Import vars from separate files
 
-The `vars` property can point to a file or directory. For example:
+The `vars` property can point to a YAML or JSON file, or a glob pattern that matches several. For example:
 
 ```yaml
 tests:
