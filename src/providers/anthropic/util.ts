@@ -611,9 +611,12 @@ export function outputFromMessage(message: Anthropic.Messages.Message, showThink
           return `Thinking: ${block.thinking}\nSignature: ${block.signature}`;
         } else if (block.type === 'redacted_thinking' && showThinking) {
           return `Redacted Thinking: ${block.data}`;
-        } else if (block.type !== 'thinking' && block.type !== 'redacted_thinking') {
+        } else if (block.type === 'tool_use') {
           return JSON.stringify(block);
         }
+        // Server-executed tool blocks (web search/fetch, code execution) are intermediate
+        // steps the text already answers. Serializing them buries that answer under large
+        // encrypted payloads, which broke JSON verdict parsing on thinking models.
         return '';
       })
       .filter((text) => text !== '')

@@ -741,6 +741,30 @@ describe('Anthropic utilities', () => {
       expect(outputFromMessage(message, true)).toBe('Final answer');
     });
 
+    // Claude 5 models think by default, which routes web search responses through the
+    // tool-aware branch; the search blocks must not end up ahead of the answer.
+    it('should omit server tool blocks when thinking is present', () => {
+      const message = {
+        content: [
+          { type: 'thinking', thinking: '', signature: 'abc123' },
+          {
+            type: 'server_tool_use',
+            id: 'srvtoolu_1',
+            name: 'web_search',
+            input: { query: 'Iceland population' },
+          },
+          {
+            type: 'web_search_tool_result',
+            tool_use_id: 'srvtoolu_1',
+            content: [{ type: 'web_search_result', url: 'https://example.com', title: 'Iceland' }],
+          },
+          { type: 'text', text: '{"pass": true, "score": 1}', citations: [] },
+        ],
+      } as unknown as Anthropic.Messages.Message;
+
+      expect(outputFromMessage(message, true)).toBe('{"pass": true, "score": 1}');
+    });
+
     it('should exclude thinking blocks when showThinking is false', () => {
       const message: AnthropicTestMessage = {
         content: [
