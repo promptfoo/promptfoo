@@ -827,6 +827,42 @@ function createAbortError(message: string): Error {
   return error;
 }
 
+/**
+ * `npm i -g @openai/codex` installs a `codex.cmd` shim on Windows, which `spawn` cannot run
+ * without a shell: bare names only resolve `.com`/`.exe`, and `.cmd` paths throw EINVAL.
+ * Run the shim's `@openai/codex` entrypoint with the current Node binary instead.
+ */
+function resolveCodexLaunch(
+  command: string,
+  args: string[],
+  env: Record<string, string>,
+): { command: string; args: string[] } {
+  if (process.platform !== 'win32') {
+    return { command, args };
+  }
+  const resolved =
+    path.basename(command) === command && !path.extname(command)
+      ? (env.PATH ?? env.Path ?? '')
+          .split(path.delimiter)
+          .flatMap((dir) => ['.com', '.exe', '.cmd'].map((ext) => path.join(dir, command + ext)))
+          .find((candidate) => fs.existsSync(candidate))
+      : command;
+  if (!resolved?.toLowerCase().endsWith('.cmd')) {
+    return { command, args };
+  }
+  const entrypoint = path.join(
+    path.dirname(resolved),
+    'node_modules',
+    '@openai',
+    'codex',
+    'bin',
+    'codex.js',
+  );
+  return fs.existsSync(entrypoint)
+    ? { command: process.execPath, args: [entrypoint, ...args] }
+    : { command, args };
+}
+
 class CodexAppServerConnection {
   readonly instanceId: string;
 
@@ -842,7 +878,8 @@ class CodexAppServerConnection {
 
   constructor(private readonly options: AppServerConnectionOptions) {
     this.instanceId = options.connectionInstanceId;
-    this.process = spawn(options.command, options.args, {
+    const { command, args } = resolveCodexLaunch(options.command, options.args, options.env);
+    this.process = spawn(command, args, {
       env: options.env,
       stdio: ['pipe', 'pipe', 'pipe'],
     });

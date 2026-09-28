@@ -1,4 +1,7 @@
 import { EventEmitter } from 'events';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { PassThrough } from 'stream';
 
 import { trace } from '@opentelemetry/api';
@@ -581,6 +584,59 @@ describe('OpenAICodexAppServerProvider', () => {
         stdio: ['pipe', 'pipe', 'pipe'],
       }),
     );
+  });
+
+  describe('on Windows', () => {
+    const originalPlatform = process.platform;
+    let npmBinDir: string;
+    let entrypoint: string;
+
+    beforeEach(() => {
+      npmBinDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-codex-npm-'));
+      entrypoint = path.join(npmBinDir, 'node_modules', '@openai', 'codex', 'bin', 'codex.js');
+      fs.mkdirSync(path.dirname(entrypoint), { recursive: true });
+      fs.writeFileSync(entrypoint, '');
+      fs.writeFileSync(path.join(npmBinDir, 'codex.cmd'), '');
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    });
+
+    afterEach(() => {
+      Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
+      fs.rmSync(npmBinDir, { recursive: true, force: true });
+    });
+
+    async function getSpawnCall(config: Record<string, unknown>) {
+      mocks.spawn.mockImplementation(() => {
+        throw new Error('spawn stub');
+      });
+      await new OpenAICodexAppServerProvider({ config }).callApi('Hello');
+      return mocks.spawn.mock.calls[0];
+    }
+
+    it.each([
+      ['the npm codex.cmd shim on PATH', () => ({ cli_env: { PATH: npmBinDir } })],
+      [
+        'a codex.cmd codex_path_override',
+        () => ({ codex_path_override: path.join(npmBinDir, 'codex.cmd') }),
+      ],
+    ])('runs the @openai/codex entrypoint with Node for %s', async (_label, getConfig) => {
+      const [command, args] = await getSpawnCall(getConfig());
+
+      expect(command).toBe(process.execPath);
+      expect(args).toEqual([entrypoint, 'app-server', '--listen', 'stdio://']);
+    });
+
+    it('spawns a native codex.exe that precedes the npm shim on PATH', async () => {
+      const nativeBinDir = path.join(npmBinDir, 'native');
+      fs.mkdirSync(nativeBinDir);
+      fs.writeFileSync(path.join(nativeBinDir, 'codex.exe'), '');
+
+      const [command] = await getSpawnCall({
+        cli_env: { PATH: [nativeBinDir, npmBinDir].join(path.delimiter) },
+      });
+
+      expect(command).toBe('codex');
+    });
   });
 
   it('emits a protocol turn span with nested usage when no turn/started notification arrives', async () => {
