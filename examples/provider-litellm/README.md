@@ -29,18 +29,25 @@ LiteLLM provides a unified interface to 400+ LLMs. Instead of managing different
 
    Keep `OPENAI_API_KEY` for the default embedding route even if you omit GPT chat. To run without OpenAI, configure an embedding provider you can access in both configs, or remove the `similar` assertion and its `defaultTest.options.provider.embedding` setting.
 
-2. **Start the LiteLLM proxy**:
+2. **Install the LiteLLM proxy with Python 3.10–3.14**:
+
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate # Windows: .venv\Scripts\activate
+   python -m pip install --upgrade 'litellm[proxy]>=1.101.0,<2'
+   ```
+
+3. **Start the LiteLLM proxy**:
 
    ```bash
    # Use the provided script
    ./start-proxy.sh
 
    # Or manually:
-   pip install litellm[proxy]
    litellm --config litellm_config.yaml --port 4000
    ```
 
-3. **Run the evaluation**:
+4. **Run the evaluation**:
    ```bash
    npx promptfoo@latest eval
    ```
@@ -75,6 +82,9 @@ The proxy keeps client-facing `model_name` aliases separate from backend routes.
 
 The example evaluates translation and creative writing tasks across three different providers:
 
+Each test supplies its own prompt so translation assertions apply to translations
+and the three-line assertion applies to the haiku. The evaluation runs six cases.
+
 ```yaml
 providers:
   - litellm:gpt-4.1
@@ -100,12 +110,12 @@ defaultTest:
 1. **Check proxy is running**:
 
    ```bash
-   curl http://localhost:4000/health
+   curl http://localhost:4000/health/liveliness
    ```
 
-2. **Verify API keys**:
+2. **Verify a required key is set**:
    ```bash
-   echo $OPENAI_API_KEY
+   test -n "$OPENAI_API_KEY" && echo 'OpenAI key is set'
    ```
 
 ## Advanced Usage
