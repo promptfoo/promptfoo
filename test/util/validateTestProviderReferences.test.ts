@@ -165,4 +165,91 @@ describe('validateTestProviderReferences', () => {
       );
     });
   });
+
+  describe('filter-providers behavior', () => {
+    it('silently drops test refs matching excluded provider configs', () => {
+      const tests: TestCase[] = [
+        { vars: { foo: 'bar' }, providers: ['openai:gpt-4', 'gemini'] },
+      ];
+      const excludedConfigs = ['gemini', 'openrouter:deepseek/deepseek-r1'];
+      expect(() =>
+        validateTestProviderReferences(tests, providers, undefined, undefined, excludedConfigs),
+      ).not.toThrow();
+      expect(tests[0].providers).toEqual(['openai:gpt-4']);
+    });
+
+    it('still throws for refs matching nothing anywhere', () => {
+      const tests: TestCase[] = [
+        { vars: { foo: 'bar' }, providers: ['openai:gpt-4', 'nonexistent'] },
+      ];
+      const excludedConfigs = ['gemini'];
+      expect(() =>
+        validateTestProviderReferences(tests, providers, undefined, undefined, excludedConfigs),
+      ).toThrow(ProviderReferenceValidationError);
+    });
+
+    it('handles test with all providers excluded', () => {
+      const tests: TestCase[] = [{ vars: { foo: 'bar' }, providers: ['gemini'] }];
+      const excludedConfigs = ['gemini'];
+      expect(() =>
+        validateTestProviderReferences(tests, providers, undefined, undefined, excludedConfigs),
+      ).not.toThrow();
+      expect(tests[0].providers).toEqual([]);
+    });
+
+    it('drops excluded refs from defaultTest', () => {
+      const tests: TestCase[] = [];
+      const defaultTest = { providers: ['openai:gpt-4', 'gemini'] };
+      const excludedConfigs = ['gemini'];
+      expect(() =>
+        validateTestProviderReferences(tests, providers, defaultTest, undefined, excludedConfigs),
+      ).not.toThrow();
+      expect(defaultTest.providers).toEqual(['openai:gpt-4']);
+    });
+
+    it('drops excluded refs from scenario tests', () => {
+      const tests: TestCase[] = [];
+      const scenarios: Scenario[] = [
+        {
+          config: [{}],
+          tests: [{ vars: { foo: 'bar' }, providers: ['openai:gpt-4', 'gemini'] }],
+        },
+      ];
+      const excludedConfigs = ['gemini'];
+      expect(() =>
+        validateTestProviderReferences(tests, providers, undefined, scenarios, excludedConfigs),
+      ).not.toThrow();
+      expect(scenarios[0].tests?.[0].providers).toEqual(['openai:gpt-4']);
+    });
+
+    it('drops excluded refs from scenario config', () => {
+      const tests: TestCase[] = [];
+      const scenarios: Scenario[] = [
+        {
+          config: [{ providers: ['openai:gpt-4', 'gemini'] }],
+          tests: [],
+        },
+      ];
+      const excludedConfigs = ['gemini'];
+      expect(() =>
+        validateTestProviderReferences(tests, providers, undefined, scenarios, excludedConfigs),
+      ).not.toThrow();
+      expect(scenarios[0].config?.[0].providers).toEqual(['openai:gpt-4']);
+    });
+
+    it('works without excluded configs (backward compatible)', () => {
+      const tests: TestCase[] = [{ vars: { foo: 'bar' }, providers: ['openai:gpt-4'] }];
+      expect(() => validateTestProviderReferences(tests, providers)).not.toThrow();
+      expect(tests[0].providers).toEqual(['openai:gpt-4']);
+    });
+
+    it('matches excluded configs with wildcard refs', () => {
+      const tests: TestCase[] = [{ vars: { foo: 'bar' }, providers: ['openai:gpt-4', 'openrouter:*'] }];
+      const excludedConfigs = ['openrouter:deepseek/deepseek-r1', 'openrouter:free'];
+      expect(() =>
+        validateTestProviderReferences(tests, providers, undefined, undefined, excludedConfigs),
+      ).not.toThrow();
+      expect(tests[0].providers).toEqual(['openai:gpt-4']);
+    });
+  });
 });

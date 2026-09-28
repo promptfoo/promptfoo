@@ -1285,6 +1285,7 @@ async function resolveLoadedConfig(
     testSuite.providers,
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
     testSuite.scenarios,
+    cliFilteredProviderConfigs,
   );
 
   // Validate that all prompt references in tests exist
