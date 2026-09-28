@@ -61,6 +61,11 @@ EXAMPLES = {
         ((".", "dependencies_test.py"),),
         minimums=True,
     ),
+    "redteam-langchain": Example(
+        "examples/redteam-langchain",
+        ("3.10", "3.14"),
+        ((".", "*_test.py"),),
+    ),
     "openai-agents": Example(
         "examples/openai-agents",
         ("3.12", "3.14"),
@@ -98,6 +103,22 @@ EXAMPLES = {
             "opentelemetry-sdk>=1.44,<2",
             "opentelemetry-exporter-otlp-proto-http>=1.44,<2",
         ),
+    ),
+    "langgraph": Example(
+        "examples/integration-langgraph",
+        ("3.10", "3.14"),
+        ((".", "agent_test.py"),),
+    ),
+    "rag-pdf": Example(
+        "examples/eval-rag-full",
+        ("3.10",),
+        (("tests", "test_*.py"),),
+    ),
+    "rag-pdf-cli": Example(
+        "examples/eval-rag-full",
+        ("3.14",),
+        (("tests", "test_*.py"), ("tests", "smoke_cli.py")),
+        node=True,
     ),
     "f-score": Example(
         "examples/eval-f-score",
