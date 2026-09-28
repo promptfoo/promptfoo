@@ -372,8 +372,8 @@ describe('provider operation retry ownership', () => {
     expect(fetch).toHaveBeenCalledTimes(4);
   });
 
-  it.each(['POST', 'PATCH'] as const)(
-    'does not replay a stateful n8n %s with request-local zero retries',
+  it.each(['GET', 'HEAD', 'PUT', 'POST', 'PATCH'] as const)(
+    'does not replay a stateful n8n webhook %s with request-local zero retries',
     async (method) => {
       const fetch = vi.fn().mockImplementation(async () => throttled());
       vi.stubGlobal('fetch', fetch);
