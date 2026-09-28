@@ -754,8 +754,6 @@ describeEvaluator('evaluator execution control', () => {
         cost: 0.05,
         latencyMs: 321,
         sessionId: 'provider-response-session',
-        // A cached response reports its whole total as cached, so the accumulated
-        // `cached` count below is 100 rather than this reported 7.
         tokenUsage: { total: 100, prompt: 80, completion: 20, cached: 7, numRequests: 1 },
         metadata: {
           numTurns: 5,
@@ -782,6 +780,14 @@ describeEvaluator('evaluator execution control', () => {
       ],
     };
 
+    // A cached response reports its whole total as cached, so `cached` is 100, not the 7 above.
+    const expectedUsage = expect.objectContaining({
+      total: 100,
+      prompt: 80,
+      completion: 20,
+      cached: 100,
+      numRequests: 1,
+    });
     vi.mocked(transform).mockRejectedValueOnce(new Error('transform failed'));
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
@@ -792,13 +798,7 @@ describeEvaluator('evaluator execution control', () => {
         successes: 0,
         failures: 0,
         errors: 1,
-        tokenUsage: expect.objectContaining({
-          total: 100,
-          prompt: 80,
-          completion: 20,
-          cached: 100,
-          numRequests: 1,
-        }),
+        tokenUsage: expectedUsage,
       }),
     );
     const result = summary.results[0];
@@ -811,13 +811,7 @@ describeEvaluator('evaluator execution control', () => {
         namedScores: {},
         latencyMs: 321,
         cost: 0.05,
-        tokenUsage: expect.objectContaining({
-          total: 100,
-          prompt: 80,
-          completion: 20,
-          cached: 100,
-          numRequests: 1,
-        }),
+        tokenUsage: expectedUsage,
         metadata: expect.objectContaining({
           numTurns: 5,
           sessionId: 'provider-session',
@@ -831,13 +825,7 @@ describeEvaluator('evaluator execution control', () => {
           cost: 0.05,
           latencyMs: 321,
           sessionId: 'provider-response-session',
-          tokenUsage: expect.objectContaining({
-            total: 100,
-            prompt: 80,
-            completion: 20,
-            cached: 100,
-            numRequests: 1,
-          }),
+          tokenUsage: expectedUsage,
           metadata: expect.objectContaining({
             numTurns: 5,
             sessionId: 'provider-session',
@@ -857,13 +845,7 @@ describeEvaluator('evaluator execution control', () => {
             testErrorCount: 1,
             totalLatencyMs: 321,
             cost: 0.05,
-            tokenUsage: expect.objectContaining({
-              total: 100,
-              prompt: 80,
-              completion: 20,
-              cached: 100,
-              numRequests: 1,
-            }),
+            tokenUsage: expectedUsage,
           }),
         }),
       ]),
