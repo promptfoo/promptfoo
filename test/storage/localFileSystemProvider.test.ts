@@ -65,6 +65,7 @@ describe('LocalFileSystemProvider', () => {
 
     const retrieved = await provider.retrieve(ref.key);
     expect(retrieved.toString('utf8')).toBe('hello');
+    expect(fs.existsSync(path.join(tempDir, `${ref.key}.meta.json`))).toBe(false);
     await expect(provider.delete(ref.key)).resolves.toBeUndefined();
     await expect(provider.exists(ref.key)).resolves.toBe(false);
   });
