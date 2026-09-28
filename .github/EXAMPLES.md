@@ -48,7 +48,8 @@ LiteLLM profile adds only the documented optional adapter. Each runs the provide
 loader tests and both original configs through the built CLI and real SDKs against
 loopback model fixtures. Model errors and wrong tool arguments must fail; the
 positive cases retain the original state, artifact, tool, and native trace assertions.
-These tests do not measure hosted-model quality.
+The ADK HTTP fixtures and CLI harness live in `scripts/tests/google_adk/`, outside
+the downloadable example. These tests do not measure hosted-model quality.
 
 The runner creates and cleans up a temporary virtual environment, installs the
 example requirements, and runs the registered test suites. Fresh environments
@@ -68,8 +69,9 @@ incompatible `h11` requirement. This profile checks runtime compatibility, not
 ## Register another example
 
 Add an `Example` entry in `scripts/examples.py`, choosing its supported runtimes,
-test directories/patterns, and any Node, Docker, or optional package requirements. Keep assertions
-beside the example and use local model fixtures, not paid API calls. Each profile
+test directories/patterns, and any Node, Docker, or optional package requirements.
+Keep example configs simple; put substantial test harnesses under `scripts/tests/`
+and use local model fixtures, not paid API calls. Each profile
 gets a fresh environment; do not combine unrelated SDK requirements. Add selection
 coverage in `scripts/test_examples.py`, then run:
 

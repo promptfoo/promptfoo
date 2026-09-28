@@ -224,6 +224,10 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(calls[1].args[0][1:], ("-m", "pip", "check"))
         self.assertEqual(calls[2].args[0][-1], "*_test.py")
         self.assertEqual(calls[3].args[0][-1], "test_litellm.py")
+        self.assertEqual(
+            Path(calls[3].args[0][-2]).resolve(),
+            SCRIPT.parent / "tests/google_adk",
+        )
         self.assertEqual(len(calls), 4)
         environment = create.call_args.args[0]
         for call in calls:

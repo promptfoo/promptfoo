@@ -12,7 +12,9 @@ import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
+import yaml
+
+ROOT = Path(__file__).resolve().parents[4]
 EXAMPLE = ROOT / "examples/integration-google-adk"
 
 
@@ -22,6 +24,7 @@ class GoogleAdkCliTest(unittest.TestCase):
 
     def run_configs(self, failure=None) -> None:
         requests = []
+        recall_histories = []
         backend = self.backend
 
         class ModelFixture(BaseHTTPRequestHandler):
@@ -95,6 +98,7 @@ class GoogleAdkCliTest(unittest.TestCase):
                         }
                     ]
                 elif "earlier" in text.lower():
+                    recall_histories.append(contents[:-1])
                     parts = [{"text": "We discussed London earlier."}]
                 else:
                     parts = [
@@ -216,20 +220,18 @@ class GoogleAdkCliTest(unittest.TestCase):
                             trace_port = available.getsockname()[1]
                         # Preserve every original assertion; only relocate the provider
                         # and OTLP listener for this temporary evaluation.
-                        config = (
-                            (EXAMPLE / name)
-                            .read_text()
-                            .replace(
-                                "file://provider.py",
-                                f"file://{EXAMPLE / 'provider.py'}",
-                            )
+                        config = yaml.safe_load((EXAMPLE / name).read_text())
+                        provider = config["providers"][0]
+                        entrypoint = provider["id"].rsplit(":", 1)[1]
+                        provider["id"] = (
+                            f"file://{EXAMPLE / 'provider.py'}:{entrypoint}"
                         )
-                        config = config.replace(
-                            "localhost:4318", f"127.0.0.1:{trace_port}"
+                        provider["config"]["otlp_endpoint"] = (
+                            f"http://127.0.0.1:{trace_port}"
                         )
-                        config = config.replace("port: 4318", f"port: {trace_port}")
+                        config["tracing"]["otlp"]["http"]["port"] = trace_port
                         config_path = work / name
-                        config_path.write_text(config)
+                        config_path.write_text(yaml.safe_dump(config))
                         output = work / f"{name}.json"
                         process = subprocess.Popen(
                             [
@@ -313,6 +315,16 @@ class GoogleAdkCliTest(unittest.TestCase):
                 self.assertGreaterEqual(
                     len(requests), 2 if failure == "api-error" else 8
                 )
+                if failure != "api-error":
+                    self.assertEqual(len(recall_histories), 1)
+                    history = json.dumps(recall_histories[0])
+                    for previous_turn in (
+                        "What's the weather in London?",
+                        "Save a short trip note for that city.",
+                        "get_weather",
+                        "save_trip_note",
+                    ):
+                        self.assertIn(previous_turn, history)
                 if backend == "litellm":
                     for request in requests:
                         self.assertEqual(request["model"], "gpt-5.4-mini")

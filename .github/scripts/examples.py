@@ -64,20 +64,23 @@ EXAMPLES = {
     "google-adk": Example(
         "examples/integration-google-adk",
         ("3.12", "3.14"),
-        ((".", "*_test.py"), ("tests", "test_cli.py")),
+        ((".", "*_test.py"), ("../../.github/scripts/tests/google_adk", "test_cli.py")),
         node=True,
     ),
     "google-adk-minimums": Example(
         "examples/integration-google-adk",
         ("3.10",),
-        ((".", "*_test.py"), ("tests", "test_cli.py")),
+        ((".", "*_test.py"), ("../../.github/scripts/tests/google_adk", "test_cli.py")),
         node=True,
         minimums=True,
     ),
     "google-adk-litellm": Example(
         "examples/integration-google-adk",
         ("3.12",),
-        ((".", "*_test.py"), ("tests", "test_litellm.py")),
+        (
+            (".", "*_test.py"),
+            ("../../.github/scripts/tests/google_adk", "test_litellm.py"),
+        ),
         node=True,
         extra_requirements=("litellm>=1.101,<2",),
     ),

@@ -1,4 +1,4 @@
-"""Exercise the documented optional adapter in its own CI environment."""
+"""Exercise the ADK example's optional adapter in its own CI environment."""
 
 import importlib.util
 import unittest
