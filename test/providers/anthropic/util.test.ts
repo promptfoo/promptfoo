@@ -532,35 +532,36 @@ describe('Anthropic utilities', () => {
       expect(result).toBe('Hello');
     });
 
-    it('should concatenate text blocks without tool_use blocks', () => {
-      const message: AnthropicTestMessage = {
+    // Web search and document citations split one passage at each cited span, including
+    // inside a sentence or a markdown table row, so adjacent text blocks join with nothing.
+    it('should concatenate adjacent text blocks exactly as written', () => {
+      const cited = [{ type: 'web_search_result_location', url: 'https://example.com' }];
+      const message = {
         content: [
-          { type: 'text', text: 'Hello', citations: [] },
-          { type: 'text', text: 'World', citations: [] },
+          { type: 'text', text: '| Tokyo | ', citations: null },
+          { type: 'text', text: '14.2 million', citations: cited },
+          { type: 'text', text: ' |\n| Delhi | ', citations: null },
+          { type: 'text', text: '34.6 million', citations: cited },
+          { type: 'text', text: ' |', citations: null },
         ],
-        id: '',
-        model: '',
-        role: 'assistant',
-        stop_details: null,
-        stop_reason: null,
-        stop_sequence: null,
-        type: 'message',
-        container: null,
-        usage: {
-          input_tokens: 0,
-          output_tokens: 0,
-          cache_creation: null,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
-          server_tool_use: null,
-          service_tier: null,
-          inference_geo: null,
-          output_tokens_details: null,
-        },
-      };
+      } as unknown as Anthropic.Messages.Message;
 
-      const result = outputFromMessage(message, false);
-      expect(result).toBe('Hello\n\nWorld');
+      expect(outputFromMessage(message, false)).toBe(
+        '| Tokyo | 14.2 million |\n| Delhi | 34.6 million |',
+      );
+    });
+
+    it('should keep text on either side of a tool call as separate paragraphs', () => {
+      const message = {
+        content: [
+          { type: 'text', text: 'Searching.', citations: null },
+          { type: 'server_tool_use', id: 'srvtoolu_1', name: 'web_search', input: {} },
+          { type: 'web_search_tool_result', tool_use_id: 'srvtoolu_1', content: [] },
+          { type: 'text', text: 'Found it.', citations: null },
+        ],
+      } as unknown as Anthropic.Messages.Message;
+
+      expect(outputFromMessage(message, false)).toBe('Searching.\n\nFound it.');
     });
 
     it('should handle content with tool_use blocks', () => {

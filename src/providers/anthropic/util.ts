@@ -550,36 +550,33 @@ export function applyClaudeRegionalPremium(modelName: string, config: any): any 
 }
 
 export function outputFromMessage(message: Anthropic.Messages.Message, showThinking: boolean) {
-  const hasToolUse = message.content.some((block) => block.type === 'tool_use');
-  const hasThinking = message.content.some(
-    (block) => block.type === 'thinking' || block.type === 'redacted_thinking',
-  );
-
-  if (hasToolUse || hasThinking) {
-    return message.content
-      .map((block) => {
-        if (block.type === 'text') {
-          return block.text;
-        } else if (block.type === 'thinking' && showThinking && block.thinking.trim() !== '') {
-          return `Thinking: ${block.thinking}\nSignature: ${block.signature}`;
-        } else if (block.type === 'redacted_thinking' && showThinking) {
-          return `Redacted Thinking: ${block.data}`;
-        } else if (block.type === 'tool_use') {
-          return JSON.stringify(block);
-        }
-        // Server-executed tool blocks (web search/fetch, code execution) are intermediate
-        // steps the text already answers. Serializing them buries that answer under large
-        // encrypted payloads, which broke JSON verdict parsing on thinking models.
-        return '';
-      })
-      .filter((text) => text !== '')
-      .join('\n\n');
+  const segments: string[] = [];
+  let previousBlockWasText = false;
+  for (const block of message.content) {
+    if (block.type === 'text') {
+      // Citations split one passage into adjacent text blocks, often mid-sentence or
+      // mid-table-row, so adjacent blocks are concatenated exactly as the model wrote them.
+      if (previousBlockWasText) {
+        segments[segments.length - 1] += block.text;
+      } else {
+        segments.push(block.text);
+      }
+      previousBlockWasText = true;
+      continue;
+    }
+    previousBlockWasText = false;
+    if (block.type === 'thinking' && showThinking && block.thinking.trim() !== '') {
+      segments.push(`Thinking: ${block.thinking}\nSignature: ${block.signature}`);
+    } else if (block.type === 'redacted_thinking' && showThinking) {
+      segments.push(`Redacted Thinking: ${block.data}`);
+    } else if (block.type === 'tool_use') {
+      segments.push(JSON.stringify(block));
+    }
+    // Server-executed tool blocks (web search/fetch, code execution) are intermediate steps
+    // the text already answers. Serializing them buried that answer under large encrypted
+    // payloads, which broke JSON verdict parsing on thinking models.
   }
-  return message.content
-    .map((block) => {
-      return (block as Anthropic.Messages.TextBlock).text;
-    })
-    .join('\n\n');
+  return segments.filter((segment) => segment !== '').join('\n\n');
 }
 
 /**
