@@ -22,7 +22,11 @@ async function ensureNaturalPackage(): Promise<void> {
 
   try {
     // Dynamic import for ESM compatibility
-    const natural = await import('natural');
+    const naturalModule = await import('natural');
+    // `natural` is CommonJS. Native Node ESM exposes it under `default`, while
+    // Vitest and some bundlers synthesize named exports. Prefer `default` when it
+    // resolves, matching the codebase's `mod.default ?? mod` interop convention.
+    const natural = naturalModule.default ?? naturalModule;
     PorterStemmer = natural.PorterStemmer;
     WordNet = natural.WordNet;
   } catch (_err) {
@@ -45,6 +49,13 @@ interface MeteorAssertion {
 
 function preprocessWord(word: string): string {
   return word.toLowerCase();
+}
+
+function tokenize(text: string): string[] {
+  return text
+    .split(/\s+/)
+    .filter((word) => word.length > 0)
+    .map((word) => word.replace(/\.+$/, ''));
 }
 
 function generateEnums(
@@ -240,19 +251,16 @@ async function calculateMeteorScore(
   beta: number = 3.0,
   gamma: number = 0.5,
 ): Promise<number> {
-  if (!candidate || references.length === 0) {
+  if (candidate == null || references.length === 0) {
     throw new Error('Invalid inputs');
+  }
+  if (candidate.trim() === '') {
+    return 0;
   }
 
   const scores = await Promise.all(
     references.map((reference) =>
-      calculateSingleMeteorScore(
-        reference.split(/\s+/).map((word) => word.replace(/\.+$/, '')),
-        candidate.split(/\s+/).map((word) => word.replace(/\.+$/, '')),
-        alpha,
-        beta,
-        gamma,
-      ),
+      calculateSingleMeteorScore(tokenize(reference), tokenize(candidate), alpha, beta, gamma),
     ),
   );
 
@@ -290,7 +298,7 @@ export async function handleMeteorAssertion({
     score: inverse ? 1 - score : score,
     reason: pass
       ? 'METEOR assertion passed'
-      : `METEOR score ${score.toFixed(4)} did not meet threshold ${threshold}`,
+      : `METEOR score ${score.toFixed(4)} is ${inverse ? 'greater than or equal to' : 'less than'} threshold ${threshold}`,
     assertion,
   };
 }
