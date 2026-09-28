@@ -3011,19 +3011,10 @@ describe('VertexChatProvider.callClaudeApi', () => {
       env: undefined,
     },
   ])('preserves numbered Claude aliases behind custom Vertex $source', async ({ apiHost, env }) => {
+    // A gateway alias can map to a model that still accepts sampling, so the Claude 5 fallback
+    // must neither drop these values nor convert manual thinking to adaptive.
     const model = 'claude-prod-5';
-    provider = new VertexChatProvider(model, {
-      config: {
-        ...(apiHost ? { apiHost } : {}),
-        max_tokens: 10000,
-        temperature: 0.5,
-        top_p: 0.9,
-        top_k: 40,
-        thinking: { type: 'enabled', budget_tokens: 5000 },
-      },
-      env,
-    });
-    const mockRequest = mockVertexRequest({
+    const response = {
       id: 'test-id',
       type: 'message',
       role: 'assistant',
@@ -3032,22 +3023,71 @@ describe('VertexChatProvider.callClaudeApi', () => {
       stop_reason: 'end_turn',
       stop_sequence: null,
       usage: { input_tokens: 5, output_tokens: 1 },
+    };
+    const send = async (config: Record<string, unknown>) => {
+      provider = new VertexChatProvider(model, {
+        config: { ...(apiHost ? { apiHost } : {}), max_tokens: 10000, ...config },
+        env,
+      });
+      const mockRequest = mockVertexRequest(response);
+      await provider.callClaudeApi('test prompt');
+      expect(mockRequest.mock.calls[0][0].url).toContain(
+        `https://${apiHost ?? env?.VERTEX_API_HOST}/`,
+      );
+      return mockRequest.mock.calls[0][0].data as Record<string, unknown>;
+    };
+
+    expect(await send({ temperature: 0.5, top_k: 40 })).toMatchObject({
+      temperature: 0.5,
+      top_k: 40,
     });
-
-    await provider.callClaudeApi('test prompt');
-
-    expect(mockRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        url: expect.stringContaining(`https://${apiHost ?? env?.VERTEX_API_HOST}/`),
-        data: expect.objectContaining({
-          temperature: 0.5,
-          top_p: 0.9,
-          top_k: 40,
-          thinking: { type: 'enabled', budget_tokens: 5000 },
-        }),
-      }),
-    );
+    expect(
+      await send({ top_p: 0.95, thinking: { type: 'enabled', budget_tokens: 5000 } }),
+    ).toMatchObject({ top_p: 0.95, thinking: { type: 'enabled', budget_tokens: 5000 } });
   });
+
+  // Vertex forwards the body verbatim, so Claude's own sampling rules (verified live against
+  // the Messages API) must hold here too.
+  it.each([
+    ['temperature with top_p', { temperature: 0.5, top_p: 0.9 }, { top_p: 0.9 }],
+    [
+      'temperature and top_k with thinking',
+      { temperature: 0, top_k: 40, thinking: { type: 'enabled', budget_tokens: 1024 } },
+      {},
+    ],
+    [
+      'a low top_p with thinking',
+      { top_p: 0.5, thinking: { type: 'enabled', budget_tokens: 1024 } },
+      { top_p: 0.95 },
+    ],
+  ] as const)(
+    'sends Claude on Vertex only the sampling it accepts: %s',
+    async (_, sampling, expected) => {
+      provider = new VertexChatProvider('claude-sonnet-4-6', {
+        config: { max_tokens: 2048, ...sampling },
+      });
+      const mockRequest = mockVertexRequest({
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-sonnet-4-6',
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 5, output_tokens: 1 },
+      });
+
+      await provider.callClaudeApi('test prompt');
+
+      const sent = mockRequest.mock.calls[0][0].data as Record<string, unknown>;
+      expect({ temperature: sent.temperature, top_p: sent.top_p, top_k: sent.top_k }).toEqual({
+        temperature: undefined,
+        top_p: undefined,
+        top_k: undefined,
+        ...expected,
+      });
+    },
+  );
 
   it.each([
     { name: 'regional', region: 'us-central1', apiHost: undefined, env: undefined },

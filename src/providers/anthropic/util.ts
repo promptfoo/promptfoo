@@ -493,6 +493,74 @@ export function isSamplingParamsDeprecatedClaudeModel(
   );
 }
 
+/** Whether a Claude thinking config turns extended thinking on. */
+export function isClaudeThinkingEnabled(thinking: { type?: string } | undefined): boolean {
+  return thinking?.type === 'enabled' || thinking?.type === 'adaptive';
+}
+
+export interface ClaudeSamplingParams {
+  temperature?: number;
+  top_p?: number;
+  top_k?: number;
+}
+
+/**
+ * The sampling controls Claude accepts for one request, shared by every provider that sends
+ * Claude a Messages body (Anthropic, Vertex, Bedrock). Claude rejects `temperature` together
+ * with `top_p`; with thinking on it rejects `temperature` and `top_k` and needs `top_p` of at
+ * least 0.95; models that deprecate sampling reject all three. `defaultTemperature` fills in
+ * only where a temperature is allowed. Returns what to send and a warning per dropped value.
+ */
+export function resolveClaudeSamplingParams(
+  { temperature, top_p, top_k }: ClaudeSamplingParams,
+  {
+    thinkingEnabled,
+    samplingParamsDeprecated,
+    defaultTemperature,
+  }: { thinkingEnabled: boolean; samplingParamsDeprecated: boolean; defaultTemperature?: number },
+): { sampling: ClaudeSamplingParams; warnings: string[] } {
+  // Callers already warn once per model about deprecated sampling controls.
+  if (samplingParamsDeprecated) {
+    return { sampling: {}, warnings: [] };
+  }
+  const warnings: string[] = [];
+  if (thinkingEnabled) {
+    if (top_k != null) {
+      warnings.push(
+        'top_k is incompatible with extended thinking and will be omitted. Remove top_k from your config or disable thinking.',
+      );
+    }
+    if (temperature != null) {
+      warnings.push(
+        'temperature is incompatible with extended thinking and will be omitted. Remove temperature from your config or disable thinking.',
+      );
+    }
+    if (top_p == null) {
+      return { sampling: {}, warnings };
+    }
+    if (top_p < 0.95 || top_p > 1) {
+      warnings.push(
+        `top_p must be between 0.95 and 1.0 with extended thinking (got ${top_p}). Clamping to valid range.`,
+      );
+    }
+    return { sampling: { top_p: Math.max(0.95, Math.min(1, top_p)) }, warnings };
+  }
+  if (top_p != null && temperature != null) {
+    warnings.push(
+      'temperature is incompatible with top_p on Claude and will be omitted. Remove one of these parameters.',
+    );
+  }
+  const resolvedTemperature = top_p == null ? (temperature ?? defaultTemperature) : undefined;
+  return {
+    sampling: {
+      ...(resolvedTemperature == null ? {} : { temperature: resolvedTemperature }),
+      ...(top_p == null ? {} : { top_p }),
+      ...(top_k == null ? {} : { top_k }),
+    },
+    warnings,
+  };
+}
+
 /**
  * Normalize a Claude thinking config for models that deprecate manual
  * budget-based thinking: an `enabled` budget converts to adaptive thinking
