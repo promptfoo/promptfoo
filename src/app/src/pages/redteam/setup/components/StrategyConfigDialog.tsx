@@ -564,7 +564,7 @@ export default function StrategyConfigDialog({
         <Input
           id="max-concurrency"
           type="number"
-          value={localConfig.maxConcurrency === undefined ? 3 : Number(localConfig.maxConcurrency)}
+          value={localConfig.maxConcurrency === undefined ? '' : Number(localConfig.maxConcurrency)}
           onChange={(e) => {
             const value = e.target.value ? Number.parseInt(e.target.value, 10) : undefined;
             setLocalConfig({ ...localConfig, maxConcurrency: value });

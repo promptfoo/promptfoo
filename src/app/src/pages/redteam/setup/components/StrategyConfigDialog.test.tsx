@@ -461,7 +461,7 @@ describe('StrategyConfigDialog', () => {
 
     const maxConcurrencyInput = screen.getByLabelText('Max Concurrency');
     await user.clear(maxConcurrencyInput);
-    expect(maxConcurrencyInput).toHaveValue(3);
+    expect(maxConcurrencyInput).toHaveValue(null);
 
     await user.click(screen.getByRole('button', { name: 'Save' }));
     expect(mockOnSave).toHaveBeenCalledWith('best-of-n', { maxConcurrency: undefined });
