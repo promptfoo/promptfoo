@@ -69,8 +69,12 @@ tests:
       - type: contains-any
         value: ['Claude', 'Opus', 'capabilities', 'model']
         reason: 'Should discuss the Claude model family specifically'
+      # The topic can postdate the grader's training data, so grade focus and attribution
+      # rather than asking the grader to fact-check sources it cannot see.
       - type: llm-rubric
-        value: 'Provides a focused, research-based report that cites the source it fetched'
+        value: >-
+          Provides a focused report on the requested topic that names or links at least one
+          source for its claims. Do not judge factual accuracy against your own knowledge.
       - type: contains-any
         value: ['search', 'found', 'according', 'research', 'sources']
         reason: 'Should indicate research methodology was used'
