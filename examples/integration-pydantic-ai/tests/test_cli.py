@@ -11,6 +11,133 @@ import tempfile
 import threading
 import unittest
 from typing import ClassVar
+from unittest.mock import patch
+
+ROOT = pathlib.Path(__file__).resolve().parents[3]
+
+
+def fixture_environment(work: pathlib.Path, port: int) -> dict[str, str]:
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key in ("PATH", "SYSTEMROOT", "LANG", "LC_ALL")
+    }
+    home = work / "home"
+    home.mkdir()
+    temporary = work / "tmp"
+    temporary.mkdir()
+    env_file = work / "empty.env"
+    env_file.touch()
+    for proxy in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
+        env[proxy] = env[proxy.lower()] = ""
+    env["NO_PROXY"] = env["no_proxy"] = "*"
+    env.update(
+        HOME=str(home),
+        USERPROFILE=str(home),
+        TMPDIR=str(temporary),
+        # envars loads defaults before main processes the explicit --env-file flag.
+        DOTENV_PATH=str(env_file),
+        PYTHONDONTWRITEBYTECODE="1",
+        OPENAI_API_KEY="fixture-not-a-real-key",
+        OPENAI_API_HOST="",
+        OPENAI_API_BASE_URL=f"http://127.0.0.1:{port}/v1",
+        OPENAI_BASE_URL=f"http://127.0.0.1:{port}/v1",
+        PROMPTFOO_PYTHON=sys.executable,
+        PROMPTFOO_CONFIG_DIR=str(work / "promptfoo"),
+        PROMPTFOO_DISABLE_TELEMETRY="1",
+        PROMPTFOO_DISABLE_UPDATE="1",
+        PROMPTFOO_DISABLE_REMOTE_GENERATION="true",
+        PROMPTFOO_PASS_RATE_THRESHOLD="100",
+    )
+    return env
+
+
+class EnvironmentIsolationTests(unittest.TestCase):
+    def test_parent_credentials_and_settings_are_not_inherited(self):
+        parent = {
+            "PATH": os.environ["PATH"],
+            "ANTHROPIC_API_KEY": "synthetic-parent-key",
+            "AWS_SECRET_ACCESS_KEY": "synthetic-parent-secret",
+            "DOTENV_PATH": "/synthetic/parent.env",
+            "DOTENV_CONFIG_PATH": "/synthetic/legacy.env",
+            "DOTENV_OVERRIDE": "true",
+            "DOTENV_CONFIG_OVERRIDE": "true",
+            "NODE_OPTIONS": "--require=/synthetic/preload.cjs",
+            "PROMPTFOO_PASS_RATE_THRESHOLD": "0",
+            "HTTPS_PROXY": "http://synthetic.invalid",
+        }
+        with tempfile.TemporaryDirectory(prefix="promptfoo-pydantic-env-") as directory:
+            work = pathlib.Path(directory)
+            with patch.dict(os.environ, parent, clear=True):
+                env = fixture_environment(work, 12345)
+            for key in parent.keys() - {
+                "PATH",
+                "DOTENV_PATH",
+                "HTTPS_PROXY",
+                "PROMPTFOO_PASS_RATE_THRESHOLD",
+            }:
+                self.assertNotIn(key, env)
+            self.assertEqual(pathlib.Path(env["DOTENV_PATH"]).read_text(), "")
+            self.assertEqual(env["HOME"], str(work / "home"))
+            self.assertEqual(env["USERPROFILE"], env["HOME"])
+            self.assertEqual(env["HTTPS_PROXY"], "")
+            self.assertEqual(env["PROMPTFOO_PASS_RATE_THRESHOLD"], "100")
+
+    def test_import_time_defaults_cannot_override_fixture_settings(self):
+        with tempfile.TemporaryDirectory(prefix="promptfoo-pydantic-env-") as directory:
+            work = pathlib.Path(directory)
+            checkout = work / "synthetic-checkout"
+            checkout.mkdir()
+            (checkout / ".env").write_text(
+                "OPENAI_API_KEY=synthetic-checkout-key\n"
+                "OPENAI_API_BASE_URL=https://fixture.invalid/v1\n"
+                "PROMPTFOO_QA_SYNTHETIC_SECRET=synthetic-checkout-secret\n"
+            )
+            with patch.dict(os.environ, {"DOTENV_OVERRIDE": "true"}):
+                env = fixture_environment(work, 12345)
+            inspect_environment = (
+                "import {pathToFileURL} from 'node:url'; "
+                "await import(pathToFileURL(process.argv[1]).href); "
+                "process.stdout.write(JSON.stringify({"
+                "key: process.env.OPENAI_API_KEY, "
+                "base: process.env.OPENAI_API_BASE_URL, "
+                "secret: process.env.PROMPTFOO_QA_SYNTHETIC_SECRET ?? null}));"
+            )
+            command = [
+                "node",
+                "--import",
+                str(ROOT / "node_modules/tsx/dist/loader.mjs"),
+                "--input-type=module",
+                "-e",
+                inspect_environment,
+                str(ROOT / "src/envars.ts"),
+            ]
+            result = subprocess.check_output(
+                command, cwd=checkout, env=env, text=True, timeout=20
+            )
+            self.assertEqual(
+                json.loads(result),
+                {
+                    "key": "fixture-not-a-real-key",
+                    "base": "http://127.0.0.1:12345/v1",
+                    "secret": None,
+                },
+            )
+
+            # Prove the inherited override and implicit .env reproduced the old failure.
+            del env["DOTENV_PATH"]
+            env["DOTENV_OVERRIDE"] = "true"
+            control = subprocess.check_output(
+                command, cwd=checkout, env=env, text=True, timeout=20
+            )
+            self.assertEqual(
+                json.loads(control),
+                {
+                    "key": "synthetic-checkout-key",
+                    "base": "https://fixture.invalid/v1",
+                    "secret": "synthetic-checkout-secret",
+                },
+            )
 
 
 class ModelFixture(http.server.BaseHTTPRequestHandler):
@@ -109,37 +236,15 @@ class ModelFixture(http.server.BaseHTTPRequestHandler):
 
 class ExampleCliTests(unittest.TestCase):
     def test_real_sdk_runs_tools_and_returns_structured_weather(self):
-        repo = pathlib.Path(__file__).resolve().parents[3]
         ModelFixture.tool_calls = []
         server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), ModelFixture)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
             with tempfile.TemporaryDirectory(prefix="promptfoo-pydantic-") as directory:
-                output = pathlib.Path(directory) / "eval.json"
-                env = {
-                    key: value
-                    for key, value in os.environ.items()
-                    if not key.lower().endswith("_proxy")
-                    and not key.startswith(
-                        ("OPENAI_", "ANTHROPIC_", "AZURE_", "GOOGLE_")
-                    )
-                }
-                # Empty values prevent implicit dotenv from restoring proxies.
-                for proxy in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
-                    env[proxy] = env[proxy.lower()] = ""
-                env["NO_PROXY"] = env["no_proxy"] = "*"
-                env.update(
-                    OPENAI_API_KEY="fixture-not-a-real-key",
-                    # Dotenv must not restore higher-priority grader endpoints.
-                    OPENAI_API_HOST="",
-                    OPENAI_API_BASE_URL=f"http://127.0.0.1:{server.server_port}/v1",
-                    OPENAI_BASE_URL=f"http://127.0.0.1:{server.server_port}/v1",
-                    PROMPTFOO_PYTHON=sys.executable,
-                    PROMPTFOO_CONFIG_DIR=str(pathlib.Path(directory) / "promptfoo"),
-                    PROMPTFOO_DISABLE_TELEMETRY="1",
-                    PROMPTFOO_DISABLE_REMOTE_GENERATION="true",
-                )
+                work = pathlib.Path(directory)
+                output = work / "eval.json"
+                env = fixture_environment(work, server.server_port)
                 process = subprocess.Popen(
                     [
                         "npm",
@@ -151,12 +256,14 @@ class ExampleCliTests(unittest.TestCase):
                         "examples/integration-pydantic-ai/promptfooconfig.yaml",
                         "--no-cache",
                         "--no-share",
+                        "--env-file",
+                        env["DOTENV_PATH"],
                         "-j",
                         "1",
                         "-o",
                         str(output),
                     ],
-                    cwd=repo,
+                    cwd=ROOT,
                     env=env,
                     start_new_session=True,
                 )
