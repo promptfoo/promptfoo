@@ -26,7 +26,7 @@ SCRIPT = Path(__file__).with_name("examples.py")
 class SelectionTests(unittest.TestCase):
     def test_full_run_preserves_every_registered_runtime(self):
         rows = select_examples(None)
-        self.assertEqual(len(rows), 16)
+        self.assertEqual(len(rows), 18)
         self.assertEqual(
             [(row["example"], row["python"]) for row in rows],
             [
@@ -42,6 +42,8 @@ class SelectionTests(unittest.TestCase):
                 ("openai-agents-otel", "3.12"),
                 ("langgraph", "3.10"),
                 ("langgraph", "3.14"),
+                ("rag-pdf", "3.10"),
+                ("rag-pdf-cli", "3.14"),
                 ("google-adk", "3.12"),
                 ("google-adk", "3.14"),
                 ("google-adk-minimums", "3.10"),
@@ -111,6 +113,25 @@ class SelectionTests(unittest.TestCase):
                 (ROOT / example.directory / example.suites[2][0]).resolve(),
                 ROOT / ".github/scripts/tests/openai_agents",
             )
+
+    def test_rag_changes_preserve_pdf_and_cli_runtime_coverage(self):
+        for path in (
+            "examples/eval-rag-full/requirements.txt",
+            "examples/eval-rag-full/ingest.py",
+            "examples/eval-rag-full/tests/smoke_cli.py",
+        ):
+            with self.subTest(path=path):
+                rows = select_examples([path])
+                self.assertEqual(
+                    [(row["example"], row["python"], row["node"]) for row in rows],
+                    [("rag-pdf", "3.10", False), ("rag-pdf-cli", "3.14", True)],
+                )
+        self.assertEqual(EXAMPLES["rag-pdf"].suites, (("tests", "test_*.py"),))
+        self.assertEqual(
+            EXAMPLES["rag-pdf-cli"].suites,
+            (("tests", "test_*.py"), ("tests", "smoke_cli.py")),
+        )
+        self.assertEqual(select_examples(["examples/eval-rag-full-other/file.py"]), [])
 
     def test_langgraph_changes_select_its_python_only_suite(self):
         for filename in ("agent.py", "agent_test.py", "requirements.txt"):

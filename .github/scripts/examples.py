@@ -109,6 +109,17 @@ EXAMPLES = {
         ("3.10", "3.14"),
         ((".", "agent_test.py"),),
     ),
+    "rag-pdf": Example(
+        "examples/eval-rag-full",
+        ("3.10",),
+        (("tests", "test_*.py"),),
+    ),
+    "rag-pdf-cli": Example(
+        "examples/eval-rag-full",
+        ("3.14",),
+        (("tests", "test_*.py"), ("tests", "smoke_cli.py")),
+        node=True,
+    ),
     "google-adk": Example(
         "examples/integration-google-adk",
         ("3.12", "3.14"),
