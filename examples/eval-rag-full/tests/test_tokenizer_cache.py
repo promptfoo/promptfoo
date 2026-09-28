@@ -23,11 +23,11 @@ class TokenizerCacheTests(unittest.TestCase):
         self.source = self.host_cache / smoke_cli.TOKENIZER_CACHE_KEY
         self.data = b"synthetic vocabulary"
         self.env = {"HOME": str(self.work), "TMPDIR": str(self.work)}
-        self.enterContext(
-            patch.object(
-                smoke_cli, "TOKENIZER_SHA256", hashlib.sha256(self.data).hexdigest()
-            )
+        tokenizer_hash = patch.object(
+            smoke_cli, "TOKENIZER_SHA256", hashlib.sha256(self.data).hexdigest()
         )
+        tokenizer_hash.start()
+        self.addCleanup(tokenizer_hash.stop)
 
     def test_verified_cache_is_copied_without_network_or_host_changes(self):
         self.source.write_bytes(self.data)
