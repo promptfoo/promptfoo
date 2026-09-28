@@ -5,6 +5,7 @@ import type { Stats } from 'node:fs';
 
 import { trace as otelTrace, SpanStatusCode } from '@opentelemetry/api';
 import dedent from 'dedent';
+import semverSatisfies from 'semver/functions/satisfies.js';
 import cliState from '../cliState';
 import { getEnvString, getProcessEnv } from '../envars';
 import { importModule, resolvePackageEntryPoint } from '../esm';
@@ -336,7 +337,7 @@ function deriveSkillCalls(toolCalls: ToolCallEntry[]): SkillCallEntry[] {
  * Claude Agent SDK Provider
  *
  * This provider requires the @anthropic-ai/claude-agent-sdk package to be installed separately:
- *   npm install promptfoo @anthropic-ai/claude-agent-sdk@0.3.273
+ *   npm install promptfoo @anthropic-ai/claude-agent-sdk@^0.3.273
  *
  * Two default configurations:
  * - No working_dir: Runs in temp directory with no tools - behaves like plain chat API
@@ -369,6 +370,12 @@ export const CLAUDE_CODE_MODEL_ALIASES = [
 ];
 
 /**
+ * Oldest supported Claude Agent SDK. Any later 0.3.x release is accepted, so a source checkout,
+ * a Renovate bump, or a user on a newer SDK keeps working without a matching promptfoo release.
+ */
+const CLAUDE_AGENT_SDK_RANGE = '^0.3.273';
+
+/**
  * Helper to load the Claude Agent SDK ESM module
  * Uses resolvePackageEntryPoint to handle ESM-only packages with restrictive exports
  */
@@ -383,7 +390,7 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
       dedent`The @anthropic-ai/claude-agent-sdk package could not be resolved from ${basePath}.
 
       To use the Claude Agent SDK provider, install it with:
-        npm install promptfoo @anthropic-ai/claude-agent-sdk@0.3.273
+        npm install promptfoo @anthropic-ai/claude-agent-sdk@${CLAUDE_AGENT_SDK_RANGE}
 
       If the package is already installed elsewhere, run promptfoo from the
       project root (or point the config at that root) so node_modules is on
@@ -394,9 +401,9 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
   }
 
   const version = getPackageVersion('@anthropic-ai/claude-agent-sdk', claudeCodePath);
-  if (version !== '0.3.273') {
+  if (!version || !semverSatisfies(version, CLAUDE_AGENT_SDK_RANGE)) {
     throw new Error(
-      `The Claude Agent SDK provider requires @anthropic-ai/claude-agent-sdk@0.3.273 (found ${version ?? 'unknown'}). Install it with: npm install promptfoo @anthropic-ai/claude-agent-sdk@0.3.273`,
+      `The Claude Agent SDK provider requires @anthropic-ai/claude-agent-sdk@${CLAUDE_AGENT_SDK_RANGE} (found ${version ?? 'unknown'}). Install it with: npm install promptfoo @anthropic-ai/claude-agent-sdk@${CLAUDE_AGENT_SDK_RANGE}`,
     );
   }
 
@@ -415,7 +422,7 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
       - Corrupted installation
 
       Try reinstalling:
-        npm install promptfoo @anthropic-ai/claude-agent-sdk@0.3.273
+        npm install promptfoo @anthropic-ai/claude-agent-sdk@${CLAUDE_AGENT_SDK_RANGE}
 
       For more information, see: https://www.promptfoo.dev/docs/providers/claude-agent-sdk/`,
     );

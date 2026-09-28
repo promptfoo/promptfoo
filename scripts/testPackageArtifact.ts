@@ -823,7 +823,7 @@ if (mode === 'incompatible') {
       '--no-fund',
       '--no-package-lock',
       '@openai/codex-sdk@^0.156.1',
-      '@anthropic-ai/claude-agent-sdk@0.3.273',
+      '@anthropic-ai/claude-agent-sdk@^0.3.273',
       '@openai/codex-security@^0.1.31',
     ],
     consumerDir,

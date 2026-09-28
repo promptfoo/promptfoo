@@ -590,22 +590,32 @@ describe('ClaudeCodeSDKProvider', () => {
     const provider = new ClaudeCodeSDKProvider({ config: { apiKey: 'test-key' } });
     const result = await provider.callApi('Import failure');
     expect(result.error).toContain('Failed to load @anthropic-ai/claude-agent-sdk');
-    expect(result.error).toContain('npm install promptfoo @anthropic-ai/claude-agent-sdk@0.3.273');
+    expect(result.error).toContain('npm install promptfoo @anthropic-ai/claude-agent-sdk@^0.3.273');
   });
 
-  it.each(['0.3.235', '0.3.274', '1.0.0', 'invalid', null])(
+  it.each(['0.3.235', '0.4.0', '1.0.0', 'invalid', null])(
     'rejects incompatible SDK %s before importing it',
     async (version) => {
       vi.mocked(getPackageVersion).mockReturnValue(version);
       const provider = new ClaudeCodeSDKProvider({ config: { apiKey: 'test-key' } });
       const response = await provider.callApi('test');
-      expect(response.error).toContain('requires @anthropic-ai/claude-agent-sdk@0.3.273');
+      expect(response.error).toContain('requires @anthropic-ai/claude-agent-sdk@^0.3.273');
       expect(response.error).toContain(
-        'npm install promptfoo @anthropic-ai/claude-agent-sdk@0.3.273',
+        'npm install promptfoo @anthropic-ai/claude-agent-sdk@^0.3.273',
       );
       expect(importModule).not.toHaveBeenCalled();
     },
   );
+
+  // Renovate bumps the pinned devDependency, so later 0.3.x releases must keep working.
+  it.each(['0.3.273', '0.3.277', '0.3.999'])('accepts compatible SDK %s', async (version) => {
+    vi.mocked(getPackageVersion).mockReturnValue(version);
+    mockQuery.mockReturnValue(createMockResponse('Response'));
+    const provider = new ClaudeCodeSDKProvider({ config: { apiKey: 'test-key' } });
+    const response = await provider.callApi('test');
+    expect(response.error).toBeUndefined();
+    expect(response.output).toBe('Response');
+  });
 
   it.each(['', null])(
     'honors empty system prompts while defaulting null (%j)',
