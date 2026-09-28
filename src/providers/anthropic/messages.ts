@@ -364,11 +364,13 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       return message;
     }
     let turnContent = message.content;
-    for (
-      let resumes = 0;
-      message.stop_reason === 'pause_turn' && resumes < MAX_PAUSE_TURN_RESUMES;
-      resumes++
-    ) {
+    for (let resumes = 0; message.stop_reason === 'pause_turn'; resumes++) {
+      if (resumes === MAX_PAUSE_TURN_RESUMES) {
+        logger.warn(
+          `Claude's turn was still paused (stop_reason: pause_turn) after ${MAX_PAUSE_TURN_RESUMES} resumes, so the output may be incomplete. Lower the tool max_uses or split the task.`,
+        );
+        break;
+      }
       try {
         message = await send(
           withTurnContainer(
@@ -388,7 +390,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       } catch (err) {
         // Keep the paused output rather than failing a row that already has a partial answer.
         logger.warn(
-          `Could not resume a paused Claude turn: ${err instanceof Error ? err.message : String(err)}`,
+          `Could not resume a paused Claude turn, so the output may be incomplete: ${err instanceof Error ? err.message : String(err)}`,
         );
         break;
       }

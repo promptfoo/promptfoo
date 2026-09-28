@@ -2672,6 +2672,7 @@ describe('AnthropicMessagesProvider', () => {
 
     it('stops resuming after five pauses and keeps the partial turn', async () => {
       provider = createProvider('claude-sonnet-4-6');
+      const warnSpy = vi.spyOn(logger, 'warn');
       const create = vi.spyOn(provider.anthropic.messages, 'create');
       for (const n of [1, 2, 3, 4, 5, 6]) {
         create.mockResolvedValueOnce({
@@ -2694,6 +2695,8 @@ describe('AnthropicMessagesProvider', () => {
       expect(result.error).toBeUndefined();
       expect(result.finishReason).toBe('pause_turn');
       expect(result.tokenUsage).toMatchObject({ prompt: 60, completion: 6, total: 66 });
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('still paused'));
+      expect(warnSpy).toHaveBeenCalledTimes(1);
     });
 
     it('keeps the paused output when the resume request fails', async () => {
@@ -2711,8 +2714,9 @@ describe('AnthropicMessagesProvider', () => {
       expect(result.tokenUsage).toMatchObject({ prompt: 1000, completion: 100, total: 1100 });
       expect(result.cost).toBeCloseTo(0.0045, 10);
       expect(warnSpy).toHaveBeenCalledWith(
-        'Could not resume a paused Claude turn: 400 The conversation must end with a user message.',
+        'Could not resume a paused Claude turn, so the output may be incomplete: 400 The conversation must end with a user message.',
       );
+      expect(warnSpy).toHaveBeenCalledTimes(1);
     });
 
     it('resumes a paused turn through the streaming path', async () => {
