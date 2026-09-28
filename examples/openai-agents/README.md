@@ -95,6 +95,12 @@ This sample is intentionally not a production-hardened airline agent. Some gener
 
 ## Notes
 
+Credential-free regression coverage runs through the shared Examples workflow.
+The real-SDK CLI harness is maintained under `.github/scripts/tests/openai_agents`;
+see `.github/EXAMPLES.md` in a repository checkout for runtime, minimum-version,
+and optional wrapper-telemetry profiles. It exercises the original config against
+loopback model fixtures, not hosted-model quality.
+
 - The example uses `openai-agents>=0.22.3,<0.23` and the Python SDK, not the built-in `openai:agents:*` provider. That built-in provider is for the JavaScript `@openai/agents` SDK.
 - `requirements.txt` contains only the Agents SDK. The custom tracing bridge uses the SDK and Python standard library, so the default eval does not need the optional OpenTelemetry SDK or exporter. Install the wrapper packages with the command above before setting `PROMPTFOO_ENABLE_OTEL=true`.
 - If you do not need SDK spans, remove the `configure_promptfoo_tracing(...)` import and call from `agent_provider.py`. You can then delete `promptfoo_tracing.py`, but you will lose tool-path assertions because Promptfoo will no longer receive the SDK's internal agent spans.
