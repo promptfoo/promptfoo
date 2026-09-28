@@ -327,8 +327,7 @@ describe('webSearchUtils', () => {
       expect(hasWebSearchCapability(provider as ApiProvider)).toBe(false);
     });
 
-    // Both the legacy basic variant and the current dynamic-filtering variant count.
-    it.each(['web_search_20250305', 'web_search_20260209'])(
+    it.each(['web_search_20250305', 'web_search_20260209', 'web_search_20260318'])(
       'should return true for Anthropic provider with the %s tool',
       (toolType) => {
         const provider: Partial<ApiProvider> = {

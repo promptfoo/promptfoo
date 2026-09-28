@@ -3,9 +3,8 @@ import { AnthropicMessagesProvider } from './messages';
 import type { EnvOverrides } from '../../types/env';
 import type { DefaultProviders, ProviderResponse } from '../../types/index';
 
-// Default model to use for all default providers. Sonnet 5 is the current-generation
-// Sonnet: 1M context, cheaper than Sonnet 4.6 ($2/$10 vs $3/$15), and it accepts the
-// forced `tool_choice` the llm-rubric grader below depends on.
+// Default model for all default providers. It must accept the forced `tool_choice` that the
+// llm-rubric grader below depends on.
 export const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-5';
 
 /**

@@ -107,19 +107,10 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
     return true;
   }
 
-  // Check for Anthropic with web_search tool. Every registered variant counts:
-  // `web_search_20260318` is the newest (adds response_inclusion), `web_search_20260209`
-  // added dynamic filtering, and `web_search_20250305` is the basic variant still used
-  // for pre-4.6 models and on Vertex.
+  // Check for Anthropic with any version of its dated `web_search_YYYYMMDD` server tool.
   if (
     id.includes('anthropic') &&
-    hasTool(
-      provider,
-      (t) =>
-        t.type === 'web_search_20250305' ||
-        t.type === 'web_search_20260209' ||
-        t.type === 'web_search_20260318',
-    )
+    hasTool(provider, (t) => typeof t.type === 'string' && t.type.startsWith('web_search_'))
   ) {
     return true;
   }
