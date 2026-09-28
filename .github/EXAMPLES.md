@@ -93,3 +93,22 @@ These checks prove runtime contracts, not hosted-model quality or an OS security
 boundary. The Unix-local workflow executes commands on the test host. The harness
 uses synthetic files, an allowlisted environment, dummy credentials, local model
 and trace endpoints, an isolated copy/database, and bounded child process groups.
+
+## RAG PDF
+
+The `rag-pdf` profile runs all PDF, timeout, environment-isolation and tokenizer-cache
+regressions on Python 3.10. The `rag-pdf-cli` profile repeats those tests on Python
+3.14, then invokes the existing source CLI smoke through unittest discovery. It
+persists two document batches in real Chroma, reopens the database, and checks all
+nine original evaluation cases against local embedding and chat APIs.
+
+```bash
+python3.10 .github/scripts/examples.py run rag-pdf
+python3.14 .github/scripts/examples.py run rag-pdf-cli
+```
+
+The CLI profile requires the normal local CLI build before the shared runner starts.
+The smoke itself continues to use `npm run local`, with bounded process cleanup and
+isolated environment/cache preparation. It can also be run directly with
+`python examples/eval-rag-full/tests/smoke_cli.py`. These profiles replace the
+standalone RAG workflow without changing its Python runtime split or assertions.

@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -275,6 +276,11 @@ def main():
         server.shutdown()
         server.server_close()
         worker.join()
+
+
+class RagCliTest(unittest.TestCase):
+    def test_persisted_retrieval_through_original_config(self):
+        main()
 
 
 if __name__ == "__main__":

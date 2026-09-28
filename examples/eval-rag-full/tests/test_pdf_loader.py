@@ -2,14 +2,15 @@
 
 import importlib
 import os
+import sys
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
+from pathlib import Path
 from unittest.mock import patch
 
 import requests
-from pdf_loader import load_pdf_pages
 from pypdf import PdfWriter
 from pypdf.errors import PdfReadError
 from pypdf.generic import (
@@ -18,6 +19,10 @@ from pypdf.generic import (
     NameObject,
     NumberObject,
 )
+
+# The shared example runner invokes this suite from the repository root.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from pdf_loader import load_pdf_pages
 
 
 def make_pdf() -> bytes:
