@@ -10,7 +10,7 @@ const REQUEST_TIMEOUT_MS = 300_000; // 5 minutes
  *
  * See https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles-support.html
  */
-export const INFERENCE_PROFILE_PREFIX = /^(?:us|eu|apac|global|jp|au)\./;
+export const INFERENCE_PROFILE_PREFIX = /^(?:us|us-gov|eu|apac|global|jp|au|ca|in)\./;
 
 export function hasProxyEnv(): boolean {
   return Boolean(getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY'));

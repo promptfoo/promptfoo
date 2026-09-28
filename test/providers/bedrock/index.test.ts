@@ -3808,7 +3808,17 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
       // Regional/global inference profiles must be rejected too — otherwise ids such as
       // `eu.anthropic.claude-3-5-haiku-20241022-v1:0` fall through to the `anthropic.claude`
       // catch-all and fail at request time with an opaque AWS error.
-      for (const prefix of ['us.', 'eu.', 'apac.', 'global.', 'jp.', 'au.']) {
+      for (const prefix of [
+        'us.',
+        'us-gov.',
+        'eu.',
+        'apac.',
+        'global.',
+        'jp.',
+        'au.',
+        'ca.',
+        'in.',
+      ]) {
         expect(() => getHandlerForModel(`${prefix}${modelName}`)).toThrow(
           `Unknown Amazon Bedrock model: ${prefix}${modelName}`,
         );

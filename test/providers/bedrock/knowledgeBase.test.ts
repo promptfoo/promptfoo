@@ -315,6 +315,27 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     });
   });
 
+  it.each([
+    'us-gov.anthropic.claude-3-5-sonnet-20240620-v1:0',
+    'ca.amazon.nova-lite-v1:0',
+    'in.openai.gpt-5.6-terra',
+  ])('passes the %s inference profile through as the model ARN', async (modelName) => {
+    mockSend.mockResolvedValueOnce({ output: { text: 'ok' } });
+    const provider = new AwsBedrockKnowledgeBaseProvider(modelName, {
+      config: { knowledgeBaseId: 'kb-123', region: 'us-east-1' },
+    });
+
+    await provider.callApi('What is the capital of France?');
+
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        retrieveAndGenerateConfiguration: expect.objectContaining({
+          knowledgeBaseConfiguration: expect.objectContaining({ modelArn: modelName }),
+        }),
+      }),
+    );
+  });
+
   it('should handle API errors gracefully', async () => {
     mockSend.mockRejectedValueOnce(new Error('API error'));
 
