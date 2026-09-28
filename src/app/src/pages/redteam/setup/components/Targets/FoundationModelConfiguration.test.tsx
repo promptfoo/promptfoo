@@ -136,6 +136,32 @@ describe('FoundationModelConfiguration', () => {
     );
   });
 
+  it('should preserve zero values for Temperature and Top P instead of converting to undefined', async () => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={initialTarget}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="openai"
+      />,
+    );
+
+    const accordionSummary = screen.getByRole('button', { name: /Advanced Configuration/ });
+    await user.click(accordionSummary);
+
+    const temperatureInput = screen.getByLabelText('Temperature');
+    await user.click(temperatureInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('0');
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('temperature', 0);
+
+    const topPInput = screen.getByLabelText('Top P');
+    await user.click(topPInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('0');
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('top_p', 0);
+  });
+
   it('should call updateCustomTarget with undefined when Temperature field is cleared', async () => {
     const user = userEvent.setup();
     render(

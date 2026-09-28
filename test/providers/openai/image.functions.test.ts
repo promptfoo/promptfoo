@@ -588,8 +588,77 @@ describe('OpenAI Image Provider Functions', () => {
       );
 
       expect(result).toHaveProperty('error');
-      expect(result.error).toContain('API error: TypeError');
-      expect(result.error).toContain('Cannot read properties of undefined');
+      expect(result.error).toContain('No image URL found in response');
+      expect(result.error).not.toContain('TypeError');
+      expect(mockDeleteFromCache).toHaveBeenCalledWith();
+    });
+
+    it('should return clear error for empty data array (url)', async () => {
+      const mockDeleteFromCache = vi.fn();
+      const data = {
+        data: [],
+        deleteFromCache: mockDeleteFromCache,
+      };
+
+      const result = await processApiResponse(
+        data,
+        'test prompt',
+        'url',
+        false,
+        'dall-e-2',
+        '512x512',
+        undefined,
+      );
+
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('No image URL found in response');
+      expect(result.error).not.toContain('TypeError');
+      expect(mockDeleteFromCache).toHaveBeenCalledWith();
+    });
+
+    it('should return clear error for empty data array (b64_json)', async () => {
+      const mockDeleteFromCache = vi.fn();
+      const data = {
+        data: [],
+        deleteFromCache: mockDeleteFromCache,
+      };
+
+      const result = await processApiResponse(
+        data,
+        'test prompt',
+        'b64_json',
+        false,
+        'dall-e-3',
+        '1024x1024',
+        undefined,
+      );
+
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('No base64 image data found in response');
+      expect(result.error).not.toContain('TypeError');
+      expect(mockDeleteFromCache).toHaveBeenCalledWith();
+    });
+
+    it('should return clear error for missing data field', async () => {
+      const mockDeleteFromCache = vi.fn();
+      const data = {
+        created: 123,
+        deleteFromCache: mockDeleteFromCache,
+      };
+
+      const result = await processApiResponse(
+        data,
+        'test prompt',
+        'url',
+        false,
+        'dall-e-2',
+        '512x512',
+        undefined,
+      );
+
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('No image URL found in response');
+      expect(result.error).not.toContain('TypeError');
       expect(mockDeleteFromCache).toHaveBeenCalledWith();
     });
 

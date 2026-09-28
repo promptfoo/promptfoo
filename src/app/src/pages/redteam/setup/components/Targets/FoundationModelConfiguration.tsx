@@ -625,9 +625,10 @@ const FoundationModelConfiguration = ({
                 max={2}
                 step={0.1}
                 value={selectedTarget.config?.temperature ?? ''}
-                onChange={(e) =>
-                  updateCustomTarget('temperature', parseFloat(e.target.value) || undefined)
-                }
+                onChange={(e) => {
+                  const value = parseFloat(e.target.value);
+                  updateCustomTarget('temperature', Number.isNaN(value) ? undefined : value);
+                }}
               />
               <p className="text-sm text-muted-foreground">Controls randomness (0.0 to 2.0)</p>
             </div>
@@ -664,9 +665,10 @@ const FoundationModelConfiguration = ({
                 max={1}
                 step={0.01}
                 value={selectedTarget.config?.top_p ?? ''}
-                onChange={(e) =>
-                  updateCustomTarget('top_p', parseFloat(e.target.value) || undefined)
-                }
+                onChange={(e) => {
+                  const value = parseFloat(e.target.value);
+                  updateCustomTarget('top_p', Number.isNaN(value) ? undefined : value);
+                }}
               />
               <p className="text-sm text-muted-foreground">
                 Nucleus sampling parameter (0.0 to 1.0)
