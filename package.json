@@ -234,7 +234,7 @@
     "@aws-sdk/client-sagemaker-runtime": "^3.1045.0",
     "@aws-sdk/credential-provider-sso": "^3.972.16",
     "@azure/identity": "^4.13.3",
-    "@biomejs/biome": "2.5.13",
+    "@biomejs/biome": "2.5.14",
     "@fal-ai/client": "~1.10.1",
     "@ibm-cloud/watsonx-ai": "^1.7.16",
     "@langfuse/client": "^5.11.1",
