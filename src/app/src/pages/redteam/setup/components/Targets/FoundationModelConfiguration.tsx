@@ -124,6 +124,12 @@ const createDefaultMCPServer = (index: number): MCPServerConfig => ({
   args: [],
 });
 
+// Zero is a valid sampling value, so only an empty or unparseable input clears the field.
+const parseOptionalFloat = (value: string): number | undefined => {
+  const parsed = Number.parseFloat(value);
+  return Number.isNaN(parsed) ? undefined : parsed;
+};
+
 const FoundationModelConfiguration = ({
   selectedTarget,
   updateCustomTarget,
@@ -626,7 +632,7 @@ const FoundationModelConfiguration = ({
                 step={0.1}
                 value={selectedTarget.config?.temperature ?? ''}
                 onChange={(e) =>
-                  updateCustomTarget('temperature', parseFloat(e.target.value) || undefined)
+                  updateCustomTarget('temperature', parseOptionalFloat(e.target.value))
                 }
               />
               <p className="text-sm text-muted-foreground">Controls randomness (0.0 to 2.0)</p>
@@ -664,9 +670,7 @@ const FoundationModelConfiguration = ({
                 max={1}
                 step={0.01}
                 value={selectedTarget.config?.top_p ?? ''}
-                onChange={(e) =>
-                  updateCustomTarget('top_p', parseFloat(e.target.value) || undefined)
-                }
+                onChange={(e) => updateCustomTarget('top_p', parseOptionalFloat(e.target.value))}
               />
               <p className="text-sm text-muted-foreground">
                 Nucleus sampling parameter (0.0 to 1.0)
