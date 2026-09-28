@@ -456,6 +456,33 @@ This policy excludes all staff going on any outgoing structured programs, short 
       expect(result.metadata?.relevantSentenceCount).toBe(1);
     });
 
+    it('should not count grader response header as an extracted sentence', async () => {
+      // Regression: the grader's raw output may include a preamble/header line
+      // (e.g. "candidate sentences:") that is not a context sentence. Counting
+      // it as an extracted sentence inflates the numerator and the score.
+      const input = 'Who created Python?';
+      const context =
+        'Python is a high-level programming language. It has a large standard library. It was created by Guido van Rossum. Python is widely used in data science.';
+      const threshold = 0.5;
+
+      const mockCallApi = vi.fn().mockResolvedValue({
+        output: 'candidate sentences:\nIt was created by Guido van Rossum.',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+      const result = await matchesContextRelevance(input, context, threshold);
+
+      // 1 relevant sentence out of 4 → 1/4 = 0.25 (not 2/4 = 0.5)
+      expect(result.score).toBe(0.25);
+      expect(result.pass).toBe(false);
+      expect(result.metadata?.totalContextUnits).toBe(4);
+      expect(result.metadata?.relevantSentenceCount).toBe(1);
+      expect(result.metadata?.extractedSentences).toEqual([
+        'It was created by Guido van Rossum.',
+      ]);
+    });
+
     it('should tag a non-grounded grader response as a grader error', async () => {
       // A refusal/apology that quotes nothing from the context is not a genuine
       // low-relevance verdict. It must be tagged as a grader error (score 0,
