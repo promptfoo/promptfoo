@@ -93,3 +93,14 @@ These checks prove runtime contracts, not hosted-model quality or an OS security
 boundary. The Unix-local workflow executes commands on the test host. The harness
 uses synthetic files, an allowlisted environment, dummy credentials, local model
 and trace endpoints, an isolated copy/database, and bounded child process groups.
+
+## Specialized Browser Workflow
+
+`workflows/browser-example-python.yml` retains the Gradio browser example's Python
+3.10/3.14 component tests and Python 3.12 end-to-end browser job. That job provisions
+Chromium and its operating-system libraries, starts the Gradio server, and runs both
+original configurations through the local CLI. The shared runner's Node option
+builds the CLI but does not provision browser binaries or system libraries; keeping
+this workflow separate preserves the actual browser coverage without expanding
+the shared runner's infrastructure API. Shared runtime/toolchain changes select
+the specialized workflow as well as the aggregate example matrix.
