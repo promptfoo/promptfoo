@@ -4,9 +4,9 @@
  * Spawns and manages the @modelcontextprotocol/server-filesystem child process.
  */
 
-import { existsSync, realpathSync } from 'node:fs';
 import { type ChildProcess, spawn } from 'child_process';
-import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from 'path';
+import { existsSync } from 'fs';
+import { delimiter, dirname, isAbsolute, join, resolve } from 'path';
 
 import logger from '../../logger';
 import { FilesystemMcpError } from '../../types/codeScan';
@@ -27,64 +27,25 @@ function createFilesystemMcpEnv(): NodeJS.ProcessEnv {
   return env;
 }
 
-function isWithinDirectory(directory: string, candidate: string): boolean {
-  const relativePath = relative(directory, candidate);
-  return (
-    !relativePath ||
-    (relativePath !== '..' && !relativePath.startsWith(`..${sep}`) && !isAbsolute(relativePath))
-  );
-}
-
-function resolveWindowsNpx(
-  rootDir: string,
-  env: NodeJS.ProcessEnv,
-): { command: string; args: string[] } {
-  const canonicalRoot = realpathSync(rootDir);
-  const trustedPath = (candidate: string): string | undefined => {
-    try {
-      if (!existsSync(candidate) || isWithinDirectory(rootDir, candidate)) {
-        return undefined;
-      }
-      const canonical = realpathSync(candidate);
-      return isWithinDirectory(canonicalRoot, canonical) ? undefined : canonical;
-    } catch {
-      // An inaccessible or disappearing installation is not a usable candidate.
-      return undefined;
-    }
-  };
-  const npmCliIn = (directory: string) =>
-    trustedPath(join(directory, 'node_modules', 'npm', 'bin', 'npx-cli.js'));
-
-  // Windows npm shims are .cmd files and cannot be spawned without a shell. Run
-  // their JS entrypoint under Node instead, as the code-scan action does for npm.
-  const bundledNpx = npmCliIn(dirname(process.execPath));
-  if (bundledNpx) {
-    return { command: process.execPath, args: [bundledNpx] };
+/**
+ * Windows npm shims are .cmd files, which spawn() cannot run without a shell. Run npm's
+ * npx-cli.js under this Node instead, preferring its bundled npm; a bare node.exe (such as
+ * the GitHub Actions runtime) falls back to PATH.
+ */
+function getNpxCommand(): string[] {
+  if (process.platform !== 'win32') {
+    return ['npx'];
   }
-
-  // Match Node's case-insensitive PATH selection. A scanned repository must not
-  // supply an npm lookalike through a relative PATH entry, shim, or symlink.
-  const pathKey = Object.keys(env)
-    .sort()
-    .find((key) => key.toUpperCase() === 'PATH');
-  for (const directory of (pathKey ? (env[pathKey] ?? '') : '').split(delimiter)) {
-    if (!isAbsolute(directory) || !trustedPath(directory)) {
-      continue;
-    }
-    const nativeNpx = trustedPath(join(directory, 'npx.exe'));
-    if (nativeNpx) {
-      return { command: nativeNpx, args: [] };
-    }
-    if (!trustedPath(join(directory, 'npx.cmd'))) {
-      continue;
-    }
-    const npmCli = npmCliIn(directory);
-    if (npmCli) {
-      return { command: process.execPath, args: [npmCli] };
-    }
+  // Skip empty and relative PATH entries: the child would resolve them against the scanned
+  // repo. Read process.env, not a copy, so the lookup stays case-insensitive on Windows.
+  const searchDirs = (process.env.PATH ?? '').split(delimiter).filter(isAbsolute);
+  const npxCli = [dirname(process.execPath), ...searchDirs]
+    .map((dir) => join(dir, 'node_modules', 'npm', 'bin', 'npx-cli.js'))
+    .find((cli) => existsSync(cli));
+  if (!npxCli) {
+    throw new Error('npx not found: install npm alongside Node.js or on PATH');
   }
-
-  throw new Error('npm/npx CLI not found outside the scanned repository; install npm with Node.js');
+  return [process.execPath, npxCli];
 }
 
 /**
@@ -107,20 +68,14 @@ export function startFilesystemMcpServer(rootDir: string): ChildProcess {
   try {
     // Spawn the filesystem MCP server
     // Using npx to run @modelcontextprotocol/server-filesystem
-    const env = createFilesystemMcpEnv();
-    const launcher =
-      process.platform === 'win32'
-        ? resolveWindowsNpx(absoluteRootDir, env)
-        : { command: 'npx', args: [] };
+    const [command, ...npxArgs] = getNpxCommand();
     const mcpProcess = spawn(
-      launcher.command,
-      [...launcher.args, '-y', '@modelcontextprotocol/server-filesystem', absoluteRootDir],
+      command,
+      [...npxArgs, '-y', '@modelcontextprotocol/server-filesystem', absoluteRootDir],
       {
         stdio: ['pipe', 'pipe', 'pipe'], // stdin/stdout/stderr all piped
         cwd: absoluteRootDir,
-        env,
-        shell: false,
-        windowsHide: process.platform === 'win32',
+        env: createFilesystemMcpEnv(),
       },
     );
 
