@@ -81,11 +81,6 @@ describe('isEmptyResponse', () => {
     expect(isEmptyResponse('   ')).toBe(true);
     expect(isEmptyResponse('{}')).toBe(true);
     expect(isEmptyResponse('  {}  ')).toBe(true);
-    expect(isEmptyResponse('undefined')).toBe(true);
-    expect(isEmptyResponse('  undefined  ')).toBe(true);
-    expect(isEmptyResponse('UNDEFINED')).toBe(true);
-    expect(isEmptyResponse('null')).toBe(true);
-    expect(isEmptyResponse('  NULL  ')).toBe(true);
   });
 
   it('should return false for non-empty responses', () => {
@@ -93,6 +88,14 @@ describe('isEmptyResponse', () => {
     expect(isEmptyResponse('{"key": "value"}')).toBe(false);
     expect(isEmptyResponse('undefined behavior')).toBe(false);
     expect(isEmptyResponse('null pointer')).toBe(false);
+  });
+
+  it('should return false for transport failure strings', () => {
+    expect(isEmptyResponse('undefined')).toBe(false);
+    expect(isEmptyResponse('  undefined  ')).toBe(false);
+    expect(isEmptyResponse('UNDEFINED')).toBe(false);
+    expect(isEmptyResponse('null')).toBe(false);
+    expect(isEmptyResponse('  NULL  ')).toBe(false);
   });
 });
 
