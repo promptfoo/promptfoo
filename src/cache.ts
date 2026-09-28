@@ -689,9 +689,9 @@ async function fetchAndReadBody(
   options: FetchOptions,
   timeout: number,
   maxRetries: number | undefined,
-  retryBody: boolean,
+  isIdempotent: boolean,
 ): Promise<{ respText: string; resp: Response; fetchLatencyMs: number }> {
-  const maxBodyRetries = retryBody ? 2 : 0;
+  const maxBodyRetries = isIdempotent ? 2 : 0;
   for (let bodyAttempt = 0; bodyAttempt <= maxBodyRetries; bodyAttempt++) {
     const fetchStart = Date.now();
     // fetchWithRetries errors propagate directly — not caught by body retry
@@ -742,10 +742,10 @@ async function prepareFetchResponse(
   options: RequestInit,
   timeout: number,
   maxRetries: number | undefined,
-  retryBody: boolean,
+  isIdempotent: boolean,
   format: 'json' | 'text',
 ): Promise<PreparedFetchResponse> {
-  const result = await fetchAndReadBody(url, options, timeout, maxRetries, retryBody);
+  const result = await fetchAndReadBody(url, options, timeout, maxRetries, isIdempotent);
   const response = result.resp;
   const responseText = result.respText;
   const fetchLatencyMs = result.fetchLatencyMs;
@@ -814,7 +814,7 @@ async function prepareFetchResponse(
  * @param timeout Request timeout in milliseconds (default: standard timeout)
  * @param format Response format: 'json' or 'text' (default: 'json')
  * @param bustOrOptions Bypass cache or provide cache options for this request
- * @param maxRetries Maximum transport retries (response-body retries are controlled by retryBody)
+ * @param maxRetries Maximum number of retries on transient errors
  *
  * @returns FetchWithCacheResult with data, cache status, and HTTP metadata
  *
@@ -853,14 +853,11 @@ export async function fetchWithCache<T = unknown>(
 
   // Only retry body-read for idempotent methods to avoid double-submitting
   // POST/PATCH requests (the server already processed the request once
-  // headers arrived; only the response body stream failed). Callers such as
-  // webhook providers can also opt out when their GET/PUT operations have side effects.
+  // headers arrived; only the response body stream failed).
   const method = (
     fetchOptions.method ?? (url instanceof Request ? url.method : 'GET')
   ).toUpperCase();
-  const retryBody =
-    cacheOptions.retryBody !== false &&
-    ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(method);
+  const isIdempotent = ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(method);
 
   const cacheEnabled = getEffectiveCacheEnabled();
   if (cacheEnabled && !bust && fetchOptions.getAuthHeaders && !providedCacheKey) {
@@ -886,7 +883,7 @@ export async function fetchWithCache<T = unknown>(
       fetchOptions,
       timeout,
       maxRetries,
-      retryBody,
+      isIdempotent,
     );
     try {
       return {
@@ -919,8 +916,7 @@ export async function fetchWithCache<T = unknown>(
     return deserializeFetchResponse<T>(cachedResponse, true, cache, cacheKey);
   }
 
-  // Do not coalesce callers that disagree on whether a body failure may replay the request.
-  const inflightCacheKey = `${getInflightFetchCacheKey(cacheKey, url, fetchOptions)}:retryBody:${retryBody}`;
+  const inflightCacheKey = getInflightFetchCacheKey(cacheKey, url, fetchOptions);
   let inflightResponse = inflightFetchResponses.get(inflightCacheKey);
   const coalesced = inflightResponse !== undefined;
   if (!inflightResponse) {
@@ -930,7 +926,7 @@ export async function fetchWithCache<T = unknown>(
         fetchOptions,
         timeout,
         maxRetries,
-        retryBody,
+        isIdempotent,
         format,
       );
       if (preparedResponse.cacheable) {

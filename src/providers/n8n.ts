@@ -1,7 +1,7 @@
 import { createHash } from 'crypto';
 
-import { fetchWithCache } from '../cache';
 import logger from '../logger';
+import { fetchWithRetries } from '../util/fetch';
 import { getNunjucksEngine } from '../util/templates';
 import { getRequestTimeoutMs } from './shared';
 
@@ -536,10 +536,7 @@ export class N8nProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    // Normalize method to upper-case so `method: get` (or `Post`) in YAML
-    // doesn't bypass the GET / non-idempotent branches downstream — both the
-    // GET-vs-body decision and the maxRetries policy depend on exact case
-    // matches against the standard verb spelling.
+    // Normalize before deciding whether to send a body or query parameters.
     const method = (this.config.method || 'POST').toUpperCase();
     const timeout = this.config.timeout || getRequestTimeoutMs();
 
@@ -567,29 +564,23 @@ export class N8nProvider implements ApiProvider {
 
     let data: any;
     let rawText = '';
-    let cached = false;
     let latencyMs: number | undefined;
 
     try {
-      // Webhooks can dispatch side effects before either the request or body read fails.
-      // Disable both retry layers, even for nominally idempotent HTTP methods.
-      const maxRetries = 0;
-
-      // Webhook URLs and session-bearing requests can be sensitive and stateful.
-      const response = await fetchWithCache<string>(
-        url,
-        fetchOptions,
-        timeout,
-        'text',
-        { bust: true, retryBody: false },
-        maxRetries,
-      );
-
-      rawText =
-        typeof response.data === 'string' ? response.data : JSON.stringify(response.data ?? '');
-      data = parseN8nResponseBody(response.data);
-      cached = response.cached;
-      latencyMs = response.latencyMs;
+      // Every webhook method can dispatch side effects. Never cache or replay it.
+      const startedAt = Date.now();
+      const response = await fetchWithRetries(url, fetchOptions, timeout, 0);
+      latencyMs = Date.now() - startedAt;
+      try {
+        rawText = await response.text();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `Error reading n8n response body: ${message}. HTTP ${response.status} ${response.statusText}`,
+          { cause: error },
+        );
+      }
+      data = parseN8nResponseBody(rawText);
 
       if (response.status < 200 || response.status >= 300) {
         return {
@@ -624,7 +615,7 @@ export class N8nProvider implements ApiProvider {
     // Build response
     const response: ProviderResponse = {
       output,
-      cached,
+      cached: false,
       latencyMs,
       raw: data,
     };
@@ -642,7 +633,6 @@ export class N8nProvider implements ApiProvider {
     }
 
     logger.debug(`[n8n] Response received`, {
-      cached,
       latencyMs,
       hasToolCalls: !!toolCalls,
       hasSessionId: !!sessionId,
