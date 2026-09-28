@@ -228,9 +228,8 @@ providers:
       # Sonnet 5 rejects temperature/top_p/top_k — use `effort` for the
       # quality/cost tradeoff instead. See Supported Parameters above.
       effort: medium
-      max_tokens: 512
-      extra_body:
-        custom_param: 'test_value'
+      # Sonnet 5 thinks by default, and thinking shares this budget with the answer.
+      max_tokens: 2048
 prompts:
   - file://prompt.json
 ```
