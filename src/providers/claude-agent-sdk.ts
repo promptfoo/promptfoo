@@ -40,12 +40,15 @@ import type {
   CanUseTool,
   HookCallbackMatcher,
   HookEvent,
+  ModelUsage,
   OnElicitation,
   OutputFormat,
+  Query,
   Options as QueryOptions,
   SandboxSettings,
   SDKAssistantMessage,
   SDKAssistantMessageError,
+  SDKControlGetUsageResponse,
   SDKResultMessage,
   SettingSource,
   Settings,
@@ -100,6 +103,33 @@ const REDACTED_SUBAGENT_TRANSCRIPT =
   '[Subagent transcript omitted; set forward_subagent_text: true to include it]';
 /** Returned when cancellation is observed at any checkpoint before the SDK query starts. */
 const ABORTED_BEFORE_START_ERROR = 'Claude Agent SDK call aborted before it started';
+const USAGE_BASELINE_TIMEOUT_MS = 5_000;
+const MODEL_USAGE_COUNTERS = [
+  'inputTokens',
+  'outputTokens',
+  'thinkingTokens',
+  'cacheReadInputTokens',
+  'cacheCreationInputTokens',
+  'webSearchRequests',
+  'costUSD',
+] as const;
+
+function subtractSessionUsage(
+  current: Record<string, ModelUsage>,
+  baseline: Record<string, ModelUsage>,
+): Record<string, ModelUsage> {
+  return Object.fromEntries(
+    Object.entries(current).map(([model, usage]) => {
+      const delta = { ...usage };
+      for (const key of MODEL_USAGE_COUNTERS) {
+        if (typeof usage[key] === 'number') {
+          delta[key] = Math.max(0, usage[key] - (baseline[model]?.[key] ?? 0));
+        }
+      }
+      return [model, delta];
+    }),
+  );
+}
 
 /**
  * Append promptfoo-specific resource-attribute kvs to a W3C-style
@@ -1861,6 +1891,91 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       title: config.title,
     };
     const queryParams = { prompt, options };
+    const needsUsageBaseline = Boolean(
+      config.resume ||
+        config.continue ||
+        config.fork_session ||
+        ['resume', 'r', 'continue', 'c', 'fork-session'].some((key) =>
+          Object.prototype.hasOwnProperty.call(config.extra_args ?? {}, key),
+        ),
+    );
+    let query: Query | undefined;
+    let usageBaseline: SDKControlGetUsageResponse['session'] | undefined;
+    let captureUsageBaseline: Promise<void> | undefined;
+    if (needsUsageBaseline) {
+      // SDK 0.3.277 restores transcript totals on resume. Capture them before
+      // inference, without reading private transcripts or replacing user hooks.
+      options.hooks = {
+        ...hooks,
+        UserPromptSubmit: [
+          {
+            hooks: [
+              async () => {
+                captureUsageBaseline ??= (async () => {
+                  let timer: ReturnType<typeof setTimeout> | undefined;
+                  let cancelSnapshot: (() => void) | undefined;
+                  try {
+                    const snapshot =
+                      query?.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET;
+                    if (!snapshot) {
+                      return;
+                    }
+                    const report = await Promise.race([
+                      snapshot.call(query, { skipBehaviors: true }),
+                      new Promise<never>((_, reject) => {
+                        cancelSnapshot = () => reject(new Error('Usage baseline cancelled'));
+                        if (abortController.signal.aborted) {
+                          cancelSnapshot();
+                          return;
+                        }
+                        abortController.signal.addEventListener('abort', cancelSnapshot, {
+                          once: true,
+                        });
+                        timer = setTimeout(
+                          () => reject(new Error('Usage baseline timed out')),
+                          USAGE_BASELINE_TIMEOUT_MS,
+                        );
+                      }),
+                    ]);
+                    const session = report?.session;
+                    if (
+                      session &&
+                      Number.isFinite(session.total_cost_usd) &&
+                      session.total_cost_usd >= 0 &&
+                      session.model_usage &&
+                      typeof session.model_usage === 'object' &&
+                      !Array.isArray(session.model_usage) &&
+                      Object.values(session.model_usage).every(
+                        (usage) =>
+                          usage &&
+                          typeof usage === 'object' &&
+                          MODEL_USAGE_COUNTERS.every(
+                            (key) =>
+                              usage[key] === undefined ||
+                              (Number.isFinite(usage[key]) && usage[key]! >= 0),
+                          ),
+                      )
+                    ) {
+                      usageBaseline = session;
+                    }
+                  } catch {
+                    // An experimental control API must not block inference or user hooks.
+                  } finally {
+                    clearTimeout(timer);
+                    if (cancelSnapshot) {
+                      abortController.signal.removeEventListener('abort', cancelSnapshot);
+                    }
+                  }
+                })();
+                await captureUsageBaseline;
+                return {};
+              },
+            ],
+          },
+          ...(hooks?.UserPromptSubmit ?? []),
+        ],
+      };
+    }
 
     // Log the query params for debugging
     logger.debug(
@@ -1922,6 +2037,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           }
 
           const res = await this.claudeCodeModule.query(queryParams);
+          query = res;
 
           // Collect tool calls and results from intermediate messages
           const toolCallsMap = new Map<string, ToolCallEntry>();
@@ -2176,6 +2292,28 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             });
           }
           const raw = JSON.stringify(finalMsg);
+          const usageUnavailable = needsUsageBaseline && !usageBaseline;
+          if (usageUnavailable) {
+            logger.warn(
+              '[ClaudeAgentSDK] Could not measure resumed-session usage before inference; per-call cost and token usage are unavailable. Raw session totals are preserved.',
+            );
+          }
+          // A /clear or startup failure can reset the SDK counters below the snapshot.
+          const counterReset =
+            usageBaseline &&
+            (finalMsg.total_cost_usd < usageBaseline.total_cost_usd ||
+              Object.entries(finalMsg.modelUsage ?? {}).some(([model, usage]) =>
+                MODEL_USAGE_COUNTERS.some(
+                  (key) =>
+                    typeof usage[key] === 'number' &&
+                    usage[key] < (usageBaseline?.model_usage[model]?.[key] ?? 0),
+                ),
+              ));
+          const modelUsage = usageUnavailable
+            ? undefined
+            : usageBaseline && !counterReset
+              ? subtractSessionUsage(finalMsg.modelUsage ?? {}, usageBaseline.model_usage)
+              : finalMsg.modelUsage;
           // result.usage counts only the main agent; modelUsage has a row per model, so it also
           // covers subagent calls. Prefer modelUsage and fall back to result.usage, normalizing
           // both to one shape so the totals are summed in a single place. When the SDK reports
@@ -2187,8 +2325,8 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             thinkingTokens?: number;
             cacheReadInputTokens?: number;
             cacheCreationInputTokens?: number;
-          }[] = Object.values(finalMsg.modelUsage ?? {});
-          if (usageSources.length === 0 && finalMsg.usage) {
+          }[] = Object.values(modelUsage ?? {});
+          if (!usageUnavailable && usageSources.length === 0 && finalMsg.usage) {
             usageSources.push({
               inputTokens: finalMsg.usage.input_tokens,
               outputTokens: finalMsg.usage.output_tokens,
@@ -2243,7 +2381,20 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                   : {}),
               }
             : {};
-          const cost = finalMsg.total_cost_usd ?? 0;
+          const cost = usageUnavailable
+            ? undefined
+            : Math.max(
+                0,
+                (finalMsg.total_cost_usd ?? 0) -
+                  (counterReset ? 0 : (usageBaseline?.total_cost_usd ?? 0)),
+              );
+          const usageMetadata = needsUsageBaseline
+            ? {
+                usageAccounting: usageUnavailable ? 'unavailable' : 'query',
+                sessionCost: finalMsg.total_cost_usd,
+                sessionModelUsage: finalMsg.modelUsage,
+              }
+            : {};
           const sessionId = finalMsg.session_id;
 
           const toolCallsArray = Array.from(toolCallsMap.values());
@@ -2292,7 +2443,8 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                 numTurns: finalMsg.num_turns,
                 durationMs: finalMsg.duration_ms,
                 durationApiMs: finalMsg.duration_api_ms,
-                modelUsage: finalMsg.modelUsage,
+                modelUsage,
+                ...usageMetadata,
                 permissionDenials: finalMsg.permission_denials,
                 ...(finalMsg.terminal_reason === undefined
                   ? {}
@@ -2335,7 +2487,8 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               numTurns: finalMsg.num_turns,
               durationMs: finalMsg.duration_ms,
               durationApiMs: finalMsg.duration_api_ms,
-              modelUsage: finalMsg.modelUsage,
+              modelUsage,
+              ...usageMetadata,
               permissionDenials: finalMsg.permission_denials,
               ...(finalMsg.terminal_reason === undefined
                 ? {}
