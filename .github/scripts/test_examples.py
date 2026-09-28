@@ -26,7 +26,7 @@ SCRIPT = Path(__file__).with_name("examples.py")
 class SelectionTests(unittest.TestCase):
     def test_full_run_preserves_every_registered_runtime(self):
         rows = select_examples(None)
-        self.assertEqual(len(rows), 14)
+        self.assertEqual(len(rows), 16)
         self.assertEqual(
             [(row["example"], row["python"]) for row in rows],
             [
@@ -44,6 +44,8 @@ class SelectionTests(unittest.TestCase):
                 ("langgraph", "3.14"),
                 ("rag-pdf", "3.10"),
                 ("rag-pdf-cli", "3.14"),
+                ("f-score", "3.10"),
+                ("f-score", "3.14"),
             ],
         )
 
@@ -96,6 +98,19 @@ class SelectionTests(unittest.TestCase):
                 (ROOT / example.directory / example.suites[2][0]).resolve(),
                 ROOT / ".github/scripts/tests/openai_agents",
             )
+
+    def test_fscore_changes_select_its_python_only_dependency_suite(self):
+        for filename in ("prepare_data.py", "dependencies_test.py", "requirements.txt"):
+            with self.subTest(filename=filename):
+                self.assertEqual(
+                    select_examples([f"examples/eval-f-score/{filename}"]),
+                    [
+                        {"example": "f-score", "python": "3.10", "node": False},
+                        {"example": "f-score", "python": "3.14", "node": False},
+                    ],
+                )
+        self.assertEqual(EXAMPLES["f-score"].suites, ((".", "dependencies_test.py"),))
+        self.assertEqual(select_examples(["examples/eval-f-score-other/file.py"]), [])
 
     def test_rag_changes_preserve_pdf_and_cli_runtime_coverage(self):
         for path in (

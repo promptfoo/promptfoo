@@ -120,6 +120,11 @@ EXAMPLES = {
         (("tests", "test_*.py"), ("tests", "smoke_cli.py")),
         node=True,
     ),
+    "f-score": Example(
+        "examples/eval-f-score",
+        ("3.10", "3.14"),
+        ((".", "dependencies_test.py"),),
+    ),
 }
 
 # Shared runtime changes can break examples without changing their own directories.
