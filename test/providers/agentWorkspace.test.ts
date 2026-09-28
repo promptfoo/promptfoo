@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import { createServer } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -417,11 +418,15 @@ describe('agent workspaces', () => {
       }
       const source = path.join(root, 'fixture');
       fs.mkdirSync(source);
-      execFileSync('mkfifo', [path.join(source, 'pipe')]);
-
-      await expect(createAgentWorkspace(source)).rejects.toThrow(
-        'it is not a regular file or directory',
-      );
+      const socket = createServer();
+      await new Promise<void>((resolve) => socket.listen(path.join(source, 'sock'), resolve));
+      try {
+        await expect(createAgentWorkspace(source)).rejects.toThrow(
+          'it is not a regular file or directory',
+        );
+      } finally {
+        await new Promise<void>((resolve) => socket.close(() => resolve()));
+      }
     });
 
     it('rejects a .git file, which points at another repository', async () => {

@@ -132,8 +132,11 @@ describeEvaluator('evaluator copy_working_dir workspaces', () => {
       config: { working_dir: fixture, copy_working_dir: 'copy' },
       callApi: vi.fn<ApiProvider['callApi']>(async (_prompt, context, options) => {
         workspaces.push(context?.prompt.config?.working_dir as string);
-        await new Promise((resolve) => options?.abortSignal?.addEventListener('abort', resolve));
-        // Like a real provider, reject with an AbortError, which the scheduler does not retry.
+        // Like a real provider, stop as soon as the call is aborted, including before it starts,
+        // and reject with an AbortError, which the scheduler does not retry.
+        if (!options?.abortSignal?.aborted) {
+          await new Promise((resolve) => options?.abortSignal?.addEventListener('abort', resolve));
+        }
         throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
       }),
     };
@@ -148,7 +151,13 @@ describeEvaluator('evaluator copy_working_dir workspaces', () => {
     const summary = await evalRecord.toEvaluateSummary();
 
     expect(summary.results[0].error).toContain('timed out');
-    expect(workspaces).toHaveLength(1);
-    await vi.waitFor(() => expect(fs.existsSync(workspaces[0])).toBe(false));
+    // The step can time out while its workspace is still being created, before the call starts.
+    await vi.waitFor(
+      () => {
+        expect(workspaces).toHaveLength(1);
+        expect(fs.existsSync(workspaces[0])).toBe(false);
+      },
+      { timeout: 5000 },
+    );
   });
 });
