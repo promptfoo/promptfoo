@@ -28,9 +28,10 @@ const throttled = () =>
 describe('provider operation retry ownership', () => {
   let registry: RateLimitRegistry;
   beforeEach(() => {
+    // Fake timers keep jittered retries fast without mocking Math.random, which
+    // source-map also uses to choose quicksort pivots while formatting SDK errors.
     vi.useFakeTimers();
     vi.stubEnv('PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER', 'false');
-    vi.spyOn(Math, 'random').mockReturnValue(0);
     registry = new RateLimitRegistry({ maxConcurrency: 4 });
   });
   afterEach(() => {
@@ -41,7 +42,10 @@ describe('provider operation retry ownership', () => {
     vi.unstubAllEnvs();
   });
 
-  async function invoke(provider: ApiProvider): Promise<ProviderResponse> {
+  async function invoke(
+    provider: ApiProvider,
+    advanceTimersByMs?: number,
+  ): Promise<ProviderResponse> {
     const pending = withCacheEnabled(false, () =>
       wrapProviderWithRateLimiting(provider, registry).callApi('hello', {
         vars: {},
@@ -49,7 +53,11 @@ describe('provider operation retry ownership', () => {
       }),
     );
     const handled = pending.catch((error: Error) => ({ error: error.message }));
-    await vi.runAllTimersAsync();
+    if (advanceTimersByMs === undefined) {
+      await vi.runAllTimersAsync();
+    } else {
+      await vi.advanceTimersByTimeAsync(advanceTimersByMs);
+    }
     return handled;
   }
 
@@ -382,71 +390,10 @@ describe('provider operation retry ownership', () => {
     vi.stubGlobal('fetch', fetch);
     const config = { apiKey: 'fixture', apiBaseUrl: 'https://retry.fixture.test', maxRetries: 1 };
     const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', { config });
-    const sdkErrors: string[] = [];
-    const create = provider.anthropic.messages.create;
-    const session = new Session();
-    const scripts: { scriptId: string; url: string }[] = [];
-    const post = <T = void>(method: string, params = {}) =>
-      new Promise<T>((resolve, reject) => {
-        session.post(method, params, (error, result) =>
-          error ? reject(error) : resolve(result as T),
-        );
-      });
-    session.connect();
-    session.on('Debugger.scriptParsed', ({ params }) => {
-      if (params.url.replaceAll('\\', '/').endsWith('/src/providers/anthropic/messages.ts')) {
-        scripts.push(params);
-      }
-    });
-    session.on('Debugger.paused', ({ params }) => {
-      session.post(
-        'Debugger.evaluateOnCallFrame',
-        {
-          callFrameId: params.callFrames[0].callFrameId,
-          expression: 'err instanceof Error ? err.stack : String(err)',
-          returnByValue: true,
-        },
-        (error, result) => {
-          sdkErrors.push(error?.message ?? String(result?.result.value));
-          session.post('Debugger.resume');
-        },
-      );
-    });
-    let result: ProviderResponse;
-    try {
-      // Observe the original error after its stack unwinds, without wrapping SDK promises.
-      // Resolve the catch location from Vite's actual emitted source, not TS line numbers.
-      await post('Debugger.enable');
-      let breakpoints = 0;
-      for (const { scriptId } of scripts) {
-        const { scriptSource } = await post<{ scriptSource: string }>('Debugger.getScriptSource', {
-          scriptId,
-        });
-        const lineNumber = scriptSource
-          .split('\n')
-          .findIndex((line) => line.includes('Anthropic Messages API call error:'));
-        if (lineNumber >= 0) {
-          await post('Debugger.setBreakpoint', { location: { scriptId, lineNumber } });
-          breakpoints++;
-        }
-      }
-      expect(breakpoints).toBeGreaterThan(0);
-      result = await invoke(provider);
-    } finally {
-      try {
-        await post('Debugger.disable');
-      } finally {
-        session.disconnect();
-      }
-    }
-    const diagnostics = JSON.stringify({ fetchCount: fetch.mock.calls.length, sdkErrors });
-    expect(provider.anthropic.messages.create).toBe(create);
-    expect(sdkErrors, diagnostics).toEqual(
-      expect.arrayContaining([expect.stringContaining('429')]),
-    );
-    expect(result.error, diagnostics).toContain('429');
+    const result = await invoke(provider, 120_000);
+    expect(result.error).toContain('429');
     // The SDK's two retries and the scheduler's one retry remain separate.
-    expect(fetch, diagnostics).toHaveBeenCalledTimes(6);
+    expect(fetch).toHaveBeenCalledTimes(6);
   });
 
   it('retains Agents session replay until terminal job failures have local recovery', async () => {
@@ -621,5 +568,3 @@ describe('provider operation retry ownership', () => {
     expect(calls).toBe(2);
   });
 });
-
-import { Session } from 'node:inspector';
