@@ -10,10 +10,11 @@ import sys
 import tempfile
 import threading
 import unittest
+from typing import ClassVar
 
 
 class ModelFixture(http.server.BaseHTTPRequestHandler):
-    tool_calls = []
+    tool_calls: ClassVar[list[str]] = []
 
     def do_POST(self):
         request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
