@@ -588,7 +588,7 @@ tests:
       shared: file://../shared/context.json
 ```
 
-Nested `file://` references inside test and vars files keep the owning config's base directory. With multiple configs, each config's tests use its base directory; configured providers and deferred grader references use the first config's base directory. Explicit `--tests` and `--vars` paths resolve from the working directory.
+Nested `file://` references inside test and vars files keep the owning config's base directory. A test's own `vars:` file path or glob, such as `vars: ../vars/*.yaml` in `tests/cases.yaml`, resolves from the directory of the tests file that declares it. With multiple configs, each config's tests use its base directory; configured providers and deferred grader references use the first config's base directory. Explicit `--tests` and `--vars` paths resolve from the working directory.
 
 CLI evaluations save parsed test rows, external defaults, and an absolute base directory. Resume and retry reuse those rows, including generated and remote datasets. Run a new evaluation to pick up changed test sources. An unmatched test-source glob warns and adds no rows; a missing literal test file is an error.
 

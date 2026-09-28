@@ -1994,22 +1994,32 @@ describe('suite environment loading', () => {
   });
 
   it.each(['json', 'jsonl', 'yaml'])(
-    'loads bare vars paths in array %s rows from the config directory',
+    'resolves vars files and providers in array %s rows from the tests file directory',
     async (extension) => {
       const configPath = writeConfig('array-root', { tests: [`nested/cases.${extension}`] });
       const base = path.dirname(configPath);
       fs.mkdirSync(path.join(base, 'nested'));
-      fs.writeFileSync(path.join(base, 'vars.yaml'), 'source: root');
-      fs.writeFileSync(path.join(base, 'nested/vars.yaml'), 'source: wrong-shadow');
-      const test = { vars: 'vars.yaml' };
+      fs.writeFileSync(path.join(base, 'vars.yaml'), 'source: wrong-root');
+      fs.writeFileSync(path.join(base, 'nested/vars.yaml'), 'source: nested');
+      const rows = [
+        { vars: 'vars.yaml' },
+        { vars: { doc: 'file://doc.txt' }, provider: 'file://provider.py:call_api' },
+      ];
       fs.writeFileSync(
         path.join(base, `nested/cases.${extension}`),
         extension === 'yaml'
-          ? '- vars: vars.yaml'
-          : JSON.stringify(extension === 'json' ? [test] : test),
+          ? '- vars: vars.yaml\n- vars:\n    doc: file://doc.txt\n  provider: file://provider.py:call_api\n'
+          : extension === 'json'
+            ? JSON.stringify(rows)
+            : rows.map((row) => JSON.stringify(row)).join('\n'),
       );
-      const { testSuite } = await resolveConfigs({ config: [configPath] }, {});
-      expect(testSuite.tests?.[0].vars?.source).toBe('root');
+      const { config, testSuite } = await resolveConfigs({ config: [configPath] }, {});
+      expect(testSuite.tests?.[0].vars?.source).toBe('nested');
+      expect((config.tests as TestCase[])[1].provider).toBe(
+        `file://${path.join(base, 'nested/provider.py')}:call_api`,
+      );
+      // Inline file:// vars stay config-relative, matching prompt rendering.
+      expect(testSuite.tests?.[1].vars?.doc).toBe(`file://${path.join(base, 'doc.txt')}`);
     },
   );
 

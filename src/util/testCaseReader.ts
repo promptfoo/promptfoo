@@ -511,21 +511,24 @@ async function readTestWithEnv(
   isDefaultTest: boolean,
   env: EnvOverrides | undefined,
   loadProviders = true,
+  // Directory of the file declaring the row: its `vars` files and provider resolve from here,
+  // while inline `file://` vars keep `basePath`, where prompt rendering resolves them.
+  sourceBasePath = basePath,
 ): Promise<TestCase> {
   if (typeof test === 'object' && isRemoteTestCase(test)) {
     return test as TestCase;
   }
   let testCase: TestCase;
-  let effectiveBasePath = basePath;
+  let effectiveBasePath = sourceBasePath;
 
   if (typeof test === 'string') {
-    const testFilePath = path.resolve(basePath, test);
+    const testFilePath = path.resolve(sourceBasePath, test);
     effectiveBasePath = path.dirname(testFilePath);
     const rawContent = loadYaml(await fsPromises.readFile(testFilePath, 'utf-8'));
     const rawTestCase = maybeLoadConfigFromExternalFile(rawContent) as TestCaseWithVarsFile;
     testCase = await loadTestWithVars(rawTestCase, effectiveBasePath);
   } else {
-    testCase = await loadTestWithVars(test, basePath);
+    testCase = await loadTestWithVars(test, effectiveBasePath);
   }
 
   if (!loadProviders) {
@@ -709,7 +712,16 @@ async function loadTestsFromGlobWithEnv(
         testCases = [testCases];
       }
       for (const testCase of testCases) {
-        ret.push(await readTestWithEnv(testCase, basePath, false, env, loadProviders));
+        ret.push(
+          await readTestWithEnv(
+            testCase,
+            basePath,
+            false,
+            env,
+            loadProviders,
+            path.dirname(testFile),
+          ),
+        );
       }
     }
   }
