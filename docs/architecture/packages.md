@@ -82,6 +82,14 @@ dependency-light state implementation for embedded evaluators and focused tests.
 resume append behavior. The evaluator orchestrates evaluation behavior without
 importing the concrete `Eval` model.
 
+`src/util/envFile.ts` owns plain `.env` file loading as a Node filesystem adapter.
+The imports from `src/envars.ts` and `src/server/server.ts` replace external
+`dotenv` calls at the same startup points; the edge baseline records these two
+internal dependencies. The loader imports only Node built-ins, so early loading
+does not initialize the logger, configuration state, or database. Keeping it
+separate from `setupEnv` preserves that initialization order without duplicating
+the parser across callers.
+
 The checker also resolves cross-layer source aliases such as `@promptfoo/*`.
 The browser-only `@app/*` alias stays inside the `app` layer. Alias spelling
 does not exempt a browser import from the same layer and path checks as a
