@@ -61,6 +61,11 @@ EXAMPLES = {
         ((".", "dependencies_test.py"),),
         minimums=True,
     ),
+    "redteam-langchain": Example(
+        "examples/redteam-langchain",
+        ("3.10", "3.14"),
+        ((".", "*_test.py"),),
+    ),
     "openai-agents": Example(
         "examples/openai-agents",
         ("3.12", "3.14"),
