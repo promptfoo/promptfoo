@@ -387,6 +387,51 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('Test prompt with {"key":"valueFromYaml"}');
     });
 
+    it('should load file:// references in nested objects', async () => {
+      const prompt = toPrompt('Test prompt with {{ reporting_period.previous.report }}');
+      const vars = {
+        reporting_period: {
+          current: { period: '2023-12-31' },
+          previous: { period: '2024-02-15', report: 'file://test.txt' },
+        },
+      };
+
+      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('file content here');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.txt'), 'utf8');
+      expect(renderedPrompt).toBe('Test prompt with file content here');
+    });
+
+    it('should load file:// references in nested arrays', async () => {
+      const prompt = toPrompt('Test prompt with {{ items[0].content }}');
+      const vars = {
+        items: [{ content: 'file://test.txt' }, { content: 'static' }],
+      };
+
+      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('array file content');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.txt'), 'utf8');
+      expect(renderedPrompt).toBe('Test prompt with array file content');
+    });
+
+    it('should load file:// references in deeply nested objects', async () => {
+      const prompt = toPrompt('Test prompt with {{ a.b.c.d }}');
+      const vars = {
+        a: { b: { c: { d: 'file://test.txt' } } },
+      };
+
+      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('deep file content');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.txt'), 'utf8');
+      expect(renderedPrompt).toBe('Test prompt with deep file content');
+    });
+
     describe('with PROMPTFOO_DISABLE_TEMPLATING', () => {
       beforeEach(() => {
         mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });

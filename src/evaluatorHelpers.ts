@@ -114,6 +114,138 @@ function referencesUndefinedVariables(template: string, vars: Record<string, Var
 }
 
 /**
+ * Loads multimedia file (image, video, audio) as base64 data.
+ */
+async function loadMultimediaFile(filePath: string, provider?: ApiProvider): Promise<string> {
+  const fileType = isImageFile(filePath) ? 'image' : isVideoFile(filePath) ? 'video' : 'audio';
+  const fileBuffer = await fs.readFile(filePath);
+  const base64Data = fileBuffer.toString('base64');
+  if (fileType === 'image') {
+    let mimeType = getMimeTypeFromExtension(path.extname(filePath));
+    const extension = path.extname(filePath);
+    const extensionWasUnknown = !extension || mimeType === 'image/jpeg';
+    const detectedType = detectMimeFromBase64(base64Data);
+    if (detectedType && detectedType !== mimeType) {
+      mimeType = detectedType;
+    } else if (!detectedType && extensionWasUnknown) {
+      logger.warn(
+        `Could not detect image format for ${filePath}, defaulting to image/jpeg. Supported formats: JPEG, PNG, GIF, WebP, BMP, TIFF, ICO, AVIF, HEIC, SVG`,
+      );
+    }
+    return `data:${mimeType};base64,${base64Data}`;
+  }
+  if (fileType === 'audio' && filePath.toLowerCase().endsWith('.m4a') && provider) {
+    return provider.getAudioInputFormat?.() === 'google'
+      ? `data:audio/mp4;base64,${base64Data}`
+      : base64Data;
+  }
+  return base64Data;
+}
+
+/**
+ * Loads file content from a file:// path, handling all supported file types.
+ */
+async function loadFileContent(
+  filePath: string,
+  varName: string,
+  basePrompt: string,
+  vars: Record<string, VarValue>,
+  provider?: ApiProvider,
+): Promise<string> {
+  const fileExtension = filePath.split('.').pop();
+
+  logger.debug(`Loading nested var ${varName} from file: ${filePath}`);
+  if (isJavascriptFile(filePath)) {
+    const javascriptOutput = (await (
+      await importModule(filePath)
+    )(varName, basePrompt, vars, provider)) as {
+      output?: string;
+      error?: string;
+    };
+    if (javascriptOutput.error) {
+      throw new Error(`Error running ${filePath}: ${javascriptOutput.error}`);
+    }
+    if (!javascriptOutput.output) {
+      throw new Error(
+        `Expected ${filePath} to return { output: string } but got ${javascriptOutput}`,
+      );
+    }
+    return javascriptOutput.output;
+  }
+  if (fileExtension === 'py') {
+    const pythonScriptOutput = (await runPython(filePath, 'get_var', [
+      varName,
+      basePrompt,
+      vars,
+    ])) as { output?: unknown; error?: string };
+    if (pythonScriptOutput.error) {
+      throw new Error(`Error running Python script ${filePath}: ${pythonScriptOutput.error}`);
+    }
+    if (!pythonScriptOutput.output) {
+      throw new Error(`Python script ${filePath} did not return any output`);
+    }
+    invariant(
+      typeof pythonScriptOutput.output === 'string',
+      `pythonScriptOutput.output must be a string. Received: ${typeof pythonScriptOutput.output}`,
+    );
+    return pythonScriptOutput.output.trim();
+  }
+  if (fileExtension === 'yaml' || fileExtension === 'yml') {
+    return JSON.stringify(loadYaml(await fs.readFile(filePath, 'utf8')) as string | object);
+  }
+  if (fileExtension === 'pdf' && !getEnvBool('PROMPTFOO_DISABLE_PDF_AS_TEXT')) {
+    return extractTextFromPDF(filePath);
+  }
+  if (
+    (isImageFile(filePath) || isVideoFile(filePath) || isAudioFile(filePath)) &&
+    !getEnvBool('PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64')
+  ) {
+    return loadMultimediaFile(filePath, provider);
+  }
+  return (await fs.readFile(filePath, 'utf8')).trim();
+}
+
+/**
+ * Recursively resolves file:// references in nested objects and arrays.
+ * Returns a new object with file:// strings replaced by their file content.
+ */
+async function resolveNestedFileRefs(
+  value: unknown,
+  basePath: string,
+  varName: string,
+  basePrompt: string,
+  vars: Record<string, VarValue>,
+  provider?: ApiProvider,
+): Promise<unknown> {
+  if (typeof value === 'string' && value.startsWith('file://')) {
+    const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
+    return loadFileContent(filePath, varName, basePrompt, vars, provider);
+  }
+  if (Array.isArray(value)) {
+    return Promise.all(
+      value.map((item) =>
+        resolveNestedFileRefs(item, basePath, varName, basePrompt, vars, provider),
+      ),
+    );
+  }
+  if (typeof value === 'object' && value !== null) {
+    const result: Record<string, unknown> = {};
+    for (const key of Object.keys(value)) {
+      result[key] = await resolveNestedFileRefs(
+        (value as Record<string, unknown>)[key],
+        basePath,
+        varName,
+        basePrompt,
+        vars,
+        provider,
+      );
+    }
+    return result;
+  }
+  return value;
+}
+
+/**
  * Collects metadata about file variables in the vars object.
  * @param vars The variables object containing potential file references
  * @returns An object mapping variable names to their file metadata
@@ -248,6 +380,24 @@ export async function renderPrompt(
   const nunjucks = getNunjucksEngine(nunjucksFilters);
 
   let basePrompt = prompt.raw;
+
+  // Recursively resolve file:// references in nested objects and arrays
+  const basePath = cliState.basePath || '';
+  for (const [varName, value] of Object.entries(vars)) {
+    if (skipRenderVars?.includes(varName)) {
+      continue;
+    }
+    if (typeof value === 'object' && value !== null) {
+      vars[varName] = (await resolveNestedFileRefs(
+        value,
+        basePath,
+        varName,
+        basePrompt,
+        vars,
+        provider,
+      )) as VarValue;
+    }
+  }
 
   // Load files
   for (const [varName, value] of Object.entries(vars)) {
