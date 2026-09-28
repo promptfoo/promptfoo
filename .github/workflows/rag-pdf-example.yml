@@ -5,21 +5,27 @@ on:
     paths:
       - 'examples/eval-rag-full/**'
       - '.github/workflows/rag-pdf-example.yml'
-      - 'src/providers/pythonCompletion.ts'
-      - 'src/python/**'
+      - 'src/**'
+      - 'scripts/**'
+      - 'drizzle/**'
       - 'package.json'
       - 'package-lock.json'
       - '.nvmrc'
+      - '.npmrc'
+      - 'tsconfig.json'
   push:
     branches: [main]
     paths:
       - 'examples/eval-rag-full/**'
       - '.github/workflows/rag-pdf-example.yml'
-      - 'src/providers/pythonCompletion.ts'
-      - 'src/python/**'
+      - 'src/**'
+      - 'scripts/**'
+      - 'drizzle/**'
       - 'package.json'
       - 'package-lock.json'
       - '.nvmrc'
+      - '.npmrc'
+      - 'tsconfig.json'
 
 permissions:
   contents: read
