@@ -1,4 +1,7 @@
+import { eq } from 'drizzle-orm';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { getDb } from '../../src/database';
+import { evalResultsTable } from '../../src/database/tables';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
@@ -173,6 +176,48 @@ describe('EvalResult', () => {
       // Verify it was not persisted to database
       const retrieved = await EvalResult.findById(result.id);
       expect(retrieved).toBeNull();
+    });
+
+    it('preserves historical private baseline state across reload and save', async () => {
+      const result = await EvalResult.createFromEvaluateResult(
+        'test-eval-historical-baseline',
+        mockEvaluateResult,
+      );
+      const baseline = {
+        version: 1,
+        status: 'baseline',
+        original: {
+          success: false,
+          score: 0.25,
+          failureReason: ResultFailureReason.ASSERT,
+          gradingResult: {
+            pass: false,
+            score: 0.25,
+            reason: 'Historical custom score',
+            hadReason: true,
+            hadAssertion: false,
+            hadComponentResults: false,
+          },
+        },
+      };
+      const db = await getDb();
+      await db
+        .update(evalResultsTable)
+        .set({ manualRatingState: baseline })
+        .where(eq(evalResultsTable.id, result.id));
+
+      const loaded = await EvalResult.findById(result.id);
+      expect(loaded).not.toBeNull();
+      await loaded!.save();
+
+      const stored = await db
+        .select({ state: evalResultsTable.manualRatingState })
+        .from(evalResultsTable)
+        .where(eq(evalResultsTable.id, result.id))
+        .get();
+      expect(stored?.state).toEqual(baseline);
+      expect(JSON.stringify(loaded)).not.toContain('Historical custom score');
+      expect(loaded).not.toHaveProperty('manualRatingState');
     });
 
     it('should preserve response headers when persist option is false', async () => {
@@ -1034,6 +1079,35 @@ describe('EvalResult', () => {
         evaluationId: 'bulk-evaluation-id',
         metadata: { source: 'import' },
       });
+    });
+
+    it('does not import private manual-rating provenance', async () => {
+      const [result] = await EvalResult.createManyFromEvaluateResult(
+        [
+          {
+            ...mockEvaluateResult,
+            manualRatingState: {
+              version: 1,
+              status: 'active',
+              original: {
+                success: false,
+                score: 0.123,
+                failureReason: ResultFailureReason.ASSERT,
+                gradingResult: null,
+              },
+            },
+          } as EvaluateResult & { manualRatingState: unknown },
+        ],
+        'test-eval-bulk-private-state',
+      );
+
+      const stored = await (await getDb())
+        .select({ manualRatingState: evalResultsTable.manualRatingState })
+        .from(evalResultsTable)
+        .where(eq(evalResultsTable.id, result.id))
+        .get();
+      expect(stored?.manualRatingState).toBeNull();
+      expect(result).not.toHaveProperty('manualRatingState');
     });
   });
 

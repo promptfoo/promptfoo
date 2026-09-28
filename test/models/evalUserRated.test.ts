@@ -121,6 +121,84 @@ describe('User-Rated Filter Feature', () => {
       expect(testIndices).toEqual([0, 2, 4]);
     });
 
+    it('includes legacy top-level human ratings in both query paths', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      await eval_.addResult({
+        description: 'legacy-top-level-human',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: {} },
+        promptId: 'test-prompt',
+        provider: { id: 'test-provider', label: 'test-label' },
+        prompt: { raw: 'Test prompt', label: 'Test prompt' },
+        vars: {},
+        response: { output: 'Response' },
+        error: null,
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 1,
+        latencyMs: 100,
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'Legacy manual rating',
+          assertion: { type: HUMAN_ASSERTION_TYPE },
+        },
+        namedScores: {},
+        cost: 0.007,
+        metadata: {},
+      } as EvaluateResult);
+
+      await expect((eval_ as any).queryTestIndices({ filterMode: 'user-rated' })).resolves.toEqual({
+        testIndices: [0],
+        filteredCount: 1,
+      });
+      await expect(
+        queryTestIndicesOptimized(eval_.id, { filterMode: 'user-rated' }),
+      ).resolves.toEqual({ testIndices: [0], filteredCount: 1 });
+    });
+
+    it.each([true, false])(
+      'counts legacy top-level human assertions once in filtered metrics (pass: %s)',
+      async (pass) => {
+        const eval_ = await EvalFactory.create({ numResults: 0 });
+        for (const [testIdx, componentResults] of [
+          undefined,
+          [],
+          [null, 42, 'invalid', { pass: 'false' }],
+          [{ pass: !pass, score: 0.5, reason: 'Automated', assertion: { type: 'equals' } }],
+          [{ pass, score: Number(pass), reason: 'Manual', assertion: { type: 'human' } }],
+        ].entries()) {
+          await eval_.addResult({
+            promptIdx: 0,
+            testIdx,
+            testCase: {},
+            prompt: { raw: 'Test prompt', label: 'Test prompt' },
+            provider: { id: 'test-provider' },
+            response: { output: 'Rated result' },
+            success: pass,
+            score: Number(pass),
+            failureReason: pass ? ResultFailureReason.NONE : ResultFailureReason.ASSERT,
+            gradingResult: {
+              pass,
+              score: Number(pass),
+              reason: 'Legacy manual rating',
+              assertion: { type: 'human' },
+              componentResults,
+            },
+            namedScores: {},
+          } as EvaluateResult);
+        }
+        const page = await eval_.getTablePage({ filterMode: 'user-rated' });
+        const metrics = await eval_.getFilteredMetrics({ filterMode: 'user-rated' });
+        expect(page.filteredCount).toBe(5);
+        expect(metrics[0]).toMatchObject({
+          assertPassCount: pass ? 5 : 1,
+          assertFailCount: pass ? 1 : 5,
+        });
+      },
+    );
+
     it('should handle empty dataset with user-rated filter', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
 

@@ -27,7 +27,17 @@ import { getDb } from '../database/index';
 import logger from '../logger';
 import { ResultFailureReason } from '../types/index';
 
-import type { PromptMetrics } from '../types/index';
+import type { CompletedPrompt, PromptMetrics } from '../types/index';
+
+export type RatingMetrics = Pick<
+  PromptMetrics,
+  | 'score'
+  | 'testPassCount'
+  | 'testFailCount'
+  | 'testErrorCount'
+  | 'assertPassCount'
+  | 'assertFailCount'
+>;
 
 export interface FilteredMetricsOptions {
   evalId: string;
@@ -536,55 +546,41 @@ async function aggregateNamedScores(
   }
 }
 
-/**
- * Aggregate assertion counts using SQL json_each().
- * This requires nested JSON extraction for componentResults.
- *
- * SECURITY: Uses parameterized SQL query via Drizzle's sql template strings.
- *
- * The grading_result structure is:
- * {
- *   "componentResults": [
- *     {"pass": true, "assertion": {...}},
- *     {"pass": false, "assertion": {...}}
- *   ]
- * }
- *
- * We need to count pass=true vs pass=false across all results.
- */
+function countAssertionsSql(pass: boolean): SQL {
+  const gradingResult = sql`CASE WHEN json_valid(grading_result) THEN grading_result ELSE '{}' END`;
+  const components = sql`CASE
+    WHEN json_type(${gradingResult}, '$.componentResults') = 'array'
+      THEN json_extract(${gradingResult}, '$.componentResults')
+    ELSE '[]'
+  END`;
+  return sql`(
+    SELECT COUNT(*) FROM json_each(${components})
+    WHERE CASE WHEN json_each.type = 'object'
+      THEN json_type(json_each.value, '$.pass') = ${pass ? 'true' : 'false'}
+      ELSE 0 END
+  ) + CASE
+    WHEN json_extract(${gradingResult}, '$.assertion.type') = 'human'
+      AND json_type(${gradingResult}, '$.pass') = ${pass ? 'true' : 'false'}
+      AND NOT EXISTS (
+        SELECT 1 FROM json_each(${components})
+        WHERE CASE WHEN json_each.type = 'object'
+          THEN json_extract(json_each.value, '$.assertion.type') = 'human'
+          ELSE 0 END
+      )
+    THEN 1 ELSE 0 END`;
+}
+
+/** Count strict boolean outcomes, including legacy top-level human assertions once. */
 async function aggregateAssertions(
   metrics: PromptMetrics[],
   whereSql: SQL<unknown>,
 ): Promise<void> {
   const db = await getDb();
-
-  // SQLite query to count assertions from nested JSON
-  // This is complex but avoids fetching all results into memory
   const query = sql`
     SELECT
       prompt_idx,
-      SUM(
-        CASE
-          WHEN json_valid(grading_result) AND json_type(json_extract(grading_result, '$.componentResults')) = 'array' THEN
-            (
-              SELECT COUNT(*)
-              FROM json_each(json_extract(grading_result, '$.componentResults'))
-              WHERE CAST(json_extract(json_each.value, '$.pass') AS INTEGER) = 1
-            )
-          ELSE 0
-        END
-      ) as assert_pass_count,
-      SUM(
-        CASE
-          WHEN json_valid(grading_result) AND json_type(json_extract(grading_result, '$.componentResults')) = 'array' THEN
-            (
-              SELECT COUNT(*)
-              FROM json_each(json_extract(grading_result, '$.componentResults'))
-              WHERE CAST(json_extract(json_each.value, '$.pass') AS INTEGER) = 0
-            )
-          ELSE 0
-        END
-      ) as assert_fail_count
+      SUM(${countAssertionsSql(true)}) as assert_pass_count,
+      SUM(${countAssertionsSql(false)}) as assert_fail_count
     FROM eval_results
     WHERE ${whereSql}
       AND grading_result IS NOT NULL
@@ -605,6 +601,61 @@ async function aggregateAssertions(
       metrics[idx].assertFailCount = row.assert_fail_count || 0;
     }
   }
+}
+
+/**
+ * Streaming evaluators own token/cost metrics, but their snapshots can predate ratings.
+ * Reconcile only columns with rating history, including cleared ratings, from current
+ * persisted results. The caller must use the same transaction for the prompt write.
+ */
+export async function reconcileManualRatingMetrics(
+  db: Pick<Awaited<ReturnType<typeof getDb>>, 'all'>,
+  evalId: string,
+  prompts: CompletedPrompt[],
+  retainedMetrics: ReadonlyMap<number, RatingMetrics>,
+): Promise<CompletedPrompt[]> {
+  const ratedPrompts = await db.all<{ prompt_idx: number }>(sql`
+    SELECT DISTINCT prompt_idx FROM eval_results
+    WHERE eval_id = ${evalId} AND manual_rating_state IS NOT NULL
+  `);
+  if (ratedPrompts.length === 0) {
+    return prompts;
+  }
+  const rows = await db.all<RatingMetrics & { prompt_idx: number }>(sql`
+    SELECT prompt_idx,
+      COALESCE(SUM(score), 0) AS score,
+      SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) AS testPassCount,
+      SUM(CASE WHEN success = 0 AND COALESCE(failure_reason, 0) != ${ResultFailureReason.ERROR}
+        THEN 1 ELSE 0 END) AS testFailCount,
+      SUM(CASE WHEN success = 0 AND failure_reason = ${ResultFailureReason.ERROR}
+        THEN 1 ELSE 0 END) AS testErrorCount,
+      SUM(${countAssertionsSql(true)}) AS assertPassCount,
+      SUM(${countAssertionsSql(false)}) AS assertFailCount
+    FROM eval_results
+    WHERE eval_id = ${evalId}
+      AND prompt_idx IN (
+        ${sql.join(
+          ratedPrompts.map(({ prompt_idx }) => sql`${prompt_idx}`),
+          sql`, `,
+        )}
+      )
+    GROUP BY prompt_idx
+  `);
+  const reconciled = [...prompts];
+  for (const { prompt_idx, ...metrics } of rows) {
+    const prompt = prompts[prompt_idx];
+    if (prompt?.metrics) {
+      const retained = retainedMetrics.get(prompt_idx);
+      if (retained) {
+        for (const key of Object.keys(retained) as Array<keyof RatingMetrics>) {
+          metrics[key] += retained[key];
+        }
+      }
+      // Do not mutate the evaluator's array: it still accumulates its own metrics.
+      reconciled[prompt_idx] = { ...prompt, metrics: { ...prompt.metrics, ...metrics } };
+    }
+  }
+  return reconciled;
 }
 
 /**

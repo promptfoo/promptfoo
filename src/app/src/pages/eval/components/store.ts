@@ -1,5 +1,5 @@
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
-import { callApi } from '@app/utils/api';
+import { callApi, getApiBaseUrl } from '@app/utils/api';
 import { Severity } from '@promptfoo/redteam/constants';
 import {
   isPolicyMetric,
@@ -12,7 +12,7 @@ import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable
 import { create } from 'zustand';
 import { persist, subscribeWithSelector } from 'zustand/middleware';
 import logger from '../../../../../logger';
-import { hasHumanRating } from './utils';
+import { getRatingCellKey, hasHumanRating } from './utils';
 import type { Policy, PolicyObject } from '@promptfoo/redteam/types';
 import type {
   EvalResultsFilterMode,
@@ -20,6 +20,7 @@ import type {
   EvaluateStats,
   EvaluateSummaryV2,
   EvaluateTable,
+  EvaluateTableOutput,
   PromptMetrics,
   RedteamPluginObject,
   ResultsFile,
@@ -214,6 +215,11 @@ interface FetchEvalOptions {
   filters?: ResultsFilter[];
 }
 
+interface RatingQueue {
+  tail?: { promise: Promise<EvaluateTable | undefined>; settled: boolean };
+  edits: Map<string, { visible: EvaluateTableOutput; completed: EvaluateTableOutput }>;
+}
+
 interface ColumnState {
   selectedColumns: string[];
   columnVisibility: VisibilityState;
@@ -301,7 +307,16 @@ interface TableState {
    */
   stats: EvaluateStats | null;
 
-  fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
+  tableQuery: { evalId: string; url: string } | null;
+  tableRequestGeneration: number;
+  tableSelectionRequest: { generation: number; evalId: string } | null;
+  ratingQueues: Map<string, RatingQueue>;
+  pruneInactiveRatingQueues: () => void;
+  // null is a failed request; undefined means a newer request superseded this one.
+  fetchEvalData: (
+    id: string,
+    options?: FetchEvalOptions,
+  ) => Promise<EvalTableDTO | null | undefined>;
   isFetching: boolean;
   isStreaming: boolean;
   setIsStreaming: (isStreaming: boolean) => void;
@@ -534,7 +549,10 @@ const isFilterApplied = (filter: Partial<ResultsFilter> | ResultsFilter): boolea
 export const useTableStore = create<TableState>()(
   subscribeWithSelector((set, get) => ({
     evalId: null,
-    setEvalId: (evalId: string) => set(() => ({ evalId, filteredMetrics: null })),
+    setEvalId: (evalId: string) => {
+      set({ evalId, filteredMetrics: null });
+      get().pruneInactiveRatingQueues();
+    },
 
     author: null,
     setAuthor: (author: string | null) => set(() => ({ author })),
@@ -621,6 +639,19 @@ export const useTableStore = create<TableState>()(
       set(() => ({ filteredMetrics: metrics })),
 
     stats: null,
+    tableQuery: null,
+    tableRequestGeneration: 0,
+    tableSelectionRequest: null,
+    ratingQueues: new Map(),
+    pruneInactiveRatingQueues: () => {
+      const { evalId, ratingQueues } = get();
+      const activeKey = JSON.stringify([getApiBaseUrl(), evalId]);
+      for (const [key, queue] of ratingQueues) {
+        if (key !== activeKey && queue.tail?.settled) {
+          ratingQueues.delete(key);
+        }
+      }
+    },
 
     highlightedResultsCount: 0,
     userRatedResultsCount: 0,
@@ -647,12 +678,86 @@ export const useTableStore = create<TableState>()(
 
       // Cancel any existing metadata keys request and reset state for new eval
       const currentState = get();
+      if (skipSettingEvalId && currentState.evalId !== id) {
+        return undefined;
+      }
+      const apiBaseUrl = getApiBaseUrl();
+      const ratingKey = JSON.stringify([apiBaseUrl, id]);
+      const ratingsAtStart = currentState.ratingQueues.get(ratingKey);
+      const tailAtStart = ratingsAtStart?.tail;
+      const writesSettledAtStart = tailAtStart?.settled ?? true;
+      let url = new URL(
+        `/eval/${id}/table`,
+        // URL constructor expects a valid url
+        window.location.origin,
+      );
+
+      url.searchParams.set('offset', (pageIndex * pageSize).toString());
+      url.searchParams.set('limit', pageSize.toString());
+      url.searchParams.set('filterMode', filterMode);
+
+      comparisonEvalIds.forEach((evalId) => {
+        url.searchParams.append('comparisonEvalIds', evalId);
+      });
+
+      if (searchText) {
+        url.searchParams.set('search', searchText);
+      }
+
+      filters.forEach((filter) => {
+        url.searchParams.append(
+          'filter',
+          JSON.stringify({
+            logicOperator: filter.logicOperator,
+            type: filter.type,
+            operator: filter.operator,
+            value: filter.value,
+            field: filter.field,
+          }),
+        );
+      });
+
+      // Background refreshes update the active result set. Their caller may have captured
+      // an older search or page, or (for realtime updates) omitted those options entirely.
+      if (skipLoadingState && skipSettingEvalId && currentState.tableQuery?.evalId === id) {
+        url = new URL(currentState.tableQuery.url, window.location.origin);
+      }
+      const tableQuery = { evalId: id, url: url.pathname + url.search };
+
+      const requestGeneration = currentState.tableRequestGeneration + 1;
+      const ownsSelectionRequest = () =>
+        get().tableSelectionRequest?.generation === requestGeneration;
+      const isCurrentRequest = () =>
+        getApiBaseUrl() === apiBaseUrl &&
+        (get().tableRequestGeneration === requestGeneration || ownsSelectionRequest()) &&
+        (!skipSettingEvalId || get().evalId === id);
+      const shouldIgnoreResponse = () => !isCurrentRequest();
+      const finishCurrentRequest = () => {
+        if (!isCurrentRequest()) {
+          return;
+        }
+        set((prevState) => {
+          const ownsSelection = prevState.tableSelectionRequest?.generation === requestGeneration;
+          return ownsSelection ? { isFetching: false, tableSelectionRequest: null } : {};
+        });
+      };
       if (currentState.currentMetadataKeysRequest) {
         currentState.currentMetadataKeysRequest.abort();
       }
 
       set({
-        isFetching: skipLoadingState ? get().isFetching : true,
+        tableQuery:
+          !skipLoadingState || currentState.evalId === id ? tableQuery : currentState.tableQuery,
+        tableRequestGeneration: requestGeneration,
+        // Refreshing the displayed eval must not cancel a pending switch to another eval.
+        tableSelectionRequest:
+          !skipLoadingState ||
+          (!skipSettingEvalId &&
+            currentState.evalId !== id &&
+            currentState.tableSelectionRequest?.evalId !== id)
+            ? { generation: requestGeneration, evalId: id }
+            : currentState.tableSelectionRequest,
+        isFetching: skipLoadingState ? currentState.isFetching : true,
         shouldHighlightSearchText: false,
         // Clear previous metadata keys to prevent memory accumulation
         metadataKeys: [],
@@ -667,43 +772,16 @@ export const useTableStore = create<TableState>()(
 
       try {
         logger.debug('[EvalStore] Fetching eval table data', { evalId: id, options });
-
-        const url = new URL(
-          `/eval/${id}/table`,
-          // URL constructor expects a valid url
-          window.location.origin,
-        );
-
-        url.searchParams.set('offset', (pageIndex * pageSize).toString());
-        url.searchParams.set('limit', pageSize.toString());
-        url.searchParams.set('filterMode', filterMode);
-
-        comparisonEvalIds.forEach((evalId) => {
-          url.searchParams.append('comparisonEvalIds', evalId);
-        });
-
-        if (searchText) {
-          url.searchParams.set('search', searchText);
-        }
-
-        filters.forEach((filter) => {
-          url.searchParams.append(
-            'filter',
-            JSON.stringify({
-              logicOperator: filter.logicOperator,
-              type: filter.type,
-              operator: filter.operator,
-              value: filter.value,
-              field: filter.field,
-            }),
-          );
-        });
-
-        // Remove the origin as it was only added to satisfy the URL constructor.
-        const resp = await callApi(url.toString().replace(window.location.origin, ''));
+        const resp = await callApi(tableQuery.url);
 
         if (resp.ok) {
           const data = (await resp.json()) as EvalTableDTO;
+
+          // A background refresh for the previously active eval must not replace a newly
+          // selected eval while its response was in flight.
+          if (shouldIgnoreResponse()) {
+            return undefined;
+          }
 
           // Build async options
           const [redteamOptions, policyIdToNameMap] = await Promise.all([
@@ -711,46 +789,92 @@ export const useTableStore = create<TableState>()(
             extractPolicyIdToNameMap(data.config?.redteam?.plugins ?? []),
           ]);
 
-          set((prevState) => ({
-            table: data.table,
-            filteredResultsCount: data.filteredCount,
-            totalResultsCount: data.totalCount,
-            highlightedResultsCount: computeHighlightCount(data.table),
-            userRatedResultsCount: computeUserRatedCount(data.table),
-            config: data.config,
-            version: data.version,
-            author: data.author,
-            evalId: skipSettingEvalId ? get().evalId : id,
-            isFetching: skipLoadingState ? prevState.isFetching : false,
-            shouldHighlightSearchText: searchText !== '',
-            // Store filtered metrics from backend (null when no filters or feature disabled)
-            filteredMetrics: data.filteredMetrics || null,
-            // Store evaluation-level stats including durationMs
-            stats: data.stats || null,
-            filters: {
-              ...prevState.filters,
-              options: {
-                metric: computeAvailableMetrics(data.table),
-                metadata: [],
-                ...redteamOptions,
+          if (shouldIgnoreResponse()) {
+            return undefined;
+          }
+
+          // Reads from any source must retain accepted edits, including completed cells
+          // while another write is pending. Only a read begun after the final write can
+          // replace this overlay with authoritative server state.
+          const ratings = get().ratingQueues.get(ratingKey);
+          const retainEdits =
+            ratings &&
+            (ratings !== ratingsAtStart || ratings.tail !== tailAtStart || !writesSettledAtStart);
+          const table = retainEdits
+            ? {
+                ...data.table,
+                body: data.table.body.map((row, rowIndex) => ({
+                  ...row,
+                  outputs: row.outputs.map((output, promptIndex) =>
+                    output
+                      ? (ratings.edits.get(
+                          getRatingCellKey(output.id, {
+                            rowIndex,
+                            promptIndex,
+                            testIdx: row.testIdx,
+                          }),
+                        )?.visible ?? output)
+                      : output,
+                  ),
+                })),
+              }
+            : data.table;
+          if (!retainEdits) {
+            get().ratingQueues.delete(ratingKey);
+          }
+
+          set((prevState) => {
+            const shouldClearLoading =
+              !skipLoadingState || prevState.tableSelectionRequest?.evalId === id;
+            return {
+              table,
+              tableQuery,
+              filteredResultsCount: data.filteredCount,
+              totalResultsCount: data.totalCount,
+              highlightedResultsCount: computeHighlightCount(table),
+              userRatedResultsCount: computeUserRatedCount(table),
+              config: data.config,
+              version: data.version,
+              author: data.author,
+              evalId: skipSettingEvalId ? get().evalId : id,
+              isFetching: shouldClearLoading ? false : prevState.isFetching,
+              tableSelectionRequest: shouldClearLoading ? null : prevState.tableSelectionRequest,
+              shouldHighlightSearchText: url.searchParams.has('search'),
+              // Store filtered metrics from backend (null when no filters or feature disabled)
+              filteredMetrics: data.filteredMetrics || null,
+              // Store evaluation-level stats including durationMs
+              stats: data.stats || null,
+              filters: {
+                ...prevState.filters,
+                options: {
+                  metric: computeAvailableMetrics(table),
+                  metadata: [],
+                  ...redteamOptions,
+                },
+                policyIdToNameMap,
               },
-              policyIdToNameMap,
-            },
-          }));
+            };
+          });
+
+          get().pruneInactiveRatingQueues();
 
           // Metadata keys will be fetched lazily when user opens metadata filter dropdown
 
-          return data;
+          return { ...data, table };
         }
 
-        if (!skipLoadingState) {
-          set({ isFetching: false });
+        if (shouldIgnoreResponse()) {
+          return undefined;
         }
+        finishCurrentRequest();
         return null;
       } catch (error) {
+        if (shouldIgnoreResponse()) {
+          return undefined;
+        }
         console.error('Error fetching eval data:', error);
+        finishCurrentRequest();
         set({
-          isFetching: skipLoadingState ? get().isFetching : false,
           isStreaming: false,
           metadataKeysLoading: false,
           currentMetadataKeysRequest: null,

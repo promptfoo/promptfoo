@@ -110,6 +110,7 @@ const baseMockTableStore = {
     .fn()
     .mockResolvedValue({ table: mockTable, config: {}, totalCount: 0, filteredCount: 0 }),
   resetFilters: vi.fn(),
+  pruneInactiveRatingQueues: vi.fn(),
   setIsStreaming: vi.fn(),
   addFilter: vi.fn(),
 };
@@ -121,11 +122,7 @@ const baseMockResultsViewSettings = {
 };
 
 // Mock getState and subscribe for the store
-(useTableStore as any).getState = vi.fn(() => ({
-  filters: { values: {} },
-  resetFilters: baseMockTableStore.resetFilters,
-  addFilter: baseMockTableStore.addFilter,
-}));
+(useTableStore as any).getState = vi.fn(() => useTableStore());
 (useTableStore as any).subscribe = vi.fn(() => vi.fn());
 
 describe('Eval', () => {
@@ -163,11 +160,7 @@ describe('Eval', () => {
     });
     window.history.replaceState({}, '', '/eval/test-eval');
 
-    (useTableStore as any).getState = vi.fn(() => ({
-      filters: { values: {} },
-      resetFilters: baseMockTableStore.resetFilters,
-      addFilter: baseMockTableStore.addFilter,
-    }));
+    (useTableStore as any).getState = vi.fn(() => useTableStore());
     (useTableStore as any).subscribe = vi.fn(() => vi.fn());
 
     useTestTimers();
@@ -184,7 +177,7 @@ describe('Eval', () => {
     restoreTestTimers({ runPending: true });
   });
 
-  it('should call resetFilters when navigating from one eval to another', async () => {
+  it('preserves unchanged URL filters while selecting a different eval', async () => {
     vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
 
     const { rerender } = render(
@@ -193,7 +186,7 @@ describe('Eval', () => {
       </MemoryRouter>,
     );
 
-    expect(baseMockTableStore.resetFilters).toHaveBeenCalledTimes(1);
+    expect(baseMockTableStore.resetFilters).not.toHaveBeenCalled();
 
     await act(async () => {
       rerender(
@@ -203,32 +196,8 @@ describe('Eval', () => {
       );
     });
 
-    expect(baseMockTableStore.resetFilters).toHaveBeenCalledTimes(2);
-  });
-
-  it('should not call resetFilters unnecessarily when other dependencies change', async () => {
-    vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
-
-    const fetchId = 'test-eval-id';
-
-    const { rerender } = render(
-      <MemoryRouter>
-        <Eval fetchId={fetchId} />
-      </MemoryRouter>,
-    );
-
-    expect(baseMockTableStore.resetFilters).toHaveBeenCalledTimes(1);
-    baseMockTableStore.resetFilters.mockClear();
-
-    await act(async () => {
-      rerender(
-        <MemoryRouter>
-          <Eval fetchId={fetchId} />
-        </MemoryRouter>,
-      );
-    });
-
     expect(baseMockTableStore.resetFilters).not.toHaveBeenCalled();
+    expect(baseMockTableStore.fetchEvalData).toHaveBeenCalledWith('eval-2', expect.anything());
   });
 
   it('should handle null fetchId gracefully without fetching data', async () => {
@@ -306,7 +275,7 @@ describe('Eval', () => {
     expect(queryByTestId('results-view')).toBeInTheDocument();
   });
 
-  it('should preserve the ResultsView instance when navigating between evals', async () => {
+  it('preserves the ResultsView instance when the selected eval is already loaded', async () => {
     let tableStoreValue = {
       ...baseMockTableStore,
       table: mockTable,
@@ -314,6 +283,7 @@ describe('Eval', () => {
     };
 
     vi.mocked(useTableStore).mockImplementation(() => tableStoreValue as any);
+    (useTableStore as any).getState = vi.fn(() => tableStoreValue);
 
     const { getByTestId, rerender } = render(
       <MemoryRouter>
@@ -416,6 +386,58 @@ describe('Eval', () => {
     expect(resultsView?.getAttribute('data-default-eval-id')).toBe('eval-2');
   });
 
+  it('ignores a failed load after a newer eval load has started', async () => {
+    const successfulLoad = {
+      table: mockTable,
+      config: {},
+      totalCount: 0,
+      filteredCount: 0,
+    };
+    let resolveFirst!: (value: null) => void;
+    let resolveSecond!: (value: typeof successfulLoad) => void;
+    const firstLoad = new Promise<null>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const secondLoad = new Promise<typeof successfulLoad>((resolve) => {
+      resolveSecond = resolve;
+    });
+    const fetchEvalDataMock = vi
+      .fn()
+      .mockReturnValueOnce(firstLoad)
+      .mockReturnValueOnce(secondLoad);
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      fetchEvalData: fetchEvalDataMock,
+    });
+
+    const { queryByText, rerender } = render(
+      <MemoryRouter>
+        <Eval fetchId="eval-1" />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      rerender(
+        <MemoryRouter>
+          <Eval fetchId="eval-2" />
+        </MemoryRouter>,
+      );
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetchEvalDataMock).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      resolveFirst(null);
+      await firstLoad;
+    });
+    expect(queryByText('404 Eval not found')).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveSecond(successfulLoad);
+      await secondLoad;
+    });
+    expect(queryByText('404 Eval not found')).not.toBeInTheDocument();
+  });
+
   it('reloads the scoped eval from a socket update', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       ...baseMockTableStore,
@@ -442,6 +464,151 @@ describe('Eval', () => {
       expect.objectContaining({ skipLoadingState: true }),
     );
     expect(baseMockTableStore.setEvalId).toHaveBeenCalledWith('retried-eval');
+  });
+
+  it('surfaces a pinned initial load failure when a newer background refresh also fails', async () => {
+    let resolveForeground!: (value: null) => void;
+    let resolveBackground!: (value: null) => void;
+    const foregroundLoad = new Promise<null>((resolve) => {
+      resolveForeground = resolve;
+    });
+    const backgroundLoad = new Promise<null>((resolve) => {
+      resolveBackground = resolve;
+    });
+    const fetchEvalDataMock = vi
+      .fn()
+      .mockReturnValueOnce(foregroundLoad)
+      .mockReturnValueOnce(backgroundLoad);
+    const tableStore = {
+      ...baseMockTableStore,
+      table: null,
+      evalId: 'selected-eval',
+      fetchEvalData: fetchEvalDataMock,
+    };
+    vi.mocked(useTableStore).mockReturnValue(tableStore);
+    (useTableStore as any).getState = vi.fn(() => ({
+      ...tableStore,
+      filters: { values: {} },
+      resetFilters: baseMockTableStore.resetFilters,
+      addFilter: baseMockTableStore.addFilter,
+    }));
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ evalId: 'selected-eval' }] }),
+    } as Response);
+
+    const { queryByText } = render(
+      <MemoryRouter>
+        <Eval fetchId="selected-eval" />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetchEvalDataMock).toHaveBeenCalledTimes(1);
+
+    let socketWork: Promise<void> | undefined;
+    await act(async () => {
+      socketWork = mockSocketHandlers.get('init')?.({ evalId: 'selected-eval' });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetchEvalDataMock).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      resolveBackground(null);
+      await backgroundLoad;
+      await socketWork;
+    });
+    await act(async () => {
+      resolveForeground(null);
+      await foregroundLoad;
+    });
+
+    expect(queryByText('404 Eval not found')).toBeInTheDocument();
+    expect(queryByText('Waiting for eval data')).not.toBeInTheDocument();
+  });
+
+  it('keeps a successful same-eval background load when the initial foreground load fails', async () => {
+    const successfulLoad = {
+      table: mockTable,
+      config: {},
+      totalCount: 0,
+      filteredCount: 0,
+    };
+    let resolveForeground!: (value: null) => void;
+    let resolveBackground!: (value: typeof successfulLoad) => void;
+    const foregroundLoad = new Promise<null>((resolve) => {
+      resolveForeground = resolve;
+    });
+    const backgroundLoad = new Promise<typeof successfulLoad>((resolve) => {
+      resolveBackground = resolve;
+    });
+    const fetchEvalDataMock = vi
+      .fn()
+      .mockReturnValueOnce(foregroundLoad)
+      .mockReturnValueOnce(backgroundLoad);
+    const tableStore = {
+      ...baseMockTableStore,
+      table: null,
+      evalId: 'selected-eval',
+      fetchEvalData: fetchEvalDataMock,
+    };
+    let currentTable: EvaluateTable | null = null;
+    vi.mocked(useTableStore).mockReturnValue(tableStore);
+    (useTableStore as any).getState = vi.fn(() => ({
+      ...tableStore,
+      table: currentTable,
+      filters: { values: {} },
+      resetFilters: baseMockTableStore.resetFilters,
+      addFilter: baseMockTableStore.addFilter,
+    }));
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ evalId: 'selected-eval' }] }),
+    } as Response);
+
+    const { queryByText, queryByTestId, rerender } = render(
+      <MemoryRouter>
+        <Eval fetchId="selected-eval" />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    let socketWork: Promise<void> | undefined;
+    await act(async () => {
+      socketWork = mockSocketHandlers.get('init')?.({ evalId: 'selected-eval' });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    await act(async () => {
+      resolveForeground(null);
+      await foregroundLoad;
+    });
+    expect(queryByText('404 Eval not found')).not.toBeInTheDocument();
+    expect(queryByText('Waiting for eval data')).toBeInTheDocument();
+
+    await act(async () => {
+      currentTable = mockTable;
+      resolveBackground(successfulLoad);
+      await backgroundLoad;
+      await socketWork;
+    });
+
+    vi.mocked(useTableStore).mockReturnValue({ ...tableStore, table: mockTable });
+    await act(async () => {
+      rerender(
+        <MemoryRouter>
+          <Eval fetchId="selected-eval" />
+        </MemoryRouter>,
+      );
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(queryByText('404 Eval not found')).not.toBeInTheDocument();
+    expect(queryByTestId('results-view')).toBeInTheDocument();
   });
 
   it('does not navigate away for a scoped background socket update', async () => {
@@ -495,16 +662,56 @@ describe('Eval', () => {
 
     expect(baseMockTableStore.fetchEvalData).toHaveBeenCalledWith(
       'latest-eval',
-      expect.objectContaining({ skipLoadingState: true }),
+      expect.objectContaining({ skipLoadingState: true, skipSettingEvalId: false }),
     );
-    expect(baseMockTableStore.setEvalId).toHaveBeenCalledWith('latest-eval');
+    expect(baseMockTableStore.setEvalId).not.toHaveBeenCalledWith('latest-eval');
+  });
+
+  it('retains the current root eval when a newer background eval fails', async () => {
+    const fetchEvalDataMock = vi.fn().mockResolvedValue(null);
+    const tableStore = {
+      ...baseMockTableStore,
+      evalId: 'selected-eval',
+      fetchEvalData: fetchEvalDataMock,
+    };
+    vi.mocked(useTableStore).mockReturnValue(tableStore);
+    (useTableStore as any).getState = vi.fn(() => ({
+      ...tableStore,
+      filters: { values: {} },
+      resetFilters: baseMockTableStore.resetFilters,
+      addFilter: baseMockTableStore.addFilter,
+    }));
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ evalId: 'latest-eval' }] }),
+    } as Response);
+
+    const { queryByTestId, queryByText } = render(
+      <MemoryRouter>
+        <Eval fetchId={null} />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+      await mockSocketHandlers.get('init')?.({ evalId: 'latest-eval' });
+    });
+
+    expect(fetchEvalDataMock).toHaveBeenCalledWith(
+      'latest-eval',
+      expect.objectContaining({ skipLoadingState: true, skipSettingEvalId: false }),
+    );
+    expect(baseMockTableStore.setEvalId).not.toHaveBeenCalledWith('latest-eval');
+    expect(queryByTestId('results-view')).toBeInTheDocument();
+    expect(queryByText('404 Eval not found')).not.toBeInTheDocument();
   });
 
   it('keeps a pinned eval visible when its initial background recents refresh fails', async () => {
-    vi.mocked(useTableStore).mockReturnValue({
+    const tableStoreValue = {
       ...baseMockTableStore,
       evalId: 'selected-eval',
-    });
+    };
+    vi.mocked(useTableStore).mockReturnValue(tableStoreValue);
+    (useTableStore as any).getState = vi.fn(() => tableStoreValue);
     vi.mocked(callApi).mockResolvedValue({
       ok: false,
     } as Response);
@@ -609,10 +816,10 @@ describe('Eval', () => {
       await mockSocketHandlers.get('update')?.({ deletedEvalIds: ['selected-eval'] });
     });
 
-    expect(baseMockTableStore.setEvalId).toHaveBeenCalledWith('latest-eval');
+    expect(baseMockTableStore.setEvalId).not.toHaveBeenCalledWith('latest-eval');
     expect(baseMockTableStore.fetchEvalData).toHaveBeenCalledWith(
       'latest-eval',
-      expect.objectContaining({ skipLoadingState: true }),
+      expect.objectContaining({ skipLoadingState: true, skipSettingEvalId: false }),
     );
   });
 
@@ -691,10 +898,10 @@ describe('Eval', () => {
     });
 
     // An empty id list is treated as "refresh to latest"; with survivors it must not clear.
-    expect(baseMockTableStore.setEvalId).toHaveBeenCalledWith('latest-eval');
+    expect(baseMockTableStore.setEvalId).not.toHaveBeenCalledWith('latest-eval');
     expect(baseMockTableStore.fetchEvalData).toHaveBeenCalledWith(
       'latest-eval',
-      expect.objectContaining({ skipLoadingState: true }),
+      expect.objectContaining({ skipLoadingState: true, skipSettingEvalId: false }),
     );
     expect(baseMockTableStore.setEvalId).not.toHaveBeenCalledWith('');
   });
@@ -752,10 +959,10 @@ describe('Eval', () => {
     });
 
     // Both events converge on the surviving eval; the view is never left cleared.
-    expect(baseMockTableStore.setEvalId).toHaveBeenCalledWith('surviving-eval');
+    expect(baseMockTableStore.setEvalId).not.toHaveBeenCalledWith('surviving-eval');
     expect(baseMockTableStore.fetchEvalData).toHaveBeenCalledWith(
       'surviving-eval',
-      expect.objectContaining({ skipLoadingState: true }),
+      expect.objectContaining({ skipLoadingState: true, skipSettingEvalId: false }),
     );
     expect(baseMockTableStore.setEvalId).not.toHaveBeenCalledWith('');
   });
@@ -914,10 +1121,10 @@ describe('Eval', () => {
       await mockSocketHandlers.get('init')?.({ evalId: 'latest-eval' });
     });
 
-    expect(baseMockTableStore.setEvalId).toHaveBeenCalledWith('latest-eval');
+    expect(baseMockTableStore.setEvalId).not.toHaveBeenCalledWith('latest-eval');
     expect(baseMockTableStore.fetchEvalData).toHaveBeenCalledWith(
       'latest-eval',
-      expect.objectContaining({ skipLoadingState: true }),
+      expect.objectContaining({ skipLoadingState: true, skipSettingEvalId: false }),
     );
   });
 
@@ -945,8 +1152,7 @@ describe('Eval', () => {
     const disconnectsAfterMount = mockSocketDisconnect.mock.calls.length;
     expect(ioCallsAfterMount).toBeGreaterThan(0);
 
-    // Toggling the result filter mode re-renders the component (and changes loadEvalById's
-    // identity). The socket must stay mounted instead of tearing down and reconnecting.
+    // Toggling the result filter mode must keep the existing socket connected.
     mockFilterMode.current = 'failures';
     await act(async () => {
       rerender(
@@ -1294,6 +1500,7 @@ describe('Eval', () => {
     });
     (useTableStore as any).getState = vi.fn(() => ({
       filters: { values: {} },
+      pruneInactiveRatingQueues: baseMockTableStore.pruneInactiveRatingQueues,
       resetFilters: vi.fn(() => {
         subscriptionCallback?.({ values: {}, appliedCount: 0 });
       }),

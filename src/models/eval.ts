@@ -34,7 +34,11 @@ import {
   type ResultsFile,
   type UnifiedConfig,
 } from '../types/index';
-import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
+import {
+  calculateFilteredMetrics,
+  type RatingMetrics,
+  reconcileManualRatingMetrics,
+} from '../util/calculateFilteredMetrics';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
@@ -62,6 +66,7 @@ import {
   queryTestIndicesOptimized,
 } from './evalPerformance';
 import EvalResult, {
+  countGradingAssertions,
   getResultIndexKey,
   getStripFlags,
   PROMPTFOO_METADATA_KEY,
@@ -550,6 +555,7 @@ export default class Eval {
             opts.results?.map((r) => ({
               ...r,
               metadata: persistTraceMetadata(r.metadata, r.traceId, r.evaluationId),
+              manualRatingState: null,
               evalId,
               id: crypto.randomUUID(),
             })),
@@ -672,12 +678,10 @@ export default class Eval {
     this.oldResults.table = table;
   }
 
-  async save() {
-    const db = await getDb();
+  async save({ updatePrompts = true }: { updatePrompts?: boolean } = {}) {
     const updateObj: Record<string, unknown> = {
       config: sanitizeTracingConfigForPersistence(this.config),
       isRedteam: this.config.redteam !== undefined,
-      prompts: this.prompts,
       description: this.config.description,
       author: this.author,
       updatedAt: getCurrentTimestamp(),
@@ -708,7 +712,13 @@ export default class Eval {
       }
       updateObj.results = expr;
     }
-    await db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
+    if (updatePrompts) {
+      await this.persistWithPrompts(updateObj, this.prompts);
+    } else {
+      // Reloaded metadata edits do not have the evaluator's retained, unpersisted results.
+      const db = await getDb();
+      await db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
+    }
     notifyEvaluationChanged(this.id);
     this.persisted = true;
   }
@@ -933,13 +943,15 @@ export default class Eval {
     } else if (mode === 'highlights') {
       conditions.push(sql`json_extract(grading_result, '$.comment') LIKE ${'!highlight%'}`);
     } else if (mode === 'user-rated') {
-      // Check if componentResults array contains an entry with assertion.type = 'human'
-      // Uses EXISTS + json_each for accurate JSON querying (avoids false positives from LIKE)
+      // Match canonical component ratings and legacy top-level human assertions.
       conditions.push(sql`
-        EXISTS (
-          SELECT 1
-          FROM json_each(grading_result, '$.componentResults')
-          WHERE json_extract(value, '$.assertion.type') = ${HUMAN_ASSERTION_TYPE}
+        (
+          json_extract(grading_result, '$.assertion.type') = ${HUMAN_ASSERTION_TYPE}
+          OR EXISTS (
+            SELECT 1
+            FROM json_each(grading_result, '$.componentResults')
+            WHERE json_extract(value, '$.assertion.type') = ${HUMAN_ASSERTION_TYPE}
+          )
         )
       `);
     }
@@ -1358,12 +1370,80 @@ export default class Eval {
   async addPrompts(prompts: CompletedPrompt[]) {
     this.prompts = prompts;
     if (this.persisted) {
-      const db = await getDb();
-      await db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
+      await this.persistWithPrompts({}, prompts);
       // Notify the view server after prompt metadata changes so cached /api/prompts
       // responses and socket listeners can pick up prompts added after eval creation.
       notifyEvaluationChanged(this.id);
     }
+  }
+
+  private async persistWithPrompts(update: Record<string, unknown>, incoming: CompletedPrompt[]) {
+    const db = await getDb();
+    const reconciled = await db.transaction(async (tx) => {
+      const prompts = this.useOldResults()
+        ? incoming
+        : await reconcileManualRatingMetrics(
+            tx,
+            this.id,
+            incoming,
+            await this.getRetainedResultMetrics(tx),
+          );
+      await tx
+        .update(evalsTable)
+        .set({ ...update, prompts })
+        .where(eq(evalsTable.id, this.id))
+        .run();
+      return prompts;
+    });
+    if (this.prompts === incoming) {
+      this.prompts = reconciled;
+    }
+  }
+
+  private async getRetainedResultMetrics(db: Pick<Awaited<ReturnType<typeof getDb>>, 'all'>) {
+    const metrics = new Map<number, RatingMetrics>();
+    if (this.failedResults.size === 0) {
+      return metrics;
+    }
+    const failed = Array.from(this.failedResults);
+    // Only index pairs cross this query boundary. A later successful write for the same
+    // pair owns the outcome, just as it does when assembling comparison inputs.
+    const persisted = await db.all<{ testIdx: number; promptIdx: number }>(sql`
+      SELECT test_idx AS testIdx, prompt_idx AS promptIdx FROM eval_results
+      WHERE eval_id = ${this.id} AND (test_idx, prompt_idx) IN (
+        SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]')
+        FROM json_each(${JSON.stringify(failed.map(([, row]) => [row.testIdx, row.promptIdx]))})
+      )
+    `);
+    const persistedKeys = new Set(persisted.map(getResultIndexKey));
+    for (const [key, original] of failed) {
+      if (persistedKeys.has(key)) {
+        continue;
+      }
+      // Comparisons mutate the cached reconstruction; its outcome supersedes the raw row.
+      const row = this.failedEvalResults.get(key) ?? original;
+      const counts = metrics.get(row.promptIdx) ?? {
+        score: 0,
+        testPassCount: 0,
+        testFailCount: 0,
+        testErrorCount: 0,
+        assertPassCount: 0,
+        assertFailCount: 0,
+      };
+      counts.score += row.score;
+      if (row.success) {
+        counts.testPassCount++;
+      } else if (row.failureReason === ResultFailureReason.ERROR) {
+        counts.testErrorCount++;
+      } else {
+        counts.testFailCount++;
+      }
+      const assertions = countGradingAssertions(row.gradingResult);
+      counts.assertPassCount += assertions.pass;
+      counts.assertFailCount += assertions.fail;
+      metrics.set(row.promptIdx, counts);
+    }
+    return metrics;
   }
 
   async setResults(results: EvalResult[]) {
@@ -1376,6 +1456,7 @@ export default class Eval {
           results.map((r) => ({
             ...r,
             metadata: persistTraceMetadata(r.metadata, r.traceId, r.evaluationId),
+            manualRatingState: null,
             evalId: this.id,
           })),
         )

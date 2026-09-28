@@ -111,9 +111,13 @@ export const evalResultsTable = sqliteTable(
 
     // Metadata fields
     metadata: text('metadata', { mode: 'json' }).$type<Record<string, string>>(),
+    manualRatingState: text('manual_rating_state', { mode: 'json' }).$type<unknown>(),
   },
   (table) => ({
     evalIdIdx: index('eval_result_eval_id_idx').on(table.evalId),
+    manualRatingIdx: index('eval_result_manual_rating_idx')
+      .on(table.evalId, table.promptIdx)
+      .where(sql`${table.manualRatingState} IS NOT NULL`),
     testIdxIdx: index('eval_result_test_idx').on(table.testIdx),
 
     evalTestIdx: index('eval_result_eval_test_idx').on(table.evalId, table.testIdx),

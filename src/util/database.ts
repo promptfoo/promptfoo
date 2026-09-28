@@ -203,7 +203,7 @@ export async function updateResult(
       existingEval.setTable(newTable);
     }
 
-    await existingEval.save();
+    await existingEval.save({ updatePrompts: false });
 
     logger.info(`Updated eval with ID ${id}`);
   } catch (err) {
