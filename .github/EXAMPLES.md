@@ -119,3 +119,14 @@ this profile does not require a Node build or model credentials.
 python3.10 .github/scripts/examples.py run redteam-langchain
 python3.14 .github/scripts/examples.py run redteam-langchain
 ```
+
+## Specialized Browser Workflow
+
+`workflows/browser-example-python.yml` retains the Gradio browser example's Python
+3.10/3.14 component tests and Python 3.12 end-to-end browser job. That job provisions
+Chromium and its operating-system libraries, starts the Gradio server, and runs both
+original configurations through the local CLI. The shared runner's Node option
+builds the CLI but does not provision browser binaries or system libraries; keeping
+this workflow separate preserves the actual browser coverage without expanding
+the shared runner's infrastructure API. Shared runtime/toolchain changes select
+the specialized workflow as well as the aggregate example matrix.
