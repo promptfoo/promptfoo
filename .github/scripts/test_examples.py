@@ -26,7 +26,7 @@ SCRIPT = Path(__file__).with_name("examples.py")
 class SelectionTests(unittest.TestCase):
     def test_full_run_preserves_every_registered_runtime(self):
         rows = select_examples(None)
-        self.assertEqual(len(rows), 12)
+        self.assertEqual(len(rows), 16)
         self.assertEqual(
             [(row["example"], row["python"]) for row in rows],
             [
@@ -34,10 +34,14 @@ class SelectionTests(unittest.TestCase):
                 ("docker-sandbox", "3.14"),
                 ("python-provider-upgrade", "3.10"),
                 ("python-provider-minimums", "3.14"),
+                ("redteam-langchain", "3.10"),
+                ("redteam-langchain", "3.14"),
                 ("openai-agents", "3.12"),
                 ("openai-agents", "3.14"),
                 ("openai-agents-minimums", "3.10"),
                 ("openai-agents-otel", "3.12"),
+                ("langgraph", "3.10"),
+                ("langgraph", "3.14"),
                 ("google-adk", "3.12"),
                 ("google-adk", "3.14"),
                 ("google-adk-minimums", "3.10"),
@@ -66,6 +70,27 @@ class SelectionTests(unittest.TestCase):
         )
         self.assertTrue(all(row["node"] for row in rows))
 
+    def test_langchain_changes_select_only_its_supported_runtimes(self):
+        for filename in (
+            "langchain_provider.py",
+            "langchain_provider_test.py",
+            "requirements.txt",
+        ):
+            with self.subTest(filename=filename):
+                rows = select_examples([f"examples/redteam-langchain/{filename}"])
+                self.assertEqual(
+                    rows,
+                    [
+                        {
+                            "example": "redteam-langchain",
+                            "python": version,
+                            "node": False,
+                        }
+                        for version in ("3.10", "3.14")
+                    ],
+                )
+        self.assertEqual(EXAMPLES["redteam-langchain"].suites, ((".", "*_test.py"),))
+
     def test_agents_changes_select_all_isolated_profiles(self):
         rows = select_examples(["examples/openai-agents/requirements.txt"])
         self.assertEqual(
@@ -86,6 +111,18 @@ class SelectionTests(unittest.TestCase):
                 (ROOT / example.directory / example.suites[2][0]).resolve(),
                 ROOT / ".github/scripts/tests/openai_agents",
             )
+
+    def test_langgraph_changes_select_its_python_only_suite(self):
+        for filename in ("agent.py", "agent_test.py", "requirements.txt"):
+            with self.subTest(filename=filename):
+                self.assertEqual(
+                    select_examples([f"examples/integration-langgraph/{filename}"]),
+                    [
+                        {"example": "langgraph", "python": "3.10", "node": False},
+                        {"example": "langgraph", "python": "3.14", "node": False},
+                    ],
+                )
+        self.assertEqual(EXAMPLES["langgraph"].suites, ((".", "agent_test.py"),))
 
     def test_shared_changes_run_all_profiles(self):
         for path in (
@@ -262,6 +299,46 @@ class RunnerTests(unittest.TestCase):
             self.assertTrue(call.kwargs["check"])
         self.assertEqual(EXAMPLES["google-adk"].extra_requirements, ())
         self.assertEqual(EXAMPLES["google-adk-minimums"].extra_requirements, ())
+        self.assertFalse(environment.exists())
+
+    def test_langchain_runs_its_existing_provider_suite_in_isolation(self):
+        with (
+            patch(
+                "examples.sys.version_info", types.SimpleNamespace(major=3, minor=10)
+            ),
+            patch("examples.venv.EnvBuilder.create") as create,
+            patch("examples.subprocess.run") as run,
+        ):
+            run_example("redteam-langchain")
+        environment = create.call_args.args[0]
+        commands = [call.args[0] for call in run.call_args_list]
+        self.assertEqual(len(commands), 3)
+        self.assertEqual(
+            commands[0][1:],
+            (
+                "-m",
+                "pip",
+                "install",
+                "--disable-pip-version-check",
+                "-r",
+                str(ROOT / "examples/redteam-langchain/requirements.txt"),
+            ),
+        )
+        self.assertEqual(commands[1][1:], ("-m", "pip", "check"))
+        self.assertEqual(
+            commands[2][1:],
+            (
+                str(SCRIPT),
+                "test",
+                str(ROOT / "examples/redteam-langchain"),
+                "*_test.py",
+            ),
+        )
+        for call in run.call_args_list:
+            self.assertTrue(str(call.args[0][0]).startswith(str(environment)))
+            self.assertEqual(call.kwargs["env"]["PROMPTFOO_PYTHON"], call.args[0][0])
+            self.assertEqual(call.kwargs["cwd"], ROOT)
+            self.assertTrue(call.kwargs["check"])
         self.assertFalse(environment.exists())
 
     def test_agents_optional_requirements_do_not_leak_into_default(self):
