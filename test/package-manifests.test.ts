@@ -62,6 +62,7 @@ const KNOWN_BAD_RELEASES = new Map([
   ['cache-manager', '7.2.10'], // Shai-Hulud compromise (#10301)
   ['cacheable-request', '13.0.20'], // Shai-Hulud compromise (#10301)
   ['extract-zip', '<=2.0.1'], // GHSA-jmr9-qjv8-65gv, GHSA-7pqw-9j4j-h8q3
+  ['fast-uri', '<2.4.7 || >=3.0.0 <3.1.8 || >=4.0.0 <4.1.5'], // GHSA-hrr3-gc8f-f4qj, GHSA-qw65-cvwx-89v3, GHSA-58mr-gqgx-xq4g
   ['image-size', '>=0.6.3 <=2.0.2'], // GHSA-5p2g-fcmc-qvqq, GHSA-w3rx-r6r6-pgpr
   ['hono', '<4.13.7'], // GHSA-hxh3-vqpv-xpqv
   ['js-yaml', '<3.15.2 || >=4.0.0 <4.3.2 || >=5.0.0 <5.2.3'], // #10356, GHSA-2883-xcg3-v3hh
