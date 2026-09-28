@@ -4,17 +4,27 @@ on:
   pull_request:
     paths:
       - 'examples/integration-browser/headless/**'
-      - 'src/providers/browser.ts'
+      - 'src/**'
+      - 'scripts/**'
+      - 'drizzle/**'
+      - '.nvmrc'
+      - '.npmrc'
       - 'package.json'
       - 'package-lock.json'
+      - 'tsconfig.json'
       - '.github/workflows/browser-example-python.yml'
   push:
     branches: [main]
     paths:
       - 'examples/integration-browser/headless/**'
-      - 'src/providers/browser.ts'
+      - 'src/**'
+      - 'scripts/**'
+      - 'drizzle/**'
+      - '.nvmrc'
+      - '.npmrc'
       - 'package.json'
       - 'package-lock.json'
+      - 'tsconfig.json'
       - '.github/workflows/browser-example-python.yml'
 
 permissions:
