@@ -127,7 +127,7 @@
     "react-dom": "^19.3.0",
     "react-is": "^19.3.0",
     "react-router-config": {
-      "react-router": "^8.0.0"
+      "react-router": "^5.3.4"
     },
     "@ai-sdk/provider-utils": {
       "undici": "$undici"
