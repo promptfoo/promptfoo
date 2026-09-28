@@ -1589,6 +1589,20 @@ describe('Anthropic utilities', () => {
 
     // `response_inclusion` only exists on the 2026-03-18 variants, so the older specs must
     // drop it rather than forward a field the API does not accept on that version.
+    // url_sources limits which URLs web_fetch may load, so dropping it silently widens access.
+    it.each([
+      'web_fetch_20250910',
+      'web_fetch_20260209',
+      'web_fetch_20260309',
+      'web_fetch_20260318',
+    ])('forwards url_sources on %s', (type) => {
+      const url_sources = { user_input: 'none', server_tool_results: 'all' };
+      const { processedTools } = processAnthropicTools([
+        { type, name: 'web_fetch', url_sources } as any,
+      ]);
+      expect(processedTools[0]).toMatchObject({ url_sources });
+    });
+
     it('drops response_inclusion on tool versions that do not support it', () => {
       const { processedTools } = processAnthropicTools([
         { type: 'web_search_20260209', name: 'web_search', response_inclusion: 'excluded' } as any,

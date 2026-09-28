@@ -871,7 +871,18 @@ const WEB_FETCH_FIELDS = [
   'cache_control',
   'defer_loading',
   'strict',
+  'url_sources',
 ] as const satisfies readonly (keyof WebFetchToolConfig)[];
+
+const WEB_FETCH_20260309_FIELDS = [
+  ...WEB_FETCH_FIELDS,
+  'use_cache',
+] as const satisfies readonly (keyof WebFetchToolConfigV2)[];
+
+const WEB_FETCH_20260318_FIELDS = [
+  ...WEB_FETCH_20260309_FIELDS,
+  'response_inclusion',
+] as const satisfies readonly (keyof WebFetchToolConfig20260318)[];
 
 const WEB_SEARCH_FIELDS = [
   'allowed_callers',
@@ -883,6 +894,33 @@ const WEB_SEARCH_FIELDS = [
   'strict',
   'user_location',
 ] as const satisfies readonly (keyof WebSearchToolConfig)[];
+
+const WEB_SEARCH_20260318_FIELDS = [
+  ...WEB_SEARCH_FIELDS,
+  'response_inclusion',
+] as const satisfies readonly (keyof WebSearchToolConfig20260318)[];
+
+/** SDK fields on a server tool that its field list would drop without warning. */
+type UnforwardedToolFields<Tool, Fields extends readonly string[]> = Exclude<
+  keyof Tool,
+  'name' | 'type' | Fields[number]
+>;
+
+// Fails to type-check, naming the field, when an SDK upgrade adds a server tool field that
+// the matching list does not forward, such as `url_sources`, which restricts fetchable URLs.
+type _ServerToolFieldsAreForwarded<T extends never> = T;
+type _AllServerToolFieldsForwarded = _ServerToolFieldsAreForwarded<
+  | UnforwardedToolFields<Anthropic.Messages.WebFetchTool20250910, typeof WEB_FETCH_FIELDS>
+  | UnforwardedToolFields<Anthropic.Messages.WebFetchTool20260209, typeof WEB_FETCH_FIELDS>
+  | UnforwardedToolFields<Anthropic.Messages.WebFetchTool20260309, typeof WEB_FETCH_20260309_FIELDS>
+  | UnforwardedToolFields<Anthropic.Messages.WebFetchTool20260318, typeof WEB_FETCH_20260318_FIELDS>
+  | UnforwardedToolFields<Anthropic.Messages.WebSearchTool20250305, typeof WEB_SEARCH_FIELDS>
+  | UnforwardedToolFields<Anthropic.Messages.WebSearchTool20260209, typeof WEB_SEARCH_FIELDS>
+  | UnforwardedToolFields<
+      Anthropic.Messages.WebSearchTool20260318,
+      typeof WEB_SEARCH_20260318_FIELDS
+    >
+>;
 
 interface ServerToolSpec {
   /** Tool name the API expects; always overrides whatever `name` the user config carried. */
@@ -906,37 +944,12 @@ const SERVER_TOOL_SPECS = new Map<string, ServerToolSpec>([
   ],
   ['web_fetch_20260209', { name: 'web_fetch', fields: WEB_FETCH_FIELDS }],
   // use_cache arrived in 20260309; response_inclusion in 20260318.
-  [
-    'web_fetch_20260309',
-    {
-      name: 'web_fetch',
-      fields: [...WEB_FETCH_FIELDS, 'use_cache' satisfies keyof WebFetchToolConfigV2],
-    },
-  ],
-  [
-    'web_fetch_20260318',
-    {
-      name: 'web_fetch',
-      fields: [
-        ...WEB_FETCH_FIELDS,
-        'use_cache' satisfies keyof WebFetchToolConfig20260318,
-        'response_inclusion' satisfies keyof WebFetchToolConfig20260318,
-      ],
-    },
-  ],
+  ['web_fetch_20260309', { name: 'web_fetch', fields: WEB_FETCH_20260309_FIELDS }],
+  ['web_fetch_20260318', { name: 'web_fetch', fields: WEB_FETCH_20260318_FIELDS }],
   // Web search needs no beta header in the current SDK.
   ['web_search_20250305', { name: 'web_search', fields: WEB_SEARCH_FIELDS }],
   ['web_search_20260209', { name: 'web_search', fields: WEB_SEARCH_FIELDS }],
-  [
-    'web_search_20260318',
-    {
-      name: 'web_search',
-      fields: [
-        ...WEB_SEARCH_FIELDS,
-        'response_inclusion' satisfies keyof WebSearchToolConfig20260318,
-      ],
-    },
-  ],
+  ['web_search_20260318', { name: 'web_search', fields: WEB_SEARCH_20260318_FIELDS }],
 ]);
 
 /**

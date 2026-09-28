@@ -3,7 +3,9 @@ import type Anthropic from '@anthropic-ai/sdk';
 import type { MCPConfig } from '../mcp/types';
 import type { OpenAIToolChoice } from '../shared';
 
-type AnthropicServerToolCaller = 'direct' | 'code_execution_20250825' | 'code_execution_20260120';
+type AnthropicServerToolCaller = NonNullable<
+  Anthropic.Messages.WebSearchTool20260318['allowed_callers']
+>[number];
 
 interface BaseAnthropicServerToolConfig {
   allowed_callers?: AnthropicServerToolCaller[];
@@ -21,6 +23,8 @@ interface BaseWebFetchToolConfig extends BaseAnthropicServerToolConfig {
     enabled: boolean;
   };
   max_content_tokens?: number;
+  /** Which URLs the tool may fetch: from user input, client tool results, or server tool results. */
+  url_sources?: Anthropic.Messages.WebFetchURLSources;
 }
 
 interface BaseWebSearchToolConfig extends BaseAnthropicServerToolConfig {
