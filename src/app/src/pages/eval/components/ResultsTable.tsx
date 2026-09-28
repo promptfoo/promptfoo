@@ -1323,7 +1323,7 @@ function hasFileMetadataForColumn({
   return Boolean(fileMetadata?.[varName]);
 }
 
-function getImageSourceForCell({
+export function getImageSourceForCell({
   columnId,
   value,
   row,
@@ -1336,6 +1336,10 @@ function getImageSourceForCell({
   headVars: string[];
   injectVarName: string;
 }): string | undefined {
+  if (columnId === 'description') {
+    return undefined;
+  }
+
   if (typeof value !== 'string' || hasFileMetadataForColumn({ columnId, row, headVars })) {
     return undefined;
   }
