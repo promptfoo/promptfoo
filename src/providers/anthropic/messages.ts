@@ -703,11 +703,6 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     if (refusalDetails && !cached) {
       logger.warn(refusalDetails);
     }
-    if (message.stop_reason === 'pause_turn' && !cached) {
-      logger.warn(
-        'Claude paused a long-running server tool turn (stop_reason: pause_turn) before finishing its answer, so the output may be incomplete. Lower the tool max_uses or split the task.',
-      );
-    }
 
     return {
       output,
