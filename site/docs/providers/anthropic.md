@@ -88,14 +88,14 @@ rejected locally with `Unknown Amazon Bedrock model`.
 
 | Model ID                     | Description            | Suggested replacement |
 | ---------------------------- | ---------------------- | --------------------- |
-| `claude-opus-4-1-20250805`   | Claude 4.1 Opus        | `claude-opus-5`       |
-| `claude-opus-4-20250514`     | Claude 4 Opus          | `claude-opus-5`       |
+| `claude-opus-4-1-20250805`   | Claude 4.1 Opus        | `claude-opus-5-5`     |
+| `claude-opus-4-20250514`     | Claude 4 Opus          | `claude-opus-5-5`     |
 | `claude-sonnet-4-20250514`   | Claude 4 Sonnet        | `claude-sonnet-5`     |
 | `claude-3-7-sonnet-20250219` | Claude 3.7 Sonnet      | `claude-sonnet-5`     |
 | `claude-3-5-sonnet-20241022` | Claude 3.5 Sonnet (v2) | `claude-sonnet-5`     |
 | `claude-3-5-sonnet-20240620` | Claude 3.5 Sonnet (v1) | `claude-sonnet-5`     |
 | `claude-3-5-haiku-20241022`  | Claude 3.5 Haiku       | `claude-haiku-4-5`    |
-| `claude-3-opus-20240229`     | Claude 3 Opus          | `claude-opus-5`       |
+| `claude-3-opus-20240229`     | Claude 3 Opus          | `claude-opus-5-5`     |
 | `claude-3-haiku-20240307`    | Claude 3 Haiku         | `claude-haiku-4-5`    |
 
 :::note Model aliases
@@ -195,11 +195,9 @@ The `system_message` and `question` are example variables that can be set with t
 :::warning Assistant prefill is not supported on current models
 
 Ending a prompt with an `assistant` message ("prefilling" Claude's reply) returns a 400 —
-`This model does not support assistant message prefill` — on Opus 4.6, Sonnet 4.6, Opus 4.7,
-Opus 4.8, Opus 5, Sonnet 5, and the Fable/Mythos 5 families. Only the 4.5 generation
-(Opus 4.5, Sonnet 4.5, Haiku 4.5) and older still accept it.
-
-Promptfoo warns when it sees a trailing assistant turn on an affected model. Use
+`This model does not support assistant message prefill` — on every model from the 4.6
+generation onward, including Opus 5.5, Opus 5, Sonnet 5, and the Fable/Mythos 5 families. Only
+the 4.5 generation (Opus 4.5, Sonnet 4.5, Haiku 4.5) and older still accept it. Use
 [structured outputs](#structured-outputs) or a system-prompt instruction to constrain the
 response format instead.
 
@@ -799,7 +797,7 @@ thinking:
   budget_tokens: number # Must be ≥1024 and less than max_tokens
 ```
 
-Fable 5/5.1, Mythos 5/5.1, Opus 5, Sonnet 5, and Opus 4.7/4.8 reject this with a 400
+Fable 5/5.1, Mythos 5/5.1, Opus 5.5, Opus 5, Sonnet 5, and Opus 4.7/4.8 reject this with a 400
 (`"thinking.type.enabled" is not supported for this model`); on those models promptfoo
 converts an `enabled` budget to `{ type: 'adaptive' }` and warns once.
 
@@ -815,7 +813,7 @@ thinking:
   type: 'disabled'
 ```
 
-Not accepted on Fable 5 / Mythos 5 / Fable 5.1 / Mythos 5.1, where thinking is always on,
+Not accepted on Opus 5.5 or Fable 5 / Mythos 5 / Fable 5.1 / Mythos 5.1, where thinking is always on,
 nor on Opus 5 above `effort: high`. Promptfoo omits it in both cases and warns.
 
 #### Thinking `display`
@@ -823,10 +821,10 @@ nor on Opus 5 above `effort: high`. Promptfoo omits it in both cases and warns.
 The `display` field controls whether the reasoning text is returned. Thinking happens — and
 is billed — identically under every setting:
 
-| Value          | Behavior                                                                                                                                                                   |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `'omitted'`    | **Default** on Fable 5/5.1, Mythos 5/5.1, Opus 5, Opus 4.7/4.8, and Sonnet 5. The `thinking` block is returned with empty text plus a signature for multi-turn continuity. |
-| `'summarized'` | Returns a readable summary of the reasoning. Default on Opus 4.6 and Sonnet 4.6 only.                                                                                      |
+| Value          | Behavior                                                                                                                                                                             |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `'omitted'`    | **Default** on Fable 5/5.1, Mythos 5/5.1, Opus 5.5, Opus 5, Opus 4.7/4.8, and Sonnet 5. The `thinking` block is returned with empty text plus a signature for multi-turn continuity. |
+| `'summarized'` | Returns a readable summary of the reasoning. Default on Opus 4.6 and Sonnet 4.6 only.                                                                                                |
 
 Because `'omitted'` is the default on current models, set `display` explicitly when you want
 to assert against Claude's reasoning:
@@ -870,7 +868,7 @@ Example response with thinking enabled:
 #### Controlling Thinking Output
 
 Two separate controls decide whether you see reasoning. The API's `thinking.display`
-decides whether Claude returns any reasoning text; on Fable 5/5.1, Mythos 5/5.1, Opus 5,
+decides whether Claude returns any reasoning text; on Fable 5/5.1, Mythos 5/5.1, Opus 5.5, Opus 5,
 Opus 4.7/4.8, and Sonnet 5 it defaults to `omitted`, so you must set
 `display: 'summarized'` first. (Opus 4.6 and Sonnet 4.6 already default to `summarized`
 and need no opt-in.) Promptfoo's `showThinking` then decides whether returned reasoning is
@@ -925,7 +923,7 @@ providers:
       effort: high
 ```
 
-Fable 5/5.1, Opus 5, Opus 4.6–4.8, Sonnet 5, and Sonnet 4.6 all support up to **128K** output
+Fable 5/5.1, Opus 5.5, Opus 5, Opus 4.6–4.8, Sonnet 5, and Sonnet 4.6 all support up to **128K** output
 tokens; the 4.5 generation caps at 64K. The `output-128k-2025-02-19` beta feature is specific to
 Claude 3.7 Sonnet and is not needed on any current model.
 
@@ -952,16 +950,16 @@ providers:
 
 Support varies by model — sending an unsupported level returns a 400:
 
-| Model                                                    | Supported levels                            |
-| -------------------------------------------------------- | ------------------------------------------- |
-| Fable 5, Fable 5.1, Opus 5, Sonnet 5, Opus 4.7, Opus 4.8 | `low`, `medium`, `high`, `xhigh`, `max`     |
-| Opus 4.6, Sonnet 4.6                                     | `low`, `medium`, `high`, `max` (no `xhigh`) |
-| Opus 4.5                                                 | `low`, `medium`, `high`                     |
-| Sonnet 4.5, Haiku 4.5                                    | Not supported — omit `effort`               |
+| Model                                                              | Supported levels                            |
+| ------------------------------------------------------------------ | ------------------------------------------- |
+| Fable 5, Fable 5.1, Opus 5.5, Opus 5, Sonnet 5, Opus 4.7, Opus 4.8 | `low`, `medium`, `high`, `xhigh`, `max`     |
+| Opus 4.6, Sonnet 4.6                                               | `low`, `medium`, `high`, `max` (no `xhigh`) |
+| Opus 4.5                                                           | `low`, `medium`, `high`                     |
+| Sonnet 4.5, Haiku 4.5                                              | Not supported — omit `effort`               |
 
 `xhigh` sits between `high` and `max` and was introduced with Claude Opus 4.7. For coding and
 agentic use cases, Anthropic recommends starting at `high` or `xhigh`, then sweeping downward —
-`low` and `medium` are the main cost and latency lever on Opus 5 and Sonnet 5.
+`low` and `medium` are the main cost and latency lever on Opus 5.5, Opus 5, and Sonnet 5.
 
 When `effort` is unset, the API uses `high` on most models but `medium` on Claude Opus 5.5.
 
@@ -987,7 +985,7 @@ providers:
 ### Structured Outputs
 
 Structured outputs constrain Claude's responses to a JSON schema. Supported on every current
-Claude model — Fable 5/5.1, Opus 5, Sonnet 5, Opus 4.6–4.8, Sonnet 4.6, and the 4.5 generation
+Claude model — Fable 5/5.1, Opus 5.5, Opus 5, Sonnet 5, Opus 4.6–4.8, Sonnet 4.6, and the 4.5 generation
 (Opus 4.5, Sonnet 4.5, Haiku 4.5).
 
 Promptfoo's `output_format` config key maps to the API's `output_config.format` and adds the

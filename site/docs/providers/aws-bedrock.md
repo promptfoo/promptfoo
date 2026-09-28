@@ -202,7 +202,7 @@ The `thinking` configuration controls Claude's reasoning behavior:
 - `type: adaptive` - Activates adaptive thinking (Claude 5, Opus 4.7/4.8); pair with `output_config.effort` on the Converse path
 - `type: enabled` - Activates manual extended thinking (Opus 4.6, Sonnet 4.6, and the 4.5 generation)
 - `budget_tokens` - Maximum tokens allocated for thinking (minimum 1024), manual thinking only
-- For Claude Opus 4.7, Opus 4.8, Opus 5, and Sonnet 5, promptfoo converts `type: enabled` to adaptive thinking because manual thinking is not accepted by those models.
+- For Claude Opus 4.7, Opus 4.8, Opus 5, Opus 5.5, and Sonnet 5, promptfoo converts `type: enabled` to adaptive thinking because manual thinking is not accepted by those models.
 
 Use `showThinking: true` to include the model's reasoning process in the output, or `false` to only show the final response.
 
@@ -918,7 +918,7 @@ calculating costs.
 ```yaml
 config:
   max_tokens: 256
-  temperature: 0.7 # Omit on Opus 4.7+, Opus 5, Sonnet 5, and the Fable/Mythos 5 models
+  temperature: 0.7 # Omit on Opus 4.7 and later, Sonnet 5, and the Fable/Mythos 5 models
   anthropic_version: 'bedrock-2023-05-31'
   tools: [...] # Optional: Specify available tools
   tool_choice: { ... } # Optional: Specify tool choice
@@ -1965,7 +1965,7 @@ Configuration options include:
 - `accessKeyId`, `secretAccessKey`, `sessionToken`: AWS credentials (if not using environment variables or IAM roles)
 - `profile`: AWS profile name for SSO authentication
 
-For Claude models that no longer support sampling parameters — [Opus 4.7](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-4-7.html), Opus 4.8, Opus 5, Sonnet 5, and the Fable/Mythos 5 models — the provider omits `temperature`, `top_p`, and `top_k` while preserving `max_tokens`. This check uses `config.modelArn` when supplied.
+For Claude models that no longer support sampling parameters — [Opus 4.7](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-4-7.html), Opus 4.8, Opus 5, Opus 5.5, Sonnet 5, and the Fable/Mythos 5 models — the provider omits `temperature`, `top_p`, and `top_k` while preserving `max_tokens`. This check uses `config.modelArn` when supplied.
 
 [Claude Sonnet 4.5 and Haiku 4.5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic-claude-messages-request-response.html) accept either `temperature` or `top_p`. When both are configured, `top_p` takes precedence. The provider applies the same precedence to Sonnet 4.6. For Amazon Nova, `top_k` is mapped to its native `inferenceConfig.topK` request field; for [Cohere Command R and R+](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-cohere-command-r-plus.html), it is mapped to `k`.
 

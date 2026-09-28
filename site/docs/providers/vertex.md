@@ -148,7 +148,7 @@ and the model ID because Google does not publish one in its public model catalog
 Claude models require explicit access enablement through the [Vertex AI Model Garden](https://console.cloud.google.com/vertex-ai/publishers). Navigate to the Model Garden, search for "Claude", and enable the specific models you need.
 :::
 
-Note: Claude context limits vary by model. Fable 5, Mythos 5, Opus 5, and Sonnet 5 support up to 1 million input tokens.
+Note: Claude context limits vary by model. Fable 5, Mythos 5, Opus 5.5, Opus 5, and Sonnet 5 support up to 1 million input tokens.
 
 ### Llama Models
 
@@ -744,7 +744,7 @@ See [Google's SafetySetting API documentation](https://ai.google.dev/api/generat
 - Support for text, code, and analysis tasks
 - Tool use (function calling) capabilities
 - Available in multiple regions (us-east5, europe-west1, asia-southeast1) plus the `global` endpoint for the Claude 5 models and Opus 4.7/4.8
-- Fable/Mythos 5, Opus 5, Sonnet 5, and Opus 4.7/4.8: promptfoo automatically omits deprecated sampling parameters (`temperature`, `top_p`, `top_k`) and converts configured manual thinking (`type: enabled`) to adaptive thinking before forwarding the request to Vertex's `rawPredict` endpoint
+- Fable/Mythos 5, Opus 5.5, Opus 5, Sonnet 5, and Opus 4.7/4.8: promptfoo automatically omits deprecated sampling parameters (`temperature`, `top_p`, `top_k`) and converts configured manual thinking (`type: enabled`) to adaptive thinking before forwarding the request to Vertex's `rawPredict` endpoint
 - Quota limits vary by model version (20-245 QPM)
 
 ## Advanced Usage

@@ -1120,7 +1120,7 @@ paths, TTLs, and explicit cache clearing.
 | `openai:responses:gpt-5.4`           | High        | Higher | Production, complex rubrics |
 | `openai:responses:gpt-5-mini`        | Medium      | Low    | Development, simple checks  |
 | `anthropic:messages:claude-sonnet-5` | High        | Medium | Production                  |
-| `anthropic:messages:claude-opus-5`   | High        | Higher | Production, complex rubrics |
+| `anthropic:messages:claude-opus-5-5` | High        | Higher | Production, complex rubrics |
 
 Override via CLI:
 
@@ -1158,7 +1158,7 @@ judge to treat candidate output as untrusted data. See [LLM judge prompt templat
 
 ### What is the best LLM judge model?
 
-`openai:responses:gpt-5.4` and `anthropic:messages:claude-sonnet-5` are reliable for production, and `anthropic:messages:claude-opus-5` for the most demanding rubrics. Use `openai:responses:gpt-5-mini` for development. The judge should be at least as capable as the system under test.
+`openai:responses:gpt-5.4` and `anthropic:messages:claude-sonnet-5` are reliable for production, and `anthropic:messages:claude-opus-5-5` for the most demanding rubrics. Use `openai:responses:gpt-5-mini` for development. The judge should be at least as capable as the system under test.
 
 ### How do you do majority vote LLM judging?
 

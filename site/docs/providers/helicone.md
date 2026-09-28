@@ -89,7 +89,7 @@ providers:
 
 This provider extends promptfoo's OpenAI-compatible request builder, which sends
 `temperature: 0` unless you set `omitDefaults: true`. Claude 5 models
-(`claude-opus-5`, `claude-sonnet-5`, `claude-fable-5*`) reject `temperature`,
+(`claude-opus-5*`, `claude-sonnet-5`, `claude-fable-5*`) reject `temperature`,
 `top_p`, and `top_k` with a 400, so add `omitDefaults: true` to their config.
 
 :::
