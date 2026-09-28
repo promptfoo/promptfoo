@@ -993,7 +993,7 @@ async function doEvalWithEnv(
         // Providers outside the registry also own resources. Release them before
         // returning a paused/canceled eval, reporting results, or starting watch.
         const cleanupResults = await Promise.allSettled(
-          testSuite.providers.map(async (provider) => {
+          Array.from(new Set(testSuite.providers)).map(async (provider) => {
             if (isApiProvider(provider)) {
               await provider.cleanup?.();
             }

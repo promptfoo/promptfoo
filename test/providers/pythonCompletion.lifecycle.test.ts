@@ -211,6 +211,29 @@ describe('Python provider resource lifetime', () => {
     expect(second.shutdown).toHaveBeenCalledOnce();
   });
 
+  it('can retry a synchronous construction failure after config was resolved', async () => {
+    const first = createPool();
+    const second = createPool();
+    mocks.createPool
+      .mockReturnValueOnce(first)
+      .mockImplementationOnce(() => {
+        throw new Error('pool construction failed');
+      })
+      .mockReturnValueOnce(second);
+    const provider = createProvider();
+    await provider.initialize();
+    await provider.shutdown();
+
+    await expect(provider.initialize()).rejects.toThrow('pool construction failed');
+    await Promise.all([provider.initialize(), provider.initialize()]);
+
+    expect(mocks.processConfig).toHaveBeenCalledOnce();
+    expect(mocks.createPool).toHaveBeenCalledTimes(3);
+    expect(second.initialize).toHaveBeenCalledOnce();
+    await provider.callApi('retry');
+    expect(second.execute).toHaveBeenCalledOnce();
+  });
+
   it('keeps a restarted pool registered while global cleanup waits for another provider', async () => {
     const first = createPool();
     const second = createPool();

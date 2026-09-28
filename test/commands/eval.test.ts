@@ -2410,8 +2410,12 @@ describe('evalCommand', () => {
     },
   );
 
-  it('should await async provider cleanup after evaluation', async () => {
-    const cleanup = vi.fn().mockResolvedValue(undefined);
+  it('awaits one cleanup per provider instance after evaluation', async () => {
+    let finishCleanup!: () => void;
+    const closing = new Promise<void>((resolve) => {
+      finishCleanup = resolve;
+    });
+    const cleanup = vi.fn(() => closing);
     const provider = {
       id: () => 'cleanup-provider',
       callApi: async () => ({ output: 'ok' }),
@@ -2421,7 +2425,7 @@ describe('evalCommand', () => {
       config: {} as UnifiedConfig,
       testSuite: {
         prompts: [],
-        providers: [provider],
+        providers: [provider, provider],
       },
       basePath: path.resolve('/'),
     });
@@ -2429,9 +2433,18 @@ describe('evalCommand', () => {
       async (_testSuite, evalRecord) => evalRecord as Eval,
     );
 
-    await doEval({}, defaultConfig, defaultConfigPath, {});
-
-    expect(cleanup).toHaveBeenCalledTimes(1);
+    let settled = false;
+    const running = doEval({}, defaultConfig, defaultConfigPath, {}).finally(() => {
+      settled = true;
+    });
+    try {
+      await vi.waitFor(() => expect(cleanup).toHaveBeenCalled());
+      expect(cleanup).toHaveBeenCalledOnce();
+      expect(settled).toBe(false);
+    } finally {
+      finishCleanup?.();
+      await running;
+    }
   });
 
   it('should handle redteam config', async () => {

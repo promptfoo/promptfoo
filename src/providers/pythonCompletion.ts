@@ -230,54 +230,48 @@ export class PythonProvider implements ApiProvider {
     // Register before startup so shutdownAll also owns an initializing provider.
     providerRegistry.register(this);
     this.poolPromise = (async () => {
-      try {
-        if (!this.configResolved) {
-          this.configAbortController = new AbortController();
-          try {
-            const config = await processConfigFileReferences(
-              this.config,
-              this.options?.config.basePath || '',
-              this.configAbortController.signal,
-            );
-            this.configAbortController.signal.throwIfAborted();
-            this.config = config;
-            this.configResolved = true;
-          } finally {
-            this.configAbortController = null;
-          }
+      if (!this.configResolved) {
+        this.configAbortController = new AbortController();
+        try {
+          const config = await processConfigFileReferences(
+            this.config,
+            this.options?.config.basePath || '',
+            this.configAbortController.signal,
+          );
+          this.configAbortController.signal.throwIfAborted();
+          this.config = config;
+          this.configResolved = true;
+        } finally {
+          this.configAbortController = null;
         }
-
-        // Initialize worker pool
-        const workerCount = this.getWorkerCount();
-        const absPath = path.resolve(
-          path.join(this.options?.config.basePath || '', this.scriptPath),
-        );
-
-        const pool = new PythonWorkerPool(
-          absPath,
-          this.functionName || 'call_api',
-          workerCount,
-          getConfiguredPythonPath(this.config.pythonExecutable),
-          this.config.timeout,
-        );
-        this.ownedPool = pool;
-        await pool.initialize();
-        logger.debug(`Initialized Python provider ${this.id()} with ${workerCount} workers`);
-        return pool;
-      } catch (error) {
-        // Also let synchronous construction failures finish assigning poolPromise.
-        await Promise.resolve();
-        this.poolPromise = null;
-        // An explicit shutdown already owns cleanup and joins this readiness
-        // promise. Awaiting it here would make the two promises wait on each other.
-        if (!this.shutdownPromise) {
-          await this.shutdown().catch((cleanupError) => {
-            logger.warn('Failed to clean up Python provider startup', { error: cleanupError });
-          });
-        }
-        throw error;
       }
-    })();
+
+      // Initialize worker pool
+      const workerCount = this.getWorkerCount();
+      const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
+
+      const pool = new PythonWorkerPool(
+        absPath,
+        this.functionName || 'call_api',
+        workerCount,
+        getConfiguredPythonPath(this.config.pythonExecutable),
+        this.config.timeout,
+      );
+      this.ownedPool = pool;
+      await pool.initialize();
+      logger.debug(`Initialized Python provider ${this.id()} with ${workerCount} workers`);
+      return pool;
+    })().catch(async (error) => {
+      this.poolPromise = null;
+      // An explicit shutdown already owns cleanup and joins this readiness
+      // promise. Awaiting it here would make the two promises wait on each other.
+      if (!this.shutdownPromise) {
+        await this.shutdown().catch((cleanupError) => {
+          logger.warn('Failed to clean up Python provider startup', { error: cleanupError });
+        });
+      }
+      throw error;
+    });
 
     return this.poolPromise;
   }
