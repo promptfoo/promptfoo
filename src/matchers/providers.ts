@@ -9,12 +9,14 @@ import {
 } from '../scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
 import invariant from '../util/invariant';
+import { normalizeProviderRef } from '../util/providerRef';
 
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   GradingConfig,
+  LoadApiProviderContext,
   ProviderOptions,
   ProviderResponse,
   ProviderType,
@@ -115,7 +117,11 @@ export function callProviderWithContext(
   );
 }
 
-async function loadFromProviderOptions(provider: ProviderOptions) {
+async function loadFromProviderOptions(
+  provider: ProviderOptions,
+  configTransform?: LoadApiProviderContext['configTransform'],
+  providerPath = provider.id,
+) {
   invariant(
     typeof provider === 'object',
     `Provider must be an object, but received a ${typeof provider}: ${provider}`,
@@ -125,8 +131,9 @@ async function loadFromProviderOptions(provider: ProviderOptions) {
     `Provider must be an object, but received an array: ${JSON.stringify(provider)}`,
   );
   invariant(provider.id, 'Provider supplied to assertion must have an id');
-  return loadApiProvider(provider.id, {
+  return loadApiProvider(providerPath ?? provider.id, {
     options: provider as ProviderOptions,
+    ...(configTransform && { configTransform }),
     basePath: cliState.basePath,
   });
 }
@@ -158,11 +165,15 @@ export async function getGradingProvider(
   type: ProviderType,
   provider: GradingConfig['provider'],
   defaultProvider: ApiProvider | null,
+  configTransform?: LoadApiProviderContext['configTransform'],
 ): Promise<ApiProvider | null> {
   let finalProvider: ApiProvider | null;
   if (typeof provider === 'string') {
     // Defined as a string
-    finalProvider = await loadApiProvider(provider, { basePath: cliState.basePath });
+    finalProvider = await loadApiProvider(provider, {
+      basePath: cliState.basePath,
+      ...(configTransform && { configTransform }),
+    });
   } else if (
     provider != null &&
     typeof provider === 'object' &&
@@ -172,12 +183,19 @@ export async function getGradingProvider(
     finalProvider = provider as ApiProvider;
   } else if (provider != null && typeof provider === 'object') {
     const typeValue = (provider as ProviderTypeMap)[type];
+    const providerRef = configTransform ? normalizeProviderRef(provider) : undefined;
     if (typeValue) {
       // Defined as embedding, classification, or text record
-      finalProvider = await getGradingProvider(type, typeValue, defaultProvider);
+      finalProvider = await getGradingProvider(type, typeValue, defaultProvider, configTransform);
     } else if ((provider as ProviderOptions).id) {
       // Defined as ProviderOptions
-      finalProvider = await loadFromProviderOptions(provider as ProviderOptions);
+      finalProvider = await loadFromProviderOptions(provider as ProviderOptions, configTransform);
+    } else if (providerRef?.kind === 'map') {
+      finalProvider = await loadFromProviderOptions(
+        providerRef.loadOptions,
+        configTransform,
+        providerRef.loadProviderPath,
+      );
     } else if (Array.isArray(provider)) {
       throw new Error(
         `Provider must be an object or string, but received an array.\n\nCheck that the provider ${JSON.stringify(
@@ -220,7 +238,7 @@ export async function getGradingProvider(
 
     if (cfg) {
       // Recursively call getGradingProvider to handle all provider types (string, object, etc.)
-      finalProvider = await getGradingProvider(type, cfg, defaultProvider);
+      finalProvider = await getGradingProvider(type, cfg, defaultProvider, configTransform);
       if (finalProvider) {
         logger.debug('[Grading] Using provider from defaultTest fallback', {
           providerId: finalProvider.id(),

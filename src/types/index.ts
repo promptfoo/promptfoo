@@ -1584,6 +1584,11 @@ export const OutputFileExtension = z.enum([
 export type OutputFileExtension = z.infer<typeof OutputFileExtension>;
 
 export interface LoadApiProviderContext {
+  /** Optional config renderer, applied instead of env-only rendering before construction. */
+  configTransform?: (
+    config: ProviderOptions['config'],
+    env?: EnvOverrides,
+  ) => ProviderOptions['config'];
   options?: ProviderOptions;
   basePath?: string;
   env?: EnvOverrides;
