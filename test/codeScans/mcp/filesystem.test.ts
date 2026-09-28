@@ -1,11 +1,18 @@
 import { EventEmitter } from 'events';
+import path from 'path';
 import type { ChildProcess } from 'child_process';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockProcessEnv } from '../../util/utils';
 
 const mocks = vi.hoisted(() => ({
+  existsSync: vi.fn(),
   spawn: vi.fn(),
+}));
+
+vi.mock('fs', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('fs')>()),
+  existsSync: mocks.existsSync,
 }));
 
 vi.mock('child_process', async (importOriginal) => {
@@ -41,6 +48,7 @@ describe('filesystem MCP server management', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.resetAllMocks();
+    mocks.existsSync.mockReturnValue(true); // lets Windows find npm's npx-cli.js
     restoreEnv = mockProcessEnv(originalEnv, { clear: true });
   });
 
@@ -132,5 +140,65 @@ describe('filesystem MCP server management', () => {
 
     await vi.advanceTimersByTimeAsync(1000);
     await expectation;
+  });
+});
+
+describe('filesystem MCP launcher', () => {
+  const { execPath, platform } = process;
+  const nodeDir = path.resolve('/nodejs');
+  const npmDir = path.resolve('/npm-global');
+  const rootDir = path.resolve('/repo');
+  const npxCli = (dir: string) => path.join(dir, 'node_modules', 'npm', 'bin', 'npx-cli.js');
+  const npxArgs = ['-y', '@modelcontextprotocol/server-filesystem', rootDir];
+  let restoreEnv: () => void;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mocks.spawn.mockReturnValue(createFakeProcess());
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    Object.defineProperty(process, 'execPath', { value: path.join(nodeDir, 'node.exe') });
+    restoreEnv = mockProcessEnv({ PATH: ['', 'relative', npmDir].join(path.delimiter) });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { value: platform });
+    Object.defineProperty(process, 'execPath', { value: execPath });
+    restoreEnv();
+  });
+
+  it('runs the npx entrypoint installed with Node on Windows', () => {
+    mocks.existsSync.mockImplementation((file) => file === npxCli(nodeDir));
+
+    startFilesystemMcpServer(rootDir);
+
+    expect(mocks.spawn).toHaveBeenCalledWith(
+      process.execPath,
+      [npxCli(nodeDir), ...npxArgs],
+      expect.objectContaining({ cwd: rootDir }),
+    );
+  });
+
+  it('falls back to npm on an absolute PATH entry on Windows', () => {
+    // Empty and relative entries resolve against the cwd and must be skipped.
+    mocks.existsSync.mockImplementation((file) => !String(file).startsWith(nodeDir));
+
+    startFilesystemMcpServer(rootDir);
+
+    expect(mocks.spawn.mock.calls[0]?.[1]).toEqual([npxCli(npmDir), ...npxArgs]);
+  });
+
+  it('fails before spawning when npm cannot be found on Windows', () => {
+    mocks.existsSync.mockReturnValue(false);
+
+    expect(() => startFilesystemMcpServer(rootDir)).toThrow('npx not found');
+    expect(mocks.spawn).not.toHaveBeenCalled();
+  });
+
+  it('runs npx directly on other platforms', () => {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+
+    startFilesystemMcpServer(rootDir);
+
+    expect(mocks.spawn).toHaveBeenCalledWith('npx', npxArgs, expect.anything());
   });
 });

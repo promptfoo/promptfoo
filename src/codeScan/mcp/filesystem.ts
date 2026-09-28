@@ -5,7 +5,8 @@
  */
 
 import { type ChildProcess, spawn } from 'child_process';
-import { isAbsolute, resolve } from 'path';
+import { existsSync } from 'fs';
+import { delimiter, dirname, isAbsolute, join, resolve } from 'path';
 
 import logger from '../../logger';
 import { FilesystemMcpError } from '../../types/codeScan';
@@ -24,6 +25,27 @@ function createFilesystemMcpEnv(): NodeJS.ProcessEnv {
   delete env.npm_config_before;
 
   return env;
+}
+
+/**
+ * Windows npm shims are .cmd files, which spawn() cannot run without a shell. Run npm's
+ * npx-cli.js under this Node instead, preferring its bundled npm; a bare node.exe (such as
+ * the GitHub Actions runtime) falls back to PATH.
+ */
+function getNpxCommand(): string[] {
+  if (process.platform !== 'win32') {
+    return ['npx'];
+  }
+  // Skip empty and relative PATH entries: the child would resolve them against the scanned
+  // repo. Read process.env, not a copy, so the lookup stays case-insensitive on Windows.
+  const searchDirs = (process.env.PATH ?? '').split(delimiter).filter(isAbsolute);
+  const npxCli = [dirname(process.execPath), ...searchDirs]
+    .map((dir) => join(dir, 'node_modules', 'npm', 'bin', 'npx-cli.js'))
+    .find((cli) => existsSync(cli));
+  if (!npxCli) {
+    throw new Error('npx not found: install npm alongside Node.js or on PATH');
+  }
+  return [process.execPath, npxCli];
 }
 
 /**
@@ -46,9 +68,10 @@ export function startFilesystemMcpServer(rootDir: string): ChildProcess {
   try {
     // Spawn the filesystem MCP server
     // Using npx to run @modelcontextprotocol/server-filesystem
+    const [command, ...npxArgs] = getNpxCommand();
     const mcpProcess = spawn(
-      'npx',
-      ['-y', '@modelcontextprotocol/server-filesystem', absoluteRootDir],
+      command,
+      [...npxArgs, '-y', '@modelcontextprotocol/server-filesystem', absoluteRootDir],
       {
         stdio: ['pipe', 'pipe', 'pipe'], // stdin/stdout/stderr all piped
         cwd: absoluteRootDir,
