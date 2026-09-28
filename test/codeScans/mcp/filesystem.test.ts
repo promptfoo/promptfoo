@@ -68,6 +68,57 @@ describe('filesystem MCP server management', () => {
     }
   });
 
+  it('uses npx directly on non-Windows platforms', () => {
+    const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+
+    try {
+      mocks.spawn.mockReturnValue(createFakeProcess());
+
+      startFilesystemMcpServer(process.cwd());
+
+      const [command, args] = mocks.spawn.mock.calls[0] ?? [];
+      expect(command).toBe('npx');
+      expect(args).toEqual(['-y', '@modelcontextprotocol/server-filesystem', expect.any(String)]);
+    } finally {
+      if (originalPlatform) {
+        Object.defineProperty(process, 'platform', originalPlatform);
+      }
+    }
+  });
+
+  it('resolves npx-cli.js and uses process.execPath on Windows', () => {
+    const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+    const originalExecPath = process.execPath;
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    Object.defineProperty(process, 'execPath', {
+      value: 'C:\\Program Files\\nodejs\\node.exe',
+      configurable: true,
+    });
+
+    try {
+      mocks.spawn.mockReturnValue(createFakeProcess());
+
+      startFilesystemMcpServer(process.cwd());
+
+      const [command, args] = mocks.spawn.mock.calls[0] ?? [];
+      expect(command).toBe('C:\\Program Files\\nodejs\\node.exe');
+      expect(args?.[0]).toContain('npx-cli.js');
+      expect(args?.[1]).toBe('-y');
+      expect(args?.[2]).toBe('@modelcontextprotocol/server-filesystem');
+      expect(args?.[3]).toEqual(expect.any(String));
+    } finally {
+      if (originalPlatform) {
+        Object.defineProperty(process, 'platform', originalPlatform);
+      }
+      Object.defineProperty(process, 'execPath', {
+        value: originalExecPath,
+        writable: true,
+        configurable: true,
+      });
+    }
+  });
+
   it('resolves when the filesystem MCP server prints its ready marker', async () => {
     const mcpProcess = createFakeProcess();
     const ready = waitForFilesystemMcpServerReady(mcpProcess);

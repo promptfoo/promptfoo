@@ -5,7 +5,8 @@
  */
 
 import { type ChildProcess, spawn } from 'child_process';
-import { isAbsolute, resolve } from 'path';
+import { existsSync } from 'fs';
+import { dirname, isAbsolute, resolve } from 'path';
 
 import logger from '../../logger';
 import { FilesystemMcpError } from '../../types/codeScan';
@@ -27,6 +28,49 @@ function createFilesystemMcpEnv(): NodeJS.ProcessEnv {
 }
 
 /**
+ * Resolve the path to npx-cli.js on Windows.
+ *
+ * On Windows, `npx` is `npx.cmd` (a batch file) which cannot be spawned
+ * natively by Node's child_process.spawn. Instead, we locate the npx-cli.js
+ * entrypoint and invoke it with process.execPath (the node binary).
+ */
+function resolveNpxCliPath(): string | undefined {
+  const nodeDir = dirname(process.execPath);
+  const candidates = [
+    resolve(nodeDir, '..', 'lib', 'node_modules', 'npm', 'bin', 'npx-cli.js'),
+    resolve(nodeDir, 'npx-cli.js'),
+  ];
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Get the command and args for spawning the filesystem MCP server.
+ *
+ * On Windows, resolves npx-cli.js and uses process.execPath to invoke it.
+ * On other platforms, uses `npx` directly which works as a native executable.
+ */
+function getNpxSpawnCommand(rootDir: string): { command: string; args: string[] } {
+  if (process.platform === 'win32') {
+    const npxCliPath = resolveNpxCliPath();
+    if (npxCliPath) {
+      return {
+        command: process.execPath,
+        args: [npxCliPath, '-y', '@modelcontextprotocol/server-filesystem', rootDir],
+      };
+    }
+  }
+  return {
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-filesystem', rootDir],
+  };
+}
+
+/**
  * Start the filesystem MCP server as a child process
  * @param rootDir Absolute path to root directory for filesystem access
  * @returns Child process handle
@@ -44,17 +88,12 @@ export function startFilesystemMcpServer(rootDir: string): ChildProcess {
   logger.debug(`Root directory: ${absoluteRootDir}`);
 
   try {
-    // Spawn the filesystem MCP server
-    // Using npx to run @modelcontextprotocol/server-filesystem
-    const mcpProcess = spawn(
-      'npx',
-      ['-y', '@modelcontextprotocol/server-filesystem', absoluteRootDir],
-      {
-        stdio: ['pipe', 'pipe', 'pipe'], // stdin/stdout/stderr all piped
-        cwd: absoluteRootDir,
-        env: createFilesystemMcpEnv(),
-      },
-    );
+    const { command, args } = getNpxSpawnCommand(absoluteRootDir);
+    const mcpProcess = spawn(command, args, {
+      stdio: ['pipe', 'pipe', 'pipe'], // stdin/stdout/stderr all piped
+      cwd: absoluteRootDir,
+      env: createFilesystemMcpEnv(),
+    });
 
     // Filter stderr to suppress expected timeout warnings
     mcpProcess.stderr?.on('data', (chunk: Buffer) => {
