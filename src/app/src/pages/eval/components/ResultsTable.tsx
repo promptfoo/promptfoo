@@ -1350,7 +1350,7 @@ function getImageSourceForCell({
       })
     : value;
 
-  return typeof imageValue === 'string' ? resolveImageSource(imageValue) : undefined;
+  return typeof imageValue === 'string' ? resolveImageSource(imageValue, true) : undefined;
 }
 
 function renderImageCellContent({
@@ -1433,7 +1433,7 @@ function renderResultsTableCell({
   const renderedCellContent = flexRender(cell.column.columnDef.cell, cell.getContext());
   const value = cell.getValue();
   const renderedImgSrc =
-    typeof renderedCellContent === 'string' ? resolveImageSource(renderedCellContent) : undefined;
+    typeof renderedCellContent === 'string' ? resolveImageSource(renderedCellContent, isMetadataCol) : undefined;
   const rawImgSrc = getImageSourceForCell({
     columnId,
     value,

@@ -144,6 +144,7 @@ export function resolveAudioSource(
 
 export function resolveImageSource(
   image?: { data?: string; format?: string; blobRef?: BlobLike } | string | null,
+  strict?: boolean,
 ): string | undefined {
   if (typeof image === 'string') {
     const blobUrl = resolveBlobUri(image);
@@ -155,7 +156,9 @@ export function resolveImageSource(
     }
     // Allow base64-ish payloads that are purely non-whitespace and use common base64/url-safe chars
     // Require a minimum length to avoid misclassifying short strings (e.g., session IDs) as images.
-    if (image.length >= 60 && /^[A-Za-z0-9+/=_-]+$/.test(image)) {
+    // In strict mode (used for text columns like description), skip this heuristic to avoid
+    // misclassifying plain text slugs as images.
+    if (!strict && image.length >= 60 && /^[A-Za-z0-9+/=_-]+$/.test(image)) {
       return `data:image/png;base64,${image}`;
     }
     return undefined;

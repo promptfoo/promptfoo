@@ -721,6 +721,20 @@ describe('resolveImageSource security', () => {
     expect(resolveImageSource('short-string')).toBeUndefined();
   });
 
+  it('should skip base64 heuristic in strict mode for text columns', () => {
+    // Long slug-like strings should NOT be treated as images in strict mode
+    const slug = 'golden-047-brushless-dc-motor-assemblies-for-applia-a45abef4';
+    expect(resolveImageSource(slug, true)).toBeUndefined();
+    expect(resolveImageSource(slug, false)).toBe(`data:image/png;base64,${slug}`);
+  });
+
+  it('should skip base64 heuristic in strict mode for description-like strings', () => {
+    // Longer description strings with hyphens should not be misclassified
+    const description = 'example-test-case-slug-that-happens-to-be-sixty-characters-abc123';
+    expect(resolveImageSource(description, true)).toBeUndefined();
+    expect(resolveImageSource(description, false)).toBe(`data:image/png;base64,${description}`);
+  });
+
   it('should resolve blobRef from image object', () => {
     const result = resolveImageSource({
       blobRef: 'promptfoo://blob/abc123def456789012345678901234567890',
