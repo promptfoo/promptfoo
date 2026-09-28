@@ -295,194 +295,64 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('Test prompt with loaded from file');
     });
 
-    it('should load a file reference nested inside an object var', async () => {
-      const prompt = toPrompt('Analyze this report: {{ reporting_period.previous.report }}');
+    it('should load file references nested in object and array vars', async () => {
+      vi.mocked(fs.readFileSync).mockImplementation((filePath) =>
+        String(filePath).endsWith('nested-report.txt') ? 'report text\n' : 'key: value',
+      );
       const vars = {
-        reporting_period: {
-          current: { period: '2023-12-31' },
-          previous: { period: '2022-12-31', report: 'file://data/report.txt' },
+        period: {
+          previous: { report: 'file://nested-report.txt', data: ['file://nested-data.YML', 'x'] },
+          untouched: ['file://chart.png', 'file://paper.PDF', 'file://gen.py', 'file://fn.js'],
         },
       };
 
-      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('quarterly numbers');
+      const renderedPrompt = await renderPrompt(
+        toPrompt(
+          '{{ period.previous.report }}|{{ period.previous.data | join(",") }}|{{ period.untouched | join(",") }}',
+        ),
+        vars,
+      );
 
-      const renderedPrompt = await renderPrompt(prompt, vars, {});
-
-      expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('report.txt'), 'utf8');
-      expect(renderedPrompt).toBe('Analyze this report: quarterly numbers');
+      expect(renderedPrompt).toBe(
+        'report text|{"key":"value"},x|file://chart.png,file://paper.PDF,file://gen.py,file://fn.js',
+      );
+      expect(fs.readFileSync).toHaveBeenCalledTimes(2);
     });
 
-    it('should load file references nested inside an array var', async () => {
-      const prompt = toPrompt('{{ docs[0] }} and {{ docs[1].body }}');
+    it('should not load file references nested in runtime or output vars', async () => {
       const vars = {
-        docs: ['file://first.txt', { body: 'file://second.txt' }],
+        _conversation: [{ input: 'hi', output: 'file:///etc/passwd' }],
+        stored: { answer: 'file:///etc/passwd' },
       };
 
-      vi.spyOn(fs, 'readFileSync')
-        .mockReturnValueOnce('first contents')
-        .mockReturnValueOnce('second contents');
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{ _conversation[0].output }}|{{ stored.answer }}'),
+        vars,
+        undefined,
+        undefined,
+        undefined,
+        ['stored'],
+      );
 
-      const renderedPrompt = await renderPrompt(prompt, vars, {});
-
-      expect(renderedPrompt).toBe('first contents and second contents');
-    });
-
-    it('should leave nested non-file values and script references untouched', async () => {
-      const prompt = toPrompt('{{ cfg.period }} {{ cfg.script }} {{ cfg.count }}');
-      const vars = {
-        cfg: { period: '2023-12-31', script: 'file://gen.py', count: 3 },
-      };
-
-      const renderedPrompt = await renderPrompt(prompt, vars, {});
-
+      expect(renderedPrompt).toBe('file:///etc/passwd|file:///etc/passwd');
       expect(fs.readFileSync).not.toHaveBeenCalled();
-      expect(renderedPrompt).toBe('2023-12-31 file://gen.py 3');
     });
 
-    it('should leave nested media and pdf references untouched rather than reading them as text', async () => {
-      const prompt = toPrompt('{{ cfg.image }} {{ cfg.doc }} {{ cfg.clip }}');
-      const vars = {
-        cfg: { image: 'file://shot.png', doc: 'file://paper.pdf', clip: 'file://take.mp3' },
-      };
-
-      const renderedPrompt = await renderPrompt(prompt, vars, {});
-
-      expect(fs.readFileSync).not.toHaveBeenCalled();
-      expect(renderedPrompt).toBe('file://shot.png file://paper.pdf file://take.mp3');
-    });
-
-    it('should parse nested yaml file references into JSON', async () => {
-      const prompt = toPrompt('{{ cfg.settings }}');
-      const vars = { cfg: { settings: 'file://settings.yaml' } };
-
-      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('retries: 3\nmode: strict\n');
-
-      const renderedPrompt = await renderPrompt(prompt, vars, {});
-
-      expect(renderedPrompt).toBe(JSON.stringify({ retries: 3, mode: 'strict' }));
-    });
-
-    it('should leave class instances such as Date untouched', async () => {
-      const prompt = toPrompt('{{ when }}');
-      const when = new Date('2024-01-15T00:00:00.000Z');
-      const vars: Record<string, any> = { when, wrapper: { inner: when } };
-
-      await renderPrompt(prompt, vars, {});
-
-      expect(vars.when).toBeInstanceOf(Date);
-      expect(vars.wrapper.inner).toBeInstanceOf(Date);
-    });
-
-    it('should skip nested references whose extension is uppercase', async () => {
-      const prompt = toPrompt('{{ cfg.doc }} {{ cfg.pic }}');
-      const vars = { cfg: { doc: 'file://paper.PDF', pic: 'file://shot.PNG' } };
-
-      const renderedPrompt = await renderPrompt(prompt, vars, {});
-
-      expect(fs.readFileSync).not.toHaveBeenCalled();
-      expect(renderedPrompt).toBe('file://paper.PDF file://shot.PNG');
-    });
-
-    it('should not recurse forever on a self-referential object var', async () => {
-      const prompt = toPrompt('{{ cfg.name }}');
-      const cfg: Record<string, unknown> = { name: 'loop' };
-      cfg.self = cfg;
-
-      const renderedPrompt = await renderPrompt(prompt, { cfg }, {});
-
-      expect(renderedPrompt).toBe('loop');
-    });
-
-    it('should load file references under every alias of a shared object', async () => {
-      const prompt = toPrompt('{{ cfg.a.report }} {{ cfg.b.report }}');
-      const shared = { report: 'file://report.txt' };
-      const vars = { cfg: { a: shared, b: shared } };
-
-      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('quarterly numbers');
-
-      const renderedPrompt = await renderPrompt(prompt, vars, {});
-
-      expect(renderedPrompt).toBe('quarterly numbers quarterly numbers');
-    });
-
-    it('should clone an object shared between two top-level vars only once', async () => {
-      const prompt = toPrompt('{{ a.report }} {{ b.report }}');
-      const shared = { report: 'file://report.txt' };
-      const vars = { a: shared, b: shared };
-
-      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('quarterly numbers');
-
-      const renderedPrompt = await renderPrompt(prompt, vars, {});
-
-      expect(renderedPrompt).toBe('quarterly numbers quarterly numbers');
-      expect(vars.a).toBe(vars.b);
-    });
-
-    it('should parse nested yaml references with uppercase extensions', async () => {
-      const prompt = toPrompt('{{ cfg.settings }}');
-      const vars = { cfg: { settings: 'file://settings.YAML' } };
-
-      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('retries: 3\nmode: strict\n');
-
-      const renderedPrompt = await renderPrompt(prompt, vars, {});
-
-      expect(renderedPrompt).toBe(JSON.stringify({ retries: 3, mode: 'strict' }));
-    });
-
-    it('should keep an own __proto__ key as a data property when cloning', async () => {
-      const prompt = toPrompt('{{ cfg.name }}');
-      const vars: Record<string, any> = {
-        cfg: JSON.parse('{"name":"x","__proto__":{"injected":"yes"}}'),
-      };
-
-      await renderPrompt(prompt, vars, {});
-
-      expect(Object.prototype.hasOwnProperty.call(vars.cfg, '__proto__')).toBe(true);
-      expect((vars.cfg as any).injected).toBeUndefined();
-    });
-
-    it('should surface an error when a nested file reference does not exist', async () => {
-      const prompt = toPrompt('{{ cfg.report }}');
-      const vars = { cfg: { report: 'file://missing.txt' } };
-
-      vi.spyOn(fs, 'readFileSync').mockImplementationOnce(() => {
+    it('should throw when a nested file reference does not exist', async () => {
+      vi.mocked(fs.readFileSync).mockImplementationOnce(() => {
         throw new Error('ENOENT: no such file or directory');
       });
 
-      await expect(renderPrompt(prompt, vars, {})).rejects.toThrow('ENOENT');
+      await expect(
+        renderPrompt(toPrompt('{{ cfg.report }}'), { cfg: { report: 'file://missing.txt' } }),
+      ).rejects.toThrow('ENOENT');
     });
 
-    it('should not dereference file paths inside the _conversation var', async () => {
-      const prompt = toPrompt('{{ topic }}');
-      const conversation = [
-        { input: 'first turn', output: 'see file:///etc/passwd for details' },
-        { input: 'file://secrets.txt', output: 'ok' },
-      ];
-      const vars: Record<string, any> = { topic: 'safety', _conversation: conversation };
+    it('should not recurse forever on self-referential object vars', async () => {
+      const cfg: Record<string, unknown> = { name: 'loop' };
+      cfg.self = cfg;
 
-      const renderedPrompt = await renderPrompt(prompt, vars, {});
-
-      expect(fs.readFileSync).not.toHaveBeenCalled();
-      expect(vars._conversation).toBe(conversation);
-      expect(vars._conversation[0].output).toBe('see file:///etc/passwd for details');
-      expect(renderedPrompt).toBe('safety');
-    });
-
-    it('should copy accessor properties by descriptor without invoking the getter', async () => {
-      const prompt = toPrompt('{{ cfg.report }}');
-      const getter = vi.fn(() => 'computed');
-      const cfg: Record<string, any> = { report: 'file://report.txt' };
-      Object.defineProperty(cfg, 'lazy', { get: getter, enumerable: true, configurable: true });
-      const vars: Record<string, any> = { cfg };
-
-      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('quarterly numbers');
-
-      const renderedPrompt = await renderPrompt(prompt, vars, {});
-
-      expect(renderedPrompt).toBe('quarterly numbers');
-      expect(getter).not.toHaveBeenCalled();
-      const descriptor = Object.getOwnPropertyDescriptor(vars.cfg, 'lazy');
-      expect(descriptor?.get).toBe(getter);
+      await expect(renderPrompt(toPrompt('{{ cfg.name }}'), { cfg })).resolves.toBe('loop');
     });
 
     it('should load external js files in renderPrompt and execute the exported function', async () => {

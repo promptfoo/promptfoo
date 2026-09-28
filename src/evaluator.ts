@@ -836,6 +836,7 @@ async function renderRunEvalPrompt({
   isRedteam,
   provider,
   promptForRender,
+  registers,
   test,
   testSuite,
   vars,
@@ -844,6 +845,7 @@ async function renderRunEvalPrompt({
   isRedteam: boolean;
   provider: ApiProvider;
   promptForRender: Prompt;
+  registers?: EvalRegisters;
   test: AtomicTestCase;
   testSuite?: TestSuite;
   vars: Vars;
@@ -857,6 +859,7 @@ async function renderRunEvalPrompt({
     filters,
     provider,
     skipRenderVars,
+    registers && Object.keys(registers),
   );
   if (isRedteam) {
     throwIfTargetPromptExceedsMaxChars(renderedPrompt, testSuite?.redteam?.maxCharsPerMessage);
@@ -1663,6 +1666,7 @@ async function runEvalInternal({
       isRedteam,
       provider,
       promptForRender: state.promptForRender,
+      registers,
       test,
       testSuite,
       vars: state.vars,

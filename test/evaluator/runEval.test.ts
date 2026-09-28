@@ -598,6 +598,24 @@ describe('runEval', () => {
     );
   });
 
+  it('should not load file references nested in object-valued registers', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'Using {{ savedValue.path }}', label: 'test-label' },
+      test: {},
+      conversations: {},
+      registers: { savedValue: { path: 'file:///nonexistent/secret.txt' } },
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(mockProvider.callApi).toHaveBeenCalledWith(
+      'Using file:///nonexistent/secret.txt',
+      expect.anything(),
+      undefined,
+    );
+  });
+
   it('should store output in register when specified', async () => {
     const registers = {};
 
