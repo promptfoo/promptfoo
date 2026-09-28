@@ -26,7 +26,7 @@ SCRIPT = Path(__file__).with_name("examples.py")
 class SelectionTests(unittest.TestCase):
     def test_full_run_preserves_every_registered_runtime(self):
         rows = select_examples(None)
-        self.assertEqual(len(rows), 10)
+        self.assertEqual(len(rows), 12)
         self.assertEqual(
             [(row["example"], row["python"]) for row in rows],
             [
