@@ -4142,5 +4142,48 @@ Turn 3: Expected tool "execute_create"
         'Does the output correctly reference the input: {{myVar}}?',
       );
     });
+
+    // Regression for https://github.com/promptfoo/promptfoo/issues/10447: file://
+    // values for model-graded assertions must also be interpolated.
+    it('interpolates variables in llm-rubric file:// values', async () => {
+      const capturedPrompt = vi.fn<ApiProvider['callApi']>(async () => ({
+        output: JSON.stringify({ pass: true, score: 1, reason: 'graded' }),
+      }));
+      const capturingGrader = createMockProvider({
+        id: 'capturing-grader',
+        callApi: capturedPrompt,
+      });
+
+      const fileContent = 'Fail unless the output mentions "{{topic}}".';
+      vi.mocked(fs.readFileSync).mockReturnValue(fileContent);
+      vi.mocked(path.resolve).mockReturnValue('/base/path/rubric.txt');
+      vi.mocked(path.extname).mockReturnValue('.txt');
+
+      const assertion: Assertion = {
+        type: 'llm-rubric',
+        value: 'file://rubric.txt',
+        provider: capturingGrader,
+      };
+
+      const test: AtomicTestCase = {
+        vars: { topic: 'capybaras' },
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        assertion,
+        test,
+        providerResponse: { output: 'static model output' },
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      });
+
+      const gradingPrompt = capturedPrompt.mock.calls[0]?.[0] as string;
+      expect(gradingPrompt).toContain('capybaras');
+      expect(gradingPrompt).not.toContain('{{topic}}');
+
+      expect(result.metadata?.renderedAssertionValue).toBe(
+        'Fail unless the output mentions "capybaras".',
+      );
+    });
   });
 });

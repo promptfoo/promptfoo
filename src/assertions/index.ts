@@ -534,6 +534,12 @@ async function runAssertionInternal({
         }
       } else {
         renderedValue = processFileReference(renderedValue);
+        if (
+          typeof renderedValue === 'string' &&
+          MODEL_GRADED_ASSERTION_TYPES.has(getAssertionBaseType(assertion))
+        ) {
+          renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
+        }
       }
     } else if (isPackagePath(renderedValue)) {
       const basePath = cliState.basePath || '';
@@ -554,7 +560,14 @@ async function runAssertionInternal({
     renderedValue = renderedValue.map((v) => {
       if (typeof v === 'string') {
         if (v.startsWith('file://')) {
-          return processFileReference(v);
+          const loaded = processFileReference(v);
+          if (
+            typeof loaded === 'string' &&
+            MODEL_GRADED_ASSERTION_TYPES.has(getAssertionBaseType(assertion))
+          ) {
+            return nunjucks.renderString(loaded, resolvedVars);
+          }
+          return loaded;
         }
         return nunjucks.renderString(v, resolvedVars);
       }
