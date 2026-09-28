@@ -1,7 +1,7 @@
 import { DEFAULT_AGENT_GRADING_PROMPT } from '../prompts/grading';
 import { isAgenticGradingProvider } from '../providers/agentic-utils';
+import { isAgentWorkspace } from '../providers/agentWorkspace';
 import { getCodexDefaultProviders } from '../providers/openai/codexDefaults';
-import { isWorkingDirectoryCopy } from '../providers/workingDirectoryCopies';
 import { getGradingProvider } from './providers';
 import { runJsonGradingPrompt } from './rubric';
 import { tryParse } from './shared';
@@ -21,7 +21,7 @@ export async function matchesAgentRubric(
   vars?: Record<string, VarValue>,
   assertion?: Assertion,
   providerCallContext?: CallApiContextParams,
-  targetWorkingDir?: string,
+  targetWorkingDir?: unknown,
 ): Promise<GradingResult> {
   if (!grading) {
     throw new Error(
@@ -51,15 +51,13 @@ export async function matchesAgentRubric(
     },
     label: 'agent-rubric',
     providerCallContext,
-    // A copied target workspace is the default grader workspace. Explicit grader
-    // working_dir remains authoritative; the shared instance is never mutated. The path
-    // comes from the target's response metadata, so accept only a copy this process owns.
-    providerPromptConfig:
-      targetWorkingDir &&
-      isWorkingDirectoryCopy(targetWorkingDir) &&
-      (!configuredProvider || !agentProvider.config?.working_dir)
-        ? { working_dir: targetWorkingDir }
-        : undefined,
+    // When the output came from a copy_working_dir workspace, the grader inspects that
+    // workspace. Only a live workspace this process created is used: the target's response
+    // metadata is not trusted to choose where the grader runs.
+    ...(typeof targetWorkingDir === 'string' &&
+      isAgentWorkspace(targetWorkingDir) && {
+        providerPromptConfig: { working_dir: targetWorkingDir },
+      }),
     vars: {
       ...(vars || {}),
       output: tryParse(llmOutput),

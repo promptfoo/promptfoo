@@ -25,6 +25,7 @@ import { getResultIndexKey, sanitizeResultForJsonlArtifact } from './models/eval
 import { generateIdFromPrompt } from './models/prompt';
 import { nodeEvaluatorRuntime } from './node/evaluatorRuntime';
 import { CIProgressReporter } from './progress/ciProgressReporter';
+import { type AgentWorkspace, createAgentWorkspaceForConfig } from './providers/agentWorkspace';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
@@ -1450,7 +1451,7 @@ async function gradeRunEvalResponse({
     invariant(providerCallQueue, 'providerCallQueue is required when deferGrading is enabled');
     ret.response = processedResponse;
     const gradingPromise = withProviderCallExecutionContext(
-      { abortSignal, evaluationId: evalId, providerCallQueue, rateLimitRegistry },
+      { abortSignal, providerCallQueue, rateLimitRegistry },
       () =>
         runAssertions({
           prompt: renderedPrompt,
@@ -1470,7 +1471,7 @@ async function gradeRunEvalResponse({
   }
 
   const checkResult = await withProviderCallExecutionContext(
-    { abortSignal, evaluationId: evalId, rateLimitRegistry },
+    { abortSignal, rateLimitRegistry },
     () =>
       runAssertions({
         prompt: renderedPrompt,
@@ -1656,6 +1657,8 @@ async function runEvalInternal({
   let setup = state.setup;
   let latencyMs = 0;
   let traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> | undefined;
+  // The step's copy_working_dir workspace, removed once its assertions have run.
+  let workspace: AgentWorkspace | undefined;
 
   try {
     const rendered = await renderRunEvalPrompt({
@@ -1668,6 +1671,14 @@ async function runEvalInternal({
       vars: state.vars,
     });
     setup = rendered.setup;
+    if (!test.providerOutput) {
+      const activeProvider = isApiProvider(test.provider) ? test.provider : provider;
+      workspace = await createAgentWorkspaceForConfig(
+        { ...activeProvider.config, ...rendered.setup.prompt.config },
+        state.vars,
+      );
+    }
+    const stepWorkspace = workspace;
 
     traceContext = test.providerOutput
       ? null
@@ -1694,7 +1705,9 @@ async function runEvalInternal({
             filters,
             promptForRender: {
               ...state.promptForRender,
-              config: rendered.setup.prompt.config,
+              config: stepWorkspace
+                ? { ...rendered.setup.prompt.config, working_dir: stepWorkspace.dir }
+                : rendered.setup.prompt.config,
             },
             provider,
             rateLimitRegistry,
@@ -1708,6 +1721,9 @@ async function runEvalInternal({
           });
           const response = normalizeCachedTargetResponse(providerCall.response);
           latencyMs = providerCall.latencyMs;
+          if (stepWorkspace) {
+            response.metadata = { ...response.metadata, ...(await stepWorkspace.metadata()) };
+          }
 
           updateConversationHistory({
             conversationKey: state.conversationKey,
@@ -1785,7 +1801,7 @@ async function runEvalInternal({
         },
         (rows) => deferredGradingPromises.get(rows[0]),
       );
-    return executionTraceContext
+    const rows = executionTraceContext
       ? await withProviderCallTracingContext(
           {
             getActiveTraceparent,
@@ -1796,6 +1812,13 @@ async function runEvalInternal({
           runExecution,
         )
       : await runExecution();
+    // Deferred assertions still need the workspace, so they remove it when they finish.
+    const deferredGrading = deferredGradingPromises.get(rows[0]);
+    if (workspace && deferredGrading) {
+      deferredGradingPromises.set(rows[0], deferredGrading.finally(workspace.remove));
+      workspace = undefined;
+    }
+    return rows;
   } catch (err) {
     const { errorWithStack, metadata, logContext } = buildProviderErrorContext({
       error: err,
@@ -1830,6 +1853,8 @@ async function runEvalInternal({
         ...getTraceLinkage(traceContext, evalId),
       },
     ];
+  } finally {
+    await workspace?.remove();
   }
 }
 
@@ -4469,7 +4494,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const originalProvider = this.testSuite.providers.find((p) => p.id() === providerId);
     return {
       getCache,
-      evaluationId: this.store.id,
       ...(originalProvider && { originalProvider }),
       prompt: firstResult.prompt,
       promptIdx: firstResult.promptIdx,
@@ -5073,9 +5097,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       const writerCloseResults = await Promise.allSettled(
         this.fileWriters.map((writer) => writer.close()),
       );
-      // Assertions (including deferred graders) and afterEach hooks have finished.
-      // Active SDK calls that outlive a timeout release their own copies when they settle.
-      await providerRegistry.releaseEvaluationWorkingDirectories(this.store.id);
       const writerCloseErrors = writerCloseResults.flatMap((result) =>
         result.status === 'rejected' ? [result.reason] : [],
       );

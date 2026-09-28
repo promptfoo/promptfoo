@@ -33,9 +33,7 @@ export const handleAgentRubric = async ({
     test.vars,
     assertion,
     providerCallContext,
-    typeof providerResponse.metadata?.workingDir === 'string'
-      ? providerResponse.metadata.workingDir
-      : undefined,
+    providerResponse?.metadata?.workingDir,
   );
 
   if (isGraderFailure(resp)) {

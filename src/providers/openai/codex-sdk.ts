@@ -27,6 +27,7 @@ import {
 } from '../../util/fetch/errors';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
+import { assertIsolatedWorkingDir } from '../agentWorkspace';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
 import {
@@ -267,6 +268,8 @@ export interface OpenAICodexSDKConfig {
    * Defaults to process.cwd()
    */
   working_dir?: string;
+  /** Run each eval call in a fresh copy of `working_dir`, created by promptfoo eval. */
+  copy_working_dir?: boolean | 'git' | 'copy';
 
   /**
    * Additional directories the agent can access beyond the working directory.
@@ -424,6 +427,7 @@ const OpenAICodexSDKConfigShape = {
   base_url: z.string().min(1).optional(),
   maxRetries: z.number().int().nonnegative().optional(),
   working_dir: z.string().min(1).optional(),
+  copy_working_dir: z.union([z.boolean(), z.enum(['git', 'copy'])]).optional(),
   additional_directories: z.array(z.string().min(1)).optional(),
   skip_git_repo_check: z.boolean().optional(),
   codex_path_override: z.string().min(1).optional(),
@@ -2087,6 +2091,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // but runtime variable rendering must not recurse into provider methods.
     delete mergedConfig.provider;
     const config = renderVarsInObject(mergedConfig, context?.vars) as OpenAICodexSDKConfig;
+    assertIsolatedWorkingDir(config);
 
     const requestedModel =
       typeof config.model === 'string' && config.model ? config.model : undefined;

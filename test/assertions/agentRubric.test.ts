@@ -60,6 +60,25 @@ describe('handleAgentRubric', () => {
     );
   });
 
+  it("passes the target's reported working directory to the matcher", async () => {
+    mockMatchesAgentRubric.mockResolvedValue({ pass: true, score: 1, reason: 'verified' });
+
+    await handleAgentRubric({
+      ...params,
+      providerResponse: { output: 'Implemented', metadata: { workingDir: '/tmp/workspace' } },
+    });
+
+    expect(mockMatchesAgentRubric).toHaveBeenCalledWith(
+      'Verify the claimed change',
+      'Implemented',
+      {},
+      {},
+      params.assertion,
+      undefined,
+      '/tmp/workspace',
+    );
+  });
+
   it('uses a structured rubric prompt when no assertion value is rendered', async () => {
     const rubricPrompt = [{ role: 'system', content: 'Inspect the artifact' }];
     const structuredParams: AssertionParams = {
@@ -97,32 +116,6 @@ describe('handleAgentRubric', () => {
       structuredParams.assertion,
       undefined,
       undefined,
-    );
-  });
-
-  it('forwards the response working directory to the grader', async () => {
-    mockMatchesAgentRubric.mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'verified',
-    });
-
-    await handleAgentRubric({
-      ...params,
-      providerResponse: {
-        output: 'Implemented',
-        metadata: { workingDir: '/tmp/target-copy' },
-      },
-    });
-
-    expect(mockMatchesAgentRubric).toHaveBeenCalledWith(
-      'Verify the claimed change',
-      'Implemented',
-      {},
-      {},
-      params.assertion,
-      undefined,
-      '/tmp/target-copy',
     );
   });
 

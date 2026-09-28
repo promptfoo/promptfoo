@@ -131,47 +131,9 @@ prompts:
   - 'Refactor the authentication module to use async/await'
 ```
 
-> **Note:** when using `acceptEdits` and tools that allow side effects like writing to files, you'll need to consider how you will reset the files after each test run. See the [Managing Side Effects](#managing-side-effects) section for more information.
+> **Note:** when using `acceptEdits` and tools that allow side effects like writing to files, each call changes `working_dir` for the calls after it. Set `copy_working_dir: true` to run each eval step in a fresh copy of `working_dir` instead (see [isolated workspaces][isolated-workspaces]), or see [Managing Side Effects](#managing-side-effects) for other options.
 
-To start every call from the same fixture, including concurrent repeats and retries, set
-`copy_working_dir: true`. The source directory is never passed to the SDK:
-
-```yaml
-providers:
-  - id: anthropic:claude-agent-sdk
-    config:
-      working_dir: ./fixtures/sample-repo
-      copy_working_dir: true
-      append_allowed_tools: ['Write', 'Edit']
-      permission_mode: acceptEdits
-
-tests:
-  - assert:
-      - type: javascript
-        value: file://assertions/check-workspace.js
-      - type: agent-rubric
-        value: Inspect the written files and verify the requested change.
-```
-
-```js title="assertions/check-workspace.js"
-const fs = require('node:fs');
-const path = require('node:path');
-
-module.exports = (output, context) =>
-  fs.existsSync(path.join(context.metadata.workingDir, 'expected.txt'));
-```
-
-The actual copy path is available as `response.metadata.workingDir` and as
-`context.metadata.workingDir` in JavaScript assertions. Inline JavaScript assertions
-cannot load Node modules, so read the files from a file-based assertion as shown. An `agent-rubric` grader
-without an explicit `working_dir` uses that copy during grading; an explicit grader
-workspace still wins. Copies remain available through assertions and `afterEach` hooks,
-then are removed when the eval ends. Saved result paths are therefore temporary.
-
-Copied fixtures must contain regular files and directories. Symbolic links and special
-files are rejected because they can escape the copy. This option does not isolate
-`additional_directories`, plugins, MCP servers, or absolute paths used by tools; use
-sandbox permissions when those require isolation.
+[isolated-workspaces]: /docs/guides/evaluate-coding-agents#isolated-workspaces
 
 ## Supported Parameters
 
@@ -180,7 +142,7 @@ sandbox permissions when those require isolation.
 | `apiKey`                             | string           | Anthropic API key                                                                                            | Environment variable     |
 | `apiKeyRequired`                     | boolean          | Require Promptfoo to find an Anthropic API key before calling the SDK. Set to `false` for local SDK auth.    | `true`                   |
 | `working_dir`                        | string           | Directory for file operations                                                                                | Temporary directory      |
-| `copy_working_dir`                   | boolean          | Copy `working_dir` into a new temporary workspace for every call, repeat, and retry                          | `false`                  |
+| `copy_working_dir`                   | boolean/string   | Run each eval step in a fresh copy of `working_dir` ([isolated workspaces][isolated-workspaces])             | false                    |
 | `model`                              | string           | Primary model to use (passed to Claude Agent SDK)                                                            | Claude Agent SDK default |
 | `fallback_model`                     | string           | Fallback model if primary fails. Accepts a comma-separated list, tried in order.                             | Claude Agent SDK default |
 | `max_turns`                          | number           | Maximum conversation turns                                                                                   | Claude Agent SDK default |
@@ -1271,7 +1233,7 @@ The receiver's `/v1/logs` endpoint accepts JSON only. The provider automatically
 
 ## Caching Behavior
 
-This provider automatically caches responses, and will read from the cache if the prompt, configuration, and files in the working directory (if `working_dir` is set) are the same as a previous run.
+This provider automatically caches responses, and will read from the cache if the prompt, configuration, and files in the working directory (if `working_dir` is set) are the same as a previous run. Calls that use `copy_working_dir` are never cached.
 
 When MCP servers are configured, caching is disabled by default because MCP tools typically interact with external state (APIs, file systems, databases), making cached responses unreliable. To opt back into caching for deterministic MCP tools (e.g., code search, static knowledge bases), set `cache_mcp: true`:
 
@@ -1319,6 +1281,7 @@ When using Claude Agent SDK with configurations that allow side effects, like wr
 
 This increases complexity, so first consider if you can achieve your goal with a read-only configuration. If you do need to test with side effects, here are some strategies that can help:
 
+- **Isolated workspaces**: Set `copy_working_dir: true` to run each eval step in a fresh copy of `working_dir` (see [isolated workspaces][isolated-workspaces])
 - **Serial execution**: Set `evaluateOptions.maxConcurrency: 1` in your config or use `--max-concurrency 1` CLI flag
 - **Hooks**: Use promptfoo [extension hooks](/docs/configuration/reference/#extension-hooks) to reset the environment after each test run
 - **Wrapper scripts**: Handle setup/cleanup outside of promptfoo

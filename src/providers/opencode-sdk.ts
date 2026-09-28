@@ -16,6 +16,7 @@ import {
   initializeAgenticCache,
   resolveAgenticWorkingDir,
 } from './agentic-utils';
+import { assertIsolatedWorkingDir } from './agentWorkspace';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -297,6 +298,9 @@ export interface OpenCodeSDKConfig {
    * If not specified, uses a temporary directory
    */
   working_dir?: string;
+
+  /** Run each eval call in a fresh copy of `working_dir`, created by promptfoo eval. */
+  copy_working_dir?: boolean | 'git' | 'copy';
 
   /**
    * Workspace identifier for OpenCode v2 workspace-aware APIs
@@ -1832,6 +1836,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const { config, isTempDir, workingDir } = this.prepareCall(context);
+    // A fresh workspace must not be served from, or written to, the response cache.
+    const inIsolatedWorkspace = assertIsolatedWorkingDir(config);
     let ephemeralSession: OpenCodeSessionHandle | undefined;
     let abortListener: (() => void) | undefined;
 
@@ -1853,7 +1859,11 @@ export class OpenCodeSDKProvider implements ApiProvider {
       const sensitiveMcpConfig = openCodeMcpContainsCacheSensitiveData(mcpConfig);
       const sensitiveBaseUrl = openCodeBaseUrlContainsCacheSensitiveData(config.baseUrl);
       const cacheResult =
-        statefulSession || hasPermissionRules || sensitiveMcpConfig || sensitiveBaseUrl
+        inIsolatedWorkspace ||
+        statefulSession ||
+        hasPermissionRules ||
+        sensitiveMcpConfig ||
+        sensitiveBaseUrl
           ? { shouldCache: false, shouldReadCache: false, shouldWriteCache: false }
           : await initializeAgenticCache(
               {

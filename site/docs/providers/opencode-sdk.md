@@ -197,6 +197,7 @@ When enabling write/edit/bash tools, consider how you will reset files after eac
 | `timeout`           | number  | Server startup timeout in milliseconds                                     | `30000`                                |
 | `log_level`         | string  | OpenCode server log level (`debug`, `info`, `warn`, `error`, `off`)        | Provider default                       |
 | `working_dir`       | string  | Directory for file operations and read-only default tools                  | Temporary directory                    |
+| `copy_working_dir`  | boolean | Fresh copy of `working_dir` per eval step ([details][isolated-workspaces]) | false                                  |
 | `workspace`         | string  | Workspace identifier for workspace-aware OpenCode requests                 | None                                   |
 | `provider_id`       | string  | LLM provider (`anthropic`, `openai`, `google`, `ollama`, etc.)             | OpenCode default                       |
 | `model`             | string  | Model ID within `provider_id`; set both for an explicit selection          | OpenCode default                       |
@@ -643,7 +644,11 @@ tests:
 
 When using tools that allow side effects (write, edit, bash), consider:
 
+- **Isolated workspaces**: Set `copy_working_dir: true` to run each eval step in a fresh copy of `working_dir` (see [isolated workspaces][isolated-workspaces])
 - **Serial execution**: Set `evaluateOptions.maxConcurrency: 1` to prevent race conditions
+
+[isolated-workspaces]: /docs/guides/evaluate-coding-agents#isolated-workspaces
+
 - **Git reset**: Use git to reset files after each test
 - **Extension hooks**: Use promptfoo hooks for setup/cleanup
 - **Containers**: Run tests in containers for isolation

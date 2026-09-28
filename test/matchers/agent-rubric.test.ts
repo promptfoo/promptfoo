@@ -1,4 +1,9 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createAgentWorkspace } from '../../src/providers/agentWorkspace';
 
 import type { ApiProvider, ProviderResponse } from '../../src/types/index';
 
@@ -188,5 +193,44 @@ describe('matchesAgentRubric', () => {
         reason: 'partial evidence',
       }),
     );
+  });
+  it('grades inside the workspace that the output came from', async () => {
+    const { matchesAgentRubric } = await import('../../src/matchers/agent');
+    const source = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-rubric-fixture-'));
+    fs.writeFileSync(path.join(source, 'file.txt'), 'content');
+    const workspace = await createAgentWorkspace(source, 'copy');
+    try {
+      await matchesAgentRubric(
+        'Check the file',
+        'Done',
+        {},
+        {},
+        undefined,
+        undefined,
+        workspace.dir,
+      );
+    } finally {
+      await workspace.remove();
+      fs.rmSync(source, { recursive: true, force: true });
+    }
+
+    expect(mocks.codexProvider.callApi).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        prompt: expect.objectContaining({ config: { working_dir: workspace.dir } }),
+      }),
+    );
+  });
+
+  it.each([
+    ['a directory the target reported', os.tmpdir()],
+    ['a non-string value', { dir: os.tmpdir() }],
+  ])('does not grade in %s', async (_label, workingDir) => {
+    const { matchesAgentRubric } = await import('../../src/matchers/agent');
+
+    await matchesAgentRubric('Check the file', 'Done', {}, {}, undefined, undefined, workingDir);
+
+    const [, context] = vi.mocked(mocks.codexProvider.callApi).mock.calls[0];
+    expect(context?.prompt).not.toHaveProperty('config');
   });
 });

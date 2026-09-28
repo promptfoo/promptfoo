@@ -38,10 +38,7 @@ tests:
 
 Install and authenticate the [OpenAI Codex SDK provider](/docs/providers/openai-codex-sdk) before using the implicit default.
 
-When an Anthropic Claude Agent SDK target uses `copy_working_dir: true`, an
-`agent-rubric` grader without its own `working_dir` inspects that call's copied
-workspace. Explicit grader `working_dir` settings remain unchanged. The copied
-workspace is removed after grading and the eval's `afterEach` hooks complete.
+When the target runs with [`copy_working_dir`](/docs/guides/evaluate-coding-agents#isolated-workspaces), the grader runs in the workspace of the call it grades, in place of its own `working_dir`. It sees the files as the agent left them.
 
 ## Supported agent providers
 

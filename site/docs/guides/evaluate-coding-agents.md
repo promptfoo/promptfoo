@@ -189,6 +189,7 @@ providers:
     config:
       model: claude-sonnet-4-6
       working_dir: ./user-service
+      copy_working_dir: true
       append_allowed_tools: ['Write', 'Edit', 'MultiEdit', 'Bash']
       permission_mode: acceptEdits
 
@@ -210,7 +211,7 @@ tests:
 
 </details>
 
-The agent's output is its final text response describing what it did, not the file contents. For file-level verification, read the files after the eval or enable [tracing](/docs/tracing/).
+The agent's output is its final text response describing what it did, not the file contents. For file-level verification, check the files in its [isolated workspace](#isolated-workspaces) or enable [tracing](/docs/tracing/).
 
 When you need to verify behavior rather than the agent's self-report, tracing is the better fit. It lets you assert that the agent actually ran tests, executed commands, or took multiple reasoning steps:
 
@@ -283,6 +284,67 @@ tests:
 ```
 
 </details>
+
+## Isolated workspaces
+
+An agent that edits files changes `working_dir` for every test, repeat, and concurrent call that comes after it. Set `copy_working_dir: true` to give each eval step a fresh copy instead:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      working_dir: ./user-service
+      copy_working_dir: true
+      append_allowed_tools: ['Write', 'Edit', 'MultiEdit', 'Bash']
+      permission_mode: acceptEdits
+```
+
+`promptfoo eval` creates the workspace before each call and deletes it after that call's assertions have run. The Claude Agent SDK, OpenAI Codex SDK, and OpenCode SDK providers support it. How the workspace is made depends on the value:
+
+| Value    | Workspace                                                                                                                                                                   |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `true`   | A clone when `working_dir` is the root of a git repository whose files all match its current commit, with no untracked or ignored files. A copy of the directory otherwise. |
+| `'git'`  | A clone of the current commit. `working_dir` must be the root of a repository whose files all match that commit. Ignored files, such as `node_modules`, are left out.       |
+| `'copy'` | A copy of the directory.                                                                                                                                                    |
+
+A clone is fast and doesn't write to your repository. It has no remote, so a push from the agent has nowhere to go.
+
+Assertions can read two fields from the response metadata:
+
+- `workingDir`: the workspace directory. It exists until the call's assertions have run.
+- `workspaceDiff`: for a clone, the agent's changes as a unified diff against the cloned commit, including any commits the agent made. Diffs longer than 100,000 characters are truncated.
+
+```yaml
+tests:
+  - assert:
+      - type: javascript
+        value: file://check-workspace.js
+```
+
+```js title="check-workspace.js"
+const fs = require('fs');
+const path = require('path');
+
+module.exports = (output, context) => {
+  const { workingDir, workspaceDiff } = context.providerResponse.metadata;
+  const source = fs.readFileSync(path.join(workingDir, 'user_service.py'), 'utf8');
+  const pass = source.includes('bcrypt') && !source.includes('md5');
+  return {
+    pass,
+    score: pass ? 1 : 0,
+    reason: workspaceDiff ?? 'The workspace is a copy, so there is no diff.',
+  };
+};
+```
+
+An [`agent-rubric`](/docs/configuration/expected-outputs/model-graded/agent-rubric) grader runs in the same workspace, so it can inspect the agent's changes.
+
+Workspaces have these limits:
+
+- Responses are never cached, because a cached response would come without the agent's changes.
+- Only eval steps get a workspace. When anything else calls the provider, such as a multi-turn red team strategy, the call fails instead of running in `working_dir` itself.
+- Repositories with submodules aren't supported yet. A copy can't contain links that point outside `working_dir`, or the `.git` file of a linked worktree or submodule. Commit the changes so the directory is cloned instead.
+- A workspace keeps calls from affecting each other, but it isn't a sandbox. An agent with shell access can still reach the rest of the file system, so run untrusted agents in a container.
 
 ## Evaluation techniques
 
