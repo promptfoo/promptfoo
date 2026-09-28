@@ -25,6 +25,12 @@ describe('setupEnv', () => {
 
   beforeEach(() => {
     restoreEnv = mockProcessEnv({
+      DOTENV_PATH: undefined,
+      DOTENV_CONFIG_PATH: undefined,
+      DOTENV_ENCODING: undefined,
+      DOTENV_CONFIG_ENCODING: undefined,
+      DOTENV_OVERRIDE: undefined,
+      DOTENV_CONFIG_OVERRIDE: undefined,
       PROMPTFOO_CONFIG_DIR: undefined,
       PROMPTFOO_ENV_TEST_VALUE: undefined,
       PROMPTFOO_ENV_TEST_MISSING: undefined,
@@ -73,6 +79,54 @@ describe('setupEnv', () => {
 
     expect(process.env.PROMPTFOO_ENV_TEST_VALUE).toBe('host');
     expect(loggerInfoSpy).not.toHaveBeenCalled();
+  });
+
+  it.each(['DOTENV_', 'DOTENV_CONFIG_'])('inherits %s defaults for implicit loading', (prefix) => {
+    const file = path.join(directory, 'configured.env');
+    fs.writeFileSync(file, 'PROMPTFOO_ENV_TEST_VALUE=file', 'utf16le');
+    mockProcessEnv({
+      [`${prefix}PATH`]: file,
+      [`${prefix}ENCODING`]: 'utf16le',
+      [`${prefix}OVERRIDE`]: 'true',
+      PROMPTFOO_ENV_TEST_VALUE: 'host',
+    });
+
+    setupEnv(undefined);
+
+    expect(process.env.PROMPTFOO_ENV_TEST_VALUE).toBe('file');
+    expect(loggerInfoSpy).not.toHaveBeenCalled();
+  });
+
+  it('lets explicit paths and override behavior win over configured defaults', () => {
+    mockProcessEnv({
+      DOTENV_PATH: writeEnv('ignored.env', 'PROMPTFOO_ENV_TEST_VALUE=ignored'),
+      DOTENV_OVERRIDE: 'false',
+      PROMPTFOO_ENV_TEST_VALUE: 'host',
+    });
+    const file = writeEnv('explicit.env', 'PROMPTFOO_ENV_TEST_VALUE=explicit');
+
+    setupEnv(file);
+
+    expect(process.env.PROMPTFOO_ENV_TEST_VALUE).toBe('explicit');
+  });
+
+  it('keeps configured implicit overrides isolated and preserves host-only values', () => {
+    mockProcessEnv({
+      DOTENV_PATH: writeEnv(
+        'configured.env',
+        'PROMPTFOO_ENV_TEST_VALUE=file\nPROMPTFOO_ENV_TEST_MISSING=added',
+      ),
+      DOTENV_OVERRIDE: 'true',
+      PROMPTFOO_ENV_TEST_VALUE: 'host',
+      PROMPTFOO_ENV_TEST_MISSING: 'host-only',
+    });
+    const env: NodeJS.ProcessEnv = { PROMPTFOO_ENV_TEST_VALUE: 'local' };
+
+    setupEnv(undefined, { processEnv: env });
+
+    expect(env).toEqual({ PROMPTFOO_ENV_TEST_VALUE: 'file' });
+    expect(process.env.PROMPTFOO_ENV_TEST_VALUE).toBe('host');
+    expect(process.env.PROMPTFOO_ENV_TEST_MISSING).toBe('host-only');
   });
 
   it('keeps implicit defaults isolated and defers to host and existing destination values', () => {

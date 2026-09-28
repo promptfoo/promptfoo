@@ -8,21 +8,211 @@ import { mockProcessEnv } from './utils';
 
 describe('loadEnvFiles', () => {
   let directory: string;
+  let restoreEnv: () => void;
 
   beforeEach(() => {
+    restoreEnv = mockProcessEnv({
+      DOTENV_PATH: undefined,
+      DOTENV_CONFIG_PATH: undefined,
+      DOTENV_ENCODING: undefined,
+      DOTENV_CONFIG_ENCODING: undefined,
+      DOTENV_OVERRIDE: undefined,
+      DOTENV_CONFIG_OVERRIDE: undefined,
+    });
     directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-env-file-'));
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    restoreEnv();
     fs.rmSync(directory, { recursive: true, force: true });
   });
 
-  function writeEnv(name: string, content: string): string {
+  function writeEnv(name: string, content: string, encoding: BufferEncoding = 'utf8'): string {
     const file = path.join(directory, name);
-    fs.writeFileSync(file, content);
+    fs.writeFileSync(file, content, encoding);
     return file;
   }
+
+  describe('environment-configured defaults', () => {
+    it.each(['DOTENV_PATH', 'DOTENV_CONFIG_PATH'])('loads the file selected by %s', (key) => {
+      const file = writeEnv('selected.env', 'SELECTED=value');
+      mockProcessEnv({ [key]: file, SELECTED: undefined });
+      const env: NodeJS.ProcessEnv = {};
+
+      loadEnvFiles(undefined, { processEnv: env });
+
+      expect(env).toEqual({ SELECTED: 'value' });
+      expect(process.env.SELECTED).toBeUndefined();
+    });
+
+    it.each(['selected.env', ''])(
+      'gives a modern path priority over its legacy alias (%j)',
+      (name) => {
+        const selected = writeEnv(name || '.env', 'SELECTED=modern');
+        const legacy = writeEnv('legacy.env', 'SELECTED=legacy');
+        mockProcessEnv({ DOTENV_PATH: name ? selected : '', DOTENV_CONFIG_PATH: legacy });
+        vi.spyOn(process, 'cwd').mockReturnValue(directory);
+        const env: NodeJS.ProcessEnv = {};
+
+        loadEnvFiles(undefined, { processEnv: env });
+
+        expect(env).toEqual({ SELECTED: 'modern' });
+      },
+    );
+
+    it('lets an explicit list of paths override environment-selected paths', () => {
+      mockProcessEnv({ DOTENV_PATH: writeEnv('ignored.env', 'SELECTED=ignored') });
+      const env: NodeJS.ProcessEnv = {};
+
+      loadEnvFiles([writeEnv('explicit.env', 'SELECTED=explicit')], { processEnv: env });
+
+      expect(env).toEqual({ SELECTED: 'explicit' });
+      loadEnvFiles([], { processEnv: env, override: true });
+      expect(env).toEqual({ SELECTED: 'explicit' });
+    });
+
+    it('does not fall back to .env when the configured path is missing', () => {
+      writeEnv('.env', 'UNEXPECTED=value');
+      vi.spyOn(process, 'cwd').mockReturnValue(directory);
+      mockProcessEnv({ DOTENV_PATH: path.join(directory, 'missing.env') });
+      const env: NodeJS.ProcessEnv = {};
+
+      expect(() => loadEnvFiles(undefined, { processEnv: env })).not.toThrow();
+
+      expect(env).toEqual({});
+    });
+
+    it('reads environment defaults again on each call', () => {
+      const selected = writeEnv('selected.env', 'SELECTED=next');
+      writeEnv('.env', `DOTENV_PATH=${selected}`);
+      vi.spyOn(process, 'cwd').mockReturnValue(directory);
+      mockProcessEnv({ SELECTED: undefined });
+
+      loadEnvFiles();
+      expect(process.env.SELECTED).toBeUndefined();
+      loadEnvFiles();
+
+      expect(process.env.SELECTED).toBe('next');
+    });
+
+    it.each(['DOTENV_ENCODING', 'DOTENV_CONFIG_ENCODING'])('decodes files using %s', (key) => {
+      const file = writeEnv('encoded.env', 'ENCODED=value', 'utf16le');
+      mockProcessEnv({ [key]: 'utf16le' });
+      const env: NodeJS.ProcessEnv = {};
+
+      loadEnvFiles([file], { processEnv: env });
+
+      expect(env).toEqual({ ENCODED: 'value' });
+    });
+
+    it.each(['utf8', ''])(
+      'gives modern encoding priority over its legacy alias (%j)',
+      (encoding) => {
+        mockProcessEnv({ DOTENV_ENCODING: encoding, DOTENV_CONFIG_ENCODING: 'utf16le' });
+        const env: NodeJS.ProcessEnv = {};
+
+        loadEnvFiles([writeEnv('encoded.env', 'ENCODED=value')], { processEnv: env });
+
+        expect(env).toEqual({ ENCODED: 'value' });
+      },
+    );
+
+    it.each(['DOTENV_OVERRIDE', 'DOTENV_CONFIG_OVERRIDE'])(
+      'parses boolean defaults from %s',
+      (key) => {
+        const first = writeEnv('first.env', 'HOST=first\nSHARED=first');
+        const last = writeEnv('last.env', 'HOST=last\nSHARED=last');
+        for (const value of ['false', '0', 'No', 'OFF', '', 'true', '1', 'yes', ' false ']) {
+          mockProcessEnv({ [key]: value });
+          const env: NodeJS.ProcessEnv = { HOST: 'host' };
+
+          loadEnvFiles([first, last], { processEnv: env });
+
+          const override = !['false', '0', 'no', 'off', ''].includes(value.toLowerCase());
+          expect(env).toEqual({
+            HOST: override ? 'last' : 'host',
+            SHARED: override ? 'last' : 'first',
+          });
+        }
+      },
+    );
+
+    it.each(['false', ''])('does not fall back to a legacy override when modern is %j', (value) => {
+      mockProcessEnv({ DOTENV_OVERRIDE: value, DOTENV_CONFIG_OVERRIDE: 'true' });
+      const env: NodeJS.ProcessEnv = { HOST: 'host' };
+
+      loadEnvFiles([writeEnv('host.env', 'HOST=file')], { processEnv: env });
+
+      expect(env.HOST).toBe('host');
+    });
+
+    it.each([false, true])(
+      'gives an explicit override=%j priority over environment defaults',
+      (override) => {
+        mockProcessEnv({ DOTENV_OVERRIDE: String(!override) });
+        const env: NodeJS.ProcessEnv = { HOST: 'host' };
+
+        loadEnvFiles([writeEnv('host.env', 'HOST=file')], { processEnv: env, override });
+
+        expect(env.HOST).toBe(override ? 'file' : 'host');
+      },
+    );
+
+    it('preserves an explicitly undefined override instead of using the environment default', () => {
+      mockProcessEnv({ DOTENV_OVERRIDE: 'true' });
+      const env: NodeJS.ProcessEnv = { HOST: 'host' };
+
+      loadEnvFiles([writeEnv('host.env', 'HOST=file')], { processEnv: env, override: undefined });
+
+      expect(env.HOST).toBe('host');
+    });
+
+    it('continues after read errors with environment-configured encoding and override', () => {
+      mockProcessEnv({ DOTENV_ENCODING: 'utf16le', DOTENV_OVERRIDE: 'true' });
+      const env: NodeJS.ProcessEnv = { HOST: 'host' };
+      const first = writeEnv('first.env', 'HOST=first\nFIRST=value', 'utf16le');
+      const last = writeEnv('last.env', 'HOST=last\nLAST=value', 'utf16le');
+
+      loadEnvFiles([first, path.join(directory, 'missing.env'), directory, last], {
+        processEnv: env,
+      });
+
+      expect(env).toEqual({ HOST: 'last', FIRST: 'value', LAST: 'value' });
+    });
+
+    it('treats an invalid encoding as a best-effort read failure', () => {
+      mockProcessEnv({ DOTENV_ENCODING: 'not-an-encoding' });
+      const env: NodeJS.ProcessEnv = { HOST: 'host' };
+
+      expect(() =>
+        loadEnvFiles([writeEnv('host.env', 'HOST=file\nEXTRA=value')], { processEnv: env }),
+      ).not.toThrow();
+
+      expect(env).toEqual({ HOST: 'host' });
+    });
+
+    it('reads defaults from the host environment, not the isolated destination', () => {
+      const selected = writeEnv('selected.env', 'HOST=file\nSELECTED=value');
+      const ignored = writeEnv('ignored.env', 'SELECTED=ignored');
+      mockProcessEnv({ DOTENV_PATH: selected, DOTENV_OVERRIDE: 'false', SELECTED: undefined });
+      const env: NodeJS.ProcessEnv = {
+        DOTENV_PATH: ignored,
+        DOTENV_OVERRIDE: 'true',
+        HOST: 'local',
+      };
+
+      loadEnvFiles(undefined, { processEnv: env });
+
+      expect(env).toEqual({
+        DOTENV_PATH: ignored,
+        DOTENV_OVERRIDE: 'true',
+        HOST: 'local',
+        SELECTED: 'value',
+      });
+      expect(process.env.SELECTED).toBeUndefined();
+    });
+  });
 
   it.each([
     {

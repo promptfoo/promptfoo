@@ -59,17 +59,23 @@ interface LoadEnvOptions {
  * call during initialization and from the repository's CommonJS scripts.
  * Explicit-path existence checks belong to setupEnv; reads remain best effort.
  */
-export function loadEnvFiles(
-  paths: string[] = [path.resolve(process.cwd(), '.env')],
-  options: LoadEnvOptions = {},
-): void {
+export function loadEnvFiles(paths?: string[], options: LoadEnvOptions = {}): void {
+  // Explicit options win; an empty modern default must not fall through to its legacy alias.
+  const configuredPath = process.env.DOTENV_PATH ?? process.env.DOTENV_CONFIG_PATH;
+  const encoding = (process.env.DOTENV_ENCODING ?? process.env.DOTENV_CONFIG_ENCODING) || 'utf8';
+  const configuredOverride = process.env.DOTENV_OVERRIDE ?? process.env.DOTENV_CONFIG_OVERRIDE;
+  const override = Object.prototype.hasOwnProperty.call(options, 'override')
+    ? Boolean(options.override)
+    : configuredOverride !== undefined &&
+      !['false', '0', 'no', 'off', ''].includes(configuredOverride.toLowerCase());
+  const files = paths ?? [configuredPath || path.resolve(process.cwd(), '.env')];
   const parsed: Record<string, string> = {};
-  for (const file of paths) {
+  for (const file of files) {
     try {
       const resolved = file.startsWith('~') ? path.join(os.homedir(), file.slice(1)) : file;
-      const values = parseEnvFile(fs.readFileSync(resolved, 'utf8'));
+      const values = parseEnvFile(fs.readFileSync(resolved, encoding as BufferEncoding));
       for (const key of Object.keys(values)) {
-        if (options.override || !Object.prototype.hasOwnProperty.call(parsed, key)) {
+        if (override || !Object.prototype.hasOwnProperty.call(parsed, key)) {
           parsed[key] = values[key];
         }
       }
@@ -81,7 +87,7 @@ export function loadEnvFiles(
 
   const destination = options.processEnv ?? process.env;
   for (const key of Object.keys(parsed)) {
-    if (options.override || !Object.prototype.hasOwnProperty.call(destination, key)) {
+    if (override || !Object.prototype.hasOwnProperty.call(destination, key)) {
       destination[key] = parsed[key];
     }
   }
