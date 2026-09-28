@@ -138,10 +138,9 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
 export async function loadWebSearchProvider(
   preferAnthropic: boolean = false,
 ): Promise<ApiProvider | null> {
-  // Anthropic Claude Opus 5 with web search tool
   const loadAnthropicWebSearch = async () => {
     try {
-      return await loadApiProvider('anthropic:messages:claude-opus-5', {
+      return await loadApiProvider('anthropic:messages:claude-opus-5-5', {
         options: {
           config: {
             tools: [
@@ -160,10 +159,9 @@ export async function loadWebSearchProvider(
     }
   };
 
-  // OpenAI GPT-5.6 Terra with web search tool (via Responses API)
   const loadOpenAIWebSearch = async () => {
     try {
-      return await loadApiProvider('openai:responses:gpt-5.6-terra', {
+      return await loadApiProvider('openai:responses:gpt-6-sol', {
         options: {
           config: { tools: [{ type: 'web_search_preview' }] },
         },

@@ -928,6 +928,10 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: { input: 10 / 1000000, output: 50 / 1000000 },
   },
   {
+    id: 'claude-opus-5-5',
+    cost: { input: 4 / 1000000, output: 20 / 1000000, cacheRead: 0.2 / 1000000 },
+  },
+  {
     id: 'claude-opus-5',
     cost: { input: 5 / 1000000, output: 25 / 1000000 },
   },

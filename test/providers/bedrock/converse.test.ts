@@ -726,6 +726,39 @@ describe('AwsBedrockConverseProvider', () => {
       );
     });
 
+    it('preserves the unknown MCP block diagnostic and normalized result envelope', async () => {
+      using debugSpy = vi.spyOn(logger, 'debug');
+      mcpMocks.mockCallTool.mockResolvedValueOnce({
+        content: [{ text: 'known' }, { json: { count: 2 } }, { unknown: 'value' }],
+      });
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+        },
+      });
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('', {
+          toolUse: { id: 'tool-123', name: 'list_resources', input: {} },
+          stopReason: 'tool_use',
+        }),
+      );
+
+      const result = await provider.callApi('List resources');
+
+      expect(result.output).toBe(
+        'MCP Tool Result (list_resources): known\n{"count":2}\n{"unknown":"value"}',
+      );
+      expect(result.error).toBeUndefined();
+      expect(debugSpy).toHaveBeenCalledWith(
+        '[Bedrock Converse] Unknown MCP content shape, serializing as JSON',
+        { keys: ['unknown'] },
+      );
+    });
+
     it('should return MCP tool errors', async () => {
       mcpMocks.mockCallTool.mockResolvedValueOnce({
         content: 'MCP server failed',
@@ -1946,6 +1979,35 @@ Third line`;
         /Forced tool choice/.test(String(call[0] ?? '')),
       );
       expect(forcedToolChoiceWarnings).toHaveLength(1);
+      expect(String(forcedToolChoiceWarnings[0][0])).toContain(
+        'Claude Fable 5 and Claude Mythos 5',
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('drops forced tool choice for Claude Opus 5.5 and names the model in the warning', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+      const provider = new AwsBedrockConverseProvider('global.anthropic.claude-opus-5-5', {
+        config: {
+          region: 'us-east-1',
+          tools: [{ name: 'test_tool', description: 'Test' }],
+          toolChoice: 'any' as any,
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      const request = (
+        ConverseCommand as unknown as { mock: { calls: unknown[][] } }
+      ).mock.calls.at(-1)?.[0] as { toolConfig?: Record<string, unknown> };
+      expect(request.toolConfig).not.toHaveProperty('toolChoice');
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('always-on adaptive thinking of Claude Opus 5.5'),
+      );
       warnSpy.mockRestore();
     });
 
