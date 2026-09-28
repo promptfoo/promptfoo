@@ -1,3 +1,5 @@
+# The shared Examples runner currently assumes requirements.txt and Ubuntu.
+# Keep this pyproject/uvx integration separate to retain real Windows MCP coverage.
 name: Redteam API example
 
 on:

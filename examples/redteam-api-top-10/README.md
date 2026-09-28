@@ -93,6 +93,12 @@ an API key, run:
 uv run python -m unittest discover -s tests -v
 ```
 
+Repository CI runs these checks on Linux with Python 3.10 and 3.14, and on Windows
+with Python 3.14. This example retains a dedicated workflow because the shared
+Examples runner currently installs `requirements.txt` projects on Ubuntu; the API
+example installs its `pyproject.toml` and the `uvx` launcher, including Windows MCP
+subprocess coverage.
+
 ## Demo Users
 
 All users have password `password123`:
