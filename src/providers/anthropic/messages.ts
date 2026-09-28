@@ -55,6 +55,8 @@ import type { McpToolCallEntry } from '../mcp/types';
 import type { AnthropicMessageOptions, ClaudeEffort } from './types';
 
 const DEFAULT_MAX_MCP_TOOL_CALLS = 8;
+// Each resume re-sends the turn so far, so a pausing run stops after this many.
+const MAX_PAUSE_TURN_RESUMES = 5;
 
 type AnthropicMessageStream = {
   finalMessage(): Promise<Anthropic.Messages.Message>;
@@ -169,6 +171,25 @@ function getMcpContinuationParams(
   }
 
   return { ...params, messages };
+}
+
+/**
+ * A request that doesn't name a container runs in a new, empty one, so each follow-up request
+ * of a turn names the container the previous response ran in (unless the config pinned one),
+ * keeping the files and state the turn's code has built. The SDK's tool runner does the same.
+ */
+function withTurnContainer(
+  params: Anthropic.Messages.MessageCreateParams,
+  previous: Anthropic.Messages.Message,
+): Anthropic.Messages.MessageCreateParams {
+  const requested = params.container;
+  if (!previous.container || typeof requested === 'string' || requested?.id != null) {
+    return params;
+  }
+  return {
+    ...params,
+    container: requested ? { ...requested, id: previous.container.id } : previous.container.id,
+  };
 }
 
 function coerceMcpToolInput(input: unknown): Record<string, unknown> {
@@ -309,17 +330,87 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     }
   }
 
+  /**
+   * Send one request, resuming the turn while the API pauses it (`stop_reason: 'pause_turn'`).
+   * The API pauses a long server-tool run (web search, fetch, code execution) at its iteration
+   * limit, and continues when the turn so far is sent back as the assistant message. Every call
+   * is appended to `responses` for usage and cost; the returned message holds the whole turn.
+   */
+  private async sendMessage(
+    params: Anthropic.Messages.MessageCreateParams,
+    headers: Record<string, string>,
+    shouldStream: boolean,
+    responses: Anthropic.Messages.Message[],
+  ): Promise<Anthropic.Messages.Message> {
+    const requestOptions = Object.keys(headers).length > 0 ? { headers } : {};
+    const send = async (requestParams: Anthropic.Messages.MessageCreateParams) => {
+      const message = shouldStream
+        ? await finalMessageWithStreamedStopDetails(
+            await this.anthropic.messages.stream(requestParams, requestOptions),
+          )
+        : ((await this.anthropic.messages.create(
+            requestParams,
+            requestOptions,
+          )) as Anthropic.Messages.Message);
+      logger.debug('Anthropic Messages API response', {
+        response: getMessagesResponseMetadata(message),
+      });
+      responses.push(message);
+      return message;
+    };
+
+    let message = await send(params);
+    if (message.stop_reason !== 'pause_turn') {
+      return message;
+    }
+    let turnContent = message.content;
+    for (
+      let resumes = 0;
+      message.stop_reason === 'pause_turn' && resumes < MAX_PAUSE_TURN_RESUMES;
+      resumes++
+    ) {
+      try {
+        message = await send(
+          withTurnContainer(
+            {
+              ...params,
+              messages: [
+                ...params.messages,
+                {
+                  role: 'assistant',
+                  content: turnContent as Anthropic.Messages.ContentBlockParam[],
+                },
+              ],
+            },
+            message,
+          ),
+        );
+      } catch (err) {
+        // Keep the paused output rather than failing a row that already has a partial answer.
+        logger.warn(
+          `Could not resume a paused Claude turn: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        break;
+      }
+      turnContent = [...turnContent, ...message.content];
+    }
+    return { ...message, content: turnContent };
+  }
+
   private async resolveMcpToolUse({
     config,
     headers,
     initialResponse,
     params,
+    responses,
     shouldStream,
   }: {
     config: AnthropicMessageOptions;
     headers: Record<string, string>;
     initialResponse: Anthropic.Messages.Message;
     params: Anthropic.Messages.MessageCreateParams;
+    /** Every API call made so far, for usage and cost. */
+    responses: Anthropic.Messages.Message[];
     shouldStream: boolean;
   }): Promise<{
     error?: string;
@@ -331,15 +422,19 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     // trips max_tool_calls or mixes MCP and non-MCP blocks is exactly when you want to
     // see which tools did run.
     const toolCalls: McpToolCallEntry[] = [];
-    const responses = [initialResponse];
+    const unchanged = () => ({
+      response: withMergedAnthropicUsage(initialResponse, responses),
+      responses,
+      toolCalls,
+    });
 
     if (!this.mcpClient) {
-      return { response: initialResponse, responses, toolCalls };
+      return unchanged();
     }
 
     const mcpToolNames = new Set(this.mcpClient.getAllTools().map((tool) => tool.name));
     if (mcpToolNames.size === 0) {
-      return { response: initialResponse, responses, toolCalls };
+      return unchanged();
     }
 
     const maxToolCalls = getMaxMcpToolCalls(config);
@@ -347,7 +442,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       // max_tool_calls: 0 explicitly disables automatic MCP tool execution.
       // Return the model's initial response (which may contain tool_use
       // blocks) unchanged rather than treating unexecuted tools as an error.
-      return { response: initialResponse, responses, toolCalls };
+      return unchanged();
     }
 
     let response = initialResponse;
@@ -408,23 +503,12 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         },
       ];
 
-      const nextParams = getMcpContinuationParams(params, messages);
-
-      if (shouldStream) {
-        const stream = await this.anthropic.messages.stream(nextParams, {
-          ...(Object.keys(headers).length > 0 ? { headers } : {}),
-        });
-        response = await finalMessageWithStreamedStopDetails(stream);
-      } else {
-        response = (await this.anthropic.messages.create(nextParams, {
-          ...(Object.keys(headers).length > 0 ? { headers } : {}),
-        })) as Anthropic.Messages.Message;
-      }
-
-      logger.debug('Anthropic Messages API MCP follow-up response', {
-        response: getMessagesResponseMetadata(response),
-      });
-      responses.push(response);
+      response = await this.sendMessage(
+        withTurnContainer(getMcpContinuationParams(params, messages), response),
+        headers,
+        shouldStream,
+        responses,
+      );
     }
 
     const unresolvedToolUses = response.content.filter(
@@ -1030,37 +1114,20 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
     }
 
-    const requestOptions =
-      Object.keys(headers).length > 0 ? ({ headers } as { headers: Record<string, string> }) : {};
-
     try {
-      let initialMessage: Anthropic.Messages.Message;
-      if (shouldStream) {
-        const stream = await this.anthropic.messages.stream(params, requestOptions);
-        initialMessage = await finalMessageWithStreamedStopDetails(stream);
-        logger.debug(`Anthropic Messages API streaming complete`, {
-          finalMessage: getMessagesResponseMetadata(initialMessage),
-        });
-      } else {
-        initialMessage = (await this.anthropic.messages.create(
-          params,
-          requestOptions,
-        )) as Anthropic.Messages.Message;
-        logger.debug(`Anthropic Messages API response`, {
-          response: getMessagesResponseMetadata(initialMessage),
-        });
-      }
+      const responses: Anthropic.Messages.Message[] = [];
+      const initialMessage = await this.sendMessage(params, headers, shouldStream, responses);
 
       const {
         error,
         response: resolvedMessage,
-        responses,
         toolCalls,
       } = await this.resolveMcpToolUse({
         config,
         headers,
         initialResponse: initialMessage,
         params,
+        responses,
         shouldStream,
       });
       const cost = responses.reduce<number | undefined>((total, message) => {

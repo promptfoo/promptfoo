@@ -400,6 +400,10 @@ providers:
 
 This configuration allows the model to first search for relevant information, then fetch full content from the most promising results.
 
+##### Paused Turns
+
+A long server-tool run (many searches, fetches, or code executions) can stop with `stop_reason: pause_turn` before Claude finishes. Promptfoo resumes the turn automatically, up to 5 times, in the same code execution container. The result holds the whole turn's output, token usage, and cost. A turn that is still paused after that keeps its partial output and reports `finishReason: pause_turn`.
+
 ##### Memory Tool
 
 Anthropic's `memory_20250818` tool can be included in `tools`. Promptfoo passes this native tool definition through unchanged, which is useful for evaluating whether a model requests memory operations. Promptfoo does not manage Anthropic memory stores or run local memory handlers for you.

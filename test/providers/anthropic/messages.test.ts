@@ -2384,6 +2384,92 @@ describe('AnthropicMessagesProvider', () => {
       expect(result.cost).toBeGreaterThan(0);
     });
 
+    it('resumes a follow-up turn that pauses after an MCP tool call', async () => {
+      provider = createProvider('claude-sonnet-4-6', {
+        config: { mcp: { enabled: true, server: { command: 'npm', args: ['start'] } } },
+      });
+      mcpMocks.callTool.mockResolvedValueOnce({ content: 'Found Acme Solar.' });
+      const toolUseTurn = {
+        content: [
+          {
+            type: 'tool_use',
+            id: 'toolu_search',
+            name: 'search_companies',
+            input: { query: 'solar' },
+          },
+        ],
+        stop_reason: 'tool_use',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      } as Anthropic.Messages.Message;
+      const pausedFollowUp = {
+        content: [{ type: 'server_tool_use', id: 'srvtoolu_news', name: 'web_search', input: {} }],
+        stop_reason: 'pause_turn',
+        usage: { input_tokens: 20, output_tokens: 3 },
+      } as unknown as Anthropic.Messages.Message;
+      const create = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce(toolUseTurn)
+        .mockResolvedValueOnce(pausedFollowUp)
+        .mockResolvedValueOnce({
+          content: [
+            { type: 'web_search_tool_result', tool_use_id: 'srvtoolu_news', content: [] },
+            { type: 'text', text: 'Acme Solar is expanding.' },
+          ],
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 30, output_tokens: 6 },
+        } as unknown as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Find solar companies in the news');
+
+      expect(create).toHaveBeenCalledTimes(3);
+      const resume = create.mock.calls[2][0] as Anthropic.Messages.MessageCreateParams;
+      expect(resume.messages.slice(-3)).toEqual([
+        { role: 'assistant', content: toolUseTurn.content },
+        {
+          role: 'user',
+          content: [
+            { type: 'tool_result', tool_use_id: 'toolu_search', content: 'Found Acme Solar.' },
+          ],
+        },
+        { role: 'assistant', content: pausedFollowUp.content },
+      ]);
+      expect(result.output).toContain('Acme Solar is expanding.');
+      expect(result.metadata?.toolCalls).toHaveLength(1);
+      expect(result.tokenUsage).toMatchObject({ prompt: 60, completion: 14, total: 74 });
+    });
+
+    it('names the turn container in MCP follow-up requests', async () => {
+      provider = createProvider('claude-sonnet-4-6', {
+        config: { mcp: { enabled: true, server: { command: 'npm', args: ['start'] } } },
+      });
+      mcpMocks.callTool.mockResolvedValueOnce({ content: 'Found Acme Solar.' });
+      const create = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_search',
+              name: 'search_companies',
+              input: { query: 'solar' },
+            },
+          ],
+          container: { id: 'container_turn', expires_at: '2026-09-30T00:00:00Z', skills: null },
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 10, output_tokens: 5 },
+        } as Anthropic.Messages.Message)
+        .mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'Acme Solar is a match.' }],
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 7, output_tokens: 4 },
+        } as Anthropic.Messages.Message);
+
+      await provider.callApi('Find solar companies');
+
+      expect(create.mock.calls[0][0]).not.toHaveProperty('container');
+      expect(create.mock.calls[1][0].container).toBe('container_turn');
+    });
+
     it('continues MCP tool execution through the streaming path', async () => {
       provider = createProvider('claude-sonnet-4-6', {
         config: {
@@ -2504,6 +2590,146 @@ describe('AnthropicMessagesProvider', () => {
         total: 27,
       });
       expect(result.cost).toBeGreaterThan(0);
+    });
+  });
+
+  describe('pause_turn continuation', () => {
+    const pausedTurn = {
+      content: [
+        { type: 'text', text: 'Searching for sources.' },
+        {
+          type: 'server_tool_use',
+          id: 'srvtoolu_1',
+          name: 'web_search',
+          input: { query: 'solar' },
+        },
+      ],
+      stop_reason: 'pause_turn',
+      usage: { input_tokens: 1000, output_tokens: 100 },
+    } as unknown as Anthropic.Messages.Message;
+    const finishedTurn = {
+      content: [
+        { type: 'web_search_tool_result', tool_use_id: 'srvtoolu_1', content: [] },
+        { type: 'text', text: 'Solar leads new capacity.' },
+      ],
+      stop_reason: 'end_turn',
+      usage: { input_tokens: 1500, output_tokens: 200 },
+    } as unknown as Anthropic.Messages.Message;
+
+    it('resumes a paused turn and reports the whole turn', async () => {
+      provider = createProvider('claude-sonnet-4-6', {
+        config: { tools: [{ type: 'web_search_20260209', name: 'web_search' }] },
+      });
+      const create = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce(pausedTurn)
+        .mockResolvedValueOnce(finishedTurn);
+
+      const result = await provider.callApi('What leads new power capacity?');
+
+      expect(create).toHaveBeenCalledTimes(2);
+      const [request, resume] = create.mock.calls.map(
+        ([params]) => params as Anthropic.Messages.MessageCreateParams,
+      );
+      expect(resume).toEqual({
+        ...request,
+        messages: [...request.messages, { role: 'assistant', content: pausedTurn.content }],
+      });
+      expect(result.output).toContain('Searching for sources.');
+      expect(result.output).toContain('Solar leads new capacity.');
+      expect(result.finishReason).toBe('stop');
+      expect(result.tokenUsage).toMatchObject({ prompt: 2500, completion: 300, total: 2800 });
+      // $3/$15 per MTok: 1000 in + 100 out, then 1500 in + 200 out.
+      expect(result.cost).toBeCloseTo(0.012, 10);
+    });
+
+    it.each([
+      ['names the paused container', undefined, 'container_paused'],
+      [
+        'keeps the requested skills in the paused container',
+        { skills: [{ type: 'anthropic', skill_id: 'xlsx', version: 'latest' }] },
+        {
+          id: 'container_paused',
+          skills: [{ type: 'anthropic', skill_id: 'xlsx', version: 'latest' }],
+        },
+      ],
+    ])('%s when resuming', async (_name, requested, expected) => {
+      provider = createProvider('claude-sonnet-4-6', {
+        config: { extra_body: requested ? { container: requested } : {} },
+      });
+      const create = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({
+          ...pausedTurn,
+          container: { id: 'container_paused', expires_at: '2026-09-30T00:00:00Z', skills: null },
+        })
+        .mockResolvedValueOnce(finishedTurn);
+
+      await provider.callApi('Build the spreadsheet');
+
+      expect(create.mock.calls[1][0].container).toEqual(expected);
+    });
+
+    it('stops resuming after five pauses and keeps the partial turn', async () => {
+      provider = createProvider('claude-sonnet-4-6');
+      const create = vi.spyOn(provider.anthropic.messages, 'create');
+      for (const n of [1, 2, 3, 4, 5, 6]) {
+        create.mockResolvedValueOnce({
+          content: [
+            { type: 'server_tool_use', id: `srvtoolu_${n}`, name: 'web_search', input: {} },
+          ],
+          stop_reason: 'pause_turn',
+          usage: { input_tokens: 10, output_tokens: 1 },
+        } as unknown as Anthropic.Messages.Message);
+      }
+
+      const result = await provider.callApi('Research everything');
+
+      expect(create).toHaveBeenCalledTimes(6);
+      const lastRequest = create.mock.calls[5][0] as Anthropic.Messages.MessageCreateParams;
+      expect(lastRequest.messages.at(-1)).toEqual({
+        role: 'assistant',
+        content: [1, 2, 3, 4, 5].map((n) => expect.objectContaining({ id: `srvtoolu_${n}` })),
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.finishReason).toBe('pause_turn');
+      expect(result.tokenUsage).toMatchObject({ prompt: 60, completion: 6, total: 66 });
+    });
+
+    it('keeps the paused output when the resume request fails', async () => {
+      provider = createProvider('claude-sonnet-4-6');
+      const warnSpy = vi.spyOn(logger, 'warn');
+      vi.spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce(pausedTurn)
+        .mockRejectedValueOnce(new Error('400 The conversation must end with a user message.'));
+
+      const result = await provider.callApi('What leads new power capacity?');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toContain('Searching for sources.');
+      expect(result.finishReason).toBe('pause_turn');
+      expect(result.tokenUsage).toMatchObject({ prompt: 1000, completion: 100, total: 1100 });
+      expect(result.cost).toBeCloseTo(0.0045, 10);
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Could not resume a paused Claude turn: 400 The conversation must end with a user message.',
+      );
+    });
+
+    it('resumes a paused turn through the streaming path', async () => {
+      provider = createProvider('claude-sonnet-4-6', { config: { stream: true } });
+      const stream = vi
+        .spyOn(provider.anthropic.messages, 'stream')
+        .mockResolvedValueOnce({ finalMessage: vi.fn().mockResolvedValue(pausedTurn) } as any)
+        .mockResolvedValueOnce({ finalMessage: vi.fn().mockResolvedValue(finishedTurn) } as any);
+
+      const result = await provider.callApi('What leads new power capacity?');
+
+      expect(stream).toHaveBeenCalledTimes(2);
+      const resume = stream.mock.calls[1][0] as Anthropic.Messages.MessageCreateParams;
+      expect(resume.messages.at(-1)).toEqual({ role: 'assistant', content: pausedTurn.content });
+      expect(result.output).toContain('Solar leads new capacity.');
+      expect(result.finishReason).toBe('stop');
+      expect(result.tokenUsage).toMatchObject({ prompt: 2500, completion: 300, total: 2800 });
     });
   });
 
