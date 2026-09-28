@@ -22,7 +22,7 @@ export interface N8nProviderConfig {
   /**
    * HTTP method to use (default: POST)
    */
-  method?: 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH';
+  method?: 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'OPTIONS' | 'DELETE';
 
   /**
    * Additional headers to include in requests
@@ -604,6 +604,13 @@ export class N8nProvider implements ApiProvider {
       if (response.status < 200 || response.status >= 300) {
         return {
           error: `n8n webhook call error: HTTP ${response.status} ${response.statusText}`,
+          metadata: {
+            http: {
+              status: response.status,
+              statusText: response.statusText,
+              headers: response.headers,
+            },
+          },
         };
       }
 

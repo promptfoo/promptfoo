@@ -20,6 +20,24 @@ vi.mock('@app/hooks/useTelemetry', () => ({
 }));
 
 describe('ProviderTypeSelector', () => {
+  it('prevents changing providers when model selection is disabled', async () => {
+    const user = userEvent.setup();
+    const setProvider = vi.fn();
+    renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={{ id: 'openai:gpt-6-sol', config: {} }}
+        providerType="openai"
+        setProvider={setProvider}
+        disableModelSelection
+      />,
+    );
+
+    await user.click(screen.getByText('Anthropic', { exact: true }).closest('[role="button"]')!);
+
+    expect(setProvider).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Search providers')).toBeDisabled();
+  });
+
   it('selects a registered Bedrock Agent provider ID', async () => {
     const user = userEvent.setup();
     const setProvider = vi.fn();

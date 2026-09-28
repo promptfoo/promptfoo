@@ -24,6 +24,7 @@ export default function ProviderTypeSelector({
   providerType,
   setProvider,
   availableProviderIds,
+  disableModelSelection = false,
 }: ProviderTypeSelectorProps) {
   const { recordEvent } = useTelemetry();
 
@@ -49,6 +50,9 @@ export default function ProviderTypeSelector({
 
   // Handle tag filter toggle
   const handleTagToggle = (tag: string) => {
+    if (disableModelSelection) {
+      return;
+    }
     setSelectedTag(tag);
 
     // Track tag filter usage
@@ -60,6 +64,9 @@ export default function ProviderTypeSelector({
 
   // Handle provider type selection
   const handleProviderTypeSelect = (value: string) => {
+    if (disableModelSelection) {
+      return;
+    }
     setSelectedProviderType(value);
 
     const currentLabel = provider?.label;
@@ -80,6 +87,9 @@ export default function ProviderTypeSelector({
 
   // Handle edit/change button click
   const handleEditSelection = () => {
+    if (disableModelSelection) {
+      return;
+    }
     setIsExpanded(true);
     setSearchTerm(''); // Clear search when expanding
     setSelectedTag(undefined); // Clear tag filter when expanding
@@ -150,7 +160,12 @@ export default function ProviderTypeSelector({
               </Tooltip>
             )}
 
-            <Button variant="outline" size="sm" onClick={handleEditSelection}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleEditSelection}
+              disabled={disableModelSelection}
+            >
               <Edit className="mr-1 size-4" />
               Change
             </Button>
@@ -182,6 +197,7 @@ export default function ProviderTypeSelector({
           <button
             type="button"
             onClick={() => setSelectedTag(undefined)}
+            disabled={disableModelSelection}
             className={cn(
               'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
@@ -197,6 +213,7 @@ export default function ProviderTypeSelector({
               key={filter.key}
               type="button"
               onClick={() => handleTagToggle(filter.key)}
+              disabled={disableModelSelection}
               className={cn(
                 'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
@@ -219,6 +236,7 @@ export default function ProviderTypeSelector({
             placeholder="Search providers..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            disabled={disableModelSelection}
             className="pl-9 pr-9"
           />
           {searchTerm && (
@@ -261,7 +279,8 @@ export default function ProviderTypeSelector({
                 )}
                 <div
                   role="button"
-                  tabIndex={0}
+                  tabIndex={disableModelSelection ? -1 : 0}
+                  aria-disabled={disableModelSelection}
                   onClick={() => handleProviderTypeSelect(option.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
@@ -275,6 +294,7 @@ export default function ProviderTypeSelector({
                     isSelected
                       ? 'border-2 border-primary bg-primary/5'
                       : 'border-border hover:bg-muted/50',
+                    disableModelSelection && 'cursor-not-allowed opacity-60',
                   )}
                 >
                   <div className="min-w-0 flex-1">

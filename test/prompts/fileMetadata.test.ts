@@ -58,6 +58,16 @@ describe('prompt file configuration', () => {
     expect(new Set(prompts.map(generateIdFromPrompt)).size).toBe(count);
   });
 
+  it('preserves an explicit label for each globbed file', async () => {
+    const prompts = await readPrompts([
+      { id: `file://${path.join(directory, '*.md')}`, label: 'Named prompt' },
+    ]);
+
+    expect(prompts).toHaveLength(2);
+    expect(prompts.every((prompt) => prompt.label?.startsWith('Named prompt: '))).toBe(true);
+    expect(new Set(prompts.map(generateIdFromPrompt)).size).toBe(2);
+  });
+
   it('preserves metadata on an unmatched glob fallback without reading the pattern', async () => {
     const descriptor = {
       id: `file://${path.join(directory, 'missing-*.md')}`,

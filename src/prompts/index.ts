@@ -153,7 +153,13 @@ async function processPrompt(
     for (const globbedFilePath of globbedPath) {
       const rawPath = functionName ? `${globbedFilePath}:${functionName}` : globbedFilePath;
       const processedPrompts = await processPrompt(
-        { raw: rawPath, config: prompt.config },
+        {
+          ...prompt,
+          raw: rawPath,
+          // A glob can expand to multiple files. Keep the caller-provided label while
+          // retaining a distinct identity for each expanded prompt.
+          label: prompt.label ? `${prompt.label}: ${globbedFilePath}` : undefined,
+        },
         basePath,
         maxRecursionDepth - 1,
       );

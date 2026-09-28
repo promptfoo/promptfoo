@@ -15,13 +15,17 @@ vi.mock('../../src/logger', () => ({
 }));
 
 // Helper to create mock fetch responses with required fields
-function createMockResponse(data: any, options: { cached?: boolean; latencyMs?: number } = {}) {
+function createMockResponse(
+  data: any,
+  options: { cached?: boolean; latencyMs?: number; headers?: Record<string, string> } = {},
+) {
   return {
     data,
     cached: options.cached ?? false,
     latencyMs: options.latencyMs ?? 50,
     status: 200,
     statusText: 'OK',
+    headers: options.headers ?? {},
   };
 }
 
@@ -648,6 +652,9 @@ describe('N8nProvider', () => {
 
       expect(result).toEqual({
         error: 'n8n webhook call error: HTTP 401 Unauthorized',
+        metadata: {
+          http: { status: 401, statusText: 'Unauthorized', headers: {} },
+        },
       });
     });
 

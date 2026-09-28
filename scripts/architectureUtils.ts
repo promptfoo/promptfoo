@@ -209,11 +209,14 @@ export function readLayerConfig(repoRoot: string): LayerConfig {
   if (!config || typeof config !== 'object' || !Array.isArray(config.layers)) {
     throw new Error(`${configPath} must define a layers array.`);
   }
+  const publicFacadePath =
+    typeof config.publicFacade === 'string' ? path.join(repoRoot, config.publicFacade) : '';
   if (
-    typeof config.publicFacade !== 'string' ||
-    !fs.existsSync(path.join(repoRoot, config.publicFacade))
+    !publicFacadePath ||
+    !fs.existsSync(publicFacadePath) ||
+    !fs.statSync(publicFacadePath).isFile()
   ) {
-    throw new Error(`${configPath} must define an existing publicFacade path.`);
+    throw new Error(`${configPath} must define an existing publicFacade file path.`);
   }
 
   const layerNames = new Set<string>();
@@ -225,6 +228,23 @@ export function readLayerConfig(repoRoot: string): LayerConfig {
     }
     layerNames.add(layer.name);
     configuredRoots.push(...validateLayerDefinition(repoRoot, configPath, layer));
+  }
+
+  if (config.leafLayers !== undefined) {
+    if (!Array.isArray(config.leafLayers)) {
+      throw new Error(`${configPath} leafLayers must be an array of unique layer names.`);
+    }
+    const leafLayers = new Set<string>();
+    for (const layerName of config.leafLayers) {
+      if (
+        typeof layerName !== 'string' ||
+        leafLayers.has(layerName) ||
+        !layerNames.has(layerName)
+      ) {
+        throw new Error(`${configPath} leafLayers must be unique, known layer names.`);
+      }
+      leafLayers.add(layerName);
+    }
   }
 
   validateDependencies(config, layerNames);

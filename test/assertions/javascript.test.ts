@@ -1514,9 +1514,7 @@ describe('JavaScript file references', () => {
 
       // Mock importModule to handle both path and functionName
       const mockImportModule = vi.mocked(importModule);
-      mockImportModule.mockImplementation((path, functionName) => {
-        // Make sure both parameters are captured in the mock
-        mockImportModule.mock.calls.push([path, functionName]);
+      mockImportModule.mockImplementation((_path, _functionName) => {
         return Promise.resolve(mockFn);
       });
 
