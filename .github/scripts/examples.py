@@ -109,6 +109,17 @@ EXAMPLES = {
         ("3.10", "3.14"),
         ((".", "agent_test.py"),),
     ),
+    "rag-pdf": Example(
+        "examples/eval-rag-full",
+        ("3.10",),
+        (("tests", "test_*.py"),),
+    ),
+    "rag-pdf-cli": Example(
+        "examples/eval-rag-full",
+        ("3.14",),
+        (("tests", "test_*.py"), ("tests", "smoke_cli.py")),
+        node=True,
+    ),
 }
 
 # Shared runtime changes can break examples without changing their own directories.

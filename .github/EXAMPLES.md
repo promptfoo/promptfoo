@@ -130,3 +130,22 @@ builds the CLI but does not provision browser binaries or system libraries; keep
 this workflow separate preserves the actual browser coverage without expanding
 the shared runner's infrastructure API. Shared runtime/toolchain changes select
 the specialized workflow as well as the aggregate example matrix.
+
+## RAG PDF
+
+The `rag-pdf` profile runs all PDF, timeout, environment-isolation and tokenizer-cache
+regressions on Python 3.10. The `rag-pdf-cli` profile repeats those tests on Python
+3.14, then invokes the existing source CLI smoke through unittest discovery. It
+persists two document batches in real Chroma, reopens the database, and checks all
+nine original evaluation cases against local embedding and chat APIs.
+
+```bash
+python3.10 .github/scripts/examples.py run rag-pdf
+python3.14 .github/scripts/examples.py run rag-pdf-cli
+```
+
+The CLI profile requires the normal local CLI build before the shared runner starts.
+The smoke itself continues to use `npm run local`, with bounded process cleanup and
+isolated environment/cache preparation. It can also be run directly with
+`python examples/eval-rag-full/tests/smoke_cli.py`. These profiles replace the
+standalone RAG workflow without changing its Python runtime split or assertions.
