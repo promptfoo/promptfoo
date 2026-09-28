@@ -104,6 +104,11 @@ EXAMPLES = {
             "opentelemetry-exporter-otlp-proto-http>=1.44,<2",
         ),
     ),
+    "langgraph": Example(
+        "examples/integration-langgraph",
+        ("3.10", "3.14"),
+        ((".", "agent_test.py"),),
+    ),
 }
 
 # Shared runtime changes can break examples without changing their own directories.

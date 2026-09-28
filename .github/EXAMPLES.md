@@ -65,6 +65,19 @@ broader manifest-installation checks are separate from these behavior tests; an
 installation pass does not demonstrate that an example runs correctly. As other
 example PRs land, register their tests here instead of adding another workflow.
 
+## LangGraph
+
+Run the Python-only graph and provider tests without a Node build or model credentials:
+
+```bash
+python3.10 .github/scripts/examples.py run langgraph
+python3.14 .github/scripts/examples.py run langgraph
+```
+
+The three tests execute the real graph with deterministic model responses and cover
+structured summaries, Responses content blocks, and provider errors. They do not
+exercise the Promptfoo CLI or shared Python wrapper.
+
 ## OpenAI Agents
 
 After building the local CLI, run the SDK example profiles:

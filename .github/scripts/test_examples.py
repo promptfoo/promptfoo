@@ -40,6 +40,8 @@ class SelectionTests(unittest.TestCase):
                 ("openai-agents", "3.14"),
                 ("openai-agents-minimums", "3.10"),
                 ("openai-agents-otel", "3.12"),
+                ("langgraph", "3.10"),
+                ("langgraph", "3.14"),
             ],
         )
 
@@ -92,6 +94,18 @@ class SelectionTests(unittest.TestCase):
                 (ROOT / example.directory / example.suites[2][0]).resolve(),
                 ROOT / ".github/scripts/tests/openai_agents",
             )
+
+    def test_langgraph_changes_select_its_python_only_suite(self):
+        for filename in ("agent.py", "agent_test.py", "requirements.txt"):
+            with self.subTest(filename=filename):
+                self.assertEqual(
+                    select_examples([f"examples/integration-langgraph/{filename}"]),
+                    [
+                        {"example": "langgraph", "python": "3.10", "node": False},
+                        {"example": "langgraph", "python": "3.14", "node": False},
+                    ],
+                )
+        self.assertEqual(EXAMPLES["langgraph"].suites, ((".", "agent_test.py"),))
 
     def test_shared_changes_run_all_profiles(self):
         for path in (
