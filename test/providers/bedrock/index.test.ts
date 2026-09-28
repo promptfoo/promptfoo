@@ -3802,6 +3802,16 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     );
   });
 
+  it.each([
+    'arn:aws:bedrock:us-east-2:123456789012:inference-profile/eu.anthropic.claude-3-5-haiku-20241022-v1:0',
+    'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-opus-20240229-v1:0',
+  ])('rejects a retired model named by its ARN (%s)', (modelName) => {
+    // The inference-profile branch returns a handler without looking at the model ID.
+    expect(() => getHandlerForModel(modelName, { inferenceModelType: 'claude' })).toThrow(
+      `Unknown Amazon Bedrock model: ${modelName}`,
+    );
+  });
+
   it.each(RETIRED_BEDROCK_MODEL_IDS)(
     'rejects retired model id %s under every inference profile prefix',
     (modelName) => {

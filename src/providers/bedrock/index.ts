@@ -2617,7 +2617,12 @@ export const RETIRED_BEDROCK_MODELS = new Set([
  * skip the check entirely.
  */
 export function assertBedrockModelIsAvailable(modelName: string): void {
-  if (RETIRED_BEDROCK_MODELS.has(modelName.replace(INFERENCE_PROFILE_PREFIX, ''))) {
+  // A system inference profile or foundation model ARN ends in the ID it resolves to.
+  // Application inference profile ARNs hide the model, so they cannot be checked here.
+  const modelId = modelName.startsWith('arn:')
+    ? (/:(?:inference-profile|foundation-model)\/([^/]+)$/.exec(modelName)?.[1] ?? modelName)
+    : modelName;
+  if (RETIRED_BEDROCK_MODELS.has(modelId.replace(INFERENCE_PROFILE_PREFIX, ''))) {
     throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
   }
 }
@@ -2626,6 +2631,7 @@ export function getHandlerForModel(
   modelName: string,
   config?: BedrockInvokeModelOptions,
 ): IBedrockModel {
+  assertBedrockModelIsAvailable(modelName);
   const messagesOnlyModel = modelName.match(/^(?:[^.]+\.)?(anthropic\.claude-mythos-5)$/);
   if (messagesOnlyModel) {
     // Mythos has no geo/global inference profiles, so always point at the bare
@@ -2706,7 +2712,6 @@ export function getHandlerForModel(
   if (ret) {
     return ret;
   }
-  assertBedrockModelIsAvailable(modelName);
   if (modelName.startsWith('ai21.')) {
     return BEDROCK_MODEL.AI21;
   }

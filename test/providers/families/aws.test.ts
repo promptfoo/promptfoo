@@ -330,14 +330,18 @@ describe('aws bedrock provider factory routing', () => {
   it.each([
     'bedrock:converse:anthropic.claude-3-5-haiku-20241022-v1:0',
     'bedrock:converse:us.anthropic.claude-3-5-haiku-20241022-v1:0',
-  ])('rejects a retired model on the explicit Converse route (%s)', async (providerPath) => {
-    // The converse: route builds AwsBedrockConverseProvider directly and never reaches
-    // getHandlerForModel, so without an explicit check a withdrawn model would only fail at
-    // the remote API.
-    await expect(
-      bedrockFactory.create(providerPath, { config: { region: 'us-east-1' } }, ctx),
-    ).rejects.toThrow(/Unknown Amazon Bedrock model/);
-  });
+    'bedrock:kb:eu.anthropic.claude-3-5-haiku-20241022-v1:0',
+  ])(
+    'rejects a retired model on the explicit Converse and knowledge base routes (%s)',
+    async (providerPath) => {
+      // The converse: route builds AwsBedrockConverseProvider directly and never reaches
+      // getHandlerForModel, so without an explicit check a withdrawn model would only fail at
+      // the remote API.
+      await expect(
+        bedrockFactory.create(providerPath, { config: { region: 'us-east-1' } }, ctx),
+      ).rejects.toThrow(/Unknown Amazon Bedrock model/);
+    },
+  );
 
   it('still allows a Converse model AWS continues to serve', async () => {
     const provider = await bedrockFactory.create(
