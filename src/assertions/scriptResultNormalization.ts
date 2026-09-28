@@ -56,12 +56,11 @@ export function normalizeScriptAssertionResult(
   return {
     ...result,
     pass,
-    reason:
-      pass === result.pass
-        ? result.reason
-        : pass
-          ? 'Assertion passed'
-          : result.reason,
+    reason: inverse
+      ? pass
+        ? 'Assertion passed'
+        : result.reason || getFailureReason(true)
+      : result.reason,
     assertion: result.assertion ?? assertion,
   };
 }

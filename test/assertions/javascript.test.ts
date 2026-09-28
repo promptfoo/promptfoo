@@ -1257,6 +1257,13 @@ describe('JavaScript file references', () => {
       0.75,
       'Custom reason',
     ],
+    [
+      'empty-reason GradingResult results for not-javascript assertions',
+      { type: 'not-javascript', value: () => ({ pass: true, score: 1, reason: '' }) },
+      false,
+      1,
+      'Custom function returned true',
+    ],
   ];
 
   it.each(inverseFunctionAssertionCases)(
@@ -1325,11 +1332,7 @@ describe('JavaScript file references', () => {
           expect(result).toMatchObject({
             pass: rawPass !== inverse,
             score: 0.4,
-            reason: inverse
-              ? rawPass
-                ? 'Custom function returned true'
-                : 'Assertion passed'
-              : 'Custom reason',
+            reason: inverse && !rawPass ? 'Assertion passed' : 'Custom reason',
             namedScores: { safety: 0.7 },
             tokensUsed: { total: 3 },
             assertion: { type: 'javascript', value: '() => false' },
