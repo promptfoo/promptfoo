@@ -613,6 +613,33 @@ describe('suite environment loading', () => {
     expect(testSuite.tests?.map((test) => test.vars?.source)).toEqual(['present']);
   });
 
+  it('loads file:// vars files for tests, test files, defaultTest, and scenarios', async () => {
+    const dir = path.join(tempDir, 'vars-files');
+    fs.mkdirSync(path.join(dir, 'vars'), { recursive: true });
+    for (const name of ['default', 'inline', 'row', 'scenario']) {
+      fs.writeFileSync(path.join(dir, 'vars', `${name}.yaml`), `${name}: loaded`);
+    }
+    fs.writeFileSync(path.join(dir, 'tests.yaml'), '- vars: file://vars/row.yaml');
+    const configPath = path.join(dir, 'config.json');
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        prompts: ['Hello'],
+        providers: ['echo'],
+        defaultTest: { vars: 'file://vars/default.yaml' },
+        tests: [{ vars: 'file://vars/inline.yaml' }, 'file://tests.yaml'],
+        scenarios: [{ config: [{}], tests: [{ vars: 'file://vars/scenario.yaml' }] }],
+      }),
+    );
+    const { testSuite } = await resolveConfigs({ config: [configPath] }, {});
+    expect(testSuite.defaultTest).toMatchObject({ vars: { default: 'loaded' } });
+    expect(testSuite.tests?.map((test) => test.vars)).toEqual([
+      { inline: 'loaded' },
+      { row: 'loaded' },
+    ]);
+    expect(testSuite.scenarios?.[0].tests[0].vars).toEqual({ scenario: 'loaded' });
+  });
+
   it('persists dataset rows independently of their source path', async () => {
     const snapshots = [];
     for (const name of ['first', 'second']) {

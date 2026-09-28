@@ -848,10 +848,16 @@ async function prepareCombinedConfig(
       // Otherwise merge objects
       const currDefaultTest = typeof curr.defaultTest === 'object' ? curr.defaultTest : {};
       const prevObj = typeof prev === 'object' ? prev : {};
+      // A vars file reference (string or list) is loaded later and cannot be merged by key.
+      const hasVarsFile = [prevObj.vars, currDefaultTest.vars].some(
+        (vars) => typeof vars === 'string' || Array.isArray(vars),
+      );
       return {
         ...prevObj,
         ...currDefaultTest,
-        vars: { ...prevObj?.vars, ...currDefaultTest?.vars },
+        vars: hasVarsFile
+          ? (currDefaultTest.vars ?? prevObj.vars)
+          : { ...prevObj?.vars, ...currDefaultTest?.vars },
         assert: [...(prevObj?.assert || []), ...(currDefaultTest?.assert || [])],
         options: { ...prevObj?.options, ...currDefaultTest?.options },
         metadata: { ...prevObj?.metadata, ...currDefaultTest?.metadata },
