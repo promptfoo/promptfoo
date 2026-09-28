@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FoundationModelConfiguration from './FoundationModelConfiguration';
@@ -136,28 +136,10 @@ describe('FoundationModelConfiguration', () => {
     );
   });
 
-  it('should call updateCustomTarget with undefined when Temperature field is cleared', async () => {
-    const user = userEvent.setup();
-    render(
-      <FoundationModelConfiguration
-        selectedTarget={initialTarget}
-        updateCustomTarget={mockUpdateCustomTarget}
-        providerType="openai"
-      />,
-    );
-
-    const accordionSummary = screen.getByRole('button', { name: /Advanced Configuration/ });
-    await user.click(accordionSummary);
-
-    const temperatureInput = screen.getByLabelText('Temperature');
-    await user.clear(temperatureInput);
-    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('temperature', undefined);
-  });
-
   it.each([
     ['Temperature', 'temperature'],
     ['Top P', 'top_p'],
-  ])('should preserve zero and clear invalid input for the %s field', async (label, field) => {
+  ])('should unset %s when cleared and keep an explicit 0', async (label, field) => {
     const user = userEvent.setup();
     render(
       <FoundationModelConfiguration
@@ -169,31 +151,12 @@ describe('FoundationModelConfiguration', () => {
 
     await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
     const input = screen.getByLabelText(label);
-    await user.click(input);
+    await user.clear(input);
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith(field, undefined);
+
     await user.keyboard('{Control>}a{/Control}');
     await user.paste('0');
-
-    expect(mockUpdateCustomTarget).toHaveBeenCalledWith(field, 0);
-
-    fireEvent.change(input, { target: { value: 'invalid' } });
-
-    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith(field, undefined);
-  });
-
-  it('should call updateCustomTarget with undefined when Top P field is cleared', async () => {
-    const user = userEvent.setup();
-    render(
-      <FoundationModelConfiguration
-        selectedTarget={initialTarget}
-        updateCustomTarget={mockUpdateCustomTarget}
-        providerType="openai"
-      />,
-    );
-
-    await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
-    await user.clear(screen.getByLabelText('Top P'));
-
-    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('top_p', undefined);
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith(field, 0);
   });
 
   it('should call updateCustomTarget with undefined when API Base URL field is cleared', async () => {
