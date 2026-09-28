@@ -248,6 +248,32 @@ describe('transformMCPToolsToOpenAi', () => {
 });
 
 describe('transformMCPConfigToClaudeCode', () => {
+  it('validates nested auth before converting any server', async () => {
+    await expect(
+      transformMCPConfigToClaudeCode({
+        servers: [
+          { command: 'node' },
+          { url: 'https://mcp.example.test', auth: { type: 'api_key' } },
+        ],
+      }),
+    ).rejects.toThrow('api_key auth requires value or api_key');
+  });
+
+  it('normalizes no-auth and preserves URL precedence for the SDK adapter', async () => {
+    await expect(
+      transformMCPConfigToClaudeCode({
+        server: {
+          name: 'remote',
+          url: 'https://mcp.example.test',
+          command: 'ignored',
+          auth: { type: 'none' },
+        },
+      }),
+    ).resolves.toEqual({
+      remote: { type: 'http', url: 'https://mcp.example.test', headers: {} },
+    });
+  });
+
   it('returns no servers when MCP is disabled', async () => {
     await expect(
       transformMCPConfigToClaudeCode({
@@ -273,7 +299,7 @@ describe('transformMCPConfigToClaudeCode', () => {
 
   it('rejects a server without a URL, command, or path', async () => {
     await expect(transformMCPConfigToClaudeCode({ enabled: true, server: {} })).rejects.toThrow(
-      'MCP configuration cannot be converted to Claude Agent SDK MCP server config',
+      'Either command or path or url must be specified for MCP server',
     );
   });
 
