@@ -1,37 +1,46 @@
+import { getEnvString } from '../envars';
 import logger from '../logger';
+import { renderVarsInObject } from '../util/render';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { clampCachedTokens } from './shared';
 
-import type { ApiProvider, ProviderOptions } from '../types/index';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderOptions,
+} from '../types/index';
+import type { OpenAiChatCompletionCostData } from './openai/chat';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 type DeepSeekConfig = OpenAiCompletionOptions;
 
 type DeepSeekProviderOptions = Omit<ProviderOptions, 'config'> & {
-  config?: {
+  config?: DeepSeekConfig & {
     config?: DeepSeekConfig;
     env?: ProviderOptions['env'];
   };
 };
 
 export const DEEPSEEK_CHAT_MODELS = [
-  {
-    id: 'deepseek-v4-flash',
+  // Peak-hour estimates; off-peak rates are half. https://api-docs.deepseek.com/quick_start/pricing/
+  ...['deepseek-flash', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp'].map((id) => ({
+    id,
     cost: {
-      input: 0.14 / 1e6,
-      output: 0.28 / 1e6,
-      cache_read: 0.0028 / 1e6,
+      input: 0.3 / 1e6,
+      output: 1.2 / 1e6,
+      cache_read: 0.006 / 1e6,
     },
-  },
+  })),
   {
     id: 'deepseek-v4-pro',
     cost: {
-      input: 0.435 / 1e6,
-      output: 0.87 / 1e6,
-      cache_read: 0.003625 / 1e6,
+      input: 1.32 / 1e6,
+      output: 3.96 / 1e6,
+      cache_read: 0.044 / 1e6,
     },
   },
-  // Legacy aliases retained for compatibility.
+  // Retired models retain their historical rates.
   {
     id: 'deepseek-chat',
     cost: {
@@ -110,8 +119,6 @@ export function calculateDeepSeekCost(
 }
 
 class DeepSeekProvider extends OpenAiChatCompletionProvider {
-  private originalConfig?: DeepSeekConfig;
-
   protected get apiKey(): string | undefined {
     return this.config?.apiKey;
   }
@@ -127,11 +134,12 @@ class DeepSeekProvider extends OpenAiChatCompletionProvider {
         ...providerOptions.config,
         ...deepseekConfig,
         apiKeyEnvar: 'DEEPSEEK_API_KEY',
-        apiBaseUrl: 'https://api.deepseek.com/v1',
+        apiBaseUrl:
+          deepseekConfig?.apiBaseUrl ??
+          providerOptions.config?.apiBaseUrl ??
+          'https://api.deepseek.com/v1',
       },
     });
-
-    this.originalConfig = deepseekConfig;
   }
 
   id(): string {
@@ -153,43 +161,44 @@ class DeepSeekProvider extends OpenAiChatCompletionProvider {
     };
   }
 
-  async callApi(prompt: string, context?: any, callApiOptions?: any): Promise<any> {
-    const response = await super.callApi(prompt, context, callApiOptions);
-
-    if (!response || response.error) {
-      return response;
+  override async getOpenAiBody(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ) {
+    const result = await super.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = result;
+    // Let DeepSeek choose its reasoning budget instead of the inherited 1,024-token limit.
+    if (
+      config.max_tokens === undefined &&
+      config.passthrough?.max_tokens === undefined &&
+      getEnvString('OPENAI_MAX_TOKENS') === undefined
+    ) {
+      delete body.max_tokens;
     }
-
-    // Extract cache hit information if available
-    let cachedTokens = 0;
-    if (typeof response.raw === 'string') {
-      try {
-        const rawData = JSON.parse(response.raw);
-        if (rawData?.usage?.prompt_tokens_details?.cached_tokens) {
-          cachedTokens = rawData.usage.prompt_tokens_details.cached_tokens;
-        }
-      } catch (err) {
-        logger.debug(`Failed to parse raw response for cache info: ${err}`);
-      }
-    } else if (typeof response.raw === 'object' && response.raw !== null) {
-      const rawData = response.raw;
-      if (rawData?.usage?.prompt_tokens_details?.cached_tokens) {
-        cachedTokens = rawData.usage.prompt_tokens_details.cached_tokens;
-      }
+    if (config.reasoning_effort !== undefined) {
+      body.reasoning_effort = renderVarsInObject(config.reasoning_effort, context?.vars);
     }
+    return result;
+  }
 
-    // Calculate cost with cache information
-    if (response.tokenUsage && !response.cached) {
-      response.cost = calculateDeepSeekCost(
-        this.modelName,
-        this.config || {},
-        response.tokenUsage.prompt,
-        response.tokenUsage.completion,
-        cachedTokens,
-      );
+  protected override calculateResponseCost(
+    data: OpenAiChatCompletionCostData & { usage?: { prompt_cache_hit_tokens?: number } },
+    config: OpenAiCompletionOptions,
+    cached: boolean,
+  ): number | undefined {
+    if (cached) {
+      return undefined;
     }
-
-    return response;
+    const { usage } = data;
+    const passthrough = config.passthrough as { model?: string } | undefined;
+    return calculateDeepSeekCost(
+      passthrough?.model ?? this.modelName,
+      config,
+      usage?.prompt_tokens,
+      usage?.completion_tokens,
+      usage?.prompt_tokens_details?.cached_tokens ?? usage?.prompt_cache_hit_tokens,
+    );
   }
 }
 

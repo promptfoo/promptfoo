@@ -48,8 +48,10 @@ import {
   accumulateUnblockingTokenUsage,
   buildGraderResultAssertion,
   callTargetProvider,
+  captureFlaggedTurn,
   getGraderAssertionValue,
   getLastMessageContent,
+  resolveStoredGraderResult,
   runRedteamGrader,
   tryUnblocking,
 } from './shared';
@@ -74,7 +76,7 @@ import type {
 } from '../../types/providers';
 import type { RedteamGradingContext } from '../grading/types';
 import type { BaseRedteamMetadata } from '../types';
-import type { Message } from './shared';
+import type { FlaggedTurn, Message } from './shared';
 
 const ATTACHED_IMAGE_OUTPUT_PLACEHOLDER =
   '[Image output attached. Inspect the attached image directly for visual grading.]';
@@ -94,6 +96,7 @@ interface GoatMetadata extends BaseRedteamMetadata {
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
   traceSnapshots?: Record<string, unknown>[];
+  transformDisplayVars?: Record<string, string>;
 }
 
 /**
@@ -256,6 +259,7 @@ export default class GoatProvider implements ApiProvider {
     let assertToUse: Assertion | AssertionSet | undefined;
     let graderPassed: boolean | undefined;
     let storedGraderResult: GradingResult | undefined;
+    let flaggedTurn: FlaggedTurn | undefined;
     const { getGraderById } = await import('../graders');
     let test: AtomicTestCase | undefined;
 
@@ -806,12 +810,20 @@ export default class GoatProvider implements ApiProvider {
             };
           }
 
-          const { grade, rubric } = await runRedteamGrader(
-            grader,
-            lastFinalAttackPrompt ||
+          const gradedTurn = {
+            prompt:
+              lastFinalAttackPrompt ||
               getLastMessageContent(messages, 'user') ||
               attackerMessage.content,
-            finalOutput,
+            output: finalOutput,
+            messages,
+            guardrails: finalResponse.guardrails,
+            transformDisplayVars: lastTransformDisplayVars,
+          };
+          const { grade, rubric } = await runRedteamGrader(
+            grader,
+            gradedTurn.prompt,
+            gradedTurn.output,
             test,
             targetProvider,
             getGraderAssertionValue(assertToUse),
@@ -827,16 +839,12 @@ export default class GoatProvider implements ApiProvider {
               assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
             },
             {
-              prompt:
-                lastFinalAttackPrompt ||
-                getLastMessageContent(messages, 'user') ||
-                attackerMessage.content,
-              output: finalOutput,
-              messages: messages,
+              ...gradedTurn,
               pluginId: test.metadata?.pluginId,
               assertion: assertToUse,
             },
           );
+          flaggedTurn ??= captureFlaggedTurn(storedGraderResult, gradedTurn);
         }
 
         if (graderPassed === false) {
@@ -875,27 +883,39 @@ export default class GoatProvider implements ApiProvider {
     }
 
     const finalPrompt = getLastMessageContent(messages, 'user') || '';
-    return {
+    const reported = flaggedTurn ?? {
       output: getLastMessageContent(messages, 'assistant') || '',
       prompt: finalPrompt,
+      messages,
+      guardrails: lastTargetResponse?.guardrails,
+      transformDisplayVars: lastTransformDisplayVars,
+    };
+    return {
+      output: reported.output,
+      prompt: reported.prompt,
       metadata: {
         // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
-        redteamFinalPrompt: lastFinalAttackPrompt || finalPrompt,
-        messages: messages as Record<string, any>[],
+        redteamFinalPrompt: flaggedTurn ? flaggedTurn.prompt : lastFinalAttackPrompt || finalPrompt,
+        messages: reported.messages as Record<string, any>[],
         stopReason,
         redteamHistory,
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,
-        storedGraderResult,
+        storedGraderResult: resolveStoredGraderResult(
+          flaggedTurn?.graderResult,
+          storedGraderResult,
+        ),
         traceSnapshots:
           traceSnapshots.length > 0
             ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
             : undefined,
         sessionId: getSessionId(lastTargetResponse, context),
-        ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+        ...(reported.transformDisplayVars && {
+          transformDisplayVars: reported.transformDisplayVars,
+        }),
       },
       tokenUsage: totalTokenUsage,
-      guardrails: lastTargetResponse?.guardrails,
+      guardrails: reported.guardrails,
     };
   }
 }

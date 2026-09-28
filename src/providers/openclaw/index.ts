@@ -1,3 +1,4 @@
+import { modelNameFromProviderPath } from '../shared';
 import { OpenClawAgentProvider } from './agent';
 import { OpenClawChatProvider } from './chat';
 import { OpenClawEmbeddingProvider } from './embedding';
@@ -46,27 +47,27 @@ export function createOpenClawProvider(
 ): ApiProvider {
   const splits = providerPath.split(':');
   const keyword = splits[1];
-  // Agent IDs and tool names may themselves contain colons.
-  const target = splits.slice(2).join(':') || undefined;
   const opts = { ...providerOptions, env };
+  const modelName = modelNameFromProviderPath(providerPath, 2);
 
   if (keyword === 'responses') {
-    return new OpenClawResponsesProvider(target, opts);
+    return new OpenClawResponsesProvider(modelName, opts);
   }
 
   if (keyword === 'embedding' || keyword === 'embeddings') {
-    return new OpenClawEmbeddingProvider(target, opts);
+    return new OpenClawEmbeddingProvider(modelName, opts);
   }
 
   if (keyword === 'agent') {
-    return new OpenClawAgentProvider(target, opts);
+    return new OpenClawAgentProvider(modelName, opts);
   }
 
   if (keyword === 'tools') {
-    if (!target) {
+    const toolName = splits.slice(2).join(':');
+    if (!toolName) {
       throw new Error('OpenClaw tools provider requires a tool name: openclaw:tools:<tool-name>');
     }
-    return new OpenClawToolInvokeProvider(target, opts);
+    return new OpenClawToolInvokeProvider(toolName, opts);
   }
 
   // Default: chat provider

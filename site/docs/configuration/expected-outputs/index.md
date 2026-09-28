@@ -136,7 +136,7 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [contains-sql](/docs/configuration/expected-outputs/deterministic/#contains-sql)                                   | output is valid SQL or contains a valid SQL code block             |
 | [is-xml](/docs/configuration/expected-outputs/deterministic/#is-xml)                                               | output is a supported well-formed XML document                     |
 | [contains-xml](/docs/configuration/expected-outputs/deterministic/#contains-xml)                                   | output contains valid xml fragment(s)                              |
-| [is-refusal](/docs/configuration/expected-outputs/deterministic/#is-refusal)                                       | output indicates the model refused to perform the task             |
+| [is-refusal](/docs/configuration/expected-outputs/deterministic/#is-refusal)                                       | the provider reports a refusal or the output indicates one         |
 | [javascript](/docs/configuration/expected-outputs/javascript)                                                      | provided Javascript function validates the output                  |
 | [python](/docs/configuration/expected-outputs/python)                                                              | provided Python function validates the output                      |
 | [ruby](/docs/configuration/expected-outputs/ruby)                                                                  | provided Ruby function validates the output                        |
@@ -169,7 +169,7 @@ Every test type can be negated by prepending `not-`. For example, `not-equals` o
 
 The `search-rubric` and `not-search-rubric` assertions require a rubric value that renders to a string.
 
-For `not-classifier` and `not-search-rubric`, a grader error or missing verdict remains a failure with score `0`. Negation only inverts a valid grading result.
+For `not-classifier`, `not-search-rubric`, `not-factuality` (also `not-model-graded-factuality`), and `not-model-graded-closedqa`, a grader error or missing verdict remains a failure with score `0`. Negation only inverts a valid grading result.
 :::
 
 ### Model-assisted eval metrics
@@ -288,7 +288,7 @@ The scoring function can be JavaScript or Python, referenced with `file://` pref
 
 ```typescript
 type ScoringFunction = (
-  namedScores: Record<string, number>, // Map of metric names to scores (0-1)
+  namedScores: Record<string, number>, // Normalized scores; may be nonfinite after aggregation
   context: {
     threshold?: number; // Test case threshold if set
     tokensUsed?: {
@@ -300,12 +300,16 @@ type ScoringFunction = (
   },
 ) => {
   pass: boolean; // Whether the test case passes
-  score: number; // Final score (0-1)
+  score: number; // Finite final score (usually 0-1)
   reason: string; // Explanation of the score
 };
 ```
 
 When assertions use `weight`, each named score passed into the scoring function is already normalized as a weighted average. Eval outputs also include `namedScoreWeights` so downstream consumers can recover the weighted denominator when needed.
+
+Custom scoring results must use finite numbers for `score` and values in `namedScores` and `namedScoreWeights`, including nested `componentResults`. `NaN` and infinities cause a scoring function error.
+
+JavaScript scoring functions may receive `NaN` or infinity from aggregation; Python functions receive `None`. Custom scoring can replace invalid aggregate values. Any nonfinite score or weight remaining afterward fails the test with score 0 and an aggregation error. Invalid metric/weight pairs are omitted; valid metrics and component results are retained.
 
 See the [custom assertion scoring example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-assertion-scoring-override) for complete implementations in JavaScript and Python.
 
@@ -517,6 +521,8 @@ These metrics will be shown in the UI:
 
 ![llm eval metrics](/img/docs/named-metrics.png)
 
+Named metric percentages in column headers use each column's own graded assertions, including assertion weights. Results that never reach grading, such as provider errors, do not contribute to the metric total. If an older or imported eval has no recorded metric total, its column header shows the aggregate score without a percentage.
+
 See [named metrics example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-named-metrics).
 
 ## Creating derived metrics
@@ -576,15 +582,15 @@ derivedMetrics:
 defaultTest:
   assert:
     - type: javascript
-      value: output.sentiment === 'positive' && context.vars.expected === 'positive' ? 1 : 0
+      value: "output.sentiment === 'positive' && context.vars.expected === 'positive' ? 1 : 0"
       metric: true_positives
       weight: 0
     - type: javascript
-      value: output.sentiment === 'positive' && context.vars.expected === 'negative' ? 1 : 0
+      value: "output.sentiment === 'positive' && context.vars.expected === 'negative' ? 1 : 0"
       metric: false_positives
       weight: 0
     - type: javascript
-      value: output.sentiment === 'negative' && context.vars.expected === 'positive' ? 1 : 0
+      value: "output.sentiment === 'negative' && context.vars.expected === 'positive' ? 1 : 0"
       metric: false_negatives
       weight: 0
 

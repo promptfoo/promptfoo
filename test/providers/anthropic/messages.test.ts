@@ -1725,6 +1725,40 @@ describe('AnthropicMessagesProvider', () => {
       ]);
     });
 
+    it.each([
+      ['cyber', 0.006],
+      ['bio', 0.014],
+    ] as const)(
+      'prices each MCP request separately when the final request refuses %s',
+      async (category, cost) => {
+        provider = createProvider('claude-opus-5-5', {
+          config: { mcp: { enabled: true, server: { command: 'npm', args: ['start'] } } },
+        });
+        mcpMocks.callTool.mockResolvedValueOnce({ content: 'Company details' });
+        vi.spyOn(provider.anthropic.messages, 'create')
+          .mockResolvedValueOnce({
+            content: [
+              { type: 'tool_use', id: 'toolu_search', name: 'search_companies', input: {} },
+            ],
+            stop_reason: 'tool_use',
+            usage: { input_tokens: 1000, output_tokens: 100 },
+          } as Anthropic.Messages.Message)
+          .mockResolvedValueOnce({
+            content: [],
+            model: 'claude-opus-5-5',
+            stop_reason: 'refusal',
+            stop_details: { type: 'refusal', category, explanation: null },
+            usage: { input_tokens: 2000, output_tokens: 0 },
+          } as unknown as Anthropic.Messages.Message);
+
+        const result = await provider.callApi('Find companies');
+
+        expect(result.cost).toBeCloseTo(cost, 10);
+        expect(result.tokenUsage).toMatchObject({ prompt: 3000, completion: 100, total: 3100 });
+        expect(result.finishReason).toBe('content_filter');
+      },
+    );
+
     it('sums thinking tokens across MCP continuation rounds', async () => {
       provider = createProvider('claude-sonnet-4-6', {
         config: {
@@ -3973,6 +4007,35 @@ describe('AnthropicMessagesProvider', () => {
   });
 
   describe('refusal stop_details handling', () => {
+    it.each([
+      ['bio', 0, 0.004],
+      ['frontier_llm', 0, 0.004],
+      ['reasoning_extraction', 0, 0.004],
+      ['cyber', 0, 0],
+      ['general_harms', 0, 0],
+      [null, 0, 0],
+      ['cyber', 100, 0.006],
+      ['bio', 100, 0.006],
+    ] as const)(
+      'prices %s refusals with %i output tokens at $%s',
+      async (category, outputTokens, cost) => {
+        const provider = createProvider('claude-opus-5-5', { config: {} });
+        vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+          content: [],
+          model: 'claude-opus-5-5',
+          stop_reason: 'refusal',
+          stop_details: { type: 'refusal', category, explanation: null },
+          usage: { input_tokens: 1000, output_tokens: outputTokens },
+        } as unknown as Anthropic.Messages.Message);
+
+        const result = await provider.callApi('Refused request');
+
+        expect(result.cost).toBeCloseTo(cost, 10);
+        expect(result.finishReason).toBe('content_filter');
+        expect(result.tokenUsage?.prompt).toBe(1000);
+      },
+    );
+
     it('should include guardrails in response when stop_reason is refusal', async () => {
       const provider = createProvider('claude-sonnet-4-6', { config: {} });
       const refusalResponse = {
@@ -4083,6 +4146,7 @@ describe('AnthropicMessagesProvider', () => {
 
       const result = await provider.callApi('Hack something');
       expect(result.cached).toBe(true);
+      expect(result.cost).toBe(0);
       expect(result.guardrails).toEqual({
         flagged: true,
         reason: expect.stringContaining('category: cyber'),
@@ -4120,6 +4184,7 @@ describe('AnthropicMessagesProvider', () => {
 
       const result = await provider.callApi('Dangerous request');
 
+      expect(result.cost).toBeCloseTo(0.00003, 10);
       expect(result.guardrails).toEqual({
         flagged: true,
         reason: expect.stringContaining('category: bio'),
