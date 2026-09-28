@@ -65,6 +65,19 @@ broader manifest-installation checks are separate from these behavior tests; an
 installation pass does not demonstrate that an example runs correctly. As other
 example PRs land, register their tests here instead of adding another workflow.
 
+## LangGraph
+
+Run the Python-only graph and provider tests without a Node build or model credentials:
+
+```bash
+python3.10 .github/scripts/examples.py run langgraph
+python3.14 .github/scripts/examples.py run langgraph
+```
+
+The three tests execute the real graph with deterministic model responses and cover
+structured summaries, Responses content blocks, and provider errors. They do not
+exercise the Promptfoo CLI or shared Python wrapper.
+
 ## OpenAI Agents
 
 After building the local CLI, run the SDK example profiles:
@@ -93,6 +106,19 @@ These checks prove runtime contracts, not hosted-model quality or an OS security
 boundary. The Unix-local workflow executes commands on the test host. The harness
 uses synthetic files, an allowlisted environment, dummy credentials, local model
 and trace endpoints, an isolated copy/database, and bounded child process groups.
+
+## Redteam LangChain
+
+The `redteam-langchain` profile runs the example's five provider unit tests on
+Python 3.10 and 3.14. It installs the declared requirements in a fresh environment
+and checks output parsing, token usage, and error handling with a stubbed chat
+model. These tests do not exercise the Node wrapper or hosted-model quality, so
+this profile does not require a Node build or model credentials.
+
+```bash
+python3.10 .github/scripts/examples.py run redteam-langchain
+python3.14 .github/scripts/examples.py run redteam-langchain
+```
 
 ## Specialized Browser Workflow
 
