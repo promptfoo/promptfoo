@@ -35,6 +35,7 @@ class SmokeEnvironmentTests(unittest.TestCase):
                 patch.dict(os.environ, host, clear=True),
                 patch.object(smoke_cli, "ThreadingHTTPServer"),
                 patch.object(smoke_cli.threading, "Thread"),
+                patch.object(smoke_cli, "prepare_tokenizer"),
                 patch.object(smoke_cli, "run_process", side_effect=inspect),
                 self.assertRaises(StopBeforeIngestion),
             ):

@@ -1,5 +1,6 @@
 """Exercise real Chroma persistence and the example config with local model APIs."""
 
+import hashlib
 import json
 import os
 import shutil
@@ -14,6 +15,11 @@ from pathlib import Path
 EXAMPLE = Path(__file__).resolve().parents[1]
 REPO = EXAMPLE.parents[1]
 ANSWER = "Revenue increased to 42 million dollars."
+TOKENIZER_URL = (
+    "https://openaipublic.blob.core.windows.net/encodings/cl100k_base.tiktoken"
+)
+TOKENIZER_SHA256 = "223921b76ee99bde995b7ff738513eef100fb51d18c93597a113bcffe865b2a7"
+TOKENIZER_CACHE_KEY = hashlib.sha1(TOKENIZER_URL.encode()).hexdigest()
 
 
 def run_process(command, *, cwd, env, timeout):
@@ -30,6 +36,59 @@ def run_process(command, *, cwd, env, timeout):
             raise
         if returncode:
             raise subprocess.CalledProcessError(returncode, command)
+
+
+def prepare_tokenizer(root, env):
+    cache = root / "tokenizer-cache"
+    cache.mkdir()
+    env["TIKTOKEN_CACHE_DIR"] = str(cache)
+    source = os.environ.get(
+        "TIKTOKEN_CACHE_DIR",
+        os.environ.get(
+            "DATA_GYM_CACHE_DIR", str(Path(tempfile.gettempdir()) / "data-gym-cache")
+        ),
+    )
+    # Read the developer cache without letting tiktoken delete corrupt entries.
+    if source:
+        try:
+            data = (Path(source) / TOKENIZER_CACHE_KEY).read_bytes()
+        except OSError:
+            pass
+        else:
+            if hashlib.sha256(data).hexdigest() == TOKENIZER_SHA256:
+                (cache / TOKENIZER_CACHE_KEY).write_bytes(data)
+                return
+
+    # Only vocabulary preparation can use the host's proxy and CA settings.
+    # This environment has a temporary HOME and no model credentials.
+    download_env = env.copy()
+    for key in (
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "NO_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+        "no_proxy",
+        "REQUESTS_CA_BUNDLE",
+        "CURL_CA_BUNDLE",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+    ):
+        if key in os.environ:
+            download_env[key] = os.environ[key]
+    run_process(
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            "import tiktoken; tiktoken.get_encoding('cl100k_base')",
+        ],
+        cwd=root,
+        env=download_env,
+        timeout=60,
+    )
 
 
 def main():
@@ -129,6 +188,7 @@ def main():
                 XDG_STATE_HOME=str(state),
                 TMPDIR=str(temporary),
             )
+            prepare_tokenizer(root, env)
             for key in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
                 env[key] = env[key.lower()] = ""
             env.update(

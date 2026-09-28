@@ -66,4 +66,4 @@ In a repository checkout with its Node dependencies and this example's Python re
 python examples/eval-rag-full/tests/smoke_cli.py
 ```
 
-It persists two document batches, reopens Chroma through the Python provider, and evaluates the original nine-question config against local embedding/chat APIs. It uses no API credentials or paid model calls; the tokenizer may download its vocabulary on first use.
+It persists two document batches, reopens Chroma through the Python provider, and evaluates the original nine-question config against local embedding/chat APIs. It uses no API credentials or paid model calls. The smoke test copies a hash-verified tokenizer vocabulary from the existing cache without modifying it, or downloads the vocabulary into a temporary cache using your proxy and CA settings. Model API calls remain local and do not use those proxies.
