@@ -120,6 +120,11 @@ EXAMPLES = {
         (("tests", "test_*.py"), ("tests", "smoke_cli.py")),
         node=True,
     ),
+    "f-score": Example(
+        "examples/eval-f-score",
+        ("3.10", "3.14"),
+        ((".", "dependencies_test.py"),),
+    ),
     "google-adk": Example(
         "examples/integration-google-adk",
         ("3.12", "3.14"),
