@@ -5,11 +5,13 @@
  */
 
 import { type ChildProcess, spawn } from 'child_process';
-import { existsSync } from 'fs';
-import { delimiter, dirname, isAbsolute, join, resolve } from 'path';
+import { createRequire } from 'module';
+import { isAbsolute, resolve } from 'path';
 
 import logger from '../../logger';
 import { FilesystemMcpError } from '../../types/codeScan';
+
+const require = createRequire(import.meta.url);
 
 const FILESYSTEM_MCP_READY_MARKER = 'running on stdio';
 const FILESYSTEM_MCP_READY_TIMEOUT_MS = 30000;
@@ -18,34 +20,32 @@ function formatFilesystemMcpExitReason(code: number | null, signal: NodeJS.Signa
   return code === null ? (signal ? `signal ${signal}` : 'unknown reason') : `code ${code}`;
 }
 
+// The server reads no configuration from the environment; pass only what Node needs.
+const FILESYSTEM_MCP_ENV_KEYS = new Set([
+  'HOME',
+  'PATH',
+  'SYSTEMROOT',
+  'TEMP',
+  'TMP',
+  'TMPDIR',
+  'USERPROFILE',
+]);
+
 function createFilesystemMcpEnv(): NodeJS.ProcessEnv {
-  const env = { ...process.env };
-
-  delete env.NPM_CONFIG_BEFORE;
-  delete env.npm_config_before;
-
-  return env;
+  // Match case-insensitively: Windows keeps names such as Path and SystemRoot.
+  return Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => FILESYSTEM_MCP_ENV_KEYS.has(key.toUpperCase())),
+  );
 }
 
-/**
- * Windows npm shims are .cmd files, which spawn() cannot run without a shell. Run npm's
- * npx-cli.js under this Node instead, preferring its bundled npm; a bare node.exe (such as
- * the GitHub Actions runtime) falls back to PATH.
- */
-function getNpxCommand(): string[] {
-  if (process.platform !== 'win32') {
-    return ['npx'];
+function resolveFilesystemMcpServerEntry(): string {
+  try {
+    return require.resolve('@modelcontextprotocol/server-filesystem/dist/index.js');
+  } catch {
+    throw new Error(
+      'The @modelcontextprotocol/server-filesystem package is required to scan beyond the diff. Reinstall promptfoo with optional dependencies or use --diffs-only.',
+    );
   }
-  // Skip empty and relative PATH entries: the child would resolve them against the scanned
-  // repo. Read process.env, not a copy, so the lookup stays case-insensitive on Windows.
-  const searchDirs = (process.env.PATH ?? '').split(delimiter).filter(isAbsolute);
-  const npxCli = [dirname(process.execPath), ...searchDirs]
-    .map((dir) => join(dir, 'node_modules', 'npm', 'bin', 'npx-cli.js'))
-    .find((cli) => existsSync(cli));
-  if (!npxCli) {
-    throw new Error('npx not found: install npm alongside Node.js or on PATH');
-  }
-  return [process.execPath, npxCli];
 }
 
 /**
@@ -66,12 +66,11 @@ export function startFilesystemMcpServer(rootDir: string): ChildProcess {
   logger.debug(`Root directory: ${absoluteRootDir}`);
 
   try {
-    // Spawn the filesystem MCP server
-    // Using npx to run @modelcontextprotocol/server-filesystem
-    const [command, ...npxArgs] = getNpxCommand();
+    // Run the installed server under this Node rather than through npx, so the scanned
+    // repository's npm context does not affect how it is resolved or launched.
     const mcpProcess = spawn(
-      command,
-      [...npxArgs, '-y', '@modelcontextprotocol/server-filesystem', absoluteRootDir],
+      process.execPath,
+      [resolveFilesystemMcpServerEntry(), absoluteRootDir],
       {
         stdio: ['pipe', 'pipe', 'pipe'], // stdin/stdout/stderr all piped
         cwd: absoluteRootDir,
@@ -119,9 +118,8 @@ export function startFilesystemMcpServer(rootDir: string): ChildProcess {
 /**
  * Wait until the filesystem MCP server is ready to accept JSON-RPC messages.
  *
- * The child process is started through npx, which can spend time resolving or
- * installing the package before the MCP server takes over stdin. Announcing the
- * runner before that point lets the cloud side send initialize too early.
+ * The server starts reading stdin only after it validates its root directory.
+ * Announcing the runner before that point lets the cloud side send initialize too early.
  */
 export function waitForFilesystemMcpServerReady(
   mcpProcess: ChildProcess,

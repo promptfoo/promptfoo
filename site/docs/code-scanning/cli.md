@@ -17,6 +17,8 @@ Install promptfoo globally:
 npm install -g promptfoo
 ```
 
+Full-repository scans use the `@modelcontextprotocol/server-filesystem` package that installs with promptfoo as an optional dependency. If you install with `--omit=optional`, add that package or use `--diffs-only`.
+
 Authenticate with your promptfoo account:
 
 ```bash
