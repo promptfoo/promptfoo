@@ -287,7 +287,7 @@ async function loadNestedFileVars(
  *                         variables contain attack payloads (e.g., SSTI, XSS) that should NOT be
  *                         evaluated by Promptfoo before reaching the target.
  * @param outputVars - Optional names of vars holding provider output (`storeOutputAs` registers).
- *                     `file://` references nested inside them are not loaded.
+ *                     `file://` references in them are not loaded.
  * @returns The rendered prompt string
  */
 export async function renderPrompt(
@@ -304,7 +304,12 @@ export async function renderPrompt(
 
   // Load files
   for (const [varName, value] of Object.entries(vars)) {
-    if (skipRenderVars?.includes(varName)) {
+    // Runtime and output vars hold model output, so never load files from them.
+    if (
+      skipRenderVars?.includes(varName) ||
+      isRuntimeVar(varName) ||
+      outputVars?.includes(varName)
+    ) {
       continue;
     }
 
@@ -442,13 +447,7 @@ export async function renderPrompt(
         );
       }
       vars[varName] = javascriptOutput.output;
-    } else if (
-      value &&
-      typeof value === 'object' &&
-      !isRuntimeVar(varName) &&
-      !outputVars?.includes(varName)
-    ) {
-      // Runtime and output vars hold model output, so never load files from them.
+    } else if (value && typeof value === 'object') {
       vars[varName] = (await loadNestedFileVars(value)) as VarValue;
     }
   }

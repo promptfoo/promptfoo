@@ -319,22 +319,26 @@ describe('evaluatorHelpers', () => {
       expect(fs.readFileSync).toHaveBeenCalledTimes(2);
     });
 
-    it('should not load file references nested in runtime or output vars', async () => {
+    it('should not load file references from runtime or output vars', async () => {
       const vars = {
         _conversation: [{ input: 'hi', output: 'file:///etc/passwd' }],
+        sessionId: 'file:///etc/passwd',
         stored: { answer: 'file:///etc/passwd' },
+        storedText: 'file:///etc/passwd',
       };
 
       const renderedPrompt = await renderPrompt(
-        toPrompt('{{ _conversation[0].output }}|{{ stored.answer }}'),
+        toPrompt(
+          '{{ _conversation[0].output }}|{{ sessionId }}|{{ stored.answer }}|{{ storedText }}',
+        ),
         vars,
         undefined,
         undefined,
         undefined,
-        ['stored'],
+        ['stored', 'storedText'],
       );
 
-      expect(renderedPrompt).toBe('file:///etc/passwd|file:///etc/passwd');
+      expect(renderedPrompt).toBe(Array(4).fill('file:///etc/passwd').join('|'));
       expect(fs.readFileSync).not.toHaveBeenCalled();
     });
 
