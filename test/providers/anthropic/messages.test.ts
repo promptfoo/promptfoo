@@ -3948,6 +3948,23 @@ describe('AnthropicMessagesProvider', () => {
     });
   });
 
+  it('warns that a paused server tool turn may be incomplete', async () => {
+    const provider = createProvider('claude-sonnet-5', { config: {} });
+    vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+      content: [{ type: 'text', text: 'Partial answer', citations: null }],
+      model: 'claude-sonnet-5',
+      stop_reason: 'pause_turn',
+      usage: { input_tokens: 10, output_tokens: 5 },
+    } as unknown as Anthropic.Messages.Message);
+    const warnSpy = vi.spyOn(logger, 'warn');
+
+    const result = await provider.callApi('Search many sources');
+
+    expect(result.output).toBe('Partial answer');
+    expect(result.finishReason).toBe('pause_turn');
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('stop_reason: pause_turn'));
+  });
+
   describe('refusal stop_details handling', () => {
     it.each([
       ['bio', 0, 0.004],
