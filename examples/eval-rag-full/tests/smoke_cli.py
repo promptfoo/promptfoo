@@ -109,8 +109,26 @@ def main():
             ):
                 shutil.copyfile(EXAMPLE / name, root / name)
             endpoint = f"http://127.0.0.1:{server.server_port}/v1"
-            env = os.environ.copy()
-            # Empty values also prevent dotenv from restoring repository proxy settings.
+            env = {
+                key: value
+                for key, value in os.environ.items()
+                if key in ("PATH", "SYSTEMROOT", "LANG", "LC_ALL")
+            }
+            home = root / "home"
+            state = home / ".local" / "state"
+            temporary = root / "tmp"
+            state.mkdir(parents=True)
+            temporary.mkdir()
+            env_file = root / "empty.env"
+            env_file.touch()
+            # envars loads defaults before the CLI processes explicit flags.
+            env.update(
+                DOTENV_PATH=str(env_file),
+                HOME=str(home),
+                USERPROFILE=str(home),
+                XDG_STATE_HOME=str(state),
+                TMPDIR=str(temporary),
+            )
             for key in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
                 env[key] = env[key.lower()] = ""
             env.update(
@@ -124,6 +142,10 @@ def main():
                 PYTHONPATH=str(root),
                 PROMPTFOO_CONFIG_DIR=str(root / "promptfoo"),
                 PROMPTFOO_DISABLE_TELEMETRY="1",
+                PROMPTFOO_DISABLE_UPDATE="1",
+                PROMPTFOO_DISABLE_REMOTE_GENERATION="true",
+                PROMPTFOO_DISABLE_SHARING="true",
+                PROMPTFOO_PASS_RATE_THRESHOLD="100",
                 LANGSMITH_TRACING="false",
                 LANGCHAIN_TRACING_V2="false",
                 ANONYMIZED_TELEMETRY="False",
