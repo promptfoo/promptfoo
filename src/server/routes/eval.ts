@@ -218,32 +218,7 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
       return;
     }
 
-    if (job.status === 'complete') {
-      res.json(
-        EvalSchemas.GetJob.Response.parse({
-          status: 'complete',
-          result: job.result,
-          evalId: job.evalId,
-          logs: job.logs,
-        }),
-      );
-    } else if (job.status === 'error') {
-      res.json(
-        EvalSchemas.GetJob.Response.parse({
-          status: 'error',
-          logs: job.logs,
-        }),
-      );
-    } else {
-      res.json(
-        EvalSchemas.GetJob.Response.parse({
-          status: 'in-progress',
-          progress: job.progress,
-          total: job.total,
-          logs: job.logs,
-        }),
-      );
-    }
+    res.json(EvalSchemas.GetJob.Response.parse(job));
   } catch {
     sendError(res, 500, 'Failed to load eval job');
   }

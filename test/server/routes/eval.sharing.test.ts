@@ -178,17 +178,22 @@ describe('Eval Routes - Sharing behavior', () => {
     });
 
     const inProgressResponse = await api.get(`/api/eval/job/${jobId}`);
-    expect(inProgressResponse.body.status).toBe('in-progress');
-    expect(inProgressResponse.body.evalId).toBeUndefined();
+    expect(inProgressResponse.body).toEqual({
+      status: 'in-progress',
+      progress: 0,
+      total: 0,
+      logs: [],
+    });
 
     resolveSummary!({ results: [] });
 
     await vi.waitFor(async () => {
       const completedResponse = await api.get(`/api/eval/job/${jobId}`);
-      expect(completedResponse.body).toMatchObject({
+      expect(completedResponse.body).toEqual({
         status: 'complete',
         evalId: 'eval-result-id',
         result: { results: [] },
+        logs: [],
       });
     });
   });
@@ -235,7 +240,10 @@ describe('Eval Routes - Sharing behavior', () => {
 
     await vi.waitFor(async () => {
       const response = await api.get(`/api/eval/job/${jobId}`);
-      expect(response.body.status).toBe('error');
+      expect(response.body).toEqual({
+        status: 'error',
+        logs: ['Error: summary boom'],
+      });
     });
   });
 
