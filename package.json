@@ -123,9 +123,9 @@
     "storybook": {
       "esbuild": "0.28.2"
     },
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "react-is": "^19.2.4",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-is": "^19.3.0",
     "react-router-config": {
       "react-router": "^5.3.4"
     },
@@ -136,8 +136,8 @@
       "whatwg-url": "16.0.1",
       "chokidar": "5.0.0",
       "esbuild": "0.28.2",
-      "react": "^19.2.4",
-      "react-dom": "^19.2.4"
+      "react": "^19.3.0",
+      "react-dom": "^19.3.0"
     },
     "@opentelemetry/exporter-trace-otlp-http": {
       "@opentelemetry/core": "2.11.0"
@@ -217,7 +217,7 @@
       ".": "0.5.0",
       "chevrotain": "13.2.0"
     },
-    "webpack": "5.111.0",
+    "webpack": "5.111.1",
     "dompurify": "3.4.15",
     "monaco-editor": {
       ".": "0.56.0",
@@ -225,18 +225,16 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.273",
+    "@anthropic-ai/claude-agent-sdk": "0.3.276",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
-    "@aws/bedrock-token-generator": "^1.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.1045.0",
     "@aws-sdk/credential-provider-sso": "^3.972.16",
-    "@aws-sdk/types": "^3.973.5",
+    "@aws/bedrock-token-generator": "^1.1.0",
     "@azure/identity": "^4.13.3",
-    "@azure/openai-assistants": "^1.0.0-beta.6",
-    "@biomejs/biome": "2.5.13",
+    "@biomejs/biome": "2.5.14",
     "@fal-ai/client": "~1.10.1",
     "@ibm-cloud/watsonx-ai": "^1.7.16",
     "@langfuse/client": "^5.11.1",
@@ -249,7 +247,7 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsdom": "^30.0.0",
-    "@types/node": "^24.12.0",
+    "@types/node": "^24.13.5",
     "@types/nunjucks": "^3.2.6",
     "@types/opener": "^1.4.3",
     "@types/pem": "^1.14.4",
@@ -257,6 +255,7 @@
     "@types/semver": "^7.7.1",
     "@types/source-map-support": "^0.5.10",
     "@types/supertest": "^7.0.0",
+    "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^5.0.0",
     "block-no-verify": "^1.2.0",
     "concurrently": "^9.2.3",
@@ -277,7 +276,6 @@
     "tsdown": "0.23.0",
     "typescript": "^7.0.0",
     "vitest": "^5.0.0",
-    "winston-transport": "^4.9.0",
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
@@ -291,7 +289,6 @@
     "@azure/ai-projects": "^2.1.1",
     "@azure/identity": "^4.13.3",
     "@azure/msal-node": "^6.0.0",
-    "@azure/openai-assistants": "^1.0.0-beta.6",
     "@azure/storage-blob": "^12.31.0",
     "@fal-ai/client": "~1.10.1",
     "@googleapis/sheets": "^18.0.0",
@@ -300,12 +297,12 @@
     "@langfuse/client": "^5.11.1",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@openai/agents": "^0.11.3",
-    "@opencode-ai/sdk": "^1.18.30",
+    "@opencode-ai/sdk": "^1.18.31",
     "@playwright/browser-chromium": "^1.63.0",
     "@slack/web-api": "^8.1.1",
     "@smithy/node-http-handler": "^4.4.14",
-    "google-auth-library": "^11.0.2",
-    "hono": "^4.13.7",
+    "google-auth-library": "^11.1.0",
+    "hono": "^4.13.8",
     "ibm-cloud-sdk-core": "^5.6.2",
     "jks-js": "^1.1.5",
     "natural": "^8.1.1",
@@ -334,10 +331,8 @@
     "@opentelemetry/core": "2.11.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.222.0",
     "@opentelemetry/resources": "^2.6.0",
-    "@opentelemetry/sdk-trace-base": "^2.6.0",
     "@opentelemetry/sdk-trace-node": "^2.6.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
-    "@types/ws": "^8.18.1",
     "ai": "^6.0.264",
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
@@ -353,9 +348,7 @@
     "cors": "^2.8.6",
     "csv-parse": "^7.0.0",
     "csv-stringify": "^6.7.0",
-    "debounce": "^3.0.0",
     "dedent": "^1.7.2",
-    "dotenv": "^17.3.1",
     "drizzle-orm": "^0.45.1",
     "execa": "^10.0.0",
     "express": "^5.2.1",
