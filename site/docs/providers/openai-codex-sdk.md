@@ -94,7 +94,7 @@ These IDs select the same provider:
 
 A model in the ID takes precedence over the provider's `config.model`. To compare models, add one provider entry per model.
 
-Choose a model your account can access from [OpenAI's Codex model guide](https://learn.chatgpt.com/docs/models). Use a concrete model such as `gpt-6-sol` for repeatable comparisons. Omitting it lets Codex choose from its configuration, so results can change when that configuration or its defaults change. GPT-6 Sol and Luna require Codex 0.156.1 or later; Astra requires 0.153.1 or later. The installation above includes a compatible runtime.
+Choose a model your account can access from [OpenAI's Codex model guide](https://learn.chatgpt.com/docs/models). Use a concrete model such as `gpt-6-sol` for repeatable comparisons. Omitting it lets Codex choose from its configuration, so results can change when that configuration or its defaults change. GPT-6 Sol and Luna require [Codex 0.156.1 or later](https://github.com/openai/codex/releases/tag/rust-v0.156.1); Astra requires 0.153.1 or later. The installation above includes a compatible runtime.
 
 Set reasoning effort when you need to compare speed and answer quality:
 
@@ -183,7 +183,7 @@ providers:
       web_search_mode: disabled
 ```
 
-Promptfoo clones a clean Git repository or copies other directories. A copy without its own `.git` directory, including a repository subdirectory, needs `skip_git_repo_check: true`. See [isolated workspaces](/docs/guides/evaluate-coding-agents#isolated-workspaces) for supported layouts and workspace artifacts.
+Promptfoo clones a clean Git repository or copies the directory, then removes the workspace after the step's assertions finish. A copied directory without its own `.git`, such as a repository subdirectory, needs `skip_git_repo_check: true`. Assertions can inspect the temporary path in `response.metadata.workingDir`. See [isolated workspaces](/docs/guides/evaluate-coding-agents#isolated-workspaces) for cloning requirements, explicit `'git'` and `'copy'` modes, and limits.
 
 For reproducible CI, also pin the SDK version, model, repository revision, and Codex configuration. A dedicated [Codex home](#authentication-and-environment) helps control user-level configuration and skills.
 
@@ -441,7 +441,7 @@ Set both environment variables before using this fragment, or remove the entries
 
 Process variables such as `CODEX_HOME`, proxy settings, certificate paths, and `SSH_AUTH_SOCK` are not inherited by default. Non-authentication fields in Promptfoo's `env` config are not forwarded to the subprocess either. `inherit_process_env: true` forwards the full process environment, with `cli_env` taking precedence. Variables passed to the CLI may also be available to agent commands; sandbox mode does not remove them.
 
-Native OpenAI API graders need API credentials even when the target Codex provider uses ChatGPT sign-in. See [grading providers](/docs/configuration/expected-outputs/model-graded) when configuring model-graded assertions.
+Promptfoo can use Codex sign-in for default text grading and synthesis when no higher-priority API credentials are available. Explicit OpenAI API graders still need API credentials even when the target Codex provider uses ChatGPT sign-in. See [grading providers](/docs/configuration/expected-outputs/model-graded) when configuring model-graded assertions.
 
 <Link id="option-3-run-on-amazon-bedrock" />
 
@@ -464,9 +464,11 @@ providers:
         AWS_SECRET_ACCESS_KEY: '{{env.AWS_SECRET_ACCESS_KEY}}'
 ```
 
-For temporary credentials, also pass `AWS_SESSION_TOKEN`. For profile-based authentication, forward the required AWS profile and configuration variables instead. Check [Bedrock model access and Regions](/docs/providers/aws-bedrock#openai-models) before running the eval. Codex 0.156.1 does not list GPT-6 Sol or Luna in its Bedrock catalog; use the direct Promptfoo Bedrock provider for those models.
+For temporary credentials, also pass `AWS_SESSION_TOKEN`. For profile-based authentication, forward the required AWS profile and configuration variables instead. Check [Bedrock model access and Regions](/docs/providers/aws-bedrock#openai-models) before running the eval.
 
 Promptfoo does not inject ambient OpenAI keys for a custom `model_provider` unless you explicitly supply `config.apiKey` or the keys in `cli_env`. Top-level `model_provider` takes precedence over `cli_config.model_provider`.
+
+Codex 0.156.1 does not list GPT-6 Sol or Luna in its [Bedrock catalog](https://github.com/openai/codex/blob/rust-v0.156.1/codex-rs/model-provider/src/amazon_bedrock/catalog.rs). For those models, use the [direct Bedrock provider](/docs/providers/aws-bedrock#openai-models) instead of the Codex runtime.
 
 The [Bedrock example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/bedrock) has complete setup instructions.
 
@@ -555,7 +557,7 @@ The legacy `collaboration_mode` field accepts `coding` or `plan` and forwards it
 
 Reasoning and cache-write counts are included in token details when Codex reports them. Cached input tokens are already part of the input total.
 
-If the requested model is omitted or unknown to the pricing table, `cost` is undefined. The SDK turn does not report the backend-resolved model, so Promptfoo cannot infer it for pricing. Cost estimates do not represent ChatGPT subscription usage or automatically account for Fast, Flex, or Batch pricing. Missing cache-write counts can understate costs. Codex's instructions, tool definitions, and conversation history can make input usage much larger than the visible prompt.
+If the requested model is omitted or unknown to the pricing table, `cost` is undefined. The SDK turn does not report the backend-resolved model, so Promptfoo cannot infer it for pricing. Cost estimates do not represent ChatGPT subscription usage or automatically account for Fast, Flex, or Batch pricing. See [OpenAI cost estimates](/docs/providers/openai#cost-estimates) for supported models. Missing cache-write counts can understate costs. Codex's instructions, tool definitions, and conversation history can make input usage much larger than the visible prompt.
 
 ## Troubleshooting
 
