@@ -5313,7 +5313,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       progressBarManager = new ProgressBarManager(isWebUI);
     }
 
-    this.options.progressCallback = (completed, total, index, evalStep, metrics) => {
+    processingContext.options.progressCallback = (completed, total, index, evalStep, metrics) => {
       if (originalProgressCallback) {
         originalProgressCallback(completed, total, index, evalStep, metrics);
       }

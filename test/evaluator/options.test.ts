@@ -5,12 +5,57 @@ import { randomUUID } from 'crypto';
 import { expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
+import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { type ApiProvider, ResultFailureReason, type TestSuite } from '../../src/types/index';
 import { mockApiProvider, mockApiProvider2, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator options and hooks', () => {
+  it.each([false, true])(
+    'reports completed rows to CI and the caller (timeout=%s)',
+    async (timedOut) => {
+      vi.useFakeTimers();
+      vi.stubEnv('CI', 'true');
+      const info = vi.spyOn(logger, 'info');
+      const progressCallback = vi.fn();
+      if (timedOut) {
+        vi.mocked(mockApiProvider.callApi).mockImplementation(
+          async (_prompt, _context, options) =>
+            new Promise((_resolve, reject) => {
+              options?.abortSignal?.addEventListener(
+                'abort',
+                () => reject(new DOMException('Aborted', 'AbortError')),
+                { once: true },
+              );
+            }),
+        );
+      }
+      try {
+        const suite: TestSuite = {
+          providers: [mockApiProvider],
+          prompts: [toPrompt('Fixture request')],
+          tests: [{}],
+        };
+        const evaluation = new Eval({});
+        const pending = evaluate(suite, evaluation, {
+          timeoutMs: timedOut ? 10 : 0,
+          progressCallback,
+        });
+        await vi.runAllTimersAsync();
+        await pending;
+        const summary = await evaluation.toEvaluateSummary();
+        expect(summary.stats.errors).toBe(timedOut ? 1 : 0);
+        expect(progressCallback).toHaveBeenCalledOnce();
+        expect(progressCallback.mock.calls[0].slice(0, 2)).toEqual([1, 1]);
+        expect(info).toHaveBeenCalledWith(expect.stringContaining('Complete! 1/1 tests'));
+      } finally {
+        info.mockRestore();
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
   it.each(['timeoutMs', 'maxEvalTimeMs'] as const)(
     'rejects invalid %s values before running providers or starting timers',
     async (name) => {
