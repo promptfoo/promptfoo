@@ -456,18 +456,26 @@ describeEvaluator('cancellation at target and comparison boundaries', () => {
         id: () => 'offline',
         callApi: async () => ({ output: 'ok' }),
       };
+      const record = new Eval({});
       try {
-        await expect(
-          evaluate(
-            {
-              providers: [provider],
-              prompts: [toPrompt('first'), toPrompt('second')],
-              tests: [{ assert: [{ type: 'select-best', value: 'fixture' }] }],
-            },
-            new Eval({}),
-            { abortSignal: controller.signal, timeoutMs: 0, maxEvalTimeMs: 0 },
-          ),
-        ).rejects.toThrow('grading failure');
+        await evaluate(
+          {
+            providers: [provider],
+            prompts: [toPrompt('first'), toPrompt('second')],
+            tests: [{ assert: [{ type: 'select-best', value: 'fixture' }] }],
+          },
+          record,
+          { abortSignal: controller.signal, timeoutMs: 0, maxEvalTimeMs: 0 },
+        );
+        const rows = await record.getResults();
+        expect(rows).toHaveLength(2);
+        for (const row of rows) {
+          expect(row.failureReason).toBe(ResultFailureReason.ERROR);
+          expect(row.error).toContain('Check the grader configuration and credentials');
+          expect(row.error).not.toContain('grading failure');
+          expect(row.error).not.toMatch(/^Aborted: /);
+        }
+        expect(record.getStats()).toMatchObject({ successes: 0, failures: 0, errors: 2 });
       } finally {
         compare.mockRestore();
       }
