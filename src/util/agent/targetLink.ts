@@ -171,7 +171,13 @@ async function followRedirects(
         break;
       }
       const nextUrl = new URL(location, currentUrl);
-      if (nextUrl.origin !== new URL(currentUrl).origin) {
+      const previousUrl = new URL(currentUrl);
+      const isHttpsUpgrade =
+        previousUrl.protocol === 'http:' &&
+        nextUrl.protocol === 'https:' &&
+        nextUrl.hostname === previousUrl.hostname &&
+        ((!previousUrl.port && !nextUrl.port) || nextUrl.port === previousUrl.port);
+      if (nextUrl.origin !== previousUrl.origin && !isHttpsUpgrade) {
         throw new Error('TargetLink HTTP probes do not follow cross-origin redirects');
       }
       currentUrl = nextUrl.href;

@@ -24,13 +24,17 @@ Treat Promptfoo configuration files and everything they reference or evaluate ag
 
 Promptfoo OSS is a local eval runner, not a sandbox for adversarial eval content. Adversarial data flowing through the configured template engine and eval pipeline (e.g., model output in grading prompts, variable values rendered through Nunjucks) is normal operation. However, if a code path outside the configured template engine or user-configured code-executing fields promotes runtime data to code, that is a vulnerability.
 
-**In scope for OSS:** runtime data promoted to code by a code path outside the configured template engine and user-configured code-executing fields; bypasses of supported isolation boundaries or hardening controls; data or secret leakage to destinations not configured to receive that data or secret.
+**In scope for OSS:** runtime data executed as code outside the configured template engine and code-executing fields; bypasses of documented isolation, access, or sharing controls; and data or credentials sent somewhere the user did not configure.
 
 **Out of scope for OSS:** adversarial eval content flowing through the configured template engine and eval pipeline; code execution from explicitly configured custom code or templates in fields that execute code; direct local API or browser access to the OSS local server (`promptfoo view`); and issues requiring users to run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, or model-output feedback loops with local privileges.
 
-Code Scan is best-effort analysis, not a guarantee that every vulnerability will be found. Routine false negatives and transient failures are out of scope; PR-controlled scan evasion, checkout escapes, runner-credential exposure, and tenant-isolation bypasses remain in scope.
+Code Scan does not sandbox repositories or guarantee complete findings. See the [repository security policy](https://github.com/promptfoo/promptfoo/blob/main/SECURITY.md#contributor-ci-and-automation-tooling) for report scope.
 
-Secret persistence or display that remains confined to the same local user account is generally treated as a hardening or privacy issue rather than a security-boundary bypass. It becomes in scope when Promptfoo bypasses a documented redaction or disable/opt-out control, or exposes that data outside the configured sharing or Cloud-backed path.
+When you share an eval, Promptfoo sends its snapshot to your Cloud organization, on-premises deployment, or configured self-hosted endpoint. Your account or config may also enable automatic sharing. A snapshot can include prompts, test vars, model outputs, grading results, traces, configuration, and media.
+
+Saved `PROMPTFOO_STRIP_*` settings remove their documented fields from eval results, exports, and shared snapshots, including shared traces. They do not disable sharing or redact arbitrary content in other fields. Failures of documented redactions or exclusions remain in scope.
+
+Sharing remains in scope if it bypasses a documented control, reaches the wrong destination, exposes another tenant's data, or includes fields or credentials the feature promises to protect. Data confined to your local account is a hardening or privacy issue unless a promised security or redaction control fails.
 
 ### Cloud Services
 
@@ -112,7 +116,8 @@ The following are out-of-scope:
 - Direct local API access or browser access to the OSS local server (`promptfoo view`)
 - Adversarial eval content flowing through the configured template engine and eval pipeline (e.g., model output in grading prompts or reports)
 - Issues requiring users to run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, or model-output feedback loops with local privileges
-- Sensitive data present only in local logs, databases, caches, reports, exports, or UI views under the same local user account, unless Promptfoo bypasses a documented redaction or disable/opt-out control or exposes that artifact outside the configured sharing or Cloud-backed path
+- Data that remains in your own local logs, databases, caches, reports, exports, or views, unless a promised security or redaction control fails
+- Eval snapshots sent to their intended recipients while sharing is enabled. Sharing-control bypasses, failed documented redactions or exclusions, unauthorized access, cross-tenant disclosure, and exposed provider credentials remain in scope
 - Reports based only on spoofed `Origin` or `Sec-Fetch-Site` headers from non-browser clients
 - Social engineering, phishing, or physical attacks
 - Volumetric denial of service

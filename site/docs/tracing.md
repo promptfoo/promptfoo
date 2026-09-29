@@ -352,8 +352,6 @@ A built-in sanitizer masks common credential-shaped keys (`authorization`, `api_
 `token`, `password`, `cookie`, …) when traces are read, but does not prevent those values
 from being stored. Don't rely on `redactAttributes` alone to cover built-in provider spans.
 
-These rules do not redact arbitrary text in logs or other artifacts. Shared traces also apply the eval's saved `PROMPTFOO_STRIP_*` settings; see [sharing](/docs/usage/sharing/).
-
 :::
 
 Trace retention (`storage.retentionDays`) prunes traces and spans older than the given number

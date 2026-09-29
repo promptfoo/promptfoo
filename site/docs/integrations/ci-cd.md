@@ -500,7 +500,7 @@ cache:
    - Consider on-premise deployments for enterprise
 
 3. **Data Privacy**
-   - Use output stripping to reduce data in exported or displayed results. It does not remove data already stored in the local database or blob store and may not apply to every trace, diagnostic, or shared field:
+   - Strip large or sensitive fields from results, exports, and shared snapshots. These flags do not disable sharing or remove sensitive content from other fields:
 
    ```bash
    export PROMPTFOO_STRIP_RESPONSE_OUTPUT=true
