@@ -11,12 +11,8 @@
  * - Cache token tracking
  */
 
-import path from 'path';
-
 import { getCache, isCacheEnabled } from '../../cache';
-import cliState from '../../cliState';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
-import { importModule } from '../../esm';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import {
@@ -24,15 +20,22 @@ import {
   type GenAISpanResult,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
-import { parseFileUrl } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import {
+  getClaudeModelWarningName,
   isAlwaysOnAdaptiveThinkingClaudeModel,
+  isClaudeThinkingEnabled,
+  isForcedToolChoiceUnsupportedClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
   normalizeClaudeThinkingConfig,
+  resolveClaudeSamplingParams,
 } from '../anthropic/util';
+import {
+  executeProviderFunctionCallback,
+  loadProviderCallbackFromFileUrl,
+} from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
-import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
+import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from '../mcp/util';
 import { providerRegistry } from '../providerRegistry';
 import {
   isOpenAIToolArray,
@@ -64,6 +67,7 @@ import type { DocumentType } from '@smithy/types';
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/providers';
 import type { TokenUsage, VarValue } from '../../types/shared';
+import type { ClaudeEffort, ClaudeThinkingConfig } from '../anthropic/types';
 import type { MCPConfig, MCPTool } from '../mcp/types';
 
 /**
@@ -80,15 +84,8 @@ export interface BedrockConverseOptions extends BedrockOptions {
   stopSequences?: string[];
   stop?: string[]; // Alias for compatibility
 
-  // Extended thinking (Claude models)
-  thinking?:
-    | {
-        type: 'enabled';
-        budget_tokens: number;
-        display?: 'summarized' | 'omitted';
-      }
-    | { type: 'adaptive'; display?: 'summarized' | 'omitted' }
-    | { type: 'disabled' };
+  // Shared with the Anthropic Messages and Bedrock InvokeModel providers.
+  thinking?: ClaudeThinkingConfig;
 
   // Reasoning configuration (Amazon Nova 2 models)
   // Note: When reasoning is enabled, temperature/topP/topK must NOT be set
@@ -238,41 +235,6 @@ function transformMCPToolsToBedrockConverse(tools: MCPTool[]): BedrockConverseTo
   return result;
 }
 
-function normalizeMCPToolContent(content: unknown): string {
-  if (content == null) {
-    return '';
-  }
-  if (typeof content === 'string') {
-    return content;
-  }
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => {
-        if (typeof part === 'string') {
-          return part;
-        }
-        if (part && typeof part === 'object') {
-          if ('text' in part && (part as { text?: unknown }).text != null) {
-            return String((part as { text?: unknown }).text);
-          }
-          if ('json' in part) {
-            return JSON.stringify((part as { json?: unknown }).json);
-          }
-          if ('data' in part) {
-            return JSON.stringify((part as { data?: unknown }).data);
-          }
-          logger.debug('[Bedrock Converse] Unknown MCP content shape, serializing as JSON', {
-            keys: Object.keys(part as object),
-          });
-          return JSON.stringify(part);
-        }
-        return String(part);
-      })
-      .join('\n');
-  }
-  return JSON.stringify(content);
-}
-
 /**
  * Extract a printable message from an unknown thrown value without losing
  * non-`Error` payloads to `[object Object]`.
@@ -332,7 +294,12 @@ function joinMcpErrors(errors: string[]): string | undefined {
 }
 
 function formatMcpToolResult(name: string, content: unknown): string {
-  return `MCP Tool Result (${name}): ${normalizeMCPToolContent(content)}`;
+  const normalizedContent = normalizeMcpToolContent(content, (part) => {
+    logger.debug('[Bedrock Converse] Unknown MCP content shape, serializing as JSON', {
+      keys: Object.keys(part),
+    });
+  });
+  return `MCP Tool Result (${name}): ${normalizedContent}`;
 }
 
 function formatMcpToolError(name: string, message: string): string {
@@ -829,97 +796,25 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
    * @returns The loaded function
    */
   private async loadExternalFunction(fileRef: string): Promise<Function> {
-    const { filePath, functionName } = parseFileUrl(fileRef);
-
-    try {
-      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
-      logger.debug(
-        `[Bedrock Converse] Loading function from ${resolvedPath}${functionName ? `:${functionName}` : ''}`,
-      );
-
-      const requiredModule = await importModule(resolvedPath, functionName);
-
-      if (typeof requiredModule === 'function') {
-        return requiredModule;
-      } else if (
-        requiredModule &&
-        typeof requiredModule === 'object' &&
-        functionName &&
-        functionName in requiredModule
-      ) {
-        const fn = requiredModule[functionName];
-        if (typeof fn === 'function') {
-          return fn;
-        }
-      }
-
-      throw new Error(
-        `Function callback malformed: ${filePath} must export ${
-          functionName
-            ? `a named function '${functionName}'`
-            : 'a function or have a default export as a function'
-        }`,
-      );
-    } catch (error: any) {
-      throw new Error(`Error loading function from ${filePath}: ${error.message || String(error)}`);
-    }
+    return loadProviderCallbackFromFileUrl(fileRef, '[Bedrock Converse]');
   }
 
   /**
    * Executes a function callback with proper error handling
    */
-  private async executeFunctionCallback(functionName: string, args: string): Promise<string> {
-    try {
-      // Check if we've already loaded this function
-      let callback = this.loadedFunctionCallbacks[functionName];
-
-      // If not loaded yet, try to load it now
-      if (!callback) {
-        const callbackRef = this.config.functionToolCallbacks?.[functionName];
-
-        if (callbackRef && typeof callbackRef === 'string') {
-          const callbackStr: string = callbackRef;
-          if (callbackStr.startsWith('file://')) {
-            callback = await this.loadExternalFunction(callbackStr);
-          } else {
-            callback = new Function('return ' + callbackStr)();
-          }
-
-          // Cache for future use
-          this.loadedFunctionCallbacks[functionName] = callback;
-        } else if (typeof callbackRef === 'function') {
-          callback = callbackRef;
-          this.loadedFunctionCallbacks[functionName] = callback;
-        }
-      }
-
-      if (!callback) {
-        throw new Error(`No callback found for function '${functionName}'`);
-      }
-
-      // Execute the callback
-      logger.debug(`[Bedrock Converse] Executing function '${functionName}' with args: ${args}`);
-      const result = await callback(args);
-
-      // Format the result
-      if (result === undefined || result === null) {
-        return '';
-      } else if (typeof result === 'object') {
-        try {
-          return JSON.stringify(result);
-        } catch (error) {
-          logger.warn(`Error stringifying result from function '${functionName}': ${error}`);
-          return String(result);
-        }
-      } else {
-        return String(result);
-      }
-    } catch (error: any) {
-      logger.error(
-        `[Bedrock Converse] Error executing function '${functionName}': ${error.message || String(error)}`,
-      );
-      throw error;
-    }
+  private async executeFunctionCallback(
+    functionName: string,
+    args: string,
+    callId?: string,
+  ): Promise<string> {
+    return executeProviderFunctionCallback({
+      functionName,
+      args,
+      callId,
+      callbacks: this.config.functionToolCallbacks,
+      cache: this.loadedFunctionCallbacks,
+      logPrefix: '[Bedrock Converse]',
+    });
   }
 
   /**
@@ -967,8 +862,28 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     // ValidationException. Drop both regardless of where they came from (config
     // or AWS_BEDROCK_TEMPERATURE / AWS_BEDROCK_TOP_P).
     const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
-    const temperature = reasoningEnabled || samplingParamsDeprecated ? undefined : temperatureValue;
-    const topP = reasoningEnabled || samplingParamsDeprecated ? undefined : topPValue;
+    let temperature = reasoningEnabled || samplingParamsDeprecated ? undefined : temperatureValue;
+    let topP = reasoningEnabled || samplingParamsDeprecated ? undefined : topPValue;
+    // Converse relays Claude's own rules as ValidationExceptions: no temperature with topP,
+    // and with extended thinking no temperature and a topP of at least 0.95. Other model
+    // families accept both, so only Claude models go through the shared resolver.
+    if (this.modelName.includes('anthropic.claude')) {
+      const rawThinking = this.config.additionalModelRequestFields?.thinking as
+        | { type?: string }
+        | undefined;
+      const { sampling, warnings } = resolveClaudeSamplingParams(
+        { temperature, top_p: topP },
+        {
+          thinkingEnabled: isClaudeThinkingEnabled(this.config.thinking ?? rawThinking),
+          samplingParamsDeprecated,
+        },
+      );
+      for (const warning of warnings) {
+        logger.warn(warning);
+      }
+      temperature = sampling.temperature;
+      topP = sampling.top_p;
+    }
 
     // Only return config if at least one field is set
     if (
@@ -1040,13 +955,17 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     const requestedToolChoice = configToolChoice
       ? convertToolChoiceToConverseFormat(configToolChoice)
       : undefined;
+    const modelRejectsForcedToolChoice = isForcedToolChoiceUnsupportedClaudeModel(this.modelName);
     const dropForcedToolChoice =
-      isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName) &&
+      (modelRejectsForcedToolChoice || isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName)) &&
       requestedToolChoice !== undefined &&
       ('any' in requestedToolChoice || 'tool' in requestedToolChoice);
     if (dropForcedToolChoice && !this.forcedToolChoiceRemovalWarned) {
+      const modelName = getClaudeModelWarningName(this.modelName) ?? 'this Claude model';
       logger.warn(
-        'Forced tool choice (any/tool) is incompatible with the always-on adaptive thinking of Claude Fable 5 and Claude Mythos 5 and has been omitted. The model decides when to call tools; remove toolChoice to silence this warning.',
+        modelRejectsForcedToolChoice
+          ? `Forced tool choice (any/tool) is not supported on ${modelName} and has been omitted. The model decides when to call tools; remove toolChoice to silence this warning.`
+          : `Forced tool choice (any/tool) is incompatible with the always-on adaptive thinking of ${modelName} and has been omitted. The model decides when to call tools; remove toolChoice to silence this warning.`,
       );
       this.forcedToolChoiceRemovalWarned = true;
     }
@@ -1076,8 +995,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     }
 
     return {
-      guardrailIdentifier: String(this.config.guardrailIdentifier),
-      guardrailVersion: String(this.config.guardrailVersion || 'DRAFT'),
+      // YAML can deserialize unquoted guardrail values as numbers despite their TypeScript types.
+      guardrailIdentifier: String(this.config.guardrailIdentifier as unknown),
+      guardrailVersion: String((this.config.guardrailVersion || 'DRAFT') as unknown),
       ...(this.config.trace ? { trace: this.config.trace as GuardrailTrace } : {}),
     };
   }
@@ -1089,17 +1009,26 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     const fields: Record<string, unknown> = {
       ...(this.config.additionalModelRequestFields || {}),
     };
-    const alwaysOnAdaptiveThinking = isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName);
-
-    // Raw additional fields must not bypass Fable's model-level constraints.
-    if (alwaysOnAdaptiveThinking) {
+    // Converse has no typed effort option, but `output_config.effort` is a supported escape
+    // hatch through these raw fields, so read it back out for the effort-capped thinking rules
+    // (turning thinking off at `xhigh`/`max` is a 400 on Opus 5 and Sonnet 5.5).
+    const effort = (fields.output_config as { effort?: ClaudeEffort } | undefined)?.effort;
+    // Raw additional fields must not bypass the model's sampling/thinking constraints. Every
+    // sampling-deprecated Claude model (Claude 5, Opus 4.7/4.8) rejects temperature/top_p/top_k,
+    // so strip them from the raw fields too; normalizeClaudeThinkingConfig then converts enabled
+    // -> adaptive and applies the model's rules for `disabled` (dropped, or `between_tools`).
+    if (isSamplingParamsDeprecatedClaudeModel(this.modelName)) {
       delete fields.temperature;
       delete fields.top_p;
       delete fields.top_k;
       const additionalThinking = fields.thinking as
         | { type: string; display?: 'summarized' | 'omitted' }
         | undefined;
-      const normalizedThinking = normalizeClaudeThinkingConfig(this.modelName, additionalThinking);
+      const normalizedThinking = normalizeClaudeThinkingConfig(
+        this.modelName,
+        additionalThinking,
+        effort,
+      );
       if (normalizedThinking === undefined) {
         delete fields.thinking;
       } else {
@@ -1112,6 +1041,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       const normalizedThinking = normalizeClaudeThinkingConfig(
         this.modelName,
         this.config.thinking,
+        effort,
       );
       if (normalizedThinking !== undefined) {
         fields.thinking = normalizedThinking;
@@ -1177,7 +1107,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       topP: inferenceConfig?.topP,
       stopSequences: inferenceConfig?.stopSequences,
       // Promptfoo context from test case if available
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,
@@ -1224,13 +1154,12 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       context?.vars,
       context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
     );
-    const toolsDisabled = isDisabledToolChoice(
-      this.getEffectiveToolChoice(
-        context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
-      ),
-    );
+    const toolsDisabled = this.isRequestToolsDisabled(context);
     const guardrailConfig = this.buildGuardrailConfig();
     const additionalModelRequestFields = this.buildAdditionalModelRequestFields();
+    const betweenToolsThinking =
+      (additionalModelRequestFields as { thinking?: { type?: string } } | undefined)?.thinking
+        ?.type === 'between_tools';
     const performanceConfig = this.buildPerformanceConfig();
     const serviceTier = this.buildServiceTier();
 
@@ -1271,7 +1200,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       if (cachedResponse) {
         logger.debug('Returning cached response');
         const parsed = JSON.parse(cachedResponse as string) as ConverseCommandOutput;
-        const result = await this.parseResponse(parsed, toolsDisabled);
+        const result = await this.parseResponse(parsed, toolsDisabled, betweenToolsThinking);
         return { ...result, cached: true };
       }
     }
@@ -1321,13 +1250,14 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       hasMetrics: !!response.metrics,
     });
 
-    return await this.parseResponse(response, toolsDisabled);
+    return await this.parseResponse(response, toolsDisabled, betweenToolsThinking);
   }
 
   /**
    * Resolves the effective tool choice for a request without touching the MCP
    * client. Used by `callApi`/`callApiStreaming` to short-circuit MCP init for
-   * tool-disabled requests so a hung MCP transport never stalls them.
+   * tool-disabled requests so a hung MCP transport never stalls them, and to supply
+   * the `toolsDisabled` flag those methods pass on to `parseResponse`.
    */
   private isRequestToolsDisabled(context?: CallApiContextParams): boolean {
     return isDisabledToolChoice(
@@ -1471,6 +1401,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   private async parseResponse(
     response: ConverseCommandOutput,
     toolsDisabled = false,
+    betweenToolsThinking = false,
   ): Promise<ProviderResponse> {
     // Extract output text
     const outputMessage = response.output?.message;
@@ -1613,7 +1544,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
               typeof block.toolUse.input === 'string'
                 ? block.toolUse.input
                 : JSON.stringify(block.toolUse.input || {});
-            const result = await this.executeFunctionCallback(functionName, args);
+            const result = await this.executeFunctionCallback(
+              functionName,
+              args,
+              block.toolUse.toolUseId,
+            );
             dispatchResults.push(result);
             handledIndexes.add(idx);
           } catch (err) {
@@ -1645,6 +1580,15 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     }
 
     if (dispatchResults.length > 0) {
+      if (betweenToolsThinking) {
+        const progress = extractTextFromContentBlocks(
+          content.filter((block) => block.reasoningContent),
+          showThinking,
+        );
+        if (progress) {
+          dispatchResults.unshift(progress);
+        }
+      }
       // Surface MCP failures via the response `error` field so downstream
       // consumers (assertions, exit codes, redteam grader) treat broken MCP
       // calls as failures rather than greenlighting them on the strength of an
@@ -1709,11 +1653,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       context?.vars,
       context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
     );
-    const toolsDisabled = isDisabledToolChoice(
-      this.getEffectiveToolChoice(
-        context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
-      ),
-    );
+    const toolsDisabled = this.isRequestToolsDisabled(context);
     const guardrailConfig = this.buildGuardrailConfig();
     const additionalModelRequestFields = this.buildAdditionalModelRequestFields();
     const performanceConfig = this.buildPerformanceConfig();

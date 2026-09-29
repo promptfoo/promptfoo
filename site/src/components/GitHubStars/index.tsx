@@ -46,13 +46,16 @@ function setCachedStars(stars: string): void {
 }
 
 export default function GitHubStars(): React.ReactElement {
-  const [stars, setStars] = useState<string>(
-    () => getCachedStars() || SITE_CONSTANTS.GITHUB_STARS_DISPLAY,
-  );
+  // Always start from the build-time constant so the first client render matches the
+  // server-rendered HTML. Reading localStorage during render would hydrate a returning
+  // visitor with their cached count and mismatch the SSR markup on every page.
+  const [stars, setStars] = useState<string>(SITE_CONSTANTS.GITHUB_STARS_DISPLAY);
 
   useEffect(() => {
-    // Skip fetch if we have cached data
-    if (getCachedStars()) {
+    // Prefer cached data and skip the network call entirely when it is still fresh.
+    const cached = getCachedStars();
+    if (cached) {
+      setStars(cached);
       return;
     }
 
