@@ -1637,6 +1637,33 @@ describe('fetchWithRetries', () => {
     expect(cancel).toHaveBeenCalledOnce();
   });
 
+  it.each([0, 1])('releases a header-only rate-limit response with %i retries', async (retries) => {
+    vi.mocked(getEnvBool).mockReturnValue(false);
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    const response = new Response(new ReadableStream({ cancel }), {
+      status: 503,
+      headers: { 'x-ratelimit-remaining-requests': '0', 'retry-after': '0.001' },
+    });
+    const success = createMockResponse();
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(response)
+      .mockImplementationOnce(async () => {
+        expect(cancel).toHaveBeenCalledOnce();
+        return success;
+      });
+
+    const pending = fetchWithRetries('https://example.com', {}, 1000, retries);
+    if (retries) {
+      await expect(pending).resolves.toBe(success);
+    } else {
+      await expect(pending).rejects.toThrow('Rate limited');
+    }
+
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(global.fetch).toHaveBeenCalledTimes(retries + 1);
+  });
+
   it('should handle rate limits with proper backoff', async () => {
     const rateLimitedResponse = createMockResponse({
       status: 429,

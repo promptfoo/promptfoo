@@ -677,6 +677,8 @@ async function handleRateLimitedResponse(
   if (isHardRateLimit) {
     const { body, code, type } = await peekRateLimitBody(response);
     rateLimitError = buildHttpRateLimitError(response, body, code, type);
+  } else {
+    void response.body?.cancel().catch(() => undefined);
   }
 
   // Hard quota failures (e.g. insufficient_quota) won't resolve on retry. Fail
