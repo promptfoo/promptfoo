@@ -50,19 +50,13 @@ const { connectionMocks } = vi.hoisted(() => {
   return { connectionMocks: { MockConnection, instances } };
 });
 
-vi.mock('../../../src/providers/voice/connections/googleLive', () => ({
-  GoogleLiveConnection: connectionMocks.MockConnection,
-}));
-vi.mock('../../../src/providers/voice/connections/novaSonic', () => ({
-  NovaSonicConnection: connectionMocks.MockConnection,
-}));
 vi.mock('../../../src/providers/voice/connections/openaiRealtime', () => ({
   OpenAIRealtimeConnection: connectionMocks.MockConnection,
 }));
 
 import { VoiceConversationOrchestrator } from '../../../src/providers/voice/orchestrator';
 
-function providerConfig(provider: 'openai' | 'google' | 'bedrock', model = `${provider}-model`) {
+function providerConfig(provider: 'openai', model = `${provider}-model`) {
   return {
     provider,
     model,
@@ -74,7 +68,7 @@ function providerConfig(provider: 'openai' | 'google' | 'bedrock', model = `${pr
 function config(overrides: Partial<OrchestratorConfig> = {}): OrchestratorConfig {
   return {
     targetConfig: providerConfig('openai'),
-    simulatedUserConfig: providerConfig('google'),
+    simulatedUserConfig: providerConfig('openai'),
     turnDetection: {
       mode: 'server_vad',
       silenceThresholdMs: 500,
@@ -144,6 +138,7 @@ describe('VoiceConversationOrchestrator', () => {
     target.emit('audio_done');
     expect(user.requestResponse).not.toHaveBeenCalled();
     target.emit('transcript_delta', 'Welcome ');
+    target.emit('usage', { prompt: 10, completion: 5, total: 15, numRequests: 1 });
     target.emit('transcript_done', 'Welcome caller');
     target.emit('speech_stopped');
 
@@ -157,6 +152,7 @@ describe('VoiceConversationOrchestrator', () => {
     user.emit('audio_done');
     expect(target.commitAudio).not.toHaveBeenCalled();
     user.emit('transcript_delta', 'Thanks ');
+    user.emit('usage', { prompt: 7, completion: 3, total: 10, cached: 2, numRequests: 1 });
     user.emit('transcript_done', `Thanks ${STOP_MARKER}`);
     user.emit('speech_stopped');
 
@@ -168,6 +164,13 @@ describe('VoiceConversationOrchestrator', () => {
         turnCount: 2,
       }),
     );
+    expect(completed.tokenUsage).toEqual({
+      prompt: 17,
+      completion: 8,
+      total: 25,
+      cached: 2,
+      numRequests: 2,
+    });
     expect(completed.transcript).toContain('Welcome caller');
     expect(completed.targetAudio).toBeInstanceOf(Buffer);
     expect(completed.combinedAudio).toBeInstanceOf(Buffer);
@@ -225,7 +228,7 @@ describe('VoiceConversationOrchestrator', () => {
     const orchestrator = new VoiceConversationOrchestrator(
       config({
         targetConfig: { ...providerConfig('openai'), sampleRate: undefined },
-        simulatedUserConfig: { ...providerConfig('google'), sampleRate: undefined },
+        simulatedUserConfig: { ...providerConfig('openai'), sampleRate: undefined },
       }),
     );
     const { result, target, user } = await startConversation(orchestrator);
@@ -410,21 +413,15 @@ describe('VoiceConversationOrchestrator', () => {
     expect(result.transcript).toBe(`Agent: Fresh target response\n---\nUser: ${STOP_MARKER}`);
   });
 
-  it('rejects invalid start states, unknown providers, and connection errors', async () => {
+  it('rejects invalid start states and connection errors', async () => {
     const active = new VoiceConversationOrchestrator(config());
     const activeStart = await startConversation(active);
     await expect(active.start()).rejects.toThrow('already in state active');
     await active.stop();
     await activeStart.result;
 
-    await expect(
-      new VoiceConversationOrchestrator(
-        config({ targetConfig: { ...providerConfig('openai'), provider: 'mystery' as 'openai' } }),
-      ).start(),
-    ).rejects.toThrow('Unknown voice provider type');
-
     const failedConnection = new VoiceConversationOrchestrator(
-      config({ targetConfig: providerConfig('bedrock', 'fail-connect') }),
+      config({ targetConfig: providerConfig('openai', 'fail-connect') }),
     );
     await expect(failedConnection.start()).rejects.toThrow('connect failed');
   });

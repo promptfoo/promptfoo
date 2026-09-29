@@ -1,12 +1,12 @@
-import { getEnvBool } from '../../envars';
-import { cloudConfig } from '../../globalConfig/cloud';
+import cliState from '../../cliState';
 import logger from '../../logger';
-import { fetchWithProxy } from '../../util/fetch/index';
 import { getNunjucksEngine } from '../../util/templates';
+import { providerRegistry } from '../providerRegistry';
 import { VoiceConversationOrchestrator } from './orchestrator';
 import { STOP_MARKER } from './transcriptAccumulator';
 
 import type { ProviderResponse } from '../../contracts/providers';
+import type { EnvOverrides } from '../../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -32,33 +32,15 @@ type SimulatedVoiceUserProviderOptions = ProviderOptions & {
   config?: SimulatedVoiceUserConfig;
 };
 
-/**
- * Simulated Voice User Provider
- *
- * Simulates a voice user interacting with a realtime voice agent
- * using bidirectional audio streaming. The simulated user is powered
- * by OpenAI Realtime API (or other voice providers) and follows
- * instructions to achieve a goal in the conversation.
- *
- * @example
- * ```yaml
- * providers:
- *   - id: simulated-voice-user
- *     config:
- *       instructions: "You are a customer calling to check your account balance."
- *       maxTurns: 5
- *       targetProvider: openai
- *       targetModel: gpt-realtime
- *       simulatedUserProvider: openai
- *       simulatedUserModel: gpt-realtime
- * ```
- */
 export class SimulatedVoiceUser implements ApiProvider {
   private readonly identifier: string;
   private readonly voiceConfig: SimulatedVoiceUserConfig;
+  private readonly env?: EnvOverrides;
+  private readonly conversations = new Set<VoiceConversationOrchestrator>();
 
-  constructor({ id, label, config }: SimulatedVoiceUserProviderOptions) {
+  constructor({ id, label, config, env }: SimulatedVoiceUserProviderOptions) {
     this.identifier = id ?? label ?? 'simulated-voice-user';
+    this.env = env;
     this.voiceConfig = {
       maxTurns: DEFAULT_MAX_TURNS,
       timeoutMs: DEFAULT_TIMEOUT_MS,
@@ -99,7 +81,7 @@ export class SimulatedVoiceUser implements ApiProvider {
       provider,
       model: this.voiceConfig.targetModel,
       apiKey: this.voiceConfig.targetApiKey,
-      voice: this.voiceConfig.targetVoice ?? (provider === 'openai' ? 'alloy' : undefined),
+      voice: this.voiceConfig.targetVoice ?? 'alloy',
       instructions,
       audioFormat: this.voiceConfig.audioFormat || DEFAULT_AUDIO_FORMAT,
       sampleRate: this.getAudioSampleRate(),
@@ -110,7 +92,6 @@ export class SimulatedVoiceUser implements ApiProvider {
   }
 
   private buildSimulatedUserConfig(instructions: string): VoiceProviderConfig {
-    // Build the simulated user instructions with the goal
     const simulatedUserInstructions = this.buildSimulatedUserInstructions(instructions);
     const provider = this.voiceConfig.simulatedUserProvider || 'openai';
 
@@ -118,7 +99,7 @@ export class SimulatedVoiceUser implements ApiProvider {
       provider,
       model: this.voiceConfig.simulatedUserModel,
       apiKey: this.voiceConfig.simulatedUserApiKey,
-      voice: this.voiceConfig.simulatedUserVoice ?? (provider === 'openai' ? 'echo' : undefined),
+      voice: this.voiceConfig.simulatedUserVoice ?? 'echo',
       instructions: simulatedUserInstructions,
       audioFormat: this.voiceConfig.audioFormat || DEFAULT_AUDIO_FORMAT,
       sampleRate: this.getAudioSampleRate(),
@@ -128,22 +109,11 @@ export class SimulatedVoiceUser implements ApiProvider {
   }
 
   private buildSimulatedUserInstructions(goal: string): string {
-    const baseInstructions = `
-You are simulating a user in a voice conversation. Your goal is:
+    return `You are the caller in a voice conversation. Your goal is:
 
 ${goal}
 
-IMPORTANT INSTRUCTIONS:
-1. Speak naturally as a human would in a phone call or voice conversation.
-2. Be conversational and respond appropriately to what you hear.
-3. Work towards achieving your goal through the conversation.
-4. When you have achieved your goal OR the conversation has reached a natural end, say "${STOP_MARKER}" to end the conversation.
-5. If you've made multiple attempts and cannot achieve your goal, say "${STOP_MARKER}" and explain why.
-
-Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user in this interaction.
-`.trim();
-
-    return baseInstructions;
+Speak naturally and respond to the agent. Say "${STOP_MARKER}" when your goal is achieved, the conversation ends, or you decide to give up.`;
   }
 
   private shouldRecordConversation(): boolean {
@@ -151,34 +121,39 @@ Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user
   }
 
   private shouldTargetSpeakFirst(): boolean {
-    return this.voiceConfig.targetSpeaksFirst ?? this.voiceConfig.targetProvider !== 'bedrock';
+    return this.voiceConfig.targetSpeaksFirst ?? true;
   }
 
   private validateLocalAudioConfiguration(): string | undefined {
-    const audioFormat = this.voiceConfig.audioFormat || DEFAULT_AUDIO_FORMAT;
-    const targetProvider = this.voiceConfig.targetProvider || 'openai';
-    const simulatedUserProvider = this.voiceConfig.simulatedUserProvider || 'openai';
-
     if (
-      audioFormat !== 'pcm16' &&
-      (targetProvider !== 'openai' || simulatedUserProvider !== 'openai')
+      (this.voiceConfig.targetProvider ?? 'openai') !== 'openai' ||
+      (this.voiceConfig.simulatedUserProvider ?? 'openai') !== 'openai'
     ) {
-      return `${audioFormat} audio is supported only when both local voice endpoints use OpenAI. Use pcm16 with Google Live or Amazon Nova Sonic.`;
+      return 'Simulated voice conversations support OpenAI Realtime endpoints only.';
     }
-
-    if (targetProvider === 'bedrock' && simulatedUserProvider === 'bedrock') {
-      return 'Local Amazon Nova Sonic conversations require at least one non-Bedrock endpoint to initiate an audio turn.';
-    }
-
     return undefined;
   }
 
-  async callApi(
+  async shutdown(): Promise<void> {
+    await Promise.all(
+      [...this.conversations].map((conversation) => conversation.stop('user_hangup')),
+    );
+  }
+
+  callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const run = () => this.runConversation(prompt, context, options);
+    return this.env ? cliState.withEnv({ ...cliState.env, ...this.env }, run) : run();
+  }
+
+  private async runConversation(
     prompt: string,
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    // Render the instructions with context variables
     const rawInstructions = this.voiceConfig.instructions || DEFAULT_INSTRUCTIONS_TEMPLATE;
     const instructions = getNunjucksEngine().renderString(rawInstructions, context?.vars || {});
 
@@ -189,25 +164,14 @@ Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user
       simulatedUserProvider: this.voiceConfig.simulatedUserProvider,
     });
 
-    const useRemote = cloudConfig.isEnabled() && !getEnvBool('PROMPTFOO_DISABLE_REMOTE_GENERATION');
-    if (useRemote) {
-      return this.callRemoteVoiceTau(
-        prompt,
-        this.buildSimulatedUserInstructions(instructions),
-        callApiOptions?.abortSignal,
-      );
-    }
-
     const configurationError = this.validateLocalAudioConfiguration();
     if (configurationError) {
       return { error: configurationError };
     }
 
-    // Build configs for both connections
     const targetConfig = this.buildTargetConfig(prompt);
     const simulatedUserConfig = this.buildSimulatedUserConfig(instructions);
 
-    // Create and run the orchestrator
     const orchestrator = new VoiceConversationOrchestrator({
       targetConfig,
       simulatedUserConfig,
@@ -218,7 +182,6 @@ Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user
       recordFullAudio: this.shouldRecordConversation(),
     });
 
-    // Setup event logging
     this.setupOrchestratorLogging(orchestrator);
 
     const abortSignal = callApiOptions?.abortSignal;
@@ -226,6 +189,8 @@ Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user
       return { error: 'Voice conversation aborted' };
     }
 
+    this.conversations.add(orchestrator);
+    providerRegistry.register(this);
     let abortHandler: (() => void) | undefined;
     try {
       const conversation = orchestrator.start();
@@ -244,91 +209,22 @@ Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user
             }),
           ])
         : await conversation;
-      return this.formatResult(result);
+      return result.stopReason === 'user_hangup'
+        ? { error: 'Voice conversation aborted', tokenUsage: result.tokenUsage }
+        : this.formatResult(result);
     } catch (error) {
       logger.error('[SimulatedVoiceUser] Conversation failed:', { error });
       return {
         error: error instanceof Error ? error.message : String(error),
       };
     } finally {
+      this.conversations.delete(orchestrator);
+      if (this.conversations.size === 0) {
+        providerRegistry.unregister(this);
+      }
       if (abortHandler) {
         abortSignal?.removeEventListener('abort', abortHandler);
       }
-    }
-  }
-
-  private async callRemoteVoiceTau(
-    targetInstructions: string,
-    simulatedUserInstructions: string,
-    abortSignal?: AbortSignal,
-  ): Promise<ProviderResponse> {
-    const apiKey = cloudConfig.getApiKey();
-    const url = `${cloudConfig.getApiHost()}/api/v1/task`;
-
-    if (!apiKey) {
-      return {
-        error:
-          'Remote voice-tau requires Promptfoo Cloud authentication. Run `promptfoo auth login` or set PROMPTFOO_API_KEY.',
-      };
-    }
-
-    logger.debug('[SimulatedVoiceUser] Using remote voice-tau task');
-
-    try {
-      const timeoutSignal = AbortSignal.timeout(
-        (this.voiceConfig.timeoutMs || DEFAULT_TIMEOUT_MS) + 15000,
-      );
-      const requestSignal = abortSignal
-        ? AbortSignal.any([abortSignal, timeoutSignal])
-        : timeoutSignal;
-      const response = await fetchWithProxy(
-        url,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-            'x-promptfoo-silent': 'true',
-          },
-          body: JSON.stringify({
-            task: 'voice-tau',
-            targetProvider: this.voiceConfig.targetProvider || 'openai',
-            targetModel: this.voiceConfig.targetModel,
-            targetVoice: this.voiceConfig.targetVoice,
-            targetInstructions,
-            simulatedUserProvider: this.voiceConfig.simulatedUserProvider || 'openai',
-            simulatedUserModel: this.voiceConfig.simulatedUserModel,
-            simulatedUserVoice: this.voiceConfig.simulatedUserVoice,
-            simulatedUserInstructions,
-            maxTurns: this.voiceConfig.maxTurns || DEFAULT_MAX_TURNS,
-            timeoutMs: this.voiceConfig.timeoutMs || DEFAULT_TIMEOUT_MS,
-            targetSpeaksFirst: this.shouldTargetSpeakFirst(),
-            audioFormat: this.voiceConfig.audioFormat || DEFAULT_AUDIO_FORMAT,
-            sampleRate: this.getAudioSampleRate(),
-            recordConversation: this.shouldRecordConversation(),
-            turnDetection: this.buildTurnDetectionConfig(),
-          }),
-        },
-        requestSignal,
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        logger.error('[SimulatedVoiceUser] Remote voice-tau failed:', {
-          status: response.status,
-        });
-        return {
-          error: `Remote voice-tau failed: ${response.status} ${errorText}`,
-        };
-      }
-
-      const result = await response.json();
-      return this.formatResult(result);
-    } catch (error) {
-      logger.error('[SimulatedVoiceUser] Remote voice-tau request failed');
-      return {
-        error: error instanceof Error ? error.message : String(error),
-      };
     }
   }
 
@@ -349,26 +245,18 @@ Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user
     });
   }
 
-  private formatResult(
-    result: Omit<ConversationResult, 'combinedAudio' | 'targetAudio' | 'simulatedUserAudio'> & {
-      combinedAudio?: Buffer | string;
-      targetAudio?: Buffer | string;
-      simulatedUserAudio?: Buffer | string;
-    },
-  ): ProviderResponse {
-    // Build the output transcript
+  private formatResult(result: ConversationResult): ProviderResponse {
     const output = result.turns
       .map((turn) => `${turn.speaker === 'agent' ? 'Assistant' : 'User'}: ${turn.text}`)
       .join('\n---\n');
 
-    // Use combined stereo audio (left=agent, right=user) for best playback experience
-    // Falls back to target-only audio if combined not available
     const audioData = this.shouldRecordConversation()
       ? result.combinedAudio || result.targetAudio
       : undefined;
 
     return {
       output,
+      tokenUsage: result.tokenUsage,
       ...(result.stopReason === 'error'
         ? { error: result.error || 'Voice conversation failed before completion' }
         : {}),
@@ -380,7 +268,6 @@ Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user
         success: result.success,
         targetProvider: result.metadata?.targetProvider,
         simulatedUserProvider: result.metadata?.simulatedUserProvider,
-        // Include separate track references for advanced use cases
         audioTracks: this.shouldRecordConversation()
           ? {
               combined: result.combinedAudio ? 'stereo (left=agent, right=user)' : undefined,
@@ -391,7 +278,7 @@ Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user
       },
       audio: audioData
         ? {
-            data: typeof audioData === 'string' ? audioData : audioData.toString('base64'),
+            data: audioData.toString('base64'),
             format: 'wav',
           }
         : undefined,

@@ -316,6 +316,14 @@ describe('OpenAIRealtimeConnection', () => {
     (status) => {
       const error = vi.fn();
       connection.on('error', error);
+      const completed = vi.fn();
+      connection.on('transcript_done', completed);
+      (connection as any).handleMessage(
+        JSON.stringify({
+          type: 'response.output_audio_transcript.done',
+          transcript: 'Finished ###STOP###',
+        }),
+      );
       (connection as any).handleMessage(
         JSON.stringify({
           type: 'response.done',
@@ -325,8 +333,41 @@ describe('OpenAIRealtimeConnection', () => {
       expect(error).toHaveBeenCalledWith(
         expect.objectContaining({ message: `OpenAI Realtime response ${status}: fixture reason` }),
       );
+      expect(completed).not.toHaveBeenCalled();
     },
   );
+
+  it('reports usage before completing the transcript', () => {
+    const events: string[] = [];
+    const usage = vi.fn(() => events.push('usage'));
+    connection.on('usage', usage);
+    connection.on('transcript_done', () => events.push('transcript'));
+    (connection as any).handleMessage(
+      JSON.stringify({ type: 'response.output_audio_transcript.done', transcript: 'Done' }),
+    );
+    (connection as any).handleMessage(
+      JSON.stringify({
+        type: 'response.done',
+        response: {
+          status: 'completed',
+          usage: {
+            input_tokens: 12,
+            output_tokens: 8,
+            total_tokens: 20,
+            input_token_details: { cached_tokens: 3 },
+          },
+        },
+      }),
+    );
+    expect(usage).toHaveBeenCalledWith({
+      prompt: 12,
+      completion: 8,
+      total: 20,
+      cached: 3,
+      numRequests: 1,
+    });
+    expect(events).toEqual(['usage', 'transcript']);
+  });
 
   it('allows a requested response cancellation', () => {
     const error = vi.fn();
@@ -533,7 +574,7 @@ describe('OpenAIRealtimeConnection', () => {
       expect(handler).toHaveBeenCalledWith('Hello ');
     });
 
-    it('should emit transcript_done on response.output_audio_transcript.done', () => {
+    it('waits for terminal success before completing the transcript', () => {
       const handler = vi.fn();
       connection.on('transcript_done', handler);
 
@@ -544,6 +585,10 @@ describe('OpenAIRealtimeConnection', () => {
         }),
       );
 
+      expect(handler).not.toHaveBeenCalled();
+      (connection as any).handleMessage(
+        JSON.stringify({ type: 'response.done', response: { status: 'completed' } }),
+      );
       expect(handler).toHaveBeenCalledWith('Hello world');
     });
 
@@ -634,6 +679,9 @@ describe('OpenAIRealtimeConnection', () => {
       );
       (connection as any).handleMessage(JSON.stringify({ type: 'error', error: {} }));
 
+      (connection as any).handleMessage(
+        JSON.stringify({ type: 'response.done', response: { status: 'completed' } }),
+      );
       expect(transcriptDone).toHaveBeenCalledWith('');
       expect(inputTranscript).toHaveBeenCalledWith('');
       expect(errorHandler).toHaveBeenCalledWith(

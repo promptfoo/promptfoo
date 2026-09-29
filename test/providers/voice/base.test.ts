@@ -61,10 +61,6 @@ class TestVoiceConnection extends BaseVoiceConnection {
     this.startPingInterval(ms);
   }
 
-  apiKey(): string {
-    return this.getApiKey();
-  }
-
   protected handleMessage(data: Buffer | string): void {
     if (data.toString() === 'bad') {
       throw new Error('bad message');
@@ -109,7 +105,6 @@ describe('BaseVoiceConnection', () => {
     expect(connection.getConfig()).toEqual(
       expect.objectContaining({ model: 'voice-model', apiKey: 'explicit-key' }),
     );
-    expect(connection.apiKey()).toBe('explicit-key');
 
     const ready = vi.fn();
     connection.on('ready', ready);
@@ -252,14 +247,5 @@ describe('BaseVoiceConnection', () => {
     );
     await vi.advanceTimersByTimeAsync(50);
     await timeoutExpectation;
-  });
-
-  it('loads provider API keys from supported environments', () => {
-    vi.stubEnv('OPENAI_API_KEY', 'openai-key');
-    vi.stubEnv('GOOGLE_API_KEY', 'google-key');
-
-    expect(new TestVoiceConnection(config).apiKey()).toBe('openai-key');
-    expect(new TestVoiceConnection({ ...config, provider: 'google' }).apiKey()).toBe('google-key');
-    expect(new TestVoiceConnection({ ...config, provider: 'bedrock' }).apiKey()).toBe('');
   });
 });

@@ -32,11 +32,10 @@ function toRealtimeAudioFormat(format: AudioFormat) {
 
 export class OpenAIRealtimeConnection extends BaseVoiceConnection {
   private model: string;
-  // Track cumulative audio position across responses (for playback timeline).
-  // This is the key to proper audio alignment: each chunk's timestamp is based
-  // on how much audio has been produced, rather than when it was received.
+  // Audio position follows sample duration, independent of network delivery time.
   private cumulativeAudioPositionMs = 0;
   private cancelRequested = false;
+  private pendingTranscript: string | undefined;
 
   constructor(config: VoiceProviderConfig) {
     super(config);
@@ -237,9 +236,6 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
         const audioData = Buffer.from(msg.delta as string, 'base64');
         const durationMs = calculateDuration(audioData.length, sampleRate, audioFormat);
 
-        // Use cumulative audio position as timestamp (not real time).
-        // This ensures proper playback alignment: a 10s audio response gets
-        // timestamps spanning 0-10000ms regardless of network streaming speed.
         const timestamp = this.cumulativeAudioPositionMs;
 
         this.emit('audio_delta', {
@@ -250,7 +246,6 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
           sampleRate: sampleRate,
         });
 
-        // Advance cumulative position for next chunk
         this.cumulativeAudioPositionMs += durationMs;
         break;
       }
@@ -269,7 +264,7 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
         break;
 
       case 'response.output_audio_transcript.done':
-        this.emit('transcript_done', (msg.transcript as string) || '');
+        this.pendingTranscript = (msg.transcript as string) || '';
         break;
 
       // Input transcription (what the model heard)
@@ -305,15 +300,39 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
 
       case 'response.done': {
         const response = msg.response as
-          | { status?: string; status_details?: { reason?: string; error?: { message?: string } } }
+          | {
+              status?: string;
+              status_details?: { reason?: string; error?: { message?: string } };
+              usage?: {
+                input_tokens?: number;
+                output_tokens?: number;
+                total_tokens?: number;
+                input_token_details?: { cached_tokens?: number };
+              };
+            }
           | undefined;
+        const usage = response?.usage;
+        if (usage) {
+          this.emit('usage', {
+            prompt: usage.input_tokens ?? 0,
+            completion: usage.output_tokens ?? 0,
+            total: usage.total_tokens ?? (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0),
+            cached: usage.input_token_details?.cached_tokens ?? 0,
+            numRequests: 1,
+          });
+        }
         const status = response?.status;
         if (status && status !== 'completed' && !(status === 'cancelled' && this.cancelRequested)) {
           const detail =
             response?.status_details?.error?.message ?? response?.status_details?.reason;
+          this.pendingTranscript = undefined;
           this.handleError(
             new Error(`OpenAI Realtime response ${status}${detail ? `: ${detail}` : ''}`),
           );
+        } else if (this.pendingTranscript !== undefined) {
+          const transcript = this.pendingTranscript;
+          this.pendingTranscript = undefined;
+          this.emit('transcript_done', transcript);
         }
         this.cancelRequested = false;
         break;

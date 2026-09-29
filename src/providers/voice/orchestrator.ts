@@ -1,20 +1,18 @@
 import { EventEmitter } from 'events';
 
 import logger from '../../logger';
+import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
 import { AudioBuffer, createStereoWav } from './audioBuffer';
-import { GoogleLiveConnection } from './connections/googleLive';
-import { NovaSonicConnection } from './connections/novaSonic';
 import { OpenAIRealtimeConnection } from './connections/openaiRealtime';
 import { STOP_MARKER, TranscriptAccumulator } from './transcriptAccumulator';
 import { TurnDetector } from './turnDetection';
 
-import type { BaseVoiceConnection } from './connections/base';
+import type { TokenUsage } from '../../contracts/shared';
 import type {
   AudioChunk,
   ConversationResult,
   ConversationState,
   OrchestratorConfig,
-  VoiceProviderConfig,
   VoiceTurn,
 } from './types';
 
@@ -22,33 +20,17 @@ const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_TIMEOUT_MS = 120000; // 2 minutes
 const DEFAULT_SAMPLE_RATE = 24000;
 
-function createConnection(
-  providerType: 'openai' | 'google' | 'bedrock',
-  config: VoiceProviderConfig,
-): BaseVoiceConnection {
-  switch (providerType) {
-    case 'openai':
-      return new OpenAIRealtimeConnection(config);
-    case 'google':
-      return new GoogleLiveConnection(config);
-    case 'bedrock':
-      // NovaSonicConnection implements the same interface but extends EventEmitter directly
-      return new NovaSonicConnection(config) as unknown as BaseVoiceConnection;
-    default:
-      throw new Error(`Unknown voice provider type: ${providerType}`);
-  }
-}
-
 export class VoiceConversationOrchestrator extends EventEmitter {
   private config: OrchestratorConfig;
-  private targetConnection: BaseVoiceConnection | null = null;
-  private simulatedUserConnection: BaseVoiceConnection | null = null;
+  private targetConnection: OpenAIRealtimeConnection | null = null;
+  private simulatedUserConnection: OpenAIRealtimeConnection | null = null;
   private turnDetector: TurnDetector;
   private transcript: TranscriptAccumulator;
   private targetAudioBuffer: AudioBuffer;
   private simulatedUserAudioBuffer: AudioBuffer;
   private state: ConversationState = 'idle';
   private turnCount = 0;
+  private tokenUsage: TokenUsage = {};
   private startTime = 0;
   private conversationTimeout: ReturnType<typeof setTimeout> | null = null;
   private isTargetSpeaking = false;
@@ -118,17 +100,14 @@ export class VoiceConversationOrchestrator extends EventEmitter {
     this.emit('state_change', this.state);
 
     try {
-      this.targetConnection = createConnection(
-        this.config.targetConfig.provider as 'openai' | 'google' | 'bedrock',
-        this.config.targetConfig,
-      );
-      this.simulatedUserConnection = createConnection(
-        this.config.simulatedUserConfig.provider as 'openai' | 'google' | 'bedrock',
-        this.config.simulatedUserConfig,
-      );
+      this.targetConnection = new OpenAIRealtimeConnection(this.config.targetConfig);
+      this.simulatedUserConnection = new OpenAIRealtimeConnection(this.config.simulatedUserConfig);
     } catch (error) {
       this.cleanup();
       throw error;
+    }
+    for (const connection of [this.targetConnection, this.simulatedUserConnection]) {
+      connection.on('usage', (usage: TokenUsage) => accumulateTokenUsage(this.tokenUsage, usage));
     }
     this.setupTargetHandlers();
     this.setupSimulatedUserHandlers();
@@ -240,7 +219,7 @@ export class VoiceConversationOrchestrator extends EventEmitter {
     return false;
   }
 
-  private async requestNextResponse(connection: BaseVoiceConnection): Promise<void> {
+  private async requestNextResponse(connection: OpenAIRealtimeConnection): Promise<void> {
     try {
       await connection.commitAudio();
       if (
@@ -592,6 +571,7 @@ export class VoiceConversationOrchestrator extends EventEmitter {
       turns,
       turnCount: this.turnCount,
       duration: endTime - this.startTime,
+      tokenUsage: { ...this.tokenUsage },
       targetAudio,
       simulatedUserAudio,
       combinedAudio,
@@ -654,6 +634,7 @@ export class VoiceConversationOrchestrator extends EventEmitter {
     this.pendingTurnDetectorSpeaker = null;
     this.activeTurnDetectorSpeaker = null;
     this.turnCount = 0;
+    this.tokenUsage = {};
     this.globalAudioPositionMs = 0;
     this.targetAudioOffsetMs = 0;
     this.userAudioOffsetMs = 0;

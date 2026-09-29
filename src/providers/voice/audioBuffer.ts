@@ -227,7 +227,7 @@ export function calculateDuration(bytes: number, sampleRate: number, format: Aud
   const bytesPerSample = BYTES_PER_SAMPLE[format];
   const samples = bytes / bytesPerSample;
   const seconds = samples / sampleRate;
-  return Math.round(seconds * 1000);
+  return seconds * 1000;
 }
 
 function placeStereoChunks(
@@ -247,7 +247,7 @@ function placeStereoChunks(
       chunk.sampleRate,
       sampleRate,
     );
-    const startPosition = Math.floor(((chunk.timestamp - startTime) / 1000) * sampleRate);
+    const startPosition = Math.round(((chunk.timestamp - startTime) / 1000) * sampleRate);
     const numSamples = pcmData.length / bytesPerSample;
 
     for (let i = 0; i < numSamples; i++) {
@@ -278,12 +278,7 @@ function placeStereoChunks(
  * @returns Stereo WAV buffer with properly aligned audio
  */
 export function createStereoWav(agentBuffer: AudioBuffer, userBuffer: AudioBuffer): Buffer {
-  const sampleRate = Math.max(
-    agentBuffer.getSampleRate(),
-    userBuffer.getSampleRate(),
-    ...agentBuffer.getChunks().map((chunk) => chunk.sampleRate),
-    ...userBuffer.getChunks().map((chunk) => chunk.sampleRate),
-  );
+  const sampleRate = Math.max(agentBuffer.getSampleRate(), userBuffer.getSampleRate());
   const bytesPerSample = 2; // PCM16
   const bytesPerFrame = 4; // Stereo: 2 bytes × 2 channels
 

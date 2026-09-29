@@ -400,3 +400,42 @@ describe('createStereoWav', () => {
     expect(wav.readInt16LE(44 + 16000 * 4 + 2)).toBe(2000);
   });
 });
+
+describe('streaming recording fidelity', () => {
+  it('keeps every sample at fractional-millisecond chunk boundaries', () => {
+    const agent = new AudioBuffer('pcm16', 24000);
+    const user = new AudioBuffer('pcm16', 24000);
+    const duration = calculateDuration(1024, 24000, 'pcm16');
+    for (let i = 0; i < 3; i++) {
+      const data = Buffer.alloc(1024);
+      for (let sample = 0; sample < 512; sample++) {
+        data.writeInt16LE(i + 1, sample * 2);
+      }
+      agent.append({
+        data: data.toString('base64'),
+        timestamp: i * duration,
+        duration,
+        format: 'pcm16',
+        sampleRate: 24000,
+      });
+    }
+    const wav = createStereoWav(agent, user);
+    for (let sample = 0; sample < 1536; sample++) {
+      expect(wav.readInt16LE(44 + sample * 4)).toBe(Math.floor(sample / 512) + 1);
+    }
+  });
+
+  it('uses the requested recording rate for higher-rate transport chunks', () => {
+    const agent = new AudioBuffer('pcm16', 16000);
+    const user = new AudioBuffer('pcm16', 16000);
+    agent.append({
+      data: Buffer.alloc(4800).toString('base64'),
+      timestamp: 0,
+      duration: 100,
+      format: 'pcm16',
+      sampleRate: 24000,
+    });
+    expect(createStereoWav(agent, user).readUInt32LE(24)).toBe(16000);
+    expect(agent.toWav().readUInt32LE(24)).toBe(16000);
+  });
+});

@@ -1,20 +1,7 @@
-/**
- * Voice Conversation Types
- *
- * Core type definitions for the simulated voice user system.
- * These types are used across the orchestrator, connections, and provider.
- */
-
 import type { TokenUsage } from '../../contracts/shared';
 
-/**
- * Supported audio formats for voice providers.
- */
 export type AudioFormat = 'pcm16' | 'g711_ulaw' | 'g711_alaw';
 
-/**
- * A single chunk of audio data.
- */
 export interface AudioChunk {
   /** Base64 encoded audio data */
   data: string;
@@ -28,9 +15,6 @@ export interface AudioChunk {
   sampleRate: number;
 }
 
-/**
- * A single turn in the voice conversation (simplified for transcript).
- */
 export interface VoiceTurn {
   /** Who spoke during this turn */
   speaker: 'user' | 'agent';
@@ -40,9 +24,6 @@ export interface VoiceTurn {
   timestamp?: number;
 }
 
-/**
- * Current state of the conversation (state machine).
- */
 export type ConversationState =
   | 'idle'
   | 'connecting'
@@ -52,9 +33,6 @@ export type ConversationState =
   | 'completed'
   | 'error';
 
-/**
- * Reason the conversation ended.
- */
 export type StopReason =
   | 'goal_achieved' // User said ###STOP###
   | 'max_turns' // Reached maximum turn limit
@@ -62,9 +40,6 @@ export type StopReason =
   | 'error' // An error occurred
   | 'user_hangup'; // User naturally ended conversation
 
-/**
- * Result of a completed voice conversation.
- */
 export interface ConversationResult {
   /** Whether the conversation succeeded */
   success: boolean;
@@ -96,14 +71,8 @@ export interface ConversationResult {
   };
 }
 
-/**
- * Turn detection mode.
- */
 export type TurnDetectionMode = 'server_vad' | 'silence' | 'hybrid';
 
-/**
- * Configuration for turn detection.
- */
 export interface TurnDetectionConfig {
   /** Detection mode */
   mode: TurnDetectionMode;
@@ -119,9 +88,6 @@ export interface TurnDetectionConfig {
   prefixPaddingMs: number;
 }
 
-/**
- * Default turn detection configuration.
- */
 export const DEFAULT_TURN_DETECTION: TurnDetectionConfig = {
   mode: 'server_vad',
   silenceThresholdMs: 700,
@@ -131,17 +97,11 @@ export const DEFAULT_TURN_DETECTION: TurnDetectionConfig = {
   prefixPaddingMs: 300,
 };
 
-/**
- * Supported voice provider types.
- */
-export type VoiceProviderType = 'openai' | 'google' | 'bedrock';
+export type VoiceProviderType = 'openai';
 
-/**
- * Configuration for a voice provider connection.
- */
 export interface VoiceProviderConfig {
   /** Provider type */
-  provider: VoiceProviderType | string;
+  provider: VoiceProviderType;
   /** Model to use (e.g., 'gpt-realtime') */
   model?: string;
   /** Voice ID */
@@ -158,9 +118,6 @@ export interface VoiceProviderConfig {
   sampleRate?: number;
 }
 
-/**
- * Configuration for the voice conversation orchestrator.
- */
 export interface OrchestratorConfig {
   /** Configuration for the target voice provider */
   targetConfig: VoiceProviderConfig;
@@ -168,7 +125,7 @@ export interface OrchestratorConfig {
   simulatedUserConfig: VoiceProviderConfig;
   /** Turn detection configuration */
   turnDetection: TurnDetectionConfig;
-  /** Maximum turns per speaker */
+  /** Maximum completed speaker utterances */
   maxTurns?: number;
   /** Overall timeout in milliseconds */
   timeoutMs?: number;
@@ -178,13 +135,10 @@ export interface OrchestratorConfig {
   recordFullAudio?: boolean;
 }
 
-/**
- * Configuration for the SimulatedVoiceUser provider.
- */
 export interface SimulatedVoiceUserConfig {
   /** User persona and goals (supports Nunjucks templating) */
   instructions?: string;
-  /** Maximum conversation turns per speaker */
+  /** Maximum completed speaker utterances */
   maxTurns?: number;
   /** Overall timeout in milliseconds */
   timeoutMs?: number;
@@ -195,7 +149,7 @@ export interface SimulatedVoiceUserConfig {
 
   // Target provider config
   /** Provider for the target agent */
-  targetProvider?: VoiceProviderType | string;
+  targetProvider?: VoiceProviderType;
   /** Model for the target agent */
   targetModel?: string;
   /** API key for the target provider */
@@ -205,7 +159,7 @@ export interface SimulatedVoiceUserConfig {
 
   // Simulated user provider config
   /** Provider for the simulated user */
-  simulatedUserProvider?: VoiceProviderType | string;
+  simulatedUserProvider?: VoiceProviderType;
   /** Model for the simulated user */
   simulatedUserModel?: string;
   /** API key for the simulated user provider */
@@ -229,15 +183,10 @@ export interface SimulatedVoiceUserConfig {
 
   /** Whether the target speaks first */
   targetSpeaksFirst?: boolean;
-  /** Allow interruptions */
-  enableInterruptions?: boolean;
   /** Record full conversation audio */
   recordConversation?: boolean;
 }
 
-/**
- * Base WebSocket message structure.
- */
 export interface RealtimeMessage {
   type?: string;
   event_id?: string;
@@ -247,20 +196,11 @@ export interface RealtimeMessage {
   audio?: string;
   transcript?: string;
   error?: Record<string, unknown>;
-  // Google specific
-  setupComplete?: boolean;
-  serverContent?: Record<string, unknown>;
-  toolCall?: Record<string, unknown>;
-  realtimeInput?: Record<string, unknown>;
-  candidates?: Array<Record<string, unknown>>;
-  streamingCustomOp?: Record<string, unknown>;
   [key: string]: unknown;
 }
 
-/**
- * Events emitted by voice connections.
- */
 export interface VoiceConnectionEvents {
+  usage: (usage: TokenUsage) => void;
   /** Connection is ready */
   ready: () => void;
   /** Session has been configured */
@@ -285,19 +225,12 @@ export interface VoiceConnectionEvents {
   close: () => void;
 }
 
-/**
- * Audio sample rates commonly used.
- */
 export const SAMPLE_RATES = {
   OPENAI_REALTIME: 24000,
-  GOOGLE_LIVE: 24000,
   TELEPHONE: 8000,
   CD_QUALITY: 44100,
 } as const;
 
-/**
- * Bytes per sample for different formats.
- */
 export const BYTES_PER_SAMPLE: Record<AudioFormat, number> = {
   pcm16: 2,
   g711_ulaw: 1,

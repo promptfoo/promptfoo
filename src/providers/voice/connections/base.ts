@@ -210,22 +210,6 @@ export abstract class BaseVoiceConnection extends EventEmitter {
     this.stopPingInterval();
   }
 
-  protected getApiKey(): string {
-    if (this.config.apiKey) {
-      return this.config.apiKey;
-    }
-
-    // Try provider-specific env vars
-    switch (this.config.provider) {
-      case 'openai':
-        return process.env.OPENAI_API_KEY || '';
-      case 'google':
-        return process.env.GOOGLE_API_KEY || '';
-      default:
-        return '';
-    }
-  }
-
   emit<K extends keyof VoiceConnectionEvents>(
     event: K,
     ...args: Parameters<VoiceConnectionEvents[K]>
