@@ -922,9 +922,19 @@ describe('ResultsCharts', () => {
       const { unmount } = render(<ResultsCharts scores={scores} />);
       const region = screen.getByRole('region', { name: 'Score distribution chart' });
       const summary = region.querySelector('p')?.textContent ?? '';
-      const table_ = within(region).getByRole('table').textContent ?? '';
+      const tableElement = within(region).getByRole('table');
+      const table_ = tableElement.textContent ?? '';
+      const rows = within(tableElement)
+        .getAllByRole('row')
+        .slice(1)
+        .map((row) => ({
+          range: within(row).getByRole('rowheader').textContent,
+          counts: within(row)
+            .getAllByRole('cell')
+            .map((cell) => cell.textContent),
+        }));
       unmount();
-      return { summary, table: table_ };
+      return { summary, table: table_, rows };
     };
 
     it('distinguishes histograms with equal totals and ranges but different per-prompt bins', () => {
@@ -941,7 +951,10 @@ describe('ResultsCharts', () => {
 
     it('counts identical scores in the accessible histogram table', () => {
       const histogram = renderHistogram(buildHistogramTable([1, 1], [1, 1]));
-      expect(histogram.table).toContain('4');
+      expect(histogram.rows[0]).toEqual({ range: '1 to 1.1', counts: ['2', '2'] });
+      expect(
+        histogram.rows.slice(1).every((row) => row.counts.every((count) => count === '0')),
+      ).toBe(true);
     });
 
     const buildScatterTable = (
