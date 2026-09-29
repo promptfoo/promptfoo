@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearCache } from '../../src/cache';
+import { clearCache, isCacheEnabled, withCacheEnabled } from '../../src/cache';
 import { OpenRouterProvider } from '../../src/providers/openrouter';
 import * as fetchModule from '../../src/util/fetch/index';
 import { mockProcessEnv } from '../util/utils';
@@ -22,6 +22,68 @@ describe('OpenRouter', () => {
   afterEach(async () => {
     await clearCache();
     vi.clearAllMocks();
+  });
+
+  describe('credential selection', () => {
+    let restoreEnv: () => void;
+
+    beforeEach(() => {
+      restoreEnv = mockProcessEnv({
+        OPENROUTER_API_KEY: 'process-router-key',
+        CUSTOM_OPENROUTER_KEY: 'process-custom-key',
+        OPENAI_API_KEY: 'unrelated-openai-key',
+      });
+      mockedFetchWithRetries.mockReset();
+    });
+
+    afterEach(() => {
+      restoreEnv();
+      mockedFetchWithRetries.mockReset();
+    });
+
+    it.each([
+      [undefined, undefined, 'scoped-router-key'],
+      ['CUSTOM_OPENROUTER_KEY', undefined, 'scoped-custom-key'],
+      ['OPENAI_API_KEY', undefined, 'selected-openai-key'],
+      ['CUSTOM_OPENROUTER_KEY', 'explicit-key', 'explicit-key'],
+    ])('sends the selected credential (%s, %s)', async (apiKeyEnvar, apiKey, expectedKey) => {
+      mockedFetchWithRetries.mockResolvedValueOnce(
+        Response.json({ choices: [{ message: { content: 'Hello' } }], usage: { cost: 0.25 } }),
+      );
+      const provider = new OpenRouterProvider('fixture/model', {
+        config: { apiKeyEnvar, apiKey, apiBaseUrl: 'https://proxy.example.com/v1' },
+        env: {
+          OPENROUTER_API_KEY: 'scoped-router-key',
+          CUSTOM_OPENROUTER_KEY: 'scoped-custom-key',
+          OPENAI_API_KEY: 'selected-openai-key',
+        },
+      });
+
+      expect(await provider.callApi('Hello')).toMatchObject({ output: 'Hello', cost: 0.25 });
+      expect(mockedFetchWithRetries).toHaveBeenCalledWith(
+        'https://proxy.example.com/v1/chat/completions',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: `Bearer ${expectedKey}` }),
+        }),
+        expect.any(Number),
+        undefined,
+      );
+    });
+
+    it.each([undefined, 'CUSTOM_OPENROUTER_KEY'])(
+      'leaves a missing selected credential unavailable (%s)',
+      (apiKeyEnvar) => {
+        mockProcessEnv({ OPENROUTER_API_KEY: undefined, CUSTOM_OPENROUTER_KEY: undefined });
+        const provider = new OpenRouterProvider('fixture/model', {
+          config: { apiKeyEnvar },
+          env: {
+            OPENAI_API_KEY: 'unrelated-scoped-openai-key',
+            OPENROUTER_API_KEY: apiKeyEnvar ? 'nonselected-router-key' : undefined,
+          },
+        });
+        expect(provider.getApiKey()).toBeUndefined();
+      },
+    );
   });
 
   describe('OpenRouterProvider', () => {
@@ -166,38 +228,55 @@ describe('OpenRouter', () => {
       }
     });
 
-    it('should preserve a trailing slash on the configured apiBaseUrl as-is', async () => {
-      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+    it.each([
+      {
+        apiBaseUrl: 'https://proxy.example.com/openrouter/api/v1/',
+        expectedUrl: 'https://proxy.example.com/openrouter/api/v1/chat/completions',
+      },
+      {
+        apiBaseUrl: 'https://proxy.example.com/openrouter/api/v1///',
+        expectedUrl: 'https://proxy.example.com/openrouter/api/v1/chat/completions',
+      },
+      {
+        apiBaseUrl: 'https://proxy.example.com/openrouter/api/v1/?api-version=2026-08-18',
+        expectedUrl:
+          'https://proxy.example.com/openrouter/api/v1/chat/completions?api-version=2026-08-18',
+      },
+    ])(
+      'should normalize the request URL for apiBaseUrl $apiBaseUrl',
+      async ({ apiBaseUrl, expectedUrl }) => {
+        const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
 
-      try {
-        const customApiBaseUrl = 'https://proxy.example.com/openrouter/api/v1/';
-        const provider = new OpenRouterProvider('google/gemini-2.5-pro', {
-          config: {
-            apiBaseUrl: customApiBaseUrl,
-          },
-        });
+        try {
+          const provider = new OpenRouterProvider('google/gemini-2.5-pro', {
+            config: {
+              apiBaseUrl,
+            },
+          });
 
-        const response = new Response(
-          JSON.stringify({
-            choices: [{ message: { content: 'Test output' }, finish_reason: 'stop' }],
-            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-          }),
-          {
-            status: 200,
-            statusText: 'OK',
-            headers: new Headers({ 'Content-Type': 'application/json' }),
-          },
-        );
-        mockedFetchWithRetries.mockResolvedValueOnce(response);
+          const response = new Response(
+            JSON.stringify({
+              choices: [{ message: { content: 'Test output' }, finish_reason: 'stop' }],
+              usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          );
+          mockedFetchWithRetries.mockResolvedValueOnce(response);
 
-        await provider.callApi('Test prompt');
+          await provider.callApi('Test prompt');
 
-        const [url] = mockedFetchWithRetries.mock.calls[0] ?? [];
-        expect(url).toBe(`${customApiBaseUrl}/chat/completions`);
-      } finally {
-        restoreEnv();
-      }
-    });
+          const [url] = mockedFetchWithRetries.mock.calls[0] ?? [];
+          expect(provider.config.apiBaseUrl).toBe(apiBaseUrl);
+          expect(url).toBe(expectedUrl);
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
 
     it('should combine apiBaseUrl override with passthrough options on the request body', async () => {
       const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
@@ -235,6 +314,495 @@ describe('OpenRouter', () => {
       } finally {
         restoreEnv();
       }
+    });
+
+    it('returns a clean error instead of crashing on an empty choices array', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('google/gemini-2.5-pro', {});
+
+        // A 200 response with an empty `choices` array (soft moderation block,
+        // upstream hiccup, or n>1 edge cases). Before the fix this made
+        // `data.choices[0]` undefined and `.message` threw an opaque TypeError.
+        const response = new Response(
+          JSON.stringify({
+            choices: [],
+            usage: { total_tokens: 5, prompt_tokens: 5, completion_tokens: 0 },
+          }),
+          {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          },
+        );
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.error).toContain('Malformed response data');
+        expect(result.output).toBeUndefined();
+        // The malformed-response return must carry the cache-hit status so
+        // downstream doesn't treat a cached failure as a live provider call.
+        expect(result.cached).toBe(false);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('returns a clean error instead of crashing when the response has no choices field', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('google/gemini-2.5-pro', {});
+
+        const response = new Response(
+          JSON.stringify({
+            usage: { total_tokens: 5, prompt_tokens: 5, completion_tokens: 0 },
+          }),
+          {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          },
+        );
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.error).toContain('Malformed response data');
+        expect(result.cached).toBe(false);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    describe('response cost', () => {
+      beforeEach(() => {
+        mockedFetchWithRetries.mockReset();
+      });
+
+      function mockResponse(usage: unknown, status = 200) {
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          Response.json(
+            { choices: [{ message: { content: 'Cost fixture' }, finish_reason: 'stop' }], usage },
+            { status, statusText: status === 200 ? 'OK' : 'Bad Request' },
+          ),
+        );
+      }
+
+      function provider(config: Record<string, unknown> = {}, model = 'openai/gpt-4o') {
+        return new OpenRouterProvider(model, { config: { apiKey: 'test-key', ...config } });
+      }
+
+      describe('BYOK accounting', () => {
+        it('preserves the documented non-BYOK charge and independent cost components', async () => {
+          mockResponse({
+            prompt_tokens: 10,
+            completion_tokens: 15,
+            total_tokens: 25,
+            cost: 0.0012,
+            is_byok: false,
+            cost_details: {
+              upstream_inference_cost: null,
+              upstream_inference_prompt_cost: 0.0008,
+              upstream_inference_completions_cost: 0.0004,
+            },
+          });
+          const result = await provider().callApi('Cost prompt');
+          expect(result.cost).toBe(0.0012);
+          expect(result.metadata?.openrouter).toEqual({
+            accountCharge: 0.0012,
+            isByok: false,
+            reportedUpstreamPromptCost: 0.0008,
+            reportedUpstreamCompletionCost: 0.0004,
+          });
+        });
+
+        it.each([
+          { charge: 0, details: { upstream_inference_cost: 0.02 } },
+          { charge: 0.001, details: { upstream_inference_cost: 0.02 } },
+          { charge: 0.25, details: { upstream_inference_cost: 0 } },
+          { charge: 0.25, details: undefined },
+          { charge: 0.25, details: null },
+          { charge: 0.25, details: { upstream_inference_cost: '0.02' } },
+        ])('leaves explicit BYOK cost unknown (%j)', async ({ charge, details }) => {
+          mockResponse({ cost: charge, is_byok: true, cost_details: details });
+          const result = await provider().callApi('Cost prompt');
+          expect(result.output).toBe('Cost fixture');
+          expect(result.error).toBeUndefined();
+          expect(result.cost).toBeUndefined();
+          expect(result.metadata?.openrouter).toMatchObject({
+            accountCharge: charge,
+            isByok: true,
+          });
+        });
+
+        it('keeps missing BYOK status unknown in the documented usage-accounting example', async () => {
+          mockResponse({
+            prompt_tokens: 194,
+            completion_tokens: 2,
+            total_tokens: 196,
+            cost: 0.95,
+            cost_details: { upstream_inference_cost: 19 },
+          });
+          const result = await provider().callApi('Cost prompt');
+          expect(result.cost).toBe(0.95);
+          expect(result.metadata?.openrouter).toEqual({
+            accountCharge: 0.95,
+            reportedUpstreamInferenceCost: 19,
+          });
+        });
+
+        it.each(['true', 1, null, {}, []])(
+          'does not coerce an invalid BYOK flag (%j)',
+          async (flag) => {
+            mockResponse({ cost: 0.25, is_byok: flag });
+            const result = await provider().callApi('Cost prompt');
+            expect(result.cost).toBe(0.25);
+            expect(result.metadata?.openrouter).toEqual({ accountCharge: 0.25 });
+          },
+        );
+
+        it('does not add upstream or server-tool components to a non-BYOK charge', async () => {
+          mockResponse({
+            cost: 0.25,
+            is_byok: false,
+            cost_details: {
+              upstream_inference_cost: 0.25,
+              upstream_inference_prompt_cost: 0.1,
+              upstream_inference_completions_cost: 0.15,
+              server_tool_cost: 0.05,
+            },
+          });
+          const result = await provider().callApi('Cost prompt');
+          expect(result.cost).toBe(0.25);
+          expect(result.metadata?.openrouter).toEqual({
+            accountCharge: 0.25,
+            isByok: false,
+            reportedUpstreamInferenceCost: 0.25,
+            reportedUpstreamPromptCost: 0.1,
+            reportedUpstreamCompletionCost: 0.15,
+            reportedServerToolCost: 0.05,
+          });
+        });
+
+        it.each([
+          { config: { cost: 0.01 }, expected: 0.3 },
+          { config: { inputCost: 0.01, outputCost: 0.02 }, expected: 0.5 },
+          { config: { cost: 0 }, expected: 0 },
+          { config: { inputCost: 0.01 }, expected: undefined },
+          { config: { cost: -1 }, expected: undefined },
+          { config: { cost: Infinity }, expected: undefined },
+        ])('preserves configured BYOK rate semantics (%j)', async ({ config, expected }) => {
+          mockResponse({ prompt_tokens: 10, completion_tokens: 20, cost: 0, is_byok: true });
+          const result = await provider(config).callApi('Cost prompt');
+          if (expected === undefined) {
+            expect(result.cost).toBeUndefined();
+          } else {
+            expect(result.cost).toBeCloseTo(expected);
+          }
+          expect(result.metadata?.openrouter).toEqual({ accountCharge: 0, isByok: true });
+        });
+
+        it('uses prompt-level BYOK rates while retaining the reported charge as metadata', async () => {
+          mockResponse({ prompt_tokens: 10, completion_tokens: 20, cost: 0.001, is_byok: true });
+          const result = await provider({ cost: 1 }).callApi('Cost prompt', {
+            vars: {},
+            prompt: { raw: 'Cost prompt', label: 'Cost prompt', config: { cost: 0.02 } },
+          });
+          expect(result.cost).toBeCloseTo(0.6);
+          expect(result.metadata?.openrouter).toEqual({ accountCharge: 0.001, isByok: true });
+        });
+
+        it('leaves a configured BYOK estimate unknown without token counts', async () => {
+          mockResponse({ cost: 0, is_byok: true });
+          const result = await provider({ cost: 0.01 }).callApi('Cost prompt');
+          expect(result.cost).toBeUndefined();
+          expect(result.metadata?.openrouter).toEqual({ accountCharge: 0, isByok: true });
+        });
+
+        it.each([
+          undefined,
+          null,
+          {},
+          [],
+          0,
+          'invalid',
+          { unrelated: true },
+          { cost: null, is_byok: null },
+        ])('does not invent billing facts from empty or malformed usage (%j)', async (usage) => {
+          mockResponse(usage);
+          const result = await provider().callApi('Cost prompt');
+          expect(result.output).toBe('Cost fixture');
+          expect(result.cost).toBeUndefined();
+          expect(result.metadata?.openrouter).toBeUndefined();
+        });
+
+        it.each([undefined, null, [], 'invalid', true, {}])(
+          'tolerates malformed cost details (%j)',
+          async (details) => {
+            mockResponse({ cost: 0, is_byok: true, cost_details: details });
+            const result = await provider().callApi('Cost prompt');
+            expect(result.cost).toBeUndefined();
+            expect(result.metadata?.openrouter).toEqual({ accountCharge: 0, isByok: true });
+          },
+        );
+
+        it('preserves valid zero and partial upstream facts independently', async () => {
+          mockResponse({
+            cost: 0,
+            is_byok: true,
+            cost_details: {
+              upstream_inference_cost: 0,
+              upstream_inference_prompt_cost: '0.1',
+              upstream_inference_completions_cost: 0.2,
+              server_tool_cost: 0,
+            },
+          });
+          const result = await provider().callApi('Cost prompt');
+          expect(result.cost).toBeUndefined();
+          expect(result.metadata?.openrouter).toEqual({
+            accountCharge: 0,
+            isByok: true,
+            reportedUpstreamInferenceCost: 0,
+            reportedUpstreamCompletionCost: 0.2,
+            reportedServerToolCost: 0,
+          });
+        });
+
+        it.each([-1, '0.02', null, true, {}])(
+          'omits invalid upstream components (%j)',
+          async (amount) => {
+            mockResponse({
+              cost: 0,
+              is_byok: true,
+              cost_details: {
+                upstream_inference_cost: amount,
+                upstream_inference_prompt_cost: amount,
+                upstream_inference_completions_cost: amount,
+                server_tool_cost: amount,
+              },
+            });
+            const result = await provider().callApi('Cost prompt');
+            expect(result.cost).toBeUndefined();
+            expect(result.metadata?.openrouter).toEqual({ accountCharge: 0, isByok: true });
+          },
+        );
+
+        for (const imageInput of [false, true]) {
+          it.each([
+            { name: 'standard', byok: false, config: {}, expected: 0.25 },
+            { name: 'BYOK', byok: true, config: {}, expected: undefined },
+            { name: 'configured BYOK', byok: true, config: { cost: 0.01 }, expected: 0.3 },
+          ])(
+            `preserves $name accounting on ${imageInput ? 'image-input' : 'text'} cache replay`,
+            async ({ byok, config, expected }) => {
+              const content = [
+                { type: 'text', text: 'Describe this fixture' },
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK1cAAAAASUVORK5CYII=',
+                  },
+                },
+              ];
+              const prompt = imageInput
+                ? JSON.stringify([{ role: 'user', content }])
+                : 'Cost cache prompt';
+              const wasCacheEnabled = isCacheEnabled();
+              await withCacheEnabled(true, async () => {
+                mockResponse({
+                  prompt_tokens: 10,
+                  completion_tokens: 20,
+                  total_tokens: 30,
+                  cost: 0.25,
+                  is_byok: byok,
+                });
+                const instance = provider(config);
+                const first = await instance.callApi(prompt);
+                const second = await instance.callApi(prompt);
+                if (expected === undefined) {
+                  expect(first.cost).toBeUndefined();
+                } else {
+                  expect(first.cost).toBeCloseTo(expected);
+                }
+                expect(first.cached).toBe(false);
+                expect(second.cached).toBe(true);
+                expect(second.cost).toBe(first.cost);
+                expect(first.metadata?.openrouter).toEqual({ accountCharge: 0.25, isByok: byok });
+                expect(second.metadata).toEqual(first.metadata);
+                expect(mockedFetchWithRetries).toHaveBeenCalledTimes(1);
+                const [url, options] = mockedFetchWithRetries.mock.calls[0];
+                expect(url).toBe(`${OPENROUTER_API_BASE}/chat/completions`);
+                expect(options?.headers).toMatchObject({ Authorization: 'Bearer test-key' });
+                if (imageInput) {
+                  expect(JSON.parse(options?.body as string).messages[0].content).toEqual(content);
+                }
+              });
+              expect(isCacheEnabled()).toBe(wasCacheEnabled);
+            },
+          );
+        }
+      });
+
+      it('uses the total account charge rather than upstream inference cost', async () => {
+        mockResponse({
+          prompt_tokens: 10,
+          completion_tokens: 20,
+          total_tokens: 30,
+          cost: 0.012,
+          cost_details: { upstream_inference_cost: 0.8 },
+        });
+        const result = await provider().callApi('Cost prompt');
+        expect(result.cost).toBe(0.012);
+        expect(result.output).toBe('Cost fixture');
+        expect(result.tokenUsage).toMatchObject({ prompt: 10, completion: 20, total: 30 });
+      });
+
+      it.each([0, 0.25])('accepts reported cost %s without token counts', async (cost) => {
+        mockResponse({ cost });
+        expect((await provider().callApi('Cost prompt')).cost).toBe(cost);
+      });
+
+      it.each([
+        undefined,
+        null,
+        {},
+        { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+      ])('does not borrow native OpenAI prices when billing is absent (%j)', async (usage) => {
+        mockResponse(usage);
+        const result = await provider({}, 'gpt-4o').callApi('Cost prompt');
+        expect(result.output).toBe('Cost fixture');
+        expect(result.cost).toBeUndefined();
+      });
+
+      it.each([-1, '0.01', null, {}, true])('rejects malformed reported cost %j', async (cost) => {
+        mockResponse({
+          prompt_tokens: 10,
+          completion_tokens: 20,
+          total_tokens: 30,
+          cost,
+          is_byok: false,
+        });
+        const result = await provider({}, 'gpt-4o').callApi('Cost prompt');
+        expect(result.output).toBe('Cost fixture');
+        expect(result.cost).toBeUndefined();
+        expect(result.metadata?.openrouter).toEqual({ isByok: false });
+      });
+
+      it('preserves complete explicit per-token rates for arbitrary gateway IDs', async () => {
+        mockResponse({ prompt_tokens: 10, completion_tokens: 20, total_tokens: 30, cost: 0.5 });
+        const result = await provider({ cost: 0.01 }, 'vendor/custom-model').callApi('Cost prompt');
+        expect(result.cost).toBeCloseTo(0.3);
+      });
+
+      it('gives directional rates priority over the shared rate', async () => {
+        mockResponse({ prompt_tokens: 10, completion_tokens: 20, total_tokens: 30, cost: 1.5 });
+        const result = await provider({ cost: 1, inputCost: 0.01, outputCost: 0.02 }).callApi(
+          'Cost prompt',
+        );
+        expect(result.cost).toBe(0.5);
+      });
+
+      it('preserves an explicit zero rate', async () => {
+        mockResponse({ prompt_tokens: 10, completion_tokens: 20, total_tokens: 30, cost: 0.5 });
+        expect((await provider({ cost: 0 }).callApi('Cost prompt')).cost).toBe(0);
+      });
+
+      it('honors prompt-level cost overrides', async () => {
+        mockResponse({ prompt_tokens: 10, completion_tokens: 20, total_tokens: 30, cost: 0.5 });
+        const result = await provider({ cost: 1 }).callApi('Cost prompt', {
+          vars: {},
+          prompt: { raw: 'Cost prompt', label: 'Cost prompt', config: { cost: 0.01 } },
+        });
+        expect(result.cost).toBeCloseTo(0.3);
+      });
+
+      it.each([{ inputCost: 0.01 }, { cost: -1 }, { cost: Infinity }, { cost: NaN }])(
+        'does not invent cost for incomplete or invalid manual rates (%j)',
+        async (config) => {
+          mockResponse({ prompt_tokens: 10, completion_tokens: 20, total_tokens: 30, cost: 0.5 });
+          expect((await provider(config, 'gpt-4o').callApi('Cost prompt')).cost).toBeUndefined();
+        },
+      );
+
+      it('leaves a manual estimate unknown when token counts are missing', async () => {
+        mockResponse({ cost: 0.5 });
+        expect((await provider({ cost: 0.01 }).callApi('Cost prompt')).cost).toBeUndefined();
+      });
+
+      it('keeps custom endpoint routing and authorization when reading cost', async () => {
+        mockResponse({ cost: 0.25 });
+        const result = await provider({
+          apiBaseUrl: 'https://proxy.example.com/openrouter/api/v1',
+          apiKey: 'custom-fixture-key',
+        }).callApi('Cost prompt');
+        expect(result.cost).toBe(0.25);
+        const [url, options] = mockedFetchWithRetries.mock.calls[0];
+        expect(url).toBe('https://proxy.example.com/openrouter/api/v1/chat/completions');
+        expect(options?.headers).toMatchObject({ Authorization: 'Bearer custom-fixture-key' });
+      });
+
+      it.each([
+        { name: 'reported', config: {}, usage: { cost: 0.25 }, expectedCost: 0.25 },
+        { name: 'reported zero', config: {}, usage: { cost: 0 }, expectedCost: 0 },
+        { name: 'manual', config: { cost: 0.01 }, usage: { cost: 0.25 }, expectedCost: 0.3 },
+        {
+          name: 'directional manual',
+          config: { inputCost: 0.01, outputCost: 0.02 },
+          usage: { cost: 0.25 },
+          expectedCost: 0.5,
+        },
+        { name: 'manual zero', config: { cost: 0 }, usage: { cost: 0.25 }, expectedCost: 0 },
+        { name: 'missing billing', config: {}, usage: {}, expectedCost: undefined },
+        { name: 'invalid billing', config: {}, usage: { cost: '0.25' }, expectedCost: undefined },
+        {
+          name: 'partial manual rate',
+          config: { inputCost: 0.01 },
+          usage: { cost: 0.25 },
+          expectedCost: undefined,
+        },
+        {
+          name: 'invalid manual rate',
+          config: { cost: -1 },
+          usage: { cost: 0.25 },
+          expectedCost: undefined,
+        },
+        {
+          name: 'missing token counts',
+          config: { cost: 0.01 },
+          usage: { cost: 0.25, prompt_tokens: undefined, completion_tokens: undefined },
+          expectedCost: undefined,
+        },
+      ])(
+        'preserves logical cost on a promptfoo cache replay ($name)',
+        async ({ config, usage, expectedCost }) => {
+          expect(process.env.PROMPTFOO_CACHE_TYPE).toBe('memory');
+          const wasCacheEnabled = isCacheEnabled();
+          await withCacheEnabled(true, async () => {
+            mockResponse({ prompt_tokens: 10, completion_tokens: 20, total_tokens: 30, ...usage });
+            const instance = provider(config);
+            const first = await instance.callApi('Cost cache prompt');
+            const second = await instance.callApi('Cost cache prompt');
+            expect(first.cached).toBe(false);
+            if (expectedCost === undefined) {
+              expect(first.cost).toBeUndefined();
+            } else {
+              expect(first.cost).toBeCloseTo(expectedCost);
+            }
+            expect(second).toMatchObject({ cached: true, tokenUsage: { cached: 30 } });
+            expect(second.cost).toBe(first.cost);
+            expect(mockedFetchWithRetries).toHaveBeenCalledTimes(1);
+          });
+          expect(isCacheEnabled()).toBe(wasCacheEnabled);
+        },
+      );
+
+      it('preserves HTTP errors without assigning their billing metadata', async () => {
+        mockResponse({ cost: 0.25 }, 400);
+        const result = await provider().callApi('Cost prompt');
+        expect(result.error).toContain('API error: 400');
+        expect(result.cost).toBeUndefined();
+      });
     });
 
     describe('Thinking tokens handling', () => {

@@ -13,7 +13,7 @@ import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { EVAL_ROUTES, MODEL_AUDIT_ROUTES, REDTEAM_ROUTES, ROUTES } from '@app/constants/routes';
 import { cn } from '@app/lib/utils';
 import { Info, Settings } from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router';
 import ApiSettingsModal from './ApiSettingsModal';
 import CloudStatusIndicator from './CloudStatusIndicator';
 import InfoModal from './InfoModal';
@@ -205,9 +205,9 @@ export default function Navigation() {
   return (
     <>
       <header className="sticky top-0 z-(--z-appbar) w-full border-b border-border bg-card shadow-sm">
-        <div className="flex h-14 min-w-0 items-center justify-between gap-2 px-3 sm:px-4">
+        <div className="flex min-h-14 flex-wrap items-center justify-between gap-2 px-3 py-1 sm:h-14 sm:flex-nowrap sm:px-4 sm:py-0">
           {/* Left section: Logo and Navigation */}
-          <div className="flex min-w-0 items-center gap-2 sm:gap-6">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-6">
             <Logo />
             <NavigationMenu>
               <NavigationMenuList className="gap-1">
@@ -251,7 +251,7 @@ export default function Navigation() {
           </div>
 
           {/* Right section: Actions */}
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="ml-auto flex shrink-0 items-center gap-1">
             <Tooltip>
               <TooltipTrigger asChild>
                 <button

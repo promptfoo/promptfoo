@@ -13,17 +13,24 @@ import {
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Spinner } from '@app/components/ui/spinner';
-import { useInvalidateCloudConfig } from '@app/hooks/useCloudConfig';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { cn } from '@app/lib/utils';
 import { useUserStore } from '@app/stores/userStore';
 import { callApi } from '@app/utils/api';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router';
 
 interface LoginState {
   success: boolean;
   error?: string;
   email?: string;
+}
+
+function decodeRedirect(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
 }
 
 async function loginAction(_prevState: LoginState, formData: FormData): Promise<LoginState> {
@@ -68,7 +75,6 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { email, isLoading, setEmail, fetchEmail } = useUserStore();
-  const invalidateCloudConfig = useInvalidateCloudConfig();
 
   usePageMeta({
     title: 'Login to Promptfoo',
@@ -87,7 +93,7 @@ export default function LoginPage() {
     let redirect = null;
 
     if (redirectMatch) {
-      redirect = decodeURIComponent(redirectMatch[1]);
+      redirect = decodeRedirect(redirectMatch[1]);
     } else {
       const params = new URLSearchParams(searchStr);
       redirect = params.get('redirect');
@@ -103,11 +109,10 @@ export default function LoginPage() {
   // Handle successful login
   useEffect(() => {
     if (state.success && state.email) {
-      invalidateCloudConfig();
       setEmail(state.email);
       handleRedirect();
     }
-  }, [state.success, state.email, setEmail, handleRedirect, invalidateCloudConfig]);
+  }, [state.success, state.email, setEmail, handleRedirect]);
 
   // Redirect if already logged in
   useEffect(() => {

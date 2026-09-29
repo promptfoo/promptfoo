@@ -101,22 +101,25 @@ describe('API Health Utilities', () => {
       'https://promptfoo.app',
       'https://app.promptfoo.app',
       'https://app.promptfoo.com',
-    ])('should omit custom-endpoint suffix when cloud config points at hosted host %s', async (apiHost) => {
-      // Regression: previously the suffix was gated on isEnabled() alone, so a
-      // logged-in user on hosted Cloud (apiHost = https://www.promptfoo.app,
-      // which the CLI writes during `promptfoo auth login`) saw "(using custom
-      // endpoint)" even though their API host is the hosted one.
-      mockIsEnabled.mockReturnValue(true);
-      mockGetApiHost.mockReturnValue(apiHost);
-      mockedFetchWithTimeout.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ status: 'OK' }),
-      } as Response);
+    ])(
+      'should omit custom-endpoint suffix when cloud config points at hosted host %s',
+      async (apiHost) => {
+        // Regression: previously the suffix was gated on isEnabled() alone, so a
+        // logged-in user on hosted Cloud (apiHost = https://www.promptfoo.app,
+        // which the CLI writes during `promptfoo auth login`) saw "(using custom
+        // endpoint)" even though their API host is the hosted one.
+        mockIsEnabled.mockReturnValue(true);
+        mockGetApiHost.mockReturnValue(apiHost);
+        mockedFetchWithTimeout.mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ status: 'OK' }),
+        } as Response);
 
-      const result = await checkRemoteHealth('https://test.api/health');
-      expect(result.status).toBe('OK');
-      expect(result.message).toBe('Cloud API is healthy');
-    });
+        const result = await checkRemoteHealth('https://test.api/health');
+        expect(result.status).toBe('OK');
+        expect(result.message).toBe('Cloud API is healthy');
+      },
+    );
 
     it('should handle non-OK response', async () => {
       mockedFetchWithTimeout.mockResolvedValueOnce({

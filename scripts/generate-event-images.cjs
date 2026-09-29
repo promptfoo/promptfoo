@@ -5,7 +5,7 @@ const https = require('https');
 const { execSync } = require('child_process');
 
 // Load environment variables from .env file
-require('dotenv').config({ path: path.join(__dirname, '..', '.env'), quiet: true });
+require('../src/util/envFile.ts').loadEnvFiles([path.join(__dirname, '..', '.env')]);
 
 // Get OpenAI API key from environment
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;

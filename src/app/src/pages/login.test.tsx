@@ -1,14 +1,14 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import LoginPage from './login';
 
 const mockNavigate = vi.fn();
 let mockLocationSearch = '';
 
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
+vi.mock('react-router', async () => {
+  const actual = await vi.importActual('react-router');
   return {
     ...actual,
     useNavigate: () => mockNavigate,
@@ -39,11 +39,6 @@ vi.mock('@app/utils/api', () => ({
   callApi: (...args: any[]) => callApiMock(...args),
 }));
 
-const invalidateCloudConfigMock = vi.fn();
-vi.mock('@app/hooks/useCloudConfig', () => ({
-  useInvalidateCloudConfig: () => invalidateCloudConfigMock,
-}));
-
 describe('LoginPage', () => {
   const createUserStoreState = (overrides = {}) => ({
     email: null,
@@ -65,7 +60,6 @@ describe('LoginPage', () => {
     mockNavigate.mockReset();
     useUserStoreMock.mockReset();
     callApiMock.mockReset();
-    invalidateCloudConfigMock.mockReset();
     mockLocationSearch = '';
     mockActionState = { success: false };
     mockIsPending = false;
@@ -186,7 +180,6 @@ describe('LoginPage', () => {
     );
 
     await waitFor(() => expect(setEmail).toHaveBeenCalledWith('test@example.com'));
-    expect(invalidateCloudConfigMock).toHaveBeenCalledOnce();
     expect(mockNavigate).toHaveBeenCalledWith('/');
   });
 
@@ -442,6 +435,25 @@ describe('LoginPage', () => {
     });
 
     mockLocationSearch = '?redirect=javascript:alert("XSS")';
+
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>,
+    );
+
+    expect(mockNavigate).toHaveBeenCalledWith('/');
+  });
+
+  it('should navigate to the default route when redirect has invalid percent encoding', () => {
+    useUserStoreMock.mockReturnValue({
+      email: 'test@example.com',
+      isLoading: false,
+      fetchEmail: vi.fn(),
+      setEmail: vi.fn(),
+    });
+
+    mockLocationSearch = '?redirect=%';
 
     render(
       <MemoryRouter>

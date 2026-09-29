@@ -46,7 +46,6 @@ const mockFetchTraces = vi.fn().mockResolvedValue([
 const mockCloudConfig = {
   appUrl: 'https://cloud.example.com',
   isEnabled: true,
-  isEnterprise: false,
 };
 
 const defaultProps = {
@@ -897,7 +896,6 @@ describe('EvalOutputPromptDialog cloud config', () => {
     const customCloudConfig = {
       appUrl: 'https://custom.cloud.com',
       isEnabled: true,
-      isEnterprise: false,
     };
     const propsWithCustomConfig = {
       ...defaultProps,
@@ -921,7 +919,6 @@ describe('EvalOutputPromptDialog cloud config', () => {
     const customCloudConfig = {
       appUrl: 'https://custom.cloud.com',
       isEnabled: true,
-      isEnterprise: false,
     };
     const propsWithCustomConfig = {
       ...defaultProps,

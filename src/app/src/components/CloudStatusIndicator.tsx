@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
@@ -32,43 +32,18 @@ interface IndicatorState {
   status: Status;
   serviceName: string;
   teamName: 'team' | 'organization';
-  // Browser-safe https/http URL with no embedded credentials. `null` when
-  // the API reported a configured cloud whose dashboard URL we can't trust.
   safeAppUrl: string | null;
-  // Where the "connect" CTA in the dialog should send the user. For
-  // enterprise we point at the configured app host when it is safe;
-  // otherwise the public signup page.
   connectDestination: { href: string; label: string };
 }
 
-/**
- * Browser-safe URL gate: reject non-http(s) protocols and embedded
- * credentials. The server already does this, but we re-check here in case
- * the response is forged or older clients didn't sanitize.
- */
-function toBrowserSafeAppUrl(appUrl: string | null | undefined): string | null {
-  if (!appUrl) {
-    return null;
-  }
-  try {
-    const parsed = new URL(appUrl);
-    if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password) {
-      return null;
-    }
-    return appUrl;
-  } catch {
-    return null;
-  }
-}
-
 function deriveIndicatorState(
-  data: CloudConfigData | undefined,
+  data: CloudConfigData | null,
   isLoading: boolean,
   isError: boolean,
 ): IndicatorState {
   const isConfigured = data?.isEnabled ?? false;
   const isEnterprise = data?.isEnterprise ?? false;
-  const safeAppUrl = toBrowserSafeAppUrl(data?.appUrl);
+  const safeAppUrl = data?.appUrl ?? null;
   const serviceName = isEnterprise ? 'Promptfoo Enterprise' : 'Promptfoo Cloud';
 
   const status: Status = isLoading
@@ -111,12 +86,12 @@ function statusLabel(state: IndicatorState): string {
 }
 
 export default function CloudStatusIndicator() {
-  const { data, isLoading, isFetching, isError, refetch } = useCloudConfig();
+  const { data, isLoading, error, refetch } = useCloudConfig();
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const [showDialog, setShowDialog] = useState(false);
   const { recordEvent } = useTelemetry();
 
-  const isCheckingCloudConfig = isLoading || isFetching;
-  const state = deriveIndicatorState(data, isCheckingCloudConfig, isError);
+  const state = deriveIndicatorState(data, isLoading, error !== null);
   const canOpenDashboard = state.status === 'configured' && state.safeAppUrl !== null;
   const label = statusLabel(state);
 
@@ -154,13 +129,14 @@ export default function CloudStatusIndicator() {
   const failureMessage =
     state.status === 'error'
       ? 'Unable to check cloud configuration. Please check your connection and try again.'
-      : `A safe ${state.serviceName} dashboard URL is unavailable. Sign in again or refresh after updating your configuration.`;
+      : `The ${state.serviceName} dashboard URL is missing or invalid. Sign in again, then refresh.`;
 
   return (
     <>
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
+            ref={triggerRef}
             type="button"
             variant="ghost"
             size="icon"
@@ -173,31 +149,27 @@ export default function CloudStatusIndicator() {
             )}
             aria-label={label}
           >
-            <StatusIcon
-              className={cn('size-5', state.status === 'loading' && 'animate-spin')}
-              data-testid={canOpenDashboard ? 'CloudIcon' : 'CloudOffIcon'}
-            />
+            <StatusIcon className={cn('size-5', state.status === 'loading' && 'animate-spin')} />
           </Button>
         </TooltipTrigger>
         <TooltipContent side="bottom">{label}</TooltipContent>
       </Tooltip>
 
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        {/*
-          hideDescription={false} so the explicit <DialogDescription> below
-          becomes the dialog's accessible description. The primitive's default
-          (`hideDescription={true}`) injects a hidden placeholder and nulls
-          aria-describedby — useful when no real description is provided, but
-          here we have one.
-        */}
-        <DialogContent hideDescription={false}>
+        <DialogContent
+          hideDescription={false}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            triggerRef.current?.focus();
+          }}
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CloudCog className="size-5 text-primary" />
               Configure {state.serviceName}
             </DialogTitle>
             <DialogDescription>
-              Configure {state.serviceName} to unlock {state.teamName} workflows.
+              Connect to share evaluation results with your {state.teamName}.
             </DialogDescription>
           </DialogHeader>
 
@@ -209,7 +181,7 @@ export default function CloudStatusIndicator() {
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <LayoutDashboard className="size-4 text-primary" />
-                <span>Open centralized dashboards and reports</span>
+                <span>View dashboards and reports</span>
               </div>
             </div>
 
@@ -262,17 +234,13 @@ export default function CloudStatusIndicator() {
               Learn More
             </Button>
             <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={handleRefreshClick}
-                disabled={isCheckingCloudConfig}
-              >
-                {isCheckingCloudConfig ? (
+              <Button variant="outline" onClick={handleRefreshClick} disabled={isLoading}>
+                {isLoading ? (
                   <Loader2 className="mr-2 size-4 animate-spin" />
                 ) : (
                   <RefreshCw className="mr-2 size-4" />
                 )}
-                {isCheckingCloudConfig ? 'Checking...' : 'Refresh Configuration'}
+                {isLoading ? 'Checking...' : 'Refresh Configuration'}
               </Button>
               <Button onClick={() => setShowDialog(false)}>Close</Button>
             </div>

@@ -221,7 +221,7 @@ describe('User Routes', () => {
       });
     });
 
-    it('should not link a hosted dashboard for a configured custom API deployment', async () => {
+    it('should retain the hosted dashboard behind a custom API proxy', async () => {
       mockedCloudConfig.isEnabled.mockReturnValue(true);
       mockedCloudConfig.getApiHost.mockReturnValue('https://api.enterprise.company.com');
       mockedCloudConfig.getAppUrl.mockReturnValue('https://www.promptfoo.app');
@@ -230,9 +230,9 @@ describe('User Routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
-        appUrl: null,
+        appUrl: 'https://www.promptfoo.app',
         isEnabled: true,
-        isEnterprise: true,
+        isEnterprise: false,
       });
     });
 
@@ -256,13 +256,6 @@ describe('User Routes', () => {
     });
 
     it('should treat a hosted-app apiHost as hosted cloud', async () => {
-      // Older or manually saved configs may put a hosted app hostname in
-      // apiHost. Previously HOSTED_CLOUD_API_HOSTNAMES only listed
-      // `api.promptfoo.app`, so the hosted-app apiHost looked like an
-      // enterprise API to the route, tripping the "mismatched app vs api"
-      // branch that nulls out appUrl.
-      // Result: a happy-path logged-in user saw `appUrl: null, isEnterprise: true`,
-      // and the navbar indicator rendered the "dashboard URL unavailable" state.
       const hostedApiHosts = [
         'https://promptfoo.app',
         'https://www.promptfoo.app',

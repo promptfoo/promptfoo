@@ -112,6 +112,25 @@ export type LogoutResponse = z.infer<typeof LogoutResponseSchema>;
 
 // GET /api/user/cloud-config
 
+const HOSTED_CLOUD_HOSTNAMES = new Set([
+  'promptfoo.app',
+  'www.promptfoo.app',
+  'app.promptfoo.app',
+  'app.promptfoo.com',
+  'api.promptfoo.app',
+]);
+
+export function isHostedCloudHost(url: string | null | undefined): boolean {
+  if (!url) {
+    return false;
+  }
+  try {
+    return HOSTED_CLOUD_HOSTNAMES.has(new URL(url).hostname.toLowerCase().replace(/\.$/, ''));
+  } catch {
+    return false;
+  }
+}
+
 /** Browser-safe Promptfoo Cloud app URL without embedded credentials. */
 const HttpUrlSchema = z.url().refine(
   (url) => {
@@ -133,7 +152,7 @@ const HttpUrlSchema = z.url().refine(
 export const CloudConfigResponseSchema = z.object({
   appUrl: HttpUrlSchema.nullable(),
   isEnabled: z.boolean(),
-  isEnterprise: z.boolean(),
+  isEnterprise: z.boolean().optional(),
 });
 
 export type CloudConfigResponse = z.infer<typeof CloudConfigResponseSchema>;

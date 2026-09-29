@@ -8,10 +8,10 @@ import {
   getUserId,
   setUserEmail,
 } from '../../globalConfig/accounts';
-import { cloudConfig, isHostedCloudHost } from '../../globalConfig/cloud';
+import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import { UserSchemas } from '../../types/api/user';
+import { isHostedCloudHost, UserSchemas } from '../../types/api/user';
 import { replyValidationError, sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
@@ -111,39 +111,9 @@ userRouter.get('/email/status', async (req: Request, res: Response): Promise<voi
   }
 });
 
-/** Returns a URL only when it is safe to expose as a browser navigation target. */
 function getBrowserSafeHttpUrl(url: string | null): string | null {
-  if (!url) {
-    return null;
-  }
-
-  try {
-    const appUrl = url.trim();
-    const parsedUrl = new URL(appUrl);
-
-    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
-      return null;
-    }
-
-    if (parsedUrl.username || parsedUrl.password) {
-      return null;
-    }
-
-    return appUrl;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Determines if a URL represents an enterprise deployment — anything that
- * is not a known hosted Promptfoo Cloud hostname (app or API). Invalid
- * URLs and absent values are treated as non-enterprise so the caller can
- * fall through to "not configured" rather than mislabel a missing config
- * as enterprise.
- */
-function isEnterprise(url: string | null): boolean {
-  return Boolean(url) && !isHostedCloudHost(url);
+  const result = UserSchemas.CloudConfig.Response.shape.appUrl.safeParse(url?.trim());
+  return result.success ? result.data : null;
 }
 
 // New API key authentication endpoint that mirrors CLI behavior
@@ -236,15 +206,14 @@ userRouter.get('/cloud-config', async (_req: Request, res: Response): Promise<vo
     const isEnabled = cloudConfig.isEnabled();
     const appUrl = getBrowserSafeHttpUrl(cloudConfig.getAppUrl());
     const apiHost = getBrowserSafeHttpUrl(cloudConfig.getApiHost());
-    const hasEnterpriseAppUrl = isEnterprise(appUrl);
-    const hasEnterpriseApiHost = isEnterprise(apiHost);
-    const browserAppUrl = hasEnterpriseApiHost && !hasEnterpriseAppUrl ? null : appUrl;
+    const hasEnterpriseAppUrl = appUrl !== null && !isHostedCloudHost(appUrl);
+    const hasEnterpriseApiHost = apiHost !== null && !isHostedCloudHost(apiHost);
 
     res.json(
       UserSchemas.CloudConfig.Response.parse({
-        appUrl: browserAppUrl,
+        appUrl,
         isEnabled,
-        isEnterprise: hasEnterpriseAppUrl || hasEnterpriseApiHost,
+        isEnterprise: appUrl ? hasEnterpriseAppUrl : hasEnterpriseApiHost,
       }),
     );
   } catch (error) {

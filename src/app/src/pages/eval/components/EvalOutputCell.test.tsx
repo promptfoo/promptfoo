@@ -14,22 +14,6 @@ import EvalOutputCell, { isImageProvider, isVideoProvider } from './EvalOutputCe
 
 import type { EvalOutputCellProps } from './EvalOutputCell';
 
-// EvalOutputCell consumes `useCloudConfig` for share-link metadata. The hook
-// is now TanStack-Query-backed; useQuery schedules internal cleanup/refetch
-// timers that leak into the active-timer counts asserted by the link-feedback
-// timer tests below. The cloud config isn't relevant to those assertions, so
-// stub the hook out at module scope.
-vi.mock('@app/hooks/useCloudConfig', () => ({
-  __esModule: true,
-  default: vi.fn(() => ({
-    data: { isEnabled: false, appUrl: null, isEnterprise: false },
-    isLoading: false,
-    isError: false,
-    error: null,
-    refetch: vi.fn(),
-  })),
-}));
-
 // Mock the EvalOutputPromptDialog component to check what props are passed to it
 vi.mock('./EvalOutputPromptDialog', () => ({
   default: vi.fn(({ gradingResults, metadata, onClose }) => (
@@ -196,6 +180,24 @@ describe('EvalOutputCell', () => {
     timers?.restore();
     timers = undefined;
   });
+
+  it.each([
+    [true, 'Mark as safe', 'Mark as vulnerable', 'lucide-check', 'lucide-x'],
+    [false, 'Mark test passed', 'Mark test failed', 'lucide-thumbs-up', 'lucide-thumbs-down'],
+  ])(
+    'shows the correct grading actions when isRedteam is %s',
+    (isRedteam, passLabel, failLabel, passIcon, failIcon) => {
+      renderWithProviders(<EvalOutputCell {...defaultProps} isRedteam={isRedteam} />);
+
+      const passButton = screen.getByRole('button', { name: passLabel });
+      const failButton = screen.getByRole('button', { name: failLabel });
+
+      expect(passButton.querySelector('svg')).toHaveClass(passIcon);
+      expect(failButton.querySelector('svg')).toHaveClass(failIcon);
+      expect(passButton).not.toHaveTextContent(passLabel);
+      expect(failButton).not.toHaveTextContent(failLabel);
+    },
+  );
 
   it('handles outputs without text without throwing', () => {
     const propsWithoutText: MockEvalOutputCellProps = {
@@ -949,10 +951,18 @@ describe('EvalOutputCell', () => {
       await clipboard.writeText.mock.results[0]?.value;
     });
 
+    // Flush query notifications without advancing the three-second link feedback timer.
+    await act(async () => {
+      await timers?.advanceByAsync(0);
+    });
     expect(timers.getTimerCount()).toBe(1);
 
     unmount();
 
+    // The shared cloud query removes unused entries on its zero-delay GC timer.
+    await act(async () => {
+      await timers?.advanceByAsync(0);
+    });
     expect(timers.getTimerCount()).toBe(0);
   });
 
@@ -982,6 +992,10 @@ describe('EvalOutputCell', () => {
       await writeTextPromise;
     });
 
+    // The shared cloud query removes unused entries on its zero-delay GC timer.
+    await act(async () => {
+      await timers?.advanceByAsync(0);
+    });
     expect(timers.getTimerCount()).toBe(0);
   });
 
@@ -2375,6 +2389,10 @@ describe('isImageProvider helper function', () => {
     expect(isImageProvider('google:gemini-2.5-flash-image')).toBe(true);
   });
 
+  it('should return true for Gemini 3.1 Flash-Lite image provider (Nano Banana 2 Lite)', () => {
+    expect(isImageProvider('google:gemini-3.1-flash-lite-image')).toBe(true);
+  });
+
   it('should return false for text completion providers', () => {
     expect(isImageProvider('openai:gpt-4')).toBe(false);
   });
@@ -2409,8 +2427,8 @@ describe('isVideoProvider helper function', () => {
     expect(isVideoProvider('google:video:veo-3.1-generate-preview')).toBe(true);
   });
 
-  it('should return true for Google Veo 2 provider', () => {
-    expect(isVideoProvider('google:video:veo-2-generate')).toBe(true);
+  it('should return true for Google Veo 3.1 Fast provider', () => {
+    expect(isVideoProvider('google:video:veo-3.1-fast-generate-preview')).toBe(true);
   });
 
   it('should return true for any provider with :video: in the name', () => {

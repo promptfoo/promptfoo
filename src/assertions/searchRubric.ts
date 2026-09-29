@@ -1,4 +1,6 @@
+import { isGraderFailure } from '../matchers/llmGrading';
 import { matchesSearchRubric } from '../matchers/search';
+import { invertScore } from '../matchers/shared';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -12,12 +14,12 @@ export async function handleSearchRubric({
   test,
   providerResponse,
 }: AssertionParams): Promise<GradingResult> {
-  if (renderedValue == null) {
+  if (typeof renderedValue !== 'string') {
     throw new Error('search-rubric assertion type must have a string value');
   }
 
   const result = await matchesSearchRubric(
-    String(renderedValue),
+    renderedValue,
     providerResponse.output,
     test.options,
     test.vars,
@@ -26,11 +28,22 @@ export async function handleSearchRubric({
     providerCallContext,
   );
 
+  if (isGraderFailure(result)) {
+    // A broken grader is not evidence about the criterion; propagate verbatim
+    // instead of flipping a transport failure into a pass.
+    return result;
+  }
+
   if (inverse) {
-    result.pass = !result.pass;
-    result.reason = result.pass
-      ? `Output does not require web search verification: ${result.reason}`
-      : `Output requires web search verification: ${result.reason}`;
+    const pass = !result.pass;
+    return {
+      ...result,
+      pass,
+      score: invertScore(result.score),
+      reason: pass
+        ? `Output does not require web search verification: ${result.reason}`
+        : `Output requires web search verification: ${result.reason}`,
+    };
   }
 
   return result;
