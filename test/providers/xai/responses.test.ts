@@ -568,6 +568,7 @@ describe('XAIResponsesProvider', () => {
 
     expect(result).toMatchObject({
       isRefusal: true,
+      cached: false,
       cost: 1.25,
       tokenUsage: { prompt: 10, completion: 5, total: 15 },
     });
@@ -589,9 +590,91 @@ describe('XAIResponsesProvider', () => {
     });
     const result = await provider.callApi('blocked prompt');
 
-    expect(result).toMatchObject({ isRefusal: true, cost: 0 });
+    expect(result).toMatchObject({ isRefusal: true, cached: true, cost: 0 });
     expect(result.tokenUsage).toEqual({ cached: 15, total: 15 });
   });
+
+  it.each([
+    {
+      name: 'xAI cache-read pricing',
+      config: {},
+      usage: { input_tokens: 10, output_tokens: 5, input_tokens_details: { cached_tokens: 8 } },
+      cost: 0.0000166,
+    },
+    {
+      name: 'the requested model override',
+      config: { passthrough: { model: 'grok-4.5' } },
+      usage: { input_tokens: 10, output_tokens: 5, input_tokens_details: { cached_tokens: 8 } },
+      cost: 0.0000364,
+    },
+    {
+      name: 'prompt pricing overrides instead of billed ticks',
+      config: { inputCost: 0.002, outputCost: 0.003, cacheReadCost: 0.0005 },
+      usage: {
+        input_tokens: 10,
+        output_tokens: 5,
+        input_tokens_details: { cached_tokens: 8 },
+        cost_in_usd_ticks: 12_500_000_000,
+      },
+      cost: 0.023,
+    },
+    {
+      name: 'input-only usage',
+      config: {},
+      usage: { input_tokens: 10, output_tokens: 0, input_tokens_details: { cached_tokens: 8 } },
+      cost: 0.0000041,
+    },
+    {
+      name: 'reasoning-only output usage',
+      config: {},
+      usage: {
+        input_tokens: 10,
+        output_tokens: 0,
+        output_tokens_details: { reasoning_tokens: 5 },
+      },
+      cost: 0.000025,
+    },
+  ])('bills invalid prompt refusals using $name', async ({ config, usage, cost }) => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: { error: { code: 'invalid_prompt' }, usage },
+      cached: false,
+      status: 400,
+      statusText: 'Bad Request',
+    });
+    const provider = new XAIResponsesProvider('grok-4.3', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('local billing fixture', {
+      prompt: { raw: 'local billing fixture', label: 'billing', config },
+      vars: {},
+    });
+
+    expect(result.isRefusal).toBe(true);
+    expect(result.cost).toBeCloseTo(cost, 10);
+    const request = JSON.parse(mockFetchWithCache.mock.calls[0][1].body);
+    expect(request.model).toBe(config.passthrough?.model ?? 'grok-4.3');
+  });
+
+  it.each([undefined, { input_tokens: 0, output_tokens: 0 }])(
+    'leaves refusal cost unknown without billable usage (%j)',
+    async (usage) => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: { error: { code: 'invalid_prompt' }, usage },
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      });
+      const provider = new XAIResponsesProvider('grok-4.3', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const result = await provider.callApi('local billing fixture');
+
+      expect(result.isRefusal).toBe(true);
+      expect(result.cost).toBeUndefined();
+    },
+  );
 
   it('leaves cost unknown when neither usage ticks nor fallback token counts are available', async () => {
     mockFetchWithCache.mockResolvedValueOnce({

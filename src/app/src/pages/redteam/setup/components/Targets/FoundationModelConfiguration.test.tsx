@@ -126,7 +126,7 @@ describe('FoundationModelConfiguration', () => {
     const modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
     expect(modelIdInput).toHaveAttribute(
       'placeholder',
-      'openai:gpt-6-luna, openai:gpt-5.6-terra, openai:gpt-6-sol, openai:gpt-6-astra',
+      'openai:gpt-6-sol, openai:gpt-6-luna, openai:gpt-6-astra',
     );
 
     const documentationLink = screen.getByRole('link', { name: /OpenAI documentation/ });
@@ -136,7 +136,10 @@ describe('FoundationModelConfiguration', () => {
     );
   });
 
-  it('should call updateCustomTarget with undefined when Temperature field is cleared', async () => {
+  it.each([
+    ['Temperature', 'temperature'],
+    ['Top P', 'top_p'],
+  ])('should unset %s when cleared and keep an explicit 0', async (label, field) => {
     const user = userEvent.setup();
     render(
       <FoundationModelConfiguration
@@ -146,12 +149,14 @@ describe('FoundationModelConfiguration', () => {
       />,
     );
 
-    const accordionSummary = screen.getByRole('button', { name: /Advanced Configuration/ });
-    await user.click(accordionSummary);
+    await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
+    const input = screen.getByLabelText(label);
+    await user.clear(input);
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith(field, undefined);
 
-    const temperatureInput = screen.getByLabelText('Temperature');
-    await user.clear(temperatureInput);
-    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('temperature', undefined);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('0');
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith(field, 0);
   });
 
   it('should call updateCustomTarget with undefined when API Base URL field is cleared', async () => {
@@ -199,7 +204,7 @@ describe('FoundationModelConfiguration', () => {
     const modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
     expect(modelIdInput).toHaveAttribute(
       'placeholder',
-      'openrouter:openai/gpt-6-sol, openrouter:anthropic/claude-opus-4.7',
+      'openrouter:openai/gpt-6-sol, openrouter:anthropic/claude-opus-5.5',
     );
 
     const documentationLink = screen.getByRole('link', { name: /OpenRouter documentation/ });
@@ -251,7 +256,7 @@ describe('FoundationModelConfiguration', () => {
     let modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
     expect(modelIdInput).toHaveAttribute(
       'placeholder',
-      'openai:gpt-6-luna, openai:gpt-5.6-terra, openai:gpt-6-sol, openai:gpt-6-astra',
+      'openai:gpt-6-sol, openai:gpt-6-luna, openai:gpt-6-astra',
     );
     let documentationLink = screen.getByRole('link', { name: /OpenAI documentation/ });
     expect(documentationLink).toHaveAttribute(
@@ -594,7 +599,11 @@ describe('FoundationModelConfiguration', () => {
     expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('id', expectedId);
   });
 
-  it('validates recognized GPT shorthand as the canonical OpenAI model', async () => {
+  it.each([
+    ['gpt-5.6-sol', false],
+    ['gpt-oss-120b', false],
+    ['gpt-custom', true],
+  ])('validates only recognized GPT shorthands in the current draft %s', async (model, invalid) => {
     const user = userEvent.setup();
     render(
       <FoundationModelConfiguration
@@ -606,10 +615,14 @@ describe('FoundationModelConfiguration', () => {
 
     const input = screen.getByLabelText(/Model ID/i);
     await user.clear(input);
-    await user.paste('gpt-5.6-sol');
+    await user.paste(model);
 
-    expect(input).toHaveAttribute('aria-invalid', 'false');
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(input).toHaveAttribute('aria-invalid', String(invalid));
+    if (invalid) {
+      expect(screen.getByRole('alert')).toHaveTextContent('Responses requires');
+    } else {
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    }
   });
 
   it('should preserve the Responses prefix and use Responses-specific settings', async () => {

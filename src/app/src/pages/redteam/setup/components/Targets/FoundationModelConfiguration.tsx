@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
+import { NumberInput } from '@app/components/ui/number-input';
 import {
   type BedrockApiMode,
   getBedrockTextRoute,
@@ -61,10 +62,12 @@ const getBedrockModelFromId = (id?: string): string => {
   return getBedrockTextRoute(id || 'bedrock:')?.modelId ?? id ?? '';
 };
 
+const BEDROCK_GPT_SHORTHAND = /^gpt-(?:\d|oss-)/;
+
 const buildBedrockProviderId = (apiMode: BedrockApiMode, modelId: string): string => {
   // Accept familiar GPT names in the editor; persist Bedrock's canonical namespace.
   // Do not guess namespaces for custom IDs, inference profiles, or ARNs.
-  if (/^gpt-(?:\d|oss-)/.test(modelId)) {
+  if (BEDROCK_GPT_SHORTHAND.test(modelId)) {
     modelId = `openai.${modelId}`;
   }
   if (apiMode === 'responses' || apiMode === 'chat') {
@@ -139,7 +142,9 @@ const FoundationModelConfiguration = ({
   const [modelId, setModelId] = useState(
     isBedrock ? getBedrockModelFromId(selectedTarget.id) : selectedTarget.id || '',
   );
-  const bedrockModelIdForValidation = modelId.startsWith('gpt-') ? `openai.${modelId}` : modelId;
+  const bedrockModelIdForValidation = BEDROCK_GPT_SHORTHAND.test(modelId)
+    ? `openai.${modelId}`
+    : modelId;
   const bedrockApiError =
     isBedrock && bedrockApiMode
       ? getBedrockApiError(bedrockApiMode, bedrockModelIdForValidation)
@@ -270,9 +275,8 @@ const FoundationModelConfiguration = ({
       },
       anthropic: {
         name: 'Anthropic',
-        defaultModel: 'anthropic:messages:claude-sonnet-4-5-20250929',
-        placeholder:
-          'anthropic:messages:claude-sonnet-4-5-20250929, anthropic:messages:claude-haiku-4-5-20251001',
+        defaultModel: 'anthropic:messages:claude-sonnet-5',
+        placeholder: 'anthropic:messages:claude-opus-5-5, anthropic:messages:claude-sonnet-5',
         docUrl: 'https://www.promptfoo.dev/docs/providers/anthropic',
         envVar: 'ANTHROPIC_API_KEY',
       },
@@ -335,7 +339,7 @@ const FoundationModelConfiguration = ({
       openrouter: {
         name: 'OpenRouter',
         defaultModel: 'openrouter:openai/gpt-6-sol',
-        placeholder: 'openrouter:openai/gpt-6-sol, openrouter:anthropic/claude-opus-4.7',
+        placeholder: 'openrouter:openai/gpt-6-sol, openrouter:anthropic/claude-opus-5.5',
         docUrl: 'https://www.promptfoo.dev/docs/providers/openrouter',
         envVar: 'OPENROUTER_API_KEY',
       },
@@ -619,16 +623,14 @@ const FoundationModelConfiguration = ({
           <div className="grid gap-4">
             <div className="space-y-2">
               <Label htmlFor="temperature">Temperature</Label>
-              <Input
+              <NumberInput
                 id="temperature"
-                type="number"
                 min={0}
                 max={2}
                 step={0.1}
-                value={selectedTarget.config?.temperature ?? ''}
-                onChange={(e) =>
-                  updateCustomTarget('temperature', parseFloat(e.target.value) || undefined)
-                }
+                allowDecimals
+                value={selectedTarget.config?.temperature}
+                onChange={(v) => updateCustomTarget('temperature', v)}
               />
               <p className="text-sm text-muted-foreground">Controls randomness (0.0 to 2.0)</p>
             </div>
@@ -658,16 +660,14 @@ const FoundationModelConfiguration = ({
 
             <div className="space-y-2">
               <Label htmlFor="top-p">Top P</Label>
-              <Input
+              <NumberInput
                 id="top-p"
-                type="number"
                 min={0}
                 max={1}
                 step={0.01}
-                value={selectedTarget.config?.top_p ?? ''}
-                onChange={(e) =>
-                  updateCustomTarget('top_p', parseFloat(e.target.value) || undefined)
-                }
+                allowDecimals
+                value={selectedTarget.config?.top_p}
+                onChange={(v) => updateCustomTarget('top_p', v)}
               />
               <p className="text-sm text-muted-foreground">
                 Nucleus sampling parameter (0.0 to 1.0)

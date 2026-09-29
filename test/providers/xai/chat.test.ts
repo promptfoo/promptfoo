@@ -46,6 +46,28 @@ describe('xAI Chat Provider', () => {
   });
 
   describe('Provider creation and configuration', () => {
+    it('sends Grok 4.7 requests to the configured endpoint before the region default', async () => {
+      const provider = createXAIProvider('xai:grok-4.7', {
+        config: {
+          config: {
+            apiKey: 'test-key',
+            apiBaseUrl: 'http://localhost:8080/v1',
+            region: 'us',
+          },
+        },
+      });
+      const result = await provider.callApi('Hello');
+      expect(result.error).toBeUndefined();
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        'http://localhost:8080/v1/chat/completions',
+        expect.objectContaining({ body: expect.stringContaining('grok-4.7') }),
+        expect.any(Number),
+        'json',
+        undefined,
+        undefined,
+      );
+    });
+
     it('throws an error if no model name is provided', () => {
       expect(() => createXAIProvider('xai:')).toThrow('Model name is required');
     });
@@ -1373,6 +1395,10 @@ describe('xAI Chat Provider', () => {
       expect(
         calculateXAICost('grok-4.5', {}, 219, 0, 50, 128, { reasoningBilledSeparately: true }),
       ).toBeCloseTo((91 * 2 + 128 * 0.3 + 50 * 6) / 1e6, 12);
+    });
+
+    it('bills input-only usage while preserving cache-read pricing', () => {
+      expect(calculateXAICost('grok-4.3', {}, 10, 0, 0, 8)).toBeCloseTo(0.0000041, 10);
     });
 
     it('returns undefined for invalid inputs', () => {

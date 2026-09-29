@@ -673,7 +673,11 @@ export function calculateXAICost(
     : completion > 0
       ? completion
       : (reasoningTokens ?? 0);
-  if (promptTokens == null || billableOutputTokens <= 0) {
+  if (
+    promptTokens == null ||
+    billableOutputTokens < 0 ||
+    (promptTokens <= 0 && billableOutputTokens === 0)
+  ) {
     return undefined;
   }
 
@@ -945,9 +949,9 @@ class XAIProvider extends OpenAiChatCompletionProvider {
         ...providerOptions.config,
         ...xaiConfig, // Merge the nested config into the main config
         apiKeyEnvar: 'XAI_API_KEY',
-        apiBaseUrl: xaiConfig?.region
-          ? `https://${xaiConfig.region}.api.x.ai/v1`
-          : 'https://api.x.ai/v1',
+        apiBaseUrl:
+          xaiConfig?.apiBaseUrl ??
+          (xaiConfig?.region ? `https://${xaiConfig.region}.api.x.ai/v1` : 'https://api.x.ai/v1'),
       },
     });
 

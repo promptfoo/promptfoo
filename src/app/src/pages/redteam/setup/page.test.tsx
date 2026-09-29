@@ -3,7 +3,7 @@ import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from './hooks/useRedTeamTargetConfigValidation';
@@ -20,9 +20,9 @@ const mockLocation = {
   key: 'default',
 };
 
-// Mock react-router-dom
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
+// Mock react-router
+vi.mock('react-router', async () => {
+  const actual = await vi.importActual('react-router');
   return {
     ...actual,
     useNavigate: () => mockNavigate,
@@ -478,6 +478,43 @@ redteam:
         expect(config.target.id).toBe('openai:gpt-5-mini');
         expect(config.target.label).toBe('openai:gpt-5-mini');
         expect(providerType).toBe('openai');
+      });
+    });
+
+    it('preserves the dated Sonnet 4.5 preset when importing a saved YAML configuration', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <MemoryRouter initialEntries={['/redteam/setup']}>
+          <RedTeamSetupPage />
+        </MemoryRouter>,
+      );
+
+      await user.click(screen.getByRole('button', { name: /Load Config/i }));
+
+      const file = new File(
+        [
+          `description: Saved Sonnet configuration
+targets:
+  - claude-sonnet-4-5-20250929
+prompts:
+  - "{{prompt}}"
+redteam:
+  purpose: Answer product questions
+`,
+        ],
+        'config.yaml',
+        { type: 'text/yaml' },
+      );
+
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      await user.upload(fileInput, file);
+
+      await waitFor(() => {
+        expect(useRedTeamConfig.getState().config.target).toMatchObject({
+          id: 'claude-sonnet-4-5-20250929',
+          label: 'claude-sonnet-4-5-20250929',
+        });
       });
     });
 
