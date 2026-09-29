@@ -171,7 +171,7 @@ Choose the appropriate transport based on your use case:
 
 ### HTTP Security
 
-HTTP listens on `127.0.0.1` and accepts `Host` headers for `127.0.0.1`, `localhost`, or `[::1]`, with an optional port. Browser POSTs use the web UI's CSRF checks before their JSON bodies are parsed. Local origins and origins configured in [`PROMPTFOO_CSRF_ALLOWED_ORIGINS`](/docs/usage/command-line/#environment-variables) remain allowed.
+HTTP listens on `127.0.0.1` and accepts `Host` headers for `127.0.0.1`, `localhost`, or `[::1]`, with an optional port. Browser POSTs use the web UI's CSRF checks before their JSON bodies are parsed. Local origins and origins configured in [`PROMPTFOO_CSRF_ALLOWED_ORIGINS`](/docs/usage/command-line/) remain allowed.
 
 This changes the previous listener on all network interfaces. Remote clients, Docker port publication, and IPv6-only connections no longer work. Run the HTTP client in the same network namespace and connect to `127.0.0.1`, or use STDIO with a compatible client.
 
