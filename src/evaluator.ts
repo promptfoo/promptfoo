@@ -1364,7 +1364,7 @@ async function applyRunEvalResponseOutcome({
   }
 
   if (response.output === null || response.output === undefined) {
-    applyEmptyResponseOutcome(ret, isRedteam);
+    applyEmptyResponseOutcome(ret, isRedteam && test.metadata?.isSafe !== true);
     return;
   }
 

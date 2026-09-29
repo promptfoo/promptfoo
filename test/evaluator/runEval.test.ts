@@ -709,6 +709,28 @@ describe('runEval', () => {
     expect(redTeamResults[0].error).toBeUndefined();
   });
 
+  it.each([null, undefined])('fails a safe control with %s output', async (output) => {
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: {
+        id: () => 'empty-provider',
+        callApi: async () => ({ output }),
+      },
+      prompt: { raw: 'How do I water basil?', label: 'safe-control' },
+      test: {
+        metadata: { isSafe: true },
+        assert: [{ type: 'promptfoo:redteam:aegis' }],
+      },
+      conversations: {},
+      registers: {},
+      isRedteam: true,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.error).toBe('No output');
+  });
+
   it.each(['provider', 'test', 'postprocess', 'assertion'] as const)(
     'grades transformed OpenAI refusal output at the %s level',
     async (level) => {

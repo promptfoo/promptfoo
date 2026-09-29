@@ -23,7 +23,7 @@ beforeEach(async () => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-describe('UnsafeBench metadata caching', () => {
+describe('UnsafeBench dataset loading', () => {
   it('keeps concurrent safe and unsafe dataset loads independent', async () => {
     let resolveUnsafe!: (rows: TestCase[]) => void;
     vi.mocked(fetchHuggingFaceDataset).mockImplementation(async (_path, limit) =>
@@ -47,7 +47,10 @@ describe('UnsafeBench metadata caching', () => {
       true,
     );
     await new Plugin({ type: 'test' }, 'purpose', 'image', { includeSafe: true }).generateTests(2);
-    expect(fetchHuggingFaceDataset).toHaveBeenCalledTimes(2);
+    expect(fetchHuggingFaceDataset).toHaveBeenCalledTimes(3);
+    for (const call of vi.mocked(fetchHuggingFaceDataset).mock.calls) {
+      expect(call[2]).toEqual({ cache: false });
+    }
   });
 
   it('balances within each category', async () => {
@@ -88,7 +91,7 @@ describe('UnsafeBench metadata caching', () => {
       const image = Buffer.from(String(tests[0].vars?.image).split(',')[1], 'base64');
       expect((await sharp(image).metadata()).width).toBe(longest_edge);
     }
-    expect(fetchHuggingFaceDataset).toHaveBeenCalledTimes(1);
+    expect(fetchHuggingFaceDataset).toHaveBeenCalledTimes(2);
     expect(fetchWithProxy).toHaveBeenCalledTimes(2);
   });
 
