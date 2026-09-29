@@ -18,7 +18,7 @@ import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
 import invariant from '@promptfoo/util/invariant';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router';
 import type { EvalSummary } from '@promptfoo/types';
 import type { ColumnDef, RowSelectionState } from '@tanstack/react-table';
 
