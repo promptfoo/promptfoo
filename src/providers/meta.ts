@@ -656,13 +656,12 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
   override async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(missingMetaApiKeyMessage(this.config as MetaMessagesConfig));
     }
 
-    const response = await super.callApi(prompt, context, options);
+    const response = await super.callApi(prompt, context);
 
     // Unlike the chat provider, do NOT skip error responses: the base class
     // deliberately bills errors that carry tokenUsage (e.g. an MCP loop that

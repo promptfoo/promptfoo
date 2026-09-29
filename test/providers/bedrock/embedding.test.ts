@@ -25,7 +25,7 @@ describe('AwsBedrockEmbeddingProvider wire contract', () => {
     const { provider, invokeModel } = mockEmbedding(model, data);
     expect(await provider.callEmbeddingApi('A quiet garden')).toEqual({ embedding: [0.1, 0.2] });
     expect(provider.id()).toBe('custom-embedding');
-    expect(invokeModel.mock.calls[0][0]).toEqual({
+    expect(invokeModel).toHaveBeenCalledWith({
       modelId: model,
       accept: 'application/json',
       contentType: 'application/json',

@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 
 import { PythonShell } from 'python-shell';
+import { getProcessEnv } from '../envars';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { getRequestTimeoutMs } from '../providers/shared';
@@ -51,13 +52,11 @@ export class PythonWorker {
       this.pythonPath || 'python',
       typeof this.pythonPath === 'string',
     );
-    if (this.shuttingDown) {
-      throw new Error('Python worker shut down during startup');
-    }
 
     this.process = new PythonShell(wrapperPath, {
       mode: 'text',
       pythonPath: resolvedPythonPath,
+      env: getProcessEnv(),
       args: [this.scriptPath, this.functionName],
       stdio: ['pipe', 'pipe', 'pipe'],
     });
@@ -275,12 +274,13 @@ export class PythonWorker {
   }
 
   async shutdown(): Promise<void> {
-    this.shuttingDown = true;
     if (!this.process) {
       return;
     }
 
     try {
+      this.shuttingDown = true;
+
       // Reject any in-flight request promptly
       if (this.pendingRequest) {
         this.pendingRequest.reject(new Error('Worker shutting down'));

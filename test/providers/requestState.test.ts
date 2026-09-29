@@ -39,8 +39,7 @@ it('keeps TrueFoundry embedding headers request-local during overlapping calls',
       loggingConfig: { enabled: false },
     },
   });
-  const signal = new AbortController().signal;
-  const firstCall = provider.callEmbeddingApi('first', context(), { abortSignal: signal });
+  const firstCall = provider.callEmbeddingApi('first');
   const secondCall = provider.callEmbeddingApi('second');
   const headersDuringCalls = provider.config.headers;
   const response = {
@@ -55,7 +54,6 @@ it('keeps TrueFoundry embedding headers request-local during overlapping calls',
   await secondCall;
   expect(headersDuringCalls).toBe(headers);
   expect(provider.config.headers).toBe(headers);
-  expect(vi.mocked(fetchWithCache).mock.calls[0][1]?.signal).toBe(signal);
   for (const [, request] of vi.mocked(fetchWithCache).mock.calls) {
     expect(request?.headers).toMatchObject({
       'X-Fixture': 'configured',

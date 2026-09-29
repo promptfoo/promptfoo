@@ -2,7 +2,7 @@ import { resolveProviderCreatorInput } from './creator';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { splitLocalOptions } from './openai/localOptions';
 
-import type { ApiProvider } from '../types/index';
+import type { ApiProvider, CallApiContextParams, CallApiOptionsParams } from '../types/index';
 import type { ProviderCreatorOptions } from './creator';
 
 class CerebrasProvider extends OpenAiChatCompletionProvider {
@@ -10,12 +10,14 @@ class CerebrasProvider extends OpenAiChatCompletionProvider {
     return this.config.organization;
   }
 
-  async getOpenAiBody(prompt: string, context?: any, callApiOptions?: any) {
-    // Get the body from the parent method
+  override async getOpenAiBody(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ) {
     const { body, config } = await super.getOpenAiBody(prompt, context, callApiOptions);
 
-    // Cerebras API doesn't support both max_tokens and max_completion_tokens
-    // If max_completion_tokens is set, use it and remove max_tokens
+    // Cerebras accepts only one token-limit parameter.
     if (body.max_completion_tokens) {
       delete body.max_tokens;
     }
@@ -24,14 +26,7 @@ class CerebrasProvider extends OpenAiChatCompletionProvider {
   }
 }
 
-/**
- * Creates a Cerebras provider using OpenAI-compatible chat endpoints
- *
- * Documentation: https://docs.cerebras.ai
- *
- * Cerebras API supports the OpenAI-compatible chat completion interface.
- * All parameters are automatically passed through to the Cerebras API.
- */
+/** Creates a Cerebras chat provider, keeping transport settings out of the request body. */
 export function createCerebrasProvider(
   providerPath: string,
   options: ProviderCreatorOptions = {},

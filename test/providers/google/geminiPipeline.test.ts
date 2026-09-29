@@ -1,17 +1,25 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AIStudioChatProvider } from '../../../src/providers/google/ai.studio';
 import {
   getGeminiTokenUsage,
   parseGeminiContent,
   prepareGeminiRequest,
 } from '../../../src/providers/google/gemini';
-import { GoogleProvider } from '../../../src/providers/google/provider';
-import { VertexChatProvider } from '../../../src/providers/google/vertex';
 
 import type { CompletionOptions } from '../../../src/providers/google/types';
 import type { GeminiApiResponse } from '../../../src/providers/google/util';
 
-const facades = ['ai-studio', 'unified', 'vertex'] as const;
+const facades = ['ai-studio', 'vertex'] as const;
+
+it.each([
+  { data: [] },
+  { data: [{ usageMetadata: { totalTokenCount: 3 } }] },
+  { data: [{ promptFeedback: { safetyRatings: [{ probability: 'NEGLIGIBLE' }] } }] },
+])('preserves the Vertex error for candidate-free stream %j', ({ data }) => {
+  expect(parseGeminiContent(data as GeminiApiResponse, 'vertex')).toEqual({
+    kind: 'response',
+    response: { error: `No output found in response: ${JSON.stringify(data)}` },
+  });
+});
 
 it('rejects malformed Vertex candidates but preserves finish-only frames', () => {
   const data = [
@@ -55,36 +63,6 @@ it('retains terminal AI Studio safety ratings without dropping streamed output',
       content: { parts: [{ text: 'partial' }] },
     },
   });
-});
-
-it.each([
-  [
-    'AI Studio',
-    () => new AIStudioChatProvider('gemini-2.5-flash', { config: { apiKey: 'fixture' } }),
-  ],
-  ['unified', () => new GoogleProvider('gemini-2.5-flash', { config: { apiKey: 'fixture' } })],
-  ['Vertex', () => new VertexChatProvider('gemini-2.5-flash', { config: {} })],
-] as const)('%s forwards cancellation to tool loading', async (_name, createProvider) => {
-  const provider = createProvider();
-  const controller = new AbortController();
-  const tools = vi
-    .spyOn(provider as any, 'getAllTools')
-    .mockRejectedValue(new Error('tool boundary'));
-  try {
-    await provider
-      .callApi(
-        'hello',
-        { prompt: { raw: 'hello', label: 'fixture' }, vars: {} },
-        { abortSignal: controller.signal },
-      )
-      .catch(() => undefined);
-    expect(tools).toHaveBeenCalledWith(
-      expect.any(Object),
-      expect.objectContaining({ abortSignal: controller.signal }),
-    );
-  } finally {
-    tools.mockRestore();
-  }
 });
 
 describe.each(facades)('%s shared Gemini pipeline', (facade) => {
@@ -144,7 +122,6 @@ describe.each(facades)('%s shared Gemini pipeline', (facade) => {
         vars: {},
       },
       facade,
-      facade === 'vertex',
       getTools,
     );
     expect(body.generationConfig.temperature).toBe(0);
@@ -168,7 +145,6 @@ describe.each(facades)('%s shared Gemini pipeline', (facade) => {
       'Hello',
       undefined,
       facade,
-      facade === 'vertex',
       getTools,
     );
     expect(toolsDisabled).toBe(true);
@@ -185,7 +161,6 @@ describe.each(facades)('%s shared Gemini pipeline', (facade) => {
       'Hello',
       undefined,
       facade,
-      facade === 'vertex',
       async () => [],
     );
     expect(body.generationConfig.responseModalities).toEqual(['AUDIO']);
@@ -207,7 +182,6 @@ it('keeps facade wire names and loaded-schema compatibility explicit', async () 
       'Hello',
       undefined,
       facade,
-      facade === 'vertex',
       async () => [],
     );
     expect(body[facade === 'vertex' ? 'systemInstruction' : 'system_instruction']).toBeDefined();
@@ -224,7 +198,6 @@ it('keeps legacy Vertex generation field order for persistent cache keys', async
     'Hello',
     undefined,
     'vertex',
-    true,
     async () => [],
   );
   expect(Object.keys(body.generationConfig)).toEqual([
@@ -239,7 +212,7 @@ it('keeps legacy Vertex generation field order for persistent cache keys', async
 });
 
 it('preserves unknown usage and vendor prompt-cache accounting', () => {
-  expect(getGeminiTokenUsage(undefined, false, 'unified')).toMatchObject({
+  expect(getGeminiTokenUsage(undefined, false, 'ai-studio')).toMatchObject({
     total: undefined,
     prompt: undefined,
     completion: undefined,
@@ -265,7 +238,7 @@ it('preserves unknown usage and vendor prompt-cache accounting', () => {
     getGeminiTokenUsage({ cachedContentTokenCount: 3 } as any, true, 'ai-studio'),
   ).toMatchObject({
     total: undefined,
-    cached: 3,
+    cached: undefined,
   });
   expect(
     getGeminiTokenUsage(
@@ -278,7 +251,6 @@ it('preserves unknown usage and vendor prompt-cache accounting', () => {
 
 it.each([
   ['ai-studio', false],
-  ['unified', false],
   ['vertex', true],
 ] as const)(
   'keeps %s passthrough safety settings in their original request order',
@@ -291,7 +263,6 @@ it.each([
       'Hello',
       undefined,
       facade,
-      facade === 'vertex',
       vi.fn().mockResolvedValue([]),
     );
 

@@ -13,14 +13,12 @@ Each provider:
 
 ## Provider Lifecycle & Cleanup
 
-The evaluator (`src/evaluator.ts`) manages provider lifecycle with `providerRegistry.withScope()`. Each evaluation releases only resources it owns, and shared providers remain open until all owning evaluations finish. `shutdownAll()` is reserved for process shutdown or explicit caller cleanup.
+The evaluator (`src/evaluator.ts`) manages provider lifecycle. After evaluation completes, it calls `providerRegistry.shutdownAll()` to clean up resources.
 
 **If your provider allocates resources** (Python workers, connections, child processes):
 
 - Implement a `cleanup()` method on your provider
-- Evaluation targets exposing `cleanup()` or legacy `shutdown()` are adopted automatically
-- Register dynamically created resources with `providerRegistry` before initialization and on reuse to claim the current evaluation scope
-- Allow initialization after cleanup when the same provider instance is reused
+- Register with `providerRegistry` for automatic cleanup
 - Resources are released in the evaluator's `finally` block
 
 **Reference implementations:**
@@ -79,13 +77,6 @@ strings persist to disk; if it stores hashed keys, the hash persists.
   `getModerationCacheKey` in `src/providers/azure/moderation.ts`.
 
 ## Caching Best Practices
-
-Use `shouldBustProviderCache(context)` for the shared `bustCache`/legacy `debug`
-precedence, including both reads and writes for manually cached SDK responses.
-Use `withResponseCacheMetadata(response, cached)` after response normalization to
-retain replay provenance and mark cached requests without mutating stored usage.
-The helper preserves reported costs and unknown token counts; the evaluator
-derives incurred usage and cost from the cache marker.
 
 When implementing caching in your provider, **ALWAYS set the `cached: true` flag** when returning a cached response:
 
@@ -163,26 +154,16 @@ ls examples/myprovider/promptfooconfig.yaml
 
 ## Gemini maintenance
 
-The AI Studio, unified Google, and Vertex classes share `google/gemini.ts` for request preparation, streamed candidate parsing, and usage extraction. Keep endpoint/authentication, cache transport, pricing, and final facade response shaping in the existing classes. Add shared pipeline tests when changing Gemini tool merging or stream parsing.
+AI Studio and Vertex share `google/gemini.ts` for request construction, streamed-content parsing, and token accounting. The provider classes own authentication, transport, caching, pricing, and final response fields. Cover shared request and parser changes in `test/providers/google/geminiPipeline.test.ts`.
 
-The facade policy preserves AI Studio's loaded-schema handling, Vertex's context/examples and Model Armor fields, the system-instruction wire names, and legacy unknown-usage/error shapes. Do not silently unify those compatibility choices while editing shared logic. Vertex non-Gemini paths remain independent.
-
-## Request cancellation
-
-Adaptive scheduler slot queues, grouped grading queues, and retry waits also receive the request signal. Cancellation removes waiting work without releasing another call's slot or suppressing errors from already-running callbacks.
-
-All operation interfaces accept optional request options with `abortSignal`. Implementations should check it before dispatch and pass it to their fetch or SDK transport, retry waits, and polling. Authentication and callback waits can use `awaitProviderOperation` from `shared.ts`; this stops waiting but cannot undo a callback already started or cancel a vendor job already accepted.
-
-The optional interface preserves compatibility: third-party providers and legacy implementations can ignore it. Do not claim universal transport cancellation from the method signature alone. Native cancellation is covered for the migrated OpenAI, Anthropic Messages, MCP tools, Azure chat/embedding/moderation, Google, Ollama, Hugging Face, Cohere/Voyage/LocalAI embedding, and Bedrock embedding/video paths. Other implementations require their own transport-level tests before claiming support.
+Preserve each provider's request field order, response-schema handling, system-instruction names, and unknown-usage and error contracts. Vertex also keeps its context/examples and Model Armor fields. Its non-Gemini paths stay separate.
 
 ## Tool callbacks
 
-Use `executeCallback` from `functionCallbackExecutor.ts` for callback loading, reference-aware caching, cancellation, and traced execution. Keep file-export policy and wire conversion in each adapter. Pass `transformOutput` when serialization is part of the tool execution so failures are recorded before the span closes. The execution record retains tool name, arguments, call ID, raw output, and the original error.
-
-Use `normalizeMcpToolContent` from `mcp/util.ts` for MCP content blocks; keep each provider's tool-result envelope and error policy local.
+Use `executeCallback` from `functionCallbackExecutor.ts` for callback loading, reference-aware caching, and traced execution. Keep file-export policy and output conversion in each adapter. Pass `transformOutput` to record the serialized result before the tool span closes. The execution record retains the tool name, arguments, call ID, output, and original error.
 
 ## Creator inputs
 
-The loader normalizes configuration and environment once; factories receive that `ProviderOptions` and a context containing the same merged environment. New creator adapters should accept `providerOptions` directly rather than nesting it under another `config`. `creator.ts` adapts the legacy nested input only at existing public creator boundaries.
+The loader normalizes configuration and environment once. Factories receive those `ProviderOptions`; existing public creators accept them as `providerOptions`. `creator.ts` adapts the older nested `config` input at those public boundaries.
 
-`families/compatible.ts` loads the Cerebras, Envoy, LiteLLM, Novita, Nscale, and TogetherAI creators on demand. These family factories run before the generic file fallback, including when a model name ends in `.js`. Keep alias/default-subtype rules inside each creator, and preserve the distinction between family load gates and factory dispatch predicates.
+`families/compatible.ts` loads the Cerebras, Envoy, LiteLLM, Novita, Nscale, and TogetherAI creators on demand, before the generic file fallback. Preserve each creator's aliases, default subtype, and colon-containing model names.

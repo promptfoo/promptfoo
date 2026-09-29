@@ -12,6 +12,7 @@ import { resolveProviderCreatorInput } from './creator';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { hasOpenAiGatewayCredentials } from './openai/util';
 
 import type { ProviderCreatorOptions } from './creator';
 import type { OpenAiCompletionOptions } from './openai/types';
@@ -93,7 +94,32 @@ abstract class LiteLLMProviderWrapper<TProvider extends LiteLLMDelegate>
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    return this.provider.callApi(prompt, context, options);
+    const headers =
+      this.providerType === 'chat'
+        ? (context?.prompt?.config?.headers ?? this.config.headers)
+        : this.config.headers;
+    return this.withAuthHint(await this.provider.callApi(prompt, context, options), headers);
+  }
+
+  protected withAuthHint<T extends { error?: string }>(
+    response: T,
+    headers: Record<string, string> | undefined = this.config.headers,
+  ): T {
+    if (
+      !response.error ||
+      this.getApiKey?.() ||
+      hasOpenAiGatewayCredentials(headers, this.provider.getApiUrl()) ||
+      !/\b(?:401|unauthorized|authentication error|auth_error|invalid_api_key)\b/i.test(
+        response.error.split('\n', 1)[0],
+      )
+    ) {
+      return response;
+    }
+
+    return {
+      ...response,
+      error: `${response.error}\nNo LiteLLM API key was configured. Set LITELLM_API_KEY or the provider's apiKey or apiKeyEnvar. OPENAI_API_KEY is not used by default.`,
+    };
   }
 }
 
@@ -117,8 +143,10 @@ class LiteLLMEmbeddingProvider
     super(new OpenAiEmbeddingProvider(modelName, options), 'embedding', options.id);
   }
 
-  callEmbeddingApi(...args: Parameters<ApiEmbeddingProvider['callEmbeddingApi']>) {
-    return this.provider.callEmbeddingApi(...args);
+  async callEmbeddingApi(...args: Parameters<ApiEmbeddingProvider['callEmbeddingApi']>) {
+    const callEmbeddingApi: ApiEmbeddingProvider['callEmbeddingApi'] =
+      this.provider.callEmbeddingApi.bind(this.provider);
+    return this.withAuthHint(await callEmbeddingApi(...args));
   }
 }
 

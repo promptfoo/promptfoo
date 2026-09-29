@@ -1,3 +1,4 @@
+import { getEnvString } from '../envars';
 import { resolveProviderCreatorInput } from './creator';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
@@ -41,11 +42,10 @@ export function createEnvoyProvider(
   // Filter out basePath from config to avoid passing it to the API
   const { basePath: _, ...configWithoutBasePath } = providerOptions.config || {};
 
-  // Get the gateway URL from config or environment
   const apiBaseUrl =
     configWithoutBasePath.apiBaseUrl ||
     providerOptions.env?.ENVOY_API_BASE_URL ||
-    process.env.ENVOY_API_BASE_URL;
+    getEnvString('ENVOY_API_BASE_URL');
 
   if (!apiBaseUrl) {
     throw new Error(
@@ -53,18 +53,14 @@ export function createEnvoyProvider(
     );
   }
 
-  // Ensure the URL ends with the correct path if not already specified
-  const normalizedBaseUrl = apiBaseUrl.endsWith('/v1')
-    ? apiBaseUrl
-    : `${apiBaseUrl.replace(/\/$/, '')}/v1`;
+  const baseUrl = apiBaseUrl.replace(/\/+$/, '');
+  const normalizedBaseUrl = baseUrl.endsWith('/v1') ? baseUrl : `${baseUrl}/v1`;
 
   const envoyConfig = {
     ...providerOptions,
     config: {
-      apiBaseUrl: normalizedBaseUrl,
-      // Authentication is optional and depends on gateway configuration
-      // Users can specify apiKey, headers, or other auth in their config
       ...configWithoutBasePath,
+      apiBaseUrl: normalizedBaseUrl,
     },
   };
 

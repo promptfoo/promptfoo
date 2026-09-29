@@ -722,29 +722,6 @@ describe('AIStudioChatProvider', () => {
       expect(response.error).toContain('Model not found');
     });
 
-    it('preserves usage without charging a replayed legacy response', async () => {
-      const provider = new AIStudioChatProvider('palm2', { config: { apiKey: 'test-key' } });
-      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-        data: {
-          candidates: [{ content: 'cached legacy response' }],
-          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
-        },
-        cached: true,
-      } as any);
-
-      const response = await provider.callApi('test prompt');
-      expect(response).toMatchObject({
-        cached: true,
-        tokenUsage: {
-          prompt: 10,
-          completion: 5,
-          cached: 15,
-          numRequests: 0,
-          incurredTokenUsage: {},
-        },
-      });
-    });
-
     it('should call the correct API endpoint for non-Gemini models', async () => {
       const provider = new AIStudioChatProvider('palm2', {
         config: {
@@ -1099,13 +1076,12 @@ describe('AIStudioChatProvider', () => {
 
       const response = await provider.callGemini('test prompt');
 
-      expect(response).toMatchObject({
+      expect(response).toEqual({
         output: 'cached response',
         tokenUsage: {
           cached: 15,
           total: 15,
-          numRequests: 0,
-          incurredTokenUsage: {},
+          numRequests: 1,
         },
         raw: mockResponse.data,
         cached: true,
@@ -1546,17 +1522,13 @@ describe('AIStudioChatProvider', () => {
           "Function callback 'fail' failed after 1 completed callback(s)",
         );
         expect(response.error).toContain('Check for side effects before retrying');
-        expect(response.output).toBe('completed');
+        expect(response.output).toBeUndefined();
         expect(response.cached).toBe(cached);
         expect(response.tokenUsage).toMatchObject({
           total: 15,
           ...(cached ? { cached: 15 } : { prompt: 10, completion: 5 }),
         });
-        expect(response.cost).toEqual(expect.any(Number));
-        expect(response.tokenUsage?.numRequests).toBe(cached ? 0 : 1);
-        if (cached) {
-          expect(response.tokenUsage?.incurredTokenUsage).toEqual({});
-        }
+        expect(response.cost).toEqual(cached ? undefined : expect.any(Number));
         expect(response.metadata?.thoughtSignatures).toEqual(['signature']);
         expect(response.raw).toMatchObject({ usageMetadata: { totalTokenCount: 15 } });
         expect(succeed).toHaveBeenCalledExactlyOnceWith('{}');
@@ -1813,6 +1785,43 @@ describe('AIStudioChatProvider', () => {
         expect.any(Boolean),
       );
     });
+
+    it.each([true, false])(
+      'deduplicates declarations across REST tools (canonical first: %s)',
+      async (canonicalFirst) => {
+        const canonical = {
+          name: 'lookup',
+          parameters: {
+            type: 'OBJECT' as const,
+            properties: { code: { type: 'STRING' as const } },
+            required: ['code'],
+          },
+        };
+        const camelTool = { functionDeclarations: [canonical] };
+        const snakeTool = { function_declarations: [{ name: 'lookup' }] };
+        provider = new AIStudioChatProvider('gemini-3.6-flash', {
+          config: {
+            apiKey: 'test-key',
+            tools: canonicalFirst ? [camelTool, snakeTool] : [snakeTool, camelTool],
+          },
+        });
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValueOnce({
+          contents: [{ role: 'user', parts: [{ text: 'Look up the code' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          data: { candidates: [{ content: { parts: [{ text: 'Done' }] } }] },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        expect((await provider.callGemini('Look up the code')).error).toBeUndefined();
+        const body = JSON.parse(vi.mocked(cache.fetchWithCache).mock.calls[0][1]?.body as string);
+        expect(body.tools).toEqual([{ functionDeclarations: [canonical] }]);
+      },
+    );
 
     it('should handle function calling configuration', async () => {
       vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
@@ -2491,7 +2500,7 @@ describe('AIStudioChatProvider', () => {
       );
     });
 
-    it('should handle Google Search retrieval for Gemini 1.5 models', async () => {
+    it('should handle Google Search retrieval for Gemini 2.5 models', async () => {
       // Reset the Nunjucks mock to return the non-rendered value for these tests
       vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
         return {
@@ -2964,11 +2973,8 @@ describe('AIStudioChatProvider', () => {
 
         expect(response.tokenUsage).toEqual({
           cached: 80,
-          prompt: 10,
-          completion: 20,
           total: 80,
-          numRequests: 0,
-          incurredTokenUsage: {},
+          numRequests: 1,
           completionDetails: {
             reasoning: 50,
             acceptedPrediction: 0,
@@ -2976,6 +2982,37 @@ describe('AIStudioChatProvider', () => {
           },
         });
       });
+    });
+
+    it('should not double-count tool-use prompt tokens when pricing a standard Gemini response', async () => {
+      const provider = new AIStudioChatProvider('gemini-2.5-flash', {
+        config: { apiKey: 'test-key' },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1_000,
+            toolUsePromptTokenCount: 400,
+            candidatesTokenCount: 500,
+            totalTokenCount: 1_900,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+        contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+
+      const result = await provider.callGemini('test prompt');
+
+      expect(result.tokenUsage).toMatchObject({ prompt: 1_400, completion: 500, total: 1_900 });
+      expect(result.cost).toBeCloseTo((1_400 * 0.3 + 500 * 2.5) / 1e6, 12);
     });
 
     describe('thinking token cost calculation', () => {
@@ -3085,7 +3122,7 @@ describe('AIStudioChatProvider', () => {
         expect(response.metadata).toMatchObject({ serviceTier: 'standard' });
       });
 
-      it('preserves the estimated cost for a cached thinking response', async () => {
+      it('should not include thinking tokens in cost when response is cached', async () => {
         const provider = new AIStudioChatProvider('gemini-2.5-flash', {
           config: {
             apiKey: 'test-key',
@@ -3116,8 +3153,7 @@ describe('AIStudioChatProvider', () => {
 
         const response = await provider.callGemini('test prompt');
 
-        expect(response.cost).toBeCloseTo(0.0007655);
-        expect(response.tokenUsage).toMatchObject({ numRequests: 0, incurredTokenUsage: {} });
+        expect(response.cost).toBeUndefined();
       });
 
       it('should calculate cost correctly when thoughtsTokenCount is absent', async () => {
@@ -3217,7 +3253,7 @@ describe('AIStudioEmbeddingProvider', () => {
     expect(response.cost).toBeCloseTo(0.002, 10);
   });
 
-  it('preserves estimated cost for cached embedding responses', async () => {
+  it('omits cost for cached embedding responses', async () => {
     vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: {
         embedding: { values: [0.1, 0.2] },
@@ -3230,8 +3266,7 @@ describe('AIStudioEmbeddingProvider', () => {
     const response = await provider.callEmbeddingApi('hello world');
 
     expect(response.cached).toBe(true);
-    expect(response.cost).toBeCloseTo(0.002, 10);
-    expect(response.tokenUsage).toMatchObject({ numRequests: 0, incurredTokenUsage: {} });
+    expect(response.cost).toBeUndefined();
   });
 
   it('omits cost when the response has no usage metadata', async () => {
@@ -3241,7 +3276,6 @@ describe('AIStudioEmbeddingProvider', () => {
     const response = await provider.callEmbeddingApi('hello world');
 
     expect(response.cost).toBeUndefined();
-    expect(response.tokenUsage).toEqual({ numRequests: 1 });
   });
 
   it('forwards taskType, outputDimensionality, and title from config', async () => {
@@ -3307,7 +3341,7 @@ describe('AIStudioEmbeddingProvider', () => {
     expect(response.error).toContain('No embedding found');
   });
 
-  it('marks responses as cached without a new request', async () => {
+  it('marks responses as cached and records one logical request', async () => {
     vi.mocked(cache.fetchWithCache).mockResolvedValue({
       ...(embeddingResponse([0.1, 0.2], 3) as any),
       cached: true,
@@ -3317,12 +3351,7 @@ describe('AIStudioEmbeddingProvider', () => {
     const response = await provider.callEmbeddingApi('hello');
 
     expect(response.cached).toBe(true);
-    expect(response.tokenUsage).toEqual({
-      cached: 3,
-      total: 3,
-      numRequests: 0,
-      incurredTokenUsage: {},
-    });
+    expect(response.tokenUsage).toEqual({ cached: 3, total: 3, numRequests: 1 });
   });
 
   it('does not support text inference via callApi', async () => {

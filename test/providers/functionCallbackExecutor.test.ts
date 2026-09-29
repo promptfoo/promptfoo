@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { executeCallback } from '../../src/providers/functionCallbackExecutor';
-import { normalizeMcpToolContent } from '../../src/providers/mcp/util';
 import { createDeferred } from '../util/utils';
 
 afterEach(() => vi.restoreAllMocks());
@@ -128,6 +127,24 @@ describe('callback execution records', () => {
     expect(loadFile).toHaveBeenCalledTimes(3);
   });
 
+  it('keeps a reused reference cached when an earlier different load finishes later', async () => {
+    const cache = {};
+    const pending = createDeferred<Function>();
+    const loadFile = vi
+      .fn()
+      .mockResolvedValueOnce(() => 'first')
+      .mockReturnValueOnce(pending.promise);
+    const call = (reference: string) =>
+      executeCallback({ ...identity, reference, cache, loadFile });
+    expect((await call('file://first.js')).output).toBe('first');
+    const secondCall = call('file://second.js');
+    expect((await call('file://first.js')).output).toBe('first');
+    pending.resolve(() => 'second');
+    expect((await secondCall).output).toBe('second');
+    expect((await call('file://first.js')).output).toBe('first');
+    expect(loadFile).toHaveBeenCalledTimes(2);
+  });
+
   it('lets an older load populate the cache when a newer load fails', async () => {
     const cache = {};
     const first = createDeferred<Function>();
@@ -206,59 +223,4 @@ describe('callback execution records', () => {
     expect(Object.getPrototypeOf(cache)).toBe(Object.prototype);
     expect(Object.hasOwn(cache, '__proto__')).toBe(true);
   });
-
-  it('does not load an already-cancelled callback', async () => {
-    const loadFile = vi.fn();
-    await expect(
-      executeCallback({
-        ...identity,
-        reference: 'file://fixture.js',
-        cache: {},
-        loadFile,
-        signal: AbortSignal.abort(new Error('cancelled')),
-      }),
-    ).rejects.toThrow('cancelled');
-    expect(loadFile).not.toHaveBeenCalled();
-  });
-
-  it('cancels a pending load without invoking its eventual callback', async () => {
-    const controller = new AbortController();
-    const loaded = createDeferred<Function>();
-    const callback = vi.fn();
-    const pending = executeCallback({
-      ...identity,
-      reference: 'file://fixture.js',
-      cache: {},
-      loadFile: () => loaded.promise,
-      signal: controller.signal,
-    });
-    controller.abort(new Error('cancelled load'));
-    await expect(pending).rejects.toThrow('cancelled load');
-    loaded.resolve(callback);
-    await Promise.resolve();
-    expect(callback).not.toHaveBeenCalled();
-  });
-});
-
-it('normalizes mixed MCP result blocks consistently', () => {
-  expect(
-    normalizeMcpToolContent([
-      'plain',
-      { text: 'text' },
-      { json: { found: true } },
-      { data: [1, 2] },
-      { extra: false },
-      0,
-      null,
-    ]),
-  ).toBe('plain\ntext\n{"found":true}\n[1,2]\n{"extra":false}\n0\nnull');
-  expect(normalizeMcpToolContent(undefined)).toBe('');
-  expect(normalizeMcpToolContent('')).toBe('');
-});
-
-it('normalizes MCP content with BigInt and circular JSON blocks', () => {
-  const circular: { value: number; self?: unknown } = { value: 2 };
-  circular.self = circular;
-  expect(normalizeMcpToolContent([{ json: 1n }, { data: circular }])).toBe('1\n[object Object]');
-  expect(normalizeMcpToolContent(circular)).toBe('[object Object]');
 });
