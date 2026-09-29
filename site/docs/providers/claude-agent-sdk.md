@@ -213,8 +213,8 @@ Model selection is optional, since Claude Agent SDK uses sensible defaults. When
 providers:
   - id: anthropic:claude-agent-sdk
     config:
-      model: claude-opus-4-6
-      fallback_model: claude-sonnet-4-5-20250929
+      model: claude-opus-5
+      fallback_model: claude-sonnet-5
 ```
 
 Claude Agent SDK also supports a number of [model aliases](https://docs.claude.com/en/docs/claude-code/model-config#model-aliases), which can also be used in the configuration.
@@ -738,7 +738,7 @@ Currently available betas:
 | ----------------------- | -------------------------------------------------- |
 | `context-1m-2025-08-07` | Enable 1M token context window (Sonnet 4/4.5 only) |
 
-See the [Anthropic beta headers documentation](https://docs.anthropic.com/en/api/beta-headers) for more information.
+See the [Anthropic beta headers documentation](https://docs.claude.com/en/api/beta-headers) for more information.
 
 ## Sandbox Configuration
 
@@ -798,7 +798,7 @@ sandbox:
 
 Leave `credentials.allowPlaintextInject` disabled unless the target is a trusted-network test fixture; plain HTTP cannot verify the upstream identity or protect the credential in transit.
 
-See the [Claude Code sandbox documentation](https://docs.anthropic.com/en/docs/claude-code/settings#sandbox-settings) for more details.
+See the [Claude Code sandbox documentation](https://docs.claude.com/en/docs/claude-code/settings#sandbox-settings) for more details.
 
 ## Settings
 
@@ -1146,6 +1146,8 @@ providers:
 ## Token Usage
 
 With SDK 0.3.257 and newer, reported thinking tokens appear in `tokenUsage.completionDetails.reasoning`. They are already included in completion and total token counts. Sessions resumed from older SDK versions may report only a partial thinking-token count.
+
+For resumed, continued, or forked sessions, `cost`, `tokenUsage`, and `metadata.modelUsage` cover only the current call, including subagents. Cumulative SDK totals remain in `raw`, `metadata.sessionCost`, and `metadata.sessionModelUsage`. Promptfoo captures a pre-prompt baseline using the SDK's experimental usage API. If that API is unavailable, times out, or a local command bypasses the prompt hook, the output is preserved but per-call accounting is omitted with a warning and `metadata.usageAccounting: 'unavailable'`; cost assertions then fail rather than treating unknown cost as zero.
 
 ## Error Diagnostics
 

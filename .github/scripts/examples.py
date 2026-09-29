@@ -61,6 +61,11 @@ EXAMPLES = {
         ((".", "dependencies_test.py"),),
         minimums=True,
     ),
+    "redteam-langchain": Example(
+        "examples/redteam-langchain",
+        ("3.10", "3.14"),
+        ((".", "*_test.py"),),
+    ),
     "openai-agents": Example(
         "examples/openai-agents",
         ("3.12", "3.14"),
@@ -98,6 +103,50 @@ EXAMPLES = {
             "opentelemetry-sdk>=1.44,<2",
             "opentelemetry-exporter-otlp-proto-http>=1.44,<2",
         ),
+    ),
+    "langgraph": Example(
+        "examples/integration-langgraph",
+        ("3.10", "3.14"),
+        ((".", "agent_test.py"),),
+    ),
+    "rag-pdf": Example(
+        "examples/eval-rag-full",
+        ("3.10",),
+        (("tests", "test_*.py"),),
+    ),
+    "rag-pdf-cli": Example(
+        "examples/eval-rag-full",
+        ("3.14",),
+        (("tests", "test_*.py"), ("tests", "smoke_cli.py")),
+        node=True,
+    ),
+    "f-score": Example(
+        "examples/eval-f-score",
+        ("3.10", "3.14"),
+        ((".", "dependencies_test.py"),),
+    ),
+    "google-adk": Example(
+        "examples/integration-google-adk",
+        ("3.12", "3.14"),
+        ((".", "*_test.py"), ("../../.github/scripts/tests/google_adk", "test_cli.py")),
+        node=True,
+    ),
+    "google-adk-minimums": Example(
+        "examples/integration-google-adk",
+        ("3.10",),
+        ((".", "*_test.py"), ("../../.github/scripts/tests/google_adk", "test_cli.py")),
+        node=True,
+        minimums=True,
+    ),
+    "google-adk-litellm": Example(
+        "examples/integration-google-adk",
+        ("3.12",),
+        (
+            (".", "*_test.py"),
+            ("../../.github/scripts/tests/google_adk", "test_litellm.py"),
+        ),
+        node=True,
+        extra_requirements=("litellm>=1.101,<2",),
     ),
 }
 
@@ -225,6 +274,7 @@ def run_example(name: str) -> None:
         if example.seed:
             run(*pip, *example.seed)
         requirements = ROOT / example.directory / "requirements.txt"
+        # Resolve optional adapters together with the example's own bounds.
         install = [*pip, "-r", str(requirements), *example.extra_requirements]
         if example.minimums:
             constraints = Path(temporary) / "minimums.txt"
