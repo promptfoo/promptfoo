@@ -139,6 +139,7 @@ import type {
   EvaluatorResultWriter,
   EvaluatorRuntime,
 } from './evaluator/runtime';
+import type { StatableResult } from './runStats/types';
 import type {
   EvalConversations,
   EvalRegisters,
@@ -3564,6 +3565,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   fileWriters: EvaluatorResultWriter[];
   rateLimitRegistry: RateLimitRegistry | undefined;
   private readonly invocationResultIds: string[] = [];
+  private readonly invocationComparisonResults: StatableResult[] = [];
   private readonly unpersistedInvocationResults: EvaluateResult[] = [];
 
   private readonly comparisonProviders = new Map<string, ComparisonProviders>();
@@ -4430,6 +4432,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
   }) {
+    this.store.evaluation.interrupted = true;
     logger.info('Evaluation interrupted, saving progress...');
     if (globalTimeout) {
       clearTimeout(globalTimeout);
@@ -4855,6 +4858,16 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     wasSuccess: boolean;
     wasScore: number;
   }) {
+    if (cliState.resume && !this.currentResultKeys.has(getResultIndexKey(result))) {
+      this.invocationComparisonResults.push({
+        gradingOnly: true,
+        testIdx: result.testIdx,
+        promptIdx: result.promptIdx,
+        success: gradingResult.pass,
+        latencyMs: 0,
+        gradingResult: { tokensUsed: gradingResult.tokensUsed, componentResults: [gradingResult] },
+      });
+    }
     this.updateComparisonStats(
       result,
       gradingResult.pass,
@@ -5101,9 +5114,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     yield this.store.results;
   }
 
-  private async *getInvocationTelemetryResultBatches(): AsyncGenerator<
-    Array<TResult | EvaluateResult>
-  > {
+  private async *getInvocationTelemetryResultBatches(): AsyncGenerator<StatableResult[]> {
+    yield this.invocationComparisonResults;
     if (this.store.persisted) {
       const seenResultIndexes =
         this.store.resultPersistenceFailed || this.unpersistedInvocationResults.length > 0
@@ -5247,6 +5259,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   private async _runEvaluation(): Promise<TEvaluation> {
+    this.store.evaluation.interrupted = false;
     const { options } = this;
     let { testSuite } = this;
 

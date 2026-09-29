@@ -7,13 +7,14 @@ import type { GradingResult, ProviderResponse, ResultFailureReason } from '../ty
  * It is satisfied by both EvalResult (database model) and EvaluateResult (interface).
  */
 export interface StatableResult {
+  gradingOnly?: boolean;
   testIdx?: number;
   promptIdx?: number;
   success: boolean;
   latencyMs: number;
   error?: string | null;
   failureReason?: ResultFailureReason;
-  response?: Pick<ProviderResponse, 'cached' | 'tokenUsage'>;
+  response?: Pick<ProviderResponse, 'cached' | 'tokenUsage' | 'output' | 'error'>;
   provider?: { id?: string };
   gradingResult?: Pick<GradingResult, 'componentResults' | 'tokensUsed'> | null;
 }

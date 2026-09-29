@@ -127,7 +127,7 @@ export class RunStatsAccumulator {
     };
   }
 
-  private addResult(result: StatableResult): void {
+  private addProviderResult(result: StatableResult): void {
     this.processedResultCount++;
 
     if (result.latencyMs >= 0) {
@@ -135,9 +135,12 @@ export class RunStatsAccumulator {
     }
 
     const operationalError = isOperationalError(result);
-    if (!operationalError && result.response?.cached === true) {
+    const targetError =
+      operationalError &&
+      (Boolean(result.response?.error) || result.response?.output === undefined);
+    if (!targetError && result.response?.cached === true) {
       this.cacheHits++;
-    } else if (!operationalError && result.response) {
+    } else if (!targetError && result.response) {
       this.cacheMisses++;
     }
 
@@ -149,13 +152,6 @@ export class RunStatsAccumulator {
         this.foundTimedOutResult = true;
       }
     }
-    this.foundAssertionTokenUsage =
-      accumulateResultAssertionTokenUsage(
-        this.assertionTokenUsage,
-        result,
-        this.seenComparisonAssertionTokenUsage,
-      ) || this.foundAssertionTokenUsage;
-
     const providerId = result.provider?.id || 'unknown';
     this.modelProviderIds.add(providerId);
     const provider = this.providers.get(providerId) ?? {
@@ -170,7 +166,7 @@ export class RunStatsAccumulator {
     };
     provider.requests++;
     provider.totalLatencyMs += result.latencyMs || 0;
-    if (operationalError) {
+    if (targetError) {
       provider.failures++;
     } else {
       provider.successes++;
@@ -180,6 +176,18 @@ export class RunStatsAccumulator {
     provider.promptTokens += result.response?.tokenUsage?.prompt || 0;
     provider.completionTokens += result.response?.tokenUsage?.completion || 0;
     provider.cachedTokens += result.response?.tokenUsage?.cached || 0;
+  }
+
+  private addResult(result: StatableResult): void {
+    if (!result.gradingOnly) {
+      this.addProviderResult(result);
+    }
+    this.foundAssertionTokenUsage =
+      accumulateResultAssertionTokenUsage(
+        this.assertionTokenUsage,
+        result,
+        this.seenComparisonAssertionTokenUsage,
+      ) || this.foundAssertionTokenUsage;
 
     for (const componentResult of getCountableAssertionComponents(result)) {
       this.assertionCount++;

@@ -205,7 +205,7 @@ describe('doRedteamRun', () => {
         plugins: [{ id: 'pii', numTests: 1 }],
         strategies: [{ id: 'jailbreak' }],
       },
-      targets: [{ id: 'promptfoo:sample-target' }],
+      targets: [{ id: 'https://example.promptfoo.app' }],
     });
     vi.mocked(doEval).mockResolvedValueOnce({
       persisted: false,
@@ -331,6 +331,52 @@ describe('doRedteamRun', () => {
     );
   });
 
+  it.each(['signal', 'interrupted'])('records %s cancellation as aborted', async (mode) => {
+    const controller = new AbortController();
+    vi.mocked(doGenerateRedteam).mockResolvedValueOnce({
+      redteam: { plugins: [], strategies: [] },
+    });
+    vi.mocked(doEval).mockImplementationOnce(async () => {
+      if (mode === 'signal') {
+        controller.abort();
+      }
+      return {
+        interrupted: mode === 'interrupted',
+        persisted: false,
+        getStats: () => ({ successes: 0, failures: 0, errors: 0 }),
+        setGenerationDurationMs: vi.fn(),
+        findTargetErrorStatus: async () => undefined,
+      } as any;
+    });
+    await doRedteamRun({ abortSignal: controller.signal });
+    expect(telemetry.record).toHaveBeenCalledWith(
+      'redteam run',
+      expect.objectContaining({ phase: 'aborted' }),
+    );
+  });
+
+  it.each([
+    ['promptfoo://provider/fixture-id', false],
+    [{ id: 'promptfoo://provider/fixture-id' }, false],
+    ['https://example.promptfoo.app', true],
+  ])('classifies the providers alias %j as sample=%s', async (provider, expected) => {
+    vi.mocked(doGenerateRedteam).mockResolvedValueOnce({
+      providers: [provider],
+      redteam: { plugins: [], strategies: [] },
+    } as any);
+    vi.mocked(doEval).mockResolvedValueOnce({
+      persisted: false,
+      getStats: () => ({ successes: 1, failures: 0, errors: 0 }),
+      setGenerationDurationMs: vi.fn(),
+      findTargetErrorStatus: async () => undefined,
+    } as any);
+    await doRedteamRun({});
+    expect(telemetry.record).toHaveBeenCalledWith(
+      'redteam run',
+      expect.objectContaining({ isPromptfooSampleTarget: expected }),
+    );
+  });
+
   it('records target-error termination as aborted', async () => {
     vi.mocked(doGenerateRedteam).mockResolvedValueOnce({
       redteam: { plugins: [], strategies: [] },
@@ -385,7 +431,7 @@ describe('doRedteamRun', () => {
         plugins: [{ id: 'pii', numTests: 1 }],
         strategies: [{ id: 'jailbreak' }],
       },
-      targets: [{ id: 'promptfoo:sample-target' }],
+      targets: [{ id: 'https://example.promptfoo.app' }],
     });
 
     vi.mocked(doEval).mockResolvedValueOnce({
@@ -408,7 +454,7 @@ describe('doRedteamRun', () => {
           plugins: ['pii'],
           strategies: ['jailbreak'],
         },
-        targets: [{ id: 'promptfoo:sample-target' }],
+        targets: [{ id: 'https://example.promptfoo.app' }],
       },
     });
 

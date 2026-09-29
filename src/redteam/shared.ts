@@ -182,18 +182,14 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
       );
     }
 
-    // Show appropriate completion message based on abort status
-    // Note: Detailed abort information is already shown in the summary, so we just show a brief message here
-    // Check if scan was aborted due to target error (efficient DB query, not loading all results)
     const hasTargetError = evalResult ? (await evalResult.findTargetErrorStatus()) != null : false;
-    if (hasTargetError) {
-      // Abort details already shown in summary - no need to repeat
-    } else {
+    const aborted =
+      hasTargetError || options.abortSignal?.aborted === true || evalResult?.interrupted === true;
+    if (!aborted) {
       logger.info(chalk.green('\nRed team scan complete!'));
     }
-
     if (evalResult) {
-      recordRedteamCompletionTelemetry(evalResult, options, redteamConfig, hasTargetError);
+      recordRedteamCompletionTelemetry(evalResult, options, redteamConfig, aborted);
     }
 
     if (!evalResult?.shared) {
@@ -238,24 +234,21 @@ function getConfigIds(values: unknown): string[] {
 
 function isSampleTarget(target: unknown): boolean {
   if (typeof target === 'string') {
-    return (
-      target.includes('promptfoo:') ||
-      target.includes('promptfoo.app') ||
-      target.includes('promptfoo.dev')
-    );
+    try {
+      const { hostname } = new URL(target);
+      return ['promptfoo.app', 'promptfoo.dev'].some(
+        (domain) => hostname === domain || hostname.endsWith(`.${domain}`),
+      );
+    } catch {
+      return false;
+    }
   }
   if (!target || typeof target !== 'object') {
     return false;
   }
   const { id, config } = target as { id?: string; config?: { url?: string } };
-  const url = config?.url || '';
   return (
-    Object.keys(target).some((key) => isSampleTarget(key)) ||
-    id?.includes('promptfoo:') ||
-    id?.includes('promptfoo.app') ||
-    id?.includes('promptfoo.dev') ||
-    url.includes('promptfoo.app') ||
-    url.includes('promptfoo.dev')
+    Object.keys(target).some(isSampleTarget) || isSampleTarget(id) || isSampleTarget(config?.url)
   );
 }
 
@@ -273,7 +266,7 @@ function recordRedteamCompletionTelemetry(
   const strategies = getConfigIds(config.redteam?.strategies).map((id) =>
     (ALL_STRATEGIES as readonly string[]).includes(id) ? id : 'custom',
   );
-  const targets = config.targets;
+  const targets = config.targets ?? config.providers;
   const isPromptfooSampleTarget =
     typeof targets === 'string'
       ? isSampleTarget(targets)

@@ -25,6 +25,77 @@ describe('computeRunStats', () => {
       id: () => id,
     }) as ApiProvider;
 
+  it.each([undefined, 1])(
+    'deduplicates comparison calls across component positions with aggregate requests=%s',
+    (numRequests) => {
+      const comparison = {
+        pass: true,
+        score: 1,
+        reason: '',
+        assertion: { type: 'select-best' as const, value: 'choose a greeting' },
+        tokensUsed: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
+      };
+      const ordinary = {
+        pass: true,
+        score: 1,
+        reason: '',
+        assertion: { type: 'contains' as const, value: 'hello' },
+      };
+      const runStats = computeRunStats({
+        results: [0, 1].map((promptIdx) => ({
+          testIdx: 0,
+          promptIdx,
+          success: true,
+          latencyMs: 1,
+          gradingResult: {
+            tokensUsed: { total: 50, prompt: 30, completion: 20, numRequests },
+            componentResults: promptIdx === 0 ? [comparison] : [ordinary, comparison],
+          },
+        })),
+        stats: createStats(),
+        providers: [],
+      });
+      expect(runStats.assertions.tokenUsage).toMatchObject({ totalTokens: 50, numRequests: 1 });
+    },
+  );
+
+  it.each([undefined, 1])(
+    'does not recount custom grading children with aggregate requests=%s',
+    (numRequests) => {
+      const tokensUsed = { total: 10, prompt: 8, completion: 2, numRequests: 1 };
+      const child = {
+        pass: true,
+        score: 1,
+        reason: '',
+        assertion: { type: 'llm-rubric' as const },
+        tokensUsed,
+      };
+      const parent = {
+        pass: true,
+        score: 1,
+        reason: '',
+        assertion: { type: 'javascript' as const },
+        tokensUsed,
+        componentResults: [child],
+      };
+      const runStats = computeRunStats({
+        results: [
+          {
+            success: true,
+            latencyMs: 1,
+            gradingResult: {
+              tokensUsed: { ...tokensUsed, numRequests },
+              componentResults: [parent, child],
+            },
+          },
+        ],
+        stats: createStats(),
+        providers: [],
+      });
+      expect(runStats.assertions.tokenUsage).toMatchObject({ totalTokens: 10, numRequests: 1 });
+    },
+  );
+
   it('should compute all stats for empty input', () => {
     const runStats = computeRunStats({
       results: [],

@@ -1,139 +1,55 @@
 import { safeJsonStringify } from '../util/json';
 import { createEmptyAssertions } from '../util/tokenUsageUtils';
-import { getCountableAssertionComponents } from './assertionComponents';
 
-import type { EvaluateStats } from '../types/index';
+import type { EvaluateStats, GradingResult } from '../types/index';
 import type { TokenUsage } from '../types/shared';
 import type { AssertionTokenUsage, StatableResult } from './types';
 
 type AssertionTokenAccumulator = NonNullable<TokenUsage['assertions']>;
 
-function addNumbers(left: number | undefined, right: number | undefined): number {
-  return (left ?? 0) + (right ?? 0);
-}
+const TOKEN_FIELDS = ['total', 'prompt', 'completion', 'cached', 'numRequests'] as const;
+const DETAIL_FIELDS = [
+  'reasoning',
+  'acceptedPrediction',
+  'rejectedPrediction',
+  'cacheReadInputTokens',
+  'cacheCreationInputTokens',
+] as const;
 
 function accumulateAssertionTokens(
   target: AssertionTokenAccumulator,
   usage: Partial<TokenUsage> | undefined,
+  direction = 1,
 ) {
   if (!usage) {
     return;
   }
-
-  target.total = addNumbers(target.total, usage.total);
-  target.prompt = addNumbers(target.prompt, usage.prompt);
-  target.completion = addNumbers(target.completion, usage.completion);
-  target.cached = addNumbers(target.cached, usage.cached);
-  target.numRequests = addNumbers(target.numRequests, usage.numRequests);
-
+  for (const field of TOKEN_FIELDS) {
+    target[field] = Math.max(0, (target[field] ?? 0) + direction * (usage[field] ?? 0));
+  }
   if (usage.completionDetails) {
     target.completionDetails ??= {};
-    target.completionDetails.reasoning = addNumbers(
-      target.completionDetails.reasoning,
-      usage.completionDetails.reasoning,
-    );
-    target.completionDetails.acceptedPrediction = addNumbers(
-      target.completionDetails.acceptedPrediction,
-      usage.completionDetails.acceptedPrediction,
-    );
-    target.completionDetails.rejectedPrediction = addNumbers(
-      target.completionDetails.rejectedPrediction,
-      usage.completionDetails.rejectedPrediction,
-    );
-    target.completionDetails.cacheReadInputTokens = addNumbers(
-      target.completionDetails.cacheReadInputTokens,
-      usage.completionDetails.cacheReadInputTokens,
-    );
-    target.completionDetails.cacheCreationInputTokens = addNumbers(
-      target.completionDetails.cacheCreationInputTokens,
-      usage.completionDetails.cacheCreationInputTokens,
-    );
-  }
-}
-
-function subtractAssertionTokens(
-  target: AssertionTokenAccumulator,
-  usage: Partial<TokenUsage> | undefined,
-) {
-  if (!usage) {
-    return;
-  }
-
-  target.total = Math.max(0, addNumbers(target.total, -(usage.total ?? 0)));
-  target.prompt = Math.max(0, addNumbers(target.prompt, -(usage.prompt ?? 0)));
-  target.completion = Math.max(0, addNumbers(target.completion, -(usage.completion ?? 0)));
-  target.cached = Math.max(0, addNumbers(target.cached, -(usage.cached ?? 0)));
-  target.numRequests = Math.max(0, addNumbers(target.numRequests, -(usage.numRequests ?? 0)));
-
-  if (usage.completionDetails && target.completionDetails) {
-    target.completionDetails.reasoning = Math.max(
-      0,
-      addNumbers(target.completionDetails.reasoning, -(usage.completionDetails.reasoning ?? 0)),
-    );
-    target.completionDetails.acceptedPrediction = Math.max(
-      0,
-      addNumbers(
-        target.completionDetails.acceptedPrediction,
-        -(usage.completionDetails.acceptedPrediction ?? 0),
-      ),
-    );
-    target.completionDetails.rejectedPrediction = Math.max(
-      0,
-      addNumbers(
-        target.completionDetails.rejectedPrediction,
-        -(usage.completionDetails.rejectedPrediction ?? 0),
-      ),
-    );
-    target.completionDetails.cacheReadInputTokens = Math.max(
-      0,
-      addNumbers(
-        target.completionDetails.cacheReadInputTokens,
-        -(usage.completionDetails.cacheReadInputTokens ?? 0),
-      ),
-    );
-    target.completionDetails.cacheCreationInputTokens = Math.max(
-      0,
-      addNumbers(
-        target.completionDetails.cacheCreationInputTokens,
-        -(usage.completionDetails.cacheCreationInputTokens ?? 0),
-      ),
-    );
-  }
-}
-
-function getDuplicateComparisonTokenUsage(
-  result: StatableResult,
-  seenComparisonTokenUsage: Set<string> | undefined,
-): Set<number> {
-  const duplicateIndexes = new Set<number>();
-  if (result.testIdx === undefined || !seenComparisonTokenUsage) {
-    return duplicateIndexes;
-  }
-
-  getCountableAssertionComponents(result).forEach((componentResult, index) => {
-    if (componentResult.assertion?.type !== 'select-best' || !componentResult.tokensUsed) {
-      return;
+    for (const field of DETAIL_FIELDS) {
+      target.completionDetails[field] = Math.max(
+        0,
+        (target.completionDetails[field] ?? 0) + direction * (usage.completionDetails[field] ?? 0),
+      );
     }
-    const key = `${result.testIdx}:${index}:${safeJsonStringify(componentResult.assertion)}:${safeJsonStringify(componentResult.tokensUsed)}`;
-    if (seenComparisonTokenUsage.has(key)) {
-      duplicateIndexes.add(index);
-    } else {
-      seenComparisonTokenUsage.add(key);
-    }
-  });
-  return duplicateIndexes;
+  }
 }
 
-function getComponentAssertionRequestCount(
-  result: StatableResult,
-  duplicateComparisonIndexes: Set<number>,
-): number {
-  return getCountableAssertionComponents(result).reduce(
-    (count, componentResult, index) =>
-      count +
-      (duplicateComparisonIndexes.has(index) ? 0 : (componentResult.tokensUsed?.numRequests ?? 0)),
-    0,
-  );
+function getComponentTokenUsage(component: GradingResult): Partial<TokenUsage> | undefined {
+  if (component.tokensUsed) {
+    return component.tokensUsed;
+  }
+  const usage = createAssertionTokenAccumulator();
+  let found = false;
+  for (const child of component.componentResults ?? []) {
+    const childUsage = getComponentTokenUsage(child);
+    accumulateAssertionTokens(usage, childUsage);
+    found ||= Boolean(childUsage);
+  }
+  return found ? usage : undefined;
 }
 
 export function createAssertionTokenAccumulator(): AssertionTokenAccumulator {
@@ -145,55 +61,47 @@ export function accumulateResultAssertionTokenUsage(
   result: StatableResult,
   seenComparisonTokenUsage?: Set<string>,
 ): boolean {
-  const components = getCountableAssertionComponents(result);
-  const duplicateComparisonIndexes = getDuplicateComparisonTokenUsage(
-    result,
-    seenComparisonTokenUsage,
-  );
-  const topLevelTokenUsage = result.gradingResult?.tokensUsed;
-  if (topLevelTokenUsage) {
-    accumulateAssertionTokens(target, topLevelTokenUsage);
-    for (const duplicateIndex of duplicateComparisonIndexes) {
-      subtractAssertionTokens(target, components[duplicateIndex]?.tokensUsed);
-    }
-
-    // Comparison assertions can merge token totals into the row-level grading
-    // result without preserving numRequests. Component results still retain
-    // those request counts, so use them to fill only the missing request delta.
-    const topLevelRequestCount = topLevelTokenUsage.numRequests ?? 0;
-    const duplicateComparisonRequestCount = Array.from(duplicateComparisonIndexes).reduce(
-      (count, index) => count + (components[index]?.tokensUsed?.numRequests ?? 0),
-      0,
-    );
-    const retainedTopLevelRequestCount = Math.max(
-      0,
-      topLevelRequestCount - duplicateComparisonRequestCount,
-    );
-    const componentRequestCount = getComponentAssertionRequestCount(
-      result,
-      duplicateComparisonIndexes,
-    );
-    if (componentRequestCount > retainedTopLevelRequestCount) {
-      target.numRequests = addNumbers(
-        target.numRequests,
-        componentRequestCount - retainedTopLevelRequestCount,
-      );
-    }
-
-    return true;
-  }
-
-  let foundTokenUsage = false;
-  for (const [index, componentResult] of components.entries()) {
-    if (duplicateComparisonIndexes.has(index)) {
+  const components = result.gradingResult?.componentResults ?? [];
+  const componentUsage = createAssertionTokenAccumulator();
+  const duplicates: Partial<TokenUsage>[] = [];
+  const occurrences = new Map<string, number>();
+  let found = Boolean(result.gradingResult?.tokensUsed);
+  for (let index = 0; index < components.length; index++) {
+    const component = components[index];
+    // AssertionsResult emits each aggregate followed by its already-counted children.
+    index += component.componentResults?.length ?? 0;
+    const usage = getComponentTokenUsage(component);
+    accumulateAssertionTokens(componentUsage, usage);
+    found ||= Boolean(usage);
+    if (
+      component.assertion?.type !== 'select-best' ||
+      !component.tokensUsed ||
+      result.testIdx === undefined ||
+      !seenComparisonTokenUsage
+    ) {
       continue;
     }
-    if (componentResult.tokensUsed) {
-      accumulateAssertionTokens(target, componentResult.tokensUsed);
-      foundTokenUsage = true;
+    const identity = safeJsonStringify(component.assertion) ?? 'select-best';
+    const occurrence = occurrences.get(identity) ?? 0;
+    occurrences.set(identity, occurrence + 1);
+    const key = `${result.testIdx}:${identity}:${occurrence}`;
+    if (seenComparisonTokenUsage.has(key)) {
+      duplicates.push(component.tokensUsed);
+    } else {
+      seenComparisonTokenUsage.add(key);
     }
   }
-  return foundTokenUsage;
+  const rowUsage = createAssertionTokenAccumulator();
+  const aggregate = result.gradingResult?.tokensUsed;
+  accumulateAssertionTokens(rowUsage, aggregate ?? componentUsage);
+  if (aggregate && aggregate.numRequests === undefined) {
+    rowUsage.numRequests = componentUsage.numRequests;
+  }
+  for (const duplicate of duplicates) {
+    accumulateAssertionTokens(rowUsage, duplicate, -1);
+  }
+  accumulateAssertionTokens(target, rowUsage);
+  return found;
 }
 
 export function getStatsAssertionTokenUsage(stats: EvaluateStats): AssertionTokenAccumulator {

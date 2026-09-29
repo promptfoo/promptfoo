@@ -29,6 +29,7 @@ export interface EvaluationRecord {
   readonly results: EvaluationStoreResult[];
   resultPersistenceFailed: boolean;
   runStats?: EvalRunStats;
+  interrupted?: boolean;
 }
 
 export interface EvaluationStore<
