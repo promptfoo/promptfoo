@@ -5,10 +5,19 @@ import https from 'https';
 import path from 'path';
 
 import httpZ from 'http-z';
+import { LRUCache } from 'lru-cache';
 import { Agent, type Dispatcher, interceptors } from 'undici';
 import { z } from 'zod';
 import { fetchWithCache } from '../cache';
 import cliState from '../cliState';
+import {
+  HttpProviderConfigFieldsSchema,
+  HttpSessionInputSchema,
+  HttpTokenEstimationInputSchema,
+} from '../contracts/providerConfig/http';
+import { HttpAuthSchema } from '../contracts/providerConfig/httpAuth';
+import { HttpSignatureAuthSchema } from '../contracts/providerConfig/httpSignature';
+import { HttpTlsFieldsSchema } from '../contracts/providerConfig/httpTls';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
@@ -32,7 +41,6 @@ import {
   sanitizeUrl,
   sanitizeUrlEncodedString,
 } from '../util/sanitizer';
-import { getFileSourceHash } from '../util/sourceHash';
 import { getNunjucksEngine } from '../util/templates';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import {
@@ -40,7 +48,11 @@ import {
   type RenderedHttpMultipartBody,
   renderHttpMultipartBody,
 } from './httpMultipart';
-import { createTransformRequest, createTransformResponse } from './httpTransforms';
+import {
+  createTransformRequest,
+  createTransformResponse,
+  type TransformResponseContext,
+} from './httpTransforms';
 import {
   getRequestTimeoutMs,
   type ToolFormat,
@@ -48,11 +60,7 @@ import {
   transformTools,
 } from './shared';
 import { normalizeResponseTransformResult } from './transformResult';
-import {
-  getTransformBasePath,
-  loadTransformModule,
-  parseFileTransformReference,
-} from './transformUtils';
+import { loadTransformModule, parseFileTransformReference } from './transformUtils';
 
 export { loadTransformModule } from './transformUtils';
 
@@ -67,7 +75,7 @@ import type {
 
 const AUTH_TOKEN_CACHE_HMAC_CONTEXT = 'promptfoo:http-auth-token-cache-key';
 const AUTH_TOKEN_CACHE_HMAC_KEY = crypto.randomBytes(32);
-const MAX_AUTH_TOKEN_CACHE_ENTRIES = 256;
+const MAX_AUTH_CACHE_ENTRIES = 256;
 
 /**
  * Escapes string values in variables for safe JSON template substitution.
@@ -709,139 +717,20 @@ function needsSignatureRefresh(timestamp: number, validityMs: number, bufferMs?:
   return timeElapsed + effectiveBufferMs >= validityMs;
 }
 
-const TokenEstimationConfigSchema = z.object({
+const TokenEstimationConfigSchema = HttpTokenEstimationInputSchema.strip().extend({
   enabled: z.boolean().prefault(false),
   multiplier: z.number().min(0.01).prefault(1.3),
 });
 
-// Base signature auth fields
-const BaseSignatureAuthSchema = z.object({
-  signatureValidityMs: z.number().prefault(300000),
-  signatureDataTemplate: z.string().prefault('{{signatureTimestamp}}'),
-  signatureAlgorithm: z.string().prefault('SHA256'),
-  signatureRefreshBufferMs: z.number().optional(),
-});
-
-// PEM signature auth schema
-const PemSignatureAuthSchema = BaseSignatureAuthSchema.extend({
-  type: z.literal('pem'),
-  privateKeyPath: z.string().optional(),
-  privateKey: z.string().optional(),
-}).refine((data) => data.privateKeyPath !== undefined || data.privateKey !== undefined, {
-  error: 'Either privateKeyPath or privateKey must be provided for PEM type',
-});
-
-// JKS signature auth schema
-const JksSignatureAuthSchema = BaseSignatureAuthSchema.extend({
-  type: z.literal('jks'),
-  keystorePath: z.string().optional(),
-  keystoreContent: z.string().optional(), // Base64 encoded JKS content
-  keystorePassword: z.string().optional(),
-  keyAlias: z.string().optional(),
-}).refine((data) => data.keystorePath !== undefined || data.keystoreContent !== undefined, {
-  error: 'Either keystorePath or keystoreContent must be provided for JKS type',
-});
-
-// PFX signature auth schema
-const PfxSignatureAuthSchema = BaseSignatureAuthSchema.extend({
-  type: z.literal('pfx'),
-  pfxPath: z.string().optional(),
-  pfxContent: z.string().optional(), // Base64 encoded PFX content
-  pfxPassword: z.string().optional(),
-  certPath: z.string().optional(),
-  keyPath: z.string().optional(),
-  certContent: z.string().optional(), // Base64 encoded certificate content
-  keyContent: z.string().optional(), // Base64 encoded private key content
-}).refine(
-  (data) => {
-    return (
-      data.pfxPath ||
-      data.pfxContent ||
-      (data.certPath && data.keyPath) ||
-      (data.certContent && data.keyContent)
-    );
-  },
-  {
-    error:
-      'Either pfxPath, pfxContent, both certPath and keyPath, or both certContent and keyContent must be provided for PFX type',
-  },
-);
-
-// Legacy signature auth schema (for backward compatibility)
-const LegacySignatureAuthSchema = z.looseObject(
-  BaseSignatureAuthSchema.extend({
-    privateKeyPath: z.string().optional(),
-    privateKey: z.string().optional(),
-    keystorePath: z.string().optional(),
-    keystorePassword: z.string().optional(),
-    keyAlias: z.string().optional(),
-    keyPassword: z.string().optional(),
-    pfxPath: z.string().optional(),
-    pfxPassword: z.string().optional(),
-    certPath: z.string().optional(),
-    keyPath: z.string().optional(),
-  }).shape,
-);
-
-// Generic certificate auth schema (for UI-based certificate uploads)
-const GenericCertificateAuthSchema = z.looseObject(
-  BaseSignatureAuthSchema.extend({
-    certificateContent: z.string().optional(),
-    certificatePassword: z.string().optional(),
-    certificateFilename: z.string().optional(),
-    type: z.enum(['pem', 'jks', 'pfx']).optional(),
-    // Include type-specific fields that might be present or added by transform
-    pfxContent: z.string().optional(),
-    pfxPassword: z.string().optional(),
-    pfxPath: z.string().optional(),
-    keystoreContent: z.string().optional(),
-    keystorePassword: z.string().optional(),
-    keystorePath: z.string().optional(),
-    privateKey: z.string().optional(),
-    privateKeyPath: z.string().optional(),
-    keyAlias: z.string().optional(),
-    certPath: z.string().optional(),
-    keyPath: z.string().optional(),
-    certContent: z.string().optional(),
-    keyContent: z.string().optional(),
-  }).shape,
-);
-
-// TLS Certificate configuration schema for HTTPS connections
-const TlsCertificateSchema = z
-  .object({
-    // CA certificate for verifying server certificates
-    ca: z.union([z.string(), z.array(z.string())]).optional(),
-    caPath: z.string().optional(),
-
-    // Client certificate for mutual TLS
-    cert: z.union([z.string(), z.array(z.string())]).optional(),
-    certPath: z.string().optional(),
-
-    // Private key for client certificate
-    key: z.union([z.string(), z.array(z.string())]).optional(),
-    keyPath: z.string().optional(),
-
-    // PFX/PKCS12 certificate bundle
-    // Supports inline content as base64-encoded string or Buffer
+const TlsCertificateSchema = HttpTlsFieldsSchema.strip()
+  .extend({
     pfx: z
       .union([z.string(), z.instanceof(Buffer)])
       .optional()
       .describe(
         'PFX/PKCS12 certificate bundle. Can be a file path via pfxPath, or inline as a base64-encoded string or Buffer',
       ),
-    pfxPath: z.string().optional().describe('Path to PFX/PKCS12 certificate file'),
-    passphrase: z.string().optional().describe('Passphrase for PFX certificate'),
-
-    // Security options
     rejectUnauthorized: z.boolean().prefault(true),
-    servername: z.string().optional(),
-
-    // Cipher configuration
-    ciphers: z.string().optional(),
-    secureProtocol: z.string().optional(),
-    minVersion: z.string().optional(),
-    maxVersion: z.string().optional(),
   })
   .refine(
     (data) => {
@@ -868,58 +757,6 @@ const TlsCertificateSchema = z
     },
   );
 
-const OAuthClientCredentialsSchema = z.object({
-  type: z.literal('oauth'),
-  grantType: z.literal('client_credentials'),
-  clientId: z.string(),
-  clientSecret: z.string(),
-  tokenUrl: z.string(),
-  scopes: z.array(z.string()).optional(),
-});
-
-const OAuthPasswordSchema = z.object({
-  type: z.literal('oauth'),
-  grantType: z.literal('password'),
-  clientId: z.string().optional(),
-  clientSecret: z.string().optional(),
-  tokenUrl: z.string(),
-  scopes: z.array(z.string()).optional(),
-  username: z.string(),
-  password: z.string(),
-});
-
-const BasicAuthSchema = z.object({
-  type: z.literal('basic'),
-  username: z.string(),
-  password: z.string(),
-});
-
-const BearerAuthSchema = z.object({
-  type: z.literal('bearer'),
-  token: z.string(),
-});
-
-const ApiKeyAuthSchema = z.object({
-  type: z.literal('api_key'),
-  value: z.string(),
-  placement: z.enum(['header', 'query']),
-  keyName: z.string(),
-});
-
-const FileAuthSchema = z.object({
-  type: z.literal('file'),
-  path: z.string().min(1),
-});
-
-const AuthSchema = z.union([
-  OAuthClientCredentialsSchema,
-  OAuthPasswordSchema,
-  BasicAuthSchema,
-  BearerAuthSchema,
-  ApiKeyAuthSchema,
-  FileAuthSchema,
-]);
-
 const FileAuthResultSchema = z.object({
   token: z.string().min(1),
   expiration: z.number().finite().nullable().optional(),
@@ -939,91 +776,56 @@ type AuthTokenRefreshLock = {
   promise: Promise<CachedAuthToken>;
 };
 
+type RequestSignature = { timestamp: number; signature: Promise<string> };
+
 /**
  * Configuration for a separate session endpoint that must be called before the main API.
  * The session endpoint returns a session ID that is then used in the main request.
  */
-export const SessionEndpointConfigSchema = z.object({
-  /** URL of the session endpoint */
-  url: z.string(),
-  /** HTTP method for the session endpoint (default: POST) */
+export const SessionEndpointConfigSchema = HttpSessionInputSchema.strip().extend({
   method: z.enum(['GET', 'POST']).optional().default('POST'),
-  /** Headers to send with the session endpoint request */
-  headers: z.record(z.string(), z.string()).optional(),
-  /** Request body for the session endpoint (for POST requests) */
   body: z.union([z.record(z.string(), z.any()), z.string()]).optional(),
-  /**
-   * Path to extract sessionId from response.
-   * Can be a JavaScript expression like 'data.body.sessionId' or 'data.headers["x-session-id"]'
-   */
-  responseParser: z.union([z.string(), z.function()]),
+  responseParser: z.union([z.string(), z.function()]).meta({
+    ...HttpSessionInputSchema.shape.responseParser.meta(),
+  }),
 });
 
-export const HttpProviderConfigSchema = z.object({
+export const HttpProviderConfigSchema = HttpProviderConfigFieldsSchema.strip().extend({
   body: z.union([z.record(z.string(), z.any()), z.string(), z.array(z.any())]).optional(),
-  headers: z.record(z.string(), z.string()).optional(),
-  maxRetries: z.number().min(0).optional(),
-  method: z.string().optional(),
   multipart: HttpMultipartConfigSchema.optional(),
-  queryParams: z.record(z.string(), z.string()).optional(),
-  request: z.string().optional(),
-  /**
-   * Tools to make available to the model, in OpenAI format.
-   * Use with `transformToolsFormat` to auto-convert to provider-specific format.
-   */
   tools: z.array(z.any()).optional(),
-  /**
-   * Tool choice configuration, in OpenAI format.
-   * Use with `transformToolsFormat` to auto-convert to provider-specific format.
-   */
   tool_choice: z.any().optional(),
-  /**
-   * Transform OpenAI-format tools/tool_choice to provider-specific format.
-   * Use 'openai' for OpenAI-compatible endpoints, 'anthropic' for Anthropic, etc.
-   */
-  transformToolsFormat: z.enum(['openai', 'anthropic', 'bedrock', 'google']).optional(),
-  useHttps: z
-    .boolean()
-    .optional()
-    .describe('Use HTTPS for the request. This only works with the raw request option'),
-  /**
-   * Configuration for a separate session endpoint.
-   * When configured, the provider will call this endpoint to get a session ID
-   * before making the main API request.
-   */
   session: SessionEndpointConfigSchema.optional(),
   sessionParser: z.union([z.string(), z.function()]).optional(),
-  sessionSource: z.enum(['client', 'server', 'endpoint']).optional(),
-  stateful: z.boolean().optional(),
   transformRequest: z.union([z.string(), z.function()]).optional(),
   transformResponse: z.union([z.string(), z.function()]).optional(),
-  url: z.string().optional(),
   validateStatus: z
     .union([z.string(), z.function({ input: [z.number()], output: z.boolean() })])
     .optional(),
-  /**
-   * @deprecated use transformResponse instead
-   */
-  responseParser: z.union([z.string(), z.function()]).optional(),
-  // Token estimation configuration
-  tokenEstimation: TokenEstimationConfigSchema.optional(),
-  auth: AuthSchema.optional(),
-  // Digital Signature Authentication with support for multiple certificate types
-  signatureAuth: z
-    .union([
-      LegacySignatureAuthSchema,
-      PemSignatureAuthSchema,
-      JksSignatureAuthSchema,
-      PfxSignatureAuthSchema,
-      GenericCertificateAuthSchema,
-    ])
+  responseParser: z
+    .union([z.string(), z.function()])
     .optional()
-    .transform(preprocessSignatureAuthConfig),
-  // TLS Certificate configuration for HTTPS connections
+    .meta({
+      ...HttpProviderConfigFieldsSchema.shape.responseParser.meta(),
+    }),
+  tokenEstimation: TokenEstimationConfigSchema.optional(),
+  auth: HttpAuthSchema.optional(),
+  signatureAuth: HttpSignatureAuthSchema.optional().transform(preprocessSignatureAuthConfig),
   tls: TlsCertificateSchema.optional(),
 });
 
-export type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
+export interface HttpProviderConfig extends z.output<typeof HttpProviderConfigSchema> {
+  /** Tools in OpenAI format; transformToolsFormat converts them for other providers. */
+  tools?: z.output<typeof HttpProviderConfigSchema>['tools'];
+  /** Tool choice in OpenAI format; transformToolsFormat converts it for other providers. */
+  tool_choice?: z.output<typeof HttpProviderConfigSchema>['tool_choice'];
+  /** Convert OpenAI-format tools and tool_choice to the selected provider format. */
+  transformToolsFormat?: z.output<typeof HttpProviderConfigSchema>['transformToolsFormat'];
+  /** Call a separate endpoint to obtain a session ID before the main API request. */
+  session?: z.output<typeof HttpProviderConfigSchema>['session'];
+  /** @deprecated Use transformResponse instead. */
+  responseParser?: z.output<typeof HttpProviderConfigSchema>['responseParser'];
+}
 
 function contentTypeIsJson(headers: Record<string, string> | undefined) {
   if (!headers) {
@@ -1224,7 +1026,6 @@ function formatFileAuthFreshness(expiration?: number | null): string {
 
 export async function createSessionParser(
   parser: string | Function | undefined,
-  basePath = getTransformBasePath(),
 ): Promise<(data: SessionParserData) => string> {
   if (!parser) {
     return () => '';
@@ -1234,7 +1035,10 @@ export async function createSessionParser(
   }
   if (typeof parser === 'string' && parser.startsWith('file://')) {
     const { filename, functionName } = parseFileTransformReference(parser);
-    const requiredModule = await importModule(path.resolve(basePath, filename), functionName);
+    const requiredModule = await importModule(
+      path.resolve(cliState.basePath || '', filename),
+      functionName,
+    );
     if (typeof requiredModule === 'function') {
       return requiredModule;
     }
@@ -1686,7 +1490,6 @@ export function determineRequestBody(
 
 export async function createValidateStatus(
   validator: string | ((status: number) => boolean) | undefined,
-  basePath = getTransformBasePath(),
 ): Promise<(status: number) => boolean> {
   if (!validator) {
     return (_status: number) => true;
@@ -1700,7 +1503,10 @@ export async function createValidateStatus(
     if (validator.startsWith('file://')) {
       const { filename, functionName } = parseFileTransformReference(validator);
       try {
-        const requiredModule = await importModule(path.resolve(basePath, filename), functionName);
+        const requiredModule = await importModule(
+          path.resolve(cliState.basePath || '', filename),
+          functionName,
+        );
         if (typeof requiredModule === 'function') {
           return requiredModule;
         }
@@ -1941,14 +1747,15 @@ async function createHttpsAgent(
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
-  private transformResponsePromise?: ReturnType<typeof createTransformResponse>;
-  private transformRequestPromise?: ReturnType<typeof createTransformRequest>;
-  private sessionParserPromise?: ReturnType<typeof createSessionParser>;
-  private validateStatusPromise?: ReturnType<typeof createValidateStatus>;
-  private transformBasePath = getTransformBasePath();
-  private configBasePathLocked = false;
-  private lastSignatureTimestamp?: number;
-  private lastSignature?: string;
+  private transformResponse: Promise<
+    (data: any, text: string, context?: TransformResponseContext) => ProviderResponse
+  >;
+  private sessionParser: Promise<(data: SessionParserData) => string>;
+  private transformRequest: Promise<
+    (prompt: string, vars: Record<string, any>, context?: CallApiContextParams) => any
+  >;
+  private validateStatus: Promise<(status: number) => boolean>;
+  private signatureCache = new LRUCache<string, RequestSignature>({ max: MAX_AUTH_CACHE_ENTRIES });
   private authTokenCache = new Map<string, CachedAuthToken>();
   private tokenRefreshLocks = new Map<string, AuthTokenRefreshLock>();
   private httpsAgent?: Dispatcher;
@@ -1961,45 +1768,7 @@ export class HttpProvider implements ApiProvider {
   /**
    * Parser for extracting session ID from session endpoint response.
    */
-  private sessionEndpointParserPromise?: ReturnType<typeof createSessionParser>;
-
-  // Replay validates file provenance before executable config is first used.
-  private get transformResponse() {
-    return (this.transformResponsePromise ??= loadTransformModule(
-      this.config.transformResponse || this.config.responseParser,
-      this.transformBasePath,
-    ).then(createTransformResponse));
-  }
-
-  private get transformRequest() {
-    return (this.transformRequestPromise ??= loadTransformModule(
-      this.config.transformRequest,
-      this.transformBasePath,
-    ).then(createTransformRequest));
-  }
-
-  private get sessionParser() {
-    return (this.sessionParserPromise ??= createSessionParser(
-      this.config.sessionParser,
-      this.transformBasePath,
-    ));
-  }
-
-  private get validateStatus() {
-    return (this.validateStatusPromise ??= createValidateStatus(
-      this.config.validateStatus,
-      this.transformBasePath,
-    ));
-  }
-
-  private get sessionEndpointParser() {
-    return this.config.session
-      ? (this.sessionEndpointParserPromise ??= createSessionParser(
-          this.config.session.responseParser,
-          this.transformBasePath,
-        ))
-      : undefined;
-  }
+  private sessionEndpointParser?: Promise<(data: SessionParserData) => string>;
 
   constructor(url: string, options: ProviderOptions) {
     this.config = HttpProviderConfigSchema.parse(options.config);
@@ -2008,6 +1777,22 @@ export class HttpProvider implements ApiProvider {
       this.config.tokenEstimation = { enabled: true, multiplier: 1.3 };
     }
     this.url = this.config.url || url;
+
+    // Pre-load any file:// references before passing to transform functions
+    // This ensures httpTransforms.ts doesn't need to import from ../esm
+    this.transformResponse = loadTransformModule(
+      this.config.transformResponse || this.config.responseParser,
+    ).then(createTransformResponse);
+    this.sessionParser = createSessionParser(this.config.sessionParser);
+    this.transformRequest = loadTransformModule(this.config.transformRequest).then(
+      createTransformRequest,
+    );
+    this.validateStatus = createValidateStatus(this.config.validateStatus);
+
+    // Initialize session endpoint parser if session config is provided
+    if (this.config.session) {
+      this.sessionEndpointParser = createSessionParser(this.config.session.responseParser);
+    }
 
     // Initialize HTTPS agent if TLS configuration is provided
     // Note: We can't use async in constructor, so we'll initialize on first use
@@ -2032,38 +1817,6 @@ export class HttpProvider implements ApiProvider {
     if (this.config.body) {
       this.config.body = maybeLoadConfigFromExternalFile(this.config.body);
     }
-  }
-
-  setConfigBasePath(basePath: string): void {
-    const resolved = path.resolve(basePath);
-    if (resolved === this.transformBasePath) {
-      return;
-    }
-    if (this.configBasePathLocked) {
-      throw new Error('Cannot change the configuration directory of an initialized HTTP provider');
-    }
-    this.transformBasePath = resolved;
-  }
-
-  getSourceHash(): string {
-    const sources = [
-      this.config.transformRequest,
-      this.config.transformResponse || this.config.responseParser,
-      this.config.sessionParser,
-      this.config.session?.responseParser,
-      this.config.validateStatus,
-    ].map((reference) => {
-      if (typeof reference !== 'string' || !reference.startsWith('file://')) {
-        return null;
-      }
-      const { filename, functionName } = parseFileTransformReference(reference);
-      return getFileSourceHash(path.resolve(this.transformBasePath, filename), functionName);
-    });
-    if (this.config.auth?.type === 'file') {
-      const { filePath, functionName } = parseFileAuthReference(this.config.auth.path);
-      sources.push(getFileSourceHash(path.resolve(this.transformBasePath, filePath), functionName));
-    }
-    return crypto.createHash('sha256').update(JSON.stringify(sources)).digest('hex');
   }
 
   id(): string {
@@ -2281,7 +2034,7 @@ export class HttpProvider implements ApiProvider {
   }
 
   private enforceAuthTokenCacheLimit(): void {
-    while (this.authTokenCache.size > MAX_AUTH_TOKEN_CACHE_ENTRIES) {
+    while (this.authTokenCache.size > MAX_AUTH_CACHE_ENTRIES) {
       const oldestCacheKey = this.authTokenCache.keys().next().value;
       if (oldestCacheKey == null) {
         return;
@@ -2386,7 +2139,6 @@ export class HttpProvider implements ApiProvider {
         filePath,
         functionName,
         defaultFunctionName,
-        basePath: this.transformBasePath,
       });
       const result = FileAuthResultSchema.parse(await authFn(authContext));
       const cachedToken = this.cacheToken(cacheKey, result.token, result.expiration ?? undefined);
@@ -2400,49 +2152,40 @@ export class HttpProvider implements ApiProvider {
     }
   }
 
-  private async refreshSignatureIfNeeded(vars: Record<string, any>): Promise<void> {
-    if (!this.config.signatureAuth) {
-      logger.debug('[HTTP Provider Auth]: No signature auth configured');
-      return;
-    }
-
+  private getSignature(vars: Record<string, any>): RequestSignature {
     const signatureAuth = this.config.signatureAuth;
-
+    const renderedConfig = {
+      type: 'pem',
+      ...signatureAuth,
+      privateKey: signatureAuth.privateKey
+        ? getNunjucksEngine().renderString(signatureAuth.privateKey, vars)
+        : undefined,
+    };
+    const cacheKey = digestAuthCacheInput({ signature: renderedConfig });
+    const cached = this.signatureCache.get(cacheKey);
     if (
-      !this.lastSignatureTimestamp ||
-      !this.lastSignature ||
-      needsSignatureRefresh(
-        this.lastSignatureTimestamp,
+      cached &&
+      !needsSignatureRefresh(
+        cached.timestamp,
         signatureAuth.signatureValidityMs,
         signatureAuth.signatureRefreshBufferMs,
       )
     ) {
-      logger.debug('[HTTP Provider Auth]: Generating new signature');
-      this.lastSignatureTimestamp = Date.now();
-
-      // Render privateKey with template substitution
-      const nunjucks = getNunjucksEngine();
-      const renderedConfig: any = {
-        ...signatureAuth,
-        privateKey: signatureAuth.privateKey
-          ? nunjucks.renderString(signatureAuth.privateKey, vars)
-          : undefined,
-      };
-
-      // Determine the signature auth type for legacy configurations
-      let authConfig = renderedConfig;
-      if (!('type' in renderedConfig)) {
-        authConfig = { ...renderedConfig, type: 'pem' };
-      }
-
-      this.lastSignature = await generateSignature(authConfig, this.lastSignatureTimestamp);
-      logger.debug('[HTTP Provider Auth]: Generated new signature successfully');
-    } else {
-      logger.debug('[HTTP Provider Auth]: Using cached signature');
+      return cached;
     }
 
-    invariant(this.lastSignature, 'Signature should be defined at this point');
-    invariant(this.lastSignatureTimestamp, 'Timestamp should be defined at this point');
+    const timestamp = Date.now();
+    const entry: RequestSignature = {
+      timestamp,
+      signature: generateSignature(renderedConfig, timestamp).catch((error) => {
+        if (this.signatureCache.peek(cacheKey) === entry) {
+          this.signatureCache.delete(cacheKey);
+        }
+        throw error;
+      }),
+    };
+    this.signatureCache.set(cacheKey, entry);
+    return entry;
   }
 
   /**
@@ -2694,7 +2437,6 @@ export class HttpProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    this.configBasePathLocked = true;
     return this.callApiInternal(prompt, context, options);
   }
 
@@ -2770,25 +2512,20 @@ export class HttpProvider implements ApiProvider {
       vars.expiration = authToken.expiresAt;
     }
 
-    // Add signature values to vars if signature auth is enabled
     if (this.config.signatureAuth) {
-      await this.refreshSignatureIfNeeded(vars);
-      invariant(this.lastSignature, 'Signature should be defined at this point');
-      invariant(this.lastSignatureTimestamp, 'Timestamp should be defined at this point');
+      const pending = this.getSignature(vars);
+      const signature = await pending.signature;
 
-      if (vars.signature) {
-        logger.warn(
-          '[HTTP Provider Auth]: `signature` is already defined in vars and will be overwritten',
-        );
-      }
-      if (vars.signatureTimestamp) {
-        logger.warn(
-          '[HTTP Provider Auth]: `signatureTimestamp` is already defined in vars and will be overwritten',
-        );
+      for (const key of ['signature', 'signatureTimestamp']) {
+        if (vars[key]) {
+          logger.warn(
+            `[HTTP Provider Auth]: \`${key}\` is already defined in vars and will be overwritten`,
+          );
+        }
       }
 
-      vars.signature = this.lastSignature;
-      vars.signatureTimestamp = this.lastSignatureTimestamp;
+      vars.signature = signature;
+      vars.signatureTimestamp = pending.timestamp;
     }
 
     // Resolve session ID from session endpoint if configured

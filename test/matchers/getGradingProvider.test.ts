@@ -18,7 +18,6 @@ describe('getGradingProvider', () => {
   });
 
   afterEach(() => {
-    cliState.config = undefined;
     vi.resetAllMocks();
   });
 

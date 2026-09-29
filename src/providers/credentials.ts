@@ -1,6 +1,4 @@
-import { getEnvString } from '../envars';
-
-import type { EnvVarKey } from '../envars';
+import { type EnvVarKey, getEnvString } from '../envars';
 
 interface CredentialOptions {
   apiKey?: string;
@@ -13,19 +11,22 @@ export function resolveProviderApiKey(
   env: Readonly<Record<string, string | undefined>> | undefined,
   defaultEnvars: readonly string[],
 ): string | undefined {
-  if (config?.apiKey && config.apiKey !== '[REDACTED]') {
+  if (config?.apiKey) {
     return config.apiKey;
   }
   const envars = config?.apiKeyEnvar ? [config.apiKeyEnvar] : defaultEnvars;
   for (const envar of envars) {
     const value = env?.[envar];
-    if (value && value !== '[REDACTED]') {
+    if (value) {
       return value;
     }
   }
   for (const envar of envars) {
+    if (env?.[envar] === '') {
+      continue;
+    }
     const value = getEnvString(envar as EnvVarKey);
-    if (value && value !== '[REDACTED]') {
+    if (value) {
       return value;
     }
   }

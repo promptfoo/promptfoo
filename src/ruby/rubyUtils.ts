@@ -3,8 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { promisify } from 'util';
 
-import { getEnvString } from '../envars';
-import { getRuntimeEnv } from '../envOverrides';
+import { getEnvString, getProcessEnv } from '../envars';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
@@ -345,7 +344,7 @@ export async function runRuby<T = unknown>(
     const { stdout, stderr } = await execFileAsync(
       rubyPath,
       [wrapperPath, absPath, method, tempJsonPath, outputPath],
-      { env: getRuntimeEnv() },
+      { env: getProcessEnv() },
     );
 
     if (stdout) {

@@ -80,8 +80,6 @@ export interface ProviderOptions {
 }
 
 export interface CallApiContextParams {
-  /** Invocation-local environment, available during evaluation and omitted from serialization. */
-  env?: Record<string, string | undefined>;
   filters?: NunjucksFilterMap;
   getCache?: any;
   logger?: winston.Logger;
@@ -123,16 +121,21 @@ export interface CallApiOptionsParams {
 }
 
 export interface ApiProvider extends MinimalApiProvider {
-  /** Bind the containing config directory before lazy provider initialization. */
-  setConfigBasePath?: (basePath: string) => void;
   callApi: CallApiFunction;
   callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
   callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
   config?: any;
   delay?: number;
+  /** True when callApi applies delay itself and the evaluator should not wait again. */
+  handlesOwnDelay?: boolean;
+  /**
+   * True when callApi owns retries for its operations, including requests that
+   * must not be replayed. Scheduling still applies, but the scheduler must not
+   * retry the whole call after its transport or SDK has finished. Subclasses
+   * replacing that behavior can override this with false to use scheduler retries.
+   */
+  handlesOwnRetries?: boolean;
   getSessionId?: () => string;
-  /** Current file-backed implementation identity used to validate eval replay. */
-  getSourceHash?: () => string;
   /** Native audio input content format accepted by this provider and its configured model. */
   getAudioInputFormat?: () => 'openai' | 'google' | undefined;
   inputs?: Inputs;

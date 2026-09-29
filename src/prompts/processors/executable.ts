@@ -1,16 +1,11 @@
 import { execFile } from 'child_process';
 import { stat as fsStat, readFile } from 'fs/promises';
 
-import { getCache } from '../../cache';
-import { getRuntimeEnv } from '../../envOverrides';
-import {
-  getFileHashes,
-  getScriptCacheKey,
-  parseScriptParts,
-} from '../../providers/scriptCompletion';
+import { getCache, isCacheEnabled } from '../../cache';
+import { getProcessEnv } from '../../envars';
+import { getFileHashes, parseScriptParts } from '../../providers/scriptCompletion';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
-import { getExecutableSourceHash } from '../../util/sourceHash';
 
 import type { ApiProvider, Prompt, PromptFunctionContext, VarValue } from '../../types/index';
 
@@ -51,15 +46,12 @@ export const executablePromptFunction = async (
   };
 
   const scriptParts = parseScriptParts(scriptPath);
-  const fileHashes = getFileHashes(scriptParts, context.config?.basePath);
+  const fileHashes = getFileHashes(scriptParts);
 
-  const cacheKey =
-    fileHashes.length > 0
-      ? getScriptCacheKey('exec-prompt', fileHashes, [scriptPath, transformedContext])
-      : undefined;
+  const cacheKey = `exec-prompt:${scriptPath}:${fileHashes.join(':')}:${safeJsonStringify(transformedContext)}`;
 
   let cachedResult;
-  if (cacheKey) {
+  if (fileHashes.length > 0 && isCacheEnabled()) {
     const cache = getCache();
     cachedResult = await cache.get(cacheKey);
 
@@ -77,7 +69,7 @@ export const executablePromptFunction = async (
 
     const options = {
       cwd: context.config?.basePath,
-      env: getRuntimeEnv(),
+      env: getProcessEnv(),
       timeout: context.config?.timeout || 60000, // Default 60 second timeout
     };
 
@@ -90,12 +82,14 @@ export const executablePromptFunction = async (
       const standardOutput = stripText(Buffer.from(stdout).toString('utf8').trim());
       const errorOutput = stripText(Buffer.from(stderr).toString('utf8').trim());
 
-      if (errorOutput && !standardOutput) {
-        reject(new Error(errorOutput));
-        return;
+      if (errorOutput) {
+        if (!standardOutput) {
+          reject(new Error(errorOutput));
+          return;
+        }
       }
 
-      if (cacheKey) {
+      if (fileHashes.length > 0 && isCacheEnabled()) {
         const cache = getCache();
         await cache.set(cacheKey, standardOutput);
       }
@@ -150,7 +144,6 @@ export async function processExecutableFile(
       function: (context) =>
         executablePromptFunction(filePath, { ...context, config: prompt.config }),
       config: prompt.config,
-      sourceHash: getExecutableSourceHash(scriptParts, prompt.config?.basePath),
     },
   ];
 }

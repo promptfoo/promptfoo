@@ -3,7 +3,6 @@ import * as path from 'path';
 
 import cliState from './cliState';
 import { getEnvBool } from './envars';
-import { withRuntimeEnv } from './envOverrides';
 import { importModule } from './esm';
 import { getPrompt as getHeliconePrompt } from './integrations/helicone';
 import { getPrompt as getLangfusePrompt } from './integrations/langfuse';
@@ -395,7 +394,7 @@ export async function renderPrompt(
 
   // Apply prompt functions
   if (prompt.function) {
-    const result = await prompt.function(withRuntimeEnv({ vars, provider }));
+    const result = await prompt.function({ vars, provider });
     if (typeof result === 'string') {
       basePrompt = result;
     } else if (typeof result === 'object') {
@@ -553,8 +552,6 @@ export async function renderPrompt(
  * Called once before the evaluation starts.
  */
 export type BeforeAllExtensionHookContext = {
-  /** Invocation-local environment; excluded from serialized hook context. */
-  env?: Record<string, string | undefined>;
   /** The test suite configuration (mutable) */
   suite: TestSuite;
 };
@@ -564,8 +561,6 @@ export type BeforeAllExtensionHookContext = {
  * Called before each test case is evaluated.
  */
 export type BeforeEachExtensionHookContext = {
-  /** Invocation-local environment; excluded from serialized hook context. */
-  env?: Record<string, string | undefined>;
   /** The test case about to be evaluated (mutable) */
   test: TestCase;
 };
@@ -579,8 +574,6 @@ export type BeforeEachExtensionHookContext = {
  * into the evaluation result and persisted.
  */
 export type AfterEachExtensionHookContext = {
-  /** Invocation-local environment; excluded from serialized hook context. */
-  env?: Record<string, string | undefined>;
   /** The test case that was evaluated */
   test: TestCase;
   /** The result of the evaluation (namedScores, metadata, and response.metadata are mutable) */
@@ -604,8 +597,6 @@ export type AfterEachExtensionHookContext = {
  * ```
  */
 export type AfterAllExtensionHookContext = {
-  /** Invocation-local environment; excluded from serialized hook context. */
-  env?: Record<string, string | undefined>;
   /** The test suite configuration */
   suite: TestSuite;
   /** All evaluation results as plain data objects */
@@ -813,7 +804,6 @@ export async function runExtensionHook<HookName extends keyof ExtensionHookConte
       `Running extension ${extension} for hook ${hookName} (${useNewCallingConvention ? 'new' : 'legacy'} convention)`,
     );
 
-    updatedContext = withRuntimeEnv(updatedContext);
     let extensionReturnValue;
     try {
       if (useNewCallingConvention) {

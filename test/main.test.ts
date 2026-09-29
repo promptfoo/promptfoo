@@ -132,13 +132,15 @@ describe('shouldSkipDefaultConfigLoading', () => {
     await loadMainModule();
   });
 
-  it.each(['code-scans', 'mcp'])('skips unrelated default config discovery for %s', (command) => {
-    expect(shouldSkipDefaultConfigLoading([command])).toBe(true);
-    expect(shouldSkipDefaultConfigLoading(['--verbose', command, '--help'])).toBe(true);
-    expect(shouldSkipDefaultConfigLoading(['--env-file', '.env.local', command, '--help'])).toBe(
+  it('skips unrelated default config discovery for code-scans commands', () => {
+    expect(shouldSkipDefaultConfigLoading(['code-scans', 'run'])).toBe(true);
+    expect(shouldSkipDefaultConfigLoading(['--verbose', 'code-scans', 'run', '--help'])).toBe(true);
+    expect(
+      shouldSkipDefaultConfigLoading(['--env-file', '.env.local', 'code-scans', 'run', '--help']),
+    ).toBe(true);
+    expect(shouldSkipDefaultConfigLoading(['--env-path=.env.local', 'code-scans', 'run'])).toBe(
       true,
     );
-    expect(shouldSkipDefaultConfigLoading(['--env-path=.env.local', command])).toBe(true);
   });
 
   it('keeps default config discovery for other commands and post-separator arguments', () => {

@@ -17,47 +17,6 @@ export function setEnvOverridesProvider(provider: EnvOverridesProvider | undefin
   envOverridesProvider = provider;
 }
 
-/**
- * Returns suite overrides or env-file defaults, or `undefined` if no provider is
- * registered. Swallows provider exceptions to preserve the invariant that
- * `getEnvString` (and its delegates `getEnvBool` / `getEnvInt` / etc.) never
- * throw on environment access — relied on by ~148 call sites.
- */
-export function getEnvOverrides(layer: 'suite' | 'file' = 'suite'): EnvOverrides | undefined {
-  if (!envOverridesProvider) {
-    return undefined;
-  }
-  try {
-    return envOverridesProvider(layer);
-  } catch {
-    return undefined;
-  }
-}
-
-/** Environment inherited by child processes, including invocation-local file values. */
-export function getProcessEnv(): NodeJS.ProcessEnv {
-  const fileEnv = getEnvOverrides('file');
-  return fileEnv
-    ? {
-        ...process.env,
-        ...Object.fromEntries(Object.entries(fileEnv).filter(([, value]) => value !== undefined)),
-      }
-    : process.env;
-}
-
-/** Environment for callbacks and child processes, with suite values above file defaults. */
-export function getRuntimeEnv(): NodeJS.ProcessEnv {
-  return {
-    ...getProcessEnv(),
-    ...Object.fromEntries(
-      Object.entries(getEnvOverrides() ?? {}).filter(([, value]) => value !== undefined),
-    ),
-  };
-}
-
-/** Expose invocation-local env to JS callbacks without serializing it with their context. */
-export function withRuntimeEnv<T extends object>(context: T): T & { env: NodeJS.ProcessEnv } {
-  return Object.defineProperty({ ...context }, 'env', {
-    value: getRuntimeEnv(),
-  }) as T & { env: NodeJS.ProcessEnv };
+export function getEnvOverridesProvider(): EnvOverridesProvider | undefined {
+  return envOverridesProvider;
 }

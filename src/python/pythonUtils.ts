@@ -4,8 +4,7 @@ import path from 'path';
 import { promisify } from 'util';
 
 import { PythonShell } from 'python-shell';
-import { getEnvBool, getEnvString } from '../envars';
-import { getRuntimeEnv } from '../envOverrides';
+import { getEnvBool, getEnvString, getProcessEnv } from '../envars';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
@@ -323,7 +322,7 @@ export async function runPython<T = unknown>(
     const outputPath = await writeSecureTempFile(tempDirectory, 'output.json', '');
     const pythonOptions: PythonShellOptions = {
       args: [absPath, method, tempJsonPath, outputPath],
-      env: getRuntimeEnv(),
+      env: getProcessEnv(),
       mode: 'binary',
       pythonPath,
       scriptPath: getWrapperDir('python'),

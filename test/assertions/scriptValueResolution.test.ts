@@ -413,18 +413,14 @@ describe('Script value resolution', () => {
       expect(result.pass).toBe(true);
     });
 
-    it.each([
-      'file://some_ruby_file.rb:MyModule::Nested.method',
-      'file://C:/checks/some_ruby_file.rb:MyModule::Nested.method',
-      'file:///checks/12:00/some_ruby_file.rb:MyModule::Nested.method',
-    ])('preserves namespaced Ruby methods in %s', async (value) => {
+    it('should allow colons in class or function names when parsing file names', async () => {
       const mockRunRuby = vi.mocked(runRuby);
       mockRunRuby.mockResolvedValue(true);
 
       const result = await runAssertion({
         assertion: {
           type: 'ruby',
-          value,
+          value: 'file://some_ruby_file.rb:MyModule::Nested.method',
         },
         test: { vars: {} },
         providerResponse: {

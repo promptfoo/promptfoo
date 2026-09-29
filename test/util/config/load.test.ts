@@ -68,7 +68,8 @@ vi.mock('path', async () => {
   };
 });
 
-vi.mock('glob', () => ({
+vi.mock('glob', async (importOriginal) => ({
+  escape: (await importOriginal<typeof import('glob')>()).escape,
   globSync: vi.fn(),
   hasMagic: vi.fn((pattern: string | string[]) => {
     const p = Array.isArray(pattern) ? pattern.join('') : pattern;
@@ -140,18 +141,18 @@ vi.mock('../../../src/util/file', async () => {
   };
 });
 
-vi.mock('../../../src/util/testCaseReader', () => ({
-  readTest: vi.fn().mockImplementation(async (test) => test),
-  readTests: vi.fn().mockImplementation(async (tests) => {
-    if (!tests) {
-      return [];
-    }
-    if (Array.isArray(tests)) {
-      return tests;
-    }
-    return [];
-  }),
-}));
+vi.mock('../../../src/util/testCaseReader', async (importOriginal) => {
+  const readRows = vi.fn(async (tests) => (Array.isArray(tests) ? tests : []));
+  return {
+    isRemoteTestsReference: (
+      await importOriginal<typeof import('../../../src/util/testCaseReader')>()
+    ).isRemoteTestsReference,
+    readTest: vi.fn(async (test) => test),
+    readTestConfig: vi.fn(async (test) => test),
+    readTests: readRows,
+    readTestConfigs: readRows,
+  };
+});
 
 vi.mock('../../../src/providers', async () => {
   const actual =
@@ -217,6 +218,7 @@ vi.mock('../../../src/assertions', () => ({
 // Global setup for all tests - set default mock implementation for $RefParser
 beforeEach(() => {
   mockDereference.mockImplementation((config: object) => Promise.resolve(config));
+  vi.mocked(readTests).mockReset();
 });
 
 describe('combineConfigs', () => {
@@ -311,6 +313,7 @@ describe('combineConfigs', () => {
     );
 
     expect(config1Result).toEqual({
+      basePath: '.',
       description: 'test1',
       tags: { tag1: 'value1' },
       providers: ['provider1'],
@@ -347,6 +350,7 @@ describe('combineConfigs', () => {
     );
 
     expect(config2Result).toEqual({
+      basePath: '.',
       description: 'test2',
       tags: {},
       providers: ['provider2'],
@@ -388,6 +392,7 @@ describe('combineConfigs', () => {
 
     expect(fs.readFileSync).toHaveBeenCalledTimes(4);
     expect(result).toEqual({
+      basePath: '.',
       description: 'test1, test2',
       tags: { tag1: 'value1' },
       providers: ['provider1', 'provider2'],
@@ -1075,7 +1080,7 @@ describe('combineConfigs', () => {
     expect(result.sharing).toBeUndefined();
   });
 
-  it('should load defaultTest from external file when string starts with file://', async () => {
+  it('resolves a relative defaultTest file reference without loading it', async () => {
     const externalDefaultTest = {
       assert: [{ type: 'equals', value: 'test' }],
       vars: { foo: 'bar' },
@@ -1097,8 +1102,8 @@ describe('combineConfigs', () => {
 
     const result = await combineConfigs(['config.json']);
 
-    // combineConfigs should preserve the string reference, not load it
-    expect(result.defaultTest).toBe('file://path/to/defaultTest.yaml');
+    expect(result.defaultTest).toBe(`file://${path.resolve('path/to/defaultTest.yaml')}`);
+    expect(maybeLoadFromExternalFile).not.toHaveBeenCalled();
   });
 
   it('should preserve string defaultTest when combining configs with file:// reference', async () => {
@@ -1123,7 +1128,7 @@ describe('combineConfigs', () => {
     const result = await combineConfigs(['config1.json', 'config2.json']);
 
     // Should preserve the file:// reference from the second config
-    expect(result.defaultTest).toBe('file://external/defaultTest.yaml');
+    expect(result.defaultTest).toBe(`file://${path.resolve('external/defaultTest.yaml')}`);
   });
 
   it('should merge inline defaultTest objects when combining configs', async () => {
@@ -1560,7 +1565,7 @@ describe('resolveConfigs', () => {
 
     await resolveConfigs(cmdObj, defaultConfig);
 
-    expect(cliState.basePath).toBe(path.dirname('config.json'));
+    expect(cliState.basePath).toBe(path.resolve(path.dirname('config.json')));
   });
 
   it('should include YAML location when an inline test references a missing prompt', async () => {
@@ -1629,9 +1634,9 @@ describe('resolveConfigs', () => {
       }),
     );
 
-    vi.mocked(maybeLoadFromExternalFile)
-      .mockResolvedValueOnce(scenarios)
-      .mockResolvedValueOnce(externalTests);
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(async (value) =>
+      typeof value === 'string' ? scenarios : value,
+    );
 
     vi.mocked(readTests).mockResolvedValue(externalTests);
 
@@ -1655,8 +1660,12 @@ describe('resolveConfigs', () => {
 
     const { testSuite } = await resolveConfigs(cmdObj, defaultConfig);
 
-    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(['file://scenarios.yaml']);
-    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file://tests.yaml');
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file://scenarios.yaml');
+    expect(readTests).toHaveBeenCalledWith(
+      [`file://${path.resolve('/mock/cwd/tests.yaml')}`],
+      path.resolve('.'),
+      {},
+    );
 
     expect(testSuite).toMatchObject({
       prompts: [
@@ -2131,27 +2140,6 @@ describe('ConfigResolutionError', () => {
     vi.clearAllMocks();
   });
 
-  it.each([
-    undefined,
-    '',
-    'Use another config',
-    'Fetch https://user:PRIVATE_OVERRIDE@example.com failed',
-  ])('sanitizes credentials while preserving the CLI message override: %s', (cliMessage) => {
-    const error = new ConfigResolutionError('Fetch https://user:PRIVATE_ERROR@example.com failed', {
-      cliMessage,
-    });
-    expect(error.message).not.toContain('PRIVATE_ERROR');
-    expect(error.message).toContain('example.com');
-    expect(error.cliMessage).not.toContain('PRIVATE_OVERRIDE');
-    if (cliMessage === undefined) {
-      expect(error.cliMessage).toBe(error.message);
-    } else if (!cliMessage.includes('PRIVATE_OVERRIDE')) {
-      expect(error.cliMessage).toBe(cliMessage);
-    }
-    logConfigResolutionError(error);
-    expect(logger.error).toHaveBeenCalledWith(error.cliMessage);
-  });
-
   it('should fall back to error logging for invalid runtime log levels', () => {
     const error = new ConfigResolutionError('invalid log level', {
       logLevel: 'debug' as any,
@@ -2263,65 +2251,6 @@ describe('readConfig', () => {
 
     expect(result).toEqual(mockConfig);
     expect(importModule).toHaveBeenCalledWith('config.js');
-  });
-
-  it('binds preconstructed providers to their containing JavaScript config', async () => {
-    const providers = new Map<string, ReturnType<typeof createMockProvider>>();
-    vi.mocked(importModule).mockImplementation(async (configPath) => {
-      const provider = createMockProvider();
-      provider.setConfigBasePath = vi.fn();
-      providers.set(String(configPath), provider);
-      await Promise.resolve();
-      return { providers: [provider], prompts: ['hello'] };
-    });
-    const configs = ['/first/config.mjs', '/second/config.mjs'];
-    const loaded = await Promise.all(configs.map((configPath) => readConfig(configPath)));
-    for (const [index, configPath] of configs.entries()) {
-      const provider = providers.get(configPath)!;
-      expect(provider.setConfigBasePath).toHaveBeenCalledWith(
-        path.resolve(path.dirname(configPath)),
-      );
-      expect((loaded[index].providers as unknown[])[0]).toBe(provider);
-    }
-  });
-
-  it('binds nested preconstructed providers once without walking their internal state', async () => {
-    const nested = createMockProvider();
-    nested.setConfigBasePath = vi.fn();
-    const internal = createMockProvider();
-    internal.setConfigBasePath = vi.fn();
-    nested.config = { internal };
-    vi.mocked(importModule).mockResolvedValue({
-      providers: ['echo'],
-      prompts: ['hello'],
-      defaultTest: { provider: nested, options: { provider: { text: nested } } },
-      tests: [{ assert: [{ type: 'llm-rubric', provider: nested, value: 'Pass' }] }],
-      scenarios: [{ config: [{ provider: nested }], tests: [{ provider: nested }] }],
-    });
-    await readConfig('/nested/config.mjs');
-    expect(nested.setConfigBasePath).toHaveBeenCalledExactlyOnceWith(path.resolve('/nested'));
-    expect(internal.setConfigBasePath).not.toHaveBeenCalled();
-    expect(nested.config.internal).toBe(internal);
-  });
-
-  it('cleans up nested preconstructed providers with the evaluation scope', async () => {
-    const { providerRegistry } = await import('../../../src/providers/providerRegistry');
-    const actual = await vi.importActual<typeof import('../../../src/providers/index')>(
-      '../../../src/providers/index',
-    );
-    const provider = createMockProvider();
-    provider.cleanup = vi.fn().mockResolvedValue(undefined);
-    vi.mocked(importModule).mockResolvedValue({
-      providers: ['echo'],
-      prompts: ['hello'],
-      defaultTest: { provider },
-    });
-    await vi
-      .mocked(loadApiProviders)
-      .withImplementation(actual.loadApiProviders, () =>
-        providerRegistry.withScope(() => readConfig('/nested/config.mjs')),
-      );
-    expect(provider.cleanup).toHaveBeenCalledOnce();
   });
 
   it('should throw error for unsupported file format', async () => {
@@ -2671,7 +2600,9 @@ describe('resolveConfigs with external defaultTest', () => {
 
     const result = await resolveConfigs({ config: ['config.json'] }, {});
 
-    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file://shared/defaultTest.yaml');
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(
+      `file://${path.resolve('shared/defaultTest.yaml')}`,
+    );
     expect(result.testSuite.defaultTest).toEqual(
       expect.objectContaining({
         assert: externalDefaultTest.assert,

@@ -19,6 +19,7 @@ import {
   handleRateLimit,
   isRateLimited,
   isTransientError,
+  readBoundedText,
 } from '../src/util/fetch/index';
 import { withFetchRetryContext } from '../src/util/fetch/retryContext';
 import { sleep } from '../src/util/time';
@@ -57,9 +58,9 @@ vi.mock('../src/logger', () => ({
 
 vi.mock('../src/globalConfig/cloud', () => ({
   cloudConfig: {
-    getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.dev'),
+    getApiHost: vi.fn(),
     getApiKey: vi.fn(),
-    getAuthHeaderName: vi.fn().mockReturnValue('Authorization'),
+    getAuthHeaderName: vi.fn(),
     getCurrentOrganizationId: vi.fn(),
     getCurrentTeamId: vi.fn(),
   },
@@ -157,6 +158,11 @@ vi.mock('../src/cliState', () => ({
   },
 }));
 
+beforeEach(() => {
+  vi.mocked(cloudConfig.getApiHost).mockReset().mockReturnValue('https://api.promptfoo.dev');
+  vi.mocked(cloudConfig.getAuthHeaderName).mockReset().mockReturnValue('Authorization');
+});
+
 describe('fetchWithProxy', () => {
   beforeEach(() => {
     restoreFetchTestEnv();
@@ -164,8 +170,6 @@ describe('fetchWithProxy', () => {
     vi.clearAllMocks();
     clearAgentCache();
     vi.spyOn(global, 'fetch').mockResolvedValue(new Response());
-    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.promptfoo.dev');
-    vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('Authorization');
     vi.mocked(ProxyAgent).mockClear();
     cliState.basePath = undefined;
     cliState.maxConcurrency = undefined;
@@ -191,6 +195,117 @@ describe('fetchWithProxy', () => {
         }),
       }),
     );
+  });
+
+  describe('request-time authentication', () => {
+    it.each(['rate limit', 'network'] as const)(
+      'refreshes credentials after a %s failure',
+      async (failure) => {
+        const getAuthHeaders = vi
+          .fn()
+          .mockResolvedValueOnce({ Authorization: 'Bearer first' })
+          .mockResolvedValueOnce({ Authorization: 'Bearer second' });
+        const fetch = vi.mocked(global.fetch);
+        if (failure === 'rate limit') {
+          fetch.mockResolvedValueOnce(new Response('', { status: 429 }));
+        } else {
+          fetch.mockRejectedValueOnce(new Error('connection reset'));
+        }
+        fetch.mockResolvedValueOnce(new Response('ok'));
+        const headers = { 'Content-Type': 'application/json' };
+        await fetchWithRetries('https://example.com', { headers, getAuthHeaders }, 1000, 1);
+        expect(getAuthHeaders).toHaveBeenCalledTimes(2);
+        expect(
+          fetch.mock.calls.map(([, init]) => new Headers(init?.headers).get('authorization')),
+        ).toEqual(['Bearer first', 'Bearer second']);
+        expect(fetch.mock.calls.every(([, init]) => !('getAuthHeaders' in init!))).toBe(true);
+        expect(headers).toEqual({ 'Content-Type': 'application/json' });
+      },
+    );
+
+    it('refreshes credentials for direct transient retries', async () => {
+      const getAuthHeaders = vi
+        .fn()
+        .mockResolvedValueOnce({ Authorization: 'Bearer first' })
+        .mockResolvedValueOnce({ Authorization: 'Bearer second' });
+      vi.mocked(global.fetch)
+        .mockResolvedValueOnce(new Response('', { status: 503, statusText: 'Service Unavailable' }))
+        .mockResolvedValueOnce(new Response('ok'));
+      await fetchWithProxy('https://example.com', { getAuthHeaders });
+      expect(getAuthHeaders).toHaveBeenCalledTimes(2);
+      expect(
+        new Headers(vi.mocked(global.fetch).mock.calls[1][1]?.headers).get('authorization'),
+      ).toBe('Bearer second');
+    });
+
+    it('preserves explicit authentication headers case-insensitively', async () => {
+      await fetchWithProxy('https://example.com', {
+        headers: { AUTHORIZATION: 'Bearer explicit' },
+        getAuthHeaders: async () => ({ Authorization: 'Bearer generated' }),
+      });
+      expect(
+        new Headers(vi.mocked(global.fetch).mock.calls[0][1]?.headers).get('authorization'),
+      ).toBe('Bearer explicit');
+    });
+
+    it('does not retry or dispatch when credential resolution fails', async () => {
+      const cause = new Error('credential discovery failed');
+      const getAuthHeaders = vi.fn().mockRejectedValue(cause);
+      await expect(
+        fetchWithRetries('https://example.com', { getAuthHeaders }, 1000, 2),
+      ).rejects.toMatchObject({ message: cause.message, cause });
+      expect(getAuthHeaders).toHaveBeenCalledTimes(1);
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('does not dispatch if aborted during credential resolution', async () => {
+      const controller = new AbortController();
+      await expect(
+        fetchWithRetries(
+          'https://example.com',
+          {
+            signal: controller.signal,
+            getAuthHeaders: async (signal) => {
+              expect(signal?.aborted).toBe(false);
+              controller.abort();
+              return { Authorization: 'Bearer stale' };
+            },
+          },
+          1000,
+          2,
+        ),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('includes credential resolution in the HTTP timeout', async () => {
+      vi.useFakeTimers();
+      let finishAuth!: (headers: HeadersInit) => void;
+      let authSignal: AbortSignal | undefined;
+      const result = fetchWithTimeout(
+        'https://example.com',
+        {
+          getAuthHeaders: (signal) => {
+            authSignal = signal;
+            return new Promise((resolve) => {
+              finishAuth = resolve;
+            });
+          },
+        },
+        100,
+      );
+      const assertion = expect(result).rejects.toThrow('Request timed out after 100 ms');
+      try {
+        await vi.advanceTimersByTimeAsync(100);
+        await assertion;
+        expect(authSignal?.aborted).toBe(true);
+        finishAuth({ Authorization: 'Bearer late' });
+        await vi.runAllTimersAsync();
+        expect(global.fetch).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   it('should preserve Request headers when init headers are absent', async () => {
@@ -725,6 +840,26 @@ describe('fetchWithProxy', () => {
     await fetchWithProxy('https://example.com');
 
     expect(ProxyAgent).not.toHaveBeenCalled();
+  });
+
+  it.each(['0', '-2', '2foo', '1.5', '', '9007199254740992', 'Infinity'])(
+    'falls back to CLI concurrency for invalid pool size %j',
+    async (value) => {
+      vi.mocked(getEnvString).mockImplementation((key, fallback) =>
+        key === 'PROMPTFOO_FETCH_CONNECTIONS' ? value : fallback,
+      );
+      cliState.maxConcurrency = 3;
+      await fetchWithProxy('https://example.com');
+      expect(Agent).toHaveBeenCalledWith(expect.objectContaining({ connections: 3 }));
+    },
+  );
+
+  it('accepts a positive integer pool size with whitespace', async () => {
+    vi.mocked(getEnvString).mockImplementation((key, fallback) =>
+      key === 'PROMPTFOO_FETCH_CONNECTIONS' ? ' 12 ' : fallback,
+    );
+    await fetchWithProxy('https://example.com');
+    expect(Agent).toHaveBeenCalledWith(expect.objectContaining({ connections: 12 }));
   });
 
   it('should read REQUEST_TIMEOUT_MS when creating the default agent', async () => {
@@ -1827,17 +1962,26 @@ describe('fetchWithRetries', () => {
   });
 
   describe('HttpRateLimitError classification', () => {
+    it('does not inspect a streamless rate-limit body', async () => {
+      const text = vi
+        .fn()
+        .mockResolvedValue(JSON.stringify({ error: { code: 'insufficient_quota' } }));
+      vi.mocked(global.fetch).mockResolvedValue(createMockResponse({ status: 429, text }));
+      const error = await fetchWithRetries('https://example.com', {}, 1000, 0).catch((err) => err);
+      expect(error).toMatchObject({ kind: 'rate_limit' });
+      expect(text).not.toHaveBeenCalled();
+    });
+
     function rateLimitedJsonResponse(opts: {
       headers?: Headers;
       body?: unknown;
       statusText?: string;
     }): Response {
       const text = JSON.stringify(opts.body ?? {});
-      return createMockResponse({
+      return new Response(text, {
         status: 429,
         statusText: opts.statusText ?? 'Too Many Requests',
         headers: opts.headers ?? new Headers(),
-        text: () => Promise.resolve(text),
       });
     }
 
@@ -1905,6 +2049,24 @@ describe('fetchWithRetries', () => {
       const rl = err as HttpRateLimitError;
       expect(rl.kind).toBe('quota');
       expect(rl.code).toBe('credit_balance_exhausted');
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(sleep).not.toHaveBeenCalled();
+    });
+
+    it('fails fast on OpenRouter gateway billing metadata without an error type', async () => {
+      const quotaResponse = rateLimitedJsonResponse({
+        body: {
+          error: {
+            message: 'Insufficient credits',
+            metadata: { provider_code: 'credit_balance_exhausted' },
+          },
+        },
+      });
+      vi.mocked(global.fetch).mockResolvedValue(quotaResponse);
+
+      const error = await fetchWithRetries('https://example.com', {}, 1000, 4).catch((err) => err);
+      expect(error).toBeInstanceOf(HttpRateLimitError);
+      expect(error).toMatchObject({ kind: 'quota', code: 'credit_balance_exhausted' });
       expect(global.fetch).toHaveBeenCalledTimes(1);
       expect(sleep).not.toHaveBeenCalled();
     });
@@ -2011,11 +2173,9 @@ describe('fetchWithRetries', () => {
     });
 
     it('falls back to status-only when body has no JSON code', async () => {
-      const response = createMockResponse({
+      const response = new Response('plain text rate limit notice', {
         status: 429,
         statusText: 'Too Many Requests',
-        headers: new Headers(),
-        text: () => Promise.resolve('plain text rate limit notice'),
       });
       vi.mocked(global.fetch).mockResolvedValue(response);
 
@@ -2684,5 +2844,42 @@ describe('fetchWithRetries with disableTransientRetries', () => {
     // So we should see exactly 1 fetch call
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(result).toBe(transientResponse);
+  });
+});
+
+describe('readBoundedText', () => {
+  it.each([undefined, '1', '1000000'])(
+    'does not buffer a streamless body with length %s',
+    async (length) => {
+      const text = vi.fn().mockResolvedValue('oversized body');
+      const response = {
+        body: null,
+        headers: new Headers(length ? { 'content-length': length } : {}),
+        text,
+      } as unknown as Response;
+      expect(await readBoundedText(response, 4, { requireStream: true })).toBe('');
+      expect(text).not.toHaveBeenCalled();
+    },
+  );
+
+  it('preserves the legacy streamless fallback for ordinary response consumers', async () => {
+    const response = {
+      body: null,
+      headers: new Headers(),
+      text: vi.fn().mockResolvedValue('hello'),
+    } as unknown as Response;
+    expect(await readBoundedText(response, 4)).toBe('hell');
+  });
+
+  it('bounds streamed bytes and cancels the reader', async () => {
+    const cancel = vi.fn();
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('abcdefgh'));
+      },
+      cancel,
+    });
+    expect(await readBoundedText(new Response(body), 4)).toBe('abcd');
+    expect(cancel).toHaveBeenCalledOnce();
   });
 });

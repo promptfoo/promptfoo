@@ -29,7 +29,8 @@ vi.mock('fs/promises', () => ({
   },
 }));
 
-vi.mock('../../src/envars', () => ({
+vi.mock(import('../../src/envars'), async (importOriginal) => ({
+  ...(await importOriginal()),
   getEnvString: vi.fn(),
 }));
 

@@ -7,7 +7,6 @@ import {
   startTraceExportLoop,
 } from '@openai/agents';
 import { SandboxAgent } from '@openai/agents/sandbox';
-import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { getConfiguredTracingExport } from '../tracing';
 import {
@@ -156,7 +155,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       this.agentConfig.tracing === true ||
       Boolean(context?.traceparent && hasConfiguredExporter) ||
       context?.test?.metadata?.tracingEnabled === true ||
-      (this.env?.PROMPTFOO_TRACING_ENABLED ?? getEnvString('PROMPTFOO_TRACING_ENABLED')) === 'true';
+      process.env.PROMPTFOO_TRACING_ENABLED === 'true';
 
     if (!tracingEnabled) {
       logger.debug('[AgentsProvider] Tracing not enabled');

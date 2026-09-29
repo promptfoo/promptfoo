@@ -10,14 +10,11 @@ import { notifyEvaluationChanged } from '../models/evalMutation';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { ResultFailureReason } from '../types/index';
 import { ConfigResolutionError, resolveConfigs } from '../util/config/load';
-import { setupEnv } from '../util/env';
 import {
   filterProviders,
   getPersistedProviderFilterOptions,
   getProviderFilterRegexError,
 } from '../util/eval/filterProviders';
-import { applyProviderSelection } from '../util/eval/providerSelection';
-import { applyPromptSelection, getPromptsForReplay } from '../util/eval/replay';
 import { accumulateNamedMetric } from '../util/namedMetrics';
 import { writeMultipleOutputs } from '../util/output';
 import { getOutputFileFormat } from '../util/outputFormats';
@@ -31,14 +28,11 @@ import {
 import type { TokenUsage } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
 
-const SQLITE_MAX_BOUND_PARAMETERS = 999;
-
 export interface RetryCommandOptions {
   config?: string;
   verbose?: boolean;
   maxConcurrency?: number;
   delay?: number;
-  envPath?: string | string[];
   share?: boolean;
 }
 
@@ -63,26 +57,10 @@ function assertRetryProviderFilterMatched(
   );
 }
 
-function loadRetryEnvironment(originalEval: Eval, cmdObj: RetryCommandOptions): boolean {
-  const explicitEnvPaths = (Array.isArray(cmdObj.envPath) ? cmdObj.envPath : [cmdObj.envPath])
-    .filter((envPath): envPath is string => typeof envPath === 'string')
-    .flatMap((envPath) => envPath.split(',').map((candidate) => candidate.trim()))
-    .filter((envPath) => envPath.length > 0);
-  if (explicitEnvPaths.length > 0) {
-    setupEnv(explicitEnvPaths.length === 1 ? explicitEnvPaths[0] : explicitEnvPaths);
-    return true;
-  }
-  if (!cmdObj.config && originalEval.runtimeOptions?.configEnvPaths) {
-    setupEnv(originalEval.runtimeOptions.configEnvPaths);
-  }
-  return false;
-}
-
 async function resolveRetryConfigs(
   originalEval: Eval,
   cmdObj: RetryCommandOptions,
 ): Promise<Awaited<ReturnType<typeof resolveConfigs>>> {
-  const hasExplicitEnvPaths = loadRetryEnvironment(originalEval, cmdObj);
   const providerFilterOptions = getPersistedProviderFilterOptions(
     originalEval.runtimeOptions?.providerFilter,
   );
@@ -101,58 +79,15 @@ async function resolveRetryConfigs(
     );
   }
 
-  const resolveOptions = {
-    allowConfigFilterSample:
-      originalEval.runtimeOptions?.testCaseSelection === undefined &&
-      originalEval.runtimeOptions?.testCaseIndices === undefined,
-    loadEnvFiles:
-      !hasExplicitEnvPaths &&
-      (Boolean(cmdObj.config) || originalEval.runtimeOptions?.configEnvSource !== 'cli'),
-    ...(cmdObj.config || !originalEval.runtimeOptions?.configBasePath
-      ? {}
-      : { configBasePath: originalEval.runtimeOptions.configBasePath }),
-  };
   const configs = cmdObj.config
-    ? await resolveConfigs(
-        { config: [cmdObj.config], ...providerFilterOptions },
-        {},
-        undefined,
-        resolveOptions,
-      )
-    : await resolveConfigs(providerFilterOptions, originalEval.config, undefined, resolveOptions);
+    ? await resolveConfigs({ config: [cmdObj.config], ...providerFilterOptions }, {})
+    : await resolveConfigs(providerFilterOptions, originalEval.config);
 
-  const providerSelection = originalEval.runtimeOptions?.providerSelection;
-  if (providerSelection) {
-    try {
-      const selected = applyProviderSelection(
-        configs.testSuite.providers,
-        Array.isArray(configs.selectedProviderConfigs)
-          ? configs.selectedProviderConfigs
-          : undefined,
-        providerSelection,
-        configs.basePath,
-      );
-      configs.testSuite.providers = selected.providers;
-      configs.selectedProviderConfigs = selected.providerConfigs;
-      cliState.selectedProviderConfigs = selected.providerConfigs;
-    } catch (error) {
-      throw new ConfigResolutionError(
-        `Could not restore provider selection for evaluation ${originalEval.id}: ${error instanceof Error ? error.message : String(error)}. Existing ERROR results were preserved.`,
-      );
-    }
-  }
-  // Selection indices address the resolved list before runtime id/label filtering.
+  // The original run filtered twice: raw configs in resolveConfigs, then instantiated
+  // providers by live id()/label in doEval. Replay both stages so the retried provider
+  // set matches the original even when an instantiated id or label diverges from its
+  // raw config reference.
   configs.testSuite.providers = filterProviders(configs.testSuite.providers, providerFilter);
-  const promptSelection = originalEval.runtimeOptions?.promptSelection;
-  if (promptSelection) {
-    try {
-      configs.testSuite.prompts = applyPromptSelection(configs.testSuite.prompts, promptSelection);
-    } catch (error) {
-      throw new ConfigResolutionError(
-        `Could not restore prompt selection for evaluation ${originalEval.id}: ${error instanceof Error ? error.message : String(error)}. Existing ERROR results were preserved.`,
-      );
-    }
-  }
 
   assertRetryProviderFilterMatched(
     providerFilter,
@@ -205,150 +140,30 @@ export async function getErrorResultIds(evalId: string): Promise<string[]> {
   return errorResults.map((r) => r.id);
 }
 
-/** Snapshot existing rows so retry can distinguish new replacements from stale successes. */
-export async function getAllResultIds(evalId: string): Promise<string[]> {
-  const db = await getDb();
-
-  const rows = await db
-    .select({ id: evalResultsTable.id })
-    .from(evalResultsTable)
-    .where(eq(evalResultsTable.evalId, evalId))
-    .all();
-
-  return rows.map((r) => r.id);
-}
-
-/** Delete superseded rows in one transaction and notify affected evaluations. */
+/**
+ * Deletes ERROR results after successful retry.
+ * Uses batch delete for better performance.
+ */
 export async function deleteErrorResults(resultIds: string[]): Promise<void> {
   if (resultIds.length === 0) {
     return;
   }
 
   const db = await getDb();
-  const affectedEvalIds = new Set<string>();
-  for (let offset = 0; offset < resultIds.length; offset += SQLITE_MAX_BOUND_PARAMETERS) {
-    const resultIdBatch = resultIds.slice(offset, offset + SQLITE_MAX_BOUND_PARAMETERS);
-    const affectedEvals = await db
-      .selectDistinct({ evalId: evalResultsTable.evalId })
-      .from(evalResultsTable)
-      .where(inArray(evalResultsTable.id, resultIdBatch))
-      .all();
-    for (const { evalId } of affectedEvals) {
-      affectedEvalIds.add(evalId);
-    }
-  }
+  const affectedEvals = await db
+    .selectDistinct({ evalId: evalResultsTable.evalId })
+    .from(evalResultsTable)
+    .where(inArray(evalResultsTable.id, resultIds))
+    .all();
 
-  await db.transaction(async (tx) => {
-    for (let offset = 0; offset < resultIds.length; offset += SQLITE_MAX_BOUND_PARAMETERS) {
-      const resultIdBatch = resultIds.slice(offset, offset + SQLITE_MAX_BOUND_PARAMETERS);
-      await tx.delete(evalResultsTable).where(inArray(evalResultsTable.id, resultIdBatch)).run();
-    }
-  });
+  // Use batch delete with inArray for better performance
+  await db.delete(evalResultsTable).where(inArray(evalResultsTable.id, resultIds)).run();
 
-  for (const evalId of affectedEvalIds) {
+  for (const { evalId } of affectedEvals) {
     notifyEvaluationChanged(evalId);
   }
 
   logger.debug(`Deleted ${resultIds.length} error results from database`);
-}
-
-/**
- * Require a newly persisted replacement and return superseded rows for each failed execution.
- * The pre-retry snapshot prevents older duplicate rows from counting as replacements.
- */
-export async function assertErrorResultsReplaced(
-  resultIds: string[],
-  preexistingResultIds: string[] = [],
-): Promise<string[]> {
-  if (resultIds.length === 0) {
-    return [];
-  }
-
-  const db = await getDb();
-  const staleRows: Array<{
-    evalId: string;
-    id: string;
-    promptIdx: number;
-    testIdx: number;
-  }> = [];
-  for (let offset = 0; offset < resultIds.length; offset += SQLITE_MAX_BOUND_PARAMETERS) {
-    const resultIdBatch = resultIds.slice(offset, offset + SQLITE_MAX_BOUND_PARAMETERS);
-    staleRows.push(
-      ...(await db
-        .select({
-          evalId: evalResultsTable.evalId,
-          id: evalResultsTable.id,
-          promptIdx: evalResultsTable.promptIdx,
-          testIdx: evalResultsTable.testIdx,
-        })
-        .from(evalResultsTable)
-        .where(inArray(evalResultsTable.id, resultIdBatch))
-        .all()),
-    );
-  }
-  if (staleRows.length !== resultIds.length) {
-    throw new Error('Could not verify all original ERROR rows after retry. They were preserved.');
-  }
-
-  const preexistingIds = new Set([...resultIds, ...preexistingResultIds]);
-  const supersededIds = new Set(resultIds);
-  const failedExecutions = new Set(
-    staleRows.map((row) => `${row.evalId}:${row.testIdx}:${row.promptIdx}`),
-  );
-  const replacedExecutions = new Map<string, number>();
-  const testIndicesByEval = new Map<string, Set<number>>();
-  for (const row of staleRows) {
-    const testIndices = testIndicesByEval.get(row.evalId) ?? new Set<number>();
-    testIndices.add(row.testIdx);
-    testIndicesByEval.set(row.evalId, testIndices);
-  }
-  for (const [evalId, testIndexSet] of testIndicesByEval) {
-    const testIndices = [...testIndexSet];
-    const batchSize = SQLITE_MAX_BOUND_PARAMETERS - 1;
-    for (let offset = 0; offset < testIndices.length; offset += batchSize) {
-      const testIndexBatch = testIndices.slice(offset, offset + batchSize);
-      const candidateRows = await db
-        .select({
-          evalId: evalResultsTable.evalId,
-          id: evalResultsTable.id,
-          promptIdx: evalResultsTable.promptIdx,
-          testIdx: evalResultsTable.testIdx,
-        })
-        .from(evalResultsTable)
-        .where(
-          and(
-            eq(evalResultsTable.evalId, evalId),
-            inArray(evalResultsTable.testIdx, testIndexBatch),
-          ),
-        )
-        .all();
-      for (const row of candidateRows) {
-        const key = `${row.evalId}:${row.testIdx}:${row.promptIdx}`;
-        if (!preexistingIds.has(row.id)) {
-          replacedExecutions.set(key, (replacedExecutions.get(key) ?? 0) + 1);
-        } else if (failedExecutions.has(key)) {
-          supersededIds.add(row.id);
-        }
-      }
-    }
-  }
-
-  const missingRows: typeof staleRows = [];
-  for (const row of staleRows) {
-    const key = `${row.evalId}:${row.testIdx}:${row.promptIdx}`;
-    const replacements = replacedExecutions.get(key) ?? 0;
-    if (replacements === 0) {
-      missingRows.push(row);
-    } else {
-      replacedExecutions.set(key, replacements - 1);
-    }
-  }
-  if (missingRows.length > 0) {
-    throw new Error(
-      `Retry produced no persisted replacement for ${missingRows.length} ERROR result${missingRows.length === 1 ? '' : 's'}. Original ERROR rows were preserved.`,
-    );
-  }
-  return [...supersededIds];
 }
 
 // Batch size of 1000 balances memory usage vs. database query overhead for large evals (40K+ results)
@@ -536,20 +351,34 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
     return originalEval;
   }
 
-  // Snapshot every existing result ID BEFORE the retry so replacement verification
-  // only credits rows this retry newly persisted (not pre-existing duplicates).
-  const preexistingResultIds = await getAllResultIds(evalId);
-
   logger.info(`Found ${errorResultIds.length} ERROR results to retry`);
 
   // Load configuration - from provided config file or from original evaluation
-  const { testSuite, commandLineOptions, config, basePath } = await resolveRetryConfigs(
-    originalEval,
-    cmdObj,
+  const resolvedConfig = await resolveRetryConfigs(originalEval, cmdObj);
+  return cliState.withConfig(
+    resolvedConfig.config,
+    () =>
+      cliState.withEnv(resolvedConfig.testSuite.env, () =>
+        retryWithConfig(originalEval, errorResultIds, cmdObj, resolvedConfig),
+      ),
+    resolvedConfig.selectedProviderConfigs,
   );
-  if (originalEval.prompts.length > 0) {
-    testSuite.prompts = getPromptsForReplay(originalEval.prompts, testSuite.prompts);
-  }
+}
+
+async function retryWithConfig(
+  originalEval: Eval,
+  errorResultIds: string[],
+  cmdObj: RetryCommandOptions,
+  { testSuite, commandLineOptions, config }: Awaited<ReturnType<typeof resolveRetryConfigs>>,
+) {
+  const evalId = originalEval.id;
+
+  // CRITICAL: We do NOT delete ERROR results here anymore!
+  // Previously (before this fix), deletion happened before evaluate(), which caused data loss:
+  // - If retry failed (network error, API timeout, etc.), the ERROR results were already gone
+  // - User could not re-retry because the original ERROR results were permanently deleted
+  // Now we delete AFTER successful retry, so if retry fails, ERROR results are preserved
+  // and the user can simply run the retry command again.
 
   logger.info(
     `🔄 Running evaluation with resume mode to retry ${errorResultIds.length} test cases...`,
@@ -559,31 +388,19 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
   // Enable retry mode so getCompletedIndexPairs excludes ERROR results
   cliState.resume = true;
   cliState.retryMode = true;
+  cliState._retryErrorResultIds = errorResultIds;
 
-  // Calculate effective execution controls. An explicit retry config is a deliberate
-  // override; otherwise preserve the original runtime before falling back to saved config.
-  // Priority: CLI flag > explicit retry config > original runtime > saved config.
+  // Calculate effective maxConcurrency from CLI or config (commandLineOptions)
+  // Priority: CLI flag > config file's commandLineOptions
   // Use runtime validation to handle cases where config may contain wrong types (e.g., string "5" instead of number 5)
   const configMaxConcurrency = commandLineOptions?.maxConcurrency;
-  const explicitConfigMaxConcurrency =
-    cmdObj.config && typeof configMaxConcurrency === 'number' ? configMaxConcurrency : undefined;
   const effectiveMaxConcurrency =
     cmdObj.maxConcurrency ??
-    explicitConfigMaxConcurrency ??
-    originalEval.runtimeOptions?.maxConcurrency ??
     (typeof configMaxConcurrency === 'number' ? configMaxConcurrency : undefined);
 
   const configDelay = commandLineOptions?.delay;
-  const explicitConfigDelay =
-    cmdObj.config && typeof configDelay === 'number' ? configDelay : undefined;
   const effectiveDelay =
-    cmdObj.delay ??
-    explicitConfigDelay ??
-    originalEval.runtimeOptions?.delay ??
-    (typeof configDelay === 'number' ? configDelay : undefined);
-  const persistedRepeat = originalEval.runtimeOptions?.repeat;
-  const effectiveRepeat =
-    Number.isSafeInteger(persistedRepeat) && (persistedRepeat as number) > 0 ? persistedRepeat : 1;
+    cmdObj.delay ?? (typeof configDelay === 'number' ? configDelay : undefined);
 
   // Propagate maxConcurrency to cliState for providers (e.g., Python worker pool)
   // Handle delay mode: force concurrency to 1 when delay is set
@@ -598,24 +415,10 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
 
   // Set up evaluation options
   const evaluateOptions: InternalEvaluateOptions = {
-    configBasePath: basePath || originalEval.runtimeOptions?.configBasePath || process.cwd(),
     maxConcurrency: effectiveDelay && effectiveDelay > 0 ? 1 : effectiveMaxConcurrency,
     delay: effectiveDelay,
     eventSource: 'cli',
-    repeat: effectiveRepeat,
     showProgressBar: !cmdObj.verbose, // Show progress bar unless verbose mode
-    ...(originalEval.runtimeOptions?.filterRange
-      ? { filterRange: originalEval.runtimeOptions.filterRange }
-      : {}),
-    ...(originalEval.runtimeOptions?.testCaseIndices === undefined
-      ? {}
-      : { testCaseIndices: originalEval.runtimeOptions.testCaseIndices }),
-    ...(originalEval.runtimeOptions?.testCaseSelection
-      ? { testCaseSelection: originalEval.runtimeOptions.testCaseSelection }
-      : {}),
-    ...(originalEval.runtimeOptions?.providerSelection
-      ? { providerSelection: originalEval.runtimeOptions.providerSelection }
-      : {}),
   };
 
   try {
@@ -628,14 +431,9 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
       throw new Error('Retry results failed to persist. Existing ERROR rows were preserved.');
     }
 
-    const supersededResultIds = await assertErrorResultsReplaced(
-      errorResultIds,
-      preexistingResultIds,
-    );
-
     let errorRowsDeleted = false;
     try {
-      await deleteErrorResults(supersededResultIds);
+      await deleteErrorResults(errorResultIds);
       errorRowsDeleted = true;
       await recalculatePromptMetrics(retriedEval);
     } catch (cleanupError) {
@@ -679,8 +477,6 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
       try {
         const shareUrl = await createShareableUrl(retriedEval, { silent: false });
         if (shareUrl) {
-          retriedEval.shared = true;
-          retriedEval.shareableUrl = shareUrl;
           logger.info(
             `${chalk.dim('>>>')} ${chalk.green('View results:')} ${chalk.cyan(shareUrl)}`,
           );
@@ -703,6 +499,7 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
     // Always clear the state flags to prevent stale state
     cliState.resume = false;
     cliState.retryMode = false;
+    delete cliState._retryErrorResultIds;
     cliState.maxConcurrency = undefined;
   }
 }

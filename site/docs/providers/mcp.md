@@ -6,9 +6,9 @@ description: Use Model Context Protocol (MCP) servers as providers in promptfoo 
 
 # MCP (Model Context Protocol) Provider
 
-The `mcp` provider allows you to use Model Context Protocol (MCP) servers directly as providers in promptfoo. This is particularly useful for red teaming and testing agentic systems that rely on MCP tools for function calling, data access, and external integrations.
+The `mcp` provider calls Model Context Protocol (MCP) tools directly, so you can test or red team the server itself.
 
-Unlike the [MCP integration for other providers](../integrations/mcp.md), the MCP provider treats the MCP server itself as the target system under test, allowing you to evaluate security vulnerabilities and robustness of MCP-based applications.
+To give MCP tools to a model you're testing, use the [MCP integration for other providers](../integrations/mcp.md).
 
 ## Setup
 
@@ -60,14 +60,24 @@ providers:
 Promptfoo's own environment, so the server process inherits everything Promptfoo was started
 with and a per-server entry wins on conflict.
 
-Relative `server.path` values resolve from the configuration directory, including preconstructed providers nested in JavaScript test, assertion, and scenario configuration. An explicit provider `basePath` takes precedence.
-
-Reused provider instances retain their environment templates for later evaluations, including when a provider updates unrelated runtime configuration. Rendering preserves JavaScript SDK objects and cycles in the configuration. The first call initializes the connection and response transform from that evaluation's environment. Nested instances join the evaluation's cleanup scope, so their connections close before the next run. An active instance rejects calls with a different execution environment. Use separate instances for those evaluations; an instance can use a new environment after cleanup.
-
 Keep secrets out of the config file. `{{ env.VAR }}` placeholders are resolved from the
 environment when the provider loads, so the config stays committable while the credential comes
 from your shell or `--env-file`. A placeholder for an unset variable is preserved verbatim
 rather than collapsing to an empty string, so a missing credential fails visibly.
+
+A stdio server can also be started from a script with `path`, which accepts `.js` and `.py` files
+and is resolved relative to the config file. Use it in place of `command`/`args`: `args` is not
+applied to a `path` server, and `command` takes precedence when both are set.
+
+```yaml
+providers:
+  - id: mcp
+    config:
+      enabled: true
+      server:
+        path: ./mcp_server/index.js # .js runs with Node; .py runs with Python
+        name: local-server
+```
 
 #### Remote Server (URL-based)
 
@@ -236,21 +246,21 @@ When using OAuth authentication:
 
 #### Authentication Options Reference
 
-| Option       | Type     | Auth Type               | Required | Description                                           |
-| ------------ | -------- | ----------------------- | -------- | ----------------------------------------------------- |
-| type         | string   | All                     | Yes      | `'bearer'`, `'basic'`, `'api_key'`, or `'oauth'`      |
-| token        | string   | bearer                  | Yes      | The bearer token                                      |
-| username     | string   | basic, oauth (password) | Yes      | Username                                              |
-| password     | string   | basic, oauth (password) | Yes      | Password                                              |
-| value        | string   | api_key                 | Yes\*    | The API key value                                     |
-| api_key      | string   | api_key                 | Yes\*    | Legacy field, use `value` instead                     |
-| keyName      | string   | api_key                 | No       | Header or query parameter name (default: `X-API-Key`) |
-| placement    | string   | api_key                 | No       | `'header'` (default) or `'query'`                     |
-| grantType    | string   | oauth                   | Yes      | `'client_credentials'` or `'password'`                |
-| tokenUrl     | string   | oauth                   | No       | OAuth token endpoint URL (auto-discovered if omitted) |
-| clientId     | string   | oauth                   | Varies   | Required for client_credentials                       |
-| clientSecret | string   | oauth                   | Varies   | Required for client_credentials                       |
-| scopes       | string[] | oauth                   | No       | OAuth scopes to request                               |
+| Option       | Type     | Auth Type               | Required | Description                                                                                                                        |
+| ------------ | -------- | ----------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| type         | string   | All                     | Yes      | `'bearer'`, `'basic'`, `'api_key'`, `'oauth'`, or `'none'` (`''` and `'no_auth'` are accepted aliases that disable generated auth) |
+| token        | string   | bearer                  | Yes      | The bearer token                                                                                                                   |
+| username     | string   | basic, oauth (password) | Yes      | Username                                                                                                                           |
+| password     | string   | basic, oauth (password) | Yes      | Password                                                                                                                           |
+| value        | string   | api_key                 | Yes\*    | The API key value                                                                                                                  |
+| api_key      | string   | api_key                 | Yes\*    | Legacy field, use `value` instead                                                                                                  |
+| keyName      | string   | api_key                 | No       | Header or query parameter name (default: `X-API-Key`)                                                                              |
+| placement    | string   | api_key                 | No       | `'header'` (default) or `'query'`                                                                                                  |
+| grantType    | string   | oauth                   | Varies   | `'client_credentials'` (the default when omitted) or `'password'`, which must be set explicitly                                    |
+| tokenUrl     | string   | oauth                   | No       | OAuth token endpoint URL (auto-discovered if omitted)                                                                              |
+| clientId     | string   | oauth                   | Varies   | Required for client_credentials                                                                                                    |
+| clientSecret | string   | oauth                   | Varies   | Required for client_credentials                                                                                                    |
+| scopes       | string[] | oauth                   | No       | OAuth scopes to request                                                                                                            |
 
 \* Either `value` or `api_key` is required for api_key auth type.
 
@@ -284,10 +294,12 @@ providers:
       timeout: 900000 # Request timeout in milliseconds (15 minutes)
       debug: true # Enable debug logging
       verbose: true # Enable verbose output
-      defaultArgs: # Default arguments for all tool calls
+      defaultArgs: # Tool call arguments override these defaults
         session_id: 'test-session'
         user_role: 'customer'
 ```
+
+Tools and response transforms receive the full arguments. Debug logs list argument names only. Promptfoo redacts credential fields such as `session_id` and `apiKey` in saved result metadata and tool traces. Use the separate [server authentication](#authentication) settings for credentials that authenticate the connection itself.
 
 ### Response Transforms
 

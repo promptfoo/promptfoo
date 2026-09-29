@@ -1,5 +1,4 @@
-import { isTemplateProcessEnvDisabled } from '../envars';
-import { getProcessEnv } from '../envOverrides';
+import { getProcessEnv, isTemplateProcessEnvDisabled } from '../envars';
 import { JsonlFileWriter } from '../util/exportToFile/writeToFile';
 import { getOutputFileFormat } from '../util/outputFormats';
 import { renderEnvOnlyInObject } from '../util/render';
@@ -27,7 +26,8 @@ export const nodeEvaluatorRuntime: EvaluatorRuntime<Eval, EvalResult> = {
       return testSuite;
     }
 
-    const processEnvironment = isTemplateProcessEnvDisabled() ? {} : getProcessEnv();
+    const processEnvironmentDisabled = isTemplateProcessEnvDisabled();
+    const processEnvironment = processEnvironmentDisabled ? {} : getProcessEnv();
     let renderedEnv = testSuite.env;
     if (renderedEnv) {
       const maxPasses = Object.keys(renderedEnv).length;

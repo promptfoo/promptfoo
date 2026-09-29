@@ -14,6 +14,25 @@ afterEach(() => {
 });
 
 describe('provider credential policy', () => {
+  it.each(['OPENAI_API_KEY', 'CUSTOM_API_KEY'])(
+    'honors an explicitly empty override for %s',
+    (name) => {
+      mockProcessEnv({ [name]: 'process-key' });
+      expect(
+        resolveProviderApiKey(
+          name === 'CUSTOM_API_KEY' ? { apiKeyEnvar: name } : {},
+          { [name]: '' },
+          ['OPENAI_API_KEY'],
+        ),
+      ).toBeUndefined();
+    },
+  );
+
+  it('keeps an unmasked alias available when another key is explicitly empty', () => {
+    mockProcessEnv({ AZURE_API_KEY: 'masked-key', AZURE_OPENAI_API_KEY: 'alias-key' });
+    expect(resolveProviderApiKey({}, { AZURE_API_KEY: '' }, defaults)).toBe('alias-key');
+  });
+
   it('prefers explicit keys over provider and process environments', () => {
     mockProcessEnv({ OPENAI_API_KEY: 'process-key' });
     expect(
@@ -21,29 +40,6 @@ describe('provider credential policy', () => {
         'OPENAI_API_KEY',
       ]),
     ).toBe('configured-key');
-  });
-
-  it.each(['configured', 'provider-env', 'process-env'] as const)(
-    'does not use a redaction marker as a %s credential',
-    (source) => {
-      mockProcessEnv({
-        AZURE_API_KEY: source === 'process-env' ? '[REDACTED]' : 'fallback-key',
-        AZURE_OPENAI_API_KEY: 'legacy-key',
-      });
-      const config = source === 'configured' ? { apiKey: '[REDACTED]' } : {};
-      const env = source === 'provider-env' ? { AZURE_API_KEY: '[REDACTED]' } : undefined;
-      expect(resolveProviderApiKey(config, env, defaults)).toBe(
-        source === 'process-env' ? 'legacy-key' : 'fallback-key',
-      );
-      expect(config).toEqual(source === 'configured' ? { apiKey: '[REDACTED]' } : {});
-    },
-  );
-
-  it('returns no credential when every available value is redacted', () => {
-    mockProcessEnv({ AZURE_API_KEY: '[REDACTED]', AZURE_OPENAI_API_KEY: '[REDACTED]' });
-    expect(
-      resolveProviderApiKey({ apiKey: '[REDACTED]' }, { AZURE_API_KEY: '[REDACTED]' }, defaults),
-    ).toBeUndefined();
   });
 
   it('prefers provider environment for a named credential', () => {

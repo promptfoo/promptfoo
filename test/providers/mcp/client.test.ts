@@ -207,6 +207,69 @@ describe('MCPClient', () => {
       await mcpClient.cleanup();
     });
 
+    it.each([
+      { server: {} },
+      { server: { url: 'https://mcp.example.test', auth: { type: 'api_key' } } },
+      {
+        servers: [
+          { command: 'node' },
+          { url: 'https://mcp.example.test', auth: { type: 'bearer', token: 123 } },
+        ],
+      },
+      { server: { command: 'node', env: { TOKEN: 123 } } },
+      { timeout: -1 },
+    ])('rejects malformed configuration before initializing any SDK client: %j', (config) => {
+      expect(() => new MCPClient({ enabled: true, ...config })).toThrow();
+      expect(Client).not.toHaveBeenCalled();
+      expect(StdioClientTransport).not.toHaveBeenCalled();
+      expect(StreamableHTTPClientTransport).not.toHaveBeenCalled();
+      expect(mockGetOAuthTokenWithExpiry).not.toHaveBeenCalled();
+    });
+
+    it('defaults enabled and OAuth grant without changing the input', async () => {
+      const auth = {
+        type: 'oauth',
+        clientId: 'client',
+        clientSecret: 'secret',
+        scopes: 'read write',
+      };
+      const input = { server: { url: 'https://mcp.example.test', auth } };
+      mcpClient = new MCPClient(input);
+      await mcpClient.initialize();
+      expect(mockGetOAuthTokenWithExpiry).toHaveBeenCalledWith(
+        { ...auth, grantType: 'client_credentials' },
+        'https://mcp.example.test',
+      );
+      expect(input).not.toHaveProperty('enabled');
+      expect(auth).not.toHaveProperty('grantType');
+      await mcpClient.cleanup();
+    });
+
+    it('retains servers precedence and command transport precedence', async () => {
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: { command: 'ignored' },
+        servers: [{ command: 'selected', path: 'ignored.js', url: 'https://ignored.example.test' }],
+      });
+      await mcpClient.initialize();
+      expect(StdioClientTransport).toHaveBeenCalledTimes(1);
+      expect(StdioClientTransport).toHaveBeenCalledWith(
+        expect.objectContaining({ command: 'selected' }),
+      );
+      expect(StreamableHTTPClientTransport).not.toHaveBeenCalled();
+      await mcpClient.cleanup();
+    });
+
+    it('normalizes no-auth and keeps disabled configuration inert', async () => {
+      mcpClient = new MCPClient({
+        enabled: false,
+        server: { url: 'https://mcp.example.test', auth: { type: 'none' } },
+      });
+      await mcpClient.initialize();
+      expect(Client).not.toHaveBeenCalled();
+      expect(mockGetOAuthTokenWithExpiry).not.toHaveBeenCalled();
+    });
+
     it('should not initialize if disabled', async () => {
       mcpClient = new MCPClient({ enabled: false });
       await mcpClient.initialize();
@@ -235,9 +298,7 @@ describe('MCPClient', () => {
         args: ['start'],
         env: process.env as Record<string, string>,
       });
-      expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport, {
-        signal: expect.any(AbortSignal),
-      });
+      expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport, undefined);
       await mcpClient.cleanup();
       expect(mcpClient.hasInitialized).toBe(false);
     });
@@ -326,9 +387,7 @@ describe('MCPClient', () => {
           CUSTOM_MCP_VAR: 'custom_value',
         },
       });
-      expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport, {
-        signal: expect.any(AbortSignal),
-      });
+      expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport, undefined);
       await mcpClient.cleanup();
     });
 
@@ -347,7 +406,7 @@ describe('MCPClient', () => {
 
       expect(StdioClientTransport).toHaveBeenCalledWith({
         command: process.execPath,
-        args: [path.resolve('script.js')],
+        args: ['script.js'],
         env: { ...(process.env as Record<string, string>), CUSTOM_MCP_VAR: 'custom_value' },
       });
       await mcpClient.cleanup();
@@ -411,33 +470,28 @@ describe('MCPClient', () => {
       expect(mockClient.connect).toHaveBeenCalledTimes(2);
     });
 
-    it.each(['config', 'cli-state'])(
-      'keeps the local server directory from %s until initialization',
-      async (source) => {
-        mockClient.connect.mockResolvedValueOnce(undefined);
-        mockClient.listTools.mockResolvedValueOnce({
-          tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-        });
-        cliState.basePath = '/tmp/simple-mcp';
+    it('should resolve local server paths relative to the config base path', async () => {
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+      cliState.basePath = '/tmp/simple-mcp';
 
-        mcpClient = new MCPClient({
-          enabled: true,
-          ...(source === 'config' ? { basePath: '/tmp/simple-mcp' } : {}),
-          server: {
-            path: './example-server.js',
-          },
-        });
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          path: './example-server.js',
+        },
+      });
 
-        cliState.basePath = '/tmp/another-config';
-        await mcpClient.initialize();
+      await mcpClient.initialize();
 
-        expect(StdioClientTransport).toHaveBeenCalledWith({
-          command: process.execPath,
-          args: [path.resolve('/tmp/simple-mcp', './example-server.js')],
-          env: process.env as Record<string, string>,
-        });
-      },
-    );
+      expect(StdioClientTransport).toHaveBeenCalledWith({
+        command: process.execPath,
+        args: [path.resolve(cliState.basePath, './example-server.js')],
+        env: process.env as Record<string, string>,
+      });
+    });
 
     it('should throw error for unsupported file type', async () => {
       mcpClient = new MCPClient({
@@ -469,9 +523,7 @@ describe('MCPClient', () => {
       await mcpClient.initialize();
 
       expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(expect.any(URL), undefined);
-      expect(mockClient.connect).toHaveBeenCalledWith(mockStreamableHTTPTransport, {
-        signal: expect.any(AbortSignal),
-      });
+      expect(mockClient.connect).toHaveBeenCalledWith(mockStreamableHTTPTransport, undefined);
     });
 
     it('should initialize with remote server using StreamableHTTPClientTransport with headers', async () => {
@@ -504,42 +556,34 @@ describe('MCPClient', () => {
           }),
         }),
       );
-      expect(mockClient.connect).toHaveBeenCalledWith(mockStreamableHTTPTransport, {
-        signal: expect.any(AbortSignal),
-      });
+      expect(mockClient.connect).toHaveBeenCalledWith(mockStreamableHTTPTransport, undefined);
     });
 
-    it.each([false, true])(
-      'falls back to SSE when HTTP fails (cleanup rejects: %s)',
-      async (cleanupRejects) => {
-        if (cleanupRejects) {
-          mockStreamableHTTPTransport.close.mockRejectedValueOnce(new Error('Cleanup failed'));
-        }
-        // Reset mocks for this test
-        mockClient.connect
-          .mockImplementationOnce(function () {
-            throw new Error('Connection failed');
-          })
-          .mockResolvedValueOnce(undefined);
+    it('should fall back to SSEClientTransport if StreamableHTTPClientTransport fails', async () => {
+      // Reset mocks for this test
+      mockClient.connect
+        .mockImplementationOnce(function () {
+          throw new Error('Connection failed');
+        })
+        .mockResolvedValueOnce(undefined);
 
-        mockClient.listTools.mockResolvedValueOnce({
-          tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-        });
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
 
-        mcpClient = new MCPClient({
-          enabled: true,
-          server: {
-            url: 'http://localhost:3000',
-          },
-        });
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          url: 'http://localhost:3000',
+        },
+      });
 
-        await mcpClient.initialize();
+      await mcpClient.initialize();
 
-        expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(expect.any(URL), undefined);
-        expect(SSEClientTransport).toHaveBeenCalledWith(expect.any(URL), undefined);
-        expect(mockClient.connect).toHaveBeenCalledTimes(2);
-      },
-    );
+      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(expect.any(URL), undefined);
+      expect(SSEClientTransport).toHaveBeenCalledWith(expect.any(URL), undefined);
+      expect(mockClient.connect).toHaveBeenCalledTimes(2);
+    });
 
     it('should fall back to SSEClientTransport with headers if StreamableHTTPClientTransport fails', async () => {
       // Reset mocks for this test
@@ -710,10 +754,7 @@ describe('MCPClient', () => {
 
       await mcpClient.initialize();
 
-      expect(mockClient.listTools).toHaveBeenCalledWith(undefined, {
-        timeout: 900000,
-        signal: expect.any(AbortSignal),
-      });
+      expect(mockClient.listTools).toHaveBeenCalledWith(undefined, { timeout: 900000 });
     });
 
     it('should pass timeout options to connect()', async () => {
@@ -734,10 +775,7 @@ describe('MCPClient', () => {
 
       await mcpClient.initialize();
 
-      expect(mockClient.connect).toHaveBeenCalledWith(expect.anything(), {
-        timeout: 300000,
-        signal: expect.any(AbortSignal),
-      });
+      expect(mockClient.connect).toHaveBeenCalledWith(expect.anything(), { timeout: 300000 });
     });
 
     it('should ping server when pingOnConnect is true', async () => {
@@ -862,10 +900,16 @@ describe('MCPClient', () => {
       const tracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({ startActiveSpan } as any);
 
       try {
-        expect(await mcpClient.callTool('tool1', { query: 'inventory' })).toEqual({
+        const args = { query: 'inventory', session: 'opaque-session', nested: { apiKey: 'short' } };
+        expect(await mcpClient.callTool('tool1', args)).toEqual({
           content: 'result',
           raw: { content: 'result' },
         });
+        expect(mockClient.callTool).toHaveBeenCalledWith(
+          { name: 'tool1', arguments: args },
+          undefined,
+          undefined,
+        );
 
         expect(startActiveSpan).toHaveBeenCalledExactlyOnceWith(
           'execute_tool tool1',
@@ -873,7 +917,8 @@ describe('MCPClient', () => {
             attributes: expect.objectContaining({
               'gen_ai.operation.name': 'execute_tool',
               'gen_ai.tool.name': 'tool1',
-              'tool.arguments': '{"query":"inventory"}',
+              'tool.arguments':
+                '{"query":"inventory","session":"[REDACTED]","nested":{"apiKey":"[REDACTED]"}}',
             }),
           }),
           expect.any(Function),
@@ -1232,95 +1277,6 @@ describe('MCPClient', () => {
   });
 
   describe('cleanup', () => {
-    it.each(['connect', 'ping', 'listTools'] as const)(
-      'closes the allocated client when %s initialization fails',
-      async (stage) => {
-        mockClient[stage].mockRejectedValueOnce(new Error('Initialization failed'));
-        mcpClient = new MCPClient({
-          enabled: true,
-          pingOnConnect: true,
-          server: { command: 'node' },
-        });
-        await expect(mcpClient.initialize()).rejects.toThrow('Initialization failed');
-        expect(mockClient.close).toHaveBeenCalledOnce();
-        expect(mcpClient.connectedServers).toEqual([]);
-        await mcpClient.cleanup();
-        expect(mockStdioTransport.close).toHaveBeenCalled();
-      },
-    );
-
-    it('closes the client even when its transport fails to close', async () => {
-      mcpClient = new MCPClient({ enabled: true, server: { command: 'node' } });
-      await mcpClient.initialize();
-      mockStdioTransport.close.mockRejectedValueOnce(new Error('Transport close failed'));
-      await mcpClient.cleanup();
-      expect(mockStdioTransport.close).toHaveBeenCalledOnce();
-      expect(mockClient.close).toHaveBeenCalledOnce();
-      expect(mcpClient.connectedServers).toEqual([]);
-    });
-
-    it.each(['connecting', 'listing'] as const)(
-      'closes a transport while %s and prevents late initialization',
-      async (stage) => {
-        const started = createDeferred<void>();
-        const pending = createDeferred<void>();
-        const operation = stage === 'connecting' ? mockClient.connect : mockClient.listTools;
-        operation.mockImplementationOnce(async () => {
-          started.resolve(undefined);
-          await pending.promise;
-          return { tools: [] };
-        });
-        mcpClient = new MCPClient({ enabled: true, server: { url: 'http://localhost:3000' } });
-        const initialized = mcpClient.initialize();
-        const outcome = initialized.then(
-          () => undefined,
-          (error: unknown) => error,
-        );
-        await started.promise;
-        await mcpClient.cleanup();
-        pending.resolve(undefined);
-        expect(await outcome).toBeInstanceOf(Error);
-        expect(mockStreamableHTTPTransport.close).toHaveBeenCalled();
-        expect(mockClient.connect.mock.calls[0][1]?.signal?.aborted).toBe(true);
-        expect(SSEClientTransport).not.toHaveBeenCalled();
-        expect(mcpClient.connectedServers).toEqual([]);
-        expect(mcpClient.getAllTools()).toEqual([]);
-      },
-    );
-
-    it('does not connect after cleanup during an OAuth token request', async () => {
-      const started = createDeferred<void>();
-      const pending = createDeferred<void>();
-      mockGetOAuthTokenWithExpiry.mockImplementationOnce(async () => {
-        started.resolve(undefined);
-        await pending.promise;
-        return { accessToken: 'fixture-token', expiresAt: Date.now() + 3600000 };
-      });
-      mcpClient = new MCPClient({
-        enabled: true,
-        server: {
-          url: 'http://localhost:3000',
-          auth: {
-            type: 'oauth',
-            grantType: 'client_credentials',
-            clientId: 'fixture',
-            clientSecret: 'fixture',
-            tokenUrl: 'http://localhost:3000/token',
-          },
-        },
-      });
-      const outcome = mcpClient.initialize().then(
-        () => undefined,
-        (error: unknown) => error,
-      );
-      await started.promise;
-      await mcpClient.cleanup();
-      pending.resolve(undefined);
-      expect(await outcome).toBeInstanceOf(Error);
-      expect(mockClient.connect).not.toHaveBeenCalled();
-      expect(mcpClient.connectedServers).toEqual([]);
-    });
-
     it('should cleanup all clients', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);

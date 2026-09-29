@@ -13,6 +13,11 @@ import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../contracts/va
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
 import { parseFilterRange } from '../util/filterRange';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
+import {
+  CONFIG_PROVIDER_INPUT_ERROR,
+  hasValidConfigProviders,
+  normalizeConfigProviderAlias,
+} from './configAliases';
 
 export { ProvidersSchema };
 
@@ -25,7 +30,6 @@ export {
   isCliEventSource,
 } from './eventSource';
 
-import type { BlobRef } from '../blobs/types';
 import type { EnvOverrides } from '../contracts/env';
 import type { Prompt, PromptFunction } from '../contracts/prompts';
 import type {
@@ -316,57 +320,9 @@ export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & {
 };
 
 /** Runtime options stored with an evaluation for reproducible resume and retry behavior. */
-export interface EvalProviderSelectionEntry {
-  /** Index in the resolved provider list. */
-  index: number;
-  /** Effective runtime provider ID. */
-  id: string;
-  /** Effective runtime provider label, when configured. */
-  label?: string;
-  /** Original Promptfoo Cloud provider reference, before runtime resolution. */
-  cloudProviderId?: string;
-  /** Linked Promptfoo target used for permission checks and remote grading. */
-  linkedTargetId?: string;
-  /** Hash of the resolved provider definition used to fail closed on replay drift. */
-  fingerprint: string;
-}
-
-export interface EvalProviderSelection {
-  providers: EvalProviderSelectionEntry[];
-}
-
-export interface EvalPromptSelection {
-  prompts: Array<{ id: string; fingerprint: string }>;
-}
-
-export interface EvalTestCaseSelectionEntry {
-  /** Zero-based position when the selection was created, used for diagnostics only. */
-  index: number;
-  /** Content fingerprint used to restore this logical test exactly. */
-  fingerprint: string;
-}
-
-export interface EvalTestCaseSelection {
-  tests: EvalTestCaseSelectionEntry[];
-}
-
 export type EvalRuntimeOptions = Partial<EvaluateOptions> & {
-  /** @internal Absolute base directory used to resolve the persisted configuration. */
-  configBasePath?: string;
-  /** @internal Resolved config environment files reloaded for resume and retry. */
-  configEnvPaths?: string | string[];
-  /** @internal Source of the effective environment paths, used to preserve CLI precedence. */
-  configEnvSource?: 'cli' | 'config';
   /** @internal Normalized value of --filter-providers or --filter-targets. */
   providerFilter?: string;
-  /** @internal Exact resolved-provider selection for reproducible MCP replay. */
-  providerSelection?: EvalProviderSelection;
-  /** @internal Exact logical prompt order for reproducible resume and retry. */
-  promptSelection?: EvalPromptSelection;
-  /** @internal Zero-based logical test indices selected after scenario expansion. */
-  testCaseIndices?: number[];
-  /** @internal Exact logical test selection for reproducible resume and retry. */
-  testCaseSelection?: EvalTestCaseSelection;
 };
 
 const PromptMetricsSchema = z.object({
@@ -486,31 +442,8 @@ export interface EvaluateTableOutput {
   text: string;
   tokenUsage?: Partial<TokenUsage>;
   error?: string | null;
-  audio?: {
-    id?: string;
-    expiresAt?: number;
-    data?: string; // base64 encoded audio data
-    blobRef?: BlobRef;
-    transcript?: string;
-    format?: string;
-    sampleRate?: number;
-    channels?: number;
-    duration?: number;
-  };
-  video?: {
-    id?: string; // Provider video ID (e.g., Sora job ID, Veo operation name)
-    blobRef?: BlobRef; // Blob storage reference for video data (Veo)
-    storageRef?: { key?: string }; // Storage reference for video file (Sora)
-    url?: string; // Storage ref URL (e.g., storageRef:video/abc123.mp4) or blob URI
-    format?: string; // 'mp4'
-    size?: string; // '1280x720', '720x1280', '1792x1024', or '1024x1792'
-    duration?: number; // Seconds
-    thumbnail?: string; // Storage ref URL for thumbnail (Sora)
-    spritesheet?: string; // Storage ref URL for spritesheet (Sora)
-    model?: string; // Model used (e.g., 'sora-2', 'veo-3.1-generate-preview')
-    aspectRatio?: string; // '16:9' or '9:16' (Veo)
-    resolution?: string; // '720p' or '1080p' (Veo)
-  };
+  audio?: ProviderResponse['audio'];
+  video?: ProviderResponse['video'];
   images?: ImageOutput[];
 }
 
@@ -585,16 +518,16 @@ export interface GradingResult {
   reason: string;
 
   // Map of labeled metrics to values
-  namedScores?: Record<string, number>;
+  namedScores?: Record<string, number> | null;
 
   // Total weight contributing to each named score
-  namedScoreWeights?: Record<string, number>;
+  namedScoreWeights?: Record<string, number> | null;
 
   // Record of tokens usage for this assertion
   tokensUsed?: TokenUsage;
 
   // List of results for each component of the assertion
-  componentResults?: GradingResult[];
+  componentResults?: GradingResult[] | null;
 
   // The assertion that was evaluated
   // TODO(Will): Can we move to this being required?
@@ -631,23 +564,76 @@ export interface GradingResult {
   };
 }
 
-export function isGradingResult(result: any): result is GradingResult {
+function isFiniteNumberRecord(value: unknown): value is Record<string, number> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    // Custom tags can disguise built-in containers as ordinary records.
+    !(Symbol.toStringTag in value) &&
+    Object.prototype.toString.call(value) === '[object Object]' &&
+    Object.values(value).every((entry) => Number.isFinite(entry))
+  );
+}
+
+function hasValidGradingResultFields(result: any): boolean {
   return (
     typeof result === 'object' &&
     result !== null &&
     typeof result.pass === 'boolean' &&
-    typeof result.score === 'number' &&
+    Number.isFinite(result.score) &&
     typeof result.reason === 'string' &&
-    (typeof result.namedScores === 'undefined' || typeof result.namedScores === 'object') &&
-    (typeof result.namedScoreWeights === 'undefined' ||
-      typeof result.namedScoreWeights === 'object') &&
+    (result.namedScores == null || isFiniteNumberRecord(result.namedScores)) &&
+    (result.namedScoreWeights == null || isFiniteNumberRecord(result.namedScoreWeights)) &&
     (typeof result.tokensUsed === 'undefined' || typeof result.tokensUsed === 'object') &&
-    (typeof result.componentResults === 'undefined' || Array.isArray(result.componentResults)) &&
+    (result.componentResults == null || Array.isArray(result.componentResults)) &&
     (typeof result.assertion === 'undefined' ||
       result.assertion === null ||
       typeof result.assertion === 'object') &&
     (typeof result.comment === 'undefined' || typeof result.comment === 'string')
   );
+}
+
+export function isGradingResult(result: any): result is GradingResult {
+  try {
+    const ancestors = new WeakSet<object>();
+    const validated = new WeakSet<object>();
+    const frames = [{ result, nextChild: -1 }];
+
+    // Traverse one indexed child at a time without consuming the JavaScript call stack.
+    while (frames.length > 0) {
+      const frame = frames[frames.length - 1];
+      const current = frame.result;
+      if (frame.nextChild === -1) {
+        if (validated.has(current)) {
+          frames.pop();
+          continue;
+        }
+        if (!hasValidGradingResultFields(current) || ancestors.has(current)) {
+          return false;
+        }
+        ancestors.add(current);
+        frame.nextChild = 0;
+      }
+
+      const components = current.componentResults;
+      if (components != null && frame.nextChild < components.length) {
+        // Ignore custom iterators and reject a sparse entry as soon as it is visited.
+        const index = frame.nextChild++;
+        if (!Object.prototype.hasOwnProperty.call(components, index)) {
+          return false;
+        }
+        frames.push({ result: components[index], nextChild: -1 });
+      } else {
+        ancestors.delete(current);
+        validated.add(current);
+        frames.pop();
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export const BaseAssertionTypesSchema = z.enum([
@@ -807,8 +793,6 @@ export const AssertionOrSetSchema = z.union([AssertionSetSchema, AssertionSchema
 export type AssertionOrSet = z.infer<typeof AssertionOrSetSchema>;
 
 export interface AssertionValueFunctionContext {
-  /** Invocation-local environment; excluded from serialized assertion context. */
-  env?: Record<string, string | undefined>;
   prompt: string | undefined;
   vars: Record<string, VarValue>;
   test: AtomicTestCase;
@@ -1283,6 +1267,8 @@ export const TestSuiteSchema = z.object({
       queryDelay: TraceQueryDelaySchema.optional(),
     })
     .optional(),
+  /** Directory for local references, retained when replaying a saved evaluation. */
+  basePath: z.string().optional(),
 });
 
 export type TestSuite = z.infer<typeof TestSuiteSchema>;
@@ -1443,43 +1429,37 @@ export const TestSuiteConfigSchema = z.object({
       queryDelay: TraceQueryDelaySchema.optional(),
     })
     .optional(),
+  /** Directory for local references, retained when replaying a saved evaluation. */
+  basePath: z.string().optional(),
 });
 
 export type TestSuiteConfig = z.infer<typeof TestSuiteConfigSchema>;
 
-export const UnifiedConfigSchema = TestSuiteConfigSchema.extend({
+/** Input fields shared by complete runtime configs and incomplete editor drafts. */
+const UnifiedConfigInputSchema = TestSuiteConfigSchema.extend({
   evaluateOptions: EvaluateOptionsSchema.optional(),
   commandLineOptions: CommandLineOptionsSchema.partial().optional(),
   providers: ProvidersSchema.optional(),
   targets: ProvidersSchema.optional(),
-})
-  .refine(
-    (data) => {
-      const hasTargets = data.targets !== undefined;
-      const hasProviders = data.providers !== undefined;
-      return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
-    },
-    {
-      message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
-    },
-  )
-  .transform((data) => {
-    if (data.targets && !data.providers) {
-      data.providers = data.targets;
-      delete data.targets;
-    }
+});
 
-    // Handle null extensions, undefined extensions, or empty arrays by deleting the field
-    if (
-      data.extensions === null ||
-      data.extensions === undefined ||
-      (Array.isArray(data.extensions) && data.extensions.length === 0)
-    ) {
-      delete data.extensions;
-    }
+export const UnifiedConfigSchema = UnifiedConfigInputSchema.refine(
+  (data) => hasValidConfigProviders(data),
+  { message: CONFIG_PROVIDER_INPUT_ERROR },
+).transform((data) => {
+  const config = normalizeConfigProviderAlias(data);
 
-    return data;
-  });
+  // Handle null extensions, undefined extensions, or empty arrays by deleting the field
+  if (
+    config.extensions === null ||
+    config.extensions === undefined ||
+    (Array.isArray(config.extensions) && config.extensions.length === 0)
+  ) {
+    delete config.extensions;
+  }
+
+  return config;
+});
 
 export type UnifiedConfig = z.infer<typeof UnifiedConfigSchema>;
 

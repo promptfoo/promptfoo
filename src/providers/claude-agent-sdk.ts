@@ -6,8 +6,7 @@ import type { Stats } from 'node:fs';
 import { trace as otelTrace, SpanStatusCode } from '@opentelemetry/api';
 import dedent from 'dedent';
 import cliState from '../cliState';
-import { getEnvString } from '../envars';
-import { getRuntimeEnv } from '../envOverrides';
+import { getEnvString, getProcessEnv } from '../envars';
 import { importModule, resolvePackageEntryPoint } from '../esm';
 import logger from '../logger';
 import {
@@ -28,6 +27,7 @@ import {
   initializeAgenticCache,
   resolveAgenticWorkingDir,
 } from './agentic-utils';
+import { assertIsolatedWorkingDir, clearRepositoryEnv } from './agentWorkspace';
 import { ANTHROPIC_MODELS } from './anthropic/util';
 import { transformMCPConfigToClaudeCode, validateMCPConfigForClaudeCode } from './mcp/transform';
 import {
@@ -40,12 +40,15 @@ import type {
   CanUseTool,
   HookCallbackMatcher,
   HookEvent,
+  ModelUsage,
   OnElicitation,
   OutputFormat,
+  Query,
   Options as QueryOptions,
   SandboxSettings,
   SDKAssistantMessage,
   SDKAssistantMessageError,
+  SDKControlGetUsageResponse,
   SDKResultMessage,
   SettingSource,
   Settings,
@@ -100,6 +103,33 @@ const REDACTED_SUBAGENT_TRANSCRIPT =
   '[Subagent transcript omitted; set forward_subagent_text: true to include it]';
 /** Returned when cancellation is observed at any checkpoint before the SDK query starts. */
 const ABORTED_BEFORE_START_ERROR = 'Claude Agent SDK call aborted before it started';
+const USAGE_BASELINE_TIMEOUT_MS = 5_000;
+const MODEL_USAGE_COUNTERS = [
+  'inputTokens',
+  'outputTokens',
+  'thinkingTokens',
+  'cacheReadInputTokens',
+  'cacheCreationInputTokens',
+  'webSearchRequests',
+  'costUSD',
+] as const;
+
+function subtractSessionUsage(
+  current: Record<string, ModelUsage>,
+  baseline: Record<string, ModelUsage>,
+): Record<string, ModelUsage> {
+  return Object.fromEntries(
+    Object.entries(current).map(([model, usage]) => {
+      const delta = { ...usage };
+      for (const key of MODEL_USAGE_COUNTERS) {
+        if (typeof usage[key] === 'number') {
+          delta[key] = Math.max(0, usage[key] - (baseline[model]?.[key] ?? 0));
+        }
+      }
+      return [model, delta];
+    }),
+  );
+}
 
 /**
  * Append promptfoo-specific resource-attribute kvs to a W3C-style
@@ -394,6 +424,12 @@ export interface ClaudeCodeOptions {
    * If not supplied, we'll use an empty temp dir for isolation
    */
   working_dir?: string;
+
+  /**
+   * Run each eval call in a fresh copy of `working_dir`, created by promptfoo eval. `true` clones
+   * a clean git repository and copies anything else; `'git'` or `'copy'` forces one method.
+   */
+  copy_working_dir?: boolean | 'git' | 'copy';
 
   /**
    * 'model' and 'fallback_model' are optional
@@ -712,7 +748,7 @@ export interface ClaudeCodeOptions {
    * Enable beta features. Currently supports:
    * - 'context-1m-2025-08-07' - Enable 1M token context window (Sonnet 4/4.5 only)
    *
-   * @see https://docs.anthropic.com/en/api/beta-headers
+   * @see https://platform.claude.com/docs/en/api/beta-headers
    */
   betas?: 'context-1m-2025-08-07'[];
 
@@ -722,7 +758,7 @@ export interface ClaudeCodeOptions {
    * - { type: 'enabled', budgetTokens?: number } - Fixed thinking token budget (older models)
    * - { type: 'disabled' } - No extended thinking
    *
-   * @see https://docs.anthropic.com/en/docs/build-with-claude/adaptive-thinking
+   * @see https://platform.claude.com/docs/en/build-with-claude/thinking-steering-and-cost
    */
   thinking?: ThinkingConfig;
 
@@ -749,7 +785,7 @@ export interface ClaudeCodeOptions {
    * - 'xhigh' - Extra high reasoning (Opus 4.7+); sits between 'high' and 'max'
    * - 'max' - Maximum effort
    *
-   * @see https://docs.anthropic.com/en/docs/build-with-claude/effort
+   * @see https://platform.claude.com/docs/en/build-with-claude/effort
    */
   effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
@@ -846,7 +882,7 @@ export interface ClaudeCodeOptions {
    *     args: ['--hidden']
    * ```
    *
-   * @see https://docs.anthropic.com/en/docs/claude-code/settings#sandbox-settings
+   * @see https://code.claude.com/docs/en/settings#sandbox-settings
    */
   sandbox?: SandboxSettings;
 
@@ -1406,6 +1442,8 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       ...this.config,
       ...context?.prompt?.config,
     };
+    // A fresh workspace must not be served from, or written to, the response cache.
+    const inIsolatedWorkspace = assertIsolatedWorkingDir(config);
 
     if (config.ask_user_question !== undefined) {
       validateAskUserQuestionConfig(config.ask_user_question);
@@ -1418,7 +1456,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     // Sort keys for stable cache-key hashing. Precedence is documented on the
     // `env` field of ClaudeCodeOptions: process.env < config.env < EnvOverrides.
     const env: Record<string, string> = {};
-    const processEnv = getRuntimeEnv();
+    const processEnv = getProcessEnv();
     for (const key of Object.keys(processEnv).sort()) {
       if (processEnv[key] !== undefined) {
         env[key] = processEnv[key];
@@ -1441,6 +1479,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           env[key] = value;
         }
       }
+    }
+
+    if (inIsolatedWorkspace) {
+      clearRepositoryEnv(env);
     }
 
     if (config.deep_tracing) {
@@ -1645,9 +1687,16 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               type: 'preset',
               preset: 'claude_code',
               append: config.append_system_prompt,
+              // Promptfoo supports per-call config overrides, including on resumed sessions.
+              // Preserve that behavior after Agent SDK 0.3.267 made snapshots the default.
+              snapshot: false,
               ...(config.exclude_dynamic_sections ? { excludeDynamicSections: true } : {}),
             }
-          : config.custom_system_prompt,
+          : {
+              type: 'custom',
+              prompt: config.custom_system_prompt,
+              snapshot: false,
+            },
       maxThinkingTokens: config.max_thinking_tokens,
       allowedTools,
       disallowedTools,
@@ -1756,6 +1805,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       );
     }
     const cacheResult =
+      inIsolatedWorkspace ||
       runtimeCallbackBypassesCache ||
       sensitiveMcpBypassesCache ||
       settingsConfigurationBypassesCache ||
@@ -1847,6 +1897,91 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       title: config.title,
     };
     const queryParams = { prompt, options };
+    const needsUsageBaseline = Boolean(
+      config.resume ||
+        config.continue ||
+        config.fork_session ||
+        ['resume', 'r', 'continue', 'c', 'fork-session'].some((key) =>
+          Object.prototype.hasOwnProperty.call(config.extra_args ?? {}, key),
+        ),
+    );
+    let query: Query | undefined;
+    let usageBaseline: SDKControlGetUsageResponse['session'] | undefined;
+    let captureUsageBaseline: Promise<void> | undefined;
+    if (needsUsageBaseline) {
+      // SDK 0.3.277 restores transcript totals on resume. Capture them before
+      // inference, without reading private transcripts or replacing user hooks.
+      options.hooks = {
+        ...hooks,
+        UserPromptSubmit: [
+          {
+            hooks: [
+              async () => {
+                captureUsageBaseline ??= (async () => {
+                  let timer: ReturnType<typeof setTimeout> | undefined;
+                  let cancelSnapshot: (() => void) | undefined;
+                  try {
+                    const snapshot =
+                      query?.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET;
+                    if (!snapshot) {
+                      return;
+                    }
+                    const report = await Promise.race([
+                      snapshot.call(query, { skipBehaviors: true }),
+                      new Promise<never>((_, reject) => {
+                        cancelSnapshot = () => reject(new Error('Usage baseline cancelled'));
+                        if (abortController.signal.aborted) {
+                          cancelSnapshot();
+                          return;
+                        }
+                        abortController.signal.addEventListener('abort', cancelSnapshot, {
+                          once: true,
+                        });
+                        timer = setTimeout(
+                          () => reject(new Error('Usage baseline timed out')),
+                          USAGE_BASELINE_TIMEOUT_MS,
+                        );
+                      }),
+                    ]);
+                    const session = report?.session;
+                    if (
+                      session &&
+                      Number.isFinite(session.total_cost_usd) &&
+                      session.total_cost_usd >= 0 &&
+                      session.model_usage &&
+                      typeof session.model_usage === 'object' &&
+                      !Array.isArray(session.model_usage) &&
+                      Object.values(session.model_usage).every(
+                        (usage) =>
+                          usage &&
+                          typeof usage === 'object' &&
+                          MODEL_USAGE_COUNTERS.every(
+                            (key) =>
+                              usage[key] === undefined ||
+                              (Number.isFinite(usage[key]) && usage[key]! >= 0),
+                          ),
+                      )
+                    ) {
+                      usageBaseline = session;
+                    }
+                  } catch {
+                    // An experimental control API must not block inference or user hooks.
+                  } finally {
+                    clearTimeout(timer);
+                    if (cancelSnapshot) {
+                      abortController.signal.removeEventListener('abort', cancelSnapshot);
+                    }
+                  }
+                })();
+                await captureUsageBaseline;
+                return {};
+              },
+            ],
+          },
+          ...(hooks?.UserPromptSubmit ?? []),
+        ],
+      };
+    }
 
     // Log the query params for debugging
     logger.debug(
@@ -1908,6 +2043,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           }
 
           const res = await this.claudeCodeModule.query(queryParams);
+          query = res;
 
           // Collect tool calls and results from intermediate messages
           const toolCallsMap = new Map<string, ToolCallEntry>();
@@ -2162,6 +2298,28 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             });
           }
           const raw = JSON.stringify(finalMsg);
+          const usageUnavailable = needsUsageBaseline && !usageBaseline;
+          if (usageUnavailable) {
+            logger.warn(
+              '[ClaudeAgentSDK] Could not measure resumed-session usage before inference; per-call cost and token usage are unavailable. Raw session totals are preserved.',
+            );
+          }
+          // A /clear or startup failure can reset the SDK counters below the snapshot.
+          const counterReset =
+            usageBaseline &&
+            (finalMsg.total_cost_usd < usageBaseline.total_cost_usd ||
+              Object.entries(finalMsg.modelUsage ?? {}).some(([model, usage]) =>
+                MODEL_USAGE_COUNTERS.some(
+                  (key) =>
+                    typeof usage[key] === 'number' &&
+                    usage[key] < (usageBaseline?.model_usage[model]?.[key] ?? 0),
+                ),
+              ));
+          const modelUsage = usageUnavailable
+            ? undefined
+            : usageBaseline && !counterReset
+              ? subtractSessionUsage(finalMsg.modelUsage ?? {}, usageBaseline.model_usage)
+              : finalMsg.modelUsage;
           // result.usage counts only the main agent; modelUsage has a row per model, so it also
           // covers subagent calls. Prefer modelUsage and fall back to result.usage, normalizing
           // both to one shape so the totals are summed in a single place. When the SDK reports
@@ -2173,8 +2331,8 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             thinkingTokens?: number;
             cacheReadInputTokens?: number;
             cacheCreationInputTokens?: number;
-          }[] = Object.values(finalMsg.modelUsage ?? {});
-          if (usageSources.length === 0 && finalMsg.usage) {
+          }[] = Object.values(modelUsage ?? {});
+          if (!usageUnavailable && usageSources.length === 0 && finalMsg.usage) {
             usageSources.push({
               inputTokens: finalMsg.usage.input_tokens,
               outputTokens: finalMsg.usage.output_tokens,
@@ -2229,7 +2387,20 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                   : {}),
               }
             : {};
-          const cost = finalMsg.total_cost_usd ?? 0;
+          const cost = usageUnavailable
+            ? undefined
+            : Math.max(
+                0,
+                (finalMsg.total_cost_usd ?? 0) -
+                  (counterReset ? 0 : (usageBaseline?.total_cost_usd ?? 0)),
+              );
+          const usageMetadata = needsUsageBaseline
+            ? {
+                usageAccounting: usageUnavailable ? 'unavailable' : 'query',
+                sessionCost: finalMsg.total_cost_usd,
+                sessionModelUsage: finalMsg.modelUsage,
+              }
+            : {};
           const sessionId = finalMsg.session_id;
 
           const toolCallsArray = Array.from(toolCallsMap.values());
@@ -2278,7 +2449,8 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                 numTurns: finalMsg.num_turns,
                 durationMs: finalMsg.duration_ms,
                 durationApiMs: finalMsg.duration_api_ms,
-                modelUsage: finalMsg.modelUsage,
+                modelUsage,
+                ...usageMetadata,
                 permissionDenials: finalMsg.permission_denials,
                 ...(finalMsg.terminal_reason === undefined
                   ? {}
@@ -2321,7 +2493,8 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               numTurns: finalMsg.num_turns,
               durationMs: finalMsg.duration_ms,
               durationApiMs: finalMsg.duration_api_ms,
-              modelUsage: finalMsg.modelUsage,
+              modelUsage,
+              ...usageMetadata,
               permissionDenials: finalMsg.permission_denials,
               ...(finalMsg.terminal_reason === undefined
                 ? {}

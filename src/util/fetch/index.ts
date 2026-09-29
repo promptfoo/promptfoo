@@ -13,17 +13,45 @@ import { parseRateLimitHeaders } from '../../scheduler/headerParser';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { sanitizeUrl, sanitizeUrlForLogging } from '../sanitizer';
+import { CloudAuthRedirectError } from './cloudAuthRedirects';
 import {
   extractRateLimitErrorCode,
   extractRateLimitErrorType,
   HttpRateLimitError,
   type SystemError,
 } from './errors';
-import { monkeyPatchFetch } from './monkeyPatchFetch';
+import { monkeyPatchFetch, preserveCloudAuthRedirects } from './monkeyPatchFetch';
 import { getFetchRetryContextMaxRetries } from './retryContext';
 import { stripDecompressionHeaders } from './stripDecompressionHeaders';
 
 import type { FetchOptions } from './types';
+
+// Credential failures are not transient HTTP failures and must not be retried by this layer.
+class RequestAuthenticationError extends Error {}
+
+async function resolveAuthenticationHeaders(
+  getAuthHeaders: NonNullable<FetchOptions['getAuthHeaders']>,
+  explicitHeaders: HeadersInit | undefined,
+  signal: AbortSignal | null | undefined,
+): Promise<Record<string, string>> {
+  signal?.throwIfAborted();
+  let headers: Headers;
+  try {
+    headers = new Headers(await getAuthHeaders(signal ?? undefined));
+  } catch (error) {
+    signal?.throwIfAborted();
+    throw Object.assign(
+      new RequestAuthenticationError(
+        error instanceof Error ? error.message : 'Request authentication failed',
+      ),
+      { cause: error },
+    );
+  }
+  signal?.throwIfAborted();
+  // Never mutate the original headers: a retry must not inherit the previous attempt's token.
+  new Headers(explicitHeaders).forEach((value, name) => headers.set(name, value));
+  return Object.fromEntries(headers);
+}
 
 // Cached agents to avoid recreating on every request.
 // Keep separate entries per resolved connection count so overlapping requests
@@ -46,8 +74,9 @@ const cachedProxyAgents: Map<string, Dispatcher> = new Map();
 function getConnectionPoolSize(): number {
   const envConnections = getEnvString('PROMPTFOO_FETCH_CONNECTIONS');
   if (envConnections != null) {
-    const parsed = parseInt(envConnections, 10);
-    if (!isNaN(parsed)) {
+    const normalized = envConnections.trim();
+    const parsed = Number(normalized);
+    if (/^\d+$/.test(normalized) && Number.isSafeInteger(parsed) && parsed > 0) {
       return parsed;
     }
   }
@@ -180,6 +209,7 @@ export async function fetchWithProxy(
   options: FetchOptions = {},
   abortSignal?: AbortSignal,
 ): Promise<Response> {
+  options = preserveCloudAuthRedirects(url, options);
   let finalUrl = url;
   let finalUrlString = getFetchUrlString(url);
 
@@ -195,8 +225,9 @@ export async function fetchWithProxy(
     : options.signal;
 
   // This is overridden globally but Node v20 is still complaining so we need to add it here too
+  const { getAuthHeaders, ...requestOptions } = options;
   const finalOptions: FetchOptions & { dispatcher?: any } = {
-    ...options,
+    ...requestOptions,
     headers: getFetchWithProxyHeaders(url, options),
     signal: combinedSignal,
   };
@@ -276,7 +307,18 @@ export async function fetchWithProxy(
   const maxTransientRetries = disableTransientRetries ? 0 : 3;
 
   for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
-    const response = await monkeyPatchFetch(finalUrl, finalOptions);
+    let attemptOptions = finalOptions;
+    if (getAuthHeaders) {
+      attemptOptions = {
+        ...finalOptions,
+        headers: await resolveAuthenticationHeaders(
+          getAuthHeaders,
+          finalOptions.headers,
+          combinedSignal,
+        ),
+      };
+    }
+    const response = await monkeyPatchFetch(finalUrl, attemptOptions);
 
     if (!disableTransientRetries && isTransientError(response) && attempt < maxTransientRetries) {
       const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
@@ -465,7 +507,7 @@ async function peekRateLimitBody(
 
   let text: string;
   try {
-    text = await readBoundedText(cloned, RATE_LIMIT_BODY_PEEK_BYTES);
+    text = await readBoundedText(cloned, RATE_LIMIT_BODY_PEEK_BYTES, { requireStream: true });
   } catch (err) {
     logger.debug(`[fetch] peekRateLimitBody: body read failed: ${err}`);
     return { body: undefined, code: undefined, type: undefined };
@@ -493,15 +535,18 @@ async function peekRateLimitBody(
  * Drain a Response's body into a string, but stop reading once `maxBytes`
  * have been collected. Each streamed chunk is bounded to the remaining
  * budget *before* it enters the in-memory buffer, so a single oversized
- * chunk cannot exceed `maxBytes` of retained memory. Falls back to
- * `.text()` when the body stream isn't available (some Response polyfills);
- * in that path we consult `Content-Length` first to skip materializing
- * very large bodies entirely.
+ * chunk cannot exceed `maxBytes` of retained memory. `requireStream` skips
+ * streamless polyfills to guarantee bounded buffering for rate-limit peeking.
+ * Other callers retain the legacy text fallback, which buffers before truncation.
  */
-export async function readBoundedText(response: Response, maxBytes: number): Promise<string> {
+export async function readBoundedText(
+  response: Response,
+  maxBytes: number,
+  options: { requireStream?: boolean } = {},
+): Promise<string> {
   if (!response.body) {
     const contentLength = Number.parseInt(response.headers?.get?.('content-length') ?? '', 10);
-    if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    if (options.requireStream || (Number.isFinite(contentLength) && contentLength > maxBytes)) {
       return '';
     }
     const text = await response.text();
@@ -698,6 +743,7 @@ export async function fetchWithRetries(
   timeout: number,
   maxRetries?: number,
 ): Promise<Response> {
+  options = preserveCloudAuthRedirects(url, options);
   const contextMaxRetries = getFetchRetryContextMaxRetries();
   maxRetries = Math.max(0, maxRetries ?? contextMaxRetries ?? 4);
 
@@ -734,10 +780,12 @@ export async function fetchWithRetries(
         throw getAbortError(signal);
       }
 
-      // Structured rate-limit errors are already final (quota fail-fast or
-      // retries exhausted) and carry retry-after / reset metadata. Don't
-      // swallow them in the generic retry path.
-      if (error instanceof HttpRateLimitError) {
+      // Do not retry policy rejections, credential failures, or already-final rate-limit errors.
+      if (
+        error instanceof CloudAuthRedirectError ||
+        error instanceof HttpRateLimitError ||
+        error instanceof RequestAuthenticationError
+      ) {
         throw error;
       }
 

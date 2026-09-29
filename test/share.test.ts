@@ -6,7 +6,6 @@ import * as constants from '../src/constants';
 import * as envars from '../src/envars';
 import { getUserEmail } from '../src/globalConfig/accounts';
 import { cloudConfig } from '../src/globalConfig/cloud';
-import EvalResult from '../src/models/evalResult';
 import {
   createShareableModelAuditUrl,
   createShareableUrl,
@@ -16,10 +15,11 @@ import {
   isSharingEnabled,
   stripAuthFromUrl,
 } from '../src/share';
-import { checkCloudPermissions, makeRequest } from '../src/util/cloud';
+import { makeRequest } from '../src/util/cloud';
 import { inlineBlobRefsForShare } from '../src/util/inlineBlobsForShare';
 
 import type Eval from '../src/models/eval';
+import type EvalResult from '../src/models/evalResult';
 import type ModelAudit from '../src/models/modelAudit';
 
 function buildMockEval(): Partial<Eval> {
@@ -104,7 +104,8 @@ vi.mock('../src/util/cloud', () => ({
   getOrgContext: vi.fn().mockResolvedValue(null),
 }));
 
-vi.mock('../src/envars', () => ({
+vi.mock('../src/envars', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/envars')>()),
   getEnvBool: vi.fn(),
   getEnvInt: vi.fn(),
   getEnvString: vi.fn().mockReturnValue(''),
@@ -689,211 +690,6 @@ describe('createShareableUrl', () => {
       );
     });
 
-    it('uses a provider-scoped remote config for both authorization and upload', async () => {
-      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
-      vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
-      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
-      vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
-      mockEval.config = {
-        providers: [
-          { id: 'echo', config: { apiKey: 'local-secret' } },
-          { id: 'http', config: { url: 'https://excluded.example.com' } },
-        ],
-        prompts: ['Hello'],
-      };
-      mockEval.runtimeOptions = {
-        configEnvSource: 'cli',
-        promptSelection: {
-          prompts: [{ id: 'prompt-id', fingerprint: '1'.repeat(64) }],
-        },
-        providerSelection: {
-          providers: [
-            {
-              index: 0,
-              id: 'echo',
-              label: 'selected',
-              fingerprint: '0'.repeat(64),
-            },
-          ],
-        },
-        testCaseSelection: {
-          tests: [{ index: 0, fingerprint: '2'.repeat(64) }],
-        },
-      };
-      mockEval.prompts = [
-        {
-          provider: 'webhook:https://hooks.slack.com/services/T-short/B-short/short-secret',
-          raw: 'Hello',
-          label: 'Hello',
-          config: { apiKey: 'completed-prompt-secret', endpoint: 'https://u:p@gateway.test' },
-        },
-      ];
-      const remoteConfig = {
-        ...mockEval.config,
-        providers: [{ id: 'echo', label: 'selected' }],
-      };
-
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({ id: 'scoped-eval-id' }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({}),
-        });
-
-      await createShareableUrl(mockEval as Eval);
-
-      expect(checkCloudPermissions).toHaveBeenCalledWith(remoteConfig);
-      const initialRequest = mockFetch.mock.calls[0];
-      const requestBody = JSON.parse(initialRequest[1].body);
-      expect(requestBody.config.providers).toEqual([{ id: 'echo', label: 'selected' }]);
-      expect(requestBody.runtimeOptions).not.toHaveProperty('promptSelection');
-      expect(requestBody.runtimeOptions).not.toHaveProperty('providerSelection');
-      expect(requestBody.runtimeOptions).not.toHaveProperty('testCaseSelection');
-      expect(requestBody.runtimeOptions).not.toHaveProperty('configEnvSource');
-      expect(JSON.stringify(requestBody)).not.toContain('completed-prompt-secret');
-      expect(JSON.stringify(requestBody.prompts)).not.toContain('short-secret');
-      expect(JSON.stringify(requestBody)).not.toContain('https://u:p@');
-      expect(mockEval.prompts[0].config?.apiKey).toBe('completed-prompt-secret');
-      expect(JSON.stringify(requestBody.config)).not.toContain('local-secret');
-      expect(JSON.stringify(requestBody.config)).not.toContain('excluded.example.com');
-      expect(mockEval.config.providers).toHaveLength(2);
-
-      mockEval.runtimeOptions = { promptSelection: mockEval.runtimeOptions.promptSelection };
-      mockFetch
-        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ id: 'full-eval-id' }) })
-        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) });
-      vi.mocked(checkCloudPermissions).mockClear();
-
-      await createShareableUrl(mockEval as Eval);
-
-      expect(checkCloudPermissions).toHaveBeenCalledWith(mockEval.config);
-    });
-
-    it.each([true, false])(
-      'redacts credentials in persisted=%s result batches',
-      async (persisted) => {
-        const transform = () => 'PRIVATE_SHARED_FUNCTION_SOURCE';
-        const provider = {
-          id: 'openai:grader',
-          config: {
-            headers: { 'X-Client-Token': 'abc123', 'Content-Type': 'application/json' },
-            connectors: [{ id: 'search', user_access_token: 'connector123' }],
-            transform,
-          },
-        };
-        const result = new EvalResult({
-          id: 'result-with-grader',
-          evalId: mockEval.id!,
-          promptIdx: 0,
-          testIdx: 0,
-          gradingResult: {
-            pass: true,
-            score: 1,
-            reason: 'Visible reason',
-            assertion: {
-              type: 'llm-rubric',
-              provider: { id: 'openai:grader', config: { apiKey: 'PRIVATE_ASSERTION_CREDENTIAL' } },
-            },
-            metadata: {
-              http: {
-                headers: {
-                  authorization: 'PRIVATE_GRADER_HEADER',
-                  'content-type': 'application/json',
-                },
-              },
-            },
-          },
-          failureReason: 0,
-          provider,
-          testCase: {
-            vars: { input: 'Hello', apiKey: 'abc123' },
-            options: { provider, transform },
-            assert: [{ type: 'javascript', value: transform }],
-          },
-          prompt: { raw: 'Hello', label: 'Hello', config: { provider } },
-          response: {
-            output: 'Unchanged response',
-            metadata: {
-              http: {
-                status: 200,
-                statusText: 'OK',
-                headers: {
-                  authorization: 'PRIVATE_RESPONSE_HEADER',
-                  'content-type': 'application/json',
-                },
-              },
-            },
-          },
-          metadata: {
-            http: {
-              headers: {
-                authorization: 'PRIVATE_RESULT_HEADER',
-                'content-type': 'application/json',
-              },
-            },
-          },
-          score: 1,
-          success: true,
-        });
-        Object.assign(mockEval, {
-          fetchResultsBatched: vi.fn(async function* () {
-            yield [persisted ? result : result.toEvaluateResult()];
-          }),
-        });
-        mockFetch
-          .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'shared' }) })
-          .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
-
-        await createShareableUrl(mockEval as Eval);
-
-        const body = mockFetch.mock.calls[1][1].body;
-        for (const secret of [
-          'PRIVATE_ASSERTION_CREDENTIAL',
-          'PRIVATE_GRADER_HEADER',
-          'PRIVATE_RESPONSE_HEADER',
-          'PRIVATE_RESULT_HEADER',
-        ]) {
-          expect(body).not.toContain(secret);
-        }
-        expect(result.response?.metadata).toMatchObject({
-          http: { headers: { authorization: 'PRIVATE_RESPONSE_HEADER' } },
-        });
-        expect(body).not.toContain('abc123');
-        expect(body).not.toContain('connector123');
-        expect(JSON.stringify(mockFetch.mock.calls)).not.toContain(
-          'PRIVATE_SHARED_FUNCTION_SOURCE',
-        );
-        expect(JSON.parse(body)[0].testCase.options).not.toHaveProperty('transform');
-        expect(result.testCase.options?.transform).toBe(transform);
-        expect(JSON.parse(body)[0]).toMatchObject({
-          testCase: { vars: { input: 'Hello' } },
-          response: {
-            output: 'Unchanged response',
-            metadata: {
-              http: {
-                headers: { authorization: '[REDACTED]', 'content-type': 'application/json' },
-              },
-            },
-          },
-          metadata: {
-            http: { headers: { authorization: '[REDACTED]', 'content-type': 'application/json' } },
-          },
-          score: 1,
-          success: true,
-        });
-        expect(body).toContain('application/json');
-        if (!persisted) {
-          expect(JSON.parse(body)[0].vars).toEqual({ input: 'Hello', apiKey: '[REDACTED]' });
-        }
-        expect(result.testCase.vars?.apiKey).toBe('abc123');
-        expect(provider.config.headers['X-Client-Token']).toBe('abc123');
-        expect(provider.config.connectors[0].user_access_token).toBe('connector123');
-      },
-    );
-
     it('uploads local blob refs before manually sharing a previously unshared eval', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
@@ -1027,6 +823,376 @@ describe('createShareableUrl', () => {
       expect(uploadBlobRefsForShare).not.toHaveBeenCalled();
     });
 
+    it.each([false, true])(
+      'strips response media before blob handling (cloud: %s)',
+      async (cloud) => {
+        vi.mocked(cloudConfig.isEnabled).mockReturnValue(cloud);
+        vi.mocked(envars.getEnvBool).mockImplementation((_key, defaultValue) =>
+          Boolean(defaultValue),
+        );
+        const outputUri = `promptfoo://blob/${'b'.repeat(64)}`;
+        const inputUri = `promptfoo://blob/${'c'.repeat(64)}`;
+        const dataUrl = 'data:image/png;base64,cHJpdmF0ZSBvdXRwdXQ=';
+        const svgUrl = 'data:image/svg+xml,%3Csvg%3Eprivate%20output%3C%2Fsvg%3E';
+        const preview = { samples: [outputUri, dataUrl, svgUrl], caption: 'data:ready' };
+        const row = {
+          id: 'media-row',
+          testCase: { vars: { input: inputUri } },
+          metadata: {
+            audio: { data: outputUri },
+            blobUris: [outputUri],
+            preview,
+            note: 'keep metadata',
+          },
+          response: {
+            output: outputUri,
+            providerTransformedOutput: outputUri,
+            audio: { data: outputUri },
+            video: { url: outputUri },
+            images: [{ url: outputUri }],
+            metadata: {
+              blobUris: [outputUri],
+              audio: { data: outputUri },
+              preview,
+              note: 'keep metadata',
+            },
+          },
+        };
+        mockEval.config = { env: { PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' } };
+        mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+          yield [row];
+        });
+        mockFetch
+          .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
+          .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+        await createShareableUrl(mockEval as Eval);
+
+        const scans = cloud
+          ? vi.mocked(uploadBlobRefsForShare).mock.calls
+          : vi.mocked(inlineBlobRefsForShare).mock.calls;
+        expect(scans.length).toBeGreaterThan(0);
+        for (const [value] of scans) {
+          expect(JSON.stringify(value)).not.toContain(outputUri);
+          expect(JSON.stringify(value)).not.toContain(dataUrl);
+          expect(JSON.stringify(value)).not.toContain(svgUrl);
+          expect(JSON.stringify(value)).toContain(inputUri);
+        }
+        const [uploaded] = JSON.parse(mockFetch.mock.calls[1][1].body);
+        expect(uploaded.response).toEqual({
+          output: '[output stripped]',
+          metadata: {
+            note: 'keep metadata',
+            preview: {
+              samples: ['[output stripped]', '[output stripped]', '[output stripped]'],
+              caption: 'data:ready',
+            },
+          },
+        });
+        expect(uploaded.metadata).toEqual(uploaded.response.metadata);
+        expect(row.response.metadata.blobUris).toEqual([outputUri]);
+      },
+    );
+
+    it.each([false, true])(
+      'preserves test metadata when stripping response output (override: %s)',
+      async (override) => {
+        const testMetadata = {
+          audio: { language: 'English' },
+          blobUris: ['ordinary user value'],
+          preview: 'data:image/png;base64,dXNlciBpbnB1dA==',
+        };
+        const responseMetadata = override ? { audio: { data: 'private audio bytes' } } : undefined;
+        const row = {
+          id: 'metadata-row',
+          testCase: { metadata: testMetadata },
+          metadata: { ...testMetadata, ...responseMetadata },
+          response: { output: 'private-output', metadata: responseMetadata },
+        };
+        mockEval.config = { env: { PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' } };
+        mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+          yield [row];
+        });
+        mockFetch
+          .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
+          .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+        await createShareableUrl(mockEval as Eval);
+
+        const [uploaded] = JSON.parse(mockFetch.mock.calls[1][1].body);
+        expect(uploaded.testCase.metadata).toEqual(testMetadata);
+        expect(uploaded.metadata).toEqual({
+          ...testMetadata,
+          ...(override && { audio: undefined }),
+        });
+        expect(uploaded.response.output).toBe('[output stripped]');
+        expect(row.metadata.audio).toEqual(responseMetadata?.audio ?? testMetadata.audio);
+      },
+    );
+
+    it('omits the duplicate legacy results from the initial share payload', async () => {
+      const oldResults = { results: [{ response: { output: 'private-legacy-output' } }] };
+      Object.assign(mockEval, { oldResults });
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+      await createShareableUrl(mockEval as Eval);
+
+      expect(JSON.parse(mockFetch.mock.calls[0][1].body)).not.toHaveProperty('oldResults');
+      expect(mockEval.oldResults).toBe(oldResults);
+    });
+
+    it.each([false, true])(
+      'omits runtime provider paths from uploads (strip data: %s)',
+      async (stripData) => {
+        vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+        vi.mocked(envars.getEnvBool).mockImplementation(
+          (key) =>
+            stripData &&
+            [
+              'PROMPTFOO_STRIP_TEST_VARS',
+              'PROMPTFOO_STRIP_METADATA',
+              'PROMPTFOO_STRIP_RESPONSE_OUTPUT',
+            ].includes(key),
+        );
+        const row = {
+          id: 'source-row',
+          provider: {
+            id: 'file:///home/alice/project/target.js',
+            config: {
+              basePath: '/home/alice/project',
+              temperature: 0,
+              tools: 'file:///home/alice/project/tools.json',
+              nested: [{ schema: 'file://C:\\Users\\alice\\project\\schema.json' }],
+            },
+          },
+          prompt: {
+            raw: 'public',
+            label: 'public',
+            config: { provider: { id: 'echo', config: { basePath: '/home/alice/project' } } },
+          },
+          testCase: {
+            provider: 'file:///home/alice/project/target.js',
+            options: {
+              provider: {
+                text: {
+                  id: 'openai:chat:test',
+                  config: { basePath: '/home/alice/project', temperature: 0 },
+                },
+                embedding: 'file:///home/alice/project/embedding.js',
+                classification: 'file://C:\\Users\\alice\\project\\classifier.js',
+              },
+            },
+            assert: [
+              {
+                type: 'assert-set' as const,
+                assert: [
+                  {
+                    type: 'llm-rubric' as const,
+                    provider: {
+                      id: 'file:///home/alice/project/grader.js',
+                      config: { basePath: '/home/alice/project' },
+                    },
+                  },
+                ],
+              },
+            ],
+            vars: {
+              basePath: 'user-variable',
+              nested: {
+                files: [
+                  'file:///home/alice/project/input.txt',
+                  'file://C:\\Users\\alice\\project\\image.png',
+                ],
+              },
+              literal: '/ordinary/user/data',
+            },
+            metadata: { note: 'private-note' },
+            providerOutput: 'private-output',
+          },
+        };
+        mockEval.config = {
+          basePath: '/home/alice/project',
+          providers: [row.provider],
+          tests: [row.testCase],
+          defaultTest: row.testCase,
+          scenarios: [{ config: [row.testCase], tests: [row.testCase] }],
+        };
+        mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+          yield [row];
+        });
+        mockFetch
+          .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
+          .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+        await createShareableUrl(mockEval as Eval);
+
+        const [uploaded] = JSON.parse(mockFetch.mock.calls[1][1].body);
+        for (const [, options] of mockFetch.mock.calls) {
+          expect(options.body).not.toContain('/home/alice');
+          expect(options.body).not.toContain('Users');
+        }
+        expect(uploaded.provider.id).toBe('file://target.js');
+        expect(uploaded.provider.config).toEqual({
+          temperature: 0,
+          tools: 'file://tools.json',
+          nested: [{ schema: 'file://schema.json' }],
+        });
+        expect(uploaded.testCase.options.provider.text.config).toEqual({ temperature: 0 });
+        expect(uploaded.testCase.options.provider.classification).toBe('file://classifier.js');
+        expect(row.provider.config.basePath).toBe('/home/alice/project');
+        if (stripData) {
+          expect(JSON.stringify(uploaded)).not.toContain('private-');
+          expect(uploaded.testCase.vars).toBeUndefined();
+        } else {
+          expect(uploaded.testCase.vars.basePath).toBe('user-variable');
+          expect(uploaded.testCase.vars.nested.files).toEqual([
+            'file://input.txt',
+            'file://image.png',
+          ]);
+          expect(uploaded.testCase.vars.literal).toBe('/ordinary/user/data');
+          expect(row.testCase.vars.nested.files[0]).toBe('file:///home/alice/project/input.txt');
+        }
+      },
+    );
+
+    it('removes prompt file roots without losing map entries with matching filenames', async () => {
+      const prompts = {
+        'file:///home/alice/project/first/prompt.txt': 'first',
+        'file:///home/alice/project/second/prompt.txt': 'second',
+        'literal prompt': 'literal',
+      };
+      mockEval.config = { prompts };
+      const prompt = {
+        id: 'file:///home/alice/project/first/prompt.txt',
+        raw: 'content',
+        label: 'first',
+        provider: 'echo',
+      };
+      mockEval.prompts = [prompt];
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+      await createShareableUrl(mockEval as Eval);
+
+      const uploaded = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(uploaded.config.prompts).toEqual([
+        { raw: 'file://prompt.txt', label: 'first' },
+        { raw: 'file://prompt.txt', label: 'second' },
+        { raw: 'literal prompt', label: 'literal' },
+      ]);
+      expect(uploaded.prompts[0]).toEqual({ ...prompt, id: 'file://prompt.txt' });
+      expect(mockFetch.mock.calls[0][1].body).not.toContain('/home/alice');
+      expect(mockEval.config.prompts).toEqual(prompts);
+      expect(prompt.id).toBe('file:///home/alice/project/first/prompt.txt');
+    });
+
+    it('preserves literal file URLs in processed prompt content and labels', async () => {
+      const prompt = {
+        id: 'file:///home/alice/project/prompt.txt',
+        raw: 'file:///literal/prompt.txt',
+        label: 'file:///literal/label.txt',
+        provider: 'echo',
+      };
+      mockEval.config = { prompts: [prompt] };
+      mockEval.prompts = [prompt];
+      mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+        yield [{ id: 'row', prompt }];
+      });
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+      await createShareableUrl(mockEval as Eval);
+
+      const config = JSON.parse(mockFetch.mock.calls[0][1].body);
+      const [row] = JSON.parse(mockFetch.mock.calls[1][1].body);
+      for (const projected of [config.config.prompts[0], config.prompts[0], row.prompt]) {
+        expect(projected).toMatchObject({ ...prompt, id: 'file://prompt.txt' });
+      }
+      expect(prompt.id).toBe('file:///home/alice/project/prompt.txt');
+    });
+
+    it('honors saved strip flags when sharing outside the evaluation scope', async () => {
+      const { getEnvBool } = await vi.importActual<typeof import('../src/envars')>('../src/envars');
+      vi.mocked(envars.getEnvBool).mockImplementation(getEnvBool);
+      vi.stubEnv('PROMPTFOO_STRIP_TEST_VARS', 'false');
+      vi.stubEnv('PROMPTFOO_STRIP_METADATA', 'false');
+      vi.stubEnv('PROMPTFOO_STRIP_RESPONSE_OUTPUT', 'false');
+      const testCase = {
+        vars: { input: 'private-input' },
+        metadata: { note: 'private-note' },
+        providerOutput: 'private-output',
+      };
+      mockEval.config = {
+        env: {
+          PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+          PROMPTFOO_STRIP_TEST_VARS: 'true',
+          PROMPTFOO_STRIP_METADATA: 'true',
+          PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+        },
+        tests: [testCase],
+      };
+      mockEval.getTraces = vi.fn().mockResolvedValue([
+        {
+          metadata: { note: 'private-trace-note' },
+          spans: [
+            {
+              attributes: {
+                'promptfoo.request.body': 'private-trace-request',
+                'promptfoo.response.body': 'private-trace-response',
+                operation: 'provider-call',
+              },
+            },
+          ],
+        },
+      ]);
+      mockEval.prompts = [{ raw: 'private-prompt', label: 'public', provider: 'echo' }];
+      mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+        yield [{ id: 'row', testCase }];
+      });
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+      try {
+        await createShareableUrl(mockEval as Eval);
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+        for (const [, options] of mockFetch.mock.calls) {
+          expect(options.body).not.toContain('private-');
+        }
+        expect(JSON.parse(mockFetch.mock.calls[0][1].body).traces).toEqual([
+          { spans: [{ attributes: { operation: 'provider-call' } }] },
+        ]);
+        expect(testCase.vars.input).toBe('private-input');
+        expect(getEnvBool('PROMPTFOO_STRIP_TEST_VARS')).toBe(false);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it('redacts gateway URL credentials from shared config without changing the live provider', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      const gateway = 'https://gateway.example/v1?tenantClientSecret=short-private-value';
+      mockEval.config = {
+        basePath: '/home/alice/private-project',
+        providers: [{ id: 'openai:chat:test', config: { apiBaseUrl: gateway } }],
+        metadata: { documentationUrl: 'HTTPS://Docs.Example?version=2' },
+      };
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+      await createShareableUrl(mockEval as Eval);
+      const request = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(JSON.stringify(request.config)).not.toContain('short-private-value');
+      expect(request.config.providers[0].config.apiBaseUrl).toContain('%5BREDACTED%5D');
+      expect(request.config.metadata.documentationUrl).toBe('HTTPS://Docs.Example?version=2');
+      expect(request.config).not.toHaveProperty('basePath');
+      expect(mockEval.config.basePath).toBe('/home/alice/private-project');
+      expect(JSON.stringify(mockEval.config)).toContain(gateway);
+    });
+
     it('redacts Azure Blob SAS tokens from the shared eval config', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       mockEval.config = {
@@ -1118,50 +1284,6 @@ describe('createShareableUrl', () => {
       },
     );
 
-    it.each(
-      [false, true].flatMap((cloudEnabled) =>
-        [false, true].map((selected) => ({ cloudEnabled, selected })),
-      ),
-    )(
-      'removes TLS keys from shares, cloud: $cloudEnabled, provider selection: $selected',
-      async ({ cloudEnabled, selected }) => {
-        vi.mocked(cloudConfig.isEnabled).mockReturnValue(cloudEnabled);
-        vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
-        vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
-        vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-456');
-        mockEval.config = {
-          defaultTest: {
-            options: {
-              provider: {
-                id: 'https://target.example.com',
-                config: {
-                  tls: { key: ['fixture-private-key'], cert: 'public-cert', ca: 'public-ca' },
-                },
-              },
-            },
-          },
-        };
-        mockEval.runtimeOptions = selected
-          ? {
-              providerSelection: {
-                providers: [{ index: 0, id: 'echo', fingerprint: '0'.repeat(64) }],
-              },
-            }
-          : undefined;
-        mockFetch
-          .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
-          .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
-        await createShareableUrl(mockEval as Eval);
-        const requestBody = mockFetch.mock.calls[0][1].body;
-        expect(requestBody).not.toContain('fixture-private-key');
-        expect(JSON.parse(requestBody).config.defaultTest.options.provider.config.tls).toEqual({
-          key: '[REDACTED]',
-          cert: 'public-cert',
-          ca: 'public-ca',
-        });
-      },
-    );
-
     it('includes eval tags in the shared config payload', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       mockEval.config = {
@@ -1203,7 +1325,7 @@ describe('createShareableUrl', () => {
           traceId: 'trace-123',
           evaluationId: mockEvalWithTraces.id as string,
           testCaseId: 'test-case-1',
-          metadata: { test: 'metadata', headers: { Authorization: 'PRIVATE_TRACE_CREDENTIAL' } },
+          metadata: { test: 'metadata' },
           spans: [
             {
               spanId: 'span-1',
@@ -1211,15 +1333,6 @@ describe('createShareableUrl', () => {
               startTime: 1000,
               endTime: 2000,
               statusCode: 1,
-              attributes: {
-                headers: { 'x-api-key': 'PRIVATE_TRACE_CREDENTIAL', 'content-type': 'text/plain' },
-              },
-              events: [
-                {
-                  name: 'request',
-                  attributes: { headers: { Authorization: 'PRIVATE_TRACE_CREDENTIAL' } },
-                },
-              ],
             },
           ],
         },
@@ -1251,8 +1364,6 @@ describe('createShareableUrl', () => {
       // Verify trace data structure is correct
       const firstCall = mockFetch.mock.calls[0];
       const requestBody = JSON.parse(firstCall[1].body);
-      expect(JSON.stringify(requestBody.traces)).not.toContain('PRIVATE_TRACE_CREDENTIAL');
-      expect(JSON.stringify(mockTraces)).toContain('PRIVATE_TRACE_CREDENTIAL');
       expect(requestBody.traces).toHaveLength(1);
       expect(requestBody.traces[0]).toMatchObject({
         traceId: 'trace-123',

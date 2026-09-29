@@ -85,16 +85,11 @@ export class InMemoryEvaluationStore
 
   async readCompletedIndexPairs(options?: { excludeErrors?: boolean }): Promise<Set<string>> {
     const completedPairs = new Set<string>();
-    const errorPairs = new Set<string>();
     for (const result of this.evaluation.results) {
-      const key = getResultIndexKey(result);
-      completedPairs.add(key);
       if (options?.excludeErrors && result.failureReason === ERROR_FAILURE_REASON) {
-        errorPairs.add(key);
+        continue;
       }
-    }
-    for (const key of errorPairs) {
-      completedPairs.delete(key);
+      completedPairs.add(getResultIndexKey(result));
     }
     return completedPairs;
   }

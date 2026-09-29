@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
-import cliState from '../../../src/cliState';
 import {
   cleanAssistantResponse,
   OpenAiChatKitProvider,
@@ -159,18 +158,6 @@ describe('OpenAiChatKitProvider', () => {
   });
 
   describe('constructor', () => {
-    it.each([
-      { env: undefined, poolSize: undefined, expected: 3 },
-      { env: { PROMPTFOO_MAX_CONCURRENCY: '5' }, poolSize: undefined, expected: 5 },
-      { env: { PROMPTFOO_MAX_CONCURRENCY: '5' }, poolSize: 7, expected: 7 },
-    ])('uses scoped pool configuration: $expected', ({ env, poolSize, expected }) => {
-      const provider = cliState.withEnvFileOverrides(
-        { PROMPTFOO_MAX_CONCURRENCY: '3' },
-        () => new OpenAiChatKitProvider('wf_test', { env, config: { poolSize } }),
-      );
-      expect(provider['chatKitConfig'].poolSize).toBe(expected);
-    });
-
     it('should create provider with workflow ID', () => {
       const provider = new OpenAiChatKitProvider('wf_test123', {
         config: { apiKey: 'test-key' },

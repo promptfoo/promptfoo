@@ -1,12 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
-import { getDb } from '../../src/database/index';
+import { getEnvBool } from '../../src/envars';
 import { evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { notifyEvaluationChanged } from '../../src/models/evalMutation';
 import {
-  assertErrorResultsReplaced,
   deleteErrorResults,
   getErrorResultIds,
   recalculatePromptMetrics,
@@ -15,38 +14,22 @@ import {
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
 import { ResultFailureReason } from '../../src/types/index';
 import { resolveConfigs } from '../../src/util/config/load';
-import { setupEnv } from '../../src/util/env';
-import { createProviderSelection } from '../../src/util/eval/providerSelection';
 import { writeMultipleOutputs } from '../../src/util/output';
 import { shouldShareResults } from '../../src/util/sharing';
 
-import type { TestSuite, UnifiedConfig } from '../../src/types/index';
+import type { EnvOverrides, TestSuite, UnifiedConfig } from '../../src/types/index';
 
 const dbMocks = vi.hoisted(() => {
   const errorRows: Array<{ id: string }> = [];
   const affectedEvalRows: Array<{ evalId: string }> = [];
   const errorRowsAll = vi.fn(async () => errorRows);
-  const detailedSelectState = { callCount: 0, includeReplacements: true };
-  const detailedRowsAll = vi.fn(async () => {
-    const staleRows = errorRows.map((row, index) => ({
-      ...row,
-      evalId: 'eval-123',
-      promptIdx: index,
-      testIdx: index,
-    }));
-    const isCandidateQuery = detailedSelectState.callCount++ % 2 === 1;
-    if (!isCandidateQuery || !detailedSelectState.includeReplacements) {
-      return staleRows;
-    }
-    return [...staleRows, ...staleRows.map((row) => ({ ...row, id: `replacement-${row.id}` }))];
-  });
   const affectedEvalRowsAll = vi.fn(async () => affectedEvalRows);
   const deleteRun = vi.fn(async () => undefined);
   const db = {
-    select: vi.fn((fields: Record<string, unknown>) => ({
+    select: vi.fn(() => ({
       from: vi.fn(() => ({
         where: vi.fn(() => ({
-          all: Object.keys(fields).includes('evalId') ? detailedRowsAll : errorRowsAll,
+          all: errorRowsAll,
         })),
       })),
     })),
@@ -62,14 +45,12 @@ const dbMocks = vi.hoisted(() => {
         run: deleteRun,
       })),
     })),
-    transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback(db)),
   };
 
   return {
     affectedEvalRows,
     db,
     deleteRun,
-    detailedSelectState,
     errorRows,
   };
 });
@@ -86,7 +67,6 @@ vi.mock('../../src/util/config/load', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/util/config/load')>()),
   resolveConfigs: vi.fn(),
 }));
-vi.mock('../../src/util/env');
 vi.mock('../../src/util/output');
 vi.mock('../../src/util/sharing');
 
@@ -118,19 +98,16 @@ function mockResolvedConfig({
   commandLineOptions,
   config,
   providers,
-  selectedProviderConfigs,
 }: {
   commandLineOptions?: Record<string, unknown>;
   config?: Record<string, unknown>;
   providers?: TestSuite['providers'];
-  selectedProviderConfigs?: UnifiedConfig['providers'];
 } = {}) {
   vi.mocked(resolveConfigs).mockResolvedValue({
     basePath: '/workspace',
     commandLineOptions,
     config: (config ?? {}) as UnifiedConfig,
     testSuite: providers ? { ...testSuite, providers } : testSuite,
-    selectedProviderConfigs,
   });
 }
 
@@ -139,8 +116,6 @@ describe('retryCommand', () => {
     vi.resetAllMocks();
     dbMocks.errorRows.splice(0);
     dbMocks.affectedEvalRows.splice(0);
-    dbMocks.detailedSelectState.callCount = 0;
-    dbMocks.detailedSelectState.includeReplacements = true;
     cliState.resume = false;
     cliState.retryMode = false;
     cliState.maxConcurrency = undefined;
@@ -152,8 +127,6 @@ describe('retryCommand', () => {
     vi.resetAllMocks();
     dbMocks.errorRows.splice(0);
     dbMocks.affectedEvalRows.splice(0);
-    dbMocks.detailedSelectState.callCount = 0;
-    dbMocks.detailedSelectState.includeReplacements = true;
     cliState.resume = false;
     cliState.retryMode = false;
     cliState.maxConcurrency = undefined;
@@ -193,19 +166,6 @@ describe('retryCommand', () => {
     expect(dbMocks.deleteRun).toHaveBeenCalledTimes(1);
     expect(notifyEvaluationChanged).toHaveBeenCalledWith('eval-123');
     expect(notifyEvaluationChanged).toHaveBeenCalledWith('eval-456');
-  });
-
-  it('batches large result deletion within the SQLite parameter limit', async () => {
-    dbMocks.affectedEvalRows.push({ evalId: 'eval-123' });
-    const resultIds = Array.from({ length: 1_000 }, (_, index) => `error-result-${index}`);
-
-    await deleteErrorResults(resultIds);
-
-    expect(dbMocks.db.selectDistinct).toHaveBeenCalledTimes(2);
-    expect(dbMocks.db.transaction).toHaveBeenCalledTimes(1);
-    expect(dbMocks.deleteRun).toHaveBeenCalledTimes(2);
-    expect(notifyEvaluationChanged).toHaveBeenCalledTimes(1);
-    expect(notifyEvaluationChanged).toHaveBeenCalledWith('eval-123');
   });
 
   it('skips database work when there are no error result ids to delete', async () => {
@@ -560,11 +520,9 @@ describe('retryCommand', () => {
       expect(receivedSuite).toBe(testSuite);
       expect(receivedEval).toBe(originalEval);
       expect(options).toEqual({
-        configBasePath: '/workspace',
         delay: 0,
         eventSource: 'cli',
         maxConcurrency: 4,
-        repeat: 1,
         showProgressBar: true,
       });
       return retriedEval;
@@ -578,8 +536,6 @@ describe('retryCommand', () => {
     expect(resolveConfigs).toHaveBeenCalledWith(
       { filterProviders: 'selected-target' },
       originalEval.config,
-      undefined,
-      { allowConfigFilterSample: true, loadEnvFiles: true },
     );
     expect(dbMocks.deleteRun).toHaveBeenCalledTimes(1);
     expect(notifyEvaluationChanged).toHaveBeenCalledWith(originalEval.id);
@@ -592,21 +548,6 @@ describe('retryCommand', () => {
     expect(cliState.resume).toBe(false);
     expect(cliState.retryMode).toBe(false);
     expect(cliState.maxConcurrency).toBeUndefined();
-  });
-
-  it('preserves old errors when retry produces no persisted replacement row', async () => {
-    const originalEval = createEval();
-    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
-    dbMocks.errorRows.push({ id: 'error-result-1' });
-    dbMocks.detailedSelectState.includeReplacements = false;
-    mockResolvedConfig();
-    vi.mocked(evaluate).mockResolvedValue(createEval());
-
-    await expect(retryCommand(originalEval.id, {})).rejects.toThrow(
-      'Retry produced no persisted replacement for 1 ERROR result',
-    );
-
-    expect(dbMocks.deleteRun).not.toHaveBeenCalled();
   });
 
   it('uses an explicit config and forces concurrency to one when delay is requested', async () => {
@@ -622,11 +563,9 @@ describe('retryCommand', () => {
     vi.mocked(evaluate).mockImplementation(async (_suite, _eval, options) => {
       expect(cliState.maxConcurrency).toBe(1);
       expect(options).toEqual({
-        configBasePath: '/workspace',
         delay: 25,
         eventSource: 'cli',
         maxConcurrency: 1,
-        repeat: 1,
         showProgressBar: false,
       });
       return retriedEval;
@@ -644,201 +583,10 @@ describe('retryCommand', () => {
     expect(resolveConfigs).toHaveBeenCalledWith(
       { config: ['retry.yaml'], filterProviders: 'selected-target' },
       {},
-      undefined,
-      { allowConfigFilterSample: true, loadEnvFiles: true },
     );
     expect(logger.info).toHaveBeenCalledWith(
       'Running at concurrency=1 because 25ms delay was requested between API calls',
     );
-  });
-
-  it('lets an explicit retry env file override persisted and config env files', async () => {
-    const originalEval = createEval({
-      runtimeOptions: { configEnvPaths: '/workspace/original.env' },
-    });
-    const retriedEval = createEval();
-    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
-    dbMocks.errorRows.push({ id: 'error-result-1' });
-    mockResolvedConfig();
-    vi.mocked(evaluate).mockResolvedValue(retriedEval);
-
-    await expect(
-      retryCommand(originalEval.id, {
-        config: 'retry.yaml',
-        envPath: ['/workspace/override.env'],
-      }),
-    ).resolves.toBe(retriedEval);
-
-    expect(setupEnv).toHaveBeenCalledWith('/workspace/override.env');
-    expect(setupEnv).not.toHaveBeenCalledWith('/workspace/original.env');
-    expect(resolveConfigs).toHaveBeenCalledWith({ config: ['retry.yaml'] }, {}, undefined, {
-      allowConfigFilterSample: true,
-      loadEnvFiles: false,
-    });
-  });
-
-  it('lets an explicit retry config override persisted concurrency and delay', async () => {
-    const originalEval = createEval({
-      runtimeOptions: { delay: 25, maxConcurrency: 8 },
-    });
-    const retriedEval = createEval();
-    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
-    dbMocks.errorRows.push({ id: 'error-result-1' });
-    mockResolvedConfig({ commandLineOptions: { delay: 0, maxConcurrency: 2 } });
-    vi.mocked(evaluate).mockImplementation(async (_suite, _eval, options) => {
-      expect(cliState.maxConcurrency).toBe(2);
-      expect(options).toMatchObject({ delay: 0, maxConcurrency: 2, repeat: 1 });
-      return retriedEval;
-    });
-
-    await expect(retryCommand(originalEval.id, { config: 'retry.yaml' })).resolves.toBe(
-      retriedEval,
-    );
-  });
-
-  it('preserves original CLI env precedence over a saved config env during retry', async () => {
-    const originalEval = createEval({
-      runtimeOptions: {
-        configEnvPaths: '/workspace/original-cli.env',
-        configEnvSource: 'cli',
-      },
-    });
-    const retriedEval = createEval();
-    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
-    dbMocks.errorRows.push({ id: 'error-result-1' });
-    mockResolvedConfig();
-    vi.mocked(evaluate).mockResolvedValue(retriedEval);
-
-    await expect(retryCommand(originalEval.id, {})).resolves.toBe(retriedEval);
-
-    expect(setupEnv).toHaveBeenCalledWith('/workspace/original-cli.env');
-    expect(resolveConfigs).toHaveBeenCalledWith({}, originalEval.config, undefined, {
-      allowConfigFilterSample: true,
-      loadEnvFiles: false,
-    });
-  });
-
-  it('restores a persisted filter range for standalone retry', async () => {
-    const originalEval = createEval({
-      runtimeOptions: { filterRange: '1:2' },
-    });
-    const retriedEval = createEval();
-    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
-    dbMocks.errorRows.push({ id: 'error-result-1' });
-    mockResolvedConfig();
-    vi.mocked(evaluate).mockImplementation(async (_suite, _eval, options) => {
-      expect(options.filterRange).toBe('1:2');
-      return retriedEval;
-    });
-
-    await expect(retryCommand(originalEval.id, {})).resolves.toBe(retriedEval);
-  });
-
-  it.each([false, true])('replays selections (filtered: %s)', async (filtered) => {
-    const providerFilter = filtered ? 'selected-target' : undefined;
-    const excludedProvider = {
-      id: () => 'echo',
-      label: 'excluded-target',
-      callApi: vi.fn(),
-    } as TestSuite['providers'][number];
-    const selectedProvider = {
-      id: () => 'http',
-      label: 'selected-target',
-      callApi: vi.fn(),
-    } as TestSuite['providers'][number];
-    const providerConfigs = [
-      { id: 'echo', label: 'excluded-target' },
-      { id: 'http', label: 'selected-target' },
-    ];
-    const providerSelection = createProviderSelection(
-      [excludedProvider, selectedProvider],
-      providerConfigs,
-      [selectedProvider],
-    );
-    const originalEval = createEval({
-      config: { providers: providerConfigs } as UnifiedConfig,
-      prompts: [
-        {
-          id: 'prompt-1',
-          raw: 'Hello',
-          label: 'Greeting',
-          provider: 'echo',
-          config: { prefix: 'prefix' },
-        },
-        {
-          id: 'prompt-1',
-          raw: 'Hello',
-          label: 'Greeting',
-          provider: 'http',
-          config: { prefix: 'prefix' },
-        },
-      ] as any,
-      runtimeOptions: {
-        ...(providerFilter ? { providerFilter } : {}),
-        configBasePath: '/workspace/config',
-        delay: 4,
-        maxConcurrency: 7,
-        repeat: 3,
-        testCaseIndices: [2, 0],
-        testCaseSelection: {
-          tests: [{ index: 2, fingerprint: 'selected-test-fingerprint' }],
-        },
-        providerSelection,
-      },
-    });
-    const retriedEval = createEval();
-    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
-    dbMocks.errorRows.push({ id: 'error-result-1' });
-    mockResolvedConfig({
-      config: { providers: providerConfigs },
-      providers: [excludedProvider, selectedProvider],
-      selectedProviderConfigs: providerConfigs,
-    });
-    vi.mocked(evaluate).mockImplementation(async (receivedSuite, _eval, options) => {
-      expect(receivedSuite.providers).toEqual([selectedProvider]);
-      expect(receivedSuite.prompts).toEqual([
-        {
-          raw: 'Hello',
-          label: 'Greeting',
-          config: { prefix: 'prefix' },
-        },
-      ]);
-      expect(cliState.selectedProviderConfigs).toEqual([providerConfigs[1]]);
-      expect(options).toEqual({
-        configBasePath: '/workspace',
-        delay: 4,
-        eventSource: 'cli',
-        maxConcurrency: 1,
-        providerSelection: originalEval.runtimeOptions?.providerSelection,
-        repeat: 3,
-        showProgressBar: true,
-        testCaseIndices: [2, 0],
-        testCaseSelection: originalEval.runtimeOptions?.testCaseSelection,
-      });
-      return retriedEval;
-    });
-    vi.mocked(shouldShareResults).mockReturnValue(true);
-    vi.mocked(isSharingEnabled).mockReturnValue(true);
-    vi.mocked(createShareableUrl).mockResolvedValue('https://example.com/eval/eval-123');
-
-    await expect(retryCommand(originalEval.id, { share: true })).resolves.toBe(retriedEval);
-
-    expect(resolveConfigs).toHaveBeenCalledWith(
-      providerFilter ? { filterProviders: providerFilter } : {},
-      originalEval.config,
-      undefined,
-      {
-        allowConfigFilterSample: false,
-        configBasePath: '/workspace/config',
-        loadEnvFiles: true,
-      },
-    );
-    expect(createShareableUrl).toHaveBeenCalledWith(retriedEval, {
-      silent: false,
-    });
-    expect(retriedEval.shared).toBe(true);
-    expect(retriedEval.shareableUrl).toBe('https://example.com/eval/eval-123');
-    expect(dbMocks.deleteRun).toHaveBeenCalledTimes(1);
   });
 
   it('preserves error results when an explicit config no longer matches the stored filter', async () => {
@@ -851,58 +599,6 @@ describe('retryCommand', () => {
 
     await expect(retryCommand(originalEval.id, { config: 'retry.yaml' })).rejects.toThrow(
       'Stored provider filter "selected-target" matched no providers in the retry config "retry.yaml"',
-    );
-
-    expect(evaluate).not.toHaveBeenCalled();
-    expect(dbMocks.deleteRun).not.toHaveBeenCalled();
-  });
-
-  it.each(['', '['])('redacts credentials in stored filter errors (%s)', async (suffix) => {
-    const filter = `mcp:https://fixture-user:fixture-filter-password@host.test/mcp?api_key=fixture-filter-key${suffix}`;
-    const originalEval = createEval({ runtimeOptions: { providerFilter: filter } });
-    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
-    dbMocks.errorRows.push({ id: 'error-result-1' });
-    mockResolvedConfig({ providers: [] });
-
-    const error = await retryCommand(originalEval.id, {}).catch((error) => error);
-    expect(error).toBeInstanceOf(Error);
-    expect(error.message).toContain('provider filter');
-    expect(error.message).not.toContain('fixture-filter-password');
-    expect(error.message).not.toContain('fixture-filter-key');
-    expect(evaluate).not.toHaveBeenCalled();
-    expect(dbMocks.deleteRun).not.toHaveBeenCalled();
-  });
-
-  it('preserves error results when persisted provider identity has drifted', async () => {
-    const originalEval = createEval({
-      runtimeOptions: {
-        providerSelection: {
-          providers: [
-            {
-              index: 0,
-              id: 'http',
-              label: 'selected-target',
-              fingerprint: '0'.repeat(64),
-            },
-          ],
-        },
-      },
-    });
-    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
-    dbMocks.errorRows.push({ id: 'error-result-1' });
-    mockResolvedConfig({
-      providers: [
-        {
-          id: () => 'echo',
-          label: 'different-target',
-          callApi: vi.fn(),
-        } as TestSuite['providers'][number],
-      ],
-      selectedProviderConfigs: [{ id: 'echo', label: 'different-target' }],
-    });
-
-    await expect(retryCommand(originalEval.id, {})).rejects.toThrow(
-      'Could not restore provider selection for evaluation eval-123',
     );
 
     expect(evaluate).not.toHaveBeenCalled();
@@ -977,6 +673,44 @@ describe('retryCommand', () => {
     expect(retriedEval.resultPersistenceFailed).toBe(true);
     expect(dbMocks.deleteRun).not.toHaveBeenCalled();
   });
+
+  it.each([false, true])(
+    'keeps retry output redaction scoped with persistence failure=%j',
+    async (failed) => {
+      const previousConfig = cliState.config;
+      const env: EnvOverrides = { PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' };
+      const originalEval = createEval({ config: { outputPath: 'results.jsonl' } as UnifiedConfig });
+      const retriedEval = createEval({ resultPersistenceFailed: failed });
+      vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+      dbMocks.errorRows.push({ id: 'error-result-1' });
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        basePath: '/workspace',
+        config: { prompts: [], env },
+        testSuite: { ...testSuite, env },
+      });
+      vi.mocked(evaluate).mockImplementation(async () => {
+        cliState.config = { env: { PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'false' } };
+        return retriedEval;
+      });
+      const flags: boolean[] = [];
+      vi.mocked(writeMultipleOutputs).mockImplementation(async () => {
+        await Promise.resolve();
+        flags.push(getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false));
+      });
+      try {
+        const result = retryCommand(originalEval.id, {});
+        if (failed) {
+          await expect(result).rejects.toThrow('Retry results failed to persist');
+        } else {
+          await expect(result).resolves.toBe(retriedEval);
+        }
+        expect(flags).toEqual([true]);
+        expect(getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT')).toBe(false);
+      } finally {
+        cliState.config = previousConfig;
+      }
+    },
+  );
 
   it('warns when JSONL restoration and post-retry rewriting fail', async () => {
     const originalEval = createEval({
@@ -1061,93 +795,5 @@ describe('retryCommand', () => {
     expect(logger.warn).toHaveBeenCalledWith(
       'Cloud sync failed. Run promptfoo share eval-123 to retry manually.',
     );
-  });
-});
-
-// Fix 4 (thread 3481053693): a pre-existing duplicate success at the same
-// (evalId, testIdx, promptIdx) key must not be miscounted as this retry's
-// replacement. A retry that resume skips (persisting no new row) must fail closed
-// so the stale ERROR row is preserved.
-describe('assertErrorResultsReplaced replacement accounting', () => {
-  function sequencedDb(results: Array<Array<Record<string, unknown>>>) {
-    let call = 0;
-    return {
-      select: () => ({
-        from: () => ({
-          where: () => ({
-            all: async () => results[call++] ?? [],
-          }),
-        }),
-      }),
-    };
-  }
-
-  afterEach(() => {
-    vi.resetAllMocks();
-  });
-
-  it('fails closed when only a pre-existing duplicate success shares the retry key', async () => {
-    const staleError = { evalId: 'e', id: 'err', testIdx: 0, promptIdx: 1 };
-    const oldDuplicateSuccess = { evalId: 'e', id: 'old-success', testIdx: 0, promptIdx: 1 };
-    vi.mocked(getDb).mockResolvedValue(
-      sequencedDb([[staleError], [staleError, oldDuplicateSuccess]]) as any,
-    );
-
-    await expect(
-      // The pre-retry snapshot contains both the stale error and the old success.
-      assertErrorResultsReplaced(['err'], ['err', 'old-success']),
-    ).rejects.toThrow('Retry produced no persisted replacement');
-  });
-
-  it('passes when this retry persists a genuinely new replacement row', async () => {
-    const staleError = { evalId: 'e', id: 'err', testIdx: 0, promptIdx: 1 };
-    const oldDuplicateSuccess = { evalId: 'e', id: 'old-success', testIdx: 0, promptIdx: 1 };
-    const newlyPersisted = { evalId: 'e', id: 'new-row', testIdx: 0, promptIdx: 1 };
-    vi.mocked(getDb).mockResolvedValue(
-      sequencedDb([[staleError], [staleError, oldDuplicateSuccess, newlyPersisted]]) as any,
-    );
-
-    await expect(assertErrorResultsReplaced(['err'], ['err', 'old-success'])).resolves.toEqual([
-      'err',
-      'old-success',
-    ]);
-  });
-
-  it.each([0, 1, 2])(
-    'requires one replacement per repeated execution (%s replacements)',
-    async (count) => {
-      const staleRows = ['err-1', 'err-2'].map((id) => ({
-        evalId: 'e',
-        id,
-        testIdx: 0,
-        promptIdx: 1,
-      }));
-      const replacements = Array.from({ length: count }, (_, index) => ({
-        ...staleRows[0],
-        id: `new-${index}`,
-      }));
-      vi.mocked(getDb).mockResolvedValue(
-        sequencedDb([staleRows, [...staleRows, ...replacements]]) as any,
-      );
-      const result = assertErrorResultsReplaced(staleRows.map(({ id }) => id));
-      if (count < staleRows.length) {
-        await expect(result).rejects.toThrow('Original ERROR rows were preserved');
-      } else {
-        await expect(result).resolves.toEqual(['err-1', 'err-2']);
-      }
-    },
-  );
-
-  it('does not infer retry provenance from insertion order', async () => {
-    const staleError = { evalId: 'e', id: 'err', testIdx: 0, promptIdx: 1, rowId: 2 };
-    const oldSuccess = { evalId: 'e', id: 'old-success', testIdx: 0, promptIdx: 1, rowId: 1 };
-    const priorReplacement = { evalId: 'e', id: 'prior-retry', testIdx: 0, promptIdx: 1, rowId: 3 };
-    vi.mocked(getDb).mockResolvedValue(
-      sequencedDb([[staleError], [staleError, oldSuccess, priorReplacement]]) as any,
-    );
-
-    await expect(
-      assertErrorResultsReplaced(['err'], ['err', 'old-success', 'prior-retry']),
-    ).rejects.toThrow('Retry produced no persisted replacement');
   });
 });

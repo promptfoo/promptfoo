@@ -1,7 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cache from '../src/cache';
-import cliState from '../src/cliState';
-import { getRuntimeEnv } from '../src/envOverrides';
 import { evaluate as doEvaluate } from '../src/evaluator';
 import * as index from '../src/index';
 import { evaluate } from '../src/index';
@@ -253,39 +251,6 @@ describe('evaluate function', () => {
   afterEach(() => {
     loadApiProvidersSpy.mockRestore();
     loadApiProviderSpy.mockRestore();
-  });
-
-  it('keeps each SDK suite environment through execution and output writing', async () => {
-    const originalEvaluate = vi.mocked(doEvaluate).getMockImplementation()!;
-    const observed: (string | undefined)[] = [];
-    vi.mocked(doEvaluate).mockImplementation(async (_suite, record) => {
-      await Promise.resolve();
-      observed.push(getRuntimeEnv().PROMPTFOO_REVIEW_ENV_PROBE);
-      return record;
-    });
-    vi.mocked(writeMultipleOutputs).mockImplementation(async () => {
-      await Promise.resolve();
-      observed.push(getRuntimeEnv().PROMPTFOO_REVIEW_ENV_PROBE);
-    });
-    try {
-      await cliState.withEnv({ PROMPTFOO_REVIEW_ENV_PROBE: 'outer' }, async () => {
-        await Promise.all(
-          ['first', 'second'].map((value) =>
-            evaluate({
-              prompts: ['test'],
-              providers: [],
-              env: { PROMPTFOO_REVIEW_ENV_PROBE: value },
-              outputPath: `${value}.json`,
-            }),
-          ),
-        );
-        expect(getRuntimeEnv().PROMPTFOO_REVIEW_ENV_PROBE).toBe('outer');
-      });
-      expect(observed.sort()).toEqual(['first', 'first', 'second', 'second']);
-    } finally {
-      vi.mocked(doEvaluate).mockImplementation(originalEvaluate);
-      vi.mocked(writeMultipleOutputs).mockReset();
-    }
   });
 
   it('should handle function prompts correctly', async () => {
@@ -1138,7 +1103,7 @@ describe('evaluate function', () => {
         );
       });
 
-      it('preserves suite env for deferred grading provider map entries', async () => {
+      it('keeps deferred grading provider map entries in the suite environment', async () => {
         const mockTargetProvider = createMockProvider({ id: 'echo' });
 
         loadApiProvidersSpy.mockResolvedValueOnce([mockTargetProvider]);
@@ -1180,12 +1145,8 @@ describe('evaluate function', () => {
                   text: {
                     id: 'litellm:inline-judge',
                     config: { apiKey: '{{ env.GRADER_API_KEY }}' },
-                    env: { GRADER_API_KEY: 'suite-key' },
                   },
-                  embedding: {
-                    id: 'unsupported-provider:unused-embedding',
-                    env: { GRADER_API_KEY: 'suite-key' },
-                  },
+                  embedding: 'unsupported-provider:unused-embedding',
                 },
               }),
             }),
@@ -1193,6 +1154,22 @@ describe('evaluate function', () => {
           expect.anything(),
           expect.anything(),
         );
+      });
+
+      it('preserves suite env for nested test providers', async () => {
+        loadApiProvidersSpy.mockResolvedValueOnce([createMockProvider({ id: 'echo' })]);
+
+        await evaluate({
+          env: { OPENAI_API_KEY: 'suite-key' },
+          prompts: ['Test prompt'],
+          providers: ['echo'],
+          tests: [{ provider: 'openai:chat:test-model', vars: { input: 'hello' } }],
+        });
+
+        expect(loadApiProviderSpy).toHaveBeenCalledWith('openai:chat:test-model', {
+          basePath: process.cwd(),
+          env: { OPENAI_API_KEY: 'suite-key' },
+        });
       });
 
       it('should fall back to loadApiProvider for model-graded assertions when provider not in main array', async () => {
@@ -1673,46 +1650,6 @@ describe('evaluate with external defaultTest', () => {
 
     afterEach(() => {
       resolveProviderSpy.mockRestore();
-    });
-
-    it('redacts declarative provider references throughout the saved config without mutating input', async () => {
-      const secret = 'PRIVATE_DECLARATIVE_PROVIDER_CREDENTIAL';
-      const provider = {
-        id: 'echo',
-        label: 'declarative-provider',
-        env: { OPENAI_API_KEY: secret },
-        config: { apiKey: secret, temperature: 0.4 },
-      };
-      const assertion = { type: 'llm-rubric' as const, value: 'Valid answer', provider };
-      const suite = {
-        prompts: ['test prompt'],
-        providers: [provider],
-        defaultTest: { provider, options: { provider }, assert: [assertion] },
-        tests: [
-          {
-            provider,
-            options: { provider: { text: provider } },
-            assert: [{ type: 'assert-set' as const, assert: [assertion] }],
-          },
-        ],
-        scenarios: [
-          {
-            config: [{ provider, options: { provider: { embedding: provider } } }],
-            tests: [{ provider, assert: [assertion] }],
-          },
-        ],
-        writeLatestResults: true,
-      };
-      const original = JSON.stringify(suite);
-      const createEvalSpy = vi.spyOn(Eval, 'create');
-      await evaluate(suite);
-      const stored = createEvalSpy.mock.calls.at(-1)?.[0];
-      expect(stored).toBeDefined();
-      expect(JSON.stringify(stored)).not.toContain(secret);
-      expect(stored?.providers).toMatchObject([
-        { id: 'echo', label: 'declarative-provider', config: { temperature: 0.4 } },
-      ]);
-      expect(JSON.stringify(suite)).toBe(original);
     });
 
     it('does not mutate testSuite.defaultTest.options.provider when resolving for the runtime suite', async () => {

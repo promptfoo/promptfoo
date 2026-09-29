@@ -1,10 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { GolangProvider } from '../../src/providers/golangCompletion';
-import { mockProcessEnv } from '../util/utils';
 
 // Hoisted mock functions
 const mockExecFile = vi.hoisted(() => vi.fn());
@@ -103,9 +102,6 @@ vi.mock('../../src/util', () => ({
 }));
 
 describe('GolangProvider', () => {
-  let restoreHostEnv: () => void;
-  afterEach(() => restoreHostEnv());
-
   const mockReadFileSync = vi.mocked(fs.readFileSync);
   const mockResolve = vi.mocked(path.resolve);
   const mockMkdtempSync = vi.mocked(fs.mkdtempSync);
@@ -120,7 +116,6 @@ describe('GolangProvider', () => {
   const mockRelative = vi.mocked(path.relative);
 
   beforeEach(async () => {
-    restoreHostEnv = mockProcessEnv({}, { clear: true });
     vi.clearAllMocks();
     mockExecFile.mockReset();
     mockGetCache.mockReset();
@@ -364,24 +359,6 @@ describe('GolangProvider', () => {
   });
 
   describe('caching', () => {
-    it('bypasses cache reads and writes when provider environment is configured', async () => {
-      mockIsCacheEnabled.mockReturnValue(true);
-      const cache = {
-        get: vi.fn().mockResolvedValue(JSON.stringify({ output: 'cached' })),
-        set: vi.fn(),
-      };
-      mockGetCache.mockResolvedValue(cache as never);
-      for (const value of ['cache-private-first', 'cache-private-second', 'cache-private-first']) {
-        const provider = new GolangProvider('script.go', {
-          config: { basePath: '/absolute/path/to' },
-          env: { OPENAI_API_KEY: value },
-        });
-        await provider.callApi('unchanged prompt');
-      }
-      expect(cache.get).not.toHaveBeenCalled();
-      expect(cache.set).not.toHaveBeenCalled();
-    });
-
     it('should use cached result when available', async () => {
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to' },

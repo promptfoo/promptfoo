@@ -154,6 +154,7 @@ vi.mock('../../src/globalConfig/cloud', () => {
       isEnabled: vi.fn().mockReturnValue(false),
       getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.dev'),
       getApiKey: vi.fn().mockReturnValue('test-api-key'),
+      getAuthHeaderName: () => 'Authorization',
     },
   };
 });
@@ -1409,54 +1410,6 @@ describe('loadApiProvider', () => {
     });
   });
 
-  it.each([
-    { env: undefined, options: {}, expected: 'file-key' },
-    { env: { OPENAI_API_KEY: 'suite-key' }, options: {}, expected: 'suite-key' },
-    {
-      env: { OPENAI_API_KEY: 'suite-key' },
-      options: { env: { OPENAI_API_KEY: 'provider-key' } },
-      expected: 'provider-key',
-    },
-    { env: { OPENAI_API_KEY: undefined }, options: {}, expected: 'file-key' },
-  ])(
-    'uses env-file values beneath defined suite and provider overrides: $expected',
-    async ({ env, options, expected }) => {
-      mockProcessEnv({ OPENAI_API_KEY: 'host-key' });
-      const provider = (await cliState.withEnvFileOverrides({ OPENAI_API_KEY: 'file-key' }, () =>
-        loadApiProvider('openai:chat', { env, options }),
-      )) as OpenAiChatCompletionProvider;
-      expect(provider.getApiKey()).toBe(expected);
-      expect(process.env.OPENAI_API_KEY).toBe('host-key');
-    },
-  );
-
-  it('constructs Slack providers with an isolated env-file token', async () => {
-    mockProcessEnv({ SLACK_BOT_TOKEN: undefined });
-    await expect(
-      cliState.withEnvFileOverrides({ SLACK_BOT_TOKEN: 'fixture-slack-token' }, () =>
-        loadApiProvider('slack', { options: { config: { channel: 'fixture-channel' } } }),
-      ),
-    ).resolves.toMatchObject({ client: { token: 'fixture-slack-token' } });
-    expect(process.env.SLACK_BOT_TOKEN).toBeUndefined();
-  });
-
-  it.each([
-    {
-      id: 'envoy:fixture',
-      env: { ENVOY_API_BASE_URL: 'https://gateway.example.com' },
-      expected: 'https://gateway.example.com/v1',
-    },
-    {
-      id: 'snowflake:fixture',
-      env: { SNOWFLAKE_ACCOUNT_IDENTIFIER: 'org-account' },
-      expected: 'https://org-account.snowflakecomputing.com',
-    },
-  ])('constructs $id from isolated file defaults', async ({ id, env, expected }) => {
-    mockProcessEnv({ ENVOY_API_BASE_URL: undefined, SNOWFLAKE_ACCOUNT_IDENTIFIER: undefined });
-    const provider = await cliState.withEnvFileOverrides(env, () => loadApiProvider(id));
-    expect(provider.config.apiBaseUrl).toBe(expected);
-  });
-
   it('passes provider env overrides to provider instances', async () => {
     const provider = (await loadApiProvider('openai:chat', {
       options: {
@@ -1531,6 +1484,20 @@ describe('loadApiProvider', () => {
       expect(provider.getApiKey()).toBe('provider-key');
     } finally {
       cliState.config = originalConfig;
+    }
+  });
+
+  it('does not inherit cliState env when a suite explicitly has no env', async () => {
+    const originalConfig = cliState.config;
+    const restoreEnv = mockProcessEnv({ ABLIT_API_BASE_URL: undefined });
+    cliState.config = { env: { ABLIT_API_BASE_URL: 'https://previous.example.com/v1' } };
+
+    try {
+      const [provider] = await loadApiProviders(['abliteration:test-model'], { env: {} });
+      expect(provider.config.apiBaseUrl).toBe('https://api.abliteration.ai/v1');
+    } finally {
+      cliState.config = originalConfig;
+      restoreEnv();
     }
   });
 
@@ -2177,7 +2144,8 @@ describe('resolveProvider', () => {
     expect(result).toBeDefined();
     expect(typeof result.id).toBe('function');
     expect(result.id()).toBe('My Custom Provider');
-    expect(result.callApi).toBe(mockFunctionProvider);
+    await expect(result.callApi('Hello')).resolves.toEqual({ output: 'Response for: Hello' });
+    expect(mockFunctionProvider).toHaveBeenCalledWith('Hello');
     expect(result.transform).toBe(mockFunctionProvider.transform);
     expect(result.delay).toBe(250);
   });
@@ -2194,7 +2162,8 @@ describe('resolveProvider', () => {
     expect(result).toBeDefined();
     expect(typeof result.id).toBe('function');
     expect(result.id()).toBe('custom-function');
-    expect(result.callApi).toBe(mockFunctionProvider);
+    await expect(result.callApi('Hello')).resolves.toEqual({ output: 'Response for: Hello' });
+    expect(mockFunctionProvider).toHaveBeenCalledWith('Hello');
   });
 
   it('should handle empty providerMap gracefully', async () => {

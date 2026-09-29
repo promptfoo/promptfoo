@@ -1,5 +1,4 @@
 import cliState from '../cliState';
-import { withRuntimeEnv } from '../envOverrides';
 import logger from '../logger';
 import { loadApiProvider } from '../providers/index';
 import { shouldGenerateRemote } from '../redteam/remoteGeneration';
@@ -61,15 +60,13 @@ export function callGradingProvider<T extends ProviderResponse>(
   const { callContext, operationName } = options;
   const executionContext = getProviderCallExecutionContext();
   const tracingContext = getProviderCallTracingContext();
-  const invokeWithEnv = (context: CallApiContextParams | undefined) =>
-    invoke(context ? withRuntimeEnv(context) : context);
   const callProvider = (): Promise<T> =>
     tracingContext
       ? (tracingContext.withProviderSpan(
           { provider, callContext, operationName, role: 'grader', promptLabel: label },
-          invokeWithEnv,
+          invoke,
         ) as Promise<T>)
-      : invokeWithEnv(callContext);
+      : invoke(callContext);
 
   const executeCall = () => {
     if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
@@ -97,12 +94,14 @@ export function callProviderWithContext(
   label: string,
   vars: Record<string, VarValue>,
   context?: CallApiContextParams,
+  promptConfig?: Record<string, unknown>,
 ): Promise<ProviderResponse> {
   const callApiContext = {
     ...context,
     prompt: {
       raw: prompt,
       label,
+      ...(promptConfig && { config: promptConfig }),
     },
     vars,
   };

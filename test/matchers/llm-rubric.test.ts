@@ -94,7 +94,6 @@ describe('matchesLlmRubric', () => {
   });
 
   afterEach(() => {
-    cliState.config = undefined;
     cliState.selectedProviderConfigs = undefined;
   });
 
