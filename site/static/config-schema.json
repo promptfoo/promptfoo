@@ -2493,27 +2493,6 @@
             "AZURE_STORAGE_CONNECTION_STRING": {
               "type": "string"
             },
-            "IS_TESTING": {
-              "type": "string"
-            },
-            "PROMPTFOO_CACHE_ENABLED": {
-              "type": "string"
-            },
-            "PROMPTFOO_CACHE_PATH": {
-              "type": "string"
-            },
-            "PROMPTFOO_CACHE_TTL": {
-              "type": "string"
-            },
-            "PROMPTFOO_CACHE_TYPE": {
-              "type": "string"
-            },
-            "PROMPTFOO_CONFIG_DIR": {
-              "type": "string"
-            },
-            "PROMPTFOO_DISABLE_TELEMETRY": {
-              "type": "string"
-            },
             "PROMPTFOO_FETCH_CONNECTIONS": {
               "type": "string"
             },
