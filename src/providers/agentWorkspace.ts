@@ -40,6 +40,7 @@ export interface AgentWorkspace {
 interface RepositoryState {
   head: string;
   objectsDir: string;
+  objectFormat: string;
 }
 
 const MAX_DIFF_LENGTH = 100_000;
@@ -133,16 +134,22 @@ export function assertIsolatedWorkingDir(config: {
 
 async function git(
   args: string[],
-  { cwd, env }: { cwd?: string; env?: Record<string, string> } = {},
+  { cwd, env, input }: { cwd?: string; env?: Record<string, string>; input?: string } = {},
 ): Promise<string> {
   const baseEnv = { ...process.env };
   clearRepositoryEnv(baseEnv);
-  const { stdout } = await execFileAsync('git', cwd ? ['-C', cwd, ...args] : args, {
+  const command = execFileAsync('git', cwd ? ['-C', cwd, ...args] : args, {
     env: { ...baseEnv, ...env },
     maxBuffer: 64 * 1024 * 1024,
   });
+  if (input !== undefined) {
+    command.child.stdin?.end(input);
+  }
+  const { stdout } = await command;
   return stdout;
 }
+
+class UnsupportedGitFilterError extends Error {}
 
 /**
  * The repository to clone when `source` is the root of a git repository whose working tree
@@ -154,9 +161,17 @@ async function getCloneableRepository(
   allowIgnored: boolean,
 ): Promise<RepositoryState | undefined> {
   try {
-    const [topLevel, objectsDir, head] = (
+    const [topLevel, objectsDir, objectFormat, head] = (
       await git(
-        ['rev-parse', '--show-toplevel', '--path-format=absolute', '--git-path', 'objects', 'HEAD'],
+        [
+          'rev-parse',
+          '--show-toplevel',
+          '--path-format=absolute',
+          '--git-path',
+          'objects',
+          '--show-object-format',
+          'HEAD',
+        ],
         { cwd: source },
       )
     )
@@ -164,6 +179,20 @@ async function getCloneableRepository(
       .split('\n');
     if ((await fs.realpath(topLevel)) !== source) {
       return undefined;
+    }
+    const trackedPaths = await git(['ls-files', '-z'], { cwd: source });
+    const attributes = await git(['check-attr', '-z', '--stdin', 'filter'], {
+      cwd: source,
+      input: trackedPaths,
+    });
+    if (
+      attributes
+        .split('\0')
+        .some((value, index) => index % 3 === 2 && value !== 'unspecified' && value !== 'unset')
+    ) {
+      throw new UnsupportedGitFilterError(
+        "copy_working_dir: 'git' does not support tracked Git filter attributes; use 'copy' or true to preserve materialized files.",
+      );
     }
     // --no-optional-locks: a plain status refreshes, and so rewrites, the source's index.
     const status = await git(
@@ -183,8 +212,11 @@ async function getCloneableRepository(
     // a sparse checkout), so they can differ from the commit. `ls-files -v` tags them with a
     // lowercase letter or S.
     const files = await git(['--no-optional-locks', 'ls-files', '-v'], { cwd: source });
-    return /^[a-zS]/m.test(files) ? undefined : { head, objectsDir };
-  } catch {
+    return /^[a-zS]/m.test(files) ? undefined : { head, objectsDir, objectFormat };
+  } catch (error) {
+    if (allowIgnored && error instanceof UnsupportedGitFilterError) {
+      throw error;
+    }
     // Not a git repository, a repository without commits, or git is not installed.
     return undefined;
   }
@@ -235,6 +267,11 @@ async function assertCopyable(entry: string, root: string): Promise<boolean> {
     }
     if (await fs.lstat(path.join(entry, 'commondir')).catch(() => undefined)) {
       throw new Error(`copy_working_dir cannot copy ${entry}: it shares a git common directory`);
+    }
+    if (await fs.lstat(path.join(entry, 'worktrees')).catch(() => undefined)) {
+      throw new Error(
+        `copy_working_dir cannot copy ${entry}: it contains linked worktree metadata; use a clean clone instead`,
+      );
     }
   } else if (stat.isFile() && path.basename(entry) === '.git') {
     // A git worktree or submodule points at another repository, which the copy would share.
@@ -291,7 +328,9 @@ async function getWorkspaceDiff(dir: string, repo: RepositoryState): Promise<str
       GIT_CONFIG_NOSYSTEM: '1',
       GIT_TEMPLATE_DIR: '',
     };
-    await git(['init', '--quiet', '--bare', gitDir], { env: isolatedConfig });
+    await git(['init', '--quiet', '--bare', `--object-format=${repo.objectFormat}`, gitDir], {
+      env: isolatedConfig,
+    });
     await fs.writeFile(path.join(gitDir, 'objects', 'info', 'alternates'), `${repo.objectsDir}\n`);
     const env = {
       ...isolatedConfig,
@@ -300,6 +339,29 @@ async function getWorkspaceDiff(dir: string, repo: RepositoryState): Promise<str
       GIT_ATTR_SOURCE: repo.head,
     };
     await git(['read-tree', repo.head], { env });
+    // Include ignored files the agent explicitly added, without loading its Git configuration.
+    const ignoredTracked = await git(
+      ['ls-files', '-z', '--cached', '--ignored', '--exclude-standard'],
+      {
+        env: { ...env, GIT_INDEX_FILE: path.join(dir, '.git', 'index') },
+      },
+    );
+    const existingIgnored: string[] = [];
+    for (const file of ignoredTracked.split('\0').filter(Boolean)) {
+      const fullPath = path.resolve(dir, file);
+      if (isInside(dir, fullPath) && (await fs.lstat(fullPath).catch(() => undefined))) {
+        existingIgnored.push(file);
+      }
+    }
+    if (existingIgnored.length > 0) {
+      await git(
+        ['--literal-pathspecs', 'add', '--force', '--pathspec-from-file=-', '--pathspec-file-nul'],
+        {
+          env,
+          input: `${existingIgnored.join('\0')}\0`,
+        },
+      );
+    }
     await git(['-c', 'core.fsmonitor=false', 'add', '--all'], { env });
     const diff = await git(
       [

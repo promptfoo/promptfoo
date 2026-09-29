@@ -50,7 +50,7 @@ function makeSuite() {
 }
 
 describeEvaluator('select-best runtime grading configuration', () => {
-  it('grades with the replacement test returned by beforeEach', async () => {
+  it.each([0, 10000])('grades the replacement test with timeoutMs=%s', async (timeoutMs) => {
     const { grader, suite } = makeSuite();
     vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
       if (hookName !== 'beforeEach' || !('test' in context)) {
@@ -66,7 +66,7 @@ describeEvaluator('select-best runtime grading configuration', () => {
     });
     const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
 
-    await evaluate(suite, record, { maxConcurrency: 1 });
+    await evaluate(suite, record, { maxConcurrency: 1, timeoutMs });
 
     expect(grader.callApi).toHaveBeenCalledTimes(1);
     expect(vi.mocked(grader.callApi).mock.calls[0][0]).toContain('Use the updated criteria');

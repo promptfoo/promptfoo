@@ -3801,6 +3801,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       }
       await this.addEvalStepTimeoutResult(evalStep, index, timeoutMs, error, context);
     } finally {
+      evalStep.test = evalStepWithSignal.test;
       clearEvalStepTimeout();
     }
   }

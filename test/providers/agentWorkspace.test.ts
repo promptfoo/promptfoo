@@ -96,6 +96,92 @@ describe('agent workspaces', () => {
   });
 
   describe('git repositories', () => {
+    it.each([
+      ['sha256', 'sha1'],
+      ['sha1', 'sha256'],
+    ])(
+      'diffs a %s repository when the default object format is %s',
+      async (format, defaultHash) => {
+        const source = path.join(root, 'repo');
+        fs.mkdirSync(source);
+        git(source, 'init', '-q', `--object-format=${format}`);
+        makeRepository(source);
+        const restoreEnv = mockProcessEnv({ GIT_DEFAULT_HASH: defaultHash });
+        try {
+          const workspace = await create(source);
+          write(path.join(workspace.dir, 'README.md'), 'changed\n');
+
+          expect(workspace.strategy).toBe('git');
+          expect((await workspace.metadata()).workspaceDiff).toContain('+changed');
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
+
+    it('copies filtered tracked files and rejects explicit git mode', async () => {
+      const source = path.join(root, 'repo');
+      const filter = path.join(root, 'filter.cjs');
+      const marker = path.join(root, 'filter-ran');
+      write(
+        filter,
+        [
+          `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'ran');`,
+          "let data = ''; process.stdin.on('data', chunk => data += chunk);",
+          "process.stdin.on('end', () => process.stdout.write(process.argv[2] === 'clean' ? data.replaceAll('MATERIALIZED', 'CANONICAL') : data.replaceAll('CANONICAL', 'MATERIALIZED')));",
+        ].join('\n'),
+      );
+      const configFile = path.join(root, 'global.gitconfig');
+      const command = `node "${filter.split(path.sep).join('/')}"`;
+      write(
+        configFile,
+        `[filter "review"]\n clean = ${command} clean\n smudge = ${command} smudge\n`,
+      );
+      const restoreEnv = mockProcessEnv({ GIT_CONFIG_GLOBAL: configFile });
+      try {
+        makeRepository(source, {
+          '.gitattributes': '*.txt filter=review\n',
+          'report data.txt': 'MATERIALIZED\n',
+        });
+        expect(git(source, 'show', 'HEAD:report data.txt')).toBe('CANONICAL');
+        fs.rmSync(marker);
+
+        const workspace = await create(source);
+
+        expect(workspace.strategy).toBe('copy');
+        expect(fs.readFileSync(path.join(workspace.dir, 'report data.txt'), 'utf8')).toBe(
+          'MATERIALIZED\n',
+        );
+        expect(await workspace.metadata()).toEqual({ workingDir: workspace.dir });
+        await expect(create(source, 'git')).rejects.toThrow('tracked Git filter attributes');
+        expect(fs.existsSync(marker)).toBe(false);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it.each(['staged', 'committed'])(
+      'includes newly %s ignored files in its diff',
+      async (state) => {
+        const source = path.join(root, 'repo');
+        makeRepository(source, { '.gitignore': '*.snap\n' });
+        const workspace = await create(source);
+        write(path.join(workspace.dir, 'added file.snap'), 'new snapshot\n');
+        write(path.join(workspace.dir, 'untracked.snap'), 'excluded\n');
+        git(workspace.dir, 'add', '-f', 'added file.snap');
+        if (state === 'committed') {
+          git(workspace.dir, 'commit', '-q', '-m', 'agent snapshot');
+        }
+
+        const { workspaceDiff } = await workspace.metadata();
+
+        expect(workspaceDiff).toContain('+++ b/added file.snap');
+        expect(workspaceDiff).toContain('+new snapshot');
+        expect(workspaceDiff).not.toContain('untracked.snap');
+        expect(fs.existsSync(path.join(source, 'added file.snap'))).toBe(false);
+      },
+    );
+
     it('keeps an unchanged clone diff empty with global CRLF conversion enabled', async () => {
       const source = path.join(root, 'repo');
       makeRepository(source);
@@ -315,7 +401,7 @@ describe('agent workspaces', () => {
       expect(fs.readdirSync(victimDir)).toEqual([]);
     });
 
-    it('does not invoke user git filters while diffing agent-controlled files', async () => {
+    it('copies filter attributes even when their driver is configured later', async () => {
       const source = path.join(root, 'repo');
       makeRepository(source, { '.gitattributes': '*.txt filter=user\n' });
       const workspace = await create(source);
@@ -327,9 +413,9 @@ describe('agent workspaces', () => {
       write(path.join(workspace.dir, 'src', 'app.txt'), 'changed\n');
       const restoreEnv = mockProcessEnv({ GIT_CONFIG_GLOBAL: userConfig });
       try {
-        const { workspaceDiff } = await workspace.metadata();
+        expect(workspace.strategy).toBe('copy');
+        expect(await workspace.metadata()).toEqual({ workingDir: workspace.dir });
         expect(fs.existsSync(marker)).toBe(false);
-        expect(workspaceDiff).toContain('+changed');
       } finally {
         restoreEnv();
       }
@@ -466,6 +552,23 @@ describe('agent workspaces', () => {
   });
 
   describe('copies', () => {
+    it.each(['auto', 'copy'] as const)(
+      'rejects copied worktree backlinks in %s mode',
+      async (mode) => {
+        const source = path.join(root, 'repo');
+        const linked = path.join(root, 'linked');
+        makeRepository(source);
+        git(source, 'worktree', 'add', '-q', '--detach', linked);
+        const linkedGitFile = fs.readFileSync(path.join(linked, '.git'), 'utf8');
+        write(path.join(source, 'README.md'), 'uncommitted\n');
+
+        await expect(create(source, mode)).rejects.toThrow('linked worktree metadata');
+
+        expect(fs.readFileSync(path.join(linked, '.git'), 'utf8')).toBe(linkedGitFile);
+        expect(git(linked, 'rev-parse', '--show-toplevel')).toBe(linked);
+      },
+    );
+
     it('rejects symbolic git metadata that redirects the working tree to the source', async () => {
       if (process.platform === 'win32') {
         return;
