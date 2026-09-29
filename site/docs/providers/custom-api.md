@@ -75,7 +75,7 @@ module.exports = class OpenAIProvider {
 };
 ```
 
-`options.env` contains provider and suite environment overrides. Read it before `process.env`, as above, so custom providers honor those settings. For programmatic env files, see [Node API environment handling](/docs/usage/node-package#provider-functions).
+`options.env` contains provider and suite environment overrides. Read it before `process.env`, as above, so custom providers honor those settings. The `??` checks preserve explicit empty overrides instead of falling back to host credentials. For programmatic env files, see [Node API environment handling](/docs/usage/node-package#provider-functions).
 
 `callApi` returns a `ProviderResponse` object. The `ProviderResponse` object format:
 
