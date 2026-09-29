@@ -21,7 +21,7 @@ import { HttpTlsFieldsSchema } from '../contracts/providerConfig/httpTls';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { isTransientConnectionError } from '../util/fetch/errors';
+import { isTransientConnectionError, responseBodyError } from '../util/fetch/errors';
 import { fetchWithRetries } from '../util/fetch/index';
 import {
   estimateStreamingTokensPerSecond,
@@ -1893,12 +1893,11 @@ export class HttpProvider implements ApiProvider {
         } catch (error) {
           // Abort every response branch, including the fetch logger's clone.
           controller.abort(error);
-          if (
-            fetchOptions.signal?.aborted ||
-            bodyAttempt >= maxBodyRetries ||
-            !isTransientConnectionError(error as Error)
-          ) {
+          if (fetchOptions.signal?.aborted) {
             throw error;
+          }
+          if (bodyAttempt >= maxBodyRetries || !isTransientConnectionError(error as Error)) {
+            throw responseBodyError(error, url, rawResponse);
           }
         } finally {
           clearTimeout(bodyTimeout);

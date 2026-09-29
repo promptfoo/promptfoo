@@ -64,10 +64,11 @@ describe('streaming response metrics', () => {
     expect(result.streamingMetrics.timeToFirstToken).toBe(140);
   });
 
-  it('requires a readable body', async () => {
-    await expect(processStreamingResponse(new Response(null), Date.now())).rejects.toThrow(
-      'no readable body',
-    );
+  it('returns empty text without token timings when the response has no body', async () => {
+    await expect(processStreamingResponse(new Response(null), Date.now())).resolves.toEqual({
+      text: '',
+      streamingMetrics: { multiChunkDelivery: false },
+    });
   });
 
   it('releases the stream lock after read errors', async () => {

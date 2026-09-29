@@ -117,7 +117,7 @@ export async function processStreamingResponse(
 ): Promise<{ text: string; streamingMetrics: StreamingMetrics }> {
   const reader = response.body?.getReader();
   if (!reader) {
-    throw new Error(`Response has no readable body (status ${response.status})`);
+    return { text: '', streamingMetrics: { multiChunkDelivery: false } };
   }
   const detectToken = createTextDetector(opts?.streamFormat);
   const decoder = new TextDecoder();

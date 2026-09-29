@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HttpProvider } from '../../src/providers/http';
+import { DEFAULT_RETRY_POLICY, shouldRetry } from '../../src/scheduler/retryPolicy';
 import * as fetchModule from '../../src/util/fetch';
 import * as monkeyPatchFetchModule from '../../src/util/fetch/monkeyPatchFetch';
 
@@ -49,6 +50,61 @@ describe('HttpProvider streaming integration', () => {
       await rejection;
     },
   );
+
+  it.each([204, 205])(
+    'passes bodyless HTTP %s responses through status and output handlers',
+    async (status) => {
+      vi.spyOn(fetchModule, 'fetchWithRetries').mockImplementation(
+        async () => new Response(null, { status }),
+      );
+      const transformResponse = vi.fn((_json, text) =>
+        text === '' ? 'No content' : 'Unexpected body',
+      );
+      const provider = new HttpProvider('https://example.com/stream', {
+        config: {
+          method: 'POST',
+          body: { stream: true },
+          validateStatus: (value: number) => value === status,
+          transformResponse,
+        },
+      });
+      const result = await provider.callApi('Hello');
+      expect(result.output).toBe('No content');
+      expect(result.streamingMetrics?.timeToFirstToken).toBeUndefined();
+      expect(transformResponse).toHaveBeenCalledOnce();
+
+      const rejected = new HttpProvider('https://example.com/stream', {
+        config: { method: 'POST', body: { stream: true }, validateStatus: () => false },
+      });
+      await expect(rejected.callApi('Hello')).rejects.toThrow(
+        `HTTP call failed with status ${status}`,
+      );
+    },
+  );
+
+  it('preserves HTTP context for scheduler retries without exposing URL credentials', async () => {
+    const bodyError = new TypeError('terminated');
+    vi.spyOn(fetchModule, 'fetchWithRetries').mockResolvedValue(
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.error(bodyError);
+          },
+        }),
+        { status: 503, statusText: 'Service Unavailable' },
+      ),
+    );
+    const provider = new HttpProvider('https://example.com/stream?api_key=fixture-secret', {
+      config: { method: 'POST', body: { stream: true } },
+    });
+    const error = await provider.callApi('Hello').catch((error: Error) => error);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain('HTTP 503 Service Unavailable');
+    expect((error as Error).message).toContain('https://example.com/stream');
+    expect((error as Error).message).not.toContain('fixture-secret');
+    expect((error as Error).cause).toBe(bodyError);
+    expect(shouldRetry(0, error as Error, false, DEFAULT_RETRY_POLICY)).toBe(true);
+  });
 
   it('keeps retry backoff outside the per-attempt and body timeouts', async () => {
     vi.useFakeTimers();
