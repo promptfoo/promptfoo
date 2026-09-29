@@ -58,6 +58,99 @@ describe.each([AegisGrader, BeavertailsGrader, UnsafeBenchGrader])('%s safe cont
     );
   });
 
+  it.each([true, false])(
+    'forwards audio-only answers without remote grading, explicit=%s',
+    async (explicit) => {
+      if (!explicit) {
+        cliState.config = { redteam: {} };
+      }
+      const audioJudge = createMockProvider({
+        id: () => 'audio-judge',
+        getAudioInputFormat: () => 'openai',
+      });
+      vi.mocked(redteamProviderManager.getGradingProvider).mockResolvedValue(audioJudge);
+      const audio = { data: 'YmVuaWduIGZpeHR1cmU=', format: 'wav' };
+      const grade = { pass: true, score: 1, reason: 'Answered in audio' };
+      vi.mocked(matchesLlmRubric).mockResolvedValue(grade);
+      const result = await new Grader().getResult(
+        'Explain how to water basil.',
+        '',
+        { metadata: { purpose: 'Answer gardening questions', isSafe: true } },
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { providerResponse: { output: '', audio } },
+      );
+      expect(result.grade).toEqual(grade);
+      expect(matchesLlmRubric).toHaveBeenCalledWith(
+        expect.any(String),
+        '',
+        expect.objectContaining({ provider: audioJudge }),
+        undefined,
+        undefined,
+        { providerResponse: { output: '', images: undefined, audio } },
+      );
+      expect(vi.mocked(matchesLlmRubric).mock.calls[0][2]).toHaveProperty(
+        '__promptfooPreferRemote',
+        false,
+      );
+    },
+  );
+
+  it('reports unsupported audio grading instead of failing the target as empty', async () => {
+    await expect(
+      new Grader().getResult(
+        'Explain how to water basil.',
+        '',
+        { metadata: { purpose: 'Answer gardening questions', isSafe: true } },
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { providerResponse: { output: '', audio: { data: 'YmFzaWw=', format: 'wav' } } },
+      ),
+    ).rejects.toThrow('requires a configured grader that supports audio input');
+    expect(matchesLlmRubric).not.toHaveBeenCalled();
+  });
+
+  it('grades an available transcript when no audio bytes remain', async () => {
+    vi.mocked(matchesLlmRubric).mockResolvedValue({ pass: true, score: 1, reason: 'Answered' });
+    await new Grader().getResult(
+      'Explain how to water basil.',
+      '',
+      { metadata: { purpose: 'Answer gardening questions', isSafe: true } },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        providerResponse: { output: '', audio: { transcript: 'Water when the top soil is dry.' } },
+      },
+    );
+    expect(matchesLlmRubric).toHaveBeenCalledWith(
+      expect.any(String),
+      'Water when the top soil is dry.',
+      expect.objectContaining({ provider: judge }),
+    );
+  });
+
+  it('reports unsupported video-only responses as grading errors', async () => {
+    await expect(
+      new Grader().getResult(
+        'Show a basil plant.',
+        '',
+        { metadata: { purpose: 'Illustrate plants', isSafe: true } },
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { providerResponse: { output: '', video: { id: 'local-fixture' } } },
+      ),
+    ).rejects.toThrow('does not support video-only responses');
+    expect(matchesLlmRubric).not.toHaveBeenCalled();
+  });
+
   it('fails responses with neither text nor images', async () => {
     const result = await new Grader().getResult(
       'Draw basil.',
