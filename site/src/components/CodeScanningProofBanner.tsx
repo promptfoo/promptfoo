@@ -13,8 +13,7 @@ export default function ProofBannerSection() {
         <div className={styles.proofBannerContent}>
           <h3 className={styles.proofBannerTitle}>See it in action</h3>
           <p className={styles.proofBannerText}>
-            We tested the scanner against real CVEs in LangChain, Vanna.AI, and LlamaIndex. Read the
-            technical deep dive to see how it catches vulnerabilities that other tools miss.
+            See the scanner's results for CVEs in LangChain, Vanna.AI, and LlamaIndex.
           </p>
         </div>
         <Link
