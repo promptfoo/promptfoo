@@ -126,18 +126,18 @@ Azure provides access to OpenAI models as well as third-party models through Azu
 
 Azure AI Foundry provides access to models from multiple providers:
 
-| Provider             | Models                                                                                                                                                                                                                                                                                                                                                                            |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Anthropic Claude** | `claude-fable-5`, `claude-opus-5`, `claude-opus-4-8`, `claude-opus-4-7`, `claude-opus-4-6-20260205`, `claude-sonnet-5`, `claude-sonnet-4-6`, `claude-opus-4-5-20251101`, `claude-sonnet-4-5-20250929`, `claude-haiku-4-5-20251001`, `claude-3-5-sonnet-20241022`, `claude-3-5-haiku-20241022` — see [Using Claude Models](#using-claude-models) for deployment and config details |
-| **Meta Llama**       | `Llama-4-Scout-17B-16E-Instruct`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `Llama-3.3-70B-Instruct`, `Meta-Llama-3.1-405B-Instruct`, `Meta-Llama-3.1-70B-Instruct`, `Meta-Llama-3.1-8B-Instruct`                                                                                                                                                                                 |
-| **DeepSeek**         | `DeepSeek-R1` (reasoning), `DeepSeek-V3`, `DeepSeek-R1-Distill-Llama-70B`, `DeepSeek-R1-Distill-Qwen-32B`                                                                                                                                                                                                                                                                         |
-| **Mistral**          | `Mistral-Large-2411`, `Pixtral-Large-2411`, `Ministral-3B-2410`, `Mistral-Nemo-2407`                                                                                                                                                                                                                                                                                              |
-| **Cohere**           | `Cohere-command-a-03-2025`, `command-r-plus-08-2024`, `command-r-08-2024`                                                                                                                                                                                                                                                                                                         |
-| **Microsoft MAI**    | Image (Preview) via `azure:image`: `MAI-Image-2.6`, `MAI-Image-2.6-Flash`, `MAI-Image-2.5`, `MAI-Image-2.5-Flash`. Chat via `azure:chat`: `MAI-DS-R1` (deprecated), `MAI-Thinking-1` / `MAI-Code-1-Flash` (private preview) — see [Using Microsoft MAI Models](#using-microsoft-mai-models)                                                                                       |
-| **Microsoft Phi**    | `Phi-4`, `Phi-4-mini-instruct`, `Phi-4-reasoning`, `Phi-4-mini-reasoning`                                                                                                                                                                                                                                                                                                         |
-| **xAI Grok**         | `grok-3`, `grok-3-mini`, `grok-3-reasoning`, `grok-3-mini-reasoning`, `grok-2-vision-1212`                                                                                                                                                                                                                                                                                        |
-| **AI21**             | `AI21-Jamba-1.5-Large`, `AI21-Jamba-1.5-Mini`                                                                                                                                                                                                                                                                                                                                     |
-| **Core42**           | `JAIS-70b-chat`, `Falcon3-7B-Instruct`                                                                                                                                                                                                                                                                                                                                            |
+| Provider             | Models                                                                                                                                                                                                                                                                                      |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Anthropic Claude** | Opus, Sonnet, Haiku, Fable, and Mythos — see [Using Claude Models](#using-claude-models) for model IDs and deployment details                                                                                                                                                               |
+| **Meta Llama**       | `Llama-4-Scout-17B-16E-Instruct`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `Llama-3.3-70B-Instruct`, `Meta-Llama-3.1-405B-Instruct`, `Meta-Llama-3.1-70B-Instruct`, `Meta-Llama-3.1-8B-Instruct`                                                                                           |
+| **DeepSeek**         | `DeepSeek-R1` (reasoning), `DeepSeek-V3`, `DeepSeek-R1-Distill-Llama-70B`, `DeepSeek-R1-Distill-Qwen-32B`                                                                                                                                                                                   |
+| **Mistral**          | `Mistral-Large-2411`, `Pixtral-Large-2411`, `Ministral-3B-2410`, `Mistral-Nemo-2407`                                                                                                                                                                                                        |
+| **Cohere**           | `Cohere-command-a-03-2025`, `command-r-plus-08-2024`, `command-r-08-2024`                                                                                                                                                                                                                   |
+| **Microsoft MAI**    | Image (Preview) via `azure:image`: `MAI-Image-2.6`, `MAI-Image-2.6-Flash`, `MAI-Image-2.5`, `MAI-Image-2.5-Flash`. Chat via `azure:chat`: `MAI-DS-R1` (deprecated), `MAI-Thinking-1` / `MAI-Code-1-Flash` (private preview) — see [Using Microsoft MAI Models](#using-microsoft-mai-models) |
+| **Microsoft Phi**    | `Phi-4`, `Phi-4-mini-instruct`, `Phi-4-reasoning`, `Phi-4-mini-reasoning`                                                                                                                                                                                                                   |
+| **xAI Grok**         | `grok-3`, `grok-3-mini`, `grok-3-reasoning`, `grok-3-mini-reasoning`, `grok-2-vision-1212`                                                                                                                                                                                                  |
+| **AI21**             | `AI21-Jamba-1.5-Large`, `AI21-Jamba-1.5-Mini`                                                                                                                                                                                                                                               |
+| **Core42**           | `JAIS-70b-chat`, `Falcon3-7B-Instruct`                                                                                                                                                                                                                                                      |
 
 For the complete list of models with pricing, see the [Microsoft Foundry model catalog](https://azure.microsoft.com/en-us/products/ai-foundry).
 
@@ -659,7 +659,7 @@ When client credentials are provided, promptfoo uses the `@azure/identity` libra
 
 If neither an API key nor client credentials are provided, promptfoo falls back to `AzureCliCredential` (i.e., your `az login` session) — see [Option 3](#option-3-azure-cli-authentication).
 
-Each provider instance shares authentication work across concurrent requests and refreshes bearer tokens within five minutes of expiry. A failed authentication or refresh fails the waiting requests; a later request retries. Successfully constructed credentials are reused. Refresh failures do not fall back to an older token. Tokens without expiry information retain the existing behavior of no automatic refresh. API keys take precedence and require no token refresh.
+Bearer tokens with an expiry time are refreshed within five minutes of expiry. If both an API key and credentials are configured, the API key takes precedence.
 
 The `azureAuthorityHost` defaults to `https://login.microsoftonline.com` if not specified. The `azureTokenScope` defaults to `https://cognitiveservices.azure.com/.default`, the scope required to authenticate with Azure Cognitive Services. You typically don't need to change these unless you're working with a sovereign cloud (e.g., Azure Government or Azure China).
 
@@ -816,7 +816,7 @@ These properties can be set under the provider `config` key:
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | o1                    | Set to `true` if your Azure deployment uses an o1 model. **(Deprecated, use `isReasoningModel` instead)**                                                                                                             |
 | isReasoningModel      | Treat the deployment as reasoning-capable. Set to `true` for custom deployment names; recognizable reasoning model names are auto-detected.                                                                           |
-| isClaudeOpus47OrLater | Set to `true` for a custom-named Claude Opus 4.7 or 4.8 chat deployment so unsupported sampling parameters are omitted.                                                                                               |
+| isClaudeOpus47OrLater | Set to `true` to omit unsupported sampling parameters for a custom-named Claude deployment. Prefer `modelName` for model-specific compatibility and cost estimates.                                                   |
 | modelName             | Underlying Claude model ID for `azure:chat` compatibility and cost estimates when your deployment uses a custom alias. The deployment name is still sent to Azure.                                                    |
 | max_completion_tokens | Maximum tokens for `azure:chat` reasoning models. Use `max_output_tokens` for `azure:responses`; `azure:completion` does not support it.                                                                              |
 | max_output_tokens     | Maximum output tokens for `azure:responses`, including reasoning deployments.                                                                                                                                         |
@@ -978,11 +978,13 @@ Azure AI Foundry exposes Claude through two endpoint families. Pick the one that
 
 ### Option 1 (recommended): Anthropic Messages endpoint
 
-Per Anthropic's own Foundry integration, every Claude deployment publishes a native Messages endpoint at `https://<resource>.services.ai.azure.com/anthropic/v1/messages`. Point promptfoo's `anthropic:messages` provider at that base URL and you get the full Anthropic provider feature set — adaptive thinking, `xhigh` effort, automatic sampling-parameter suppression for Fable 5 and Opus 4.7/4.8 (`temperature`/`top_p`/`top_k`), and Anthropic list pricing (note that Bedrock regional/geo endpoints and non-global Vertex regions carry a 10% premium for Claude 5 models):
+Use `anthropic:messages` with Foundry's native [Messages endpoint](https://platform.claude.com/docs/en/build-with-claude/claude-in-microsoft-foundry) for adaptive thinking,
+effort controls, and automatic handling of unsupported sampling parameters. Set
+`apiBaseUrl` to your resource's `/anthropic` prefix:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: anthropic:messages:claude-opus-4-8
+  - id: anthropic:messages:claude-opus-5
     config:
       apiBaseUrl: 'https://<resource>.services.ai.azure.com/anthropic'
       apiKey: '{{env.AZURE_FOUNDRY_API_KEY}}'
@@ -993,18 +995,20 @@ Promptfoo appends `/v1/messages` to the base URL automatically, so set `apiBaseU
 
 ### Option 2: Azure OpenAI-compatible chat endpoint
 
-The same deployment also accepts OpenAI-style chat completion requests. Use this if you want a single provider type across Azure Claude and Azure OpenAI deployments:
+For deployments that expose OpenAI-style chat completions, use `azure:chat`:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: azure:chat:claude-opus-4-7
+  - id: azure:chat:claude-opus-5
     config:
       apiHost: 'your-deployment.services.ai.azure.com'
       apiVersion: '2025-04-01-preview'
       max_tokens: 4096
 ```
 
-Fable and Mythos 5.1, Fable 5, Opus 5.5, and Opus 4.7/4.8 deployments whose names contain the model identifier automatically omit unsupported sampling parameters. Fable and Mythos 5.1 and Opus 5.5 also omit forced `tool_choice` values; use `auto` or `none` instead.
+For Claude 5 and Opus 4.7/4.8 deployments with recognizable model names, promptfoo
+omits unsupported `temperature`, `top_p`, and `top_k` values. Fable/Mythos 5.1 and
+Opus 5.5 and Sonnet 5.5 also omit forced `tool_choice` values; use `auto` or `none` instead.
 
 If your Azure deployment uses a custom alias, set `modelName` to the underlying Claude model ID. Promptfoo uses it for request compatibility and cost estimates while continuing to send the deployment name to Azure:
 
@@ -1030,6 +1034,7 @@ Available Claude deployments on Azure AI Foundry:
 | `claude-mythos-5-1`          | Claude Mythos 5.1 (provider approval required) |
 | `claude-fable-5`             | Claude Fable 5                                 |
 | `claude-opus-5-5`            | Claude Opus 5.5                                |
+| `claude-sonnet-5-5`          | Claude Sonnet 5.5                              |
 | `claude-opus-5`              | Claude Opus 5                                  |
 | `claude-opus-4-8`            | Claude Opus 4.8                                |
 | `claude-opus-4-7`            | Claude Opus 4.7                                |
@@ -1057,13 +1062,13 @@ command has no flag for it yet, so create the deployment via the REST API
 description: Azure Claude evaluation
 
 providers:
-  - id: anthropic:messages:claude-opus-4-7
-    label: claude-opus-4-7
+  - id: anthropic:messages:claude-opus-5
+    label: claude-opus-5
     config:
       apiBaseUrl: 'https://<resource>.services.ai.azure.com/anthropic'
       apiKey: '{{env.AZURE_FOUNDRY_API_KEY}}'
-      max_tokens: 1024
-      effort: xhigh
+      max_tokens: 4096
+      effort: medium
 
 prompts:
   - 'Explain {{concept}} in simple terms.'
@@ -1217,13 +1222,7 @@ The following setup and examples are archival references for pre-retirement conf
 
 1. An Azure OpenAI deployment
 2. An assistant created in the Azure web UI
-3. The `@azure/openai-assistants` package:
-
-```sh
-npm i @azure/openai-assistants
-```
-
-4. A provider configuration referencing the assistant ID:
+3. A provider configuration referencing the assistant ID:
 
 ```yaml
 providers:
@@ -1329,190 +1328,46 @@ The [legacy Assistants evaluation guide](/docs/guides/evaluate-openai-assistants
 
 ## Azure AI Foundry Agents
 
-Azure AI Foundry Agents let promptfoo run an existing Foundry agent through the Azure AI Projects SDK (`@azure/ai-projects`) and the v2 agent runtime. Promptfoo resolves the agent from your Azure AI Foundry project, then calls the Responses API with an `agent_reference`.
-
-Each provider instance reuses its project client, credential, and agent lookup across concurrent requests. Failed client initialization or agent lookup can retry on a later request. Each invocation gets its own OpenAI Responses client. Foundry retains the SDK's `DefaultAzureCredential` chain, including environment, workload identity, managed identity, and developer credentials.
-
-### Key Differences from Standard Azure Assistants
-
-| Feature             | Azure Assistant                              | Azure Foundry Agent                                                                       |
-| ------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| **API Type**        | Direct HTTP calls to Azure OpenAI API        | Azure AI Projects SDK (`@azure/ai-projects`) + Responses API agent runtime                |
-| **Authentication**  | API key or Azure credentials                 | `DefaultAzureCredential` (Azure CLI, environment variables, managed identity)             |
-| **Endpoint**        | Azure OpenAI endpoint (`*.openai.azure.com`) | Azure AI Project URL (`*.services.ai.azure.com/api/projects/*`)                           |
-| **Provider Format** | `azure:assistant:<assistant_id>`             | `azure:foundry-agent:<agent-name-or-id>`                                                  |
-| **Execution Model** | Threads/messages/runs                        | `responses.create(..., { body: { agent_reference: { name, type: "agent_reference" } } })` |
+Use `azure:foundry-agent:<agent-name>` to eval an existing Foundry agent through the Responses API. You need the agent's name and its project endpoint.
 
 ### Setup
 
-1. Install the required Azure SDK packages:
+Install the Azure SDK packages and sign in:
 
 ```bash
 npm install @azure/ai-projects @azure/identity
+az login
 ```
 
-2. Authenticate using one of these methods:
-   - **Azure CLI** (recommended for local development): Run `az login`
-   - **Environment variables**: Set Azure service principal credentials
-   - **Managed Identity**: Automatic in Azure-hosted environments
-   - **Service Principal**: Configure via environment variables
+The provider uses `DefaultAzureCredential`, which also supports service principals, workload identity, and managed identity. Azure OpenAI API keys do not authenticate Foundry agents.
 
-3. Set your Azure AI Project URL:
+Copy the project endpoint from your Foundry project overview:
 
 ```bash
-export AZURE_AI_PROJECT_URL="https://your-project.services.ai.azure.com/api/projects/your-project-id"
+export AZURE_AI_PROJECT_URL="https://your-resource.services.ai.azure.com/api/projects/your-project"
 ```
-
-Alternatively, you can provide the `projectUrl` in your configuration file.
 
 ### Basic Configuration
 
-The provider uses the `azure:foundry-agent:<agent-name-or-id>` format. Agent names are preferred. Legacy IDs still work as a fallback lookup if the agent exists in the project.
+Replace `my-foundry-agent` with your agent's name:
 
 ```yaml
 providers:
   - id: azure:foundry-agent:my-foundry-agent
-    config:
-      projectUrl: 'https://your-project.services.ai.azure.com/api/projects/your-project-id'
-      temperature: 0.7
-      max_tokens: 150
-      instructions: 'You are a helpful assistant that provides clear and concise answers.'
 ```
 
-### Configuration Options
-
-This provider references an existing Foundry agent. Some settings can still be sent per request through the Responses API, while agent-definition settings need to be configured on the agent itself.
-
-Supported per-request settings:
-
-| Parameter               | Description                                                                         |
-| ----------------------- | ----------------------------------------------------------------------------------- |
-| `projectUrl`            | Azure AI Project URL (required, can also use `AZURE_AI_PROJECT_URL` env var)        |
-| `instructions`          | Additional per-request instructions                                                 |
-| `temperature`           | Controls randomness                                                                 |
-| `top_p`                 | Nucleus sampling parameter                                                          |
-| `max_tokens`            | Mapped to `max_output_tokens` for the Responses API                                 |
-| `max_completion_tokens` | Also mapped to `max_output_tokens`                                                  |
-| `response_format`       | Output format (`json_object` or `json_schema`)                                      |
-| `tools`                 | Tool definitions loaded into the request                                            |
-| `tool_choice`           | Tool selection strategy                                                             |
-| `functionToolCallbacks` | Callback implementations for `function_call` outputs                                |
-| `modelName`             | Optional per-request model override                                                 |
-| `reasoning_effort`      | Sent as `reasoning.effort`                                                          |
-| `verbosity`             | Passed through to the Responses text config                                         |
-| `metadata`              | Request metadata                                                                    |
-| `passthrough`           | Additional raw Responses API fields                                                 |
-| `maxPollTimeMs`         | Maximum time to keep resolving callback loops before timing out (default: `300000`) |
-
-Ignored per-request settings:
-
-- `tool_resources`
-- `frequency_penalty`
-- `presence_penalty`
-- `seed`
-- `stop`
-- `timeoutMs`
-- `retryOptions`
-
-Configure those on the Foundry agent definition itself instead of on the eval request.
-
-### Response continuity and accounting
-
-The provider resends instructions, tools, response format, model overrides, and generation settings on each tool turn. A forced `tool_choice` (`required` or a named function) applies to the initial request; subsequent turns use `auto` so the agent can return a final answer. An `allowed_tools` restriction remains in place while its mode changes to `auto`.
-
-By default, tool outputs continue the latest response using `previous_response_id`. If `passthrough.conversation` is configured, every turn uses that conversation instead. Do not combine `conversation` and `previous_response_id`. Requests using either explicit linkage field bypass promptfoo's response cache so repeated prompts still reach the conversation.
-
-Foundry supports [stateless responses](https://learn.microsoft.com/en-us/azure/foundry/agents/concepts/runtime-components#generate-a-response-without-storing), but this provider does not yet carry stateless tool history. `passthrough.store: false` works for a single request without local callbacks; combining it with `functionToolCallbacks` returns a configuration error before Azure access. Streaming and background requests are also unsupported by this provider.
-
-Failed, cancelled, incomplete, or still-pending Responses results return an error, preserving any available partial output, raw response, and usage. A completed refusal remains distinguishable through `isRefusal: true`. Partial text never clears a service error.
-
-Usage and cost cover every model turn in the invocation, including work completed before a later timeout or failure. `numRequests` counts SDK request attempts within that provider invocation, excluding local callbacks and retries internal to the SDK. Separate scheduler retries restart the provider invocation; their earlier usage is not aggregated here. Cached and reasoning tokens remain subsets of the total. Cost is calculated separately for each response's model. If usage or pricing is unavailable, metadata includes `usageIncomplete` or `costIncomplete`; incomplete cost is omitted from `cost`, with the known subtotal in `metadata.knownCost`.
-
-### Function Tools with Azure Foundry Agents
-
-Promptfoo can handle Responses API `function_call` outputs for Foundry agents. If every requested function has a configured callback, promptfoo executes the callbacks locally and sends `function_call_output` items back with `previous_response_id`.
-
-You can define callbacks at the provider level or override them per prompt:
-
-```yaml
-providers:
-  - id: azure:foundry-agent:my-foundry-agent
-    config:
-      projectUrl: 'https://your-project.services.ai.azure.com/api/projects/your-project-id'
-      tools: file://tools/weather-function.json
-      functionToolCallbacks:
-        get_current_weather: file://callbacks/weather.js:getCurrentWeather
-        get_forecast: |
-          async function(args) {
-            try {
-              const parsedArgs = JSON.parse(args);
-              const location = parsedArgs.location;
-              const days = parsedArgs.days || 7;
-
-              // Your implementation here
-              return JSON.stringify({
-                location,
-                forecast: [
-                  { day: 'Monday', temperature: 72, condition: 'sunny' },
-                  { day: 'Tuesday', temperature: 68, condition: 'cloudy' }
-                ]
-              });
-            } catch (error) {
-              return JSON.stringify({ error: String(error) });
-            }
-          }
-```
-
-The function callbacks receive two parameters:
-
-- `args`: JSON-encoded function arguments
-- `context`: `{ threadId, runId, assistantId, provider }`
-
-If a callback is missing, promptfoo returns the unresolved function call in the model output instead of trying to fake a tool result.
-
-### Agent-Defined Tools and Resources
-
-Foundry agent tools such as file search and vector stores should be configured on the agent in Azure AI Foundry. The v2 runtime does not apply `tool_resources` from the eval request.
-
-```yaml
-providers:
-  - id: azure:foundry-agent:my-foundry-agent
-    config:
-      projectUrl: 'https://your-project.services.ai.azure.com/api/projects/your-project-id'
-      tools:
-        - type: file_search
-      temperature: 1
-      top_p: 1
-```
-
-In that example, the request tells the runtime that file search is available, but the actual vector store bindings still need to live on the Foundry agent definition.
-
-### Environment Variables
-
-| Variable               | Description                                                    |
-| ---------------------- | -------------------------------------------------------------- |
-| `AZURE_AI_PROJECT_URL` | Your Azure AI Project URL (can be overridden in config)        |
-| `AZURE_CLIENT_ID`      | Azure service principal client ID (for service principal auth) |
-| `AZURE_CLIENT_SECRET`  | Azure service principal secret (for service principal auth)    |
-| `AZURE_TENANT_ID`      | Azure tenant ID (for service principal auth)                   |
+To set the endpoint in YAML, use `config.projectUrl`; it overrides `AZURE_AI_PROJECT_URL`. Agent names are preferred, though legacy IDs can be looked up within the project.
 
 ### Complete Example
 
-Here's a complete example configuration:
+Save this as `promptfooconfig.yaml` after setting the project endpoint:
 
-```yaml
-description: 'Azure Foundry Agent evaluation'
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - '{{question}}'
 
 providers:
   - id: azure:foundry-agent:my-foundry-agent
-    config:
-      projectUrl: 'https://my-project.services.ai.azure.com/api/projects/my-project-id'
-      temperature: 0.7
-      max_tokens: 150
-      instructions: 'You are a helpful assistant that provides clear and concise answers.'
-
-prompts:
-  - '{{question}}'
 
 tests:
   - vars:
@@ -1520,60 +1375,139 @@ tests:
     assert:
       - type: contains
         value: 'Paris'
-
-  - vars:
-      question: 'Explain what photosynthesis is in simple terms.'
-    assert:
-      - type: contains
-        value: 'plants'
-      - type: contains
-        value: 'sunlight'
 ```
 
-### Error Handling
+Run `npx promptfoo@latest eval`.
 
-The Azure Foundry Agent provider includes comprehensive error handling:
+### Configuration Options
 
-- **Content Filter Detection**: Automatically detects and reports content filtering events with guardrails metadata
-- **Rate Limit Handling**: Per-window 429s (`rate_limit_exceeded`) are retried with `Retry-After`-based backoff plus randomized jitter. The error message is `Rate limit exceeded: HTTP 429 Too Many Requests (code: rate_limit_exceeded) [retry after Xs]`.
-- **Hard-Quota Fail-Fast**: Billing and contract-level codes (`insufficient_quota`, `billing_hard_limit_reached`, `billing_not_active`, `access_terminated`, `quota_exceeded`) skip retries entirely — retrying these only amplifies load against an exhausted account. The error message is `Quota exceeded: HTTP 429 Too Many Requests (code: insufficient_quota). Retries will not help — check your billing or daily quota.` If the server also sets a small `Retry-After` (≤ 1h), the error is treated as a recoverable rate limit instead, since billing servers do not hint at recovery time.
-- **Service Error Detection**: Detects transient service errors (500, 502, 503, 504)
-- **Timeout Management**: Configurable polling timeout via `maxPollTimeMs`
+Set these under the provider's `config`:
 
-### Caching
+| Parameter                             | Description                                                                          |
+| ------------------------------------- | ------------------------------------------------------------------------------------ |
+| `projectUrl`                          | Project endpoint; overrides `AZURE_AI_PROJECT_URL`                                   |
+| `instructions`                        | Per-request instructions                                                             |
+| `temperature`, `top_p`                | Sampling settings, if supported by the model                                         |
+| `max_tokens`, `max_completion_tokens` | Responses API `max_output_tokens`                                                    |
+| `response_format`                     | `json_object` or `json_schema` output                                                |
+| `tools`, `tool_choice`                | Tool definitions and selection                                                       |
+| `functionToolCallbacks`               | Local callbacks for function calls                                                   |
+| `modelName`                           | Model override                                                                       |
+| `reasoning_effort`                    | Responses API `reasoning.effort`                                                     |
+| `verbosity`                           | Responses text verbosity                                                             |
+| `metadata`                            | Request metadata                                                                     |
+| `passthrough`                         | Additional Responses API fields                                                      |
+| `maxPollTimeMs`                       | Tool-loop time budget after the first response (default: `300000` ms)                |
+| `timeoutMs`                           | Deadline for each request attempt (default: `600000` ms)                             |
+| `retryOptions.maxRetries`             | Non-negative integer retry count (default: `2`); other retry options are unsupported |
+| `maxToolIterations`                   | Maximum callback batches (default: `8`; range: `1`–`64`)                             |
 
-The provider supports caching to improve performance and reduce API calls. Results are cached based on:
+The runtime ignores `tool_resources`, `frequency_penalty`, `presence_penalty`, `seed`, and `stop` on eval requests. Configure these on the agent in Foundry where supported.
 
-- Request configuration (instructions, model override, temperature, etc.)
-- Tool definitions
-- Input prompt
+### Function Tools with Azure Foundry Agents
 
-Caching is enabled by default. To explicitly configure it in your configuration:
+Configure callbacks for functions defined on your agent or in `tools`. Callbacks receive JSON-encoded arguments and a context object:
 
 ```yaml
-evaluateOptions:
-  cache: true
-
 providers:
   - id: azure:foundry-agent:my-foundry-agent
     config:
-      projectUrl: 'https://your-project.services.ai.azure.com/api/projects/your-project-id'
+      functionToolCallbacks:
+        get_current_weather: |
+          (args, context) => {
+            const { location } = JSON.parse(args);
+            return JSON.stringify({ location, temperature: 72, unit: 'F' });
+          }
 ```
+
+This callback returns a fixed value for testing. You can also load a callback from a file, such as `file://callbacks/weather.js:getCurrentWeather`, or override callbacks per prompt.
+
+Context contains `{ threadId, runId, assistantId, provider, abortSignal? }`. If any function in a batch has no callback, Promptfoo returns the unresolved calls without running that batch.
+
+Settings carry over to each tool turn. A forced `tool_choice` applies to the first request, then changes to `auto` so the agent can answer. Any `allowed_tools` restriction remains in place.
+
+### Agent-Defined Tools and Resources
+
+Configure file search, vector stores, and their bindings on the agent in Foundry. Passing `tools: [{ type: file_search }]` declares the tool but does not attach a vector store. The runtime ignores request-level `tool_resources`.
+
+### Execution Limits and Cancellation
+
+`maxToolIterations` limits callback batches; parallel calls in one response count as one batch. The final answer after the last allowed batch is still returned.
+
+`maxPollTimeMs` starts after the first response and is checked between tool turns. It does not interrupt a request or callback already running. A final answer can arrive after this budget.
+
+`timeoutMs` applies to each request attempt, including authentication and reading the response body. It excludes client setup, agent lookup, and callbacks. Retries can make the total wait longer.
+
+<details>
+<summary>Valid limits and JavaScript cancellation</summary>
+
+`timeoutMs` must be a positive integer no greater than `2147483647`. `maxPollTimeMs` must be finite and non-negative. `maxToolIterations` rounds down values in the range `1`–`64`; missing or invalid values use `8`.
+
+JavaScript callers can pass `{ abortSignal: controller.signal }` as the third `callApi` argument. Cancellation stops waiting, aborts the request, and prevents further tool turns. Callbacks receive `context.abortSignal`; pass it to `fetch` or other cancellable work. Shared setup and operations that ignore the signal can continue after cancellation.
+
+</details>
+
+### Error Handling
+
+Failed, cancelled, incomplete, or pending responses return an error with any available partial output and usage. Refusals have `isRefusal: true`; content filtering is reported in guardrails metadata.
+
+Promptfoo retries connection errors, timeouts, and HTTP 408/409/429/5xx responses, subject to server retry hints. It honors delays up to 60 seconds; a longer delay returns the error without provider or scheduler retries. Without a valid delay hint, retries use exponential backoff with jitter.
+
+Quota errors (`metadata.rateLimitKind: 'quota'`) are not retried. Check billing or quota before running the eval again.
+
+<details>
+<summary>Retry and quota classification</summary>
+
+Delay hints come from `retry-after-ms` or `Retry-After` (integer seconds or an HTTP date). `x-should-retry` can allow or suppress retries. A retry veto or delay over 60 seconds sets `metadata.rateLimitRetryable: false` so the scheduler does not retry or delay queued calls.
+
+Billing codes such as `credit_balance_exhausted`, `billing_hard_limit_reached`, `billing_not_active`, and `access_terminated` always remain quota errors. `insufficient_quota` and `quota_exceeded` can be treated as recoverable rate limits when a retry or reset hint indicates recovery within one hour. The 60-second retry-delay limit still applies.
+
+</details>
+
+### Response continuity and accounting
+
+<details>
+<summary>Conversations and response storage</summary>
+
+Tool outputs continue the latest response using `previous_response_id`. With `passthrough.conversation`, every turn uses that conversation instead. Do not set both `conversation` and `previous_response_id`.
+
+`passthrough.store: false` supports a single request without local callbacks. It cannot be combined with `functionToolCallbacks` because this provider does not carry [stateless tool history](https://learn.microsoft.com/en-us/azure/foundry/agents/concepts/runtime-components#generate-a-response-without-storing). Streaming and background requests are unsupported.
+
+</details>
+
+<details>
+<summary>Token usage and cost</summary>
+
+Usage and cost include all model turns in a provider call, including turns completed before a later error. `numRequests` counts these turns; `metadata.transportRetries` counts additional request attempts. Separate scheduler retries start new provider calls and do not add earlier usage to these totals.
+
+After a retry, totals are marked incomplete because Azure may not report usage from failed attempts. Missing usage or pricing also sets `metadata.usageIncomplete` or `metadata.costIncomplete`. When cost is incomplete, `cost` is omitted and `metadata.knownCost` holds the known subtotal. Cost uses each response's model; cached and reasoning tokens are subsets of total usage.
+
+</details>
+
+### Caching
+
+Responses are cached by project, agent, request settings, and prompt. Calls with local callbacks, an explicit `maxPollTimeMs`, or conversation linkage bypass the cache. Use `--no-cache` to force fresh responses during testing.
+
+### Environment Variables
+
+| Variable               | Description                                         |
+| ---------------------- | --------------------------------------------------- |
+| `AZURE_AI_PROJECT_URL` | Project endpoint; overridden by `config.projectUrl` |
+| `AZURE_CLIENT_ID`      | Service principal client ID                         |
+| `AZURE_CLIENT_SECRET`  | Service principal secret                            |
+| `AZURE_TENANT_ID`      | Azure tenant ID                                     |
+
+### Key Differences from Standard Azure Assistants
+
+Foundry uses a project endpoint, agent name, and Azure credentials. Azure OpenAI assistant IDs and API keys belong to the retired Assistants API and cannot be substituted directly.
 
 ### When to Use Azure Foundry Agents
 
-Use Azure Foundry Agents when:
-
-- You're working within Azure AI Foundry projects
-- You prefer native Azure SDK authentication (`DefaultAzureCredential`)
-- You're using managed identities or service principals for authentication
-- You want to leverage Azure AI Projects features
-
-Azure OpenAI Assistants is retired. Existing Azure OpenAI resources and API keys do not restore that API; migrate to a Foundry agent and configure its project URL and agent name.
+Use this provider to test an agent already configured in Foundry. To call a model deployment directly, choose an [Azure chat or Responses provider](#provider-types).
 
 ### Example Repository
 
-For complete working examples, check out the [Azure Foundry Agent example directory](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/foundry-agent).
+The [Foundry example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/foundry-agent) includes a starter config.
 
 ## Video Generation (Sora)
 
