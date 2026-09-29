@@ -23,13 +23,9 @@ describe('getRunnableAssertionValueError', () => {
       );
     });
 
-    it('rejects numeric 0 because runtime treats it as an absent contains value', () => {
-      expect(getRunnableAssertionValueError(make({ type: 'contains', value: 0 }))).toMatch(
-        /Enter an expected value/,
-      );
-      expect(getRunnableAssertionValueError(make({ type: 'icontains', value: 0 }))).toMatch(
-        /Enter an expected value/,
-      );
+    it('accepts numeric 0 because runtime supports it as a contains value', () => {
+      expect(getRunnableAssertionValueError(make({ type: 'contains', value: 0 }))).toBeUndefined();
+      expect(getRunnableAssertionValueError(make({ type: 'icontains', value: 0 }))).toBeUndefined();
     });
 
     it('accepts non-blank strings and finite numbers', () => {
@@ -133,21 +129,21 @@ describe('getRunnableAssertionValueError', () => {
     });
   });
 
-  it.each([
-    'video-rubric',
-    'not-video-rubric',
-  ] as const)('validates normalized thresholds for %s', (type) => {
-    expect(
-      getRunnableAssertionValueError(
-        make({ type, value: 'The video matches the rubric', threshold: 1.1 }),
-      ),
-    ).toBe('Enter a score threshold from 0 to 1.');
-    expect(
-      getRunnableAssertionValueError(
-        make({ type, value: 'The video matches the rubric', threshold: 0.8 }),
-      ),
-    ).toBeUndefined();
-  });
+  it.each(['video-rubric', 'not-video-rubric'] as const)(
+    'validates normalized thresholds for %s',
+    (type) => {
+      expect(
+        getRunnableAssertionValueError(
+          make({ type, value: 'The video matches the rubric', threshold: 1.1 }),
+        ),
+      ).toBe('Enter a score threshold from 0 to 1.');
+      expect(
+        getRunnableAssertionValueError(
+          make({ type, value: 'The video matches the rubric', threshold: 0.8 }),
+        ),
+      ).toBeUndefined();
+    },
+  );
 
   describe('LLM-graded assertions', () => {
     it('requires criteria for select-best', () => {

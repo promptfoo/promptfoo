@@ -2,7 +2,7 @@ import type { Buffer } from 'node:buffer';
 
 import type { BlobRef } from '../contracts/blobs';
 
-export type { BlobRef } from '../contracts/blobs';
+export type { BlobRef };
 
 export interface BlobMetadata {
   mimeType: string;
@@ -26,6 +26,8 @@ export interface BlobStorageProvider {
   readonly providerId: string;
   store(data: Buffer, mimeType: string): Promise<BlobStoreResult>;
   getByHash(hash: string): Promise<StoredBlob>;
+  /** Optional capability; must reject oversized reads without unbounded allocation. */
+  getByHashBounded?(hash: string, maxBytes: number): Promise<StoredBlob>;
   exists(hash: string): Promise<boolean>;
   deleteByHash(hash: string): Promise<void>;
   getUrl(hash: string, expiresInSeconds?: number): Promise<string | null>;

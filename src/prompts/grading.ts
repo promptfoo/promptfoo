@@ -186,22 +186,8 @@ export const DEFAULT_WEB_SEARCH_PROMPT = JSON.stringify([
   },
 ]);
 
-/**
- * Default prompt for video grading using multimodal LLMs.
- *
- * The video content is injected by the video grading provider as a multimodal part.
- * The rubric is provided as text.
- */
-export const DEFAULT_VIDEO_GRADING_PROMPT = dedent`You are grading a generated video according to a user-specified rubric. Analyze the video content carefully and evaluate whether it meets the criteria in the rubric.
-
-If the statement in the rubric is true, then the video passes the test.
-
-Respond with a JSON object with this structure: {reason: string, pass: boolean, score: number}
-
-Where:
-- reason: A detailed explanation of your assessment
-- pass: true if the video meets the rubric criteria, false otherwise
-- score: A value between 0.0 and 1.0 indicating how well the video meets the criteria
+export const DEFAULT_VIDEO_GRADING_PROMPT = dedent`Grade the attached video against the rubric below.
+Return one JSON object with a boolean pass, a score from 0 to 1, and a reason describing the visible evidence.
 
 Rubric: {{ rubric }}`;
 

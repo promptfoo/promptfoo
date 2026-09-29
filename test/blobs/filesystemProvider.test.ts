@@ -21,6 +21,18 @@ describe('FilesystemBlobStorageProvider', () => {
     expect(stored.data.toString('utf8')).toBe('blob-data');
   });
 
+  it('reads managed videos within a byte budget', async () => {
+    tempDir = createTempDir('promptfoo-blobs-');
+    const provider = new FilesystemBlobStorageProvider({ basePath: tempDir });
+    const data = Buffer.from('video fixture');
+    const { ref } = await provider.store(data, 'video/mp4');
+    await expect(provider.getByHashBounded(ref.hash, data.length)).resolves.toMatchObject({ data });
+    await expect(provider.getByHashBounded(ref.hash, data.length - 1)).rejects.toMatchObject({
+      code: 'too-large',
+    });
+    await expect(provider.getByHash(ref.hash)).resolves.toMatchObject({ data });
+  });
+
   it('deduplicates identical blobs', async () => {
     tempDir = createTempDir('promptfoo-blobs-');
     const provider = new FilesystemBlobStorageProvider({ basePath: tempDir });

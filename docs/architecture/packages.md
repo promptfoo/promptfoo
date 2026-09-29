@@ -82,6 +82,14 @@ dependency-light state implementation for embedded evaluators and focused tests.
 resume append behavior. The evaluator orchestrates evaluation behavior without
 importing the concrete `Eval` model.
 
+`src/util/envFile.ts` owns plain `.env` file loading as a Node filesystem adapter.
+The imports from `src/envars.ts` and `src/server/server.ts` replace external
+`dotenv` calls at the same startup points; the edge baseline records these two
+internal dependencies. The loader imports only Node built-ins, so early loading
+does not initialize the logger, configuration state, or database. Keeping it
+separate from `setupEnv` preserves that initialization order without duplicating
+the parser across callers.
+
 The checker also resolves cross-layer source aliases such as `@promptfoo/*`.
 The browser-only `@app/*` alias stays inside the `app` layer. Alias spelling
 does not exempt a browser import from the same layer and path checks as a
@@ -104,6 +112,13 @@ toward a directed acyclic graph without regressing:
 After intentionally reducing or otherwise reviewing cross-layer coupling, run
 `npm run architecture:baseline` and include the baseline change in review. Do
 not refresh the baseline merely to make a newly introduced dependency pass.
+
+Video grading uses the existing rubric handler and storage adapters. Its four reviewed
+adapter imports are recorded in the baseline: the core rubric calls the Node video
+resolver; that resolver calls the existing blob API; and the blob API and filesystem
+adapter share the Node bounded-read error and reader. Custom storage providers must
+implement the optional bounded-read capability for video grading. Other reads keep
+their existing behavior, and bounded reads never fall back to an unbounded adapter.
 
 ## Browser Import Ratchet
 
@@ -128,3 +143,7 @@ npm run deps:ownership
 
 The report is intentionally descriptive for now. It gives us the evidence needed
 to move dependencies into future packages without guessing at ownership.
+
+It includes direct, optional, and peer dependency declarations. Peers marked
+optional in `peerDependenciesMeta` appear as `optional-peer`; other peers appear
+as `peer`. These labels describe the package contract, not what is installed.

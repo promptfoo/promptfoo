@@ -5,12 +5,14 @@
  * async invoke API. Videos can be 5 or 9 seconds with various aspect ratios.
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
+
 import { storeBlob } from '../../blobs';
 import logger from '../../logger';
 import { ellipsize } from '../../util/text';
 import { sleep } from '../../util/time';
 import { AwsBedrockGenericProvider } from './base';
-import { detectImageFormat, getImageMimeType, loadImageData } from './video-utils';
 
 import type { BlobRef } from '../../blobs';
 import type { EnvOverrides } from '../../types/env';
@@ -63,10 +65,41 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
   }
 
   /**
+   * Load image data from file:// path or return as-is if base64
+   */
+  private loadImageData(imagePath: string): { data?: string; error?: string } {
+    if (imagePath.startsWith('file://')) {
+      const filePath = imagePath.slice(7);
+      // Resolve to absolute path and validate no path traversal
+      const resolvedPath = path.resolve(filePath);
+      if (filePath.includes('..') && resolvedPath !== path.resolve(path.normalize(filePath))) {
+        return { error: `Invalid image path (path traversal detected): ${filePath}` };
+      }
+      if (!fs.existsSync(resolvedPath)) {
+        return { error: `Image file not found: ${resolvedPath}` };
+      }
+      return { data: fs.readFileSync(resolvedPath).toString('base64') };
+    }
+    // Assume it's already base64
+    return { data: imagePath };
+  }
+
+  /**
+   * Detect image format from path or data
+   */
+  private detectImageFormat(imagePath: string): 'image/jpeg' | 'image/png' {
+    const lowerPath = imagePath.toLowerCase();
+    if (lowerPath.includes('.png') || lowerPath.startsWith('ivborw')) {
+      return 'image/png';
+    }
+    return 'image/jpeg';
+  }
+
+  /**
    * Build a keyframe from image path
    */
   private buildKeyframe(imagePath: string): { keyframe?: LumaRayKeyframe; error?: string } {
-    const { data, error } = loadImageData(imagePath);
+    const { data, error } = this.loadImageData(imagePath);
     if (error || !data) {
       return { error: error || 'Failed to load image' };
     }
@@ -76,7 +109,7 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
         type: 'image',
         source: {
           type: 'base64',
-          media_type: getImageMimeType(detectImageFormat(imagePath)),
+          media_type: this.detectImageFormat(imagePath),
           data,
         },
       },
@@ -280,6 +313,7 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
    */
   private async downloadAndStoreVideo(
     s3Uri: string,
+    context?: CallApiContextParams,
   ): Promise<{ blobRef?: BlobRef; error?: string }> {
     try {
       // Parse S3 URI
@@ -321,8 +355,11 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
 
       // Store to blob storage
       const { ref } = await storeBlob(buffer, 'video/mp4', {
+        evalId: context?.evaluationId,
         kind: 'video',
         location: 'response.video',
+        promptIdx: context?.promptIdx,
+        testIdx: context?.testIdx,
       });
 
       logger.debug('[Luma Ray] Stored video to blob storage', { uri: ref.uri, hash: ref.hash });
@@ -442,7 +479,10 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
     const outputUrl = `${outputS3Uri}/output.mp4`;
 
     if (config.downloadFromS3 !== false) {
-      const { blobRef: ref, error: downloadError } = await this.downloadAndStoreVideo(outputS3Uri);
+      const { blobRef: ref, error: downloadError } = await this.downloadAndStoreVideo(
+        outputS3Uri,
+        context,
+      );
       if (downloadError) {
         logger.warn(`[Luma Ray] Failed to download video: ${downloadError}. Using S3 URL.`);
       } else {

@@ -1,10 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getVideoMimeType,
-  isWithinInlineLimit,
   resolveVideoBytes,
   VIDEO_INLINE_LIMIT_BYTES,
-  videoToBase64,
 } from '../../src/util/video';
 
 // Mock dependencies
@@ -29,42 +27,6 @@ describe('video utilities', () => {
   describe('VIDEO_INLINE_LIMIT_BYTES', () => {
     it('should be 20MB', () => {
       expect(VIDEO_INLINE_LIMIT_BYTES).toBe(20 * 1024 * 1024);
-    });
-  });
-
-  describe('videoToBase64', () => {
-    it('should convert buffer to base64 string', () => {
-      const buffer = Buffer.from('test video content');
-      const result = videoToBase64(buffer);
-      expect(result).toBe(buffer.toString('base64'));
-    });
-
-    it('should handle empty buffer', () => {
-      const buffer = Buffer.alloc(0);
-      const result = videoToBase64(buffer);
-      expect(result).toBe('');
-    });
-  });
-
-  describe('isWithinInlineLimit', () => {
-    it('should return true for small videos', () => {
-      const smallBuffer = Buffer.alloc(1024 * 1024); // 1MB
-      expect(isWithinInlineLimit(smallBuffer)).toBe(true);
-    });
-
-    it('should return true when base64 content fits under the request budget', () => {
-      const fourteenMegabytes = Buffer.alloc(14 * 1024 * 1024);
-      expect(isWithinInlineLimit(fourteenMegabytes)).toBe(true);
-    });
-
-    it('should return false for large videos', () => {
-      const largeBuffer = Buffer.alloc(VIDEO_INLINE_LIMIT_BYTES + 1024 * 1024); // limit + 1MB
-      expect(isWithinInlineLimit(largeBuffer)).toBe(false);
-    });
-
-    it('should account for base64 expansion before reaching the raw limit', () => {
-      const fifteenMegabytes = Buffer.alloc(15 * 1024 * 1024);
-      expect(isWithinInlineLimit(fifteenMegabytes)).toBe(false);
     });
   });
 
@@ -105,7 +67,7 @@ describe('video utilities', () => {
 
   describe('resolveVideoBytes', () => {
     beforeEach(() => {
-      vi.clearAllMocks();
+      vi.resetAllMocks();
     });
 
     it('should resolve video from blobRef', async () => {
@@ -119,16 +81,14 @@ describe('video utilities', () => {
       const result = await resolveVideoBytes({
         blobRef: {
           hash: 'abc123',
-          uri: 'blob://abc123',
           mimeType: 'video/webm',
           sizeBytes: 100,
-          provider: 'test',
         },
       });
 
       expect(result.buffer).toEqual(mockBlobData);
       expect(result.mimeType).toBe('video/webm');
-      expect(getBlobByHash).toHaveBeenCalledWith('abc123');
+      expect(getBlobByHash).toHaveBeenCalledWith('abc123', expect.any(Number));
     });
 
     it('should default to video/mp4 if blobRef has no mimeType', async () => {
@@ -142,10 +102,8 @@ describe('video utilities', () => {
       const result = await resolveVideoBytes({
         blobRef: {
           hash: 'abc123',
-          uri: 'blob://abc123',
           mimeType: '',
           sizeBytes: 100,
-          provider: 'test',
         },
       });
 
@@ -163,10 +121,8 @@ describe('video utilities', () => {
       const result = await resolveVideoBytes({
         blobRef: {
           hash: 'abc123',
-          uri: 'blob://abc123',
           mimeType: 'video/webm',
           sizeBytes: 100,
-          provider: 'test',
         },
       });
 
@@ -184,7 +140,7 @@ describe('video utilities', () => {
 
       expect(result.buffer).toEqual(mockBuffer);
       expect(result.mimeType).toBe('video/webm');
-      expect(retrieveMedia).toHaveBeenCalledWith('video/test123.webm');
+      expect(retrieveMedia).toHaveBeenCalledWith('video/test123.webm', expect.any(Number));
     });
 
     it('should use the mapped MIME type for stored QuickTime videos', async () => {
@@ -211,7 +167,7 @@ describe('video utilities', () => {
       });
 
       expect(result.buffer).toEqual(mockBlobData);
-      expect(getBlobByHash).toHaveBeenCalledWith('xyz789');
+      expect(getBlobByHash).toHaveBeenCalledWith('xyz789', expect.any(Number));
     });
 
     it('should resolve video from storageRef: URL', async () => {
@@ -225,18 +181,18 @@ describe('video utilities', () => {
 
       expect(result.buffer).toEqual(mockBuffer);
       expect(result.mimeType).toBe('video/mp4');
-      expect(retrieveMedia).toHaveBeenCalledWith('video/abc.mp4');
+      expect(retrieveMedia).toHaveBeenCalledWith('video/abc.mp4', expect.any(Number));
     });
 
     it('should throw error when no valid source is found', async () => {
       await expect(resolveVideoBytes({})).rejects.toThrow(
-        '[VideoRubric] No valid video source found',
+        'Video grading requires a managed blob or media storage reference',
       );
     });
 
     it('should reject external video URLs instead of fetching provider-controlled locations', async () => {
       await expect(resolveVideoBytes({ url: 'https://example.com/video.mp4' })).rejects.toThrow(
-        '[VideoRubric] External video URLs are not supported for grading',
+        'Video grading requires a managed blob or media storage reference',
       );
     });
 
@@ -252,10 +208,8 @@ describe('video utilities', () => {
       const result = await resolveVideoBytes({
         blobRef: {
           hash: 'abc',
-          uri: 'blob://abc',
           mimeType: 'video/mp4',
           sizeBytes: 100,
-          provider: 'test',
         },
         storageRef: { key: 'should-not-be-used' },
       });

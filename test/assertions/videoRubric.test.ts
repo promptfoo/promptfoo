@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { handleVideoRubric } from '../../src/assertions/videoRubric';
+import { handleVideoRubric } from '../../src/assertions/llmRubric';
 
 import type { AssertionParams, GradingResult } from '../../src/types/index';
 
 // Mock the matcher
-vi.mock('../../src/matchers/video', () => ({
+vi.mock('../../src/matchers/rubric', () => ({
   matchesVideoRubric: vi.fn(),
 }));
 
-import { matchesVideoRubric } from '../../src/matchers/video';
+import { matchesVideoRubric } from '../../src/matchers/rubric';
 
 // Helper to create minimal valid AssertionParams
 function createParams(overrides: Partial<AssertionParams> = {}): AssertionParams {

@@ -15,22 +15,21 @@ const mocks = vi.hoisted(() => {
   return {
     defaultVideoGradingProvider,
     getDefaultProviders: vi.fn(),
+    getDefaultVideoGradingProvider: vi.fn(),
     gradingProvider,
-    isWithinInlineLimit: vi.fn(),
     resolveVideoBytes: vi.fn(),
-    videoToBase64: vi.fn(),
   };
 });
 
 vi.mock('../../src/util/video', () => ({
   VIDEO_INLINE_LIMIT_BYTES: 20 * 1024 * 1024,
-  isWithinInlineLimit: mocks.isWithinInlineLimit,
   resolveVideoBytes: mocks.resolveVideoBytes,
-  videoToBase64: mocks.videoToBase64,
+  videoResolutionErrorMessage: () => 'Failed to resolve managed video',
 }));
 
 vi.mock('../../src/providers/defaults', () => ({
   getDefaultProviders: mocks.getDefaultProviders,
+  getDefaultVideoGradingProvider: mocks.getDefaultVideoGradingProvider,
 }));
 
 describe('matchesVideoRubric', () => {
@@ -40,8 +39,6 @@ describe('matchesVideoRubric', () => {
       buffer: Buffer.from('fake video bytes'),
       mimeType: 'video/mp4',
     });
-    mocks.isWithinInlineLimit.mockReturnValue(true);
-    mocks.videoToBase64.mockReturnValue('ZmFrZSB2aWRlbyBieXRlcw==');
     vi.mocked(mocks.gradingProvider.callApi).mockResolvedValue({
       output: JSON.stringify({ pass: true, score: 0.9, reason: 'Video matches rubric' }),
       tokenUsage: { total: 8, prompt: 5, completion: 3 },
@@ -50,13 +47,11 @@ describe('matchesVideoRubric', () => {
       output: JSON.stringify({ pass: true, score: 0.9, reason: 'Default video grade' }),
       tokenUsage: { total: 8, prompt: 5, completion: 3 },
     } satisfies ProviderResponse);
-    mocks.getDefaultProviders.mockResolvedValue({
-      videoGradingProvider: mocks.defaultVideoGradingProvider,
-    });
+    mocks.getDefaultVideoGradingProvider.mockReturnValue(mocks.defaultVideoGradingProvider);
   });
 
   it('sends inline video content to the grading provider and parses JSON results', async () => {
-    const { matchesVideoRubric } = await import('../../src/matchers/video');
+    const { matchesVideoRubric } = await import('../../src/matchers/rubric');
 
     const result = await matchesVideoRubric(
       'The video shows a cat',
@@ -82,15 +77,15 @@ describe('matchesVideoRubric', () => {
     expect(mocks.gradingProvider.callApi).toHaveBeenCalledTimes(1);
     expect(mocks.getDefaultProviders).not.toHaveBeenCalled();
     const multimodalPrompt = JSON.parse(vi.mocked(mocks.gradingProvider.callApi).mock.calls[0][0]);
-    expect(multimodalPrompt[0].parts[0].inline_data).toEqual({
-      mime_type: 'video/mp4',
+    expect(multimodalPrompt[0].content[1].inlineData).toEqual({
+      mimeType: 'video/mp4',
       data: 'ZmFrZSB2aWRlbyBieXRlcw==',
     });
-    expect(multimodalPrompt[0].parts[1].text).toContain('The video shows a cat');
+    expect(multimodalPrompt[0].content[0].text).toContain('The video shows a cat');
   });
 
   it('uses the configured default video grading provider when no assertion provider is set', async () => {
-    const { matchesVideoRubric } = await import('../../src/matchers/video');
+    const { matchesVideoRubric } = await import('../../src/matchers/rubric');
 
     const result = await matchesVideoRubric(
       'The video shows a cat',
@@ -105,13 +100,30 @@ describe('matchesVideoRubric', () => {
         reason: 'Default video grade',
       }),
     );
-    expect(mocks.getDefaultProviders).toHaveBeenCalledTimes(1);
+    expect(mocks.getDefaultVideoGradingProvider).toHaveBeenCalledTimes(1);
     expect(mocks.defaultVideoGradingProvider.callApi).toHaveBeenCalledTimes(1);
     expect(mocks.gradingProvider.callApi).not.toHaveBeenCalled();
   });
 
+  it('attaches video to native Google parts in a custom rubric prompt', async () => {
+    const { matchesVideoRubric } = await import('../../src/matchers/rubric');
+    await matchesVideoRubric(
+      'Visible cat',
+      { storageRef: { key: 'video/test.mp4' } },
+      {
+        provider: mocks.gradingProvider,
+        rubricPrompt: JSON.stringify([{ role: 'user', parts: [{ text: '{{rubric}}' }] }]),
+      },
+    );
+    const prompt = JSON.parse(vi.mocked(mocks.gradingProvider.callApi).mock.calls[0][0]);
+    expect(prompt[0].parts).toEqual([
+      { text: 'Visible cat' },
+      { inlineData: { mimeType: 'video/mp4', data: 'ZmFrZSB2aWRlbyBieXRlcw==' } },
+    ]);
+  });
+
   it('renders custom rubric prompts with vars', async () => {
-    const { matchesVideoRubric } = await import('../../src/matchers/video');
+    const { matchesVideoRubric } = await import('../../src/matchers/rubric');
 
     await matchesVideoRubric(
       'Show {{ animal }} clearly',
@@ -124,13 +136,13 @@ describe('matchesVideoRubric', () => {
     );
 
     const multimodalPrompt = JSON.parse(vi.mocked(mocks.gradingProvider.callApi).mock.calls[0][0]);
-    expect(multimodalPrompt[0].parts[1].text).toBe(
+    expect(multimodalPrompt[0].content[0].text).toBe(
       'Judge this: Show {{ animal }} clearly / animal=owl',
     );
   });
 
   it('does not allow test vars to override the rubric placeholder', async () => {
-    const { matchesVideoRubric } = await import('../../src/matchers/video');
+    const { matchesVideoRubric } = await import('../../src/matchers/rubric');
 
     await matchesVideoRubric(
       'Show the intended product placement',
@@ -146,13 +158,13 @@ describe('matchesVideoRubric', () => {
     );
 
     const multimodalPrompt = JSON.parse(vi.mocked(mocks.gradingProvider.callApi).mock.calls[0][0]);
-    expect(multimodalPrompt[0].parts[1].text).toBe(
+    expect(multimodalPrompt[0].content[0].text).toBe(
       'Rubric=Show the intended product placement / segment=intro',
     );
   });
 
   it('requires an explicit grading config', async () => {
-    const { matchesVideoRubric } = await import('../../src/matchers/video');
+    const { matchesVideoRubric } = await import('../../src/matchers/rubric');
 
     await expect(
       matchesVideoRubric('rubric', { url: 'https://example.com/video.mp4' }),
@@ -160,7 +172,7 @@ describe('matchesVideoRubric', () => {
   });
 
   it('fails before grading when the video cannot be resolved', async () => {
-    const { matchesVideoRubric } = await import('../../src/matchers/video');
+    const { matchesVideoRubric } = await import('../../src/matchers/rubric');
     mocks.resolveVideoBytes.mockRejectedValue(new Error('missing blob'));
 
     const result = await matchesVideoRubric(
@@ -173,18 +185,17 @@ describe('matchesVideoRubric', () => {
       expect.objectContaining({
         pass: false,
         score: 0,
-        reason: 'Failed to resolve video: missing blob',
+        reason: 'Failed to resolve managed video',
       }),
     );
     expect(mocks.gradingProvider.callApi).not.toHaveBeenCalled();
   });
 
   it('fails before grading when the encoded video and rubric exceed the request budget', async () => {
-    const { matchesVideoRubric } = await import('../../src/matchers/video');
-    mocks.videoToBase64.mockReturnValue('x'.repeat(20 * 1024 * 1024));
+    const { matchesVideoRubric } = await import('../../src/matchers/rubric');
 
     const result = await matchesVideoRubric(
-      'rubric',
+      'rubric'.repeat(4 * 1024 * 1024),
       { storageRef: { key: 'video/test.mp4' } },
       { provider: mocks.gradingProvider },
     );
@@ -193,19 +204,18 @@ describe('matchesVideoRubric', () => {
       expect.objectContaining({
         pass: false,
         score: 0,
-        reason: expect.stringContaining('inline request limit'),
+        reason: expect.stringContaining('video-grading request budget'),
       }),
     );
     expect(mocks.gradingProvider.callApi).not.toHaveBeenCalled();
   });
 
   it('fails before grading when the video exceeds the inline limit', async () => {
-    const { matchesVideoRubric } = await import('../../src/matchers/video');
+    const { matchesVideoRubric } = await import('../../src/matchers/rubric');
     mocks.resolveVideoBytes.mockResolvedValue({
       buffer: Buffer.alloc(21 * 1024 * 1024),
       mimeType: 'video/mp4',
     });
-    mocks.isWithinInlineLimit.mockReturnValue(false);
 
     const result = await matchesVideoRubric(
       'rubric',
@@ -217,14 +227,14 @@ describe('matchesVideoRubric', () => {
       expect.objectContaining({
         pass: false,
         score: 0,
-        reason: expect.stringContaining('inline request limit'),
+        reason: expect.stringContaining('video-grading request budget'),
       }),
     );
     expect(mocks.gradingProvider.callApi).not.toHaveBeenCalled();
   });
 
   it('returns provider errors before parsing a grader response', async () => {
-    const { matchesVideoRubric } = await import('../../src/matchers/video');
+    const { matchesVideoRubric } = await import('../../src/matchers/rubric');
     vi.mocked(mocks.gradingProvider.callApi).mockResolvedValue({
       error: 'grader unavailable for sk-secret',
       tokenUsage: { total: 2, prompt: 1, completion: 1 },
@@ -249,7 +259,7 @@ describe('matchesVideoRubric', () => {
   });
 
   it('returns a default failure when the grader response has no output', async () => {
-    const { matchesVideoRubric } = await import('../../src/matchers/video');
+    const { matchesVideoRubric } = await import('../../src/matchers/rubric');
     vi.mocked(mocks.gradingProvider.callApi).mockResolvedValue({
       tokenUsage: { total: 3, prompt: 2, completion: 1 },
     });
@@ -272,7 +282,7 @@ describe('matchesVideoRubric', () => {
   });
 
   it('returns a failure when the grader response is not parseable JSON', async () => {
-    const { matchesVideoRubric } = await import('../../src/matchers/video');
+    const { matchesVideoRubric } = await import('../../src/matchers/rubric');
     vi.mocked(mocks.gradingProvider.callApi).mockResolvedValue({
       output: 'not json sk-secret',
       tokenUsage: { total: 4, prompt: 2, completion: 2 },
@@ -288,7 +298,7 @@ describe('matchesVideoRubric', () => {
       expect.objectContaining({
         pass: false,
         score: 0,
-        reason: 'Could not extract JSON from video-rubric response',
+        reason: 'video-rubric requires one complete JSON object',
         metadata: { graderError: true },
         tokensUsed: expect.objectContaining({ total: 4 }),
       }),
@@ -296,8 +306,37 @@ describe('matchesVideoRubric', () => {
     expect(result.reason).not.toContain('sk-secret');
   });
 
+  it.each([
+    '{"pass":true,"score":1',
+    '{pass: true, score: 1}',
+    '{"pass":true,"score":1} trailing text',
+    '{"pass":true,"score":1} {"pass":false,"score":0}',
+  ])('rejects incomplete or non-JSON grader text: %s', async (output) => {
+    const { matchesVideoRubric } = await import('../../src/matchers/rubric');
+    vi.mocked(mocks.gradingProvider.callApi).mockResolvedValue({ output });
+    const result = await matchesVideoRubric(
+      'The video shows a cat',
+      { storageRef: { key: 'video/fixture.mp4' } },
+      { provider: mocks.gradingProvider },
+    );
+    expect(result).toMatchObject({ pass: false, score: 0, metadata: { graderError: true } });
+  });
+
+  it('accepts one complete fenced JSON response', async () => {
+    const { matchesVideoRubric } = await import('../../src/matchers/rubric');
+    vi.mocked(mocks.gradingProvider.callApi).mockResolvedValue({
+      output: '```json\n{"pass":true,"score":0.9}\n```',
+    });
+    const result = await matchesVideoRubric(
+      'The video shows a cat',
+      { storageRef: { key: 'video/fixture.mp4' } },
+      { provider: mocks.gradingProvider },
+    );
+    expect(result).toMatchObject({ pass: true, score: 0.9 });
+  });
+
   it('returns a malformed-response failure for array grader output', async () => {
-    const { matchesVideoRubric } = await import('../../src/matchers/video');
+    const { matchesVideoRubric } = await import('../../src/matchers/rubric');
     vi.mocked(mocks.gradingProvider.callApi).mockResolvedValue({
       output: ['bad response sk-secret'],
       tokenUsage: { total: 5, prompt: 3, completion: 2 },
@@ -313,7 +352,7 @@ describe('matchesVideoRubric', () => {
       expect.objectContaining({
         pass: false,
         score: 0,
-        reason: 'video-rubric produced malformed response',
+        reason: 'video-rubric requires one complete JSON object',
         metadata: { graderError: true },
         tokensUsed: expect.objectContaining({ total: 5 }),
       }),
@@ -322,9 +361,9 @@ describe('matchesVideoRubric', () => {
   });
 
   it('coerces object grader output and applies string thresholds', async () => {
-    const { matchesVideoRubric } = await import('../../src/matchers/video');
+    const { matchesVideoRubric } = await import('../../src/matchers/rubric');
     vi.mocked(mocks.gradingProvider.callApi).mockResolvedValue({
-      output: { pass: 'yes', score: '0.75' },
+      output: { pass: 'yes', score: '0.75', reason: 'Video matches rubric' },
       tokenUsage: { total: 6, prompt: 4, completion: 2 },
     });
     const stringThresholdAssertion = {
@@ -350,7 +389,7 @@ describe('matchesVideoRubric', () => {
   });
 
   it('fails closed when the grader omits pass or returns a nonnumeric score', async () => {
-    const { matchesVideoRubric } = await import('../../src/matchers/video');
+    const { matchesVideoRubric } = await import('../../src/matchers/rubric');
     vi.mocked(mocks.gradingProvider.callApi).mockResolvedValue({
       output: { score: 'not-a-number' },
     });
@@ -372,7 +411,7 @@ describe('matchesVideoRubric', () => {
   });
 
   it('fails closed when the grader returns a score outside the documented range', async () => {
-    const { matchesVideoRubric } = await import('../../src/matchers/video');
+    const { matchesVideoRubric } = await import('../../src/matchers/rubric');
     vi.mocked(mocks.gradingProvider.callApi).mockResolvedValue({
       output: { pass: true, score: 2 },
     });
@@ -394,7 +433,7 @@ describe('matchesVideoRubric', () => {
   });
 
   it('returns the generic failed fallback for invalid string thresholds', async () => {
-    const { matchesVideoRubric } = await import('../../src/matchers/video');
+    const { matchesVideoRubric } = await import('../../src/matchers/rubric');
     vi.mocked(mocks.gradingProvider.callApi).mockResolvedValue({
       output: { pass: false, score: 0.2 },
     });
@@ -421,7 +460,7 @@ describe('matchesVideoRubric', () => {
   });
 
   it('does not blame the threshold when the grader fails above the minimum score', async () => {
-    const { matchesVideoRubric } = await import('../../src/matchers/video');
+    const { matchesVideoRubric } = await import('../../src/matchers/rubric');
     vi.mocked(mocks.gradingProvider.callApi).mockResolvedValue({
       output: { pass: false, score: 0.9 },
     });
@@ -444,7 +483,7 @@ describe('matchesVideoRubric', () => {
   });
 
   it('returns the generic failed fallback when no threshold reason is available', async () => {
-    const { matchesVideoRubric } = await import('../../src/matchers/video');
+    const { matchesVideoRubric } = await import('../../src/matchers/rubric');
     vi.mocked(mocks.gradingProvider.callApi).mockResolvedValue({
       output: { pass: false, score: 0.2 },
     });

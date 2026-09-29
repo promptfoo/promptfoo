@@ -185,7 +185,7 @@ export default function Guardrails(): React.ReactElement {
       description="Comprehensive AI guardrails to ensure safe, compliant, and brand-aligned outputs. Protect against harmful content, PII exposure, prompt injections, and regulatory violations."
     >
       <Head>
-        <meta property="og:image" content="https://www.promptfoo.dev/img/meta/guardrails.png" />
+        <meta property="og:image" content="https://www.promptfoo.dev/img/meta/homepage.png" />
         <meta name="twitter:card" content="summary_large_image" />
       </Head>
       <div className={styles.pageContainer}>

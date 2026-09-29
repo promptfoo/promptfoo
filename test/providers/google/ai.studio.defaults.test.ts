@@ -7,12 +7,11 @@ import {
 describe('Google AI Studio Default Providers', () => {
   it('should create providers with correct model names', () => {
     const providers = getGoogleAiStudioProviders();
-    expect(providers.gradingProvider.id()).toBe('google:gemini-2.5-pro');
-    expect(providers.gradingJsonProvider.id()).toBe('google:gemini-2.5-pro');
-    expect(providers.llmRubricProvider.id()).toBe('google:gemini-2.5-pro');
-    expect(providers.suggestionsProvider.id()).toBe('google:gemini-2.5-pro');
-    expect(providers.synthesizeProvider.id()).toBe('google:gemini-2.5-pro');
-    expect(providers.videoGradingProvider.id()).toBe('google:gemini-3.5-flash');
+    expect(providers.gradingProvider.id()).toBe('google:gemini-3.8-flash');
+    expect(providers.gradingJsonProvider.id()).toBe('google:gemini-3.8-flash');
+    expect(providers.llmRubricProvider.id()).toBe('google:gemini-3.8-flash');
+    expect(providers.suggestionsProvider.id()).toBe('google:gemini-3.8-flash');
+    expect(providers.synthesizeProvider.id()).toBe('google:gemini-3.8-flash');
   });
 
   it('should create AIStudioChatProvider instances', () => {
@@ -20,15 +19,11 @@ describe('Google AI Studio Default Providers', () => {
     expect(providers.gradingProvider).toBeInstanceOf(AIStudioChatProvider);
     expect(providers.gradingJsonProvider).toBeInstanceOf(AIStudioChatProvider);
     expect(providers.llmRubricProvider).toBeInstanceOf(AIStudioChatProvider);
-    expect(providers.videoGradingProvider).toBeInstanceOf(AIStudioChatProvider);
   });
 
   it('should configure JSON provider with correct response format', () => {
     const providers = getGoogleAiStudioProviders();
     expect(providers.gradingJsonProvider.config.generationConfig?.response_mime_type).toBe(
-      'application/json',
-    );
-    expect(providers.videoGradingProvider.config.generationConfig?.response_mime_type).toBe(
       'application/json',
     );
   });
@@ -51,7 +46,6 @@ describe('Google AI Studio Default Providers', () => {
     expect(b.gradingProvider).not.toBe(a.gradingProvider);
     expect(b.gradingJsonProvider).not.toBe(a.gradingJsonProvider);
     expect(b.llmRubricProvider).not.toBe(a.llmRubricProvider);
-    expect(b.videoGradingProvider).not.toBe(a.videoGradingProvider);
   });
 
   it('should propagate env overrides into provider api keys', () => {
@@ -59,6 +53,5 @@ describe('Google AI Studio Default Providers', () => {
     expect(providers.gradingProvider.getApiKey()).toBe('override-key');
     expect(providers.gradingJsonProvider.getApiKey()).toBe('override-key');
     expect(providers.llmRubricProvider.getApiKey()).toBe('override-key');
-    expect(providers.videoGradingProvider.getApiKey()).toBe('override-key');
   });
 });
