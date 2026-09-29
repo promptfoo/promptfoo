@@ -941,7 +941,9 @@ async function main(): Promise<void> {
       `Verified installed package artifact (${values.profile}): ${path.basename(tarballPath)}`,
     );
   } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    console.log('Removing temporary artifact consumer...');
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+    console.log('Removed temporary artifact consumer');
   }
 }
 
