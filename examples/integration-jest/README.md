@@ -7,13 +7,11 @@ npx promptfoo@latest init --example integration-jest
 cd integration-jest
 ```
 
-This folder contains a small example of how to test LLM prompts using Jest, Vitest, and `promptfoo`.
+Use Promptfoo assertions in Jest or Vitest to check semantic similarity and grade responses.
 
 ## Getting Started
 
 Use Node.js 22.22 or newer to meet the Promptfoo and Vitest 5 requirements.
-
-To get started, follow these steps:
 
 1. **Install the dependencies**:
 
@@ -38,7 +36,7 @@ To get started, follow these steps:
    Or, to run the tests with Vitest:
 
    ```sh
-   npm run test:vitest
+   npm run test:vitest -- --run
    ```
 
 ## Additional Information
