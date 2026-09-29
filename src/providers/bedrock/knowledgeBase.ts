@@ -6,6 +6,7 @@ import { sha256 } from '../../util/createHash';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
 import { AwsBedrockGenericProvider } from './base';
+import { assertBedrockModelIsAvailable } from './index';
 import { createBedrockRequestHandler, hasProxyEnv, INFERENCE_PROFILE_PREFIX } from './util';
 import type {
   BedrockAgentRuntimeClient,
@@ -81,6 +82,7 @@ export class AwsBedrockKnowledgeBaseProvider
     options: { config?: BedrockKnowledgeBaseOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     super(modelName, options);
+    assertBedrockModelIsAvailable(options.config?.modelArn || modelName);
 
     // Ensure we have a knowledgeBaseId
     if (!options.config?.knowledgeBaseId) {

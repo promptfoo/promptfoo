@@ -2600,8 +2600,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
  * regions on 2026-09-04. Note this is Bedrock's lifecycle, not Anthropic's: several models
  * retired on the Anthropic API are still served here and must NOT be listed.
  *
- * List bare IDs only: lookups strip the inference profile prefix, so every geo spelling
- * (`us.`, `eu.`, `global.`, ...) is rejected too.
+ * Use bare IDs; the availability check removes inference-profile prefixes.
  */
 export const RETIRED_BEDROCK_MODELS = new Set([
   'anthropic.claude-3-opus-20240229-v1:0',
@@ -2617,11 +2616,7 @@ export const RETIRED_BEDROCK_MODELS = new Set([
   'meta.llama2-70b-chat-v1',
 ]);
 
-/**
- * Throw for a model AWS has withdrawn. Called from both `getHandlerForModel` and the explicit
- * `bedrock:converse:` factory route, which builds its provider directly and would otherwise
- * skip the check entirely.
- */
+/** Reject withdrawn models before InvokeModel, Converse, or Knowledge Base requests. */
 export function assertBedrockModelIsAvailable(modelName: string): void {
   // A system inference profile or foundation model ARN ends in the ID it resolves to.
   // Application inference profile ARNs hide the model, so they cannot be checked here.

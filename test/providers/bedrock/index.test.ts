@@ -3837,19 +3837,24 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
   it.each([
     'arn:aws:bedrock:us-east-2:123456789012:inference-profile/eu.anthropic.claude-3-5-haiku-20241022-v1:0',
     'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-opus-20240229-v1:0',
+    'arn:aws-us-gov:bedrock:us-gov-west-1:123456789012:inference-profile/us-gov.anthropic.claude-3-5-haiku-20241022-v1:0',
   ])('rejects a retired model named by its ARN (%s)', (modelName) => {
-    // The inference-profile branch returns a handler without looking at the model ID.
     expect(() => getHandlerForModel(modelName, { inferenceModelType: 'claude' })).toThrow(
       `Unknown Amazon Bedrock model: ${modelName}`,
+    );
+  });
+
+  it('allows application inference profiles without inferring their underlying model', () => {
+    const modelArn =
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abc123xyz789';
+    expect(getHandlerForModel(modelArn, { inferenceModelType: 'claude' })).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
   });
 
   it.each(RETIRED_BEDROCK_MODEL_IDS)(
     'rejects retired model id %s under every inference profile prefix',
     (modelName) => {
-      // Regional/global inference profiles must be rejected too — otherwise ids such as
-      // `eu.anthropic.claude-3-5-haiku-20241022-v1:0` fall through to the `anthropic.claude`
-      // catch-all and fail at request time with an opaque AWS error.
       for (const prefix of [
         'us.',
         'us-gov.',

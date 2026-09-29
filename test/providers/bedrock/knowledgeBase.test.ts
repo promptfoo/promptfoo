@@ -356,6 +356,40 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     });
   });
 
+  it.each([
+    'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-opus-20240229-v1:0',
+    'arn:aws:bedrock:us-east-1:123456789012:inference-profile/eu.anthropic.claude-3-5-haiku-20241022-v1:0',
+  ])('rejects a retired modelArn override before creating a client: %s', (modelArn) => {
+    expect(
+      () =>
+        new AwsBedrockKnowledgeBaseProvider('default', {
+          config: { knowledgeBaseId: 'kb-123', modelArn },
+        }),
+    ).toThrow(`Unknown Amazon Bedrock model: ${modelArn}`);
+    expect(BedrockAgentRuntimeClient).not.toHaveBeenCalled();
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0',
+    'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abc123xyz789',
+  ])('uses the modelArn override instead of a retired route model: %s', async (modelArn) => {
+    mockSend.mockResolvedValueOnce({ output: { text: 'ok' } });
+    const provider = new AwsBedrockKnowledgeBaseProvider(
+      'eu.anthropic.claude-3-5-haiku-20241022-v1:0',
+      { config: { knowledgeBaseId: 'kb-123', modelArn } },
+    );
+
+    expect((await provider.callApi('Describe the garden')).output).toBe('ok');
+    expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        retrieveAndGenerateConfiguration: expect.objectContaining({
+          knowledgeBaseConfiguration: expect.objectContaining({ modelArn }),
+        }),
+      }),
+    );
+  });
+
   it('should use custom modelArn if provided', async () => {
     const mockResponse = {
       output: {

@@ -189,9 +189,6 @@ export const awsProviderFactories: ProviderFactory[] = [
         return new AwsBedrockEmbeddingProvider(modelName, providerOptions);
       }
       if (modelType === 'kb' || modelType === 'knowledge-base') {
-        // Like converse:, this route never reaches getHandlerForModel.
-        const { assertBedrockModelIsAvailable } = await import('../bedrock/index');
-        assertBedrockModelIsAvailable(modelName);
         const { AwsBedrockKnowledgeBaseProvider } = await import('../bedrock/knowledgeBase');
         return new AwsBedrockKnowledgeBaseProvider(modelName, providerOptions);
       }
