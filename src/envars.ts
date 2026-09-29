@@ -3,14 +3,7 @@ import { loadEnvFiles } from './util/envFile';
 
 import type { EnvOverrides } from './types/env';
 
-// Test workers must not inherit local .env files. The worker marker survives
-// tests that clear process.env and remove VITEST.
-const isTestProcess =
-  process.env.VITEST === 'true' ||
-  Object.prototype.hasOwnProperty.call(globalThis, '__vitest_worker__');
-if (!isTestProcess) {
-  loadEnvFiles();
-}
+loadEnvFiles();
 
 // Define the supported environment variables and their types
 type EnvVars = {

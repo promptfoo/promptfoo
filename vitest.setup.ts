@@ -11,6 +11,19 @@ import { afterAll, afterEach, vi } from 'vitest';
 import { closeTestDatabaseClients } from './src/database/testing';
 import { mockProcessEnv } from './test/util/utils';
 
+// Suppress implicit developer files in this suite; explicit fixtures still load.
+vi.mock('./src/util/envFile', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./src/util/envFile')>();
+  return {
+    ...actual,
+    loadEnvFiles: (...args: Parameters<typeof actual.loadEnvFiles>) => {
+      if (args[0] !== undefined) {
+        actual.loadEnvFiles(...args);
+      }
+    },
+  };
+});
+
 const TEST_CONFIG_DIR = path.join('.local', 'vitest', 'config', `worker-${process.pid}`);
 
 mockProcessEnv({

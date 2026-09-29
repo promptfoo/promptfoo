@@ -1,6 +1,8 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../src/cliState';
@@ -209,8 +211,10 @@ describe('envars', () => {
   describe('dotenv loading', () => {
     // Capture Windows TEMP/TMP before the test clears process.env.
     const tmpRoot = os.tmpdir();
+    const envarsUrl = pathToFileURL(path.resolve(__dirname, '../src/envars.ts')).href;
+    const tsxUrl = pathToFileURL(require.resolve('tsx')).href;
 
-    async function expectImportToIgnoreDotenv(): Promise<void> {
+    async function withDotenvFixture(check: (file: string) => Promise<void>): Promise<void> {
       const restoreEnv = mockProcessEnv({
         DOTENV_PATH: undefined,
         DOTENV_CONFIG_PATH: undefined,
@@ -218,13 +222,12 @@ describe('envars', () => {
       });
       const originalCwd = process.cwd();
       const dir = fs.mkdtempSync(path.join(tmpRoot, 'promptfoo-dotenv-'));
-      fs.writeFileSync(path.join(dir, '.env'), 'PROMPTFOO_DOTENV_PROBE=leaked\n');
+      fs.writeFileSync(path.join(dir, '.env'), 'PROMPTFOO_DOTENV_PROBE=fixture\n');
 
       try {
         process.chdir(dir);
         vi.resetModules();
-        await import('../src/envars');
-        expect(process.env.PROMPTFOO_DOTENV_PROBE).toBeUndefined();
+        await check(path.join(dir, '.env'));
       } finally {
         process.chdir(originalCwd);
         fs.rmSync(dir, { recursive: true, force: true });
@@ -233,17 +236,73 @@ describe('envars', () => {
     }
 
     it('does not load a .env file into a test process', async () => {
-      await expectImportToIgnoreDotenv();
+      await withDotenvFixture(async () => {
+        await import('../src/envars');
+        expect(process.env.PROMPTFOO_DOTENV_PROBE).toBeUndefined();
+      });
     });
 
     it('does not load a .env file after a test clears process.env', async () => {
       const restoreEnv = mockProcessEnv({}, { clear: true });
 
       try {
-        await expectImportToIgnoreDotenv();
+        await withDotenvFixture(async () => {
+          await import('../src/envars');
+          expect(process.env.PROMPTFOO_DOTENV_PROBE).toBeUndefined();
+        });
       } finally {
         restoreEnv();
       }
+    });
+
+    it.each([undefined, 'DOTENV_PATH', 'DOTENV_CONFIG_PATH'])(
+      'does not load implicit files during command setup (%s)',
+      async (pathVariable) => {
+        await withDotenvFixture(async (file) => {
+          if (pathVariable) {
+            mockProcessEnv({ [pathVariable]: file });
+          }
+          const { setupEnv } = await import('../src/util/env');
+          setupEnv(undefined);
+          expect(process.env.PROMPTFOO_DOTENV_PROBE).toBeUndefined();
+        });
+      },
+    );
+
+    it('keeps default loading for downstream Vitest consumers', async () => {
+      await withDotenvFixture(async () => {
+        const output = execFileSync(
+          process.execPath,
+          [
+            '--import',
+            tsxUrl,
+            '--input-type=module',
+            '--eval',
+            `globalThis.__vitest_worker__ = {};
+             await import(${JSON.stringify(envarsUrl)});
+             process.stdout.write(process.env.PROMPTFOO_DOTENV_PROBE ?? 'missing');`,
+          ],
+          {
+            env: {
+              VITEST: 'true',
+              SystemRoot: process.env.SystemRoot,
+              TMPDIR: tmpRoot,
+              TMP: tmpRoot,
+              TEMP: tmpRoot,
+            },
+            encoding: 'utf8',
+          },
+        );
+        expect(output).toBe('fixture');
+      });
+    });
+
+    it('still loads explicitly selected command fixtures', async () => {
+      await withDotenvFixture(async (file) => {
+        const { setupEnv } = await import('../src/util/env');
+        setupEnv(file);
+        expect(process.env.PROMPTFOO_DOTENV_PROBE).toBe('fixture');
+      });
     });
   });
 
