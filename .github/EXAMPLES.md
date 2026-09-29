@@ -2,7 +2,8 @@
 
 `workflows/examples.yml` runs credential-free example regressions, with one isolated
 job per registered example/runtime and one aggregate `Examples` status check. It
-replaces the Docker-only, Python-provider-only, and OpenAI Agents workflows. Core Python wrapper
+replaces the Docker-only, Python-provider-only, OpenAI Agents, and Google ADK
+workflows. Core Python wrapper
 tests stay in `main.yml`.
 
 PRs run the affected registered examples. Changes to `src/`, build scripts/config,
@@ -33,6 +34,24 @@ python3.10 .github/scripts/examples.py run docker-sandbox
 python3.14 .github/scripts/examples.py run docker-sandbox
 ```
 
+After building the local CLI, run the Google ADK profiles with the same entrypoint:
+
+```bash
+python3.12 .github/scripts/examples.py run google-adk
+python3.14 .github/scripts/examples.py run google-adk
+python3.10 .github/scripts/examples.py run google-adk-minimums
+python3.12 .github/scripts/examples.py run google-adk-litellm
+```
+
+ADK's default profiles keep the minimal Gemini installation; the Python 3.10
+profile pins every direct dependency to its declared minimum. The separate
+LiteLLM profile adds only the documented optional adapter. Each runs the provider
+loader tests and both original configs through the built CLI and real SDKs against
+loopback model fixtures. Model errors and wrong tool arguments must fail; the
+positive cases retain the original state, artifact, tool, and native trace assertions.
+The ADK HTTP fixtures and CLI harness live in `scripts/tests/google_adk/`, outside
+the downloadable example. These tests do not measure hosted-model quality.
+
 The runner creates and cleans up a temporary virtual environment, installs the
 example requirements, and runs the registered test suites. Fresh environments
 must also pass `pip check`.
@@ -51,8 +70,9 @@ incompatible `h11` requirement. This profile checks runtime compatibility, not
 ## Register another example
 
 Add an `Example` entry in `scripts/examples.py`, choosing its supported runtimes,
-test directories/patterns, and any Node or Docker requirements. Keep assertions
-beside the example and use local model fixtures, not paid API calls. Each profile
+test directories/patterns, and any Node, Docker, or optional package requirements.
+Keep example configs simple; put substantial test harnesses under `scripts/tests/`
+and use local model fixtures, not paid API calls. Each profile
 gets a fresh environment; do not combine unrelated SDK requirements. Add selection
 coverage in `scripts/test_examples.py`, then run:
 
@@ -107,6 +127,21 @@ boundary. The Unix-local workflow executes commands on the test host. The harnes
 uses synthetic files, an allowlisted environment, dummy credentials, local model
 and trace endpoints, an isolated copy/database, and bounded child process groups.
 
+## F-Score
+
+Run the offline dataset preparation and local metadata path regressions without a
+Node build or model credentials:
+
+```bash
+python3.10 .github/scripts/examples.py run f-score
+python3.14 .github/scripts/examples.py run f-score
+```
+
+Both runtimes install the example requirements, check dependency consistency, and
+run the two existing Python tests. The three TypeScript metric regressions in
+`test/examples/evalFScore.test.ts` remain part of the normal repository test suite;
+they are not run by this Python-only profile.
+
 ## Redteam LangChain
 
 The `redteam-langchain` profile runs the example's five provider unit tests on
@@ -119,3 +154,33 @@ this profile does not require a Node build or model credentials.
 python3.10 .github/scripts/examples.py run redteam-langchain
 python3.14 .github/scripts/examples.py run redteam-langchain
 ```
+
+## Specialized Browser Workflow
+
+`workflows/browser-example-python.yml` retains the Gradio browser example's Python
+3.10/3.14 component tests and Python 3.12 end-to-end browser job. That job provisions
+Chromium and its operating-system libraries, starts the Gradio server, and runs both
+original configurations through the local CLI. The shared runner's Node option
+builds the CLI but does not provision browser binaries or system libraries; keeping
+this workflow separate preserves the actual browser coverage without expanding
+the shared runner's infrastructure API. Shared runtime/toolchain changes select
+the specialized workflow as well as the aggregate example matrix.
+
+## RAG PDF
+
+The `rag-pdf` profile runs all PDF, timeout, environment-isolation and tokenizer-cache
+regressions on Python 3.10. The `rag-pdf-cli` profile repeats those tests on Python
+3.14, then invokes the existing source CLI smoke through unittest discovery. It
+persists two document batches in real Chroma, reopens the database, and checks all
+nine original evaluation cases against local embedding and chat APIs.
+
+```bash
+python3.10 .github/scripts/examples.py run rag-pdf
+python3.14 .github/scripts/examples.py run rag-pdf-cli
+```
+
+The CLI profile requires the normal local CLI build before the shared runner starts.
+The smoke itself continues to use `npm run local`, with bounded process cleanup and
+isolated environment/cache preparation. It can also be run directly with
+`python examples/eval-rag-full/tests/smoke_cli.py`. These profiles replace the
+standalone RAG workflow without changing its Python runtime split or assertions.

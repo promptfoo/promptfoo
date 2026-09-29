@@ -4,14 +4,16 @@
  * Spawns and manages the @modelcontextprotocol/server-filesystem child process.
  */
 
-import { type ChildProcess, spawn } from 'child_process';
+import { type ChildProcess, execFile, spawn } from 'child_process';
 import { createRequire } from 'module';
-import { isAbsolute, resolve } from 'path';
+import { isAbsolute, join, resolve } from 'path';
+import { promisify } from 'util';
 
 import logger from '../../logger';
 import { FilesystemMcpError } from '../../types/codeScan';
 
 const require = createRequire(import.meta.url);
+const execFileAsync = promisify(execFile);
 
 const FILESYSTEM_MCP_READY_MARKER = 'running on stdio';
 const FILESYSTEM_MCP_READY_TIMEOUT_MS = 30000;
@@ -208,31 +210,82 @@ export function waitForFilesystemMcpServerReady(
 
 /**
  * Stop the filesystem MCP server process
- * @param process Child process to terminate
+ * @param mcpProcess Child process to terminate
  */
-export async function stopFilesystemMcpServer(process: ChildProcess): Promise<void> {
-  if (!process.pid || process.exitCode !== null || process.signalCode !== null) {
+export async function stopFilesystemMcpServer(mcpProcess: ChildProcess): Promise<void> {
+  if (!mcpProcess.pid || mcpProcess.exitCode !== null || mcpProcess.signalCode !== null) {
     logger.debug('MCP server already stopped');
     return;
   }
 
-  logger.debug(`Stopping MCP server (pid: ${process.pid})...`);
+  logger.debug(`Stopping MCP server (pid: ${mcpProcess.pid})...`);
 
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      // Force kill if graceful shutdown takes too long
-      logger.debug('MCP server did not exit gracefully, force killing...');
-      process.kill('SIGKILL');
-      resolve();
-    }, 5000); // 5 second timeout
+  if (process.platform === 'win32') {
+    // Stop the complete process tree on Windows, including any server subprocesses.
+    const windowsDir = process.env.SystemRoot;
+    if (!windowsDir || !isAbsolute(windowsDir)) {
+      throw new FilesystemMcpError('Cannot locate the Windows system directory for MCP cleanup');
+    }
+    try {
+      await execFileAsync(
+        join(windowsDir, 'System32', 'taskkill.exe'),
+        ['/PID', String(mcpProcess.pid), '/T', '/F'],
+        { windowsHide: true, timeout: 5000 },
+      );
+    } catch (error) {
+      throw new FilesystemMcpError(
+        `Failed to stop filesystem MCP process tree: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    return;
+  }
 
-    process.on('exit', () => {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+
+    const cleanup = () => {
       clearTimeout(timeout);
+      mcpProcess.off('exit', onExit);
+      mcpProcess.off('error', onError);
+    };
+
+    const onExit = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
       logger.debug('MCP server stopped');
       resolve();
-    });
+    };
 
-    // Try graceful shutdown first
-    process.kill('SIGTERM');
+    const onError = (error: Error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      reject(new FilesystemMcpError(`Failed to stop filesystem MCP server: ${error.message}`));
+    };
+
+    const sendSignal = (signal: NodeJS.Signals) => {
+      try {
+        if (!mcpProcess.kill(signal)) {
+          onError(new Error(`Could not send ${signal} to process ${mcpProcess.pid}`));
+        }
+      } catch (error) {
+        onError(error instanceof Error ? error : new Error(String(error)));
+      }
+    };
+
+    const timeout = setTimeout(() => {
+      logger.debug('MCP server did not exit gracefully, force killing...');
+      // Signal delivery does not confirm termination; keep waiting for the exit event.
+      sendSignal('SIGKILL');
+    }, 5000);
+
+    mcpProcess.once('exit', onExit);
+    mcpProcess.once('error', onError);
+    sendSignal('SIGTERM');
   });
 }

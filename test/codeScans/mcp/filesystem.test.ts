@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockProcessEnv } from '../../util/utils';
 
 const mocks = vi.hoisted(() => ({
+  execFile: vi.fn(),
   resolve: vi.fn(),
   spawn: vi.fn(),
 }));
@@ -14,6 +15,7 @@ vi.mock('child_process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('child_process')>();
   return {
     ...actual,
+    execFile: mocks.execFile,
     spawn: mocks.spawn,
   };
 });
@@ -29,13 +31,14 @@ vi.mock('module', async (importOriginal) => {
 
 import {
   startFilesystemMcpServer,
+  stopFilesystemMcpServer,
   waitForFilesystemMcpServerReady,
 } from '../../../src/codeScan/mcp/filesystem';
 
 class FakeChildProcess extends EventEmitter {
   exitCode: number | null = null;
   killed = false;
-  kill = vi.fn();
+  kill = vi.fn().mockReturnValue(true);
   pid = 1234;
   signalCode: NodeJS.Signals | null = null;
   stderr = new EventEmitter();
@@ -148,6 +151,8 @@ describe('filesystem MCP launcher', () => {
         PROMPTFOO_API_KEY: 'test-key',
         NODE_OPTIONS: '--max-old-space-size=4096',
         npm_config_before: '2026-03-29T00:00:00.000Z',
+        NPM_CONFIG_BEFORE: '2026-03-29T00:00:00.000Z',
+        Npm_Config_Before: '2026-03-29T00:00:00.000Z',
       },
       { clear: true },
     );
@@ -189,5 +194,161 @@ describe('filesystem MCP launcher', () => {
       'The @modelcontextprotocol/server-filesystem package is required',
     );
     expect(mocks.spawn).not.toHaveBeenCalled();
+  });
+});
+
+describe('filesystem MCP cleanup', () => {
+  const { platform } = process;
+  const windowsDir = path.resolve('/windows');
+  let restoreEnv: () => void;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.useFakeTimers();
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    restoreEnv = mockProcessEnv({ SystemRoot: windowsDir });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { value: platform });
+    restoreEnv();
+    vi.useRealTimers();
+  });
+
+  it('waits for Windows process-tree termination even if the server exits first', async () => {
+    const child = createFakeProcess();
+    const stopped = stopFilesystemMcpServer(child);
+    let settled = false;
+    void stopped.then(() => {
+      settled = true;
+    });
+
+    expect(mocks.execFile).toHaveBeenCalledWith(
+      path.join(windowsDir, 'System32', 'taskkill.exe'),
+      ['/PID', '1234', '/T', '/F'],
+      { windowsHide: true, timeout: 5000 },
+      expect.any(Function),
+    );
+    child.emit('exit', null, 'SIGTERM');
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    mocks.execFile.mock.calls[0][3](null);
+    await expect(stopped).resolves.toBeUndefined();
+    expect(child.kill).not.toHaveBeenCalled();
+  });
+
+  it('reports Windows process-tree termination failures', async () => {
+    const child = createFakeProcess();
+    const stopped = stopFilesystemMcpServer(child);
+    mocks.execFile.mock.calls[0][3](new Error('Access denied'));
+    await expect(stopped).rejects.toThrow(
+      'Failed to stop filesystem MCP process tree: Access denied',
+    );
+  });
+
+  it('rejects a relative Windows system directory before launching cleanup', async () => {
+    const restoreRoot = mockProcessEnv({ SystemRoot: 'relative' });
+    try {
+      await expect(stopFilesystemMcpServer(createFakeProcess())).rejects.toThrow(
+        'Cannot locate the Windows system directory',
+      );
+      expect(mocks.execFile).not.toHaveBeenCalled();
+    } finally {
+      restoreRoot();
+    }
+  });
+
+  it('does not launch cleanup for a process that already exited', async () => {
+    const child = createFakeProcess();
+    Object.defineProperty(child, 'exitCode', { value: 0 });
+    await stopFilesystemMcpServer(child);
+    expect(mocks.execFile).not.toHaveBeenCalled();
+    expect(child.kill).not.toHaveBeenCalled();
+  });
+
+  it('preserves graceful POSIX termination', async () => {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    const child = createFakeProcess();
+    const stopped = stopFilesystemMcpServer(child);
+    expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+    expect(mocks.execFile).not.toHaveBeenCalled();
+    child.emit('exit', 0, null);
+    await expect(stopped).resolves.toBeUndefined();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(child.kill).toHaveBeenCalledTimes(1);
+    expect(child.listenerCount('exit')).toBe(0);
+    expect(child.listenerCount('error')).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('waits for POSIX exit after sending SIGKILL', async () => {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    const child = createFakeProcess();
+    const stopped = stopFilesystemMcpServer(child);
+    const onStopped = vi.fn();
+    void stopped.then(onStopped);
+
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(child.kill).toHaveBeenLastCalledWith('SIGKILL');
+    expect(onStopped).not.toHaveBeenCalled();
+
+    child.emit('exit', null, 'SIGKILL');
+    await expect(stopped).resolves.toBeUndefined();
+    expect(onStopped).toHaveBeenCalledOnce();
+    expect(child.listenerCount('exit')).toBe(0);
+    expect(child.listenerCount('error')).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('waits for a previously signaled POSIX process that is still running', async () => {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    const child = createFakeProcess();
+    Object.defineProperty(child, 'killed', { value: true });
+    const stopped = stopFilesystemMcpServer(child);
+    const onStopped = vi.fn();
+    void stopped.then(onStopped);
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(onStopped).not.toHaveBeenCalled();
+    child.emit('exit', null, 'SIGTERM');
+    await expect(stopped).resolves.toBeUndefined();
+  });
+
+  it.each([
+    ['SIGTERM', 'false'],
+    ['SIGTERM', 'throw'],
+    ['SIGTERM', 'error'],
+    ['SIGKILL', 'false'],
+    ['SIGKILL', 'throw'],
+    ['SIGKILL', 'error'],
+  ] as const)('rejects and cleans up when %s fails via %s', async (failedSignal, failure) => {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    const child = createFakeProcess();
+    const existingExitListener = vi.fn();
+    const existingErrorListener = vi.fn();
+    child.on('exit', existingExitListener);
+    child.on('error', existingErrorListener);
+    vi.mocked(child.kill).mockImplementation((signal) => {
+      if (signal !== failedSignal) {
+        return true;
+      }
+      if (failure === 'throw') {
+        throw new Error('Access denied');
+      }
+      if (failure === 'error') {
+        child.emit('error', new Error('Access denied'));
+      }
+      return false;
+    });
+
+    const stopped = stopFilesystemMcpServer(child);
+    const expectation = expect(stopped).rejects.toThrow('Failed to stop filesystem MCP server');
+    if (failedSignal === 'SIGKILL') {
+      await vi.advanceTimersByTimeAsync(5000);
+    }
+    await expectation;
+    expect(child.listeners('exit')).toEqual([existingExitListener]);
+    expect(child.listeners('error')).toEqual([existingErrorListener]);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
