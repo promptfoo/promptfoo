@@ -144,8 +144,8 @@ describe('OrcaRouter', () => {
         await p.callApi('Hi');
 
         const [, init] = mockedFetchWithRetries.mock.calls[0] ?? [];
-        const headers = new Headers((init as RequestInit | undefined)?.headers);
-        expect(headers.has('openai-organization')).toBe(false);
+        const headers = (init as RequestInit | undefined)?.headers as Record<string, string>;
+        expect(headers).not.toHaveProperty('OpenAI-Organization');
       } finally {
         restoreEnv();
       }
@@ -216,10 +216,11 @@ describe('OrcaRouter', () => {
 
         const [url, init] = mockedFetchWithRetries.mock.calls[0] ?? [];
         expect(url).toBe(`${ORCAROUTER_API_BASE}/chat/completions`);
-        const headers = new Headers((init as RequestInit | undefined)?.headers);
-        expect(headers.get('authorization')).toBe('Bearer default-test-key');
-        expect(headers.get('http-referer')).toBe('https://promptfoo.dev/');
-        expect(headers.get('x-title')).toBe('promptfoo');
+        expect((init as RequestInit | undefined)?.headers).toMatchObject({
+          Authorization: 'Bearer default-test-key',
+          'HTTP-Referer': 'https://promptfoo.dev/',
+          'X-Title': 'promptfoo',
+        });
       } finally {
         restoreEnv();
       }
@@ -252,10 +253,12 @@ describe('OrcaRouter', () => {
         await p.callApi('Hi');
 
         const [, init] = mockedFetchWithRetries.mock.calls[0] ?? [];
-        const headers = new Headers((init as RequestInit | undefined)?.headers);
-        expect(headers.has('authorization')).toBe(false);
-        expect(headers.get('http-referer')).toBe('https://promptfoo.dev/');
-        expect(headers.get('x-title')).toBe('promptfoo');
+        const headers = (init as RequestInit | undefined)?.headers as Record<string, string>;
+        expect(headers).not.toHaveProperty('Authorization');
+        expect(headers).toMatchObject({
+          'HTTP-Referer': 'https://promptfoo.dev/',
+          'X-Title': 'promptfoo',
+        });
       } finally {
         restoreEnv();
       }

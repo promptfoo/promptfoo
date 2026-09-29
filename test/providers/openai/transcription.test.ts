@@ -1,9 +1,9 @@
 import fs from 'fs';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { OpenAiTranscriptionProvider } from '../../../src/providers/openai/transcription';
-import { mockProcessEnv } from '../../util/utils';
+import { mockGlobal, mockProcessEnv } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage } from './shared';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
@@ -50,6 +50,42 @@ vi.mock('fs/promises', () => {
     },
     readFile,
   };
+});
+
+class MockFile {
+  constructor(
+    public parts: any[],
+    public name: string,
+    public options?: FilePropertyBag,
+  ) {}
+}
+
+class MockFormData {
+  private data: Map<string, any[]> = new Map();
+
+  append(key: string, value: any) {
+    this.data.set(key, [...(this.data.get(key) || []), value]);
+  }
+
+  get(key: string) {
+    return this.data.get(key)?.[0];
+  }
+
+  getAll(key: string) {
+    return this.data.get(key) || [];
+  }
+
+  has(key: string) {
+    return this.data.has(key);
+  }
+}
+
+const restoreFile = mockGlobal('File', MockFile as unknown as typeof File);
+const restoreFormData = mockGlobal('FormData', MockFormData as unknown as typeof FormData);
+
+afterAll(() => {
+  restoreFormData();
+  restoreFile();
 });
 
 describe('OpenAiTranscriptionProvider', () => {
@@ -148,7 +184,7 @@ describe('OpenAiTranscriptionProvider', () => {
       });
 
       const result = await provider.callApi('/path/to/audio.wav');
-      const form = vi.mocked(fetchWithCache).mock.calls[0][1]!.body as unknown as FormData;
+      const form = vi.mocked(fetchWithCache).mock.calls[0][1]!.body as unknown as MockFormData;
 
       expect(form.get('model')).toBe('gpt-transcribe');
       expect(form.getAll('languages[]')).toEqual(['en', 'fr', 'eng', 'zh-cn']);
@@ -201,7 +237,7 @@ describe('OpenAiTranscriptionProvider', () => {
         },
         vars: {},
       });
-      const form = vi.mocked(fetchWithCache).mock.calls[0][1]!.body as unknown as FormData;
+      const form = vi.mocked(fetchWithCache).mock.calls[0][1]!.body as unknown as MockFormData;
       expect(form.getAll('languages[]')).toEqual(['fr']);
       expect(form.getAll('keywords[]')).toEqual(['AC-42']);
     });
@@ -254,7 +290,7 @@ describe('OpenAiTranscriptionProvider', () => {
         expect.any(Object),
         expect.any(Number),
         'json',
-        false,
+        undefined,
         0,
       );
     });
@@ -267,18 +303,18 @@ describe('OpenAiTranscriptionProvider', () => {
       const result = await provider.callApi('/path/to/audio.mp3');
 
       expect(fs.readFileSync).toHaveBeenCalledWith('/path/to/audio.mp3');
-      const headers = new Headers(vi.mocked(fetchWithCache).mock.calls[0][1]?.headers);
-      expect(headers.get('authorization')).toBe('Bearer test-key');
-      expect(headers.get('x-openai-originator')).toBe('promptfoo');
       expect(fetchWithCache).toHaveBeenCalledWith(
         expect.stringContaining('/audio/transcriptions'),
         expect.objectContaining({
           method: 'POST',
-          headers: expect.any(Headers),
+          headers: expect.objectContaining({
+            Authorization: 'Bearer test-key',
+            'X-OpenAI-Originator': 'promptfoo',
+          }),
         }),
         expect.any(Number),
         'json',
-        false,
+        undefined,
         undefined,
       );
 
@@ -330,9 +366,12 @@ describe('OpenAiTranscriptionProvider', () => {
 
       await provider.callApi('/path/to/audio.mp3');
 
-      const headers = new Headers(vi.mocked(fetchWithCache).mock.calls[0][1]?.headers);
-      expect(headers.has('content-type')).toBe(false);
-      expect(headers.get('X-Gateway-Token')).toBe('gateway-token');
+      const headers = vi.mocked(fetchWithCache).mock.calls[0]![1]!.headers as Record<
+        string,
+        string
+      >;
+      expect(Object.keys(headers).some((key) => key.toLowerCase() === 'content-type')).toBe(false);
+      expect(headers['X-Gateway-Token']).toBe('gateway-token');
     });
 
     it('should let lowercase Authorization replace the default transcription credential', async () => {
@@ -627,16 +666,18 @@ describe('OpenAiTranscriptionProvider', () => {
         expect(fetchWithCache).toHaveBeenCalledWith(
           'https://gateway.example/v1/audio/transcriptions',
           expect.objectContaining({
-            headers: expect.any(Headers),
+            headers: expect.objectContaining({ 'X-Gateway-Token': 'gateway-token' }),
           }),
           expect.any(Number),
           'json',
-          false,
+          undefined,
           undefined,
         );
-        const headers = new Headers(vi.mocked(fetchWithCache).mock.calls[0][1]?.headers);
-        expect(headers.has('authorization')).toBe(false);
-        expect(headers.get('X-Gateway-Token')).toBe('gateway-token');
+        const headers = vi.mocked(fetchWithCache).mock.calls[0]![1]!.headers as Record<
+          string,
+          string
+        >;
+        expect(headers).not.toHaveProperty('Authorization');
       } finally {
         restoreEnv();
       }
@@ -644,30 +685,24 @@ describe('OpenAiTranscriptionProvider', () => {
   });
 
   describe('Abort handling', () => {
-    it('cancels an in-flight transcription when the eval is aborted', async () => {
+    it('forwards the eval abort signal to transcription requests', async () => {
       const controller = new AbortController();
       const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
         config: { apiKey: 'test-key' },
       });
-      let notifyStarted!: (signal: AbortSignal) => void;
-      const started = new Promise<AbortSignal>((resolve) => {
-        notifyStarted = resolve;
-      });
-      vi.mocked(fetchWithCache).mockImplementation(async (_url, init) => {
-        const signal = init?.signal as AbortSignal;
-        notifyStarted(signal);
-        return new Promise((_resolve, reject) => {
-          signal.addEventListener('abort', () => reject(signal.reason), { once: true });
-        });
-      });
-      const result = provider.callApi('/path/to/audio.mp3', undefined, {
+
+      await provider.callApi('/path/to/audio.mp3', undefined, {
         abortSignal: controller.signal,
       });
-      const rejection = expect(result).rejects.toMatchObject({ name: 'AbortError' });
-      const signal = await started;
-      controller.abort();
-      expect(signal.aborted).toBe(true);
-      await rejection;
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.stringContaining('/audio/transcriptions'),
+        expect.objectContaining({ signal: controller.signal }),
+        expect.any(Number),
+        'json',
+        undefined,
+        undefined,
+      );
     });
 
     it('does not transcribe for an already-aborted eval', async () => {
@@ -714,7 +749,7 @@ describe('OpenAiTranscriptionProvider', () => {
 
       await provider.callApi('/path/to/audio.mp3');
 
-      const formData = vi.mocked(fetchWithCache).mock.calls[0]![1]!.body as unknown as FormData;
+      const formData = vi.mocked(fetchWithCache).mock.calls[0]![1]!.body as unknown as MockFormData;
       expect(formData.get('response_format')).toBe('json');
       expect(formData.get('chunking_strategy[type]')).toBe('server_vad');
       expect(formData.get('chunking_strategy[threshold]')).toBe('0.6');
@@ -757,7 +792,7 @@ describe('OpenAiTranscriptionProvider', () => {
 
       await provider.callApi('/path/to/audio.mp3');
 
-      const formData = vi.mocked(fetchWithCache).mock.calls[0]![1]!.body as unknown as FormData;
+      const formData = vi.mocked(fetchWithCache).mock.calls[0]![1]!.body as unknown as MockFormData;
       expect(formData.get('response_format')).toBe('diarized_json');
       expect(formData.get('chunking_strategy')).toBe('auto');
     });
@@ -781,7 +816,7 @@ describe('OpenAiTranscriptionProvider', () => {
 
       await provider.callApi('/path/to/audio.mp3');
 
-      const formData = vi.mocked(fetchWithCache).mock.calls[0]![1]!.body as unknown as FormData;
+      const formData = vi.mocked(fetchWithCache).mock.calls[0]![1]!.body as unknown as MockFormData;
       expect(formData.get('chunking_strategy')).toBe('auto');
       expect(formData.has('prompt')).toBe(false);
       expect(formData.has('timestamp_granularities[]')).toBe(false);
@@ -809,7 +844,7 @@ describe('OpenAiTranscriptionProvider', () => {
 
       await provider.callApi('/path/to/audio.mp3');
 
-      const formData = vi.mocked(fetchWithCache).mock.calls[0]![1]!.body as unknown as FormData;
+      const formData = vi.mocked(fetchWithCache).mock.calls[0]![1]!.body as unknown as MockFormData;
       expect(formData.has('chunking_strategy')).toBe(false);
       expect(formData.get('chunking_strategy[type]')).toBe('server_vad');
       expect(formData.get('chunking_strategy[threshold]')).toBe('0.6');
@@ -988,7 +1023,7 @@ describe('OpenAiTranscriptionProvider', () => {
 
       await provider.callApi('/path/to/audio.mp3');
 
-      const formData = vi.mocked(fetchWithCache).mock.calls[0]![1]!.body as unknown as FormData;
+      const formData = vi.mocked(fetchWithCache).mock.calls[0]![1]!.body as unknown as MockFormData;
       expect(formData.get('response_format')).toBe('verbose_json');
       expect(formData.getAll('timestamp_granularities[]')).toEqual(['word', 'segment']);
       expect(formData.has('timestamp_granularities')).toBe(false);
@@ -1004,8 +1039,18 @@ describe('OpenAiTranscriptionProvider', () => {
 
       await provider.callApi('/path/to/audio.mp3');
 
-      const headers = new Headers(vi.mocked(fetchWithCache).mock.calls[0][1]?.headers);
-      expect(headers.get('OpenAI-Organization')).toBe('test-org');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'OpenAI-Organization': 'test-org',
+          }),
+        }),
+        expect.any(Number),
+        'json',
+        undefined,
+        undefined,
+      );
     });
 
     it('should merge prompt config with provider config', async () => {
@@ -1044,7 +1089,7 @@ describe('OpenAiTranscriptionProvider', () => {
         expect.any(Object),
         expect.any(Number),
         'json',
-        false,
+        undefined,
         undefined,
       );
     });

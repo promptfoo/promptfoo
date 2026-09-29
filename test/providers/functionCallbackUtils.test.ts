@@ -76,7 +76,7 @@ describe('FunctionCallbackHandler', () => {
         output: 'callback result',
         isError: false,
       });
-      expect(mockCallback).toHaveBeenCalledWith('{"param": "value"}');
+      expect(mockCallback).toHaveBeenCalledWith('{"param": "value"}', undefined);
     });
 
     it('traces function callbacks with their tool call identifier', async () => {
@@ -272,7 +272,7 @@ describe('FunctionCallbackHandler', () => {
         output: 'tool result',
         isError: false,
       });
-      expect(mockCallback).toHaveBeenCalledWith('{"toolParam": "toolValue"}');
+      expect(mockCallback).toHaveBeenCalledWith('{"toolParam": "toolValue"}', undefined);
     });
 
     it('should stringify non-string callback results', async () => {
@@ -287,23 +287,6 @@ describe('FunctionCallbackHandler', () => {
       expect(result).toEqual({
         output: '{"result":"object"}',
         isError: false,
-      });
-    });
-
-    it('should return the original call when callback results cannot be stringified', async () => {
-      const circularResult: Record<string, unknown> = {};
-      circularResult.self = circularResult;
-      const mockCallback = vi.fn().mockResolvedValue(circularResult);
-      const callbacks: FunctionCallbackConfig = {
-        testFunction: mockCallback,
-      };
-      const call = { name: 'testFunction', arguments: '{}' };
-
-      const result = await handler.processCall(call, callbacks);
-
-      expect(result).toEqual({
-        output: JSON.stringify(call),
-        isError: true,
       });
     });
 
@@ -448,7 +431,7 @@ describe('FunctionCallbackHandler', () => {
       expect(mockImportModule).toHaveBeenCalledWith(
         path.resolve('/test/basePath', 'path/to/function.js'),
       );
-      expect(mockExternalFunction).toHaveBeenCalledWith('{"param": "value"}');
+      expect(mockExternalFunction).toHaveBeenCalledWith('{"param": "value"}', undefined);
     });
 
     it('should load specific function from external file', async () => {
@@ -470,28 +453,7 @@ describe('FunctionCallbackHandler', () => {
         output: 'specific result',
         isError: false,
       });
-      expect(mockSpecificFunction).toHaveBeenCalledWith('{}');
-    });
-
-    it('should fall back to a default external function when a named export is missing', async () => {
-      const mockDefaultFunction = vi.fn().mockResolvedValue('default result');
-      mockImportModule.mockResolvedValue({ default: mockDefaultFunction });
-
-      const callbacks: FunctionCallbackConfig = {
-        testFunction: 'file://path/to/functions.js:missingFunction',
-      };
-      const call = { name: 'testFunction', arguments: '{}' };
-
-      const result = await handler.processCall(call, callbacks);
-
-      expect(result).toEqual({
-        output: 'default result',
-        isError: false,
-      });
-      expect(mockImportModule).toHaveBeenCalledWith(
-        path.resolve('/test/basePath', 'path/to/functions.js'),
-      );
-      expect(mockDefaultFunction).toHaveBeenCalledWith('{}');
+      expect(mockSpecificFunction).toHaveBeenCalledWith('{}', undefined);
     });
 
     it('should load specific function from Windows-style external file paths', async () => {
@@ -524,7 +486,7 @@ describe('FunctionCallbackHandler', () => {
         expect(mockImportModule).toHaveBeenCalledWith(
           path.resolve('C:/', 'C:/path/to/functions.js'),
         );
-        expect(mockSpecificFunction).toHaveBeenCalledWith('{}');
+        expect(mockSpecificFunction).toHaveBeenCalledWith('{}', undefined);
       } finally {
         cliState.basePath = originalBasePath;
       }
@@ -604,22 +566,6 @@ describe('FunctionCallbackHandler', () => {
       expect(mockImportModule).toHaveBeenCalledWith(
         path.resolve('/test/basePath', 'path/to/functions:default.js'),
       );
-    });
-
-    it('prefers a requested named export on callable CommonJS modules', async () => {
-      const defaultCallback = vi.fn().mockResolvedValue('default');
-      const namedCallback = vi.fn().mockResolvedValue('named');
-      Object.assign(defaultCallback, { named: namedCallback });
-      mockImportModule.mockResolvedValue(defaultCallback);
-
-      const result = await handler.processCall(
-        { name: 'testFunction', arguments: '{}' },
-        { testFunction: 'file://callbacks.js:named' },
-      );
-
-      expect(result.output).toBe('named');
-      expect(namedCallback).toHaveBeenCalled();
-      expect(defaultCallback).not.toHaveBeenCalled();
     });
 
     it('should handle inline function strings', async () => {

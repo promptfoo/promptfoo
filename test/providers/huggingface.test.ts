@@ -32,6 +32,7 @@ vi.mock('../../src/globalConfig/cloud', () => {
       isEnabled: vi.fn().mockReturnValue(false),
       getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.dev'),
       getApiKey: vi.fn().mockReturnValue('test-api-key'),
+      getAuthHeaderName: () => 'Authorization',
     },
   };
 });
@@ -280,7 +281,7 @@ describe('HuggingfaceChatCompletionProvider', () => {
       await provider.callApi('test');
 
       const [, options] = mockFetch.mock.calls[0];
-      expect(new Headers(options.headers).get('authorization')).toBe('Bearer my-secret-token');
+      expect(options.headers.Authorization).toBe('Bearer my-secret-token');
     });
 
     it('handles structured message input', async () => {

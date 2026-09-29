@@ -8,13 +8,23 @@ import { OpenAiResponsesProvider } from '../../../../src/providers/openai/respon
 
 describe('OpenAiResponsesProvider refusals', () => {
   describe('refusal handling', () => {
-    it('keeps incomplete content-filter refusals gradeable', async () => {
+    it('should handle explicit refusal content in message', async () => {
       const mockApiResponse = {
         id: 'resp_abc123',
-        status: 'incomplete',
-        incomplete_details: { reason: 'content_filter' },
+        status: 'completed',
         model: 'gpt-4o',
-        output: [],
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'refusal',
+                refusal: 'I cannot fulfill this request due to content policy violation.',
+              },
+            ],
+          },
+        ],
         usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
       };
 
@@ -33,11 +43,8 @@ describe('OpenAiResponsesProvider refusals', () => {
 
       const result = await provider.callApi('Test prompt with refusal');
 
-      expect(result.error).toBeUndefined();
       expect(result.isRefusal).toBe(true);
-      expect(result.guardrails).toEqual({ flagged: true });
-      expect(result.output).toBe('');
-      expect(result.tokenUsage).toMatchObject({ total: 15, prompt: 10, completion: 5 });
+      expect(result.output).toBe('I cannot fulfill this request due to content policy violation.');
     });
 
     it('should handle direct refusal in message object', async () => {
@@ -84,7 +91,6 @@ describe('OpenAiResponsesProvider refusals', () => {
             param: null,
             code: 'invalid_prompt',
           },
-          usage: { prompt_tokens: 8, completion_tokens: 0, total_tokens: 8 },
         },
         cached: false,
         status: 400,
@@ -106,12 +112,6 @@ describe('OpenAiResponsesProvider refusals', () => {
       expect(result.output).toContain('some random error message');
       expect(result.output).toContain('400 Bad Request');
       expect(result.isRefusal).toBe(true);
-      expect(result.tokenUsage).toEqual({
-        prompt: 8,
-        completion: 0,
-        total: 8,
-        numRequests: 1,
-      });
     });
 
     it('should still treat non-refusal 400 errors as errors', async () => {

@@ -157,13 +157,21 @@ describe('Novita providers', () => {
 
       const result = await provider.callApi('Hello Novita');
 
-      const [url, rawRequest] = vi.mocked(fetchWithCache).mock.calls[0];
-      const request = rawRequest as RequestInit;
-      expect(url).toBe('https://api.novita.ai/openai/v1/chat/completions');
-      expect(request.method).toBe('POST');
-      const headers = new Headers(request.headers);
-      expect(headers.get('content-type')).toBe('application/json');
-      expect(headers.get('authorization')).toBe('Bearer novita-key');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://api.novita.ai/openai/v1/chat/completions',
+        expect.objectContaining({
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer novita-key',
+          },
+        }),
+        expect.any(Number),
+        'json',
+        undefined,
+        undefined,
+      );
+      const request = vi.mocked(fetchWithCache).mock.calls[0][1] as RequestInit;
       expect(JSON.parse(request.body as string)).toMatchObject({
         model: 'deepseek/deepseek-v3.2',
         max_tokens: 64,
@@ -220,11 +228,12 @@ describe('Novita providers', () => {
 
       const result = await provider.callApi('complete this');
 
-      const [url, rawRequest] = vi.mocked(fetchWithCache).mock.calls[0];
-      const request = rawRequest as RequestInit;
+      const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
       expect(url).toBe('https://api.novita.ai/openai/v1/completions');
-      expect(new Headers(request.headers).get('authorization')).toBe('Bearer novita-key');
-      expect(JSON.parse(request.body as string).temperature).toBe(1);
+      expect((request as RequestInit).headers).toEqual(
+        expect.objectContaining({ Authorization: 'Bearer novita-key' }),
+      );
+      expect(JSON.parse((request as RequestInit).body as string).temperature).toBe(1);
       expect(result.output).toBe('Completion output');
     });
 
@@ -245,12 +254,12 @@ describe('Novita providers', () => {
 
       const result = await provider.callEmbeddingApi('embed this');
 
-      const [url, rawRequest] = vi.mocked(fetchWithCache).mock.calls[0];
-      const request = rawRequest as RequestInit;
+      const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
       expect(url).toBe('https://api.novita.ai/openai/v1/embeddings');
-      const headers = new Headers(request.headers);
-      expect(headers.get('content-type')).toBe('application/json');
-      expect(headers.get('authorization')).toBe('Bearer novita-key');
+      expect((request as RequestInit).headers).toEqual({
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer novita-key',
+      });
       expect(result.embedding).toEqual([0.1, 0.2]);
     });
   });

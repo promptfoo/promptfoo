@@ -1,5 +1,10 @@
+import type { IncomingMessage } from 'http';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ChatKitBrowserPool } from '../../../src/providers/openai/chatkit-pool';
+import {
+  ChatKitBrowserPool,
+  isLocalChatKitRequest,
+} from '../../../src/providers/openai/chatkit-pool';
 
 // Create hoisted mocks to access them in tests
 const mockPage = vi.hoisted(() => ({
@@ -71,6 +76,61 @@ describe('ChatKitBrowserPool', () => {
     vi.clearAllMocks();
     // Ensure clean state after each test
     ChatKitBrowserPool.resetInstance();
+    vi.useRealTimers();
+  });
+
+  describe('local request boundary', () => {
+    it.each([
+      [{ host: '127.0.0.1:3000' }, true],
+      [{ host: '127.0.0.1:3000', origin: 'http://127.0.0.1:3000' }, true],
+      [{ host: '127.0.0.1:3001' }, false],
+      [{ host: '127.0.0.1:3000', origin: 'http://127.0.0.1:3001' }, false],
+      [{}, false],
+    ])('checks the local server authority for %j', (headers, expected) => {
+      expect(isLocalChatKitRequest({ headers } as IncomingMessage, 3000)).toBe(expected);
+    });
+
+    it.each([
+      ['GET', ''],
+      ['GET', '/session'],
+      ['POST', ''],
+      ['POST', '/session/extra'],
+    ])('handles only the exact %s template route with suffix %s', async (method, suffix) => {
+      const instance = ChatKitBrowserPool.getInstance();
+      const factory = vi.fn().mockResolvedValue('fixture-secret');
+      instance.setTemplate(TEST_TEMPLATE_KEY, TEST_HTML, factory);
+      await instance.initialize();
+      const writeHead = vi.fn();
+      const end = vi.fn();
+      mockServerRequestHandler(
+        {
+          method,
+          headers: { host: '127.0.0.1:3000' },
+          url: `/template/${encodeURIComponent(TEST_TEMPLATE_KEY)}${suffix}`,
+        },
+        { writeHead, end },
+      );
+      expect(factory).not.toHaveBeenCalled();
+      expect(writeHead.mock.calls[0][0]).toBe(method === 'GET' && suffix === '' ? 200 : 404);
+    });
+
+    it('rejects requests for another local server before minting a session', async () => {
+      const instance = ChatKitBrowserPool.getInstance();
+      const factory = vi.fn().mockResolvedValue('fixture-secret');
+      instance.setTemplate(TEST_TEMPLATE_KEY, TEST_HTML, factory);
+      await instance.initialize();
+      const writeHead = vi.fn();
+      mockServerRequestHandler(
+        {
+          method: 'POST',
+          headers: { host: '127.0.0.1:3001' },
+          url: `/template/${encodeURIComponent(TEST_TEMPLATE_KEY)}/session`,
+        },
+        { writeHead, end: vi.fn() },
+      );
+      expect(writeHead).toHaveBeenCalledWith(403);
+      expect(factory).not.toHaveBeenCalled();
+    });
   });
 
   describe('getInstance', () => {
@@ -259,6 +319,7 @@ describe('ChatKitBrowserPool', () => {
       mockServerRequestHandler(
         {
           method: 'POST',
+          headers: { host: '127.0.0.1:3000' },
           url: `/template/${encodeURIComponent(TEST_TEMPLATE_KEY)}/session`,
         },
         {
@@ -270,7 +331,10 @@ describe('ChatKitBrowserPool', () => {
       await Promise.resolve();
       await Promise.resolve();
 
-      expect(writeHead).toHaveBeenCalledWith(200, { 'Content-Type': 'application/json' });
+      expect(writeHead).toHaveBeenCalledWith(200, {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store',
+      });
       expect(end).toHaveBeenCalledWith(JSON.stringify({ client_secret: 'pooled-secret-123' }));
     });
 
@@ -298,6 +362,7 @@ describe('ChatKitBrowserPool', () => {
       mockServerRequestHandler(
         {
           method: 'POST',
+          headers: { host: '127.0.0.1:3000' },
           url: `/template/${encodeURIComponent(firstKey)}/session`,
         },
         {
@@ -316,6 +381,7 @@ describe('ChatKitBrowserPool', () => {
       mockServerRequestHandler(
         {
           method: 'POST',
+          headers: { host: '127.0.0.1:3000' },
           url: `/template/${encodeURIComponent(secondKey)}/session`,
         },
         {
@@ -346,6 +412,7 @@ describe('ChatKitBrowserPool', () => {
       mockServerRequestHandler(
         {
           method: 'POST',
+          headers: { host: '127.0.0.1:3000' },
           url: `/template/${encodeURIComponent(TEST_TEMPLATE_KEY)}/session`,
         },
         {
@@ -559,6 +626,113 @@ describe('ChatKitBrowserPool', () => {
   });
 
   describe('template isolation', () => {
+    it('replaces an already idle template when a different provider arrives at capacity', async () => {
+      const instance = ChatKitBrowserPool.getInstance({ maxConcurrency: 1 });
+      instance.setTemplate('first-provider', TEST_HTML);
+      instance.setTemplate('second-provider', TEST_HTML);
+      const first = await instance.acquirePage('first-provider');
+      await instance.releasePage(first);
+
+      const second = await instance.acquirePage('second-provider');
+      expect(second.templateKey).toBe('second-provider');
+      expect(second).not.toBe(first);
+      expect(instance.getStats()).toMatchObject({ total: 1, inUse: 1, waiting: 0 });
+      expect(mockContext.close).toHaveBeenCalled();
+    });
+
+    it('keeps the initial creation reserved until it is recorded', async () => {
+      const instance = ChatKitBrowserPool.getInstance({ maxConcurrency: 1 });
+      instance.setTemplate(TEST_TEMPLATE_KEY, TEST_HTML);
+      let finish!: (value: typeof mockContext) => void;
+      mockBrowser.newContext.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+      const firstRequest = instance.acquirePage(TEST_TEMPLATE_KEY);
+      await vi.waitFor(() => expect(mockBrowser.newContext).toHaveBeenCalledTimes(1));
+      const secondRequest = instance.acquirePage(TEST_TEMPLATE_KEY);
+      finish(mockContext);
+      const first = await firstRequest;
+      expect(mockBrowser.newContext).toHaveBeenCalledTimes(1);
+      expect(instance.getStats()).toMatchObject({ total: 1, inUse: 1, waiting: 1 });
+      await instance.releasePage(first);
+      expect(await secondRequest).toBe(first);
+    });
+
+    it('rejects a queued creation failure and releases its waiting timer', async () => {
+      vi.useFakeTimers();
+      const instance = ChatKitBrowserPool.getInstance({ maxConcurrency: 1 });
+      instance.setTemplate('first', TEST_HTML);
+      instance.setTemplate('second', TEST_HTML);
+      const first = await instance.acquirePage('first');
+      const second = instance.acquirePage('second');
+      const rejected = expect(second).rejects.toThrow('fixture creation failure');
+      mockBrowser.newContext.mockRejectedValueOnce(new Error('fixture creation failure'));
+      await instance.releasePage(first);
+      await rejected;
+      expect(instance.getStats()).toMatchObject({ total: 0, waiting: 0 });
+      await instance.shutdown();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('rejects queued callers and clears timers on shutdown', async () => {
+      vi.useFakeTimers();
+      const instance = ChatKitBrowserPool.getInstance({ maxConcurrency: 1 });
+      instance.setTemplate(TEST_TEMPLATE_KEY, TEST_HTML);
+      await instance.acquirePage(TEST_TEMPLATE_KEY);
+      const waiting = instance.acquirePage(TEST_TEMPLATE_KEY);
+      const rejected = expect(waiting).rejects.toThrow('pool shut down');
+      await vi.waitFor(() => expect(instance.getStats().waiting).toBe(1));
+      await instance.shutdown();
+      await rejected;
+      await vi.advanceTimersByTimeAsync(0);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('keeps the browser alive while a reserved creation is pending', async () => {
+      vi.useFakeTimers();
+      const instance = ChatKitBrowserPool.getInstance({ maxConcurrency: 2 });
+      instance.setTemplate(TEST_TEMPLATE_KEY, TEST_HTML);
+      const first = await instance.acquirePage(TEST_TEMPLATE_KEY);
+      let finish!: (value: typeof mockContext) => void;
+      mockBrowser.newContext.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+      const creating = instance.acquirePage(TEST_TEMPLATE_KEY);
+      await vi.waitFor(() => expect(mockBrowser.newContext).toHaveBeenCalledTimes(2));
+      await instance.releasePage(first);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(mockBrowser.close).not.toHaveBeenCalled();
+      finish(mockContext);
+      await expect(creating).resolves.toMatchObject({ inUse: true });
+    });
+
+    it('closes a page whose creation completes after shutdown', async () => {
+      const instance = ChatKitBrowserPool.getInstance({ maxConcurrency: 1 });
+      instance.setTemplate(TEST_TEMPLATE_KEY, TEST_HTML);
+      let finish!: (value: typeof mockContext) => void;
+      mockBrowser.newContext.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+      const creating = instance.acquirePage(TEST_TEMPLATE_KEY);
+      const rejected = expect(creating).rejects.toThrow('pool shut down');
+      await vi.waitFor(() => expect(mockBrowser.newContext).toHaveBeenCalledTimes(1));
+      await instance.shutdown();
+      finish(mockContext);
+      await rejected;
+      expect(mockContext.close).toHaveBeenCalled();
+      expect(instance.getStats().total).toBe(0);
+    });
+
     it('reclaims an idle page for a waiting isolated template at capacity', async () => {
       const instance = ChatKitBrowserPool.getInstance({ maxConcurrency: 1 });
       const key1 = 'wf_workflow1:default:default';

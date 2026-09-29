@@ -4,7 +4,7 @@ import {
   loadCallbackFromFileUrl,
   wrapError,
 } from '../util/functions/loadFunction';
-import { getMcpErrorMessage, isMcpErrorResult } from './mcp/util';
+import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from './mcp/util';
 import { withGenAIToolSpan } from './tracing';
 
 import type {
@@ -266,9 +266,8 @@ export class FunctionCallbackHandler {
       };
     }
 
-    // Tool call format. Chat Completions tool calls do not always carry
-    // `type: "function"`, so key off the nested function payload itself.
-    if (call.function?.name) {
+    // Tool call format
+    if (call.type === 'function' && call.function?.name) {
       return {
         name: call.function.name,
         arguments: call.function.arguments,
@@ -313,16 +312,8 @@ export class FunctionCallbackHandler {
         this.loadedCallbacks[functionName] = callback;
       }
 
-      // Keep single-argument callbacks single-argument when no provider context exists;
-      // many Promptfoo configs use plain `(args) => ...`.
-      const result = context === undefined ? await callback(args) : await callback(args, context);
-      if (result === undefined || result === null) {
-        return '';
-      }
-      if (typeof result === 'object') {
-        return JSON.stringify(result);
-      }
-      return String(result);
+      const result = await callback(args, context);
+      return typeof result === 'string' ? result : JSON.stringify(result);
     });
   }
 
@@ -366,40 +357,7 @@ export class FunctionCallbackHandler {
         };
       }
 
-      // Normalize MCP content to a readable string to avoid "[object Object]"
-      const normalizeContent = (content: any): string => {
-        if (content == null) {
-          return '';
-        }
-        if (typeof content === 'string') {
-          return content;
-        }
-        if (Array.isArray(content)) {
-          return content
-            .map((part) => {
-              if (typeof part === 'string') {
-                return part;
-              }
-              if (part && typeof part === 'object') {
-                if ('text' in part && (part as any).text != null) {
-                  return String((part as any).text);
-                }
-                if ('json' in part) {
-                  return JSON.stringify((part as any).json);
-                }
-                if ('data' in part) {
-                  return JSON.stringify((part as any).data);
-                }
-                return JSON.stringify(part);
-              }
-              return String(part);
-            })
-            .join('\n');
-        }
-        return JSON.stringify(content);
-      };
-
-      const content = normalizeContent(result?.content);
+      const content = normalizeMcpToolContent(result?.content);
       return { output: `MCP Tool Result (${toolName}): ${content}`, isError: false };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

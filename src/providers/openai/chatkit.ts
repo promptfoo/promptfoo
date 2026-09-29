@@ -38,9 +38,9 @@ import logger from '../../logger';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { providerRegistry } from '../providerRegistry';
 import { getRequestTimeoutMs } from '../shared';
-import { ChatKitBrowserPool } from './chatkit-pool';
-import { createOpenAiClient, unwrapOpenAiTransportError } from './client';
+import { ChatKitBrowserPool, isLocalChatKitRequest } from './chatkit-pool';
 import { OpenAiGenericProvider } from './index';
+import { appendOpenAiApiPath } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -783,37 +783,38 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     }
     validateUserId(userId);
 
-    const timeout = getRequestTimeoutMs();
-    const client = createOpenAiClient({
-      apiKey,
-      organization: this.getOrganization(),
-      baseURL: this.getApiUrl(),
-      headers: this.getOpenAiRequestHeaders(this.config.headers),
-      // Keep ChatKit session minting on Promptfoo's proxy-aware transport.
-      // The pre-SDK browser fetch had no implicit retries, so preserve that unless configured.
-      maxRetries: 0,
-      timeout,
-      fetch: (url, init = {}) =>
-        fetchWithRetries(
-          url instanceof URL ? url.toString() : url,
-          init,
-          timeout,
-          this.config.maxRetries ?? 0,
-        ),
+    const headers = new Headers({
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'OpenAI-Beta': 'chatkit_beta=v1',
     });
-
-    try {
-      const session = await client.beta.chatkit.sessions.create({
-        workflow: {
-          id: workflowId,
-          ...(this.chatKitConfig.version ? { version: this.chatKitConfig.version } : {}),
-        },
-        user: userId,
-      });
-      return session.client_secret;
-    } catch (err) {
-      throw unwrapOpenAiTransportError(err);
+    for (const [name, value] of Object.entries(this.getOpenAiRequestHeaders())) {
+      headers.set(name, value);
     }
+    const response = await fetchWithRetries(
+      appendOpenAiApiPath(this.getApiUrl(), 'chatkit/sessions'),
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          workflow: {
+            id: workflowId,
+            ...(this.chatKitConfig.version ? { version: this.chatKitConfig.version } : {}),
+          },
+          user: userId,
+        }),
+      },
+      getRequestTimeoutMs(),
+      this.config.maxRetries ?? 0,
+    );
+    if (!response.ok) {
+      throw new Error(`ChatKit session request failed: ${response.status} ${response.statusText}`);
+    }
+    const session = (await response.json()) as { client_secret?: unknown };
+    if (typeof session.client_secret !== 'string' || !session.client_secret) {
+      throw new Error('ChatKit session response did not include a client secret');
+    }
+    return session.client_secret;
   }
 
   /**
@@ -852,10 +853,18 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     const html = generateChatKitHTML('/api/chatkit/session');
 
     this.server = http.createServer((req, res) => {
+      if (!isLocalChatKitRequest(req, this.serverPort)) {
+        res.writeHead(403);
+        res.end();
+        return;
+      }
       if (req.method === 'POST' && req.url === '/api/chatkit/session') {
         void this.createChatKitClientSecret()
           .then((clientSecret) => {
-            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.writeHead(200, {
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-store',
+            });
             res.end(JSON.stringify({ client_secret: clientSecret }));
           })
           .catch((error) => {
@@ -866,6 +875,11 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
         return;
       }
 
+      if (req.method !== 'GET' || req.url !== '/') {
+        res.writeHead(404);
+        res.end();
+        return;
+      }
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(html);
     });

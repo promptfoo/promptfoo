@@ -64,20 +64,7 @@ vi.mock('../../../src/logger', () => ({
   logRequestResponse: vi.fn(),
 }));
 vi.mock('../../../src/util/fetch/index', () => ({
-  fetchWithProxy: async (...args: unknown[]) => {
-    const result = await mockFetchWithProxy(...args);
-    if (result instanceof Response) {
-      return result;
-    }
-    return new Response(
-      result.arrayBuffer ? await result.arrayBuffer() : JSON.stringify(await result.json()),
-      {
-        status: result.status ?? (result.ok ? 200 : 500),
-        statusText: result.statusText ?? 'OK',
-        headers: { 'content-type': result.arrayBuffer ? 'video/mp4' : 'application/json' },
-      },
-    );
-  },
+  fetchWithProxy: mockFetchWithProxy,
 }));
 vi.mock('../../../src/providers/video', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../src/providers/video')>();
@@ -395,9 +382,14 @@ describe('OpenAiVideoProvider', () => {
       expect(result.video?.thumbnail).toContain('storageRef:');
       expect(result.video?.spritesheet).toContain('storageRef:');
       expect(result.cost).toBeGreaterThan(0);
-      const [url, request] = mockFetchWithProxy.mock.calls[0];
-      expect(url).toMatch(/\/videos$/);
-      expect(new Headers(request.headers).get('X-OpenAI-Originator')).toBe('promptfoo');
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        expect.stringMatching(/\/videos$/),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'X-OpenAI-Originator': 'promptfoo',
+          }),
+        }),
+      );
     });
 
     it('should propagate per-prompt headers through video polling and downloads', async () => {
@@ -418,7 +410,9 @@ describe('OpenAiVideoProvider', () => {
       expect(result.error).toBeUndefined();
       expect(mockFetchWithProxy).toHaveBeenCalledTimes(5);
       for (const [, options] of mockFetchWithProxy.mock.calls) {
-        expect(new Headers(options.headers).get('X-Route-Token')).toBe('per-prompt-route');
+        expect(options.headers).toEqual(
+          expect.objectContaining({ 'X-Route-Token': 'per-prompt-route' }),
+        );
       }
     });
 
@@ -664,7 +658,7 @@ describe('OpenAiVideoProvider', () => {
         body: string;
         headers: Record<string, string>;
       };
-      expect(new Headers(request.headers).get('Content-Type')).toBe('application/json');
+      expect(request.headers['Content-Type']).toBe('application/json');
       expect(JSON.parse(request.body)).toMatchObject({
         model: 'sora-2',
         characters: [{ id: 'char_123' }, { id: 'char_456' }],
@@ -1971,7 +1965,7 @@ describe('OpenAiVideoProvider', () => {
         body: string;
         headers: Record<string, string>;
       };
-      expect(new Headers(request.headers).get('Content-Type')).toBe('application/json');
+      expect(request.headers['Content-Type']).toBe('application/json');
       expect(JSON.parse(request.body).input_reference).toEqual({
         image_url: 'data:image/png;base64,base64EncodedImageData',
       });
