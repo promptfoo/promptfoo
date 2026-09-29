@@ -38,6 +38,7 @@ import {
   type VarValue,
 } from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
+import { parseFileUrl } from '../util/functions/loadFunction';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
@@ -484,11 +485,12 @@ async function runAssertionInternal({
   type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
   let renderedValue = assertion.value;
   let valueFromScript: ValueFromScriptType;
-  if (
-    typeof renderedValue === 'string' &&
-    !(isolatedJavascript && (renderedValue.startsWith('file://') || isPackagePath(renderedValue)))
-  ) {
-    if (renderedValue.startsWith('file://')) {
+  if (typeof renderedValue === 'string' && !(isolatedJavascript && isPackagePath(renderedValue))) {
+    if (isolatedJavascript && renderedValue.startsWith('file://')) {
+      if (!isJavascriptFile(parseFileUrl(renderedValue).filePath)) {
+        renderedValue = processFileReference(renderedValue);
+      }
+    } else if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
       const fileRef = renderedValue.slice('file://'.length);
       let filePath = fileRef;

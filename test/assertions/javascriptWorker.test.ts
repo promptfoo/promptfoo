@@ -96,6 +96,27 @@ describe('isolated JavaScript assertions', () => {
     ).resolves.toMatchObject({ pass: true, score: 1 });
   });
 
+  it.each([
+    ['txt', 'output === context.vars.expected'],
+    ['txt', 'const expected = context.vars.expected; output === expected'],
+    ['txt', 'const expected = context.vars.expected;\nreturn output === expected;'],
+    ['yaml', '"output === context.vars.expected"'],
+    ['json', '"output === context.vars.expected"'],
+  ])('evaluates a raw %s expression with the existing file reader', async (extension, source) => {
+    await fs.writeFile(path.join(basePath, `check.${extension}`), source);
+    for (const executionMode of ['in-process', 'worker'] as const) {
+      await expect(
+        cliState.withBasePath(basePath, () =>
+          runAssertion({
+            assertion: { type: 'javascript', executionMode, value: `file://check.${extension}` },
+            test: { vars: { expected: 'fixture' } },
+            providerResponse: { output: 'fixture' },
+          }),
+        ),
+      ).resolves.toMatchObject({ pass: true, score: 1 });
+    }
+  });
+
   it('loads a package export using the active configuration directory', async () => {
     const directory = path.join(basePath, 'node_modules', 'fixture-worker');
     await fs.mkdir(directory, { recursive: true });
