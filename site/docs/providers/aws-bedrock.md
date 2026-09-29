@@ -206,8 +206,10 @@ The `thinking` configuration controls Claude's reasoning behavior:
 
 Use `showThinking: true` to include the model's reasoning process in the output, or `false` to only show the final response.
 
-:::warning
-Do not set `temperature`, `topP`, or `topK` when using extended thinking. These sampling parameters are incompatible with reasoning mode.
+:::note
+Claude rejects `temperature` and `topK` with extended thinking, needs a `topP` of at least 0.95,
+and never accepts `temperature` together with `topP`. Promptfoo omits or adjusts those values
+and logs a warning, including the default `temperature` the InvokeModel path would otherwise send.
 :::
 
 ### Configuration Options
