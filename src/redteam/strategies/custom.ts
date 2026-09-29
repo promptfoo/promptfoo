@@ -17,8 +17,7 @@ export function addCustom(
     injectVar,
     { variant, ...config },
     {
-      providerName:
-        strategyId === 'custom' ? 'promptfoo:redteam:custom' : `promptfoo:redteam:${strategyId}`,
+      providerName: `promptfoo:redteam:${strategyId}`,
       metricSuffix: displayName,
       strategyId,
     },
