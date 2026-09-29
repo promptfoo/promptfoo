@@ -1,3 +1,4 @@
+import { getEnvOverrides } from '../../envars';
 import { resolveProviderEnv } from '../env';
 import { GoogleAuthManager } from './auth';
 import { GoogleLiveProvider } from './live';
@@ -40,7 +41,19 @@ export class VertexLiveProvider extends GoogleLiveProvider {
         keyFilename: config.keyFilename,
         scopes: config.scopes,
       }));
-    } catch {
+    } catch (error) {
+      if (
+        !config.credentials &&
+        !config.keyFilename &&
+        !config.googleAuthOptions?.credentials &&
+        !config.googleAuthOptions?.keyFilename &&
+        !config.googleAuthOptions?.keyFile &&
+        [this.env, getEnvOverrides(), getEnvOverrides('file')].some(
+          (env) => env?.GOOGLE_APPLICATION_CREDENTIALS !== undefined,
+        )
+      ) {
+        throw error;
+      }
       throw new Error(
         'Vertex Live requires Google Cloud OAuth credentials. Run gcloud auth application-default login, or configure service account credentials. Gemini API keys are not supported.',
       );

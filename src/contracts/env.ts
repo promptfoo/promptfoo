@@ -176,13 +176,6 @@ export const ProviderEnvOverridesSchema = z.object({
 // These settings apply to the whole evaluation, not an individual provider.
 export const EnvOverridesSchema = ProviderEnvOverridesSchema.extend({
   AZURE_STORAGE_CONNECTION_STRING: z.string().optional(),
-  IS_TESTING: z.string().optional(),
-  PROMPTFOO_CACHE_ENABLED: z.string().optional(),
-  PROMPTFOO_CACHE_PATH: z.string().optional(),
-  PROMPTFOO_CACHE_TTL: z.string().optional(),
-  PROMPTFOO_CACHE_TYPE: z.string().optional(),
-  PROMPTFOO_CONFIG_DIR: z.string().optional(),
-  PROMPTFOO_DISABLE_TELEMETRY: z.string().optional(),
 });
 
 // The runtime schema silently strips unknown keys at parse time (zod's default
