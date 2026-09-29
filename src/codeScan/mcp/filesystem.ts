@@ -7,12 +7,14 @@
 import { type ChildProcess, execFile, spawn } from 'child_process';
 import { realpathSync } from 'fs';
 import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from 'path';
+import { promisify } from 'util';
 
 import logger from '../../logger';
 import { FilesystemMcpError } from '../../types/codeScan';
 
 const FILESYSTEM_MCP_READY_MARKER = 'running on stdio';
 const FILESYSTEM_MCP_READY_TIMEOUT_MS = 30000;
+const execFileAsync = promisify(execFile);
 
 function formatFilesystemMcpExitReason(code: number | null, signal: NodeJS.Signals | null): string {
   return code === null ? (signal ? `signal ${signal}` : 'unknown reason') : `code ${code}`;
@@ -250,24 +252,18 @@ export async function stopFilesystemMcpServer(mcpProcess: ChildProcess): Promise
     if (!windowsDir || !isAbsolute(windowsDir)) {
       throw new FilesystemMcpError('Cannot locate the Windows system directory for MCP cleanup');
     }
-    return new Promise((resolve, reject) => {
-      execFile(
+    try {
+      await execFileAsync(
         join(windowsDir, 'System32', 'taskkill.exe'),
         ['/PID', String(mcpProcess.pid), '/T', '/F'],
         { windowsHide: true, timeout: 5000 },
-        (error) => {
-          if (error) {
-            reject(
-              new FilesystemMcpError(
-                `Failed to stop filesystem MCP process tree: ${error.message}`,
-              ),
-            );
-          } else {
-            resolve();
-          }
-        },
       );
-    });
+    } catch (error) {
+      throw new FilesystemMcpError(
+        `Failed to stop filesystem MCP process tree: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    return;
   }
 
   return new Promise((resolve) => {
