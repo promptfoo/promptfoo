@@ -65,11 +65,7 @@ export function getHeaderCredentialForms(value: string): string[] {
 /** Characters that continue a credential-like token, such as base64 or URL-safe text. */
 const TOKEN_CHARACTER = /[A-Za-z0-9._~+/=-]/;
 
-/**
- * Replace a credential in diagnostic text. Values of eight or more characters are replaced
- * anywhere. Shorter values are replaced only as whole tokens, so `api-key abc`,
- * `"api-key":"abc"`, and `user:abc@` lose the secret while longer words containing it stay intact.
- */
+/** Replace long credentials anywhere and short credentials only at token boundaries. */
 function redactCredential(text: string, credential: string): string {
   if (credential.length > text.length) {
     return text;
@@ -113,7 +109,7 @@ export function redactCredentials(text: string, credentials: Iterable<string>): 
     redacted = redactCredential(redacted, credential);
   }
   return redacted
-    .replace(/\b(Bearer|Basic)\s+(?!\[REDACTED\])[\w.~+/=-]{8,}/gi, `$1 ${REDACTED}`)
+    .replace(/\b(Bearer|Basic)\s+(?!\[REDACTED\])[\w.~+/=-]+/gi, `$1 ${REDACTED}`)
     .replace(/\bsk-[\w-]{16,}/g, REDACTED);
 }
 
@@ -152,15 +148,12 @@ const CREDENTIAL_FIELD_END: Record<string, RegExp> = {
   bare: /[\s,;&})\]"'\\]/g,
 };
 
-/**
- * Redact diagnostic text from an upstream service: known credentials (see `redactCredentials`),
- * then URLs with userinfo, secret parameters, or opaque path tokens, and the values of
- * credential-named fields that only the upstream knows. Every pattern is linear in the text length.
- */
+/** Redact known credentials, URLs, and credential fields in upstream diagnostics. */
 export function redactDiagnosticText(text: string, credentials: Iterable<string>): string {
-  const source = redactCredentials(text, credentials).replace(DIAGNOSTIC_URL, (url) =>
-    sanitizeUrlForLogging(url),
-  );
+  // Serialized diagnostics may escape URL slashes more than once.
+  const source = redactCredentials(text, credentials)
+    .replace(/\\+\//g, '/')
+    .replace(DIAGNOSTIC_URL, (url) => sanitizeUrlForLogging(url));
   let redacted = '';
   let copied = 0;
   for (const match of source.matchAll(CREDENTIAL_FIELD)) {

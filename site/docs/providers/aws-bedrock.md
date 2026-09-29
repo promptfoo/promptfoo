@@ -34,7 +34,7 @@ The `bedrock` provider accepts Amazon Bedrock model IDs, including regional IDs 
 
    ```yaml
    providers:
-     - id: bedrock:us.anthropic.claude-sonnet-4-6
+     - id: bedrock:us.anthropic.claude-sonnet-5
    ```
 
    Note that the provider is `bedrock:` followed by the [ARN/model id](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns) of the model.
@@ -43,13 +43,12 @@ The `bedrock` provider accepts Amazon Bedrock model IDs, including regional IDs 
 
    ```yaml
    providers:
-     - id: bedrock:us.anthropic.claude-sonnet-4-6
+     - id: bedrock:us.anthropic.claude-sonnet-5
        config:
          accessKeyId: YOUR_ACCESS_KEY_ID
          secretAccessKey: YOUR_SECRET_ACCESS_KEY
          region: 'us-west-2'
          max_tokens: 256
-         temperature: 0.7
    ```
 
 ## Application Inference Profiles
@@ -103,13 +102,13 @@ The `inferenceModelType` config option supports the following values:
 ```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  # Claude Opus 4.7 via global inference profile
-  - id: bedrock:arn:aws:bedrock:us-east-2::inference-profile/global.anthropic.claude-opus-4-7
+  # Claude Opus 5 via global inference profile
+  # (Opus 4.7+ and the Claude 5 models reject temperature/top_p/top_k)
+  - id: bedrock:arn:aws:bedrock:us-east-2::inference-profile/global.anthropic.claude-opus-5
     config:
       inferenceModelType: 'claude'
       region: 'us-east-2'
       max_tokens: 1024
-      temperature: 0.7
 
   # Using an inference profile that routes to Claude models
   - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-profile
@@ -157,16 +156,34 @@ the `bedrock:converse:` prefix to access this API.
 
 ```yaml
 providers:
-  - id: bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0
+  - id: bedrock:converse:us.anthropic.claude-sonnet-5
     config:
       region: us-east-1
       maxTokens: 4096
-      temperature: 0.7
 ```
 
 ### Extended Thinking
 
-Enable Claude's extended thinking capabilities for complex reasoning tasks:
+Claude 5 and Opus 4.7+ use adaptive thinking. On Converse, set reasoning depth through
+`additionalModelRequestFields.output_config.effort`:
+
+```yaml
+providers:
+  - id: bedrock:converse:us.anthropic.claude-sonnet-5
+    config:
+      region: us-west-2
+      maxTokens: 20000
+      thinking:
+        type: adaptive
+        display: summarized
+      additionalModelRequestFields:
+        output_config:
+          effort: high # low | medium | high | xhigh | max
+      showThinking: true # Include thinking content in output
+```
+
+Claude 4.5 models use manual thinking budgets. Opus 4.6 and Sonnet 4.6 also accept
+them, but [adaptive thinking is recommended](https://platform.claude.com/docs/en/build-with-claude/extended-thinking#migrating-to-adaptive-thinking):
 
 ```yaml
 providers:
@@ -177,47 +194,50 @@ providers:
       thinking:
         type: enabled
         budget_tokens: 16000
-      showThinking: true # Include thinking content in output
+      showThinking: true
 ```
 
-The `thinking` configuration controls Claude's reasoning behavior:
+Manual `budget_tokens` must be at least 1024 and less than `maxTokens`. Promptfoo converts
+manual thinking to adaptive thinking on models that no longer accept manual budgets.
 
-- `type: enabled` - Activates extended thinking
-- `budget_tokens` - Maximum tokens allocated for thinking (minimum 1024)
-- For Claude Opus 4.7 and 4.8, promptfoo converts `type: enabled` to adaptive thinking because manual thinking is not accepted by those models.
+`showThinking: true` includes any returned thinking summary in the output. Claude 5
+models omit summaries by default; request them with `thinking.display: summarized`.
+Set `showThinking: false` to exclude them from the eval output.
 
-Use `showThinking: true` to include the model's reasoning process in the output, or `false` to only show the final response.
-
-:::warning
-Do not set `temperature`, `topP`, or `topK` when using extended thinking. These sampling parameters are incompatible with reasoning mode.
+:::note
+Claude rejects `temperature` and `topK` with extended thinking, needs a `topP` of at least 0.95,
+and never accepts `temperature` together with `topP`. Promptfoo omits or adjusts those values
+and logs a warning, including the default `temperature` the InvokeModel path would otherwise send.
 :::
 
 ### Configuration Options
 
-| Option                | Description                                               |
-| --------------------- | --------------------------------------------------------- |
-| `maxTokens`           | Maximum output tokens                                     |
-| `temperature`         | Sampling temperature (0-1)                                |
-| `topP`                | Nucleus sampling parameter                                |
-| `stopSequences`       | Array of stop sequences                                   |
-| `thinking`            | Extended thinking configuration (Claude models)           |
-| `reasoningConfig`     | Reasoning configuration (Amazon Nova 2 models)            |
-| `showThinking`        | Include thinking in output (default: true)                |
-| `performanceConfig`   | Performance settings (`latency: optimized`)               |
-| `serviceTier`         | Service tier object (`type: priority \| default \| flex`) |
-| `guardrailIdentifier` | Guardrail ID for content filtering                        |
-| `guardrailVersion`    | Guardrail version (default: DRAFT)                        |
+| Option                         | Description                                                        |
+| ------------------------------ | ------------------------------------------------------------------ |
+| `maxTokens`                    | Maximum output tokens                                              |
+| `temperature`                  | Sampling temperature (0-1)                                         |
+| `topP`                         | Nucleus sampling parameter                                         |
+| `stopSequences`                | Array of stop sequences                                            |
+| `thinking`                     | Extended thinking configuration (Claude models)                    |
+| `additionalModelRequestFields` | Raw model-specific fields (e.g. `output_config.effort` for Claude) |
+| `reasoningConfig`              | Reasoning configuration (Amazon Nova 2 models)                     |
+| `showThinking`                 | Include thinking in output (default: true)                         |
+| `performanceConfig`            | Performance settings (`latency: optimized`)                        |
+| `serviceTier`                  | Service tier object (`type: priority \| default \| flex`)          |
+| `guardrailIdentifier`          | Guardrail ID for content filtering                                 |
+| `guardrailVersion`             | Guardrail version (default: DRAFT)                                 |
 
 ### Performance Configuration
 
-Optimize for latency or cost:
+Configure latency and service tier. [Latency optimization](https://docs.aws.amazon.com/bedrock/latest/userguide/latency-optimized-inference.html)
+is available only for supported models:
 
 ```yaml
 providers:
-  - id: bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0
+  - id: bedrock:converse:us.anthropic.claude-sonnet-5
     config:
       performanceConfig:
-        latency: optimized # or 'standard'
+        latency: standard
       serviceTier:
         type: priority # or 'default', 'flex'
 ```
@@ -238,7 +258,7 @@ Bedrock `toolSpec` entries, and sent on every request.
 
 ```yaml
 providers:
-  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
+  - id: bedrock:converse:us.anthropic.claude-sonnet-5
     config:
       region: us-east-1
       maxTokens: 1024
@@ -254,7 +274,7 @@ providers:
           #   args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp']
         # Optional: only expose specific tools
         tools:
-          - ask_question
+          - ask_wiki_question
       toolChoice: auto
 ```
 
@@ -312,7 +332,7 @@ Specify AWS access keys directly in your configuration. **For security, use envi
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+  - id: bedrock:us.anthropic.claude-sonnet-5
     config:
       accessKeyId: '{{env.AWS_ACCESS_KEY_ID}}'
       secretAccessKey: '{{env.AWS_SECRET_ACCESS_KEY}}'
@@ -350,7 +370,7 @@ export AWS_BEARER_TOKEN_BEDROCK="your-api-key-here"
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+  - id: bedrock:us.anthropic.claude-sonnet-5
     config:
       region: 'us-east-1' # Optional, defaults to us-east-1
 ```
@@ -361,7 +381,7 @@ Specify the API key directly in your configuration:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+  - id: bedrock:us.anthropic.claude-sonnet-5
     config:
       apiKey: 'your-api-key-here'
       region: 'us-east-1' # Optional, defaults to us-east-1
@@ -385,7 +405,7 @@ Use a named profile from your AWS configuration for AWS SSO setups or managing m
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+  - id: bedrock:us.anthropic.claude-sonnet-5
     config:
       profile: 'YOUR_SSO_PROFILE'
       region: 'us-east-1' # Optional, defaults to us-east-1
@@ -430,7 +450,7 @@ Use the AWS SDK's standard credential chain:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+  - id: bedrock:us.anthropic.claude-sonnet-5
     config:
       region: 'us-east-1' # Only region specified
 ```
@@ -499,17 +519,16 @@ providers:
       interfaceConfig:
         temperature: 0.7
         max_new_tokens: 256
+  # Claude 5 models reject temperature/top_p/top_k
+  - id: bedrock:us.anthropic.claude-opus-5-5
+    config:
+      region: 'us-east-1'
+      max_tokens: 256
+  - id: bedrock:us.anthropic.claude-sonnet-5
+    config:
+      region: 'us-east-1'
+      max_tokens: 256
   - id: bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0
-    config:
-      region: 'us-east-1'
-      temperature: 0.7
-      max_tokens: 256
-  - id: bedrock:us.anthropic.claude-opus-4-1-20250805-v1:0
-    config:
-      region: 'us-east-1'
-      temperature: 0.7
-      max_tokens: 256
-  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
     config:
       region: 'us-east-1'
       temperature: 0.7
@@ -519,17 +538,12 @@ providers:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
-  - id: bedrock:us.anthropic.claude-opus-4-8
+  - id: bedrock:openai.gpt-6-sol # frontier: Responses API, uses a Bedrock key or AWS credentials
     config:
       region: 'us-east-1'
-      temperature: 0.7
-      max_tokens: 256
-  - id: bedrock:openai.gpt-5.6-sol # frontier: Responses API, uses a Bedrock key or AWS credentials
-    config:
-      region: 'us-east-2'
       apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}'
       reasoning_effort: 'medium'
-      max_output_tokens: 256
+      max_output_tokens: 2048
   - id: bedrock:openai.gpt-oss-120b-1:0
     config:
       region: 'us-west-2'
@@ -829,9 +843,13 @@ config:
 
 For Claude models (e.g., `anthropic.claude-fable-5`, `anthropic.claude-sonnet-5`, `anthropic.claude-sonnet-4-6`, `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-haiku-4-5-20251001-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `us.anthropic.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
 
-**Note**: Claude Opus 4.8 (`anthropic.claude-opus-4-8`) and Claude Opus 4.7 (`anthropic.claude-opus-4-7`) are available via cross-region inference profiles (`us.`, `eu.`, `jp.`, `global.`) and, in select regions, through the base foundation model ID. Claude Opus 4.6 (`anthropic.claude-opus-4-6-v1`) and Claude Opus 4.5 (`anthropic.claude-opus-4-5-20251101-v1:0`) require an inference profile ARN and cannot be used as a direct model ID. See the [Application Inference Profiles](#application-inference-profiles) section for setup. promptfoo automatically omits unsupported sampling parameters (`temperature`, `topP`, and `topK` — including raw `top_k` in `additionalModelRequestFields`) and converts configured manual thinking to adaptive thinking for Opus 4.7, Opus 4.8, Opus 5, and Sonnet 5.
+**Note**: Claude Opus 4.8 (`anthropic.claude-opus-4-8`) and Claude Opus 4.7 (`anthropic.claude-opus-4-7`) are available via cross-region inference profiles (`us.`, `eu.`, `jp.`, `global.`) and, in select regions, through the base foundation model ID. Claude Opus 4.6 (`anthropic.claude-opus-4-6-v1`) and Claude Opus 4.5 (`anthropic.claude-opus-4-5-20251101-v1:0`) require an inference profile ARN and cannot be used as a direct model ID. See the [Application Inference Profiles](#application-inference-profiles) section for setup. promptfoo automatically omits unsupported sampling parameters (`temperature`, `topP`, and `topK` — including raw `top_k` in `additionalModelRequestFields`) and converts configured manual thinking to adaptive thinking for Opus 4.7, Opus 4.8, Opus 5, Opus 5.5, Sonnet 5, and Sonnet 5.5.
 
 **Note**: Claude Opus 5 (`anthropic.claude-opus-5`) is available through the base foundation model ID and the `us.`/`eu.`/`global.` cross-region inference profiles (e.g. `bedrock:global.anthropic.claude-opus-5`); use the `global.` profile for dynamic routing. Unlike Opus 4.7/4.8 there is no `jp.` profile — the Japan regions surface Opus 5 through `global.` only. Cost is reported on both the default `bedrock:` (InvokeModel) and `bedrock:converse:` paths — the `global.` endpoint bills at the standard $5/$25 rate and regional profiles (`us.`/`eu.`) add the 10% Claude 4.5+ regional premium.
+
+**Note**: Use Claude Opus 5.5 (`anthropic.claude-opus-5-5`) through a cross-region inference profile — `global.`, `us.`, `eu.`, `jp.`, or `au.` (for example, `bedrock:global.anthropic.claude-opus-5-5`). On-demand calls to the base model ID return a `ValidationException`. Cost is reported on both the `bedrock:` and `bedrock:converse:` paths: `global.` bills $4 / $20 per million input / output tokens, and geo profiles add the 10% regional premium.
+
+**Note**: Use Claude Sonnet 5.5 through the `global.` cross-region inference profile (`bedrock:global.anthropic.claude-sonnet-5-5`). On-demand calls to the base model ID (`anthropic.claude-sonnet-5-5`) return a `ValidationException`. Cost is reported on both the `bedrock:` and `bedrock:converse:` paths at $2 / $10 per million input / output tokens on the global profile. Sonnet 5.5 rejects `thinking: { type: 'disabled' }` and forced tool use, so promptfoo sends `thinking: { type: 'between_tools' }` instead (at effort `high` or below) and omits `any`/`tool` tool choices.
 
 **Note**: Claude Sonnet 5 (`anthropic.claude-sonnet-5`) is available through the base foundation model ID and the `us.`/`eu.`/`global.` cross-region inference profiles (e.g. `bedrock:global.anthropic.claude-sonnet-5`); use the `global.` profile for dynamic routing. Cost is reported on both the default `bedrock:` (InvokeModel) and `bedrock:converse:` paths — the `global.` endpoint bills at the standard $3/$15 rate and regional/geo profiles (`us.`/`eu.`) add the 10% Claude 4.5+ regional premium.
 
@@ -903,7 +921,7 @@ calculating costs.
 ```yaml
 config:
   max_tokens: 256
-  temperature: 0.7
+  temperature: 0.7 # Omit on Opus 4.7 and later, Sonnet 5, and the Fable/Mythos 5 models
   anthropic_version: 'bedrock-2023-05-31'
   tools: [...] # Optional: Specify available tools
   tool_choice: { ... } # Optional: Specify tool choice
@@ -911,7 +929,22 @@ config:
   showThinking: true # Optional: Control whether thinking content is included in output
 ```
 
-When using Claude's extended thinking capability, you can configure it like this:
+On Claude 5 and Opus 4.7+, extended thinking is adaptive:
+
+```yaml
+config:
+  max_tokens: 20000
+  thinking:
+    type: 'adaptive'
+  showThinking: true # Whether to include thinking content in the output (default: true)
+```
+
+The InvokeModel path exposes no reasoning-effort field. To set the depth, use
+`bedrock:converse:` with `additionalModelRequestFields.output_config.effort`, or the
+[Anthropic provider](/docs/providers/anthropic), which takes a top-level `effort`.
+
+Claude 4.5 models use manual budgets. Opus 4.6 and Sonnet 4.6 still accept them,
+but also support adaptive thinking:
 
 ```yaml
 config:
@@ -919,19 +952,12 @@ config:
   thinking:
     type: 'enabled'
     budget_tokens: 16000 # Must be ≥1024 and less than max_tokens
-  showThinking: true # Whether to include thinking content in the output (default: true)
+  showThinking: true
 ```
 
-:::tip
-
-The `showThinking` parameter controls whether thinking content is included in the response output:
-
-- When set to `true` (default), thinking content will be included in the output
-- When set to `false`, thinking content will be excluded from the output
-
-This is useful when you want to use thinking for better reasoning but don't want to expose the thinking process to end users.
-
-:::
+`showThinking` defaults to `true` and includes summaries the API returns. On Claude 5,
+set `thinking.display: summarized` to request them; `showThinking` alone does not enable
+summaries. Set it to `false` to exclude thinking content from the eval output.
 
 ### Titan Models
 
@@ -1077,11 +1103,22 @@ requests and return the final assistant message directly.
 Amazon Bedrock hosts two families of OpenAI models, and they are served by **different
 APIs**. promptfoo routes each `bedrock:openai.*` id to the correct one automatically.
 
+GPT-6 Sol (`openai.gpt-6-sol`) and Luna (`openai.gpt-6-luna`) use the
+[OpenAI-compatible Responses API on Mantle](https://developers.openai.com/api/docs/guides/amazon-bedrock)
+in `us-east-1`, which promptfoo selects by default for those two IDs. AWS also offers the
+models through Bedrock Runtime with United States and global routing; the bare promptfoo
+selectors use Mantle. Bedrock does not support Responses reasoning updates; use the request-level effort.
+
+For region-specific Standard processing, promptfoo estimates
+$2.20 input / $11 output for Sol and $0.11 input / $0.55 output per million tokens. Bedrock Runtime global profiles use the global Standard rates: $2 / $10 for Sol and $0.10 / $0.50 for Luna per million tokens.
+See [OpenAI's Bedrock pricing guidance](https://developers.openai.com/api/docs/guides/amazon-bedrock#pricing)
+for regional pricing and AWS billing terms.
+
 #### Frontier models (GPT-5.x)
 
 - **`openai.gpt-5.6-sol`**: Flagship reasoning tier (`us-east-1`, `us-east-2`)
-- **`openai.gpt-5.6-terra`**: Balanced tier (`us-east-1`, `us-east-2`, `us-west-2`)
-- **`openai.gpt-5.6-luna`**: Fast, cost-efficient tier (`us-east-1`, `us-east-2`, `us-west-2`)
+- **`openai.gpt-5.6-terra`**: Balanced tier (`us-east-1`, `us-east-2`, `us-west-2`, `us-gov-west-1`, `us-gov-east-1`)
+- **`openai.gpt-5.6-luna`**: Fast, cost-efficient tier (`us-east-1`, `us-east-2`, `us-west-2`, `us-gov-west-1`, `us-gov-east-1`)
 - **`openai.gpt-5.5`**: Earlier flagship frontier model (`us-east-1`, `us-east-2`)
 - **`openai.gpt-5.4`**: Earlier frontier model (`us-east-1`, `us-east-2`, `us-west-2`)
 
@@ -1090,8 +1127,11 @@ endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1/responses`) for bar
 GPT-5.6 also supports [Runtime Converse](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-56-sol.html).
 Promptfoo routes the bare
 `bedrock:openai.gpt-5.x` IDs to its OpenAI Responses provider, preserves the Bedrock request
-model ID, and returns the clean final answer. `us-east-2` is the default when no Region is
-configured; GPT-5.6 region availability is checked before a request is made.
+model ID, and returns the clean final answer. When no Region is configured, promptfoo uses
+`us-west-2` for `openai.gpt-6-astra`, `us-east-1` for `openai.gpt-6-sol` and `openai.gpt-6-luna`,
+and `us-east-2` for other frontier models. A configured Region is always used; if Mantle does not
+serve the model there, it returns HTTP 404 ("model does not exist") and promptfoo adds the
+Regions that list the model to the error.
 
 Authentication accepts either a pre-generated **Amazon Bedrock API key** or AWS credentials:
 
@@ -1161,7 +1201,8 @@ when inputs or outputs must not be retained; Bedrock otherwise keeps stored resp
 days in the source Region and allows follow-up requests with `previous_response_id`.
 
 GPT-5.6 pricing on Bedrock includes a 10% regional-processing uplift: [Sol](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-56-sol.html) is $4.40 input /
-$22 output, Terra $2.20 / $13.20, and Luna $0.22 / $1.32 per million tokens. Cache reads
+$22 output, Terra $2.20 / $13.20, and Luna $0.22 / $1.32 per million tokens. In AWS GovCloud
+(US), Terra is $2.64 / $15.84 and Luna $0.264 / $1.584 per million tokens. Cache reads
 receive a 90% discount, cache writes cost 1.25x the uncached input rate, and cached prefixes
 remain available for at least 30 minutes. Place
 `prompt_cache_breakpoint: { mode: explicit }` on a stable
@@ -1536,16 +1577,16 @@ defaultTest:
   options:
     provider:
       # Using a regular model ID
-      id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+      id: bedrock:us.anthropic.claude-sonnet-5
       config:
-        temperature: 0
+        region: 'us-east-1'
         # Other provider config options
 
       # Or using an inference profile
       # id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/grading-profile
       # config:
       #   inferenceModelType: 'claude'
-      #   temperature: 0
+      #   region: 'us-east-1'
 ```
 
 You can also do this for individual assertions:
@@ -1588,7 +1629,7 @@ Several Bedrock models support multimodal inputs including images and text:
 
 - **Amazon Nova** - Supports images and videos
 - **Llama 3.2 Vision** - Supports images (11B and 90B variants)
-- **Claude 3+** - Supports images (via Converse API)
+- **Claude** - Supports images (via Converse API); Claude 3 and later
 - **Pixtral Large** - Supports images (via Converse API)
 
 To use these capabilities, structure your prompts to include both image data and text content.
@@ -1681,7 +1722,7 @@ For example:
 
 ```yaml
 providers:
-  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+  - id: bedrock:us.anthropic.claude-sonnet-5
     config:
       guardrailIdentifier: 'test-guardrail'
       guardrailVersion: 1 # The version number for the guardrail. The value can also be DRAFT.
@@ -1889,11 +1930,10 @@ Configure the Knowledge Base provider by specifying `kb` in your provider ID. No
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: bedrock:kb:us.anthropic.claude-3-7-sonnet-20250219-v1:0
+  - id: bedrock:kb:us.anthropic.claude-sonnet-5
     config:
       region: 'us-east-2'
       knowledgeBaseId: 'YOUR_KNOWLEDGE_BASE_ID'
-      temperature: 0.0
       max_tokens: 1000
       numberOfResults: 5 # Optional: number of chunks to retrieve (AWS default when not specified)
 ```
@@ -1906,8 +1946,8 @@ System-defined inference profile IDs with `us.`, `eu.`, `apac.`, `global.`, `jp.
 
 For example:
 
-- `bedrock:kb:us.anthropic.claude-3-5-sonnet-20241022-v2:0` (US region)
-- `bedrock:kb:eu.anthropic.claude-3-5-sonnet-20241022-v2:0` (EU region)
+- `bedrock:kb:us.anthropic.claude-sonnet-5` (US region)
+- `bedrock:kb:eu.anthropic.claude-sonnet-5` (EU region)
 
 Configuration options include:
 
@@ -1922,7 +1962,7 @@ Configuration options include:
 - `accessKeyId`, `secretAccessKey`, `sessionToken`: AWS credentials (if not using environment variables or IAM roles)
 - `profile`: AWS profile name for SSO authentication
 
-For Claude models that no longer support sampling parameters, such as [Opus 4.7](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-4-7.html), the provider omits `temperature`, `top_p`, and `top_k` while preserving `max_tokens`. This check uses `config.modelArn` when supplied.
+For Claude models that no longer support sampling parameters — [Opus 4.7](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-4-7.html), Opus 4.8, Opus 5, Opus 5.5, Sonnet 5, and the Fable/Mythos 5 models — the provider omits `temperature`, `top_p`, and `top_k` while preserving `max_tokens`. This check uses `config.modelArn` when supplied.
 
 [Claude Sonnet 4.5 and Haiku 4.5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic-claude-messages-request-response.html) accept either `temperature` or `top_p`. When both are configured, `top_p` takes precedence. The provider applies the same precedence to Sonnet 4.6. For Amazon Nova, `top_k` is mapped to its native `inferenceConfig.topK` request field; for [Cohere Command R and R+](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-cohere-command-r-plus.html), it is mapped to `k`.
 
@@ -1936,19 +1976,17 @@ prompts:
   - 'Tell me about quantum computing.'
 
 providers:
-  - id: bedrock:kb:us.anthropic.claude-3-7-sonnet-20250219-v1:0
+  - id: bedrock:kb:us.anthropic.claude-sonnet-5
     config:
       region: 'us-east-2'
       knowledgeBaseId: 'YOUR_KNOWLEDGE_BASE_ID'
-      temperature: 0.0
       max_tokens: 1000
       numberOfResults: 10
 
   # Regular Claude model for comparison
-  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+  - id: bedrock:us.anthropic.claude-sonnet-5
     config:
       region: 'us-east-2'
-      temperature: 0.0
       max_tokens: 1000
 
 tests:

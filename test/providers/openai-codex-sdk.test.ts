@@ -1,4 +1,6 @@
+import { execFileSync } from 'child_process';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
@@ -94,6 +96,41 @@ function restoreEnvVar(name: 'OPENAI_API_KEY' | 'CODEX_API_KEY', value: string |
     mockProcessEnv({ [name]: value });
   }
 }
+
+const bundledCodexCli = path.resolve(process.cwd(), 'node_modules/@openai/codex/bin/codex.js');
+
+describe('bundled Codex model metadata', () => {
+  it.runIf(fs.existsSync(bundledCodexCli))(
+    'includes the supported Sol and Luna reasoning modes offline',
+    () => {
+      const codexHome = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-codex-models-'));
+      try {
+        const output = execFileSync(
+          process.execPath,
+          [bundledCodexCli, 'debug', 'models', '--bundled'],
+          {
+            cwd: codexHome,
+            encoding: 'utf8',
+            env: { ...process.env, CODEX_HOME: codexHome, CODEX_API_KEY: '', OPENAI_API_KEY: '' },
+            maxBuffer: 10 * 1024 * 1024,
+          },
+        );
+        const catalog = JSON.parse(output) as {
+          models: Array<{ slug: string; supported_reasoning_levels: Array<{ effort: string }> }>;
+        };
+        const modelEfforts = (slug: string) =>
+          catalog.models
+            .find((model) => model.slug === slug)
+            ?.supported_reasoning_levels.map(({ effort }) => effort);
+        expect(modelEfforts('gpt-6-sol')).toEqual(expect.arrayContaining(['high', 'max', 'ultra']));
+        expect(modelEfforts('gpt-6-luna')).toEqual(expect.arrayContaining(['high', 'max']));
+        expect(modelEfforts('gpt-6-luna')).not.toContain('ultra');
+      } finally {
+        fs.rmSync(codexHome, { recursive: true, force: true });
+      }
+    },
+  );
+});
 
 describe('OpenAICodexSDKProvider', () => {
   let statSyncSpy: MockInstance;
@@ -221,6 +258,8 @@ describe('OpenAICodexSDKProvider', () => {
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.5' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.5-pro' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-6-astra' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-6-sol' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-6-luna' } });
 
       expect(warnSpy).not.toHaveBeenCalled();
 
@@ -1862,6 +1901,8 @@ describe('OpenAICodexSDKProvider', () => {
       it.each([
         ['gpt-6-astra', 'max'],
         ['gpt-6-astra', 'ultra'],
+        ['gpt-6-sol', 'max'],
+        ['gpt-6-luna', 'max'],
         ['gpt-5.6-sol', 'max'],
         ['gpt-5.6-sol', 'ultra'],
         ['gpt-5.6-terra', 'max'],
@@ -3219,6 +3260,8 @@ describe('OpenAICodexSDKProvider', () => {
 
       it.each([
         ['gpt-6-astra', 10, 1, 50],
+        ['gpt-6-sol', 2, 0.2, 10],
+        ['gpt-6-luna', 0.1, 0.01, 0.5],
         ['gpt-5.6-sol', 4, 0.4, 20],
         ['gpt-5.6-terra', 2, 0.2, 12],
         ['gpt-5.6-luna', 0.2, 0.02, 1.2],
