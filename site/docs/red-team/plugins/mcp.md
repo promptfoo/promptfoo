@@ -1,7 +1,6 @@
 ---
-title: MCP Plugin
 sidebar_label: MCP Plugin
-description: Test MCP-enabled agents for tool manipulation, function-call abuse, system prompt leakage, and unauthorized invocation across exposed server capabilities.
+description: Red team MCP implementations by testing function exploits and tool manipulation to prevent unauthorized AI agent access
 ---
 
 # MCP Plugin
@@ -10,7 +9,7 @@ description: Test MCP-enabled agents for tool manipulation, function-call abuse,
 
 The Model Context Protocol (MCP) Plugin tests whether agentic systems using MCP are vulnerable to function call exploits, system prompt leakage, unauthorized tool discovery, or other MCP-specific attacks.
 
-This plugin aligns most strongly with [ASI02: Tool Misuse and Exploitation](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/), including tool poisoning via MCP tool descriptors, schemas, metadata, or routing information. It also relates to [ASI04: Agentic Supply Chain Vulnerabilities](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) when MCP servers/registries or tool descriptors are malicious or compromised. For multi-agent deployments, it additionally maps to ASI07 (Insecure Inter-Agent Communication) and [T16: Insecure Inter-Agent Protocol Abuse](https://genai.owasp.org/resource/agentic-ai-threats-and-mitigations/), which covers protocol-level abuse of systems like MCP.
+The [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) covers tool misuse under ASI02 and compromised tools or servers under ASI04. Promptfoo includes this plugin in both framework mappings.
 
 ## Purpose
 
@@ -90,7 +89,7 @@ Here's an example configuration for testing an MCP-enabled customer support agen
 description: Red Teaming MCP with tool use
 
 providers:
-  - id: anthropic:messages:claude-3-haiku-20240307
+  - id: anthropic:messages:claude-haiku-4-5
     config:
       mcp:
         enabled: true

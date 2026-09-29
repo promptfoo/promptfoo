@@ -157,7 +157,7 @@ fix(webui): fix pagination crash on empty results
 chore(webui): update button styling on settings page
 docs(site): add guide for custom providers
 chore(deps): update Material-UI monorepo to v8 (major)
-fix(deps): update dependency better-sqlite3 to v12.4.6
+fix(deps): update dependency zod to v4.2.0
 feat(api)!: simplify provider interface
 chore: bump version 0.119.11
 test: add smoke tests for CLI commands

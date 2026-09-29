@@ -1,0 +1,79 @@
+# n8n-agent (n8n AI Agent Evaluation)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example n8n-agent
+```
+
+This example demonstrates how to evaluate n8n AI agents and workflows using the n8n provider.
+
+## Prerequisites
+
+1. A self-hosted n8n instance with a webhook-triggered workflow
+2. An AI agent workflow that accepts messages and returns responses
+
+## Setup
+
+1. Create an n8n workflow with a Webhook trigger node
+2. Add your AI agent logic (e.g., AI Agent node, OpenAI node)
+3. Configure the workflow to return the agent's response
+4. Update `promptfooconfig.yaml` with your webhook URL:
+
+```yaml
+providers:
+  - id: n8n:https://your-n8n-instance.com/webhook/your-agent-id
+```
+
+### Environment Variables
+
+```bash
+export N8N_API_KEY=your-api-key  # If your webhook requires authentication
+```
+
+## Running the Example
+
+```bash
+# Run the evaluation
+npx promptfoo eval
+
+# View results
+npx promptfoo view
+```
+
+## Configuration Options
+
+- `url`: Webhook URL (alternative to specifying in provider path)
+- `method`: HTTP method (default: `POST`); `GET` sends rendered body fields as query parameters
+- `headers`: Additional request headers
+- `body`: Custom request body template with Nunjucks support; prefer object form for JSON payloads
+- `transformResponse`: JavaScript expression to extract output
+- `sessionHeader`: Request header name for the session ID
+- `sessionParser`: JavaScript expression to extract a session ID
+- `sessionField`: Request body field for a supplied session ID
+
+For multi-turn runs, pass `sessionId` in test variables or use a multi-turn strategy so sessions
+remain scoped to one conversation. Keep webhook credentials in environment-backed headers rather
+than embedding them in webhook URLs. The provider uses a fingerprinted display ID and skips
+response caching so tokenized URLs and session-bearing requests do not enter response-cache
+diagnostics or storage; URLs still remain in configuration and outbound requests.
+
+## Response Formats
+
+The provider automatically handles common n8n response formats:
+
+```javascript
+{ "output": "Response text" }
+{ "response": "Agent response" }
+{ "message": { "content": "Hello" } }
+[{ "json": { "output": "Result" } }]
+```
+
+For custom formats, use `transformResponse`:
+
+```yaml
+config:
+  transformResponse: 'json.data.agentMessage'
+```
+
+For more information, see the [n8n Provider documentation](/docs/providers/n8n).

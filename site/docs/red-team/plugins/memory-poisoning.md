@@ -1,7 +1,6 @@
 ---
-title: Memory Poisoning Plugin
 sidebar_label: Memory Poisoning
-description: Test stateful AI agents for memory poisoning that persists adversarial instructions across interactions and changes later decisions or tool use in production.
+description: Red team memory poisoning vulnerabilities in AI agents through persistent state manipulation to prevent malicious instruction injection and protect decision integrity
 ---
 
 # Memory Poisoning Plugin
@@ -10,11 +9,7 @@ description: Test stateful AI agents for memory poisoning that persists adversar
 
 The Memory Poisoning plugin tests whether stateful agents are vulnerable to memory poisoning attacks that manipulate an agent's memory to alter its behavior in subsequent interactions.
 
-This plugin maps to **T1: Memory Poisoning** in [OWASP Agentic AI - Threats and Mitigations](https://genai.owasp.org/resource/agentic-ai-threats-and-mitigations/) and **ASI06: Memory and Context Poisoning** in the [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/).
-
-## OWASP Context
-
-Memory poisoning targets retained application context rather than model training data. It is related to [LLM04:2025 Data and Model Poisoning](https://genai.owasp.org/llmrisk/llm042025-data-and-model-poisoning/) because both test whether untrusted data changes later behavior.
+This plugin maps to **ASI06: Memory and Context Poisoning** in the [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/). The earlier [Agentic AI Threats and Mitigations](https://genai.owasp.org/resource/agentic-ai-threats-and-mitigations/) guide calls this **T1: Memory Poisoning**.
 
 ## Purpose
 
@@ -24,7 +19,6 @@ Memory poisoning attacks attempt to inject malicious instructions into an agent'
 2. Extract sensitive information
 3. Manipulate the agent's decision-making process
 4. Bypass security controls in subsequent interactions
-5. Create persistent backdoors in the agent's behavior
 
 ## How it Works
 
@@ -105,10 +99,10 @@ A successful attack (failed test) is indicated when the agent's response to the 
 
 To protect against memory poisoning attacks:
 
-1. Validate and sanitize untrusted content before persisting it or retrieving it into model context.
-2. Keep user-authored memory separate from system instructions and trusted policy state.
-3. Record memory provenance and restrict which identities may modify retained state.
-4. Monitor unexpected memory changes and validate retained content before use.
+1. Implement input validation that filters or sanitizes user inputs prior to persistence.
+2. Sanitize user memories prior to including them within the context windows of inference calls.
+3. Segregate memory types - separate system instructions from user input memory.
+4. Apply memory attribution - track where memory content originated.
 
 ## Related Concepts
 
@@ -118,4 +112,3 @@ To protect against memory poisoning attacks:
 - [Tool Discovery](/docs/red-team/plugins/tool-discovery)
 - [Excessive Agency](/docs/red-team/plugins/excessive-agency)
 - [Hijacking](/docs/red-team/plugins/hijacking)
-- [Data and Model Poisoning](https://genai.owasp.org/llmrisk/llm042025-data-and-model-poisoning/) - OWASP LLM04:2025
