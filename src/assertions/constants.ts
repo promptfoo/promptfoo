@@ -1,10 +1,3 @@
-/**
- * Assertion constants that can be imported without circular dependencies.
- *
- * This file intentionally has minimal imports to allow other modules
- * (like runStats) to import these constants without creating cycles.
- */
-
 import type { AssertionType } from '../types/index';
 
 /**

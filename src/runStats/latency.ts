@@ -1,5 +1,3 @@
-import type { LatencyStats, StatableResult } from './types';
-
 /**
  * Computes a percentile value using linear interpolation (PERCENTILE.INC method).
  * This gives distinct values for p95/p99 even with small sample sizes.
@@ -23,27 +21,4 @@ export function getPercentile(sortedArr: number[], p: number): number {
   }
   const fraction = rank - lower;
   return sortedArr[lower] + fraction * (sortedArr[upper] - sortedArr[lower]);
-}
-
-/**
- * Computes latency distribution statistics from evaluation results.
- *
- * @param results - Array of evaluation results
- * @returns Latency stats including average and percentiles
- */
-export function computeLatencyStats(results: StatableResult[]): LatencyStats {
-  const latencies = results
-    .map((r) => r.latencyMs)
-    .filter((l): l is number => l !== undefined && l >= 0)
-    .sort((a, b) => a - b);
-
-  const totalLatency = latencies.reduce((sum, l) => sum + l, 0);
-  const avgMs = latencies.length > 0 ? totalLatency / latencies.length : 0;
-
-  return {
-    avgMs: Math.round(avgMs),
-    p50Ms: Math.round(getPercentile(latencies, 0.5)),
-    p95Ms: Math.round(getPercentile(latencies, 0.95)),
-    p99Ms: Math.round(getPercentile(latencies, 0.99)),
-  };
 }

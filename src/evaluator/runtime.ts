@@ -1,5 +1,5 @@
 import type { EvalRunStats } from '../runStats/types';
-import type { CompletedPrompt, EvaluateResult, UnifiedConfig } from '../types/index';
+import type { CompletedPrompt, EvaluateResult, TestSuite, UnifiedConfig } from '../types/index';
 
 export type EvaluationStoreResult = Pick<
   EvaluateResult,
@@ -79,6 +79,7 @@ export interface EvaluatorRuntime<
   TEvaluation extends EvaluationRecord = EvaluationRecord,
   TResult extends EvaluationStoreResult = EvaluationStoreResult,
 > {
+  resolveRuntimeTestSuite?(testSuite: TestSuite): TestSuite;
   createEvaluationStore(evaluation: TEvaluation): EvaluationStore<TEvaluation, TResult>;
   createResultWriters(
     outputPath: string | string[] | undefined,

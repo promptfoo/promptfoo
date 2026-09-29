@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { computeModelInfo, computeProviderStats } from '../../src/runStats/providers';
+import { computeModelInfo } from '../../src/runStats/providers';
 import { type ApiProvider, ResultFailureReason } from '../../src/types/index';
+import { computeProviderStats } from './helpers';
 
 import type { StatableResult } from '../../src/runStats/types';
 

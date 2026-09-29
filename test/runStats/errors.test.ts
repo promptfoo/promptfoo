@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { categorizeError, computeErrorStats } from '../../src/runStats/errors';
+import { categorizeError } from '../../src/runStats/errors';
 import { ResultFailureReason } from '../../src/types/index';
+import { computeErrorStats } from './helpers';
 
 import type { StatableResult } from '../../src/runStats/types';
 

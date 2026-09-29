@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { computeCacheStats } from '../../src/runStats/cache';
 import { ResultFailureReason } from '../../src/types/index';
+import { computeCacheStats } from './helpers';
 
 import type { StatableResult } from '../../src/runStats/types';
 

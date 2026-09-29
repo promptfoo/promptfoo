@@ -10,16 +10,34 @@ import {
   vi,
 } from 'vitest';
 import * as envars from '../src/envars';
-import { getUserAuthInfo } from '../src/globalConfig/accounts';
+import { getUserAuthInfo, getUserId } from '../src/globalConfig/accounts';
 import {
-  sanitizeTelemetryIdentifier,
-  sanitizeTelemetryProviderIdentifier,
+  sanitizeTelemetryProviderBreakdown,
   TELEMETRY_EVENTS,
   Telemetry,
   TelemetryEventSchema,
 } from '../src/telemetry';
 import { fetchWithProxy, fetchWithTimeout } from '../src/util/fetch/index';
+import { sanitizeTelemetryProviderIdentifier } from '../src/util/telemetryIdentifiers';
 import { mockProcessEnv } from './util/utils';
+
+import type { ProviderStats } from '../src/runStats/types';
+
+const { loadPostHog } = vi.hoisted(() => ({ loadPostHog: vi.fn() }));
+
+vi.mock('node:module', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:module')>();
+  return {
+    ...actual,
+    createRequire: (url: string | URL) => {
+      const require = actual.createRequire(url);
+      return Object.assign(
+        (id: string) => (id === 'posthog-node' ? loadPostHog() : require(id)),
+        require,
+      );
+    },
+  };
+});
 
 vi.mock('../src/util/fetch/index', () => ({
   fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
@@ -52,100 +70,57 @@ vi.mock('../src/cliState', () => ({
   },
 }));
 
-describe('sanitizeTelemetryIdentifier', () => {
-  it('keeps public model identifiers while hiding private paths and endpoints', () => {
-    expect(sanitizeTelemetryIdentifier('openai:chat:gpt-4o')).toBe('openai:chat:gpt-4o');
-    expect(sanitizeTelemetryProviderIdentifier('openrouter:openai/gpt-5.4')).toBe(
-      'openrouter:openai/gpt-5.4',
-    );
-    expect(
-      sanitizeTelemetryProviderIdentifier('huggingface:chat:meta-llama/Llama-3.3-70B-Instruct'),
-    ).toBe('huggingface:chat:meta-llama/Llama-3.3-70B-Instruct');
-    expect(sanitizeTelemetryProviderIdentifier('replicate:meta/llama-2-7b-chat')).toBe(
-      'replicate:meta/llama-2-7b-chat',
-    );
-    expect(
-      sanitizeTelemetryProviderIdentifier('hyperbolic:meta-llama/Llama-3.3-70B-Instruct'),
-    ).toBe('hyperbolic:meta-llama/Llama-3.3-70B-Instruct');
-    expect(
-      sanitizeTelemetryProviderIdentifier('cloudflare-ai:chat:@cf/meta/llama-3.3-70b-instruct'),
-    ).toBe('cloudflare-ai:chat:@cf/meta/llama-3.3-70b-instruct');
-    expect(sanitizeTelemetryProviderIdentifier('internal:team/private-model')).toBe('custom');
-    expect(sanitizeTelemetryProviderIdentifier('internal:private-model')).toBe('custom');
-    expect(sanitizeTelemetryIdentifier('custom:./private/redteam-plugin.yaml')).toBe(
-      'custom:custom',
-    );
-    expect(sanitizeTelemetryIdentifier('custom:acme-prod-bypass-plan')).toBe('custom:custom');
-    expect(sanitizeTelemetryIdentifier('bedrock:us.anthropic.claude-sonnet-4-6')).toBe(
-      'bedrock:us.anthropic.claude-sonnet-4-6',
-    );
-    expect(sanitizeTelemetryIdentifier('python:/Users/acme/private/grader.py:default')).toBe(
-      'python:custom',
-    );
-    expect(sanitizeTelemetryIdentifier('golang:/Users/acme/private/provider.go:CallApi')).toBe(
-      'golang:custom',
-    );
-    expect(sanitizeTelemetryIdentifier('https://internal.example/eval?token=secret')).toBe(
-      'https:custom',
-    );
-    expect(sanitizeTelemetryIdentifier('wss://internal.example/socket?token=secret')).toBe(
-      'wss:custom',
-    );
-    expect(sanitizeTelemetryIdentifier('file://./confidential/refund-policy.yaml')).toBe(
-      'file:custom',
-    );
-    expect(sanitizeTelemetryIdentifier('azure:chat:private-deployment')).toBe('azure:custom');
-    expect(sanitizeTelemetryIdentifier('databricks:team-serving-endpoint')).toBe(
-      'databricks:custom',
-    );
-    expect(sanitizeTelemetryIdentifier('mlflow-gateway:team-chat-endpoint')).toBe(
-      'mlflow-gateway:custom',
-    );
-    expect(sanitizeTelemetryIdentifier('helicone-gateway:team-router:openai/gpt-4o')).toBe(
-      'helicone-gateway:custom',
-    );
-    expect(sanitizeTelemetryIdentifier('sagemaker:jumpstart:private-endpoint')).toBe(
-      'sagemaker:custom',
-    );
-    expect(sanitizeTelemetryIdentifier('truefoundry:internal-endpoint/gpt-5')).toBe(
-      'truefoundry:custom',
-    );
-    expect(
-      sanitizeTelemetryIdentifier(
-        'bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/private',
-      ),
-    ).toBe('bedrock:custom');
-    expect(sanitizeTelemetryIdentifier('bedrock:kb:private-knowledge-base')).toBe('bedrock:custom');
-    expect(sanitizeTelemetryIdentifier('bedrock-agent:private-agent-id')).toBe(
-      'bedrock-agent:custom',
-    );
-    expect(sanitizeTelemetryIdentifier('pii')).toBe('pii');
-    expect(sanitizeTelemetryProviderIdentifier('internal-client-provider')).toBe('custom');
-    expect(sanitizeTelemetryProviderIdentifier('unknown:team-provider')).toBe('custom');
-    expect(sanitizeTelemetryProviderIdentifier('openai:ft:gpt-4o-mini:acme:billing:job-id')).toBe(
-      'openai:custom',
-    );
-    expect(sanitizeTelemetryProviderIdentifier('openai:chatkit:wf_private_workflow')).toBe(
-      'openai:custom',
-    );
-    expect(sanitizeTelemetryProviderIdentifier('openai:assistant:asst_private')).toBe(
-      'openai:custom',
-    );
-    expect(sanitizeTelemetryProviderIdentifier('openai:asst_private')).toBe('openai:custom');
-    expect(sanitizeTelemetryProviderIdentifier('openai:agents:customer-support-prod')).toBe(
-      'openai:custom',
-    );
-    expect(
-      sanitizeTelemetryProviderIdentifier('openai:moderation:omni-moderation-latest:hash'),
-    ).toBe('openai:custom');
-    expect(sanitizeTelemetryProviderIdentifier('openai:codex-sdk:instance:hash')).toBe(
-      'openai:custom',
-    );
-    expect(sanitizeTelemetryProviderIdentifier('python:custom')).toBe('python:custom');
-    expect(sanitizeTelemetryProviderIdentifier('file:custom')).toBe('file:custom');
-    expect(sanitizeTelemetryProviderIdentifier('echo')).toBe('echo');
-    expect(sanitizeTelemetryProviderIdentifier('mcp')).toBe('mcp');
-    expect(sanitizeTelemetryProviderIdentifier('browser-provider')).toBe('browser-provider');
+describe('telemetry provider categories', () => {
+  it.each([
+    ['openai:chat:fixture-private-model', 'openai'],
+    ['huggingface:chat:fixture-team/private-model', 'huggingface'],
+    ['replicate:fixture-team/private-model', 'replicate'],
+    ['ollama:fixture-private-model', 'ollama'],
+    ['azure:chat:fixture-private-deployment', 'azure'],
+    ['https://fixture.invalid/private', 'https'],
+    ['fixture-private-provider', 'custom'],
+    ['fixture-private-vendor:private-model', 'custom'],
+  ])('categorizes %s without emitting resource identifiers', (identifier, category) => {
+    expect(sanitizeTelemetryProviderIdentifier(identifier)).toBe(category);
+  });
+
+  it('aggregates private identifiers into bounded categories before selecting ten rows', () => {
+    const row = (provider: string): ProviderStats => ({
+      provider,
+      requests: 1,
+      successes: 1,
+      failures: 0,
+      successRate: 1,
+      avgLatencyMs: 12,
+      totalTokens: 2,
+      promptTokens: 1,
+      completionTokens: 1,
+      cachedTokens: 0,
+      tokensPerRequest: 2,
+      cacheRate: 0,
+    });
+    const rows = Array.from({ length: 2000 }, (_, index) => row(`huggingface:fixture-${index}`));
+    const categories = [
+      'openai',
+      'anthropic',
+      'azure',
+      'bedrock',
+      'mistral',
+      'google',
+      'vertex',
+      'replicate',
+      'ollama',
+      'xai',
+      'groq',
+      'cohere',
+    ];
+    const result = sanitizeTelemetryProviderBreakdown([
+      ...rows,
+      ...categories.map((provider) => row(`${provider}:fixture-private`)),
+    ]);
+    expect(result).toHaveLength(10);
+    expect(result[0]).toMatchObject({ provider: 'huggingface', requests: 2000, totalTokens: 4000 });
+    expect(JSON.stringify(result)).not.toContain('fixture');
   });
 });
 
@@ -229,6 +204,7 @@ describe('Telemetry', () => {
   let sendEventSpy: MockInstance;
 
   beforeEach(() => {
+    loadPostHog.mockReset();
     originalEnv = { ...process.env };
     setupTelemetryEnv(originalEnv);
 
@@ -262,6 +238,34 @@ describe('Telemetry', () => {
     const telemetry = new Telemetry();
     telemetry.record('eval_ran', { foo: 'bar' });
     expect(sendEventSpy).not.toHaveBeenCalledWith('eval_ran', expect.anything());
+    expect(loadPostHog).not.toHaveBeenCalled();
+  });
+
+  it('does not load the SDK for testing or deferred initialization', async () => {
+    mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '0', IS_TESTING: 'true' });
+    const telemetry = new Telemetry(false);
+    expect(loadPostHog).not.toHaveBeenCalled();
+    telemetry.record('eval_ran', {});
+    await telemetry.shutdown();
+    expect(loadPostHog).not.toHaveBeenCalled();
+  });
+
+  it('does not load an unused SDK during shutdown when telemetry is enabled', async () => {
+    mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '0', IS_TESTING: undefined });
+    resetModulesAndMockFetch();
+    const { Telemetry } = await import('../src/telemetry');
+    await new Telemetry(false).shutdown();
+    expect(loadPostHog).not.toHaveBeenCalled();
+  });
+
+  it('should defer identity until explicit initialization when requested', () => {
+    const getUserIdMock = vi.mocked(getUserId);
+    getUserIdMock.mockClear();
+    const telemetry = new Telemetry(false);
+
+    expect(getUserIdMock).not.toHaveBeenCalled();
+    telemetry.initialize();
+    expect(getUserIdMock).toHaveBeenCalledOnce();
   });
 
   it('re-exports telemetry DTO helpers for deep import compatibility', () => {
@@ -442,9 +446,7 @@ describe('Telemetry', () => {
 
       resetModulesAndMockFetch();
 
-      vi.doMock('posthog-node', () => ({
-        PostHog: mockPostHog,
-      }));
+      loadPostHog.mockReturnValue({ PostHog: mockPostHog });
 
       const telemetryModule = await import('../src/telemetry');
       const telemetry = new telemetryModule.Telemetry();
@@ -469,9 +471,7 @@ describe('Telemetry', () => {
 
       resetModulesAndMockFetch();
 
-      vi.doMock('posthog-node', () => ({
-        PostHog: mockPostHog,
-      }));
+      loadPostHog.mockReturnValue({ PostHog: mockPostHog });
 
       const telemetryModule = await import('../src/telemetry');
       const telemetry = new telemetryModule.Telemetry();
@@ -507,9 +507,7 @@ describe('Telemetry', () => {
       resetModulesAndMockFetch();
       vi.clearAllMocks();
 
-      vi.doMock('posthog-node', () => ({
-        PostHog: mockPostHog,
-      }));
+      loadPostHog.mockReturnValue({ PostHog: mockPostHog });
 
       vi.doMock('../src/constants', async () => {
         const actual = await vi.importActual('../src/constants');

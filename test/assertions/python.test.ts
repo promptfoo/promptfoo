@@ -322,47 +322,50 @@ describe('Python file references', { timeout: 15000 }, () => {
       false,
       0.5,
     ],
-  ])('should handle inline return type %s with return value: %p', async (type, returnValue, expectedScore, expectedReason, expectedPass, threshold) => {
-    const output =
-      'This is a string with "double quotes"\n and \'single quotes\' \n\n and some \n\t newlines.';
+  ])(
+    'should handle inline return type %s with return value: %p',
+    async (type, returnValue, expectedScore, expectedReason, expectedPass, threshold) => {
+      const output =
+        'This is a string with "double quotes"\n and \'single quotes\' \n\n and some \n\t newlines.';
 
-    let resolvedValue;
-    if (type === 'GradingResult') {
-      resolvedValue = JSON.parse(returnValue as string);
-    } else {
-      resolvedValue = returnValue;
-    }
+      let resolvedValue;
+      if (type === 'GradingResult') {
+        resolvedValue = JSON.parse(returnValue as string);
+      } else {
+        resolvedValue = returnValue;
+      }
 
-    const pythonAssertion: Assertion = {
-      type: 'python',
-      value: returnValue.toString(),
-      threshold,
-    };
+      const pythonAssertion: Assertion = {
+        type: 'python',
+        value: returnValue.toString(),
+        threshold,
+      };
 
-    vi.mocked(runPythonCode).mockResolvedValueOnce(resolvedValue);
+      vi.mocked(runPythonCode).mockResolvedValueOnce(resolvedValue);
 
-    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
-    const providerResponse = { output };
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider,
-      assertion: pythonAssertion,
-      test: {} as AtomicTestCase,
-      providerResponse,
-    });
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const providerResponse = { output };
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: pythonAssertion,
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
 
-    expect(runPythonCode).toHaveBeenCalledTimes(1);
-    expect(runPythonCode).toHaveBeenCalledWith(expect.anything(), 'main', [
-      output,
-      { prompt: 'Some prompt', test: {}, vars: {}, provider, providerResponse },
-    ]);
+      expect(runPythonCode).toHaveBeenCalledTimes(1);
+      expect(runPythonCode).toHaveBeenCalledWith(expect.anything(), 'main', [
+        output,
+        { prompt: 'Some prompt', test: {}, vars: {}, provider, providerResponse },
+      ]);
 
-    expect(result).toMatchObject({
-      pass: expectedPass,
-      reason: expect.stringMatching(expectedReason),
-      score: expectedScore,
-    });
-  });
+      expect(result).toMatchObject({
+        pass: expectedPass,
+        reason: expect.stringMatching(expectedReason),
+        score: expectedScore,
+      });
+    },
+  );
 
   it.each([
     ['boolean', 'True', true, undefined, false, 0, 'Python code returned true'],
@@ -374,7 +377,7 @@ describe('Python file references', { timeout: 15000 }, () => {
       undefined,
       false,
       0.75,
-      'Python code returned true',
+      'Custom reason',
     ],
     [
       'JSON-stringified GradingResult below threshold',
@@ -396,36 +399,39 @@ describe('Python file references', { timeout: 15000 }, () => {
       undefined,
       false,
       0.6,
-      'Python code returned true',
+      'Custom reason',
     ],
-  ])('should honor inverse mode for inline not-python assertions with %s results', async (_type, assertionValue, pythonOutput, threshold, expectedPass, expectedScore, expectedReason) => {
-    const output = 'Expected output';
+  ])(
+    'should honor inverse mode for inline not-python assertions with %s results',
+    async (_type, assertionValue, pythonOutput, threshold, expectedPass, expectedScore, expectedReason) => {
+      const output = 'Expected output';
 
-    vi.mocked(runPythonCode).mockResolvedValueOnce(pythonOutput);
+      vi.mocked(runPythonCode).mockResolvedValueOnce(pythonOutput);
 
-    const pythonAssertion: Assertion = {
-      type: 'not-python',
-      value: assertionValue,
-      threshold,
-    };
+      const pythonAssertion: Assertion = {
+        type: 'not-python',
+        value: assertionValue,
+        threshold,
+      };
 
-    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
-    const providerResponse = { output };
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider,
-      assertion: pythonAssertion,
-      test: {} as AtomicTestCase,
-      providerResponse,
-    });
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const providerResponse = { output };
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: pythonAssertion,
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
 
-    expect(result).toMatchObject({
-      assertion: pythonAssertion,
-      pass: expectedPass,
-      reason: expect.stringContaining(expectedReason),
-      score: expectedScore,
-    });
-  });
+      expect(result).toMatchObject({
+        assertion: pythonAssertion,
+        pass: expectedPass,
+        reason: expect.stringContaining(expectedReason),
+        score: expectedScore,
+      });
+    },
+  );
 
   it('should not leak rendered template variables in failed inline python assertion reasons', async () => {
     const output = 'Expected output';
@@ -473,44 +479,47 @@ describe('Python file references', { timeout: 15000 }, () => {
       false,
       'Custom reason',
     ],
-  ])('should handle when the file:// assertion with .py file returns a %s', async (_type, pythonOutput, expectedPass, expectedReason) => {
-    const output = 'Expected output';
-    vi.mocked(runPython).mockResolvedValueOnce(pythonOutput as string | object);
-    vi.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
-    vi.mocked(path.extname).mockReturnValue('.py');
+  ])(
+    'should handle when the file:// assertion with .py file returns a %s',
+    async (_type, pythonOutput, expectedPass, expectedReason) => {
+      const output = 'Expected output';
+      vi.mocked(runPython).mockResolvedValueOnce(pythonOutput as string | object);
+      vi.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
+      vi.mocked(path.extname).mockReturnValue('.py');
 
-    const fileAssertion: Assertion = {
-      type: 'python',
-      value: 'file:///path/to/assert.py',
-    };
+      const fileAssertion: Assertion = {
+        type: 'python',
+        value: 'file:///path/to/assert.py',
+      };
 
-    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
-    const providerResponse = { output };
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt that includes "double quotes" and \'single quotes\'',
-      provider,
-      assertion: fileAssertion,
-      test: {} as AtomicTestCase,
-      providerResponse,
-    });
-
-    expect(runPython).toHaveBeenCalledWith('/path/to/assert.py', 'get_assert', [
-      output,
-      {
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const providerResponse = { output };
+      const result: GradingResult = await runAssertion({
         prompt: 'Some prompt that includes "double quotes" and \'single quotes\'',
-        vars: {},
-        test: {},
         provider,
+        assertion: fileAssertion,
+        test: {} as AtomicTestCase,
         providerResponse,
-      },
-    ]);
+      });
 
-    expect(result).toMatchObject({
-      pass: expectedPass,
-      reason: expect.stringContaining(expectedReason),
-    });
-    expect(runPython).toHaveBeenCalledTimes(1);
-  });
+      expect(runPython).toHaveBeenCalledWith('/path/to/assert.py', 'get_assert', [
+        output,
+        {
+          prompt: 'Some prompt that includes "double quotes" and \'single quotes\'',
+          vars: {},
+          test: {},
+          provider,
+          providerResponse,
+        },
+      ]);
+
+      expect(result).toMatchObject({
+        pass: expectedPass,
+        reason: expect.stringContaining(expectedReason),
+      });
+      expect(runPython).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it.each([
     ['boolean', true, undefined, false, 0, 'Python code returned true'],
@@ -525,48 +534,51 @@ describe('Python file references', { timeout: 15000 }, () => {
       undefined,
       false,
       0.75,
-      'Python code returned true',
+      'Custom reason',
     ],
-  ])('should honor inverse mode when a file:// not-python assertion returns a %s', async (_type, pythonOutput, threshold, expectedPass, expectedScore, expectedReason) => {
-    const output = 'Expected output';
-    vi.mocked(runPython).mockResolvedValueOnce(pythonOutput as string | object);
-    vi.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
-    vi.mocked(path.extname).mockReturnValue('.py');
+  ])(
+    'should honor inverse mode when a file:// not-python assertion returns a %s',
+    async (_type, pythonOutput, threshold, expectedPass, expectedScore, expectedReason) => {
+      const output = 'Expected output';
+      vi.mocked(runPython).mockResolvedValueOnce(pythonOutput as string | object);
+      vi.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
+      vi.mocked(path.extname).mockReturnValue('.py');
 
-    const fileAssertion: Assertion = {
-      type: 'not-python',
-      value: 'file:///path/to/assert.py',
-      threshold,
-    };
+      const fileAssertion: Assertion = {
+        type: 'not-python',
+        value: 'file:///path/to/assert.py',
+        threshold,
+      };
 
-    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
-    const providerResponse = { output };
-    const result: GradingResult = await runAssertion({
-      prompt: 'Some prompt',
-      provider,
-      assertion: fileAssertion,
-      test: {} as AtomicTestCase,
-      providerResponse,
-    });
-
-    expect(runPython).toHaveBeenCalledWith('/path/to/assert.py', 'get_assert', [
-      output,
-      {
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const providerResponse = { output };
+      const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
-        vars: {},
-        test: {},
         provider,
+        assertion: fileAssertion,
+        test: {} as AtomicTestCase,
         providerResponse,
-      },
-    ]);
-    expect(result).toMatchObject({
-      assertion: fileAssertion,
-      pass: expectedPass,
-      reason: expect.stringContaining(expectedReason),
-      score: expectedScore,
-    });
-    expect(runPython).toHaveBeenCalledTimes(1);
-  });
+      });
+
+      expect(runPython).toHaveBeenCalledWith('/path/to/assert.py', 'get_assert', [
+        output,
+        {
+          prompt: 'Some prompt',
+          vars: {},
+          test: {},
+          provider,
+          providerResponse,
+        },
+      ]);
+      expect(result).toMatchObject({
+        assertion: fileAssertion,
+        pass: expectedPass,
+        reason: expect.stringContaining(expectedReason),
+        score: expectedScore,
+      });
+      expect(runPython).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('should handle when python file assertions throw an error', async () => {
     const output = 'Expected output';
@@ -687,6 +699,107 @@ describe('Python file references', { timeout: 15000 }, () => {
     expect(pythonResult).not.toHaveProperty('namedScores');
     expect(pythonResult).not.toHaveProperty('componentResults');
     expect(pythonResult).not.toHaveProperty('tokensUsed');
+  });
+
+  it.each([
+    ['namedScores', 'namedScores'],
+    ['named_scores', 'namedScores'],
+    ['namedScoreWeights', 'namedScoreWeights'],
+    ['named_score_weights', 'namedScoreWeights'],
+  ])(
+    'accepts nullable %s maps and component lists, including nested results',
+    async (field, mappedField) => {
+      const scriptResult = {
+        pass_: true,
+        score: 1,
+        reason: 'ok',
+        [field]: null,
+        component_results: [
+          { pass_: true, score: 0.75, reason: 'nested', [field]: null, component_results: null },
+        ],
+      };
+      vi.mocked(runPythonCode).mockResolvedValueOnce(scriptResult);
+
+      const result = await runAssertion({
+        prompt: 'Test',
+        assertion: { type: 'python', value: 'unused' },
+        test: {},
+        providerResponse: { output: 'Test output' },
+      });
+
+      expect(result).toMatchObject({ pass: true, score: 1, reason: 'ok' });
+      expect(result).toHaveProperty(mappedField, null);
+      expect(result.componentResults?.[0]).toMatchObject({
+        pass: true,
+        score: 0.75,
+        [mappedField]: null,
+        componentResults: null,
+      });
+      expect(scriptResult[field]).toBeNull();
+      expect(scriptResult.component_results[0][field]).toBeNull();
+    },
+  );
+
+  it.each([2, Number.POSITIVE_INFINITY])(
+    'validates snake_case weights in nested script results: %s',
+    async (weight) => {
+      const scriptResult = {
+        pass_: true,
+        score: 1,
+        reason: 'ok',
+        named_scores: { quality: 0.5 },
+        named_score_weights: { quality: 3 },
+        component_results: [
+          {
+            pass_: true,
+            score: 0.75,
+            reason: 'nested',
+            named_scores: { quality: 0.75 },
+            named_score_weights: { quality: weight },
+          },
+        ],
+      };
+      vi.mocked(runPythonCode).mockResolvedValueOnce(scriptResult);
+
+      const result = await runAssertion({
+        prompt: 'Test',
+        assertion: { type: 'python', value: 'unused' },
+        test: {},
+        providerResponse: { output: 'Test output' },
+      });
+
+      if (Number.isFinite(weight)) {
+        expect(result.namedScoreWeights).toEqual({ quality: 3 });
+        expect(result.componentResults?.[0].namedScoreWeights).toEqual({ quality: weight });
+      } else {
+        expect(result).toMatchObject({ pass: false, score: 0 });
+        expect(result.componentResults).toBeUndefined();
+      }
+      expect(scriptResult).not.toHaveProperty('namedScoreWeights');
+      expect(scriptResult.component_results[0]).not.toHaveProperty('namedScoreWeights');
+    },
+  );
+
+  it('omits rejected object payloads from validation errors', async () => {
+    vi.mocked(runPythonCode).mockResolvedValueOnce({
+      pass_: true,
+      score: 1,
+      reason: 'Custom grade',
+      named_scores: { quality: null },
+      metadata: { http: { requestHeaders: { authorization: 'diagnostic-placeholder' } } },
+    });
+
+    const result = await runAssertion({
+      assertion: { type: 'python', value: 'unused' },
+      test: {},
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({ pass: false, score: 0 });
+    expect(result.reason).toContain('finite scores and weights. Got type object.');
+    expect(result.reason).not.toContain('diagnostic-placeholder');
+    expect(result.reason).not.toContain('requestHeaders');
+    expect(result.metadata).toBeUndefined();
   });
 
   describe('Python threshold edge cases', () => {

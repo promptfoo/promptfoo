@@ -16,12 +16,12 @@ interface LlamaCompletionOptions {
   penalize_nl?: boolean;
   presence_penalty?: number;
   frequency_penalty?: number;
-  mirostat?: boolean;
+  mirostat?: 0 | 1 | 2 | boolean;
   mirostat_tau?: number;
   mirostat_eta?: number;
   seed?: number;
   ignore_eos?: boolean;
-  logit_bias?: Record<string, number>;
+  logit_bias?: Record<string, number> | [string | number, number | false][];
 }
 
 export class LlamaProvider implements ApiProvider {
@@ -46,7 +46,7 @@ export class LlamaProvider implements ApiProvider {
   async callApi(prompt: string): Promise<ProviderResponse> {
     const body = {
       prompt,
-      n_predict: this.config?.n_predict || 512,
+      n_predict: this.config?.n_predict ?? 512,
       temperature: this.config?.temperature,
       top_k: this.config?.top_k,
       top_p: this.config?.top_p,

@@ -1,11 +1,3 @@
-/**
- * Run statistics types for evaluation performance analysis.
- *
- * These stats are computed once after an evaluation completes and provide
- * visibility into evaluation performance - latency, cache effectiveness,
- * error breakdowns, and per-provider performance.
- */
-
 import type { GradingResult, ProviderResponse, ResultFailureReason } from '../types/index';
 
 /**
@@ -130,11 +122,7 @@ export interface AssertionTokenUsage {
 }
 
 /**
- * Complete evaluation run statistics.
- *
- * This is the main interface exposed on the in-process Eval.runStats field.
- * Contains operational data about the evaluation run - performance,
- * cache effectiveness, errors, and per-provider breakdowns.
+ * Statistics exposed on the returned Eval instance; not persisted.
  */
 export interface EvalRunStats {
   /** Latency distribution */

@@ -13,14 +13,10 @@ describe('validateSeverity', () => {
     expect(validateSeverity(input)).toBe(expected);
   });
 
-  it.each([
-    'invalid',
-    '',
-    '123',
-    'high!',
-    'critic',
-    'highh',
-  ])('rejects invalid severity %j', (input) => {
-    expect(() => validateSeverity(input)).toThrow(ZodError);
-  });
+  it.each(['invalid', '', '123', 'high!', 'critic', 'highh'])(
+    'rejects invalid severity %j',
+    (input) => {
+      expect(() => validateSeverity(input)).toThrow(ZodError);
+    },
+  );
 });

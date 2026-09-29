@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeProviderStats } from '../../src/runStats/providers';
+import { computeProviderStats } from './helpers';
 
 import type { StatableResult } from '../../src/runStats/types';
 

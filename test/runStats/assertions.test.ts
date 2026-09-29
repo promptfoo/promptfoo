@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeAssertionBreakdown, computeAssertionStats } from '../../src/runStats/assertions';
+import { computeAssertionBreakdown, computeAssertionStats } from './helpers';
 
 import type { StatableResult } from '../../src/runStats/types';
 import type { EvaluateStats } from '../../src/types/index';

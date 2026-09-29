@@ -19,8 +19,8 @@ const REDACTED_TELEMETRY_IDENTIFIER_PREFIXES = new Set([
   'wss',
 ]);
 
-// These providers identify public/catalog model names rather than user-owned endpoints or resources.
-const PUBLIC_MODEL_IDENTIFIER_PREFIXES = new Set([
+// Known provider families; suffixes can contain private model or deployment names.
+const MODEL_PROVIDER_PREFIXES = new Set([
   'abliteration',
   'ai21',
   'aimlapi',
@@ -71,113 +71,19 @@ const PUBLIC_MODEL_IDENTIFIER_PREFIXES = new Set([
   'xai',
 ]);
 
-const PUBLIC_SLASH_MODEL_IDENTIFIER_PREFIXES = new Set([
-  'cloudflare-ai',
-  'huggingface',
-  'hyperbolic',
-  'openrouter',
-  'replicate',
-]);
-const PUBLIC_BARE_PROVIDER_IDENTIFIERS = new Set(['browser-provider', 'echo', 'mcp']);
-const REDACTED_OPENAI_IDENTIFIER_TYPES = new Set([
-  'agents',
-  'assistant',
-  'chatkit',
-  'codex',
-  'codex-app-server',
-  'codex-desktop',
-  'codex-sdk',
-  'moderation',
-]);
+const BARE_PROVIDERS = new Set(['browser-provider', 'echo', 'mcp']);
 
-function containsPrivateIdentifierData(
-  prefix: string,
-  suffix: string,
-  allowCatalogSlash: boolean,
-): boolean {
-  if (REDACTED_TELEMETRY_IDENTIFIER_PREFIXES.has(prefix)) {
-    return true;
-  }
-
-  if (prefix === 'bedrock' && (suffix.startsWith('arn:') || suffix.startsWith('kb:'))) {
-    return true;
-  }
-
-  if (prefix === 'openai') {
-    const [identifierType] = suffix.toLowerCase().split(':');
-    if (
-      REDACTED_OPENAI_IDENTIFIER_TYPES.has(identifierType) ||
-      /(?:^|:)ft:/i.test(suffix) ||
-      /^asst_/i.test(suffix)
-    ) {
-      return true;
-    }
-  }
-
-  return (
-    suffix.includes('://') ||
-    /[\\?#]/.test(suffix) ||
-    (!allowCatalogSlash && suffix.includes('/')) ||
-    /^(?:\/|\.{1,2}\/|[A-Za-z]:[\\/])/.test(suffix)
-  );
-}
-
-function sanitizeNamespacedTelemetryIdentifier(identifier: string, allowCatalogSlash: boolean) {
-  const separatorIndex = identifier.indexOf(':');
-  if (separatorIndex === -1) {
-    return /[\\/?#]/.test(identifier) ? 'custom' : identifier;
-  }
-
-  const prefix = identifier.slice(0, separatorIndex).toLowerCase();
-  const suffix = identifier.slice(separatorIndex + 1);
-  return containsPrivateIdentifierData(prefix, suffix, allowCatalogSlash)
-    ? `${prefix}:custom`
-    : identifier;
-}
-
-/**
- * Redact configurable identifiers such as redteam plugins and strategies.
- */
-export function sanitizeTelemetryIdentifier(identifier: string): string {
-  if (identifier.toLowerCase().startsWith('custom:')) {
-    return 'custom:custom';
-  }
-  return sanitizeNamespacedTelemetryIdentifier(identifier, false);
-}
-
-/**
- * Keep public model IDs useful while hiding provider endpoints and resource names.
- */
+// Emit only a fixed vocabulary. A recognized vendor does not make its model ID public.
 export function sanitizeTelemetryProviderIdentifier(identifier: string): string {
-  if (!identifier.includes(':')) {
-    return PUBLIC_BARE_PROVIDER_IDENTIFIERS.has(identifier.toLowerCase()) ? identifier : 'custom';
-  }
-  if (identifier.toLowerCase().startsWith('unknown:')) {
-    return 'custom';
-  }
-  const prefix = identifier.slice(0, identifier.indexOf(':')).toLowerCase();
-  if (
-    !PUBLIC_MODEL_IDENTIFIER_PREFIXES.has(prefix) &&
-    !REDACTED_TELEMETRY_IDENTIFIER_PREFIXES.has(prefix)
-  ) {
-    return 'custom';
-  }
-  const sanitized = sanitizeNamespacedTelemetryIdentifier(
-    identifier,
-    PUBLIC_SLASH_MODEL_IDENTIFIER_PREFIXES.has(prefix),
-  );
-  if (sanitized !== identifier) {
-    return sanitized;
-  }
-  return identifier;
+  const prefix = identifier.split(':', 1)[0].toLowerCase();
+  return MODEL_PROVIDER_PREFIXES.has(prefix) ||
+    REDACTED_TELEMETRY_IDENTIFIER_PREFIXES.has(prefix) ||
+    BARE_PROVIDERS.has(prefix)
+    ? prefix
+    : 'custom';
 }
 
 export function isCustomTelemetryProviderIdentifier(identifier: string): boolean {
-  const sanitized = sanitizeTelemetryProviderIdentifier(identifier);
-  const separatorIndex = sanitized.indexOf(':');
-  const prefix = separatorIndex === -1 ? '' : sanitized.slice(0, separatorIndex).toLowerCase();
-  return (
-    sanitized !== identifier ||
-    (REDACTED_TELEMETRY_IDENTIFIER_PREFIXES.has(prefix) && sanitized === `${prefix}:custom`)
-  );
+  const category = sanitizeTelemetryProviderIdentifier(identifier);
+  return category === 'custom' || REDACTED_TELEMETRY_IDENTIFIER_PREFIXES.has(category);
 }

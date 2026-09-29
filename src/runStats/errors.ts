@@ -1,6 +1,6 @@
 import { ResultFailureReason } from '../types/index';
 
-import type { ErrorBreakdown, StatableResult } from './types';
+import type { StatableResult } from './types';
 
 /**
  * Error category type.
@@ -100,42 +100,4 @@ export function isOperationalError(
     return true;
   }
   return result.failureReason === ResultFailureReason.ERROR;
-}
-
-/**
- * Computes error statistics from evaluation results.
- *
- * @param results - Array of evaluation results
- * @returns Error stats including total count, types, and breakdown
- */
-export function computeErrorStats(results: StatableResult[]): {
-  total: number;
-  types: string[];
-  breakdown: ErrorBreakdown;
-} {
-  const breakdown: ErrorBreakdown = {
-    timeout: 0,
-    rate_limit: 0,
-    auth: 0,
-    server_error: 0,
-    network: 0,
-    other: 0,
-  };
-
-  let total = 0;
-
-  for (const result of results) {
-    if (isOperationalError(result)) {
-      total++;
-      const category = categorizeError(result.error!);
-      breakdown[category]++;
-    }
-  }
-
-  // Get list of error types that have non-zero counts
-  const types = (Object.keys(breakdown) as ErrorCategory[])
-    .filter((key) => breakdown[key] > 0)
-    .sort();
-
-  return { total, types, breakdown };
 }

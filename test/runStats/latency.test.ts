@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { computeLatencyStats, getPercentile } from '../../src/runStats/latency';
+import { getPercentile } from '../../src/runStats/latency';
+import { computeLatencyStats } from './helpers';
 
 import type { StatableResult } from '../../src/runStats/types';
 

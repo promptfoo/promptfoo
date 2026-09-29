@@ -46,13 +46,7 @@ function createEmptyErrorBreakdown(): ErrorBreakdown {
   };
 }
 
-/**
- * Aggregates run statistics while results arrive in batches.
- *
- * Exact latency percentiles require retaining latency values, but all other
- * telemetry is accumulated as bounded counters instead of retaining full
- * persisted result rows and their potentially large outputs.
- */
+// Retains latency samples and grouped counters, without retaining provider outputs.
 export class RunStatsAccumulator {
   private readonly latencies: number[] = [];
   private readonly errors = createEmptyErrorBreakdown();
@@ -238,7 +232,7 @@ export class RunStatsAccumulator {
     return maxProviders === undefined ? providerStats : providerStats.slice(0, maxProviders);
   }
 
-  private getAssertionBreakdown(): AssertionTypeStats[] {
+  getAssertionBreakdown(maxTypes = 20): AssertionTypeStats[] {
     return Array.from(this.assertions.entries())
       .map(([type, accumulated]): AssertionTypeStats => {
         const total = accumulated.pass + accumulated.fail;
@@ -251,6 +245,6 @@ export class RunStatsAccumulator {
         };
       })
       .sort((a, b) => b.total - a.total || a.type.localeCompare(b.type))
-      .slice(0, 20);
+      .slice(0, maxTypes);
   }
 }
