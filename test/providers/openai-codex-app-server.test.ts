@@ -4757,7 +4757,6 @@ describe('OpenAICodexAppServerProvider', () => {
         expect.objectContaining({
           type: 'command_execution',
           aggregated_output: 'line one\n',
-          streamed_output: 'line two',
         }),
       ]),
     );
@@ -4766,23 +4765,22 @@ describe('OpenAICodexAppServerProvider', () => {
         expect.objectContaining({
           type: 'commandExecution',
           aggregatedOutput: 'line one\n',
-          streamedOutput: 'line two',
         }),
       ]),
     );
   });
 
   it.each([
-    { before: 'a', aggregate: 'ab', after: 'b', expected: 'ab', stream: undefined },
-    { before: 'stream', aggregate: 'sdk', after: ' late', expected: 'sdk', stream: 'stream late' },
-    { before: 'a', aggregate: 'abc', after: 'b', expected: 'abc', stream: 'ab' },
-    { before: 'abc', aggregate: 'a', after: '', expected: 'a', stream: 'abc' },
-    { before: 'a', aggregate: '', after: 'b', expected: '', stream: 'ab' },
-    { before: 'a', aggregate: undefined, after: 'b', expected: 'ab', stream: 'ab' },
-    { before: 'a', aggregate: 'a', after: '', expected: 'a', stream: undefined },
+    { before: 'a', aggregate: 'ab', after: 'b', expected: 'ab' },
+    { before: 'stream', aggregate: 'sdk', after: ' late', expected: 'sdk' },
+    { before: 'a', aggregate: 'abc', after: 'b', expected: 'abc' },
+    { before: 'abc', aggregate: 'a', after: '', expected: 'a' },
+    { before: 'a', aggregate: '', after: 'b', expected: '' },
+    { before: 'a', aggregate: undefined, after: 'b', expected: 'ab' },
+    { before: 'a', aggregate: 'a', after: '', expected: 'a' },
   ])(
-    'keeps aggregate $aggregate separate from deltas $before + $after',
-    async ({ before, aggregate, after, expected, stream }) => {
+    'uses completed output $aggregate with deltas $before + $after',
+    async ({ before, aggregate, after, expected }) => {
       const server = createMockAppServer();
       mocks.spawn.mockReturnValue(server.proc);
 
@@ -4863,12 +4861,12 @@ describe('OpenAICodexAppServerProvider', () => {
       const raw = JSON.parse(result.raw as string);
       const rawItem = raw.items.find((item: any) => item.type === 'command_execution');
       expect(rawItem.aggregated_output).toBe(expected);
-      expect(rawItem.streamed_output).toBe(stream);
+      expect(rawItem).not.toHaveProperty('streamed_output');
       const metadataItem = result.metadata?.codexAppServer.items.find(
         (item: any) => item.type === 'commandExecution',
       );
       expect(metadataItem.aggregatedOutput).toBe(expected);
-      expect(metadataItem.streamedOutput).toBe(stream);
+      expect(metadataItem).not.toHaveProperty('streamedOutput');
     },
   );
 
@@ -5191,10 +5189,20 @@ describe('OpenAICodexAppServerProvider', () => {
           source: 'shell',
           status: 'completed',
           commandActions: [],
-          aggregatedOutput: 'api_key=sk-proj-abcdefghijklmnopqrstuvwxyz123456',
+          aggregatedOutput:
+            'api_key=sk-proj-abcdefghijklmnopqrstuvwxyz123456\npassword=fixture-credential',
           exitCode: 0,
           durationMs: 1,
         },
+      },
+    });
+    server.send({
+      method: 'item/commandExecution/outputDelta',
+      params: {
+        threadId: 'thr_sanitize',
+        turnId: 'turn_sanitize',
+        itemId: 'cmd_secret',
+        delta: 'fixture-credential',
       },
     });
     server.send({
@@ -5217,10 +5225,12 @@ describe('OpenAICodexAppServerProvider', () => {
     const result = await resultPromise;
     const metadataJson = JSON.stringify(result.metadata);
     expect(metadataJson).not.toContain('sk-proj-abcdefghijklmnopqrstuvwxyz123456');
+    expect(metadataJson).not.toContain('fixture-credential');
     expect(metadataJson).toContain('[REDACTED]');
 
     const rawJson = result.raw as string;
     expect(rawJson).not.toContain('sk-proj-abcdefghijklmnopqrstuvwxyz123456');
+    expect(rawJson).not.toContain('fixture-credential');
     expect(rawJson).toContain('[REDACTED]');
   });
 

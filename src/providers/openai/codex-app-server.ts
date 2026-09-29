@@ -2781,19 +2781,15 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       return item;
     }
 
-    const streamedOutput = state.commandExecutionOutputDeltasByItemId.get(item.id);
-    if (typeof streamedOutput !== 'string' || streamedOutput === item.aggregatedOutput) {
+    // Completed output is authoritative, including an empty string.
+    if (typeof item.aggregatedOutput === 'string') {
       return item;
     }
 
-    // Completed items are authoritative. Keep deltas separate so delayed output
-    // cannot duplicate text from the final aggregate or replace it.
-    return {
-      ...item,
-      aggregatedOutput:
-        typeof item.aggregatedOutput === 'string' ? item.aggregatedOutput : streamedOutput,
-      streamedOutput,
-    };
+    const streamedOutput = state.commandExecutionOutputDeltasByItemId.get(item.id);
+    return typeof streamedOutput === 'string'
+      ? { ...item, aggregatedOutput: streamedOutput }
+      : item;
   }
 
   private async handleServerRequest(
@@ -3258,7 +3254,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
           exitCode: item.exitCode,
           durationMs: item.durationMs,
           aggregatedOutput: item.aggregatedOutput,
-          streamedOutput: item.streamedOutput,
         }) as Record<string, unknown>;
       case 'fileChange':
         return this.sanitizeForMetadata({
@@ -3320,7 +3315,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
           exit_code: item.exitCode,
           duration_ms: item.durationMs,
           aggregated_output: item.aggregatedOutput,
-          streamed_output: item.streamedOutput,
         }) as Record<string, unknown>;
       case 'fileChange':
         return this.sanitizeForMetadata({

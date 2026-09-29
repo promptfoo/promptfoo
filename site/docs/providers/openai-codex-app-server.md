@@ -114,7 +114,7 @@ The provider returns Codex's final assistant text as `output`. It also records t
 
 For downstream coding-agent checks, `raw` also includes SDK-compatible `items` and `usage` fields alongside the protocol-shaped thread and turn payloads. That keeps trajectory-style assertions aligned between `openai:codex-app-server` and `openai:codex-sdk` without losing the richer app-server metadata.
 
-For command output, the completed app-server item is authoritative: its value stays in `aggregatedOutput` (metadata), `aggregated_output` (raw items), and the `codex.output` completion span. If the streamed deltas differ, metadata and raw items also include `streamedOutput` and `streamed_output`. Deltas received before the turn finishes remain in those fields without changing the completed aggregate. When the app server omits an aggregate, the provider uses the observed stream as a fallback.
+For command output, the completed app-server item is authoritative: its value stays in `aggregatedOutput` (metadata), `aggregated_output` (raw items), and the `codex.output` completion span. Later deltas do not replace or extend it. When the app server omits an aggregate, the provider uses the observed stream as a fallback. Completion spans capture that fallback when the item completes; metadata and raw items include deltas received before the turn finishes.
 
 ## Safety Defaults
 
