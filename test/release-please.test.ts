@@ -151,6 +151,14 @@ describe('npm artifact publication', () => {
     expect(command?.run).toContain('npm publish "${tarballs[0]}" --ignore-scripts');
   });
 
+  it('uses the installed command for backfills with older package layouts', () => {
+    const step = workflow.jobs?.['build-npm-backfill']?.steps?.find(
+      (candidate) => candidate.name === 'Test package artifact',
+    );
+    expect(step?.run).toContain('node "$consumer_dir/node_modules/.bin/promptfoo" --version');
+    expect(step?.run).not.toContain('/dist/src/entrypoint.js');
+  });
+
   it.each(['build', 'build-npm-backfill'])(
     'snapshots %s artifacts before running installed code',
     (buildName) => {
