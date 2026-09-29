@@ -273,6 +273,8 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   force?: boolean;
   write: boolean;
   inRedteamRun?: boolean;
+  /** Internal run identifier used to distinguish fresh generation from suite reuse. */
+  generationRunId?: string;
   verbose?: boolean;
   abortSignal?: AbortSignal;
   burpEscapeJson?: boolean;

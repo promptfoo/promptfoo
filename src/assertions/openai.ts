@@ -10,6 +10,8 @@ import { maybeLoadToolsFromExternalFile } from '../util/index';
 import { getValidationErrorMessage } from './functionToolCall';
 import { serializeAssertionOutput } from './utils';
 
+const isProxyValue = nodeUtilTypes.isProxy;
+
 interface OpenAiToolCall {
   type?: 'function';
   function: { arguments: string; name: string };
@@ -17,14 +19,6 @@ interface OpenAiToolCall {
 
 /** Allows Promptfoo's manual assertion tool to opt into its legacy rendered-MCP input contract. */
 const PROMPTFOO_TRUSTED_MCP_RENDERED_OUTPUT = Symbol.for('promptfoo.trustedMcpRenderedOutput');
-
-function isProxyValue(value: unknown): boolean {
-  return (
-    value !== null &&
-    (typeof value === 'object' || typeof value === 'function') &&
-    nodeUtilTypes.isProxy(value)
-  );
-}
 
 function isValidLookingToolCall(value: unknown): value is OpenAiToolCall {
   const type = readOwnDataProperty(value, 'type');
@@ -91,16 +85,22 @@ export type StructuredMcpToolCalls =
 function readOwnDataProperty(
   value: unknown,
   key: PropertyKey,
-): { ok: true; value: unknown } | { ok: false } {
-  if ((typeof value !== 'object' && typeof value !== 'function') || value === null) {
+): { ok: true; exists: boolean; value: unknown } | { ok: false } {
+  if (
+    (typeof value !== 'object' && typeof value !== 'function') ||
+    value === null ||
+    isProxyValue(value)
+  ) {
     return { ok: false };
   }
   try {
     const descriptor = Object.getOwnPropertyDescriptor(value, key);
     if (!descriptor) {
-      return { ok: true, value: undefined };
+      return { ok: true, exists: false, value: undefined };
     }
-    return 'value' in descriptor ? { ok: true, value: descriptor.value } : { ok: false };
+    return 'value' in descriptor
+      ? { ok: true, exists: true, value: descriptor.value }
+      : { ok: false };
   } catch {
     return { ok: false };
   }
@@ -133,121 +133,139 @@ function materializeDenseArray(value: unknown[]): unknown[] | undefined {
   }
 }
 
+function readProperties(value: unknown, keys: string[]): Record<string, unknown> | undefined {
+  const result: Record<string, unknown> = {};
+  for (const key of keys) {
+    const property = readOwnDataProperty(value, key);
+    if (!property.ok) {
+      return undefined;
+    }
+    if (property.exists) {
+      result[key] = property.value;
+    }
+  }
+  return result;
+}
+
 function parseMetadataMcpToolCalls(
   metadataCalls: unknown,
   complete: unknown,
 ): StructuredMcpToolCalls | undefined {
+  const malformed = { error: 'MCP tool call metadata is malformed' };
+  if (complete !== undefined && typeof complete !== 'boolean') {
+    return malformed;
+  }
   if (metadataCalls === undefined) {
     return undefined;
   }
-  if (!Array.isArray(metadataCalls)) {
-    return { error: 'MCP tool call metadata is malformed' };
+  if (isProxyValue(metadataCalls) || !Array.isArray(metadataCalls)) {
+    return malformed;
+  }
+  const entries = materializeDenseArray(metadataCalls);
+  if (!entries) {
+    return malformed;
   }
   const calls: McpToolCallOutcome[] = [];
-  for (const value of metadataCalls) {
+  for (const entry of entries) {
+    const value = readProperties(entry, ['name', 'status', 'error']);
     if (
-      typeof value !== 'object' ||
-      value === null ||
-      !('name' in value) ||
+      !value ||
       typeof value.name !== 'string' ||
-      value.name.trim().length === 0 ||
-      !('status' in value) ||
-      (value.status !== 'success' && value.status !== 'error')
+      !value.name.trim() ||
+      (value.status !== 'success' && value.status !== 'error') ||
+      (value.error != null && typeof value.error !== 'string')
     ) {
-      return { error: 'MCP tool call metadata is malformed' };
+      return malformed;
     }
-    if (
-      'error' in value &&
-      value.error !== undefined &&
-      value.error !== null &&
-      typeof value.error !== 'string'
-    ) {
-      return { error: 'MCP tool call metadata is malformed' };
-    }
-    const error =
-      'error' in value && typeof value.error === 'string' && value.error ? value.error : undefined;
+    const error = typeof value.error === 'string' && value.error ? value.error : undefined;
     calls.push(
       value.status === 'error' || error
         ? { name: value.name, error: error ?? 'unknown error' }
         : { name: value.name },
     );
   }
-  if (complete !== undefined && typeof complete !== 'boolean') {
-    return { error: 'MCP tool call metadata is malformed' };
-  }
-  return calls.length > 0
-    ? { calls, ...(complete === false ? { incomplete: true } : {}) }
-    : undefined;
+  return { calls };
 }
 
-function parseRawMcpToolCalls(rawOutputValue: unknown): StructuredMcpToolCalls | undefined {
-  const rawOutput: unknown[] = Array.isArray(rawOutputValue) ? rawOutputValue : [];
+function isResponseToolInvocation(type: unknown): type is string {
+  return typeof type === 'string' && (type.endsWith('_call') || type === 'mcp_approval_request');
+}
+
+function parseRawMcpCall(entry: unknown): StructuredMcpToolCalls {
+  const value = readProperties(entry, ['name', 'status', 'error', 'output']);
   if (
-    rawOutput.some(
-      (item) =>
-        typeof item === 'object' &&
-        item !== null &&
-        'type' in item &&
-        item.type === 'mcp_approval_request',
-    )
+    !value ||
+    typeof value.name !== 'string' ||
+    !value.name.trim() ||
+    (value.error != null && typeof value.error !== 'string')
   ) {
-    return { error: 'MCP tool call response is awaiting approval' };
+    return { error: 'MCP tool call response is malformed' };
   }
-  const rawCalls = rawOutput.filter(
-    (item) =>
-      typeof item === 'object' && item !== null && 'type' in item && item.type === 'mcp_call',
-  );
-  if (rawCalls.length === 0) {
+  if (typeof value.error === 'string' && value.error) {
+    return { calls: [{ name: value.name, error: value.error }] };
+  }
+  if (value.status === 'failed') {
+    return { calls: [{ name: value.name, error: 'tool call status was failed' }] };
+  }
+  const hasOutput = Object.hasOwn(value, 'output');
+  if (
+    (value.status !== undefined && value.status !== 'completed') ||
+    (hasOutput && value.output !== null && typeof value.output !== 'string') ||
+    (!hasOutput && value.status !== 'completed')
+  ) {
+    return { error: `MCP tool call response for ${value.name} is incomplete or malformed` };
+  }
+  return { calls: [{ name: value.name }] };
+}
+
+function parseRawMcpToolCalls(rawOutput: unknown): StructuredMcpToolCalls | undefined {
+  const malformed = { error: 'MCP tool call response is malformed' };
+  if (isProxyValue(rawOutput)) {
+    return malformed;
+  }
+  if (!Array.isArray(rawOutput)) {
+    if (rawOutput !== null && typeof rawOutput === 'object') {
+      const type = readOwnDataProperty(rawOutput, 'type');
+      if (!type.ok || isResponseToolInvocation(type.value)) {
+        return malformed;
+      }
+    }
     return undefined;
   }
-  const incomplete = rawOutput.some(
-    (item) =>
-      typeof item === 'object' && item !== null && 'type' in item && item.type === 'function_call',
-  );
-
+  const entries = materializeDenseArray(rawOutput);
+  if (!entries) {
+    return malformed;
+  }
   const calls: McpToolCallOutcome[] = [];
-  for (const value of rawCalls) {
-    if (
-      typeof value !== 'object' ||
-      value === null ||
-      !('name' in value) ||
-      typeof value.name !== 'string' ||
-      value.name.trim().length === 0
-    ) {
-      return { error: 'MCP tool call response is malformed' };
-    }
-    if (
-      'error' in value &&
-      value.error !== undefined &&
-      value.error !== null &&
-      typeof value.error !== 'string'
-    ) {
-      return { error: 'MCP tool call response is malformed' };
-    }
-    if ('error' in value && typeof value.error === 'string' && value.error) {
-      calls.push({ name: value.name, error: value.error });
+  let incomplete = false;
+  for (const entry of entries) {
+    if (entry === null || typeof entry !== 'object') {
       continue;
     }
-    if ('status' in value && value.status === 'failed') {
-      calls.push({ name: value.name, error: 'tool call status was failed' });
+    const type = readOwnDataProperty(entry, 'type');
+    if (!type.ok || typeof type.value !== 'string') {
+      return malformed;
+    }
+    if (!isResponseToolInvocation(type.value)) {
       continue;
     }
-    const status = 'status' in value ? value.status : undefined;
-    const hasOutput = 'output' in value;
-    const output = hasOutput ? value.output : undefined;
-    if (
-      (status !== undefined && status !== 'completed') ||
-      (hasOutput && output !== null && typeof output !== 'string') ||
-      (!hasOutput && status !== 'completed')
-    ) {
-      return { error: `MCP tool call response for ${value.name} is incomplete or malformed` };
+    if (type.value === 'mcp_approval_request') {
+      return { error: 'MCP tool call response is awaiting approval' };
     }
-    calls.push({ name: value.name });
+    if (type.value !== 'mcp_call') {
+      incomplete = true;
+      continue;
+    }
+    const result = parseRawMcpCall(entry);
+    if (result.error !== undefined) {
+      return result;
+    }
+    calls.push(...result.calls);
   }
   return { calls, ...(incomplete ? { incomplete: true } : {}) };
 }
 
-export function parseStructuredMcpToolCalls(
+function parseStructuredMcpToolCalls(
   metadataCalls: unknown,
   metadataComplete: unknown,
   rawOutput: unknown,
@@ -261,9 +279,7 @@ export function parseStructuredMcpToolCalls(
     return rawResult;
   }
   const calls = [...(metadataResult?.calls ?? []), ...(rawResult?.calls ?? [])];
-  const incomplete = Boolean(
-    metadataComplete === false || metadataResult?.incomplete || rawResult?.incomplete,
-  );
+  const incomplete = metadataComplete === false || (calls.length > 0 && rawResult?.incomplete);
   return calls.length > 0 || incomplete
     ? { calls, ...(incomplete ? { incomplete: true } : {}) }
     : undefined;
@@ -512,15 +528,12 @@ export const handleIsValidOpenAiToolsCall = async (
       ? getStructuredMcpToolCalls(providerResponse)
       : (capturedMcpToolCalls ?? undefined);
   if (structuredMcpResult?.error) {
-    return applyInverse(
-      {
-        pass: false,
-        score: 0,
-        reason: structuredMcpResult.error,
-        assertion,
-      },
-      inverse,
-    );
+    return {
+      pass: false,
+      score: 0,
+      reason: structuredMcpResult.error,
+      assertion,
+    };
   }
   const hasStructuredMcpFailure =
     structuredMcpResult?.calls?.some((call) => call.error !== undefined) ?? false;

@@ -1,4 +1,5 @@
 import { isGraderFailure, matchesClosedQa } from '../matchers/llmGrading';
+import { invertScore } from '../matchers/shared';
 import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -29,21 +30,15 @@ export const handleModelGradedClosedQa = async ({
     providerCallContext,
   );
 
-  // A grader error/refusal is not a real verdict, so do not invert it (mirrors
-  // handleLlmRubric).
+  // Grader failures must remain failures under negation.
   if (isGraderFailure(resp)) {
     return { ...resp, assertion };
   }
 
-  // Clamp only on inversion so a NaN or out-of-range grader score cannot turn
-  // `1 - score` into a misleading negative/inflated value.
-  const score = inverse
-    ? Math.min(1, Math.max(0, 1 - (Number.isFinite(resp.score) ? resp.score : 0)))
-    : resp.score;
   return {
     ...resp,
-    assertion,
     pass: resp.pass !== inverse,
-    score,
+    score: inverse ? invertScore(resp.score) : resp.score,
+    assertion,
   };
 };

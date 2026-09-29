@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../src/assertions/index';
 import { AIStudioChatProvider } from '../../src/providers/google/ai.studio';
 import { GoogleLiveProvider } from '../../src/providers/google/live';
-import { GoogleProvider } from '../../src/providers/google/provider';
 import { validateFunctionCall } from '../../src/providers/google/util';
 import { VertexChatProvider } from '../../src/providers/google/vertex';
 import { createMockProvider } from '../factories/provider';
@@ -284,48 +283,6 @@ describe('Google assertions', () => {
     });
   });
 
-  describe('Unified GoogleProvider api is-valid-function-call assertion', () => {
-    it('should pass for a direct GoogleProvider instance', async () => {
-      const output = [{ functionCall: { args: '{"x": 10, "y": 20}', name: 'add' } }];
-
-      const provider = new GoogleProvider('foo', {
-        config: {
-          tools: [
-            {
-              functionDeclarations: [
-                {
-                  name: 'add',
-                  parameters: {
-                    type: 'OBJECT',
-                    properties: {
-                      x: { type: 'NUMBER' },
-                      y: { type: 'NUMBER' },
-                    },
-                    required: ['x', 'y'],
-                  },
-                },
-              ],
-            },
-          ],
-        },
-      });
-      const result: GradingResult = await runAssertion({
-        prompt: 'Some prompt',
-        provider,
-        assertion: {
-          type: 'is-valid-function-call',
-        },
-        test: {} as AtomicTestCase,
-        providerResponse: { output },
-      });
-
-      expect(result).toMatchObject({
-        pass: true,
-        reason: 'Assertion passed',
-      });
-    });
-  });
-
   describe('AI Studio api is-valid-function-call assertion', () => {
     it('should pass for a valid function call with correct arguments', async () => {
       const output = [{ functionCall: { args: '{"x": 10, "y": 20}', name: 'add' } }];
@@ -476,89 +433,95 @@ describe('Google assertions', () => {
           },
         },
       ],
-    ] as const)('does not let an unused valid %s schema poison another call', async (_name, parameters) => {
-      const output = JSON.stringify({
-        toolCall: { functionCalls: [{ name: 'plain' }] },
-      });
-      const provider = new GoogleLiveProvider('foo', {
-        config: {
-          tools: [
-            { functionDeclarations: [{ name: 'plain' }] },
-            {
-              functionDeclarations: [{ name: 'unused', parameters: parameters as never }],
-            },
-          ],
-        },
-      });
+    ] as const)(
+      'does not let an unused valid %s schema poison another call',
+      async (_name, parameters) => {
+        const output = JSON.stringify({
+          toolCall: { functionCalls: [{ name: 'plain' }] },
+        });
+        const provider = new GoogleLiveProvider('foo', {
+          config: {
+            tools: [
+              { functionDeclarations: [{ name: 'plain' }] },
+              {
+                functionDeclarations: [{ name: 'unused', parameters: parameters as never }],
+              },
+            ],
+          },
+        });
 
-      const [positive, inverse] = await Promise.all(
-        (['is-valid-function-call', 'not-is-valid-function-call'] as const).map((type) =>
+        const [positive, inverse] = await Promise.all(
+          (['is-valid-function-call', 'not-is-valid-function-call'] as const).map((type) =>
+            runAssertion({
+              prompt: 'Some prompt',
+              provider,
+              assertion: { type },
+              test: {} as AtomicTestCase,
+              providerResponse: { output },
+            }),
+          ),
+        );
+
+        expect(positive).toMatchObject({ pass: true, score: 1 });
+        expect(inverse).toMatchObject({ pass: false, score: 0 });
+      },
+    );
+
+    it.each(['propertyOrdering', 'property_ordering'] as const)(
+      'validates an argument property named %s',
+      async (propertyName) => {
+        const provider = new AIStudioChatProvider('foo', {
+          config: {
+            tools: [
+              {
+                functionDeclarations: [
+                  {
+                    name: 'collision',
+                    parameters: {
+                      type: 'OBJECT',
+                      properties: { [propertyName]: { type: 'STRING' } },
+                      propertyOrdering: [propertyName],
+                      required: [propertyName],
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        });
+        const run = (
+          value: unknown,
+          type: 'is-valid-function-call' | 'not-is-valid-function-call',
+        ) =>
           runAssertion({
             prompt: 'Some prompt',
             provider,
             assertion: { type },
             test: {} as AtomicTestCase,
-            providerResponse: { output },
-          }),
-        ),
-      );
-
-      expect(positive).toMatchObject({ pass: true, score: 1 });
-      expect(inverse).toMatchObject({ pass: false, score: 0 });
-    });
-
-    it.each([
-      'propertyOrdering',
-      'property_ordering',
-    ] as const)('validates an argument property named %s', async (propertyName) => {
-      const provider = new AIStudioChatProvider('foo', {
-        config: {
-          tools: [
-            {
-              functionDeclarations: [
-                {
-                  name: 'collision',
-                  parameters: {
-                    type: 'OBJECT',
-                    properties: { [propertyName]: { type: 'STRING' } },
-                    propertyOrdering: [propertyName],
-                    required: [propertyName],
-                  },
-                },
-              ],
+            providerResponse: {
+              output: [{ functionCall: { name: 'collision', args: { [propertyName]: value } } }],
             },
-          ],
-        },
-      });
-      const run = (value: unknown, type: 'is-valid-function-call' | 'not-is-valid-function-call') =>
-        runAssertion({
-          prompt: 'Some prompt',
-          provider,
-          assertion: { type },
-          test: {} as AtomicTestCase,
-          providerResponse: {
-            output: [{ functionCall: { name: 'collision', args: { [propertyName]: value } } }],
-          },
+          });
+
+        const [invalidPositive, invalidInverse, validPositive, validInverse] = await Promise.all([
+          run(42, 'is-valid-function-call'),
+          run(42, 'not-is-valid-function-call'),
+          run('ordered', 'is-valid-function-call'),
+          run('ordered', 'not-is-valid-function-call'),
+        ]);
+
+        expect(invalidPositive).toMatchObject({
+          pass: false,
+          score: 0,
+          reason: expect.stringContaining('does not match schema'),
         });
+        expect(invalidInverse).toMatchObject({ pass: true, score: 1 });
+        expect(validPositive).toMatchObject({ pass: true, score: 1 });
+        expect(validInverse).toMatchObject({ pass: false, score: 0 });
+      },
+    );
 
-      const [invalidPositive, invalidInverse, validPositive, validInverse] = await Promise.all([
-        run(42, 'is-valid-function-call'),
-        run(42, 'not-is-valid-function-call'),
-        run('ordered', 'is-valid-function-call'),
-        run('ordered', 'not-is-valid-function-call'),
-      ]);
-
-      expect(invalidPositive).toMatchObject({
-        pass: false,
-        score: 0,
-        reason: expect.stringContaining('does not match schema'),
-      });
-      expect(invalidInverse).toMatchObject({ pass: true, score: 1 });
-      expect(validPositive).toMatchObject({ pass: true, score: 1 });
-      expect(validInverse).toMatchObject({ pass: false, score: 0 });
-    });
-
-    it('does not invert duplicate function names across tool groups', async () => {
+    it('validates normalized duplicate function names across tool groups', async () => {
       const output = JSON.stringify({
         toolCall: { functionCalls: [{ args: '{}', name: 'duplicate' }] },
       });
@@ -583,16 +546,8 @@ describe('Google assertions', () => {
         ),
       );
 
-      expect(positive).toMatchObject({
-        pass: false,
-        score: 0,
-        reason: expect.stringContaining('Duplicate function schema'),
-      });
-      expect(inverse).toMatchObject({
-        pass: false,
-        score: 0,
-        reason: expect.stringContaining('Duplicate function schema'),
-      });
+      expect(positive).toMatchObject({ pass: true, score: 1 });
+      expect(inverse).toMatchObject({ pass: false, score: 0 });
     });
 
     it('should fail for an invalid function call with incorrect arguments', async () => {
@@ -859,42 +814,45 @@ describe('Google assertions', () => {
       ],
       ['malformed parameters', { type: 'TYPE_UNSPECIFIED' }, false, false],
       ['null parameters', null, false, false],
-    ] as const)('validates empty arguments against %s through the dispatcher', async (_name, parameters, positivePass, inversePass) => {
-      const output = JSON.stringify({
-        toolCall: { functionCalls: [{ args: '{}', name: 'lookup' }] },
-      });
-      const provider = new GoogleLiveProvider('foo', {
-        config: {
-          tools: [
-            {
-              functionDeclarations: [{ name: 'lookup', parameters: parameters as never }],
-            },
-          ],
-        },
-      });
+    ] as const)(
+      'validates empty arguments against %s through the dispatcher',
+      async (_name, parameters, positivePass, inversePass) => {
+        const output = JSON.stringify({
+          toolCall: { functionCalls: [{ args: '{}', name: 'lookup' }] },
+        });
+        const provider = new GoogleLiveProvider('foo', {
+          config: {
+            tools: [
+              {
+                functionDeclarations: [{ name: 'lookup', parameters: parameters as never }],
+              },
+            ],
+          },
+        });
 
-      const [positive, inverse] = await Promise.all(
-        (['is-valid-function-call', 'not-is-valid-function-call'] as const).map((type) =>
-          runAssertion({
-            prompt: 'Some prompt',
-            provider,
-            assertion: { type },
-            test: {} as AtomicTestCase,
-            providerResponse: { output },
-          }),
-        ),
-      );
+        const [positive, inverse] = await Promise.all(
+          (['is-valid-function-call', 'not-is-valid-function-call'] as const).map((type) =>
+            runAssertion({
+              prompt: 'Some prompt',
+              provider,
+              assertion: { type },
+              test: {} as AtomicTestCase,
+              providerResponse: { output },
+            }),
+          ),
+        );
 
-      expect(positive).toMatchObject({ pass: positivePass, score: positivePass ? 1 : 0 });
-      expect(inverse).toMatchObject({ pass: inversePass, score: inversePass ? 1 : 0 });
-      if (_name === 'malformed parameters') {
-        expect(positive.reason).toContain("Tool schema doesn't compile with ajv");
-        expect(inverse.reason).toContain("Tool schema doesn't compile with ajv");
-      } else if (_name === 'null parameters') {
-        expect(positive.reason).toContain('Invalid function schema configured in provider');
-        expect(inverse.reason).toContain('Invalid function schema configured in provider');
-      }
-    });
+        expect(positive).toMatchObject({ pass: positivePass, score: positivePass ? 1 : 0 });
+        expect(inverse).toMatchObject({ pass: inversePass, score: inversePass ? 1 : 0 });
+        if (_name === 'malformed parameters') {
+          expect(positive.reason).toContain("Tool schema doesn't compile with ajv");
+          expect(inverse.reason).toContain("Tool schema doesn't compile with ajv");
+        } else if (_name === 'null parameters') {
+          expect(positive.reason).toContain('Invalid function schema configured in provider');
+          expect(inverse.reason).toContain('Invalid function schema configured in provider');
+        }
+      },
+    );
 
     it.each([
       ['empty object', '{}', true, false],
@@ -902,29 +860,32 @@ describe('Google assertions', () => {
       ['array', '[]', false, true],
       ['number', '0', false, true],
       ['boolean', 'false', false, true],
-    ] as const)('validates %s arguments for a parameterless function', async (_name, args, positivePass, inversePass) => {
-      const output = JSON.stringify({
-        toolCall: { functionCalls: [{ args, name: 'noop' }] },
-      });
-      const provider = new GoogleLiveProvider('foo', {
-        config: { tools: [{ functionDeclarations: [{ name: 'noop' }] }] },
-      });
+    ] as const)(
+      'validates %s arguments for a parameterless function',
+      async (_name, args, positivePass, inversePass) => {
+        const output = JSON.stringify({
+          toolCall: { functionCalls: [{ args, name: 'noop' }] },
+        });
+        const provider = new GoogleLiveProvider('foo', {
+          config: { tools: [{ functionDeclarations: [{ name: 'noop' }] }] },
+        });
 
-      const [positive, inverse] = await Promise.all(
-        (['is-valid-function-call', 'not-is-valid-function-call'] as const).map((type) =>
-          runAssertion({
-            prompt: 'Some prompt',
-            provider,
-            assertion: { type },
-            test: {} as AtomicTestCase,
-            providerResponse: { output },
-          }),
-        ),
-      );
+        const [positive, inverse] = await Promise.all(
+          (['is-valid-function-call', 'not-is-valid-function-call'] as const).map((type) =>
+            runAssertion({
+              prompt: 'Some prompt',
+              provider,
+              assertion: { type },
+              test: {} as AtomicTestCase,
+              providerResponse: { output },
+            }),
+          ),
+        );
 
-      expect(positive).toMatchObject({ pass: positivePass, score: positivePass ? 1 : 0 });
-      expect(inverse).toMatchObject({ pass: inversePass, score: inversePass ? 1 : 0 });
-    });
+        expect(positive).toMatchObject({ pass: positivePass, score: positivePass ? 1 : 0 });
+        expect(inverse).toMatchObject({ pass: inversePass, score: inversePass ? 1 : 0 });
+      },
+    );
 
     it.each([
       [
@@ -943,79 +904,87 @@ describe('Google assertions', () => {
         false,
         true,
       ],
-    ] as const)('validates omitted arguments against a %s', async (_name, parameters, positivePass, inversePass) => {
-      const output = [{ functionCall: { name: 'lookup' } }];
-      const provider = new AIStudioChatProvider('foo', {
-        config: {
-          tools: [{ functionDeclarations: [{ name: 'lookup', parameters: parameters as never }] }],
-        },
-      });
+    ] as const)(
+      'validates omitted arguments against a %s',
+      async (_name, parameters, positivePass, inversePass) => {
+        const output = [{ functionCall: { name: 'lookup' } }];
+        const provider = new AIStudioChatProvider('foo', {
+          config: {
+            tools: [
+              { functionDeclarations: [{ name: 'lookup', parameters: parameters as never }] },
+            ],
+          },
+        });
 
-      const [positive, inverse] = await Promise.all(
-        (['is-valid-function-call', 'not-is-valid-function-call'] as const).map((type) =>
-          runAssertion({
-            prompt: 'Some prompt',
-            provider,
-            assertion: { type },
-            test: {} as AtomicTestCase,
-            providerResponse: { output },
-          }),
-        ),
-      );
+        const [positive, inverse] = await Promise.all(
+          (['is-valid-function-call', 'not-is-valid-function-call'] as const).map((type) =>
+            runAssertion({
+              prompt: 'Some prompt',
+              provider,
+              assertion: { type },
+              test: {} as AtomicTestCase,
+              providerResponse: { output },
+            }),
+          ),
+        );
 
-      expect(positive).toMatchObject({ pass: positivePass, score: positivePass ? 1 : 0 });
-      expect(inverse).toMatchObject({ pass: inversePass, score: inversePass ? 1 : 0 });
-    });
+        expect(positive).toMatchObject({ pass: positivePass, score: positivePass ? 1 : 0 });
+        expect(inverse).toMatchObject({ pass: inversePass, score: inversePass ? 1 : 0 });
+      },
+    );
 
     it.each([
       ['within bounds', ['one'], true, false],
       ['below minimum', [], false, true],
       ['above maximum', ['one', 'two', 'three'], false, true],
-    ] as const)('validates string-valued Google array bounds when %s', async (_name, values, positivePass, inversePass) => {
-      const output = JSON.stringify({
-        toolCall: { functionCalls: [{ args: { values }, name: 'bounded' }] },
-      });
-      const provider = new GoogleLiveProvider('foo', {
-        config: {
-          tools: [
-            {
-              functionDeclarations: [
-                {
-                  name: 'bounded',
-                  parameters: {
-                    type: 'OBJECT',
-                    properties: {
-                      values: {
-                        type: 'ARRAY',
-                        items: { type: 'STRING' },
-                        minItems: '1',
-                        maxItems: '2',
+    ] as const)(
+      'validates string-valued Google array bounds when %s',
+      async (_name, values, positivePass, inversePass) => {
+        const output = JSON.stringify({
+          toolCall: { functionCalls: [{ args: { values }, name: 'bounded' }] },
+        });
+        const provider = new GoogleLiveProvider('foo', {
+          config: {
+            tools: [
+              {
+                functionDeclarations: [
+                  {
+                    name: 'bounded',
+                    parameters: {
+                      type: 'OBJECT',
+                      properties: {
+                        values: {
+                          type: 'ARRAY',
+                          items: { type: 'STRING' },
+                          minItems: '1',
+                          maxItems: '2',
+                        },
                       },
+                      required: ['values'],
                     },
-                    required: ['values'],
                   },
-                },
-              ],
-            },
-          ],
-        },
-      });
+                ],
+              },
+            ],
+          },
+        });
 
-      const [positive, inverse] = await Promise.all(
-        (['is-valid-function-call', 'not-is-valid-function-call'] as const).map((type) =>
-          runAssertion({
-            prompt: 'Some prompt',
-            provider,
-            assertion: { type },
-            test: {} as AtomicTestCase,
-            providerResponse: { output },
-          }),
-        ),
-      );
+        const [positive, inverse] = await Promise.all(
+          (['is-valid-function-call', 'not-is-valid-function-call'] as const).map((type) =>
+            runAssertion({
+              prompt: 'Some prompt',
+              provider,
+              assertion: { type },
+              test: {} as AtomicTestCase,
+              providerResponse: { output },
+            }),
+          ),
+        );
 
-      expect(positive).toMatchObject({ pass: positivePass, score: positivePass ? 1 : 0 });
-      expect(inverse).toMatchObject({ pass: inversePass, score: inversePass ? 1 : 0 });
-    });
+        expect(positive).toMatchObject({ pass: positivePass, score: positivePass ? 1 : 0 });
+        expect(inverse).toMatchObject({ pass: inversePass, score: inversePass ? 1 : 0 });
+      },
+    );
 
     it('should not invert a Google tool schema compilation error', async () => {
       const output = JSON.stringify({

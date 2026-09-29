@@ -1,133 +1,95 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handlePiScorer } from '../../src/assertions/pi';
-import { matchesClosedQa, matchesPiScore } from '../../src/matchers/llmGrading';
-import { getNunjucksEngine } from '../../src/util/templates';
-import type nunjucks from 'nunjucks';
+import { matchesPiScore } from '../../src/matchers/llmGrading';
 
 import type { AssertionParams } from '../../src/types/index';
 
 vi.mock('../../src/matchers/llmGrading');
-vi.mock('../../src/util/templates');
+
+const params: AssertionParams = {
+  assertion: { type: 'pi', value: 'test question' },
+  baseType: 'pi',
+  assertionValueContext: {
+    prompt: 'test prompt',
+    vars: {},
+    test: { vars: {} },
+    logProbs: undefined,
+    provider: undefined,
+    providerResponse: undefined,
+  },
+  inverse: false,
+  output: 'test output',
+  outputString: 'test output',
+  prompt: 'test prompt',
+  providerResponse: {},
+  renderedValue: 'test question',
+  test: { vars: {} },
+};
 
 describe('handlePiScorer', () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-    const mockNunjucksEnv = {
-      options: { autoescape: true },
-      render: vi.fn(),
-      renderString: vi.fn().mockImplementation((str) => str),
-      addFilter: vi.fn(),
-      getFilter: vi.fn(),
-      hasExtension: vi.fn(),
-      addExtension: vi.fn(),
-      removeExtension: vi.fn(),
-      getExtension: vi.fn(),
-      addGlobal: vi.fn(),
-      getGlobal: vi.fn(),
-      getTemplate: vi.fn(),
-      express: vi.fn(),
-      on: vi.fn(),
-    } as unknown as nunjucks.Environment;
+  beforeEach(() => vi.resetAllMocks());
 
-    vi.mocked(getNunjucksEngine).mockReturnValue(mockNunjucksEnv);
-    vi.mocked(matchesClosedQa).mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'test reason',
-    });
-  });
-
-  it('should validate string value', async () => {
-    const params: AssertionParams = {
-      assertion: { type: 'pi' },
-      baseType: 'pi',
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: {},
-        test: { vars: {} },
-        logProbs: undefined,
-        provider: undefined,
-        providerResponse: undefined,
-      },
-      inverse: false,
-      output: 'test output',
-      outputString: 'test output',
-      prompt: 'test prompt',
-      providerResponse: {},
-      renderedValue: {},
-      test: {
-        options: {},
-        vars: {},
-      },
-    };
-
-    await expect(handlePiScorer(params)).rejects.toThrow(
+  it('requires a string value', async () => {
+    await expect(handlePiScorer({ ...params, renderedValue: {} })).rejects.toThrow(
       '"pi" assertion type must have a string value',
     );
   });
 
-  it('should validate prompt exists', async () => {
-    const params: AssertionParams = {
-      assertion: { type: 'pi' },
-      baseType: 'pi',
-      assertionValueContext: {
-        prompt: undefined,
-        vars: {},
-        test: { vars: {} },
-        logProbs: undefined,
-        provider: undefined,
-        providerResponse: undefined,
-      },
-      inverse: false,
-      output: 'test output',
-      outputString: 'test output',
-      prompt: undefined,
-      providerResponse: {},
-      renderedValue: 'test value',
-      test: {
-        options: {},
-        vars: {},
-      },
-    };
-
-    await expect(handlePiScorer(params)).rejects.toThrow(
+  it('requires a prompt', async () => {
+    await expect(handlePiScorer({ ...params, prompt: undefined })).rejects.toThrow(
       '"pi" assertion must have a prompt that is a string',
     );
   });
 
-  it('should call handlePiScorer with correct parameters', async () => {
-    const params: AssertionParams = {
-      assertion: { type: 'pi', value: 'test question' },
-      baseType: 'pi',
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: { var: 'value' },
-        test: { vars: { var: 'value' } },
-        logProbs: undefined,
-        provider: undefined,
-        providerResponse: undefined,
-      },
-      inverse: false,
-      output: 'test output',
-      outputString: 'test output',
-      prompt: 'test prompt',
-      providerResponse: {},
-      renderedValue: 'test question',
-      test: {
-        options: {
-          rubricPrompt: 'test rubric',
-        },
-        vars: {
-          var: 'value',
-        },
-      },
-    };
+  it.each([false, true])(
+    'preserves scorer details and inverts only verdicts (inverse=%s)',
+    async (inverse) => {
+      for (const pass of [false, true]) {
+        const result = {
+          pass,
+          score: pass ? 0.8 : 0.2,
+          reason: 'Pi Scorer',
+          namedScores: { quality: 0.8 },
+        };
+        vi.mocked(matchesPiScore).mockResolvedValue(result);
+        const actual = await handlePiScorer({ ...params, inverse });
+        expect(matchesPiScore).toHaveBeenCalledWith(
+          'test question',
+          'test prompt',
+          'test output',
+          params.assertion,
+        );
+        expect(actual).toMatchObject({
+          reason: result.reason,
+          namedScores: result.namedScores,
+          pass: inverse ? !pass : pass,
+        });
+        expect(actual.score).toBeCloseTo(inverse ? 1 - result.score : result.score);
+      }
+    },
+  );
 
-    await handlePiScorer(params);
+  it.each([false, true])(
+    'does not turn a scorer error into a verdict (inverse=%s)',
+    async (inverse) => {
+      const failure = new Error('Fixture scorer unavailable');
+      vi.mocked(matchesPiScore).mockRejectedValue(failure);
+      await expect(handlePiScorer({ ...params, inverse })).rejects.toBe(failure);
+    },
+  );
 
-    expect(matchesPiScore).toHaveBeenCalledWith('test question', 'test prompt', 'test output', {
-      type: 'pi',
-      value: 'test question',
-    });
+  it.each([false, true])('rejects a missing or invalid score (inverse=%s)', async (inverse) => {
+    for (const score of [undefined, Number.NaN, Infinity]) {
+      vi.mocked(matchesPiScore).mockResolvedValue({
+        pass: false,
+        score,
+        reason: 'Pi Scorer',
+      } as Awaited<ReturnType<typeof matchesPiScore>>);
+      expect(await handlePiScorer({ ...params, inverse })).toMatchObject({
+        pass: false,
+        score: 0,
+        metadata: { graderError: true },
+      });
+    }
   });
 });

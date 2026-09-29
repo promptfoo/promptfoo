@@ -1,93 +1,48 @@
 ---
 sidebar_position: 8
-description: 'Identify and block prompt injection attacks using advanced model-based classification for enhanced security protection'
+description: 'Grade model outputs against a criterion using the Pi scoring API.'
 ---
 
 # Pi Scorer
 
-`pi` is an alternative approach to model grading that uses a dedicated scoring model instead of the "LLM as a judge" technique. It can evaluate input and output pairs against criteria.
-
-:::note
-**Important**: Unlike `llm-rubric` which works with your existing providers, Pi requires a separate external API key from Pi Labs.
-:::
+The `pi` assertion sends the prompt, model output, and a grading question to the Pi scoring API. It returns a numeric score and requires a separate `WITHPI_API_KEY`.
 
 ## Alternative Approach
 
-Pi offers a different approach to evaluation with some distinct characteristics:
-
-- Uses a dedicated scoring model rather than prompting an LLM to act as a judge
-- Focuses on highly accurate numeric scoring without providing detailed reasoning
-- Aims for consistency in scoring the same inputs
-- Requires a separate API key and integration
-
-Each approach has different strengths, and you may want to experiment with both to determine which best suits your specific evaluation needs.
+Pi uses a dedicated scoring API. For grading with a configured LLM provider, use [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric).
 
 ## Prerequisites
 
-To use Pi, you **must** first:
-
-1. Create a Pi API key from [Pi Labs](https://build.withpi.ai/account/keys)
-2. Set the `WITHPI_API_KEY` environment variable
+Set your Pi API key in the environment:
 
 ```bash
 export WITHPI_API_KEY=your_api_key_here
 ```
 
-or set
-
-```yaml
-env:
-  WITHPI_API_KEY: your_api_key_here
-```
-
-in your promptfoo config
-
 ## How to use it
 
-To use the `pi` assertion type, add it to your test configuration:
+Add a grading question to your test:
 
 ```yaml
 assert:
   - type: pi
-    # Specify the criteria for grading the LLM output
-    value: Is the response not apologetic and provides a clear, concise answer?
+    value: Does the response answer the question clearly?
+    threshold: 0.8
 ```
-
-This assertion will use the Pi scorer to grade the output based on the specified criteria.
 
 ## How it works
 
-Under the hood, the `pi` assertion uses the `withpi` SDK to evaluate the output based on the criteria you provide.
-
-Compared to LLM as a judge:
-
-- The inputs of the eval are the same: `llm_input` and `llm_output`
-- Pi does not need a system prompt, and is pretrained to score
-- Pi always generates the same score, when given the same input
-- Pi requires a separate API key (see Prerequisites section)
+Promptfoo sends an HTTP request containing `llm_input`, `llm_output`, and the grading question in `scoring_spec`. It uses the returned `total_score` as the assertion score and preserves `question_scores` as named scores.
 
 ## Threshold Support
 
-The `pi` assertion type supports an optional `threshold` property that sets a minimum score requirement. When specified, the output must achieve a score greater than or equal to the threshold to pass.
+The assertion passes when the score is **greater than** the threshold. The default threshold is `0.5`.
 
-```yaml
-assert:
-  - type: pi
-    value: Is not apologetic and provides a clear, concise answer
-    threshold: 0.8 # Requires a score of 0.8 or higher to pass
-```
-
-:::info
-The default threshold is `0.5` if not specified.
-:::
+Use `not-pi` to invert a valid verdict. Its score is `1 - score`, bounded to `[0, 1]`. API errors and missing or non-finite scores fail both forms.
 
 ## Metrics Brainstorming
 
-You can use the [Pi Labs Copilot](https://build.withpi.ai) to interactively brainstorm representative metrics for your application. It helps you:
-
-1. Generate effective evaluation criteria
-2. Test metrics on example outputs before integration
-3. Find the optimal threshold values for your use case
+Use criteria you can check against representative passing and failing examples before choosing a threshold.
 
 ## Example Configuration
 
@@ -101,15 +56,14 @@ tests:
       concept: quantum computing
     assert:
       - type: pi
-        value: Is the explanation easy to understand without technical jargon?
+        value: Is the explanation understandable without technical jargon?
         threshold: 0.7
-      - type: pi
-        value: Does the response correctly explain the fundamental principles?
-        threshold: 0.8
+      - type: not-pi
+        value: Does the response contain unexplained technical jargon?
+        threshold: 0.5
 ```
 
 ## See Also
 
-- [LLM Rubric](/docs/configuration/expected-outputs/model-graded/llm-rubric)
-- [Model-graded metrics](/docs/configuration/expected-outputs/model-graded)
-- [Pi Documentation](https://docs.withpi.ai) for more options, configuration, and calibration details
+- [LLM Rubric](/docs/configuration/expected-outputs/model-graded/llm-rubric) uses a configured grading provider.
+- [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) lists the other grading assertions.

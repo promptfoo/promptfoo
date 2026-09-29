@@ -2,7 +2,6 @@ import fs from 'fs/promises';
 import path from 'path';
 
 import async from 'async';
-import yaml from 'js-yaml';
 import cliState from '../cliState';
 import { getEnvInt } from '../envars';
 import { handleConversationRelevance } from '../external/assertions/deepeval';
@@ -21,7 +20,10 @@ import {
 import { matchesSimilarity } from '../matchers/similarity';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
-import { getProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
+import {
+  getProviderCallExecutionContext,
+  getProviderCallTracingContext,
+} from '../scheduler/providerCallExecutionContext';
 import { generateSpanId, generateTraceparent } from '../tracing/evaluatorTracing';
 import { getTraceStore } from '../tracing/store';
 import {
@@ -46,6 +48,7 @@ import {
   type TransformInputClone,
   transform,
 } from '../util/transform';
+import { loadYaml } from '../util/yamlLoad';
 import { handleAgentRubric } from './agentRubric';
 import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
@@ -79,8 +82,8 @@ import { handleLlmRubric } from './llmRubric';
 import { handleModelGradedClosedQa } from './modelGradedClosedQa';
 import { handleModeration } from './moderation';
 import {
+  getStructuredMcpToolCalls,
   handleIsValidOpenAiToolsCall,
-  parseStructuredMcpToolCalls,
   type StructuredMcpToolCalls,
   trustsRenderedMcpOutput,
   wasMcpProviderOrTestOutputTransformed,
@@ -129,7 +132,7 @@ import type {
   ScoringFunction,
 } from '../types/index';
 
-const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
+const DEFAULT_ASSERTIONS_MAX_CONCURRENCY = 3;
 const DEFAULT_TRACE_FETCH_MAX_ATTEMPTS = 6;
 const DEFAULT_TRACE_FETCH_RETRY_DELAY_MS = 250;
 const DEFAULT_TRACE_FETCH_STABLE_POLLS = 2;
@@ -207,6 +210,7 @@ const INVERSE_DISPATCH_ASSERTION_TYPES = new Set<AssertionType>([
   'is-valid-openai-function-call',
   'is-valid-openai-tools-call',
   'model-graded-closedqa',
+  'pi',
   'trace-error-spans',
   'trace-span-count',
   'trace-span-duration',
@@ -222,172 +226,13 @@ export function hasOpenAiToolsCallAssertions(assertions?: AssertionOrSet[]): boo
   return Boolean(assertions?.some(assertionUsesOpenAiToolsCall));
 }
 
-type OwnDataProperty =
-  | { exists: boolean; ok: true; value: unknown }
-  | { exists?: never; ok: false; value?: never };
-
-function readOwnDataProperty(value: unknown, key: PropertyKey): OwnDataProperty {
-  if (
-    (typeof value !== 'object' && typeof value !== 'function') ||
-    value === null ||
-    isProxyValue(value)
-  ) {
-    return { ok: false };
-  }
-  try {
-    const descriptor = Object.getOwnPropertyDescriptor(value, key);
-    if (!descriptor) {
-      return { exists: false, ok: true, value: undefined };
-    }
-    return 'value' in descriptor
-      ? { exists: true, ok: true, value: descriptor.value }
-      : { ok: false };
-  } catch {
-    return { ok: false };
-  }
-}
-
-function readOwnArrayValues(value: unknown): { ok: true; values: unknown[] } | { ok: false } {
-  if (isProxyValue(value) || !Array.isArray(value)) {
-    return { ok: false };
-  }
-  const values: unknown[] = [];
-  for (let index = 0; index < value.length; index++) {
-    const item = readOwnDataProperty(value, String(index));
-    if (!item.ok || !item.exists) {
-      return { ok: false };
-    }
-    values.push(item.value);
-  }
-  return { ok: true, values };
-}
-
-function copyOwnDataProperties(
-  value: unknown,
-  keys: string[],
-): { ok: true; value: Record<string, unknown> } | { ok: false } {
-  const copy: Record<string, unknown> = {};
-  for (const key of keys) {
-    const property = readOwnDataProperty(value, key);
-    if (!property.ok) {
-      return { ok: false };
-    }
-    if (property.exists) {
-      copy[key] = property.value;
-    }
-  }
-  return { ok: true, value: copy };
-}
-
-function normalizeMetadataMcpCalls(value: unknown): { ok: true; value: unknown } | { ok: false } {
-  if (value === undefined) {
-    return { ok: true, value: undefined };
-  }
-  const entries = readOwnArrayValues(value);
-  if (!entries.ok) {
-    return { ok: false };
-  }
-  const calls: Record<string, unknown>[] = [];
-  for (const entry of entries.values) {
-    const call = copyOwnDataProperties(entry, ['name', 'status', 'error']);
-    if (!call.ok) {
-      return { ok: false };
-    }
-    calls.push(call.value);
-  }
-  return { ok: true, value: calls };
-}
-
-function normalizeRawMcpOutput(value: unknown): { ok: true; value: unknown } | { ok: false } {
-  if (isProxyValue(value)) {
-    return { ok: false };
-  }
-  if (!Array.isArray(value)) {
-    return { ok: true, value: undefined };
-  }
-  const entries = readOwnArrayValues(value);
-  if (!entries.ok) {
-    return { ok: false };
-  }
-  const relevant: Record<string, unknown>[] = [];
-  for (const entry of entries.values) {
-    if (typeof entry !== 'object' || entry === null) {
-      continue;
-    }
-    if (isProxyValue(entry)) {
-      return { ok: false };
-    }
-    const type = readOwnDataProperty(entry, 'type');
-    if (!type.ok) {
-      return { ok: false };
-    }
-    if (!type.exists || typeof type.value !== 'string') {
-      return { ok: false };
-    }
-    if (
-      type.value !== 'mcp_call' &&
-      type.value !== 'mcp_approval_request' &&
-      type.value !== 'function_call'
-    ) {
-      continue;
-    }
-    const item = copyOwnDataProperties(entry, ['type', 'name', 'status', 'error', 'output']);
-    if (!item.ok) {
-      return { ok: false };
-    }
-    relevant.push(item.value);
-  }
-  return { ok: true, value: relevant };
-}
-
 export function captureMcpToolCallProvenance(
   providerResponse: ProviderResponse,
   assertions?: AssertionOrSet[],
 ): StructuredMcpToolCalls | null | undefined {
-  if (!hasOpenAiToolsCallAssertions(assertions)) {
-    return undefined;
-  }
-  const metadataProperty = readOwnDataProperty(providerResponse, 'metadata');
-  if (!metadataProperty.ok) {
-    return { error: 'MCP tool call metadata is malformed' };
-  }
-  let metadataCalls: unknown;
-  let metadataComplete: unknown;
-  if (metadataProperty.value !== undefined) {
-    const callsProperty = readOwnDataProperty(metadataProperty.value, 'mcpToolCalls');
-    const completeProperty = readOwnDataProperty(metadataProperty.value, 'mcpToolCallsComplete');
-    if (!callsProperty.ok || !completeProperty.ok) {
-      return { error: 'MCP tool call metadata is malformed' };
-    }
-    const normalizedCalls = normalizeMetadataMcpCalls(callsProperty.value);
-    if (!normalizedCalls.ok) {
-      return { error: 'MCP tool call metadata is malformed' };
-    }
-    metadataCalls = normalizedCalls.value;
-    metadataComplete = completeProperty.value;
-  }
-
-  const rawProperty = readOwnDataProperty(providerResponse, 'raw');
-  if (!rawProperty.ok) {
-    return { error: 'MCP tool call response is malformed' };
-  }
-  let rawOutput: unknown;
-  if (
-    rawProperty.value !== undefined &&
-    typeof rawProperty.value === 'object' &&
-    rawProperty.value !== null
-  ) {
-    const outputProperty = readOwnDataProperty(rawProperty.value, 'output');
-    if (!outputProperty.ok) {
-      return { error: 'MCP tool call response is malformed' };
-    }
-    const normalizedOutput = normalizeRawMcpOutput(outputProperty.value);
-    if (!normalizedOutput.ok) {
-      return { error: 'MCP tool call response is malformed' };
-    }
-    rawOutput = normalizedOutput.value;
-  }
-  return parseStructuredMcpToolCalls(metadataCalls, metadataComplete, rawOutput) ?? null;
+  return hasOpenAiToolsCallAssertions(assertions)
+    ? (getStructuredMcpToolCalls(providerResponse) ?? null)
+    : undefined;
 }
 
 function captureTrustedMcpRenderedOutput(providerResponse: ProviderResponse): string | undefined {
@@ -624,7 +469,7 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
  * @see runAssertions for batch assertion execution
  * @see evaluate for full evaluation pipeline
  */
-export async function runAssertion({
+async function runAssertionInternal({
   prompt,
   provider,
   assertion,
@@ -639,6 +484,7 @@ export async function runAssertion({
   trustedMcpRenderedOutput,
   traceId,
   traceData,
+  claimStoredGradingUsage,
 }: {
   prompt?: string;
   provider?: ApiProvider;
@@ -660,6 +506,7 @@ export async function runAssertion({
   trustedMcpRenderedOutput?: string | null;
   traceId?: string;
   traceData?: TraceData | null;
+  claimStoredGradingUsage?: () => boolean;
 }): Promise<GradingResult> {
   invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
 
@@ -878,7 +725,12 @@ export async function runAssertion({
 
   // Construct CallApiContextParams for model-graded assertions that need originalProvider
   // Generate traceparent for grader calls to link them to the main trace
-  const graderTraceparent = traceId ? generateTraceparent(traceId, generateSpanId()) : undefined;
+  const activeTraceparent = getProviderCallTracingContext()?.getActiveTraceparent();
+  const graderTraceparent = traceId
+    ? activeTraceparent?.split('-')[1] === traceId
+      ? activeTraceparent
+      : generateTraceparent(traceId, generateSpanId())
+    : undefined;
   const providerCallContext: CallApiContextParams | undefined = provider
     ? {
         originalProvider: provider,
@@ -915,7 +767,7 @@ export async function runAssertion({
 
   // Check for redteam assertions first
   if (assertionParams.baseType.startsWith('promptfoo:redteam:')) {
-    return handleRedteam(assertionParams);
+    return handleRedteam(assertionParams, claimStoredGradingUsage);
   }
 
   const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
@@ -951,6 +803,28 @@ export async function runAssertion({
   }
 
   throw new Error(`Unknown assertion type: ${assertion.type}`);
+}
+
+export async function runAssertion(
+  options: Parameters<typeof runAssertionInternal>[0],
+): Promise<GradingResult> {
+  if (!options.traceId) {
+    return runAssertionInternal(options);
+  }
+
+  const tracingContext = getProviderCallTracingContext();
+  if (!tracingContext) {
+    return runAssertionInternal(options);
+  }
+
+  return tracingContext.withGraderSpan(
+    {
+      graderId: options.assertion.type,
+      evalId: options.test.metadata?.evaluationId as string | undefined,
+      testIndex: tracingContext.testIndex,
+    },
+    () => runAssertionInternal(options),
+  );
 }
 
 /**
@@ -1104,45 +978,79 @@ export async function runAssertions({
 
   // Serialize when the grouping queue is active: concurrent dispatch can
   // reorder provider enqueues and split same-judge groups.
+  // Read at call time: --env-file and the config's `env:` block are applied after this module is imported.
+  // async rejects a limit below 1, which would fail every assertion.
   const concurrency = getProviderCallExecutionContext()?.providerCallQueue
     ? 1
-    : ASSERTIONS_MAX_CONCURRENCY;
+    : Math.max(
+        1,
+        getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', DEFAULT_ASSERTIONS_MAX_CONCURRENCY),
+      );
 
-  await async.forEachOfLimit(
-    asserts,
-    concurrency,
-    async ({ assertion, assertionTransform, assertResult, index }) => {
-      if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
-        // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
-        return;
+  // All assertions (including assertion sets) share one historical strategy cost.
+  // Keep ownership local to this run so replaying a saved response starts fresh.
+  let storedGradingUsageClaimed = false;
+  const claimStoredGradingUsage = () => {
+    if (storedGradingUsageClaimed) {
+      return false;
+    }
+    storedGradingUsageClaimed = true;
+    return true;
+  };
+
+  const runAndRecordAssertion = async ({
+    assertion,
+    assertionTransform,
+    assertResult,
+    index,
+  }: (typeof asserts)[number]) => {
+    if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
+      // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
+      return;
+    }
+
+    const result = await runAssertion({
+      prompt,
+      provider,
+      providerResponse,
+      assertionTransform,
+      assertionTransformInputSnapshot,
+      mcpToolCallProvenance: capturedMcpToolCalls,
+      mcpProviderOrTestOutputTransformed,
+      trustedMcpRenderedOutput,
+      assertion,
+      test,
+      vars,
+      latencyMs,
+      assertIndex: index,
+      traceId,
+      traceData: preloadedTraceData,
+      claimStoredGradingUsage,
+    });
+
+    assertResult.addResult({
+      index,
+      result,
+      metric: renderMetricName(assertion.metric, vars || test.vars || {}),
+      weight: assertion.weight,
+    });
+  };
+
+  const activeAssertions = new Set<Promise<void>>();
+  try {
+    await async.forEachOfLimit(asserts, concurrency, async (entry) => {
+      const pending = runAndRecordAssertion(entry);
+      activeAssertions.add(pending);
+      try {
+        await pending;
+      } finally {
+        activeAssertions.delete(pending);
       }
-
-      const result = await runAssertion({
-        prompt,
-        provider,
-        providerResponse,
-        assertionTransform,
-        assertionTransformInputSnapshot,
-        mcpToolCallProvenance: capturedMcpToolCalls,
-        mcpProviderOrTestOutputTransformed,
-        trustedMcpRenderedOutput,
-        assertion,
-        test,
-        vars,
-        latencyMs,
-        assertIndex: index,
-        traceId,
-        traceData: preloadedTraceData,
-      });
-
-      assertResult.addResult({
-        index,
-        result,
-        metric: renderMetricName(assertion.metric, vars || test.vars || {}),
-        weight: assertion.weight,
-      });
-    },
-  );
+    });
+  } finally {
+    // async stops scheduling on the first error, but active graders still need their workspace.
+    await Promise.allSettled(activeAssertions);
+  }
 
   await async.forEach(subAssertResults, async (subAssertResult) => {
     const result = await subAssertResult.testResult();
@@ -1169,7 +1077,9 @@ export async function runCompareAssertion(
   context?: CallApiContextParams,
 ): Promise<GradingResult[]> {
   invariant(typeof assertion.value === 'string', 'select-best must have a string value');
-  test = getFinalTest(test, assertion);
+  // The matcher needs options and vars, not the assertion list. A runtime assertion can
+  // contain a provider with a circular SDK client, which getFinalTest cannot deep-clone.
+  test = getFinalTest({ ...test, assert: undefined }, assertion);
   const comparisonResults = await matchesSelectBest(
     assertion.value,
     outputs,
@@ -1177,15 +1087,23 @@ export async function runCompareAssertion(
     test.vars,
     context,
   );
+  // The runtime assertion may contain a live grader and secrets. Results only need
+  // the comparison criteria and scoring labels, so keep provider config out of memory.
+  const safeAssertion: Assertion = {
+    type: assertion.type,
+    value: assertion.value,
+    metric: assertion.metric,
+    weight: assertion.weight,
+  };
   return comparisonResults.map((result) => ({
     ...result,
-    assertion,
+    assertion: safeAssertion,
   }));
 }
 
 export async function readAssertions(filePath: string): Promise<Assertion[]> {
   try {
-    const assertions = yaml.load(await fs.readFile(filePath, 'utf-8')) as Assertion[];
+    const assertions = loadYaml(await fs.readFile(filePath, 'utf-8')) as Assertion[];
     if (!Array.isArray(assertions) || assertions[0]?.type === undefined) {
       throw new Error('Assertions file must be an array of assertion objects');
     }

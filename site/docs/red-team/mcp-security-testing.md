@@ -71,7 +71,7 @@ redteam:
   strategies:
     - multi-turn # Multi-turn conversation attacks
     - jailbreak # Attempt to bypass restrictions
-    - prompt-injection # Indirect prompt injections
+    - jailbreak-templates # Applies static jailbreak templates
 ```
 
 See the full list of [plugins](/docs/red-team/plugins/) to get a sense of what can be tested. [Custom policies](/docs/red-team/plugins/policy/) are also very popular here, because they allow you to choose exactly what to test.
@@ -260,7 +260,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
 
       - name: Install dependencies
         run: npm install

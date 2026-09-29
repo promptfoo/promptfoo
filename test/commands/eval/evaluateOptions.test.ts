@@ -2,12 +2,13 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as evaluatorModule from '../../../src/evaluator';
 import logger from '../../../src/logger';
 import Eval from '../../../src/models/eval';
 import { doEval } from '../../../src/node/doEval';
+import { mockProcessEnv } from '../../util/utils';
 import type { Command } from 'commander';
 
 import type { CommandLineOptions, EvaluateOptions, TestSuite } from '../../../src/types/index';
@@ -130,6 +131,86 @@ describe('evaluateOptions behavior', () => {
   afterAll(() => {
     process.exit = originalExit;
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  describe('generation accounting provenance', () => {
+    function generationConfig(metadata: Record<string, unknown>) {
+      return {
+        metadata,
+        providers: [{ id: 'echo' }],
+        prompts: ['Hello'],
+        tests: [{ vars: {} }],
+      };
+    }
+
+    it('removes copied generation charges from a newly created evaluation', async () => {
+      const configFile = writeTempConfig(
+        tmpDir,
+        'test-stale-generation-accounting.yaml',
+        generationConfig({
+          owner: 'preserved metadata',
+          generationAccounting: {
+            id: 'previous-generation',
+            tokenUsage: { total: 40, numRequests: 4 },
+          },
+        }),
+      );
+
+      await doEval({ table: false, write: false, config: [configFile] }, {}, undefined, {});
+
+      const evalRecord = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      expect(evalRecord.config.metadata).toEqual({ owner: 'preserved metadata' });
+      expect(evalRecord.getStats().tokenUsage.generation).toBeUndefined();
+    });
+
+    it('replaces copied generation charges with accounting from the current run', async () => {
+      const configFile = writeTempConfig(
+        tmpDir,
+        'test-current-generation-accounting.yaml',
+        generationConfig({
+          generationAccounting: {
+            id: 'previous-generation',
+            tokenUsage: { total: 40, numRequests: 4 },
+          },
+        }),
+      );
+      const currentUsage = { total: 12, prompt: 8, completion: 4, numRequests: 1 };
+
+      await doEval({ table: false, write: false, config: [configFile] }, {}, undefined, {
+        generationEventId: 'current-generation',
+        generationTokenUsage: currentUsage,
+      });
+
+      const evalRecord = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      expect(evalRecord.config.metadata?.generationAccounting).toEqual({
+        id: 'current-generation',
+        tokenUsage: currentUsage,
+      });
+      expect(evalRecord.getStats().tokenUsage.generation).toMatchObject(currentUsage);
+    });
+
+    it('preserves existing generation charges when resuming the same evaluation', async () => {
+      const generationAccounting = {
+        id: 'original-generation',
+        tokenUsage: { total: 40, prompt: 25, completion: 15, numRequests: 4 },
+      };
+      const resumeEval = new Eval(generationConfig({ generationAccounting }), {
+        id: 'eval-resume-generation-accounting',
+        persisted: true,
+      });
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
+
+      try {
+        await doEval({ table: false, resume: resumeEval.id } as any, {}, undefined, {});
+
+        expect(resumeEval.config.metadata?.generationAccounting).toEqual(generationAccounting);
+        expect(resumeEval.getStats().tokenUsage.generation).toMatchObject(
+          generationAccounting.tokenUsage,
+        );
+      } finally {
+        findByIdSpy.mockRestore();
+      }
+    });
   });
 
   describe('Reading values from config file', () => {
@@ -640,6 +721,93 @@ describe('evaluateOptions behavior', () => {
       }
     });
 
+    it('resolves persisted trace-provider credential references when resuming an eval', async () => {
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_TEST_TEMPO_RESUME_TOKEN: 'resumed-tempo-runtime-secret',
+      });
+      const resumeEval = new Eval(
+        {
+          providers: [{ id: 'echo', label: 'traced-target' }],
+          prompts: ['Hello'],
+          tests: [{ vars: {} }],
+          tracing: {
+            enabled: true,
+            provider: {
+              id: 'tempo',
+              endpoint: 'https://tempo.example.com',
+              auth: { token: '{{ env.PROMPTFOO_TEST_TEMPO_RESUME_TOKEN }}' },
+              headers: {
+                Authorization: 'Bearer {{ env.PROMPTFOO_TEST_TEMPO_RESUME_TOKEN }}',
+              },
+            },
+          },
+        },
+        { id: 'eval-resume-tempo-credentials', persisted: true },
+      );
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
+
+      try {
+        await doEval({ table: false, resume: resumeEval.id } as any, {}, undefined, {});
+
+        const resumedSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        expect(resumedSuite.tracing?.provider?.auth?.token).toBe('resumed-tempo-runtime-secret');
+        expect(resumedSuite.tracing?.provider?.headers?.Authorization).toBe(
+          'Bearer resumed-tempo-runtime-secret',
+        );
+        expect(resumeEval.config.tracing?.provider?.auth?.token).toBe(
+          '{{ env.PROMPTFOO_TEST_TEMPO_RESUME_TOKEN }}',
+        );
+      } finally {
+        findByIdSpy.mockRestore();
+        restoreEnv();
+      }
+    });
+
+    it('resolves nested persisted environment references before resuming trace retrieval', async () => {
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_TEST_TEMPO_SOURCE_SECRET: 'nested-tempo-runtime-secret',
+      });
+      const resumeEval = new Eval(
+        {
+          providers: [{ id: 'echo', label: 'traced-target' }],
+          prompts: ['Hello'],
+          tests: [{ vars: {} }],
+          env: {
+            PROMPTFOO_TEST_TEMPO_READER: '{{ env.PROMPTFOO_TEST_TEMPO_SOURCE_SECRET }}',
+          },
+          tracing: {
+            enabled: true,
+            provider: {
+              id: 'tempo',
+              endpoint: 'https://tempo.example.com',
+              auth: { token: '{{ env.PROMPTFOO_TEST_TEMPO_READER }}' },
+              headers: {
+                'X-Tempo-Reader': '{{ env.PROMPTFOO_TEST_TEMPO_READER }}',
+              },
+            },
+          },
+        },
+        { id: 'eval-resume-nested-tempo-credentials', persisted: true },
+      );
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
+
+      try {
+        await doEval({ table: false, resume: resumeEval.id } as any, {}, undefined, {});
+
+        const resumedSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        expect(resumedSuite.tracing?.provider?.auth?.token).toBe('nested-tempo-runtime-secret');
+        expect(resumedSuite.tracing?.provider?.headers?.['X-Tempo-Reader']).toBe(
+          'nested-tempo-runtime-secret',
+        );
+        expect(resumeEval.config.env).toEqual({
+          PROMPTFOO_TEST_TEMPO_READER: '{{ env.PROMPTFOO_TEST_TEMPO_SOURCE_SECRET }}',
+        });
+      } finally {
+        findByIdSpy.mockRestore();
+        restoreEnv();
+      }
+    });
+
     it('should not treat evaluateOptions.providerFilter as a provider selection', async () => {
       const tempConfig = writeTempConfig(tmpDir, 'test-ignored-provider-filter.yaml', {
         evaluateOptions: {
@@ -941,45 +1109,48 @@ describe('evaluateOptions behavior', () => {
     it.each([
       ['commandLineOptions', { commandLineOptions: { filterRange: '1:2' } }],
       ['evaluateOptions', { evaluateOptions: { filterRange: '1:2' } }],
-    ])('should restore legacy %s.filterRange when resuming evals without persisted runtime options', async (_source, legacyConfig) => {
-      const resumeEval = new Eval(
-        {
-          ...legacyConfig,
-          providers: ['echo'],
-          prompts: ['Hello {{name}}'],
-          tests: [
-            { vars: { name: 'Alice' } },
-            { vars: { name: 'Bob' } },
-            { vars: { name: 'Carol' } },
-          ],
-        },
-        {
-          id: 'eval-resume-without-filter-range',
-          persisted: true,
-        },
-      );
-      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
-
-      try {
-        await doEval(
+    ])(
+      'should restore legacy %s.filterRange when resuming evals without persisted runtime options',
+      async (_source, legacyConfig) => {
+        const resumeEval = new Eval(
           {
-            table: false,
-            resume: 'eval-resume-without-filter-range',
-          } as any,
-          {},
-          undefined,
+            ...legacyConfig,
+            providers: ['echo'],
+            prompts: ['Hello {{name}}'],
+            tests: [
+              { vars: { name: 'Alice' } },
+              { vars: { name: 'Bob' } },
+              { vars: { name: 'Carol' } },
+            ],
+          },
           {
-            filterRange: '0:1',
+            id: 'eval-resume-without-filter-range',
+            persisted: true,
           },
         );
+        const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
 
-        expect(evaluateMock).toHaveBeenCalled();
-        const options = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
-        expect(options.filterRange).toBe('1:2');
-      } finally {
-        findByIdSpy.mockRestore();
-      }
-    });
+        try {
+          await doEval(
+            {
+              table: false,
+              resume: 'eval-resume-without-filter-range',
+            } as any,
+            {},
+            undefined,
+            {
+              filterRange: '0:1',
+            },
+          );
+
+          expect(evaluateMock).toHaveBeenCalled();
+          const options = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
+          expect(options.filterRange).toBe('1:2');
+        } finally {
+          findByIdSpy.mockRestore();
+        }
+      },
+    );
 
     it('should warn and ignore CLI --filter-range when resuming with a different persisted range', async () => {
       const resumeEval = new Eval(

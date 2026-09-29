@@ -32,8 +32,41 @@ Install promptfoo using [npm](https://nodejs.org/en/download), [npx](https://nod
 </Tabs>
 
 :::note
-npm and npx require [Node.js](https://nodejs.org/en/download) `^20.20.0` or `>=22.22.0`.
+npm and npx require [Node.js](https://nodejs.org/en/download) `>=22.22.0`.
 :::
+
+## Node.js runtime support
+
+Promptfoo requires Node.js `22.22.0` or newer. Node.js 24 LTS is recommended.
+
+If you are on an older release, upgrade Node.js before installing or updating promptfoo.
+
+<Tabs groupId="node-version-manager">
+  <TabItem value="nvm" label="nvm" default>
+    ```bash
+    nvm install 24
+    nvm use 24
+    ```
+  </TabItem>
+  <TabItem value="fnm" label="fnm">
+    ```bash
+    fnm install 24
+    fnm use 24
+    ```
+  </TabItem>
+  <TabItem value="volta" label="Volta">
+    ```bash
+    volta install node@24
+    ```
+  </TabItem>
+  <TabItem value="other" label="Other">
+    Download a current LTS release from the [Node.js download page](https://nodejs.org/en/download).
+  </TabItem>
+</Tabs>
+
+For CI, set the configured Node.js version to `24`. For a custom Docker image, use a current
+Node.js base image such as `node:24`. After switching runtimes, verify the active version with
+`node --version`, then install or update promptfoo.
 
 To use promptfoo as a library in your project, run `npm install promptfoo --save`.
 

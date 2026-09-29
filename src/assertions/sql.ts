@@ -139,8 +139,8 @@ export const handleIsSql = async ({
 }: AssertionParams): Promise<GradingResult> => {
   let pass = false;
   let databaseType: string = 'MySQL';
-  let whiteTableList: string[] | undefined;
-  let whiteColumnList: string[] | undefined;
+  let allowedTables: string[] | undefined;
+  let allowedColumns: string[] | undefined;
   if (renderedValue && typeof renderedValue === 'object') {
     const value = renderedValue as {
       databaseType?: string;
@@ -149,8 +149,8 @@ export const handleIsSql = async ({
     };
 
     databaseType = value.databaseType || 'MySQL';
-    whiteTableList = value.allowedTables;
-    whiteColumnList = value.allowedColumns;
+    allowedTables = value.allowedTables;
+    allowedColumns = value.allowedColumns;
   }
 
   if (renderedValue && typeof renderedValue !== 'object') {
@@ -205,10 +205,10 @@ export const handleIsSql = async ({
     pass = inverse;
   }
 
-  if (whiteTableList) {
+  if (allowedTables) {
     opt.type = 'table';
     try {
-      sqlParser.whiteListCheck(outputString, whiteTableList, opt);
+      sqlParser.whiteListCheck(outputString, allowedTables, opt);
     } catch (err) {
       pass = inverse;
       const error = err as Error;
@@ -224,7 +224,7 @@ export const handleIsSql = async ({
         failureReasons.push(
           `SQL references unauthorized table(s). ` +
             `Found: [${actualTables.join(', ')}]. ` +
-            `Allowed: [${whiteTableList.join(', ')}].`,
+            `Allowed: [${allowedTables.join(', ')}].`,
         );
       } else {
         failureReasons.push(`SQL validation failed: ${error.message}.`);
@@ -232,20 +232,20 @@ export const handleIsSql = async ({
     }
   }
 
-  if (whiteColumnList) {
+  if (allowedColumns) {
     opt.type = 'column';
-    const normalizedWhiteList = [...whiteColumnList];
-    for (const item of whiteColumnList) {
+    const normalizedAllowedColumns = [...allowedColumns];
+    for (const item of allowedColumns) {
       const parts = item.split('::');
       if (parts.length === 3 && parts[1] !== 'null') {
         const alt = `${parts[0]}::null::${parts[2]}`;
-        if (!normalizedWhiteList.includes(alt)) {
-          normalizedWhiteList.push(alt);
+        if (!normalizedAllowedColumns.includes(alt)) {
+          normalizedAllowedColumns.push(alt);
         }
       }
     }
     try {
-      sqlParser.whiteListCheck(outputString, normalizedWhiteList, opt);
+      sqlParser.whiteListCheck(outputString, normalizedAllowedColumns, opt);
     } catch (err) {
       pass = inverse;
       const error = err as Error;
@@ -261,7 +261,7 @@ export const handleIsSql = async ({
         failureReasons.push(
           `SQL references unauthorized column(s). ` +
             `Found: [${actualColumns.join(', ')}]. ` +
-            `Allowed: [${whiteColumnList.join(', ')}].`,
+            `Allowed: [${allowedColumns.join(', ')}].`,
         );
       } else {
         failureReasons.push(`SQL validation failed: ${error.message}.`);
@@ -281,8 +281,49 @@ export const handleIsSql = async ({
   };
 };
 
-const FENCE_START_PATTERN = /^[ \t]{0,3}(`{3,}|~{3,})[ \t]*([^\r\n]*)$/;
-const FENCE_END_PATTERN = /^[ \t]{0,3}(`{3,}|~{3,})[ \t]*$/;
+interface CodeFence {
+  character: string;
+  length: number;
+  info: string;
+  hasOnlyTrailingWhitespace: boolean;
+}
+
+function parseCodeFence(line: string): CodeFence | undefined {
+  let index = 0;
+  while (index < 3 && (line[index] === ' ' || line[index] === '\t')) {
+    index++;
+  }
+
+  const character = line[index];
+  if (character !== '`' && character !== '~') {
+    return undefined;
+  }
+
+  const fenceStart = index;
+  while (line[index] === character) {
+    index++;
+  }
+  const length = index - fenceStart;
+  if (length < 3) {
+    return undefined;
+  }
+
+  const info = line.slice(index);
+  let whitespaceIndex = 0;
+  while (
+    whitespaceIndex < info.length &&
+    (info[whitespaceIndex] === ' ' || info[whitespaceIndex] === '\t')
+  ) {
+    whitespaceIndex++;
+  }
+
+  return {
+    character,
+    length,
+    info,
+    hasOnlyTrailingWhitespace: whitespaceIndex === info.length,
+  };
+}
 
 function extractSqlCodeBlocks(output: string): string[] {
   const sqlBlocks: string[] = [];
@@ -291,14 +332,13 @@ function extractSqlCodeBlocks(output: string): string[] {
     | undefined;
 
   for (const line of output.split(/\r\n?|\n/)) {
+    const fence = parseCodeFence(line);
     if (!activeBlock) {
-      const openingFence = FENCE_START_PATTERN.exec(line);
-      if (openingFence) {
-        const fence = openingFence[1];
-        const language = openingFence[2].trim().toLowerCase();
+      if (fence) {
+        const language = fence.info.trim().toLowerCase();
         activeBlock = {
           body: [],
-          fenceCharacter: fence[0],
+          fenceCharacter: fence.character,
           fenceLength: fence.length,
           isSql: language === '' || language === 'sql',
         };
@@ -306,10 +346,10 @@ function extractSqlCodeBlocks(output: string): string[] {
       continue;
     }
 
-    const closingFence = FENCE_END_PATTERN.exec(line)?.[1];
     if (
-      closingFence?.[0] === activeBlock.fenceCharacter &&
-      closingFence.length >= activeBlock.fenceLength
+      fence?.hasOnlyTrailingWhitespace &&
+      fence.character === activeBlock.fenceCharacter &&
+      fence.length >= activeBlock.fenceLength
     ) {
       if (activeBlock.isSql) {
         sqlBlocks.push(activeBlock.body.join('\n').trim());

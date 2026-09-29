@@ -101,8 +101,6 @@ export const handleTraceErrorSpans = ({
   const matchingSpans = spans.filter((span) => matchesPattern(span.name, pattern));
 
   if (matchingSpans.length === 0) {
-    // No spans to check: the error-rate constraint is vacuously satisfied (so a
-    // `not-` variant fails).
     const pass = !inverse;
     return {
       pass,
@@ -155,8 +153,6 @@ export const handleTraceErrorSpans = ({
     }
   }
 
-  // `not-trace-error-spans` negates the verdict; the reason still describes the
-  // measured error spans.
   const finalPass = inverse ? !pass : pass;
   return {
     pass: finalPass,

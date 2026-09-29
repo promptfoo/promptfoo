@@ -119,24 +119,24 @@ describe('handleIsValidFunctionCall', () => {
     expect(inverseInvalid).toMatchObject({ pass: true, score: 1 });
   });
 
-  it.each([
-    'is-valid-function-call',
-    'not-is-valid-function-call',
-  ] as const)('%s does not invert an asynchronous setup error', async (type) => {
-    const result = await runAssertion({
-      assertion: { type },
-      provider: asyncSetupErrorProvider as ApiProvider,
-      prompt: 'test prompt',
-      providerResponse: { output: '{}' },
-      test: { vars: {} },
-    });
+  it.each(['is-valid-function-call', 'not-is-valid-function-call'] as const)(
+    '%s does not invert an asynchronous setup error',
+    async (type) => {
+      const result = await runAssertion({
+        assertion: { type },
+        provider: asyncSetupErrorProvider as ApiProvider,
+        prompt: 'test prompt',
+        providerResponse: { output: '{}' },
+        test: { vars: {} },
+      });
 
-    expect(result).toMatchObject({
-      pass: false,
-      score: 0,
-      reason: 'async schema unavailable',
-    });
-  });
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'async schema unavailable',
+      });
+    },
+  );
 
   it.each([
     ['a string rejection', () => Promise.reject('invalid call'), 'invalid call'],
@@ -212,28 +212,31 @@ describe('handleIsValidFunctionCall', () => {
   it.each([
     ['is-valid-function-call', false],
     ['not-is-valid-function-call', true],
-  ] as const)('does not trust an inherited setup-error brand for %s', async (type, expectedPass) => {
-    const inheritedError = Object.create({
-      code: 'FUNCTION_TOOL_CALL_VALIDATION_SETUP_ERROR',
-      name: 'ValidationError',
-      message: 'ordinary invalid call',
-    });
-    const provider = {
-      ...validProvider,
-      validateFunctionToolCall: () => {
-        throw inheritedError;
-      },
-    } as ApiProvider;
+  ] as const)(
+    'does not trust an inherited setup-error brand for %s',
+    async (type, expectedPass) => {
+      const inheritedError = Object.create({
+        code: 'FUNCTION_TOOL_CALL_VALIDATION_SETUP_ERROR',
+        name: 'ValidationError',
+        message: 'ordinary invalid call',
+      });
+      const provider = {
+        ...validProvider,
+        validateFunctionToolCall: () => {
+          throw inheritedError;
+        },
+      } as ApiProvider;
 
-    const result = await runAssertion({
-      assertion: { type },
-      provider,
-      providerResponse: { output: '{}' },
-      test: { vars: {} },
-    });
+      const result = await runAssertion({
+        assertion: { type },
+        provider,
+        providerResponse: { output: '{}' },
+        test: { vars: {} },
+      });
 
-    expect(result).toMatchObject({ pass: expectedPass, score: expectedPass ? 1 : 0 });
-  });
+      expect(result).toMatchObject({ pass: expectedPass, score: expectedPass ? 1 : 0 });
+    },
+  );
 
   it.each([
     'is-valid-function-call',
@@ -266,33 +269,33 @@ describe('handleIsValidFunctionCall', () => {
     expect(result.componentResults?.[0]).toMatchObject({ pass: false, score: 0 });
   });
 
-  it.each([
-    'is-valid-function-call',
-    'not-is-valid-function-call',
-  ] as const)('%s hard-fails a throwing validator accessor', async (type) => {
-    let reads = 0;
-    const provider = { ...validProvider } as ApiProvider;
-    Object.defineProperty(provider, 'validateFunctionToolCall', {
-      get() {
-        reads += 1;
-        throw new Error('validator getter exploded');
-      },
-    });
+  it.each(['is-valid-function-call', 'not-is-valid-function-call'] as const)(
+    '%s hard-fails a throwing validator accessor',
+    async (type) => {
+      let reads = 0;
+      const provider = { ...validProvider } as ApiProvider;
+      Object.defineProperty(provider, 'validateFunctionToolCall', {
+        get() {
+          reads += 1;
+          throw new Error('validator getter exploded');
+        },
+      });
 
-    const result = await runAssertion({
-      assertion: { type },
-      provider,
-      providerResponse: { output: '{}' },
-      test: { vars: {} },
-    });
+      const result = await runAssertion({
+        assertion: { type },
+        provider,
+        providerResponse: { output: '{}' },
+        test: { vars: {} },
+      });
 
-    expect(result).toMatchObject({
-      pass: false,
-      score: 0,
-      reason: 'validator getter exploded',
-    });
-    expect(reads).toBe(1);
-  });
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'validator getter exploded',
+      });
+      expect(reads).toBe(1);
+    },
+  );
 
   it('acquires a stateful validator accessor only once', async () => {
     let reads = 0;
@@ -320,107 +323,110 @@ describe('handleIsValidFunctionCall', () => {
     expect(reads).toBe(1);
   });
 
-  it.each([
-    'is-valid-function-call',
-    'not-is-valid-function-call',
-  ] as const)('%s propagates validator cancellation', async (type) => {
-    const abortError = new DOMException('cancelled', 'AbortError');
-    const provider = {
-      ...validProvider,
-      validateFunctionToolCall: async () => Promise.reject(abortError),
-    } as ApiProvider;
+  it.each(['is-valid-function-call', 'not-is-valid-function-call'] as const)(
+    '%s propagates validator cancellation',
+    async (type) => {
+      const abortError = new DOMException('cancelled', 'AbortError');
+      const provider = {
+        ...validProvider,
+        validateFunctionToolCall: async () => Promise.reject(abortError),
+      } as ApiProvider;
 
-    await expect(
-      runAssertion({
-        assertion: { type },
-        provider,
-        providerResponse: { output: '{}' },
-        test: { vars: {} },
-      }),
-    ).rejects.toBe(abortError);
-  });
+      await expect(
+        runAssertion({
+          assertion: { type },
+          provider,
+          providerResponse: { output: '{}' },
+          test: { vars: {} },
+        }),
+      ).rejects.toBe(abortError);
+    },
+  );
 
   it.each([
     ['is-valid-function-call', false],
     ['not-is-valid-function-call', true],
-  ] as const)('treats a hostile abort-like error as ordinary invalid output for %s', async (type, expectedPass) => {
-    let traps = 0;
-    const hostileError = new Proxy(new Error('ordinary invalid call'), {
-      get(target, property, receiver) {
-        if (property === 'name') {
+  ] as const)(
+    'treats a hostile abort-like error as ordinary invalid output for %s',
+    async (type, expectedPass) => {
+      let traps = 0;
+      const hostileError = new Proxy(new Error('ordinary invalid call'), {
+        get(target, property, receiver) {
+          if (property === 'name') {
+            traps += 1;
+            throw new Error('hostile name getter');
+          }
+          return Reflect.get(target, property, receiver);
+        },
+        getPrototypeOf() {
           traps += 1;
-          throw new Error('hostile name getter');
-        }
-        return Reflect.get(target, property, receiver);
-      },
-      getPrototypeOf() {
-        traps += 1;
-        throw new Error('hostile prototype trap');
-      },
-    });
-    const provider = {
-      ...validProvider,
-      validateFunctionToolCall: () => {
-        throw hostileError;
-      },
-    } as ApiProvider;
+          throw new Error('hostile prototype trap');
+        },
+      });
+      const provider = {
+        ...validProvider,
+        validateFunctionToolCall: () => {
+          throw hostileError;
+        },
+      } as ApiProvider;
 
-    const result = await runAssertion({
-      assertion: { type },
-      provider,
-      providerResponse: { output: '{}' },
-      test: { vars: {} },
-    });
+      const result = await runAssertion({
+        assertion: { type },
+        provider,
+        providerResponse: { output: '{}' },
+        test: { vars: {} },
+      });
 
-    expect(result).toMatchObject({ pass: expectedPass, score: expectedPass ? 1 : 0 });
-    expect(traps).toBeGreaterThan(0);
-  });
+      expect(result).toMatchObject({ pass: expectedPass, score: expectedPass ? 1 : 0 });
+      expect(traps).toBeGreaterThan(0);
+    },
+  );
 
   describe('inverse (not-is-valid-function-call)', () => {
-    it.each([
-      'not-is-valid-function-call',
-      'not-is-valid-openai-function-call',
-    ] as const)('%s fails when the output IS a valid function call', async (type) => {
-      const r = await runInverse(type, validProvider as ApiProvider);
+    it.each(['not-is-valid-function-call', 'not-is-valid-openai-function-call'] as const)(
+      '%s fails when the output IS a valid function call',
+      async (type) => {
+        const r = await runInverse(type, validProvider as ApiProvider);
 
-      expect(r.pass).toBe(false);
-      expect(r.score).toBe(0);
-      expect(r.reason).toBe('Expected output to not be a valid function call, but it was');
-    });
+        expect(r.pass).toBe(false);
+        expect(r.score).toBe(0);
+        expect(r.reason).toBe('Expected output to not be a valid function call, but it was');
+      },
+    );
 
-    it.each([
-      'not-is-valid-function-call',
-      'not-is-valid-openai-function-call',
-    ] as const)('%s passes when the output is NOT a valid function call', async (type) => {
-      const r = await runInverse(type, invalidProvider as ApiProvider);
+    it.each(['not-is-valid-function-call', 'not-is-valid-openai-function-call'] as const)(
+      '%s passes when the output is NOT a valid function call',
+      async (type) => {
+        const r = await runInverse(type, invalidProvider as ApiProvider);
 
-      expect(r.pass).toBe(true);
-      expect(r.score).toBe(1);
-      expect(r.reason).toBe('Assertion passed');
-    });
+        expect(r.pass).toBe(true);
+        expect(r.score).toBe(1);
+        expect(r.reason).toBe('Assertion passed');
+      },
+    );
 
-    it.each([
-      'not-is-valid-function-call',
-      'not-is-valid-openai-function-call',
-    ] as const)('%s fails when the provider cannot validate function calls', async (type) => {
-      const r = await runInverse(type, noValidatorProvider as ApiProvider);
+    it.each(['not-is-valid-function-call', 'not-is-valid-openai-function-call'] as const)(
+      '%s fails when the provider cannot validate function calls',
+      async (type) => {
+        const r = await runInverse(type, noValidatorProvider as ApiProvider);
 
-      expect(r.pass).toBe(false);
-      expect(r.score).toBe(0);
-      expect(r.reason).toBe('Provider does not have functionality for checking function call.');
-    });
+        expect(r.pass).toBe(false);
+        expect(r.score).toBe(0);
+        expect(r.reason).toBe('Provider does not have functionality for checking function call.');
+      },
+    );
 
-    it.each([
-      'not-is-valid-function-call',
-      'not-is-valid-openai-function-call',
-    ] as const)('%s does not invert a validator setup error', async (type) => {
-      const r = await runInverse(type, setupErrorProvider as ApiProvider);
+    it.each(['not-is-valid-function-call', 'not-is-valid-openai-function-call'] as const)(
+      '%s does not invert a validator setup error',
+      async (type) => {
+        const r = await runInverse(type, setupErrorProvider as ApiProvider);
 
-      expect(r).toMatchObject({
-        pass: false,
-        score: 0,
-        reason: 'validator schema unavailable',
-      });
-    });
+        expect(r).toMatchObject({
+          pass: false,
+          score: 0,
+          reason: 'validator schema unavailable',
+        });
+      },
+    );
   });
 });

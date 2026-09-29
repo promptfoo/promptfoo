@@ -105,6 +105,73 @@ describe('parseRateLimitHeaders', () => {
 
       expect(result.resetAt).toBe(now + 90000);
     });
+
+    it('should parse anthropic-ratelimit-requests-reset as an RFC 3339 timestamp', () => {
+      // Anthropic documents its reset headers as RFC 3339 timestamps, which is
+      // what the API actually returns.
+      const now = Date.parse('2026-08-07T20:00:00Z');
+      vi.spyOn(Date, 'now').mockReturnValue(now);
+
+      const headers = {
+        'anthropic-ratelimit-requests-reset': '2026-08-07T21:00:00Z',
+      };
+
+      const result = parseRateLimitHeaders(headers);
+
+      expect(result.resetAt).toBe(Date.parse('2026-08-07T21:00:00Z'));
+      expect(result.resetAt).toBe(now + 3_600_000);
+    });
+
+    it('should fall back to anthropic-ratelimit-tokens-reset when only it is present', () => {
+      // Token limits bind before request limits on eval workloads, so a
+      // token-limited 429 can carry the tokens reset and no requests reset.
+      const now = Date.parse('2026-08-07T20:00:00Z');
+      vi.spyOn(Date, 'now').mockReturnValue(now);
+
+      const result = parseRateLimitHeaders({
+        'anthropic-ratelimit-tokens-reset': '2026-08-07T21:00:00Z',
+      });
+
+      expect(result.resetAt).toBe(Date.parse('2026-08-07T21:00:00Z'));
+    });
+
+    it('should prefer the requests reset when both anthropic resets are present', () => {
+      const now = Date.parse('2026-08-07T20:00:00Z');
+      vi.spyOn(Date, 'now').mockReturnValue(now);
+
+      const result = parseRateLimitHeaders({
+        'anthropic-ratelimit-requests-reset': '2026-08-07T20:30:00Z',
+        'anthropic-ratelimit-tokens-reset': '2026-08-07T21:00:00Z',
+      });
+
+      expect(result.resetAt).toBe(Date.parse('2026-08-07T20:30:00Z'));
+    });
+
+    it('should parse an RFC 3339 timestamp with a UTC offset', () => {
+      const now = Date.parse('2026-08-07T20:00:00Z');
+      vi.spyOn(Date, 'now').mockReturnValue(now);
+
+      const headers = {
+        'anthropic-ratelimit-requests-reset': '2026-08-07T23:00:00+02:00',
+      };
+
+      const result = parseRateLimitHeaders(headers);
+
+      expect(result.resetAt).toBe(now + 3_600_000);
+    });
+
+    it('should ignore an RFC 3339 timestamp outside the sanity window', () => {
+      const now = Date.parse('2026-08-07T20:00:00Z');
+      vi.spyOn(Date, 'now').mockReturnValue(now);
+
+      const headers = {
+        'anthropic-ratelimit-requests-reset': '2030-01-01T00:00:00Z',
+      };
+
+      const result = parseRateLimitHeaders(headers);
+
+      expect(result.resetAt).toBeUndefined();
+    });
   });
 
   describe('Generic format (ratelimit-*)', () => {
@@ -407,6 +474,27 @@ describe('parseRateLimitHeaders', () => {
       const result = parseRateLimitHeaders({ 'x-ratelimit-reset': '-1' });
 
       expect(result.resetAt).toBeUndefined();
+    });
+
+    it('should treat a bare year-like number as relative seconds, not as a year', () => {
+      // Regression guard: "2026" is a plain number and must keep meaning
+      // "2026 seconds from now". It must not be handed to the HTTP-date
+      // fallback, which would resolve it to 2026-01-01.
+      const now = Date.parse('2026-08-07T20:00:00Z');
+      vi.spyOn(Date, 'now').mockReturnValue(now);
+
+      const result = parseRateLimitHeaders({ 'x-ratelimit-reset': '2026' });
+
+      expect(result.resetAt).toBe(now + 2026 * 1000);
+    });
+
+    it('should treat a fractional number as relative seconds', () => {
+      const now = Date.now();
+      vi.spyOn(Date, 'now').mockReturnValue(now);
+
+      const result = parseRateLimitHeaders({ 'x-ratelimit-reset': '1.5' });
+
+      expect(result.resetAt).toBe(now + 1500);
     });
 
     it('should ignore negative values', () => {
