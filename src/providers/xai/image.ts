@@ -170,7 +170,7 @@ export class XAIImageProvider extends OpenAiImageProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (this.requiresApiKey() && !this.getApiKey()) {
       throw new Error(
@@ -227,7 +227,9 @@ export class XAIImageProvider extends OpenAiImageProvider {
     let latencyMs: number | undefined;
     let deleteFromCache: (() => Promise<void>) | undefined;
     const evictFromCache = async () => {
-      await (deleteFromCache ?? data?.deleteFromCache)?.();
+      if (!callApiOptions?.abortSignal?.aborted) {
+        await (deleteFromCache ?? data?.deleteFromCache)?.();
+      }
     };
     try {
       ({ data, cached, status, statusText, latencyMs, deleteFromCache } = await callOpenAiImageApi(
@@ -256,8 +258,27 @@ export class XAIImageProvider extends OpenAiImageProvider {
       };
     }
 
+    const reportedCost = getXAICostInUsd(data.usage);
+    const cost = cached
+      ? 0
+      : (reportedCost ??
+        this.calculateImageCost(
+          model,
+          config.n || 1,
+          config.resolution,
+          this.countSourceImages(config),
+          config.quality,
+          isEdit,
+        ));
+    const generation = { cached, latencyMs, cost };
+
     try {
-      const images = await buildSafeStructuredImageOutputs(data, undefined, responseFormat);
+      const images = await buildSafeStructuredImageOutputs(
+        data,
+        undefined,
+        responseFormat,
+        callApiOptions?.abortSignal,
+      );
       const formattedOutput = formatStructuredImageOutput(
         data,
         prompt,
@@ -267,33 +288,19 @@ export class XAIImageProvider extends OpenAiImageProvider {
       );
       if (typeof formattedOutput === 'object') {
         await evictFromCache();
-        return formattedOutput;
+        return { ...generation, ...formattedOutput };
       }
-
-      const reportedCost = getXAICostInUsd(data.usage);
-      const cost = cached
-        ? 0
-        : (reportedCost ??
-          this.calculateImageCost(
-            model,
-            config.n || 1,
-            config.resolution,
-            this.countSourceImages(config),
-            config.quality,
-            isEdit,
-          ));
 
       return {
         output: formattedOutput,
         images,
-        cached,
-        latencyMs,
-        cost,
+        ...generation,
         ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
       };
     } catch (err) {
       await evictFromCache();
       return {
+        ...generation,
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
       };
     }

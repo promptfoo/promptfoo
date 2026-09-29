@@ -137,7 +137,7 @@ export class NscaleImageProvider extends OpenAiImageProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
@@ -179,7 +179,9 @@ export class NscaleImageProvider extends OpenAiImageProvider {
     let cached = false;
     let deleteFromCache: (() => Promise<void>) | undefined;
     const evictFromCache = async () => {
-      await (deleteFromCache ?? data?.deleteFromCache)?.();
+      if (!callApiOptions?.abortSignal?.aborted) {
+        await (deleteFromCache ?? data?.deleteFromCache)?.();
+      }
     };
     try {
       ({ data, cached, status, statusText, deleteFromCache } = await callOpenAiImageApi(
@@ -208,8 +210,16 @@ export class NscaleImageProvider extends OpenAiImageProvider {
       };
     }
 
+    const cost = cached ? 0 : this.calculateImageCost(this.modelName, config.n || 1);
+    const generation = { cached, cost };
+
     try {
-      const images = await buildSafeStructuredImageOutputs(data, undefined, responseFormat);
+      const images = await buildSafeStructuredImageOutputs(
+        data,
+        undefined,
+        responseFormat,
+        callApiOptions?.abortSignal,
+      );
       const formattedOutput = formatStructuredImageOutput(
         data,
         prompt,
@@ -219,21 +229,19 @@ export class NscaleImageProvider extends OpenAiImageProvider {
       );
       if (typeof formattedOutput === 'object') {
         await evictFromCache();
-        return formattedOutput;
+        return { ...generation, ...formattedOutput };
       }
-
-      const cost = cached ? 0 : this.calculateImageCost(this.modelName, config.n || 1);
 
       return {
         output: formattedOutput,
         images,
-        cached,
-        cost,
+        ...generation,
         ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
       };
     } catch (err) {
       await evictFromCache();
       return {
+        ...generation,
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
       };
     }

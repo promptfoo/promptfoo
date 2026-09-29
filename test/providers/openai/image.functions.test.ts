@@ -616,6 +616,28 @@ describe('OpenAI Image Provider Functions', () => {
       expect(deleteFromCache).toHaveBeenCalledWith();
     });
 
+    it.each([false, true])(
+      'retains billed usage after a download error, cached=%s',
+      async (cached) => {
+        const usage = { input_tokens: 10, output_tokens: 20, total_tokens: 30 };
+        vi.mocked(fetchWithProxy).mockRejectedValue(new Error('Fixture download failed'));
+        const result = await processApiResponse(
+          { data: [{ url: 'https://example.com/image.png' }], usage },
+          'A blue square',
+          'url',
+          cached,
+          'gpt-image-2',
+          '1024x1024',
+        );
+        expect(result.error).toContain('could not be downloaded');
+        expect(result.cost).toBeCloseTo(cached ? 0 : (10 * 5 + 20 * 30) / 1e6, 12);
+        expect(result.tokenUsage).toMatchObject(
+          cached ? { total: 30, cached: 30 } : { total: 30, numRequests: 1 },
+        );
+        expect(result.metadata?.usage).toEqual(usage);
+      },
+    );
+
     it('should map image API usage to token usage and metadata', async () => {
       const data = {
         data: [{ b64_json: 'base64data' }],

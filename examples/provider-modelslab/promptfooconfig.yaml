@@ -5,7 +5,7 @@ prompts:
   - 'Generate an image: {{imagePrompt}}'
 
 providers:
-  # Flux - High quality generation
+  # Flux
   - id: modelslab:image:flux
     config:
       width: 1024
@@ -21,27 +21,15 @@ providers:
       num_inference_steps: 25
       guidance_scale: 7.5
 
+defaultTest:
+  assert:
+    - type: javascript
+      value: '(context.providerResponse?.images?.length ?? 0) > 0'
+
 tests:
   - vars:
       imagePrompt: 'Professional headshot of a confident business woman, natural lighting, shallow depth of field'
-    assert:
-      - type: contains
-        value: '!['
-      - type: contains
-        value: ']('
-
   - vars:
       imagePrompt: 'Majestic mountain landscape at golden hour, dramatic clouds, oil painting style'
-    assert:
-      - type: contains
-        value: '!['
-      - type: contains
-        value: ']('
-
   - vars:
       imagePrompt: 'Futuristic cyberpunk cityscape at night, neon lights reflecting on wet streets'
-    assert:
-      - type: contains
-        value: '!['
-      - type: contains
-        value: ']('

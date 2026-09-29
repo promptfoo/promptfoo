@@ -89,6 +89,66 @@ describe('XAI Image Provider', () => {
     } as Response);
   });
 
+  it.each([false, true])(
+    'retains generation accounting when a download fails, cancelled=%s',
+    async (cancelled) => {
+      const controller = new AbortController();
+      const deleteFromCache = vi.fn();
+      vi.mocked(callOpenAiImageApi).mockResolvedValue({
+        data: { data: [{ url: 'https://example.com/image.png' }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      });
+      let started!: () => void;
+      const downloadStarted = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      vi.mocked(fetchWithProxy).mockImplementation((_url, options) => {
+        started();
+        if (!cancelled) {
+          return Promise.reject(new Error('Fixture download failed'));
+        }
+        return new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener('abort', () => reject(options.signal?.reason), {
+            once: true,
+          });
+        });
+      });
+      const provider = new XAIImageProvider('grok-2-image', { config: { apiKey: 'fixture' } });
+      const pending = provider.callApi('A blue square', undefined, {
+        abortSignal: controller.signal,
+      });
+      await downloadStarted;
+      if (cancelled) {
+        controller.abort();
+      }
+      const result = await pending;
+      expect(result.error).toContain('could not be downloaded');
+      expect(result.cost).toBe(0.07);
+      expect(result.cached).toBe(false);
+      expect(deleteFromCache).toHaveBeenCalledTimes(cancelled ? 0 : 1);
+    },
+  );
+
+  it('rejects an incomplete base64 batch while retaining its generation cost', async () => {
+    vi.mocked(callOpenAiImageApi).mockResolvedValue({
+      data: { data: [{ b64_json: 'aW1hZ2U=' }, {}] },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = new XAIImageProvider('grok-2-image', {
+      config: { apiKey: 'fixture', response_format: 'b64_json', n: 2 },
+    });
+    const result = await provider.callApi('Two blue squares');
+    expect(result.error).toContain('One or more generated images');
+    expect(result.output).toBeUndefined();
+    expect(result.cost).toBe(0.14);
+    expect(fetchWithProxy).not.toHaveBeenCalled();
+  });
+
   afterEach(() => {
     vi.resetAllMocks();
   });

@@ -953,6 +953,10 @@ export function formatStructuredImageOutput(
   outputFormat?: string,
   images?: ImageOutput[],
 ): string | { error: string } {
+  if (!images && data.data?.length > 1) {
+    return { error: 'One or more generated images could not be downloaded safely.' };
+  }
+
   if (responseFormat === 'b64_json') {
     const b64Json = data.data?.[0]?.b64_json;
     if (!b64Json) {
@@ -1179,14 +1183,32 @@ export async function processApiResponse(
   deleteFromCache?: () => Promise<void>,
   abortSignal?: AbortSignal,
 ): Promise<ProviderResponse> {
-  const evictFromCache = deleteFromCache ?? data?.deleteFromCache;
+  const evictFromCache = async () => {
+    if (!abortSignal?.aborted) {
+      await (deleteFromCache ?? data?.deleteFromCache)?.();
+    }
+  };
 
   if (data.error) {
-    await evictFromCache?.();
+    await evictFromCache();
     return {
       error: formatOpenAiError(data),
     };
   }
+
+  const exactUsageCost = calculateOpenAIUsageCost(model, billingConfig, data.usage, {
+    cachedResponse: cached,
+  });
+  const cost = exactUsageCost ?? (cached ? 0 : calculateImageCost(model, size, quality, n));
+  const tokenUsage = getImageTokenUsage(data, cached);
+
+  const generation: ProviderResponse = {
+    cached,
+    latencyMs,
+    ...(cost === undefined ? {} : { cost }),
+    ...(tokenUsage ? { tokenUsage } : {}),
+    ...(data.usage ? { metadata: { usage: data.usage } } : {}),
+  };
 
   try {
     const images = await buildSafeStructuredImageOutputs(
@@ -1195,10 +1217,6 @@ export async function processApiResponse(
       responseFormat,
       abortSignal,
     );
-    if (!images && data.data?.length > 1) {
-      await evictFromCache?.();
-      return { error: 'One or more generated images could not be downloaded safely.' };
-    }
     const formattedOutput = formatStructuredImageOutput(
       data,
       prompt,
@@ -1207,29 +1225,20 @@ export async function processApiResponse(
       images,
     );
     if (typeof formattedOutput === 'object') {
-      await evictFromCache?.();
-      return formattedOutput;
+      await evictFromCache();
+      return { ...generation, ...formattedOutput };
     }
-
-    const exactUsageCost = calculateOpenAIUsageCost(model, billingConfig, data.usage, {
-      cachedResponse: cached,
-    });
-    const cost = exactUsageCost ?? (cached ? 0 : calculateImageCost(model, size, quality, n));
-    const tokenUsage = getImageTokenUsage(data, cached);
 
     return {
       output: formattedOutput,
       images,
-      cached,
-      latencyMs,
-      ...(cost === undefined ? {} : { cost }),
-      ...(tokenUsage ? { tokenUsage } : {}),
-      ...(data.usage ? { metadata: { usage: data.usage } } : {}),
+      ...generation,
       ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
     };
   } catch (err) {
-    await evictFromCache?.();
+    await evictFromCache();
     return {
+      ...generation,
       error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
     };
   }

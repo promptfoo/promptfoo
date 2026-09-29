@@ -388,6 +388,30 @@ describe('Fal Provider', () => {
         },
       );
 
+      it('cancels a cached image download without evicting its generation', async () => {
+        const controller = new AbortController();
+        vi.mocked(isCacheEnabled).mockReturnValue(true);
+        const cache = getCache();
+        vi.mocked(cache.get).mockResolvedValue(
+          JSON.stringify('![fixture](https://example.com/image.png)'),
+        );
+        vi.mocked(buildSafeStructuredImageOutputs).mockImplementation(
+          async (_data, _format, _response, signal) => {
+            expect(signal).toBe(controller.signal);
+            controller.abort();
+            return undefined;
+          },
+        );
+        const result = await provider.callApi('A blue square', undefined, {
+          abortSignal: controller.signal,
+        });
+        expect(result.error).toContain('could not be downloaded');
+        expect(result.cached).toBe(true);
+        expect(cache.del).not.toHaveBeenCalled();
+        expect(cache.set).not.toHaveBeenCalled();
+        expect(mockSubscribe).not.toHaveBeenCalled();
+      });
+
       it('should use cached response when cache is enabled and available', async () => {
         vi.mocked(isCacheEnabled).mockImplementation(function () {
           return true;
@@ -425,9 +449,14 @@ describe('Fal Provider', () => {
           output: imageData,
           images: [{ data: imageData, mimeType: 'image/png' }],
         });
-        expect(buildSafeStructuredImageOutputs).toHaveBeenCalledWith({
-          data: [{ url: 'https://cached.example.com/image.png' }],
-        });
+        expect(buildSafeStructuredImageOutputs).toHaveBeenCalledWith(
+          {
+            data: [{ url: 'https://cached.example.com/image.png' }],
+          },
+          undefined,
+          undefined,
+          undefined,
+        );
         expect(mockCache.set).toHaveBeenCalledWith(expect.any(String), JSON.stringify(imageData));
         expect(mockSubscribe).not.toHaveBeenCalled();
         expect(mockCreateClient).not.toHaveBeenCalled();

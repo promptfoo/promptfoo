@@ -11,6 +11,7 @@ import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ImageOutput,
   ProviderResponse,
 } from '../types/index';
@@ -142,7 +143,11 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
     return true;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
         'fal.ai API key is not set. Set the FAL_KEY environment variable or or add `apiKey` to the provider config.',
@@ -182,12 +187,17 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
       imageUrl ||
       (typeof response === 'string' && response.startsWith('data:image/') ? response : undefined);
     if (imageSource) {
-      images = await buildSafeStructuredImageOutputs({ data: [{ url: imageSource }] });
+      images = await buildSafeStructuredImageOutputs(
+        { data: [{ url: imageSource }] },
+        undefined,
+        undefined,
+        options?.abortSignal,
+      );
       if (!images?.[0]?.data) {
-        if (cache && cacheKey) {
+        if (cache && cacheKey && !options?.abortSignal?.aborted) {
           await cache.del(cacheKey);
         }
-        return { error: 'The generated image could not be downloaded safely.' };
+        return { cached, error: 'The generated image could not be downloaded safely.' };
       }
       response = images[0].data;
     }

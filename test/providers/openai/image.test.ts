@@ -71,6 +71,49 @@ describe('OpenAiImageProvider', () => {
     } as Response);
   });
 
+  it.each([false, true])(
+    'retains generation accounting when a download fails, cancelled=%s',
+    async (cancelled) => {
+      const controller = new AbortController();
+      const deleteFromCache = vi.fn();
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { data: [{ url: 'https://example.com/image.png' }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      });
+      let started!: () => void;
+      const downloadStarted = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      vi.mocked(fetchWithProxy).mockImplementation((_url, options) => {
+        started();
+        if (!cancelled) {
+          return Promise.reject(new Error('Fixture download failed'));
+        }
+        return new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener('abort', () => reject(options.signal?.reason), {
+            once: true,
+          });
+        });
+      });
+      const provider = new OpenAiImageProvider('dall-e-3', { config: { apiKey: 'fixture' } });
+      const pending = provider.callApi('A blue square', undefined, {
+        abortSignal: controller.signal,
+      });
+      await downloadStarted;
+      if (cancelled) {
+        controller.abort();
+      }
+      const result = await pending;
+      expect(result.error).toContain('could not be downloaded');
+      expect(result.cost).toBe(0.04);
+      expect(result.cached).toBe(false);
+      expect(deleteFromCache).toHaveBeenCalledTimes(cancelled ? 0 : 1);
+    },
+  );
+
   afterEach(() => {
     vi.resetAllMocks();
   });
