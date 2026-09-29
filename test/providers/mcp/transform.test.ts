@@ -600,6 +600,18 @@ describe('transformMCPConfigToClaudeCode', () => {
     });
   });
 
+  it.each([{ command: 'npx', args: ['plain-server'] }, { path: 'server.js' }])(
+    'omits absent env from stdio config %j',
+    async (server) => {
+      const servers = await transformMCPConfigToClaudeCode({
+        enabled: true,
+        server: { name: 'plain', ...server },
+      });
+
+      expect(Object.hasOwn(servers.plain, 'env')).toBe(false);
+    },
+  );
+
   it.each([
     null,
     [],
