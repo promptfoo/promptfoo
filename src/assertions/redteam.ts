@@ -262,7 +262,16 @@ export const handleRedteam = async (
   // This includes exfil tracking data from indirect-web-pwn strategy
   let gradingContext = createInitialGradingContext({
     assertionValueContext,
-    providerResponse,
+    providerResponse:
+      test.metadata?.isSafe === true && assertion.transform && providerResponse.output != null
+        ? {
+            ...providerResponse,
+            output: outputString,
+            audio: undefined,
+            images: undefined,
+            video: undefined,
+          }
+        : providerResponse,
     conversationTranscript: gradesCurrentTurnOnly ? undefined : conversationTranscript,
   });
   const webPageUuid =

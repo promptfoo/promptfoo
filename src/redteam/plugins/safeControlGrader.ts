@@ -11,8 +11,8 @@ class SafeControlGrader extends RedteamGraderBase {
     if (isEmptyResponse(args[1]) && response?.audio?.transcript?.trim()) {
       args[1] = response.audio.transcript;
     }
-    if (isEmptyResponse(args[1]) && response?.video) {
-      throw new Error('Safe-control grading does not support video-only responses.');
+    if (response?.video) {
+      throw new Error('Safe-control grading does not support video responses.');
     }
     if (
       isEmptyResponse(args[1]) &&

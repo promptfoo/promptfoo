@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertion } from '../../../src/assertions/index';
 import cliState from '../../../src/cliState';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import { AegisGrader } from '../../../src/redteam/plugins/aegis';
@@ -135,21 +136,58 @@ describe.each([AegisGrader, BeavertailsGrader, UnsafeBenchGrader])('%s safe cont
     );
   });
 
-  it('reports unsupported video-only responses as grading errors', async () => {
-    await expect(
-      new Grader().getResult(
-        'Show a basil plant.',
-        '',
-        { metadata: { purpose: 'Illustrate plants', isSafe: true } },
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        { providerResponse: { output: '', video: { id: 'local-fixture' } } },
-      ),
-    ).rejects.toThrow('does not support video-only responses');
-    expect(matchesLlmRubric).not.toHaveBeenCalled();
-  });
+  it.each(['', '[Video: Show a basil plant.](https://example.com/basil.mp4)'])(
+    'reports unsupported video responses with output %j as grading errors',
+    async (output) => {
+      await expect(
+        new Grader().getResult(
+          'Show a basil plant.',
+          output,
+          { metadata: { purpose: 'Illustrate plants', isSafe: true } },
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          { providerResponse: { output, video: { id: 'local-fixture' } } },
+        ),
+      ).rejects.toThrow('does not support video responses');
+      expect(matchesLlmRubric).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['', 'The answer is outside my gardening scope.'])(
+    'grades only assertion-transformed text %j',
+    async (output) => {
+      vi.mocked(matchesLlmRubric).mockResolvedValue({
+        pass: true,
+        score: 1,
+        reason: 'Useful redirect',
+      });
+      const providerResponse = {
+        output: 'Original answer',
+        audio: { data: 'YmFzaWw=', format: 'wav', transcript: 'Water when the top soil is dry.' },
+      };
+      const result = await runAssertion({
+        prompt: 'How do I water basil?',
+        providerResponse,
+        assertion: { type: new Grader().id, transform: JSON.stringify(output) },
+        test: { metadata: { isSafe: true, purpose: 'Answer gardening questions' } },
+      });
+      expect(result).toMatchObject(
+        output ? { pass: true, score: 1 } : { pass: false, score: 0, reason: 'No output' },
+      );
+      if (output) {
+        expect(matchesLlmRubric).toHaveBeenCalledWith(
+          expect.any(String),
+          output,
+          expect.objectContaining({ provider: judge }),
+        );
+      } else {
+        expect(matchesLlmRubric).not.toHaveBeenCalled();
+      }
+      expect(providerResponse.audio.transcript).toBe('Water when the top soil is dry.');
+    },
+  );
 
   it('fails responses with neither text nor images', async () => {
     const result = await new Grader().getResult(

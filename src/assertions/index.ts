@@ -434,11 +434,12 @@ async function runAssertionInternal({
   const resolvedVars = vars || test.vars || {};
 
   const { cost, logProbs, output: originalOutput } = providerResponse;
-  let output = originalOutput;
+  const missingSafeControlOutput = test.metadata?.isSafe === true && originalOutput == null;
+  let output = missingSafeControlOutput ? '' : originalOutput;
 
   invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
 
-  if (assertion.transform) {
+  if (assertion.transform && !missingSafeControlOutput) {
     output = await transform(assertion.transform, output, {
       vars: resolvedVars,
       prompt: { label: prompt },

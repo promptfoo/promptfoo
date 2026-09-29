@@ -1368,7 +1368,6 @@ async function applyRunEvalResponseOutcome({
       applyEmptyResponseOutcome(ret, isRedteam);
       return;
     }
-    response = { ...response, output: '' };
   }
 
   await gradeRunEvalResponse({
@@ -1460,6 +1459,7 @@ async function gradeRunEvalResponse({
 
   const assertionProviderResponse = {
     ...processedResponse,
+    output: response.output == null ? response.output : processedResponse.output,
     // Keep generated audio available to graders after persistence replaces its
     // inline bytes with a blob reference in the saved result.
     ...(response.audio?.data ? { audio: response.audio } : {}),
@@ -1529,8 +1529,9 @@ async function transformRunEvalResponse({
   processedResponse: ProviderResponse;
   providerTransformedOutput: ProviderResponse['output'];
 }> {
-  const processedResponse = { ...response };
-  if (provider.transform) {
+  const hasOutput = response.output != null;
+  const processedResponse = { ...response, output: hasOutput ? response.output : '' };
+  if (hasOutput && provider.transform) {
     processedResponse.output = await transform(provider.transform, processedResponse.output, {
       vars,
       prompt,
@@ -1539,7 +1540,7 @@ async function transformRunEvalResponse({
   const providerTransformedOutput = processedResponse.output;
 
   const testTransform = test.options?.transform || test.options?.postprocess;
-  if (testTransform) {
+  if (hasOutput && testTransform) {
     processedResponse.output = await transform(testTransform, processedResponse.output, {
       vars,
       prompt,
