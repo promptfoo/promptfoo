@@ -1204,30 +1204,82 @@ describe('writeOutput', () => {
     },
   );
 
+  // A suite name reserves room for the uniqueness suffix, so it can show fewer
+  // characters than the testcase name built from the same raw text.
   it.each([
-    ['hello\u000bworld', 'hello world'],
-    ['hello\u000cworld', 'hello world'],
-    ['a' + '🚀'.repeat(300), 'a' + '🚀'.repeat(254) + '...'],
-    ['x'.repeat(520) + '\u0000', 'x'.repeat(509) + '...'],
-    ['x'.repeat(512) + '\u0001', 'x'.repeat(509) + '...'],
-    ['y'.repeat(509) + 'ABC' + '\u0000'.repeat(20), 'y'.repeat(509) + '...'],
-  ])('preserves already-valid JUnit identities for %j', async (raw, expected) => {
-    const suite = await junitSuiteWithNames(raw);
-    expect(suite['@_name']).toBe('[' + expected + '] prompt 1');
-    expect(suite.testcase['@_name']).toBe('test 1: ' + expected);
-  });
+    { case: 'vertical tab', raw: 'hello\u000bworld', suite: 'hello world' },
+    { case: 'form feed', raw: 'hello\u000cworld', suite: 'hello world' },
+    { case: 'interior controls', raw: 'case \u0000 name', suite: 'case name' },
+    { case: 'surrounding controls', raw: ' \u0001 case \u0000  name \u001f ', suite: 'case name' },
+    {
+      case: 'astral characters past the limit',
+      raw: 'a' + '🚀'.repeat(300),
+      suite: 'a' + '🚀'.repeat(254) + '...',
+    },
+    {
+      case: 'a control inside the limit',
+      raw: 'x'.repeat(490) + '\u0000-v2',
+      suite: 'x'.repeat(490) + '-v2',
+    },
+    {
+      case: 'a control run inside the limit',
+      raw: 'x'.repeat(490) + '\u0000'.repeat(14) + 'XY',
+      suite: 'x'.repeat(490) + 'XY',
+    },
+    {
+      case: 'a control past the limit',
+      raw: 'x'.repeat(520) + '\u0000',
+      suite: 'x'.repeat(490) + '...',
+      testcase: 'x'.repeat(509) + '...',
+    },
+    {
+      case: 'a control just past the limit',
+      raw: 'x'.repeat(512) + '\u0001',
+      suite: 'x'.repeat(490) + '...',
+      testcase: 'x'.repeat(512),
+    },
+    {
+      case: 'a control run that frees up room',
+      raw: 'y'.repeat(509) + 'ABC' + '\u0000'.repeat(20),
+      suite: 'y'.repeat(490) + '...',
+      testcase: 'y'.repeat(509) + 'ABC',
+    },
+  ])(
+    'keeps visible JUnit text for $case',
+    async ({ raw, suite: expectedSuite, testcase = expectedSuite }) => {
+      const suite = await junitSuiteWithNames(raw);
+      expect(suite['@_name'].replace(/ \([a-f0-9]{16}\)$/, '')).toBe(
+        '[' + expectedSuite + '] prompt 1',
+      );
+      expect(suite.testcase['@_classname']).toBe(suite['@_name']);
+      expect(suite.testcase['@_name']).toBe('test 1: ' + testcase);
+    },
+  );
 
+  // Each pair renders to the same visible text once the forbidden character is
+  // removed, so only the uniqueness suffix keeps the two suites apart.
   it.each([
-    ['case \u0000 name', 'case name'],
-    [' \u0001 case \u0000  name \u001f ', 'case name'],
-    ['x'.repeat(490) + '\u0000-v2', 'x'.repeat(490) + '-v2'],
-    ['x'.repeat(490) + '\u0000'.repeat(14) + 'XY', 'x'.repeat(490) + 'XY'],
-  ])('keeps visible JUnit text after removing controls from %j', async (raw, expected) => {
-    const suite = await junitSuiteWithNames(raw);
-    const nameWithoutHash = suite['@_name'].replace(/ \([a-f0-9]{16}\)$/, '');
-    expect(nameWithoutHash).toBe('[' + expected + '] prompt 1');
-    expect(suite.testcase['@_classname']).toBe(suite['@_name']);
-    expect(suite.testcase['@_name']).toBe('test 1: ' + expected);
+    ['a vertical tab collapses into a space', 'my\u000bmodel', 'my model'],
+    ['a form feed collapses into a space', 'my\u000cmodel', 'my model'],
+    [
+      'the forbidden character falls after the display limit',
+      `${'x'.repeat(600)}\u0000`,
+      'x'.repeat(600),
+    ],
+  ])('keeps suite identities distinct when %s', async (_scenario, sanitized, clean) => {
+    const eval_ = new Eval({});
+    for (const label of [sanitized, clean]) {
+      await eval_.addResult(createEvaluateResult({ provider: { id: 'echo', label } }));
+    }
+
+    const xml = await createJunitXml(eval_);
+    expect(() => new SaxesParser().write(xml).close()).not.toThrow();
+    const suites: { '@_name': string }[] = new XMLParser({ ignoreAttributes: false }).parse(xml)
+      .testsuites.testsuite;
+    const names = suites.map((suite) => suite['@_name']);
+    expect(names[0]).toMatch(/ \([a-f0-9]{16}\)$/);
+    expect(names[1]).not.toMatch(/ \([a-f0-9]{16}\)$/);
+    expect(new Set(names).size).toBe(2);
   });
 
   it('removes forbidden name characters before fallback and length limits', async () => {

@@ -30,10 +30,8 @@ import type {
 } from './types';
 
 /**
- * Sends every MCP HTTP request with the current OAuth token, so a refresh never has to
- * reconnect (which would abort other in-flight tool calls). The token cache replaces a
- * token shortly before it expires. A 401 means the server rejected the token before
- * handling the request, so only then is that request resent, once, with a new token.
+ * Refresh tokens per request without reconnecting and aborting other tool calls.
+ * Retry a rejected token once on HTTP 401; return other failures without a retry.
  */
 function createOAuthFetch(
   auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,

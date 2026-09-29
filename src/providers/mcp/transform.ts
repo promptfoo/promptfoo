@@ -123,16 +123,22 @@ export async function transformMCPConfigToClaudeCode(
     return {};
   }
 
-  const serverConfigs = [...(config.servers ?? [])];
-  if (config.server) {
-    serverConfigs.push(config.server);
-  }
-
+  const serverConfigs = getServerConfigs(config);
   const servers = await Promise.all(
     serverConfigs.map((server) => transformMCPServerConfigToClaudeCode(server)),
   );
+  return Object.fromEntries(
+    servers.map((server, index) => [getClaudeCodeServerName(serverConfigs[index]), server]),
+  );
+}
 
-  return Object.fromEntries(servers);
+function getServerConfigs(config: McpConfigParsed): MCPServerConfig[] {
+  return [...(config.servers ?? []), ...(config.server ? [config.server] : [])];
+}
+
+// Preserve legacy names so existing tool allow and deny rules keep matching.
+function getClaudeCodeServerName({ name, url, command }: MCPServerConfig): string {
+  return name ?? url ?? command ?? 'default';
 }
 
 export function validateMCPConfigForClaudeCode(input: unknown): McpConfigParsed {
@@ -153,14 +159,31 @@ export function validateMCPConfigForClaudeCode(input: unknown): McpConfigParsed 
       'Claude Agent SDK MCP integration does not support MCP tool allowlists or non-empty exclusions; remove `tools`/`exclude_tools` or disable MCP for this provider.',
     );
   }
+
+  const namespaces = new Map<string, number>();
+  for (const [index, server] of getServerConfigs(config).entries()) {
+    const name = getClaudeCodeServerName(server);
+    // Match the SDK's tool-name normalization without renaming the configured servers.
+    let namespace = name.replace(/[^a-zA-Z0-9_-]/g, '_');
+    if (name.startsWith('claude.ai ')) {
+      namespace = namespace.replace(/_+/g, '_').replace(/^_|_$/g, '');
+    }
+    const previous = namespaces.get(namespace);
+    if (previous !== undefined) {
+      // Names can be credential-bearing URLs; identify the entries without echoing them.
+      throw new Error(
+        `Claude Agent SDK MCP servers ${previous + 1} and ${index + 1} have colliding tool names; give each server a unique \`name\` using letters, numbers, hyphens, or underscores.`,
+      );
+    }
+    namespaces.set(namespace, index);
+  }
   return config;
 }
 
 async function transformMCPServerConfigToClaudeCode(
   config: MCPServerConfig,
-): Promise<[string, ClaudeCodeMcpServerConfig]> {
-  const key = config.name ?? config.url ?? config.command ?? 'default';
-  let out: ClaudeCodeMcpServerConfig | undefined;
+): Promise<ClaudeCodeMcpServerConfig> {
+  let out: ClaudeCodeMcpServerConfig;
 
   if (config.url) {
     // Render environment variables in auth config
@@ -206,5 +229,5 @@ async function transformMCPServerConfigToClaudeCode(
     throw new Error('MCP configuration cannot be converted to Claude Agent SDK MCP server config');
   }
 
-  return [key, out];
+  return out;
 }

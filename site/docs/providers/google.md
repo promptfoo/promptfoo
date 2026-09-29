@@ -1193,7 +1193,7 @@ When using Search grounding, the API response includes additional metadata:
 - Search will only be performed when the model determines it's necessary
 - **Important**: Per Google's requirements, applications using Search grounding must display Google Search Suggestions included in the API response metadata
 
-For more details, see the [Google AI Studio documentation on Grounding with Google Search](https://ai.google.dev/docs/gemini_api/grounding).
+For more details, see the [Google AI Studio documentation on Grounding with Google Search](https://ai.google.dev/gemini-api/docs/google-search).
 
 ### Maps Grounding
 

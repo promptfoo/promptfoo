@@ -14,7 +14,7 @@ export interface SystemError extends Error {
  * References:
  * - OpenAI: https://platform.openai.com/docs/guides/error-codes/api-errors
  * - Azure OpenAI: https://learn.microsoft.com/en-us/azure/ai-services/openai/reference
- * - Anthropic: https://docs.anthropic.com/en/api/errors
+ * - Anthropic: https://platform.claude.com/docs/en/api/errors
  *
  * Note: Azure OpenAI is known to return `insufficient_quota` for both billing
  * exhaustion AND per-minute deployment quota saturation. The
@@ -315,6 +315,14 @@ export function extractRateLimitErrorCode(body: unknown): string | undefined {
   // over a transport-level code on an SDK wrapper.
   if (typeof root.error === 'object' && root.error !== null) {
     const err = root.error as Record<string, unknown>;
+    const metadata = err.metadata;
+    const providerCode =
+      typeof metadata === 'object' && metadata !== null
+        ? (metadata as Record<string, unknown>).provider_code
+        : undefined;
+    if (typeof providerCode === 'string' && isDefinitiveBillingCode(providerCode.toLowerCase())) {
+      return providerCode.toLowerCase();
+    }
     if (typeof err.code === 'string' && err.code.length > 0) {
       return err.code;
     }
