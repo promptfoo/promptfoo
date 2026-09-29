@@ -9,7 +9,7 @@ prompts:
 
 providers:
   # See https://www.promptfoo.dev/docs/providers/vertex/
-  - id: 'vertex:gemini-3.5-flash'
+  - id: 'vertex:gemini-3.8-flash'
     config:
       region: global
       tools: file://tools.json
@@ -33,7 +33,7 @@ defaultTest:
     provider:
       embedding: 'vertex:embedding:text-embedding-005'
       text:
-        id: 'vertex:gemini-3.5-flash'
+        id: 'vertex:gemini-3.8-flash'
         config:
           region: global
 
