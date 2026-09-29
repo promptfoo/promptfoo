@@ -22,49 +22,152 @@ const render = (ui: React.ReactElement) => {
   return rtlRender(<TooltipProvider delayDuration={0}>{ui}</TooltipProvider>);
 };
 
+const replaceText = async (
+  user: ReturnType<typeof userEvent.setup>,
+  element: HTMLElement,
+  value: string,
+) => {
+  await user.click(element);
+  await user.keyboard('{Control>}a{/Control}');
+  await user.paste(value);
+};
+
 describe('CustomTargetConfiguration', () => {
-  it('uses provider terminology and general provider documentation in eval mode', () => {
+  it('shows valid Open Interpreter target and configuration examples', async () => {
+    const user = userEvent.setup();
+
     render(
       <CustomTargetConfiguration
-        selectedTarget={{ id: '', config: {} }}
+        selectedTarget={{ id: 'openinterpreter', config: {} }}
         updateCustomTarget={vi.fn()}
         rawConfigJson="{}"
         setRawConfigJson={vi.fn()}
         bodyError={null}
-        providerType="custom"
-        mode="eval"
+        providerType="openinterpreter"
       />,
     );
 
-    expect(screen.getByText('Custom Provider Configuration')).toBeInTheDocument();
-    expect(screen.getByLabelText(/Provider ID/i)).toBeInTheDocument();
-    expect(screen.queryByText('Custom Target Configuration')).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /provider documentation/i })).toHaveAttribute(
+    expect(screen.getByText('Open Interpreter Target')).toBeInTheDocument();
+    expect(screen.getByLabelText(/Target ID/i)).toHaveAttribute('placeholder', 'openinterpreter');
+    expect(screen.getByRole('link', { name: 'documentation' })).toHaveAttribute(
       'href',
-      'https://www.promptfoo.dev/docs/providers/',
+      'https://www.promptfoo.dev/docs/providers/openinterpreter/',
     );
+
+    await user.click(screen.getByRole('button', { name: /Examples/i }));
+    const example = screen.getByText((_, element) => element?.tagName === 'PRE');
+    expect(example.textContent).toContain('"sandbox_mode": "read-only"');
+    expect(example.textContent).toContain('"turn_timeout_ms": 60000');
+    expect(example.textContent).not.toContain('temperature');
+    expect(example.textContent).not.toContain('max_tokens');
   });
 
-  it('associates provider ID validation with the required field', () => {
+  it.each([
+    ['malformed JSON', '{"sandbox_mode":"read-only",}', 'Invalid JSON configuration'],
+    ['non-object JSON', '[]', 'Configuration must be a JSON object'],
+  ])('preserves the last valid Open Interpreter config for %s', async (_case, value, error) => {
+    const user = userEvent.setup();
+    const updateCustomTarget = vi.fn();
+    const onConfigErrorChange = vi.fn();
+
     render(
       <CustomTargetConfiguration
-        selectedTarget={{ id: '', config: {} }}
-        updateCustomTarget={vi.fn()}
-        rawConfigJson="{}"
+        selectedTarget={{ id: 'openinterpreter', config: { sandbox_mode: 'danger-full-access' } }}
+        updateCustomTarget={updateCustomTarget}
+        rawConfigJson={'{\n  "sandbox_mode": "danger-full-access"\n}'}
         setRawConfigJson={vi.fn()}
         bodyError={null}
-        providerType="custom"
-        mode="eval"
-        idError="Provider ID is required"
+        providerType="openinterpreter"
+        onConfigErrorChange={onConfigErrorChange}
       />,
     );
 
-    const providerId = screen.getByRole('textbox', { name: 'Provider ID' });
-    expect(providerId).toBeRequired();
-    expect(providerId).toHaveAttribute('aria-invalid', 'true');
-    expect(providerId).toHaveAccessibleDescription(
-      /A provider identifies the model, script, or endpoint used in this evaluation.*Provider ID is required/,
+    await replaceText(user, screen.getByTestId('code-editor'), value);
+
+    expect(updateCustomTarget).not.toHaveBeenCalled();
+    expect(onConfigErrorChange).toHaveBeenLastCalledWith(error);
+  });
+
+  it.each([
+    ['malformed JSON', '{"sandbox_mode":"read-only",}', 'Invalid JSON configuration'],
+    ['non-object JSON', '[]', 'Configuration must be a JSON object'],
+  ])(
+    'preserves the last valid Open Interpreter config when formatting %s',
+    async (_case, value, error) => {
+      const user = userEvent.setup();
+      const updateCustomTarget = vi.fn();
+      const onConfigErrorChange = vi.fn();
+
+      render(
+        <CustomTargetConfiguration
+          selectedTarget={{ id: 'openinterpreter', config: { sandbox_mode: 'danger-full-access' } }}
+          updateCustomTarget={updateCustomTarget}
+          rawConfigJson={value}
+          setRawConfigJson={vi.fn()}
+          bodyError={null}
+          providerType="openinterpreter"
+          onConfigErrorChange={onConfigErrorChange}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', { name: /Format/i }));
+
+      expect(updateCustomTarget).not.toHaveBeenCalled();
+      expect(onConfigErrorChange).toHaveBeenLastCalledWith(error);
+    },
+  );
+
+  it('does not clear a restored validation error for a reordered but unchanged config', async () => {
+    const user = userEvent.setup();
+    const updateCustomTarget = vi.fn();
+    const onConfigErrorChange = vi.fn();
+    const config = { sandbox_mode: 'danger-full-access', approval_policy: 'never' };
+    const reordered = '{"approval_policy":"never","sandbox_mode":"danger-full-access"}';
+
+    render(
+      <CustomTargetConfiguration
+        selectedTarget={{ id: 'openinterpreter', config }}
+        updateCustomTarget={updateCustomTarget}
+        rawConfigJson={reordered}
+        setRawConfigJson={vi.fn()}
+        bodyError={null}
+        providerType="openinterpreter"
+        onConfigErrorChange={onConfigErrorChange}
+        preserveConfigErrorOnUnchangedConfig
+      />,
     );
+
+    await replaceText(user, screen.getByTestId('code-editor'), ` ${reordered}\n`);
+    await user.click(screen.getByRole('button', { name: /Format/i }));
+
+    expect(updateCustomTarget).not.toHaveBeenCalled();
+    expect(onConfigErrorChange).not.toHaveBeenCalled();
+  });
+
+  it('keeps the validation error when a valid correction cannot be persisted', async () => {
+    const user = userEvent.setup();
+    const updateCustomTarget = vi.fn(() => {
+      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+    });
+    const onConfigErrorChange = vi.fn();
+
+    render(
+      <CustomTargetConfiguration
+        selectedTarget={{ id: 'openinterpreter', config: { sandbox_mode: 'danger-full-access' } }}
+        updateCustomTarget={updateCustomTarget}
+        rawConfigJson={'{"sandbox_mode":"read-only",}'}
+        setRawConfigJson={vi.fn()}
+        bodyError={null}
+        providerType="openinterpreter"
+        onConfigErrorChange={onConfigErrorChange}
+      />,
+    );
+
+    await replaceText(user, screen.getByTestId('code-editor'), '{"sandbox_mode":"read-only"}');
+
+    expect(updateCustomTarget).toHaveBeenCalledWith('config', { sandbox_mode: 'read-only' });
+    expect(onConfigErrorChange).not.toHaveBeenCalledWith(null);
+    expect(onConfigErrorChange).toHaveBeenLastCalledWith('Invalid JSON configuration');
   });
 
   describe('file:// prefix handling', () => {

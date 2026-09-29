@@ -12,7 +12,8 @@ import { cn } from '@app/lib/utils';
 import { ChevronDown } from 'lucide-react';
 import ExtensionEditor from './ExtensionEditor';
 import InputsEditor from './InputsEditor';
-import type { Inputs, ProviderOptions } from '@promptfoo/types';
+import type { Inputs } from '@promptfoo/contracts';
+import type { ProviderOptions } from '@promptfoo/types';
 
 interface CommonConfigurationOptionsProps {
   selectedTarget: ProviderOptions;
@@ -28,8 +29,6 @@ interface CommonConfigurationOptionsProps {
   onPromptsChange?: (prompts: string[]) => void;
   /** Hide the Test Generation section (useful for non-redteam contexts) */
   hideTestGeneration?: boolean;
-  /** Hide global extension hooks where this editor has no extension persistence callback */
-  hideExtensions?: boolean;
 }
 
 const CommonConfigurationOptions = ({
@@ -42,7 +41,6 @@ const CommonConfigurationOptions = ({
   onTestGenerationInstructionsChange,
   onPromptsChange,
   hideTestGeneration = false,
-  hideExtensions = false,
 }: CommonConfigurationOptionsProps) => {
   const inputs = (selectedTarget as { inputs?: Inputs }).inputs;
   const hasInputs = inputs && Object.keys(inputs).length > 0;
@@ -170,8 +168,8 @@ const CommonConfigurationOptions = ({
       <Collapsible open={isDelayExpanded} onOpenChange={setIsDelayExpanded}>
         <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border border-border bg-card p-4 transition-colors hover:bg-accent/50">
           <div className="text-left">
-            <h3 className="font-semibold">Provider Delay</h3>
-            <p className="text-sm text-muted-foreground">Wait before requests to this provider</p>
+            <h3 className="font-semibold">Delay</h3>
+            <p className="text-sm text-muted-foreground">Configure the delay between requests</p>
           </div>
           <ChevronDown
             className={cn('size-5 shrink-0 transition-transform', isDelayExpanded && 'rotate-180')}
@@ -179,7 +177,7 @@ const CommonConfigurationOptions = ({
         </CollapsibleTrigger>
         <CollapsibleContent className="px-4 pb-4 pt-2">
           <p className="mb-4">
-            Add a delay before each request to this provider to simulate a real user. See{' '}
+            Add a delay (ms) between requests to simulate a real user. See{' '}
             <a
               href="https://www.promptfoo.dev/docs/providers/http/#delay"
               target="_blank"
@@ -191,23 +189,20 @@ const CommonConfigurationOptions = ({
             for more details.
           </p>
           <NumberInput
-            label="Delay for this provider (ms)"
             min={0}
             value={selectedTarget.delay ?? undefined}
             onChange={(v) => updateCustomTarget('delay', v)}
-            helperText="Per-provider delay in milliseconds (default: 0)"
+            helperText="Delay in milliseconds (default: 0)"
             placeholder="0"
           />
         </CollapsibleContent>
       </Collapsible>
 
-      {!hideExtensions && (
-        <ExtensionEditor
-          extensions={extensions}
-          onExtensionsChange={handleExtensionsChange}
-          onValidationChange={onValidationChange}
-        />
-      )}
+      <ExtensionEditor
+        extensions={extensions}
+        onExtensionsChange={handleExtensionsChange}
+        onValidationChange={onValidationChange}
+      />
     </div>
   );
 };

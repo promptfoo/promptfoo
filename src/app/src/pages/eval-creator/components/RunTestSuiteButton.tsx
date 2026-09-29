@@ -8,15 +8,16 @@ import { useEvalHistoryRefresh } from '@app/hooks/useEvalHistoryRefresh';
 import { useToast } from '@app/hooks/useToast';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { getSetupReadiness, normalizePromptsForJob } from './setupReadiness';
+import { useLocation, useNavigate } from 'react-router';
+import {
+  countTests,
+  normalizePrompts,
+  normalizePromptsForJob,
+  normalizeProviders,
+} from './setupReadiness';
 import type { CreateJobResponse, GetJobResponse } from '@promptfoo/types/api/eval';
 
-interface RunTestSuiteButtonProps {
-  disabledReason?: string;
-}
-
-const RunTestSuiteButton = ({ disabledReason }: RunTestSuiteButtonProps) => {
+const RunTestSuiteButton = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { config } = useStore();
@@ -32,12 +33,12 @@ const RunTestSuiteButton = ({ disabledReason }: RunTestSuiteButtonProps) => {
     providers,
     scenarios,
     tests,
+    tracing,
     extensions,
   } = config;
   const [isRunning, setIsRunning] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
   const [runError, setRunError] = useState<string | null>(null);
-  const [runWarning, setRunWarning] = useState<string | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isMountedRef = useRef(true);
 
@@ -57,20 +58,20 @@ const RunTestSuiteButton = ({ disabledReason }: RunTestSuiteButtonProps) => {
     };
   }, [clearPollInterval]);
 
+  const normalizedProviders = normalizeProviders(providers);
+  const normalizedPrompts = normalizePrompts(prompts);
   const jobPrompts = normalizePromptsForJob(prompts);
-  const readiness = getSetupReadiness(config);
+  const testCount = countTests(tests);
 
-  const isDisabled = isRunning || !readiness.isReadyToRun || Boolean(disabledReason);
-  const setupDisabledReason = readiness.issues[0]?.message;
-  const progressMessage =
-    progressPercent === 0
-      ? 'Starting evaluation and preparing requests.'
-      : `${progressPercent.toFixed(0)}% complete. Results open automatically when finished.`;
+  const isDisabled =
+    isRunning ||
+    normalizedProviders.length === 0 ||
+    normalizedPrompts.length === 0 ||
+    testCount === 0;
 
   const runTestSuite = async () => {
     setIsRunning(true);
     setRunError(null);
-    setRunWarning(null);
     setProgressPercent(0);
 
     const sourceEvalId =
@@ -90,6 +91,7 @@ const RunTestSuiteButton = ({ disabledReason }: RunTestSuiteButtonProps) => {
       providers,
       scenarios,
       tests, // Note: This is 'tests' in the API, not 'testCases'
+      tracing,
       extensions,
       ...(sourceEvalId && { sourceEvalId }),
     };
@@ -115,9 +117,7 @@ const RunTestSuiteButton = ({ disabledReason }: RunTestSuiteButtonProps) => {
       });
 
       if (!response.ok) {
-        throw new Error(
-          `Could not start the evaluation (HTTP ${response.status}). Check the setup and try again.`,
-        );
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const job: CreateJobResponse = await response.json();
@@ -136,9 +136,7 @@ const RunTestSuiteButton = ({ disabledReason }: RunTestSuiteButtonProps) => {
 
           if (!progressResponse.ok) {
             clearPollInterval();
-            throw new Error(
-              `Could not retrieve evaluation progress (HTTP ${progressResponse.status}). Try again or review server logs.`,
-            );
+            throw new Error(`HTTP error! status: ${progressResponse.status}`);
           }
 
           const progressData: GetJobResponse = await progressResponse.json();
@@ -153,21 +151,11 @@ const RunTestSuiteButton = ({ disabledReason }: RunTestSuiteButtonProps) => {
             signalEvalCompleted();
             if (progressData.evalId) {
               navigate(EVAL_ROUTES.DETAIL(progressData.evalId));
-            } else {
-              const message =
-                'The evaluation completed, but no saved results are available to open. Review the setup and run it again.';
-              setRunWarning(message);
-              showToast(message, 'warning');
             }
           } else if (progressData.status === 'error') {
             clearPollInterval();
             setIsRunning(false);
-            const failureDetails = progressData.logs?.join('\n').trim();
-            throw new Error(
-              failureDetails
-                ? `The evaluation failed before results were saved. Details:\n${failureDetails}`
-                : 'The evaluation failed before results were saved. Review provider settings and test inputs, then try again.',
-            );
+            throw new Error(progressData.logs?.join('\n') || 'Job failed');
           } else {
             const percent =
               progressData.total === 0
@@ -191,48 +179,21 @@ const RunTestSuiteButton = ({ disabledReason }: RunTestSuiteButtonProps) => {
       <Button
         onClick={runTestSuite}
         disabled={isDisabled}
-        aria-describedby={!isRunning && isDisabled ? 'run-eval-help' : undefined}
         className="dark:bg-blue-600 dark:hover:bg-blue-500"
       >
         {isRunning ? (
-          <span className="flex items-center gap-2">
+          <span className="flex items-center gap-2" role="status" aria-live="polite">
             <Spinner className="size-4" />
-            Running evaluation
+            {progressPercent.toFixed(0)}% complete
           </span>
         ) : (
-          'Run Evaluation'
+          'Run Eval'
         )}
       </Button>
-      {isRunning && (
-        <p
-          role="status"
-          aria-live="polite"
-          aria-atomic="true"
-          className="text-sm text-muted-foreground"
-        >
-          {progressMessage}
-        </p>
-      )}
-      {!isRunning && disabledReason ? (
-        <p id="run-eval-help" className="text-xs text-destructive">
-          {disabledReason}
-        </p>
-      ) : !isRunning && isDisabled ? (
-        <p id="run-eval-help" className="text-xs text-muted-foreground">
-          {setupDisabledReason || 'Resolve the required setup items above to run this evaluation.'}
-        </p>
-      ) : null}
       {runError && (
         <Alert variant="destructive">
           <AlertContent>
             <AlertDescription>{runError}</AlertDescription>
-          </AlertContent>
-        </Alert>
-      )}
-      {runWarning && (
-        <Alert variant="warning">
-          <AlertContent>
-            <AlertDescription>{runWarning}</AlertDescription>
           </AlertContent>
         </Alert>
       )}

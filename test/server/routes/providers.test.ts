@@ -4,12 +4,12 @@ import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 
+import type { ProviderTestResult } from '../../../src/node/testProvider';
 import type { ApiProvider, ProviderOptions } from '../../../src/types/providers';
-import type { ProviderTestResult } from '../../../src/validators/testProvider';
 
 // Mock dependencies
 vi.mock('../../../src/providers/index');
-vi.mock('../../../src/validators/testProvider');
+vi.mock('../../../src/node/testProvider');
 vi.mock('../../../src/server/config/serverConfig');
 vi.mock('../../../src/redteam/commands/discover');
 vi.mock('../../../src/redteam/remoteGeneration');
@@ -18,21 +18,18 @@ vi.mock('../../../src/globalConfig/cloud', () => ({
   cloudConfig: {
     isEnabled: vi.fn(),
     getApiHost: vi.fn(),
-    getApiKey: vi.fn(),
+    getAuthHeaders: vi.fn(),
   },
 }));
 
 // Import after mocking
 import { cloudConfig } from '../../../src/globalConfig/cloud';
+import { testProviderConnectivity, testProviderSession } from '../../../src/node/testProvider';
 import { loadApiProvider } from '../../../src/providers/index';
 import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { getAvailableProviders } from '../../../src/server/config/serverConfig';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
-import {
-  testProviderConnectivity,
-  testProviderSession,
-} from '../../../src/validators/testProvider';
 
 const mockedLoadApiProvider = vi.mocked(loadApiProvider);
 const mockedDoTargetPurposeDiscovery = vi.mocked(doTargetPurposeDiscovery);
@@ -70,7 +67,7 @@ describe('Providers Routes', () => {
     // regardless of the machine's cloud-login state.
     vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
     vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.promptfoo.app');
-    vi.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
+    vi.mocked(cloudConfig.getAuthHeaders).mockReturnValue(undefined);
   });
 
   afterEach(() => {
@@ -485,7 +482,9 @@ describe('Providers Routes', () => {
     it('should call the configured on-prem cloud host with a bearer token when cloud is enabled', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
       vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://onprem.example.com/');
-      vi.mocked(cloudConfig.getApiKey).mockReturnValue('test-onprem-key');
+      vi.mocked(cloudConfig.getAuthHeaders).mockReturnValue({
+        Authorization: 'Bearer test-onprem-key',
+      });
 
       const generatedConfig = {
         url: 'https://api.example.com/v1/chat',
@@ -528,6 +527,30 @@ describe('Providers Routes', () => {
       const [calledUrl, calledOpts] = mockedFetchWithProxy.mock.calls[0];
       expect(calledUrl).toBe('https://api.promptfoo.app/api/v1/http-provider-generator');
       expect((calledOpts?.headers as Record<string, string>)?.Authorization).toBeUndefined();
+    });
+
+    it('should send the cloud credential under a configured custom header name', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://onprem.example.com/');
+      vi.mocked(cloudConfig.getAuthHeaders).mockReturnValue({
+        'X-Promptfoo-Api-Key': 'Bearer test-onprem-key',
+      });
+
+      mockedFetchWithProxy.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({ url: 'https://x', method: 'POST', headers: {} }),
+      } as any);
+
+      const response = await api
+        .post('/api/providers/http-generator')
+        .send({ requestExample: 'curl https://api.example.com/v1/chat' });
+
+      expect(response.status).toBe(200);
+      const [, calledOpts] = mockedFetchWithProxy.mock.calls[0];
+      const headers = calledOpts?.headers as Record<string, string>;
+      expect(headers?.['X-Promptfoo-Api-Key']).toBe('Bearer test-onprem-key');
+      expect(headers?.Authorization).toBeUndefined();
     });
 
     it('should not call the hosted HTTP generator when remote generation is disabled', async () => {

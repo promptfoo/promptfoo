@@ -1,4 +1,4 @@
-import { type HTMLInputTypeAttribute, useState } from 'react';
+import { useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import {
@@ -9,7 +9,6 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -17,7 +16,6 @@ import {
 import { ExpandMoreIcon, SettingsIcon } from '@app/components/ui/icons';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
-import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 
@@ -46,90 +44,41 @@ interface EnvFieldProps {
   envKey: string;
   value: string;
   onChange: (key: string, value: string) => void;
-  sensitive?: boolean;
-  inputType?: HTMLInputTypeAttribute;
 }
 
-function EnvField({
-  label,
-  envKey,
-  value,
-  onChange,
-  sensitive = false,
-  inputType = 'text',
-}: EnvFieldProps) {
-  const [showSecret, setShowSecret] = useState(false);
-
+function EnvField({ label, envKey, value, onChange }: EnvFieldProps) {
   return (
     <div className="space-y-2">
       <Label htmlFor={envKey}>{label}</Label>
-      <div className="flex items-center gap-2">
-        <Input
-          id={envKey}
-          type={sensitive && !showSecret ? 'password' : inputType}
-          value={value}
-          onChange={(e) => onChange(envKey, e.target.value)}
-          placeholder={`Enter ${label.toLowerCase()}`}
-          autoComplete={sensitive ? 'new-password' : undefined}
-          spellCheck={sensitive ? false : undefined}
-        />
-        {sensitive && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setShowSecret((shown) => !shown)}
-            aria-label={`${showSecret ? 'Hide' : 'Show'} ${label}`}
-            aria-pressed={showSecret}
-          >
-            {showSecret ? 'Hide' : 'Show'}
-          </Button>
-        )}
-      </div>
+      <Input
+        id={envKey}
+        type="password"
+        value={value}
+        onChange={(e) => onChange(envKey, e.target.value)}
+        placeholder={`Enter ${label.toLowerCase()}`}
+      />
     </div>
   );
 }
 
 const ConfigureEnvButton = () => {
   const { config, updateConfig } = useStore();
-  const { showToast } = useToast();
   const defaultEnv = config.env || {};
   const [dialogOpen, setDialogOpen] = useState(false);
   const [env, setEnv] = useState<Record<string, string>>(defaultEnv as Record<string, string>);
-  const [cleanEnv, setCleanEnv] = useState<Record<string, string>>(
-    defaultEnv as Record<string, string>,
-  );
-  const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
-  const hasUnsavedChanges = JSON.stringify(env) !== JSON.stringify(cleanEnv);
-  const hasConfiguredSettings = Object.values(defaultEnv).some(
-    (value) => typeof value === 'string' && value.trim() !== '',
-  );
 
   const handleOpen = () => {
-    const currentEnv = defaultEnv as Record<string, string>;
-    setEnv(currentEnv);
-    setCleanEnv(currentEnv);
-    setDiscardDialogOpen(false);
+    setEnv(defaultEnv as Record<string, string>);
     setDialogOpen(true);
   };
 
-  const closeDialog = () => {
+  const handleClose = () => {
     setDialogOpen(false);
-  };
-
-  const requestClose = () => {
-    if (hasUnsavedChanges) {
-      setDiscardDialogOpen(true);
-      return;
-    }
-    closeDialog();
   };
 
   const handleSave = () => {
     updateConfig({ env });
-    setCleanEnv(env);
-    closeDialog();
-    showToast('Provider settings saved for this browser session.', 'success');
+    handleClose();
   };
 
   const handleEnvChange = (key: string, value: string) => {
@@ -138,41 +87,21 @@ const ConfigureEnvButton = () => {
 
   return (
     <>
-      <Button
-        variant="outline"
-        onClick={handleOpen}
-        aria-label={hasConfiguredSettings ? 'Provider settings (configured)' : undefined}
-      >
+      <Button variant="outline" onClick={handleOpen}>
         <SettingsIcon className="size-4 mr-2" />
-        Provider settings
-        {hasConfiguredSettings && (
-          <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-            Configured
-          </span>
-        )}
+        API keys
       </Button>
 
-      <Dialog open={dialogOpen} onOpenChange={(open) => !open && requestClose()}>
-        <DialogContent
-          className="flex max-h-[85vh] max-w-2xl flex-col overflow-hidden"
-          hideDescription={false}
-        >
+      <Dialog open={dialogOpen} onOpenChange={(open) => !open && handleClose()}>
+        <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>Provider Settings</DialogTitle>
-            <DialogDescription>
-              Add temporary credentials only for providers you use in this evaluation.
-            </DialogDescription>
           </DialogHeader>
 
           <div
             data-testid="configure-env-dialog-scroll-body"
             className="min-h-0 flex-1 overflow-y-auto py-4"
           >
-            <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
-              API keys are available to this evaluation until you reload the page and are not
-              restored in later browser sessions. A YAML download includes any keys currently
-              configured here, so review it before sharing.
-            </p>
             <div className="border border-border rounded-lg overflow-hidden">
               <EnvSection title="OpenAI" defaultOpen>
                 <EnvField
@@ -180,14 +109,12 @@ const ConfigureEnvButton = () => {
                   envKey="OPENAI_API_KEY"
                   value={env.OPENAI_API_KEY || ''}
                   onChange={handleEnvChange}
-                  sensitive
                 />
                 <EnvField
                   label="OpenAI API host"
                   envKey="OPENAI_API_HOST"
                   value={env.OPENAI_API_HOST || ''}
                   onChange={handleEnvChange}
-                  inputType="url"
                 />
                 <EnvField
                   label="OpenAI organization"
@@ -203,11 +130,40 @@ const ConfigureEnvButton = () => {
                   envKey="AZURE_API_KEY"
                   value={env.AZURE_API_KEY || env.AZURE_OPENAI_API_KEY || ''}
                   onChange={handleEnvChange}
-                  sensitive
                 />
               </EnvSection>
 
               <EnvSection title="Amazon Bedrock">
+                <EnvField
+                  label="Bedrock API key"
+                  envKey="AWS_BEARER_TOKEN_BEDROCK"
+                  value={env.AWS_BEARER_TOKEN_BEDROCK || ''}
+                  onChange={handleEnvChange}
+                />
+                <EnvField
+                  label="AWS access key ID"
+                  envKey="AWS_ACCESS_KEY_ID"
+                  value={env.AWS_ACCESS_KEY_ID || ''}
+                  onChange={handleEnvChange}
+                />
+                <EnvField
+                  label="AWS secret access key"
+                  envKey="AWS_SECRET_ACCESS_KEY"
+                  value={env.AWS_SECRET_ACCESS_KEY || ''}
+                  onChange={handleEnvChange}
+                />
+                <EnvField
+                  label="AWS session token"
+                  envKey="AWS_SESSION_TOKEN"
+                  value={env.AWS_SESSION_TOKEN || ''}
+                  onChange={handleEnvChange}
+                />
+                <EnvField
+                  label="AWS profile"
+                  envKey="AWS_PROFILE"
+                  value={env.AWS_PROFILE || ''}
+                  onChange={handleEnvChange}
+                />
                 <EnvField
                   label="Bedrock Region"
                   envKey="AWS_BEDROCK_REGION"
@@ -222,7 +178,6 @@ const ConfigureEnvButton = () => {
                   envKey="ANTHROPIC_API_KEY"
                   value={env.ANTHROPIC_API_KEY || ''}
                   onChange={handleEnvChange}
-                  sensitive
                 />
               </EnvSection>
 
@@ -232,7 +187,6 @@ const ConfigureEnvButton = () => {
                   envKey="VERTEX_API_KEY"
                   value={env.VERTEX_API_KEY || ''}
                   onChange={handleEnvChange}
-                  sensitive
                 />
                 <EnvField
                   label="Vertex Project ID"
@@ -254,57 +208,16 @@ const ConfigureEnvButton = () => {
                   envKey="REPLICATE_API_KEY"
                   value={env.REPLICATE_API_KEY || ''}
                   onChange={handleEnvChange}
-                  sensitive
                 />
               </EnvSection>
             </div>
           </div>
 
-          {hasUnsavedChanges && (
-            <p
-              role="status"
-              aria-live="polite"
-              aria-atomic="true"
-              className="shrink-0 pb-3 text-sm text-muted-foreground"
-            >
-              Unsaved provider setting changes
-            </p>
-          )}
           <DialogFooter data-testid="configure-env-dialog-footer" className="shrink-0">
-            <Button variant="outline" onClick={requestClose}>
+            <Button variant="outline" onClick={handleClose}>
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={!hasUnsavedChanges}>
-              Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={discardDialogOpen}
-        onOpenChange={(open) => !open && setDiscardDialogOpen(false)}
-      >
-        <DialogContent hideDescription={false}>
-          <DialogHeader>
-            <DialogTitle>Discard provider setting changes?</DialogTitle>
-            <DialogDescription>
-              Any unsaved API keys or endpoint settings you entered will be lost.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDiscardDialogOpen(false)}>
-              Continue editing
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                setDiscardDialogOpen(false);
-                closeDialog();
-              }}
-            >
-              Discard changes
-            </Button>
+            <Button onClick={handleSave}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -17,7 +17,7 @@ import {
 } from '@app/components/ui/dialog';
 import { Label } from '@app/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
-import Prism from '@app/lib/prism';
+import { highlightJS, highlightJSON } from '@app/lib/codeHighlight';
 import { cn } from '@app/lib/utils';
 import { AlertCircle, AlignLeft, CheckCircle, ChevronDown, Code2, Info, Play } from 'lucide-react';
 
@@ -49,30 +49,6 @@ interface TransformTestDialogProps {
   };
 }
 
-const highlightJS = (code: string): string => {
-  try {
-    const grammar = Prism?.languages?.javascript;
-    if (!grammar) {
-      return code;
-    }
-    return Prism.highlight(code, grammar, 'javascript');
-  } catch {
-    return code;
-  }
-};
-
-const highlightJSON = (code: string): string => {
-  try {
-    const grammar = Prism?.languages?.json;
-    if (!grammar) {
-      return code;
-    }
-    return Prism.highlight(code, grammar, 'json');
-  } catch {
-    return code;
-  }
-};
-
 const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
   open,
   onClose,
@@ -98,26 +74,6 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
   const [testInputExpanded, setTestInputExpanded] = React.useState(true);
   const [docsExpanded, setDocsExpanded] = React.useState(false);
   const [formatError, setFormatError] = React.useState<string | null>(null);
-  const testInputEditorId = React.useId();
-  const transformEditorId = React.useId();
-  const outputEditorId = React.useId();
-  const formatErrorId = `${testInputEditorId}-format-error`;
-  const testProgressId = `${testInputEditorId}-progress`;
-  const testInputEditorRef = React.useRef<HTMLDivElement>(null);
-
-  React.useEffect(() => {
-    const textarea = testInputEditorRef.current?.querySelector('textarea');
-    if (!textarea) {
-      return;
-    }
-
-    textarea.setAttribute('aria-invalid', String(Boolean(formatError)));
-    if (formatError) {
-      textarea.setAttribute('aria-describedby', formatErrorId);
-    } else {
-      textarea.removeAttribute('aria-describedby');
-    }
-  }, [formatError, formatErrorId]);
 
   const formatJson = () => {
     try {
@@ -129,11 +85,6 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
       setFormatError(error instanceof Error ? error.message : 'Invalid JSON');
       setTimeout(() => setFormatError(null), 3000);
     }
-  };
-
-  const handleTestInputChange = (value: string) => {
-    setFormatError(null);
-    onTestInputChange(value);
   };
 
   const testTransform = async () => {
@@ -202,9 +153,7 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
               {/* Test Input Section */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor={testInputEditorId} className="text-sm font-semibold">
-                    {testInputLabel}
-                  </Label>
+                  <Label className="text-sm font-semibold">{testInputLabel}</Label>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button
@@ -240,21 +189,17 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
                   </div>
                   <CollapsibleContent>
                     {formatError && (
-                      <Alert id={formatErrorId} variant="destructive" className="m-3 mb-0">
+                      <Alert variant="destructive" className="m-3 mb-0">
                         <AlertCircle className="size-4" />
                         <AlertContent>
                           <AlertDescription>{formatError}</AlertDescription>
                         </AlertContent>
                       </Alert>
                     )}
-                    <div
-                      ref={testInputEditorRef}
-                      className="border-t border-border bg-white dark:bg-zinc-950"
-                    >
+                    <div className="border-t border-border bg-white dark:bg-zinc-950">
                       <Editor
-                        textareaId={testInputEditorId}
                         value={testInput}
-                        onValueChange={handleTestInputChange}
+                        onValueChange={onTestInputChange}
                         highlight={highlightJSON}
                         padding={12}
                         placeholder={testInputPlaceholder}
@@ -272,9 +217,7 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
 
               {/* Transform Code Editor Section */}
               <div className="space-y-2">
-                <Label htmlFor={transformEditorId} className="text-sm font-semibold">
-                  Transform Function
-                </Label>
+                <Label className="text-sm font-semibold">Transform Function</Label>
 
                 {/* Documentation Collapsible */}
                 <Collapsible
@@ -323,7 +266,6 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
                   </div>
                   <div className="bg-white dark:bg-zinc-950">
                     <Editor
-                      textareaId={transformEditorId}
                       value={transformCode}
                       onValueChange={onTransformCodeChange}
                       highlight={highlightJS}
@@ -340,27 +282,15 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
               </div>
 
               {/* Test Button */}
-              <Button
-                onClick={testTransform}
-                disabled={testLoading}
-                aria-describedby={testLoading ? testProgressId : undefined}
-                size="lg"
-                className="w-full"
-              >
+              <Button onClick={testTransform} disabled={testLoading} size="lg" className="w-full">
                 <Play className="mr-2 size-4" />
-                {testLoading ? 'Running Test...' : 'Run Test'}
+                Run Test
               </Button>
 
               {/* Loading */}
               {testLoading && (
-                <div id={testProgressId} role="status" className="space-y-2">
-                  <span className="sr-only">Running transform test</span>
-                  <div
-                    aria-hidden="true"
-                    className="h-1 w-full overflow-hidden rounded-full bg-muted"
-                  >
-                    <div className="h-full w-1/3 animate-[pulse_1s_ease-in-out_infinite] rounded-full bg-primary" />
-                  </div>
+                <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
+                  <div className="h-full w-1/3 animate-[pulse_1s_ease-in-out_infinite] rounded-full bg-primary" />
                 </div>
               )}
             </div>
@@ -369,7 +299,7 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
           {/* Right side - Result */}
           <div className="flex flex-1 flex-col bg-muted/30">
             <div className="flex flex-1 flex-col p-4">
-              <p className="mb-2 text-sm font-semibold">Result</p>
+              <Label className="mb-2 text-sm font-semibold">Result</Label>
               {testResult ? (
                 <div className="flex flex-1 flex-col overflow-auto rounded-lg border border-border bg-card p-4">
                   {testResult.success ? (
@@ -398,15 +328,11 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
                           Apply Transform
                         </Button>
                       )}
-                      <Label
-                        htmlFor={outputEditorId}
-                        className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground"
-                      >
+                      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                         {functionDocumentation.outputLabel}
-                      </Label>
+                      </p>
                       <div className="flex-1 overflow-auto rounded-lg border border-border bg-white p-3 dark:bg-zinc-950">
                         <Editor
-                          textareaId={outputEditorId}
                           value={
                             typeof testResult.result === 'string'
                               ? testResult.result

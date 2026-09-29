@@ -1,19 +1,12 @@
 import { useStore } from '@app/stores/evalConfig';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import ConfigureEnvButton from './ConfigureEnvButton';
 
-const showToastMock = vi.fn();
-vi.mock('@app/hooks/useToast', () => ({
-  useToast: () => ({
-    showToast: showToastMock,
-  }),
-}));
-
 const openProviderSettingsDialog = async () => {
-  const settingsButton = screen.getByRole('button', { name: /provider settings/i });
-  await userEvent.click(settingsButton);
+  const apiKeysButton = screen.getByRole('button', { name: /api keys/i });
+  await userEvent.click(apiKeysButton);
   const dialog = await screen.findByRole('dialog', { name: /provider settings/i });
   expect(dialog).toBeInTheDocument();
   return dialog;
@@ -22,22 +15,11 @@ const openProviderSettingsDialog = async () => {
 describe('ConfigureEnvButton', () => {
   beforeEach(() => {
     useStore.getState().reset();
-    showToastMock.mockReset();
   });
 
-  it('should open the provider settings dialog from its accurately labeled launcher', async () => {
+  it('should open the provider settings dialog when the API keys button is clicked', async () => {
     render(<ConfigureEnvButton />);
-    expect(screen.getByRole('button', { name: 'Provider settings' })).toBeInTheDocument();
-
-    const dialog = await openProviderSettingsDialog();
-
-    expect(dialog).toHaveAccessibleDescription(
-      'Add temporary credentials only for providers you use in this evaluation.',
-    );
-    expect(
-      screen.getByText(/API keys are available to this evaluation until you reload the page/i),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/YAML download includes any keys/i)).toBeInTheDocument();
+    await openProviderSettingsDialog();
   });
 
   it('should update the environment configuration and close the dialog when the Save button is clicked after editing environment fields', async () => {
@@ -48,13 +30,11 @@ describe('ConfigureEnvButton', () => {
 
     await openProviderSettingsDialog();
 
-    const openaiApiKeyInput = screen.getByLabelText(/^openai api key$/i);
+    const openaiApiKeyInput = screen.getByLabelText(/openai api key/i);
     const newOpenAiKey = 'new-openai-key-12345';
-    expect(screen.getByRole('button', { name: /save/i })).toBeDisabled();
     await userEvent.type(openaiApiKeyInput, newOpenAiKey);
 
     const saveButton = screen.getByRole('button', { name: /save/i });
-    expect(saveButton).toBeEnabled();
     await userEvent.click(saveButton);
 
     await waitFor(() => {
@@ -66,13 +46,9 @@ describe('ConfigureEnvButton', () => {
       ...initialEnv,
       OPENAI_API_KEY: newOpenAiKey,
     });
-    expect(showToastMock).toHaveBeenCalledWith(
-      'Provider settings saved for this browser session.',
-      'success',
-    );
   });
 
-  it('should confirm before discarding edited provider settings and leave the saved configuration unchanged', async () => {
+  it('should close the dialog without updating the environment configuration when the Cancel button is clicked', async () => {
     const initialEnv = { OPENAI_API_KEY: 'initial-openai-key' };
     useStore.getState().updateConfig({ env: initialEnv });
     const initialConfig = useStore.getState().config;
@@ -81,23 +57,11 @@ describe('ConfigureEnvButton', () => {
 
     await openProviderSettingsDialog();
 
-    const openaiApiKeyInput = screen.getByLabelText(/^openai api key$/i);
+    const openaiApiKeyInput = screen.getByLabelText(/openai api key/i);
     await userEvent.type(openaiApiKeyInput, 'new-openai-key');
 
     const cancelButton = screen.getByRole('button', { name: /cancel/i });
     await userEvent.click(cancelButton);
-
-    const discardDialog = screen.getByRole('dialog', { name: 'Discard provider setting changes?' });
-    expect(discardDialog).toHaveAccessibleDescription(
-      'Any unsaved API keys or endpoint settings you entered will be lost.',
-    );
-    expect(useStore.getState().config.env).toEqual(initialConfig.env);
-
-    await userEvent.click(
-      screen.getByRole('button', {
-        name: 'Discard changes',
-      }),
-    );
 
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -105,32 +69,6 @@ describe('ConfigureEnvButton', () => {
 
     const currentConfig = useStore.getState().config;
     expect(currentConfig.env).toEqual(initialConfig.env);
-  });
-
-  it('closes immediately when no provider setting changes have been made', async () => {
-    render(<ConfigureEnvButton />);
-
-    await openProviderSettingsDialog();
-    expect(screen.queryByRole('status', { name: /unsaved provider setting changes/i })).toBeNull();
-    expect(screen.getByRole('button', { name: /save/i })).toBeDisabled();
-    await userEvent.click(screen.getByRole('button', { name: /cancel/i }));
-
-    expect(screen.queryByText('Discard provider setting changes?')).toBeNull();
-    await waitFor(() => {
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    });
-  });
-
-  it('announces unsaved provider setting changes after editing a field', async () => {
-    render(<ConfigureEnvButton />);
-
-    await openProviderSettingsDialog();
-    await userEvent.type(screen.getByLabelText(/^openai api host$/i), 'https://example.test');
-
-    const status = screen.getByRole('status');
-    expect(status).toHaveTextContent('Unsaved provider setting changes');
-    expect(status).toHaveAttribute('aria-live', 'polite');
-    expect(status).toHaveAttribute('aria-atomic', 'true');
   });
 
   it('should pre-fill environment fields with values from config.env when the dialog is opened', async () => {
@@ -142,54 +80,56 @@ describe('ConfigureEnvButton', () => {
 
     render(<ConfigureEnvButton />);
 
-    expect(screen.getByRole('button', { name: 'Provider settings (configured)' })).toBeVisible();
     await openProviderSettingsDialog();
 
-    const openaiApiKeyInput = screen.getByLabelText(/^openai api key$/i);
+    const openaiApiKeyInput = screen.getByLabelText(/openai api key/i);
     expect(openaiApiKeyInput).toHaveValue(initialEnv.OPENAI_API_KEY);
 
     // Expand the Azure section
     const azureSection = screen.getByRole('button', { name: /azure/i });
     await userEvent.click(azureSection);
 
-    const azureApiKeyInput = screen.getByLabelText(/^azure api key$/i);
+    const azureApiKeyInput = screen.getByLabelText(/azure api key/i);
     expect(azureApiKeyInput).toHaveValue(initialEnv.AZURE_API_KEY);
   });
 
-  it('masks only secret values and lets users verify API keys on demand', async () => {
+  it('should save the Amazon Bedrock API key', async () => {
     render(<ConfigureEnvButton />);
 
     await openProviderSettingsDialog();
+    await userEvent.click(screen.getByRole('button', { name: /Amazon Bedrock/i }));
 
-    const apiKeyInput = screen.getByLabelText(/^openai api key$/i);
-    const hostInput = screen.getByLabelText(/^openai api host$/i);
-    const organizationInput = screen.getByLabelText(/^openai organization$/i);
+    const bedrockApiKeyInput = screen.getByLabelText(/Bedrock API key/i);
+    await userEvent.type(bedrockApiKeyInput, 'bedrock-key');
+    await userEvent.click(screen.getByRole('button', { name: /save/i }));
 
-    expect(apiKeyInput).toHaveAttribute('type', 'password');
-    expect(apiKeyInput).toHaveAttribute('autocomplete', 'new-password');
-    expect(hostInput).toHaveAttribute('type', 'url');
-    expect(organizationInput).toHaveAttribute('type', 'text');
-
-    const revealButton = screen.getByRole('button', { name: /show openai api key/i });
-    expect(revealButton).toHaveAttribute('aria-pressed', 'false');
-    await userEvent.click(revealButton);
-
-    expect(apiKeyInput).toHaveAttribute('type', 'text');
-    expect(screen.getByRole('button', { name: /hide openai api key/i })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+    expect(useStore.getState().config.env?.AWS_BEARER_TOKEN_BEDROCK).toBe('bedrock-key');
   });
 
-  it('leaves non-secret Vertex project and region fields readable', async () => {
+  it('should save standard AWS credentials for generated Bedrock tokens', async () => {
     render(<ConfigureEnvButton />);
 
     await openProviderSettingsDialog();
-    await userEvent.click(screen.getByRole('button', { name: /google vertex ai/i }));
+    await userEvent.click(screen.getByRole('button', { name: /Amazon Bedrock/i }));
 
-    expect(screen.getByLabelText(/^vertex api key$/i)).toHaveAttribute('type', 'password');
-    expect(screen.getByLabelText(/^vertex project id$/i)).toHaveAttribute('type', 'text');
-    expect(screen.getByLabelText(/^vertex region$/i)).toHaveAttribute('type', 'text');
+    await userEvent.type(screen.getByLabelText(/AWS access key ID/i), 'access-key');
+    await userEvent.type(screen.getByLabelText(/AWS secret access key/i), 'secret-key');
+    await userEvent.type(screen.getByLabelText(/AWS session token/i), 'session-token');
+    await userEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+    expect(useStore.getState().config.env).toEqual(
+      expect.objectContaining({
+        AWS_ACCESS_KEY_ID: 'access-key',
+        AWS_SECRET_ACCESS_KEY: 'secret-key',
+        AWS_SESSION_TOKEN: 'session-token',
+      }),
+    );
   });
 
   it('should refresh environment fields from the latest config when reopened', async () => {
@@ -199,7 +139,7 @@ describe('ConfigureEnvButton', () => {
 
     await openProviderSettingsDialog();
 
-    expect(screen.getByLabelText(/^openai api key$/i)).toHaveValue('uploaded-key');
+    expect(screen.getByLabelText(/openai api key/i)).toHaveValue('uploaded-key');
   });
 
   it('should handle partial updates to the environment configuration, preserving existing values', async () => {
@@ -213,7 +153,7 @@ describe('ConfigureEnvButton', () => {
 
     await openProviderSettingsDialog();
 
-    const openaiApiKeyInput = screen.getByLabelText(/^openai api key$/i);
+    const openaiApiKeyInput = screen.getByLabelText(/openai api key/i);
     await userEvent.type(openaiApiKeyInput, 'new-openai-key');
 
     const saveButton = screen.getByRole('button', { name: /save/i });
@@ -236,7 +176,7 @@ describe('ConfigureEnvButton', () => {
 
     await openProviderSettingsDialog();
 
-    const openaiApiKeyInput = screen.getByLabelText(/^openai api key$/i);
+    const openaiApiKeyInput = screen.getByLabelText(/openai api key/i);
     const invalidApiKey = 'invalid-api-key-format';
     await userEvent.type(openaiApiKeyInput, invalidApiKey);
 

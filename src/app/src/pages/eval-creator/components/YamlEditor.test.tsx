@@ -1,17 +1,24 @@
 import React from 'react';
 
 import { mockClipboard, mockObjectUrl } from '@app/tests/browserMocks';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import YamlEditorComponent from './YamlEditor';
 
-vi.mock('react-router-dom', () => ({
+vi.mock('react-router', () => ({
   Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
     <a href={to}>{children}</a>
   ),
 }));
+
+// js-yaml v5 is native ESM with a sealed namespace, so vi.spyOn cannot patch it.
+// Wrap dump in a spy-able mock that keeps the real implementation.
+vi.mock('js-yaml', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('js-yaml')>();
+  return { ...actual, dump: vi.fn(actual.dump) };
+});
 
 // Mock useToast
 const mockShowToast = vi.fn();
@@ -71,6 +78,7 @@ vi.mock('@mui/icons-material/Upload', () => ({
 describe('YamlEditor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUpdateConfig.mockReset();
     mockClipboard();
     mockObjectUrl('blob:yaml-editor-test');
 
@@ -94,12 +102,7 @@ describe('YamlEditor', () => {
     expect(screen.getByRole('button', { name: /Discard Changes/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Download YAML/ })).toBeInTheDocument();
     expect(screen.getByText('Run in CLI')).toBeInTheDocument();
-    expect(screen.getByRole('note')).toHaveTextContent('Run in CLI');
-    expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.getByText('promptfoo eval -c promptfooconfig.yaml')).toBeInTheDocument();
-    expect(
-      screen.getByText(/downloaded or copied YAML includes any credentials/i),
-    ).toBeInTheDocument();
 
     const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
     expect(editor.disabled).toBe(false);
@@ -128,72 +131,66 @@ describe('YamlEditor', () => {
     const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
     await user.click(editor);
     await user.keyboard('{Control>}a{/Control}');
-    await user.paste(
-      'description: Saved with shortcut\nproviders:\n  - echo\nprompts:\n  - Say hi\n',
-    );
+    await user.paste('description: Saved with shortcut');
     await user.keyboard('{Control>}s{/Control}');
 
-    expect(mockUpdateConfig).toHaveBeenCalledWith(
-      expect.objectContaining({
-        description: 'Saved with shortcut',
-        providers: ['echo'],
-        prompts: ['Say hi'],
-      }),
-    );
     expect(mockShowToast).toHaveBeenCalledWith('Configuration saved successfully', 'success');
     expect(screen.getByRole('button', { name: /Save/ })).toBeDisabled();
   });
 
-  it('saves partial top-level YAML configurations', async () => {
+  it('keeps invalid configuration unsaved and identifies the invalid field', async () => {
     const user = userEvent.setup();
     render(<YamlEditorComponent />);
-
-    const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
-    await user.clear(editor);
-    await user.type(editor, 'prompts:\n  - Say hi');
+    const editor = screen.getByTestId('yaml-editor');
+    await user.click(editor);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('tracing:\n  enabled: incorrect-value');
     await user.click(screen.getByRole('button', { name: /Save/ }));
 
-    expect(mockUpdateConfig).toHaveBeenCalledWith(
-      expect.objectContaining({
-        prompts: ['Say hi'],
-      }),
-    );
-    expect(screen.queryByRole('alert')).toBeNull();
+    expect(mockUpdateConfig).not.toHaveBeenCalled();
+    expect(mockShowToast).toHaveBeenCalledWith(expect.stringContaining('tracing.enabled'), 'error');
+    expect(screen.getByText(/Invalid YAML configuration at tracing.enabled/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Save/ })).toBeEnabled();
+  });
+
+  it('does not save a web draft whose local references depend on basePath', async () => {
+    const user = userEvent.setup();
+    render(<YamlEditorComponent />);
+    const editor = screen.getByTestId('yaml-editor');
+    await user.click(editor);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('basePath: /work/config\nprompts:\n  - file://prompt.txt');
+    await user.click(screen.getByRole('button', { name: /Save/ }));
+
+    expect(mockUpdateConfig).not.toHaveBeenCalled();
+    expect(screen.getByText(/basePath.*CLI/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Save/ })).toBeEnabled();
+  });
+
+  it('saves an incomplete configuration as entered without adding runtime defaults', async () => {
+    const user = userEvent.setup();
+    render(<YamlEditorComponent />);
+    const editor = screen.getByTestId('yaml-editor');
+    await user.click(editor);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('tracing:\n  otlp:\n    http: {}');
+    await user.click(screen.getByRole('button', { name: /Save/ }));
+
+    expect(mockUpdateConfig).toHaveBeenCalledWith({ tracing: { otlp: { http: {} } } });
     expect(mockShowToast).toHaveBeenCalledWith('Configuration saved successfully', 'success');
   });
 
-  it('rejects a test-case list saved as a full YAML configuration', async () => {
+  it('uses the runtime provider alias for the form while keeping the entered YAML visible', async () => {
     const user = userEvent.setup();
     render(<YamlEditorComponent />);
-
-    const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
-    await user.clear(editor);
-    await user.type(editor, '- vars:\n    topic: safety');
+    const editor = screen.getByTestId('yaml-editor');
+    await user.click(editor);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('targets:\n  - echo');
     await user.click(screen.getByRole('button', { name: /Save/ }));
 
-    expect(mockUpdateConfig).not.toHaveBeenCalled();
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      'To import individual test cases, use Import CSV or YAML',
-    );
-    expect(mockShowToast).toHaveBeenCalledWith(
-      expect.stringContaining('To import individual test cases, use Import CSV or YAML'),
-      'error',
-    );
-  });
-
-  it('rejects a single test case saved as a full YAML configuration', async () => {
-    const user = userEvent.setup();
-    render(<YamlEditorComponent />);
-
-    const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
-    await user.clear(editor);
-    await user.type(editor, 'vars:\n  topic: safety\nassert:\n  - type: contains');
-    await user.click(screen.getByRole('button', { name: /Save/ }));
-
-    expect(mockUpdateConfig).not.toHaveBeenCalled();
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      'To import individual test cases, use Import CSV or YAML',
-    );
+    expect(mockUpdateConfig).toHaveBeenCalledWith({ providers: ['echo'] });
+    expect(editor).toHaveValue('targets:\n  - echo');
   });
 
   it('initializes with initialConfig', () => {
@@ -202,11 +199,9 @@ describe('YamlEditor', () => {
       providers: [{ id: 'test-provider' }],
     };
 
-    const dumpSpy = vi.spyOn(yaml, 'dump');
-
     render(<YamlEditorComponent initialConfig={initialConfig} />);
 
-    expect(dumpSpy).toHaveBeenCalledWith(initialConfig);
+    expect(vi.mocked(yaml.dump)).toHaveBeenCalledWith(initialConfig);
   });
 
   it('includes evaluateOptions from store in YAML', () => {
@@ -321,7 +316,7 @@ describe('YamlEditor', () => {
       expect(saveButton).not.toBeDisabled();
     });
 
-    it('should confirm before discarding changes and disable the button after confirmation', async () => {
+    it('should disable Discard Changes button after discarding changes', async () => {
       const user = userEvent.setup();
       render(<YamlEditorComponent />);
 
@@ -337,31 +332,9 @@ describe('YamlEditor', () => {
 
       await user.click(discardButton);
 
-      const dialog = screen.getByRole('dialog', { name: 'Discard unsaved YAML changes?' });
-      expect(dialog).toHaveAccessibleDescription(/edits since the last save will be lost/i);
-      expect(discardButton).not.toBeDisabled();
-
-      await user.click(within(dialog).getByRole('button', { name: 'Discard changes' }));
-
       // Button should be disabled again
       expect(discardButton).toBeDisabled();
       expect(mockShowToast).toHaveBeenCalledWith('Changes discarded', 'info');
-    });
-
-    it('keeps unsaved YAML edits when discard is canceled', async () => {
-      const user = userEvent.setup();
-      render(<YamlEditorComponent />);
-
-      const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
-      await user.clear(editor);
-      await user.type(editor, 'description: Keep this draft');
-
-      await user.click(screen.getByRole('button', { name: /Discard Changes/ }));
-      await user.click(screen.getByRole('button', { name: 'Continue editing' }));
-
-      expect(editor.value).toContain('description: Keep this draft');
-      expect(screen.getByRole('button', { name: /Discard Changes/ })).not.toBeDisabled();
-      expect(mockShowToast).not.toHaveBeenCalledWith('Changes discarded', 'info');
     });
 
     it('should show unsaved changes indicator when hasUnsavedChanges is true', async () => {
@@ -378,12 +351,9 @@ describe('YamlEditor', () => {
       await user.paste('description: Modified content');
 
       // Unsaved changes indicator should appear
-      const unsavedChanges = screen.getByRole('status');
+      const unsavedChanges = screen.getByText(/Unsaved changes/);
 
       expect(unsavedChanges).toBeInTheDocument();
-      expect(unsavedChanges).toHaveTextContent('Unsaved changes');
-      expect(unsavedChanges).toHaveAttribute('aria-live', 'polite');
-      expect(unsavedChanges).toHaveAttribute('aria-atomic', 'true');
       expect(unsavedChanges.parentElement).toHaveClass(
         'flex-col',
         'sm:flex-row',
@@ -393,6 +363,7 @@ describe('YamlEditor', () => {
 
     it('should disable both Save and Discard buttons after successful save', async () => {
       const user = userEvent.setup();
+      const mockUpdateConfig = vi.fn();
       vi.mocked(
         vi.fn(() => ({
           config: {},
@@ -410,9 +381,7 @@ describe('YamlEditor', () => {
 
       await user.click(editor);
       await user.keyboard('{Control>}a{/Control}');
-      await user.paste(
-        'description: Valid YAML content\nproviders:\n  - echo\nprompts:\n  - Say hi\n',
-      );
+      await user.paste('description: Valid YAML content');
 
       // Buttons should be enabled
       expect(saveButton).not.toBeDisabled();

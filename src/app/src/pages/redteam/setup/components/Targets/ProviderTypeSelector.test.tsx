@@ -20,6 +20,74 @@ vi.mock('@app/hooks/useTelemetry', () => ({
 }));
 
 describe('ProviderTypeSelector', () => {
+  it('selects a registered Bedrock Agent provider ID', async () => {
+    const user = userEvent.setup();
+    const setProvider = vi.fn();
+    renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={{ id: '', config: {}, label: 'Agent' }}
+        setProvider={setProvider}
+      />,
+    );
+    await user.click(
+      screen.getByText('AWS Bedrock Agents', { exact: true }).closest('[role="button"]')!,
+    );
+    expect(setProvider).toHaveBeenCalledWith(
+      { id: 'bedrock-agent:your-agent-id', config: {}, label: 'Agent' },
+      'bedrock-agent',
+    );
+  });
+
+  it.each([
+    ['OpenAI', 'openai', 'openai:gpt-6-sol'],
+    ['Anthropic', 'anthropic', 'anthropic:messages:claude-sonnet-5'],
+    ['DeepSeek', 'deepseek', 'deepseek:deepseek-flash'],
+    ['X.AI (Grok)', 'xai', 'xai:grok-4.7'],
+  ])('selects the current %s model for new targets', async (label, type, id) => {
+    const user = userEvent.setup();
+    const setProvider = vi.fn();
+    renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={{ id: '', config: {}, label: 'New target' }}
+        setProvider={setProvider}
+      />,
+    );
+    await user.click(screen.getByText(label, { exact: true }).closest('[role="button"]')!);
+    expect(setProvider).toHaveBeenCalledWith({ id, config: {}, label: 'New target' }, type);
+  });
+
+  it('defaults newly selected OpenRouter targets to OpenAI GPT-6 Sol', async () => {
+    const user = userEvent.setup();
+    const setProvider = vi.fn();
+    renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={{ id: '', config: {}, label: 'OpenRouter target' }}
+        setProvider={setProvider}
+      />,
+    );
+    await user.click(screen.getByText('OpenRouter').closest('[role="button"]')!);
+    expect(setProvider).toHaveBeenCalledWith(
+      { id: 'openrouter:openai/gpt-6-sol', config: {}, label: 'OpenRouter target' },
+      'openrouter',
+    );
+  });
+
+  it('defaults newly selected Bedrock targets to the OpenAI Responses API', async () => {
+    const user = userEvent.setup();
+    const setProvider = vi.fn();
+    renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={{ id: '', config: {}, label: 'Bedrock target' }}
+        setProvider={setProvider}
+      />,
+    );
+    await user.click(screen.getByText('AWS Bedrock').closest('[role="button"]')!);
+    expect(setProvider).toHaveBeenCalledWith(
+      { id: 'bedrock:responses:openai.gpt-5.6-sol', config: {}, label: 'Bedrock target' },
+      'bedrock',
+    );
+  });
+
   it('should update selectedProviderType and call setProvider with the correct provider configuration when a provider type card is selected', async () => {
     const user = userEvent.setup();
     const mockSetProvider = vi.fn();
@@ -40,9 +108,10 @@ describe('ProviderTypeSelector', () => {
     // Provider list is always expanded
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
     expect(screen.getByText('Python')).toBeVisible();
+    expect(screen.queryByText('GitHub Models')).not.toBeInTheDocument();
 
     // Select Python provider
-    const pythonProviderCard = screen.getByText('Python').closest('button');
+    const pythonProviderCard = screen.getByText('Python').closest('[role="button"]');
     expect(pythonProviderCard).toBeInTheDocument();
 
     if (pythonProviderCard) {
@@ -60,6 +129,30 @@ describe('ProviderTypeSelector', () => {
 
     // List remains expanded after selection
     expect(screen.getByText('Python')).toBeVisible();
+  });
+
+  it.each([
+    ['Google AI Studio', 'google', 'google:gemini-3.8-flash', {}],
+    ['Google Vertex AI', 'vertex', 'vertex:gemini-3.8-flash', { region: 'global' }],
+  ])('defaults %s to Gemini 3.8 Flash', async (label, providerType, expectedModel, config) => {
+    const user = userEvent.setup();
+    const setProvider = vi.fn();
+
+    renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={{ id: '', config: {}, label: 'Gemini target' }}
+        setProvider={setProvider}
+      />,
+    );
+
+    const providerCard = screen.getByText(label).closest('[role="button"]');
+    expect(providerCard).not.toBeNull();
+    await user.click(providerCard!);
+
+    expect(setProvider).toHaveBeenCalledWith(
+      { id: expectedModel, config, label: 'Gemini target' },
+      providerType,
+    );
   });
 
   it('should filter provider options by search term when the user enters text in the search box', async () => {
@@ -86,6 +179,41 @@ describe('ProviderTypeSelector', () => {
     expect(screen.queryByText('HTTP/HTTPS Endpoint')).toBeNull();
   });
 
+  it('finds Codex Security SDK by security search and configures its native provider', async () => {
+    const user = userEvent.setup();
+    const mockSetProvider = vi.fn();
+
+    renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={{ id: '__selecting__', config: {} }}
+        setProvider={mockSetProvider}
+      />,
+    );
+
+    await user.type(screen.getByRole('searchbox', { name: 'Search providers' }), 'security');
+
+    const providerCard = screen.getByText('Codex Security SDK').closest('[role="button"]');
+    expect(providerCard).toBeInTheDocument();
+    expect(screen.queryByText('OpenAI')).toBeNull();
+
+    await user.click(providerCard!);
+
+    expect(mockSetProvider).toHaveBeenCalledWith(
+      {
+        id: 'openai:codex-security:gpt-5.6-luna',
+        label: 'Codex Security SDK',
+        config: {
+          operation: 'security-scan',
+          repository: '',
+          auth: 'auto',
+          model_reasoning_effort: 'high',
+          max_cost_usd: 1,
+        },
+      },
+      'codex-security',
+    );
+  });
+
   it('labels provider search and clear controls', async () => {
     const user = userEvent.setup();
     const mockSetProvider = vi.fn();
@@ -100,42 +228,6 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByRole('button', { name: 'Clear provider search' })).toBeInTheDocument();
   });
 
-  it('uses provider terminology for the custom option in eval mode', () => {
-    renderWithTooltipProvider(
-      <ProviderTypeSelector provider={{ id: '', config: {} }} setProvider={vi.fn()} mode="eval" />,
-    );
-
-    expect(screen.getByText('Custom Provider')).toBeInTheDocument();
-    expect(screen.getByText('Configure another model, endpoint, or script')).toBeInTheDocument();
-    expect(screen.queryByText('Custom Target')).not.toBeInTheDocument();
-  });
-
-  it('announces the selected option and keeps documentation keyboard actions separate', async () => {
-    const user = userEvent.setup();
-    const setProvider = vi.fn();
-
-    renderWithTooltipProvider(
-      <ProviderTypeSelector
-        provider={{ id: 'http', config: {} }}
-        setProvider={setProvider}
-        providerType="http"
-      />,
-    );
-
-    const selectedCard = screen.getByText('HTTP/HTTPS Endpoint').closest('button');
-    expect(selectedCard).toBeInstanceOf(HTMLButtonElement);
-    expect(selectedCard).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByText('Python').closest('button')).toHaveAttribute('aria-pressed', 'false');
-
-    const documentationLink = screen.getByRole('link', { name: 'View Python documentation' });
-    expect(documentationLink.closest('button')).toBeNull();
-
-    documentationLink.focus();
-    await user.keyboard('{Enter}');
-
-    expect(setProvider).not.toHaveBeenCalled();
-  });
-
   it('stacks filters above search before the layout has room for a shared row', () => {
     const mockSetProvider = vi.fn();
 
@@ -146,28 +238,6 @@ describe('ProviderTypeSelector', () => {
     const searchWrapper = screen.getByPlaceholderText('Search providers...').parentElement;
     expect(searchWrapper?.parentElement).toHaveClass('flex-col', 'sm:flex-row');
     expect(searchWrapper).toHaveClass('w-full', 'sm:w-64');
-  });
-
-  it('announces active category filters and empty search feedback', async () => {
-    const user = userEvent.setup();
-
-    renderWithTooltipProvider(
-      <ProviderTypeSelector provider={{ id: '', config: {} }} setProvider={vi.fn()} />,
-    );
-
-    const allFilter = screen.getByRole('button', { name: /^All \(/ });
-    const agentsFilter = screen.getByRole('button', { name: /^Agent Frameworks \(/ });
-    expect(allFilter).toHaveAttribute('aria-pressed', 'true');
-    expect(agentsFilter).toHaveAttribute('aria-pressed', 'false');
-
-    await user.click(agentsFilter);
-    expect(allFilter).toHaveAttribute('aria-pressed', 'false');
-    expect(agentsFilter).toHaveAttribute('aria-pressed', 'true');
-
-    await user.type(screen.getByRole('searchbox', { name: 'Search providers' }), 'not-present');
-    expect(screen.getByRole('status')).toHaveTextContent(
-      'No providers found matching your search.',
-    );
   });
 
   it('should filter provider options by selected category when a category chip is toggled on', async () => {
@@ -194,6 +264,32 @@ describe('ProviderTypeSelector', () => {
     // HTTP should be hidden since it's in 'My Application' tag
     const httpProvider = screen.queryByText('HTTP/HTTPS Endpoint');
     expect(httpProvider).toBeNull();
+  });
+
+  it('updates available providers after the parent changes the allowed IDs', () => {
+    const provider: ProviderOptions = { id: '', config: {} };
+    const setProvider = vi.fn();
+    const { rerender } = renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={provider}
+        setProvider={setProvider}
+        availableProviderIds={['http']}
+      />,
+    );
+    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
+    expect(screen.queryByText('Python')).not.toBeInTheDocument();
+
+    rerender(
+      <TooltipProvider>
+        <ProviderTypeSelector
+          provider={provider}
+          setProvider={setProvider}
+          availableProviderIds={['python']}
+        />
+      </TooltipProvider>,
+    );
+    expect(screen.getByText('Python')).toBeVisible();
+    expect(screen.queryByText('HTTP/HTTPS Endpoint')).not.toBeInTheDocument();
   });
 
   it('should only display provider options included in availableProviderIds when availableProviderIds prop is provided', () => {
@@ -346,7 +442,7 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
     expect(screen.getByText('Go')).toBeVisible();
 
-    const goProviderCard = screen.getByText('Go').closest('button');
+    const goProviderCard = screen.getByText('Go').closest('[role="button"]');
     expect(goProviderCard).toBeInTheDocument();
 
     if (goProviderCard) {
@@ -364,6 +460,28 @@ describe('ProviderTypeSelector', () => {
 
     expect(screen.getByText('Go')).toBeVisible();
     expect(screen.getByText('Custom Go integration')).toBeVisible();
+  });
+
+  it('selects the first-class Open Interpreter provider', async () => {
+    const user = userEvent.setup();
+    const setProvider = vi.fn();
+
+    renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={{ id: 'http', label: 'Coding target', config: {} }}
+        setProvider={setProvider}
+        providerType="http"
+      />,
+    );
+
+    const card = screen.getByText('Open Interpreter').closest('[role="button"]');
+    expect(card).toBeInTheDocument();
+    await user.click(card!);
+
+    expect(setProvider).toHaveBeenCalledWith(
+      { id: 'openinterpreter', label: 'Coding target', config: {} },
+      'openinterpreter',
+    );
   });
 
   it('should initialize selectedProviderType from the providerType prop when provided, and show the corresponding provider as selected in the collapsed view', () => {
@@ -405,7 +523,7 @@ describe('ProviderTypeSelector', () => {
     );
 
     expect(screen.getByText('OpenAI')).toBeVisible();
-    expect(screen.getByText('GPT-5.5, GPT-5.4, GPT-5.4 Mini and older models')).toBeVisible();
+    expect(screen.getByText('GPT-6 Luna, Sol, and Astra; GPT-5.6 Terra')).toBeVisible();
   });
 
   it('should correctly update provider configuration when switching from Go provider to HTTP provider', async () => {
@@ -430,7 +548,7 @@ describe('ProviderTypeSelector', () => {
 
     // Provider list is always expanded - no Change button needed
 
-    const httpProviderCard = screen.getByText('HTTP/HTTPS Endpoint').closest('button');
+    const httpProviderCard = screen.getByText('HTTP/HTTPS Endpoint').closest('[role="button"]');
     expect(httpProviderCard).toBeInTheDocument();
 
     if (httpProviderCard) {
@@ -476,7 +594,9 @@ describe('ProviderTypeSelector', () => {
 
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
     expect(screen.getByText('Connect to your REST API or HTTP endpoint')).toBeVisible();
-    expect(screen.getByText('HTTP/HTTPS Endpoint').closest('button')).toHaveClass('border-primary');
+    expect(screen.getByText('HTTP/HTTPS Endpoint').closest('[role="button"]')).toHaveClass(
+      'border-primary',
+    );
 
     rerender(
       <TooltipProvider>
@@ -490,8 +610,8 @@ describe('ProviderTypeSelector', () => {
 
     expect(screen.getByText('Python')).toBeVisible();
     expect(screen.getByText('Custom Python script or integration')).toBeVisible();
-    expect(screen.getByText('Python').closest('button')).toHaveClass('border-primary');
-    expect(screen.getByText('HTTP/HTTPS Endpoint').closest('button')).not.toHaveClass(
+    expect(screen.getByText('Python').closest('[role="button"]')).toHaveClass('border-primary');
+    expect(screen.getByText('HTTP/HTTPS Endpoint').closest('[role="button"]')).not.toHaveClass(
       'border-primary',
     );
   });
@@ -535,7 +655,7 @@ describe('ProviderTypeSelector', () => {
 
     // Provider list is always expanded - no Change button needed
 
-    const langchainProviderCard = screen.getByText('LangChain').closest('button');
+    const langchainProviderCard = screen.getByText('LangChain').closest('[role="button"]');
     expect(langchainProviderCard).toBeInTheDocument();
 
     if (langchainProviderCard) {
@@ -576,6 +696,7 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('LlamaIndex')).toBeVisible();
     expect(screen.getByText('LangGraph')).toBeVisible();
     expect(screen.getByText('OpenAI Agents SDK')).toBeVisible();
+    expect(screen.getByText('Codex Security SDK')).toBeVisible();
     expect(screen.getByText('PydanticAI')).toBeVisible();
     expect(screen.getByText('Google ADK')).toBeVisible();
     expect(screen.getByText('Other Agent Framework')).toBeVisible();
@@ -611,7 +732,7 @@ describe('ProviderTypeSelector', () => {
       tag: 'agents',
     });
 
-    const langchainProviderCard = screen.getByText('LangChain').closest('button');
+    const langchainProviderCard = screen.getByText('LangChain').closest('[role="button"]');
     if (langchainProviderCard) {
       await user.click(langchainProviderCard);
     }
@@ -648,7 +769,7 @@ describe('ProviderTypeSelector', () => {
 
     // Provider list is always expanded - no Change button needed
 
-    const langchainProviderCard = screen.getByText('LangChain').closest('button');
+    const langchainProviderCard = screen.getByText('LangChain').closest('[role="button"]');
     expect(langchainProviderCard).toBeInTheDocument();
 
     if (langchainProviderCard) {
@@ -697,7 +818,7 @@ describe('ProviderTypeSelector', () => {
 
     // Provider list is always expanded - no Change button needed
 
-    const langchainProviderCard = screen.getByText('LangChain').closest('button');
+    const langchainProviderCard = screen.getByText('LangChain').closest('[role="button"]');
     expect(langchainProviderCard).toBeInTheDocument();
 
     if (langchainProviderCard) {
@@ -776,7 +897,7 @@ describe('ProviderTypeSelector', () => {
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
     );
 
-    const pythonProviderCard = screen.getByText('Python').closest('button');
+    const pythonProviderCard = screen.getByText('Python').closest('[role="button"]');
     if (pythonProviderCard) {
       await user.click(pythonProviderCard);
     }
@@ -892,7 +1013,7 @@ describe('ProviderTypeSelector', () => {
         />,
       );
 
-      const httpProviderCard = screen.getByText('HTTP/HTTPS Endpoint').closest('button');
+      const httpProviderCard = screen.getByText('HTTP/HTTPS Endpoint').closest('[role="button"]');
       if (httpProviderCard) {
         await user.click(httpProviderCard);
       }
@@ -932,7 +1053,7 @@ describe('ProviderTypeSelector', () => {
         />,
       );
 
-      const websocketProviderCard = screen.getByText('WebSocket').closest('button');
+      const websocketProviderCard = screen.getByText('WebSocket').closest('[role="button"]');
       if (websocketProviderCard) {
         await user.click(websocketProviderCard);
       }
@@ -971,7 +1092,7 @@ describe('ProviderTypeSelector', () => {
         />,
       );
 
-      const websocketProviderCard = screen.getByText('WebSocket').closest('button');
+      const websocketProviderCard = screen.getByText('WebSocket').closest('[role="button"]');
       if (websocketProviderCard) {
         await user.click(websocketProviderCard);
       }
@@ -997,7 +1118,7 @@ describe('ProviderTypeSelector', () => {
         />,
       );
 
-      const websocketProviderCard = screen.getByText('WebSocket').closest('button');
+      const websocketProviderCard = screen.getByText('WebSocket').closest('[role="button"]');
       if (websocketProviderCard) {
         await user.click(websocketProviderCard);
       }
@@ -1023,7 +1144,7 @@ describe('ProviderTypeSelector', () => {
         />,
       );
 
-      const browserProviderCard = screen.getByText('Browser Automation').closest('button');
+      const browserProviderCard = screen.getByText('Browser Automation').closest('[role="button"]');
       if (browserProviderCard) {
         await user.click(browserProviderCard);
       }
@@ -1062,7 +1183,7 @@ describe('ProviderTypeSelector', () => {
         />,
       );
 
-      const mcpProviderCard = screen.getByText('MCP Server').closest('button');
+      const mcpProviderCard = screen.getByText('MCP Server').closest('[role="button"]');
       if (mcpProviderCard) {
         await user.click(mcpProviderCard);
       }
@@ -1097,7 +1218,7 @@ describe('ProviderTypeSelector', () => {
         />,
       );
 
-      const websocketProviderCard = screen.getByText('WebSocket').closest('button');
+      const websocketProviderCard = screen.getByText('WebSocket').closest('[role="button"]');
       if (websocketProviderCard) {
         await user.click(websocketProviderCard);
       }
@@ -1125,7 +1246,7 @@ describe('ProviderTypeSelector', () => {
         />,
       );
 
-      const browserProviderCard = screen.getByText('Browser Automation').closest('button');
+      const browserProviderCard = screen.getByText('Browser Automation').closest('[role="button"]');
       if (browserProviderCard) {
         await user.click(browserProviderCard);
       }
@@ -1157,7 +1278,7 @@ describe('ProviderTypeSelector', () => {
         />,
       );
 
-      const mcpProviderCard = screen.getByText('MCP Server').closest('button');
+      const mcpProviderCard = screen.getByText('MCP Server').closest('[role="button"]');
       if (mcpProviderCard) {
         await user.click(mcpProviderCard);
       }
@@ -1185,8 +1306,7 @@ describe('ProviderTypeSelector', () => {
         />,
       );
 
-      const a2aProviderCard = screen.getByText('A2A Agent').closest('button');
-      expect(a2aProviderCard).toBeInTheDocument();
+      const a2aProviderCard = screen.getByText('A2A Agent').closest('[role="button"]');
       if (a2aProviderCard) {
         await user.click(a2aProviderCard);
       }

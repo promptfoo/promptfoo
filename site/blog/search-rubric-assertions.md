@@ -111,7 +111,7 @@ It prefers a provider with web search configured:
 - Your explicit `grading.provider`, if set
 - Otherwise a default "web search provider" inferred from API keys
 - If that fails, it tries to auto-load a search-capable provider such as:
-  - `anthropic:messages:claude-opus-4-6` with `web_search_20250305`
+  - `anthropic:messages:claude-opus-5` with `web_search_20260209`
   - `openai:responses:gpt-5.1` with `web_search_preview`
   - `google:gemini-3-pro-preview` with `googleSearch`
   - `perplexity:sonar-pro` (built-in search)
@@ -321,7 +321,7 @@ tests:
 If you do not specify a `grading.provider`, Promptfoo will try to pick a sensible default based on available API keys and built-in defaults:
 
 - If you have OpenAI configured, it prefers a Responses model with web search.
-- If you have Anthropic configured, it may default to a Claude 4 or 4.5 model with `web_search_20250305`.
+- If you have Anthropic configured, it may default to a Claude 5 model with `web_search_20260209`.
 - Otherwise it falls back to Perplexity, Gemini, or xAI if available.
 
 If no search-capable provider can be found, `search-rubric` will throw a clear error instead of silently ignoring web search.
@@ -403,11 +403,11 @@ providers:
   - id: openai:gpt-5.1
 
 grading:
-  provider: anthropic:messages:claude-opus-4-6
+  provider: anthropic:messages:claude-opus-5
   providerOptions:
     config:
       tools:
-        - type: web_search_20250305
+        - type: web_search_20260209
           name: web_search
           max_uses: 5
 

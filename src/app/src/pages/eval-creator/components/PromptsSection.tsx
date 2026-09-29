@@ -38,10 +38,6 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
   const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [promptToDelete, setPromptToDelete] = useState<number | null>(null);
-  const promptNumberToDelete = promptToDelete === null ? null : promptToDelete + 1;
-  const promptLabelToDelete = promptNumberToDelete
-    ? `prompt ${promptNumberToDelete}`
-    : 'this prompt';
 
   const { config, updateConfig } = useStore();
   const { showToast } = useToast();
@@ -52,7 +48,6 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
   const prompts = canEditInlinePrompts ? ((rawPrompts || []) as string[]) : [];
   const setPrompts = (p: string[]) => updateConfig({ prompts: p });
   const newPromptInputRef = useRef<HTMLInputElement>(null);
-  const promptFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (editingPromptIndex !== null && editingPromptIndex > 0 && newPromptInputRef.current) {
@@ -81,14 +76,11 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
         }
 
         setPrompts([...prompts, text]);
-        showToast(
-          'Prompt imported. By default it runs across every test case and provider; YAML routing can narrow that set.',
-          'success',
-        );
+        showToast('Prompt imported successfully', 'success');
         event.target.value = '';
       };
       reader.onerror = () => {
-        showToast('Unable to read this file. Please try again or choose another file.', 'error');
+        showToast('Failed to read file', 'error');
         event.target.value = '';
       };
       reader.readAsText(file);
@@ -99,10 +91,6 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
     event.stopPropagation();
     const duplicatedPrompt = prompts[index];
     setPrompts([...prompts, duplicatedPrompt]);
-    showToast(
-      'Prompt duplicated. By default it runs across every test case and provider; YAML routing can narrow that set.',
-      'success',
-    );
   };
 
   const handleChangePrompt = (index: number, newPrompt: string) => {
@@ -118,10 +106,6 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
   const confirmDeletePrompt = () => {
     if (promptToDelete !== null) {
       setPrompts(prompts.filter((_, index) => index !== promptToDelete));
-      showToast(
-        `Prompt ${promptToDelete + 1} deleted. Future runs no longer include it.`,
-        'success',
-      );
       setPromptToDelete(null);
     }
     setDeleteDialogOpen(false);
@@ -135,8 +119,8 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
   // Highlight template variables in prompt text
   const highlightVars = (text: string) => {
     const truncated = text.length > 250 ? text.slice(0, 250) + ' ...' : text;
-    return truncated.split(/({{\s*\w+\s*}})/g).map((part: string, i: number) =>
-      /^{{\s*\w+\s*}}$/.test(part) ? (
+    return truncated.split(/({{\w+}})/g).map((part: string, i: number) =>
+      /{{\s*(\w+)\s*}}/g.test(part) ? (
         <span
           key={i}
           className="rounded border border-primary/20 bg-primary/10 px-1 py-0.5 font-mono text-xs text-foreground"
@@ -152,11 +136,7 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
   return (
     <div className="space-y-4">
       {!canEditInlinePrompts && (
-        <Alert
-          variant="info"
-          role="note"
-          className="flex-col items-start sm:flex-row sm:items-center"
-        >
+        <Alert variant="info" className="flex-col items-start sm:flex-row sm:items-center">
           <AlertContent>
             <AlertTitle>Managed in YAML</AlertTitle>
             <AlertDescription>
@@ -181,25 +161,25 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
         <div className="flex flex-wrap items-center gap-2">
           {canEditInlinePrompts && (
             <>
-              <div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  type="button"
-                  onClick={() => promptFileInputRef.current?.click()}
-                >
-                  <UploadIcon className="mr-2 size-4" />
-                  Import prompt
-                </Button>
-                <input
-                  ref={promptFileInputRef}
-                  type="file"
-                  accept=".txt,.md"
-                  onChange={handleAddPromptFromFile}
-                  className="hidden"
-                  aria-label="Select a prompt file"
-                />
-              </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <label className="cursor-pointer" aria-label="Upload prompt from file">
+                    <Button variant="ghost" size="icon" asChild>
+                      <span>
+                        <UploadIcon className="size-4" />
+                      </span>
+                    </Button>
+                    <input
+                      type="file"
+                      accept=".txt,.md"
+                      onChange={handleAddPromptFromFile}
+                      className="hidden"
+                      aria-label="Upload prompt from file"
+                    />
+                  </label>
+                </TooltipTrigger>
+                <TooltipContent>Upload prompt from file</TooltipContent>
+              </Tooltip>
 
               <Button
                 onClick={() => setPromptDialogOpen(true)}
@@ -215,13 +195,9 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
                     const examplePrompt =
                       'Write a short, fun story about a {{animal}} going on an adventure in {{location}}. Make it entertaining and suitable for children.';
                     setPrompts([...prompts, examplePrompt]);
-                    showToast(
-                      'Starter prompt added. By default it runs across every test case and provider; YAML routing can narrow that set.',
-                      'success',
-                    );
                   }}
                 >
-                  Add Starter Prompt
+                  Add Example
                 </Button>
               )}
             </>
@@ -233,9 +209,7 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
       <div className="rounded-lg border border-border overflow-hidden">
         {canEditInlinePrompts ? (
           prompts.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">
-              No prompts added yet. Variables in a prompt become inputs for each test case.
-            </div>
+            <div className="p-8 text-center text-muted-foreground">No prompts added yet.</div>
           ) : (
             <div className="divide-y divide-border">
               {prompts.map((prompt, index) => (
@@ -340,16 +314,11 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={(open) => !open && cancelDeletePrompt()}>
-        <DialogContent hideDescription={false}>
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              Delete prompt{promptNumberToDelete ? ` ${promptNumberToDelete}` : ''}?
-            </DialogTitle>
+            <DialogTitle>Delete prompt?</DialogTitle>
             <DialogDescription>
-              This removes {promptLabelToDelete} from this evaluation. This action cannot be undone.
-              Future runs will no longer send it to providers for any test case.
-              {prompts.length === 1 &&
-                ' This is your only prompt; add another prompt before you can run the evaluation.'}
+              This removes the prompt from this evaluation. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

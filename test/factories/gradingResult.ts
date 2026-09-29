@@ -1,6 +1,4 @@
-import { createProviderResponse } from './provider';
-
-import type { GradingResult, ProviderResponse } from '../../src/types/index';
+import type { GradingResult } from '../../src/types/index';
 
 export function createGradingResult(overrides: Partial<GradingResult> = {}): GradingResult {
   return {
@@ -38,14 +36,4 @@ export function createFailingGradingResult(
     pass: false,
     score: 0,
   }) as FailingGradingResult;
-}
-
-export function createGradingProviderResponse(
-  gradingResult: GradingResult = createPassingGradingResult(),
-  overrides: Partial<ProviderResponse> = {},
-): ProviderResponse {
-  return createProviderResponse({
-    output: JSON.stringify(gradingResult),
-    ...overrides,
-  });
 }

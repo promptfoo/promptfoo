@@ -8,12 +8,12 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@app/components/ui/collapsible';
-import { HelperText } from '@app/components/ui/helper-text';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
-import Prism from '@app/lib/prism';
+import { highlightJSON } from '@app/lib/codeHighlight';
 import { cn } from '@app/lib/utils';
+import deepEqual from 'fast-deep-equal';
 import {
   AlertCircle,
   AlignLeft,
@@ -33,10 +33,9 @@ interface CustomTargetConfigurationProps {
   rawConfigJson: string;
   setRawConfigJson: (value: string) => void;
   bodyError: string | React.ReactNode | null;
-  setBodyError?: (error: string | React.ReactNode | null) => void;
   providerType?: string;
-  mode?: 'eval' | 'redteam';
-  idError?: string | null;
+  onConfigErrorChange?: (error: string | null, expectedTarget?: ProviderOptions) => void;
+  preserveConfigErrorOnUnchangedConfig?: boolean;
 }
 
 interface ProviderConfig {
@@ -54,22 +53,7 @@ interface ProviderConfig {
   configDescription: string;
 }
 
-const highlightJSON = (code: string): string => {
-  try {
-    const grammar = Prism?.languages?.json;
-    if (!grammar) {
-      return code;
-    }
-    return Prism.highlight(code, grammar, 'json');
-  } catch {
-    return code;
-  }
-};
-
-const getProviderConfig = (
-  providerType?: string,
-  mode: 'eval' | 'redteam' = 'redteam',
-): ProviderConfig => {
+const getProviderConfig = (providerType?: string): ProviderConfig => {
   switch (providerType) {
     case 'python':
       return {
@@ -219,17 +203,17 @@ const getProviderConfig = (
         title: 'AWS Bedrock',
         icon: <Cloud className="size-5 text-primary" />,
         targetIdLabel: 'Model ID',
-        targetIdPlaceholder: 'bedrock:anthropic.claude-3-sonnet-20240229-v1:0',
+        targetIdPlaceholder: 'bedrock:global.anthropic.claude-sonnet-5',
         helpText: <>AWS Bedrock model identifier. Requires AWS credentials configured.</>,
         docUrl: 'https://www.promptfoo.dev/docs/providers/aws-bedrock/',
         examples: {
           title: 'Bedrock Model Examples',
           items: [
             {
-              code: 'bedrock:anthropic.claude-3-sonnet-20240229-v1:0',
-              description: 'Claude 3 Sonnet',
+              code: 'bedrock:global.anthropic.claude-sonnet-5',
+              description: 'Claude Sonnet 5',
             },
-            { code: 'bedrock:amazon.titan-text-express-v1', description: 'Amazon Titan' },
+            { code: 'bedrock:amazon.nova-lite-v1:0', description: 'Amazon Nova Lite' },
             { code: 'bedrock:meta.llama3-70b-instruct-v1:0', description: 'Llama 3' },
           ],
         },
@@ -364,45 +348,31 @@ const getProviderConfig = (
         configDescription: 'Generation parameters',
       };
 
+    // Open Interpreter coding-agent target
+    case 'openinterpreter':
+      return {
+        title: 'Open Interpreter Target',
+        icon: <Terminal className="size-5 text-primary" />,
+        targetIdLabel: 'Target ID',
+        targetIdPlaceholder: 'openinterpreter',
+        helpText: <>Run coding-agent evaluations against an Open Interpreter app-server.</>,
+        docUrl: 'https://www.promptfoo.dev/docs/providers/openinterpreter/',
+        examples: {
+          title: 'Open Interpreter Target Example',
+          items: [{ code: 'openinterpreter', description: 'Open Interpreter app-server target' }],
+        },
+        configExample: {
+          interpreter_path: 'interpreter',
+          working_dir: './workspace',
+          skip_git_repo_check: true,
+          sandbox_mode: 'read-only',
+          turn_timeout_ms: 60000,
+        },
+        configDescription: 'Open Interpreter executable, workspace, sandbox, and timeout options',
+      };
+
     // Default fallback for custom and other providers
     default:
-      if (mode === 'eval') {
-        return {
-          title: 'Custom Provider Configuration',
-          icon: <FileCode2 className="size-5 text-primary" />,
-          targetIdLabel: 'Provider ID',
-          targetIdPlaceholder: 'e.g., openai:chat:gpt-4o or ./my-provider.py',
-          helpText: (
-            <>
-              A provider identifies the model, script, or endpoint used in this evaluation. See{' '}
-              <a
-                href="https://www.promptfoo.dev/docs/providers/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:underline"
-              >
-                provider documentation
-              </a>{' '}
-              for supported IDs and custom providers.
-            </>
-          ),
-          docUrl: 'https://www.promptfoo.dev/docs/providers/',
-          examples: {
-            title: 'Provider ID Examples',
-            items: [
-              { code: 'openai:chat:gpt-4o', description: 'OpenAI model' },
-              { code: './provider.py', description: 'Local Python script' },
-              { code: './provider.js:myFunction', description: 'JavaScript with custom function' },
-            ],
-          },
-          configExample: {
-            temperature: 0.7,
-            max_tokens: 1024,
-            apiKey: '{{OPENAI_API_KEY}}',
-          },
-          configDescription: 'Optional JSON configuration (API keys, model parameters, etc.)',
-        };
-      }
       return {
         title: 'Custom Target Configuration',
         icon: <FileCode2 className="size-5 text-primary" />,
@@ -447,37 +417,18 @@ const CustomTargetConfiguration = ({
   rawConfigJson,
   setRawConfigJson,
   bodyError,
-  setBodyError,
   providerType,
-  mode = 'redteam',
-  idError,
+  onConfigErrorChange,
+  preserveConfigErrorOnUnchangedConfig = false,
 }: CustomTargetConfigurationProps) => {
-  const configErrorId = React.useId();
-  const targetIdHelpId = React.useId();
-  const targetIdErrorId = React.useId();
-  const configEditorContainerRef = React.useRef<HTMLDivElement>(null);
   const [targetId, setTargetId] = useState(selectedTarget.id?.replace('file://', '') || '');
   const [docsExpanded, setDocsExpanded] = useState(false);
 
-  const config = useMemo(() => getProviderConfig(providerType, mode), [providerType, mode]);
+  const config = useMemo(() => getProviderConfig(providerType), [providerType]);
 
   useEffect(() => {
     setTargetId(selectedTarget.id?.replace('file://', '') || '');
   }, [selectedTarget.id]);
-
-  useEffect(() => {
-    const textarea = configEditorContainerRef.current?.querySelector('textarea');
-    if (!textarea) {
-      return;
-    }
-
-    textarea.setAttribute('aria-invalid', String(Boolean(bodyError)));
-    if (bodyError) {
-      textarea.setAttribute('aria-describedby', configErrorId);
-    } else {
-      textarea.removeAttribute('aria-describedby');
-    }
-  }, [bodyError, configErrorId]);
 
   const handleTargetIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -500,10 +451,23 @@ const CustomTargetConfiguration = ({
     setRawConfigJson(content);
     try {
       const parsedConfig = JSON.parse(content);
-      setBodyError?.(null);
+      if (
+        typeof parsedConfig !== 'object' ||
+        parsedConfig === null ||
+        Array.isArray(parsedConfig)
+      ) {
+        onConfigErrorChange?.('Configuration must be a JSON object');
+        return;
+      }
+
+      if (preserveConfigErrorOnUnchangedConfig && deepEqual(parsedConfig, selectedTarget.config)) {
+        return;
+      }
+
       updateCustomTarget('config', parsedConfig);
+      onConfigErrorChange?.(null, { ...selectedTarget, config: parsedConfig });
     } catch {
-      setBodyError?.('Configuration must be valid JSON before this provider can be saved.');
+      onConfigErrorChange?.('Invalid JSON configuration');
     }
   };
 
@@ -511,12 +475,21 @@ const CustomTargetConfiguration = ({
     if (rawConfigJson.trim()) {
       try {
         const parsed = JSON.parse(rawConfigJson);
+        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+          onConfigErrorChange?.('Configuration must be a JSON object');
+          return;
+        }
+
+        if (preserveConfigErrorOnUnchangedConfig && deepEqual(parsed, selectedTarget.config)) {
+          return;
+        }
+
         const formatted = JSON.stringify(parsed, null, 2);
         setRawConfigJson(formatted);
-        setBodyError?.(null);
         updateCustomTarget('config', parsed);
+        onConfigErrorChange?.(null, { ...selectedTarget, config: parsed });
       } catch {
-        setBodyError?.('Configuration must be valid JSON before this provider can be saved.');
+        onConfigErrorChange?.('Invalid JSON configuration');
       }
     }
   };
@@ -532,21 +505,15 @@ const CustomTargetConfiguration = ({
         {/* Target ID Section */}
         <div className="space-y-2">
           <Label htmlFor="target-id">
-            {config.targetIdLabel}
-            <span aria-hidden="true" className="ml-1 text-destructive">
-              *
-            </span>
+            {config.targetIdLabel} <span className="text-destructive">*</span>
           </Label>
           <Input
             id="target-id"
-            required
             value={targetId}
             onChange={handleTargetIdChange}
             placeholder={config.targetIdPlaceholder}
-            aria-invalid={Boolean(idError)}
-            aria-describedby={`${targetIdHelpId}${idError ? ` ${targetIdErrorId}` : ''}`}
           />
-          <p id={targetIdHelpId} className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             {config.helpText}{' '}
             {providerType && providerType !== 'custom' && (
               <>
@@ -563,11 +530,6 @@ const CustomTargetConfiguration = ({
               </>
             )}
           </p>
-          {idError && (
-            <HelperText id={targetIdErrorId} error>
-              {idError}
-            </HelperText>
-          )}
         </div>
 
         {/* Custom Configuration Section */}
@@ -638,7 +600,6 @@ const CustomTargetConfiguration = ({
 
           {/* JSON Editor */}
           <div
-            ref={configEditorContainerRef}
             className={cn(
               'overflow-hidden rounded-lg border',
               bodyError ? 'border-destructive' : 'border-border',
@@ -649,7 +610,6 @@ const CustomTargetConfiguration = ({
             </div>
             <div className="bg-white dark:bg-zinc-950">
               <Editor
-                textareaId="config-json"
                 value={rawConfigJson}
                 onValueChange={handleConfigChange}
                 highlight={highlightJSON}
@@ -668,7 +628,7 @@ const CustomTargetConfiguration = ({
             <Alert variant="destructive" className="py-2">
               <AlertCircle className="size-4" />
               <AlertContent>
-                <AlertDescription id={configErrorId}>{bodyError}</AlertDescription>
+                <AlertDescription>{bodyError}</AlertDescription>
               </AlertContent>
             </Alert>
           ) : (
