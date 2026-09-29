@@ -729,29 +729,33 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     );
   });
 
-  it('treats JSON null as no results for a failed eval', async () => {
-    await runEvaluation();
-    fs.writeFileSync(path.join(tempDir, '.promptfoo-results/results.json'), 'null');
-    evalJobStatus = 'failed';
+  it.each(['false', 'true'])(
+    'treats JSON null as no results for a failed eval (sharing=%s)',
+    async (share) => {
+      await runEvaluation();
+      fs.writeFileSync(path.join(tempDir, '.promptfoo-results/results.json'), 'null');
+      evalJobStatus = 'failed';
 
-    await withGitLabServer(
-      (request, response) => {
-        response.setHeader('Content-Type', 'application/json');
-        response.end(
-          request.url === '/api/v4/user' ? '{"id":123}' : request.method === 'GET' ? '[]' : '{}',
-        );
-      },
-      async (origin, requests) => {
-        const comment = await runScript(commentJob.script[0], {
-          CI_API_V4_URL: origin + '/api/v4',
-          CI_SERVER_URL: origin,
-        });
+      await withGitLabServer(
+        (request, response) => {
+          response.setHeader('Content-Type', 'application/json');
+          response.end(
+            request.url === '/api/v4/user' ? '{"id":123}' : request.method === 'GET' ? '[]' : '{}',
+          );
+        },
+        async (origin, requests) => {
+          const comment = await runScript(commentJob.script[0], {
+            CI_API_V4_URL: origin + '/api/v4',
+            CI_SERVER_URL: origin,
+            PROMPTFOO_SHARE: share,
+          });
 
-        expect(comment.status).toBe(0);
-        expect(JSON.parse(requests.at(-1)!.body).body).toContain('No results were written.');
-      },
-    );
-  });
+          expect(comment.status).toBe(0);
+          expect(JSON.parse(requests.at(-1)!.body).body).toContain('No results were written.');
+        },
+      );
+    },
+  );
 
   it('does not restore stale default-cache results into an artifact-only comment job', async () => {
     evalJobStatus = 'failed';

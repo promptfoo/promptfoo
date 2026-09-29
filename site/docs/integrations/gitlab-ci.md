@@ -24,7 +24,7 @@ Add the organization-owned template to your `.gitlab-ci.yml` file:
 ```yaml title=".gitlab-ci.yml"
 include:
   - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-gitlab-ci/gitlab-ci.yml'
-    integrity: 'sha256-VEhhLaVDy9AmlBftCJju8yzq1uXMFo9/njQZOoZ9l0A='
+    integrity: 'sha256-Xyd7vtbeLo0wC7VW6ZS+i2GZGRrsIV5pEhmHWF+4T+8='
 
 promptfoo-eval:
   extends: .promptfoo-eval
@@ -67,15 +67,16 @@ Protected variables are not available to ordinary merge request pipelines. GitLa
 
 The template supports these job variables:
 
-| Variable                        | Default                | Purpose                                                                |
-| ------------------------------- | ---------------------- | ---------------------------------------------------------------------- |
-| `PROMPTFOO_CONFIG`              | `promptfooconfig.yaml` | Config file to evaluate                                                |
-| `PROMPTFOO_VERSION`             | `0.123.0`              | Exact expected version of the digest-pinned Promptfoo container        |
-| `PROMPTFOO_OUTPUT_DIR`          | `.promptfoo-results`   | Directory containing JSON and JUnit results                            |
-| `PROMPTFOO_PASS_RATE_THRESHOLD` | `100`                  | Minimum passing percentage needed for the job to succeed               |
-| `PROMPTFOO_SHARE`               | `false`                | Upload eval results only when explicitly set to `true`                 |
-| `PROMPTFOO_GITLAB_TOKEN`        | Unset                  | Optional write token scoped only to the `promptfoo-review` environment |
-| `PROMPTFOO_GITLAB_TRUST_PROXY`  | `false`                | Honor proxy variables only when the proxy and pipeline are trusted     |
+| Variable                         | Default                 | Purpose                                                                |
+| -------------------------------- | ----------------------- | ---------------------------------------------------------------------- |
+| `PROMPTFOO_CONFIG`               | `promptfooconfig.yaml`  | Config file to evaluate                                                |
+| `PROMPTFOO_VERSION`              | `0.123.0`               | Exact expected version of the digest-pinned Promptfoo container        |
+| `PROMPTFOO_OUTPUT_DIR`           | `.promptfoo-results`    | Directory containing JSON and JUnit results                            |
+| `PROMPTFOO_PASS_RATE_THRESHOLD`  | `100`                   | Minimum passing percentage needed for the job to succeed               |
+| `PROMPTFOO_SHARE`                | `false`                 | Upload eval results only when explicitly set to `true`                 |
+| `PROMPTFOO_SHARING_APP_BASE_URL` | `https://promptfoo.app` | Allowed origin for shared-result links in comments                     |
+| `PROMPTFOO_GITLAB_TOKEN`         | Unset                   | Optional write token scoped only to the `promptfoo-review` environment |
+| `PROMPTFOO_GITLAB_TRUST_PROXY`   | `false`                 | Honor proxy variables only when the proxy and pipeline are trusted     |
 
 ### 3. Configure Caching (Optional but Recommended)
 
@@ -96,7 +97,7 @@ Each job writes:
 - `.promptfoo-results/results.json` for the complete eval output.
 - `.promptfoo-results/results.junit.xml` for the merge request test summary and pipeline **Tests** tab.
 
-Artifacts are uploaded even when the eval fails, are configured to expire after one week, and are restricted to users with the Developer role or higher. GitLab keeps artifacts from the most recent successful pipeline on each ref indefinitely by default; disable **Keep artifacts from most recent successful jobs** when strict expiration is required. Treat all result artifacts as sensitive because they can contain prompts, model responses, and grading details.
+Artifacts are uploaded even when the eval fails and are configured to expire after one week. Downloads through the GitLab UI and API require the Developer role or higher. This restriction does not cover runner job-token downloads; review [artifact access](https://docs.gitlab.com/ci/yaml/#artifactsaccess) and project CI/CD visibility before storing sensitive results. GitLab keeps artifacts from the most recent successful pipeline on each ref indefinitely by default; disable **Keep artifacts from most recent successful jobs** when strict expiration is required. Treat all result artifacts as sensitive because they can contain prompts, model responses, and grading details.
 
 ## Advanced Configuration
 
@@ -149,9 +150,9 @@ The cache key already includes the GitLab job name and commit SHA. If these jobs
 
 ### Integration with GitLab Merge Requests
 
-To enable optional merge request summaries, create a short-lived, project-scoped access token with the minimum API access needed to create and update merge request notes. Store it as the masked `PROMPTFOO_GITLAB_TOKEN` CI/CD variable and set its **Environment scope** to exactly `promptfoo-review`.
+To enable optional merge request summaries, create a short-lived, project-scoped access token with the minimum API access needed to create and update merge request notes. Store it as the masked, protected `PROMPTFOO_GITLAB_TOKEN` CI/CD variable and set its **Environment scope** to exactly `promptfoo-review`.
 
-Add a separate comment job after the eval:
+The pipeline must meet [GitLab’s protected-resource requirements](https://docs.gitlab.com/ci/pipelines/merge_request_pipelines/#control-access-to-protected-variables-and-runners) to receive the token. Without it, the comment job skips. Add a separate comment job after the eval:
 
 ```yaml
 promptfoo-comment:
@@ -173,11 +174,11 @@ promptfoo-comment:
       when: always
 ```
 
-GitLab's built-in `CI_JOB_TOKEN` can read merge request notes but cannot create or update them, so a project access token is required. The separate comment job starts in a fresh, unprivileged container with no checkout and accesses the write token only through its `promptfoo-review` environment scope. Repeat any job-level `PROMPTFOO_OUTPUT_DIR` or `PROMPTFOO_SHARE` overrides from the eval job in the comment job because GitLab `needs` does not inherit job variables. The eval job fails closed if that token is exposed to it, removes token-bearing Git metadata before executable providers run, and forces failed assertions to return a nonzero exit code.
+GitLab's built-in `CI_JOB_TOKEN` can read merge request notes but cannot create or update them, so a project access token is required. The separate comment job starts in a fresh, unprivileged container with no checkout and accesses the write token only through its `promptfoo-review` environment scope. Repeat any job-level `PROMPTFOO_OUTPUT_DIR`, `PROMPTFOO_SHARE`, or `PROMPTFOO_SHARING_APP_BASE_URL` overrides from the eval job in the comment job because GitLab `needs` does not inherit job variables. The eval job fails closed if that token is exposed to it, removes token-bearing Git metadata before executable providers run, and forces failed assertions to return a nonzero exit code.
 
 Keep the comment job's `changes` rules aligned with the eval so unrelated merge requests skip both jobs. Both jobs override default OIDC ID tokens with `id_tokens: {}` and set the pinned image’s system PATH before invoking executables. Keep the eval's inherited `after_script` empty: GitLab starts it with the original job credentials.
 
-The comment job reads the eval status from GitLab's pipeline jobs API. Set `PROMPTFOO_EVAL_JOB_NAME` to the eval job's exact name if you rename it. With `when: always`, it summarizes successful and failed evals even when no results were written. A per-merge-request resource group serializes overlapping updates, and older pipelines cannot overwrite a newer summary.
+The comment job reads the eval status from GitLab's pipeline jobs API. Set `PROMPTFOO_EVAL_JOB_NAME` to the eval job's exact name if you rename it. With `when: always`, it summarizes failed evals even when no results were written. A successful eval must supply valid JSON results; missing or malformed artifacts fail the comment job. A per-merge-request resource group serializes overlapping updates, and older pipelines cannot overwrite a newer summary.
 
 Only provide a write token to trusted pipelines. Masking does not prevent malicious executable providers, JavaScript assertions, or modified pipeline configuration from exfiltrating credentials that are otherwise exposed to a job.
 

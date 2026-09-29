@@ -17,7 +17,7 @@ The local `.gitlab-ci.yml` extends the hidden `.promptfoo-eval` job from `gitlab
 ```yaml
 include:
   - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-gitlab-ci/gitlab-ci.yml'
-    integrity: 'sha256-VEhhLaVDy9AmlBftCJju8yzq1uXMFo9/njQZOoZ9l0A='
+    integrity: 'sha256-Xyd7vtbeLo0wC7VW6ZS+i2GZGRrsIV5pEhmHWF+4T+8='
 
 promptfoo-eval:
   extends: .promptfoo-eval
@@ -48,7 +48,7 @@ Override job variables as needed:
 
 Configure provider credentials and optional tokens as masked GitLab CI/CD variables. Use protected variables only for trusted protected branches; ordinary merge request pipelines cannot access them unless GitLab's protected-resource requirements are met. Never run fork-controlled code with parent-project secrets.
 
-To enable merge request comments, create a masked project access token with its environment scope set to exactly `promptfoo-review`, then add:
+To enable merge request comments, store a project access token as a masked, protected CI/CD variable with its environment scope set to exactly `promptfoo-review`. Use it only in trusted pipelines that meet [GitLab’s protected-resource requirements](https://docs.gitlab.com/ci/pipelines/merge_request_pipelines/#control-access-to-protected-variables-and-runners). Without that token, the comment job skips. Add:
 
 ```yaml
 promptfoo-comment:
@@ -71,8 +71,8 @@ promptfoo-comment:
       when: always
 ```
 
-The comment reads the eval status from GitLab's pipeline jobs API; `PROMPTFOO_EVAL_JOB_NAME` must match the eval job name. It uses a separate container without a checkout, inherited setup commands, or restored caches. Shared-result links must match `PROMPTFOO_SHARING_APP_BASE_URL`. Repeat any job-level `PROMPTFOO_OUTPUT_DIR` or `PROMPTFOO_SHARE` overrides in the comment job because GitLab `needs` does not inherit job variables.
+The comment reads the eval status from GitLab's pipeline jobs API; `PROMPTFOO_EVAL_JOB_NAME` must match the eval job name. It uses a separate container without a checkout, inherited setup commands, or restored caches. Shared-result links must match `PROMPTFOO_SHARING_APP_BASE_URL`. Repeat any job-level `PROMPTFOO_OUTPUT_DIR`, `PROMPTFOO_SHARE`, or `PROMPTFOO_SHARING_APP_BASE_URL` overrides in the comment job because GitLab `needs` does not inherit job variables.
 
-Both jobs disable default OIDC tokens and use the pinned image's system PATH. The eval removes token-bearing Git metadata and job/deploy credentials before running providers. Failed assertions block the pipeline. Artifacts are restricted to project developers and expire after one week, except that GitLab keeps the latest successful artifacts unless that project setting is disabled.
+Both jobs disable default OIDC tokens and use the pinned image's system PATH. The eval removes token-bearing Git metadata and job/deploy credentials before running providers. Failed assertions block the pipeline. Artifact downloads through the GitLab UI and API require the Developer role. This restriction does not cover runner job-token downloads; review [artifact access](https://docs.gitlab.com/ci/yaml/#artifactsaccess) and project CI/CD visibility before storing sensitive results. Artifacts expire after one week, except that GitLab keeps the latest successful artifacts unless that project setting is disabled.
 
 For self-managed GitLab instances with an internal certificate authority, configure a file-type CI/CD variable containing the CA certificate and set `NODE_EXTRA_CA_CERTS` to that variable's file path. Set `PROMPTFOO_GITLAB_TRUST_PROXY: 'true'` only when the configured HTTP proxy is trusted to handle the GitLab write token. Do not disable TLS verification.

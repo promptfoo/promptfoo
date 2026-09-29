@@ -349,13 +349,14 @@
       const jobStatus = evalJob.status;
       let result = {};
       try {
-        result = JSON.parse(await readFile(`${outputDirectory}/results.json`, 'utf8'));
+        const parsed = JSON.parse(await readFile(`${outputDirectory}/results.json`, 'utf8'));
+        result = parsed && typeof parsed === 'object' ? parsed : {};
       } catch (error) {
         if (jobStatus === 'success') {
           throw error;
         }
       }
-      const stats = result && typeof result === 'object' ? result.results?.stats ?? {} : {};
+      const stats = result.results?.stats ?? {};
       const successes = Number(stats.successes ?? 0);
       const failures = Number(stats.failures ?? 0);
       const errors = Number(stats.errors ?? 0);

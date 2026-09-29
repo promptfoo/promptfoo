@@ -224,7 +224,7 @@ See our [detailed GitLab CI guide](/docs/integrations/gitlab-ci).
 ```yaml title=".gitlab-ci.yml"
 include:
   - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-gitlab-ci/gitlab-ci.yml'
-    integrity: 'sha256-VEhhLaVDy9AmlBftCJju8yzq1uXMFo9/njQZOoZ9l0A='
+    integrity: 'sha256-Xyd7vtbeLo0wC7VW6ZS+i2GZGRrsIV5pEhmHWF+4T+8='
 
 promptfoo-eval:
   extends: .promptfoo-eval
