@@ -443,6 +443,60 @@ describe('HydraProvider', () => {
       });
     });
 
+    it('should keep attacking after a grader error, which is not a verdict', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Successful attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Here is how to do harmful thing',
+        tokenUsage: { total: 50, prompt: 25, completion: 25 },
+      });
+
+      // A grading provider outage is tagged with `metadata.graderError`. Treating
+      // it as a demonstrated vulnerability would report a jailbreak that never
+      // happened, so the attack has to continue.
+      mockGetGraderById.mockImplementation(function () {
+        return {
+          getResult: vi
+            .fn()
+            .mockResolvedValueOnce({
+              grade: {
+                pass: false,
+                score: 0,
+                reason: 'Grading provider returned 503',
+                metadata: { graderError: true },
+              },
+            })
+            .mockResolvedValue({
+              grade: { pass: true, score: 0, reason: 'Target defended' },
+            }),
+        } as any;
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 2,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      const result = await provider.callApi('', context);
+
+      expect(result.metadata?.hydraResult).toBeFalsy();
+      expect(result.metadata?.stopReason).not.toBe('Grader failed');
+      expect(result.metadata?.successfulAttacks ?? []).toHaveLength(0);
+    });
+
     it('should handle multiple turns until max turns reached', async () => {
       let callCount = 0;
       const getResult = vi
