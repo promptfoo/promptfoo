@@ -19,7 +19,7 @@ npx promptfoo@latest init --example provider-pi/model-comparison
 ### 1. Install the pi CLI
 
 ```bash
-npm install -g @earendil-works/pi-coding-agent
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent
 ```
 
 Or with the install script:
@@ -28,7 +28,7 @@ Or with the install script:
 curl -fsSL https://pi.dev/install.sh | sh
 ```
 
-Pi requires Node.js 22.19 or newer.
+Use a current Pi release with RPC support.
 
 ### 2. Configure credentials
 
@@ -108,7 +108,7 @@ providers:
       # apiKey: '{{env.ANTHROPIC_API_KEY}}'
 ```
 
-By default the provider runs `pi --mode json --no-session --offline` with extension, skill, prompt-template, and context-file discovery disabled, so evals are reproducible and nothing is written to your pi session history.
+By default the provider runs `pi --mode rpc --no-session --offline` with extension, skill, prompt-template, and context-file discovery disabled, so evals are reproducible and nothing is written to your pi session history.
 
 ## Learn More
 

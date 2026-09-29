@@ -22,24 +22,24 @@ Standard LLM evals test a function: given input X, does output Y meet criteria Z
 
 ## Capability tiers
 
-| Tier                      | Example providers                                                | Use when you need                                             | Watch for                                     |
-| ------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------- |
-| **0: Text**               | `openai:gpt-6-sol`, `anthropic:claude-sonnet-5`                  | Code generation, explanation, JSON output, baseline behavior  | No file reads, shell commands, or tool traces |
+| Tier                      | Example providers                                                      | Use when you need                                             | Watch for                                     |
+| ------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------- |
+| **0: Text**               | `openai:gpt-6-sol`, `anthropic:claude-sonnet-5`                        | Code generation, explanation, JSON output, baseline behavior  | No file reads, shell commands, or tool traces |
 | **1: Coding agent SDK**   | `openai:codex-sdk`, `anthropic:claude-agent-sdk`, `opencode:sdk`, `pi` | Codebase reads, refactors, command runs, CI-friendly agent QA | Side effects, tool permissions, session state |
-| **2: Rich client server** | `openai:codex-app-server`, `openinterpreter`                     | App-server events, approvals, skills, plugins, thread details | Experimental protocol and local child process |
+| **2: Rich client server** | `openai:codex-app-server`, `openinterpreter`                           | App-server events, approvals, skills, plugins, thread details | Experimental protocol and local child process |
 
 The same underlying model behaves differently at each tier. A plain `claude-sonnet-5` call can't read your files; wrap it in Claude Agent SDK and it can. Use a plain LLM baseline when you want to prove that file access, shell access, or runtime state is actually contributing to the result.
 
 Choose the provider by the runtime boundary you need to evaluate:
 
-| Provider                    | Best fit                                                                                        | Runtime boundary                                         | Default safety posture                                                              |
-| --------------------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| **OpenAI Codex SDK**        | CI, automation, structured coding outputs, thread reuse                                         | `@openai/codex-sdk` library                              | Git repo check, filesystem sandbox, network/search off unless enabled, minimal env  |
-| **OpenAI Codex app-server** | Rich-client protocol behavior, streamed items, approvals, skills, plugins, app connector events | Local `codex app-server` JSON-RPC process                | Read-only sandbox, approvals declined, ephemeral threads, minimal env               |
-| **Claude Agent SDK**        | Claude Code-compatible workflows, MCP-heavy tasks, local skills                                 | `@anthropic-ai/claude-agent-sdk` library                 | No tools by default; configured working dirs are read-only until write tools opt in |
-| **OpenCode SDK**            | Provider-agnostic coding agent comparisons                                                      | OpenCode SDK with a promptfoo-started or existing server | Temporary workspace by default; working dirs start with read-only tools             |
-| **Pi Coding Agent** | Multi-provider agent comparisons | Local Pi CLI process | Tools disabled by default; read-only tools with a working directory; no built-in sandbox |
-| **Open Interpreter**        | Multi-backend coding agent and harness comparisons                                              | Local `interpreter app-server` JSON-RPC process          | Read-only sandbox, approvals declined, ephemeral threads, minimal env               |
+| Provider                    | Best fit                                                                                        | Runtime boundary                                         | Default safety posture                                                                   |
+| --------------------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| **OpenAI Codex SDK**        | CI, automation, structured coding outputs, thread reuse                                         | `@openai/codex-sdk` library                              | Git repo check, filesystem sandbox, network/search off unless enabled, minimal env       |
+| **OpenAI Codex app-server** | Rich-client protocol behavior, streamed items, approvals, skills, plugins, app connector events | Local `codex app-server` JSON-RPC process                | Read-only sandbox, approvals declined, ephemeral threads, minimal env                    |
+| **Claude Agent SDK**        | Claude Code-compatible workflows, MCP-heavy tasks, local skills                                 | `@anthropic-ai/claude-agent-sdk` library                 | No tools by default; configured working dirs are read-only until write tools opt in      |
+| **OpenCode SDK**            | Provider-agnostic coding agent comparisons                                                      | OpenCode SDK with a promptfoo-started or existing server | Temporary workspace by default; working dirs start with read-only tools                  |
+| **Pi Coding Agent**         | Multi-provider agent comparisons                                                                | Local Pi CLI process                                     | Tools disabled by default; read-only tools with a working directory; no built-in sandbox |
+| **Open Interpreter**        | Multi-backend coding agent and harness comparisons                                              | Local `interpreter app-server` JSON-RPC process          | Read-only sandbox, approvals declined, ephemeral threads, minimal env                    |
 
 `openai:codex-desktop` is an alias for the app-server protocol provider. Promptfoo starts its own `codex app-server` child process; it does not attach to an already-running Codex Desktop app window or reuse Desktop UI state.
 

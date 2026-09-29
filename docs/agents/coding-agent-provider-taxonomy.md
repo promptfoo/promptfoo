@@ -26,7 +26,7 @@ The main providers in this family today are:
 | Claude Agent SDK        | `anthropic:claude-agent-sdk`, `anthropic:claude-code` | `@anthropic-ai/claude-agent-sdk` library        |
 | Open Interpreter        | `openinterpreter`                                     | Local `interpreter app-server` JSON-RPC process |
 | OpenCode SDK            | `opencode:sdk`, `opencode`                            | OpenCode SDK plus local or existing server      |
-| Pi Coding Agent | `pi`, `pi:<provider>/<model>` | Local Pi CLI process |
+| Pi Coding Agent         | `pi`, `pi:<provider>/<model>`                         | Local Pi CLI process                            |
 
 Standard OpenAI, Anthropic, Bedrock, Azure, and other model providers still matter
 for grading and comparison, but they are outside this taxonomy unless they expose a
@@ -367,8 +367,7 @@ Provider IDs:
 
 Implemented capabilities:
 
-- Spawns the `pi` CLI per call in one-shot JSON event-stream mode
-  (`--mode json --no-session`), so no npm package import is required.
+- Spawns the `pi` CLI per call with `--mode rpc --no-session`; no npm package import is required.
 - Resolves the CLI from `pi_path`, a project-local
   `@earendil-works/pi-coding-agent` install, or `PATH`, with actionable install
   guidance when missing.
@@ -382,10 +381,8 @@ Implemented capabilities:
 - Maps per-message usage to summed `tokenUsage` and USD `cost`, and surfaces tool
   activity in `metadata.toolCalls`.
 - Detects agent failures from `stopReason: error|aborted` because pi exits 0 in
-  JSON mode even when the run fails.
-- Emits a top-level GenAI `callApi` span (system, model, token usage, cost,
-  cache-hit) linked to the eval trace via `traceparent`, matching the other
-  agentic providers.
+  RPC mode even when the run fails.
+- Emits a GenAI span with model, token usage, and cost, linked through `traceparent`.
 
 Important limits:
 
@@ -404,12 +401,8 @@ Important limits:
   templates, `.pi/SYSTEM.md`) is off by default (`--no-approve`) and is a
   separate axis from `load_*` discovery; opt in with `trust_project_files`
   (`--approve`), which is all-or-nothing.
-- Prompts are delivered via pi's piped stdin, which trims surrounding whitespace
-  (an all-whitespace prompt becomes empty), so whitespace-exact prompts are not
-  faithfully represented; stdin is used to keep large prompts off argv.
-- Caching fingerprints only the `working_dir` tree, so a tool-enabled run that
-  reads files outside it (pi has no sandbox) can return a stale cached result if
-  those external files change; use `--no-cache` for such runs.
+- Prompts use RPC messages to preserve whitespace. Responses are not cached because
+  Pi can read files and runtime settings outside the configured working directory.
 - On pi auto-retry, reported `tokenUsage`/`cost` reflect the final attempt; pi
   drops the failed attempt's message from its terminal `agent_end`, so discarded
   attempts' tokens are not counted.
