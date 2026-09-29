@@ -116,6 +116,7 @@ export const ProviderEnvOverridesSchema = z.object({
   ORCAROUTER_API_KEY: z.string().optional(),
   PALM_API_HOST: z.string().optional(),
   PALM_API_KEY: z.string().optional(),
+  PI_CODING_AGENT_DIR: z.string().optional(),
   PORTKEY_API_KEY: z.string().optional(),
   PROMPTFOO_CA_CERT_PATH: z.string().optional(),
   PROMPTFOO_PFX_CERT_PATH: z.string().optional(),

@@ -169,6 +169,8 @@ Responses are not cached. Each call starts Pi again because its output can depen
 
 :::note
 
+Child processes inherit values from the eval’s environment file. Provider `env` settings override those values. `PI_CODING_AGENT_DIR` can also be supplied through the shared provider `env` settings. Relative working and agent directories use the provider’s configuration directory, including when a loaded provider is called later.
+
 pi resolves credentials in the order `--api-key` flag > `~/.pi/agent/auth.json` > environment variables. This provider injects `apiKey` via the environment (never argv, to keep it out of process listings and debug logs), so a stored `auth.json` credential for the same provider takes precedence over `config.apiKey`. Set a dedicated `agent_dir` (or remove the stored credential) when you need `apiKey` to win.
 
 :::

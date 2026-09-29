@@ -6,6 +6,7 @@ import path from 'path';
 
 import dedent from 'dedent';
 import cliState from '../cliState';
+import { getProcessEnv } from '../envars';
 import logger from '../logger';
 import {
   buildChatSpanContext,
@@ -14,6 +15,7 @@ import {
 } from '../tracing/genaiTracer';
 import { resolveAgenticWorkingDir, validateAgenticWorkingDir } from './agentic-utils';
 import { clearRepositoryEnv, isAgentWorkspace } from './agentWorkspace';
+import { providerRegistry } from './providerRegistry';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -122,6 +124,9 @@ export type PiThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'x
  * Pi provider configuration
  */
 export interface PiProviderConfig {
+  /** Configuration directory captured by the provider loader. */
+  basePath?: string;
+
   /**
    * Model pattern or ID passed to `--model`.
    * Supports pi's `provider/id` form and optional `:<thinking>` suffix
@@ -322,9 +327,8 @@ interface PiPreparedCall {
   workingDir: string | undefined;
 }
 
-function resolveBasePath(): string {
-  // Config-relative paths use the same base as working_dir.
-  return cliState.basePath ? path.resolve(cliState.basePath) : process.cwd();
+function resolveBasePath(config: PiProviderConfig): string {
+  return path.resolve(config.basePath ?? cliState.basePath ?? process.cwd());
 }
 
 function truncateStderr(stderr: string): string {
@@ -411,6 +415,7 @@ export class PiProvider implements ApiProvider {
   env?: EnvOverrides;
 
   private providerId = 'pi';
+  private activeRuns = new Map<AbortController, Promise<ProviderResponse>>();
   /** Memoized findPiCliScript result; null = searched and not found */
   private cachedCliScript: string | null | undefined;
 
@@ -598,7 +603,7 @@ export class PiProvider implements ApiProvider {
   private buildEnv(config: PiProviderConfig): Record<string, string> {
     // Provider settings override the inherited environment.
     const env: Record<string, string> = {};
-    for (const [key, value] of Object.entries(process.env)) {
+    for (const [key, value] of Object.entries(getProcessEnv())) {
       if (value !== undefined) {
         env[key] = value;
       }
@@ -635,11 +640,11 @@ export class PiProvider implements ApiProvider {
       config.agent_dir ??
       config.env?.PI_CODING_AGENT_DIR ??
       this.envOverrides.PI_CODING_AGENT_DIR ??
-      process.env.PI_CODING_AGENT_DIR;
+      getProcessEnv().PI_CODING_AGENT_DIR;
     if (!raw) {
       return undefined;
     }
-    return path.isAbsolute(raw) ? raw : path.resolve(resolveBasePath(), raw);
+    return path.isAbsolute(raw) ? raw : path.resolve(resolveBasePath(config), raw);
   }
 
   private prepareCall(context?: CallApiContextParams): PiPreparedCall {
@@ -670,7 +675,7 @@ export class PiProvider implements ApiProvider {
 
     if (config.working_dir) {
       const workingDir =
-        resolveAgenticWorkingDir(config.working_dir, cliState.basePath) ?? process.cwd();
+        resolveAgenticWorkingDir(config.working_dir, resolveBasePath(config)) ?? process.cwd();
       validateAgenticWorkingDir(workingDir, config.working_dir);
       return { config, workingDir };
     }
@@ -712,6 +717,9 @@ export class PiProvider implements ApiProvider {
       let settled = false;
       let exitSignal: NodeJS.Signals | null = null;
       let treeCleanup: Promise<void> | undefined;
+      let killHandle: ReturnType<typeof setTimeout> | undefined;
+      let exitHandle: ReturnType<typeof setTimeout> | undefined;
+      let stopping = false;
 
       const signalGroup = (signal: NodeJS.Signals) => {
         if (process.platform === 'win32' && typeof child.pid === 'number') {
@@ -762,10 +770,14 @@ export class PiProvider implements ApiProvider {
       };
 
       const killChild = () => {
-        signalGroup('SIGTERM');
-        if (process.platform !== 'win32' || typeof child.pid !== 'number') {
-          setTimeout(() => signalGroup('SIGKILL'), KILL_GRACE_MS).unref();
+        if (stopping || settled) {
+          return;
         }
+        stopping = true;
+        if (process.platform !== 'win32' || typeof child.pid !== 'number') {
+          killHandle = setTimeout(() => signalGroup('SIGKILL'), KILL_GRACE_MS);
+        }
+        signalGroup('SIGTERM');
       };
 
       const timeoutHandle = setTimeout(() => {
@@ -786,6 +798,12 @@ export class PiProvider implements ApiProvider {
         }
         settled = true;
         clearTimeout(timeoutHandle);
+        clearTimeout(killHandle);
+        clearTimeout(exitHandle);
+        // Closed pipes do not prove that background descendants have stopped.
+        if (process.platform !== 'win32' && (stopping || typeof child.pid === 'number')) {
+          signalGroup('SIGKILL');
+        }
         options.abortSignal?.removeEventListener('abort', abortListener);
         void (treeCleanup ?? Promise.resolve()).then(fn, reject);
       };
@@ -871,21 +889,17 @@ export class PiProvider implements ApiProvider {
       // short flush grace period so the call can't hang forever.
       child.on('exit', (code, signal) => {
         exitSignal = signal;
-        setTimeout(() => {
-          // If 'close' still hasn't fired, pi exited while a descendant (e.g. a
-          // backgrounded bash child) is holding the inherited pipes open. Kill
-          // the process group before settling so we don't leak that orphan after
-          // returning. When 'close' already fired, this is a no-op (settled).
-          if (!settled) {
-            signalGroup('SIGKILL');
-          }
-          resolveRun(code);
-        }, STDIO_FLUSH_GRACE_MS).unref();
+        if (!settled) {
+          exitHandle = setTimeout(() => resolveRun(code), STDIO_FLUSH_GRACE_MS);
+        }
       });
       child.on('close', (code, signal) => {
         exitSignal = signal ?? exitSignal;
         resolveRun(code);
       });
+      if (options.abortSignal?.aborted) {
+        abortListener();
+      }
     });
   }
 
@@ -957,7 +971,7 @@ export class PiProvider implements ApiProvider {
       const output = usage.output ?? 0;
       const cacheRead = usage.cacheRead ?? 0;
       const cacheWrite = usage.cacheWrite ?? 0;
-      prompt += input;
+      prompt += input + cacheRead + cacheWrite;
       completion += output;
       total += usage.totalTokens ?? input + output + cacheRead + cacheWrite;
       cached += cacheRead;
@@ -1084,11 +1098,44 @@ export class PiProvider implements ApiProvider {
       context,
     });
 
-    return withGenAISpan(
+    const controller = new AbortController();
+    const abortSignal = callOptions?.abortSignal
+      ? AbortSignal.any([callOptions.abortSignal, controller.signal])
+      : controller.signal;
+    const run = withGenAISpan(
       spanContext,
-      () => this.executeRun({ args, workingDir, config, prompt, callOptions }),
+      () =>
+        this.executeRun({
+          args,
+          workingDir,
+          config,
+          prompt,
+          callOptions: { ...callOptions, abortSignal },
+        }),
       extractProviderResponseAttributes,
     );
+    this.activeRuns.set(controller, run);
+    providerRegistry.register(this);
+    try {
+      return await run;
+    } finally {
+      this.activeRuns.delete(controller);
+      if (this.activeRuns.size === 0) {
+        providerRegistry.unregister(this);
+      }
+    }
+  }
+
+  async cleanup(): Promise<void> {
+    const runs = [...this.activeRuns.entries()];
+    for (const [controller] of runs) {
+      controller.abort();
+    }
+    await Promise.allSettled(runs.map(([, run]) => run));
+  }
+
+  async shutdown(): Promise<void> {
+    await this.cleanup();
   }
 
   private async executeRun(opts: {

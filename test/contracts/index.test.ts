@@ -76,6 +76,14 @@ describe('contracts leaf surface', () => {
   });
 
   describe('ProviderEnvOverridesSchema', () => {
+    it('preserves the Pi agent directory override', () => {
+      const env = { PI_CODING_AGENT_DIR: './isolated-pi-settings' };
+      expect(ProviderEnvOverridesSchema.parse(env)).toEqual(env);
+      expect(ProviderEnvOverridesSchema.safeParse({ PI_CODING_AGENT_DIR: 123 }).success).toBe(
+        false,
+      );
+    });
+
     it('preserves Google Cloud project and location aliases', () => {
       const env = {
         GOOGLE_CLOUD_PROJECT: 'live-project',

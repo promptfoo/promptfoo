@@ -11,12 +11,8 @@ import {
   PiProvider,
   redactArgsForLog,
 } from '../../src/providers/pi';
+import { providerRegistry } from '../../src/providers/providerRegistry';
 import * as genaiTracer from '../../src/tracing/genaiTracer';
-
-vi.mock('../../src/cliState', () => ({
-  default: { basePath: '/test/basePath' },
-  basePath: '/test/basePath',
-}));
 
 // Keep the real genaiTracer implementation (spans no-op without an OTEL SDK),
 // but allow spying on withGenAISpan to assert the provider's tracing wiring.
@@ -133,8 +129,14 @@ function spawnedOptions(callIndex = 0): Record<string, any> {
 }
 
 describe('PiProvider', () => {
+  let previousBasePath: string | undefined;
   beforeEach(() => {
     vi.resetAllMocks();
+    previousBasePath = cliState.basePath;
+    cliState.basePath = '/test/basePath';
+  });
+  afterEach(() => {
+    cliState.basePath = previousBasePath;
   });
 
   describe('id and construction', () => {
@@ -470,6 +472,47 @@ describe('PiProvider', () => {
   });
 
   describe('environment', () => {
+    it('inherits invocation-local env-file settings before provider overrides', async () => {
+      vi.stubEnv('OPENAI_API_KEY', 'host-fixture');
+      vi.stubEnv('PI_CODING_AGENT_DIR', '/host/settings');
+      try {
+        mockPiRun(defaultEvents());
+        const provider = new PiProvider({
+          config: { basePath: '/loaded/config', env: { HTTPS_PROXY: 'provider-fixture' } },
+        });
+        await cliState.withEnvFileOverrides(
+          { OPENAI_API_KEY: 'file-fixture', PI_CODING_AGENT_DIR: './file-settings' },
+          () => provider.callApi('hello'),
+        );
+        expect(spawnedOptions().env).toMatchObject({
+          OPENAI_API_KEY: 'file-fixture',
+          PI_CODING_AGENT_DIR: path.resolve('/loaded/config/file-settings'),
+          HTTPS_PROXY: 'provider-fixture',
+        });
+        expect(process.env.OPENAI_API_KEY).toBe('host-fixture');
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it('keeps loader paths after the loading scope ends', async () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-loader-base-'));
+      try {
+        fs.mkdirSync(path.join(root, 'project'));
+        const { loadApiProvider } = await import('../../src/providers');
+        const provider = await loadApiProvider('pi', {
+          basePath: root,
+          options: { config: { working_dir: './project', agent_dir: './settings' } },
+        });
+        mockPiRun(defaultEvents());
+        await cliState.withBasePath('/different/caller', () => provider.callApi('hello'));
+        expect(spawnedOptions().cwd).toBe(path.join(root, 'project'));
+        expect(spawnedOptions().env.PI_CODING_AGENT_DIR).toBe(path.join(root, 'settings'));
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    });
+
     it('sets PI_CODING_AGENT_DIR from agent_dir', async () => {
       mockPiRun(defaultEvents());
       const provider = new PiProvider({ config: { agent_dir: '/tmp/pi-agent-dir' } });
@@ -642,7 +685,7 @@ describe('PiProvider', () => {
 
       expect(result.output).toBe('done');
       expect(result.tokenUsage).toEqual({
-        prompt: 300,
+        prompt: 315,
         completion: 30,
         total: 345,
         cached: 15,
@@ -664,7 +707,7 @@ describe('PiProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result.tokenUsage).toEqual({
-        prompt: 100,
+        prompt: 112,
         completion: 10,
         total: 122,
         cached: 5,
@@ -1045,6 +1088,67 @@ describe('PiProvider', () => {
   });
 
   describe('timeouts and aborts', () => {
+    it('awaits a running process during registry shutdown and can be reused', async () => {
+      vi.useFakeTimers();
+      const registered = vi.spyOn(providerRegistry, 'register');
+      const unregistered = vi.spyOn(providerRegistry, 'unregister');
+      try {
+        const child = new FakeChildProcess();
+        child.kill.mockImplementation((signal) => {
+          if (signal === 'SIGKILL') {
+            child.emit('close', null, signal);
+          }
+          return true;
+        });
+        mockSpawn.mockReturnValueOnce(child as never);
+        const provider = new PiProvider();
+        const pending = provider.callApi('hello');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(registered).toHaveBeenCalledWith(provider);
+        let finished = false;
+        const shutdown = providerRegistry.shutdownAll().then(() => {
+          finished = true;
+        });
+        await vi.advanceTimersByTimeAsync(4_999);
+        expect(finished).toBe(false);
+        expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+        await vi.advanceTimersByTimeAsync(1);
+        await shutdown;
+        expect((await pending).error).toBe('Pi call aborted');
+        expect(unregistered).toHaveBeenCalledWith(provider);
+        expect(vi.getTimerCount()).toBe(0);
+        mockPiRun(defaultEvents('next run'));
+        const next = provider.callApi('hello again');
+        await vi.advanceTimersByTimeAsync(0);
+        expect((await next).output).toBe('next run');
+      } finally {
+        vi.clearAllTimers();
+        vi.useRealTimers();
+        registered.mockRestore();
+        unregistered.mockRestore();
+      }
+    });
+
+    it('cleans the POSIX group on normal close without leaving delayed signals', async () => {
+      vi.useFakeTimers();
+      const platform = vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+      const killSpy = vi.spyOn(process, 'kill').mockReturnValue(true);
+      try {
+        const child = mockPiRun(defaultEvents('done'));
+        (child as { pid?: number }).pid = 4242;
+        const pending = new PiProvider().callApi('hello');
+        await vi.advanceTimersByTimeAsync(0);
+        expect((await pending).output).toBe('done');
+        expect(killSpy).toHaveBeenCalledWith(-4242, 'SIGKILL');
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        vi.clearAllTimers();
+        vi.useRealTimers();
+        killSpy.mockRestore();
+        platform.mockRestore();
+      }
+    });
+
     it('returns a timeout error, escalating SIGTERM to SIGKILL for a stuck process', async () => {
       vi.useFakeTimers();
       try {
@@ -1322,6 +1426,7 @@ describe('PiProvider', () => {
     });
 
     it('signals the child and its POSIX process group when killing', async () => {
+      vi.useFakeTimers();
       const platform = vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
       const killSpy = vi.spyOn(process, 'kill').mockReturnValue(true);
       try {
@@ -1338,14 +1443,20 @@ describe('PiProvider', () => {
         });
         const provider = new PiProvider();
 
-        const result = await provider.callApi('test prompt', undefined, {
+        const pending = provider.callApi('test prompt', undefined, {
           abortSignal: controller.signal,
         });
+        await vi.runAllTimersAsync();
+        const result = await pending;
 
         expect(result.error).toBe('Pi call aborted');
         expect(child.kill).toHaveBeenCalledWith('SIGTERM');
         expect(killSpy).toHaveBeenCalledWith(-4242, 'SIGTERM');
+        expect(killSpy).toHaveBeenCalledWith(-4242, 'SIGKILL');
+        expect(vi.getTimerCount()).toBe(0);
       } finally {
+        vi.clearAllTimers();
+        vi.useRealTimers();
         platform.mockRestore();
         killSpy.mockRestore();
       }
