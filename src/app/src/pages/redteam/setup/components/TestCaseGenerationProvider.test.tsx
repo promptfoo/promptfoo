@@ -10,9 +10,10 @@ import { ToastProvider } from '@app/contexts/ToastContext';
 import { callApi } from '@app/utils/api';
 import { Plugin, Strategy } from '@promptfoo/redteam/constants';
 import { within } from '@testing-library/dom';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
 import { TestCaseGenerationProvider, useTestCaseGeneration } from './TestCaseGenerationProvider';
 import type { PluginConfig } from '@promptfoo/redteam/types';
 
@@ -165,6 +166,7 @@ describe('TestCaseGenerationProvider', () => {
   beforeEach(() => {
     callApiMock.mockReset();
     callApiMock.mockImplementation(defaultCallApiImplementation);
+    useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
   });
 
   it('should render', () => {
@@ -290,6 +292,34 @@ describe('TestCaseGenerationProvider', () => {
 
       const requestBody = JSON.parse(generateCall![1]?.body as string);
       expect(requestBody.plugin.config.language).toBe('Japanese');
+    });
+
+    it('should send the current generation provider for preview requests', async () => {
+      const user = userEvent.setup();
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider
+            redTeamConfig={{
+              ...MOCK_CONFIG,
+              provider: 'openai:chat:gpt-4.1',
+            }}
+          >
+            <TestConsumer testPlugin="harmful:hate" testStrategy="basic" />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      await user.click(screen.getByTestId('test-case-generation-btn'));
+
+      await waitFor(() => expect(callApi).toHaveBeenCalledTimes(1));
+
+      const generateCall = callApiMock.mock.calls.find(
+        (call) => call[0] === '/redteam/generate-test',
+      );
+      expect(generateCall).toBeDefined();
+
+      const requestBody = JSON.parse(generateCall![1]?.body as string);
+      expect(requestBody.provider).toBe('openai:chat:gpt-4.1');
     });
 
     it('should preserve plugin-specific language when review language is configured', async () => {
@@ -480,6 +510,97 @@ describe('TestCaseGenerationProvider', () => {
   });
 
   describe('Test case execution', () => {
+    it.each([
+      ['plugin preview', 'basic'],
+      ['strategy preview', 'goat'],
+    ] as const)(
+      'does not execute an unsafe target during %s when its config is invalid',
+      async (_case, strategy) => {
+        const user = userEvent.setup();
+        useRedTeamTargetConfigValidation
+          .getState()
+          .setTargetConfigError('Invalid JSON configuration');
+
+        render(
+          <ToastProvider>
+            <TestCaseGenerationProvider
+              redTeamConfig={{
+                ...MOCK_CONFIG,
+                target: {
+                  id: 'openinterpreter',
+                  config: { sandbox_mode: 'danger-full-access' },
+                },
+              }}
+            >
+              <TestConsumer testPlugin="harmful:hate" testStrategy={strategy} />
+            </TestCaseGenerationProvider>
+          </ToastProvider>,
+        );
+
+        await user.click(screen.getByTestId('test-case-generation-btn'));
+
+        expect(screen.getByText('Invalid JSON configuration')).toBeInTheDocument();
+        expect(callApiMock).not.toHaveBeenCalledWith('/providers/test', expect.anything());
+        expect(callApiMock).not.toHaveBeenCalledWith('/redteam/generate-test', expect.anything());
+        expect(screen.queryByTestId('test-case-dialog')).not.toBeInTheDocument();
+      },
+    );
+
+    it('does not continue a multi-turn preview after the target configuration becomes invalid', async () => {
+      const user = userEvent.setup();
+      const Start = () => {
+        const { generateTestCase } = useTestCaseGeneration();
+        return (
+          <button
+            onClick={() =>
+              generateTestCase(
+                { id: 'harmful:hate', config: {}, isStatic: false },
+                { id: 'goat', config: { maxTurns: 1 }, isStatic: false },
+              )
+            }
+          >
+            start
+          </button>
+        );
+      };
+
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider
+            redTeamConfig={{
+              ...MOCK_CONFIG,
+              target: {
+                id: 'openinterpreter',
+                config: { sandbox_mode: 'danger-full-access' },
+              },
+            }}
+          >
+            <Start />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'start' }));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled());
+      expect(
+        callApiMock.mock.calls.filter(([path]) => path === '/redteam/generate-test'),
+      ).toHaveLength(1);
+      expect(callApiMock.mock.calls.filter(([path]) => path === '/providers/test')).toHaveLength(1);
+
+      act(() => {
+        useRedTeamTargetConfigValidation
+          .getState()
+          .setTargetConfigError('Invalid JSON configuration');
+      });
+      await user.click(screen.getByRole('button', { name: 'Continue' }));
+
+      expect(screen.getByText('Invalid JSON configuration')).toBeInTheDocument();
+      expect(
+        callApiMock.mock.calls.filter(([path]) => path === '/redteam/generate-test'),
+      ).toHaveLength(1);
+      expect(callApiMock.mock.calls.filter(([path]) => path === '/providers/test')).toHaveLength(1);
+    });
+
     it('should execute a test case against a target', async () => {
       const user = userEvent.setup();
       const testPlugin = 'harmful:hate';

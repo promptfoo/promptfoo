@@ -5,11 +5,25 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import {
   maybeLoadResponseFormatFromExternalFile,
   maybeLoadToolsFromExternalFile,
+  renderVarsInObject,
 } from '../../util/index';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
+import { normalizeResponsesInput } from '../responses/input';
+import { readResponsesStream } from '../responses/stream';
 import { getRequestTimeoutMs } from '../shared';
-import { calculateXAICost, GROK_4_MODELS, getXAICostInUsd, type XAICostConfig } from './chat';
+import {
+  calculateXAICost,
+  GROK_4_MODELS,
+  getXAICostInUsd,
+  getXAIRequestModel,
+  getXAIRequestOption,
+  hasXAICostOverrides,
+  resolveGrok47ReasoningEffort,
+  validateXAIReasoningEffort,
+  type XAICostConfig,
+  XAIRequestConfigError,
+} from './chat';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -95,118 +109,6 @@ export type XAIAgentTool =
   | XAICollectionsSearchTool
   | XAIMCPTool;
 
-type XAIResponsesStreamEvent = {
-  type?: string;
-  response?: any;
-  delta?: string;
-  output_text?: { delta?: string };
-  output?: any[];
-  usage?: any;
-  [key: string]: any;
-};
-
-/**
- * Parses a single Server-Sent Events (SSE) chunk into an xAI Responses stream event.
- *
- * The parser extracts and concatenates `data:` lines, then attempts to parse JSON.
- * It intentionally returns `undefined` for:
- * - empty payloads,
- * - the terminal `[DONE]` marker, and
- * - malformed JSON payloads.
- *
- * Malformed payloads are ignored for stream robustness and logged at debug level
- * to aid troubleshooting of intermittent streaming issues.
- */
-function parseSseEvent(chunk: string): XAIResponsesStreamEvent | undefined {
-  const data = chunk
-    .split(/\r?\n/)
-    .filter((line) => line.startsWith('data:'))
-    .map((line) => line.slice('data:'.length).trimStart())
-    .join('\n')
-    .trim();
-
-  if (!data || data === '[DONE]') {
-    return undefined;
-  }
-
-  try {
-    return JSON.parse(data) as XAIResponsesStreamEvent;
-  } catch {
-    logger.debug('[xAI Responses] Ignoring malformed SSE payload', { data });
-    return undefined;
-  }
-}
-
-async function readStreamingResponse(response: Response): Promise<any> {
-  if (!response.body) {
-    throw new Error('xAI streaming response has no body');
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let latestResponse: any;
-  let outputText = '';
-
-  const processChunk = (chunk: string) => {
-    const event = parseSseEvent(chunk);
-    if (!event) {
-      return;
-    }
-
-    if (event.response && typeof event.response === 'object') {
-      latestResponse = event.response;
-    } else if (Array.isArray(event.output)) {
-      latestResponse = event;
-    }
-
-    if (event.type === 'response.output_text.delta') {
-      if (typeof event.delta === 'string') {
-        outputText += event.delta;
-      } else if (typeof event.output_text?.delta === 'string') {
-        outputText += event.output_text.delta;
-      }
-    }
-  };
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) {
-      break;
-    }
-
-    buffer += decoder.decode(value, { stream: true });
-    const chunks = buffer.split(/\r?\n\r?\n/);
-    buffer = chunks.pop() || '';
-    for (const chunk of chunks) {
-      processChunk(chunk);
-    }
-  }
-
-  buffer += decoder.decode();
-  if (buffer.trim()) {
-    processChunk(buffer);
-  }
-
-  if (latestResponse) {
-    return latestResponse;
-  }
-
-  if (outputText) {
-    return {
-      output: [
-        {
-          type: 'message',
-          role: 'assistant',
-          content: [{ type: 'output_text', text: outputText }],
-        },
-      ],
-    };
-  }
-
-  throw new Error('xAI streaming response did not include output content');
-}
-
 function buildTextFormat(responseFormat: any) {
   if (!responseFormat) {
     return { format: { type: 'text' } };
@@ -263,7 +165,7 @@ export interface XAIResponsesConfig extends XAICostConfig {
   store?: boolean;
   /** Additional response data to include, such as encrypted reasoning content */
   include?: string[];
-  /** Reasoning configuration for Grok 4.3 or multi-agent models */
+  /** Reasoning configuration for Grok 4.7, Grok 4.6, Grok 4.5, Grok 4.3, or multi-agent models */
   reasoning?: {
     effort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
   };
@@ -281,6 +183,17 @@ export interface XAIResponsesConfig extends XAICostConfig {
   passthrough?: Record<string, any>;
 }
 
+function resolveGrok47Reasoning(reasoning: unknown, vars?: Record<string, unknown>): unknown {
+  if (typeof reasoning !== 'object' || Array.isArray(reasoning)) {
+    throw new XAIRequestConfigError('xAI Grok 4.7 reasoning must be an object');
+  }
+  if (!Object.prototype.hasOwnProperty.call(reasoning, 'effort')) {
+    return reasoning;
+  }
+  const config = reasoning as Record<string, unknown>;
+  return { ...config, effort: resolveGrok47ReasoningEffort(config.effort, vars) };
+}
+
 /**
  * xAI Responses API Provider
  *
@@ -289,9 +202,10 @@ export interface XAIResponsesConfig extends XAICostConfig {
  * and interact with MCP servers.
  *
  * Usage:
+ *   xai:responses:grok-4.7
+ *   xai:responses:grok-4.5
  *   xai:responses:grok-4.3
- *   xai:responses:grok-4-fast
- *   xai:responses:grok-4
+ *   xai:responses:grok-4.20-0309-reasoning
  */
 export class XAIResponsesProvider implements ApiProvider {
   modelName: string;
@@ -313,18 +227,23 @@ export class XAIResponsesProvider implements ApiProvider {
       modelName: this.modelName,
       providerType: 'xai',
       functionCallbackHandler: this.functionCallbackHandler,
-      costCalculator: (modelName: string, usage: any, config?: any) =>
-        getXAICostInUsd(usage) ??
-        calculateXAICost(
-          modelName,
-          config || {},
-          usage?.input_tokens ?? usage?.prompt_tokens,
-          usage?.output_tokens ?? usage?.completion_tokens,
-          usage?.output_tokens_details?.reasoning_tokens ??
-            usage?.completion_tokens_details?.reasoning_tokens,
-          usage?.input_tokens_details?.cached_tokens ?? usage?.prompt_tokens_details?.cached_tokens,
-        ) ??
-        0,
+      costCalculator: (modelName, usage, config) => {
+        const reportedCost = hasXAICostOverrides(config) ? undefined : getXAICostInUsd(usage);
+        return (
+          reportedCost ??
+          calculateXAICost(
+            getXAIRequestModel(modelName, config),
+            config || {},
+            usage?.input_tokens ?? usage?.prompt_tokens,
+            usage?.output_tokens ?? usage?.completion_tokens,
+            usage?.output_tokens_details?.reasoning_tokens ??
+              usage?.completion_tokens_details?.reasoning_tokens,
+            usage?.input_tokens_details?.cached_tokens ??
+              usage?.prompt_tokens_details?.cached_tokens,
+            { apiUrl: this.getApiUrl() },
+          )
+        );
+      },
     });
   }
 
@@ -377,13 +296,17 @@ export class XAIResponsesProvider implements ApiProvider {
       ...this.config,
       ...context?.prompt?.config,
     };
+    const model = getXAIRequestModel(this.modelName, config);
+    const usesGrok47 = model === 'grok-4.7';
 
-    // Parse input - can be string or array of messages
+    // Parse input - can be string or array of messages. Chat-format content parts are
+    // translated to their Responses equivalents so multimodal prompts authored for the chat
+    // API work here too (the Responses API rejects `type: "text"` / `"image_url"` outright).
     let input;
     try {
       const parsedJson = JSON.parse(prompt);
       if (Array.isArray(parsedJson)) {
-        input = parsedJson;
+        input = normalizeResponsesInput(parsedJson);
       } else {
         input = prompt;
       }
@@ -434,12 +357,30 @@ export class XAIResponsesProvider implements ApiProvider {
       ...(config.passthrough || {}),
     };
 
-    // Filter unsupported parameters for Grok-4 models
-    if (GROK_4_MODELS.includes(this.modelName)) {
+    if (usesGrok47) {
+      const reasoning = getXAIRequestOption(
+        'reasoning',
+        context?.test?.options,
+        context?.prompt?.config,
+        this.config,
+      );
+      if (reasoning == null) {
+        delete body.reasoning;
+      } else {
+        body.reasoning = resolveGrok47Reasoning(reasoning, context?.vars);
+      }
+    } else if (body.reasoning !== undefined) {
+      body.reasoning = renderVarsInObject(body.reasoning, context?.vars);
+    }
+
+    // Filter unsupported parameters for Grok 4-family models
+    if (GROK_4_MODELS.includes(model)) {
       delete body.presence_penalty;
       delete body.frequency_penalty;
       delete body.stop;
     }
+
+    validateXAIReasoningEffort(model, body.reasoning?.effort, 'reasoning.effort');
 
     return {
       body,
@@ -464,7 +405,18 @@ export class XAIResponsesProvider implements ApiProvider {
       };
     }
 
-    const { body, config } = await this.getRequestBody(prompt, context, callApiOptions);
+    const request = await this.getRequestBody(prompt, context, callApiOptions).catch(
+      (error: unknown) => {
+        if (error instanceof XAIRequestConfigError) {
+          return { error: `xAI request error: ${error.message}` };
+        }
+        throw error;
+      },
+    );
+    if ('error' in request) {
+      return request;
+    }
+    const { body, config } = request;
 
     logger.debug(`[xAI Responses] Calling ${this.getApiUrl()}/responses`, {
       model: this.modelName,
@@ -506,7 +458,7 @@ export class XAIResponsesProvider implements ApiProvider {
               data = text;
             }
           } else {
-            data = await readStreamingResponse(response);
+            data = await readResponsesStream(response, 'xAI', logger);
           }
         } catch (err) {
           if (err instanceof Error && err.name === 'AbortError') {
@@ -541,20 +493,7 @@ export class XAIResponsesProvider implements ApiProvider {
       }
 
       if (status < 200 || status >= 300) {
-        const errorMessage = `xAI API error: ${status} ${statusText}\n${
-          typeof data === 'string' ? data : JSON.stringify(data)
-        }`;
-
-        // Check for specific error types
-        if (data?.error?.code === 'invalid_prompt') {
-          return {
-            output: errorMessage,
-            tokenUsage: this.getTokenUsage(data, cached),
-            isRefusal: true,
-          };
-        }
-
-        return { error: errorMessage };
+        return this.handleUnsuccessfulResponse(data, status, statusText, cached);
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -578,9 +517,32 @@ export class XAIResponsesProvider implements ApiProvider {
     }
 
     // Use shared processor for consistent response handling
-    return this.processor.processResponseOutput(data, config, cached, {
+    const result = await this.processor.processResponseOutput(data, config, cached, {
       suppressReasoningOutput: Boolean(body.stream),
     });
+    if (cached) {
+      result.cost = 0;
+    }
+    return result;
+  }
+
+  private handleUnsuccessfulResponse(
+    data: any,
+    status: number,
+    statusText: string,
+    cached: boolean,
+  ): ProviderResponse {
+    const errorMessage = `xAI API error: ${status} ${statusText}\n${
+      typeof data === 'string' ? data : JSON.stringify(data)
+    }`;
+    if (data?.error?.code === 'invalid_prompt') {
+      return {
+        output: errorMessage,
+        tokenUsage: this.getTokenUsage(data, cached),
+        isRefusal: true,
+      };
+    }
+    return { error: errorMessage };
   }
 
   private getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {

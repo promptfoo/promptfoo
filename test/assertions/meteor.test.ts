@@ -7,6 +7,7 @@ vi.mock('natural', () => {
   };
 
   return {
+    default: undefined,
     PorterStemmer: {
       stem: (token: string) => stems[token] ?? token,
     },
@@ -20,9 +21,7 @@ vi.mock('natural', () => {
 
 import { handleMeteorAssertion } from '../../src/assertions/meteor';
 
-// Exercise the real handler while mocking only its external NLP boundary. The focused
-// natural-package integration test lives in meteor.integration.test.ts so the full behavior
-// matrix does not repeatedly load WordNet's dictionary on every supported platform.
+// Mock NLP here; integration and CLI tests cover the real dependency.
 function meteor(opts: {
   output: string;
   value: string | string[];
