@@ -4411,7 +4411,7 @@ describe('VertexChatProvider.callClaudeApi', () => {
             },
             required: ['message'],
           };
-          const schemaFile = 'file://test/adversarial-schema.json';
+          const schemaFile = 'file://test/response-schema.json';
           const responseSchema =
             source === 'object'
               ? schema
@@ -4429,13 +4429,12 @@ describe('VertexChatProvider.callClaudeApi', () => {
             client: { request } as unknown as JSONClient,
             projectId: 'test-project-id',
           });
-          // YAML/JSON configs can supply inline objects despite the narrower TypeScript field.
           provider = new VertexChatProvider('gemini-2.5-flash', {
-            config: { responseSchema: responseSchema as string },
+            config: { responseSchema },
           });
 
           await provider.callGeminiApi('test', {
-            vars: { description, schemaName: 'adversarial-schema', schemaFile },
+            vars: { description, schemaName: 'response-schema', schemaFile },
             prompt: { raw: 'test', label: 'test' },
           });
 
@@ -4454,7 +4453,7 @@ describe('VertexChatProvider.callClaudeApi', () => {
           );
           if (source === 'file path' || source === 'rendered file path') {
             expect(fs.readFileSync).toHaveBeenCalledWith(
-              expect.stringContaining('adversarial-schema.json'),
+              expect.stringContaining('response-schema.json'),
               'utf8',
             );
           }
