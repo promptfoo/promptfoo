@@ -1425,20 +1425,7 @@ assert:
 
 ### METEOR
 
-METEOR (Metric for Evaluation of Translation with Explicit ORdering) is the most sophisticated text similarity metric, going beyond simple word matching to understand meaning.
-
-**What makes METEOR special:**
-
-- **Understands synonyms**: Recognizes that "good" and "nice" mean similar things
-- **Handles word forms**: Knows that "running" and "ran" are the same verb
-- **Considers word order**: Unlike other metrics, it penalizes scrambled sentences
-- **Balanced scoring**: Combines precision, recall, AND word order into a single score
-
-**When to use METEOR:**
-
-- **High-quality translation**: When semantic accuracy matters more than exact wording
-- **Natural language understanding**: Evaluating if the model truly "gets" the meaning
-- **Flexible matching**: When there are many valid ways to express the same idea
+METEOR (Metric for Evaluation of Translation with Explicit ORdering) compares generated text with one or more references. It combines exact word matches, Porter stems, and WordNet synonyms, then applies a word-order penalty. Use it when expected outputs allow variation in wording.
 
 For additional context, read about the metric on [Wikipedia](https://en.wikipedia.org/wiki/METEOR).
 
@@ -1459,7 +1446,7 @@ METEOR evaluates text by:
 1. Matching unigrams (words) between the generated text and reference(s) using:
    - Exact matches (surface forms)
    - Word stems (e.g., "running" → "run")
-   - Semantic meanings
+   - WordNet synonyms (e.g., "couch" and "sofa")
 2. Computing a final score (0.0 to 1.0) based on:
    - Unigram precision (accuracy of matched words)
    - Unigram recall (coverage of reference words)
@@ -1473,7 +1460,7 @@ assert:
     value: hello world # Reference text to compare against
 ```
 
-By default, METEOR uses a threshold of 0.5. Scores range from 0.0 (no match) to 1.0 (perfect match).
+By default, `meteor` passes when its similarity score is at least 0.5. `not-meteor` passes when the score is below the threshold and reports `1 - similarity` as its score. A failing `not-meteor` reason states that the similarity met the threshold.
 
 #### Custom Threshold
 
