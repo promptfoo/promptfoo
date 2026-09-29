@@ -5,7 +5,6 @@ import { sha256 } from '../util/createHash';
 import { extractBlobHashesFromValue } from './blobRefs';
 import { BLOB_MAX_SIZE, BLOB_MIN_SIZE, BLOB_SCHEME } from './constants';
 import { type BlobRef, recordBlobReference, storeBlob } from './index';
-import { shouldAttemptRemoteBlobUpload, uploadBlobRemote } from './remoteUpload';
 
 import type { ProviderResponse } from '../types/providers';
 
@@ -130,30 +129,12 @@ async function maybeStore(
 
   const mimeType = parsed.mimeType || 'application/octet-stream';
 
-  // Always store blobs locally first for local viewing
+  // Blob extraction is local-only. Remote synchronization happens when an eval is shared.
   const { ref } = await storeBlob(parsed.buffer, mimeType, {
     ...context,
     location,
     kind,
   });
-
-  // Also upload to cloud when authenticated (best-effort, non-blocking)
-  // This enables blobs to be viewable after sharing to cloud
-  if (shouldAttemptRemoteBlobUpload()) {
-    uploadBlobRemote(parsed.buffer, mimeType, {
-      evalId: context.evalId,
-      testIdx: context.testIdx,
-      promptIdx: context.promptIdx,
-      location,
-      kind,
-    }).catch((error) => {
-      // Log but don't fail - local storage already succeeded
-      logger.debug('[BlobExtractor] Cloud upload failed (non-fatal)', {
-        error: error instanceof Error ? error.message : String(error),
-        hash: ref.hash,
-      });
-    });
-  }
 
   return ref;
 }
@@ -163,7 +144,7 @@ async function maybeStore(
  * payloads regardless of how the input is encoded (raw base64 vs. `data:` URL) or
  * which field it appeared under, so a single response that mirrors the same
  * audio/image across `output`, `images[]`, `metadata`, and `turns[]` triggers one
- * `storeBlob` write and one cloud upload.
+ * `storeBlob` write.
  */
 type StoreOnce = (
   base64OrDataUrl: string,
@@ -376,7 +357,7 @@ async function externalizeMetadataAudio(
   // Routing through `storeOnce` (instead of calling `maybeStore` directly) means
   // a metadata-mirrored audio payload reuses the blob written for any other
   // path (`response.audio.data`, `turns[N].audio.data`, etc.) when the bytes
-  // match — one store, one cloud upload.
+  // match — one store.
   const stored = await storeOnce(
     audioRecord.data,
     normalizeAudioMimeType(typeof audioRecord.format === 'string' ? audioRecord.format : undefined),

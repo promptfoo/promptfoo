@@ -158,10 +158,6 @@ export const MCP_PLUGINS = ['mcp', 'pii', 'bfla', 'bola', 'sql-injection', 'rbac
 export const AGENTIC_PLUGINS = ['agentic:memory-poisoning'] as const;
 export type AgenticPlugin = (typeof AGENTIC_PLUGINS)[number];
 
-// Plugins that require HuggingFace API keys for their datasets
-export const HUGGINGFACE_GATED_PLUGINS = ['beavertails', 'unsafebench', 'aegis'] as const;
-export type HuggingFaceGatedPlugin = (typeof HUGGINGFACE_GATED_PLUGINS)[number];
-
 export const COLLECTIONS = [
   'default',
   'foundation',
@@ -318,13 +314,6 @@ export const TEEN_SAFETY_PLUGINS = [
 
 export type PIIPlugin = (typeof PII_PLUGINS)[number];
 export type BiasPlugin = (typeof BIAS_PLUGINS)[number];
-export type MedicalPlugin = (typeof MEDICAL_PLUGINS)[number];
-export type PharmacyPlugin = (typeof PHARMACY_PLUGINS)[number];
-export type InsurancePlugin = (typeof INSURANCE_PLUGINS)[number];
-export type EcommercePlugin = (typeof ECOMMERCE_PLUGINS)[number];
-export type TelecomPlugin = (typeof TELECOM_PLUGINS)[number];
-export type RealEstatePlugin = (typeof REALESTATE_PLUGINS)[number];
-export type TeenSafetyPlugin = (typeof TEEN_SAFETY_PLUGINS)[number];
 
 export const BASE_PLUGINS = [
   'contracts',
@@ -358,65 +347,17 @@ export const ADDITIONAL_PLUGINS = [
   'indirect-prompt-injection',
   'mcp',
   'model-identification',
-  'medical:anchoring-bias',
-  'medical:fda:ai-disclosure',
-  'medical:fda:cyber-access-control',
-  'medical:fda:cyber-audit-tampering',
-  'medical:hallucination',
-  'medical:incorrect-knowledge',
-  'medical:off-label-use',
-  'medical:prioritization-error',
-  'medical:sycophancy',
-  'financial:calculation-error',
-  'financial:compliance-violation',
-  'financial:confidential-disclosure',
-  'financial:counterfactual',
-  'financial:data-leakage',
-  'financial:defamation',
-  'financial:hallucination',
-  'financial:impartiality',
-  'financial:japan-fiea-suitability',
-  'financial:misconduct',
-  'financial:sox-compliance',
-  'financial:sycophancy',
-  'ecommerce:compliance-bypass',
-  'ecommerce:order-fraud',
-  'ecommerce:pci-dss',
-  'ecommerce:price-manipulation',
+  ...MEDICAL_PLUGINS,
+  ...FINANCIAL_PLUGINS,
+  ...ECOMMERCE_PLUGINS,
   'goal-misalignment',
-  'insurance:coverage-discrimination',
-  'insurance:data-disclosure',
-  'insurance:network-misinformation',
-  'insurance:phi-disclosure',
+  ...INSURANCE_PLUGINS,
   'off-topic',
   'overreliance',
-  'pharmacy:controlled-substance-compliance',
-  'pharmacy:dosage-calculation',
-  'pharmacy:drug-interaction',
-  'telecom:cpni-disclosure',
-  'telecom:location-disclosure',
-  'telecom:account-takeover',
-  'telecom:e911-misinformation',
-  'telecom:tcpa-violation',
-  'telecom:unauthorized-changes',
-  'telecom:fraud-enablement',
-  'telecom:porting-misinformation',
-  'telecom:billing-misinformation',
-  'telecom:coverage-misinformation',
-  'telecom:law-enforcement-request-handling',
-  'telecom:accessibility-violation',
-  'teen-safety:harmful-body-ideals',
-  'teen-safety:dangerous-content',
-  'teen-safety:dangerous-roleplay',
-  'teen-safety:age-restricted-goods-and-services',
-  'realestate:fair-housing-discrimination',
-  'realestate:steering',
-  'realestate:discriminatory-listings',
-  'realestate:lending-discrimination',
-  'realestate:valuation-bias',
-  'realestate:accessibility-discrimination',
-  'realestate:advertising-discrimination',
-  'realestate:source-of-income',
+  ...PHARMACY_PLUGINS,
+  ...TELECOM_PLUGINS,
+  ...TEEN_SAFETY_PLUGINS,
+  ...REALESTATE_PLUGINS,
   'pliny',
   'prompt-extraction',
   'rag-document-exfiltration',
@@ -451,7 +392,7 @@ export const AGENTIC_EXEMPT_PLUGINS = [
 ] as const;
 
 // Encoding strategies that mangle prompt text and break deterministic canary/receipt matching.
-// Coding-agent plugins exclude these but allow multi-turn strategies (meta, hydra, goat, crescendo).
+// Coding-agent plugins exclude these but allow multi-turn strategies (meta, hydra, goblin, goat, crescendo).
 export const CANARY_BREAKING_STRATEGY_IDS = [
   'base64',
   'hex',
@@ -479,21 +420,13 @@ export const DATASET_EXEMPT_PLUGINS = [
 ] as const;
 
 // Plugins excluded from multi-input mode (in addition to dataset plugins)
-export const MULTI_INPUT_EXCLUDED_PLUGINS = [
-  'cca',
-  'cross-session-leak',
-  'special-token-injection',
-  'system-prompt-override',
-  'ascii-smuggling',
-] as const;
-export type MultiInputExcludedPlugin = (typeof MULTI_INPUT_EXCLUDED_PLUGINS)[number];
+export const MULTI_INPUT_EXCLUDED_PLUGINS = ['cca', 'cross-session-leak'] as const;
 
 // Plugins that don't use strategies (standalone plugins) - combination of agentic and dataset
 export const STRATEGY_EXEMPT_PLUGINS = [
   ...AGENTIC_EXEMPT_PLUGINS,
   ...DATASET_EXEMPT_PLUGINS,
 ] as const;
-export type StrategyExemptPlugin = (typeof STRATEGY_EXEMPT_PLUGINS)[number];
 
 export type Plugin =
   | AdditionalPlugin

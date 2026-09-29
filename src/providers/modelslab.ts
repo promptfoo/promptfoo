@@ -175,7 +175,7 @@ export class ModelsLabImageProvider implements ApiProvider {
           return { error: 'ModelsLab returned no image URLs' };
         }
         const imageUrl = data.output[0];
-        const { url: resolvedUrl, blobRef } = await this.maybeDownloadToBlob(imageUrl);
+        const { url: resolvedUrl, blobRef } = await this.maybeDownloadToBlob(imageUrl, context);
         const sanitizedPrompt = prompt
           .replace(/\r?\n|\r/g, ' ')
           .replace(/\[/g, '(')
@@ -197,7 +197,10 @@ export class ModelsLabImageProvider implements ApiProvider {
     }
   }
 
-  private async maybeDownloadToBlob(imageUrl: string): Promise<{ url: string; blobRef?: BlobRef }> {
+  private async maybeDownloadToBlob(
+    imageUrl: string,
+    context?: CallApiContextParams,
+  ): Promise<{ url: string; blobRef?: BlobRef }> {
     if (!isBlobStorageEnabled()) {
       return { url: imageUrl };
     }
@@ -215,8 +218,11 @@ export class ModelsLabImageProvider implements ApiProvider {
       const buffer = Buffer.from(await response.arrayBuffer());
       const mimeType = response.headers.get('content-type')?.split(';')[0] || 'image/png';
       const { ref } = await storeBlob(buffer, mimeType, {
+        evalId: context?.evaluationId,
         location: 'response.output',
         kind: 'image',
+        promptIdx: context?.promptIdx,
+        testIdx: context?.testIdx,
       });
       return { url: ref.uri, blobRef: ref };
     } catch (error) {
