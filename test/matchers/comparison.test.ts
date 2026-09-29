@@ -28,14 +28,6 @@ describe('matchesSelectBest', () => {
       reason: 'Output selected as the best: choose the best output',
     });
     expect(result.filter((item) => item.pass)).toHaveLength(1);
-    expect(result[10].tokensUsed).toMatchObject({
-      total: 7,
-      prompt: 3,
-      completion: 4,
-    });
-    expect(result.filter((_item, index) => index !== 10).map((item) => item.tokensUsed)).toEqual(
-      Array.from({ length: 11 }, () => ({ numRequests: 0 })),
-    );
   });
 
   it('should return independent failure results for invalid verdicts', async () => {
@@ -69,12 +61,12 @@ describe('matchesSelectBest', () => {
 
     const result = await matchesSelectBest('choose the best output', ['A', 'B'], { provider });
 
-    expect(result[0]).toMatchObject({
-      metadata: { cachedResponse: true },
-      tokensUsed: { total: 30, prompt: 18, completion: 12, cached: 30, numRequests: 1 },
-    });
-    expect(result[1]).toMatchObject({ metadata: { cachedResponse: true } });
-    expect(result[1].tokensUsed).toEqual({ numRequests: 0 });
+    for (const gradingResult of result) {
+      expect(gradingResult).toMatchObject({
+        metadata: { cachedResponse: true },
+        tokensUsed: { total: 30, prompt: 18, completion: 12, cached: 30, numRequests: 1 },
+      });
+    }
   });
 
   it('preserves cache provenance when a cached comparison response is malformed', async () => {
@@ -89,16 +81,13 @@ describe('matchesSelectBest', () => {
 
     const result = await matchesSelectBest('choose the best output', ['A', 'B'], { provider });
 
-    expect(result[0]).toMatchObject({
-      pass: false,
-      metadata: { cachedResponse: true },
-      tokensUsed: { total: 30, cached: 30 },
-    });
-    expect(result[1]).toMatchObject({
-      pass: false,
-      metadata: { cachedResponse: true },
-      tokensUsed: { numRequests: 0 },
-    });
+    for (const gradingResult of result) {
+      expect(gradingResult).toMatchObject({
+        pass: false,
+        metadata: { cachedResponse: true },
+        tokensUsed: { total: 30, cached: 30 },
+      });
+    }
   });
 
   it.each([
@@ -130,11 +119,7 @@ describe('matchesSelectBest', () => {
 
     const result = await matchesSelectBest('choose the best output', ['A', 'B'], { provider });
 
-    for (const [index, gradingResult] of result.entries()) {
-      if (index !== 0) {
-        expect(gradingResult.tokensUsed).toEqual({ numRequests: 0 });
-        continue;
-      }
+    for (const gradingResult of result) {
       expect(gradingResult.tokensUsed).toMatchObject({
         total: 100,
         prompt: 70,

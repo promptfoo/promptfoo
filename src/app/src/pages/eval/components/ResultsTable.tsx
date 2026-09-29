@@ -20,7 +20,6 @@ import { formatDuration } from '@app/utils/date';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
 import {
-  getCombinedTokenUsageTotal,
   getIncurredTokenAccounting,
   getPrimaryTokenUsageLabel,
   getTokenUsageTotal,
@@ -33,7 +32,6 @@ import {
   type EvaluateTableRow,
   type GradingResult,
   type ProviderOptions,
-  type TokenUsage,
   type Vars,
 } from '@promptfoo/types';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
@@ -45,7 +43,7 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import { ArrowLeft, ArrowRight, ExternalLink, X } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router';
 import CustomMetrics from './CustomMetrics';
 import CustomMetricsDialog from './CustomMetricsDialog';
 import EvalOutputCell from './EvalOutputCell';
@@ -63,7 +61,7 @@ import type {
   ColumnSizingState,
   Row,
   VisibilityState,
-} from '@tanstack/table-core';
+} from '@tanstack/react-table';
 
 import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
@@ -705,31 +703,6 @@ function renderCostMetric({
   );
 }
 
-const GENERATION_METRICS: Array<{
-  label: string;
-  read: (usage: TokenUsage['generation']) => number | undefined;
-}> = [
-  { label: 'Tokens', read: getTokenUsageTotal },
-  { label: 'Requests', read: (usage) => usage?.numRequests },
-  { label: 'Input Tokens', read: (usage) => usage?.prompt },
-  { label: 'Output Tokens', read: (usage) => usage?.completion },
-  { label: 'Cached Tokens', read: (usage) => usage?.cached },
-  { label: 'Reasoning Tokens', read: (usage) => usage?.completionDetails?.reasoning },
-  {
-    label: 'Accepted Prediction Tokens',
-    read: (usage) => usage?.completionDetails?.acceptedPrediction,
-  },
-  {
-    label: 'Rejected Prediction Tokens',
-    read: (usage) => usage?.completionDetails?.rejectedPrediction,
-  },
-  { label: 'Cache Read Tokens', read: (usage) => usage?.completionDetails?.cacheReadInputTokens },
-  {
-    label: 'Cache Creation Tokens',
-    read: (usage) => usage?.completionDetails?.cacheCreationInputTokens,
-  },
-];
-
 function renderTokenMetrics({
   metrics,
   filteredMetrics,
@@ -746,29 +719,11 @@ function renderTokenMetrics({
   const gradingTokens = getTokenUsageTotal(metrics?.tokenUsage?.assertions);
   const incurredAccounting = getIncurredTokenAccounting(metrics?.tokenUsage);
 
-  const generationRows = [
-    {
-      prefix: 'Generation',
-      usage: metrics?.tokenUsage?.generation,
-      filteredUsage: filteredMetrics?.tokenUsage?.generation,
-    },
-    {
-      prefix: 'Incurred Generation',
-      usage: metrics?.tokenUsage?.incurredTokenUsage?.generation,
-      filteredUsage: filteredMetrics?.tokenUsage?.incurredTokenUsage?.generation,
-    },
-  ].flatMap(({ prefix, usage, filteredUsage }) =>
-    GENERATION_METRICS.map(({ label, read }) => ({
-      label: `${prefix} ${label}`,
-      value: read(usage) ?? 0,
-      filteredValue: filteredMetrics?.tokenUsage ? (read(filteredUsage) ?? 0) : undefined,
-    })).filter(({ value }) => value !== 0),
-  );
-  const totalTokens = getCombinedTokenUsageTotal(metrics?.tokenUsage);
-  if (totalTokens === 0 && generationRows.length === 0) {
+  if (primaryTokens === 0 && attackerTokens === 0 && gradingTokens === 0) {
     return null;
   }
 
+  const totalTokens = primaryTokens + attackerTokens + gradingTokens;
   const filteredPrimaryTokens = filteredMetrics?.tokenUsage
     ? getTokenUsageTotal(filteredMetrics.tokenUsage)
     : undefined;
@@ -781,7 +736,7 @@ function renderTokenMetrics({
   const filteredTokens =
     filteredPrimaryTokens === undefined
       ? undefined
-      : getCombinedTokenUsageTotal(filteredMetrics?.tokenUsage);
+      : filteredPrimaryTokens + (filteredAttackerTokens ?? 0) + (filteredGradingTokens ?? 0);
   const totalAverage = testCount?.total ? totalTokens / testCount.total : 0;
   const filteredAverage =
     filteredTokens !== undefined && testCount?.filtered
@@ -819,14 +774,6 @@ function renderTokenMetrics({
             : renderFilteredSuffix(formatMetricValue(filteredGradingTokens))}
         </div>
       ) : null}
-      {generationRows.map(({ label, value, filteredValue }) => (
-        <div key={label}>
-          <strong>{label}:</strong> {formatMetricValue(value)}
-          {filteredValue === undefined
-            ? null
-            : renderFilteredSuffix(formatMetricValue(filteredValue))}
-        </div>
-      ))}
       {incurredAccounting ? (
         <>
           <div>
@@ -1190,7 +1137,6 @@ function PromptColumnHeader({
   numGoodAsserts,
   testCounts,
   passingTestCounts,
-  metricTotals,
   config,
   filterMode,
   headPromptCount,
@@ -1210,7 +1156,6 @@ function PromptColumnHeader({
   numGoodAsserts: number[];
   testCounts: PromptSummaryMetric[];
   passingTestCounts: PromptSummaryMetric[];
-  metricTotals: Record<string, number>;
   config: ReturnType<typeof useTableStore.getState>['config'];
   filterMode: EvalResultsFilterMode;
   headPromptCount: number;
@@ -1272,8 +1217,7 @@ function PromptColumnHeader({
           <div className="collapse-hidden">
             <CustomMetrics
               lookup={metrics.namedScores}
-              counts={getNamedMetricTotals(metrics)}
-              metricTotals={metricTotals}
+              metricTotals={getNamedMetricTotals(metrics)}
               onShowMore={() => setCustomMetricsDialogOpen(true)}
             />
           </div>
@@ -2212,34 +2156,6 @@ function ResultsTable({
     [tableBody],
   );
 
-  const metricTotals = React.useMemo(() => {
-    // Use the backend's already-correct metric totals instead of recalculating
-    const firstProvider = table?.head?.prompts?.[0];
-    const backendTotals = getNamedMetricTotals(firstProvider?.metrics);
-
-    if (backendTotals) {
-      return backendTotals;
-    }
-
-    const totals: Record<string, number> = {};
-    table?.body.forEach((row) => {
-      row.test.assert?.forEach((assertion) => {
-        if (assertion.metric) {
-          totals[assertion.metric] = (totals[assertion.metric] || 0) + (assertion.weight ?? 1);
-        }
-        if ('assert' in assertion && Array.isArray(assertion.assert)) {
-          assertion.assert.forEach((subAssertion) => {
-            if ('metric' in subAssertion && subAssertion.metric) {
-              totals[subAssertion.metric] =
-                (totals[subAssertion.metric] || 0) + (subAssertion.weight ?? 1);
-            }
-          });
-        }
-      });
-    });
-    return totals;
-  }, [table?.head?.prompts, table?.body]);
-
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const promptColumns = React.useMemo(() => {
     return [
@@ -2262,7 +2178,6 @@ function ResultsTable({
                 numGoodAsserts={numGoodAsserts}
                 testCounts={testCounts}
                 passingTestCounts={passingTestCounts}
-                metricTotals={metricTotals}
                 config={config}
                 filterMode={filterMode}
                 headPromptCount={head.prompts.length}
@@ -2331,7 +2246,6 @@ function ResultsTable({
     head.prompts,
     isRedteam,
     maxTextLength,
-    metricTotals,
     numAsserts,
     numGoodAsserts,
     onFailureFilterToggle,

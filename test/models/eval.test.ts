@@ -1226,6 +1226,40 @@ describe('evaluator', () => {
   });
 
   describe('getStats', () => {
+    it('retains billed-only canonical generation when rebuilding persisted summaries', async () => {
+      const config = {
+        metadata: {
+          generationAccounting: {
+            id: 'fixture-ledger',
+            tokenUsage: {
+              total: 0,
+              numRequests: 0,
+              incurredTokenUsage: { total: 12, prompt: 9, completion: 3, numRequests: 1 },
+            },
+          },
+        },
+      };
+      const record = await Eval.create(config, []);
+      const restored = await Eval.findById(record.id);
+      expect(restored).not.toBeNull();
+      const first = restored!.getStats();
+      const second = restored!.getStats();
+      expect(first.tokenUsage).toMatchObject({
+        total: 0,
+        numRequests: 0,
+        generation: { total: 0, numRequests: 0 },
+        incurredTokenUsage: {
+          total: 0,
+          numRequests: 0,
+          generation: { total: 12, prompt: 9, completion: 3, numRequests: 1 },
+        },
+      });
+      expect(second).toEqual(first);
+      expect(restored!.config.metadata?.generationAccounting).toEqual(
+        config.metadata.generationAccounting,
+      );
+    });
+
     it('attributes generation metadata once without increasing target tokens or probes', () => {
       const eval1 = new Eval({
         metadata: {
@@ -1236,15 +1270,7 @@ describe('evaluator', () => {
         },
       });
       eval1.prompts = [
-        {
-          metrics: {
-            tokenUsage: {
-              total: 10,
-              numRequests: 1,
-              generation: { total: 40, prompt: 25, completion: 15, numRequests: 4 },
-            },
-          },
-        },
+        { metrics: { tokenUsage: { total: 10, numRequests: 1 } } },
         { metrics: { tokenUsage: { total: 20, numRequests: 1 } } },
       ] as any;
 
@@ -1254,80 +1280,6 @@ describe('evaluator', () => {
         total: 30,
         numRequests: 2,
         generation: { total: 40, prompt: 25, completion: 15, numRequests: 4 },
-      });
-    });
-
-    it('uses canonical generation metadata after an empty prompt bucket', () => {
-      const eval1 = new Eval({
-        metadata: {
-          generationAccounting: { tokenUsage: { total: 7, prompt: 4, completion: 3 } },
-        },
-      });
-      eval1.prompts = [
-        { metrics: { tokenUsage: { total: 10, generation: { total: 0, numRequests: 0 } } } },
-      ] as any;
-
-      expect(eval1.getStats().tokenUsage.generation).toMatchObject({
-        total: 7,
-        prompt: 4,
-        completion: 3,
-      });
-    });
-
-    it('does not duplicate canonical generation after cached-only prompt usage', () => {
-      const eval1 = new Eval({
-        metadata: { generationAccounting: { tokenUsage: { cached: 7 } } },
-      });
-      eval1.prompts = [
-        { metrics: { tokenUsage: { generation: { cached: 7, total: 0, numRequests: 0 } } } },
-      ] as any;
-
-      expect(eval1.getStats().tokenUsage.generation).toMatchObject({ cached: 7 });
-    });
-
-    it('fills a missing incurred generation bucket from canonical metadata', () => {
-      const eval1 = new Eval({
-        metadata: {
-          generationAccounting: {
-            tokenUsage: { total: 7, incurredTokenUsage: { total: 12, numRequests: 1 } },
-          },
-        },
-      });
-      eval1.prompts = [
-        { metrics: { tokenUsage: { generation: { total: 7, numRequests: 1 } } } },
-      ] as any;
-
-      expect(eval1.getStats().tokenUsage).toMatchObject({
-        generation: { total: 7, numRequests: 1 },
-        incurredTokenUsage: { generation: { total: 12, numRequests: 1 } },
-      });
-    });
-
-    it('does not replay canonical usage when only incurred generation was recorded', () => {
-      const eval1 = new Eval({
-        metadata: {
-          generationAccounting: {
-            tokenUsage: {
-              total: 0,
-              numRequests: 0,
-              incurredTokenUsage: { total: 12, numRequests: 1 },
-            },
-          },
-        },
-      });
-      eval1.prompts = [
-        {
-          metrics: {
-            tokenUsage: {
-              generation: { total: 0, numRequests: 0 },
-              incurredTokenUsage: { generation: { total: 12, numRequests: 1 } },
-            },
-          },
-        },
-      ] as any;
-      expect(eval1.getStats().tokenUsage.incurredTokenUsage?.generation).toMatchObject({
-        total: 12,
-        numRequests: 1,
       });
     });
 
@@ -1601,6 +1553,19 @@ describe('evaluator', () => {
   });
 
   describe('toResultsFile', () => {
+    it('redacts gateway URL credentials from result files while preserving the live config', async () => {
+      const gateway = 'https://gateway.example/v1?googleAccessToken=short-private-value';
+      const evaluation = new Eval({
+        providers: [{ id: 'openai:chat:test', config: { apiBaseUrl: gateway } }],
+        metadata: { documentationUrl: 'HTTPS://Docs.Example?version=2' },
+      });
+      const result = await evaluation.toResultsFile();
+      expect(JSON.stringify(result.config)).not.toContain('short-private-value');
+      expect(JSON.stringify(result.config)).toContain('%5BREDACTED%5D');
+      expect(result.config.metadata?.documentationUrl).toBe('HTTPS://Docs.Example?version=2');
+      expect(JSON.stringify(evaluation.config)).toContain(gateway);
+    });
+
     it('drops malformed trace-provider headers when exporting older evaluations', async () => {
       const evaluation = new Eval({
         tracing: {
@@ -1992,7 +1957,7 @@ describe('evaluator', () => {
           success, score, metadata
         ) VALUES
         ('promptfoo-ns-1', '${eval_.id}', 0, 0, '{}', '{}', '{}', 1, 1.0,
-          '{"userKey": "shown", "__promptfoo": {"traceLinkage": {"traceId": "abc"}}}')`,
+          '{"userKey": "shown", "__promptfoo": {"remote": true, "traceLinkage": {"traceId": "abc"}}}')`,
       );
 
       const keys = await EvalQueries.getMetadataKeysFromEval(eval_.id);

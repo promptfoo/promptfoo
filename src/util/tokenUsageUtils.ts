@@ -44,22 +44,6 @@ export function createEmptyAssertions(): NonNullable<TokenUsage['assertions']> {
   };
 }
 
-/** Whether a token payload contains any usage worth persisting or displaying. */
-export function hasObservableTokenUsage(usage: Partial<TokenUsage> | undefined): boolean {
-  return Boolean(
-    usage &&
-      (Object.entries(usage).some(
-        ([key, value]) =>
-          key !== 'completionDetails' &&
-          key !== 'incurredTokenUsage' &&
-          typeof value === 'number' &&
-          value !== 0,
-      ) ||
-        Object.values(usage.completionDetails ?? {}).some((value) => (value ?? 0) !== 0) ||
-        hasObservableTokenUsage(usage.incurredTokenUsage)),
-  );
-}
-
 /**
  * Create an empty token usage object with all fields initialized to zero.
  */
@@ -357,14 +341,6 @@ export function accumulateGradingTokenUsage(
   const reportedTotal =
     tokensUsed?.total ?? (tokensUsed?.prompt ?? 0) + (tokensUsed?.completion ?? 0);
   const cachedTokens = tokensUsed?.cached ?? 0;
-  if (
-    tokensUsed?.numRequests === 0 &&
-    reportedTotal === 0 &&
-    cachedTokens === 0 &&
-    !hasObservableTokenUsage(tokensUsed)
-  ) {
-    return;
-  }
   const cachedResponse =
     options?.cached === true ||
     (options?.cached === undefined &&
@@ -552,9 +528,12 @@ export function accumulateGenerationTokenUsage(target: TokenUsage, update: unkno
     incurredTokenUsage,
     ...generationUsage
   } = parsed.data;
-  generationUsage.total ??= (generationUsage.prompt ?? 0) + (generationUsage.completion ?? 0);
-  const hasUsage =
-    hasObservableTokenUsage(generationUsage) || hasObservableTokenUsage(incurredTokenUsage);
+  const hasUsage = [generationUsage, incurredTokenUsage].some(
+    (usage) =>
+      usage &&
+      (Object.values(usage).some((value) => typeof value === 'number' && value !== 0) ||
+        Object.values(usage.completionDetails ?? {}).some((value) => value !== 0)),
+  );
   if (!hasUsage) {
     return false;
   }
@@ -565,36 +544,6 @@ export function accumulateGenerationTokenUsage(target: TokenUsage, update: unkno
     }),
   });
   return true;
-}
-
-/** Fill missing logical or incurred generation buckets without replaying either one. */
-export function mergeMissingGenerationTokenUsage(target: TokenUsage, update: unknown): boolean {
-  const parsed = BaseTokenUsageSchema.safeParse(update);
-  if (!parsed.success) {
-    return false;
-  }
-  const {
-    attacker: _attacker,
-    assertions: _assertions,
-    generation: _generation,
-    incurredTokenUsage,
-    ...logical
-  } = parsed.data;
-  const missingLogical =
-    !hasObservableTokenUsage(target.generation) && hasObservableTokenUsage(logical);
-  const missingIncurred =
-    target.incurredTokenUsage?.generation === undefined && incurredTokenUsage !== undefined;
-  if (missingLogical) {
-    target.generation ??= createEmptyAssertions();
-    accumulateTokenUsage(target.generation, logical);
-  }
-  if (missingIncurred) {
-    target.incurredTokenUsage ??= cloneTokenUsageBreakdown(target);
-    delete target.incurredTokenUsage.generation;
-    target.incurredTokenUsage.generation = createEmptyAssertions();
-    accumulateTokenUsage(target.incurredTokenUsage.generation, incurredTokenUsage);
-  }
-  return hasObservableTokenUsage(logical) || hasObservableTokenUsage(incurredTokenUsage);
 }
 
 /**

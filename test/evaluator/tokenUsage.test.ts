@@ -3,9 +3,12 @@ import './setup';
 import { randomUUID } from 'crypto';
 
 import { expect, it, vi } from 'vitest';
-import cliState from '../../src/cliState';
 import { evaluate, runEval } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
+import {
+  getGradingAssertionHash,
+  getGradingInputHash,
+} from '../../src/redteam/grading/storedResult';
 import { type ApiProvider, type TestSuite } from '../../src/types/index';
 import { mockApiProvider, mockGradingApiProviderPasses, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
@@ -26,101 +29,6 @@ describeEvaluator('evaluator token usage', () => {
     expect(summary.results[0].tokenUsage?.assertions).toMatchObject({
       total: 0,
       numRequests: 0,
-    });
-  });
-
-  it('deduplicates fan-out generation usage while accumulating distinct ledgers', async () => {
-    const generationUsage = { total: 7, prompt: 4, completion: 3 };
-    const testSuite: TestSuite = {
-      providers: [mockApiProvider],
-      prompts: [toPrompt('Test prompt')],
-      tests: [
-        { metadata: { providerTokenUsage: generationUsage } },
-        { metadata: { providerTokenUsage: generationUsage } },
-        { metadata: { providerTokenUsage: { total: 7, prompt: 4, completion: 3 } } },
-      ],
-    };
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-
-    await evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
-    const results = await evalRecord.getResults();
-
-    expect(evalRecord.prompts[0].metrics?.tokenUsage.generation).toMatchObject({
-      total: 14,
-      prompt: 8,
-      completion: 6,
-    });
-    expect(results.filter((result) => result.testCase.metadata?.providerTokenUsage)).toHaveLength(
-      2,
-    );
-  });
-
-  it('seeds canonical generation usage after prompt metrics are built', async () => {
-    const generationUsage = { total: 7, prompt: 4, completion: 3, numRequests: 1 };
-    const testSuite: TestSuite = {
-      providers: [mockApiProvider],
-      prompts: [toPrompt('Test prompt')],
-      tests: [{}],
-    };
-    const evalRecord = await Eval.create(
-      { metadata: { generationAccounting: { tokenUsage: generationUsage } } },
-      testSuite.prompts,
-      { id: randomUUID() },
-    );
-
-    await evaluate(testSuite, evalRecord, {});
-
-    expect(evalRecord.prompts[0].metrics?.tokenUsage.generation).toMatchObject(generationUsage);
-  });
-
-  it('keeps row generation usage when canonical usage is malformed', async () => {
-    const generationUsage = { total: 7, prompt: 4, completion: 3 };
-    const testSuite: TestSuite = {
-      providers: [mockApiProvider],
-      prompts: [toPrompt('Test prompt')],
-      tests: [{ metadata: { providerTokenUsage: generationUsage } }],
-    };
-    const evalRecord = await Eval.create(
-      { metadata: { generationAccounting: { tokenUsage: { total: 7, prompt: 'invalid' } } } },
-      testSuite.prompts,
-      { id: randomUUID() },
-    );
-
-    await evaluate(testSuite, evalRecord, {});
-
-    expect(evalRecord.prompts[0].metrics?.tokenUsage.generation).toMatchObject(generationUsage);
-  });
-
-  it('preserves incurred-only generation when resuming a completed evaluation', async () => {
-    const testSuite: TestSuite = {
-      providers: [mockApiProvider],
-      prompts: [toPrompt('Test prompt')],
-      tests: [{}],
-    };
-    const evalRecord = await Eval.create(
-      {
-        metadata: {
-          generationAccounting: {
-            tokenUsage: {
-              total: 0,
-              numRequests: 0,
-              incurredTokenUsage: { total: 12, numRequests: 1 },
-            },
-          },
-        },
-      },
-      testSuite.prompts,
-      { id: randomUUID() },
-    );
-    await evaluate(testSuite, evalRecord, {});
-    expect(evalRecord.prompts[0].metrics?.tokenUsage.incurredTokenUsage?.generation?.total).toBe(
-      12,
-    );
-    cliState.resume = true;
-    await evaluate(testSuite, evalRecord, {});
-    expect(evalRecord.prompts[0].metrics?.tokenUsage.incurredTokenUsage?.generation).toMatchObject({
-      total: 12,
-      numRequests: 1,
     });
   });
 
@@ -760,7 +668,7 @@ describeEvaluator('evaluator token usage', () => {
       expect(summary.stats.tokenUsage).toMatchObject({
         total: 200,
         numRequests: 2,
-        assertions: { total: 70, cached: 30, numRequests: 3 },
+        assertions: { total: 100, cached: 60, numRequests: 4 },
         incurredTokenUsage: {
           total: 200,
           numRequests: 2,
@@ -768,68 +676,46 @@ describeEvaluator('evaluator token usage', () => {
         },
       });
 
-      const [selectedPrompt, unselectedPrompt] = evalRecord.prompts;
-      expect(selectedPrompt.metrics?.tokenUsage).toMatchObject({
-        total: 100,
-        numRequests: 1,
-        assertions: {
+      for (const prompt of evalRecord.prompts) {
+        expect(prompt.metrics?.tokenUsage).toMatchObject({
+          total: 100,
+          numRequests: 1,
+          assertions: {
+            total: 50,
+            cached: 30,
+            numRequests: 2,
+            completionDetails: { reasoning: 7 },
+          },
+          incurredTokenUsage: {
+            total: 100,
+            numRequests: 1,
+            assertions: {
+              total: 20,
+              numRequests: 1,
+              completionDetails: { reasoning: 3 },
+            },
+          },
+        });
+      }
+
+      for (const result of summary.results) {
+        expect(result.tokenUsage).toMatchObject({
+          total: 100,
+          numRequests: 1,
+          assertions: { total: 50, cached: 30, numRequests: 2 },
+          incurredTokenUsage: {
+            total: 100,
+            numRequests: 1,
+            assertions: { total: 20, numRequests: 1 },
+          },
+        });
+        expect(result.gradingResult?.tokensUsed).toMatchObject({
           total: 50,
           cached: 30,
           numRequests: 2,
-          completionDetails: { reasoning: 7 },
-        },
-        incurredTokenUsage: {
-          total: 100,
-          numRequests: 1,
-          assertions: { total: 20, numRequests: 1, completionDetails: { reasoning: 3 } },
-        },
-      });
-      expect(unselectedPrompt.metrics?.tokenUsage).toMatchObject({
-        total: 100,
-        numRequests: 1,
-        assertions: {
-          total: 20,
-          cached: 0,
-          numRequests: 1,
-          completionDetails: { reasoning: 3 },
-        },
-      });
-      expect(unselectedPrompt.metrics?.tokenUsage).toMatchObject({
-        incurredTokenUsage: { assertions: { total: 20, numRequests: 1 } },
-      });
-
-      const [unselectedResult, selectedResult] = [...summary.results].sort(
-        (a, b) => (a.tokenUsage?.assertions?.total ?? 0) - (b.tokenUsage?.assertions?.total ?? 0),
-      );
-      expect(selectedResult.tokenUsage).toMatchObject({
-        total: 100,
-        numRequests: 1,
-        assertions: { total: 50, cached: 30, numRequests: 2 },
-        incurredTokenUsage: {
-          total: 100,
-          numRequests: 1,
-          assertions: { total: 20, numRequests: 1 },
-        },
-      });
-      expect(selectedResult.gradingResult?.tokensUsed).toMatchObject({
-        total: 50,
-        cached: 30,
-        numRequests: 2,
-        incurredTokenUsage: { total: 20, numRequests: 1 },
-      });
-      expect(unselectedResult.tokenUsage).toMatchObject({
-        total: 100,
-        numRequests: 1,
-        assertions: { total: 20, cached: 0, numRequests: 1 },
-      });
-      expect(unselectedResult.tokenUsage).toMatchObject({
-        incurredTokenUsage: { assertions: { total: 20, numRequests: 1 } },
-      });
-      expect(unselectedResult.gradingResult?.tokensUsed).toMatchObject({
-        total: 20,
-        cached: 0,
-        numRequests: 1,
-      });
+          incurredTokenUsage: { total: 20, numRequests: 1 },
+        });
+      }
     } finally {
       matchesSelectBestSpy.mockRestore();
     }
@@ -1134,7 +1020,7 @@ describeEvaluator('evaluator token usage', () => {
 
   it('combines internal judge calls with all stored red-team grading turns exactly once', async () => {
     const redteamProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('redteam-provider-with-stored-grades'),
+      id: vi.fn().mockReturnValue('promptfoo:redteam:hydra'),
       callApi: vi.fn().mockResolvedValue({
         output: 'Target response',
         metadata: {
@@ -1142,6 +1028,18 @@ describeEvaluator('evaluator token usage', () => {
             pass: true,
             score: 1,
             reason: 'Final grading turn passed',
+            assertion: { type: 'promptfoo:redteam:harmful:hate' },
+            metadata: {
+              redteamGradingAssertionHash: getGradingAssertionHash({
+                type: 'promptfoo:redteam:harmful:hate',
+              }),
+              redteamGradingInputHash: getGradingInputHash(
+                'Test prompt',
+                'Target response',
+                undefined,
+                'harmful:hate',
+              ),
+            },
             tokensUsed: {
               total: 60,
               prompt: 36,
@@ -1181,6 +1079,7 @@ describeEvaluator('evaluator token usage', () => {
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
 
+    expect(summary.results[0]).toMatchObject({ success: true });
     expect(summary.stats.tokenUsage).toMatchObject({
       total: 100,
       numRequests: 1,

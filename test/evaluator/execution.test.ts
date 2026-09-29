@@ -10,6 +10,7 @@ import cliState from '../../src/cliState';
 import { __resetPromptConversationCacheForTests, evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
+import { EchoProvider } from '../../src/providers/echo';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import {
   type ApiProvider,
@@ -51,8 +52,27 @@ describeEvaluator('evaluator execution control', () => {
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
 
+    expect(sleep).toHaveBeenCalledTimes(1);
     expect(sleep).toHaveBeenCalledWith(100);
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['the provider', 100, undefined],
+    ['the evaluation', undefined, 125],
+  ])('applies the Echo delay only once when set on %s', async (_name, providerDelay, evalDelay) => {
+    const provider = new EchoProvider({ delay: providerDelay });
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Echo test')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { delay: evalDelay });
+
+    expect(sleep).toHaveBeenCalledTimes(1);
+    expect(sleep).toHaveBeenCalledWith(providerDelay ?? evalDelay);
   });
 
   it('evaluates with no provider delay', async () => {
@@ -1135,9 +1155,6 @@ describeEvaluator('evaluator execution control', () => {
       prompts: [toPrompt('Test prompt {{topic}}')],
       tests: ['alpha', 'beta', 'gamma'].map((topic) => ({
         vars: { topic },
-        ...(topic === 'alpha'
-          ? {}
-          : { metadata: { providerTokenUsage: { total: 7, numRequests: 1 } } }),
         assert: [{ type: 'llm-rubric', value: `Judge ${topic}`, provider: judge }],
       })),
     };
@@ -1167,8 +1184,5 @@ describeEvaluator('evaluator execution control', () => {
     );
     expect(resultByTopic.get('alpha')?.error).toBeUndefined();
     expect(resultByTopic.get('gamma')?.error).toContain('Evaluation exceeded max duration');
-    expect(results.filter((result) => result.testCase.metadata?.providerTokenUsage)).toHaveLength(
-      2,
-    );
   });
 });
