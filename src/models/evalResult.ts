@@ -536,18 +536,23 @@ function sanitizeGradingResultAssertions<T>(gradingResult: T): T {
   }
 
   const gr = gradingResult as Record<string, unknown>;
+  const assertion = asRecord(gr.assertion);
+  const sanitizedAssertion = assertion && { ...assertion };
+  if (sanitizedAssertion) {
+    for (const field of ['provider', 'config']) {
+      if (Object.prototype.hasOwnProperty.call(sanitizedAssertion, field)) {
+        sanitizedAssertion[field] = sanitizeObject(sanitizedAssertion[field], {
+          context: 'grading assertion',
+          maxDepth: Number.POSITIVE_INFINITY,
+          sanitizeUrls: true,
+          throwOnError: true,
+        });
+      }
+    }
+  }
   return {
     ...gr,
-    ...(gr.assertion === undefined
-      ? {}
-      : {
-          assertion: sanitizeObject(gr.assertion, {
-            context: 'grading assertion',
-            maxDepth: Number.POSITIVE_INFINITY,
-            sanitizeUrls: true,
-            throwOnError: true,
-          }),
-        }),
+    ...(sanitizedAssertion && { assertion: sanitizedAssertion }),
     ...(Array.isArray(gr.componentResults) && {
       componentResults: gr.componentResults.map(sanitizeGradingResultAssertions),
     }),

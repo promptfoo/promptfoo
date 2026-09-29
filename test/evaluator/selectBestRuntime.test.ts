@@ -726,6 +726,7 @@ describeEvaluator('select-best runtime grading configuration', () => {
     ['runtime', 'query'],
     ['runtime', 'quoted query'],
     ['runtime', 'spaced query'],
+    ['runtime', 'parenthesized query'],
     ['runtime', 'basic'],
     ['declarative', 'query'],
     ['declarative', 'basic'],
@@ -738,7 +739,13 @@ describeEvaluator('select-best runtime grading configuration', () => {
     const rotatedKey = 'fixture-url-rotated-secret';
     const makeUrl = (key: string, host = 'grader.example') => {
       const query =
-        auth === 'quoted query' ? `${key}'${key}` : auth === 'spaced query' ? `${key} ${key}` : key;
+        auth === 'parenthesized query'
+          ? `${key} (${key})`
+          : auth === 'quoted query'
+            ? `${key}'${key}`
+            : auth === 'spaced query'
+              ? `${key} ${key}`
+              : key;
       return auth === 'basic'
         ? `https://fixture-user:${key}@${host}/grade`
         : `https://${host}/grade?api_key=${query}`;

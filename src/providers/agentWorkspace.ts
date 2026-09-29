@@ -70,8 +70,9 @@ const REPOSITORY_ENV_VARS = [
   'GIT_SHALLOW_FILE',
   'GIT_WORK_TREE',
 ];
-// Workspace directory -> temporary root that contains it.
-const liveWorkspaces = new Map<string, string>();
+const liveWorkspaces = new Set<string>();
+// Pending or failed removals still need synchronous cleanup on exit.
+const cleanupRoots = new Set<string>();
 let exitCleanupRegistered = false;
 
 /** Clear Git repository selectors from a per-call subprocess environment. */
@@ -406,7 +407,7 @@ function registerExitCleanup(): void {
   // A call still running when the process exits (e.g. after an eval timeout) never reaches
   // its cleanup. `exit` handlers must be synchronous.
   onExit(() => {
-    for (const root of liveWorkspaces.values()) {
+    for (const root of cleanupRoots) {
       try {
         rmSync(root, { recursive: true, force: true });
       } catch {
@@ -664,12 +665,14 @@ export async function createAgentWorkspace(
   }
   const root = await fs.realpath(await fs.mkdtemp(path.join(tempParent, 'promptfoo-workspace-')));
   const dir = path.join(root, 'workspace');
-  liveWorkspaces.set(dir, root);
+  liveWorkspaces.add(dir);
+  cleanupRoots.add(root);
   registerExitCleanup();
   const remove = async () => {
     liveWorkspaces.delete(dir);
     try {
       await fs.rm(root, { recursive: true, force: true, maxRetries: 3 });
+      cleanupRoots.delete(root);
     } catch (error) {
       logger.warn(`[copy_working_dir] Could not remove workspace ${root}: ${error}`);
     }

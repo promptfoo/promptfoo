@@ -133,6 +133,10 @@ describe('agent workspaces', () => {
       ['SIGTERM', 'observer-after'],
       ['SIGINT', 'removed'],
       ['SIGTERM', 'removed'],
+      ['SIGINT', 'removal-pending'],
+      ['SIGTERM', 'removal-pending'],
+      ['SIGINT', 'removal-failed'],
+      ['SIGTERM', 'removal-failed'],
       ['SIGINT', 'consume'],
       ['SIGTERM', 'consume'],
       ['SIGINT', 'before'],
@@ -155,7 +159,8 @@ describe('agent workspaces', () => {
           '-e',
           `
             import fs from 'node:fs';
-            const { createAgentWorkspace } = await import(${JSON.stringify(moduleUrl)});
+            import fsPromises from 'node:fs/promises';
+            const { createAgentWorkspace, isAgentWorkspace } = await import(${JSON.stringify(moduleUrl)});
             const { onExit } = await import('signal-exit');
             const [source, signal, handler, marker] = process.argv.slice(1);
             let workspace;
@@ -169,6 +174,21 @@ describe('agent workspaces', () => {
             if (handler === 'after') process.once(signal, handleSignal);
             if (handler === 'observer-after') onExit(() => fs.writeFileSync(marker, 'handled'));
             if (handler === 'removed') await workspace.remove();
+            if (handler.startsWith('removal-')) {
+              fsPromises.rm = async () => {
+                if (handler === 'removal-failed') throw new Error('simulated cleanup failure');
+                await new Promise(() => {});
+              };
+              process.once(signal, async () => {
+                const cleanup = workspace.remove();
+                if (handler === 'removal-failed') await cleanup;
+                process.send({
+                  removing: true,
+                  workspaceActive: isAgentWorkspace(workspace.dir),
+                  workspaceAvailable: fs.existsSync(workspace.dir),
+                });
+              });
+            }
             setInterval(() => {}, 1000);
             process.send({ workingDir: workspace.dir });
           `,
@@ -203,7 +223,9 @@ describe('agent workspaces', () => {
         ]);
         workingDir = ready.workingDir;
         expect(fs.existsSync(workingDir)).toBe(handler !== 'removed');
-        const handled = handler === 'consume' ? once(child, 'message') : undefined;
+        const handled = ['consume', 'removal-pending', 'removal-failed'].includes(handler)
+          ? once(child, 'message')
+          : undefined;
         expect(child.kill(signal)).toBe(true);
         if (handled) {
           await handled;
@@ -211,10 +233,17 @@ describe('agent workspaces', () => {
           expect(child.kill(signal)).toBe(true);
         }
 
-        const customExit = handler === 'before' || handler === 'after';
+        const customExit = ['before', 'after'].includes(handler);
         expect(await exited).toEqual(customExit ? [42, null] : [null, signal]);
         if (customExit || handler === 'consume') {
           expect(messages).toContainEqual({ handled: true, workspaceAvailable: true });
+        }
+        if (handler.startsWith('removal-')) {
+          expect(messages).toContainEqual({
+            removing: true,
+            workspaceActive: false,
+            workspaceAvailable: true,
+          });
         }
         expect(fs.existsSync(workingDir)).toBe(false);
         if (handler.startsWith('observer-')) {

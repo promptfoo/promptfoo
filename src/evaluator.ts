@@ -112,6 +112,7 @@ import {
   isSecretField,
   REDACTED,
   sanitizeObject,
+  sanitizeUrl,
 } from './util/sanitizer';
 import { analyzeTemplateReference, extractVariablesFromTemplate } from './util/templates';
 import { sleep } from './util/time';
@@ -3069,9 +3070,13 @@ function comparisonProviderId(provider: GradingConfig['provider']): string | und
       : isApiProvider(provider)
         ? provider.id()
         : provider?.id;
-  return typeof id === 'string'
-    ? sanitizeProviderIdForLog(providerToIdentifier(id) ?? id)
-    : undefined;
+  if (typeof id !== 'string') {
+    return undefined;
+  }
+  const canonicalId = providerToIdentifier(id) ?? id;
+  return canonicalId.includes('://') || canonicalId.startsWith('/')
+    ? sanitizeUrl(canonicalId)
+    : canonicalId;
 }
 
 function comparisonProviderSettings(provider: GradingConfig['provider']) {
