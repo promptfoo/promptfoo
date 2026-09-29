@@ -1,57 +1,20 @@
 # openai-vision (OpenAI Vision Model Example)
 
-This example demonstrates how to use promptfoo to evaluate OpenAI's vision capabilities, allowing you to test models on their ability to analyze and describe images.
+This example sends text and a local image to GPT-6 Sol, then checks whether the description identifies Earth.
 
-## Features Demonstrated
-
-- Using OpenAI's GPT-5.6 Sol with vision capabilities
-- Incorporating images in prompts using JSON format
-- Passing image URLs as variables
-- Testing vision model responses against expected content
-
-## Environment Variables
-
-This example requires the following environment variables:
-
-- `OPENAI_API_KEY` - Your OpenAI API key
-
-You can set this in a `.env` file or directly in your environment.
-
-## Running the Example
-
-You can run this example with:
+## Usage
 
 ```bash
 npx promptfoo@latest init --example openai-vision
-# and then
 cd openai-vision
-
-# Run the evaluation
-npx promptfoo eval
-
-# View the results
-npx promptfoo view
+export OPENAI_API_KEY=your-key-here
+npx promptfoo@latest eval --no-cache
 ```
 
-## Example Configuration
+To load the key from a `.env` file instead, add `--env-file .env` to the evaluation command.
 
-This example:
+`prompt.json` combines `input_text` and `input_image` content. `file://assets/earth.txt` loads the bundled image data URL. Change the question, image source, and assertion in `promptfooconfig.yaml` to test another image. You can also use an HTTPS image URL that is accessible to OpenAI.
 
-1. Uses a JSON-formatted prompt that includes both text and image inputs
-2. Passes image URLs as variables that can be changed for each test case
-3. Tests the model's ability to accurately describe image content
-4. Demonstrates how to transform variables to generate markdown image tags
+The bundled image is NASA's [Blue Marble photograph from Apollo 17](https://www.nasa.gov/image-article/blue-marble-image-of-earth-from-apollo-17/).
 
-## Key Technical Features
-
-- JSON prompt structure for multi-modal inputs
-- Image URL handling through variable substitution
-- Simple assertions to validate image content recognition
-- Variable transformation to generate additional context
-
-## Documentation
-
-For more information, see:
-
-- [OpenAI Vision API Documentation](https://platform.openai.com/docs/guides/vision)
-- [promptfoo OpenAI Provider Documentation](https://promptfoo.dev/docs/providers/openai#sending-images-in-prompts)
+See the [image input documentation](https://www.promptfoo.dev/docs/providers/openai/#sending-images-in-prompts) for more options.

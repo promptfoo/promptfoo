@@ -3,73 +3,151 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it } from 'vitest';
 
-describe('root dependency ownership report', () => {
-  let repoRoot: string;
+const repoRoot = path.resolve(__dirname, '../..');
+let fixtureRoot: string;
 
-  beforeEach(() => {
-    repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dependency-ownership-'));
-    const sourceRoot = path.resolve(__dirname, '../..');
-    fs.mkdirSync(path.join(repoRoot, 'scripts'));
-    for (const script of ['architectureUtils.ts', 'reportDependencyOwnership.ts']) {
-      fs.copyFileSync(
-        path.join(sourceRoot, 'scripts', script),
-        path.join(repoRoot, 'scripts', script),
-      );
-    }
-    fs.symlinkSync(
-      fs.realpathSync(path.join(sourceRoot, 'node_modules')),
-      path.join(repoRoot, 'node_modules'),
-      'junction',
-    );
-    write('package.json', {
+function write(relativePath: string, content: string) {
+  const file = path.join(fixtureRoot, relativePath);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, content);
+}
+
+beforeEach(() => {
+  fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-dependency-ownership-'));
+  write(
+    'package.json',
+    JSON.stringify({
       type: 'module',
-      dependencies: { 'root-dependency': '1.0.0' },
-    });
-    write('architecture/layers.json', {
+      dependencies: { 'direct-package': '*', 'shared-package': '*' },
+      optionalDependencies: { 'optional-package': '*' },
+      devDependencies: { 'dev-only': '*' },
+      peerDependencies: {
+        'peer-package': '*',
+        'optional-peer-package': '*',
+        'shared-package': '*',
+        'unused-peer': '*',
+      },
+      peerDependenciesMeta: {
+        'optional-peer-package': { optional: true },
+        'peer-package': { optional: false },
+        'metadata-only': { optional: true },
+      },
+    }),
+  );
+  write('src/index.ts', 'export {};');
+  write(
+    'src/core/consumer.ts',
+    `import 'direct-package';
+import 'optional-package';
+import 'peer-package';
+import 'shared-package';
+import 'dev-only';
+import 'metadata-only';
+import 'missing-package';
+import('optional-peer-package/subpath');`,
+  );
+  write('src/providers/consumer.ts', "import 'optional-peer-package';");
+  write(
+    'architecture/layers.json',
+    JSON.stringify({
       publicFacade: 'src/index.ts',
-      layers: [{ name: 'core', roots: ['src', 'packages', 'internal'], allowedDependencies: [] }],
-    });
-    write('src/index.ts', '');
-  });
+      layers: ['core', 'providers'].map((name) => ({
+        name,
+        roots: [`src/${name}`],
+        allowedDependencies: [],
+      })),
+    }),
+  );
+  for (const script of ['reportDependencyOwnership.ts', 'architectureUtils.ts']) {
+    write(`scripts/${script}`, fs.readFileSync(path.join(repoRoot, 'scripts', script), 'utf8'));
+  }
+  fs.symlinkSync(
+    path.join(repoRoot, 'node_modules'),
+    path.join(fixtureRoot, 'node_modules'),
+    'junction',
+  );
+});
 
-  afterEach(() => {
-    fs.rmSync(repoRoot, { recursive: true, force: true });
-  });
+afterEach(() => {
+  fs.rmSync(fixtureRoot, { recursive: true, force: true });
+});
 
-  function write(relativePath: string, contents: string | object): void {
-    const filePath = path.join(repoRoot, relativePath);
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, typeof contents === 'string' ? contents : JSON.stringify(contents));
+function runReport(...args: string[]): string {
+  return execFileSync(
+    process.execPath,
+    ['--import', import.meta.resolve('tsx'), 'scripts/reportDependencyOwnership.ts', ...args],
+    { cwd: fixtureRoot, encoding: 'utf8' },
+  );
+}
+
+it('reports peer contracts and owners alongside existing dependency kinds', () => {
+  expect(JSON.parse(runReport('--json'))).toEqual([
+    { dependency: 'direct-package', kind: 'dependency', owner: 'core', layers: 'core', files: 1 },
+    { dependency: 'optional-package', kind: 'optional', owner: 'core', layers: 'core', files: 1 },
+    {
+      dependency: 'optional-peer-package',
+      kind: 'optional-peer',
+      owner: 'shared',
+      layers: 'core, providers',
+      files: 2,
+    },
+    { dependency: 'peer-package', kind: 'peer', owner: 'core', layers: 'core', files: 1 },
+    {
+      dependency: 'shared-package',
+      kind: 'dependency+peer',
+      owner: 'core',
+      layers: 'core',
+      files: 1,
+    },
+    { dependency: 'unused-peer', kind: 'peer', owner: 'unreferenced', layers: '-', files: 0 },
+  ]);
+});
+
+it('keeps genuinely undeclared imports outside the table without misclassifying peers', () => {
+  const output = runReport();
+  expect(output).toContain(
+    '| optional-peer-package | optional-peer | shared | core, providers | 2 |',
+  );
+  expect(output.split('Imported packages outside root runtime dependencies:\n')[1]).toBe(
+    '- dev-only: core\n- metadata-only: core\n- missing-package: core\n',
+  );
+});
+
+it('treats peers as required when optional metadata is absent', () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(fixtureRoot, 'package.json'), 'utf8'));
+  delete manifest.peerDependenciesMeta;
+  write('package.json', JSON.stringify(manifest));
+
+  const rows = JSON.parse(runReport('--json'));
+  expect(
+    rows.find((row: { dependency: string }) => row.dependency === 'optional-peer-package'),
+  ).toEqual(expect.objectContaining({ kind: 'peer', owner: 'shared', files: 2 }));
+});
+
+it('excludes separately owned packages while reporting root-owned package and configured sources', () => {
+  write('packages/unowned/index.ts', "import 'direct-package';");
+  write('internal/runtime.ts', "import 'direct-package';");
+  const config = JSON.parse(
+    fs.readFileSync(path.join(fixtureRoot, 'architecture/layers.json'), 'utf8'),
+  );
+  config.layers[0].roots.push('packages', 'internal');
+  write('architecture/layers.json', JSON.stringify(config));
+  for (const root of ['packages/owned', 'internal/owned']) {
+    write(`${root}/package.json`, JSON.stringify({ dependencies: { 'package-dependency': '*' } }));
+    write(`${root}/src/index.ts`, "import 'package-dependency'; import 'direct-package';");
   }
 
-  it('excludes separately owned packages while reporting root-owned package and configured sources', () => {
-    write('src/runtime.ts', "import 'root-dependency'; import 'missing-root-dependency';");
-    write('packages/unowned/index.ts', "import 'root-dependency';");
-    write('internal/runtime.ts', "import 'root-dependency';");
-    for (const root of ['packages/owned', 'internal/owned']) {
-      write(`${root}/package.json`, { dependencies: { 'package-dependency': '1.0.0' } });
-      write(`${root}/src/index.ts`, "import 'package-dependency'; import 'root-dependency';");
-    }
-
-    const run = (args: string[]) =>
-      execFileSync(
-        process.execPath,
-        ['--import', 'tsx', 'scripts/reportDependencyOwnership.ts', ...args],
-        { cwd: repoRoot, encoding: 'utf8' },
-      );
-    expect(JSON.parse(run(['--json']))).toEqual([
-      {
-        dependency: 'root-dependency',
-        kind: 'dependency',
-        owner: 'core',
-        layers: 'core',
-        files: 3,
-      },
-    ]);
-    const markdown = run([]);
-    expect(markdown).toContain('- missing-root-dependency: core');
-    expect(markdown).not.toContain('package-dependency');
+  const rows = JSON.parse(runReport('--json'));
+  expect(rows.find((row: { dependency: string }) => row.dependency === 'direct-package')).toEqual({
+    dependency: 'direct-package',
+    kind: 'dependency',
+    owner: 'core',
+    layers: 'core',
+    files: 3,
   });
+  const markdown = runReport();
+  expect(markdown).toContain('- missing-package: core');
+  expect(markdown).not.toContain('package-dependency');
 });

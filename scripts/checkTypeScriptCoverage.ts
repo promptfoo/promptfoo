@@ -4,7 +4,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-import { readLayerConfig } from './architectureUtils';
+import { normalizePath, readLayerConfig } from './architectureUtils';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '..');
@@ -14,10 +14,6 @@ const externalProjectPrefixes = ['src/app/', 'test/code-scan-action/'];
 interface ProjectConfig {
   files?: string[];
   references?: { path: string }[];
-}
-
-function normalizePath(filePath: string): string {
-  return filePath.split(path.sep).join('/');
 }
 
 function isTypeScriptFile(filePath: string): boolean {
