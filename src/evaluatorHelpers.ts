@@ -439,10 +439,10 @@ export async function renderPrompt(
       vars[key] = (vars[key] as string).replace(/\n$/, '');
     }
   }
-  // Resolve variable mappings
+  // Keep resolved aliases local so later renders start from the original templates.
   const renderedVarNames = new Set<string>();
-  resolveVariables(
-    vars,
+  vars = resolveVariables(
+    { ...vars },
     skipRenderVars,
     renderedVarNames,
     skipRenderVars?.length

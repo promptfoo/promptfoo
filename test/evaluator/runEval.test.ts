@@ -250,7 +250,7 @@ describe('runEval', () => {
       registers: {},
     });
     expect(results[0].prompt.raw).toBe('{{source}} / local context');
-    expect(results[0].vars.context).toBe('local context');
+    expect(results[0].vars.context).toBe('{{source}}');
   });
 
   it('renders every local placeholder once while preserving imported literal text', async () => {

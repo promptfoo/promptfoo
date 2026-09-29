@@ -177,6 +177,25 @@ describe('evaluatorHelpers', () => {
   });
 
   describe('renderPrompt', () => {
+    it('preserves filtered alias templates across repeated renders with literal input', async () => {
+      const vars = {
+        input: '{{settings.marker}}',
+        wrapped: '{{input | trim}}',
+        settings: { marker: 'ordinary fixture text' },
+      };
+      const prompt = { raw: '{{wrapped}}', label: 'fixture' };
+      expect(await renderPrompt(prompt, vars, {}, undefined, ['input'])).toBe(
+        '{{settings.marker}}',
+      );
+      expect(vars.wrapped).toBe('{{input | trim}}');
+      vars.input = 'next {{settings.marker}}';
+      expect(await renderPrompt(prompt, vars, {}, undefined, ['input'])).toBe(
+        'next {{settings.marker}}',
+      );
+      expect(vars.wrapped).toBe('{{input | trim}}');
+      expect(vars.settings.marker).toBe('ordinary fixture text');
+    });
+
     beforeEach(() => {
       mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: undefined });
       mockProcessEnv({ PROMPTFOO_DISABLE_JSON_AUTOESCAPE: undefined });
