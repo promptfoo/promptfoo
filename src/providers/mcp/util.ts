@@ -105,12 +105,8 @@ export function renderAuthVars(
   };
 }
 
-/**
- * OAuth token cache to store and reuse tokens
- */
-interface OAuthTokenCache {
-  accessToken: string;
-  expiresAt: number;
+interface OAuthTokenCache extends OAuthTokenResult {
+  refreshAt: number;
 }
 
 const oauthTokenCache = new Map<string, OAuthTokenCache>();
@@ -205,11 +201,7 @@ export async function discoverTokenEndpoint(serverUrl: string): Promise<string> 
 // In-flight token requests, so concurrent callers share one token fetch
 const pendingTokenRequests = new Map<string, Promise<OAuthTokenResult>>();
 
-/**
- * Get OAuth token with expiration info, fetching a new one if needed.
- * If tokenUrl is not configured, attempts OAuth discovery to find the token endpoint.
- * Caches tokens and returns cached version if still valid and not the rejected token.
- */
+/** Reuse a valid token, discover its endpoint if needed, and replace rejected tokens. */
 export async function getOAuthTokenWithExpiry(
   auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
   serverUrl?: string,
@@ -226,11 +218,7 @@ export async function getOAuthTokenWithExpiry(
 
   const cacheKey = getOAuthCacheKey(auth, tokenUrl);
   const cached = oauthTokenCache.get(cacheKey);
-  if (
-    cached &&
-    cached.accessToken !== rejectedToken &&
-    Date.now() + TOKEN_REFRESH_BUFFER_MS < cached.expiresAt
-  ) {
+  if (cached && cached.accessToken !== rejectedToken && Date.now() < cached.refreshAt) {
     return { accessToken: cached.accessToken, expiresAt: cached.expiresAt };
   }
 
@@ -248,7 +236,12 @@ export async function getOAuthTokenWithExpiry(
       scopes: normalizeRenderedOAuthScopes(auth.scopes),
     })
       .then((result) => {
-        oauthTokenCache.set(cacheKey, result);
+        // Keep short-lived tokens usable instead of refreshing them on every request.
+        const remainingMs = Math.max(0, result.expiresAt - Date.now());
+        oauthTokenCache.set(cacheKey, {
+          ...result,
+          refreshAt: result.expiresAt - Math.min(TOKEN_REFRESH_BUFFER_MS, remainingMs / 2),
+        });
         logger.debug('[MCP Auth] Cached OAuth token');
         return result;
       })

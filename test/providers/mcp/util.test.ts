@@ -510,6 +510,51 @@ describe('getOAuthTokenWithExpiry', () => {
     await expect(accessToken('token-2')).resolves.toBe('token-3');
   });
 
+  it.each([
+    [30, 15_000],
+    [60, 30_000],
+    [3600, 3_540_000],
+  ])('reuses a %is token until its refresh window', async (expiresIn, refreshAfterMs) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-29T00:00:00Z'));
+    let issued = 0;
+    mockFetch.mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({ access_token: `token-${++issued}`, expires_in: expiresIn }),
+    }));
+    const auth: MCPOAuthClientCredentialsAuth = {
+      type: 'oauth',
+      grantType: 'client_credentials',
+      clientId: `short-lived-${expiresIn}`,
+      clientSecret: 'fixture-secret',
+      tokenUrl: `https://short-lived.example.com/token/${expiresIn}`,
+    };
+    try {
+      const token = await getOAuthTokenWithExpiry(auth);
+      await expect(getOAuthTokenWithExpiry(auth)).resolves.toEqual(token);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+
+      vi.advanceTimersByTime(refreshAfterMs - 1);
+      await expect(getOAuthTokenWithExpiry(auth)).resolves.toEqual(token);
+      vi.advanceTimersByTime(1);
+      const refreshed = await Promise.all([
+        getOAuthTokenWithExpiry(auth),
+        getOAuthTokenWithExpiry(auth),
+      ]);
+      expect(refreshed.map(({ accessToken }) => accessToken)).toEqual(['token-2', 'token-2']);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      await expect(getOAuthTokenWithExpiry(auth, undefined, 'token-1')).resolves.toEqual(
+        refreshed[0],
+      );
+      await expect(getOAuthTokenWithExpiry(auth, undefined, 'token-2')).resolves.toMatchObject({
+        accessToken: 'token-3',
+      });
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('normalizes string scopes for the request and cache key', async () => {
     mockFetch.mockResolvedValue({
       ok: true,
