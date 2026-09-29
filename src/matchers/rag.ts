@@ -318,16 +318,21 @@ export async function matchesContextRelevance(
   const segmentRelevant = contextIsPreSegmented ? splitIntoSentences : splitTextIntoSentences;
   const segments = insufficientInformation ? [] : segmentRelevant(resp.output);
 
-  // The rubric asks for sentences quoted verbatim from the context, so only segments that
-  // appear in the context count. This drops grader prose such as a "candidate sentences:"
-  // header, and dedupes on the normalized text so reformatted repeats count once.
+  // Only count segments whose sentences are quoted from the context. A grader line can
+  // join nonadjacent sentences from a chunk, but still counts as one selected unit.
+  // Dedupe on normalized text so reformatted repeats count once.
   const normalizeForComparison = (value: string) => value.toLowerCase().replace(/\s+/g, ' ').trim();
   const contextNormalized = normalizeForComparison(contextString);
   const quotedSegments = new Map<string, string>();
   for (const segment of segments) {
     // A list marker needs following whitespace; otherwise preserve numbers like 1.2 and -5.
     const key = normalizeForComparison(segment.replace(/^\s*(?:\d+[.)]|[-*])\s+/, ''));
-    if (key && contextNormalized.includes(key) && !quotedSegments.has(key)) {
+    const sentences = splitTextIntoSentences(key);
+    if (
+      sentences.length > 0 &&
+      sentences.every((sentence) => contextNormalized.includes(sentence)) &&
+      !quotedSegments.has(key)
+    ) {
       quotedSegments.set(key, segment);
     }
   }

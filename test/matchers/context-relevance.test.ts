@@ -476,6 +476,41 @@ This policy excludes all staff going on any outgoing structured programs, short 
       });
     });
 
+    describe.each(['array', 'multiline'])('selected sentences in %s context', (format) => {
+      const chunks = ['Fact A.', 'Fact B. Irrelevant detail. Fact C.'];
+      const context = format === 'array' ? chunks : chunks.join('\n');
+
+      it.each([
+        {
+          label: 'counts nonadjacent source sentences as one selected unit',
+          selection: 'Fact B. Fact C.',
+          extracted: ['Fact A.', 'Fact B. Fact C.'],
+          score: 1,
+          pass: true,
+        },
+        {
+          label: 'rejects a selected unit containing an invented sentence',
+          selection: 'Fact B. Invented detail.',
+          extracted: ['Fact A.'],
+          score: 0.5,
+          pass: false,
+        },
+      ])('$label', async ({ selection, extracted, score, pass }) => {
+        vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+          output: `Fact A.\n${selection}`,
+        });
+
+        const result = await matchesContextRelevance('What are the facts?', context, 0.75);
+
+        expect(result.score).toBe(score);
+        expect(result.pass).toBe(pass);
+        expect(result.metadata?.totalContextUnits).toBe(2);
+        expect(result.metadata?.relevantSentenceCount).toBe(extracted.length);
+        expect(result.metadata?.extractedSentences).toEqual(extracted);
+        expect(result.metadata?.graderError).not.toBe(true);
+      });
+    });
+
     it('should handle empty context', async () => {
       const query = 'What is the answer?';
       const context = '';
