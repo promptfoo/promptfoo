@@ -10,8 +10,11 @@ import type { EvaluateResult, TestSuite } from '../../../src/types/index';
 // This process has no Vitest setup, migrations, model-backed store, or default Node runtime.
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.includes('node/evaluatorRuntime')) {
-      throw new Error('Explicit evaluation imported the default Node runtime');
+    if (
+      specifier.includes('node/evaluatorRuntime') ||
+      specifier.includes('node/evaluatorProgress')
+    ) {
+      throw new Error(`Explicit evaluation imported ${specifier} from ${context.parentURL}`);
     }
     return nextResolve(specifier, context);
   },

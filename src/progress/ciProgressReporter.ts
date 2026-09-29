@@ -78,6 +78,11 @@ export class CIProgressReporter {
   }
 
   error(message: string): void {
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+
     // Throttle rapid errors to prevent log spam
     const now = Date.now();
     if (now - this.lastErrorTime < this.ERROR_THROTTLE_MS) {

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { evaluate, PromptSuggestionsRejectedError } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
+import { nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
 import { generatePrompts } from '../../src/suggestions';
 import { promptYesNo } from '../../src/util/readline';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
@@ -38,22 +39,66 @@ describe('generated prompt selection', () => {
     };
   }
 
-  it('throws without mutating process.exitCode for reusable callers', async () => {
-    const previousExitCode = process.exitCode;
-    process.exitCode = undefined;
-
-    try {
+  it.each(['library', 'web', 'mcp'] as const)(
+    'rejects generated prompts without an approval hook for %s callers',
+    async (eventSource) => {
+      const previousExitCode = process.exitCode;
+      const testSuite = createTestSuite();
+      const record = new Eval({});
       await expect(
-        evaluate(createTestSuite(), new Eval({}), {
-          eventSource: 'library',
+        evaluate(testSuite, record, {
+          eventSource,
           generateSuggestions: true,
         }),
-      ).rejects.toEqual(expect.any(PromptSuggestionsRejectedError));
+      ).rejects.toBeInstanceOf(PromptSuggestionsRejectedError);
+      expect(testSuite.prompts.map((prompt) => prompt.raw)).toEqual(['Original prompt']);
+      expect(record.results).toHaveLength(0);
+      expect(generatePrompts).not.toHaveBeenCalled();
+      expect(promptYesNo).not.toHaveBeenCalled();
+      expect(process.exitCode).toBe(previousExitCode);
+    },
+  );
 
-      expect(process.exitCode).toBeUndefined();
-    } finally {
-      process.exitCode = previousExitCode;
-    }
+  it('lets explicit runtimes reject suggestions without changing exit policy', async () => {
+    const previousExitCode = process.exitCode;
+    await expect(
+      evaluate(
+        createTestSuite(),
+        new Eval({}),
+        {
+          eventSource: 'library',
+          generateSuggestions: true,
+        },
+        { ...nodeEvaluatorRuntime, selectPrompt: async () => false },
+      ),
+    ).rejects.toBeInstanceOf(PromptSuggestionsRejectedError);
+    expect(promptYesNo).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(previousExitCode);
+  });
+
+  it('preserves the receiver for runtime selector methods', async () => {
+    const runtime = {
+      ...nodeEvaluatorRuntime,
+      allowed: new Set(['Generated prompt']),
+      async selectPrompt(prompt: string) {
+        return this.allowed.has(prompt);
+      },
+    };
+    const suite = createTestSuite();
+    await evaluate(suite, new Eval({}), { generateSuggestions: true }, runtime);
+    expect(suite.prompts).toHaveLength(2);
+    expect(promptYesNo).not.toHaveBeenCalled();
+  });
+
+  it('preserves generator error identity', async () => {
+    const failure = new Error('fixture generation failure');
+    vi.mocked(generatePrompts).mockRejectedValueOnce(failure);
+    await expect(
+      evaluate(createTestSuite(), new Eval({}), {
+        eventSource: 'cli',
+        generateSuggestions: true,
+      }),
+    ).rejects.toBe(failure);
   });
 
   it('preserves the CLI exit code when all suggested prompts are rejected', async () => {
@@ -79,65 +124,32 @@ describe('generated prompt selection', () => {
 
     try {
       const testSuite = createTestSuite();
-      // Library mode would throw PromptSuggestionsRejectedError if a regression
-      // flipped the boolean — covers the accepted branch that the rejection
-      // tests above intentionally don't exercise.
       await expect(
         evaluate(testSuite, new Eval({}), {
-          eventSource: 'library',
+          eventSource: 'cli',
           generateSuggestions: true,
         }),
       ).resolves.toBeDefined();
+      expect(promptYesNo).toHaveBeenCalledTimes(1);
+      expect(testSuite.prompts).toHaveLength(2);
       expect(process.exitCode).toBeUndefined();
     } finally {
       process.exitCode = previousExitCode;
     }
   });
 
-  it('passes the requested suggestion count to the generator', async () => {
-    vi.mocked(promptYesNo).mockResolvedValueOnce(true);
-
-    await evaluate(createTestSuite(), new Eval({}), {
-      eventSource: 'library',
-      generateSuggestions: true,
-      suggestionsCount: 3,
-    });
-
-    expect(generatePrompts).toHaveBeenCalledWith('Original prompt', 3);
-  });
-
-  it('defaults suggestionsCount to 1 when omitted', async () => {
-    vi.mocked(promptYesNo).mockResolvedValueOnce(true);
-
-    await evaluate(createTestSuite(), new Eval({}), {
-      eventSource: 'library',
-      generateSuggestions: true,
-    });
-
-    expect(generatePrompts).toHaveBeenCalledWith('Original prompt', 1);
-  });
-
-  it('clamps over-cap suggestionsCount to MAX_SUGGESTIONS_COUNT', async () => {
-    vi.mocked(promptYesNo).mockResolvedValueOnce(true);
-
-    await evaluate(createTestSuite(), new Eval({}), {
-      eventSource: 'library',
-      generateSuggestions: true,
-      suggestionsCount: 1_000,
-    });
-
-    expect(generatePrompts).toHaveBeenCalledWith('Original prompt', 50);
-  });
-
-  it('coerces invalid suggestionsCount values to 1', async () => {
-    vi.mocked(promptYesNo).mockResolvedValueOnce(true);
-
-    await evaluate(createTestSuite(), new Eval({}), {
-      eventSource: 'library',
-      generateSuggestions: true,
-      suggestionsCount: 0,
-    });
-
-    expect(generatePrompts).toHaveBeenCalledWith('Original prompt', 1);
+  it.each([
+    [3, 3],
+    [undefined, 1],
+    [1_000, 50],
+    [0, 1],
+  ])('normalizes suggestionsCount=%s to %s', async (suggestionsCount, expected) => {
+    await evaluate(
+      createTestSuite(),
+      new Eval({}),
+      { eventSource: 'library', generateSuggestions: true, suggestionsCount },
+      { ...nodeEvaluatorRuntime, selectPrompt: async () => true },
+    );
+    expect(generatePrompts).toHaveBeenCalledWith('Original prompt', expected);
   });
 });

@@ -121,30 +121,33 @@ describe('coverage ratchets', () => {
     expect(result.skippedFiles).toEqual(['src/legacy.ts']);
   });
 
-  it.each(['src/assertions/contains.ts', 'src/evaluator/engine.ts'])(
-    'enforces coverage floors for modified critical backend path %s',
-    (file) => {
-      const result = evaluateCoverageRatchets({
-        changedFiles: [{ path: file, status: 'M' }],
-        coverageMap: {
-          [file]: coverageFile(file, {
-            statements: { covered: 1, total: 4 },
-          }),
-        },
-        repoRoot,
-        report: backendReport,
-      });
+  it.each([
+    'src/assertions/contains.ts',
+    'src/evaluator/engine.ts',
+    'src/evaluator/progress.ts',
+    'src/node/evaluateForCli.ts',
+    'src/node/evaluatorProgress.ts',
+  ])('enforces coverage floors for modified critical backend path %s', (file) => {
+    const result = evaluateCoverageRatchets({
+      changedFiles: [{ path: file, status: 'M' }],
+      coverageMap: {
+        [file]: coverageFile(file, {
+          statements: { covered: 1, total: 4 },
+        }),
+      },
+      repoRoot,
+      report: backendReport,
+    });
 
-      expect(result.checkedFiles).toHaveLength(1);
-      expect(result.failures).toEqual([
-        {
-          file,
-          reason: 'critical path',
-          message: expect.stringContaining('lines 25.00% < 80%'),
-        },
-      ]);
-    },
-  );
+    expect(result.checkedFiles).toHaveLength(1);
+    expect(result.failures).toEqual([
+      {
+        file,
+        reason: 'critical path',
+        message: expect.stringContaining('lines 25.00% < 80%'),
+      },
+    ]);
+  });
 
   it('normalizes absolute frontend coverage paths', () => {
     const file = 'src/app/src/components/NewThing.tsx';
