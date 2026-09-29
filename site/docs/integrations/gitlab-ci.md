@@ -24,7 +24,7 @@ Add the organization-owned template to your `.gitlab-ci.yml` file:
 ```yaml title=".gitlab-ci.yml"
 include:
   - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-gitlab-ci/gitlab-ci.yml'
-    integrity: 'sha256-ieGQ4iWgVqgCkkdUTEPZGSdoLNrriQy2pNgHzB/4dN8='
+    integrity: 'sha256-VEhhLaVDy9AmlBftCJju8yzq1uXMFo9/njQZOoZ9l0A='
 
 promptfoo-eval:
   extends: .promptfoo-eval

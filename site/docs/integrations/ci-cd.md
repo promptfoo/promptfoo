@@ -224,7 +224,7 @@ See our [detailed GitLab CI guide](/docs/integrations/gitlab-ci).
 ```yaml title=".gitlab-ci.yml"
 include:
   - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-gitlab-ci/gitlab-ci.yml'
-    integrity: 'sha256-ieGQ4iWgVqgCkkdUTEPZGSdoLNrriQy2pNgHzB/4dN8='
+    integrity: 'sha256-VEhhLaVDy9AmlBftCJju8yzq1uXMFo9/njQZOoZ9l0A='
 
 promptfoo-eval:
   extends: .promptfoo-eval
@@ -300,19 +300,25 @@ CMD ["npx", "promptfoo@latest", "eval"]
 
 ### 2. Parallel Testing
 
-Test multiple models or configurations in parallel:
+Test multiple models in parallel by overriding the provider ID. Configure credentials for each provider in your workflow:
 
 ```yaml
 # GitHub Actions example
 strategy:
   matrix:
-    model: [gpt-5.6, claude-opus-4-8, gemini-3.1-pro-preview]
+    include:
+      - name: gpt-6-sol
+        provider: openai:gpt-6-sol
+      - name: claude-opus-5-5
+        provider: anthropic:messages:claude-opus-5-5
+      - name: gemini-3.1-pro-preview
+        provider: google:gemini-3.1-pro-preview
 steps:
-  - name: Test ${{ matrix.model }}
+  - name: Test ${{ matrix.name }}
     run: |
       npx promptfoo@latest eval \
-        --providers.0.config.model=${{ matrix.model }} \
-        -o results-${{ matrix.model }}.json
+        --providers "${{ matrix.provider }}" \
+        -o "results-${{ matrix.name }}.json"
 ```
 
 ### 3. Scheduled Security Scans

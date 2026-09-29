@@ -17,7 +17,7 @@ The local `.gitlab-ci.yml` extends the hidden `.promptfoo-eval` job from `gitlab
 ```yaml
 include:
   - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-gitlab-ci/gitlab-ci.yml'
-    integrity: 'sha256-ieGQ4iWgVqgCkkdUTEPZGSdoLNrriQy2pNgHzB/4dN8='
+    integrity: 'sha256-VEhhLaVDy9AmlBftCJju8yzq1uXMFo9/njQZOoZ9l0A='
 
 promptfoo-eval:
   extends: .promptfoo-eval
@@ -71,6 +71,8 @@ promptfoo-comment:
       when: always
 ```
 
-The comment reads the eval status from GitLab's pipeline jobs API; `PROMPTFOO_EVAL_JOB_NAME` must match the eval job name. It runs in a fresh non-root container without a checkout; its write token is never available to the eval. Empty setup and teardown hooks prevent it from inheriting pipeline-wide commands. Cache restoration is disabled so it reads only current eval artifacts. Shared-result links must match the independently configured `PROMPTFOO_SHARING_APP_BASE_URL` origin. Both jobs disable default OIDC ID tokens and select executables only from the pinned image’s system PATH before running any commands. Repeat any job-level `PROMPTFOO_OUTPUT_DIR` or `PROMPTFOO_SHARE` overrides from the eval job in the comment job because GitLab `needs` does not inherit job variables. The eval removes token-bearing `.git` metadata, strips job/deploy credentials from executable providers, and always fails on failed assertions. Results remain restricted to project developers with one-week artifact expiration; GitLab keeps the latest successful artifacts by default unless that project setting is disabled.
+The comment reads the eval status from GitLab's pipeline jobs API; `PROMPTFOO_EVAL_JOB_NAME` must match the eval job name. It uses a separate container without a checkout, inherited setup commands, or restored caches. Shared-result links must match `PROMPTFOO_SHARING_APP_BASE_URL`. Repeat any job-level `PROMPTFOO_OUTPUT_DIR` or `PROMPTFOO_SHARE` overrides in the comment job because GitLab `needs` does not inherit job variables.
+
+Both jobs disable default OIDC tokens and use the pinned image's system PATH. The eval removes token-bearing Git metadata and job/deploy credentials before running providers. Failed assertions block the pipeline. Artifacts are restricted to project developers and expire after one week, except that GitLab keeps the latest successful artifacts unless that project setting is disabled.
 
 For self-managed GitLab instances with an internal certificate authority, configure a file-type CI/CD variable containing the CA certificate and set `NODE_EXTRA_CA_CERTS` to that variable's file path. Set `PROMPTFOO_GITLAB_TRUST_PROXY: 'true'` only when the configured HTTP proxy is trusted to handle the GitLab write token. Do not disable TLS verification.

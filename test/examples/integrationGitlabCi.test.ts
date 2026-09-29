@@ -305,6 +305,13 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     expect(fs.existsSync(path.join(tempDir, 'promptfoo-args'))).toBe(false);
   });
 
+  it.each([undefined, ''])('runs with an unset or empty kubeconfig (%s)', async (kubeconfig) => {
+    const result = await runScript(`set -u\n${job.script[0]}`, { KUBECONFIG: kubeconfig });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(fs.existsSync(path.join(tempDir, 'promptfoo-args'))).toBe(true);
+  });
+
   it('rejects stale output artifacts before running eval code', async () => {
     const outputDir = path.join(tempDir, job.variables.PROMPTFOO_OUTPUT_DIR);
     fs.mkdirSync(outputDir, { recursive: true });
