@@ -62,6 +62,61 @@ describeEvaluator('evaluator assertions', () => {
     },
   );
 
+  it('finishes video grading before loading the next serial clip', async () => {
+    const callOrder: string[] = [];
+    const resolve = vi.spyOn(video, 'resolveVideoBytes').mockImplementation(async () => {
+      callOrder.push('read');
+      return { buffer: Buffer.from('Benign video fixture'), mimeType: 'video/mp4' };
+    });
+    vi.mocked(mockApiProvider.callApi).mockImplementation(async () => {
+      callOrder.push('target');
+      return {
+        output: 'Fixture video',
+        video: {
+          blobRef: {
+            hash: 'fixture-hash',
+            mimeType: 'video/mp4',
+            sizeBytes: 20,
+            uri: 'promptfoo://blob/fixture-hash',
+            provider: 'filesystem',
+          },
+        },
+      };
+    });
+    const grader: ApiProvider = {
+      id: () => 'fixture-video-grader',
+      callApi: vi.fn(async () => {
+        callOrder.push('grader');
+        return { output: { pass: true, score: 1, reason: 'Fixture grade' } };
+      }),
+    };
+    const suite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Fixture video')],
+      tests: Array.from({ length: 3 }, () => ({
+        assert: [{ type: 'video-rubric', value: 'Fixture rubric', provider: grader }],
+      })),
+    };
+    const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    try {
+      await evaluate(suite, evalRecord, { maxConcurrency: 1 });
+      expect((await evalRecord.toEvaluateSummary()).stats.successes).toBe(3);
+      expect(callOrder).toEqual([
+        'target',
+        'read',
+        'grader',
+        'target',
+        'read',
+        'grader',
+        'target',
+        'read',
+        'grader',
+      ]);
+    } finally {
+      resolve.mockRestore();
+    }
+  });
+
   it.each(['failed', 'aborted'])(
     'preserves completed audio output when grading is %s',
     async (outcome) => {

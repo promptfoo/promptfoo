@@ -4295,7 +4295,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         if (
           rows.some(
             (row) =>
-              (row.response?.audio || row.response?.metadata?.workingDir) &&
+              (row.response?.audio || row.response?.video || row.response?.metadata?.workingDir) &&
               deferredGradingPromises.has(row),
           )
         ) {
