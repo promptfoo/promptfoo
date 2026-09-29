@@ -122,6 +122,42 @@ describe('runEval', () => {
     expect(sleepSpy).not.toHaveBeenCalled();
   });
 
+  it('renders local defaults while keeping imported stored-output values literal', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: '{{input}} / {{context}}', label: 'fixture' },
+      test: {
+        providerOutput: 'stored',
+        vars: { input: '{{source}}', source: 'local context', context: '{{source}}' },
+        metadata: { __promptfoo: { remote: true, remoteVars: ['input'] } },
+      },
+      conversations: {},
+      registers: {},
+    });
+    expect(results[0].prompt.raw).toBe('{{source}} / local context');
+    expect(results[0].vars.context).toBe('local context');
+  });
+
+  it('skips the response-provider transform for imported outputs but keeps test transforms', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: { ...mockProvider, transform: 'output + "-provider"' },
+      prompt: { raw: 'fixture', label: 'fixture' },
+      test: {
+        providerOutput: 'stored text',
+        metadata: { __promptfoo: { remote: true, remoteVars: [] } },
+        options: { transform: 'output + "-test"' },
+        assert: [{ type: 'equals', value: 'stored text-test' }],
+      },
+      conversations: {},
+      registers: {},
+    });
+    expect(results[0].success).toBe(true);
+    expect(results[0].response?.output).toBe('stored text-test');
+    expect(mockProvider.callApi).not.toHaveBeenCalled();
+  });
+
   it('keeps local stored-output template rendering independent of array expansion', async () => {
     const results = await runEval({
       ...defaultOptions,

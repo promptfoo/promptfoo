@@ -143,7 +143,7 @@ defaultTest:
 tests: langfuse://traces?tags=production&limit=50
 ```
 
-Each trace becomes a test case. The response provider is skipped, including when a trace has no output; missing outputs are graded as an empty string. Model-graded assertions still call their configured grading provider. Results are stored locally and are not written back to Langfuse.
+Each trace becomes a test case. The response provider and its transform are skipped, including when a trace has no output; missing outputs are graded as an empty string. Test-level transforms still apply. Model-graded assertions still call their configured grading provider. Results are stored locally and are not written back to Langfuse.
 
 Trace input and output may contain production data. They appear in local results and exports. Model-graded assertions can send that data to the grading provider, and sharing an eval also shares its stored trace data.
 
@@ -157,7 +157,7 @@ Trace input and output may contain production data. They appear in local results
 | `fromTimestamp`, `toTimestamp` | ISO 8601 timestamp bounds                                        |
 | `version`, `release`           | Match the trace version or release                               |
 
-Unknown selectors and repeated scalar selectors are rejected. A `sessionId` filter selects individual traces; it does not reconstruct conversation history or grade session continuity.
+Unknown or empty selectors and repeated scalar selectors are rejected. A `sessionId` filter selects individual traces; it does not reconstruct conversation history or grade session continuity.
 
 ### Trace variables
 
@@ -172,4 +172,4 @@ Unknown selectors and repeated scalar selectors are rejected. A `sessionId` filt
 | `__langfuse_latency`, `__langfuse_cost`                          | Latency in seconds and cost in USD, when available |
 | `__langfuse_url`                                                 | Trace link, when supplied by Langfuse              |
 
-Imported values remain literal data. To evaluate a new prompt or response provider against historical inputs, create ordinary test cases instead of using this stored-output source.
+Imported values remain literal data. Local `defaultTest.vars` entries still render normally. To evaluate a new prompt or response provider against historical inputs, create ordinary test cases instead of using this stored-output source.

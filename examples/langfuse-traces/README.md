@@ -1,4 +1,8 @@
-# Evaluate stored Langfuse outputs
+# langfuse-traces (Evaluate Stored Outputs)
+
+## Setup
+
+Start with `npx promptfoo@latest init --example langfuse-traces`, then enter the created directory.
 
 Copy `.env.example` to `.env` and fill in your Langfuse API keys. Install the optional client, then run the example:
 

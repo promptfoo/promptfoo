@@ -252,7 +252,10 @@ export function parseTracesUrl(url: string): FetchTracesQuery {
 
   for (const param of stringParams) {
     const value = params.get(param);
-    if (value) {
+    if (value !== null) {
+      if (!value.trim()) {
+        throw new Error('Langfuse trace selectors must not be empty.');
+      }
       query[param] = value;
     }
   }
@@ -262,7 +265,10 @@ export function parseTracesUrl(url: string): FetchTracesQuery {
     .flatMap((value) => value.split(','))
     .map((tag) => tag.trim())
     .filter(Boolean);
-  if (tags.length > 0) {
+  if (params.has('tags')) {
+    if (tags.length === 0) {
+      throw new Error('Langfuse trace selectors must not be empty.');
+    }
     query.tags = tags;
   }
 
@@ -292,9 +298,7 @@ function extractInputText(input: unknown): unknown {
     }
   }
 
-  // Simple key patterns: { query, prompt, message, input, text }.
-  // Responses requests commonly nest message arrays under `input`; process
-  // those through the same extractor rather than stringifying envelopes.
+  // Responses requests can nest message arrays under `input`.
   if (obj.query !== undefined) {
     return obj.query;
   }
@@ -410,11 +414,12 @@ function traceToTestCase(trace: LangfuseTrace, baseUrl: string): LangfuseTraceTe
     description: `Trace: ${trace.name || trace.id} (${new Date(trace.timestamp).toLocaleDateString()})`,
     vars,
     metadata: {
+      __promptfoo: { remoteVars: Object.keys(vars) },
       langfuseTraceId: trace.id,
       langfuseTraceUrl: traceUrl,
     },
     options: {
-      // Disable variable expansion since trace data is already resolved
+      // Arrays in trace payloads are data, not separate test cases.
       disableVarExpansion: true,
     },
   };
@@ -468,17 +473,6 @@ async function fetchTracePage(
   }
 }
 
-function shouldFetchNextPage(
-  response: LangfuseTracesResponse,
-  currentPage: number,
-  pageLimit: number,
-): boolean {
-  if (response.meta) {
-    return currentPage < response.meta.totalPages;
-  }
-  return response.data.length === pageLimit;
-}
-
 export async function fetchLangfuseTraces(url: string): Promise<LangfuseTraceTestCase[]> {
   const query = parseTracesUrl(url);
   const limit = query.limit ?? DEFAULT_LIMIT;
@@ -527,7 +521,7 @@ export async function fetchLangfuseTraces(url: string): Promise<LangfuseTraceTes
     }
 
     // If no metadata is present, assume more pages when the page is full.
-    hasMore = shouldFetchNextPage(response, page, pageLimit);
+    hasMore = response.meta ? page < response.meta.totalPages : response.data.length === pageLimit;
 
     page++;
 

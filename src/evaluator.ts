@@ -867,7 +867,7 @@ async function renderRunEvalPrompt({
 }): Promise<RenderedRunEvalPrompt> {
   const skipRenderVars =
     test.providerOutput !== undefined && test.metadata?.__promptfoo?.remote === true
-      ? Object.keys(vars)
+      ? (test.metadata.__promptfoo.remoteVars ?? Object.keys(vars))
       : shouldSkipRedteamInjectVar(test, testSuite, isRedteam)
         ? [getRedteamInjectVar(test, promptForRender, testSuite)]
         : undefined;
@@ -1530,7 +1530,9 @@ async function transformRunEvalResponse({
   providerTransformedOutput: ProviderResponse['output'];
 }> {
   const processedResponse = { ...response };
-  if (provider.transform) {
+  const isRemoteStoredOutput =
+    test.providerOutput !== undefined && test.metadata?.__promptfoo?.remote === true;
+  if (provider.transform && !isRemoteStoredOutput) {
     processedResponse.output = await transform(provider.transform, processedResponse.output, {
       vars,
       prompt,

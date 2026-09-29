@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Mock the envars module
 vi.mock('../../src/envars', () => ({
   getEnvString: vi.fn(),
   isCI: vi.fn().mockReturnValue(true),
@@ -17,7 +16,6 @@ vi.mock('../../src/integrations/langfuse', () => ({
   },
 }));
 
-// Import after mocks are set up
 import { getEnvString } from '../../src/envars';
 import {
   fetchLangfuseTraces,
@@ -26,9 +24,8 @@ import {
 } from '../../src/integrations/langfuseTraces';
 
 describe('langfuseTraces', () => {
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks();
-    // Reset mocks to ensure test isolation
     mockTraceList.mockReset();
     mockLangfuseConstructorError.error = undefined;
     vi.mocked(getEnvString).mockReset();
@@ -39,12 +36,18 @@ describe('langfuseTraces', () => {
   });
 
   describe('parseTracesUrl', () => {
-    it.each(['tag=production', 'sessionID=fixture', 'userId=a&userId=b', 'limit='])(
-      'rejects invalid selectors: %s',
-      (query) => {
-        expect(() => parseTracesUrl(`langfuse://traces?${query}`)).toThrow();
-      },
-    );
+    it.each([
+      'tag=production',
+      'sessionID=fixture',
+      'userId=a&userId=b',
+      'limit=',
+      'userId=',
+      'sessionId=%20',
+      'tags=,%20',
+      'fromTimestamp=',
+    ])('rejects invalid selectors: %s', (query) => {
+      expect(() => parseTracesUrl(`langfuse://traces?${query}`)).toThrow();
+    });
 
     it('should only accept the traces source URL and its query parameters', () => {
       expect(isLangfuseTracesUrl('langfuse://traces')).toBe(true);
@@ -151,7 +154,6 @@ describe('langfuseTraces', () => {
 
   describe('fetchLangfuseTraces', () => {
     beforeEach(() => {
-      // Set up default env mocks for authentication
       vi.mocked(getEnvString).mockImplementation((key: string) => {
         if (key === 'LANGFUSE_PUBLIC_KEY') {
           return 'pk-test';
@@ -289,6 +291,16 @@ describe('langfuseTraces', () => {
         },
         providerOutput: 'Paris is the capital of France.',
       });
+    });
+
+    it('records imported variable names before local defaults are merged', async () => {
+      mockTraceList.mockResolvedValueOnce({
+        data: [
+          { id: 'fixture', timestamp: '2026-01-01T00:00:00Z', input: 'literal', output: 'stored' },
+        ],
+      });
+      const [test] = await fetchLangfuseTraces('langfuse://traces');
+      expect(test.metadata?.__promptfoo).toEqual({ remoteVars: Object.keys(test.vars!) });
     });
 
     it('should handle traces with string input/output directly', async () => {
