@@ -17,7 +17,17 @@ Install promptfoo globally:
 npm install -g promptfoo
 ```
 
-Full-repository scans use the `@modelcontextprotocol/server-filesystem` package that installs with promptfoo as an optional dependency. If you install with `--omit=optional`, add that package or use `--diffs-only`.
+Full-repository scans use the pinned filesystem MCP server installed with promptfoo. Keep the installation outside the repository being scanned. If you installed with `--omit=optional`, reinstall with optional dependencies or use `--diffs-only`.
+
+For Yarn Plug'n'Play, add this to the external installation's `.yarnrc.yml` and reinstall. The package extension supplies a dependency omitted by the pinned filesystem server:
+
+```yaml title=".yarnrc.yml"
+pnpEnableEsmLoader: true
+packageExtensions:
+  '@modelcontextprotocol/server-filesystem@2026.8.31':
+    dependencies:
+      zod: '^4.3.6'
+```
 
 Authenticate with your promptfoo account:
 
