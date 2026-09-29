@@ -3687,8 +3687,9 @@ describe('VertexChatProvider.callClaudeApi', () => {
 
     await provider.callClaudeApi('test prompt');
 
-    const sentBody = mockRequest.mock.calls[0][0].data as Record<string, unknown>;
-    expect(sentBody).toMatchObject(expected);
+    // toEqual treats an omitted parameter and an undefined one alike, as JSON does.
+    const { temperature, top_p, top_k } = mockRequest.mock.calls[0][0].data;
+    expect({ temperature, top_p, top_k }).toEqual(expected);
   });
 
   it('should accept both max_tokens and maxOutputTokens parameters', async () => {
