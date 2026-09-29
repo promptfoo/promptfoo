@@ -1,8 +1,8 @@
 import * as fs from 'fs';
 
-import dotenv from 'dotenv';
 import logger from '../logger';
 import { refreshConfigDirectoryPathFromEnv } from './config/manage';
+import { loadEnvFiles } from './envFile';
 
 interface SetupEnvOptions {
   /** Suppress startup messages until console logging has been configured. */
@@ -38,12 +38,11 @@ export function setupEnv(envPath: string | string[] | undefined, options: SetupE
   }
 
   const previousEnv = { ...options.processEnv };
-  dotenv.config({
-    quiet: true,
-    ...(paths.length > 0 && { path: paths.length === 1 ? paths[0] : paths, override: true }),
+  loadEnvFiles(paths.length > 0 ? paths : undefined, {
+    ...(paths.length > 0 && { override: true }),
     ...(options.processEnv && { processEnv: options.processEnv }),
   });
-  // An implicit .env only supplies missing values, including in an isolated call.
+  // Implicit file values must not shadow host values absent from an isolated environment.
   if (options.processEnv && paths.length === 0) {
     for (const key of Object.keys(options.processEnv)) {
       if (

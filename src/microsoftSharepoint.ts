@@ -103,6 +103,16 @@ async function getConfidentialClient(): Promise<ConfidentialClientApplication> {
     throw new Error(`Failed to read certificate from path: ${certPath}. Error: ${error}`);
   }
 
+  const { ConfidentialClientApplication: MsalClient } = await import('@azure/msal-node');
+  // Check after both awaits so concurrent callers can reuse the same client.
+  if (
+    cachedClient?.clientId === clientId &&
+    cachedClient.tenantId === tenantId &&
+    cachedClient.pemContent === pemContent
+  ) {
+    return cachedClient.client;
+  }
+
   // Extract private key
   const privateKeyMatch = pemContent.match(
     /-----BEGIN PRIVATE KEY-----[\s\S]+?-----END PRIVATE KEY-----/,
@@ -134,16 +144,6 @@ async function getConfidentialClient(): Promise<ConfidentialClientApplication> {
     },
   };
 
-  const { ConfidentialClientApplication: MsalClient } = await import('@azure/msal-node');
-  // Check after asynchronous work so simultaneous callers with the same
-  // credentials can reuse the client; failed initialization is never cached.
-  if (
-    cachedClient?.clientId === clientId &&
-    cachedClient.tenantId === tenantId &&
-    cachedClient.pemContent === pemContent
-  ) {
-    return cachedClient.client;
-  }
   const client = new MsalClient(msalConfig);
   cachedClient = { clientId, tenantId, pemContent, client };
   return client;
