@@ -597,7 +597,7 @@ Trace reads redact credential-like attribute keys such as authorization headers,
 
 Evaluation result exports and sharing also apply the eval's saved `PROMPTFOO_STRIP_*` settings to trace metadata, test variables, and Promptfoo request/response bodies. These settings do not change locally stored spans.
 
-Span events from OTLP and the local SDK exporter are retained with their names, timestamps, and attributes. Event attributes use the same read-time redaction and export stripping as span attributes; names that exactly match a redacted attribute value are also masked. OTLP event timestamps are numeric milliseconds, preserving fractional milliseconds within JavaScript number precision, and fall back to the span start when omitted or zero. Invalid OTLP event shapes return HTTP 400; malformed event entries in imported or older stored traces are omitted without discarding valid spans.
+Span events from OTLP and the local SDK exporter are retained with their names, timestamps, and attributes. Event attributes use the same read-time redaction and export stripping as span attributes; names that exactly match a redacted attribute value are also masked. Stored event timestamps use milliseconds, including fractions within JavaScript number precision. Missing or zero OTLP timestamps use the span start. Invalid OTLP event shapes return HTTP 400; malformed event entries in imported or older stored traces are omitted without discarding valid spans.
 
 ### Exporting Traces
 
