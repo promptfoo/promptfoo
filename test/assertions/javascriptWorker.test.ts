@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import vm from 'node:vm';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../src/assertions';
@@ -119,6 +120,49 @@ describe('isolated JavaScript assertions', () => {
         }),
       ),
     ).resolves.toMatchObject({ pass: true, score: 1 });
+  });
+
+  it('accepts grading objects and nested arrays from the CommonJS compatibility loader', async () => {
+    await fs.writeFile(
+      path.join(basePath, 'check.js'),
+      'module.exports = () => ({ pass: true, score: 0.75, reason: "fixture", componentResults: [{ pass: true, score: 1, reason: "child" }] });',
+    );
+    await expect(
+      cliState.withBasePath(basePath, () =>
+        runAssertion({
+          assertion: { type: 'javascript', executionMode: 'worker', value: 'file://check.js' },
+          test: {},
+          providerResponse: { output: 'fixture' },
+        }),
+      ),
+    ).resolves.toMatchObject({
+      pass: true,
+      score: 0.75,
+      componentResults: [{ pass: true, score: 1, reason: 'child' }],
+    });
+  });
+
+  it('copies test data without parent execution settings or mutation', async () => {
+    const provider = { id: () => 'fixture', callApi: vi.fn() };
+    const test = {
+      description: 'fixture',
+      vars: { expected: 'fixture' },
+      metadata: { category: 'test' },
+      provider,
+      assertScoringFunction: vi.fn(),
+      assert: [{ type: 'llm-rubric' as const, provider }],
+      options: { provider, transform: vi.fn(), transformVars: vi.fn(), temperature: 0 },
+    };
+    await expect(execute('context.test', { ...context(), test })).resolves.toEqual({
+      description: 'fixture',
+      vars: { expected: 'fixture' },
+      metadata: { category: 'test' },
+      options: { temperature: 0 },
+    });
+    expect(test.provider).toBe(provider);
+    expect(test.assert).toHaveLength(1);
+    expect(test.options.transform).not.toHaveBeenCalled();
+    expect(test.assertScoringFunction).not.toHaveBeenCalled();
   });
 
   it('keeps direct function assertions in-process unless worker mode is selected', async () => {
@@ -307,5 +351,19 @@ describe('worker context data', () => {
     const value = Object.defineProperty({}, 'value', { get: getter, enumerable: true });
     expect(() => cloneJavascriptWorkerData(value)).toThrow('accessors');
     expect(getter).not.toHaveBeenCalled();
+  });
+
+  it('accepts plain objects across realms but rejects class instances and array subclasses', () => {
+    expect(cloneJavascriptWorkerData(vm.runInNewContext('({ rows: [1, 2] })'))).toEqual({
+      rows: [1, 2],
+    });
+    for (const expression of [
+      'new (class Fixture {})()',
+      'new (class Fixture extends Array {})()',
+    ]) {
+      expect(() => cloneJavascriptWorkerData(vm.runInNewContext(expression))).toThrow(
+        'class instances are unsupported',
+      );
+    }
   });
 });

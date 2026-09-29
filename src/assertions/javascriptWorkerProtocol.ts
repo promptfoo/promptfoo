@@ -51,10 +51,17 @@ export function cloneJavascriptWorkerData<T>(value: T): T {
     }
     seen.add(current);
     const prototype = Object.getPrototypeOf(current);
+    const constructor = prototype && Object.getOwnPropertyDescriptor(prototype, 'constructor');
+    const intrinsic = Array.isArray(current) ? Array : Object;
     if (
-      Array.isArray(current)
-        ? prototype !== Array.prototype
-        : prototype !== Object.prototype && prototype !== null
+      prototype !== null &&
+      (!constructor ||
+        typeof constructor.value !== 'function' ||
+        Function.prototype.toString.call(constructor.value) !==
+          Function.prototype.toString.call(intrinsic) ||
+        (Array.isArray(current)
+          ? !Array.isArray(prototype)
+          : Object.getPrototypeOf(prototype) !== null))
     ) {
       throw new Error(
         'Worker JavaScript assertions require plain objects and arrays; class instances are unsupported.',

@@ -252,6 +252,9 @@ export const handleJavascript = async ({
 
     return normalizeJavascriptAssertionResult(assertion, result, inverse, renderedValue);
   } catch (err) {
+    if (assertion.executionMode === 'worker' && err instanceof Error && err.name === 'AbortError') {
+      throw err;
+    }
     return {
       pass: false,
       score: 0,

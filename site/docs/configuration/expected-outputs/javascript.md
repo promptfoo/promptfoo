@@ -62,6 +62,8 @@ Set `evaluateOptions.timeoutMs` to give the evaluation a deadline. The worker us
 
 Worker input, context, callback arguments, and results must contain plain objects, arrays, or primitive values. Function closures, class instances, accessors, and non-enumerable or symbol properties produce an error. Data is copied; changes made by an assertion do not update the caller's objects. File and package assertions use the existing module loaders and active configuration directory.
 
+`context.test` contains the test's data fields. It excludes the parent process's execution settings: `assert`, `assertScoringFunction`, `provider`, and `options.provider`, `options.transform`, `options.postprocess`, and `options.transformVars`. These settings still apply in the parent process. Other fields, including variables, metadata, and provider configuration, must meet the plain-data requirements above.
+
 In a worker, `context.provider` exposes `id()`, `label`, `config`, and `callApi()`. Calls go to the existing provider in the evaluation process. Up to eight calls can be pending at once, and the evaluator's cancellation signal is passed to them. Callback options support `includeLogProbs`; callers cannot supply another `AbortSignal`. Other provider methods are unavailable. Provider code must cooperate with cancellation.
 
 Worker execution is not a security sandbox. Assertions retain Node.js capabilities, including filesystem and network access. Transforms, provider callbacks, and custom scoring functions still run in the evaluation process. Function-valued assertions are supported only in the default in-process mode.

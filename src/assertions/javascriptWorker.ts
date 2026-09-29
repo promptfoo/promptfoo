@@ -28,14 +28,31 @@ export async function runJavascriptInWorker({
   context: AssertionValueFunctionContext;
 }): Promise<unknown> {
   const signal = getProviderCallExecutionContext()?.abortSignal;
-  signal?.throwIfAborted();
+  if (signal?.aborted) {
+    throw new DOMException('Worker JavaScript assertion aborted', 'AbortError');
+  }
   const provider = context.provider;
+  const {
+    assert: _assert,
+    assertScoringFunction: _scoring,
+    provider: _testProvider,
+    options,
+    ...testData
+  } = context.test;
+  const {
+    provider: _gradingProvider,
+    transform: _transform,
+    postprocess: _postprocess,
+    transformVars: _transformVars,
+    ...optionData
+  } = options ?? {};
   const request: JavascriptWorkerRequest = cloneJavascriptWorkerData({
     value,
     functionBody,
     output,
     context: {
       ...context,
+      test: { ...testData, ...(options ? { options: optionData } : {}) },
       provider: provider
         ? { id: provider.id(), label: provider.label, config: provider.config }
         : undefined,
@@ -50,7 +67,15 @@ export async function runJavascriptInWorker({
     'assertions',
     `javascriptWorkerEntry.${built ? 'js' : 'ts'}`,
   );
-  const execArgv: string[] = [];
+  // --input-type applies to the parent's string entry point, not the worker file.
+  const execArgv: string[] = built
+    ? process.execArgv.filter(
+        (arg, index, args) =>
+          arg !== '--input-type' &&
+          !arg.startsWith('--input-type=') &&
+          args[index - 1] !== '--input-type',
+      )
+    : [];
   if (!built) {
     const loader = resolvePackageEntryPoint('tsx', getDirectory());
     if (!loader) {
@@ -60,7 +85,7 @@ export async function runJavascriptInWorker({
   }
   const worker = new Worker(pathToFileURL(entry), {
     workerData: request,
-    ...(built ? {} : { execArgv }),
+    execArgv,
   });
 
   return new Promise((resolve, reject) => {
@@ -91,7 +116,7 @@ export async function runJavascriptInWorker({
       }
     }
     function onAbort(): void {
-      void finish(new Error('Worker JavaScript assertion aborted'));
+      void finish(new DOMException('Worker JavaScript assertion aborted', 'AbortError'));
     }
     worker.on('error', (error) => void finish(error));
     worker.on('exit', (code) => {
