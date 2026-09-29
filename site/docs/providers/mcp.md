@@ -240,7 +240,7 @@ Discovered token endpoints must use the same origin (scheme, host, and port) as 
 When using OAuth authentication:
 
 1. The provider requests an access token from `tokenUrl` (or discovered endpoint) before connecting
-2. Each HTTP request to the server carries the current token; tokens are refreshed 60 seconds before expiration without reconnecting
+2. Each HTTP request carries the current token. Tokens refresh before expiry without reconnecting, using a margin of 60 seconds or half the remaining lifetime when issued, whichever is shorter
 3. Concurrent requests share the same refresh operation (no duplicate token fetches)
 4. If the server rejects a token with HTTP 401, the provider fetches a new token and resends that request once. Other failures, including tool errors, are returned without a retry
 
