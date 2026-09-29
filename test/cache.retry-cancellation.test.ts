@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache, withCacheEnabled } from '../src/cache';
 import { clearAgentCache } from '../src/util/fetch/index';
 import { withFetchRetryContext } from '../src/util/fetch/retryContext';
+import { createDeferred } from './util/utils';
 
 const transport = vi.hoisted(() => vi.fn());
 vi.mock('../src/util/fetch/monkeyPatchFetch', async (importOriginal) => ({
@@ -9,14 +10,6 @@ vi.mock('../src/util/fetch/monkeyPatchFetch', async (importOriginal) => ({
   monkeyPatchFetch: transport,
 }));
 vi.mock('../src/logger');
-
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((res) => {
-    resolve = res;
-  });
-  return { promise, resolve };
-}
 
 describe('fetchWithCache retry budget and Request cancellation', () => {
   beforeEach(() => {
@@ -67,8 +60,8 @@ describe('fetchWithCache retry budget and Request cancellation', () => {
     async (bypass) => {
       const controller = new AbortController();
       const reason = new Error('request owner stopped');
-      const started = deferred<void>();
-      const release = deferred<Response>();
+      const started = createDeferred<void>();
+      const release = createDeferred<Response>();
       let transportSignal: AbortSignal | null | undefined;
       transport.mockImplementation((_url, options: RequestInit) => {
         transportSignal = options.signal;
@@ -103,8 +96,8 @@ describe('fetchWithCache retry budget and Request cancellation', () => {
   it('lets an explicit RequestInit signal override the Request signal', async () => {
     const requestOwner = new AbortController();
     const explicitOwner = new AbortController();
-    const started = deferred<void>();
-    const release = deferred<Response>();
+    const started = createDeferred<void>();
+    const release = createDeferred<Response>();
     let transportSignal: AbortSignal | null | undefined;
     transport.mockImplementation((_url, options: RequestInit) => {
       transportSignal = options.signal;

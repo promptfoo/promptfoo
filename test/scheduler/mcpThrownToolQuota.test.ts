@@ -17,7 +17,7 @@ import {
   createEmptyTokenUsage,
 } from '../../src/util/tokenUsageUtils';
 import { createDeferred, mockProcessEnv } from '../util/utils';
-import type { ReadableSpan, SpanProcessor } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan, SpanProcessor } from '@opentelemetry/sdk-trace-node';
 
 import type { ApiProvider } from '../../src/types/providers';
 

@@ -19,6 +19,7 @@ import {
   getCloudTaskTeamId,
   getRequestUrlString,
   PROMPTFOO_TEAM_ID_HEADER,
+  preserveCloudAuthRedirects,
 } from './util/fetch/monkeyPatchFetch';
 import { getEffectiveRequestSignal } from './util/fetch/requestSignal';
 import { getFetchRetryContextMaxRetries } from './util/fetch/retryContext';
@@ -28,6 +29,7 @@ import type { Cache } from 'cache-manager';
 
 import type { CacheOptions } from './types/cache';
 import type { FetchRateLimitObservation } from './util/fetch/index';
+import type { FetchOptions } from './util/fetch/types';
 
 let cacheInstance: Cache | undefined;
 const namespacedCacheInstances = new Map<string, Cache>();
@@ -696,7 +698,7 @@ function deserializeFetchResponse<T>(
 
 async function fetchAndReadBody(
   url: RequestInfo,
-  options: RequestInit,
+  options: FetchOptions,
   timeout: number,
   maxRetries: number | undefined,
   isIdempotent: boolean,
@@ -867,7 +869,7 @@ async function prepareFetchResponse(
  */
 export async function fetchWithCache<T = unknown>(
   url: RequestInfo,
-  options: RequestInit = {},
+  options: FetchOptions = {},
   timeout: number = getRequestTimeoutMs(),
   format: 'json' | 'text' = 'json',
   bustOrOptions: boolean | CacheOptions | undefined = false,
@@ -879,7 +881,10 @@ export async function fetchWithCache<T = unknown>(
   throwIfAborted(signal);
   // fetchWithTimeout composes RequestInit.signal with its timeout signal.
   // Forward a Request-owned signal too, while retaining an explicit override.
-  const transportOptions = signal === options.signal ? options : { ...options, signal };
+  const fetchOptions = preserveCloudAuthRedirects(
+    url,
+    signal === options.signal ? options : { ...options, signal },
+  );
   const cacheOptions: CacheOptions =
     typeof bustOrOptions === 'boolean' ? { bust: bustOrOptions } : (bustOrOptions ?? {});
   const { bust = false, repeatIndex, cacheKey: providedCacheKey } = cacheOptions;
@@ -887,16 +892,27 @@ export async function fetchWithCache<T = unknown>(
   // Only retry body-read for idempotent methods to avoid double-submitting
   // POST/PATCH requests (the server already processed the request once
   // headers arrived; only the response body stream failed).
-  const method = (options.method ?? (url instanceof Request ? url.method : 'GET')).toUpperCase();
+  const method = (
+    fetchOptions.method ?? (url instanceof Request ? url.method : 'GET')
+  ).toUpperCase();
   const isIdempotent = ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(method);
 
   const cacheEnabled = getEffectiveCacheEnabled();
+  if (cacheEnabled && !bust && fetchOptions.getAuthHeaders && !providedCacheKey) {
+    throw new Error(
+      'Request-time authentication requires cache bypass or an explicit principal-scoped cache key.',
+    );
+  }
   const repeatSuffix = shouldApplyRepeatCacheSuffix(repeatIndex) ? `:repeat${repeatIndex}` : '';
+  // Caller-provided keys must not reuse responses accepted without Cloud redirect protection.
+  const providedKeyPrefix = fetchOptions.restrictCloudAuthRedirects
+    ? 'fetch:cloud-auth:v3'
+    : 'fetch:v3';
   const cacheKey =
     cacheEnabled && !bust
       ? providedCacheKey
-        ? getScopedCacheKey(`fetch:v3:${providedCacheKey}${repeatSuffix}`)
-        : getFetchCacheKey(url, options, method, format, repeatIndex)
+        ? getScopedCacheKey(`${providedKeyPrefix}:${providedCacheKey}${repeatSuffix}`)
+        : getFetchCacheKey(url, fetchOptions, method, format, repeatIndex)
       : null;
 
   let notifyRateLimitBackoff: typeof onRateLimitBackoff;
@@ -922,7 +938,7 @@ export async function fetchWithCache<T = unknown>(
   if (!cacheEnabled || bust || cacheKey == null) {
     const response = fetchAndReadBody(
       url,
-      transportOptions,
+      fetchOptions,
       timeout,
       maxRetries,
       isIdempotent,
@@ -969,14 +985,14 @@ export async function fetchWithCache<T = unknown>(
     return deserializeFetchResponse<T>(cachedResponse, true, cache, cacheKey);
   }
 
-  const inflightCacheKey = getInflightFetchCacheKey(cacheKey, url, options);
+  const inflightCacheKey = getInflightFetchCacheKey(cacheKey, url, fetchOptions);
   let inflightResponse = inflightFetchResponses.get(inflightCacheKey);
   const coalesced = inflightResponse !== undefined;
   if (!inflightResponse) {
     const rateLimitBackoff: InflightFetchResponse['rateLimitBackoff'] = { observers: new Set() };
     const response = prepareFetchResponse(
       url,
-      transportOptions,
+      fetchOptions,
       timeout,
       maxRetries,
       isIdempotent,

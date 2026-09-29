@@ -12,6 +12,7 @@ import { runExtensionHook } from '../../src/evaluatorHelpers';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
+import { EchoProvider } from '../../src/providers/echo';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { ProviderGroupedCallQueue } from '../../src/scheduler/providerCallQueue';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
@@ -74,6 +75,24 @@ describeEvaluator('evaluator execution control', () => {
       await pending;
       vi.useRealTimers();
     }
+  });
+
+  it.each([
+    ['the provider', 100, undefined],
+    ['the evaluation', undefined, 125],
+  ])('applies the Echo delay only once when set on %s', async (_name, providerDelay, evalDelay) => {
+    const provider = new EchoProvider({ delay: providerDelay });
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Echo test')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { delay: evalDelay });
+
+    expect(sleep).toHaveBeenCalledTimes(1);
+    expect(sleep).toHaveBeenCalledWith(providerDelay ?? evalDelay);
   });
 
   it('evaluates with no provider delay', async () => {
@@ -1222,7 +1241,7 @@ describeEvaluator('evaluator execution control', () => {
     }
   });
 
-  it('flushes queued grouped grading before writing max-duration timeout rows', async () => {
+  it('cancels queued grouped grading at maxEvalTimeMs and retains completed target outputs', async () => {
     vi.useFakeTimers();
 
     const results: any[] = [];
@@ -1301,21 +1320,21 @@ describeEvaluator('evaluator execution control', () => {
 
     const resultByTopic = new Map(results.map((result) => [result.vars.topic, result]));
 
-    expect(judge.callApi).toHaveBeenCalledTimes(1);
+    expect(judge.callApi).not.toHaveBeenCalled();
     expect(resultByTopic.get('alpha')).toEqual(
       expect.objectContaining({
-        success: true,
+        success: false,
         response: expect.objectContaining({
           output: 'Target output for Test prompt alpha',
         }),
       }),
     );
-    expect(resultByTopic.get('alpha')?.error).toBeUndefined();
+    expect(resultByTopic.get('alpha')?.error).toMatch(/abort|cancel/i);
     expect(resultByTopic.get('gamma')?.error).toContain('Evaluation exceeded max duration');
   });
 
-  it.each(['queued', 'active after deadline', 'immediate per-step'] as const)(
-    'retains original caller cancellation for %s grading',
+  it.each(['queued', 'active', 'deadline', 'immediate per-step'] as const)(
+    'cancels %s grading without losing completed target outputs',
     async (mode) => {
       vi.useFakeTimers();
       const controller = new AbortController();
@@ -1358,12 +1377,7 @@ describeEvaluator('evaluator execution control', () => {
             }
           }
         });
-      const topics =
-        mode === 'queued'
-          ? ['alpha', 'beta', 'gamma']
-          : mode === 'active after deadline'
-            ? ['alpha', 'beta', 'gamma', 'delta']
-            : ['alpha'];
+      const topics = mode === 'queued' ? ['alpha', 'beta', 'gamma'] : ['alpha'];
       let activeJudges = 0;
       let judgeSignal: AbortSignal | undefined;
       const target: ApiProvider = {
@@ -1372,8 +1386,8 @@ describeEvaluator('evaluator execution control', () => {
           if (mode === 'queued' && prompt.includes('beta')) {
             await held(options?.abortSignal);
           }
-          if (mode === 'active after deadline') {
-            await held(options?.abortSignal, prompt.includes('gamma') ? undefined : 10);
+          if (mode === 'active' || mode === 'deadline') {
+            await held(options?.abortSignal, 10);
           }
           return { output: `Completed ${prompt}`, tokenUsage: createEmptyTokenUsage() };
         }),
@@ -1433,7 +1447,7 @@ describeEvaluator('evaluator execution control', () => {
         settled = true;
       });
       try {
-        await vi.advanceTimersByTimeAsync(mode === 'active after deadline' ? 55 : 0);
+        await vi.advanceTimersByTimeAsync(mode === 'active' || mode === 'deadline' ? 10 : 0);
         expect(settled).toBe(false);
         if (mode === 'queued') {
           expect(target.callApi).toHaveBeenCalledTimes(2);
@@ -1444,8 +1458,16 @@ describeEvaluator('evaluator execution control', () => {
           expect(activeJudges).toBe(1);
           expect(judgeSignal?.aborted).toBe(false);
         }
-        controller.abort(reason);
-        await vi.advanceTimersByTimeAsync(0);
+        if (mode === 'deadline') {
+          await vi.advanceTimersByTimeAsync(44);
+          expect(settled).toBe(false);
+          expect(judgeSignal?.aborted).toBe(false);
+          await vi.advanceTimersByTimeAsync(1);
+          expect(controller.signal.aborted).toBe(false);
+        } else {
+          controller.abort(reason);
+          await vi.advanceTimersByTimeAsync(0);
+        }
         expect(settled).toBe(true);
         await pending;
         expect(activeJudges).toBe(0);
@@ -1460,14 +1482,6 @@ describeEvaluator('evaluator execution control', () => {
         }
         expect(alpha[0].success).toBe(false);
         expect(alpha[0].error).toMatch(/abort|cancel/i);
-        if (mode === 'active after deadline') {
-          expect(rows.find((row) => row.vars.topic === 'beta')?.response.output).toBe(
-            'Completed Topic beta',
-          );
-          expect(rows.find((row) => row.vars.topic === 'delta')?.error).toContain(
-            'Evaluation exceeded max duration',
-          );
-        }
         expect(metrics.length).toBeGreaterThan(0);
         expect(metrics.every((m) => m.activeRequests === 0 && m.queueDepth === 0)).toBe(true);
         const calls = [

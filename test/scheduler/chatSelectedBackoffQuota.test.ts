@@ -297,7 +297,8 @@ describe('loaded Chat selected fetch backoff and same-key quota', () => {
       const release = vi.spyOn(SlotQueue.prototype, 'release');
       const first = start(wrapped, 'A', caller());
       await first.done;
-      expect(first.state.error).toMatchObject({ name: 'RateLimitExhaustedError' });
+      expect(first.state.error).toBeUndefined();
+      expect(first.state.value?.error).toMatch(/Rate limit(?:ed| exceeded)/);
       expect(dispatches).toHaveLength(1);
       expect(selected.waits).toHaveLength(0);
       expect(release).toHaveBeenCalledOnce();
@@ -308,9 +309,9 @@ describe('loaded Chat selected fetch backoff and same-key quota', () => {
     { recoveryHint: false, kind: 'quota', prefix: 'Quota exceeded:' },
     { recoveryHint: true, kind: 'rate_limit', prefix: 'Rate limit exceeded:' },
   ] as const)(
-    'raw loaded Chat returns a hard-code response without lower retry (recoveryHint=$recoveryHint)',
+    'classifies a quota response with retries disabled (recoveryHint=$recoveryHint)',
     async ({ recoveryHint, kind, prefix }) => {
-      const { target, registry } = await createTarget();
+      const { target, registry } = await createTarget({ maxRetries: 0 });
       const selected = observeSelectedWait();
       const responseHeaders = recoveryHint ? { ...headers, 'retry-after': '2' } : headers;
       const dispatches = staticTransport(
@@ -326,8 +327,8 @@ describe('loaded Chat selected fetch backoff and same-key quota', () => {
         ),
       );
       const release = vi.spyOn(SlotQueue.prototype, 'release');
-      // Lower fetch fails fast on the code. Its structured error treats a short
-      // recovery hint as rate_limit; outer scheduler retry policy is separate.
+      // With no retries available, the error still distinguishes recoverable
+      // throttling from an exhausted account using the server's recovery hint.
       const first = start(target, 'A', caller());
       await first.done;
       expect(first.state.error).toBeUndefined();

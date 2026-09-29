@@ -1,4 +1,5 @@
-import { getAbortError, throwIfAborted } from './cancellation';
+import { getCallerAbortError } from '../util/fetch/requestSignal';
+import { throwIfAborted } from './cancellation';
 
 import type { ParsedRateLimitHeaders } from './headerParser';
 
@@ -76,7 +77,8 @@ export class SlotQueue {
           this.processQueue();
         }
       };
-      const onAbort = () => removeAndReject(getAbortError(abortSignal!));
+      const onAbort = () =>
+        removeAndReject(getCallerAbortError(abortSignal!, 'The operation was aborted.'));
       const request: QueuedRequest = {
         id: requestId,
         queuedAt,

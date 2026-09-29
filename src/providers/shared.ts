@@ -1,26 +1,8 @@
 import { getEnvBool, getEnvInt } from '../envars';
+import { getCallerAbortError } from '../util/fetch/requestSignal';
 import { loadYaml } from '../util/yamlLoad';
 
-export { isCallerAbortError } from '../util/fetch/requestSignal';
-
 import type { ApiProvider } from '../types/index';
-
-function getCallerAbortError(signal: AbortSignal): Error {
-  const reason: unknown = signal.reason;
-  if (
-    reason instanceof Error &&
-    (reason.name === 'AbortError' || reason.name === 'AbortException')
-  ) {
-    return reason;
-  }
-  const message =
-    reason instanceof Error
-      ? reason.message
-      : typeof reason === 'string'
-        ? reason
-        : 'Request was aborted';
-  return Object.assign(new Error(message), { name: 'AbortError', cause: reason });
-}
 
 export function throwIfAborted(signal?: AbortSignal | null): void {
   if (signal?.aborted) {
@@ -58,11 +40,36 @@ export function waitForPromiseWithAbort<T>(
   });
 }
 
+/** Returns the complete model suffix after the given number of provider/type segments. */
+export function modelNameFromProviderPath(providerPath: string, segments: number): string {
+  return providerPath.split(':').slice(segments).join(':');
+}
+
 /**
  * The default timeout for API requests in milliseconds.
  */
 export function getRequestTimeoutMs(): number {
   return getEnvInt('REQUEST_TIMEOUT_MS', 300_000);
+}
+
+/** Read a simple eval variable without evaluating template expressions. */
+export function resolveDirectTestVariable(value: unknown, vars?: Record<string, unknown>): unknown {
+  if (typeof value !== 'string' || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return value;
+  }
+  const variable = /^\{\{\s*([A-Za-z_]\w*)\s*\}\}$/.exec(value)?.[1];
+  return variable && vars && Object.prototype.hasOwnProperty.call(vars, variable)
+    ? vars[variable]
+    : value;
+}
+
+/** Match OpenAI-compatible output-limit environment precedence. */
+export function getOpenAIChatOutputLimitFromEnv(): number | undefined {
+  return getOpenAICompletionTokenLimitFromEnv() ?? getEnvInt('OPENAI_MAX_TOKENS');
+}
+
+export function getOpenAICompletionTokenLimitFromEnv(): number | undefined {
+  return getEnvInt('OPENAI_MAX_COMPLETION_TOKENS');
 }
 
 /**

@@ -580,6 +580,38 @@ export async function get_tools() {
     expect(logger.error).toHaveBeenCalled();
   });
 
+  it.each(['openai', 'openrouter'])(
+    'does not publish rate-limit headers for a successful HTTP %s hard-quota response',
+    async (route) => {
+      fetch.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: { code: 'billing_hard_limit_reached', message: 'fixture quota' },
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+              'x-ratelimit-remaining-requests': '1',
+              'x-ratelimit-reset-requests': '60s',
+            },
+          },
+        ),
+      );
+      const target =
+        route === 'openai'
+          ? provider()
+          : new OpenRouterProvider('fixture-model', {
+              config: { apiKey: 'fixture-key', maxRetries: 0 },
+            });
+      const onResponseHeaders = vi.fn();
+      const result = await target.callApi('fixture', undefined, { onResponseHeaders });
+      expect(result.error).toContain('fixture quota');
+      expect(onResponseHeaders).not.toHaveBeenCalled();
+      expect(fetch).toHaveBeenCalledOnce();
+    },
+  );
+
   it('preserves structured hard-quota errors without retrying', async () => {
     fetch.mockResolvedValueOnce(
       new Response(

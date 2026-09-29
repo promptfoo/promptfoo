@@ -13,7 +13,7 @@ import { getRateLimitKey } from '../../src/scheduler/rateLimitKey';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { SlotQueue } from '../../src/scheduler/slotQueue';
 import { createDeferred, mockProcessEnv } from '../util/utils';
-import type { ReadableSpan, SpanProcessor } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan, SpanProcessor } from '@opentelemetry/sdk-trace-node';
 
 import type { ApiProvider, ProviderResponse } from '../../src/types/providers';
 

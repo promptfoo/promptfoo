@@ -35,13 +35,11 @@ describe('public Chat Python tool preparation', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  it.each(['resolve', 'reject'] as const)(
-    'rejects while the real Python function stays held, then observes late %s',
-    async (settlement) => {
-      const file = path.join(directory, 'tools.py');
-      await writeFile(
-        file,
-        `from pathlib import Path
+  it('stops a canceled Python loader before it completes and permits a later call', async () => {
+    const file = path.join(directory, 'tools.py');
+    await writeFile(
+      file,
+      `from pathlib import Path
 import time
 
 def get_tools():
@@ -50,55 +48,58 @@ def get_tools():
     while not (directory / "release").exists():
         time.sleep(0.01)
     (directory / "finished").write_text("finished")
-    if (directory / "fail").exists():
-        raise RuntimeError("late independent Python preparation failure")
     return []
 `,
-      );
-      const runPython = vi.spyOn(pythonUtils, 'runPython');
-      provider = await loadApiProvider('openai:chat:gpt-4o', {
-        options: { config: { tools: `file://${file}:get_tools`, maxRetries: 0 } },
+    );
+    const runPython = vi.spyOn(pythonUtils, 'runPython');
+    provider = await loadApiProvider('openai:chat:gpt-4o', {
+      options: { config: { tools: `file://${file}:get_tools`, maxRetries: 0 } },
+    });
+    const controller = new AbortController();
+    const reason = Object.assign(new Error('cancel held Python preparation'), {
+      name: 'AbortError',
+    });
+    let outcome: unknown;
+    const pending = provider.callApi('fixture', undefined, { abortSignal: controller.signal }).then(
+      (value) => {
+        outcome = value;
+      },
+      (error) => {
+        outcome = error;
+      },
+    );
+    try {
+      await vi.waitFor(() => access(path.join(directory, 'started')));
+      controller.abort(reason);
+      await vi.waitFor(() => expect(outcome).toBe(reason));
+      await expect(access(path.join(directory, 'finished'))).rejects.toMatchObject({
+        code: 'ENOENT',
       });
-      const controller = new AbortController();
-      const reason = Object.assign(new Error('cancel held Python preparation'), {
-        name: 'AbortError',
-      });
-      let outcome: unknown;
-      const pending = provider
-        .callApi('fixture', undefined, { abortSignal: controller.signal })
-        .then(
-          (value) => {
-            outcome = value;
-          },
-          (error) => {
-            outcome = error;
-          },
-        );
-      try {
-        await vi.waitFor(() => access(path.join(directory, 'started')));
-        controller.abort(reason);
-        await vi.waitFor(() => expect(outcome).toBe(reason));
-        await expect(access(path.join(directory, 'finished'))).rejects.toMatchObject({
-          code: 'ENOENT',
-        });
-        expect(globalThis.fetch).not.toHaveBeenCalled();
-      } finally {
-        if (settlement === 'reject') {
-          await writeFile(path.join(directory, 'fail'), 'fail');
-        }
-        await writeFile(path.join(directory, 'release'), 'release');
-        await pending;
-        expect(runPython).toHaveBeenCalledOnce();
-        const underlying = runPython.mock.results[0].value;
-        if (settlement === 'reject') {
-          await expect(underlying).rejects.toThrow('late independent Python preparation failure');
-        } else {
-          await expect(underlying).resolves.toEqual([]);
-        }
-      }
-      await access(path.join(directory, 'finished'));
-      expect(outcome).toBe(reason);
       expect(globalThis.fetch).not.toHaveBeenCalled();
-    },
-  );
+    } finally {
+      controller.abort(reason);
+      await pending;
+      expect(runPython).toHaveBeenCalledOnce();
+      await expect(runPython.mock.results[0].value).rejects.toBe(reason);
+    }
+    await expect(access(path.join(directory, 'finished'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+    expect(outcome).toBe(reason);
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+
+    await writeFile(path.join(directory, 'release'), 'release');
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: 'recovered' }, finish_reason: 'stop' }],
+        }),
+        { headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    await expect(provider.callApi('fixture')).resolves.toMatchObject({ output: 'recovered' });
+    await access(path.join(directory, 'finished'));
+    expect(runPython).toHaveBeenCalledTimes(2);
+    expect(globalThis.fetch).toHaveBeenCalledOnce();
+  });
 });

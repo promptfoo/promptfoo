@@ -317,7 +317,7 @@ describe('public OpenRouter and Chat coalesced completed outcomes', () => {
     expect(retrying).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
     if (!pendingBody) {
-      const expectedKeys = status === 200 ? [loaded.baseKey, loaded.routerKey] : [loaded.baseKey];
+      const expectedKeys = [loaded.baseKey, loaded.routerKey];
       expect(warningObservations.map(({ key }) => key).sort()).toEqual(expectedKeys.sort());
       for (const observation of warningObservations) {
         expect(observation.bodyUsed).toBe(true);
@@ -379,7 +379,10 @@ describe('public OpenRouter and Chat coalesced completed outcomes', () => {
     const call = await runPair(await pair(), errorPayload, { status: 503 });
     expect(call.outcomes[1]).toEqual({
       status: 'fulfilled',
-      value: { error: `API error: 503 Service Unavailable\n${JSON.stringify(errorPayload)}` },
+      value: {
+        error: `API error: 503 Service Unavailable\n${JSON.stringify(errorPayload)}`,
+        metadata: { http: { status: 503, statusText: 'Service Unavailable', headers } },
+      },
     });
     expect(call.outcomes[3]).toEqual(call.outcomes[1]);
     expect(call.writes).not.toHaveBeenCalled();

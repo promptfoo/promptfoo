@@ -259,7 +259,7 @@ describe('public Chat overrides preserve caller cancellation through the schedul
     const onResponseHeaders = vi.fn();
     const body =
       mode === 'hard quota'
-        ? { error: { code: 'insufficient_quota', message: 'Fixture hard quota' } }
+        ? { error: { code: 'billing_hard_limit_reached', message: 'Fixture hard quota' } }
         : {};
     vi.mocked(globalThis.fetch).mockResolvedValueOnce(
       new Response(JSON.stringify(body), {

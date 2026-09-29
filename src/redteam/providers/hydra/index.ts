@@ -16,6 +16,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
+import { getTargetConversation } from '../../grading/storedResult';
 import { materializeInputVariablesWithMetadata } from '../../inputVariables';
 import {
   getRemoteGenerationDisabledError,
@@ -352,6 +353,7 @@ export class HydraProvider implements ApiProvider {
     let stopReason: TurnBacktrackingStopReason = 'Max turns reached';
     let storedGraderResult: GradingResult | undefined = undefined;
     let lastTargetResponse: TargetResponse | undefined = undefined;
+    let lastResponseMessages: Message[] = [];
     let backtrackCount = 0;
     let agentFailureError: string | undefined;
 
@@ -660,7 +662,10 @@ export class HydraProvider implements ApiProvider {
       }
 
       // Track the final prompt sent to target for UI display (e.g., fetchPrompt for indirect-web-pwn)
-      lastFinalAttackPrompt = finalTargetPrompt;
+      lastFinalAttackPrompt =
+        lastTransformResult?.prompt ||
+        getTargetConversation(this.conversationHistory).lastUserPrompt ||
+        nextMessage;
 
       // Get target response
       const iterationStart = Date.now();
@@ -682,6 +687,10 @@ export class HydraProvider implements ApiProvider {
         options,
       );
       lastTargetResponse = targetResponse;
+      lastResponseMessages = [
+        ...this.conversationHistory,
+        { role: 'assistant', content: targetResponse.output || '' },
+      ];
       accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
       if (targetResponse.error && options?.abortSignal?.aborted) {
         break;
@@ -800,6 +809,8 @@ export class HydraProvider implements ApiProvider {
         }
       }
 
+      // Externalization can replace the response object. Return the same output we grade.
+      lastTargetResponse = targetResponse;
       const historyOutput =
         isBlobStorageEnabled() || shouldAttemptRemoteBlobUpload()
           ? scrubOutputForHistory(targetResponse.output)
@@ -810,6 +821,7 @@ export class HydraProvider implements ApiProvider {
         role: 'assistant',
         content: historyOutput,
       });
+      lastResponseMessages = [...this.conversationHistory];
 
       // Check for refusal and backtrack if in stateless mode and backtracking enabled
       const isRefusal = isBasicRefusal(targetResponse.output);
@@ -929,7 +941,7 @@ export class HydraProvider implements ApiProvider {
 
           const { grade, rubric } = await runRedteamGrader(
             grader,
-            nextMessage,
+            lastFinalAttackPrompt || nextMessage,
             targetResponse.output,
             test,
             targetProvider,
@@ -939,10 +951,19 @@ export class HydraProvider implements ApiProvider {
             gradingContext,
           );
           graderResult = grade;
-          storedGraderResult = accumulateGraderResult(storedGraderResult, {
-            ...grade,
-            assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-          });
+          storedGraderResult = accumulateGraderResult(
+            storedGraderResult,
+            {
+              ...grade,
+              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+            },
+            {
+              prompt: lastFinalAttackPrompt || nextMessage,
+              output: targetResponse.output,
+              pluginId: test.metadata?.pluginId,
+              assertion: assertToUse,
+            },
+          );
 
           logger.debug(`${this.logPrefix} Grader result`, {
             turn,
@@ -1020,7 +1041,7 @@ export class HydraProvider implements ApiProvider {
       }
     }
 
-    const messages = this.conversationHistory.map((msg) => ({
+    const messages = lastResponseMessages.map((msg) => ({
       role: msg.role,
       content: msg.content,
     })) as Record<string, any>[];

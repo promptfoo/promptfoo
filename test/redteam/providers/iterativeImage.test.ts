@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { isResponseHeadersObserverErrorResponse } from '../../../src/scheduler/responseHeadersObserver';
 import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
+import { isResponseHeadersObserverErrorResponse } from '../../../src/util/fetch/responseHeadersObserver';
 import { createMockProvider, type MockApiProvider } from '../../factories/provider';
 import { createSelectedObserverErrorResponse } from '../../util/selectedObserverError';
 import {

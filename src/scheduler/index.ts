@@ -34,11 +34,6 @@ export {
 export { getRateLimitKey } from './rateLimitKey';
 // Core exports
 export { createRateLimitRegistry, RateLimitRegistry } from './rateLimitRegistry';
-export {
-  composeResponseHeadersObservers,
-  preserveResponseHeadersObserverError,
-  preserveResponseHeadersObserverErrorResponse,
-} from './responseHeadersObserver';
 // Retry policy
 export {
   DEFAULT_RETRY_POLICY,

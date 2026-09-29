@@ -15,7 +15,7 @@ import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import {
   composeResponseHeadersObservers,
   isResponseHeadersObserverErrorResponse,
-} from '../../src/scheduler/responseHeadersObserver';
+} from '../../src/util/fetch/responseHeadersObserver';
 import { mockProcessEnv } from '../util/utils';
 
 import type { ApiProvider, ProviderResponse } from '../../src/types/providers';

@@ -1,39 +1,11 @@
+import { isResponseHeadersObserverErrorResponse } from '../util/fetch/responseHeadersObserver';
 /**
  * Shared types for the scheduler module.
  */
 
 import { isHttpRateLimitError } from '../util/fetch/errors';
 
-import type { CallApiOptionsParams, ProviderResponse } from '../types/providers';
-
-export type ResponseHeadersObserver = NonNullable<CallApiOptionsParams['onResponseHeaders']>;
-
-// The response marker stays private to the scheduler's shared response classification.
-const CALLER_ERROR_RESPONSE = Symbol('responseHeadersCallerErrorResponse');
-
-export function markResponseHeadersObserverErrorResponse<T extends object>(response: T): T {
-  Object.defineProperty(response, CALLER_ERROR_RESPONSE, { value: true });
-  return response;
-}
-
-export function isResponseHeadersObserverErrorResponse(response: unknown): boolean {
-  return (
-    typeof response === 'object' &&
-    response !== null &&
-    (response as { [CALLER_ERROR_RESPONSE]?: boolean })[CALLER_ERROR_RESPONSE] === true
-  );
-}
-
-/** Copy private caller-exception provenance when the same error response is projected. */
-export function preserveResponseHeadersObserverErrorResponse<T extends object>(
-  source: unknown,
-  response: T,
-): T {
-  if (isResponseHeadersObserverErrorResponse(source)) {
-    markResponseHeadersObserverErrorResponse(response);
-  }
-  return response;
-}
+import type { ProviderResponse } from '../types/providers';
 
 /**
  * Options for rate-limited execution.
@@ -48,6 +20,8 @@ export interface RateLimitExecuteOptions<T> {
   isRateLimited?: (result: T | undefined, error?: Error) => boolean;
   /** Extract retry-after delay from result or error */
   getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
+  /** Preserve a structured failure result when retries are exhausted. Defaults to throwing. */
+  onRateLimitExhausted?: (result: T, error: Error) => T;
 }
 
 /**
@@ -71,7 +45,10 @@ export function isProviderResponseRateLimited(
   // Tool diagnostics may mention their own quota without describing the model request.
   const responseError = result?.metadata?.errorOrigin === 'tool' ? undefined : result?.error;
   // Structured signal — never retry a hard quota.
-  if (result?.metadata?.rateLimitKind === 'quota') {
+  if (
+    result?.metadata?.rateLimitRetryable === false ||
+    result?.metadata?.rateLimitKind === 'quota'
+  ) {
     return false;
   }
   if (result?.metadata?.rateLimitKind === 'rate_limit') {

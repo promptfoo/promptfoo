@@ -1,11 +1,13 @@
 import path from 'path';
 
 import cliState from '../../cliState';
-import { getEnvBool, getEnvInt } from '../../envars';
+import { type McpConfigParsed, McpConfigSchema } from '../../contracts/providerConfig/mcp';
+import { getEnvBool, getEnvInt, getProcessEnv } from '../../envars';
 import logger from '../../logger';
+import { isCallerAbortError } from '../../util/fetch/requestSignal';
 import { TOKEN_REFRESH_BUFFER_MS, type TokenRefreshLock } from '../../util/oauth';
 import { isMissingPackageImportError } from '../../util/packageImportErrors';
-import { isCallerAbortError, throwIfAborted, waitForPromiseWithAbort } from '../shared';
+import { throwIfAborted, waitForPromiseWithAbort } from '../shared';
 import { withGenAIToolSpan } from '../tracing';
 import {
   applyQueryParams,
@@ -13,6 +15,7 @@ import {
   getAuthQueryParams,
   getOAuthTokenWithExpiry,
   renderAuthVars,
+  sanitizeMcpToolData,
 } from './util';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
@@ -48,7 +51,7 @@ interface OAuthServerConfig {
  * override an inherited variable (e.g. a scoped token) without unsetting the rest.
  */
 function getStdioEnv(server: MCPServerConfig): Record<string, string> {
-  const parentEnv = process.env as Record<string, string>;
+  const parentEnv = getProcessEnv() as Record<string, string>;
   return server.env ? { ...parentEnv, ...server.env } : parentEnv;
 }
 
@@ -108,7 +111,7 @@ function getEffectiveRequestOptions(config: MCPConfig): MCPRequestOptions | unde
 export class MCPClient {
   private clients: Map<string, Client> = new Map();
   private tools: Map<string, MCPTool[]> = new Map();
-  private config: MCPConfig;
+  private config: McpConfigParsed;
   private transports: Map<
     string,
     StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport
@@ -144,8 +147,8 @@ export class MCPClient {
     return this.config.verbose ?? getEnvBool('MCP_VERBOSE') ?? false;
   }
 
-  constructor(config: MCPConfig) {
-    this.config = config;
+  constructor(config: unknown) {
+    this.config = McpConfigSchema.parse(config);
   }
 
   async initialize(): Promise<void> {
@@ -520,8 +523,9 @@ export class MCPClient {
     abortSignal?: AbortSignal,
   ): Promise<MCPToolResult> {
     throwIfAborted(abortSignal);
-    return await withGenAIToolSpan({ name, arguments: args, resultFormat: 'mcp' }, () =>
-      this.callToolInternal(name, args, abortSignal),
+    return await withGenAIToolSpan(
+      { name, arguments: sanitizeMcpToolData(args), resultFormat: 'mcp' },
+      () => this.callToolInternal(name, args, abortSignal),
     );
   }
 

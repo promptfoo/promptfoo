@@ -5,8 +5,8 @@ import { callTargetProvider } from '../../src/redteam/providers/shared';
 import { withProviderCallExecutionContext } from '../../src/scheduler/providerCallExecutionContext';
 import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
-import { isResponseHeadersObserverErrorResponse } from '../../src/scheduler/responseHeadersObserver';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../src/util/fetch/errors';
+import { isResponseHeadersObserverErrorResponse } from '../../src/util/fetch/responseHeadersObserver';
 import { mockProcessEnv } from '../util/utils';
 
 import type { ApiProvider, ProviderResponse } from '../../src/types/providers';

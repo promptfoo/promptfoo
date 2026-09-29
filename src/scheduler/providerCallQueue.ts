@@ -1,6 +1,7 @@
 import { AsyncResource } from 'node:async_hooks';
 
-import { getAbortError, throwIfAborted } from './cancellation';
+import { getCallerAbortError } from '../util/fetch/requestSignal';
+import { throwIfAborted } from './cancellation';
 
 export interface QueuedProviderCall<T> {
   call: () => Promise<T>;
@@ -26,7 +27,7 @@ export class ProviderGroupedCallQueue implements ProviderCallQueue {
         if (index !== -1) {
           this.jobs.splice(index, 1);
         }
-        reject(getAbortError(abortSignal!));
+        reject(getCallerAbortError(abortSignal!, 'The operation was aborted.'));
       };
       const job: QueuedProviderCall<unknown> = {
         call: () => {

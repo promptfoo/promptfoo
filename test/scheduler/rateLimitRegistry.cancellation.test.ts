@@ -8,16 +8,9 @@ import {
 } from '../../src/scheduler/providerWrapper';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { getFetchRetryContextMaxRetries } from '../../src/util/fetch/retryContext';
+import { createDeferred } from '../util/utils';
 
 import type { ApiProvider, ProviderResponse } from '../../src/types/providers';
-
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((resolvePromise) => {
-    resolve = resolvePromise;
-  });
-  return { promise, resolve };
-}
 
 function rateLimited(retryAfterMs: number): ProviderResponse {
   return {
@@ -113,7 +106,7 @@ describe('RateLimitRegistry cancellation during scheduling', () => {
 
   it('removes only a cancelled capacity waiter and keeps the active slot and next caller', async () => {
     const registry = createRegistry();
-    const active = deferred<ProviderResponse>();
+    const active = createDeferred<ProviderResponse>();
     const first = registry.execute(provider, () => active.promise);
     await vi.advanceTimersByTimeAsync(0);
     const controller = new AbortController();
@@ -244,7 +237,7 @@ describe('RateLimitRegistry cancellation during scheduling', () => {
     const rejection = limited.catch((error) => {
       caught = error;
     });
-    const held = deferred<ProviderResponse>();
+    const held = createDeferred<ProviderResponse>();
     const active = registry.execute(provider, () => held.promise);
     await vi.advanceTimersByTimeAsync(0);
     expect(Object.values(registry.getMetrics())[0].activeRequests).toBe(1);
@@ -330,11 +323,7 @@ describe('RateLimitRegistry cancellation during scheduling', () => {
         return rateLimited(60000);
       });
       const pending = registry.execute(configured, invoke, createProviderRateLimitOptions());
-      if (disabled) {
-        await expect(pending).resolves.toEqual(rateLimited(60000));
-      } else {
-        await expect(pending).rejects.toThrow('after 1 attempts');
-      }
+      await expect(pending).resolves.toEqual(rateLimited(60000));
       expect(invoke).toHaveBeenCalledOnce();
       expect(vi.getTimerCount()).toBe(0);
     },
@@ -351,7 +340,7 @@ describe('RateLimitRegistry cancellation during scheduling', () => {
     const cancelledEvent = vi.fn();
     state.on('queue:timeout', timeout);
     state.on('queue:cancelled', cancelledEvent);
-    const active = deferred<ProviderResponse>();
+    const active = createDeferred<ProviderResponse>();
     const first = state.executeWithRetry('active', () => active.promise, {});
     const controller = new AbortController();
     const cancelled = state.executeWithRetry('cancelled', vi.fn(), {

@@ -139,7 +139,7 @@ describe('explicit selected rate-limit backoff observation', () => {
     {
       name: 'hard quota with short Retry-After',
       status: 429,
-      body: '{"error":{"code":"insufficient_quota"}}',
+      body: '{"error":{"code":"billing_hard_limit_reached"}}',
       headers: { 'retry-after': '5' },
       retries: 3,
     },
@@ -266,8 +266,8 @@ describe('explicit selected rate-limit backoff observation', () => {
   it.each([
     { code: 'rate_limit_exceeded', maxRetries: 0, kind: 'rate_limit', abortAtEof: false },
     { code: 'rate_limit_exceeded', maxRetries: 0, kind: 'rate_limit', abortAtEof: true },
-    { code: 'insufficient_quota', maxRetries: 2, kind: 'quota', abortAtEof: false },
-    { code: 'insufficient_quota', maxRetries: 2, kind: 'quota', abortAtEof: true },
+    { code: 'billing_hard_limit_reached', maxRetries: 2, kind: 'quota', abortAtEof: false },
+    { code: 'billing_hard_limit_reached', maxRetries: 2, kind: 'quota', abortAtEof: true },
   ])(
     'preserves completed $code with EOF abort=$abortAtEof',
     async ({ code, maxRetries, kind, abortAtEof }) => {

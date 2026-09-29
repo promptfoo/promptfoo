@@ -1,9 +1,10 @@
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
+import { isCallerAbortError } from '../util/fetch/requestSignal';
 import {
   isResponseHeadersObserverError,
   preserveResponseHeadersObserverError,
-} from '../scheduler/responseHeadersObserver';
+} from '../util/fetch/responseHeadersObserver';
 import { normalizeFinishReason } from '../util/finishReason';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import {
@@ -12,12 +13,7 @@ import {
   getTokenUsage,
   isOpenAiErrorOnlyResponse,
 } from './openai/util';
-import {
-  getRequestTimeoutMs,
-  isCallerAbortError,
-  throwIfAborted,
-  waitForPromiseWithAbort,
-} from './shared';
+import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from './shared';
 import type OpenAI from 'openai';
 
 import type {

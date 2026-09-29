@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import { KeyvFile } from 'keyv-file';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createDeferred } from './util/utils';
 
 import type * as CacheModule from '../src/cache';
 
@@ -17,16 +18,6 @@ vi.mock('../src/util/fetch/index', () => ({
   getFetchWithProxyHeaders: () => ({}),
 }));
 vi.mock('../src/logger');
-
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-}
 
 describe('fetchWithCache caller cancellation at cache boundaries', () => {
   let cacheModule: typeof CacheModule;
@@ -72,7 +63,7 @@ describe('fetchWithCache caller cancellation at cache boundaries', () => {
   }
 
   it.each(['completed responses', 'caller cancellation'] as const)(
-    'six-P2 cache isolates a suffix-shaped user key during %s',
+    'isolates a suffix-shaped user cache key during %s',
     async (mode) => {
       // beforeEach imports a fresh cache module. Its first signaled in-flight
       // request therefore receives ID 1, without mutating private counter state.
@@ -83,8 +74,8 @@ describe('fetchWithCache caller cancellation at cache boundaries', () => {
       const unsignedUrl = 'https://cache.test/suffix-key-unsigned';
       const signaledUrl = 'https://cache.test/suffix-key-signaled';
       const request = new Request(signaledUrl, { signal: controller.signal });
-      const unsignedBody = deferred<Response>();
-      const signaledBody = deferred<Response>();
+      const unsignedBody = createDeferred<Response>();
+      const signaledBody = createDeferred<Response>();
       const pending: Promise<unknown>[] = [];
       const transportSignals = new Map<string, AbortSignal | null | undefined>();
       let unsignedSettled = false;
@@ -208,8 +199,8 @@ describe('fetchWithCache caller cancellation at cache boundaries', () => {
   it('cancels an expired-entry cleanup wait before disk save completes or miss fetch starts', async () => {
     const url = 'https://cache.test/expired';
     await warmCache(url);
-    const save = deferred<void>();
-    const saveStarted = deferred<void>();
+    const save = createDeferred<void>();
+    const saveStarted = createDeferred<void>();
     releasePendingWork.push(() => save.resolve());
     vi.mocked(diskWriteBoundary.saveToDisk).mockImplementationOnce(() => {
       saveStarted.resolve();
@@ -244,8 +235,8 @@ describe('fetchWithCache caller cancellation at cache boundaries', () => {
 
   it('releases a caller during a real cache save while preserving the entry for other callers', async () => {
     const url = 'https://cache.test/save';
-    const save = deferred<void>();
-    const saveStarted = deferred<void>();
+    const save = createDeferred<void>();
+    const saveStarted = createDeferred<void>();
     releasePendingWork.push(() => save.resolve());
     vi.mocked(diskWriteBoundary.saveToDisk).mockImplementationOnce(() => {
       saveStarted.resolve();
@@ -276,7 +267,7 @@ describe('fetchWithCache caller cancellation at cache boundaries', () => {
       await warmCache(url);
       const cache = cacheModule.getCache();
       const originalGet = cache.get.bind(cache);
-      const lookup = deferred<unknown>();
+      const lookup = createDeferred<unknown>();
       let requestedKey = '';
       vi.spyOn(cache, 'get').mockImplementationOnce((key) => {
         requestedKey = key;

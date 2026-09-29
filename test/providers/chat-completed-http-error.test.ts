@@ -22,7 +22,7 @@ const providerOptions = {
 
 describe.each([
   { name: 'Chat', type: OpenAiChatCompletionProvider, hasHttpMetadata: true },
-  { name: 'OpenRouter', type: OpenRouterProvider, hasHttpMetadata: false },
+  { name: 'OpenRouter', type: OpenRouterProvider, hasHttpMetadata: true },
   { name: 'Snowflake', type: SnowflakeCortexProvider, hasHttpMetadata: false },
 ])('$name completed HTTP response cancellation', ({ type, hasHttpMetadata }) => {
   let restoreEnvironment: () => void;

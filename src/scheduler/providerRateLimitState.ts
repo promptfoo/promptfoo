@@ -1,24 +1,26 @@
 import { EventEmitter } from 'events';
 
 import {
+  createResponseHeadersObserver,
+  isResponseHeadersObserverError,
+  isResponseHeadersObserverErrorResponse,
+  type ResponseHeadersObserver,
+} from '../util/fetch/responseHeadersObserver';
+import {
   AdaptiveConcurrency,
   type ConcurrencyChangeResult,
   WARNING_THRESHOLD,
 } from './adaptiveConcurrency';
 import { sleepWithAbort, throwIfAborted } from './cancellation';
 import { parseRateLimitHeaders } from './headerParser';
-import {
-  createResponseHeadersObserver,
-  isResponseHeadersObserverError,
-  isResponseHeadersObserverErrorResponse,
-} from './responseHeadersObserver';
 import { DEFAULT_RETRY_POLICY, getRetryDelay, type RetryPolicy, shouldRetry } from './retryPolicy';
 import { SlotQueue } from './slotQueue';
 
-import type { ResponseHeadersObserver } from './types';
-
-class RateLimitExhaustedError extends Error {
-  constructor(message: string) {
+export class RateLimitExhaustedError extends Error {
+  constructor(
+    message: string,
+    readonly result: unknown,
+  ) {
     super(message);
     this.name = 'RateLimitExhaustedError';
   }
@@ -198,12 +200,14 @@ export class ProviderRateLimitState extends EventEmitter {
         };
         const startTime = Date.now();
         let retryError: Error | undefined;
+        let retryResult: T | undefined;
         let isRateLimited: boolean;
         let retryAfterMs: number | undefined;
 
         try {
           throwIfAborted(options.abortSignal);
           const result = await callFn(onResponseHeaders);
+          retryResult = result;
           const hasErrorResponse =
             result !== null &&
             typeof result === 'object' &&
@@ -287,6 +291,7 @@ export class ProviderRateLimitState extends EventEmitter {
             retryError ??
             new RateLimitExhaustedError(
               `Rate limit exceeded for ${this.rateLimitKey} after ${attempt + 1} attempts`,
+              retryResult,
             )
           );
         }

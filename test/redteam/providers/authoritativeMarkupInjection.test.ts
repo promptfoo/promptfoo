@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { isResponseHeadersObserverErrorResponse } from '../../../src/scheduler/responseHeadersObserver';
+import { isResponseHeadersObserverErrorResponse } from '../../../src/util/fetch/responseHeadersObserver';
 import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,

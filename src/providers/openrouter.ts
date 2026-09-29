@@ -1,24 +1,28 @@
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
+import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import { isCallerAbortError } from '../util/fetch/requestSignal';
 import {
   isResponseHeadersObserverError,
   preserveResponseHeadersObserverError,
-} from '../scheduler/responseHeadersObserver';
-import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
-import { normalizeFinishReason } from '../util/finishReason';
-import { OpenAiChatCompletionProvider } from './openai/chat';
+} from '../util/fetch/responseHeadersObserver';
+import { FINISH_REASON_MAP, normalizeFinishReason } from '../util/finishReason';
+import {
+  getOpenAiGatewayRateLimitKind,
+  getOpenAiRateLimitResponse,
+  OpenAiChatCompletionProvider,
+} from './openai/chat';
 import {
   appendOpenAiApiPath,
   formatOpenAiError,
+  getOpenAiChatChoiceError,
+  getOpenAiPartialOutput,
+  getOpenAiPolicyRefusal,
   getTokenUsage,
   isOpenAiErrorOnlyResponse,
 } from './openai/util';
-import {
-  getRequestTimeoutMs,
-  isCallerAbortError,
-  throwIfAborted,
-  waitForPromiseWithAbort,
-} from './shared';
+import { calculateOpenRouterResponseCost, getOpenRouterBillingMetadata } from './openrouterBilling';
+import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from './shared';
 import type OpenAI from 'openai';
 
 import type {
@@ -30,16 +34,6 @@ import type {
 } from '../types/providers';
 import type { OpenAiChatCompletionCostData } from './openai/chat';
 import type { OpenAiCompletionOptions } from './openai/types';
-
-type OpenRouterUsage = NonNullable<OpenAiChatCompletionCostData['usage']> & {
-  cost?: unknown;
-  is_byok?: unknown;
-  cost_details?: unknown;
-};
-
-function isNonNegativeFiniteNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
-}
 
 /**
  * OpenRouter provider extends OpenAI chat completion provider with special handling
@@ -95,75 +89,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     data: OpenAiChatCompletionCostData,
     config: OpenAiCompletionOptions,
   ): number | undefined {
-    // Preserve logical cost on cache replay; the evaluator tracks incurred spending separately.
-    if (
-      config.cost !== undefined ||
-      config.inputCost !== undefined ||
-      config.outputCost !== undefined
-    ) {
-      // Explicit user rates override provider billing. Require both rates and
-      // counts; a missing rate must not come from a native OpenAI price table.
-      const inputCost = config.inputCost ?? config.cost;
-      const outputCost = config.outputCost ?? config.cost;
-      const promptTokens = data.usage?.prompt_tokens;
-      const completionTokens = data.usage?.completion_tokens;
-      if (
-        !isNonNegativeFiniteNumber(inputCost) ||
-        !isNonNegativeFiniteNumber(outputCost) ||
-        !isNonNegativeFiniteNumber(promptTokens) ||
-        !isNonNegativeFiniteNumber(completionTokens)
-      ) {
-        return undefined;
-      }
-      const cost = promptTokens * inputCost + completionTokens * outputCost;
-      return Number.isFinite(cost) ? cost : undefined;
-    }
-
-    const usage = data.usage as OpenRouterUsage | undefined;
-    // BYOK inference is billed separately by the upstream provider. A waived
-    // charge or gateway fee cannot represent its total cost.
-    if (usage?.is_byok === true) {
-      return undefined;
-    }
-
-    // Without an explicit BYOK flag, retain the reported OpenRouter account
-    // charge. Upstream components and native vendor rates cannot substitute.
-    // https://openrouter.ai/docs/cookbook/administration/usage-accounting
-    const cost = usage?.cost;
-    return isNonNegativeFiniteNumber(cost) ? cost : undefined;
-  }
-
-  private getBillingMetadata(data: OpenAiChatCompletionCostData): ProviderResponse['metadata'] {
-    const usage = data.usage as OpenRouterUsage | undefined;
-    if (!usage || typeof usage !== 'object' || Array.isArray(usage)) {
-      return undefined;
-    }
-    const details =
-      usage.cost_details &&
-      typeof usage.cost_details === 'object' &&
-      !Array.isArray(usage.cost_details)
-        ? (usage.cost_details as Record<string, unknown>)
-        : undefined;
-
-    // These are independent reported facts, regardless of whether generic cost
-    // is a configured estimate, the account charge, or unavailable.
-    const billing: Record<string, unknown> = {};
-    const amounts = {
-      accountCharge: usage.cost,
-      reportedUpstreamInferenceCost: details?.upstream_inference_cost,
-      reportedUpstreamPromptCost: details?.upstream_inference_prompt_cost,
-      reportedUpstreamCompletionCost: details?.upstream_inference_completions_cost,
-      reportedServerToolCost: details?.server_tool_cost,
-    };
-    for (const [name, amount] of Object.entries(amounts)) {
-      if (isNonNegativeFiniteNumber(amount)) {
-        billing[name] = amount;
-      }
-    }
-    if (typeof usage.is_byok === 'boolean') {
-      billing.isByok = usage.is_byok;
-    }
-    return Object.keys(billing).length > 0 ? { openrouter: billing } : undefined;
+    return calculateOpenRouterResponseCost(data, config);
   }
 
   async callApi(
@@ -178,10 +104,6 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       operationName: 'chat',
       model: this.modelName,
       providerId: this.id(),
-      temperature: this.config.temperature,
-      topP: this.config.top_p,
-      maxTokens: this.config.max_tokens,
-      stopSequences: this.config.stop,
       testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
@@ -204,24 +126,34 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       return result;
     };
 
+    let prepared: Awaited<ReturnType<OpenAiChatCompletionProvider['getOpenAiBody']>>;
+    try {
+      prepared = await waitForPromiseWithAbort(
+        this.getOpenAiBody(prompt, context, callApiOptions),
+        callApiOptions?.abortSignal,
+      );
+    } catch (error) {
+      return withGenAISpan(
+        spanContext,
+        async () => {
+          throw error;
+        },
+        resultExtractor,
+      );
+    }
     return withGenAISpan(
-      spanContext,
-      () => this.executeOpenRouterCall(prompt, context, callApiOptions),
+      { ...spanContext, ...this.getChatTracingRequest(prepared.body) },
+      () => this.executeOpenRouterCall(prepared, context, callApiOptions),
       resultExtractor,
     );
   }
 
   private async executeOpenRouterCall(
-    prompt: string,
+    prepared: Awaited<ReturnType<OpenAiChatCompletionProvider['getOpenAiBody']>>,
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    throwIfAborted(callApiOptions?.abortSignal);
-    // Get the request body and config
-    const { body, config } = await waitForPromiseWithAbort(
-      this.getOpenAiBody(prompt, context, callApiOptions),
-      callApiOptions?.abortSignal,
-    );
+    const { body, config } = prepared;
     throwIfAborted(callApiOptions?.abortSignal);
 
     // Make the API call directly
@@ -249,38 +181,101 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     let status: number;
     let statusText: string;
     let cached = false;
+    let deleteFromCache: (() => Promise<void>) | undefined;
+    let responseHeaders: Record<string, string> | undefined;
 
     try {
-      ({ data, cached, status, statusText } =
-        await fetchWithCache<OpenRouterChatCompletionResponse>(
-          appendOpenAiApiPath(this.getApiUrl(), 'chat/completions'),
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${this.getApiKey()}`,
-              ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-              ...config.headers,
-            },
-            body: JSON.stringify(body),
-            ...(callApiOptions?.abortSignal ? { signal: callApiOptions.abortSignal } : {}),
+      ({
+        data,
+        cached,
+        status,
+        statusText,
+        deleteFromCache,
+        headers: responseHeaders,
+      } = await fetchWithCache<OpenRouterChatCompletionResponse>(
+        appendOpenAiApiPath(this.getApiUrl(), 'chat/completions'),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.getApiKey()}`,
+            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+            ...config.headers,
           },
-          getRequestTimeoutMs(),
-          'json',
-          context?.bustCache ?? context?.debug,
-          undefined,
-          (response) => {
-            if (response.status >= 200 && response.status < 300 && response.headers) {
-              callApiOptions?.onResponseHeaders?.(response.headers);
-            }
+          body: JSON.stringify(body),
+          ...(callApiOptions?.abortSignal ? { signal: callApiOptions.abortSignal } : {}),
+        },
+        getRequestTimeoutMs(),
+        'json',
+        context?.bustCache ?? context?.debug,
+        undefined,
+        (response) => {
+          if (
+            response.status >= 200 &&
+            response.status < 300 &&
+            response.headers &&
+            getOpenAiGatewayRateLimitKind(response.data) !== 'quota'
+          ) {
+            callApiOptions?.onResponseHeaders?.(response.headers);
+          }
+        },
+        callApiOptions?.onResponseHeaders
+          ? (backoff) => callApiOptions.onResponseHeaders?.(backoff.headers, backoff)
+          : undefined,
+      ));
+
+      const policy = getOpenAiPolicyRefusal(data, true);
+      if (policy) {
+        return {
+          output:
+            policy.partialOutput === undefined
+              ? policy.message
+              : getOpenAiPartialOutput(
+                  policy.partialOutput,
+                  config.response_format?.type === 'json_schema',
+                ),
+          ...(data.usage ? { tokenUsage: getTokenUsage(data, cached) } : {}),
+          cached,
+          cost: this.calculateResponseCost(data, config),
+          isRefusal: true,
+          guardrails: {
+            flagged: true,
+            ...(policy.flaggedInput ? { flaggedInput: true } : {}),
+            reason: policy.message,
           },
-          callApiOptions?.onResponseHeaders
-            ? (backoff) => callApiOptions.onResponseHeaders?.(backoff.headers, backoff)
-            : undefined,
-        ));
+          raw: data,
+          metadata: {
+            ...getOpenRouterBillingMetadata(data),
+            ...(policy.code ? { providerPolicy: { code: policy.code } } : {}),
+            http: { status, statusText, headers: responseHeaders ?? {} },
+          },
+        };
+      }
+      const choiceError = data?.error ? undefined : getOpenAiChatChoiceError(data);
+      if (choiceError) {
+        await deleteFromCache?.();
+        const rateLimitKind = getOpenAiGatewayRateLimitKind(data);
+        return {
+          error: `API error: ${choiceError.error.message}`,
+          ...(data.usage ? { tokenUsage: getTokenUsage(data, cached) } : {}),
+          cached,
+          cost: this.calculateResponseCost(data, config),
+          raw: data,
+          metadata: {
+            ...getOpenRouterBillingMetadata(data),
+            ...(rateLimitKind ? { rateLimitKind } : {}),
+            http: { status, statusText, headers: responseHeaders ?? {} },
+          },
+        };
+      }
       if (status < 200 || status >= 300) {
+        const rateLimitKind = getOpenAiGatewayRateLimitKind(data);
         return {
           error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
+          metadata: {
+            ...(rateLimitKind ? { rateLimitKind } : {}),
+            http: { status, statusText, headers: responseHeaders ?? {} },
+          },
         };
       }
       // Cache coalescing can complete this diagnostic before a shared caller aborts.
@@ -297,12 +292,20 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
         throwIfAborted(callApiOptions?.abortSignal);
       }
       logger.error(`API call error: ${String(err)}`);
+      const rateLimitResponse = getOpenAiRateLimitResponse(err, responseHeaders);
+      if (rateLimitResponse) {
+        return preserveResponseHeadersObserverError(
+          callApiOptions?.onResponseHeaders,
+          err,
+          rateLimitResponse,
+        );
+      }
       return preserveResponseHeadersObserverError(callApiOptions?.onResponseHeaders, err, {
         error: `API call error: ${String(err)}`,
       });
     }
 
-    if (data.error) {
+    if (data?.error) {
       return {
         error: formatOpenAiError(data as OpenAIErrorResponse),
       };
@@ -312,7 +315,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     // (soft moderation block, upstream hiccup, or n>1 edge cases). Without this,
     // `data.choices[0]` is undefined and `.message` throws an opaque TypeError.
     // Mirrors the sibling OpenAI-compatible providers (mistral.ts, ai21.ts).
-    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+    if (!data?.choices?.[0]?.message) {
       return {
         error: `Malformed response data: ${JSON.stringify(data)}`,
         cached,
@@ -322,6 +325,21 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     // Process the response with special handling for Gemini
     const message: any = data.choices[0].message;
     const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
+    if (message.refusal || finishReason === FINISH_REASON_MAP.content_filter) {
+      return {
+        output: message.content
+          ? getOpenAiPartialOutput(message.content, config.response_format?.type === 'json_schema')
+          : message.refusal || 'Content filtered by the model provider.',
+        tokenUsage: getTokenUsage(data, cached),
+        cached,
+        cost: this.calculateResponseCost(data, config),
+        isRefusal: true,
+        guardrails: { flagged: true },
+        raw: data,
+        metadata: getOpenRouterBillingMetadata(data),
+        ...(finishReason && { finishReason }),
+      };
+    }
 
     // Prioritize tool calls over content and reasoning
     let output: string | object = '';
@@ -364,7 +382,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       tokenUsage: getTokenUsage(data, cached),
       cached,
       cost: this.calculateResponseCost(data, config),
-      metadata: this.getBillingMetadata(data),
+      metadata: getOpenRouterBillingMetadata(data),
       ...(finishReason && { finishReason }),
     };
   }

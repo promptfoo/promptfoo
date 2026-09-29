@@ -9,7 +9,11 @@ import {
   getProviderCallExecutionContext,
   withProviderCallExecutionContext,
 } from './providerCallExecutionContext';
-import { type ProviderMetrics, ProviderRateLimitState } from './providerRateLimitState';
+import {
+  type ProviderMetrics,
+  ProviderRateLimitState,
+  RateLimitExhaustedError,
+} from './providerRateLimitState';
 import { getRateLimitKey } from './rateLimitKey';
 
 import type { ApiProvider, CallApiOptionsParams } from '../types/providers';
@@ -94,7 +98,7 @@ export class RateLimitRegistry extends EventEmitter {
           getHeaders: options?.getHeaders,
           isRateLimited: options?.isRateLimited,
           getRetryAfter: options?.getRetryAfter,
-          maxRetriesOverride: providerMaxRetries,
+          maxRetriesOverride: provider.handlesOwnRetries ? 0 : providerMaxRetries,
         },
       );
 
@@ -113,6 +117,9 @@ export class RateLimitRegistry extends EventEmitter {
         requestId,
         error: String(error),
       });
+      if (error instanceof RateLimitExhaustedError && options?.onRateLimitExhausted) {
+        return options.onRateLimitExhausted(error.result as T, error);
+      }
       throw error;
     }
   }

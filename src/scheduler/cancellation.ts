@@ -1,27 +1,8 @@
-/** Keep caller cancellation recognizable even when abort() receives a custom reason. */
-export function getAbortError(signal: AbortSignal): Error {
-  const reason: unknown = signal.reason;
-  if (
-    reason instanceof Error &&
-    (reason.name === 'AbortError' || reason.name === 'AbortException')
-  ) {
-    return reason;
-  }
-  const message =
-    reason instanceof Error
-      ? reason.message
-      : typeof reason === 'string'
-        ? reason
-        : 'The operation was aborted.';
-  return Object.assign(new Error(message), {
-    name: 'AbortError',
-    cause: reason,
-  });
-}
+import { getCallerAbortError } from '../util/fetch/requestSignal';
 
 export function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) {
-    throw getAbortError(signal);
+    throw getCallerAbortError(signal, 'The operation was aborted.');
   }
 }
 
@@ -34,7 +15,7 @@ export function sleepWithAbort(ms: number, signal?: AbortSignal): Promise<void> 
     };
     const onAbort = () => {
       cleanup();
-      reject(getAbortError(signal!));
+      reject(getCallerAbortError(signal!, 'The operation was aborted.'));
     };
     const timer = setTimeout(() => {
       cleanup();

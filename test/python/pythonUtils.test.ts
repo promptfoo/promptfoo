@@ -19,6 +19,7 @@ vi.mock('child_process', () => ({
 }));
 
 import { PythonShell } from 'python-shell';
+import cliState from '../../src/cliState';
 import { getEnvBool, getEnvString } from '../../src/envars';
 import logger from '../../src/logger';
 import * as pythonUtils from '../../src/python/pythonUtils';
@@ -27,6 +28,7 @@ import {
   removeSecureTempDirectory,
   writeSecureTempFile,
 } from '../../src/util/secureTempFiles';
+import { mockProcessEnv } from '../util/utils';
 
 const fsMock = vi.hoisted(() => ({
   writeFileSync: vi.fn(),
@@ -53,7 +55,8 @@ vi.mock('fs/promises', () => ({
   unlink: fsMock.unlinkSync,
 }));
 
-vi.mock('../../src/envars', () => ({
+vi.mock(import('../../src/envars'), async (importOriginal) => ({
+  ...(await importOriginal()),
   getEnvString: vi.fn(),
   getEnvBool: vi.fn(),
 }));
@@ -74,17 +77,27 @@ vi.mock('../../src/util/secureTempFiles', () => ({
 }));
 
 // Must be hoisted for vi.mock factory
-const { mockPythonShellInstance, MockPythonShell } = vi.hoisted(() => {
+const { mockPythonShellInstance, MockPythonShell } = await vi.hoisted(async () => {
+  const { EventEmitter } = await import('node:events');
   const instance = {
-    stdout: { on: vi.fn() },
-    stderr: { on: vi.fn() },
+    stdout: { on: vi.fn(), removeListener: vi.fn() },
+    stderr: { on: vi.fn(), removeListener: vi.fn() },
     end: vi.fn(),
   };
-  // Create a proper class that can be used with 'new'
-  const MockPythonShell = vi.fn(function (this: typeof instance) {
-    Object.assign(this, instance);
-    return this;
-  }) as unknown as typeof import('python-shell').PythonShell;
+  const MockPythonShell = vi.fn(
+    class extends EventEmitter {
+      stdout = instance.stdout;
+      stderr = instance.stderr;
+      childProcess = new EventEmitter();
+
+      end(callback: (error: Error | null) => void) {
+        instance.end((error: Error | null) => {
+          callback(error);
+          this.childProcess.emit('close', error ? 1 : 0, null);
+        });
+      }
+    },
+  ) as unknown as typeof import('python-shell').PythonShell;
   return { mockPythonShellInstance: instance, MockPythonShell };
 });
 
@@ -515,6 +528,30 @@ describe('Python Utils', () => {
   });
 
   describe('runPython', () => {
+    it('passes file defaults to one-shot Python calls without changing process.env', async () => {
+      const restore = mockProcessEnv({ PROMPTFOO_REVIEW_ENV_PROBE: 'host' });
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({ type: 'final_result', data: 42 }),
+      );
+      mockExecFileAsync.mockResolvedValue({ stdout: 'Python 3.8.10\n', stderr: '' });
+      mockPythonShellInstance.end.mockImplementation((callback: (error: Error | null) => void) =>
+        callback(null),
+      );
+      try {
+        await cliState.withEnvFileOverrides({ PROMPTFOO_REVIEW_ENV_PROBE: 'file' }, () =>
+          pythonUtils.runPython('/path/to/script.py', 'call_api', []),
+        );
+        expect(PythonShell).toHaveBeenCalledWith(
+          'wrapper.py',
+          expect.objectContaining({
+            env: expect.objectContaining({ PROMPTFOO_REVIEW_ENV_PROBE: 'file' }),
+          }),
+        );
+        expect(process.env.PROMPTFOO_REVIEW_ENV_PROBE).toBe('host');
+      } finally {
+        restore();
+      }
+    });
     beforeEach(() => {
       vi.clearAllMocks();
     });

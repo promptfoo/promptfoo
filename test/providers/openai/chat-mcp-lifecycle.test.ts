@@ -190,7 +190,7 @@ describe('Chat MCP caller lifetime', () => {
   );
 
   it.each(['success', 'failure'])(
-    'waits for shared refresh %s during cleanup after its caller cancels',
+    'finishes cleanup before abandoned refresh %s and closes late connections',
     async (outcome) => {
       const connected: Array<{ client: Client; transport: unknown }> = [];
       vi.mocked(Client.prototype.connect).mockImplementation(async function (
@@ -262,14 +262,19 @@ describe('Chat MCP caller lifetime', () => {
       try {
         await nextTurn();
         expect(caller.state.error).toMatchObject({ name: 'AbortError' });
-        expect(cleanupSettled).toBe(false);
-        expect(mcp.connectedServers).toEqual(['stable']);
+        expect(cleanupSettled).toBe(true);
+        expect(mcp.connectedServers).toEqual([]);
+        expect(Client.prototype.close).toHaveBeenCalledTimes(2);
         if (outcome === 'failure') {
           refreshedToken.reject(new Error('shared refresh failed'));
         } else {
           refreshedToken.resolve({ accessToken: 'refreshed', expiresAt: Date.now() + 3_600_000 });
         }
         await cleanup;
+        await vi.waitFor(() => {
+          expect(mcp.getAllTools()).toEqual([]);
+          expect(Client.prototype.close).toHaveBeenCalledTimes(3);
+        });
         expect(cleanupError).toBeUndefined();
         expect(connected).toHaveLength(outcome === 'success' ? 3 : 2);
         for (const connection of connected) {
@@ -316,7 +321,8 @@ describe('Chat MCP caller lifetime', () => {
         connecting.resolve();
         return connection.promise;
       });
-      const expectedClosures = outcome === 'success' ? 2 : 1;
+      // The stable connection and the late startup attempt both own resources.
+      const expectedClosures = 2;
       vi.mocked(Client.prototype.close).mockImplementation(async () => {
         if (vi.mocked(Client.prototype.close).mock.calls.length === expectedClosures) {
           closed.resolve();
@@ -397,7 +403,7 @@ describe('Chat MCP caller lifetime', () => {
         expect(caller.state.error).toMatchObject({ name: 'AbortError', cause: reason });
         expect(Client.prototype.close).toHaveBeenCalledTimes(expectedClosures);
         expect(StdioClientTransport.prototype.close).toHaveBeenCalledTimes(expectedClosures);
-        for (const { client, transport } of connections.slice(0, expectedClosures)) {
+        for (const { client, transport } of connections) {
           expect(
             vi.mocked(Client.prototype.close).mock.contexts.filter((x) => x === client),
           ).toHaveLength(1);
@@ -589,10 +595,10 @@ describe('Chat MCP caller lifetime', () => {
       this: Client,
       transport,
     ) {
-      if (connected.length === 1) {
+      connected.push({ client: this, transport });
+      if (connected.length === 2) {
         throw connectionFailure;
       }
-      connected.push({ client: this, transport });
     });
     let mcp!: MCPClient;
     const initialize = MCPClient.prototype.initialize;
@@ -625,17 +631,23 @@ describe('Chat MCP caller lifetime', () => {
 
     try {
       await expect(target.cleanup()).rejects.toBe(initializationError);
-      expect(StdioClientTransport.prototype.close).toHaveBeenCalledOnce();
-      expect(vi.mocked(StdioClientTransport.prototype.close).mock.contexts[0]).toBe(
-        connected[0].transport,
-      );
-      expect(Client.prototype.close).toHaveBeenCalledOnce();
-      expect(vi.mocked(Client.prototype.close).mock.contexts[0]).toBe(connected[0].client);
+      expect(StdioClientTransport.prototype.close).toHaveBeenCalledTimes(2);
+      expect(Client.prototype.close).toHaveBeenCalledTimes(2);
+      for (const { client, transport } of connected) {
+        expect(
+          vi.mocked(Client.prototype.close).mock.contexts.filter((value) => value === client),
+        ).toHaveLength(1);
+        expect(
+          vi
+            .mocked(StdioClientTransport.prototype.close)
+            .mock.contexts.filter((value) => value === transport),
+        ).toHaveLength(1);
+      }
       expect(mcp.connectedServers).toEqual([]);
       expect(mcp.hasInitialized).toBe(false);
       expect(mcp.getAllTools()).toEqual([]);
       await expect(target.cleanup()).resolves.toBeUndefined();
-      expect(Client.prototype.close).toHaveBeenCalledOnce();
+      expect(Client.prototype.close).toHaveBeenCalledTimes(2);
       expect(globalThis.fetch).not.toHaveBeenCalled();
     } finally {
       // Release fixture state even when this regression is run against the old cleanup path.

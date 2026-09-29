@@ -6,7 +6,7 @@ import { expect, vi } from 'vitest';
 import { withCacheEnabled } from '../../src/cache';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { createDeferred } from './utils';
-import type { SpanProcessor } from '@opentelemetry/sdk-trace-base';
+import type { SpanProcessor } from '@opentelemetry/sdk-trace-node';
 
 import type { ProviderResponse } from '../../src/types/providers';
 

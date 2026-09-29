@@ -72,7 +72,11 @@ describe('scheduler rate-limit ordering and failure diagnostics', () => {
         firstResponse.reject(new Error('429 rate limit; retry after 2 seconds'));
       }
       await vi.advanceTimersByTimeAsync(0);
-      expect(await first).toBeInstanceOf(Error);
+      if (kind === 'returned') {
+        expect(await first).toEqual({ error: '429 rate limit exceeded' });
+      } else {
+        expect(await first).toBeInstanceOf(Error);
+      }
       expect(callApi).toHaveBeenCalledOnce();
       expect(Object.values(registry.getMetrics())[0]).toMatchObject({
         activeRequests: 0,

@@ -1,19 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  isCallerAbortError,
-  throwIfAborted,
-  waitForPromiseWithAbort,
-} from '../../src/providers/shared';
-
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-}
+import { throwIfAborted, waitForPromiseWithAbort } from '../../src/providers/shared';
+import { isCallerAbortError } from '../../src/util/fetch/requestSignal';
+import { createDeferred } from '../util/utils';
 
 describe('caller cancellation while waiting for shared work', () => {
   afterEach(() => {
@@ -21,7 +9,7 @@ describe('caller cancellation while waiting for shared work', () => {
   });
 
   it('releases one caller without canceling shared work or another caller', async () => {
-    const work = deferred<string>();
+    const work = createDeferred<string>();
     const first = new AbortController();
     const second = new AbortController();
     const removeFirst = vi.spyOn(first.signal, 'removeEventListener');
@@ -43,7 +31,7 @@ describe('caller cancellation while waiting for shared work', () => {
   it.each([false, true])(
     'observes late failure after caller abort (preaborted=%s)',
     async (preaborted) => {
-      const work = deferred<string>();
+      const work = createDeferred<string>();
       const controller = new AbortController();
       if (preaborted) {
         controller.abort();

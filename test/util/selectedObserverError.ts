@@ -4,7 +4,7 @@ import {
   createResponseHeadersObserver,
   isResponseHeadersObserverErrorResponse,
   preserveResponseHeadersObserverError,
-} from '../../src/scheduler/responseHeadersObserver';
+} from '../../src/util/fetch/responseHeadersObserver';
 
 import type { ProviderResponse } from '../../src/types/providers';
 

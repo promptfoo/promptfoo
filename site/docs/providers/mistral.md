@@ -17,24 +17,7 @@ keywords:
 
 # Mistral AI
 
-The [Mistral AI API](https://docs.mistral.ai/api/) provides access to cutting-edge language models that deliver exceptional performance at competitive pricing. Mistral offers a compelling alternative to OpenAI and other providers, with specialized models for reasoning, code generation, and multimodal tasks.
-
-Mistral is particularly valuable for:
-
-- **Cost-effective AI integration** with pricing up to 8x lower than competitors
-- **Advanced reasoning** with Magistral models that show step-by-step thinking
-- **Code generation excellence** with Codestral models supporting 80+ programming languages
-- **Multimodal capabilities** for text and image processing
-- **Enterprise deployments** with on-premises options requiring just 4 GPUs
-- **Multilingual applications** with native support for 12+ languages
-
-:::tip Why Choose Mistral?
-
-Mistral's current catalog spans low-cost small models, native reasoning models, and
-frontier multimodal models such as Mistral Large 3 at $0.50/$1.50 per million tokens
-(input/output).
-
-:::
+Use the [Mistral AI API](https://docs.mistral.ai/api/) for chat, reasoning, code generation, and image understanding. Check [Mistral's model catalog](https://docs.mistral.ai/getting-started/models/) for capabilities and availability.
 
 ## API Key
 
@@ -232,22 +215,11 @@ The `magistral-small-latest` alias now resolves to Mistral Small 4 (a hybrid mod
 standalone Magistral Small reasoning snapshot. Enable Small 4's reasoning with
 `reasoning_effort: high`.
 
-#### Legacy Models (Deprecated or Retired)
+<span id="legacy-models-deprecated-or-retired" />
 
-promptfoo keeps these IDs so it can cost-score cached results. **Retired** IDs return an error if you call them today; **deprecated** IDs still work until their retirement date.
+#### Legacy models
 
-1. `open-mistral-7b`, `mistral-tiny`, `mistral-tiny-2312` (retired)
-2. `mistral-small-2402` (retired)
-3. `mistral-medium-2312` (retired; bare `mistral-medium` now resolves to Mistral Medium 3.5)
-4. `mistral-medium-2505`, `mistral-medium-2508` (Mistral Medium 3 / 3.1, deprecated — succeeded by Mistral Medium 3.5)
-5. `mistral-small-2506` (Mistral Small 3.2, deprecated — succeeded by Mistral Small 4)
-6. `mistral-large-2402`, `mistral-large-2407` (retired)
-7. `codestral-2405`, `codestral-mamba-2407`, `open-codestral-mamba`, `codestral-mamba-latest` (retired)
-8. `open-mixtral-8x7b`, `open-mixtral-8x22b`, `open-mixtral-8x22b-2404`, `mistral-small`, `mistral-small-2312` (retired)
-9. `pixtral-12b` (retired — use a current vision model such as `mistral-large-latest`)
-10. `magistral-small-2506`, `magistral-small-2507` (retired); `magistral-small-2509` — standalone reasoning snapshot, deprecated 2026-04-30, retiring 2026-07-31 (`magistral-small-latest` now resolves to Mistral Small 4)
-
-> `mistral-tiny-2407` / `mistral-tiny-latest` are **not** legacy — they are current aliases of `open-mistral-nemo` (see the aliases table above).
+Promptfoo retains some older prices for estimating costs from past evals. Retired models reject new requests. Check [Mistral's model catalog](https://docs.mistral.ai/getting-started/models/) before using an older snapshot.
 
 ### Embedding Models
 
@@ -616,12 +588,12 @@ Error: 429 Too Many Requests
 - Use smaller batch sizes
 - Consider upgrading your plan
 
-```yaml
-# Reduce concurrent requests
-providers:
-  - id: mistral:mistral-large-latest
-    config:
-      timeout: 30000 # Increase timeout
+The Mistral provider has no `timeout` config option. Request timeouts come from the
+`REQUEST_TIMEOUT_MS` environment variable (default 300000), and concurrency is controlled by the
+`--max-concurrency` flag:
+
+```bash
+REQUEST_TIMEOUT_MS=600000 promptfoo eval --max-concurrency 1
 ```
 
 #### Context Length Exceeded

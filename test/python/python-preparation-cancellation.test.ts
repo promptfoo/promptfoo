@@ -9,6 +9,7 @@ import {
   removeSecureTempDirectory,
   writeSecureTempFile,
 } from '../../src/util/secureTempFiles';
+import { createDeferred } from '../util/utils';
 
 const { execFileAsync, pythonShell } = vi.hoisted(() => ({
   execFileAsync: vi.fn(),
@@ -39,14 +40,6 @@ vi.mock('../../src/util/secureTempFiles', async (importOriginal) => {
 const realTempFiles = await vi.importActual<typeof import('../../src/util/secureTempFiles')>(
   '../../src/util/secureTempFiles',
 );
-
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((resolvePromise) => {
-    resolve = resolvePromise;
-  });
-  return { promise, resolve };
-}
 
 describe('runPython preparation cancellation', () => {
   let fixtureDirectory: string;
@@ -131,8 +124,8 @@ describe('runPython preparation cancellation', () => {
   });
 
   it('cancels after held validation without cancelling another caller sharing that validation', async () => {
-    const validationStarted = deferred<void>();
-    const validationRelease = deferred<{ stdout: string; stderr: string }>();
+    const validationStarted = createDeferred<void>();
+    const validationRelease = createDeferred<{ stdout: string; stderr: string }>();
     execFileAsync.mockImplementationOnce(() => {
       validationStarted.resolve();
       return validationRelease.promise;
@@ -168,8 +161,8 @@ describe('runPython preparation cancellation', () => {
   });
 
   it('does not start Python after cancellation during the final preparation write', async () => {
-    const outputWritten = deferred<string>();
-    const writeRelease = deferred<void>();
+    const outputWritten = createDeferred<string>();
+    const writeRelease = createDeferred<void>();
     vi.mocked(writeSecureTempFile).mockImplementation(async (directory, filename, contents) => {
       const filePath = await realTempFiles.writeSecureTempFile(directory, filename, contents);
       if (filename === 'output.json') {
@@ -206,7 +199,7 @@ describe('runPython preparation cancellation', () => {
   it.each(['graceful close', 'forced close'] as const)(
     'waits for actual child close after caller abort and %s',
     async (outcome) => {
-      const started = deferred<void>();
+      const started = createDeferred<void>();
       const childProcess = Object.assign(new EventEmitter(), { kill: vi.fn(() => true) });
       let ended!: (error?: Error) => void;
       const shell = Object.assign(new EventEmitter(), {
