@@ -6,10 +6,10 @@ description: Implement regression testing by automatically retrying failed cases
 
 # Retry Strategy
 
-The retry strategy automatically incorporates previously failed test cases into your test suite, creating a regression testing system for target LLM systems. Each red team scan learns from past failures, making promptfoo increasingly effective at finding vulnerabilities in your target. The retry strategy runs first in your pipeline, allowing other strategies to build upon these historical test cases.
+The retry strategy adds previously failed cases to your test suite for regression testing. It runs before other strategies, which can also process those cases.
 
 :::note
-The retry strategy is target-specific - it only retries test cases that previously failed against the same target system (identified by target label). This ensures that the retried test cases are relevant to the specific target's known vulnerabilities.
+Retries use failures from the same target, identified by its label.
 :::
 
 ## Implementation
@@ -79,7 +79,7 @@ And previously some hate speech tests failed against your target, the retry stra
 2. Use it in combination with other strategies for maximum coverage
 
 :::info
-The retry strategy combines failures from your local database and, when connected to Promptfoo Cloud, your cloud history. Cloud failures are available even when the target has no local history; duplicate test cases are included only once.
+Retries combine local failures with cloud history when connected to Promptfoo Cloud. Cloud failures are included even when the target has no local history. Duplicate cases are included once.
 :::
 
 ## Related Concepts
