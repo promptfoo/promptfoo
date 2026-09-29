@@ -548,16 +548,17 @@ export class PiProvider implements ApiProvider {
   /**
    * Determine which env var should carry config.apiKey: an explicit
    * api_key_env, or the standard env var for the provider derived from
-   * provider_id or the provider prefix of the model pattern.
+   * provider_id or the provider prefix of the configured model. Row model overrides
+   * do not change the credential destination.
    *
    * The key is never passed via --api-key so it stays off the command line
    * (visible in process listings) and out of debug logs.
    */
-  private getApiKeyEnvVar(config: PiProviderConfig): string | undefined {
-    if (config.api_key_env) {
-      return config.api_key_env;
+  private getApiKeyEnvVar(): string | undefined {
+    if (this.config.api_key_env) {
+      return this.config.api_key_env;
     }
-    const provider = this.resolveProviderName(config);
+    const provider = this.resolveProviderName(this.config);
     if (!provider) {
       return undefined;
     }
@@ -614,7 +615,7 @@ export class PiProvider implements ApiProvider {
     }
 
     if (config.apiKey) {
-      const envVar = this.getApiKeyEnvVar(config);
+      const envVar = this.getApiKeyEnvVar();
       if (envVar) {
         env[envVar] = config.apiKey;
       }
@@ -662,7 +663,7 @@ export class PiProvider implements ApiProvider {
       );
     }
 
-    if (config.apiKey && !this.getApiKeyEnvVar(config)) {
+    if (config.apiKey && !this.getApiKeyEnvVar()) {
       throw new Error(
         dedent`Pi provider: apiKey is set but promptfoo cannot determine which env var should carry it for this provider.
 

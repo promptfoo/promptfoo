@@ -329,6 +329,47 @@ describe('PiProvider', () => {
       expect(args).not.toContain('--approve');
     });
 
+    it.each([
+      { api_key_env: undefined, expectedEnv: 'OPENAI_API_KEY' },
+      { api_key_env: 'FIXTURE_API_KEY', expectedEnv: 'FIXTURE_API_KEY' },
+    ])(
+      'keeps explicit credentials bound to $expectedEnv across row model overrides',
+      async ({ api_key_env, expectedEnv }) => {
+        vi.stubEnv('ANTHROPIC_API_KEY', 'other-provider-fixture');
+        try {
+          mockPiRun(defaultEvents());
+          const provider = createProvider({
+            config: {
+              model: 'openai/fixture',
+              apiKey: 'configured-key-fixture',
+              api_key_env,
+            },
+          });
+          const result = await provider.callApi('hello', {
+            prompt: { raw: 'hello', label: 'hello', config: { model: 'anthropic/fixture' } },
+            vars: {},
+          });
+          expect(result.error).toBeUndefined();
+          expect(spawnedArgs()).toContain('anthropic/fixture');
+          expect(spawnedOptions().env[expectedEnv]).toBe('configured-key-fixture');
+          expect(spawnedOptions().env.ANTHROPIC_API_KEY).toBe('other-provider-fixture');
+        } finally {
+          vi.unstubAllEnvs();
+        }
+      },
+    );
+
+    it('does not infer an explicit key destination from a row model', async () => {
+      const provider = createProvider({ config: { apiKey: 'configured-key-fixture' } });
+      await expect(
+        provider.callApi('hello', {
+          prompt: { raw: 'hello', label: 'hello', config: { model: 'openai/fixture' } },
+          vars: {},
+        }),
+      ).rejects.toThrow('api_key_env');
+      expect(mockSpawn).not.toHaveBeenCalled();
+    });
+
     it('passes --approve only when trust_project_files is set', async () => {
       mockPiRun(defaultEvents());
       const provider = createProvider({ config: { trust_project_files: true } });

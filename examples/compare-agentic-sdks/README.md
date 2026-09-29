@@ -46,7 +46,7 @@ The vulnerable code lives in the [test-codebase](./test-codebase/) directory.
 
 **OpenCode SDK** uses file system tools similar to Claude Agent SDK, but supports 75+ LLM providers including Anthropic, OpenAI, Google, Ollama (local), and more.
 
-**Pi** spawns the [pi](https://pi.dev/) CLI per call with read-only tools, and is also provider-agnostic — the same `pi:anthropic/claude-sonnet-4-6` entry can be swapped to any provider/model pi supports. Requires the pi CLI (`npm install -g @earendil-works/pi-coding-agent`).
+**Pi** spawns the [pi](https://pi.dev/) CLI per call with read-only tools, and is also provider-agnostic — the same `pi:anthropic/claude-sonnet-4-6` entry can be swapped to any provider/model pi supports. Requires Pi 0.99.1 or later on Linux or macOS. Install it in the project where you run promptfoo (`npm install --ignore-scripts @earendil-works/pi-coding-agent`), or set `pi_path` to its absolute executable or CLI script path.
 
 **Plain LLM** can't read files, so it explains how to do a security audit instead of doing one.
 

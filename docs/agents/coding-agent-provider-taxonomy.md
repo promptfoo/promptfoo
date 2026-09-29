@@ -364,8 +364,8 @@ Provider IDs: `pi` and `pi:<provider>/<model>`, with an optional `:<thinking>` s
 
 - Starts Pi 0.99.1 or later with `--mode rpc --no-session` for each call. Prompts
   travel through stdin unchanged; `agent_settled` marks completion.
-- Resolves the CLI from an absolute `pi_path`, a package under the current project
-  directory or its parents, or `PATH`.
+- Resolves the CLI from an absolute `pi_path` or a package under the current project
+  directory or its parents. Supports Linux and macOS.
 - Uses a temporary directory with tools disabled by default. A configured
   `working_dir` enables `read`, `grep`, `find`, and `ls`.
 - Disables resource discovery and project trust by default. Execution settings

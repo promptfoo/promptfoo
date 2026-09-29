@@ -42,6 +42,8 @@ export OPENAI_API_KEY=your_api_key_here
 
 Subscription-backed providers configured through Pi's login flow also work because the provider uses your Pi config directory (`~/.pi/agent`) by default.
 
+An explicit `apiKey` uses `api_key_env` or the vendor selected in the provider configuration. A per-test model override does not move that key to another vendor’s environment variable.
+
 ## Quick Start
 
 ```yaml title="promptfooconfig.yaml"
