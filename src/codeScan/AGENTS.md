@@ -14,7 +14,8 @@ access through MCP, GitHub PR context, and the hosted scanner service.
   abort.
 - On Windows, run npm's JS entrypoint with `process.execPath` (see `mcp/filesystem.ts`):
   `.cmd` shims need a shell, and bare command names are looked up in the cwd first.
-  Keep canonical npm entrypoints and the npm cwd outside the scanned repository.
+  Keep canonical npm entrypoints and the npm cwd outside the scanned repository, prefer
+  the running Node on PATH, and terminate the npm process tree during cleanup.
 - Preserve npm/npx environment sanitization when spawning tool installers or MCP
   servers. When adding install paths, make the registry/cwd/env explicit and cover
   PR-controlled npm config in tests.

@@ -4,7 +4,7 @@
  * Spawns and manages the @modelcontextprotocol/server-filesystem child process.
  */
 
-import { type ChildProcess, spawn } from 'child_process';
+import { type ChildProcess, execFile, spawn } from 'child_process';
 import { realpathSync } from 'fs';
 import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from 'path';
 
@@ -23,6 +23,17 @@ function createFilesystemMcpEnv(): NodeJS.ProcessEnv {
 
   delete env.NPM_CONFIG_BEFORE;
   delete env.npm_config_before;
+
+  if (process.platform === 'win32') {
+    // npm's generated server shim invokes node through PATH. Prefer this runtime and
+    // remove duplicate case variants, since Windows environment keys are case-insensitive.
+    for (const key of Object.keys(env)) {
+      if (key.toLowerCase() === 'path') {
+        delete env[key];
+      }
+    }
+    env.PATH = [dirname(process.execPath), process.env.PATH].filter(Boolean).join(delimiter);
+  }
 
   return env;
 }
@@ -223,31 +234,57 @@ export function waitForFilesystemMcpServerReady(
 
 /**
  * Stop the filesystem MCP server process
- * @param process Child process to terminate
+ * @param mcpProcess Child process to terminate
  */
-export async function stopFilesystemMcpServer(process: ChildProcess): Promise<void> {
-  if (!process.pid || process.exitCode !== null || process.signalCode !== null) {
+export async function stopFilesystemMcpServer(mcpProcess: ChildProcess): Promise<void> {
+  if (!mcpProcess.pid || mcpProcess.exitCode !== null || mcpProcess.signalCode !== null) {
     logger.debug('MCP server already stopped');
     return;
   }
 
-  logger.debug(`Stopping MCP server (pid: ${process.pid})...`);
+  logger.debug(`Stopping MCP server (pid: ${mcpProcess.pid})...`);
+
+  if (process.platform === 'win32') {
+    // SIGTERM force-kills only npm on Windows. taskkill also stops its shell and server.
+    const windowsDir = process.env.SystemRoot;
+    if (!windowsDir || !isAbsolute(windowsDir)) {
+      throw new FilesystemMcpError('Cannot locate the Windows system directory for MCP cleanup');
+    }
+    return new Promise((resolve, reject) => {
+      execFile(
+        join(windowsDir, 'System32', 'taskkill.exe'),
+        ['/PID', String(mcpProcess.pid), '/T', '/F'],
+        { windowsHide: true, timeout: 5000 },
+        (error) => {
+          if (error) {
+            reject(
+              new FilesystemMcpError(
+                `Failed to stop filesystem MCP process tree: ${error.message}`,
+              ),
+            );
+          } else {
+            resolve();
+          }
+        },
+      );
+    });
+  }
 
   return new Promise((resolve) => {
     const timeout = setTimeout(() => {
       // Force kill if graceful shutdown takes too long
       logger.debug('MCP server did not exit gracefully, force killing...');
-      process.kill('SIGKILL');
+      mcpProcess.kill('SIGKILL');
       resolve();
     }, 5000); // 5 second timeout
 
-    process.on('exit', () => {
+    mcpProcess.on('exit', () => {
       clearTimeout(timeout);
       logger.debug('MCP server stopped');
       resolve();
     });
 
     // Try graceful shutdown first
-    process.kill('SIGTERM');
+    mcpProcess.kill('SIGTERM');
   });
 }
