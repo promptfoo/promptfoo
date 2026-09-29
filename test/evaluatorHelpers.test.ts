@@ -583,6 +583,23 @@ describe('evaluatorHelpers', () => {
       expect(resolveVariables(variables)).toEqual(expected);
     });
 
+    it('resolves long local alias chains before inserting literal data', () => {
+      const variables = {
+        first: '{{second}}',
+        second: '{{third}}',
+        third: '{{fourth}}',
+        fourth: '{{fifth}}',
+        fifth: '{{sixth}}',
+        sixth: '{{seventh}}',
+        seventh: '{{input}}',
+        input: '{{literal}}',
+        literal: 'do not insert',
+      };
+      const derived = new Set<string>();
+      expect(resolveVariables(variables, ['input'], derived).first).toBe('{{literal}}');
+      expect(derived.has('first')).toBe(true);
+    });
+
     it('should not modify variables without placeholders', () => {
       const variables = { greeting: 'Hello, world!', name: 'John' };
       const expected = { greeting: 'Hello, world!', name: 'John' };

@@ -536,8 +536,8 @@ export async function fetchLangfuseTraces(url: string): Promise<LangfuseTraceTes
   });
 
   if (tests.length === 0) {
-    logger.warn(
-      '[Langfuse Traces] No traces found. Check your filter parameters or ensure traces exist in Langfuse.',
+    throw new Error(
+      'No Langfuse traces matched the filters. Check the trace source and filter parameters.',
     );
   }
 

@@ -344,9 +344,11 @@ describe('langfuseTraces', () => {
     it('should pass filter parameters to traceList', async () => {
       mockTraceList.mockResolvedValueOnce({ data: [] });
 
-      await fetchLangfuseTraces(
-        'langfuse://traces?userId=user_123&sessionId=sess_456&tags=prod&name=test',
-      );
+      await expect(
+        fetchLangfuseTraces(
+          'langfuse://traces?userId=user_123&sessionId=sess_456&tags=prod&name=test',
+        ),
+      ).rejects.toThrow('No Langfuse traces matched the filters');
 
       expect(mockTraceList).toHaveBeenCalledWith({
         fields: 'core,io,metrics',
@@ -359,12 +361,11 @@ describe('langfuseTraces', () => {
       });
     });
 
-    it('should handle empty response', async () => {
+    it('rejects an empty selection before it can create an implicit live test', async () => {
       mockTraceList.mockResolvedValueOnce({ data: [] });
-
-      const tests = await fetchLangfuseTraces('langfuse://traces');
-
-      expect(tests).toHaveLength(0);
+      await expect(fetchLangfuseTraces('langfuse://traces')).rejects.toThrow(
+        'No Langfuse traces matched the filters',
+      );
     });
 
     it('should paginate through multiple pages', async () => {

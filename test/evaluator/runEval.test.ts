@@ -139,6 +139,31 @@ describe('runEval', () => {
     expect(results[0].vars.context).toBe('local context');
   });
 
+  it('renders every local placeholder once while preserving imported literal text', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: '{{context}}', label: 'fixture' },
+      test: {
+        providerOutput: 'stored',
+        vars: {
+          context: '{{input}} | {{reference}} | {{suffix}}',
+          input: '{{literal}}',
+          reference: '{{second}}',
+          suffix: '{{local}}',
+          local: 'local suffix',
+          literal: 'do not insert',
+          second: 'do not insert either',
+        },
+        metadata: { __promptfoo: { remote: true, remoteVars: ['input', 'reference'] } },
+      },
+      conversations: {},
+      registers: {},
+    });
+    expect(results[0].prompt.raw).toBe('{{literal}} | {{second}} | local suffix');
+    expect(mockProvider.callApi).not.toHaveBeenCalled();
+  });
+
   it('skips the response-provider transform for imported outputs but keeps test transforms', async () => {
     const results = await runEval({
       ...defaultOptions,

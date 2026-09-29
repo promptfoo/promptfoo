@@ -6,10 +6,38 @@ import { expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { type ApiProvider, type TestSuite } from '../../src/types/index';
+import { transform } from '../../src/util/transform';
 import { mockApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator transforms', () => {
+  it.each(['{{literal}}', 'file:///tmp/unused-langfuse-fixture.txt'])(
+    'preserves imported data copied by transformVars: %s',
+    async (input) => {
+      vi.mocked(transform).mockResolvedValueOnce({ question: input });
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('{{question}} | {{local}}')],
+        defaultTest: { vars: { local: '{{source}}', source: 'local context' } },
+        tests: [
+          {
+            providerOutput: 'stored answer',
+            vars: { input, literal: 'do not insert' },
+            metadata: { __promptfoo: { remote: true, remoteVars: ['input'] } },
+            options: { transformVars: '({ question: vars.input })', disableVarExpansion: true },
+          },
+        ],
+      };
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, {});
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.stats.successes).toBe(1);
+      expect(summary.results[0].prompt.raw).toBe(`${input} | local context`);
+      expect(summary.results[0].response?.output).toBe('stored answer');
+      expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+    },
+  );
+
   it('evaluate with transform option - default test', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],

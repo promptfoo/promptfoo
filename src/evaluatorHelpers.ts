@@ -56,38 +56,37 @@ export function resolveVariables(
   skipResolveVars?: string[],
   varsResolvedFromSkipped?: Set<string>,
 ): Record<string, VarValue> {
-  let resolved: boolean;
-  const regex = /\{\{\s*(\w+)\s*\}\}/; // Matches {{variableName}}, {{ variableName }}, etc.
+  const originals = { ...variables };
+  const resolved = new Set(skipResolveVars);
+  const resolving = new Set<string>();
 
-  let iterations = 0;
-  do {
-    resolved = true;
-    for (const key of Object.keys(variables)) {
-      if (
-        skipResolveVars?.includes(key) ||
-        varsResolvedFromSkipped?.has(key) ||
-        typeof variables[key] !== 'string'
-      ) {
-        continue;
-      }
-      const value = variables[key] as string;
-      const match = regex.exec(value);
-      if (match) {
-        const [placeholder, varName] = match;
-        if (variables[varName] === undefined) {
-          // Do nothing - final nunjucks render will fail if necessary.
-          // logger.warn(`Variable "${varName}" not found for substitution.`);
-        } else {
-          variables[key] = value.replace(placeholder, variables[varName] as string);
-          if (skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName)) {
-            varsResolvedFromSkipped?.add(key);
-          }
-          resolved = false; // Indicate that we've made a replacement and should check again
-        }
-      }
+  function resolve(key: string): VarValue {
+    if (resolved.has(key) || resolving.has(key)) {
+      return variables[key];
     }
-    iterations++;
-  } while (!resolved && iterations < 5);
+    resolving.add(key);
+    const value = originals[key];
+    if (typeof value === 'string') {
+      // Substitute the original template once, without parsing text inserted from other vars.
+      variables[key] = value.replace(/\{\{\s*(\w+)\s*\}\}/g, (placeholder, name: string) => {
+        if (originals[name] === undefined) {
+          return placeholder;
+        }
+        const replacement = resolve(name);
+        if (skipResolveVars?.includes(name) || varsResolvedFromSkipped?.has(name)) {
+          varsResolvedFromSkipped?.add(key);
+        }
+        return String(replacement);
+      });
+    }
+    resolving.delete(key);
+    resolved.add(key);
+    return variables[key];
+  }
+
+  for (const key of Object.keys(variables)) {
+    resolve(key);
+  }
 
   return variables;
 }

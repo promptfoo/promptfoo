@@ -2555,6 +2555,16 @@ async function applyInputTransform(
     typeof transformedVars === 'object',
     'Transform function did not return a valid object',
   );
+  if (testCase.providerOutput !== undefined && testCase.metadata?.__promptfoo?.remote === true) {
+    // Transformed imported values are data, including aliases created by transformVars.
+    const metadata = testCase.metadata.__promptfoo;
+    metadata.remoteVars = [
+      ...new Set([
+        ...(metadata.remoteVars ?? Object.keys(testCase.vars ?? {})),
+        ...Object.keys(transformedVars),
+      ]),
+    ];
+  }
   testCase.vars = { ...testCase.vars, ...transformedVars };
 }
 
