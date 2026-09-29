@@ -88,9 +88,9 @@ If you made changes to your PR and want to run another scan, you can trigger a n
 
 ### Manual Scans with `workflow_dispatch`
 
-You can also start a scan manually by dispatching a workflow with a `pr_number` input. The Action associates its results with that PR, but it always scans the checked-out workspace (`--compare HEAD`). A `workflow_dispatch` run checks out the dispatch ref you selected — **not** the PR's head — so unless you explicitly check out the PR head, dispatching from `main` for PR 123 scans `main` while reporting the results against PR 123.
+For a manual scan, pass `pr_number` and check out that PR's head SHA. The Action scans the current workspace (`--compare HEAD`); the default dispatch checkout uses the ref selected when starting the workflow.
 
-Resolve the PR's **immutable head SHA** through the GitHub API, check that exact SHA out, and fail closed if the workspace `HEAD` does not match it before running the Action:
+Resolve the head SHA through the GitHub API, check out that commit, and verify the PR still points to it before scanning:
 
 ```yaml
 name: Promptfoo Code Scan (manual)
@@ -123,7 +123,6 @@ jobs:
       - name: Checkout the requested PR head
         uses: actions/checkout@v6
         with:
-          # Pin to the immutable commit SHA, not a mutable branch ref.
           ref: ${{ steps.pr.outputs.head_sha }}
           fetch-depth: 0
           persist-credentials: false
