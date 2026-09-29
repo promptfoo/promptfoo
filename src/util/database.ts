@@ -17,6 +17,7 @@ import {
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
 import Eval, { createEvalId } from '../models/eval';
+import { notifyEvaluationChanged, notifyEvaluationsDeleted } from '../models/evalMutation';
 import { generateIdFromPrompt } from '../models/prompt';
 import {
   type EvaluateSummaryV2,
@@ -30,9 +31,8 @@ import {
 } from '../types/index';
 import invariant from '../util/invariant';
 import { sha256 } from './createHash';
-import { restoreAzureBlobSasTokens } from './sanitizer';
+import { restoreAzureBlobSasTokens, sanitizeTracingConfigForPersistence } from './sanitizer';
 import {
-  clearStandaloneEvalCache,
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
   setCachedStandaloneEvals,
@@ -40,8 +40,9 @@ import {
 
 import type { StandaloneEval } from './standaloneEvalCache';
 
+export { clearStandaloneEvalCache } from './standaloneEvalCache';
+
 export type { StandaloneEval };
-export { clearStandaloneEvalCache };
 
 export async function writeResultsToDatabase(
   results: EvaluateSummaryV2,
@@ -60,7 +61,7 @@ export async function writeResultsToDatabase(
         createdAt: createdAt.getTime(),
         author: getAuthor(),
         description: config.description,
-        config,
+        config: sanitizeTracingConfigForPersistence(config),
         results,
         isRedteam: config.redteam !== undefined,
       })
@@ -160,7 +161,7 @@ export async function writeResultsToDatabase(
     }
   });
 
-  clearStandaloneEvalCache();
+  notifyEvaluationChanged(evalId);
 
   return evalId;
 }
@@ -212,7 +213,7 @@ export async function updateResult(
 }
 
 async function getPromptsWithPredicate(
-  predicate: (result: ResultsFile) => boolean,
+  predicate: (eval_: Eval) => boolean,
   limit: number,
 ): Promise<PromptWithMetadata[]> {
   // TODO(ian): Make this use a proper database query
@@ -222,13 +223,10 @@ async function getPromptsWithPredicate(
 
   for (const eval_ of evals_) {
     const createdAt = new Date(eval_.createdAt).toISOString();
-    const resultWrapper: ResultsFile = await eval_.toResultsFile();
-    if (predicate(resultWrapper)) {
+    if (predicate(eval_)) {
+      const datasetId = sha256(JSON.stringify(eval_.config.tests || []));
       for (const prompt of eval_.getPrompts()) {
         const promptId = sha256(prompt.raw);
-        const datasetId = resultWrapper.config.tests
-          ? sha256(JSON.stringify(resultWrapper.config.tests))
-          : '-';
         if (promptId in groupedPrompts) {
           groupedPrompts[promptId].recentEvalDate = new Date(
             Math.max(
@@ -269,8 +267,8 @@ export function getPromptsForTestCasesHash(
   testCasesSha256: string,
   limit: number = DEFAULT_QUERY_LIMIT,
 ) {
-  return getPromptsWithPredicate((result) => {
-    const testsJson = JSON.stringify(result.config.tests);
+  return getPromptsWithPredicate((eval_) => {
+    const testsJson = JSON.stringify(eval_.config.tests || []);
     const hash = sha256(testsJson);
     return hash === testCasesSha256;
   }, limit);
@@ -303,7 +301,7 @@ async function getTestCasesWithPredicate(
         logger.warn('Skipping TestGeneratorConfig object in database storage');
         continue;
       }
-      const datasetId = sha256(JSON.stringify(storableTestCases));
+      const datasetId = sha256(JSON.stringify(eval_.config.tests || []));
 
       if (datasetId in groupedTestCases) {
         groupedTestCases[datasetId].recentEvalDate = new Date(
@@ -456,7 +454,7 @@ export async function deleteEval(evalId: string) {
       throw new Error(`Eval with ID ${evalId} not found`);
     }
   });
-  clearStandaloneEvalCache();
+  notifyEvaluationsDeleted([evalId]);
 }
 
 /**
@@ -464,6 +462,11 @@ export async function deleteEval(evalId: string) {
  * @param ids - The IDs of the evals to delete.
  */
 export async function deleteEvals(ids: string[]): Promise<void> {
+  // Deleting zero evals must not emit a delete signal: the watcher would broadcast an empty
+  // deletedEvalIds list, which clients interpret as "all evals deleted" and reload/clear.
+  if (ids.length === 0) {
+    return;
+  }
   const db = await getDb();
   await db.transaction(async (tx) => {
     await deleteTraceRecordsForEvals(tx, ids);
@@ -473,7 +476,7 @@ export async function deleteEvals(ids: string[]): Promise<void> {
     await tx.delete(evalResultsTable).where(inArray(evalResultsTable.evalId, ids)).run();
     await tx.delete(evalsTable).where(inArray(evalsTable.id, ids)).run();
   });
-  clearStandaloneEvalCache();
+  notifyEvaluationsDeleted(ids);
 }
 
 /**
@@ -492,7 +495,7 @@ export async function deleteAllEvals(): Promise<void> {
     await tx.delete(evalsToTagsTable).run();
     await tx.delete(evalsTable).run();
   });
-  clearStandaloneEvalCache();
+  notifyEvaluationsDeleted();
 }
 
 export async function getStandaloneEvals({

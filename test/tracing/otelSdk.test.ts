@@ -38,15 +38,22 @@ vi.mock('@opentelemetry/sdk-trace-node', () => {
   };
 });
 
-vi.mock('@opentelemetry/exporter-trace-otlp-http', () => ({
-  OTLPTraceExporter: class MockOTLPTraceExporter {
-    url: string | undefined;
-    constructor(config: { url?: string } = {}) {
-      this.url = config.url;
-      otlpExporterCalls.push(config);
-    }
-  },
-}));
+const { loadOtlpExporter } = vi.hoisted(() => ({ loadOtlpExporter: vi.fn() }));
+
+vi.mock('node:module', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:module')>();
+  return {
+    ...actual,
+    createRequire: (url: string | URL) => {
+      const require = actual.createRequire(url);
+      return Object.assign(
+        (id: string) =>
+          id === '@opentelemetry/exporter-trace-otlp-http' ? loadOtlpExporter() : require(id),
+        require,
+      );
+    },
+  };
+});
 
 vi.mock('@opentelemetry/core', () => ({
   W3CTraceContextPropagator: class MockW3CTraceContextPropagator {},
@@ -109,6 +116,15 @@ describe('otelSdk', () => {
 
   beforeEach(async () => {
     // Clear all mocks and call tracking
+    loadOtlpExporter.mockReset().mockReturnValue({
+      OTLPTraceExporter: class MockOTLPTraceExporter {
+        url: string | undefined;
+        constructor(config: { url?: string } = {}) {
+          this.url = config.url;
+          otlpExporterCalls.push(config);
+        }
+      },
+    });
     vi.clearAllMocks();
     nodeTracerProviderCalls = [];
     otlpExporterCalls = [];
@@ -149,6 +165,7 @@ describe('otelSdk', () => {
 
       expect(isOtelInitialized()).toBe(false);
       expect(mockRegister).not.toHaveBeenCalled();
+      expect(loadOtlpExporter).not.toHaveBeenCalled();
     });
 
     it('should initialize and register provider', () => {
@@ -157,6 +174,7 @@ describe('otelSdk', () => {
       expect(isOtelInitialized()).toBe(true);
       expect(nodeTracerProviderCalls.length).toBe(1);
       expect(mockRegister).toHaveBeenCalled();
+      expect(loadOtlpExporter).not.toHaveBeenCalled();
     });
 
     it('should add local span processor when localExport is true', () => {

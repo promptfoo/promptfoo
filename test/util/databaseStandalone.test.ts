@@ -1,6 +1,7 @@
 import { eq, sql } from 'drizzle-orm';
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
+import { updateSignalFile } from '../../src/database/signal';
 import { evalsTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
@@ -9,13 +10,25 @@ import { type CompletedPrompt, type Prompt, ResultFailureReason } from '../../sr
 import {
   clearStandaloneEvalCache,
   deleteEval,
+  getDatasetFromHash,
+  getPrompts,
+  getPromptsForTestCasesHash,
   getStandaloneEvals,
+  getTestCases,
   updateResult,
 } from '../../src/util/database';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
 } from '../../src/util/standaloneEvalCache';
+
+vi.mock('../../src/database/signal', async () => {
+  const actual = await vi.importActual('../../src/database/signal');
+  return {
+    ...actual,
+    updateSignalFile: vi.fn(),
+  };
+});
 
 const completedPrompt: CompletedPrompt = {
   raw: 'hello',
@@ -75,6 +88,29 @@ describe('getStandaloneEvals', () => {
   });
 
   beforeEach(resetEvalTables);
+
+  afterEach(() => {
+    vi.resetAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  it.each([false, true])('keeps dataset identities when output stripping is %s', async (strip) => {
+    vi.stubEnv('PROMPTFOO_STRIP_TEST_VARS', String(strip));
+    const tests = [{ vars: { doc: 'https://cdn.example/doc?X-Amz-Signature=short-secret' } }];
+    const created = await createEvalWithPrompts({ tests });
+    const persisted = await Eval.findById(created.id);
+    const datasetId = persisted!.datasetId!;
+
+    expect(datasetId).toBeTruthy();
+    const datasets = await getTestCases();
+    expect(datasets).toHaveLength(1);
+    expect(datasets[0].id).toBe(datasetId);
+    expect(JSON.stringify(datasets[0].testCases)).not.toContain('short-secret');
+    expect((await getDatasetFromHash(datasetId))?.id).toBe(datasetId);
+    expect((await getPrompts())[0].evals[0].datasetId).toBe(datasetId);
+    expect(await getPromptsForTestCasesHash(datasetId)).toHaveLength(1);
+    expect(persisted!.config.tests).toEqual(tests);
+  });
 
   it('returns isRedteam from the materialized column, not raw JSON inspection', async () => {
     const redteamEval = await createEvalWithPrompts({ redteam: {} as any });
@@ -150,6 +186,7 @@ describe('getStandaloneEvals', () => {
     const afterIds = (await getStandaloneEvals()).map((row) => row.evalId);
     expect(afterIds).toContain(source.id);
     expect(afterIds).toContain(copy.id);
+    expect(updateSignalFile).toHaveBeenCalledWith(copy.id);
   });
 
   it('includes direct eval saves after history has been cached', async () => {
@@ -165,6 +202,7 @@ describe('getStandaloneEvals', () => {
 
     const afterRow = (await getStandaloneEvals()).find((row) => row.evalId === eval_.id);
     expect(afterRow?.description).toBe('updated description');
+    expect(updateSignalFile).toHaveBeenCalledWith(eval_.id);
   });
 
   it('includes prompt changes after history has been cached', async () => {
@@ -214,6 +252,36 @@ describe('getStandaloneEvals', () => {
 
     const afterRow = (await getStandaloneEvals()).find((row) => row.evalId === eval_.id);
     expect(afterRow?.pluginFailCount['plugin-a']).toBe(1);
+  });
+
+  it('includes incrementally added results after history has been cached', async () => {
+    const eval_ = await createEvalWithPrompts({});
+    const beforeRow = (await getStandaloneEvals()).find((row) => row.evalId === eval_.id);
+    expect(beforeRow?.pluginFailCount['plugin-add']).toBeUndefined();
+    expectStandaloneHistoryCached();
+
+    await eval_.addResult({
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: { vars: {}, metadata: { pluginId: 'plugin-add' } },
+      promptId: 'prompt-add',
+      provider: { id: 'test-provider' },
+      prompt: renderedPrompts[0],
+      vars: {},
+      response: { output: 'bad' },
+      error: null,
+      failureReason: ResultFailureReason.ASSERT,
+      success: false,
+      score: 0,
+      latencyMs: 1,
+      gradingResult: null,
+      namedScores: {},
+      cost: 0,
+      metadata: {},
+    });
+
+    const afterRow = (await getStandaloneEvals()).find((row) => row.evalId === eval_.id);
+    expect(afterRow?.pluginFailCount['plugin-add']).toBe(1);
   });
 
   it('classifies redteam: null as redteam, matching the runtime predicate', async () => {

@@ -5,13 +5,19 @@
  */
 
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
 import * as github from '@actions/github';
-import { prepareComments } from '../../src/codeScan/util/github';
-import { scanResponseToSarif } from '../../src/codeScan/util/sarif';
+// esbuild inlines (and tree-shakes) this named JSON import at build time, so each
+// action release ships with the promptfoo CLI version that was current in the
+// monorepo when the release was built — the runtime install below is pinned to it
+// instead of resolving a mutable dist-tag like `latest`.
+import { version as defaultPromptfooVersion } from '../../package.json';
+import { hasPrPostableFindings, prepareComments } from '../../src/codeScan/util/github';
+import { hasSarifReportableFindings, scanResponseToSarif } from '../../src/codeScan/util/sarif';
 import {
   CodeScanSeverity,
   type Comment,
@@ -23,7 +29,7 @@ import {
 } from '../../src/types/codeScan';
 import { getGitHubOIDCToken } from './auth';
 import { generateConfigFile } from './config';
-import { getGitHubContext, getPRFiles } from './github';
+import { getGitHubContext, getPRFiles, partitionReviewCommentsByDiff } from './github';
 
 interface ActionInputs {
   apiHost: string;
@@ -34,6 +40,7 @@ interface ActionInputs {
   githubToken: string;
   enableForkPrs: boolean;
   sarifOutputPath: string | undefined;
+  promptfooVersion: string;
 }
 
 interface PullRequestForkPayload {
@@ -86,6 +93,36 @@ function resolveMinimumSeverityInput(): string {
   return primary || alias || DEFAULT_MINIMUM_SEVERITY;
 }
 
+// Exact versions only (optionally with a prerelease suffix). Anything looser — a range,
+// a dist-tag, a git/URL spec, or an extra npm flag — must be rejected because the value
+// is passed straight into `npm install` and controls which code scans the repository.
+// Numeric components are capped at 15 digits so they always stay below
+// Number.MAX_SAFE_INTEGER, node-semver's actual component limit: an oversized
+// component makes the spec invalid semver, which npm reclassifies as a mutable
+// dist-tag lookup, defeating the exact-version contract. Leading zeros are rejected
+// as invalid strict semver (npm loose-parses them rather than resolving exactly).
+const SEMVER_NUMERIC = String.raw`(?:0|[1-9]\d{0,14})`;
+const SEMVER_PRERELEASE_ID = String.raw`(?:0|[1-9]\d{0,14}|\d*[A-Za-z-][0-9A-Za-z-]*)`;
+const EXACT_SEMVER_PATTERN = new RegExp(
+  `^${SEMVER_NUMERIC}\\.${SEMVER_NUMERIC}\\.${SEMVER_NUMERIC}` +
+    `(?:-${SEMVER_PRERELEASE_ID}(?:\\.${SEMVER_PRERELEASE_ID})*)?$`,
+);
+// semver's own MAX_LENGTH; also bounds regex work on hostile input.
+const MAX_VERSION_LENGTH = 256;
+
+function resolvePromptfooVersionInput(): string {
+  const override = core.getInput('promptfoo-version').trim();
+  if (!override) {
+    return defaultPromptfooVersion;
+  }
+  if (override.length > MAX_VERSION_LENGTH || !EXACT_SEMVER_PATTERN.test(override)) {
+    throw new Error(
+      `Invalid promptfoo-version "${override}": expected an exact version like 0.121.0`,
+    );
+  }
+  return override;
+}
+
 function getActionInputs(): ActionInputs {
   return {
     apiHost: core.getInput('api-host'),
@@ -98,6 +135,7 @@ function getActionInputs(): ActionInputs {
     // core.getInput returns '' when unset; normalize so a falsy check at the call site
     // doesn't have to special-case the empty-string sentinel.
     sarifOutputPath: core.getInput('sarif-output-path').trim() || undefined,
+    promptfooVersion: resolvePromptfooVersionInput(),
   };
 }
 
@@ -120,6 +158,13 @@ function createSubprocessEnv(): Record<string, string> {
 
   delete env.NPM_CONFIG_BEFORE;
   delete env.npm_config_before;
+
+  // A PR-controlled step running earlier in the workflow can persist
+  // NODE_OPTIONS=--require=/path/to/payload.cjs via $GITHUB_ENV; Node preloads that
+  // module into every child node process — npm during the install and promptfoo during
+  // the scan (when the OIDC token / API key are in scope). Strip it from all
+  // subprocesses; the action does not rely on caller-provided NODE_OPTIONS.
+  delete env.NODE_OPTIONS;
 
   for (const key of SUBPROCESS_ENV_EXCLUSIONS) {
     delete env[key];
@@ -314,15 +359,221 @@ function parseScanOutput(scanOutput: string): ScanResponse {
   }
 }
 
+// Owns every hardening decision for the scanner install as one unit so a future npm
+// invocation cannot accidentally drop one of them:
+// - exact release-pinned version, never a mutable spec like `latest`
+// - --ignore-scripts: the scanner tree must not execute arbitrary code before the
+//   scan starts (promptfoo and its dependency tree work without lifecycle scripts)
+// - sanitized env (createSubprocessEnv) with tokens stripped, plus every env-level
+//   npm config override removed (see below)
+// - cwd and local install prefix outside the checked-out workspace: the workspace
+//   holds the untrusted PR being scanned, so no cwd-derived npm config (registry,
+//   proxy, strict-ssl, ignore-scripts…) may ever be in scope
+// - both npm and the scanner run under the action runtime, not a possibly unsupported
+//   Node version selected by the calling workflow
+// Distinct from isPathWithinOrEqualTo below, which stays string-prefix based on purpose:
+// path.relative() case-folds on win32, and that function documents a deliberate
+// case-sensitive comparison. Do not collapse the two.
+function isPathWithinDirectory(directory: string, candidate: string): boolean {
+  const relativePath = path.relative(directory, candidate);
+  return (
+    !relativePath ||
+    (relativePath !== '..' &&
+      !relativePath.startsWith(`..${path.sep}`) &&
+      !path.isAbsolute(relativePath))
+  );
+}
+
+/** Containment that excludes the directory itself, for paths that must name a file inside it. */
+function isFileWithinDirectory(directory: string, candidate: string): boolean {
+  return (
+    Boolean(path.relative(directory, candidate)) && isPathWithinDirectory(directory, candidate)
+  );
+}
+
+function getNpmCliCandidates(directory: string): string[] {
+  return [
+    // Windows Node distributions install npm alongside node.exe.
+    path.join(directory, 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+    // Linux/macOS Node distributions install npm under the sibling lib directory.
+    path.join(directory, '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+  ];
+}
+
+function resolveSafeNpmCliCandidate(
+  directory: string,
+  canonicalWorkspace: string,
+): string | undefined {
+  for (const candidate of getNpmCliCandidates(directory)) {
+    if (!fs.existsSync(candidate)) {
+      continue;
+    }
+
+    try {
+      const canonicalCandidate = fs.realpathSync(candidate);
+      if (!isPathWithinDirectory(canonicalWorkspace, canonicalCandidate)) {
+        return canonicalCandidate;
+      }
+    } catch {
+      // A disappearing or inaccessible PATH entry is not a usable npm install.
+    }
+  }
+
+  return undefined;
+}
+
+function resolveNpmCliPath(): string {
+  const actionNodeDir = path.dirname(process.execPath);
+  for (const candidate of getNpmCliCandidates(actionNodeDir)) {
+    if (fs.existsSync(candidate)) {
+      return fs.realpathSync(candidate);
+    }
+  }
+
+  const workspace = path.resolve(process.env.GITHUB_WORKSPACE || process.cwd());
+  const canonicalWorkspace = fs.realpathSync(workspace);
+  const executableNames = process.platform === 'win32' ? ['npm.cmd', 'npm.exe', 'npm'] : ['npm'];
+  const visited = new Set<string>();
+
+  for (const directory of (process.env.PATH || '').split(path.delimiter)) {
+    if (!directory || !path.isAbsolute(directory) || visited.has(directory)) {
+      continue;
+    }
+    visited.add(directory);
+
+    // PATH often contains checkout-derived bins. A PR must not gain npm-code
+    // execution merely by placing a lookalike npm-cli.js under one of them.
+    if (isPathWithinDirectory(workspace, directory)) {
+      continue;
+    }
+
+    const npmExecutable = executableNames
+      .map((executableName) => path.join(directory, executableName))
+      .find((candidate) => fs.existsSync(candidate));
+    if (!npmExecutable) {
+      continue;
+    }
+
+    let canonicalDirectory: string;
+    let canonicalExecutable: string;
+    try {
+      canonicalDirectory = fs.realpathSync(directory);
+      canonicalExecutable = fs.realpathSync(npmExecutable);
+    } catch {
+      continue;
+    }
+
+    if (
+      isPathWithinDirectory(canonicalWorkspace, canonicalDirectory) ||
+      isPathWithinDirectory(canonicalWorkspace, canonicalExecutable)
+    ) {
+      continue;
+    }
+
+    // Unix npm shims are normally symlinks directly to npm-cli.js.
+    if (path.basename(canonicalExecutable) === 'npm-cli.js') {
+      return canonicalExecutable;
+    }
+
+    const npmCliPath = resolveSafeNpmCliCandidate(directory, canonicalWorkspace);
+    if (npmCliPath) {
+      return npmCliPath;
+    }
+  }
+
+  throw new Error('npm CLI not found; install npm or configure Node.js with actions/setup-node');
+}
+
+function resolveInstalledPromptfooEntrypoint(installDir: string): string {
+  const packageDir = path.join(installDir, 'node_modules', 'promptfoo');
+  const packageManifest = JSON.parse(
+    fs.readFileSync(path.join(packageDir, 'package.json'), 'utf-8'),
+  ) as {
+    bin?: string | Record<string, unknown>;
+  };
+  const relativeEntrypoint =
+    typeof packageManifest.bin === 'string' ? packageManifest.bin : packageManifest.bin?.promptfoo;
+
+  if (typeof relativeEntrypoint !== 'string' || !relativeEntrypoint) {
+    throw new Error('Installed promptfoo package does not declare a promptfoo executable');
+  }
+
+  const entrypoint = path.resolve(packageDir, relativeEntrypoint);
+  if (!isFileWithinDirectory(packageDir, entrypoint)) {
+    throw new Error('Installed promptfoo executable must remain within its package directory');
+  }
+
+  // npm generally rejects unsafe tar entries, but canonicalizing also prevents a
+  // package-internal symlink from redirecting the OIDC-bearing scanner elsewhere.
+  const canonicalPackageDir = fs.realpathSync(packageDir);
+  const canonicalEntrypoint = fs.realpathSync(entrypoint);
+  if (!isFileWithinDirectory(canonicalPackageDir, canonicalEntrypoint)) {
+    throw new Error('Installed promptfoo executable must remain within its package directory');
+  }
+
+  return canonicalEntrypoint;
+}
+
+async function installPromptfooCli(promptfooVersion: string): Promise<string> {
+  const installCwd = process.env.RUNNER_TEMP || os.tmpdir();
+
+  // npm reads its registry (and other config) from both env vars and user/global
+  // .npmrc files. A PR-controlled step running before this action can poison either:
+  // set npm_config_registry via $GITHUB_ENV, or write `registry=https://attacker/` to
+  // $HOME/.npmrc — redirecting this exact install to an attacker registry whose
+  // promptfoo tarball then runs as the scanner. Close both channels for the install:
+  //  - strip every npm_config_*/NPM_CONFIG_* env var, and
+  //  - point --userconfig/--globalconfig at fresh empty files so no on-disk .npmrc is
+  //    consulted (two distinct paths: npm rejects loading one file as both).
+  // The pinned version therefore resolves from the explicitly selected public registry.
+  // This deliberately bypasses runner-admin npm mirrors configured via env or .npmrc
+  // for this one install (the SaaS scan already requires public egress); the scan
+  // subprocess keeps workflow-provided npm config because its nested npx (MCP)
+  // invocations rely on it.
+  const env = createSubprocessEnv();
+  // The isolated install always uses the public registry; inherited private-registry
+  // credentials are unnecessary here but remain available to the scanner's nested npx.
+  delete env.NODE_AUTH_TOKEN;
+  delete env.NPM_TOKEN;
+  for (const key of Object.keys(env)) {
+    if (key.toLowerCase().startsWith('npm_config_')) {
+      delete env[key];
+    }
+  }
+  const installDir = fs.mkdtempSync(path.join(installCwd, 'promptfoo-install-'));
+  const emptyUserConfig = path.join(installDir, 'user');
+  const emptyGlobalConfig = path.join(installDir, 'global');
+  const npmCliPath = resolveNpmCliPath();
+
+  core.info(`📦 Installing promptfoo@${promptfooVersion}...`);
+  await exec.exec(
+    process.execPath,
+    [
+      npmCliPath,
+      'install',
+      '--prefix',
+      installDir,
+      `promptfoo@${promptfooVersion}`,
+      '--ignore-scripts',
+      '--registry=https://registry.npmjs.org/',
+      '--userconfig',
+      emptyUserConfig,
+      '--globalconfig',
+      emptyGlobalConfig,
+    ],
+    { env, cwd: installCwd },
+  );
+  core.info('✅ Promptfoo installed successfully');
+
+  return resolveInstalledPromptfooEntrypoint(installDir);
+}
+
 async function runPromptfooScan(
   cliArgs: string[],
   oidcToken: string | undefined,
+  promptfooVersion: string,
 ): Promise<ScanResponse> {
-  const installEnv = createSubprocessEnv();
-
-  core.info('📦 Installing promptfoo...');
-  await exec.exec('npm', ['install', '-g', 'promptfoo'], { env: installEnv });
-  core.info('✅ Promptfoo installed successfully');
+  const promptfooEntrypoint = await installPromptfooCli(promptfooVersion);
 
   core.info('🚀 Running promptfoo code-scans run...');
 
@@ -330,7 +581,7 @@ async function runPromptfooScan(
   let scanError = '';
   const scanEnv = createScanEnv(oidcToken);
 
-  const exitCode = await exec.exec('promptfoo', cliArgs, {
+  const exitCode = await exec.exec(process.execPath, [promptfooEntrypoint, ...cliArgs], {
     env: scanEnv,
     listeners: {
       stdout: (data: Buffer) => {
@@ -363,11 +614,15 @@ async function runPromptfooScan(
   throw new Error(`Code scan failed with exit code ${exitCode}`);
 }
 
-function getScanResponse(cliArgs: string[], oidcToken: string | undefined): Promise<ScanResponse> {
+function getScanResponse(
+  cliArgs: string[],
+  oidcToken: string | undefined,
+  promptfooVersion: string,
+): Promise<ScanResponse> {
   if (process.env.ACT === 'true') {
     return Promise.resolve(createMockScanResponse());
   }
-  return runPromptfooScan(cliArgs, oidcToken);
+  return runPromptfooScan(cliArgs, oidcToken, promptfooVersion);
 }
 
 function buildCommentBody(comment: Comment): string {
@@ -384,13 +639,33 @@ function buildCommentBody(comment: Comment): string {
   return body;
 }
 
+function buildGeneralCommentBody(comment: Comment): string {
+  const body = buildCommentBody(comment);
+  const location =
+    comment.file && comment.line
+      ? comment.startLine && comment.startLine !== comment.line
+        ? `${comment.file}:${comment.startLine}-${comment.line}`
+        : `${comment.file}:${comment.line}`
+      : comment.file;
+  return location ? `**${location}**\n\n${body}` : body;
+}
+
 function toReviewComment(comment: Comment) {
+  // GitHub's createReview API requires start_line < line for multi-line comments and
+  // rejects the entire review (422) otherwise. Comments routed here are clamped upstream
+  // by partitionReviewCommentsByDiff, but guard explicitly so this never depends on a
+  // caller having run that clamp. The ternary also narrows startLine to `number`,
+  // dropping the null/undefined the API type rejects.
+  const startLine =
+    comment.startLine && comment.line && comment.startLine < comment.line
+      ? comment.startLine
+      : undefined;
   return {
     path: comment.file!,
     line: comment.line || undefined,
-    start_line: comment.startLine || undefined,
+    start_line: startLine,
     side: 'RIGHT' as const,
-    start_side: comment.startLine ? ('RIGHT' as const) : undefined,
+    start_side: startLine ? ('RIGHT' as const) : undefined,
     body: buildCommentBody(comment),
   };
 }
@@ -437,7 +712,7 @@ async function postGeneralComments(
       owner: context.owner,
       repo: context.repo,
       issue_number: context.number,
-      body: buildCommentBody(comment),
+      body: buildGeneralCommentBody(comment),
     });
   }
 
@@ -455,14 +730,19 @@ async function postFallbackComments(
 
   try {
     const octokit = github.getOctokit(githubToken);
-    const { lineComments, generalComments, reviewBody } = prepareComments(
-      comments,
-      review,
-      minimumSeverity,
+    const {
+      lineComments: preparedLineComments,
+      generalComments,
+      reviewBody,
+    } = prepareComments(comments, review, minimumSeverity);
+    const { lineComments, invalidLineComments } = await partitionReviewCommentsByDiff(
+      githubToken,
+      context,
+      preparedLineComments,
     );
 
     await postReview(octokit, context, lineComments, reviewBody);
-    await postGeneralComments(octokit, context, generalComments);
+    await postGeneralComments(octokit, context, [...generalComments, ...invalidLineComments]);
 
     core.info('✅ All comments posted to PR by action');
   } catch (error) {
@@ -612,19 +892,35 @@ async function handleScanResponse(
   context: PullRequestContext,
 ): Promise<void> {
   const { comments, commentsPosted, review, skipReason } = scanResponse;
+  const hasSarifFindings = hasSarifReportableFindings(scanResponse);
+  const hasPrFindings = hasPrPostableFindings(comments);
 
   // A skipped scan is not a clean scan. Do not upload empty SARIF results that could clear
-  // existing Code Scanning findings or imply that authorization-gated work ran.
-  if (skipReason) {
+  // existing Code Scanning findings or imply that authorization-gated work ran. Mixed
+  // responses still need processing when a finding can be surfaced through SARIF or PR
+  // comments, because those output channels intentionally support different locations.
+  if (skipReason && !hasSarifFindings && !hasPrFindings) {
     core.info(`🔀 Scan skipped: ${skipReason}`);
     return;
   }
 
+  if (skipReason) {
+    // Carry the skipReason into the warning: a contradictory response (skip + real
+    // findings) signals a server-side bug, and the reason text is the operator's only
+    // clue to which path produced it.
+    core.warning(
+      `Scan response included findings alongside a skipReason ("${skipReason}"); processing findings.`,
+    );
+  }
+
   core.info(`📊 Found ${comments.length} comments${review ? ' and review summary' : ''}`);
 
-  emitConfiguredSarifOutput(scanResponse, inputs);
+  // A mixed skip with only PR-postable findings must not upload an empty SARIF run.
+  if (!skipReason || hasSarifFindings) {
+    emitConfiguredSarifOutput(scanResponse, inputs);
+  }
 
-  if ((comments.length > 0 || review) && commentsPosted === false) {
+  if ((hasPrFindings || review) && commentsPosted === false) {
     await postFallbackComments(
       inputs.githubToken,
       context,
@@ -707,7 +1003,7 @@ async function runCodeScan(): Promise<void> {
     await fetchBaseBranch(baseBranch);
 
     const cliArgs = buildCliArgs(inputs.apiHost, finalConfigPath, baseBranch, context);
-    const scanResponse = await getScanResponse(cliArgs, oidcToken);
+    const scanResponse = await getScanResponse(cliArgs, oidcToken, inputs.promptfooVersion);
 
     await handleScanResponse(scanResponse, inputs, context);
     logActCommentPreview(scanResponse.comments);

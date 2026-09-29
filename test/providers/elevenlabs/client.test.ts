@@ -36,6 +36,18 @@ describe('ElevenLabsClient', () => {
     vi.useRealTimers();
   });
 
+  it.each(['mpeg', 'mpga', 'MPEG', 'MPGA'])('uploads %s files as audio/mpeg', async (extension) => {
+    mockFetch.mockResolvedValue(
+      new Response(JSON.stringify({ text: 'transcribed' }), {
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    await client.upload('/speech-to-text', Buffer.from('fixture audio'), `recording.${extension}`);
+    const form = mockFetch.mock.calls[0][1]?.body as FormData;
+    expect((form.get('file') as File).type).toBe('audio/mpeg');
+    expect(await (form.get('file') as File).text()).toBe('fixture audio');
+  });
+
   describe('constructor', () => {
     it('should initialize with correct defaults', () => {
       const defaultClient = new ElevenLabsClient({ apiKey: 'test-key' });
@@ -58,6 +70,36 @@ describe('ElevenLabsClient', () => {
   });
 
   describe('post', () => {
+    it('clears failed request timers before retry backoff', async () => {
+      const signals: AbortSignal[] = [];
+      mockFetch.mockImplementation(async (_url, options) => {
+        signals.push(options!.signal as AbortSignal);
+        throw new Error('network failure');
+      });
+      const pending = expect(
+        client.post('/test', {}, { allowRetriesForNonIdempotent: true }),
+      ).rejects.toThrow('network failure');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(vi.getTimerCount()).toBe(1); // Only the retry delay remains.
+      await vi.advanceTimersByTimeAsync(3000);
+      await pending;
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+      expect(vi.getTimerCount()).toBe(0);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(signals.every((signal) => !signal.aborted)).toBe(true);
+    });
+
+    it('clears the request timer when serializing the body fails', async () => {
+      const body = {
+        toJSON: () => {
+          throw new Error('invalid body');
+        },
+      };
+      await expect(client.post('/test', body)).rejects.toThrow('invalid body');
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
     it('should make successful POST request with JSON response', async () => {
       const mockResponse = { success: true, data: 'test' };
 

@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchWithCache } from '../../src/cache';
 import logger from '../../src/logger';
 import { createN8nProvider, N8nProvider } from '../../src/providers/n8n';
+import { fetchWithRetries } from '../../src/util/fetch';
 
-vi.mock('../../src/cache');
+import type { N8nProviderConfig } from '../../src/providers/n8n';
+
+vi.mock('../../src/util/fetch');
 vi.mock('../../src/logger', () => ({
   default: {
     debug: vi.fn(),
@@ -12,15 +14,12 @@ vi.mock('../../src/logger', () => ({
   },
 }));
 
-// Helper to create mock fetch responses with required fields
-function createMockResponse(data: any, options: { cached?: boolean; latencyMs?: number } = {}) {
-  return {
-    data,
-    cached: options.cached ?? false,
-    latencyMs: options.latencyMs ?? 50,
+function createMockResponse(data: unknown, options: ResponseInit = {}) {
+  return new Response(typeof data === 'string' ? data : JSON.stringify(data), {
     status: 200,
     statusText: 'OK',
-  };
+    ...options,
+  });
 }
 
 describe('N8nProvider', () => {
@@ -29,7 +28,7 @@ describe('N8nProvider', () => {
   });
 
   afterEach(() => {
-    vi.clearAllMocks();
+    vi.restoreAllMocks();
     vi.unstubAllEnvs();
   });
 
@@ -85,14 +84,41 @@ describe('N8nProvider', () => {
   });
 
   describe('callApi', () => {
+    it.each([
+      { method: 'HEAD' } satisfies N8nProviderConfig,
+      { method: 'head' },
+      { method: 'HeAd' },
+    ])('sends $method requests without a body', async (config) => {
+      vi.mocked(fetchWithRetries).mockImplementation(async (url, options) => {
+        // Use the native Fetch contract without sending a network request.
+        new Request(url, options);
+        return createMockResponse('');
+      });
+      const provider = new N8nProvider('https://n8n.example.com/webhook/agent', {
+        config,
+      });
+
+      const result = await provider.callApi('Hello');
+
+      expect(result.error).toBeUndefined();
+      expect(fetchWithRetries).toHaveBeenCalledWith(
+        'https://n8n.example.com/webhook/agent',
+        expect.objectContaining({ method: 'HEAD' }),
+        expect.any(Number),
+        0,
+      );
+      expect(vi.mocked(fetchWithRetries).mock.calls[0][1]).not.toHaveProperty('body');
+    });
+
     it('should call n8n webhook with default body structure without response caching', async () => {
-      const mockResponse = createMockResponse({ output: 'Hello from n8n!' }, { latencyMs: 100 });
-      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+      vi.spyOn(Date, 'now').mockReturnValueOnce(1000).mockReturnValueOnce(1100);
+      const mockResponse = createMockResponse({ output: 'Hello from n8n!' });
+      vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
       const result = await provider.callApi('Hello');
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
+      expect(fetchWithRetries).toHaveBeenCalledWith(
         'https://n8n.example.com/webhook/agent',
         {
           method: 'POST',
@@ -100,8 +126,6 @@ describe('N8nProvider', () => {
           body: JSON.stringify({ prompt: 'Hello' }),
         },
         expect.any(Number),
-        'text',
-        true,
         0,
       );
 
@@ -115,7 +139,7 @@ describe('N8nProvider', () => {
 
     it('should handle n8n response array format', async () => {
       const mockResponse = createMockResponse([{ json: { output: 'Array response' } }]);
-      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+      vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
       const result = await provider.callApi('Test');
@@ -133,7 +157,7 @@ describe('N8nProvider', () => {
           },
         },
       ]);
-      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+      vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
       const result = await provider.callApi('Test');
@@ -146,11 +170,8 @@ describe('N8nProvider', () => {
     });
 
     it('should handle n8n AI agent response format', async () => {
-      const mockResponse = createMockResponse(
-        { response: 'AI agent says hello' },
-        { latencyMs: 75 },
-      );
-      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+      const mockResponse = createMockResponse({ response: 'AI agent says hello' });
+      vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
       const result = await provider.callApi('Test');
@@ -159,11 +180,8 @@ describe('N8nProvider', () => {
     });
 
     it('should handle n8n message.content format', async () => {
-      const mockResponse = createMockResponse(
-        { message: { content: 'Message content response' } },
-        { latencyMs: 60 },
-      );
-      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+      const mockResponse = createMockResponse({ message: { content: 'Message content response' } });
+      vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
       const result = await provider.callApi('Test');
@@ -173,7 +191,7 @@ describe('N8nProvider', () => {
 
     it('should use custom body template', async () => {
       const mockResponse = createMockResponse({ output: 'Response' });
-      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+      vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent', {
         config: {
@@ -189,7 +207,7 @@ describe('N8nProvider', () => {
         prompt: { raw: 'Hello', label: 'test' },
       });
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
+      expect(fetchWithRetries).toHaveBeenCalledWith(
         'https://n8n.example.com/webhook/agent',
         expect.objectContaining({
           body: JSON.stringify({
@@ -198,14 +216,12 @@ describe('N8nProvider', () => {
           }),
         }),
         expect.any(Number),
-        'text',
-        true,
         0,
       );
     });
 
     it('should not allow context vars to override the rendered prompt in body templates', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(createMockResponse({ output: 'Response' }));
+      vi.mocked(fetchWithRetries).mockResolvedValue(createMockResponse({ output: 'Response' }));
 
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent', {
         config: {
@@ -221,7 +237,7 @@ describe('N8nProvider', () => {
         prompt: { raw: 'Rendered prompt', label: 'test' },
       });
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
+      expect(fetchWithRetries).toHaveBeenCalledWith(
         'https://n8n.example.com/webhook/agent',
         expect.objectContaining({
           body: JSON.stringify({
@@ -230,14 +246,12 @@ describe('N8nProvider', () => {
           }),
         }),
         expect.any(Number),
-        'text',
-        true,
         0,
       );
     });
 
     it('should safely render prompt values in JSON string body templates', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(createMockResponse({ output: 'Response' }));
+      vi.mocked(fetchWithRetries).mockResolvedValue(createMockResponse({ output: 'Response' }));
 
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent', {
         config: {
@@ -248,21 +262,43 @@ describe('N8nProvider', () => {
 
       await provider.callApi(prompt);
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
+      expect(fetchWithRetries).toHaveBeenCalledWith(
         'https://n8n.example.com/webhook/agent',
         expect.objectContaining({
           body: JSON.stringify({ message: prompt }),
         }),
         expect.any(Number),
-        'text',
-        true,
+        0,
+      );
+    });
+
+    it('should preserve JSON array body templates when a session ID is supplied', async () => {
+      vi.mocked(fetchWithRetries).mockResolvedValue(createMockResponse({ output: 'Response' }));
+
+      const provider = new N8nProvider('https://n8n.example.com/webhook/agent', {
+        config: {
+          body: '[{"message":"{{prompt}}"}]',
+        },
+      });
+
+      await provider.callApi('Hello', {
+        vars: { sessionId: 'session-123' },
+        prompt: { raw: 'Hello', label: 'test' },
+      });
+
+      expect(fetchWithRetries).toHaveBeenCalledWith(
+        'https://n8n.example.com/webhook/agent',
+        expect.objectContaining({
+          body: JSON.stringify([{ message: 'Hello' }]),
+        }),
+        expect.any(Number),
         0,
       );
     });
 
     it('should use custom headers', async () => {
       const mockResponse = createMockResponse({ output: 'Response' });
-      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+      vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
       vi.stubEnv('N8N_API_KEY', 'token123');
 
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent', {
@@ -279,7 +315,7 @@ describe('N8nProvider', () => {
         prompt: { raw: 'Hello', label: 'test' },
       });
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
+      expect(fetchWithRetries).toHaveBeenCalledWith(
         'https://n8n.example.com/webhook/agent',
         expect.objectContaining({
           headers: {
@@ -289,32 +325,28 @@ describe('N8nProvider', () => {
           },
         }),
         expect.any(Number),
-        'text',
-        true,
         0,
       );
     });
 
     it('should forward abort signals to the webhook request', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(createMockResponse({ output: 'Response' }));
+      vi.mocked(fetchWithRetries).mockResolvedValue(createMockResponse({ output: 'Response' }));
       const abortController = new AbortController();
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
 
       await provider.callApi('Hello', undefined, { abortSignal: abortController.signal });
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
+      expect(fetchWithRetries).toHaveBeenCalledWith(
         'https://n8n.example.com/webhook/agent',
         expect.objectContaining({ signal: abortController.signal }),
         expect.any(Number),
-        'text',
-        true,
         0,
       );
     });
 
     it('should send rendered prompt values as GET query parameters', async () => {
       const mockResponse = createMockResponse({ output: 'Response' });
-      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+      vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent', {
         config: { method: 'GET' },
@@ -322,22 +354,20 @@ describe('N8nProvider', () => {
 
       await provider.callApi('Hello');
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
+      expect(fetchWithRetries).toHaveBeenCalledWith(
         'https://n8n.example.com/webhook/agent?prompt=Hello',
         {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
         },
         expect.any(Number),
-        'text',
-        true,
-        undefined,
+        0,
       );
     });
 
     it('should use custom HTTP method', async () => {
       const mockResponse = createMockResponse({ output: 'Response' });
-      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+      vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent', {
         config: { method: 'PUT' },
@@ -345,21 +375,19 @@ describe('N8nProvider', () => {
 
       await provider.callApi('Hello');
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
+      expect(fetchWithRetries).toHaveBeenCalledWith(
         'https://n8n.example.com/webhook/agent',
         expect.objectContaining({
           method: 'PUT',
         }),
         expect.any(Number),
-        'text',
-        true,
-        undefined,
+        0,
       );
     });
 
     it('should use custom transformResponse', async () => {
       const mockResponse = createMockResponse({ nested: { deep: { value: 'Extracted value' } } });
-      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+      vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent', {
         config: {
@@ -373,17 +401,14 @@ describe('N8nProvider', () => {
     });
 
     it('should handle tool calls in response', async () => {
-      const mockResponse = createMockResponse(
-        {
-          output: 'I will look that up for you',
-          tool_calls: [
-            { name: 'search', arguments: { query: 'weather' } },
-            { name: 'get_user', arguments: { id: '123' } },
-          ],
-        },
-        { latencyMs: 100 },
-      );
-      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+      const mockResponse = createMockResponse({
+        output: 'I will look that up for you',
+        tool_calls: [
+          { name: 'search', arguments: { query: 'weather' } },
+          { name: 'get_user', arguments: { id: '123' } },
+        ],
+      });
+      vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
       const result = await provider.callApi('What is the weather?');
@@ -395,14 +420,11 @@ describe('N8nProvider', () => {
     });
 
     it('should handle n8n actions format for tool calls', async () => {
-      const mockResponse = createMockResponse(
-        {
-          output: 'Looking up order',
-          actions: [{ tool: 'order_lookup', input: { order_id: '12345' } }],
-        },
-        { latencyMs: 80 },
-      );
-      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+      const mockResponse = createMockResponse({
+        output: 'Looking up order',
+        actions: [{ tool: 'order_lookup', input: { order_id: '12345' } }],
+      });
+      vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
       const result = await provider.callApi('Check my order');
@@ -417,7 +439,7 @@ describe('N8nProvider', () => {
         output: 'Hello!',
         sessionId: 'session-abc-123',
       });
-      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+      vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
       const result = await provider.callApi('Hello');
@@ -430,7 +452,7 @@ describe('N8nProvider', () => {
       const mockResponse1 = createMockResponse({ output: 'Hello!', sessionId: 'session-abc-123' });
       const mockResponse2 = createMockResponse({ output: 'Follow-up response' });
 
-      vi.mocked(fetchWithCache)
+      vi.mocked(fetchWithRetries)
         .mockResolvedValueOnce(mockResponse1)
         .mockResolvedValueOnce(mockResponse2);
 
@@ -439,7 +461,7 @@ describe('N8nProvider', () => {
       await provider.callApi('Hello');
       await provider.callApi('Follow-up');
 
-      expect(fetchWithCache).toHaveBeenLastCalledWith(
+      expect(fetchWithRetries).toHaveBeenLastCalledWith(
         'https://n8n.example.com/webhook/agent',
         expect.objectContaining({
           body: JSON.stringify({
@@ -447,15 +469,13 @@ describe('N8nProvider', () => {
           }),
         }),
         expect.any(Number),
-        'text',
-        true,
         0,
       );
     });
 
     it('should send an explicit session ID in the configured header and body', async () => {
       const mockResponse = createMockResponse({ output: 'Hello!' });
-      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+      vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent', {
         config: { sessionHeader: 'X-Session-ID' },
@@ -466,7 +486,7 @@ describe('N8nProvider', () => {
         prompt: { raw: 'Hello', label: 'test' },
       });
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
+      expect(fetchWithRetries).toHaveBeenCalledWith(
         'https://n8n.example.com/webhook/agent',
         expect.objectContaining({
           headers: expect.objectContaining({
@@ -478,14 +498,71 @@ describe('N8nProvider', () => {
           }),
         }),
         expect.any(Number),
-        'text',
-        true,
+        0,
+      );
+    });
+
+    it('should add an explicit session ID to a custom body using the configured field', async () => {
+      vi.mocked(fetchWithRetries).mockResolvedValue(createMockResponse({ output: 'Hello!' }));
+
+      const provider = new N8nProvider('https://n8n.example.com/webhook/agent', {
+        config: {
+          body: { message: '{{prompt}}' },
+          sessionField: 'conversationId',
+        },
+      });
+
+      await provider.callApi('Hello', {
+        vars: { sessionId: 'my-session-123' },
+        prompt: { raw: 'Hello', label: 'test' },
+      });
+
+      expect(fetchWithRetries).toHaveBeenCalledWith(
+        'https://n8n.example.com/webhook/agent',
+        expect.objectContaining({
+          body: JSON.stringify({
+            message: 'Hello',
+            conversationId: 'my-session-123',
+          }),
+        }),
+        expect.any(Number),
+        0,
+      );
+    });
+
+    it('should preserve an explicit session field value in a custom body', async () => {
+      vi.mocked(fetchWithRetries).mockResolvedValue(createMockResponse({ output: 'Hello!' }));
+
+      const provider = new N8nProvider('https://n8n.example.com/webhook/agent', {
+        config: {
+          body: {
+            message: '{{prompt}}',
+            conversationId: 'template-session',
+          },
+          sessionField: 'conversationId',
+        },
+      });
+
+      await provider.callApi('Hello', {
+        vars: { sessionId: 'context-session' },
+        prompt: { raw: 'Hello', label: 'test' },
+      });
+
+      expect(fetchWithRetries).toHaveBeenCalledWith(
+        'https://n8n.example.com/webhook/agent',
+        expect.objectContaining({
+          body: JSON.stringify({
+            message: 'Hello',
+            conversationId: 'template-session',
+          }),
+        }),
+        expect.any(Number),
         0,
       );
     });
 
     it('should send an explicit session ID after a response exposes a different session', async () => {
-      vi.mocked(fetchWithCache)
+      vi.mocked(fetchWithRetries)
         .mockResolvedValueOnce(createMockResponse({ output: 'First', sessionId: 'server-session' }))
         .mockResolvedValueOnce(createMockResponse({ output: 'Hello!' }));
 
@@ -499,7 +576,7 @@ describe('N8nProvider', () => {
         prompt: { raw: 'Hello', label: 'test' },
       });
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
+      expect(fetchWithRetries).toHaveBeenCalledWith(
         'https://n8n.example.com/webhook/agent',
         expect.objectContaining({
           headers: expect.objectContaining({
@@ -511,18 +588,39 @@ describe('N8nProvider', () => {
           }),
         }),
         expect.any(Number),
-        'text',
-        true,
         0,
       );
     });
 
+    it.each(['GET', 'PUT'] as const)(
+      'reports %s body failures without replaying',
+      async (method) => {
+        vi.mocked(fetchWithRetries).mockResolvedValue(
+          new Response(
+            new ReadableStream({
+              start(controller) {
+                controller.error(new Error('ECONNRESET during body read'));
+              },
+            }),
+            { status: 200, statusText: 'OK' },
+          ),
+        );
+        const provider = new N8nProvider('https://n8n.example.com/webhook/private-token', {
+          config: { method },
+        });
+
+        const result = await provider.callApi('Hello');
+
+        expect(fetchWithRetries).toHaveBeenCalledOnce();
+        expect(result.error).toContain('ECONNRESET during body read. HTTP 200 OK');
+        expect(result.error).not.toContain('private-token');
+      },
+    );
+
     it('should treat non-success HTTP responses as provider errors', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        ...createMockResponse('unauthorized'),
-        status: 401,
-        statusText: 'Unauthorized',
-      });
+      vi.mocked(fetchWithRetries).mockResolvedValue(
+        createMockResponse('unauthorized', { status: 401, statusText: 'Unauthorized' }),
+      );
 
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
       const result = await provider.callApi('Hello');
@@ -533,7 +631,9 @@ describe('N8nProvider', () => {
     });
 
     it('should treat n8n error payloads as provider errors', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(createMockResponse({ error: 'Workflow failed' }));
+      vi.mocked(fetchWithRetries).mockResolvedValue(
+        createMockResponse({ error: 'Workflow failed' }),
+      );
 
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
       const result = await provider.callApi('Hello');
@@ -544,7 +644,7 @@ describe('N8nProvider', () => {
     });
 
     it('should treat nested n8n item error payloads as provider errors', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
+      vi.mocked(fetchWithRetries).mockResolvedValue(
         createMockResponse([{ json: { error: 'Nested workflow failed' } }]),
       );
 
@@ -556,23 +656,21 @@ describe('N8nProvider', () => {
       });
     });
 
-    it.each([
-      false,
-      null,
-      '',
-      0,
-    ])('should accept successful responses with a falsey error status (%j)', async (error) => {
-      vi.mocked(fetchWithCache).mockResolvedValue(createMockResponse({ output: 'ok', error }));
+    it.each([false, null, '', 0])(
+      'should accept successful responses with a falsey error status (%j)',
+      async (error) => {
+        vi.mocked(fetchWithRetries).mockResolvedValue(createMockResponse({ output: 'ok', error }));
 
-      const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
-      const result = await provider.callApi('Hello');
+        const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
+        const result = await provider.callApi('Hello');
 
-      expect(result.output).toBe('ok');
-      expect(result.error).toBeUndefined();
-    });
+        expect(result.output).toBe('ok');
+        expect(result.error).toBeUndefined();
+      },
+    );
 
     it('should avoid putting webhook credentials or rendered prompt content in provider logs', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
+      vi.mocked(fetchWithRetries).mockResolvedValue(
         createMockResponse({ output: 'sensitive reply' }),
       );
 
@@ -587,18 +685,16 @@ describe('N8nProvider', () => {
       expect(debugLogs).not.toContain('webhook-secret-token');
       expect(debugLogs).not.toContain('private customer content');
       expect(debugLogs).not.toContain('sensitive reply');
-      expect(fetchWithCache).toHaveBeenCalledWith(
+      expect(fetchWithRetries).toHaveBeenCalledWith(
         'https://n8n.example.com/webhook/agent?token=webhook-secret-token',
         expect.any(Object),
         expect.any(Number),
-        'text',
-        true,
         0,
       );
     });
 
     it('should handle fetch errors', async () => {
-      vi.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
+      vi.mocked(fetchWithRetries).mockRejectedValue(new Error('Network error'));
 
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
       const result = await provider.callApi('Hello');
@@ -610,7 +706,7 @@ describe('N8nProvider', () => {
 
     it('should handle empty response', async () => {
       const mockResponse = createMockResponse(null);
-      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+      vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
       const result = await provider.callApi('Hello');
@@ -620,25 +716,23 @@ describe('N8nProvider', () => {
 
     it('should handle string response', async () => {
       const mockResponse = createMockResponse('Plain string response');
-      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+      vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
       const result = await provider.callApi('Hello');
 
       expect(result.output).toBe('Plain string response');
-      expect(fetchWithCache).toHaveBeenCalledWith(
+      expect(fetchWithRetries).toHaveBeenCalledWith(
         'https://n8n.example.com/webhook/agent',
         expect.any(Object),
         expect.any(Number),
-        'text',
-        true,
         0,
       );
     });
 
     it('does not attach empty toolCalls metadata when the workflow returns tool_calls: []', async () => {
       const mockResponse = createMockResponse({ output: 'No tools used', tool_calls: [] });
-      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+      vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
       const result = await provider.callApi('Hello');
@@ -649,7 +743,7 @@ describe('N8nProvider', () => {
 
     it('does not attach empty toolCalls metadata when the workflow returns actions: []', async () => {
       const mockResponse = createMockResponse({ output: 'No actions taken', actions: [] });
-      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+      vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
       const result = await provider.callApi('Hello');
@@ -658,45 +752,23 @@ describe('N8nProvider', () => {
       expect(result.metadata).toBeUndefined();
     });
 
-    it('passes maxRetries=0 to fetchWithCache for non-idempotent methods (POST/PATCH)', async () => {
-      const mockResponse = createMockResponse({ output: 'ok' });
-      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    it.each(['POST', 'PATCH', 'GET', 'PUT', 'HEAD'] as const)(
+      'disables transport retries for %s webhooks',
+      async (method) => {
+        vi.mocked(fetchWithRetries).mockResolvedValue(createMockResponse({ output: 'ok' }));
+        const provider = new N8nProvider('https://n8n.example.com/webhook/agent', {
+          config: { method },
+        });
 
-      const postProvider = new N8nProvider('https://n8n.example.com/webhook/agent', {
-        config: { method: 'POST' },
-      });
-      await postProvider.callApi('Hello');
-      const [, , , , , postMaxRetries] = vi.mocked(fetchWithCache).mock.calls[0];
-      expect(postMaxRetries).toBe(0);
-
-      vi.mocked(fetchWithCache).mockClear();
-      const patchProvider = new N8nProvider('https://n8n.example.com/webhook/agent', {
-        config: { method: 'PATCH' },
-      });
-      await patchProvider.callApi('Hello');
-      const [, , , , , patchMaxRetries] = vi.mocked(fetchWithCache).mock.calls[0];
-      expect(patchMaxRetries).toBe(0);
-    });
-
-    it('lets fetchWithCache use the default retry budget for idempotent methods (GET/PUT)', async () => {
-      const mockResponse = createMockResponse({ output: 'ok' });
-      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
-
-      const getProvider = new N8nProvider('https://n8n.example.com/webhook/agent', {
-        config: { method: 'GET' },
-      });
-      await getProvider.callApi('Hello');
-      const [, , , , , getMaxRetries] = vi.mocked(fetchWithCache).mock.calls[0];
-      expect(getMaxRetries).toBeUndefined();
-
-      vi.mocked(fetchWithCache).mockClear();
-      const putProvider = new N8nProvider('https://n8n.example.com/webhook/agent', {
-        config: { method: 'PUT' },
-      });
-      await putProvider.callApi('Hello');
-      const [, , , , , putMaxRetries] = vi.mocked(fetchWithCache).mock.calls[0];
-      expect(putMaxRetries).toBeUndefined();
-    });
+        expect((await provider.callApi('Hello')).output).toBe('ok');
+        expect(fetchWithRetries).toHaveBeenCalledExactlyOnceWith(
+          expect.any(String),
+          expect.objectContaining({ method }),
+          expect.any(Number),
+          0,
+        );
+      },
+    );
   });
 });
 
@@ -839,35 +911,37 @@ describe('createN8nProvider', () => {
     // misses, buildGetUrl() is skipped, and the body is sent with a GET
     // request — undici rejects with "Request with GET/HEAD method cannot
     // have body". Normalizing also routes the request through the correct
-    // (idempotent vs non-idempotent) retry policy.
+    // GET-vs-body policy.
     const mockResponse = createMockResponse({ output: 'ok' });
-    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithRetries).mockImplementation(async () => mockResponse.clone());
 
     const lowercaseGet = new N8nProvider('https://n8n.example.com/webhook/agent', {
       config: { method: 'get' as 'GET', body: { message: '{{prompt}}' } },
     });
     await lowercaseGet.callApi('hello');
 
-    const [url, fetchOpts, , , , maxRetries] = vi.mocked(fetchWithCache).mock.calls[0];
+    const [url, fetchOpts, , maxRetries] = vi.mocked(fetchWithRetries).mock.calls[0];
     expect((fetchOpts as RequestInit).method).toBe('GET');
     expect((fetchOpts as RequestInit).body).toBeUndefined();
     expect(url).toContain('?');
     expect(url).toContain('message=hello');
-    // GET is idempotent → default retry budget (undefined).
-    expect(maxRetries).toBeUndefined();
+    // n8n workflows can have side effects regardless of HTTP method.
+    expect(maxRetries).toBe(0);
 
-    vi.mocked(fetchWithCache).mockClear();
+    vi.mocked(fetchWithRetries).mockClear();
     const mixedCasePost = new N8nProvider('https://n8n.example.com/webhook/agent', {
       config: { method: 'Post' as 'POST' },
     });
     await mixedCasePost.callApi('hello');
-    const [, , , , , postMaxRetries] = vi.mocked(fetchWithCache).mock.calls[0];
-    // POST is non-idempotent → maxRetries=0 to avoid double-delivery.
+    const [, , , postMaxRetries] = vi.mocked(fetchWithRetries).mock.calls[0];
+    // Webhooks are never retried to avoid double-delivery.
     expect(postMaxRetries).toBe(0);
   });
 
   it('awaits async transformResponse functions instead of leaking a pending Promise into output', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValue(createMockResponse({ output: 'raw n8n payload' }));
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      createMockResponse({ output: 'raw n8n payload' }),
+    );
 
     const provider = new N8nProvider('https://n8n.example.com/webhook/agent', {
       config: {
