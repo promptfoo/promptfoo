@@ -127,7 +127,7 @@ function createStoreOnce(blobContext: BlobContext): StoreOnce {
       return null;
     }
 
-    const cacheKey = `${kind}:${parsed.buffer.toString('base64')}`;
+    const cacheKey = `${kind}:${sha256(parsed.buffer)}`;
     const existing = cache.get(cacheKey);
     if (existing) {
       return existing;
