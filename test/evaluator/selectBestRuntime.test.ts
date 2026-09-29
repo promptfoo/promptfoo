@@ -14,6 +14,7 @@ import Eval from '../../src/models/eval';
 import EvalResult, { sanitizeResultForJsonlArtifact } from '../../src/models/evalResult';
 import { EchoProvider } from '../../src/providers/echo';
 import { HttpProvider } from '../../src/providers/http';
+import telemetry from '../../src/telemetry';
 import { ResultFailureReason } from '../../src/types/index';
 import { sanitizeProviderIdForLog } from '../../src/util/provider';
 import { toPrompt } from './helpers';
@@ -723,6 +724,8 @@ describeEvaluator('select-best runtime grading configuration', () => {
 
   it.each([
     ['runtime', 'query'],
+    ['runtime', 'quoted query'],
+    ['runtime', 'spaced query'],
     ['runtime', 'basic'],
     ['declarative', 'query'],
     ['declarative', 'basic'],
@@ -733,10 +736,13 @@ describeEvaluator('select-best runtime grading configuration', () => {
     const { suite, target } = makeSuite();
     const originalKey = 'fixture-url-original-secret';
     const rotatedKey = 'fixture-url-rotated-secret';
-    const makeUrl = (key: string, host = 'grader.example') =>
-      auth === 'basic'
+    const makeUrl = (key: string, host = 'grader.example') => {
+      const query =
+        auth === 'quoted query' ? `${key}'${key}` : auth === 'spaced query' ? `${key} ${key}` : key;
+      return auth === 'basic'
         ? `https://fixture-user:${key}@${host}/grade`
-        : `https://${host}/grade?api_key=${key}`;
+        : `https://${host}/grade?api_key=${query}`;
+    };
     const provider = (url: string) => {
       const options = { id: url, config: { method: 'GET' } };
       if (kind === 'runtime') {
@@ -802,7 +808,11 @@ describeEvaluator('select-best runtime grading configuration', () => {
       }
 
       setProvider(makeUrl(rotatedKey));
-      call.mockRejectedValue(new Error(`Request failed for ${makeUrl(rotatedKey)}`));
+      call.mockRejectedValue(
+        new Error(
+          `Request failed for ${makeUrl(rotatedKey)}; retried ${makeUrl(rotatedKey)}\nOther endpoint ${makeUrl(rotatedKey, 'other.example')}`,
+        ),
+      );
       await evaluate(suite, record, { maxConcurrency: 1 });
       for (const row of await expectRedacted()) {
         expect(row.error).toContain('Request failed for');
@@ -812,6 +822,134 @@ describeEvaluator('select-best runtime grading configuration', () => {
       call.mockRestore();
       await rm(directory, { recursive: true, force: true });
     }
+  });
+
+  it.each([
+    'Prefer answers that replace PII with [REDACTED]',
+    '[REDACTED]',
+    '/path/[REDACTED]',
+    'https://example.com/[REDACTED]',
+  ])('allows literal redaction text in the grader prompt: %s', async (systemPrompt) => {
+    const { grader, seenKeys, suite, target } = makeSuite();
+    grader.config!.custom_system_prompt = systemPrompt;
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+
+    await evaluate(suite, record, { maxConcurrency: 1 });
+    cliState.resume = true;
+    await evaluate(suite, record, { maxConcurrency: 1 });
+
+    expect(grader.callApi).toHaveBeenCalledTimes(2);
+    expect(seenKeys).toEqual([secret, secret]);
+    expect(target.callApi).toHaveBeenCalledTimes(2);
+    for (const row of await record.fetchResultsByTestIdx(0)) {
+      expect(row.failureReason).not.toBe(ResultFailureReason.ERROR);
+      expect((row.testCase.assert![0] as Assertion).provider).toMatchObject({
+        config: { custom_system_prompt: systemPrompt },
+      });
+    }
+  });
+
+  it.each(['config', 'env', 'headers'])(
+    'rejects credential placeholders in %s while retaining literal prompt markers',
+    async (location) => {
+      const { grader, suite } = makeSuite();
+      const credentials = { apiKey: secret };
+      if (location === 'config') {
+        grader.config = credentials;
+      } else if (location === 'env') {
+        Object.assign(grader, { env: { OPENAI_API_KEY: secret } });
+      } else {
+        grader.config!.headers = { 'x-gateway-auth': secret };
+      }
+      grader.config!.custom_system_prompt = '[REDACTED]';
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      await evaluate(suite, record, { maxConcurrency: 1 });
+      if (location === 'config') {
+        credentials.apiKey = '[REDACTED]';
+      } else if (location === 'env') {
+        Object.assign(grader, { env: { OPENAI_API_KEY: '[REDACTED]' } });
+      } else {
+        grader.config!.headers['x-gateway-auth'] = '[REDACTED]';
+      }
+      cliState.resume = true;
+      await evaluate(suite, record, { maxConcurrency: 1 });
+      expect(grader.callApi).toHaveBeenCalledTimes(1);
+      for (const row of await record.fetchResultsByTestIdx(0)) {
+        expect(row.failureReason).toBe(ResultFailureReason.ERROR);
+        expect(row.error).toContain('Supply a grader configuration matching the saved result');
+      }
+    },
+  );
+
+  it('counts comparison errors for fresh siblings whose hook removed select-best', async () => {
+    const { grader, suite } = makeSuite();
+    vi.mocked(grader.callApi).mockRejectedValueOnce(new Error('grader unavailable'));
+    let column = 0;
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName === 'beforeEach' && 'test' in context && column++ === 1) {
+        return { ...context, test: { ...context.test, assert: [] } };
+      }
+      return context;
+    });
+    const recordEvent = vi.spyOn(telemetry, 'record');
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    try {
+      await evaluate(suite, record, { maxConcurrency: 1 });
+      expect(record.getStats()).toMatchObject({ successes: 0, failures: 0, errors: 2 });
+      expect(recordEvent.mock.calls.findLast(([event]) => event === 'eval_ran')?.[1]).toMatchObject(
+        {
+          numPasses: 0,
+          numFails: 0,
+          numErrors: 2,
+        },
+      );
+      cliState.resume = true;
+      await evaluate(suite, record, { maxConcurrency: 1 });
+      expect(recordEvent.mock.calls.findLast(([event]) => event === 'eval_ran')?.[1]).toMatchObject(
+        {
+          numTests: 0,
+          numPasses: 0,
+          numFails: 0,
+          numErrors: 0,
+        },
+      );
+    } finally {
+      recordEvent.mockRestore();
+    }
+  });
+
+  it('preserves a comparison error through max-score and recovers it on resume', async () => {
+    const { grader, suite, target } = makeSuite();
+    suite.tests![0].assert = [
+      { type: 'contains', value: 'first' },
+      suite.tests![0].assert![0],
+      { type: 'max-score' },
+    ];
+    suite.tests![0].options = { rubricPrompt: '{{ outputs | dump }}' };
+    vi.mocked(target.callApi).mockImplementation(async (prompt) => ({ output: prompt }));
+    vi.mocked(grader.callApi)
+      .mockImplementation(async (prompt) => ({
+        output: String(JSON.parse(prompt).indexOf('first')),
+      }))
+      .mockRejectedValueOnce(new Error('grader unavailable'));
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+
+    await evaluate(suite, record, { maxConcurrency: 1 });
+    for (const row of await record.fetchResultsByTestIdx(0)) {
+      expect(row.success).toBe(false);
+      expect(row.failureReason).toBe(ResultFailureReason.ERROR);
+      expect(row.error).toContain('grader unavailable');
+    }
+    expect(record.getStats()).toMatchObject({ successes: 0, failures: 0, errors: 2 });
+
+    cliState.resume = true;
+    await evaluate(suite, record, { maxConcurrency: 1 });
+    expect(record.getStats()).toMatchObject({ successes: 1, failures: 1, errors: 0 });
+    const rows = await record.fetchResultsByTestIdx(0);
+    expect(rows.find((row) => row.success)?.error).toBeNull();
+    expect(rows.every((row) => !row.metadata?.__promptfoo?.comparisonError)).toBe(true);
+    expect(target.callApi).toHaveBeenCalledTimes(2);
+    expect(grader.callApi).toHaveBeenCalledTimes(2);
   });
 
   it('redacts a raw grader key when updating an existing result', async () => {

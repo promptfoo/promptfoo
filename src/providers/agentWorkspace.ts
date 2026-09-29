@@ -324,9 +324,15 @@ function isInside(root: string, target: string): boolean {
   );
 }
 
-async function assertCopyable(entry: string, root: string, signal?: AbortSignal): Promise<boolean> {
+async function assertCopyable(
+  entry: string,
+  root: string,
+  signal?: AbortSignal,
+  destinationRoot = root,
+): Promise<boolean> {
   signal?.throwIfAborted();
   const stat = await fs.lstat(entry);
+  const destination = path.join(destinationRoot, path.relative(root, entry));
   if (stat.isSymbolicLink()) {
     if (path.basename(entry) === '.git') {
       throw new Error(
@@ -337,6 +343,7 @@ async function assertCopyable(entry: string, root: string, signal?: AbortSignal)
     if (
       path.isAbsolute(target) ||
       !isInside(root, path.resolve(path.dirname(entry), target)) ||
+      !isInside(destinationRoot, path.resolve(path.dirname(destination), target)) ||
       !isInside(root, await fs.realpath(entry))
     ) {
       throw new Error(`copy_working_dir cannot copy ${entry}: it links outside working_dir`);
@@ -358,7 +365,12 @@ async function assertCopyable(entry: string, root: string, signal?: AbortSignal)
         { signal },
       )
     ).trim();
-    if (worktree && (path.isAbsolute(worktree) || !isInside(root, path.resolve(entry, worktree)))) {
+    if (
+      worktree &&
+      (path.isAbsolute(worktree) ||
+        !isInside(root, path.resolve(entry, worktree)) ||
+        !isInside(destinationRoot, path.resolve(destination, worktree)))
+    ) {
       throw new Error(
         `copy_working_dir cannot copy ${entry}: core.worktree would point outside the copy. ` +
           'Commit the changes so working_dir is cloned instead.',
@@ -506,7 +518,7 @@ async function copyWorkspaceIndex(
 /**
  * Diff against the cloned commit using a scratch repository. The agent's Git configuration
  * is never loaded, and its index is copied through a checked file handle before Git reads it.
- * User/system filters are disabled and attributes come from the cloned commit.
+ * User/system filters are disabled; attributes and ignore rules come from the cloned commit.
  */
 async function getWorkspaceDiff(
   dir: string,
@@ -538,32 +550,66 @@ async function getWorkspaceDiff(
       GIT_ATTR_SOURCE: repo.head,
     };
     await git(['read-tree', repo.head], { env, signal });
+    // Check new files against committed ignore rules, not rules the agent can replace.
+    const ignoreDir = path.join(scratch, 'ignore');
+    await fs.mkdir(ignoreDir);
+    const ignoreFiles = await git(['ls-files', '-z', '--', '.gitignore', ':(glob)**/.gitignore'], {
+      env,
+      signal,
+    });
+    if (ignoreFiles) {
+      await git(['checkout-index', '-z', '--stdin', `--prefix=${ignoreDir}${path.sep}`], {
+        env,
+        input: ignoreFiles,
+        signal,
+      });
+    }
+    const ignoreEnv = { ...env, GIT_WORK_TREE: ignoreDir };
     // Include ignored files the agent explicitly added, without loading its Git configuration.
     const workspaceIndex = path.join(scratch, 'workspace-index');
     const ignoredTracked = (await copyWorkspaceIndex(dir, workspaceIndex, signal))
       ? await git(['ls-files', '-z', '--cached', '--ignored', '--exclude-standard'], {
-          env: { ...env, GIT_INDEX_FILE: workspaceIndex },
+          env: { ...ignoreEnv, GIT_INDEX_FILE: workspaceIndex },
           signal,
         })
       : '';
-    const existingIgnored: string[] = [];
+    const newFiles = new Set<string>();
     for (const file of ignoredTracked.split('\0').filter(Boolean)) {
       const fullPath = path.resolve(dir, file);
       if (isInside(dir, fullPath) && (await fs.lstat(fullPath).catch(() => undefined))) {
-        existingIgnored.push(file);
+        newFiles.add(file);
       }
     }
-    if (existingIgnored.length > 0) {
+    const untracked = await git(['ls-files', '-z', '--others'], { env, signal });
+    if (untracked) {
+      const ignored = await git(['check-ignore', '--no-index', '-z', '--stdin'], {
+        env: ignoreEnv,
+        input: untracked,
+        signal,
+      }).catch((error: unknown) => {
+        if (error instanceof Error && 'code' in error && error.code === 1) {
+          return ''; // check-ignore returns 1 when no paths are ignored.
+        }
+        throw error;
+      });
+      const ignoredFiles = new Set(ignored.split('\0'));
+      for (const file of untracked.split('\0').filter(Boolean)) {
+        if (!ignoredFiles.has(file)) {
+          newFiles.add(file);
+        }
+      }
+    }
+    if (newFiles.size > 0) {
       await git(
         ['--literal-pathspecs', 'add', '--force', '--pathspec-from-file=-', '--pathspec-file-nul'],
         {
           env,
-          input: `${existingIgnored.join('\0')}\0`,
+          input: `${[...newFiles].join('\0')}\0`,
           signal,
         },
       );
     }
-    await git(['-c', 'core.fsmonitor=false', 'add', '--all'], { env, signal });
+    await git(['-c', 'core.fsmonitor=false', 'add', '--update'], { env, signal });
     const diff = await git(
       [
         '-c',
@@ -668,7 +714,7 @@ export async function createAgentWorkspace(
         verbatimSymlinks: true,
         errorOnExist: true,
         force: false,
-        filter: (entry) => assertCopyable(entry, realSource, signal),
+        filter: (entry) => assertCopyable(entry, realSource, signal, dir),
       });
     }
   } catch (error) {

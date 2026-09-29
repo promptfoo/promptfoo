@@ -106,7 +106,13 @@ import {
   sanitizeProviderIdForLog,
 } from './util/provider';
 import { promptYesNo } from './util/readline';
-import { REDACTED, sanitizeObject } from './util/sanitizer';
+import {
+  isNonCredentialHeader,
+  isSecretEnvVarName,
+  isSecretField,
+  REDACTED,
+  sanitizeObject,
+} from './util/sanitizer';
 import { analyzeTemplateReference, extractVariablesFromTemplate } from './util/templates';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
@@ -3011,12 +3017,26 @@ const COMPARISON_ERROR_PREFIX = 'Error grading select-best';
 const COMPARISON_RESUME_ERROR =
   'Cannot resume select-best with this grader configuration. Supply a grader configuration matching the saved result, or rerun the evaluation.';
 
-function hasComparisonRedactions(value: unknown, seen = new WeakSet<object>()): boolean {
+function hasComparisonRedactions(
+  value: unknown,
+  field?: string,
+  parentField?: string,
+  seen = new WeakSet<object>(),
+): boolean {
   if (typeof value === 'string') {
-    return (
+    const masked =
       value.includes(REDACTED) ||
       /%(?:25)*5BREDACTED%(?:25)*5D/i.test(value) ||
-      value.includes('***:***@')
+      value.includes('***:***@');
+    return (
+      masked &&
+      ((field === undefined && /^(?:[a-z][a-z0-9+.-]*:\/\/|\/[^?#]*[?#])/i.test(value)) ||
+        field === 'id' ||
+        (field !== undefined &&
+          (isSecretField(field) ||
+            /(?:url|uri|host|endpoint|proxy)$/i.test(field) ||
+            (parentField === 'env' && isSecretEnvVarName(field)) ||
+            (parentField?.toLowerCase() === 'headers' && !isNonCredentialHeader(field)))))
     );
   }
   if (!value || typeof value !== 'object' || seen.has(value)) {
@@ -3024,7 +3044,9 @@ function hasComparisonRedactions(value: unknown, seen = new WeakSet<object>()): 
   }
   seen.add(value);
   return Object.entries(value).some(
-    ([key, entry]) => hasComparisonRedactions(key, seen) || hasComparisonRedactions(entry, seen),
+    ([key, entry]) =>
+      hasComparisonRedactions(key, undefined, undefined, seen) ||
+      hasComparisonRedactions(entry, key, field, seen),
   );
 }
 
@@ -3558,6 +3580,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   fileWriters: EvaluatorResultWriter[];
   rateLimitRegistry: RateLimitRegistry | undefined;
   private readonly comparisonProviders = new Map<string, ComparisonProviders>();
+  private readonly currentResultKeys = new Set<string>();
   private readonly retryErrorResultIds = new Set(
     cliState.retryMode ? cliState._retryErrorResultIds : [],
   );
@@ -3650,7 +3673,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         metrics.testPassCount -= 1;
         metrics.testFailCount += 1;
       }
-      if (this.comparisonProviders.get(getResultIndexKey(result))?.currentResult !== false) {
+      if (this.currentResultKeys.has(getResultIndexKey(result))) {
         this.stats.successes -= 1;
         this.stats.failures += 1;
       }
@@ -3671,7 +3694,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const before = outcome(previous);
     const after = outcome(result);
     if (before !== after) {
-      if (this.comparisonProviders.get(getResultIndexKey(result))?.currentResult) {
+      if (this.currentResultKeys.has(getResultIndexKey(result))) {
         this.stats[before]--;
         this.stats[after]++;
       }
@@ -3716,6 +3739,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   private async persistEvalRow(row: EvaluateResult): Promise<void> {
+    this.currentResultKeys.add(getResultIndexKey(row));
     setComparisonError(row);
     if (row.testCase.assert?.some((assertion) => assertion.type === 'select-best')) {
       // Capture grader references before a later hook can replace shared nested test fields.
@@ -4624,9 +4648,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         throw error;
       }
       const graderId = comparisonProviderId(assertion.provider ?? savedTest.options?.provider);
+      // Raw URLs may contain whitespace, so a token boundary can expose a credential suffix.
       const message = (error instanceof Error ? error.message : String(error)).replace(
-        /\b[a-z][a-z0-9+.-]*:\/\/[^\s<>"']+/gi,
-        sanitizeProviderIdForLog,
+        /\b[a-z][a-z0-9+.-]*:\/\/[\s\S]*/i,
+        REDACTED,
       );
       const reason = `${COMPARISON_ERROR_PREFIX}${graderId ? ` (${graderId})` : ''}: ${message}`;
       gradingResults = [];
@@ -4916,6 +4941,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     metrics: CompletedPrompt['metrics'] | undefined;
     result: TResult;
   }) {
+    if (result.failureReason === ResultFailureReason.ERROR) {
+      return;
+    }
     const wasSuccess = result.success;
     const wasScore = result.score;
     mergeMaxScoreGradingResult(result, gradingResult);

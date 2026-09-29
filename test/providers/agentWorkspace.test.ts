@@ -657,6 +657,7 @@ describe('agent workspaces', () => {
         if (state === 'committed') {
           git(workspace.dir, 'commit', '-q', '-m', 'agent snapshot');
         }
+        write(path.join(workspace.dir, '.gitignore'), '*\n');
 
         const { workspaceDiff } = await workspace.metadata();
 
@@ -664,6 +665,67 @@ describe('agent workspaces', () => {
         expect(workspaceDiff).toContain('+new snapshot');
         expect(workspaceDiff).not.toContain('untracked.snap');
         expect(fs.existsSync(path.join(source, 'added file.snap'))).toBe(false);
+      },
+    );
+
+    it('records new files when the agent creates an ignore-all file', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const workspace = await create(source);
+      write(path.join(workspace.dir, '.gitignore'), '*\n');
+      write(path.join(workspace.dir, 'new.ts'), 'export const changed = true;\n');
+      const indexBefore = fs.readFileSync(path.join(workspace.dir, '.git/index'));
+
+      const { workspaceDiff } = await workspace.metadata();
+
+      expect(workspaceDiff).toContain('+++ b/.gitignore');
+      expect(workspaceDiff).toContain('+export const changed = true;');
+      expect(fs.readFileSync(path.join(workspace.dir, '.git/index'))).toEqual(indexBefore);
+      expect(fs.readFileSync(path.join(workspace.dir, '.gitignore'), 'utf8')).toBe('*\n');
+      expect(fs.existsSync(path.join(source, '.gitignore'))).toBe(false);
+      expect(fs.existsSync(path.join(source, 'new.ts'))).toBe(false);
+    });
+
+    it.each(['changes', 'removes'])(
+      'uses baseline nested ignore rules when the agent %s them',
+      async (action) => {
+        const source = path.join(root, 'repo');
+        makeRepository(source, {
+          '.gitignore': '*.snap\nbuild/\n',
+          'src/.gitignore': '/secret.ts\n*.tmp\n!keep.tmp\n',
+        });
+        const workspace = await create(source);
+        for (const file of ['.gitignore', 'src/.gitignore']) {
+          if (action === 'changes') {
+            write(path.join(workspace.dir, file), '*\n');
+          } else {
+            fs.rmSync(path.join(workspace.dir, file));
+          }
+        }
+        for (const [file, contents] of Object.entries({
+          'new.ts': 'new root code\n',
+          'src/new.ts': 'new nested code\n',
+          'src/keep.tmp': 'allowed exception\n',
+          'src/subdir/secret.ts': 'anchored pattern allows this\n',
+          'untracked.snap': 'excluded artifact\n',
+          'build/output.js': 'excluded artifact\n',
+          'src/secret.ts': 'excluded artifact\n',
+          'src/untracked.tmp': 'excluded artifact\n',
+        })) {
+          write(path.join(workspace.dir, file), contents);
+        }
+        const indexBefore = fs.readFileSync(path.join(workspace.dir, '.git/index'));
+
+        const { workspaceDiff } = await workspace.metadata();
+
+        expect(workspaceDiff).toContain('+new root code');
+        expect(workspaceDiff).toContain('+new nested code');
+        expect(workspaceDiff).toContain('+allowed exception');
+        expect(workspaceDiff).toContain('+anchored pattern allows this');
+        expect(workspaceDiff).not.toContain('excluded artifact');
+        expect(fs.readFileSync(path.join(workspace.dir, '.git/index'))).toEqual(indexBefore);
+        expect(fs.readFileSync(path.join(source, '.gitignore'), 'utf8')).toBe('*.snap\nbuild/\n');
+        expect(fs.existsSync(path.join(source, 'new.ts'))).toBe(false);
       },
     );
 
@@ -1248,6 +1310,30 @@ describe('agent workspaces', () => {
       expect(fs.readFileSync(path.join(workspace.dir, 'bin', 'data'), 'utf8')).toBe('data\n');
     });
 
+    it.each(['auto', 'copy'] as const)(
+      'rejects relative links that point back to the source after %s relocation',
+      async (mode) => {
+        if (process.platform === 'win32') {
+          return;
+        }
+        const source = path.join(root, 'fixture');
+        const original = path.join(source, 'file.txt');
+        write(original, 'original\n');
+        const filesystemRoot = path.parse(source).root;
+        const target = path.join(
+          path.relative(source, filesystemRoot),
+          path.relative(filesystemRoot, original),
+        );
+        fs.symlinkSync(target, path.join(source, 'link'));
+        expect(fs.realpathSync(path.join(source, 'link'))).toBe(original);
+
+        await expect(create(source, mode)).rejects.toThrow('links outside working_dir');
+
+        expect(fs.readFileSync(original, 'utf8')).toBe('original\n');
+        expect(fs.readlinkSync(path.join(source, 'link'))).toBe(target);
+      },
+    );
+
     it('rejects absolute links', async () => {
       if (process.platform === 'win32') {
         return;
@@ -1312,6 +1398,26 @@ describe('agent workspaces', () => {
       expect(fs.readFileSync(path.join(workspace.dir, 'README.md'), 'utf8')).toBe('original\n');
       expect(fs.readFileSync(path.join(source, 'README.md'), 'utf8')).toBe('uncommitted\n');
     });
+
+    it.each(['auto', 'copy'] as const)(
+      'rejects core.worktree that points back to the source after %s relocation',
+      async (mode) => {
+        const source = path.join(root, 'repo');
+        makeRepository(source);
+        const filesystemRoot = path.parse(source).root;
+        const target = path.join(
+          path.relative(path.join(source, '.git'), filesystemRoot),
+          path.relative(filesystemRoot, source),
+        );
+        git(source, 'config', 'core.worktree', target);
+        write(path.join(source, 'README.md'), 'uncommitted\n');
+        expect(git(source, 'rev-parse', '--show-toplevel')).toBe(source);
+
+        await expect(create(source, mode)).rejects.toThrow('core.worktree');
+
+        expect(fs.readFileSync(path.join(source, 'README.md'), 'utf8')).toBe('uncommitted\n');
+      },
+    );
 
     it('rejects copied git metadata with a shared common directory', async () => {
       const source = path.join(root, 'repo');
