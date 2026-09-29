@@ -1,10 +1,3 @@
-/**
- * Unit tests for calculateFilteredMetrics utility.
- *
- * Tests the optimized SQL aggregation approach for calculating metrics
- * on filtered evaluation results.
- */
-
 import { sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
@@ -210,6 +203,12 @@ describe('calculateFilteredMetrics', () => {
         label: 'a fresh legacy result before a cached result',
         results: [{ cost: 0.25 }, { cost: 0.5, incurredCost: 0, responseCached: true }],
         expectedCost: 0.75,
+        expectedIncurredCost: 0.25,
+      },
+      {
+        label: 'an uncached result with explicit incurred cost',
+        results: [{ cost: 0.5, incurredCost: 0.25 }],
+        expectedCost: 0.5,
         expectedIncurredCost: 0.25,
       },
       {

@@ -1,3 +1,4 @@
+import { getProviderEditorType } from '@app/pages/redteam/setup/components/Targets/providerCatalog';
 // Import Prism for syntax highlighting in provider configurations
 import '@app/lib/prism';
 import '@app/pages/redteam/setup/components/Targets/syntax-highlighting.css';
@@ -160,7 +161,7 @@ export default function AddProviderDialog({
                   provider={provider as RedteamProviderOptions}
                   setProvider={setProvider as (provider: RedteamProviderOptions) => void}
                   setError={setError}
-                  validateAll={shouldValidate}
+                  validateAll={shouldValidate || providerType === 'codex-security'}
                   onValidationRequest={handleValidationRequest}
                   providerType={providerType}
                   mode="eval"
@@ -197,101 +198,5 @@ export default function AddProviderDialog({
 }
 
 export function getProviderTypeFromId(id: string | undefined): string | undefined {
-  if (!id || typeof id !== 'string') {
-    return undefined;
-  }
-
-  if (id.startsWith('openai:')) {
-    return 'openai';
-  }
-  if (id.startsWith('anthropic:')) {
-    return 'anthropic';
-  }
-  if (id.startsWith('bedrock:')) {
-    return 'bedrock';
-  }
-  if (id.startsWith('bedrock-agent:')) {
-    return 'bedrock-agent';
-  }
-  if (id.startsWith('azure:')) {
-    return 'azure';
-  }
-  if (id.startsWith('vertex:')) {
-    return 'vertex';
-  }
-  if (id.startsWith('google:')) {
-    return 'google';
-  }
-  if (id.startsWith('mistral:')) {
-    return 'mistral';
-  }
-  if (id.startsWith('openrouter:')) {
-    return 'openrouter';
-  }
-  if (id.startsWith('groq:')) {
-    return 'groq';
-  }
-  if (id.startsWith('deepseek:')) {
-    return 'deepseek';
-  }
-  if (id.startsWith('perplexity:')) {
-    return 'perplexity';
-  }
-  if (id === 'openinterpreter' || id.startsWith('openinterpreter:')) {
-    return 'openinterpreter';
-  }
-  if (id === 'http') {
-    return 'http';
-  }
-  if (id === 'websocket') {
-    return 'websocket';
-  }
-  if (id === 'browser') {
-    return 'browser';
-  }
-  if (id === 'mcp') {
-    return 'mcp';
-  }
-  if (id.startsWith('exec:')) {
-    return 'exec';
-  }
-  if (id.startsWith('file://')) {
-    if (id.includes('.py')) {
-      return 'python';
-    }
-    if (id.includes('.js')) {
-      return 'javascript';
-    }
-    if (id.includes('.go')) {
-      return 'go';
-    }
-    // Check for agent frameworks
-    if (id.includes('langchain')) {
-      return 'langchain';
-    }
-    if (id.includes('autogen')) {
-      return 'autogen';
-    }
-    if (id.includes('crewai')) {
-      return 'crewai';
-    }
-    if (id.includes('llamaindex')) {
-      return 'llamaindex';
-    }
-    if (id.includes('langgraph')) {
-      return 'langgraph';
-    }
-    if (id.includes('openai_agents') || id.includes('openai-agents')) {
-      return 'openai-agents-sdk';
-    }
-    if (id.includes('pydantic_ai') || id.includes('pydantic-ai')) {
-      return 'pydantic-ai';
-    }
-    if (id.includes('google_adk') || id.includes('google-adk')) {
-      return 'google-adk';
-    }
-    return 'generic-agent';
-  }
-
-  return 'custom';
+  return getProviderEditorType(id);
 }

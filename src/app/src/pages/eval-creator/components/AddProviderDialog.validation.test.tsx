@@ -34,6 +34,20 @@ vi.mock('@app/pages/redteam/setup/components/Targets/ProviderTypeSelector', () =
       >
         Choose OpenAI
       </button>
+      <button
+        type="button"
+        onClick={() =>
+          setProvider(
+            {
+              id: 'openai:codex-security:gpt-5.6-luna',
+              config: { operation: 'security-scan' },
+            },
+            'codex-security',
+          )
+        }
+      >
+        Choose Codex Security
+      </button>
     </div>
   ),
 }));
@@ -79,7 +93,32 @@ const renderDialog = (url: string, body = '{{prompt}}') => {
   return onSave;
 };
 
-describe('AddProviderDialog HTTP validation', () => {
+describe('AddProviderDialog provider validation', () => {
+  it('validates and saves Codex Security through the real provider configuration editor', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    render(
+      <TooltipProvider>
+        <AddProviderDialog open onClose={vi.fn()} onSave={onSave} />
+      </TooltipProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Choose Codex Security' }));
+
+    const save = screen.getByRole('button', { name: 'Add Provider' });
+    expect(save).toBeDisabled();
+
+    await user.type(screen.getByLabelText(/Repository path/), '/repos/service');
+
+    expect(save).toBeEnabled();
+    await user.click(save);
+    expect(onSave).toHaveBeenCalledWith({
+      id: 'openai:codex-security:gpt-5.6-luna',
+      label: 'openai:codex-security:gpt-5.6-luna',
+      config: { operation: 'security-scan', repository: '/repos/service' },
+    });
+  });
+
   it('re-enables Add Provider after backing out of malformed JSON and selecting a valid provider', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();

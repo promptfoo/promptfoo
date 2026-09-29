@@ -9,7 +9,7 @@ describe('getProviderType', () => {
       description: 'an A2A provider URL',
     },
     {
-      providerId: 'openrouter:openai/gpt-5.4',
+      providerId: 'openrouter:openai/gpt-6-sol',
       expected: 'openrouter',
       description: 'a standard provider ID with a model',
     },
@@ -33,6 +33,13 @@ describe('getProviderType', () => {
     const result = getProviderType(providerId);
     expect(result).toBe(expected);
   });
+
+  it.each(['openai:codex-security', 'openai:codex-security:gpt-5.6-luna'])(
+    'recognizes %s as Codex Security instead of a foundation OpenAI model',
+    (providerId) => {
+      expect(getProviderType(providerId)).toBe('codex-security');
+    },
+  );
 
   it('should return the substring before the first colon when multiple colons are present', () => {
     const providerId = 'bedrock:anthropic.claude-3-sonnet-20240229-v1:0';

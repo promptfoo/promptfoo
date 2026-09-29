@@ -8,6 +8,7 @@ import {
 } from '../../util/index';
 import invariant from '../../util/invariant';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
+import { applyGpt6RequestRules, getGpt6ResponsesReasoning, isGpt6Model } from '../openai/gpt6';
 import { ResponsesProcessor } from '../responses/index';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { AzureGenericProvider } from './generic';
@@ -46,7 +47,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       // the Responses-shaped usage object (input_tokens/output_tokens) so cost is non-zero.
       costCalculator: (modelName: string, usage: any, config?: any) =>
         calculateAzureCost(
-          modelName,
+          typeof config?.model === 'string' ? config.model : modelName,
           {
             ...config,
             passthrough: {
@@ -84,13 +85,13 @@ export class AzureResponsesProvider extends AzureGenericProvider {
    * Reasoning models use max_completion_tokens instead of max_tokens,
    * don't support temperature, and accept reasoning_effort parameter.
    */
-  isReasoningModel(): boolean {
+  isReasoningModel(modelName = this.config.modelName ?? this.deploymentName): boolean {
     // Check explicit config flags first (match chat.ts behavior)
     if (this.config.isReasoningModel || this.config.o1) {
       return true;
     }
 
-    const lowerName = this.deploymentName.toLowerCase();
+    const lowerName = modelName.toLowerCase();
     return (
       // OpenAI reasoning models
       lowerName.startsWith('o1') ||
@@ -102,6 +103,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       // GPT-5 series (reasoning by default)
       lowerName.startsWith('gpt-5') ||
       lowerName.includes('-gpt-5') ||
+      isGpt6Model(lowerName) ||
       // DeepSeek reasoning models
       lowerName.includes('deepseek-r1') ||
       lowerName.includes('deepseek_r1') ||
@@ -113,8 +115,8 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     );
   }
 
-  supportsTemperature(): boolean {
-    return !this.isReasoningModel();
+  supportsTemperature(modelName = this.config.modelName ?? this.deploymentName): boolean {
+    return !this.isReasoningModel(modelName);
   }
 
   async getAzureResponsesBody(
@@ -139,7 +141,14 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       input = prompt;
     }
 
-    const isReasoningModel = this.isReasoningModel();
+    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
+    const capabilityModelName = (
+      typeof passthroughModel === 'string'
+        ? passthroughModel
+        : (config.modelName ?? this.deploymentName)
+    ).toLowerCase();
+    const isReasoningModel = this.isReasoningModel(capabilityModelName);
+    const isGPT6Model = isGpt6Model(capabilityModelName);
     const maxOutputTokensDefault = config.omitDefaults
       ? getEnvString('OPENAI_MAX_TOKENS') === undefined
         ? undefined
@@ -151,17 +160,25 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       config.max_output_tokens ??
       (isReasoningModel ? reasoningMaxOutputTokensDefault : maxOutputTokensDefault);
 
-    const temperatureDefault = config.omitDefaults
-      ? getEnvString('OPENAI_TEMPERATURE') === undefined
-        ? undefined
-        : getEnvFloat('OPENAI_TEMPERATURE')
-      : getEnvFloat('OPENAI_TEMPERATURE', 0);
-    const temperature = this.supportsTemperature()
-      ? (config.temperature ?? temperatureDefault)
+    const temperatureDefault =
+      config.omitDefaults || isGPT6Model
+        ? getEnvString('OPENAI_TEMPERATURE') === undefined
+          ? undefined
+          : getEnvFloat('OPENAI_TEMPERATURE')
+        : getEnvFloat('OPENAI_TEMPERATURE', 0);
+    const temperature =
+      isGPT6Model || this.supportsTemperature(capabilityModelName)
+        ? (config.temperature ?? temperatureDefault)
+        : undefined;
+    const gpt6Reasoning = isGPT6Model
+      ? getGpt6ResponsesReasoning(this.config, context?.prompt?.config, (value) =>
+          renderVarsInObject(value, context?.vars),
+        )
       : undefined;
-    const reasoningEffort = isReasoningModel
-      ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
-      : undefined;
+    const reasoningEffort =
+      isReasoningModel && !isGPT6Model
+        ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
+        : undefined;
 
     const instructions = config.instructions;
 
@@ -205,6 +222,26 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       textFormat = { ...textFormat, verbosity: config.verbosity };
     }
 
+    const loadedTools = config.tools
+      ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
+      : undefined;
+    const tools = Array.isArray(loadedTools)
+      ? loadedTools.map((tool) => {
+          if (tool?.type !== 'function' || !tool.function) {
+            return tool;
+          }
+          const { function: functionDefinition, ...rest } = tool;
+          return { ...rest, ...functionDefinition };
+        })
+      : loadedTools;
+    const toolChoice =
+      typeof config.tool_choice === 'object' &&
+      config.tool_choice?.type === 'function' &&
+      'function' in config.tool_choice &&
+      config.tool_choice.function?.name
+        ? { type: 'function', name: config.tool_choice.function.name }
+        : config.tool_choice;
+
     // Azure Responses API uses 'model' field for deployment name
     const body = {
       model: this.deploymentName,
@@ -216,10 +253,8 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       ...(config.top_p !== undefined || getEnvString('OPENAI_TOP_P')
         ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
         : {}),
-      ...(config.tools
-        ? { tools: await maybeLoadToolsFromExternalFile(config.tools, context?.vars) }
-        : {}),
-      ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
+      ...(tools ? { tools } : {}),
+      ...(toolChoice ? { tool_choice: toolChoice } : {}),
       ...(config.max_tool_calls ? { max_tool_calls: config.max_tool_calls } : {}),
       ...(config.previous_response_id ? { previous_response_id: config.previous_response_id } : {}),
       text: textFormat,
@@ -232,6 +267,17 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       ...('store' in config ? { store: Boolean(config.store) } : {}),
       ...(config.passthrough || {}),
     };
+
+    if (isGPT6Model) {
+      if (gpt6Reasoning) {
+        Object.assign(body, { reasoning: gpt6Reasoning });
+      } else {
+        delete body.reasoning;
+      }
+    }
+    applyGpt6RequestRules(body, capabilityModelName, 'responses', {
+      defaultResponsesTemperature: config.omitDefaults ? undefined : 0,
+    });
 
     logger.debug('Azure Responses API request body', { body });
     return body;

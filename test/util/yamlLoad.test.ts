@@ -35,6 +35,21 @@ describe('loadYaml', () => {
     expect(() => loadYaml(content)).toThrow(/cannot merge mappings/);
   });
 
+  it('counts empty merge sources toward the total merge work limit', () => {
+    const content = 'merged:\n  <<: [{}, {}, {}]';
+
+    expect(() => loadYaml(content, { maxTotalMergeKeys: 2 })).toThrow(/maxTotalMergeKeys/);
+    expect(loadYaml(content, { maxTotalMergeKeys: 3 })).toEqual({ merged: {} });
+  });
+
+  it('rejects oversized merge sequences even when the work limit is disabled', () => {
+    const content = `merged:\n  <<: [${Array(101).fill('{}').join(', ')}]`;
+
+    expect(() => loadYaml(content, { maxTotalMergeKeys: -1 })).toThrow(
+      /abnormal merge sequence size/,
+    );
+  });
+
   it('keeps merge tokens outside mapping keys as plain strings', () => {
     expect(loadYaml('values: [<<]\ntext: <<')).toEqual({
       values: ['<<'],

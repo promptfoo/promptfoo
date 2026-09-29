@@ -1,16 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import deepEqual from 'fast-deep-equal';
+import { AlertTriangle } from 'lucide-react';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetConfigValidation';
 import A2AEndpointConfiguration from './A2AEndpointConfiguration';
 import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
+import CodexSecurityConfiguration, {
+  CODEX_SECURITY_AUTH_OPTIONS,
+  CODEX_SECURITY_OPERATION_OPTIONS,
+  CODEX_SECURITY_REASONING_OPTIONS,
+} from './CodexSecurityConfiguration';
 import CommonConfigurationOptions from './CommonConfigurationOptions';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
-import { AGENT_FRAMEWORKS } from './consts';
 import FoundationModelConfiguration from './FoundationModelConfiguration';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
+import { getProviderEditorKind } from './providerCatalog';
 import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration';
 
 import type { ProviderOptions } from '../../types';
@@ -91,6 +98,7 @@ function ProviderConfigEditor({
     clearTargetConfigValidation,
   } = useRedTeamTargetConfigValidation();
   const isRedTeam = mode === 'redteam';
+  const editorKind = getProviderEditorKind(providerType);
   const isTargetConfigInvalid = useCallback(
     () => isRedTeam && Boolean(useRedTeamTargetConfigValidation.getState().targetConfigError),
     [isRedTeam],
@@ -222,6 +230,9 @@ function ProviderConfigEditor({
 
     if (field === 'id') {
       updatedTarget.id = value as string;
+      if (providerType === 'codex-security') {
+        delete updatedTarget.config.model;
+      }
       if (shouldRemoveMcpConfig(currentProvider.id, updatedTarget.id, providerType)) {
         delete updatedTarget.config.mcp;
       }
@@ -356,23 +367,74 @@ function ProviderConfigEditor({
       if (!url || !validateUrl(url, 'websocket')) {
         errors.push('Valid WebSocket URL is required');
       }
-    } else if (
-      [
-        'openai',
-        'anthropic',
-        'google',
-        'vertex',
-        'mistral',
-        'cohere',
-        'groq',
-        'deepseek',
-        'azure',
-        'bedrock',
-        'openrouter',
-        'perplexity',
-        'cerebras',
-      ].includes(providerType || '')
-    ) {
+    } else if (providerType === 'codex-security') {
+      if (
+        provider.id !== 'openai:codex-security' &&
+        !provider.id.startsWith('openai:codex-security:')
+      ) {
+        errors.push('Codex Security provider ID must start with openai:codex-security');
+      }
+      if (
+        provider.config.operation !== undefined &&
+        !CODEX_SECURITY_OPERATION_OPTIONS.some(
+          (option) => option.value === provider.config.operation,
+        )
+      ) {
+        errors.push('Unsupported Codex Security operation');
+      }
+      if (
+        provider.config.auth !== undefined &&
+        !CODEX_SECURITY_AUTH_OPTIONS.some((option) => option.value === provider.config.auth)
+      ) {
+        errors.push('Unsupported Codex Security authentication method');
+      }
+      if (
+        [provider.config.model_reasoning_effort, provider.config.reasoning_effort].some(
+          (effort) =>
+            effort !== undefined &&
+            !CODEX_SECURITY_REASONING_OPTIONS.some((option) => option === effort),
+        )
+      ) {
+        errors.push('Unsupported Codex Security reasoning effort');
+      }
+      const repository = provider.config.repository ?? provider.config.working_dir;
+      if (typeof repository !== 'string' || !repository.trim()) {
+        errors.push('Repository path is required');
+      }
+      if (
+        provider.config.operation === 'security-diff-scan' &&
+        !provider.config.base_ref &&
+        !provider.config.working_tree
+      ) {
+        errors.push('A base Git reference or working tree target is required for diff scans');
+      }
+      if (provider.config.working_tree && provider.config.head_ref) {
+        errors.push('Working-tree scans cannot specify a head Git reference');
+      }
+      if (
+        provider.config.operation !== 'security-diff-scan' &&
+        (provider.config.base_ref || provider.config.head_ref || provider.config.working_tree)
+      ) {
+        errors.push('Git diff target options require the diff scan operation');
+      }
+      if (
+        provider.config.operation === 'security-diff-scan' &&
+        Array.isArray(provider.config.paths) &&
+        provider.config.paths.length > 0
+      ) {
+        errors.push('Scoped repository paths cannot be combined with diff scans');
+      }
+      if (
+        provider.config.model_reasoning_effort &&
+        provider.config.reasoning_effort &&
+        provider.config.model_reasoning_effort !== provider.config.reasoning_effort
+      ) {
+        errors.push('Reasoning effort settings must match');
+      }
+      if (provider.config.max_cost_usd !== undefined && provider.config.max_cost_usd <= 0) {
+        errors.push('Maximum scan cost must be greater than 0');
+      }
+    } else if (editorKind === 'foundation') {
       // Foundation model providers validation
       if (!provider.id || provider.id.trim() === '') {
         errors.push('Model ID is required');
@@ -395,7 +457,7 @@ function ProviderConfigEditor({
       ) {
         errors.push('Top P must be between 0 and 1');
       }
-    } else if (AGENT_FRAMEWORKS.includes(providerType || '')) {
+    } else if (editorKind === 'agent') {
       // Agent frameworks validation
       if (!provider.id || provider.id.trim() === '') {
         errors.push('Python file path is required');
@@ -403,9 +465,18 @@ function ProviderConfigEditor({
         errors.push('Provider ID must start with file:// for Python agent files');
       }
     } else if (
-      ['a2a', 'javascript', 'python', 'go', 'custom', 'mcp', 'exec', 'openinterpreter'].includes(
-        providerType || '',
-      )
+      [
+        'a2a',
+        'javascript',
+        'python',
+        'go',
+        'custom',
+        'mcp',
+        'exec',
+        'openinterpreter',
+        'bedrock-agent',
+        'claude-agent-sdk',
+      ].includes(providerType || '')
     ) {
       // Custom providers validation
       if (!provider.id || provider.id.trim() === '') {
@@ -480,6 +551,7 @@ function ProviderConfigEditor({
     return !hasErrors;
   }, [
     providerType,
+    editorKind,
     provider,
     structuredProvider,
     bodyError,
@@ -507,7 +579,7 @@ function ProviderConfigEditor({
 
   return (
     <div>
-      {(providerType === 'custom' || providerType === 'openinterpreter') && (
+      {editorKind === 'custom' && (
         <CustomTargetConfiguration
           selectedTarget={provider}
           updateCustomTarget={updateCustomTarget}
@@ -520,7 +592,7 @@ function ProviderConfigEditor({
         />
       )}
 
-      {providerType === 'http' && (
+      {editorKind === 'http' && (
         <HttpEndpointConfiguration
           selectedTarget={structuredProvider}
           updateCustomTarget={updateCustomTarget}
@@ -534,7 +606,7 @@ function ProviderConfigEditor({
         />
       )}
 
-      {providerType === 'websocket' && (
+      {editorKind === 'websocket' && (
         <WebSocketEndpointConfiguration
           selectedTarget={structuredProvider}
           updateWebSocketTarget={updateWebSocketTarget}
@@ -542,14 +614,14 @@ function ProviderConfigEditor({
         />
       )}
 
-      {providerType === 'browser' && (
+      {editorKind === 'browser' && (
         <BrowserAutomationConfiguration
           selectedTarget={structuredProvider}
           updateCustomTarget={updateCustomTarget}
         />
       )}
 
-      {providerType === 'a2a' && (
+      {editorKind === 'a2a' && (
         <A2AEndpointConfiguration
           selectedTarget={structuredProvider}
           updateCustomTarget={updateCustomTarget}
@@ -560,22 +632,14 @@ function ProviderConfigEditor({
         />
       )}
 
-      {/* Foundation model providers */}
-      {[
-        'openai',
-        'anthropic',
-        'google',
-        'vertex',
-        'mistral',
-        'cohere',
-        'groq',
-        'deepseek',
-        'azure',
-        'bedrock',
-        'openrouter',
-        'perplexity',
-        'cerebras',
-      ].includes(providerType || '') && (
+      {editorKind === 'codex-security' && (
+        <CodexSecurityConfiguration
+          selectedTarget={provider}
+          updateCustomTarget={updateCustomTarget}
+        />
+      )}
+
+      {editorKind === 'foundation' && (
         <FoundationModelConfiguration
           selectedTarget={structuredProvider}
           updateCustomTarget={updateCustomTarget}
@@ -583,80 +647,35 @@ function ProviderConfigEditor({
         />
       )}
 
-      {/* Cloud and enterprise providers - use custom config for now */}
-      {[
-        'sagemaker',
-        'databricks',
-        'cloudflare-ai',
-        'fireworks',
-        'together',
-        'replicate',
-        'huggingface',
-      ].includes(providerType || '') && (
-        <CustomTargetConfiguration
-          selectedTarget={provider}
-          updateCustomTarget={updateCustomTarget}
-          rawConfigJson={rawConfigJson}
-          setRawConfigJson={handleCustomRawConfigJsonChange}
-          bodyError={customConfigError ?? bodyError}
-          providerType={providerType}
-          onConfigErrorChange={handleCustomConfigErrorChange}
-          preserveConfigErrorOnUnchangedConfig={preserveConfigErrorOnUnchangedConfig}
-        />
-      )}
-
-      {/* Specialized providers - use custom config for now */}
-      {['github', 'xai', 'ai21', 'aimlapi', 'hyperbolic', 'fal', 'voyage'].includes(
-        providerType || '',
-      ) && (
-        <CustomTargetConfiguration
-          selectedTarget={provider}
-          updateCustomTarget={updateCustomTarget}
-          rawConfigJson={rawConfigJson}
-          setRawConfigJson={handleCustomRawConfigJsonChange}
-          bodyError={customConfigError ?? bodyError}
-          providerType={providerType}
-          onConfigErrorChange={handleCustomConfigErrorChange}
-          preserveConfigErrorOnUnchangedConfig={preserveConfigErrorOnUnchangedConfig}
-        />
-      )}
-
-      {/* Local model providers - use custom config for now */}
-      {['ollama', 'vllm', 'localai', 'llamafile', 'llama.cpp', 'text-generation-webui'].includes(
-        providerType || '',
-      ) && (
-        <CustomTargetConfiguration
-          selectedTarget={provider}
-          updateCustomTarget={updateCustomTarget}
-          rawConfigJson={rawConfigJson}
-          setRawConfigJson={handleCustomRawConfigJsonChange}
-          bodyError={customConfigError ?? bodyError}
-          providerType={providerType}
-          onConfigErrorChange={handleCustomConfigErrorChange}
-          preserveConfigErrorOnUnchangedConfig={preserveConfigErrorOnUnchangedConfig}
-        />
+      {/* Retired providers - no configuration can make them run again */}
+      {providerType === 'github' && (
+        <Alert variant="warning">
+          <AlertTriangle className="size-4" />
+          <AlertContent>
+            <AlertDescription>
+              GitHub retired GitHub Models, including its inference API, on July 30, 2026, so{' '}
+              <code>github:</code> targets no longer run. Pick another provider and configure its
+              own endpoint and credentials — see the{' '}
+              <a
+                href="https://www.promptfoo.dev/docs/providers/github"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                GitHub Models documentation
+              </a>
+              .
+            </AlertDescription>
+          </AlertContent>
+        </Alert>
       )}
 
       {/* Agent frameworks */}
-      {AGENT_FRAMEWORKS.includes(providerType || '') && (
+      {editorKind === 'agent' && (
         <AgentFrameworkConfiguration
           selectedTarget={structuredProvider}
           updateCustomTarget={updateCustomTarget}
           agentType={providerType || ''}
-        />
-      )}
-
-      {/* Custom providers */}
-      {['javascript', 'python', 'go', 'mcp', 'exec'].includes(providerType || '') && (
-        <CustomTargetConfiguration
-          selectedTarget={provider}
-          updateCustomTarget={updateCustomTarget}
-          rawConfigJson={rawConfigJson}
-          setRawConfigJson={handleCustomRawConfigJsonChange}
-          bodyError={customConfigError ?? bodyError}
-          providerType={providerType}
-          onConfigErrorChange={handleCustomConfigErrorChange}
-          preserveConfigErrorOnUnchangedConfig={preserveConfigErrorOnUnchangedConfig}
         />
       )}
 
