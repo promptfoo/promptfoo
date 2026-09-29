@@ -171,7 +171,7 @@ function assertPackagedFiles(packResult: PackResult): void {
     .map((file) => `dist/${file}`)
     .filter((file) => !packagedPaths.has(file));
   const missingWebAppFiles = listFiles(path.join(ROOT, 'dist', 'src', 'app'))
-    .filter((file) => !file.endsWith('.map'))
+    .filter((file) => !file.endsWith('.map') && !file.endsWith('.tsbuildinfo'))
     .filter((file) => !packagedPaths.has(file));
 
   assert.deepEqual(missingPaths, [], `Missing packaged runtime assets: ${missingPaths.join(', ')}`);
