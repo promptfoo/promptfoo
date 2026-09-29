@@ -3,8 +3,10 @@ import {
   calculateCacheInputCost,
   isClaudeFableOrMythos5Model,
   isClaudeOpus5Model,
+  isClaudeOpus55Model,
   isClaudeRegionalPremiumModel,
   isClaudeSonnet5Model,
+  isClaudeSonnet55Model,
 } from '../anthropic/util';
 
 export type BedrockServiceTier = {
@@ -51,6 +53,10 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   'anthropic.claude-fable-5-1': { input: 10, output: 50 },
   'anthropic.claude-mythos-5-1': { input: 10, output: 50 },
   'anthropic.claude-fable-5': { input: 10, output: 50 },
+  // Claude Opus 5.5. Must precede Opus 5: lookup is first-match `includes()`, and
+  // `anthropic.claude-opus-5-5` contains `anthropic.claude-opus-5`. Cache reads bill at
+  // 0.05x input ($0.20) per the AWS price list (see calculateCacheInputCost).
+  'anthropic.claude-opus-5-5': { input: 4, output: 20 },
   // Claude Opus 5 (same list rates as Opus 4.8; full 1M context bills at the standard rate)
   'anthropic.claude-opus-5': { input: 5, output: 25 },
   // Claude Opus 4.8
@@ -63,6 +69,10 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   'anthropic.claude-opus-4-5': { input: 5, output: 25 },
   // Claude Opus 4/4.1
   'anthropic.claude-opus-4': { input: 15, output: 75 },
+  // Claude Sonnet 5.5 ($2/$10 global, $2.20/$11 regional per the AWS price list on 2026-09-29).
+  // Must precede Sonnet 5: lookup is first-match `includes()`, and `anthropic.claude-sonnet-5-5`
+  // contains `anthropic.claude-sonnet-5`.
+  'anthropic.claude-sonnet-5-5': { input: 2, output: 10 },
   // Claude Sonnet 5 (standard list pricing; full 1M context bills at the standard rate)
   'anthropic.claude-sonnet-5': { input: 3, output: 15 },
   // Claude Sonnet 4.x — the point releases must precede the bare `-4` prefix: lookup is first-match-wins
@@ -94,8 +104,7 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   'amazon.nova-lite': { input: 0.06, output: 0.24 },
   'amazon.nova-pro': { input: 0.8, output: 3.2 },
   'amazon.nova-premier': { input: 2.5, output: 12.5 },
-  // Amazon Nova 2 (reasoning models). The cross-region global profile bills at its own cheaper
-  // meter, so its key must stay ahead of the plain us-east-1 one.
+  // Global Nova 2 Lite has a separate meter and must precede the regional key.
   'global.amazon.nova-2-lite': { input: 0.3, output: 2.5 },
   'amazon.nova-2-lite': { input: 0.33, output: 2.75 },
   // Amazon Titan Text
@@ -165,11 +174,8 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   // OpenAI GPT-OSS (open-weight models served via InvokeModel/Converse).
   'openai.gpt-oss-120b': { input: 0.15, output: 0.6 },
   'openai.gpt-oss-20b': { input: 0.07, output: 0.3 },
-  // OpenAI GPT-5.6 frontier models, reachable over Converse through the geo inference
-  // profiles (`bedrock:converse:us.openai.gpt-5.6-sol`). Bedrock lists the first-party rates
-  // plus a 10% regional-processing uplift, and bills the whole request at 2x input /
-  // 1.5x output above 272K input tokens. InvokeModel does not serve these models, so they
-  // stay out of BEDROCK_INVOKE_PRICING_MODEL_PREFIXES.
+  // GPT-5.6 Converse rates from the September 2026 catalog, including the regional uplift.
+  // Keep these models out of the InvokeModel allowlist; cache-token pricing is not modeled.
   'openai.gpt-5.6-sol': {
     input: 4.4,
     output: 22,
@@ -388,17 +394,23 @@ const BEDROCK_REGION_PRICING: Record<string, Record<string, BedrockPricing>> = {
   'us-gov-west-1': US_GOV_PRICING,
 };
 
-/** Tables are keyed by model-id substring and matched first-match-wins in insertion order. */
+/** Match model-id substrings in table order, with specific variants before broader names. */
 function matchPricing(
   table: Record<string, BedrockPricing> | undefined,
   normalizedModelId: string,
 ): BedrockPricing | undefined {
-  return Object.entries(table ?? {}).find(([modelPrefix]) =>
+  if (!table) {
+    return undefined;
+  }
+  return Object.entries(table).find(([modelPrefix]) =>
     normalizedModelId.includes(modelPrefix),
   )?.[1];
 }
 
-function getBedrockPricing(normalizedModelId: string, region?: string): BedrockPricing | undefined {
+export function getBedrockPricing(
+  normalizedModelId: string,
+  region?: string,
+): BedrockPricing | undefined {
   if (normalizedModelId.includes('openai.gpt-oss-') && region) {
     return matchPricing(GPT_OSS_REGION_PRICING[region.toLowerCase()], normalizedModelId);
   }
@@ -418,6 +430,7 @@ function getBedrockPricing(normalizedModelId: string, region?: string): BedrockP
 }
 
 const BEDROCK_INVOKE_PRICING_MODEL_PREFIXES = [
+  'amazon.nova-2-lite',
   'zai.glm-',
   'minimax.minimax-',
   'kimi-k2',
@@ -444,6 +457,13 @@ export function calculateBedrockCost(
   }
 
   const normalizedModelId = modelId.toLowerCase();
+  // GPT-5.6 cache rates are not modeled here, so avoid reporting a partial cost.
+  if (
+    normalizedModelId.includes('openai.gpt-5.6-') &&
+    (cacheReadTokens > 0 || cacheWriteTokens > 0)
+  ) {
+    return undefined;
+  }
   const pricing = getBedrockPricing(normalizedModelId, region);
   if (!pricing) {
     return undefined;
@@ -492,7 +512,7 @@ export function calculateBedrockCost(
  * reported Claude 5 cost. Keep that fail-closed behavior for legacy Runtime models instead of
  * emitting a plausible but incorrect cost.
  *
- * Claude 5 models (Fable 5, Mythos 5, Opus 5, and Sonnet 5) have verified Runtime rates, so they
+ * Claude 5 models (Fable 5, Mythos 5, Opus 5, Opus 5.5, Sonnet 5, and Sonnet 5.5) have verified Runtime rates, so they
  * report cost on the default `bedrock:` InvokeModel path — without this, `bedrock:anthropic.claude-opus-5`
  * reports token usage but `cost: 0`. Legacy Claude (e.g. Sonnet/Opus 4.x) stays fail-closed.
  */
@@ -508,6 +528,8 @@ export function calculateBedrockInvokeModelCost(
   if (
     !isClaudeFableOrMythos5Model(normalizedModelId) &&
     !isClaudeOpus5Model(normalizedModelId) &&
+    !isClaudeOpus55Model(normalizedModelId) &&
+    !isClaudeSonnet55Model(normalizedModelId) &&
     !isClaudeSonnet5Model(normalizedModelId) &&
     !BEDROCK_INVOKE_PRICING_MODEL_PREFIXES.some((prefix) => normalizedModelId.includes(prefix))
   ) {

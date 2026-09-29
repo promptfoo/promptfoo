@@ -4,39 +4,14 @@ import { fileURLToPath } from 'url';
 
 import { z } from 'zod';
 import cliState from '../cliState';
+import {
+  HttpGeneratedDocumentSourceSchema as GeneratedDocumentSourceSchema,
+  HttpPathFileSourceSchema as PathFileSourceSchema,
+  HttpMultipartConfigSchema as PortableHttpMultipartConfigSchema,
+} from '../contracts/providerConfig/httpMultipart';
 import { getNunjucksEngine } from '../util/templates';
 
-const GeneratedDocumentSourceSchema = z.object({
-  type: z.literal('generated'),
-  generator: z.literal('basic-document').optional().default('basic-document'),
-  format: z.enum(['pdf', 'png', 'jpeg', 'jpg']).optional().default('pdf'),
-  text: z.string().optional(),
-});
-
-const PathFileSourceSchema = z.object({
-  type: z.literal('path'),
-  path: z.string(),
-});
-
-const MultipartFieldPartSchema = z.object({
-  kind: z.literal('field'),
-  name: z.string(),
-  value: z.union([z.string(), z.number(), z.boolean()]),
-});
-
-const MultipartFilePartSchema = z.object({
-  kind: z.literal('file'),
-  name: z.string(),
-  filename: z.string().optional(),
-  filenameTemplate: z.string().optional(),
-  contentType: z.string().optional(),
-  source: z.union([GeneratedDocumentSourceSchema, PathFileSourceSchema]),
-});
-
-export const HttpMultipartConfigSchema = z.object({
-  parts: z.array(z.union([MultipartFieldPartSchema, MultipartFilePartSchema])).min(1),
-});
-
+export const HttpMultipartConfigSchema = PortableHttpMultipartConfigSchema;
 export type HttpMultipartConfig = z.infer<typeof HttpMultipartConfigSchema>;
 
 export interface MultipartFileDescriptor {

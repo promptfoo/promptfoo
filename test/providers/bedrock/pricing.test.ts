@@ -141,7 +141,7 @@ describe('calculateBedrockCost', () => {
   });
 
   it('bills the Nova 2 Lite global profile at its own cheaper meter', () => {
-    // AWS publishes $0.30/$2.50 for `global.amazon.nova-2-lite`, against $0.33/$2.75 regionally.
+    // The catalog distinguishes global and regional Nova 2 Lite meters.
     expect(
       calculateBedrockCost('global.amazon.nova-2-lite-v1:0', INPUT_TOKENS, OUTPUT_TOKENS),
     ).toBeCloseTo(costAtRates(0.3, 2.5), 6);
@@ -179,6 +179,16 @@ describe('calculateBedrockCost', () => {
         (272_001 / 1e6) * 8.8 + (1_000 / 1e6) * 33,
         6,
       );
+    });
+
+    it.each([
+      [100, 0],
+      [0, 100],
+      [100, 100],
+    ])('leaves cache reads=%s and writes=%s unpriced', (reads, writes) => {
+      expect(
+        calculateBedrockCost('us.openai.gpt-5.6-sol', 1000, 500, reads, writes, 'us-east-1'),
+      ).toBeUndefined();
     });
 
     it('stays fail-closed on InvokeModel, which does not serve these models', () => {
@@ -275,6 +285,36 @@ describe('calculateBedrockCost', () => {
       calculateBedrockCost('global.anthropic.claude-opus-4-1-20250805-v1:0', 1_000_000, 0),
     ).toBeCloseTo(15, 6);
   });
+
+  it.each([
+    'global.anthropic.claude-opus-5-5',
+    'us.anthropic.claude-opus-5-5',
+    'eu.anthropic.claude-opus-5-5',
+    'jp.anthropic.claude-opus-5-5',
+    'au.anthropic.claude-opus-5-5',
+  ])('prices Opus 5.5 cache reads at 0.05x input for %s', (model) => {
+    // AWS price list (us-east-1): global $4 in / $20 out / $0.20 cache read / $5 cache write;
+    // geo profiles are 1.1x. Also guards the first-match `includes()` lookup: Opus 5's $5/$25
+    // row must not win for `anthropic.claude-opus-5-5`.
+    // 1000*4 + 200*0.2 + 100*5 + 500*20 = 14,540 per 1e6
+    const expected = 0.01454 * (model.startsWith('global.') ? 1 : 1.1);
+    expect(calculateBedrockCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
+    // The default `bedrock:` InvokeModel path must report cost too, not fail closed.
+    expect(calculateBedrockInvokeModelCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
+  });
+
+  it.each(['global.anthropic.claude-sonnet-5-5', 'anthropic.claude-sonnet-5-5'])(
+    'prices Sonnet 5.5 at $2/$10 for %s, with the regional premium off global',
+    (model) => {
+      // AWS price list (us-east-1, 2026-09-29): global $2 in / $10 out / $0.20 cache read /
+      // $2.50 cache write; regional 1.1x. Also guards the first-match `includes()` lookup:
+      // Sonnet 5's row must not win for `anthropic.claude-sonnet-5-5`.
+      // 1000*2 + 200*0.2 + 100*2.5 + 500*10 = 7,290 per 1e6
+      const expected = 0.00729 * (model.startsWith('global.') ? 1 : 1.1);
+      expect(calculateBedrockCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
+      expect(calculateBedrockInvokeModelCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
+    },
+  );
 
   it.each([
     'global.anthropic.claude-fable-5-1',
