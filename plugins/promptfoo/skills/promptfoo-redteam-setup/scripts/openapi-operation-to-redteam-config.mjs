@@ -41,34 +41,6 @@ function isTruthy(value) {
   return ['1', 'true', 'yes'].includes(String(value).toLowerCase());
 }
 
-// Parameters with these names (or suffixes) are treated as credentials even
-// when the spec models them as plain header/query/cookie parameters rather
-// than as securitySchemes. Their example values are replaced with
-// `{{env.<UPPER_NAME>}}` placeholders so generated configs never embed real
-// tokens.
-const CREDENTIAL_PARAM_NAMES = new Set([
-  'authorization',
-  'bearer',
-  'token',
-  'access_token',
-  'auth_token',
-  'api_key',
-  'apikey',
-  'x_api_key',
-  'x_auth_token',
-  'x_access_token',
-  'secret',
-  'password',
-  'csrf_token',
-  'xsrf_token',
-  'session',
-  'sessionid',
-  'session_id',
-  'sid',
-]);
-const CREDENTIAL_SUFFIX_REGEX =
-  /(^|_)(api_key|apikey|auth_token|access_token|bearer|password|secret|token|authorization)$/;
-
 function credentialPlaceholder(paramName) {
   return `{{env.${varName(paramName).toUpperCase()}}}`;
 }
@@ -217,6 +189,9 @@ const {
   responseProperties,
   responseSchema,
 } = analyzeOperation(document, args['operation-id']);
+const promptPath = pathTemplate.replace(/\{([^}]+)\}/g, (_match, name) =>
+  encodedInputTemplate(name),
+);
 
 const fieldSamples = Object.fromEntries([
   ...Object.entries(parameterSamples),

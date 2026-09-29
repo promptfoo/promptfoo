@@ -72,34 +72,6 @@ function multipartPart(document, name, schema) {
   return { kind: 'field', name, value: inputTemplate(name) };
 }
 
-// Parameters with these names (or these suffixes) are treated as credentials
-// even when they are modeled as plain header/query/cookie parameters rather
-// than as OpenAPI securitySchemes. Copying their literal `example` values into
-// the generated config could leak real tokens, so the helper forces
-// `{{env.<UPPER_NAME>}}` placeholders for them instead.
-const CREDENTIAL_PARAM_NAMES = new Set([
-  'authorization',
-  'bearer',
-  'token',
-  'access_token',
-  'auth_token',
-  'api_key',
-  'apikey',
-  'x_api_key',
-  'x_auth_token',
-  'x_access_token',
-  'secret',
-  'password',
-  'csrf_token',
-  'xsrf_token',
-  'session',
-  'sessionid',
-  'session_id',
-  'sid',
-]);
-const CREDENTIAL_SUFFIX_REGEX =
-  /(^|_)(api_key|apikey|auth_token|access_token|bearer|password|secret|token|authorization)$/;
-
 function credentialEnvName(paramName) {
   return varName(paramName).toUpperCase();
 }
