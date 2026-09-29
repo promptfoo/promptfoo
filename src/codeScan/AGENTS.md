@@ -5,7 +5,7 @@ access through MCP, GitHub PR context, and the hosted scanner service.
 
 ## Rules
 
-Follow these rules as defense in depth. Code Scan is a best-effort analysis tool, not an adversarial-repository sandbox or a guarantee of scan completeness. See the root `SECURITY.md` for reportability and supported boundaries.
+Code Scan does not sandbox untrusted repositories or guarantee complete findings. See the root `SECURITY.md` for supported boundaries and report scope.
 
 - Treat repository contents, branch names, PR metadata, config files, guidance text,
   and scanner responses as untrusted input.
@@ -14,6 +14,10 @@ Follow these rules as defense in depth. Code Scan is a best-effort analysis tool
 - Keep filesystem MCP roots absolute and normalized. Do not widen the root beyond the
   repository being scanned, and always stop child processes on success, failure, or
   abort.
+- On Windows, run npm's JS entrypoint with `process.execPath` (see `mcp/filesystem.ts`):
+  `.cmd` shims need a shell, and bare command names are looked up in the cwd first.
+  Keep canonical npm entrypoints and the npm cwd outside the scanned repository, prefer
+  the running Node on PATH, and terminate the npm process tree during cleanup.
 - Preserve npm/npx environment sanitization when spawning tool installers or MCP
   servers. When adding install paths, make the registry/cwd/env explicit and cover
   PR-controlled npm config in tests.

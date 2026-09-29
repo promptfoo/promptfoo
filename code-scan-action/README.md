@@ -23,6 +23,15 @@ To also surface findings in GitHub Code Scanning, configure `sarif-output-path` 
 
 Once merged, the scanner will automatically run on future pull requests. Authentication is handled automatically with GitHub OIDC—no API key needed.
 
+The action runs the scanner with its bundled Node.js 24 runtime. Older action releases and workflow steps that run Promptfoo directly require Node.js `>=22.22.0` on the runner's `PATH`. Configure Node.js 24 LTS for compatibility:
+
+```yaml
+- name: Set up Node.js
+  uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+  with:
+    node-version: '24'
+```
+
 **[Read the full documentation →](https://promptfoo.dev/docs/code-scanning/github-action)** for configuration options, manual installation, and more.
 
 ## Fork Pull Requests
@@ -81,7 +90,7 @@ The hardening below applies to releases after v0.1.8; earlier releases resolve `
 
   Additionally, every release PR in this repository is validated by a workflow that rebuilds `dist/` from the pinned monorepo source commit and fails on any byte difference.
 
-- **Don't run untrusted PR code before the scan in the same job.** Scanner installation applies npm and environment hardening, but it is not an adversarial-repository sandbox. A step that executes pull-request-controlled code earlier in the same job (for example `npm ci` or a build) can persist state — `$GITHUB_PATH`, `$GITHUB_ENV`, or `$HOME` writes — that later steps inherit, and such a step already runs with the job's token. Keep the scan in an isolated job with scoped credentials, and run untrusted build steps separately.
+- **Don't run untrusted PR code before the scan in the same job.** Scanner installation filters npm configuration and `NODE_OPTIONS`, but it does not sandbox the repository. A step that executes pull-request-controlled code earlier in the same job (for example `npm ci` or a build) can persist state — `$GITHUB_PATH`, `$GITHUB_ENV`, or `$HOME` writes — that later steps inherit, and such a step already runs with the job's token. Keep the scan in an isolated job with scoped credentials, and run untrusted build steps separately.
 
 ## Contributing
 

@@ -5,7 +5,11 @@ import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../util/tokenUsageUtils';
 import {
   getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
@@ -13,6 +17,7 @@ import {
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
+import { callTargetProvider } from './shared';
 
 import type {
   ApiProvider,
@@ -95,6 +100,10 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
     );
 
     const data = await response.json();
+    const totalTokenUsage = createEmptyTokenUsage();
+    if (data?.tokenUsage) {
+      accumulateAttackerTokenUsage(totalTokenUsage, { tokenUsage: data.tokenUsage });
+    }
     if (typeof data?.message !== 'object' || !data.message?.content || !data.message?.role) {
       throw new Error(
         `[AuthoritativeMarkupInjection] Invalid response from server: ${safeJsonStringify(data)}`,
@@ -121,11 +130,14 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
       prompt: renderedAttackerPrompt,
     });
 
-    const totalTokenUsage = createEmptyTokenUsage();
-
     // Call the target provider with the injected attack
     throwIfTargetPromptExceedsMaxChars(renderedAttackerPrompt);
-    const targetResponse = await targetProvider.callApi(renderedAttackerPrompt, context, options);
+    const targetResponse = await callTargetProvider(
+      targetProvider,
+      renderedAttackerPrompt,
+      context,
+      options,
+    );
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
     logger.debug('[AuthoritativeMarkupInjection] Target response', {
