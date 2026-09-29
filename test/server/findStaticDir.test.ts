@@ -35,7 +35,7 @@ vi.mock('../../src/migrate', () => ({
 
 vi.mock('../../src/database/signal', () => ({
   setupSignalWatcher: vi.fn().mockReturnValue({ close: vi.fn(), on: vi.fn() }),
-  readSignalEvalId: vi.fn().mockResolvedValue(null),
+  readSignalFile: vi.fn().mockReturnValue({ type: 'update' }),
 }));
 
 vi.mock('../../src/util/server', () => ({

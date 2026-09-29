@@ -32,8 +32,41 @@ Install promptfoo using [npm](https://nodejs.org/en/download), [npx](https://nod
 </Tabs>
 
 :::note
-npm and npx require [Node.js](https://nodejs.org/en/download) `^20.20.0` or `>=22.22.0`.
+npm and npx require [Node.js](https://nodejs.org/en/download) `>=22.22.0`.
 :::
+
+## Node.js runtime support
+
+Promptfoo requires Node.js `22.22.0` or newer. Node.js 24 LTS is recommended.
+
+If you are on an older release, upgrade Node.js before installing or updating promptfoo.
+
+<Tabs groupId="node-version-manager">
+  <TabItem value="nvm" label="nvm" default>
+    ```bash
+    nvm install 24
+    nvm use 24
+    ```
+  </TabItem>
+  <TabItem value="fnm" label="fnm">
+    ```bash
+    fnm install 24
+    fnm use 24
+    ```
+  </TabItem>
+  <TabItem value="volta" label="Volta">
+    ```bash
+    volta install node@24
+    ```
+  </TabItem>
+  <TabItem value="other" label="Other">
+    Download a current LTS release from the [Node.js download page](https://nodejs.org/en/download).
+  </TabItem>
+</Tabs>
+
+For CI, set the configured Node.js version to `24`. For a custom Docker image, use a current
+Node.js base image such as `node:24`. After switching runtimes, verify the active version with
+`node --version`, then install or update promptfoo.
 
 To use promptfoo as a library in your project, run `npm install promptfoo --save`.
 
@@ -87,31 +120,15 @@ This will guide you through the process of creating a `promptfooconfig.yaml` fil
 
 ## Updating Promptfoo
 
-To update promptfoo to the latest version, use the built-in update command:
+For a global npm installation on macOS or Linux, run:
 
 ```bash
 promptfoo update
 ```
 
-The update command automatically detects how you installed promptfoo and either runs a supported global package-manager update or prints the safest manual instructions:
+The command verifies that the active CLI belongs to npm's global package directory before installing the newer release. For other package managers, local dependencies, containers, temporary installations such as `npx`, and Windows, it prints manual instructions.
 
-- **npm global**: Runs `npm install -g promptfoo@latest`
-- **Homebrew**: Instructs you to run `brew upgrade promptfoo`
-- **yarn global**: Runs `yarn global add promptfoo@latest`
-- **pnpm global**: Runs `pnpm add -g promptfoo@latest`
-- **bun global**: Runs `bun add -g promptfoo@latest`
-
-For installations that cannot be safely identified for automatic updating (like `npx`, local project installations, or an unconfirmed npm path), the command provides appropriate manual instructions.
-
-### Update Options
-
-```bash
-# Check if updates are available without installing
-promptfoo update --check
-
-# Force update even if already on latest version
-promptfoo update --force
-```
+Use `promptfoo update --check` to check without installing. Use `promptfoo update --force` to reinstall even when the current version is latest or update checks are disabled. See [automatic updates](/docs/configuration/telemetry/#automatic-updates) for opt-in installation after successful commands.
 
 For a guide on running your first evaluation, please refer to our [Getting Started guide](./getting-started.md).
 

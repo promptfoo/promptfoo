@@ -12,7 +12,8 @@ import { cn } from '@app/lib/utils';
 import { ChevronDown } from 'lucide-react';
 import ExtensionEditor from './ExtensionEditor';
 import InputsEditor from './InputsEditor';
-import type { Inputs, ProviderOptions } from '@promptfoo/types';
+import type { Inputs } from '@promptfoo/contracts';
+import type { ProviderOptions } from '@promptfoo/types';
 
 interface CommonConfigurationOptionsProps {
   selectedTarget: ProviderOptions;

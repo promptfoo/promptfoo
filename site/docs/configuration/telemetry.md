@@ -38,60 +38,24 @@ PROMPTFOO_DISABLE_TELEMETRY=1
 
 ## Updates
 
-The CLI checks for updates when it starts up. If there is a newer version available, it will display a notification message suggesting you run `promptfoo update` to upgrade.
-
-To disable update notifications, set:
+The CLI checks for a newer Promptfoo release when it starts and prints update instructions. To disable those requests and notifications, set:
 
 ```sh
-PROMPTFOO_DISABLE_UPDATE=1
+export PROMPTFOO_DISABLE_UPDATE=1
 ```
 
-This disables startup update notifications and update-check network requests. To reinstall from the latest package tag while this is set, run `promptfoo update --force`.
+`promptfoo update --force` explicitly overrides this setting and reinstalls the latest package. `promptfoo update --check` never installs a package and continues to respect the setting.
 
 ## Automatic Updates
 
-:::caution Experimental Feature
-
-Automatic updates are **disabled by default** and considered experimental. This is an opt-in feature. Use with caution in production environments.
-
-:::
-
-When enabled, promptfoo runs an automatic update after a successful CLI invocation detects a newer version. It releases resources used by the current invocation before starting the updater and waits for completion up to a bounded timeout, reporting either a completed result or that installation is still in progress before the process ends. After a successful update, the new version will be available on your next command.
-
-### Enabling Auto-Updates
-
-Auto-updates are **opt-in**. To enable automatic updates, set the variable in the shell or parent process that launches promptfoo:
+Automatic installation is disabled by default. To opt in, set this variable in the shell or parent process that launches Promptfoo:
 
 ```sh
-# Enable auto-updates (opt-in, disabled by default)
 export PROMPTFOO_ENABLE_AUTO_UPDATE=1
 ```
 
-For safety, a project `.env` file, `--env-file`, or configuration-level environment override cannot enable automatic installation.
+Only verified global npm installations on macOS and Linux support installation through the CLI. Other installation methods receive manual instructions. A project `.env`, `--env-file`, or configuration override cannot enable automatic installation. A launch-time `PROMPTFOO_DISABLE_UPDATE=1` remains a veto even if later configuration clears it; later configuration can also disable updates.
 
-### Disabling Auto-Updates
+An automatic update starts after a successful, uninterrupted command releases its resources. It uses launch-time package-manager settings, a filtered executable search path, and a private working directory. The CLI waits up to 60 seconds. If installation is still running, it reports that result and leaves npm running in the background. Wait for installation to finish before running Promptfoo again. A background install may leave its empty temporary working directory behind when the CLI exits.
 
-Auto-updates are disabled by default. No action needed unless you've previously enabled them:
-
-```sh
-# Disable auto-updates (default behavior)
-unset PROMPTFOO_ENABLE_AUTO_UPDATE
-# Or explicitly disable
-export PROMPTFOO_ENABLE_AUTO_UPDATE=0
-```
-
-### How It Works
-
-- Auto-updates only work for globally installed instances (npm, yarn, pnpm, bun) on macOS and Linux
-- Updates begin after the current promptfoo command completes successfully; the CLI waits up to 60 seconds, then warns that an unfinished installation is continuing in the background with success not yet known
-- After a successful updater result, the new version takes effect on the next promptfoo command
-- Updaters run outside the project directory with a restricted environment captured before project `.env` files are loaded; project credentials and workspace package-manager settings are not forwarded
-- No updates occur for local project installations, Docker, or npx usage
-- npm auto-updates require confirmation that the active CLI is from npm's global install root
-- Updates are skipped if `PROMPTFOO_DISABLE_UPDATE=1` is set
-
-### Supported Installation Methods
-
-Auto-updates work with global npm, yarn, pnpm, and bun installations on macOS and Linux. On Windows, automatic installation is disabled; use `promptfoo update` to explicitly run a manual update.
-
-Auto-updates are **not available** for local project installations, Homebrew, Docker, npx/pnpx/bunx, or git clones.
+To stop automatic installation, unset `PROMPTFOO_ENABLE_AUTO_UPDATE` or set it to `0`. To check for updates without installing, run `promptfoo update --check`.

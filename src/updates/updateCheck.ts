@@ -1,10 +1,11 @@
 import semver from 'semver';
 import { getEnvBool } from '../envars';
 import logger from '../logger';
+import { getLatestVersion } from '../updates';
 import { VERSION } from '../version';
-import { getLatestVersion } from './latestVersion';
+import { getUpdateCommands } from './updateCommands';
 
-export interface UpdateInfo {
+interface UpdateInfo {
   current: string;
   latest: string;
   name: string;
@@ -15,14 +16,26 @@ export interface UpdateObject {
   update: UpdateInfo;
 }
 
-export interface CheckForUpdatesOptions {
+interface CheckForUpdatesOptions {
   throwOnError?: boolean;
   ignoreDisableUpdate?: boolean;
 }
 
 const PACKAGE_NAME = 'promptfoo';
-export const UPDATE_INSTRUCTIONS =
-  'For global installations, run "promptfoo update". For npx, pnpx, or bunx, invoke the latest package directly (for example, "npx promptfoo@latest").';
+export function getUpdateInstructions(): string {
+  const commands = getUpdateCommands({
+    isContainer: getEnvBool('PROMPTFOO_RUNNING_IN_DOCKER'),
+    isOfficialDockerImage: getEnvBool('PROMPTFOO_OFFICIAL_DOCKER_IMAGE'),
+    isNpx: false,
+  });
+  if (commands.isCustomContainer) {
+    return 'Update the Promptfoo source, dependency, or parent image, then rebuild and redeploy the container.';
+  }
+  if (commands.commandType === 'docker') {
+    return `Run ${commands.primary}. For a derived image, update its Promptfoo base, rebuild, and redeploy.`;
+  }
+  return 'For global npm installations on macOS or Linux, run "promptfoo update". For temporary installations, invoke the latest package (for example, "npx promptfoo@latest"). Otherwise, update with the package manager that installed Promptfoo.';
+}
 
 export async function checkForUpdates(
   options: CheckForUpdatesOptions = {},
@@ -36,7 +49,6 @@ export async function checkForUpdates(
       return null;
     }
 
-    // Use custom API to get latest version
     const latestVersion = await getLatestVersion();
 
     if (semver.gt(latestVersion, VERSION)) {
@@ -56,8 +68,6 @@ export async function checkForUpdates(
     if (options.throwOnError) {
       throw err;
     }
-    // Use debug level to avoid spamming users with network errors
-    // Don't expose full error object which might contain sensitive info
     const message = err instanceof Error ? err.message : String(err);
     logger.debug(`Failed to check for updates: ${message}`);
     return null;

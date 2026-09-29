@@ -1,23 +1,15 @@
-import { tmpdir } from 'node:os';
+import { spawn } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
 import path from 'node:path';
 
-type PackageManagerExecutable = 'npm' | 'pnpm' | 'yarn' | 'bun';
+import semver from 'semver';
 
 const UPDATE_ENV_KEYS = [
   'PATH',
-  'Path',
   'HOME',
-  'USERPROFILE',
-  'APPDATA',
-  'LOCALAPPDATA',
-  'SYSTEMROOT',
-  'SystemRoot',
-  'COMSPEC',
-  'ComSpec',
-  'TEMP',
-  'TMP',
   'TMPDIR',
-  'SHELL',
+  'TMP',
+  'TEMP',
   'HTTP_PROXY',
   'HTTPS_PROXY',
   'NO_PROXY',
@@ -27,12 +19,6 @@ const UPDATE_ENV_KEYS = [
   'NODE_EXTRA_CA_CERTS',
   'SSL_CERT_FILE',
   'SSL_CERT_DIR',
-  'XDG_CONFIG_HOME',
-  'XDG_DATA_HOME',
-  'XDG_CACHE_HOME',
-  'PNPM_HOME',
-  'YARN_GLOBAL_FOLDER',
-  'BUN_INSTALL',
   'NPM_CONFIG_PREFIX',
   'npm_config_prefix',
   'NPM_CONFIG_USERCONFIG',
@@ -41,67 +27,116 @@ const UPDATE_ENV_KEYS = [
   'npm_config_globalconfig',
 ] as const;
 
-function sanitizeExecutableSearchPath(pathValue: string): string {
-  const delimiter = process.platform === 'win32' ? ';' : ':';
-  const pathApi = process.platform === 'win32' ? path.win32 : path.posix;
-  return pathValue
-    .split(delimiter)
-    .filter((entry) => {
-      if (!entry || !pathApi.isAbsolute(entry)) {
-        return false;
-      }
-      return !entry.replace(/\\/g, '/').toLowerCase().includes('/node_modules/.bin');
-    })
-    .join(delimiter);
-}
-
-export function getPackageManagerExecutable(executable: PackageManagerExecutable): string {
-  if (process.platform !== 'win32') {
-    return executable;
-  }
-
-  return executable === 'bun' ? 'bun.exe' : `${executable}.cmd`;
-}
-
-export function getUpdateSpawnContext(sourceEnvironment: NodeJS.ProcessEnv): {
-  cwd: string;
-  env: NodeJS.ProcessEnv;
-} {
+/** Use launch settings and a private cwd; npm global mode ignores project .npmrc files. */
+export function createUpdateContext(sourceEnvironment: NodeJS.ProcessEnv, projectRoot: string) {
   const env: NodeJS.ProcessEnv = {};
   for (const key of UPDATE_ENV_KEYS) {
     const value = sourceEnvironment[key];
     if (value !== undefined) {
-      env[key] = key === 'PATH' || key === 'Path' ? sanitizeExecutableSearchPath(value) : value;
+      env[key] = value;
     }
   }
-
-  return { cwd: tmpdir(), env };
-}
-
-export function withTargetVersion(updateCommand: string, targetVersion: string): string {
-  return updateCommand.replace('@latest', `@${targetVersion}`);
-}
-
-export function parseUpdateCommandForSpawn(
-  updateCommand: string,
-  sourceEnvironment: NodeJS.ProcessEnv = process.env,
-): {
-  command: string;
-  args: string[];
-} {
-  const commandParts = updateCommand.split(' ');
-  const executable = commandParts[0];
-  const args = commandParts.slice(1);
-
-  if (process.platform === 'win32' && executable.toLowerCase().endsWith('.cmd')) {
-    return {
-      command: sourceEnvironment.ComSpec || sourceEnvironment.COMSPEC || 'cmd.exe',
-      args: ['/d', '/s', '/c', executable, ...args],
-    };
+  env.PATH =
+    (env.PATH ?? '/usr/bin:/bin')
+      .split(path.delimiter)
+      .filter((entry) => path.isAbsolute(entry))
+      .map((entry) => path.normalize(entry))
+      .filter(
+        (entry) =>
+          !entry.includes('/node_modules/.bin') &&
+          entry !== projectRoot &&
+          !entry.startsWith(`${projectRoot}/`),
+      )
+      .join(path.delimiter) || '/usr/bin:/bin';
+  for (const key of [
+    'HOME',
+    'NODE_EXTRA_CA_CERTS',
+    'SSL_CERT_FILE',
+    'SSL_CERT_DIR',
+    'NPM_CONFIG_PREFIX',
+    'npm_config_prefix',
+    'NPM_CONFIG_USERCONFIG',
+    'npm_config_userconfig',
+    'NPM_CONFIG_GLOBALCONFIG',
+    'npm_config_globalconfig',
+  ] as const) {
+    if (env[key]) {
+      env[key] = path.resolve(projectRoot, env[key]);
+    }
   }
+  const configuredTemp =
+    sourceEnvironment.TMPDIR || sourceEnvironment.TMP || sourceEnvironment.TEMP;
+  const tempRoot = configuredTemp && path.isAbsolute(configuredTemp) ? configuredTemp : '/tmp';
+  const cwd = mkdtempSync(path.join(tempRoot, 'promptfoo-update-'));
+  return { cwd, env, cleanup: () => rmSync(cwd, { recursive: true, force: true }) };
+}
 
-  return {
-    command: executable,
-    args,
-  };
+export async function runNpmUpdate(
+  version: string,
+  sourceEnvironment: NodeJS.ProcessEnv,
+  projectRoot: string,
+  backgroundAfterMs?: number,
+): Promise<'complete' | 'background'> {
+  if (version !== 'latest' && !semver.valid(version)) {
+    throw new Error('Invalid update version');
+  }
+  const context = createUpdateContext(sourceEnvironment, projectRoot);
+  try {
+    return await new Promise((resolve, reject) => {
+      const child = spawn('npm', ['install', '--global', `promptfoo@${version}`], {
+        cwd: context.cwd,
+        env: context.env,
+        stdio: backgroundAfterMs === undefined ? 'inherit' : 'ignore',
+        shell: false,
+        detached: backgroundAfterMs !== undefined,
+      });
+      let settled = false;
+      let finished = false;
+      const timeout =
+        backgroundAfterMs === undefined
+          ? undefined
+          : setTimeout(() => {
+              settled = true;
+              child.unref();
+              // Keep the cwd while npm is running. A parent exit can leave this empty directory behind.
+              resolve('background');
+            }, backgroundAfterMs);
+      const finish = (error?: Error) => {
+        if (finished) {
+          return;
+        }
+        finished = true;
+        clearTimeout(timeout);
+        try {
+          context.cleanup();
+        } catch (cleanupError) {
+          error ??= cleanupError instanceof Error ? cleanupError : new Error(String(cleanupError));
+        }
+        if (settled) {
+          return;
+        }
+        settled = true;
+        if (error) {
+          reject(error);
+        } else {
+          resolve('complete');
+        }
+      };
+      child.once('error', finish);
+      child.once('close', (code, signal) =>
+        finish(
+          code === 0
+            ? undefined
+            : new Error(
+                signal
+                  ? `Update stopped by ${signal}`
+                  : `Update exited with code ${code ?? 'unknown'}`,
+              ),
+        ),
+      );
+    });
+  } catch (error) {
+    context.cleanup();
+    throw error;
+  }
 }

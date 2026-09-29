@@ -3,6 +3,10 @@ import { BLOB_SCHEME } from './constants';
 export const BLOB_HASH_REGEX = /^[a-f0-9]{64}$/i;
 export const BLOB_URI_REGEX = /promptfoo:\/\/blob\/([a-f0-9]{64})/gi;
 
+// Shared bounds for scanning result values for blob URIs at share time.
+export const BLOB_SCAN_MAX_DEPTH = 8;
+export const BLOB_SCAN_MAX_STRING_LENGTH = 100_000;
+
 interface CollectBlobHashesOptions {
   maxDepth?: number;
   maxStringLength?: number;

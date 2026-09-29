@@ -10,6 +10,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 const mockSetupEnv = vi.hoisted(() => vi.fn());
 const mockSetLogLevel = vi.hoisted(() => vi.fn());
 const mockTelemetryRecord = vi.hoisted(() => vi.fn());
+const mockTelemetryInitialize = vi.hoisted(() => vi.fn());
 const mockTelemetryShutdown = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockCloseLogger = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockCloseDbIfOpen = vi.hoisted(() => vi.fn());
@@ -34,7 +35,11 @@ vi.mock('../src/logger', () => ({
 
 vi.mock('../src/telemetry', () => ({
   __esModule: true,
-  default: { record: mockTelemetryRecord, shutdown: mockTelemetryShutdown },
+  default: {
+    initialize: mockTelemetryInitialize,
+    record: mockTelemetryRecord,
+    shutdown: mockTelemetryShutdown,
+  },
 }));
 
 vi.mock('../src/database/index', () => ({
@@ -44,21 +49,6 @@ vi.mock('../src/database/index', () => ({
 vi.mock('undici', async () => ({
   ...(await actualUndici),
   getGlobalDispatcher: mockGetGlobalDispatcher,
-}));
-
-// Mock the update check system
-vi.mock('../src/updates/updateCheck', () => ({
-  checkForUpdates: vi.fn(() => Promise.resolve(null)),
-}));
-
-vi.mock('../src/envars', () => ({
-  getEnvBool: vi.fn(() => false),
-  getEnvInt: vi.fn((_key, defaultValue) => defaultValue),
-  getEnvString: vi.fn((_key, defaultValue) => defaultValue),
-  getEnvFloat: vi.fn((_key, defaultValue) => defaultValue),
-  getEvalTimeoutMs: vi.fn(() => 0),
-  getMaxEvalTimeMs: vi.fn(() => 0),
-  isCI: vi.fn(() => false),
 }));
 
 // Mock code scan commands to avoid ESM import issues with execa
@@ -91,30 +81,35 @@ describe('setupEnvFilesFromArgv', () => {
   beforeEach(async () => {
     await loadMainModule();
     mockSetupEnv.mockReset();
+    mockTelemetryInitialize.mockReset();
   });
 
   it('should load env files before command actions run', () => {
     setupEnvFilesFromArgv(['eval', '--env-file', '.env.local']);
 
-    expect(mockSetupEnv).toHaveBeenCalledWith('.env.local');
+    expect(mockSetupEnv).toHaveBeenCalledWith('.env.local', { refreshConfigDirectory: true });
+    expect(mockTelemetryInitialize).toHaveBeenCalledOnce();
   });
 
   it('should support repeated and comma-separated env file args', () => {
     setupEnvFilesFromArgv(['eval', '--env-file', '.env.one', '--env-path=.env.two,.env.three']);
 
-    expect(mockSetupEnv).toHaveBeenCalledWith(['.env.one', '.env.two', '.env.three']);
+    expect(mockSetupEnv).toHaveBeenCalledWith(['.env.one', '.env.two', '.env.three'], {
+      refreshConfigDirectory: true,
+    });
   });
 
   it('should ignore flags after --', () => {
     setupEnvFilesFromArgv(['eval', '--', '--env-file', '.env.local']);
 
     expect(mockSetupEnv).not.toHaveBeenCalled();
+    expect(mockTelemetryInitialize).toHaveBeenCalledOnce();
   });
 
   it('should recognize the --env-path alias', () => {
     setupEnvFilesFromArgv(['eval', '--env-path', '.env.staging']);
 
-    expect(mockSetupEnv).toHaveBeenCalledWith('.env.staging');
+    expect(mockSetupEnv).toHaveBeenCalledWith('.env.staging', { refreshConfigDirectory: true });
   });
 
   it('should be a no-op when no env flags are present', () => {
@@ -358,6 +353,33 @@ describe('addCommonOptionsRecursively', () => {
     expect(mockSetupEnv).toHaveBeenCalledWith('.env.combined');
   });
 
+  it('keeps structured code-scan output muted even when --verbose is present', () => {
+    const mockHookRegister = vi.fn();
+    (program as any).hook = mockHookRegister;
+
+    addCommonOptionsRecursively(program);
+
+    const preActionFn = mockHookRegister.mock.calls[0][1];
+    const originalArgv = process.argv;
+
+    process.argv = ['node', 'promptfoo', 'code-scans', 'run', '.', '--json', '--verbose'];
+
+    try {
+      preActionFn({
+        opts: () => ({ verbose: true }),
+        name: () => 'run',
+        parent: {
+          name: () => 'code-scans',
+          parent: null,
+        },
+      });
+    } finally {
+      process.argv = originalArgv;
+    }
+
+    expect(mockSetLogLevel).not.toHaveBeenCalledWith('debug');
+  });
+
   it('should parse --env-file without consuming positional subcommand arguments', async () => {
     const action = vi.fn();
     const documentCommand = program.command('scan-model').argument('<model>').action(action);
@@ -546,6 +568,9 @@ describe('shutdownGracefully', () => {
     expect(mockTelemetryShutdown).toHaveBeenCalled();
     expect(mockCloseLogger).toHaveBeenCalled();
     expect(mockCloseDbIfOpen).toHaveBeenCalled();
+    expect(mockCloseDbIfOpen.mock.invocationCallOrder[0]).toBeLessThan(
+      mockCloseLogger.mock.invocationCallOrder[0],
+    );
     expect(mockDispatcherDestroy).toHaveBeenCalled();
   });
 
@@ -588,6 +613,23 @@ describe('shutdownGracefully', () => {
     expect(mockCloseLogger).toHaveBeenCalled();
   });
 
+  it.each(['timeout', 'error'])(
+    'skips replacement after dispatcher cleanup %s',
+    async (failure) => {
+      mockDispatcherDestroy.mockImplementation(() =>
+        failure === 'timeout'
+          ? new Promise(() => {})
+          : Promise.reject(new Error('fixture cleanup failure')),
+      );
+      const update = vi.fn().mockResolvedValue(undefined);
+      const shutdown = shutdownGracefully(update);
+      await vi.runAllTimersAsync();
+      await shutdown;
+      expect(update).not.toHaveBeenCalled();
+      expect(mockCloseLogger).toHaveBeenCalled();
+    },
+  );
+
   it('should handle telemetry shutdown timeout', async () => {
     // Make telemetry.shutdown() hang forever
     mockTelemetryShutdown.mockImplementation(() => new Promise(() => {}));
@@ -622,6 +664,38 @@ describe('shutdownGracefully', () => {
     expect(mockTelemetryShutdown).toHaveBeenCalled();
     expect(mockCloseDbIfOpen).toHaveBeenCalled();
     expect(mockDispatcherDestroy).toHaveBeenCalled();
+  });
+
+  it('should continue cleanup when database close times out', async () => {
+    let resolveDbClose!: () => void;
+    const markDbCloseResolved = vi.fn();
+    mockCloseDbIfOpen.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveDbClose = resolve;
+        }),
+    );
+
+    const shutdownPromise = shutdownGracefully();
+
+    await vi.advanceTimersByTimeAsync(1100);
+
+    expect(mockDispatcherDestroy).toHaveBeenCalled();
+    expect(mockCloseLogger).not.toHaveBeenCalled();
+    expect(process.exit).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(500);
+    markDbCloseResolved();
+    resolveDbClose();
+    await shutdownPromise;
+    expect(mockCloseLogger).toHaveBeenCalled();
+    expect(markDbCloseResolved.mock.invocationCallOrder[0]).toBeLessThan(
+      mockCloseLogger.mock.invocationCallOrder[0],
+    );
+    expect(process.exit).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(process.exit).toHaveBeenCalledWith(0);
   });
 
   it('should handle dispatcher.destroy() timeout', async () => {

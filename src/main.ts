@@ -6,7 +6,7 @@ import { cacheCommand } from './commands/cache';
 import { configCommand } from './commands/config';
 import { debugCommand } from './commands/debug';
 import { deleteCommand } from './commands/delete';
-import { EvalRunError, evalCommand } from './commands/eval';
+import { evalCommand } from './commands/eval';
 import { evalSetupCommand } from './commands/evalSetup';
 import { exportCommand } from './commands/export';
 import { feedbackCommand } from './commands/feedback';
@@ -19,15 +19,17 @@ import { logsCommand } from './commands/logs';
 import { mcpCommand } from './commands/mcp/index';
 import { modelScanCommand } from './commands/modelScan';
 import { optimizeCommand } from './commands/optimize';
+import { initCommand as redteamInitCommand } from './commands/redteam/init';
+import { redteamReportCommand } from './commands/redteam/report';
+import { redteamSetupCommand } from './commands/redteam/setup';
 import { setupRetryCommand } from './commands/retry';
 import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { updateCommand } from './commands/update';
 import { validateCommand } from './commands/validate';
 import { viewCommand } from './commands/view';
-import { getEnvBool, getEnvBoolFromEnvironment } from './envars';
+import { getEnvBool, parseEnvBool } from './envars';
 import { EmailValidationError } from './globalConfig/accounts';
-import { getInitialProcessEnvironment } from './initialProcessEnvironment';
 import logger, { initializeRunLogging } from './logger';
 import {
   addCommonOptionsRecursively,
@@ -39,20 +41,20 @@ import {
   shutdownGracefully,
 } from './mainUtils';
 import { runDbMigrations } from './migrate';
+import { EvalRunError } from './node/doEval';
 import { discoverCommand as redteamDiscoverCommand } from './redteam/commands/discover';
 import { redteamGenerateCommand } from './redteam/commands/generate';
-import { initCommand as redteamInitCommand } from './redteam/commands/init';
 import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';
-import { redteamReportCommand } from './redteam/commands/report';
 import { redteamRunCommand } from './redteam/commands/run';
-import { redteamSetupCommand } from './redteam/commands/setup';
 import { ServerError } from './server/errors';
 import {
   AUTO_UPDATE_TIMEOUT_MS,
   handleAutoUpdate,
-  setUpdateHandler,
+  isAutoUpdateEnabled,
+  trackUpdateInterruptions,
 } from './updates/handleAutoUpdate';
-import { checkForUpdates, UPDATE_INSTRUCTIONS } from './updates/updateCheck';
+import { getInitialProcessEnvironment } from './updates/initialProcessEnvironment';
+import { checkForUpdates, getUpdateInstructions } from './updates/updateCheck';
 import { loadDefaultConfig } from './util/config/default';
 import { ConfigResolutionError, logConfigResolutionError } from './util/config/load';
 import { printErrorInformation } from './util/errors/index';
@@ -63,14 +65,13 @@ import type { UpdateObject } from './updates/updateCheck';
 
 interface PendingAutoUpdate {
   info: UpdateObject;
-  disableUpdateNag: boolean;
   projectRoot: string;
   sourceEnvironment: NodeJS.ProcessEnv;
 }
 
-async function main(): Promise<PendingAutoUpdate | undefined> {
+async function main(startupEnvironment: NodeJS.ProcessEnv): Promise<PendingAutoUpdate | undefined> {
   const argv = process.argv.slice(2);
-  const startupEnvironment = getInitialProcessEnvironment();
+  const projectRoot = process.cwd();
   setupEnvFilesFromArgv(argv);
   initializeRunLogging();
 
@@ -79,21 +80,10 @@ async function main(): Promise<PendingAutoUpdate | undefined> {
     Object.assign(process.env, { PROMPTFOO_DISABLE_UPDATE: 'true' });
   }
 
-  // Set up update event handlers (for future use by web UI or other consumers)
-  setUpdateHandler(
-    (info) => logger.debug(`Update notification: ${info.message}`),
-    (info) => logger.info(info.message),
-    (info) => logger.warn(info.message),
-    (info) => logger.warn(info.message),
-  );
-
-  // Check for updates and show notification (non-blocking)
-  const disableUpdateNag = getEnvBool('PROMPTFOO_DISABLE_UPDATE');
-  // Auto-update is opt-in: only enabled if explicitly set to true
-  const enableAutoUpdate = getEnvBoolFromEnvironment(
-    'PROMPTFOO_ENABLE_AUTO_UPDATE',
-    startupEnvironment,
-  );
+  const disableUpdateNag =
+    parseEnvBool(startupEnvironment.PROMPTFOO_DISABLE_UPDATE) ||
+    getEnvBool('PROMPTFOO_DISABLE_UPDATE');
+  const enableAutoUpdate = isAutoUpdateEnabled(startupEnvironment);
   const updateCommandRequested = isUpdateCommandRequested(argv);
 
   let pendingAutoUpdate: UpdateObject | undefined;
@@ -103,7 +93,7 @@ async function main(): Promise<PendingAutoUpdate | undefined> {
       .then((info) => {
         if (info) {
           logger.info(info.message);
-          logger.info(UPDATE_INSTRUCTIONS);
+          logger.info(getUpdateInstructions());
 
           // Defer replacement until shutdown has released resources used by this invocation.
           if (enableAutoUpdate) {
@@ -207,8 +197,7 @@ async function main(): Promise<PendingAutoUpdate | undefined> {
   if (pendingAutoUpdate && isSuccessfulExitCode(process.exitCode)) {
     return {
       info: pendingAutoUpdate,
-      disableUpdateNag,
-      projectRoot: process.cwd(),
+      projectRoot,
       sourceEnvironment: startupEnvironment,
     };
   }
@@ -225,11 +214,15 @@ try {
 }
 
 if (isMain) {
+  const startupEnvironment = getInitialProcessEnvironment();
+  const interruptions = parseEnvBool(startupEnvironment.PROMPTFOO_ENABLE_AUTO_UPDATE)
+    ? trackUpdateInterruptions()
+    : undefined;
   let mainError: unknown;
   let libsqlBindingErrorMessage: string | undefined;
   let pendingAutoUpdate: PendingAutoUpdate | undefined;
   try {
-    pendingAutoUpdate = await main();
+    pendingAutoUpdate = await main(startupEnvironment);
   } catch (error) {
     mainError = error;
     if (error instanceof ConfigResolutionError) {
@@ -250,15 +243,15 @@ if (isMain) {
     try {
       await shutdownGracefully(
         autoUpdateToRun
-          ? () =>
-              handleAutoUpdate(
-                autoUpdateToRun.info,
-                autoUpdateToRun.disableUpdateNag,
-                false,
-                autoUpdateToRun.projectRoot,
-                undefined,
-                autoUpdateToRun.sourceEnvironment,
-              )
+          ? async () => {
+              if (!interruptions?.wasInterrupted() && isSuccessfulExitCode(process.exitCode)) {
+                await handleAutoUpdate(
+                  autoUpdateToRun.info,
+                  autoUpdateToRun.projectRoot,
+                  autoUpdateToRun.sourceEnvironment,
+                );
+              }
+            }
           : undefined,
         autoUpdateToRun ? AUTO_UPDATE_TIMEOUT_MS + 1_000 : undefined,
       );
@@ -272,6 +265,8 @@ if (isMain) {
   // ConfigResolutionError / EmailValidationError / ServerError / EvalRunError
   // already rendered a user-facing message before reaching this boundary;
   // everything else is unexpected and bubbles up.
+  interruptions?.dispose();
+
   if (mainError) {
     if (
       mainError instanceof ConfigResolutionError ||

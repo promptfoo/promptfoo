@@ -3,27 +3,68 @@ import { promisify } from 'util';
 
 import chalk from 'chalk';
 import semverGt from 'semver/functions/gt.js';
-import { TERMINAL_MAX_WIDTH } from './constants';
+import { TERMINAL_MAX_WIDTH, VERSION } from './constants';
 import { getEnvBool } from './envars';
 import logger from './logger';
-import { getLatestVersion } from './updates/latestVersion';
-import {
-  checkForUpdates as getPromptfooUpdateInfo,
-  UPDATE_INSTRUCTIONS,
-} from './updates/updateCheck';
+import { getUpdateCommands } from './updates/updateCommands';
 import { fetchWithTimeout } from './util/fetch/index';
 
 const execAsync = promisify(exec);
 
-export { getLatestVersion };
+export async function getLatestVersion() {
+  const response = await fetchWithTimeout(
+    `https://api.promptfoo.dev/api/latestVersion`,
+    {
+      headers: { 'x-promptfoo-silent': 'true' },
+    },
+    10000,
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to fetch package information for promptfoo`);
+  }
+  const data = (await response.json()) as { latestVersion: string };
+  return data.latestVersion;
+}
 
 export async function checkForUpdates(): Promise<boolean> {
-  const updateInfo = await getPromptfooUpdateInfo();
-  if (updateInfo) {
-    logger.info(updateInfo.message);
-    logger.info(UPDATE_INSTRUCTIONS);
+  if (getEnvBool('PROMPTFOO_DISABLE_UPDATE')) {
+    return false;
   }
-  return Boolean(updateInfo);
+
+  let latestVersion: string;
+  try {
+    latestVersion = await getLatestVersion();
+  } catch {
+    return false;
+  }
+  if (semverGt(latestVersion, VERSION)) {
+    const border = '='.repeat(TERMINAL_MAX_WIDTH);
+    const updateCommands = getUpdateCommands({
+      isContainer: getEnvBool('PROMPTFOO_RUNNING_IN_DOCKER'),
+      isOfficialDockerImage: getEnvBool('PROMPTFOO_OFFICIAL_DOCKER_IMAGE'),
+      // Preserve the existing npx-first CLI guidance while sharing Docker command policy.
+      isNpx: true,
+    });
+
+    const updateInstruction = updateCommands.isCustomContainer
+      ? 'Update the Promptfoo source, dependency, or parent image, then rebuild and redeploy the container.'
+      : updateCommands.commandType === 'docker'
+        ? `Run ${chalk.green(updateCommands.primary)}. If this is a derived image, update its Promptfoo base and rebuild it. Then redeploy the container.`
+        : `Please run ${chalk.green(updateCommands.primary)}${
+            updateCommands.alternative ? ` or ${chalk.green(updateCommands.alternative)}` : ''
+          } to update.`;
+    logger.info(
+      `\n${border}
+${chalk.yellow('⚠️')} The current version of promptfoo ${chalk.yellow(
+        VERSION,
+      )} is lower than the latest available version ${chalk.green(latestVersion)}.
+
+${updateInstruction}
+${border}\n`,
+    );
+    return true;
+  }
+  return false;
 }
 
 export async function getModelAuditLatestVersion(): Promise<string | null> {

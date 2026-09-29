@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { getGlobalDispatcher } from 'undici';
+import { requestsStructuredCodeScanOutput } from './codeScan/util/structuredOutputDetect';
 import { closeDbIfOpen } from './database/index';
 import logger, { closeLogger, setLogLevel } from './logger';
 import telemetry from './telemetry';
@@ -41,13 +42,21 @@ function getEnvPathKey(envPath: string | string[]): string {
   return Array.isArray(envPath) ? envPath.join('\0') : envPath;
 }
 
-function loadEnvPathOnce(envPath: string | string[], shouldLog: boolean): void {
+function loadEnvPathOnce(
+  envPath: string | string[],
+  shouldLog: boolean,
+  refreshConfigDirectory: boolean = false,
+): void {
   const envPathKey = getEnvPathKey(envPath);
   if (loadedEnvPathKey === envPathKey) {
     return;
   }
 
-  setupEnv(envPath);
+  if (refreshConfigDirectory) {
+    setupEnv(envPath, { refreshConfigDirectory: true });
+  } else {
+    setupEnv(envPath);
+  }
   loadedEnvPathKey = envPathKey;
 
   if (shouldLog) {
@@ -86,64 +95,39 @@ export function setupEnvFilesFromArgv(argv: string[] = process.argv.slice(2)): v
 
   const envPath = normalizeEnvPaths(envFileValues);
   if (envPath) {
-    loadEnvPathOnce(envPath, false);
+    loadEnvPathOnce(envPath, false, true);
   }
+
+  telemetry.initialize();
+}
+
+function getRequestedCommand(argv: string[]): string | undefined {
+  for (let index = 0; index < argv.length; index++) {
+    const arg = argv[index];
+    if (arg === '--') {
+      return undefined;
+    }
+    if (arg === '--env-file' || arg === '--env-path') {
+      index++;
+    } else if (
+      arg !== '-v' &&
+      arg !== '--verbose' &&
+      !arg.startsWith('--env-file=') &&
+      !arg.startsWith('--env-path=')
+    ) {
+      return arg;
+    }
+  }
+  return undefined;
 }
 
 export function shouldSkipDefaultConfigLoading(argv: string[] = process.argv.slice(2)): boolean {
-  for (let index = 0; index < argv.length; index++) {
-    const arg = argv[index];
-
-    if (arg === '--') {
-      return false;
-    }
-
-    if (arg === '--env-file' || arg === '--env-path') {
-      index += 1;
-      continue;
-    }
-
-    if (
-      arg === '-v' ||
-      arg === '--verbose' ||
-      arg.startsWith('--env-file=') ||
-      arg.startsWith('--env-path=')
-    ) {
-      continue;
-    }
-
-    return arg === 'code-scans' || arg === 'update';
-  }
-
-  return false;
+  const command = getRequestedCommand(argv);
+  return command === 'code-scans' || command === 'update';
 }
 
 export function isUpdateCommandRequested(argv: string[] = process.argv.slice(2)): boolean {
-  for (let index = 0; index < argv.length; index++) {
-    const arg = argv[index];
-
-    if (arg === '--') {
-      return false;
-    }
-
-    if (arg === '--env-file' || arg === '--env-path') {
-      index += 1;
-      continue;
-    }
-
-    if (
-      arg === '-v' ||
-      arg === '--verbose' ||
-      arg.startsWith('--env-file=') ||
-      arg.startsWith('--env-path=')
-    ) {
-      continue;
-    }
-
-    return arg === 'update';
-  }
-
-  return false;
+  return getRequestedCommand(argv) === 'update';
 }
 
 export function isSuccessfulExitCode(exitCode: number | string | null | undefined): boolean {
@@ -200,7 +184,11 @@ export function addCommonOptionsRecursively(command: Command) {
   }
 
   command.hook('preAction', (thisCommand, actionCommand) => {
-    if (thisCommand.opts().verbose) {
+    const keepStructuredCodeScanOutputMuted = requestsStructuredCodeScanOutput(
+      process.argv.slice(2),
+    );
+
+    if (thisCommand.opts().verbose && !keepStructuredCodeScanOutputMuted) {
       setLogLevel('debug');
       logger.debug('Verbose mode enabled via --verbose flag');
     }
@@ -272,25 +260,36 @@ export const shutdownGracefully = async (
     });
   }
 
-  await closeDbIfOpen();
+  const dbClosePromise = closeDbIfOpen();
+  await withTimeout(dbClosePromise, 'closeDbIfOpen()');
   clearAgentCache();
 
+  let dispatcherReleased = false;
   try {
     const dispatcher = getGlobalDispatcher();
-    await withTimeout(dispatcher.destroy(), 'dispatcher.destroy()');
+    dispatcherReleased =
+      (await withTimeout(
+        dispatcher.destroy().then(() => true),
+        'dispatcher.destroy()',
+      )) ?? false;
   } catch {
     // Silently handle dispatcher destroy errors.
   }
 
+  // Keep logging available until the database cleanup settles.
+  await dbClosePromise;
+
   clearTimeout(forceExitTimeout);
 
   try {
-    if (afterResourcesReleased) {
+    if (afterResourcesReleased && dispatcherReleased) {
       await withTimeout(
         afterResourcesReleased(),
         'afterResourcesReleased()',
         afterResourcesReleasedTimeoutMs,
       );
+    } else if (afterResourcesReleased) {
+      logger.warn('Update skipped because network cleanup did not finish.');
     }
   } finally {
     logger.debug('Closing logger file transports');

@@ -3,8 +3,8 @@ import path from 'path';
 
 import Ajv from 'ajv';
 import { globSync } from 'glob';
-import yaml from 'js-yaml';
-import { describe, expect, it } from 'vitest';
+import * as yaml from 'js-yaml';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import {
   AssertionSchema,
@@ -24,7 +24,12 @@ import { dereferenceConfig } from '../../src/util/config/load';
 import { PromptConfigSchema } from '../../src/validators/prompts';
 import { createMockProvider } from '../factories/provider';
 
-import type { TestSuite, TestSuiteConfig } from '../../src/types/index';
+import type {
+  GradingResult,
+  ScoringFunction,
+  TestSuite,
+  TestSuiteConfig,
+} from '../../src/types/index';
 
 describe('AssertionSchema', () => {
   it('should validate a basic assertion', () => {
@@ -181,6 +186,315 @@ describe('isGradingResult', () => {
     expect(isGradingResult(null)).toBe(false);
   });
 
+  it('reads the score once when checking its finite numeric value', () => {
+    const readScore = vi.fn(() => 0.75);
+    const result = {
+      pass: true,
+      get score() {
+        return readScore();
+      },
+      reason: '',
+    };
+
+    expect(isGradingResult(result)).toBe(true);
+    expect(readScore).toHaveBeenCalledOnce();
+  });
+
+  it.each(['namedScores', 'namedScoreWeights'] as const)(
+    'rejects unreadable %s entries, including in nested results',
+    (field) => {
+      const result = {
+        pass: true,
+        score: 0.75,
+        reason: '',
+        [field]: {
+          get quality() {
+            throw new Error('Metric unavailable');
+          },
+        },
+      };
+      expect(isGradingResult(result)).toBe(false);
+      expect(
+        isGradingResult({ pass: true, score: 1, reason: '', componentResults: [result] }),
+      ).toBe(false);
+    },
+  );
+
+  it.each(['namedScores', 'namedScoreWeights'] as const)(
+    'accepts stable %s entry getters',
+    (field) => {
+      const result = {
+        pass: true,
+        score: 0.75,
+        reason: '',
+        [field]: {
+          get quality() {
+            return 0.75;
+          },
+        },
+      };
+      expect(isGradingResult(result)).toBe(true);
+      expect(
+        isGradingResult({ pass: true, score: 1, reason: '', componentResults: [result] }),
+      ).toBe(true);
+    },
+  );
+
+  it.each([false, true])('contains indexed child inspection errors: throws=%s', (throws) => {
+    const child = { pass: true, score: 0.75, reason: '' };
+    const components = [child];
+    Object.defineProperty(components, 0, {
+      get() {
+        if (throws) {
+          throw new Error('Child unavailable');
+        }
+        return child;
+      },
+    });
+    expect(
+      isGradingResult({ pass: true, score: 1, reason: '', componentResults: components }),
+    ).toBe(!throws);
+  });
+
+  it.each([false, true])('contains nested grade inspection errors: throws=%s', (throws) => {
+    const child = {
+      pass: true,
+      get score() {
+        if (throws) {
+          throw new Error('Score unavailable');
+        }
+        return 0.75;
+      },
+      reason: '',
+    };
+    expect(isGradingResult({ pass: true, score: 1, reason: '', componentResults: [child] })).toBe(
+      !throws,
+    );
+  });
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    'rejects nonfinite scores and metric weights: %s',
+    (value) => {
+      const result = { pass: true, score: 1, reason: '' };
+      expect(isGradingResult({ ...result, score: value })).toBe(false);
+      expect(isGradingResult({ ...result, namedScores: { quality: value } })).toBe(false);
+      expect(isGradingResult({ ...result, namedScoreWeights: { quality: value } })).toBe(false);
+      expect(
+        isGradingResult({
+          ...result,
+          componentResults: [{ ...result, componentResults: [{ ...result, score: value }] }],
+        }),
+      ).toBe(false);
+    },
+  );
+
+  it.each([
+    { componentResults: new Array(1) },
+    { componentResults: Object.assign(new Array(2), { 0: { pass: true, score: 1, reason: '' } }) },
+  ])('rejects sparse component-result arrays: %j', ({ componentResults }) => {
+    const result = { pass: true, score: 1, reason: '', componentResults };
+    expect(isGradingResult(result)).toBe(false);
+    expect(isGradingResult({ ...result, componentResults: [result] })).toBe(false);
+  });
+
+  it.each([0, 1])('rejects a component hole at index %s filled by its prototype', (index) => {
+    const child = { pass: true, score: 0.75, reason: '' };
+    const componentResults = new Array<GradingResult>(index + 1);
+    if (index > 0) {
+      componentResults[0] = child;
+    }
+    Object.setPrototypeOf(
+      componentResults,
+      Object.assign(Object.create(Array.prototype), { [index]: child }),
+    );
+    const result = { pass: true, score: 1, reason: '', componentResults };
+
+    expect(Object.hasOwn(componentResults, index)).toBe(false);
+    expect(componentResults[index]).toBe(child);
+    expect(isGradingResult(result)).toBe(false);
+    expect(isGradingResult({ ...result, componentResults: [result] })).toBe(false);
+  });
+
+  it.each(['value', 'accessor'])('accepts an own component %s with a custom prototype', (slot) => {
+    const child = { pass: true, score: 0.75, reason: '' };
+    const componentResults = [child];
+    const readChild = vi.fn(() => child);
+    Object.setPrototypeOf(
+      componentResults,
+      Object.assign(Object.create(Array.prototype), { 0: { ...child, score: Infinity } }),
+    );
+    if (slot === 'accessor') {
+      Object.defineProperty(componentResults, 0, { get: readChild });
+    }
+    const result = { pass: true, score: 1, reason: '', componentResults };
+
+    expect(isGradingResult(result)).toBe(true);
+    expect(readChild).toHaveBeenCalledTimes(slot === 'accessor' ? 1 : 0);
+    readChild.mockClear();
+    expect(isGradingResult({ ...result, componentResults: [result] })).toBe(true);
+    expect(readChild).toHaveBeenCalledTimes(slot === 'accessor' ? 1 : 0);
+  });
+
+  it.each([
+    { componentResults: new Array(1) },
+    { componentResults: [{ pass: true, score: Number.POSITIVE_INFINITY, reason: '' }] },
+  ])(
+    'rejects invalid indexed components hidden by a custom iterator: %j',
+    ({ componentResults }) => {
+      componentResults[Symbol.iterator] = function* () {
+        yield { pass: true, score: 1, reason: 'Iterator result' };
+        return undefined;
+      };
+      expect(isGradingResult({ pass: true, score: 1, reason: '', componentResults })).toBe(false);
+    },
+  );
+
+  it('validates dense indexed components without invoking their custom iterator', () => {
+    const componentResults = [{ pass: true, score: 0.75, reason: 'Indexed result' }];
+    componentResults[Symbol.iterator] = () => {
+      throw new Error('Custom iterator should not run during indexed validation');
+    };
+    expect(isGradingResult({ pass: true, score: 1, reason: '', componentResults })).toBe(true);
+  });
+
+  it('rejects direct and indirect component-result cycles', () => {
+    const result: GradingResult = { pass: true, score: 1, reason: '' };
+    result.componentResults = [result];
+    expect(isGradingResult(result)).toBe(false);
+
+    const child: GradingResult = { pass: true, score: 0.5, reason: '', componentResults: [result] };
+    result.componentResults = [child];
+    expect(isGradingResult(result)).toBe(false);
+  });
+
+  it('accepts shared children in acyclic component results', () => {
+    const child: GradingResult = { pass: true, score: 0.5, reason: '' };
+    const result: GradingResult = {
+      pass: true,
+      score: 1,
+      reason: '',
+      componentResults: [child, { ...child, componentResults: [child] }],
+    };
+    expect(isGradingResult(result)).toBe(true);
+  });
+
+  it('validates deeply nested component results', () => {
+    const leaf: GradingResult = { pass: true, score: 0.75, reason: '' };
+    let result = leaf;
+    for (let depth = 0; depth < 200; depth++) {
+      result = { pass: true, score: 1, reason: '', componentResults: [result] };
+    }
+    expect(isGradingResult(result)).toBe(true);
+    leaf.score = Number.POSITIVE_INFINITY;
+    expect(isGradingResult(result)).toBe(false);
+  });
+
+  it('avoids repeating validation for shared subtrees within a call', () => {
+    const readPass = vi.fn(() => true);
+    const leaf: GradingResult = { pass: true, score: 0.75, reason: '' };
+    // Count visits without changing the value returned by the shared leaf.
+    Object.defineProperty(leaf, 'pass', { get: readPass });
+    let result = leaf;
+    for (let depth = 0; depth < 8; depth++) {
+      result = { pass: true, score: 1, reason: '', componentResults: [result, result] };
+    }
+
+    expect(isGradingResult(result)).toBe(true);
+    expect(readPass).toHaveBeenCalledOnce();
+    leaf.score = Number.POSITIVE_INFINITY;
+    expect(isGradingResult(result)).toBe(false);
+  });
+
+  it('supports nullable optional containers in the public grading result type', () => {
+    const result: GradingResult = {
+      pass: true,
+      score: 0.75,
+      reason: '',
+      namedScores: null,
+      namedScoreWeights: null,
+      componentResults: null,
+    };
+    expect(isGradingResult(result)).toBe(true);
+  });
+
+  it.each(['namedScores', 'namedScoreWeights', 'componentResults'])(
+    'accepts null %s as absent, including nested results',
+    (field) => {
+      const result = { pass: true, score: 0.75, reason: '', [field]: null };
+      expect(isGradingResult(result)).toBe(true);
+      expect(isGradingResult({ ...result, componentResults: [result] })).toBe(true);
+    },
+  );
+
+  it.each([-2, 0, 2])('accepts finite scores outside the usual 0–1 range: %s', (score) => {
+    expect(
+      isGradingResult({
+        pass: false,
+        score,
+        reason: '',
+        namedScores: { quality: score },
+        namedScoreWeights: { quality: 0 },
+        componentResults: [{ pass: true, score, reason: '' }],
+      }),
+    ).toBe(true);
+  });
+
+  it.each([
+    [],
+    new Date(0),
+    new Map([['quality', 1]]),
+    new Set([1]),
+    { quality: '1' },
+    { quality: null },
+    { quality: undefined },
+  ])('rejects malformed named score and weight records: %j', (value) => {
+    const result = { pass: true, score: 1, reason: '' };
+    expect(isGradingResult({ ...result, namedScores: value })).toBe(false);
+    expect(isGradingResult({ ...result, namedScoreWeights: value })).toBe(false);
+  });
+
+  it.each([[], new Date(0), new Map([['quality', 1]]), new Set([1])])(
+    'rejects containers with a custom object tag: %j',
+    (value) => {
+      Object.defineProperty(value, Symbol.toStringTag, { value: 'Object' });
+      const result = { pass: true, score: 1, reason: '' };
+
+      expect(isGradingResult({ ...result, namedScores: value })).toBe(false);
+      expect(isGradingResult({ ...result, namedScoreWeights: value })).toBe(false);
+    },
+  );
+
+  it('rejects metric records with inherited custom object tags', () => {
+    const value = Object.assign(Object.create({ [Symbol.toStringTag]: 'Object' }), { quality: 1 });
+    const result = { pass: true, score: 1, reason: '' };
+
+    expect(isGradingResult({ ...result, namedScores: value })).toBe(false);
+    expect(isGradingResult({ ...result, namedScoreWeights: value })).toBe(false);
+  });
+
+  it.each([
+    { quality: 2 },
+    Object.setPrototypeOf({ quality: -2 }, null),
+    new (class {
+      quality = 0.8;
+    })(),
+  ])('accepts numeric records that serialize to object maps: %j', (value) => {
+    const result = {
+      pass: true,
+      score: 1,
+      reason: '',
+      namedScores: value,
+      namedScoreWeights: value,
+    };
+
+    expect(isGradingResult(result)).toBe(true);
+    expect(JSON.parse(JSON.stringify(result))).toEqual({
+      ...result,
+      namedScores: { quality: value.quality },
+      namedScoreWeights: { quality: value.quality },
+    });
+  });
+
   it('should return false for non-object', () => {
     expect(isGradingResult('not an object')).toBe(false);
     expect(isGradingResult(123)).toBe(false);
@@ -260,6 +574,29 @@ describe('TestCaseSchema assertScoringFunction', () => {
       vars: { input: 'test' },
     };
     expect(() => TestCaseSchema.parse(testCase)).not.toThrow('Invalid test case schema');
+  });
+
+  it('should expose cached tokens and request counts to typed scoring functions', async () => {
+    const scoringFunction: ScoringFunction = (_scores, context) => ({
+      pass: (context?.tokensUsed?.numRequests ?? 0) > 0,
+      score: context?.tokensUsed?.cached ?? 0,
+      reason: 'Used the documented token accounting fields',
+    });
+
+    const result = await scoringFunction(
+      {},
+      {
+        tokensUsed: {
+          total: 3,
+          prompt: 2,
+          completion: 1,
+          cached: 1,
+          numRequests: 1,
+        },
+      },
+    );
+
+    expect(result).toMatchObject({ pass: true, score: 1 });
   });
 
   it('should validate test case with missing assertScoringFunction', () => {
@@ -358,11 +695,19 @@ describe('TestCaseSchema options (merged schema properties)', () => {
       options: {
         disableVarExpansion: true,
         disableConversationVar: true,
+        repeat: 3,
         runSerially: true,
       },
     };
     expect(() => TestCaseSchema.parse(testCase)).not.toThrow();
   });
+
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1])(
+    'should reject invalid per-test repeat %s',
+    (repeat) => {
+      expect(TestCaseSchema.safeParse({ options: { repeat } }).success).toBe(false);
+    },
+  );
 
   it('should validate options combining properties from ALL merged schemas', () => {
     // This is the critical test - properties from different sub-schemas must work together
@@ -702,11 +1047,44 @@ describe('CommandLineOptionsSchema', () => {
       filterProviders: 'provider1',
       filterRange: '1:3',
       filterSample: 5,
+      filterSampleSeed: 42,
       filterTargets: 'target1',
     };
     expect(() => CommandLineOptionsSchema.parse(options)).not.toThrow(
       'Invalid command line options',
     );
+  });
+
+  it('should coerce numeric filter sample seed arguments to numbers', () => {
+    expect(
+      CommandLineOptionsSchema.parse({
+        providers: ['provider1'],
+        output: ['output1'],
+        filterSampleSeed: '42',
+      }),
+    ).toMatchObject({
+      filterSampleSeed: 42,
+    });
+  });
+
+  it('should reject nonnumeric filter sample seeds', () => {
+    expect(() =>
+      CommandLineOptionsSchema.parse({
+        providers: ['provider1'],
+        output: ['output1'],
+        filterSampleSeed: 'repeatable-run',
+      }),
+    ).toThrow();
+  });
+
+  it('should reject unsafe integer filter sample seeds', () => {
+    expect(() =>
+      CommandLineOptionsSchema.parse({
+        providers: ['provider1'],
+        output: ['output1'],
+        filterSampleSeed: Number.MAX_SAFE_INTEGER + 1,
+      }),
+    ).toThrow();
   });
 
   it('should reject invalid filterRange values', () => {
@@ -851,6 +1229,23 @@ describe('TestSuiteConfigSchema', () => {
         : { id: 'test-provider', config: { someConfig: true } };
 
       expect(Object.keys(testProvider)).toContain('env');
+    });
+  });
+
+  describe('tracing property', () => {
+    it('defaults the OTLP HTTP receiver to loopback', () => {
+      const result = TestSuiteConfigSchema.parse({
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: {},
+          },
+        },
+      });
+
+      expect(result.tracing?.otlp?.http?.host).toBe('127.0.0.1');
     });
   });
 

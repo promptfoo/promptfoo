@@ -141,6 +141,13 @@ describe('OpenAI Provider', () => {
 
       const result = await provider.callApi('Test prompt');
 
+      expect(OpenAI).toHaveBeenCalledWith(
+        expect.objectContaining({
+          defaultHeaders: expect.objectContaining({
+            'X-OpenAI-Originator': 'promptfoo',
+          }),
+        }),
+      );
       expect(result.output).toBe('[Assistant] Test response');
       expect(mockClient.beta.threads.createAndRun).toHaveBeenCalledTimes(1);
       expect(mockClient.beta.threads.runs.retrieve).toHaveBeenCalledTimes(1);
@@ -148,7 +155,82 @@ describe('OpenAI Provider', () => {
       expect(mockClient.beta.threads.messages.retrieve).toHaveBeenCalledTimes(1);
     });
 
-    it('emits a chat <model> span around the assistant run', async () => {
+    it('drops the SDK organization option when a case-variant org header overrides it', async () => {
+      const mockRun = { id: 'run_123', thread_id: 'thread_123', status: 'completed' };
+      const mockSteps = {
+        data: [
+          {
+            id: 'step_1',
+            step_details: { type: 'message_creation', message_creation: { message_id: 'msg_1' } },
+          },
+        ],
+      };
+      const mockMessage = {
+        role: 'assistant',
+        content: [{ type: 'text', text: { value: 'Test response' } }],
+      };
+      mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.retrieve.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.steps.list.mockResolvedValue(mockSteps);
+      mockClient.beta.threads.messages.retrieve.mockResolvedValue(mockMessage);
+
+      const overrideProvider = new OpenAiAssistantProvider('test-assistant-id', {
+        config: {
+          apiKey: 'test-key',
+          organization: 'test-org',
+          headers: { 'openai-organization': 'custom-org' },
+        },
+      });
+
+      await overrideProvider.callApi('Test prompt');
+
+      // The SDK would otherwise inject its own canonical OpenAI-Organization header
+      // from `organization`, duplicating (and beating) the custom override.
+      expect(OpenAI).toHaveBeenCalledWith(
+        expect.objectContaining({
+          organization: undefined,
+          defaultHeaders: expect.objectContaining({ 'openai-organization': 'custom-org' }),
+        }),
+      );
+      const sdkArgs = vi.mocked(OpenAI).mock.calls.at(-1)?.[0] as { defaultHeaders: object };
+      expect(sdkArgs.defaultHeaders).not.toHaveProperty('OpenAI-Organization');
+    });
+
+    it('passes custom gateway query credentials through the SDK default query', async () => {
+      const mockRun = { id: 'run_123', thread_id: 'thread_123', status: 'completed' };
+      const mockSteps = {
+        data: [
+          {
+            id: 'step_1',
+            step_details: { type: 'message_creation', message_creation: { message_id: 'msg_1' } },
+          },
+        ],
+      };
+      mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.retrieve.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.steps.list.mockResolvedValue(mockSteps);
+      mockClient.beta.threads.messages.retrieve.mockResolvedValue({
+        role: 'assistant',
+        content: [{ type: 'text', text: { value: 'Test response' } }],
+      });
+      const gatewayProvider = new OpenAiAssistantProvider('test-assistant-id', {
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl: 'https://gateway.example/v1?api_key=tenant-secret&region=west',
+        },
+      });
+
+      await gatewayProvider.callApi('Test prompt');
+
+      expect(OpenAI).toHaveBeenCalledWith(
+        expect.objectContaining({
+          baseURL: 'https://gateway.example/v1',
+          defaultQuery: { api_key: 'tenant-secret', region: 'west' },
+        }),
+      );
+    });
+
+    it('emits an agent invocation span around the assistant run', async () => {
       const spans = installTracerSpy();
       const mockRun = { id: 'run_123', thread_id: 'thread_123', status: 'completed' };
       const mockSteps = {
@@ -173,19 +255,21 @@ describe('OpenAI Provider', () => {
       });
       await localProvider.callApi('Test prompt');
 
-      const chatSpan = spans.find((span) => span.name === 'chat test-assistant-id');
-      expect(chatSpan).toBeDefined();
-      expect(chatSpan?.attributes).toMatchObject({
-        'gen_ai.system': 'openai',
-        'gen_ai.operation.name': 'chat',
-        'gen_ai.request.model': 'test-assistant-id',
+      const agentSpan = spans.find((span) => span.name === 'invoke_agent');
+      expect(agentSpan).toBeDefined();
+      expect(agentSpan?.attributes).toMatchObject({
+        'gen_ai.provider.name': 'openai',
+        'gen_ai.operation.name': 'invoke_agent',
+        'gen_ai.agent.id': 'test-assistant-id',
       });
-      expect(chatSpan?.ended).toBe(true);
+      expect(agentSpan?.attributes).not.toHaveProperty('gen_ai.agent.name');
+      expect(agentSpan?.attributes).not.toHaveProperty('gen_ai.request.model');
+      expect(agentSpan?.ended).toBe(true);
       // SpanStatusCode.OK === 1
-      expect(chatSpan?.status?.code).toBe(1);
+      expect(agentSpan?.status?.code).toBe(1);
     });
 
-    it('marks the chat span ERROR when the assistant run fails', async () => {
+    it('marks the agent invocation span ERROR when the assistant run fails', async () => {
       const spans = installTracerSpy();
       mockClient.beta.threads.createAndRun.mockRejectedValue(new Error('assistant boom'));
 
@@ -195,11 +279,11 @@ describe('OpenAI Provider', () => {
       const result = await localProvider.callApi('Test prompt');
       expect(result.error).toBeDefined();
 
-      const chatSpan = spans.find((span) => span.name === 'chat test-assistant-id');
-      expect(chatSpan).toBeDefined();
+      const agentSpan = spans.find((span) => span.name === 'invoke_agent');
+      expect(agentSpan).toBeDefined();
       // SpanStatusCode.ERROR === 2
-      expect(chatSpan?.status?.code).toBe(2);
-      expect(chatSpan?.ended).toBe(true);
+      expect(agentSpan?.status?.code).toBe(2);
+      expect(agentSpan?.ended).toBe(true);
     });
 
     it('should preserve an explicit temperature of 0', async () => {

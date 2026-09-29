@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, type MockedFunction, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type MockedFunction, vi } from 'vitest';
 
 vi.mock('../../src/util/fetch/index', () => ({
   fetchWithTimeout: vi.fn(),
@@ -20,6 +20,11 @@ import { fetchWithTimeout } from '../../src/util/fetch/index';
 
 const mockFetchWithTimeout = fetchWithTimeout as MockedFunction<typeof fetchWithTimeout>;
 const mockSemverGt = semver.gt as MockedFunction<typeof semver.gt>;
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
 
 describe('checkForUpdates', () => {
   beforeEach(() => {

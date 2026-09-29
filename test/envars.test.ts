@@ -2,11 +2,12 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import cliState from '../src/cliState';
 import {
   getEnvBool,
-  getEnvBoolFromEnvironment,
   getEnvFloat,
   getEnvInt,
+  getEnvOverrides,
   getEnvString,
   getMaxEvalTimeMs,
+  getProcessEnv,
   isCI,
 } from '../src/envars';
 import { setEnvOverridesProvider } from '../src/envOverrides';
@@ -154,14 +155,50 @@ describe('envars', () => {
     it('should auto-register the provider when cliState is imported', async () => {
       vi.resetModules();
 
-      const [dynEnvOverrides, dynCliState] = await Promise.all([
-        import('../src/envOverrides'),
-        import('../src/cliState'),
-      ]);
+      // Resolve pending mock cleanup before importing cliState again.
+      const dynEnvars = await import('../src/envars');
+      const dynCliState = await import('../src/cliState');
 
       dynCliState.default.config = { env: { OPENAI_API_KEY: 'wired-key' } };
 
-      expect(dynEnvOverrides.getEnvOverrides()).toEqual({ OPENAI_API_KEY: 'wired-key' });
+      expect(dynEnvars.getEnvOverrides()).toEqual({ OPENAI_API_KEY: 'wired-key' });
+    });
+  });
+
+  describe('invocation environment views', () => {
+    it('keeps child-process and suite environments separate without changing process.env', () => {
+      mockProcessEnv({ CONTRACT_PARENT: 'parent', CONTRACT_INHERITED: 'parent' });
+      const suite = { CONTRACT_PARENT: 'suite', CONTRACT_SUITE_ONLY: 'suite' };
+      const file = {
+        CONTRACT_PARENT: 'file',
+        CONTRACT_FILE_ONLY: 'file',
+        CONTRACT_INHERITED: undefined,
+      };
+      setEnvOverridesProvider((layer) => (layer === 'suite' ? suite : file));
+
+      expect(getEnvOverrides()).toBe(suite);
+      expect(getEnvOverrides('file')).toBe(file);
+      const inherited = getProcessEnv();
+      expect(inherited).toMatchObject({
+        CONTRACT_PARENT: 'file',
+        CONTRACT_FILE_ONLY: 'file',
+        CONTRACT_INHERITED: 'parent',
+      });
+      expect(inherited).not.toHaveProperty('CONTRACT_SUITE_ONLY');
+      expect(process.env.CONTRACT_PARENT).toBe('parent');
+      expect(process.env).not.toHaveProperty('CONTRACT_FILE_ONLY');
+    });
+
+    it('keeps the parent environment when no invocation provider can supply overrides', () => {
+      setEnvOverridesProvider(undefined);
+      expect(getEnvOverrides()).toBeUndefined();
+      expect(getProcessEnv()).toBe(process.env);
+
+      setEnvOverridesProvider(() => {
+        throw new Error('unavailable');
+      });
+      expect(getEnvOverrides('file')).toBeUndefined();
+      expect(getProcessEnv()).toBe(process.env);
     });
   });
 
@@ -176,21 +213,6 @@ describe('envars', () => {
     it('should explicitly treat "yeppers" as a truthy value', () => {
       mockProcessEnv({ PROMPTFOO_CACHE_ENABLED: 'yeppers' });
       expect(getEnvBool('PROMPTFOO_CACHE_ENABLED')).toBe(true);
-    });
-
-    it('should read a trusted source environment without config overrides', () => {
-      cliState.config = {
-        env: {
-          PROMPTFOO_ENABLE_AUTO_UPDATE: true as any,
-        },
-      };
-
-      expect(getEnvBoolFromEnvironment('PROMPTFOO_ENABLE_AUTO_UPDATE', {})).toBe(false);
-      expect(
-        getEnvBoolFromEnvironment('PROMPTFOO_ENABLE_AUTO_UPDATE', {
-          PROMPTFOO_ENABLE_AUTO_UPDATE: 'yes',
-        }),
-      ).toBe(true);
     });
 
     it('should return false for falsy string values', () => {
@@ -264,20 +286,20 @@ describe('envars', () => {
   describe('getInitialProcessEnvironment', () => {
     it('captures process values before dotenv loads project values', async () => {
       mockProcessEnv({ PROMPTFOO_ENABLE_AUTO_UPDATE: undefined });
-      vi.doMock('dotenv', () => ({
-        default: {
-          config: vi.fn(() => {
-            vi.stubEnv('PROMPTFOO_ENABLE_AUTO_UPDATE', '1');
-          }),
-        },
+      vi.doMock('../src/util/envFile', () => ({
+        loadEnvFiles: vi.fn(() => {
+          vi.stubEnv('PROMPTFOO_ENABLE_AUTO_UPDATE', '1');
+        }),
       }));
 
       await import('../src/envars');
-      const { getInitialProcessEnvironment } = await import('../src/initialProcessEnvironment');
+      const { getInitialProcessEnvironment } = await import(
+        '../src/updates/initialProcessEnvironment'
+      );
 
       expect(process.env.PROMPTFOO_ENABLE_AUTO_UPDATE).toBe('1');
       expect(getInitialProcessEnvironment().PROMPTFOO_ENABLE_AUTO_UPDATE).toBeUndefined();
-      vi.doUnmock('dotenv');
+      vi.doUnmock('../src/util/envFile');
     });
   });
 

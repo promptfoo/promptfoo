@@ -38,4 +38,22 @@ describe('ProvidersListSection', () => {
 
     expect(onChange).toHaveBeenCalledWith([providers[1]]);
   });
+
+  it('labels native Codex Security providers separately from OpenAI foundation models', () => {
+    render(
+      <ProvidersListSection
+        providers={[
+          {
+            id: 'openai:codex-security:gpt-5.6-luna',
+            label: 'Deep repository scan',
+            config: { operation: 'deep-security-scan' },
+          },
+        ]}
+        onChange={onChange}
+      />,
+    );
+
+    expect(screen.getByText('Codex Security SDK')).toBeInTheDocument();
+    expect(screen.queryByText('OpenAI')).not.toBeInTheDocument();
+  });
 });
