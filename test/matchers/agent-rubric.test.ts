@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAgentWorkspace } from '../../src/providers/agentWorkspace';
 
 import type { ApiProvider, ProviderResponse } from '../../src/types/index';
@@ -48,6 +48,10 @@ vi.mock('../../src/providers/index', () => ({
 }));
 
 describe('matchesAgentRubric', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   beforeEach(() => {
     vi.resetAllMocks();
     const agentResponse = async (): Promise<ProviderResponse> => ({
@@ -232,5 +236,33 @@ describe('matchesAgentRubric', () => {
 
     const [, context] = vi.mocked(mocks.codexProvider.callApi).mock.calls[0];
     expect(context?.prompt).not.toHaveProperty('config');
+  });
+
+  it('does not follow a workspace that the target replaced with a link', async () => {
+    if (process.platform === 'win32') {
+      return;
+    }
+    const { matchesAgentRubric } = await import('../../src/matchers/agent');
+    const source = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-rubric-fixture-'));
+    const workspace = await createAgentWorkspace(source, 'copy');
+    try {
+      fs.rmSync(workspace.dir, { recursive: true });
+      fs.symlinkSync(source, workspace.dir);
+      await matchesAgentRubric(
+        'Check the file',
+        'Done',
+        {},
+        {},
+        undefined,
+        undefined,
+        workspace.dir,
+      );
+
+      const [, context] = vi.mocked(mocks.codexProvider.callApi).mock.calls[0];
+      expect(context?.prompt).not.toHaveProperty('config');
+    } finally {
+      await workspace.remove();
+      fs.rmSync(source, { recursive: true, force: true });
+    }
   });
 });

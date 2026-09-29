@@ -34,15 +34,6 @@ function git(cwd: string, ...args: string[]): string {
   ).trim();
 }
 
-function gitSupportsAttrSource(): boolean {
-  const [major, minor] = (
-    /(\d+)\.(\d+)/.exec(execFileSync('git', ['--version'], { encoding: 'utf8' })) ?? []
-  )
-    .slice(1)
-    .map(Number);
-  return major > 2 || (major === 2 && minor >= 41);
-}
-
 function listFiles(dir: string): string[] {
   return fs.readdirSync(dir, { recursive: true, encoding: 'utf8' }).sort();
 }
@@ -219,10 +210,7 @@ describe('agent workspaces', () => {
 
       expect(workspaceDiff).toContain('+changed');
       expect(listFiles(path.join(source, '.git'))).toEqual(gitFilesBefore);
-      // Git 2.41+ reads attributes from the cloned commit, which selects no filter.
-      if (gitSupportsAttrSource()) {
-        expect(fs.existsSync(marker)).toBe(false);
-      }
+      expect(fs.existsSync(marker)).toBe(false);
     });
 
     it('ignores links the agent plants next to its workspace', async () => {
@@ -247,6 +235,26 @@ describe('agent workspaces', () => {
       expect(workspaceDiff).toContain('+changed');
       expect(fs.readFileSync(victim, 'utf8')).toBe('keep me\n');
       expect(fs.readdirSync(victimDir)).toEqual([]);
+    });
+
+    it('does not invoke user git filters while diffing agent-controlled files', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source, { '.gitattributes': '*.txt filter=user\n' });
+      const workspace = await create(source);
+      const marker = path.join(root, 'filter-ran');
+      const filter = path.join(root, 'filter.cjs');
+      write(filter, `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'ran');`);
+      const userConfig = path.join(root, 'user.gitconfig');
+      write(userConfig, `[filter "user"]\n clean = node "${filter.split(path.sep).join('/')}"\n`);
+      write(path.join(workspace.dir, 'src', 'app.txt'), 'changed\n');
+      const restoreEnv = mockProcessEnv({ GIT_CONFIG_GLOBAL: userConfig });
+      try {
+        const { workspaceDiff } = await workspace.metadata();
+        expect(fs.existsSync(marker)).toBe(false);
+        expect(workspaceDiff).toContain('+changed');
+      } finally {
+        restoreEnv();
+      }
     });
 
     it('does not diff a workspace the agent replaced with a link', async () => {
@@ -412,6 +420,57 @@ describe('agent workspaces', () => {
       );
     });
 
+    it('rejects relative links that escape through another link', async () => {
+      if (process.platform === 'win32') {
+        return;
+      }
+      const source = path.join(root, 'fixture');
+      write(path.join(root, 'outside.txt'), 'outside\n');
+      fs.mkdirSync(source);
+      fs.symlinkSync('.', path.join(source, 'alias'));
+      // Lexically inside fixture, but alias resolves before .. is traversed.
+      fs.symlinkSync('alias/../outside.txt', path.join(source, 'escape'));
+
+      await expect(create(source, 'copy')).rejects.toThrow('links outside working_dir');
+    });
+
+    it('rejects copied git metadata that redirects its working tree to the source', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      git(source, 'config', 'core.worktree', source);
+      write(path.join(source, 'README.md'), 'uncommitted\n');
+
+      await expect(create(source)).rejects.toThrow('core.worktree');
+      expect(fs.readFileSync(path.join(source, 'README.md'), 'utf8')).toBe('uncommitted\n');
+    });
+
+    it('keeps a relative git working tree inside the copy', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      git(source, 'config', 'core.worktree', '..');
+      write(path.join(source, 'README.md'), 'uncommitted\n');
+
+      const workspace = await create(source);
+      git(workspace.dir, 'checkout', '--', 'README.md');
+
+      expect(fs.readFileSync(path.join(workspace.dir, 'README.md'), 'utf8')).toBe('original\n');
+      expect(fs.readFileSync(path.join(source, 'README.md'), 'utf8')).toBe('uncommitted\n');
+    });
+
+    it('rejects copied git metadata with a shared common directory', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const linked = path.join(root, 'linked');
+      git(source, 'worktree', 'add', '-q', linked, '-b', 'feature');
+      const gitDir = git(linked, 'rev-parse', '--absolute-git-dir');
+      fs.unlinkSync(path.join(linked, '.git'));
+      fs.cpSync(gitDir, path.join(linked, '.git'), { recursive: true });
+      // A directory-shaped gitdir can still share HEAD, refs, and objects elsewhere.
+      fs.writeFileSync(path.join(linked, '.git', 'commondir'), path.join(source, '.git'));
+
+      await expect(create(linked, 'copy')).rejects.toThrow('shares a git common directory');
+    });
+
     it('rejects special files', async () => {
       if (process.platform === 'win32') {
         return;
@@ -496,6 +555,31 @@ describe('agent workspaces', () => {
         assertIsolatedWorkingDir({ working_dir: workspace.dir, copy_working_dir: true }),
       ).toThrow(message);
     });
+
+    it.each(['workspace', 'parent'])(
+      'rejects a live workspace whose %s was replaced with a link',
+      async (part) => {
+        if (process.platform === 'win32') {
+          return;
+        }
+        const source = path.join(root, 'fixture');
+        write(path.join(source, 'file.txt'), 'content\n');
+        const workspace = await create(source, 'copy');
+        const replaced = part === 'workspace' ? workspace.dir : path.dirname(workspace.dir);
+        const moved = `${replaced}-moved`;
+        fs.renameSync(replaced, moved);
+        fs.symlinkSync(moved, replaced);
+        try {
+          expect(isAgentWorkspace(workspace.dir)).toBe(false);
+          expect(() =>
+            assertIsolatedWorkingDir({ working_dir: workspace.dir, copy_working_dir: true }),
+          ).toThrow('This call was not made by an eval step');
+        } finally {
+          fs.unlinkSync(replaced);
+          fs.renameSync(moved, replaced);
+        }
+      },
+    );
   });
 
   describe('createAgentWorkspaceForConfig', () => {

@@ -10,7 +10,7 @@
  * A workspace keeps one call from affecting another; it is not a security sandbox.
  */
 import { execFile } from 'node:child_process';
-import { rmSync } from 'node:fs';
+import { lstatSync, realpathSync, rmSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -85,7 +85,16 @@ export function getCopyWorkingDirMode(value: unknown): AgentWorkspaceMode | unde
 
 /** Whether `dir` is a workspace that this process created and has not removed. */
 export function isAgentWorkspace(dir: string): boolean {
-  return liveWorkspaces.has(path.resolve(dir));
+  const resolved = path.resolve(dir);
+  if (!liveWorkspaces.has(resolved)) {
+    return false;
+  }
+  try {
+    // The agent can replace the workspace or its parent with a link after its call.
+    return lstatSync(resolved).isDirectory() && realpathSync(resolved) === resolved;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -178,8 +187,34 @@ async function assertCopyable(entry: string, root: string): Promise<boolean> {
   const stat = await fs.lstat(entry);
   if (stat.isSymbolicLink()) {
     const target = await fs.readlink(entry);
-    if (path.isAbsolute(target) || !isInside(root, path.resolve(path.dirname(entry), target))) {
+    if (
+      path.isAbsolute(target) ||
+      !isInside(root, path.resolve(path.dirname(entry), target)) ||
+      !isInside(root, await fs.realpath(entry))
+    ) {
       throw new Error(`copy_working_dir cannot copy ${entry}: it links outside working_dir`);
+    }
+  } else if (stat.isDirectory() && path.basename(entry) === '.git') {
+    const worktree = (
+      await git([
+        '--git-dir',
+        entry,
+        'config',
+        '--includes',
+        '--default',
+        '',
+        '--get',
+        'core.worktree',
+      ])
+    ).trim();
+    if (worktree && (path.isAbsolute(worktree) || !isInside(root, path.resolve(entry, worktree)))) {
+      throw new Error(
+        `copy_working_dir cannot copy ${entry}: core.worktree would point outside the copy. ` +
+          'Commit the changes so working_dir is cloned instead.',
+      );
+    }
+    if (await fs.lstat(path.join(entry, 'commondir')).catch(() => undefined)) {
+      throw new Error(`copy_working_dir cannot copy ${entry}: it shares a git common directory`);
     }
   } else if (stat.isFile() && path.basename(entry) === '.git') {
     // A git worktree or submodule points at another repository, which the copy would share.
@@ -220,20 +255,30 @@ function registerExitCleanup(): void {
  *   workspace's `.git`, whose config could define commands for git to run.
  * - The scratch repository reads the cloned commit from the source repository's objects,
  *   which git never writes to, so nothing is written to the source repository.
- * - Attributes come from the cloned commit (git 2.41+), so the agent cannot use a
- *   `.gitattributes` file to run a filter from the user's git config on its files.
+ * - User/system Git config and templates are disabled so attributes cannot invoke a
+ *   configured filter on agent-controlled files. Attributes come from the cloned commit.
  */
 async function getWorkspaceDiff(dir: string, repo: RepositoryState): Promise<string> {
-  if ((await fs.lstat(dir)).isSymbolicLink()) {
+  if (!isAgentWorkspace(dir)) {
     // Otherwise the diff would copy whatever the link points to into the results.
     throw new Error('the workspace directory was replaced by a link');
   }
   const scratch = await fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-workspace-diff-'));
   try {
     const gitDir = path.join(scratch, 'git');
-    await git(['init', '--quiet', '--bare', gitDir]);
+    const isolatedConfig = {
+      GIT_CONFIG_GLOBAL: os.devNull,
+      GIT_CONFIG_NOSYSTEM: '1',
+      GIT_TEMPLATE_DIR: '',
+    };
+    await git(['init', '--quiet', '--bare', gitDir], { env: isolatedConfig });
     await fs.writeFile(path.join(gitDir, 'objects', 'info', 'alternates'), `${repo.objectsDir}\n`);
-    const env = { GIT_DIR: gitDir, GIT_WORK_TREE: dir, GIT_ATTR_SOURCE: repo.head };
+    const env = {
+      ...isolatedConfig,
+      GIT_DIR: gitDir,
+      GIT_WORK_TREE: dir,
+      GIT_ATTR_SOURCE: repo.head,
+    };
     await git(['read-tree', repo.head], { env });
     await git(['-c', 'core.fsmonitor=false', 'add', '--all'], { env });
     const diff = await git(
