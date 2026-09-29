@@ -401,48 +401,41 @@ function writeConsumerScripts(consumerDir: string): void {
     "  throw new Error('Missing MCP auth JSON Schema export');",
     '}',
   ];
-  fs.writeFileSync(
-    path.join(consumerDir, 'import-package.mjs'),
-    [
-      "import { AssertionSchema, AtomicTestCaseSchema, TestSuiteSchema } from 'promptfoo';",
-      "import { EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator } from 'promptfoo/contracts';",
-      "import { McpAuthInputJsonSchema, McpAuthInputSchema, McpAuthSchema } from 'promptfoo/contracts';",
-      "import { McpConfigInputJsonSchema, McpConfigInputSchema, McpConfigSchema } from 'promptfoo/contracts';",
-      "import { HttpAuthInputSchema, HttpProviderConfigInputSchema, HttpProviderConfigInputJsonSchema } from 'promptfoo/contracts';",
-      '',
-      'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
-      "  if (!value || typeof value.safeParse !== 'function') {",
-      "    throw new Error('Missing expected ESM schema export');",
-      '  }',
-      '}',
-      'if (!hasFunctionToolCallValidator({ validateFunctionToolCall() {} })) {',
-      "  throw new Error('Missing expected ESM provider capability export');",
-      '}',
-      ...authAssertions,
-      '',
-    ].join('\n'),
-  );
-  fs.writeFileSync(
-    path.join(consumerDir, 'require-package.cjs'),
-    [
-      "const { AssertionSchema, AtomicTestCaseSchema, TestSuiteSchema } = require('promptfoo');",
-      "const { EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator } = require('promptfoo/contracts');",
-      "const { McpAuthInputJsonSchema, McpAuthInputSchema, McpAuthSchema } = require('promptfoo/contracts');",
-      "const { McpConfigInputJsonSchema, McpConfigInputSchema, McpConfigSchema } = require('promptfoo/contracts');",
-      "const { HttpAuthInputSchema, HttpProviderConfigInputSchema, HttpProviderConfigInputJsonSchema } = require('promptfoo/contracts');",
-      '',
-      'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
-      "  if (!value || typeof value.safeParse !== 'function') {",
-      "    throw new Error('Missing expected CJS schema export');",
-      '  }',
-      '}',
-      'if (!hasFunctionToolCallValidator({ validateFunctionToolCall() {} })) {',
-      "  throw new Error('Missing expected CJS provider capability export');",
-      '}',
-      ...authAssertions,
-      '',
-    ].join('\n'),
-  );
+  for (const filename of ['import-package.mjs', 'require-package.cjs']) {
+    const imports = [
+      ['promptfoo', 'AssertionSchema, AtomicTestCaseSchema, TestSuiteSchema'],
+      [
+        'promptfoo/contracts',
+        'EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator',
+      ],
+      ['promptfoo/contracts', 'McpAuthInputJsonSchema, McpAuthInputSchema, McpAuthSchema'],
+      ['promptfoo/contracts', 'McpConfigInputJsonSchema, McpConfigInputSchema, McpConfigSchema'],
+      [
+        'promptfoo/contracts',
+        'HttpAuthInputSchema, HttpProviderConfigInputSchema, HttpProviderConfigInputJsonSchema',
+      ],
+    ].map(([specifier, names]) =>
+      filename.endsWith('.mjs')
+        ? `import { ${names} } from '${specifier}';`
+        : `const { ${names} } = require('${specifier}');`,
+    );
+    fs.writeFileSync(
+      path.join(consumerDir, filename),
+      [
+        ...imports,
+        'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
+        "  if (!value || typeof value.safeParse !== 'function') {",
+        "    throw new Error('Missing expected schema export');",
+        '  }',
+        '}',
+        'if (!hasFunctionToolCallValidator({ validateFunctionToolCall() {} })) {',
+        "  throw new Error('Missing expected provider capability export');",
+        '}',
+        ...authAssertions,
+        '',
+      ].join('\n'),
+    );
+  }
   fs.writeFileSync(
     path.join(consumerDir, 'import-contracts.ts'),
     [
@@ -481,24 +474,24 @@ function writeConsumerScripts(consumerDir: string): void {
       '',
     ].join('\n'),
   );
-  // The root API exposes Eval's ORM methods. Drizzle's declarations pull unrelated optional
-  // database drivers and have upstream type errors; check caller code with skipLibCheck while
-  // keeping the portable contracts checks above fully strict.
-  for (const [mode, module] of [
-    ['esm', 'NodeNext'],
-    ['cjs', 'Node16'],
-  ]) {
+  // Only root API callers skip Drizzle's broken optional-driver declarations.
+  for (const [config, file, module, skipLibCheck] of [
+    ['tsconfig.json', 'import-contracts.ts', 'NodeNext', false],
+    ['tsconfig.node16-cjs.json', 'require-contracts.cts', 'Node16', false],
+    ['tsconfig.api-esm.json', 'import-api.ts', 'NodeNext', true],
+    ['tsconfig.api-cjs.json', 'require-api.cts', 'Node16', true],
+  ] as const) {
     fs.writeFileSync(
-      path.join(consumerDir, `tsconfig.api-${mode}.json`),
+      path.join(consumerDir, config),
       JSON.stringify({
         compilerOptions: {
           module,
           moduleResolution: module,
           noEmit: true,
           strict: true,
-          skipLibCheck: true,
+          skipLibCheck,
         },
-        include: [mode === 'esm' ? 'import-api.ts' : 'require-api.cts'],
+        include: [file],
       }),
     );
   }
@@ -540,18 +533,6 @@ function writeConsumerScripts(consumerDir: string): void {
     ].join('\n'),
   );
   fs.writeFileSync(
-    path.join(consumerDir, 'tsconfig.json'),
-    JSON.stringify({
-      compilerOptions: {
-        module: 'NodeNext',
-        moduleResolution: 'NodeNext',
-        noEmit: true,
-        strict: true,
-      },
-      include: ['import-contracts.ts'],
-    }),
-  );
-  fs.writeFileSync(
     path.join(consumerDir, 'require-contracts.cts'),
     [
       "import contracts = require('promptfoo/contracts');",
@@ -581,18 +562,6 @@ function writeConsumerScripts(consumerDir: string): void {
       '}',
       '',
     ].join('\n'),
-  );
-  fs.writeFileSync(
-    path.join(consumerDir, 'tsconfig.node16-cjs.json'),
-    JSON.stringify({
-      compilerOptions: {
-        module: 'Node16',
-        moduleResolution: 'Node16',
-        noEmit: true,
-        strict: true,
-      },
-      include: ['require-contracts.cts'],
-    }),
   );
 }
 
