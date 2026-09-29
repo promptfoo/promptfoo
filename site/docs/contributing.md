@@ -136,7 +136,7 @@ Don't hesitate to ask for help. We're here to support you. If you're worried abo
 
 ### Running Tests
 
-We use both Vitest and Jest. To run the test suite:
+We use Vitest. To run the test suite:
 
 ```bash
 npm test
@@ -151,11 +151,7 @@ npm run test:watch
 You can also run specific tests with:
 
 ```bash
-# Vitest
 npx vitest [pattern]
-
-# Jest
-npx jest [pattern]
 
 # Example:
 # Runs all provider tests
@@ -166,10 +162,10 @@ npx vitest providers
 
 When writing tests, please:
 
-- **Use Vitest for new test files.** When modifying existing files, use whichever framework that file uses.
+- **Use Vitest for tests in `test/`, `src/app/`, and `site/`.**
 - Ensure proper test isolation by:
   - Using `beforeEach` and `afterEach` to set up and clean up mocks
-  - Calling `vi.clearAllMocks()` or `vi.restoreAllMocks()` for Vitest (or `jest.clearAllMocks()` for Jest)
+  - Calling `vi.clearAllMocks()` or `vi.restoreAllMocks()`
   - Avoiding shared state between tests
 - Check the coverage report to ensure your changes are covered.
 - Avoid adding additional logs to the console.

@@ -61,10 +61,10 @@ OpenClaw exposes five provider types, each targeting a different gateway API sur
 
 | Provider    | Format                         | API                    | Use Case                                             |
 | ----------- | ------------------------------ | ---------------------- | ---------------------------------------------------- |
-| Chat        | `openclaw:main`                | `/v1/chat/completions` | Standard chat completions (default)                  |
-| Responses   | `openclaw:responses:main`      | `/v1/responses`        | OpenResponses-compatible API with item-based inputs  |
-| Embeddings  | `openclaw:embedding:main`      | `/v1/embeddings`       | OpenAI-compatible embeddings through an agent target |
-| Agent       | `openclaw:agent:main`          | WebSocket RPC          | Full agent streaming via native WS protocol          |
+| Chat        | `openclaw`                     | `/v1/chat/completions` | Standard chat completions (default)                  |
+| Responses   | `openclaw:responses`           | `/v1/responses`        | OpenResponses-compatible API with item-based inputs  |
+| Embeddings  | `openclaw:embedding`           | `/v1/embeddings`       | OpenAI-compatible embeddings through an agent target |
+| Agent       | `openclaw:agent`               | WebSocket RPC          | Full agent streaming via native WS protocol          |
 | Tool Invoke | `openclaw:tools:sessions_list` | `/tools/invoke`        | Direct tool invocation for stable built-in tools     |
 
 ### Chat (default)
@@ -72,12 +72,32 @@ OpenClaw exposes five provider types, each targeting a different gateway API sur
 Uses the OpenAI-compatible chat completions endpoint. This is the default when no keyword is specified.
 Requires `gateway.http.endpoints.chatCompletions.enabled=true`.
 
-- `openclaw` - Uses the default agent
+- `openclaw` - Uses the gateway's default HTTP route (see compatibility below)
 - `openclaw:main` - Explicitly targets the main agent
 - `openclaw:<agent-id>` - Targets a specific agent by ID
 
-Promptfoo sends OpenClaw's current slash-style model id (`openclaw/<agent-id>`) to the gateway
-while keeping the `openclaw:<agent-id>` promptfoo provider syntax for compatibility.
+Promptfoo sends OpenClaw's model ids to the gateway while keeping the
+`openclaw:<agent-id>` promptfoo syntax:
+
+- bare `openclaw` sends `openclaw` without an agent header
+- `openclaw:main` uses `openclaw/main`
+- `openclaw:<agent-id>` uses `openclaw/<agent-id>`
+
+Current gateways resolve bare `openclaw` to the configured default agent. Older HTTP gateways such
+as v2026.3.8 fall back to `main`; use an explicit agent selector to target another agent on those versions.
+
+Only an omitted agent selector leaves routing to the gateway. For example, `openclaw:default` explicitly
+targets an agent whose ID is `default`; the same rule applies to Responses, Embeddings, and WS Agent
+provider forms.
+
+:::note[Compatibility]
+Plain `openclaw` avoids selecting a literal agent named `default` on older HTTP gateways. The HTTP
+fallback described above does not change WS agent selection.
+
+Older Promptfoo versions routed bare OpenClaw provider forms to `main` and reported provider IDs
+ending in `:main`. Use an explicit `:main` suffix to retain that routing. Bare forms now appear with
+bare provider IDs in results, so update any filters or reporting keyed to the old IDs.
+:::
 
 ### Responses
 
@@ -96,7 +116,7 @@ default and requires enabling in gateway config:
 }
 ```
 
-- `openclaw:responses` - Default agent via Responses API
+- `openclaw:responses` - Gateway's default HTTP route via Responses API (same compatibility as Chat)
 - `openclaw:responses:main` - Explicit agent ID
 - `openclaw:responses:<agent-id>` - Custom agent
 
@@ -117,7 +137,7 @@ Promptfoo includes a stable device identity, signs the gateway `connect.challeng
 issued `hello-ok.auth.deviceToken` values, and retries once with a cached device token when the
 gateway reports an `AUTH_TOKEN_MISMATCH`.
 
-- `openclaw:agent` - Default agent via WS
+- `openclaw:agent` - Configured default agent via WS
 - `openclaw:agent:main` - Explicit agent ID
 - `openclaw:agent:<agent-id>` - Custom agent
 
@@ -156,7 +176,7 @@ includes:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - openclaw:main
+  - openclaw
 ```
 
 ### Explicit Configuration
@@ -191,7 +211,7 @@ export OPENCLAW_GATEWAY_TOKEN=your-token-here
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - openclaw:main
+  - openclaw
 ```
 
 ## Config Options
@@ -230,7 +250,7 @@ prompts:
   - 'What is the capital of {{country}}?'
 
 providers:
-  - openclaw:main
+  - openclaw
 
 tests:
   - vars:
@@ -269,7 +289,7 @@ prompts:
   - 'Summarize: {{text}}'
 
 providers:
-  - openclaw:responses:main
+  - openclaw:responses
 
 tests:
   - vars:
@@ -299,7 +319,7 @@ this eval without changing the agent's normal default model.
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openclaw:main
+  - id: openclaw
     config:
       backend_model: openai/gpt-5.6-terra
 ```
@@ -315,6 +335,11 @@ model is selected only inside OpenClaw's own agent config.
 ### WebSocket Agent
 
 Promptfoo uses an isolated session key per call unless you set `session_key` explicitly.
+Unscoped session keys are scoped to an explicitly selected agent. For WS, `global` is scoped
+to explicit non-main agents so older gateways select that agent; bare and explicit-main
+providers keep `global` unscoped. HTTP endpoints preserve the `global` and `unknown` sentinels.
+For WS, `unknown` requires an explicit agent and becomes `agent:<agent-id>:unknown`.
+With bare `openclaw:agent`, use another key or omit `session_key` instead of using `unknown`.
 
 ```yaml title="promptfooconfig.yaml"
 prompts:

@@ -19,12 +19,11 @@ providers:
       max_tokens: 500
       anthropic_version: 'bedrock-2023-05-31'
 
-  # Direct model for comparison (no failover)
-  - id: bedrock:us.anthropic.claude-sonnet-4-6
-    label: 'Direct Claude (Single Region)'
+  # System inference profile for comparison
+  - id: bedrock:us.anthropic.claude-sonnet-5
+    label: 'Claude Sonnet 5 (US profile)'
     config:
       region: 'us-east-1'
-      temperature: 0.3
       max_tokens: 500
 
 tests:
