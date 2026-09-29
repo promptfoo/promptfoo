@@ -20,15 +20,20 @@ vi.mock('../../src/database/signal', async () => {
 
 describe('eval routes', () => {
   let api: ReturnType<typeof request.agent>;
+  let app: ReturnType<typeof createApp>;
+  const jsonSettings = ['json replacer', 'json spaces', 'json escape'];
+  const originalJsonSettings = new Map<string, unknown>();
   let server: Server;
   const testEvalIds = new Set<string>();
 
   beforeAll(async () => {
     await runDbMigrations();
+    app = createApp();
+    for (const setting of jsonSettings) {
+      originalJsonSettings.set(setting, app.get(setting));
+    }
     await new Promise<void>((resolve, reject) => {
-      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
-        error ? reject(error) : resolve(),
-      );
+      server = app.listen(0, '127.0.0.1', (error?: Error) => (error ? reject(error) : resolve()));
     });
     api = request.agent(server);
   });
@@ -44,6 +49,9 @@ describe('eval routes', () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
+    for (const setting of jsonSettings) {
+      app.set(setting, originalJsonSettings.get(setting));
+    }
 
     // More robust cleanup with proper error handling
     const cleanupPromises = Array.from(testEvalIds).map(async (evalId) => {
@@ -64,11 +72,11 @@ describe('eval routes', () => {
     vi.resetAllMocks();
   });
 
-  // Forces the oversized-payload RangeError (#7649) for matching JSON.stringify
-  // calls without allocating a ~512MB string.
-  function mockJsonStringifyRangeError(
+  // Exercise serialization failures without allocating large payloads.
+  function mockJsonStringifyError(
     matches: (value: unknown) => boolean,
     shouldThrow: (attempt: number) => boolean = () => true,
+    error: Error = new RangeError('Invalid string length'),
   ) {
     const originalStringify = JSON.stringify;
     let matchingAttempts = 0;
@@ -79,7 +87,7 @@ describe('eval routes', () => {
         if (matches(args[0])) {
           matchingAttempts += 1;
           if (shouldThrow(matchingAttempts)) {
-            throw new RangeError('Invalid string length');
+            throw error;
           }
         }
         return originalStringify.apply(JSON, args);
@@ -463,7 +471,7 @@ describe('eval routes', () => {
       testEvalIds.add(eval_.id);
       await setResultPromptRaws(eval_, ['small prompt', 'x'.repeat(100), 'x'.repeat(50)]);
 
-      mockJsonStringifyRangeError(isTablePayload, (attempt) => attempt === 1);
+      mockJsonStringifyError(isTablePayload, (attempt) => attempt === 1);
 
       const res = await api.get(`/api/eval/${eval_.id}/table`);
 
@@ -486,7 +494,7 @@ describe('eval routes', () => {
       testEvalIds.add(eval_.id);
       await setResultPromptRaws(eval_, ['small prompt', 'x'.repeat(100), 'x'.repeat(50)]);
 
-      mockJsonStringifyRangeError(isTablePayload, (attempt) => attempt <= 2);
+      mockJsonStringifyError(isTablePayload, (attempt) => attempt <= 2);
 
       const res = await api.get(`/api/eval/${eval_.id}/table`);
 
@@ -506,7 +514,7 @@ describe('eval routes', () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
 
-      mockJsonStringifyRangeError(isTablePayload);
+      mockJsonStringifyError(isTablePayload);
 
       const res = await api.get(`/api/eval/${eval_.id}/table`);
 
@@ -538,18 +546,84 @@ describe('eval routes', () => {
       );
     });
 
-    it('returns 413 when the JSON export exceeds the serialization limit (#7649)', async () => {
-      const eval_ = await EvalFactory.create({ numResults: 2 });
+    it('honors the Express JSON replacer for JSON exports', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 1 });
       testEvalIds.add(eval_.id);
+      await setResultPromptRaws(eval_, ['prompt omitted by the configured replacer']);
+      app.set('json replacer', (key: string, value: unknown) =>
+        key === 'prompt' ? undefined : value,
+      );
 
-      mockJsonStringifyRangeError(isJsonExportPayload);
+      const res = await api.get(`/api/eval/${eval_.id}/table?format=json`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.body).toHaveLength(1);
+      expect(res.body.body[0].outputs[0]).not.toHaveProperty('prompt');
+      expect(res.text).not.toContain('prompt omitted by the configured replacer');
+    });
+
+    it('honors the Express JSON indentation for JSON exports', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 1 });
+      testEvalIds.add(eval_.id);
+      app.set('json spaces', 4);
+
+      const res = await api.get(`/api/eval/${eval_.id}/table?format=json`);
+
+      expect(res.status).toBe(200);
+      expect(res.text).toBe(JSON.stringify(res.body, null, 4));
+      expect(res.text).toContain('\n    "head": {');
+    });
+
+    it('honors Express JSON escaping without changing exported values', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 1 });
+      testEvalIds.add(eval_.id);
+      await setResultPromptRaws(eval_, ['<example>&']);
+      app.set('json escape', true);
+
+      const res = await api.get(`/api/eval/${eval_.id}/table?format=json`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.body[0].outputs[0].prompt).toBe('<example>&');
+      expect(res.text).toContain('\\u003cexample\\u003e\\u0026');
+      expect(res.text).not.toContain('<example>&');
+    });
+
+    it.each([
+      'Invalid string length',
+      'Cannot create a string longer than the runtime limit',
+      'ERR_STRING_TOO_LONG',
+      'Maximum call stack size exceeded',
+    ])('returns 413 for the JSON serialization limit: %s', async (message) => {
+      const eval_ = await EvalFactory.create({ numResults: 1 });
+      testEvalIds.add(eval_.id);
+      mockJsonStringifyError(isJsonExportPayload, undefined, new RangeError(message));
 
       const res = await api.get(`/api/eval/${eval_.id}/table?format=json`);
 
       expect(res.status).toBe(413);
       expect(res.body).toEqual({ error: 'Eval JSON export is too large to serialize.' });
-      expect(res.headers['content-disposition']).toBeUndefined();
-      expect(res.headers['cache-control']).toBeUndefined();
+      for (const header of ['content-disposition', 'cache-control', 'pragma', 'expires']) {
+        expect(res.headers[header]).toBeUndefined();
+      }
+      expect(res.headers['content-type']).toContain('application/json');
+    });
+
+    it.each([
+      new RangeError('Unrelated serialization fixture error'),
+      new Error('Invalid string length'),
+    ])('propagates non-limit JSON serialization failures: %s', async (error) => {
+      const eval_ = await EvalFactory.create({ numResults: 1 });
+      testEvalIds.add(eval_.id);
+      mockJsonStringifyError(isJsonExportPayload, undefined, error);
+
+      const res = await api.get(`/api/eval/${eval_.id}/table?format=json`);
+
+      expect(res.status).toBe(500);
+      expect(res.headers['content-type']).toContain('text/html');
+      expect(res.text).toContain(error.message);
+      for (const header of ['content-disposition', 'cache-control', 'pragma', 'expires']) {
+        expect(res.headers[header]).toBeUndefined();
+      }
     });
   });
 

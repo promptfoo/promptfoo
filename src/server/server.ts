@@ -1,8 +1,8 @@
 import compression from 'compression';
 import cors from 'cors';
-import dotenv from 'dotenv';
+import { loadEnvFiles } from '../util/envFile';
 
-dotenv.config({ quiet: true });
+loadEnvFiles();
 
 import fs from 'node:fs';
 import http from 'node:http';
@@ -372,7 +372,7 @@ export function createApp() {
 export async function startServer(
   port = getDefaultPort(),
   browserBehavior: BrowserBehavior = BrowserBehavior.ASK,
-) {
+): Promise<void> {
   const app = createApp();
 
   const httpServer = http.createServer(app);

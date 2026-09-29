@@ -26,7 +26,6 @@ import { shouldShareResults } from '../../util/sharing';
 import { evalJobService } from '../services/evalJobService';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import { replyValidationError, sendError } from '../utils/errors';
-import { sendJsonResponse } from '../utils/safeJsonResponse';
 import type { Request, Response } from 'express';
 
 import type {
@@ -145,6 +144,7 @@ evalRouter.post('/job', async (req: Request, res: Response): Promise<void> => {
     evaluateOptions,
     sourceEvalId,
     providers: _validatedProviders,
+    basePath: _basePath,
     ...restData
   } = result.data;
   let testSuite = {
@@ -157,7 +157,10 @@ evalRouter.post('/job', async (req: Request, res: Response): Promise<void> => {
     try {
       const sourceEval = await Eval.findById(sourceEvalId);
       if (sourceEval) {
-        testSuite = restoreAzureBlobSasTokens(testSuite, sourceEval.config);
+        testSuite = {
+          ...restoreAzureBlobSasTokens(testSuite, sourceEval.config),
+          ...(sourceEval.config.basePath !== undefined && { basePath: sourceEval.config.basePath }),
+        };
       }
     } catch (error) {
       sendError(res, 500, 'Failed to prepare eval job', error);
@@ -421,14 +424,25 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   if (format === 'json') {
     const jsonData = evalTableToJson(returnTable);
 
-    // Serialize before setting download headers. If V8 reaches a JSON
-    // serialization limit, return a regular 413 error response.
-    sendJsonResponse(res, jsonData, {
-      beforeSend: () => setDownloadHeaders(res, `${id}.json`, 'application/json'),
-      evalId: id,
-      logger,
-      tooLargeMessage: 'Eval JSON export is too large to serialize.',
-    });
+    try {
+      setDownloadHeaders(res, `${id}.json`, 'application/json');
+      res.json(jsonData);
+    } catch (error) {
+      // Serialization can fail after download headers are set, before any bytes are sent.
+      ['Content-Type', 'Content-Disposition', 'Cache-Control', 'Pragma', 'Expires'].forEach(
+        (header) => res.removeHeader(header),
+      );
+      if (
+        !(error instanceof RangeError) ||
+        !/Invalid string length|Cannot create a string longer than|ERR_STRING_TOO_LONG|Maximum call stack size exceeded/i.test(
+          error.message,
+        )
+      ) {
+        throw error;
+      }
+      logger.warn('[GET /:id/table] JSON export hit a serialization limit', { evalId: id, error });
+      sendError(res, 413, 'Eval JSON export is too large to serialize.');
+    }
     return;
   }
 

@@ -14,6 +14,7 @@ This example demonstrates Anthropic's structured outputs feature, which ensures 
 ```bash
 export ANTHROPIC_API_KEY=your_api_key_here
 npx promptfoo@latest init --example anthropic/structured-outputs
+cd anthropic/structured-outputs
 npx promptfoo@latest eval
 ```
 
@@ -21,11 +22,11 @@ npx promptfoo@latest eval
 
 ### JSON Outputs
 
-The first provider configuration shows how to extract structured data from unstructured text using a JSON schema:
+The first three providers extract structured data using inline, external, and nested schema files:
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-sonnet-4-6
+  - id: anthropic:messages:claude-sonnet-5
     config:
       output_format:
         type: json_schema
@@ -52,12 +53,15 @@ providers:
 
 ### Strict Tool Use
 
-The second provider configuration demonstrates how to ensure tool parameters exactly match your schema:
+The fourth provider requests a `book_demo` tool call with schema-constrained parameters:
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-sonnet-4-6
+  - id: anthropic:messages:claude-sonnet-5
     config:
+      tool_choice:
+        type: tool
+        name: book_demo
       tools:
         - name: book_demo
           strict: true # Enable strict mode
@@ -65,6 +69,8 @@ providers:
             type: object
             properties:
               customer_email:
+                type: string
+              customer_name:
                 type: string
               # ... more properties
             required:
@@ -79,13 +85,6 @@ providers:
 - Ensuring type-safe function calls
 - Complex tools with many/nested properties
 - You need validated parameters and tool names
-
-## Key Benefits
-
-- **Always valid**: No more `JSON.parse()` errors
-- **Type safe**: Guaranteed field types and required fields
-- **Reliable**: No retries needed for schema violations
-- **Production-ready**: Build agents that work consistently at scale
 
 ## Schema Requirements
 
@@ -107,22 +106,18 @@ Both modes share these JSON Schema limitations:
 
 ## Test Cases
 
-The example includes comprehensive tests:
-
-1. **Schema validation**: Ensures all required fields are present
-2. **Data accuracy**: Verifies extracted values match the input
-3. **No extra fields**: Confirms `additionalProperties: false` is enforced
-4. **Tool calling**: Validates tool names and parameters are correct
-5. **Type safety**: Checks that types match schema definitions
+The assertions check that both JSON responses and the requested demo contain the customer's name and email. The API enforces the configured JSON and strict tool schemas.
 
 ## Supported Models
 
-Structured outputs are available for:
+The example uses Claude Sonnet 5. Other supported models include:
 
-- Claude Sonnet 4.6 (`claude-sonnet-4-6`)
-- Claude Opus 4.1 (`claude-opus-4-1-20250805`)
+- Claude Opus 5 (`claude-opus-5`)
+- Claude Fable 5 / 5.1 (`claude-fable-5`, `claude-fable-5-1`)
+- Claude Opus 4.6–4.8 and Claude Sonnet 4.6
+- The 4.5 generation (`claude-opus-4-5`, `claude-sonnet-4-5`, `claude-haiku-4-5`)
 
 ## Learn More
 
-- [Anthropic Structured Outputs Documentation](https://docs.anthropic.com/en/docs/build-with-claude/structured-outputs)
+- [Anthropic Structured Outputs Documentation](https://platform.claude.com/docs/en/build-with-claude/structured-outputs)
 - [promptfoo Anthropic Provider Documentation](/docs/providers/anthropic)
