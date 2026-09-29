@@ -2,7 +2,7 @@
 sidebar_label: Authentication
 sidebar_position: 10
 title: Authenticating into Promptfoo Enterprise
-description: Configure enterprise authentication with SSO providers, API keys, service accounts, and CLI access for secure team collaboration workflows and automation.
+description: Configure enterprise authentication with SSO providers, API keys, service accounts, and CLI access for secure team collaboration
 keywords: [authentication, login, logout, promptfoo enterprise, promptfoo app, sso, saml, oidc]
 ---
 
@@ -20,66 +20,25 @@ You can also authenticate into the application using a magic link. To do this, n
 
 ## Authenticating Into the CLI
 
-Connect the Promptfoo CLI to your Enterprise account to share evals and run red team scans.
+You may wish to authenticate into the CLI when using Promptfoo Enterprise. Follow these steps to connect Promptfoo Enterprise to the CLI.
 
-### Browser-Based Login (Recommended)
+1. Install the Promptfoo CLI. Read [getting started](/docs/getting-started/) for help installing the CLI.
 
-The simplest way to authenticate is through your browser:
+2. In the Promptfoo Enterprise app, select the "CLI Login Information" underneath your profile.
 
-```sh
-promptfoo auth login
-```
+![CLI Login Information](/img/enterprise-docs/CLI-login-setting.png)
 
-This opens your browser to a device authorization page. Verify the code displayed in your terminal matches the one shown in the browser, then sign in with your Enterprise credentials. The CLI receives your authentication token automatically.
+3. Copy the first command and run in your CLI. Your CLI will then be authenticated to Promptfoo Enterprise, allowing you to share eval results run locally.
 
-![Device authorization - sign in to authorize](/img/enterprise-docs/device-auth-code-verified.png)
+![CLI Login Command](/img/enterprise-docs/CLI-login-key.png)
 
-Once authorized, you'll see a confirmation and can close the browser:
-
-![Device authorized successfully](/img/enterprise-docs/device-auth-success.png)
-
-For self-hosted instances, specify your host:
-
-```sh
-promptfoo auth login --host https://promptfoo.your-company.com
-```
-
-### API Key Login
-
-For CI/CD pipelines or automated environments where browser authentication isn't available, use an API key:
-
-```sh
-promptfoo auth login --api-key YOUR_API_KEY
-```
-
-To obtain an API key:
-
-1. Open the Promptfoo Enterprise app
-2. Navigate to your profile settings
-3. Select **CLI Login Information**
-4. Copy the API key
-
-For CI/CD, set the `PROMPTFOO_API_KEY` environment variable instead of passing it on the command line.
-
-### Verify Authentication
-
-Check your current authentication status:
-
-```sh
-promptfoo auth whoami
-```
-
-### Logout
-
-```sh
-promptfoo auth logout
-```
+4. Once authenticated, you can run `promptfoo eval --share` or `promptfoo share` to share eval results to your Promptfoo Enterprise organization.
 
 :::tip
-All evals are stored locally until you share them. Run `promptfoo share` to upload existing local evals to your Enterprise organization.
+All of your evals are stored locally until you share them. If you were previously an open-source user, you can share your local evals to your Promptfoo Enterprise organization by running `promptfoo share`.
 :::
 
-Authenticating with your organization's account enables [team-based sharing](/docs/usage/sharing#enterprise-sharing), ensuring your eval results are only visible to members of your organization.
+Authenticating with your organization's account enables [team-based sharing](/docs/usage/sharing#enterprise-sharing), ensuring your evaluation results are only visible to members of your organization rather than being publicly accessible.
 
 ## Working with Multiple Teams
 
@@ -92,7 +51,7 @@ If your organization has multiple teams, you can manage which team context you'r
 promptfoo auth teams list
 ```
 
-This shows all available teams with a marker (●) next to your current team.
+This shows the teams accessible to your API key in its organization, with a marker (●) next to your current team.
 
 ### Switching Teams
 
@@ -102,6 +61,8 @@ promptfoo auth teams set "Data Science"
 ```
 
 You can use the team name, slug, or ID. Your selection persists across CLI sessions.
+
+To switch organizations, run `promptfoo auth login --api-key <apiKey>` with a key from the organization you want to use.
 
 ### Checking Current Team
 

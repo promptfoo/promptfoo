@@ -2,7 +2,7 @@
 title: Using the web viewer
 sidebar_position: 30
 sidebar_label: Web viewer
-description: Compare LLM outputs side-by-side, rate responses for training data, share evaluations, and analyze results with Promptfoo's interactive web viewer securely.
+description: Compare LLM outputs side-by-side, rate responses for training data, share evaluations, and analyze results with Promptfoo's interactive web viewer.
 ---
 
 # Using the web viewer
@@ -116,10 +116,7 @@ Compare two prompts head-to-head. Click to select prompts.
 Free at [promptfoo.app](https://promptfoo.app/welcome). Links are private to your organization.
 
 ```sh
-# One-time setup. Opens your browser to authenticate.
-promptfoo auth login
-
-# Share any eval.
+promptfoo auth login -k YOUR_API_KEY
 promptfoo share
 ```
 

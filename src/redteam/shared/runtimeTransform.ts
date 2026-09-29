@@ -9,9 +9,11 @@
  */
 
 import logger from '../../logger';
+import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 
 import type { MediaData } from '../../storage/types';
-import type { TestCaseWithPlugin } from '../../types';
+import type { TestCaseWithPlugin, TokenUsage } from '../../types';
 // Import type only to avoid circular dependency - actual Strategies loaded dynamically
 import type { Strategy } from '../strategies/types';
 
@@ -41,6 +43,8 @@ export interface TransformResult {
   displayVars?: Record<string, string>;
   /** Metadata from the transform (e.g., webPageUuid, webPageUrl from indirect-web-pwn) */
   metadata?: Record<string, unknown>;
+  /** Auxiliary model usage consumed while producing the transformed attack prompt. */
+  tokenUsage?: TokenUsage;
 }
 
 /**
@@ -48,6 +52,8 @@ export interface TransformResult {
  * This allows multi-turn providers to pass evaluation context to layer strategies.
  */
 export interface RuntimeTransformContext {
+  /** Cloud target database ID used to resolve target-owned task context. */
+  targetId?: string;
   /** The evaluation ID (for server-side tracking) */
   evaluationId?: string;
   /** The test case ID */
@@ -120,6 +126,7 @@ export async function applyRuntimeTransforms(
 
   let audioApplied = false;
   let imageApplied = false;
+  let tokenUsage: TokenUsage | undefined;
 
   for (const layer of layerConfigs) {
     const layerId = typeof layer === 'string' ? layer : layer.id;
@@ -144,17 +151,25 @@ export async function applyRuntimeTransforms(
     try {
       // Call existing strategy action - this REUSES all existing implementation
       // The strategy expects an array of test cases and returns transformed test cases
-      const result = await strategy.action([testCase], injectVar, layerConfig);
+      const result = await strategy.action([testCase], injectVar, {
+        ...layerConfig,
+        ...remoteGenerationContextPayload(context?.targetId),
+      });
       const transformed = result[0];
 
       if (transformed) {
+        const { runtimeTokenUsage, ...metadata } = transformed.metadata ?? {};
+        if (runtimeTokenUsage && typeof runtimeTokenUsage === 'object') {
+          tokenUsage ??= {};
+          accumulateTokenUsage(tokenUsage, runtimeTokenUsage as TokenUsage, true);
+        }
         // Preserve context metadata (evaluationId, testCaseId, purpose, goal) across transforms
         // by merging original metadata first, then transformed metadata on top
         testCase = {
           ...transformed,
           metadata: {
             ...testCase.metadata,
-            ...transformed.metadata,
+            ...metadata,
             pluginId: testCase.metadata.pluginId,
           },
         };
@@ -169,6 +184,7 @@ export async function applyRuntimeTransforms(
         prompt: originalPrompt,
         originalPrompt,
         error: errorMsg,
+        ...(tokenUsage ? { tokenUsage } : {}),
       };
     }
   }
@@ -199,6 +215,7 @@ export async function applyRuntimeTransforms(
     prompt: transformedPrompt,
     originalPrompt,
     ...(Object.keys(displayVars).length > 0 && { displayVars }),
+    ...(tokenUsage ? { tokenUsage } : {}),
     // Include metadata from the transform (e.g., webPageUuid from indirect-web-pwn)
     metadata: testCase.metadata,
   };

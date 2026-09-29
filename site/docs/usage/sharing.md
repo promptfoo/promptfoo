@@ -1,6 +1,6 @@
 ---
 sidebar_position: 40
-description: Share your promptfoo eval results with teams via cloud platform, enterprise deployment, or self-hosted infrastructure with private links and CI/CD guidance.
+description: Share your promptfoo eval results with teams via cloud platform, enterprise deployment, or self-hosted infrastructure
 keywords: [eval sharing, model testing, promptfoo sharing, collaboration, team sharing]
 ---
 
@@ -12,22 +12,21 @@ Sharing uploads the eval/report snapshot needed to view the result. This can inc
 
 ## Quick Start (Cloud)
 
-Share evaluations to Promptfoo Cloud:
+Most users will share to promptfoo.app cloud:
 
 ```sh
 # Login (one-time setup)
-promptfoo auth login
+# First, get your API key from https://promptfoo.app/welcome
+promptfoo auth login -k YOUR_API_KEY
 
 # Run an eval and share it
 promptfoo eval
 promptfoo share
 ```
 
-The login command opens your browser to authenticate. If you don't have an account, visit [promptfoo.app/welcome](https://promptfoo.app/welcome) to create one.
-
 :::note
 
-Cloud sharing creates private links only visible to you and your organization.
+Cloud sharing creates private links only visible to you and your organization. If you don't have an account, visit https://promptfoo.app/welcome to create one and get your API key.
 
 :::
 
@@ -73,11 +72,18 @@ If you have a Promptfoo Enterprise account:
 
 ```sh
 # Login to your enterprise instance
-promptfoo auth login --host https://your-company.promptfoo.app
+# Get your API key from the "CLI Login Information" section in your profile
+promptfoo auth login --host https://your-company.promptfoo.app -k YOUR_API_KEY
 
 # Share your eval
 promptfoo share
 ```
+
+If your gateway reserves `Authorization` for its own authentication, add `--auth-header-name X-Promptfoo-Api-Key` to the API-key login command. Configure the gateway to copy that header into `Authorization` before forwarding to Promptfoo; its value remains `Bearer <token>`. Supply the gateway's own credential separately—this option only moves the Promptfoo credential.
+
+The saved header name takes precedence over `PROMPTFOO_CLOUD_AUTH_HEADER` and persists when you change hosts. Use `promptfoo auth whoami` to inspect the effective API URL and header, or log in with `--auth-header-name Authorization` to reset it. Web login uses the saved setting or the server's environment variable; it cannot select a header in the form.
+
+Custom-header Cloud requests follow same-origin redirects, but reject redirects that change the scheme, host, or port. Use the final gateway API URL with `--host` if a redirect is rejected.
 
 Enterprise sharing includes additional features:
 
@@ -164,7 +170,16 @@ For multi-tenant environments, reducing the chunk size on the client is usually 
 
 ## Disabling Sharing
 
-To disable sharing completely:
+To disable sharing completely, use any of the controls below. These controls prevent both the
+eval snapshot and referenced media/blob data from being uploaded to a sharing destination. Media
+blobs are still stored locally, so they remain available in the local viewer and are included if
+you later run an explicit `promptfoo share` command.
+
+### Disable for One Eval
+
+```sh
+promptfoo eval --no-share
+```
 
 ### Disable via Configuration
 

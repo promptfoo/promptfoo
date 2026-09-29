@@ -4,6 +4,7 @@ import { NovaReelVideoProvider } from '../../../src/providers/bedrock/nova-reel'
 import { sleep } from '../../../src/util/time';
 
 import type { NovaReelVideoOptions } from '../../../src/providers/bedrock';
+import type { CallApiContextParams } from '../../../src/types/providers';
 
 // Create hoisted mock functions and classes that can be controlled from tests
 const {
@@ -281,7 +282,11 @@ describe('NovaReelVideoProvider', () => {
         } as NovaReelVideoOptions,
       });
 
-      const result = await provider.callApi('Generate a beautiful sunset over the ocean');
+      const result = await provider.callApi('Generate a beautiful sunset over the ocean', {
+        evaluationId: 'eval-nova-reel',
+        promptIdx: 6,
+        testIdx: 5,
+      } as unknown as CallApiContextParams);
 
       expect(result.error).toBeUndefined();
       expect(result.output).toContain('[Video:');
@@ -291,6 +296,17 @@ describe('NovaReelVideoProvider', () => {
       expect(result.video?.duration).toBe(6);
       expect(result.video?.blobRef).toBeDefined();
       expect(result.metadata?.taskType).toBe('TEXT_VIDEO');
+      const { storeBlob } = await import('../../../src/blobs');
+      expect(storeBlob).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        'video/mp4',
+        expect.objectContaining({
+          evalId: 'eval-nova-reel',
+          kind: 'video',
+          promptIdx: 6,
+          testIdx: 5,
+        }),
+      );
     });
 
     it('should handle video generation failure', async () => {
