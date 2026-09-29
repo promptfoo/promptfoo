@@ -172,7 +172,7 @@ describe('RateLimitRegistry integration - provider maxRetries', () => {
       const registry = new RateLimitRegistry({ maxConcurrency: 8, queueTimeoutMs: 100 });
       const provider = {
         ...createProvider(0),
-        shouldSkipRateLimit: (context?: { vars: Record<string, unknown> }) =>
+        isHistoricalReplay: (context?: { vars: Record<string, unknown> }) =>
           context?.vars.local === true,
       };
       try {
@@ -232,7 +232,7 @@ describe('RateLimitRegistry integration - provider maxRetries', () => {
     async (disabled) => {
       vi.stubEnv('PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER', String(disabled));
       const registry = new RateLimitRegistry({ maxConcurrency: 1 });
-      const provider = { ...createProvider(0), shouldSkipRateLimit: () => true };
+      const provider = { ...createProvider(0), isHistoricalReplay: () => true };
       const call = vi.fn(async () => getFetchRetryContextMaxRetries());
       try {
         expect(await registry.execute(provider, call, { skipRateLimit: true })).toBe(0);

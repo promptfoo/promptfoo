@@ -91,7 +91,7 @@ describeEvaluator('provider batch preflight', () => {
     );
     const provider: ApiProvider = {
       id: () => 'local-scanner',
-      shouldSkipRateLimit: classify,
+      isHistoricalReplay: classify,
       callApi: vi.fn(async () => ({ output: 'Local result' })),
     };
     await evaluate(
@@ -104,12 +104,17 @@ describeEvaluator('provider batch preflight', () => {
       { silent: true, maxConcurrency: 1 },
       inMemoryRuntime,
     );
-    expect(classify).toHaveBeenCalledTimes(2);
-    expect(classify.mock.calls.map(([context]) => context?.prompt?.config?.report_file)).toEqual([
-      'prompt.json',
-      '{{report}}',
-    ]);
-    expect(classify.mock.calls[1][0]?.vars.report).toBe('test.json');
+    expect(classify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.objectContaining({ config: { report_file: 'prompt.json' } }),
+      }),
+    );
+    expect(classify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.objectContaining({ config: { report_file: '{{report}}' } }),
+        vars: expect.objectContaining({ report: 'test.json' }),
+      }),
+    );
   });
   it('rechecks an eager failure after an earlier serial workload prepares the file without extensions', async () => {
     let fileReady = false;

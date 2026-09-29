@@ -48,25 +48,27 @@ export function createProviderRateLimitOptions(
   context?: CallApiContextParams,
 ): RateLimitExecuteOptions<ProviderResponse> {
   return {
-    skipRateLimit: provider?.shouldSkipRateLimit?.(context) ?? false,
+    skipRateLimit: provider?.isHistoricalReplay?.(context) ?? false,
     // Provider errors are values carrying output, usage and HTTP metadata.
     // Keep that evidence when the scheduler has no retries left.
     onRateLimitExhausted: (result, error) =>
       result.error ? result : { ...result, error: error.message },
-    // A hard quota is not retried, so its headers must not feed the shared
+    // Non-retryable rate limits must not feed the shared
     // rate-limit state either: a billing 429 that also carries
     // `x-ratelimit-remaining-*: 0` and a reset timestamp would otherwise
     // park every queued and subsequent call until that reset instead of
     // letting them fail fast.
     getHeaders: (result: ProviderResponse | undefined) =>
-      result?.retryable === false || result?.metadata?.rateLimitKind === 'quota'
+      result?.retryable === false ||
+      result?.metadata?.rateLimitRetryable === false ||
+      result?.metadata?.rateLimitKind === 'quota'
         ? undefined
         : getProviderResponseHeaders(result),
     isRateLimited: isProviderResponseRateLimited,
     // Historical/local responses do not prove the upstream rate limit recovered.
     shouldRecoverConcurrency: (result) => result.retryable !== false,
     getRetryAfter: (result: ProviderResponse | undefined, error: Error | undefined) => {
-      if (result?.retryable === false) {
+      if (result?.retryable === false || result?.metadata?.rateLimitRetryable === false) {
         return undefined;
       }
       const rawHeaders = getProviderResponseHeaders(result);
@@ -128,8 +130,8 @@ export function wrapProviderWithRateLimiting(
     // Explicitly delegate id() since prototype methods aren't copied by spread
     id: () => provider.id(),
     ...(provider.checkSetup ? { checkSetup: provider.checkSetup.bind(provider) } : {}),
-    ...(provider.shouldSkipRateLimit
-      ? { shouldSkipRateLimit: provider.shouldSkipRateLimit.bind(provider) }
+    ...(provider.isHistoricalReplay
+      ? { isHistoricalReplay: provider.isHistoricalReplay.bind(provider) }
       : {}),
     callApi: async (
       prompt: string,

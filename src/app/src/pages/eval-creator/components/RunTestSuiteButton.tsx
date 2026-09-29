@@ -10,7 +10,7 @@ import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
 import { formatCost } from '@app/utils/media';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router';
 import {
   countTests,
   normalizePrompts,

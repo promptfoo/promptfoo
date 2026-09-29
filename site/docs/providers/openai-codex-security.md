@@ -21,12 +21,12 @@ The Codex Security provider runs the `@openai/codex-security` SDK directly as a 
 Promptfoo declares the SDK as an optional dependency. If optional dependencies were omitted, install Promptfoo and the SDK together so they share the same installation:
 
 ```bash
-npm install promptfoo @openai/codex-security@^0.1.18
+npm install promptfoo @openai/codex-security@^0.1.31
 ```
 
-Native operations require `@openai/codex-security` version `0.1.18` or newer. Older SDK releases omit finding validation and can undercount deep-worker token usage and cost. The `^0.1.18` installation range also permits newer `0.1.x` releases. Use Node.js `^22.22.0`, `^24.0.0`, or `^26.0.0`, plus Python 3.10 or later. Python 3.10 also requires `tomli`; use `python_path` to select an interpreter when needed.
+Native operations require `@openai/codex-security` version `0.1.31` or newer, which replaces the legacy ZIP extractor. Use Node.js `^22.22.0`, `^24.0.0`, or `^26.0.0`, plus Python 3.10 or later. Python 3.10 also requires `tomli`; use `python_path` to select an interpreter when needed.
 
-Promptfoo loads the SDK from its own installation; it does not execute SDK packages found in the target repository or eval directory. For a global installation, install both packages together with `npm install -g promptfoo @openai/codex-security@^0.1.18`.
+Promptfoo loads the SDK from its own installation; it does not execute SDK packages found in the target repository or eval directory. For a global installation, install both packages together with `npm install -g promptfoo @openai/codex-security@^0.1.31`.
 
 Use a supported saved Codex/ChatGPT login, or set `OPENAI_API_KEY` or `CODEX_API_KEY` before starting the Promptfoo server or CLI. Credentials belong to that process: the Setup API keys dialog and provider-scoped environment overrides cannot supply a different key to this provider. With `auth: auto`, the SDK prefers an environment API key when both a key and a saved login are available. Set `auth: chatgpt` to select the saved login, or `auth: api-key` to require an environment key. See the [SDK authentication documentation](https://learn.chatgpt.com/docs/security/sdk#configure-the-runtime-and-credentials).
 
@@ -253,7 +253,7 @@ This checks reported coverage, not detection accuracy. For recall and precision,
 ## Troubleshooting
 
 - **Zero findings with partial coverage:** Inspect `metadata.codexSecurity.warnings`, the raw output's `coverage.deferred`, and `coverage.json`. Discarded findings or malformed evidence references indicate an incomplete scan, not a clean repository.
-- **Deep scan cost appears too low:** Install SDK version `0.1.18` or newer. Earlier versions can omit independently launched discovery and deduplication workers from token and cost totals.
+- **Deep scan cost appears too low:** Install SDK version `0.1.31` or newer. SDKs before `0.1.18` can omit independently launched discovery and deduplication workers from token and cost totals.
 - **SDK fails to load:** Install Promptfoo and the SDK together, and use Node.js `^22.22.0`, `^24.0.0`, or `^26.0.0`.
 - **Python is unavailable:** Install Python 3.10+ (`tomli` is also required on 3.10), or point `python_path` at the supported interpreter. A successful local preflight does not verify Python or model access.
 - **Authentication or access fails:** Sign in with Codex or set `OPENAI_API_KEY` / `CODEX_API_KEY`; confirm that the account has the required Codex Security and Trusted Access permissions.

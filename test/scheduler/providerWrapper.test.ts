@@ -83,16 +83,16 @@ describe('providerWrapper', () => {
           return 'local-provider';
         }
         callApi = vi.fn().mockResolvedValue({ output: 'Local result' });
-        shouldSkipRateLimit(context?: { vars: Record<string, unknown> }) {
+        isHistoricalReplay(context?: { vars: Record<string, unknown> }) {
           return this.config.local && context?.vars.local === true;
         }
       }
       const provider = new LocalProvider();
       const context = { vars: { local: true }, prompt: { raw: 'Read', label: 'Read' } };
-      const classify = vi.spyOn(LocalProvider.prototype, 'shouldSkipRateLimit');
+      const classify = vi.spyOn(LocalProvider.prototype, 'isHistoricalReplay');
       mockExecute.mockImplementation(async (_provider, callFn) => callFn());
       const wrapped = wrapProviderWithRateLimiting(provider, mockRegistry);
-      expect(wrapped.shouldSkipRateLimit?.(context)).toBe(true);
+      expect(wrapped.isHistoricalReplay?.(context)).toBe(true);
       await wrapped.callApi('Read', context);
       expect(classify).toHaveBeenCalledWith(context);
       expect(classify.mock.contexts.every((instance) => instance === provider)).toBe(true);

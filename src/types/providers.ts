@@ -140,14 +140,21 @@ export interface ApiProvider extends MinimalApiProvider {
   checkSetupOnEval?: boolean;
   /** Emits bounded operational updates through callApi's onProgress observer. */
   supportsProgress?: boolean;
-  /** Pure per-call classification for local operations that must not queue or update shared rate limits. */
-  shouldSkipRateLimit?: (context?: CallApiContextParams) => boolean;
+  /** Pure per-call classification of prerecorded results that need no workspace or live rate limits. */
+  isHistoricalReplay?: (context?: CallApiContextParams) => boolean;
   callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
   callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
   config?: any;
   delay?: number;
   /** True when callApi applies delay itself and the evaluator should not wait again. */
   handlesOwnDelay?: boolean;
+  /**
+   * True when callApi owns retries for its operations, including requests that
+   * must not be replayed. Scheduling still applies, but the scheduler must not
+   * retry the whole call after its transport or SDK has finished. Subclasses
+   * replacing that behavior can override this with false to use scheduler retries.
+   */
+  handlesOwnRetries?: boolean;
   getSessionId?: () => string;
   /** Native audio input content format accepted by this provider and its configured model. */
   getAudioInputFormat?: () => 'openai' | 'google' | undefined;

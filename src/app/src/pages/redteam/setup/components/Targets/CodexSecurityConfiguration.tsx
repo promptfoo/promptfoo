@@ -196,7 +196,7 @@ export default function CodexSecurityConfiguration({
               <p className="font-semibold">Codex Security SDK</p>
               <p className="mt-1">
                 Compare repository scans, finding validation, model reasoning, and estimated cost.
-                Install <code>promptfoo</code> and <code>@openai/codex-security@^0.1.18</code>{' '}
+                Install <code>promptfoo</code> and <code>@openai/codex-security@^0.1.31</code>{' '}
                 together on the machine running the Promptfoo server.
               </p>
               <p className="mt-2">

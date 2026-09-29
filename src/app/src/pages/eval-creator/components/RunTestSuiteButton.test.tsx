@@ -19,7 +19,7 @@ const renderWithProvider = (ui: React.ReactElement) => {
 const mockShowToast = vi.fn();
 let sourceEvalId: string | undefined;
 
-vi.mock('react-router-dom', () => ({
+vi.mock('react-router', () => ({
   useNavigate: () => vi.fn(),
   useLocation: () => ({ state: sourceEvalId ? { sourceEvalId } : null }),
 }));

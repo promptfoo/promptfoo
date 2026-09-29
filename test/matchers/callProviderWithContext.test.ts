@@ -89,7 +89,7 @@ describe('callProviderWithContext', () => {
 
   it('classifies grading calls with the same context passed to the provider', async () => {
     const provider = createProvider();
-    provider.shouldSkipRateLimit = vi.fn(() => true);
+    provider.isHistoricalReplay = vi.fn(() => true);
     const registry = createRegistry();
     const callContext = {
       vars,
@@ -100,7 +100,7 @@ describe('callProviderWithContext', () => {
         callContext,
       }),
     );
-    expect(provider.shouldSkipRateLimit).toHaveBeenCalledWith(callContext);
+    expect(provider.isHistoricalReplay).toHaveBeenCalledWith(callContext);
     expect(registry.executeSpy).toHaveBeenCalledWith(
       provider,
       expect.any(Function),

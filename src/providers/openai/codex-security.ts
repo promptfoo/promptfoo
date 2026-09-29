@@ -42,7 +42,7 @@ export const CODEX_SECURITY_OPERATIONS = [
   'validation',
 ] as const;
 
-const MINIMUM_CODEX_SECURITY_SDK_VERSION = '0.1.18';
+const MINIMUM_CODEX_SECURITY_SDK_VERSION = '0.1.31';
 
 const ReasoningEffortSchema = z.enum(['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
 
@@ -195,7 +195,7 @@ async function loadCodexSecurity(): Promise<CodexSecurityModule> {
       if (!semverSatisfies(version, `>=${MINIMUM_CODEX_SECURITY_SDK_VERSION}`)) {
         incompatibleVersions.add(version);
         logger.warn(
-          `[CodexSecurity] Ignoring @openai/codex-security ${version}; version ${MINIMUM_CODEX_SECURITY_SDK_VERSION} or newer is required for complete security operations and deep-scan usage accounting.`,
+          `[CodexSecurity] Ignoring @openai/codex-security ${version}; version ${MINIMUM_CODEX_SECURITY_SDK_VERSION} or newer is required for updated plugin archive extraction, finding validation, and deep-scan usage accounting.`,
         );
         continue;
       }
@@ -223,7 +223,7 @@ async function loadCodexSecurity(): Promise<CodexSecurityModule> {
     throw new Error(
       dedent`The installed @openai/codex-security package is incompatible (${Array.from(incompatibleVersions).join(', ')}).
 
-      Version ${MINIMUM_CODEX_SECURITY_SDK_VERSION} or newer is required for finding validation and accurate deep-worker cost tracking.
+      Version ${MINIMUM_CODEX_SECURITY_SDK_VERSION} or newer is required for updated plugin archive extraction, finding validation, and accurate deep-worker cost tracking.
       Install the compatible SDK alongside Promptfoo with:
         npm install promptfoo @openai/codex-security@^${MINIMUM_CODEX_SECURITY_SDK_VERSION}
 
@@ -318,7 +318,7 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
     return false;
   }
 
-  shouldSkipRateLimit(context?: CallApiContextParams): boolean {
+  isHistoricalReplay(context?: CallApiContextParams): boolean {
     // Even malformed import configuration fails locally without using the live service.
     return this.operationContext(context).importingReport;
   }

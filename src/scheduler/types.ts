@@ -40,11 +40,12 @@ export function isProviderResponseRateLimited(
   result: ProviderResponse | undefined,
   error: Error | undefined,
 ): boolean {
-  if (result?.retryable === false) {
-    return false;
-  }
-  // Structured signal — never retry a hard quota.
-  if (result?.metadata?.rateLimitKind === 'quota') {
+  // Local responses and explicit policy decisions must not trigger retries.
+  if (
+    result?.retryable === false ||
+    result?.metadata?.rateLimitRetryable === false ||
+    result?.metadata?.rateLimitKind === 'quota'
+  ) {
     return false;
   }
   if (result?.metadata?.rateLimitKind === 'rate_limit') {

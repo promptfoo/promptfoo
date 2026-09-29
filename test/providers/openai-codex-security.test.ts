@@ -48,10 +48,10 @@ const mockModule = {
     refs: mockRefs,
     workingTree: mockWorkingTree,
   },
-  VERSION: '0.1.18',
+  VERSION: '0.1.31',
   BUNDLED_PLUGIN_VERSION: '0.1.22',
 };
-const incompatibleSdkVersions = ['0.1.8', '0.1.10'] as const;
+const incompatibleSdkVersions = ['0.1.18', '0.1.30'] as const;
 
 function createScanResult(overrides: Record<string, unknown> = {}) {
   const findings = {
@@ -290,7 +290,7 @@ describe('OpenAICodexSecurityProvider', () => {
           check: 'local-preflight',
           repository: '/repo',
           model: 'test-model',
-          sdkVersion: '0.1.18',
+          sdkVersion: mockModule.VERSION,
         },
       });
       expect(result.message).toContain('have not been verified');
@@ -593,7 +593,7 @@ describe('OpenAICodexSecurityProvider', () => {
         codexSecurity: {
           source: { kind: 'sdk' },
           status: 'failed',
-          versions: { sdk: '0.1.18' },
+          versions: { sdk: mockModule.VERSION },
           cost: { baselineUsd: 0.01, range: { minUsd: 0.01, maxUsd: 0.02 } },
           artifacts: [{ kind: 'scanDir', path: '/tmp/incomplete-output' }],
           warnings: ['Incomplete coverage'],
@@ -611,7 +611,7 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(response.metadata).toMatchObject({
         codexSecurity: {
           source: { kind: 'sdk' },
-          versions: { sdk: '0.1.18' },
+          versions: { sdk: mockModule.VERSION },
           operation: 'validation',
         },
       });
@@ -625,9 +625,9 @@ describe('OpenAICodexSecurityProvider', () => {
       'classifies merged report_file %j as local before validation or rendering',
       (report_file) => {
         const provider = new OpenAICodexSecurityProvider({ config: { repository: '/native' } });
-        expect(provider.shouldSkipRateLimit()).toBe(false);
+        expect(provider.isHistoricalReplay()).toBe(false);
         expect(
-          provider.shouldSkipRateLimit({
+          provider.isHistoricalReplay({
             vars: {},
             prompt: { raw: '', label: '', config: { report_file } },
           }),
@@ -639,9 +639,9 @@ describe('OpenAICodexSecurityProvider', () => {
 
     it('classifies base imports but resumes native scheduling for an explicit undefined row override', () => {
       const provider = new OpenAICodexSecurityProvider({ config: { report_file: '{{report}}' } });
-      expect(provider.shouldSkipRateLimit()).toBe(true);
+      expect(provider.isHistoricalReplay()).toBe(true);
       expect(
-        provider.shouldSkipRateLimit({
+        provider.isHistoricalReplay({
           vars: {},
           prompt: { raw: '', label: '', config: { report_file: undefined } },
         }),
@@ -1810,16 +1810,16 @@ describe('OpenAICodexSecurityProvider', () => {
       expect(mockRun).not.toHaveBeenCalled();
     });
 
-    it('rejects outdated security SDKs that omit validation and deep-worker usage', async () => {
+    it.each(incompatibleSdkVersions)('rejects outdated security SDK %s', async (version) => {
       vi.mocked(importModule).mockResolvedValue({
         ...mockModule,
-        VERSION: incompatibleSdkVersions[0],
+        VERSION: version,
       });
       const provider = new OpenAICodexSecurityProvider();
 
       const response = await provider.callApi('Scan');
 
-      expect(response.error).toContain(`package is incompatible (${incompatibleSdkVersions[0]})`);
+      expect(response.error).toContain(`package is incompatible (${version})`);
       const suggestedRange = response.error?.match(
         /npm install promptfoo @openai\/codex-security@(\S+)/,
       )?.[1];

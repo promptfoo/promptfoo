@@ -2,12 +2,12 @@
 title: Evaluate a vulnerability-finding harness
 sidebar_label: Codex Security Harness Comparison
 sidebar_position: 65
-description: Compare Codex Security source reviews in Promptfoo using pinned source, curated expected findings, coverage, recorded model usage, and genuine saved reports.
+description: Compare Codex Security source reviews in Promptfoo using pinned source, curated expected findings, coverage, recorded model usage, and saved reports.
 ---
 
 # Evaluate a vulnerability-finding harness
 
-Compare two Codex Security configurations on the same pinned source, then review their findings against independently curated ground truth. The consolidated example runs a standard source review with Luna and Terra at medium reasoning effort; a separate config imports genuine saved reports without repeating the operation. The example includes a recorded aggregate case study; supply your own reports when running import.
+Compare two Codex Security configurations on the same pinned source, then review their findings against independently curated ground truth. The example runs a standard source review with Luna and Terra at medium reasoning effort; a separate config imports saved reports without repeating the operation. The example includes a recorded aggregate case study; supply your own reports when running import.
 
 Use this workflow to answer a specific question, such as which run identifies more of your independently confirmed expected findings. Completion and coverage checks alone do not measure detection quality.
 
@@ -121,7 +121,7 @@ The failed Luna attempt produced an invalid manifest and no canonical report. It
 | Estimated USD range, all attempts                           | $0.32471884–$0.61524308 | $3.62291200–$6.74751200 |
 | Mean outer CLI duration, all attempts                       |                229.86 s |                239.73 s |
 
-The precision bounds include unresolved claims; they are not confidence intervals. Counts deduplicate control claims within each report, then pool across eligible repeats. One finding can contain multiple claims. The mean of per-report precision bounds differs from pooled precision: Luna's lower bound is 95.45% when averaged per report and 94.74% when pooling its 19 claims. No refuted core claim does not establish that every impact or precondition statement was correct.
+The precision bounds include unresolved claims; they are not confidence intervals. Counts deduplicate control claims within each report, then pool across eligible repeats. One finding can contain multiple claims. The mean of per-report precision bounds differs from pooled precision: Luna's lower bound is 95.45% when averaged per report and 94.74% when pooling its 19 claims. Impact and precondition statements still need independent review, even when no core claim was refuted.
 
 Coverage and delivered artifacts exposed harness failures. Terra repeat 1's model repairs reduced malformed drafts to four canonical findings while broader coverage prose still said other surfaces were reported; SDK export and Promptfoo agreed on four. Luna repeat 3 retained seven findings with twelve schema-recovery warnings and partial coverage. Its expected denominator stayed 11. Complete coverage likewise did not guarantee full recall.
 
@@ -129,7 +129,7 @@ The frozen protocol used SDK 0.1.31/plugin 0.1.95, CLI 0.156.1, saved ChatGPT au
 
 This is known public code with inline vulnerability annotations, not an unseen-code benchmark. The reading restrictions were prompt instructions, not filesystem isolation; a trace audit determined the excluded attempt's invalidity. Two AI agents reviewed anonymous finding packets, but timing batches and accidental disclosure of Terra repeat 1 model/count metadata to one reviewer limited blinding. This was source review, not human validation or runtime reproduction. Three planned repeats and two eligible reports per model support descriptive observations, not a statistically established winner.
 
-Six earlier setup failures occurred before any model session because of output-directory permissions. They remain a separate operational cohort. An earlier three-file pilot also showed why the prompt must explicitly include intentional flaws and require canonical finding schemas. Neither earlier cohort is pooled into these six model-backed attempts; no failed or invalid attempt was replaced to improve this table.
+Six earlier setup failures occurred before any model session because of output-directory permissions. They are reported separately. An earlier three-file pilot also showed why the prompt must explicitly include intentional flaws and require canonical finding schemas. Both are excluded from these six model-backed attempts; no failed or invalid attempt was replaced to improve this table.
 
 ## Define ground truth before measuring quality
 

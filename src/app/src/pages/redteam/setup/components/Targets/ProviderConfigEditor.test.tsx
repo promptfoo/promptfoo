@@ -180,6 +180,43 @@ describe('ProviderConfigEditor', () => {
     useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
   });
 
+  it.each([
+    ['bedrock-agent', 'bedrock-agent:your-agent-id'],
+    ['claude-agent-sdk', 'file:///path/to/claude_agent.py'],
+  ])('provides an editable target configuration for %s', (providerType, id) => {
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={{ id, config: { retained: 'value' } }}
+        setProvider={vi.fn()}
+        providerType={providerType}
+      />,
+    );
+    expect(screen.getByTestId('custom-config')).toBeVisible();
+    expect(screen.getByTestId('custom-raw-config')).toHaveTextContent('retained');
+    expect(screen.getByTestId('common-config')).toBeVisible();
+  });
+
+  it.each(['bedrock-agent', 'claude-agent-sdk'])(
+    'rejects an empty ID for the editable %s target',
+    (providerType) => {
+      let validate: (() => boolean) | undefined;
+      const setError = vi.fn();
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: '', config: {} }}
+          setProvider={vi.fn()}
+          setError={setError}
+          providerType={providerType}
+          onValidationRequest={(validator) => {
+            validate = validator;
+          }}
+        />,
+      );
+      expect(validate?.()).toBe(false);
+      expect(setError).toHaveBeenCalledWith('Provider ID is required');
+    },
+  );
+
   describe('validate method', () => {
     it('should return true from validate() for a valid http provider', () => {
       const mockSetProvider = vi.fn();
