@@ -50,6 +50,7 @@ interface TempoTraceResponse {
   }>;
 }
 
+const MAX_SPANS = 10_000;
 const SPAN_KIND_NAMES = ['unspecified', 'internal', 'server', 'client', 'producer', 'consumer'];
 const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/i;
 const BASE64_TRACE_ID_PATTERN = /^[A-Za-z0-9+/]{22}(?:==)?$/;
@@ -329,6 +330,11 @@ export class TempoProvider implements TraceProvider {
                 throw new TraceProviderError('Conflicting duplicate Tempo span IDs');
               }
               spans.set(normalizedSpan.spanId, normalizedSpan);
+              if (spans.size > MAX_SPANS) {
+                throw new TraceProviderError('Tempo trace exceeds the maximum span count', {
+                  limitExceeded: true,
+                });
+              }
             }
           } catch (error) {
             if (error instanceof TraceProviderError) {
@@ -390,7 +396,7 @@ export class TempoProvider implements TraceProvider {
     }
 
     const snapshot = this.transformSpans(data, traceId);
-    const spans = snapshot.spans.slice(0, Math.max(1, options?.maxSpans ?? Infinity));
+    const spans = snapshot.spans.slice(0, Math.max(1, options?.maxSpans ?? MAX_SPANS));
     const services = new Set<string>();
     for (const span of spans) {
       const service = span.attributes?.['service.name'];

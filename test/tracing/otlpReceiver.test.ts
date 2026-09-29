@@ -1789,6 +1789,33 @@ describe('OTLPReceiver', () => {
       expect((spans as any[])[0].parentSpanId).toBeUndefined();
     });
 
+    it('keeps timed log IDs stable across retries and distinct within a batch', async () => {
+      const record = {
+        timeUnixNano: '1700000000000000000',
+        traceId: hexTraceId,
+        spanId: hexParentSpanId,
+        body: { stringValue: 'Inventory lookup complete' },
+      };
+      const payload = makeLogsRequest([record, record]);
+      for (let attempt = 0; attempt < 2; attempt++) {
+        await request(receiver.getApp())
+          .post('/v1/logs')
+          .set('Content-Type', 'application/json')
+          .send(payload)
+          .expect(200);
+      }
+      const first = persistSpans.mock.calls[0][1];
+      const retry = persistSpans.mock.calls[1][1];
+      expect(first).toEqual(retry);
+      expect(new Set(first.map((span: { spanId: string }) => span.spanId)).size).toBe(2);
+      await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(makeLogsRequest([{ ...record, body: { stringValue: 'Different event' } }]))
+        .expect(200);
+      expect(persistSpans.mock.calls[2][1][0].spanId).not.toBe(first[0].spanId);
+    });
+
     it('handles multiple log records in a single request', async () => {
       const req = makeLogsRequest([
         {

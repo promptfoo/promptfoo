@@ -14,6 +14,7 @@ import {
 import {
   type AddSpansOptions,
   getTraceStore,
+  LOCAL_SPAN_EXPORT_FAILURE,
   type SpanData,
   TraceLimitError,
   type TraceSpanQueryOptions,
@@ -82,7 +83,11 @@ const inFlightExternalFetches = new WeakMap<
 
 async function assertStoredTraceComplete(traceId: string): Promise<void> {
   const reason = (await getTraceStore().getTraceMetadata(traceId))?.promptfooTraceIncomplete;
-  if (reason === 'conflicting trace evidence' || reason === 'cyclic parent relationships') {
+  if (
+    reason === 'conflicting trace evidence' ||
+    reason === 'cyclic parent relationships' ||
+    reason === LOCAL_SPAN_EXPORT_FAILURE
+  ) {
     throw Object.assign(new Error(`Cannot grade incomplete trace: ${reason}.`), {
       name: 'TraceEvidenceError',
     });
@@ -500,22 +505,8 @@ async function fetchFromExternalProvider(
         };
       }
 
-      const snapshot = waitForStableSpans
-        ? JSON.stringify(
-            [...validSpans].sort((a, b) => a.spanId.localeCompare(b.spanId)),
-            (_key, value) =>
-              value && typeof value === 'object' && !Array.isArray(value)
-                ? Object.fromEntries(
-                    Object.keys(value)
-                      .sort()
-                      .map((key) => [key, value[key]]),
-                  )
-                : value,
-          )
-        : undefined;
-      latestComplete =
-        validSpans.every((span) => span.endTime !== undefined && span.endTime >= span.startTime) &&
-        (!waitForStableSpans || snapshot === previousSnapshot);
+      const snapshot = waitForStableSpans ? traceSnapshot(validSpans) : undefined;
+      latestComplete = isCompleteSnapshot(validSpans, snapshot, previousSnapshot);
       previousSnapshot = snapshot;
       if ((requireComplete || (waitForStableSpans && !latestComplete)) && attempt < maxRetries) {
         await waitForRetry(retryDelayMs, abortSignal);
@@ -563,6 +554,31 @@ async function fetchFromExternalProvider(
   return latestContext;
 }
 
+function isCompleteSnapshot(
+  spans: SpanData[],
+  snapshot: string | undefined,
+  previousSnapshot: string | undefined,
+): boolean {
+  return (
+    spans.every((span) => span.endTime !== undefined && span.endTime >= span.startTime) &&
+    snapshot === previousSnapshot
+  );
+}
+
+function traceSnapshot(spans: SpanData[]): string {
+  return JSON.stringify(
+    [...spans].sort((a, b) => a.spanId.localeCompare(b.spanId)),
+    (_key, value) =>
+      value && typeof value === 'object' && !Array.isArray(value)
+        ? Object.fromEntries(
+            Object.keys(value)
+              .sort()
+              .map((key) => [key, value[key]]),
+          )
+        : value,
+  );
+}
+
 function createTraceAbortError(signal?: AbortSignal): Error {
   const error = new Error('cancelled by user') as Error & { cause?: unknown };
   error.cause = signal?.reason;
@@ -594,6 +610,7 @@ async function fetchFromLocalStore(
   traceId: string,
   options: {
     requireComplete?: boolean;
+    waitForStableSpans?: boolean;
     maxRetries: number;
     retryDelayMs: number;
     includeInternalSpans: boolean;
@@ -612,9 +629,11 @@ async function fetchFromLocalStore(
     abortSignal,
     redactAttributes,
     requireComplete,
+    waitForStableSpans,
     ...spanOptions
   } = options;
   const traceStore = getTraceStore();
+  let previousSnapshot: string | undefined;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (abortSignal?.aborted) {
@@ -624,9 +643,17 @@ async function fetchFromLocalStore(
       const spans = await traceStore.getSpans(traceId, spanOptions);
       await assertStoredTraceComplete(traceId);
 
-      if (requireComplete && attempt < maxRetries) {
+      const snapshot = waitForStableSpans ? traceSnapshot(spans) : undefined;
+      const complete = isCompleteSnapshot(spans, snapshot, previousSnapshot);
+      previousSnapshot = snapshot;
+      if ((requireComplete || (waitForStableSpans && !complete)) && attempt < maxRetries) {
         await waitForRetry(retryDelayMs, abortSignal);
         continue;
+      }
+      if (requireComplete && spans.length && !complete) {
+        throw Object.assign(new Error('Execution trace evidence is incomplete or unstable'), {
+          name: 'TraceEvidenceError',
+        });
       }
 
       if (spans.length === 0) {
@@ -805,5 +832,5 @@ async function fetchTraceContextData(
   }
 
   // Otherwise, use local TraceStore
-  return fetchFromLocalStore(traceId, fetchOptions);
+  return fetchFromLocalStore(traceId, { ...fetchOptions, waitForStableSpans });
 }

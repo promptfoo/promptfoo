@@ -165,6 +165,37 @@ describe('TempoProvider', () => {
     expect((await provider.fetchTrace(TRACE_ID))?.spans).toHaveLength(2);
   });
 
+  it.each([10_000, 10_001])(
+    'bounds complete snapshots at 10,000 unique spans: %s',
+    async (count) => {
+      const original = traceResponse.batches[0].scopeSpans[0].spans[0];
+      mockedFetch.mockResolvedValue(
+        response({
+          batches: [
+            {
+              scopeSpans: [
+                {
+                  spans: Array.from({ length: count }, (_, index) => ({
+                    ...original,
+                    spanId: (index + 1).toString(16).padStart(16, '0'),
+                  })),
+                },
+              ],
+            },
+          ],
+        }),
+      );
+      const result = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' }).fetchTrace(
+        TRACE_ID,
+      );
+      if (count > 10_000) {
+        await expect(result).rejects.toMatchObject({ limitExceeded: true });
+      } else {
+        expect((await result)?.spans).toHaveLength(count);
+      }
+    },
+  );
+
   it.each([0, -2])(
     'clamps maxSpans=%s to one, like the other trace providers',
     async (maxSpans) => {
@@ -354,7 +385,7 @@ describe('TempoProvider', () => {
     });
   });
 
-  it('preserves the full snapshot so storage can reject an oversized trace atomically', async () => {
+  it('rejects an oversized snapshot even when the caller requests one span', async () => {
     const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
     const spans = Array.from({ length: 10_001 }, (_, index) => ({
       traceId: TRACE_ID,
@@ -364,9 +395,9 @@ describe('TempoProvider', () => {
     }));
     mockedFetch.mockResolvedValueOnce(response({ batches: [{ scopeSpans: [{ spans }] }] }));
 
-    const trace = await provider.fetchTrace(TRACE_ID);
-    expect(trace?.spans).toHaveLength(10_001);
-    expect(trace?.spans.at(-1)?.spanId).toBe(spans.at(-1)?.spanId);
+    await expect(provider.fetchTrace(TRACE_ID, { maxSpans: 1 })).rejects.toMatchObject({
+      limitExceeded: true,
+    });
   });
 
   it('rejects invalid or oversized trace responses', async () => {

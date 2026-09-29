@@ -88,6 +88,33 @@ describe('evaluator trace integration', () => {
     vi.restoreAllMocks();
   });
 
+  it('passes published tracing defaults to receiver startup for direct evaluator callers', async () => {
+    const provider = { id: 'tempo', endpoint: 'https://tempo.example.test' } as const;
+    const tracing = { enabled: true, otlp: { http: {} }, provider };
+    const testSuite: TestSuite = {
+      providers: [],
+      prompts: [],
+      tests: [],
+      tracing: tracing as TestSuite['tracing'],
+    };
+    const runtime: EvaluatorRuntime<Eval, EvalResult> = {
+      ...nodeEvaluatorRuntime,
+      resolveRuntimeTestSuite: (suite) => suite,
+    };
+
+    await evaluate(testSuite, mockEval, {}, runtime);
+
+    const evaluated = vi.mocked(evaluatorTracing.startOtlpReceiverIfNeeded).mock.calls[0][0];
+    expect(evaluated.tracing?.otlp?.http).toEqual({
+      enabled: true,
+      port: 4318,
+      host: '127.0.0.1',
+      acceptFormats: ['json', 'protobuf'],
+    });
+    expect(evaluated.tracing?.provider).toBe(provider);
+    expect(tracing.otlp.http).toEqual({});
+  });
+
   it('should pass traceId through to assertions when tracing is enabled', async () => {
     // Mock trace creation and retrieval
     const testTraceId = 'abcdef1234567890abcdef1234567890';
@@ -689,6 +716,46 @@ describe('evaluator trace integration', () => {
         TEMPO_INTERMEDIATE: '{{ env.TEMPO_SOURCE_SECRET }}',
         TEMPO_SOURCE_SECRET: 'programmatic-chained-secret',
       });
+    });
+
+    it('inherits active tracing configuration when runEval has no suite', async () => {
+      const captured = vi.fn();
+      const provider = createMockProvider({
+        async callApi(_prompt, context) {
+          captured(resolveTracingOptions({ strategyId: 'basic', test: context?.test }));
+          return { output: 'Inventory is available' };
+        },
+      });
+      const [result] = await cliState.withConfig(
+        {
+          tracing: {
+            enabled: true,
+            provider: providerConfig,
+            queryDelay: 750,
+            otlp: {
+              http: {
+                enabled: true,
+                port: 4318,
+                host: '127.0.0.1',
+                acceptFormats: ['json'],
+                redactAttributes: ['secret'],
+              },
+            },
+          },
+          redteam: { tracing: { enabled: true, includeInGrading: true } } as TestSuite['redteam'],
+        },
+        () => runEval(createRunOptions(provider, { testSuite: undefined })),
+      );
+      expect(result.success).toBe(true);
+      expect(captured).toHaveBeenCalledWith(
+        expect.objectContaining({
+          enabled: true,
+          includeInGrading: true,
+          provider: providerConfig,
+          queryDelay: 750,
+          redactAttributes: ['secret'],
+        }),
+      );
     });
 
     it('makes request-scoped tracing configuration available without exposing it in provider context', async () => {

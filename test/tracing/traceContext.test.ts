@@ -42,6 +42,50 @@ function mockExternalTrace(spans: SpanData[], traceId = 'trace-1') {
 }
 
 describe('fetchTraceContext', () => {
+  it('reports failed local persistence as incomplete evidence', async () => {
+    mocks.isExternalTraceProvider.mockReturnValue(false);
+    mocks.getTraceMetadata.mockResolvedValue({
+      promptfooTraceIncomplete: 'local span export failed',
+    });
+    await expect(
+      fetchTraceContext('trace-1', { requireComplete: true, maxRetries: 0 }),
+    ).rejects.toMatchObject({
+      name: 'TraceEvidenceError',
+      message: 'Cannot grade incomplete trace: local span export failed.',
+    });
+  });
+
+  it.each(['open', 'changing', 'closed', 'ordinary'])(
+    'checks local snapshot completion: %s',
+    async (state) => {
+      mocks.isExternalTraceProvider.mockReturnValue(false);
+      const span: SpanData = { spanId: 'lookup', name: 'inventory.lookup', startTime: 1 };
+      if (state === 'closed' || state === 'changing') {
+        span.endTime = 2;
+      }
+      storedSpans.push(span);
+      if (state === 'changing') {
+        mocks.getSpans
+          .mockResolvedValueOnce([{ ...span, attributes: { count: 1 } }])
+          .mockResolvedValue([{ ...span, attributes: { count: 2 } }]);
+      }
+      const pending = fetchTraceContext('trace-1', {
+        requireComplete: state !== 'ordinary',
+        waitForStableSpans: state !== 'ordinary',
+        maxRetries: 1,
+        retryDelayMs: 0,
+      });
+      if (state === 'open' || state === 'changing') {
+        await expect(pending).rejects.toMatchObject({
+          name: 'TraceEvidenceError',
+          message: 'Execution trace evidence is incomplete or unstable',
+        });
+      } else {
+        await expect(pending).resolves.toMatchObject({ spans: [{ spanId: 'lookup' }] });
+      }
+    },
+  );
+
   it.each(['required', 'ordinary', 'empty', 'after complete'])(
     'handles provider-reported incomplete snapshots: %s',
     async (state) => {

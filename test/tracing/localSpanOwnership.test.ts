@@ -75,4 +75,32 @@ describe('local SDK span ownership', () => {
     await flushOtel();
     expect((await store.getTraceMetadata(traceId))?.promptfooExternalSpanIds).toEqual([spanId]);
   });
+
+  it('keeps failed local exports incomplete and rejects later imports after reservations are released', async () => {
+    const { span, traceId, spanId, store } = await startSpan();
+    const addSpans = vi.spyOn(store, 'addSpans').mockRejectedValueOnce(new Error('write failed'));
+    span.end();
+    await flushOtel();
+    addSpans.mockRestore();
+
+    expect(await store.getSpans(traceId)).toEqual([]);
+    expect((await store.getTraceMetadata(traceId))?.promptfooTraceIncomplete).toBe(
+      'local span export failed',
+    );
+    await shutdownOtel();
+    const external = new TraceStore();
+    const replacement = { spanId, name: 'external replacement', startTime: 1 };
+    for (const updateExisting of [false, true, false]) {
+      await expect(
+        external.addSpans(traceId, [replacement], {
+          source: 'external',
+          updateExisting,
+        }),
+      ).rejects.toMatchObject({ name: 'TraceEvidenceError' });
+    }
+    expect((await store.getTraceMetadata(traceId))?.promptfooTraceIncomplete).toBe(
+      'local span export failed',
+    );
+    expect(await store.getSpans(traceId)).toEqual([]);
+  });
 });

@@ -1,13 +1,14 @@
+import { createRequire } from 'node:module';
+
 import { DiagConsoleLogger, DiagLogLevel, diag, propagation } from '@opentelemetry/api';
 import { W3CTraceContextPropagator } from '@opentelemetry/core';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { BatchSpanProcessor, NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
 import logger from '../logger';
 import { VERSION } from '../version';
 import { LocalSpanExporter } from './localSpanExporter';
-import type { Span, SpanProcessor } from '@opentelemetry/sdk-trace-base';
+import type { Span, SpanProcessor } from '@opentelemetry/sdk-trace-node';
 
 import type { OtelConfig } from './otelConfig';
 
@@ -20,6 +21,8 @@ class LocalSpanProcessor extends BatchSpanProcessor {
     this.localExporter.reserveSpan(span.spanContext());
   }
 }
+
+const require = createRequire(import.meta.url);
 
 // Singleton instances
 let provider: NodeTracerProvider | null = null;
@@ -103,6 +106,9 @@ export function initializeOtel(config: OtelConfig): void {
 
   // Add external OTLP exporter if endpoint configured
   if (config.endpoint) {
+    // Local-only tracing does not need the external exporter and its transports.
+    const { OTLPTraceExporter } =
+      require('@opentelemetry/exporter-trace-otlp-http') as typeof import('@opentelemetry/exporter-trace-otlp-http');
     const otlpExporter = new OTLPTraceExporter({
       url: config.endpoint,
     });

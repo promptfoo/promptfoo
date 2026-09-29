@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LocalSpanExporter } from '../../src/tracing/localSpanExporter';
 import { TempoProvider } from '../../src/tracing/providers/tempo';
 import * as fetchModule from '../../src/util/fetch/index';
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace-node';
 
 // Mock the store module
 const mockAddSpans = vi.fn();
@@ -11,10 +11,12 @@ const releaseReservation = vi.fn();
 const mockTraceStore = {
   addSpans: mockAddSpans,
   reserveLocalSpan: vi.fn(() => releaseReservation),
+  markTraceIncomplete: vi.fn(),
 };
 
 vi.mock('../../src/tracing/store', () => ({
   getTraceStore: vi.fn(() => mockTraceStore),
+  LOCAL_SPAN_EXPORT_FAILURE: 'local span export failed',
 }));
 
 // Mock logger
@@ -34,6 +36,7 @@ describe('LocalSpanExporter', () => {
     vi.clearAllMocks();
     mockAddSpans.mockResolvedValue({ stored: true });
     mockTraceStore.reserveLocalSpan.mockReturnValue(releaseReservation);
+    mockTraceStore.markTraceIncomplete.mockResolvedValue(undefined);
     exporter = new LocalSpanExporter();
   });
 
@@ -108,11 +111,70 @@ describe('LocalSpanExporter', () => {
         const result = exportSpans([span]);
         await vi.runAllTimersAsync();
         await result;
-        expect(releaseReservation).toHaveBeenCalledTimes(mode === 'failed' ? 0 : 1);
+        expect(releaseReservation).toHaveBeenCalledTimes(1);
         await exporter.shutdown();
         expect(releaseReservation).toHaveBeenCalledTimes(1);
       },
     );
+
+    it('keeps failed spans reserved until their incomplete marker is persisted', async () => {
+      const span = createMockSpan();
+      exporter.reserveSpan(span.spanContext());
+      mockAddSpans.mockRejectedValue(new Error('database unavailable'));
+      let finishMarker!: () => void;
+      mockTraceStore.markTraceIncomplete.mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            finishMarker = resolve;
+          }),
+      );
+
+      const result = exportSpans([span]);
+      await vi.waitFor(() =>
+        expect(mockTraceStore.markTraceIncomplete).toHaveBeenCalledWith(
+          'trace-id-123',
+          'local span export failed',
+        ),
+      );
+      expect(releaseReservation).not.toHaveBeenCalled();
+      finishMarker();
+
+      expect((await result).code).toBe(ExportResultCode.FAILED);
+      expect(releaseReservation).toHaveBeenCalledOnce();
+    });
+
+    it('retains ownership until shutdown when recording export failure also fails', async () => {
+      const span = createMockSpan();
+      exporter.reserveSpan(span.spanContext());
+      const error = new Error('database unavailable');
+      mockAddSpans.mockRejectedValue(error);
+      mockTraceStore.markTraceIncomplete.mockRejectedValue(new Error('marker unavailable'));
+
+      expect(await exportSpans([span])).toEqual({ code: ExportResultCode.FAILED, error });
+      expect(releaseReservation).not.toHaveBeenCalled();
+      await exporter.shutdown();
+      expect(releaseReservation).toHaveBeenCalledOnce();
+    });
+
+    it('marks conversion failures incomplete and continues exporting other traces', async () => {
+      const invalid = createMockSpan();
+      Object.defineProperty(invalid, 'resource', {
+        get() {
+          throw new Error('invalid resource');
+        },
+      });
+      const valid = createMockSpan({ traceId: 'other-trace' });
+      exporter.reserveSpan(invalid.spanContext());
+      exporter.reserveSpan(valid.spanContext());
+
+      expect((await exportSpans([invalid, valid])).code).toBe(ExportResultCode.FAILED);
+      expect(mockTraceStore.markTraceIncomplete).toHaveBeenCalledWith(
+        'trace-id-123',
+        'local span export failed',
+      );
+      expect(mockAddSpans).toHaveBeenCalledOnce();
+      expect(releaseReservation).toHaveBeenCalledTimes(2);
+    });
 
     it('releases an abandoned span at shutdown', async () => {
       exporter.reserveSpan(createMockSpan().spanContext());

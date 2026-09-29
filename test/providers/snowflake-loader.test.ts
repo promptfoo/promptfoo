@@ -157,7 +157,18 @@ describe('Snowflake public provider loading', () => {
     },
   );
 
-  it('loads a YAML provider file with caller environment overriding file defaults', async () => {
+  it.each([
+    {
+      name: 'uses provider-file env before suite defaults',
+      override: undefined,
+      token: 'file-token',
+    },
+    {
+      name: 'uses explicit provider options before file env',
+      override: 'caller-token',
+      token: 'caller-token',
+    },
+  ])('$name', async ({ override, token }) => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'snowflake-loader-'));
     fs.writeFileSync(
       path.join(tempDir, 'provider.yaml'),
@@ -165,7 +176,8 @@ describe('Snowflake public provider loading', () => {
     );
     const provider = await loadApiProvider('file://provider.yaml', {
       basePath: tempDir,
-      env: { SNOWFLAKE_API_KEY: 'caller-token' },
+      env: { SNOWFLAKE_API_KEY: 'suite-token' },
+      options: override ? { env: { SNOWFLAKE_API_KEY: override } } : undefined,
     });
 
     await provider.callApi('Hello', {
@@ -176,7 +188,7 @@ describe('Snowflake public provider loading', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       'https://file-account.snowflakecomputing.com/api/v2/cortex/inference:complete',
       expect.objectContaining({
-        headers: expect.objectContaining({ Authorization: 'Bearer caller-token' }),
+        headers: expect.objectContaining({ Authorization: `Bearer ${token}` }),
       }),
     );
   });

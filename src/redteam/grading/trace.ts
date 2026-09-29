@@ -252,5 +252,14 @@ export function getGradingTrace(
       'Cached responses cannot provide current execution trace evidence; rerun with --no-cache',
     );
   }
+  if (trace) {
+    const spanIds = new Set<string>();
+    for (const { spanId } of trace.spans) {
+      if (spanIds.has(spanId)) {
+        throw new TraceEvidenceError('Duplicate grading span ID.');
+      }
+      spanIds.add(spanId);
+    }
+  }
   return trace;
 }

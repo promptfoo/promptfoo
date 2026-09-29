@@ -147,6 +147,44 @@ describe('BraintrustProvider', () => {
     },
   );
 
+  it('filters old rows before enforcing the expanded trace span count', async () => {
+    mockedFetch.mockResolvedValue(
+      response({
+        rows: [
+          ...Array.from({ length: 10_001 }, (_, index) => ({
+            ...rows[0],
+            span_id: `old-${index}`,
+          })),
+          rows[1],
+          { ...rows[0], span_id: '', id: '' },
+        ],
+      }),
+    );
+    const result = await new BraintrustProvider(config).fetchTrace(TRACE_ID, {
+      earliestStartTime: 1704067200050,
+      maxSpans: 1,
+    });
+    expect(result?.spans.map((span) => span.name)).toEqual(['tool.search']);
+    expect(result?.incomplete).toBe(true);
+  });
+
+  it('enforces the relevant span ceiling even with a lower display limit', async () => {
+    mockedFetch.mockResolvedValue(
+      response({
+        rows: Array.from({ length: 10_001 }, (_, index) => ({
+          ...rows[0],
+          span_id: `current-${index}`,
+        })),
+      }),
+    );
+    await expect(
+      new BraintrustProvider(config).fetchTrace(TRACE_ID, {
+        earliestStartTime: 1704067200000,
+        maxSpans: 1,
+      }),
+    ).rejects.toMatchObject({ limitExceeded: true });
+  });
+
   it('accepts a complete trace at the span limit', async () => {
     mockedFetch.mockResolvedValue(
       response({

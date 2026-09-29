@@ -148,7 +148,8 @@ export class BraintrustProvider implements TraceProvider {
     // Braintrust native root_span_id values do not necessarily match W3C trace IDs.
     // Customers should log the propagated ID as metadata.trace_id or metadata.promptfoo_trace_id.
     // The traces shape returns every span in a matching trace, including child spans that do
-    // not repeat the correlation metadata.
+    // not repeat the correlation metadata. LIMIT bounds traces, not their expanded span rows;
+    // enforce the span ceiling below after applying the requested start-time filter.
     const query = [
       'SELECT id, span_id, root_span_id, span_parents, created, input, output,',
       '  error, metadata, metrics, span_attributes',
@@ -202,11 +203,6 @@ export class BraintrustProvider implements TraceProvider {
     if (!Array.isArray(rows)) {
       throw new TraceProviderError('Braintrust returned an invalid query response');
     }
-    if (rows.length > MAX_SPANS) {
-      throw new TraceProviderError('Braintrust trace exceeds the maximum span count', {
-        limitExceeded: true,
-      });
-    }
     if (rows.length === 0) {
       return null;
     }
@@ -214,6 +210,7 @@ export class BraintrustProvider implements TraceProvider {
     const spans: SpanData[] = [];
     const services = new Set<string>();
     let incomplete = false;
+    let matchingSpans = 0;
     for (const row of rows) {
       const span = transformSpan(row);
       if (!span) {
@@ -221,10 +218,15 @@ export class BraintrustProvider implements TraceProvider {
         logger.warn('[BraintrustProvider] Skipping malformed span');
         continue;
       }
-      if (
-        spans.length >= maxSpans ||
-        (options?.earliestStartTime !== undefined && span.startTime < options.earliestStartTime)
-      ) {
+      if (options?.earliestStartTime !== undefined && span.startTime < options.earliestStartTime) {
+        continue;
+      }
+      if (++matchingSpans > MAX_SPANS) {
+        throw new TraceProviderError('Braintrust trace exceeds the maximum span count', {
+          limitExceeded: true,
+        });
+      }
+      if (spans.length >= maxSpans) {
         continue;
       }
       const service = span.attributes?.['service.name'];

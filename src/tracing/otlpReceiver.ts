@@ -751,16 +751,23 @@ export class OTLPReceiver {
   private parseOTLPLogsJSONRequest(body: OTLPLogsRequest): ParsedTrace[] {
     const traces: ParsedTrace[] = [];
     const resourceLogs = body?.resourceLogs ?? [];
+    const batchId = crypto.createHash('sha256').update(JSON.stringify(resourceLogs)).digest('hex');
+    let recordIndex = 0;
     logger.debug(`[OtlpReceiver] Parsing logs request with ${resourceLogs.length} resource logs`);
 
     for (const resourceLog of resourceLogs) {
       const resourceAttributes = this.parseAttributes(resourceLog.resource?.attributes);
       for (const scopeLog of resourceLog.scopeLogs ?? []) {
         for (const log of scopeLog.logRecords ?? []) {
+          const spanId = crypto
+            .createHash('sha256')
+            .update(`${batchId}:${recordIndex++}`)
+            .digest('hex')
+            .slice(0, 16);
           // Log-and-skip on a per-record basis so one malformed record can't
           // drop the entire batch (the SDK often batches dozens per flush).
           try {
-            const parsed = this.logRecordToParsedTrace(log, scopeLog, resourceAttributes);
+            const parsed = this.logRecordToParsedTrace(log, scopeLog, resourceAttributes, spanId);
             if (parsed) {
               traces.push(parsed);
             }
@@ -783,6 +790,7 @@ export class OTLPReceiver {
     log: OTLPLogRecord,
     scopeLog: OTLPScopeLogs,
     resourceAttributes: Record<string, any>,
+    spanId: string,
   ): ParsedTrace | null {
     // Prefer an inline traceId on the log record (set when the SDK propagated
     // TRACEPARENT into its logs context). Fall back to the resource attribute
@@ -834,9 +842,8 @@ export class OTLPReceiver {
 
     // Log's own span_id is the span the log was emitted from, so that span
     // becomes our synthesized span's parent. Fall back to the resource-level
-    // promptfoo.parent_span_id the provider injected. We mint a fresh 16-hex
-    // span id so multiple logs within the same span don't collide on
-    // (trace_id, span_id).
+    // promptfoo.parent_span_id the provider injected. Timed records use their
+    // batch identity and position so exact retries preserve distinct log IDs.
     const hasValidInlineSpanId = !!log.spanId && !isZeroSpanId(log.spanId);
     const rawParentSpanId = hasValidInlineSpanId
       ? log.spanId
@@ -850,7 +857,7 @@ export class OTLPReceiver {
     return {
       traceId,
       span: {
-        spanId: randomSpanId(),
+        spanId: timeNano ? spanId : randomSpanId(),
         parentSpanId,
         name,
         startTime,

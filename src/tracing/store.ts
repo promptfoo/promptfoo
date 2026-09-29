@@ -54,6 +54,7 @@ export interface AddSpansOptions {
 }
 
 const EXTERNAL_SPAN_IDS_KEY = 'promptfooExternalSpanIds';
+export const LOCAL_SPAN_EXPORT_FAILURE = 'local span export failed';
 // Keep the persisted key compatible with traces written before external retry checks.
 const SPAN_HASHES_KEY = 'promptfooLocalSpanHashes';
 
@@ -459,6 +460,14 @@ export class TraceStore {
             .run();
         };
         if (options?.source === 'external') {
+          if (metadata.promptfooTraceIncomplete === LOCAL_SPAN_EXPORT_FAILURE) {
+            throw Object.assign(
+              new Error('Cannot import spans after a local span export failed.'),
+              {
+                name: 'TraceEvidenceError',
+              },
+            );
+          }
           if (spans.some((span) => TraceStore.pendingLocalSpans.has(`${traceId}:${span.spanId}`))) {
             throw Object.assign(
               new Error('External trace spans conflict with pending locally owned span IDs.'),
@@ -673,7 +682,9 @@ export class TraceStore {
     await db
       .update(tracesTable)
       .set({
-        metadata: sql`json_set(coalesce(${tracesTable.metadata}, '{}'), '$.promptfooTraceIncomplete', ${reason})`,
+        metadata: sql`json_set(coalesce(${tracesTable.metadata}, '{}'), '$.promptfooTraceIncomplete',
+          case when json_extract(${tracesTable.metadata}, '$.promptfooTraceIncomplete') = ${LOCAL_SPAN_EXPORT_FAILURE}
+            then ${LOCAL_SPAN_EXPORT_FAILURE} else ${reason} end)`,
       })
       .where(eq(tracesTable.traceId, traceId))
       .run();

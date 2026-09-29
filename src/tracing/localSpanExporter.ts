@@ -1,10 +1,10 @@
 import { SpanKind, TraceFlags } from '@opentelemetry/api';
 import { ExportResultCode } from '@opentelemetry/core';
 import logger from '../logger';
-import { getTraceStore, type SpanData, type TraceStore } from './store';
+import { getTraceStore, LOCAL_SPAN_EXPORT_FAILURE, type SpanData, type TraceStore } from './store';
 import type { SpanContext } from '@opentelemetry/api';
 import type { ExportResult } from '@opentelemetry/core';
-import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-node';
 
 const MISSING_TRACE_RETRY_DELAY_MS = 50;
 
@@ -26,8 +26,9 @@ export class LocalSpanExporter implements SpanExporter {
     }
   }
 
-  private releaseSpans(traceId: string, spans: SpanData[]): void {
-    for (const { spanId } of spans) {
+  private releaseSpans(traceId: string, spans: ReadableSpan[]): void {
+    for (const span of spans) {
+      const { spanId } = span.spanContext();
       const key = `${traceId}:${spanId}`;
       this.pendingSpans.get(key)?.();
       this.pendingSpans.delete(key);
@@ -74,23 +75,22 @@ export class LocalSpanExporter implements SpanExporter {
     logger.debug(`[LocalSpanExporter] Exporting ${spans.length} spans`);
 
     // Group spans by trace ID
-    const spansByTrace = new Map<string, SpanData[]>();
+    const spansByTrace = new Map<string, ReadableSpan[]>();
 
     for (const span of spans) {
       const traceId = span.spanContext().traceId;
-      const spanData = this.convertSpan(span);
-
       if (!spansByTrace.has(traceId)) {
         spansByTrace.set(traceId, []);
       }
-      spansByTrace.get(traceId)!.push(spanData);
+      spansByTrace.get(traceId)!.push(span);
     }
 
     // Store each trace's spans, tracking first error
     let firstError: Error | undefined;
 
-    for (const [traceId, spanDataList] of spansByTrace) {
+    for (const [traceId, traceSpans] of spansByTrace) {
       try {
+        const spanDataList = traceSpans.map((span) => this.convertSpan(span));
         const result = await this.addSpansWithTraceRetry(traceStore, traceId, spanDataList);
         if (result.stored) {
           logger.debug(
@@ -103,21 +103,30 @@ export class LocalSpanExporter implements SpanExporter {
             `[LocalSpanExporter] Skipping ${spanDataList.length} spans for orphan trace ${traceId}: ${result.reason}`,
           );
         }
-        this.releaseSpans(traceId, spanDataList);
+        this.releaseSpans(traceId, traceSpans);
       } catch (error) {
         // Handle unexpected errors (e.g., database connection issues)
         const errorMessage = error instanceof Error ? error.message : String(error);
         if (errorMessage.includes('FOREIGN KEY')) {
           // Foreign key constraint - trace was deleted between check and insert
           logger.debug(
-            `[LocalSpanExporter] Skipping ${spanDataList.length} spans for orphan trace ${traceId}`,
+            `[LocalSpanExporter] Skipping ${traceSpans.length} spans for orphan trace ${traceId}`,
           );
-          this.releaseSpans(traceId, spanDataList);
+          this.releaseSpans(traceId, traceSpans);
         } else {
           // Track error but continue processing other traces
           logger.error(`[LocalSpanExporter] Failed to add spans to trace ${traceId}`, { error });
           if (!firstError) {
             firstError = error instanceof Error ? error : new Error(String(error));
+          }
+          try {
+            await traceStore.markTraceIncomplete(traceId, LOCAL_SPAN_EXPORT_FAILURE);
+            this.releaseSpans(traceId, traceSpans);
+          } catch (markerError) {
+            // Keep ownership until shutdown if the loss of local evidence cannot be persisted.
+            logger.error(`[LocalSpanExporter] Failed to mark trace ${traceId} incomplete`, {
+              error: markerError,
+            });
           }
         }
       }
