@@ -315,12 +315,12 @@ function processOpenAiStreamingChunk(
 
 function processOpenAiSseEvent(state: OpenAiStreamingState, event: string): boolean {
   const lines = event.split(/\r\n|\r|\n/);
-  const errorEvent =
-    lines
-      .filter((line) => line.startsWith('event:'))
-      .at(-1)
-      ?.slice(6)
-      .trim() === 'error';
+  let errorEvent = false;
+  for (const line of lines) {
+    if (line.startsWith('event:')) {
+      errorEvent = line.slice(6).trim() === 'error';
+    }
+  }
   const dataLines = lines.map(getSseData).filter((data): data is string => data !== undefined);
   if (dataLines.length === 0) {
     return false;

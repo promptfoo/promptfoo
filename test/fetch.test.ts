@@ -1527,6 +1527,13 @@ describe('fetchWithRetries', () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    if (vi.isMockFunction(global.fetch)) {
+      global.fetch.mockReset();
+    }
+    vi.mocked(sleep).mockReset().mockResolvedValue(undefined);
+  });
+
   it('should make exactly one attempt when retries is 0', async () => {
     const successResponse = createMockResponse();
     vi.mocked(global.fetch).mockResolvedValueOnce(successResponse);
@@ -1645,13 +1652,13 @@ describe('fetchWithRetries', () => {
       headers: { 'x-ratelimit-remaining-requests': '0', 'retry-after': '0.001' },
     });
     const success = createMockResponse();
-    global.fetch = vi
-      .fn()
-      .mockResolvedValueOnce(response)
-      .mockImplementationOnce(async () => {
+    global.fetch = vi.fn().mockResolvedValueOnce(response);
+    if (retries) {
+      vi.mocked(global.fetch).mockImplementationOnce(async () => {
         expect(cancel).toHaveBeenCalledOnce();
         return success;
       });
+    }
 
     const pending = fetchWithRetries('https://example.com', {}, 1000, retries);
     if (retries) {
