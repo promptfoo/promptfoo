@@ -1519,6 +1519,19 @@ describe('evaluator', () => {
   });
 
   describe('toResultsFile', () => {
+    it('redacts gateway URL credentials from result files while preserving the live config', async () => {
+      const gateway = 'https://gateway.example/v1?googleAccessToken=short-private-value';
+      const evaluation = new Eval({
+        providers: [{ id: 'openai:chat:test', config: { apiBaseUrl: gateway } }],
+        metadata: { documentationUrl: 'HTTPS://Docs.Example?version=2' },
+      });
+      const result = await evaluation.toResultsFile();
+      expect(JSON.stringify(result.config)).not.toContain('short-private-value');
+      expect(JSON.stringify(result.config)).toContain('%5BREDACTED%5D');
+      expect(result.config.metadata?.documentationUrl).toBe('HTTPS://Docs.Example?version=2');
+      expect(JSON.stringify(evaluation.config)).toContain(gateway);
+    });
+
     it('drops malformed trace-provider headers when exporting older evaluations', async () => {
       const evaluation = new Eval({
         tracing: {
@@ -1910,7 +1923,7 @@ describe('evaluator', () => {
           success, score, metadata
         ) VALUES
         ('promptfoo-ns-1', '${eval_.id}', 0, 0, '{}', '{}', '{}', 1, 1.0,
-          '{"userKey": "shown", "__promptfoo": {"traceLinkage": {"traceId": "abc"}}}')`,
+          '{"userKey": "shown", "__promptfoo": {"remote": true, "traceLinkage": {"traceId": "abc"}}}')`,
       );
 
       const keys = await EvalQueries.getMetadataKeysFromEval(eval_.id);
