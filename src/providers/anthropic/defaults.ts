@@ -153,7 +153,7 @@ export function getAnthropicProviders(
   const redteamProvider = bindRedteamProviderEnvironment(
     new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL, {
       env,
-      config: { temperature: getDefaultRedteamTemperature(env) },
+      config: { temperature: getDefaultRedteamTemperature(env), showThinking: false },
     }),
     env,
   );

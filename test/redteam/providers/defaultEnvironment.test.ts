@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import { getEnvOverrides } from '../../../src/envars';
+import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
 import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
 import { getDefaultProviders } from '../../../src/providers/defaults';
 import { hasGoogleDefaultCredentials } from '../../../src/providers/google/util';
@@ -12,6 +13,7 @@ import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import { clearAgentCache } from '../../../src/util/fetch';
 import { createMockProvider } from '../../factories/provider';
 import { mockProcessEnv } from '../../util/utils';
+import type Anthropic from '@anthropic-ai/sdk';
 
 vi.mock('../../../src/providers/google/util', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -103,6 +105,39 @@ describe('automatic redteam provider call environment', () => {
       expect(requests[0].body.response_format).toBeUndefined();
       expect(requests[1].body.response_format).toEqual({ type: 'json_object' });
       expect(getEnvOverrides()).toBe(cliState.config.env);
+    },
+  );
+
+  it.each([false, true])(
+    'returns final Anthropic text without reasoning for automatic jsonOnly=%s',
+    async (jsonOnly) => {
+      const env = { ANTHROPIC_API_KEY: 'fixture-anthropic' };
+      const response = {
+        content: [
+          { type: 'thinking', thinking: '{"message":"Draft greeting"}', signature: 'fixture' },
+          { type: 'text', text: '{"message":"Hello fixture"}' },
+        ],
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 1, output_tokens: 2 },
+      } as Anthropic.Messages.Message;
+      const automatic = (await cliState.withEnv(env, () =>
+        redteamProviderManager.getProvider({ ignoreCliState: true, jsonOnly }),
+      )) as AnthropicMessagesProvider;
+      vi.spyOn(automatic.anthropic.messages, 'create').mockResolvedValue(response);
+      const result = await automatic.callApi('Return the greeting fixture as JSON.');
+      expect(JSON.parse(result.output)).toEqual({ message: 'Hello fixture' });
+      expect(result.tokenUsage?.total).toBe(3);
+
+      const explicit = new AnthropicMessagesProvider('claude-sonnet-5', {
+        env,
+        config: { showThinking: true },
+      });
+      vi.spyOn(explicit.anthropic.messages, 'create').mockResolvedValue(response);
+      const selected = await redteamProviderManager.getProvider({ provider: explicit, jsonOnly });
+      expect(selected).toBe(explicit);
+      expect((await selected.callApi('Return the greeting fixture as JSON.')).output).toContain(
+        '{"message":"Draft greeting"}',
+      );
     },
   );
 
