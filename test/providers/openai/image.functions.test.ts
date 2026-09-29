@@ -299,10 +299,17 @@ describe('OpenAI Image Provider Functions', () => {
       expect(calculateImageCost('chatgpt-image-latest', '1024x1024', 'low')).toBe(0.009);
     });
 
-    it('should not invent GPT Image 2 cost for auto quality or custom sizes', () => {
-      expect(calculateImageCost('gpt-image-2', '1024x1024')).toBeUndefined();
-      expect(calculateImageCost('gpt-image-2', '1024x1024', 'auto')).toBeUndefined();
-      expect(calculateImageCost('gpt-image-2', '2048x1152', 'high')).toBeUndefined();
+    it.each([
+      'gpt-image-1',
+      'gpt-image-1-mini',
+      'gpt-image-1.5',
+      'chatgpt-image-latest',
+      'gpt-image-2',
+    ])('should leave %s cost unset for auto settings or unpriced sizes', (model) => {
+      expect(calculateImageCost(model, '1024x1024')).toBeUndefined();
+      expect(calculateImageCost(model, '1024x1024', 'auto')).toBeUndefined();
+      expect(calculateImageCost(model, 'auto', 'high')).toBeUndefined();
+      expect(calculateImageCost(model, '2048x1152', 'high')).toBeUndefined();
     });
 
     it('should report no cost for models with no per-image rate', () => {
@@ -442,6 +449,32 @@ describe('OpenAI Image Provider Functions', () => {
   });
 
   describe('processApiResponse', () => {
+    it.each([
+      { model: 'unknown-image-model', quality: 'high', size: '1024x1024' },
+      { model: 'gpt-image-1', quality: 'auto', size: '1024x1024' },
+      { model: 'gpt-image-1-mini', quality: undefined, size: '1024x1024' },
+      { model: 'gpt-image-1.5', quality: 'high', size: 'auto' },
+      { model: 'chatgpt-image-latest', quality: 'auto', size: 'auto' },
+    ])(
+      'omits cost for $model with unpriced settings and no usage',
+      async ({ model, quality, size }) => {
+        const result = await processApiResponse(
+          { data: [{ b64_json: 'base64data' }] },
+          'A blue mug',
+          'b64_json',
+          false,
+          model,
+          size,
+          undefined,
+          quality,
+        );
+
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('data:image/png;base64,base64data');
+        expect(result).not.toHaveProperty('cost');
+      },
+    );
+
     it('should handle error in data', async () => {
       const mockDeleteFromCache = vi.fn();
       const data = {

@@ -1132,7 +1132,6 @@ describe('OpenAiImageProvider', () => {
         cached: false,
         isBase64: true,
         format: 'json',
-        cost: 0.011, // Default cost for gpt-image-1 low 1024x1024
       });
     });
 
@@ -1322,7 +1321,6 @@ describe('OpenAiImageProvider', () => {
         cached: false,
         isBase64: true,
         format: 'json',
-        cost: 0.005, // Default cost for gpt-image-1-mini low 1024x1024
       });
     });
 
@@ -1454,7 +1452,6 @@ describe('OpenAiImageProvider', () => {
         cached: false,
         isBase64: true,
         format: 'json',
-        cost: 0.009, // Default cost for gpt-image-1.5 low 1024x1024
       });
     });
 

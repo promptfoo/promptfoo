@@ -702,23 +702,20 @@ function getPerImageCost(model: string, size: string, quality?: string): number 
     return DALLE3_COSTS[`${quality || 'standard'}_${size}`] ?? DALLE3_COSTS['standard_1024x1024'];
   }
 
-  // GPT Image tables are keyed by `${quality}_${size}` and only price the three standard sizes.
-  const tieredQuality =
-    quality === 'low' || quality === 'medium' || quality === 'high' ? quality : undefined;
-  const costKey = `${tieredQuality ?? 'low'}_${size}`;
+  // Auto quality and size have no per-image rate; only use an exact table entry.
+  const costKey = `${quality}_${size}`;
 
   if (isGptImage2(model)) {
-    // GPT Image 2 also accepts custom sizes and auto quality, which have no per-image rate.
-    return tieredQuality === undefined ? undefined : GPT_IMAGE2_COSTS[costKey];
+    return GPT_IMAGE2_COSTS[costKey];
   }
   if (isGptImage1(model)) {
-    return GPT_IMAGE1_COSTS[costKey] ?? GPT_IMAGE1_COSTS['low_1024x1024'];
+    return GPT_IMAGE1_COSTS[costKey];
   }
   if (isGptImage1Mini(model)) {
-    return GPT_IMAGE1_MINI_COSTS[costKey] ?? GPT_IMAGE1_MINI_COSTS['low_1024x1024'];
+    return GPT_IMAGE1_MINI_COSTS[costKey];
   }
   if (isGptImage15(model)) {
-    return GPT_IMAGE1_5_COSTS[costKey] ?? GPT_IMAGE1_5_COSTS['low_1024x1024'];
+    return GPT_IMAGE1_5_COSTS[costKey];
   }
 
   // GPT Image 2.5 is billed from token usage, and an unrecognized model has no rate at all.
@@ -733,7 +730,6 @@ export function calculateImageCost(
 ): number | undefined {
   const costPerImage = getPerImageCost(model, size, quality);
   if (costPerImage === undefined) {
-    // Report no cost instead of guessing one.
     logger.debug('[OpenAI Image] No per-image rate, reporting no cost', { model, size, quality });
     return undefined;
   }
