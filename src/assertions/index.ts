@@ -100,6 +100,7 @@ import {
   handleTrajectoryToolSequence,
   handleTrajectoryToolUsed,
 } from './trajectory';
+import { handleTrajectoryToolSet } from './trajectoryToolSet';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
 import { handleWordCount } from './wordCount';
@@ -147,6 +148,7 @@ const TRACE_AWARE_ASSERTION_TYPES = new Set<AssertionType>([
   'trajectory:step-count',
   'trajectory:tool-args-match',
   'trajectory:tool-sequence',
+  'trajectory:tool-set',
   'trajectory:tool-used',
 ]);
 
@@ -310,6 +312,7 @@ const ASSERTION_HANDLERS: Record<
   'trajectory:tool-args-match': handleTrajectoryToolArgsMatch,
   'trajectory:step-count': handleTrajectoryStepCount,
   'trajectory:tool-sequence': handleTrajectoryToolSequence,
+  'trajectory:tool-set': handleTrajectoryToolSet,
   'trajectory:tool-used': handleTrajectoryToolUsed,
   'trace-error-spans': handleTraceErrorSpans,
   'trace-span-count': handleTraceSpanCount,

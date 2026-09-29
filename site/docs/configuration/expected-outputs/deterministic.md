@@ -54,6 +54,7 @@ These assertions can check LLM output or provider metadata directly. Configured 
 | [tool-call-f1](#tool-call-f1)                                   | F1 score comparing actual vs expected tool calls                   |
 | [skill-used](#skill-used)                                       | Ensure normalized provider skill metadata contains expected skills |
 | [trajectory:tool-used](#trajectorytool-used)                    | Ensure traced tool usage contains expected tools                   |
+| [trajectory:tool-set](#trajectorytool-set)                      | Require an exact set of traced tool names                          |
 | [trajectory:tool-args-match](#trajectorytool-args-match)        | Ensure traced tool calls include expected argument payloads        |
 | [trajectory:tool-sequence](#trajectorytool-sequence)            | Ensure traced tool usage appears in the expected order             |
 | [trajectory:step-count](#trajectorystep-count)                  | Count normalized trajectory steps by type or pattern               |
@@ -754,6 +755,20 @@ tests:
 - A string, such as `search_orders`
 - An array of strings, such as `['search_orders', 'compose_reply']`
 - An object with `pattern`, `min`, and optional `max`
+
+### trajectory:tool-set {#trajectorytool-set}
+
+`trajectory:tool-set` requires an exact set of tool names, regardless of call order or repeated calls. It reads supported tool-name attributes such as `tool.name`, `gen_ai.tool.name`, and `ai.toolCall.name`. Command tools with these attributes are included; spans without a tool-name attribute are ignored.
+
+```yaml
+assert:
+  - type: trajectory:tool-set
+    value: [search_orders, compose_reply]
+```
+
+Names are literal and case-sensitive. Use `[]` to require no attributed tool calls. Missing trace data produces an error; an empty trace has an empty tool set. The failure reason lists missing and unexpected tool names without arguments.
+
+Use `trajectory:tool-used` with a list when additional tools are allowed. Use `not-trajectory:tool-set` to require a different set, or `trajectory:tool-sequence` when order matters.
 
 ### trajectory:tool-args-match {#trajectorytool-args-match}
 

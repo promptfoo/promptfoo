@@ -13,6 +13,15 @@ const make = (overrides: Partial<Assertion>): Assertion =>
   ({ type: 'contains', value: '', ...overrides }) as Assertion;
 
 describe('getRunnableAssertionValueError', () => {
+  it.each(['trajectory:tool-set', 'not-trajectory:tool-set'] as const)(
+    'validates exact tool sets for %s',
+    (type) => {
+      expect(getRunnableAssertionValueError(make({ type, value: [] }))).toBeUndefined();
+      expect(getRunnableAssertionValueError(make({ type, value: ['lookup'] }))).toBeUndefined();
+      expect(getRunnableAssertionValueError(make({ type, value: 'lookup' }))).toContain('array');
+    },
+  );
+
   describe('required text/number assertions', () => {
     it('rejects an empty contains value', () => {
       expect(getRunnableAssertionValueError(make({ type: 'contains', value: '' }))).toMatch(
