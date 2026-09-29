@@ -41,9 +41,8 @@ const RETIRED_BEDROCK_MODEL_IDS = [
   'amazon.titan-text-lite-v1',
   'amazon.titan-text-premier-v1:0',
   'anthropic.claude-3-opus-20240229-v1:0',
-  'us.anthropic.claude-3-opus-20240229-v1:0',
   'anthropic.claude-opus-4-20250514-v1:0',
-  'us.anthropic.claude-opus-4-20250514-v1:0',
+  'anthropic.claude-3-5-haiku-20241022-v1:0',
   'anthropic.claude-instant-v1',
   'anthropic.claude-v1',
   'anthropic.claude-v2',
@@ -3834,6 +3833,45 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
       `Unknown Amazon Bedrock model: ${modelName}`,
     );
   });
+
+  it.each([
+    'arn:aws:bedrock:us-east-2:123456789012:inference-profile/eu.anthropic.claude-3-5-haiku-20241022-v1:0',
+    'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-opus-20240229-v1:0',
+    'arn:aws-us-gov:bedrock:us-gov-west-1:123456789012:inference-profile/us-gov.anthropic.claude-3-5-haiku-20241022-v1:0',
+  ])('rejects a retired model named by its ARN (%s)', (modelName) => {
+    expect(() => getHandlerForModel(modelName, { inferenceModelType: 'claude' })).toThrow(
+      `Unknown Amazon Bedrock model: ${modelName}`,
+    );
+  });
+
+  it('allows application inference profiles without inferring their underlying model', () => {
+    const modelArn =
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abc123xyz789';
+    expect(getHandlerForModel(modelArn, { inferenceModelType: 'claude' })).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+  });
+
+  it.each(RETIRED_BEDROCK_MODEL_IDS)(
+    'rejects retired model id %s under every inference profile prefix',
+    (modelName) => {
+      for (const prefix of [
+        'us.',
+        'us-gov.',
+        'eu.',
+        'apac.',
+        'global.',
+        'jp.',
+        'au.',
+        'ca.',
+        'in.',
+      ]) {
+        expect(() => getHandlerForModel(`${prefix}${modelName}`)).toThrow(
+          `Unknown Amazon Bedrock model: ${prefix}${modelName}`,
+        );
+      }
+    },
+  );
 
   it('keeps Claude 3.5/3.7 Sonnet (still offered in APAC regions)', () => {
     expect(AWS_BEDROCK_MODELS['anthropic.claude-3-5-sonnet-20240620-v1:0']).toBe(

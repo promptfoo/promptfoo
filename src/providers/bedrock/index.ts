@@ -20,7 +20,7 @@ import {
 import { parseChatPrompt } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
 import { calculateBedrockInvokeModelCost } from './pricing';
-import { novaOutputFromMessage, novaParseMessages } from './util';
+import { INFERENCE_PROFILE_PREFIX, novaOutputFromMessage, novaParseMessages } from './util';
 
 import type {
   ApiEmbeddingProvider,
@@ -2599,14 +2599,13 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
  * The Claude entries were verified absent from `list-foundation-models` in all 17 commercial
  * regions on 2026-09-04. Note this is Bedrock's lifecycle, not Anthropic's: several models
  * retired on the Anthropic API are still served here and must NOT be listed.
+ *
+ * Use bare IDs; the availability check removes inference-profile prefixes.
  */
 export const RETIRED_BEDROCK_MODELS = new Set([
   'anthropic.claude-3-opus-20240229-v1:0',
-  'us.anthropic.claude-3-opus-20240229-v1:0',
   'anthropic.claude-opus-4-20250514-v1:0',
-  'us.anthropic.claude-opus-4-20250514-v1:0',
   'anthropic.claude-3-5-haiku-20241022-v1:0',
-  'us.anthropic.claude-3-5-haiku-20241022-v1:0',
   'anthropic.claude-instant-v1',
   'anthropic.claude-v1',
   'anthropic.claude-v2',
@@ -2617,13 +2616,14 @@ export const RETIRED_BEDROCK_MODELS = new Set([
   'meta.llama2-70b-chat-v1',
 ]);
 
-/**
- * Throw for a model AWS has withdrawn. Called from both `getHandlerForModel` and the explicit
- * `bedrock:converse:` factory route, which builds its provider directly and would otherwise
- * skip the check entirely.
- */
+/** Reject withdrawn models before InvokeModel, Converse, or Knowledge Base requests. */
 export function assertBedrockModelIsAvailable(modelName: string): void {
-  if (RETIRED_BEDROCK_MODELS.has(modelName)) {
+  // A system inference profile or foundation model ARN ends in the ID it resolves to.
+  // Application inference profile ARNs hide the model, so they cannot be checked here.
+  const modelId = modelName.startsWith('arn:')
+    ? (/:(?:inference-profile|foundation-model)\/([^/]+)$/.exec(modelName)?.[1] ?? modelName)
+    : modelName;
+  if (RETIRED_BEDROCK_MODELS.has(modelId.replace(INFERENCE_PROFILE_PREFIX, ''))) {
     throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
   }
 }
@@ -2632,6 +2632,7 @@ export function getHandlerForModel(
   modelName: string,
   config?: BedrockInvokeModelOptions,
 ): IBedrockModel {
+  assertBedrockModelIsAvailable(modelName);
   const messagesOnlyModel = modelName.match(/^(?:[^.]+\.)?(anthropic\.claude-mythos-5)$/);
   if (messagesOnlyModel) {
     // Mythos has no geo/global inference profiles, so always point at the bare
@@ -2712,7 +2713,6 @@ export function getHandlerForModel(
   if (ret) {
     return ret;
   }
-  assertBedrockModelIsAvailable(modelName);
   if (modelName.startsWith('ai21.')) {
     return BEDROCK_MODEL.AI21;
   }

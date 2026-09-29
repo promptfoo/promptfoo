@@ -265,6 +265,8 @@ Control Claude Agent SDK's permissions for modifying files and running system co
 | `dontAsk`           | Deny permissions that aren't pre-approved (no prompts)                |
 | `auto`              | Use a model classifier to approve or deny permission prompts          |
 
+[Claude Code 2.1.278](https://github.com/anthropics/claude-code/releases/tag/v2.1.278), bundled with SDK 0.3.278, makes server-side permission classification the default for `auto` mode for Claude API and Enterprise users, as well as Bedrock, Vertex, Foundry, and gateway users. For Bedrock, Vertex, Foundry, and gateways, set `CLAUDE_CODE_AUTO_MODE_SERVER: '0'` in the provider's `config.env` to opt out and use the client-side classifier.
+
 :::warning
 Using `bypassPermissions` requires setting `allow_dangerously_skip_permissions: true` as a safety measure:
 
@@ -384,6 +386,13 @@ providers:
 
       strict_mcp_config: true # Only use configured servers (true by default)
 ```
+
+Server names are part of tool names (`mcp__<server>__<tool>`), which `append_allowed_tools` and
+`disallowed_tools` match. Without an explicit `name`, the adapter uses the `url` or `command`
+(`default` for a `path` server). Names must remain distinct after SDK normalization; for example,
+`tools.local` and `tools_local` collide. Set explicit names for colliding servers or URLs containing
+credentials, since names appear in tools and debug logs. Update tool permission rules when renaming
+a server.
 
 This direct SDK integration cannot enforce the shared MCP `tools` allowlist or non-empty
 `exclude_tools` filters, so those configurations fail closed instead of silently exposing a broader
