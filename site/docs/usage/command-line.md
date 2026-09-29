@@ -206,7 +206,7 @@ promptfoo eval --resume <evalId>   # resumes a specific eval
 
 - On resume, promptfoo reuses the original run's effective runtime options (e.g., `--delay`, `--no-cache`, `--max-concurrency`, `--repeat`), skips completed test/prompt pairs, ignores CLI flags that change test ordering to keep indices aligned, and disables watch mode.
 
-Grading recovery does not rerun `beforeEach` hooks. Tests whose grading callbacks exist only inside a hook must be rerun. Also rerun interrupted tests if `afterEach` changed their metadata.
+If grading was interrupted after the target responded, resume grades the saved response without calling the target again. It does not rerun `beforeEach` hooks. Rerun the test if its grading callbacks were created inside a hook or `afterEach` changed its metadata.
 
 ### Retry Errors
 

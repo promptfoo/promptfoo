@@ -630,8 +630,7 @@ async function applyAfterEachHook(
   test: AtomicTestCase,
   testSuite: TestSuite,
 ): Promise<void> {
-  // Apply afterEach hook mutations before persisting. Pass a shallow copy
-  // so in-place mutations don't corrupt the row on hook failure.
+  // Apply afterEach before persistence, with separate score and response containers.
   if (testSuite.extensions?.length) {
     const gradingMetadata = row.gradingResult?.metadata?.[PROMPTFOO_METADATA_KEY];
     const interrupted = gradingMetadata?.assertionGradingInterrupted;
