@@ -609,9 +609,11 @@ tests:
 
 ### tool-call-f1
 
-The `tool-call-f1` assertion computes the [F1 score](https://en.wikipedia.org/wiki/F-score) comparing the set of tools called by the LLM against an expected set of tools. This metric is useful for evaluating agentic LLM applications where you want to measure how accurately the model selects the right tools.
+The `tool-call-f1` assertion compares the set of called tool names with an expected set using the [F1 score](https://en.wikipedia.org/wiki/F-score).
 
 This assertion supports OpenAI Chat Completions tool calls, OpenAI Responses `function_call` items, Anthropic tool-use blocks, and Google/Vertex function calls. It accepts supported objects and arrays directly or as JSON strings, including newline-separated JSON calls mixed with text.
+
+The assertion also traverses wrapper objects, such as `{"result": {"tool_calls": [...]}}`. It ignores `tools` declarations, recognized tool-result payloads, and call arguments. Unrelated `{ name: "Alice" }` records inside wrappers are ignored; simple name entries remain supported in bare output arrays and explicit call lists.
 
 In mixed text, JSON calls must start and end on their own lines and may span multiple lines. Inline JSON examples and Markdown code fences are ignored. Complete calls after an unfinished JSON fragment can still be scored.
 

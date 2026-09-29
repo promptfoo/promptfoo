@@ -709,6 +709,149 @@ describe('handleToolCallF1', () => {
     });
   });
 
+  describe('structured wrapper extraction', () => {
+    it.each([
+      ['OpenAI', { result: { tool_calls: [{ function: { name: 'get_weather' } }] } }],
+      ['Responses', { output: [{ type: 'function_call', name: 'get_weather' }] }],
+      ['Anthropic', { message: { content: [{ type: 'tool_use', name: 'get_weather' }] } }],
+      ['Google Live', { result: { toolCall: { functionCalls: [{ name: 'get_weather' }] } } }],
+    ])('finds %s calls inside wrappers and serialized blocks', (_format, output) => {
+      for (const value of [
+        output,
+        JSON.stringify(output),
+        `Calls follow:\n${JSON.stringify(output)}`,
+      ]) {
+        expect(handleToolCallF1(createParams(value, ['get_weather']))).toMatchObject({
+          pass: true,
+          score: 1,
+        });
+      }
+    });
+
+    it('ignores named data and tool definitions alongside a real call', () => {
+      const output = {
+        records: [{ name: 'Alice' }],
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: 'book_flight',
+              parameters: { example: { type: 'tool_use', name: 'schema_example' } },
+            },
+          },
+        ],
+        result: { tool_calls: [{ function: { name: 'get_weather' } }] },
+      };
+      expect(handleToolCallF1(createParams(output, ['get_weather']))).toMatchObject({
+        pass: true,
+        score: 1,
+      });
+    });
+
+    it.each([
+      {
+        tool_calls: [
+          {
+            function: {
+              name: 'get_weather',
+              arguments: { type: 'tool_use', name: 'payload_value' },
+            },
+          },
+        ],
+      },
+      {
+        toolCall: {
+          functionCalls: [
+            { name: 'get_weather', args: { functionCall: { name: 'payload_value' } } },
+          ],
+        },
+      },
+      {
+        type: 'function_call',
+        name: 'get_weather',
+        arguments: { type: 'tool_use', name: 'payload_value' },
+      },
+      { type: 'tool_use', name: 'get_weather', input: { functionCall: { name: 'payload_value' } } },
+    ])('does not interpret argument data as a second call', (call) => {
+      const output = { result: call };
+      expect(handleToolCallF1(createParams(output, ['get_weather']))).toMatchObject({
+        pass: true,
+        score: 1,
+      });
+    });
+
+    it.each([
+      {
+        type: 'function_call_output',
+        output: { tool_calls: [{ function: { name: 'get_weather' } }] },
+      },
+      { type: 'tool_result', content: [{ type: 'tool_use', name: 'get_weather' }] },
+      { role: 'tool', content: { tool_calls: [{ function: { name: 'get_weather' } }] } },
+      { functionResponse: { name: 'lookup', response: { functionCall: { name: 'get_weather' } } } },
+      {
+        toolResponse: {
+          functionResponses: [{ response: { type: 'tool_use', name: 'get_weather' } }],
+        },
+      },
+    ])('treats tool-result payloads as data and preserves sibling calls', (result) => {
+      expect(handleToolCallF1(createParams({ messages: [result] }, ['get_weather']))).toMatchObject(
+        { pass: false, score: 0 },
+      );
+      const output = { messages: [result, { type: 'function_call', name: 'book_flight' }] };
+      expect(handleToolCallF1(createParams(output, ['book_flight']))).toMatchObject({
+        pass: true,
+        score: 1,
+      });
+    });
+
+    it('does not mistake malformed call arguments for calls', () => {
+      const output = {
+        result: { type: 'tool_use', input: { type: 'tool_use', name: 'get_weather' } },
+      };
+      expect(handleToolCallF1(createParams(output, ['get_weather']))).toMatchObject({
+        pass: false,
+        score: 0,
+      });
+    });
+
+    it('finds deeply nested calls in objects and JSON without recursion limits', () => {
+      const output: Record<string, unknown> = {};
+      let leaf = output;
+      for (let i = 0; i < 20_000; i++) {
+        leaf.nested = {};
+        leaf = leaf.nested as Record<string, unknown>;
+      }
+      const call = { tool_calls: [{ function: { name: 'get_weather' } }] };
+      Object.assign(leaf, call);
+      const json = '{"nested":'.repeat(20_000) + JSON.stringify(call) + '}'.repeat(20_000);
+      // Build params separately because JSON.stringify also has a nesting limit.
+      for (const value of [output, json]) {
+        expect(
+          handleToolCallF1({ ...createParams({}, ['get_weather']), output: value }),
+        ).toMatchObject({ pass: true, score: 1 });
+      }
+    });
+
+    it('recognizes a shared value in call context after visiting it as data', () => {
+      const shared = { name: 'get_weather' };
+      const output = { tool_calls: [shared], records: [shared] };
+      expect(handleToolCallF1(createParams(output, ['get_weather']))).toMatchObject({
+        pass: true,
+        score: 1,
+      });
+    });
+
+    it('visits shared and cyclic wrappers once while retaining all calls', () => {
+      const shared = { tool_calls: [{ function: { name: 'get_weather' } }] };
+      const output: Record<string, unknown> = { first: shared, second: shared };
+      output.self = output;
+      output.sibling = { parent: output, output: [{ type: 'function_call', name: 'book_flight' }] };
+      expect(
+        handleToolCallF1({ ...createParams({}, ['get_weather', 'book_flight']), output }),
+      ).toMatchObject({ pass: true, score: 1 });
+    });
+  });
+
   describe('expected tools input format', () => {
     it('should accept array of tool names', () => {
       const output = { tool_calls: [{ function: { name: 'get_weather', arguments: '{}' } }] };
