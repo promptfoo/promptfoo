@@ -27,7 +27,7 @@ Under the hood, `model-graded-closedqa` uses OpenAI's closed QA evaluation promp
 - `Y` if the output meets the criterion
 - `N` if the output does not meet the criterion
 
-The assertion passes if the response ends with 'Y' and fails if it ends with 'N'.
+The assertion passes if the response ends with 'Y' and fails if it ends with 'N'. Use `not-model-graded-closedqa` to require an 'N' verdict instead. Grader errors and malformed responses fail both forms with score `0`.
 
 ### Example Configuration
 

@@ -3,13 +3,19 @@ import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDa
 import logger from '../../../src/logger';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import {
+  processImageToJpeg,
   UnsafeBenchGrader,
   UnsafeBenchPlugin,
   VALID_CATEGORIES,
 } from '../../../src/redteam/plugins/unsafebench';
+import { fetchWithProxy } from '../../../src/util/fetch';
 import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/integrations/huggingfaceDatasets');
+vi.mock('../../../src/util/fetch', async (importOriginal) => ({
+  ...(await importOriginal()),
+  fetchWithProxy: vi.fn(),
+}));
 vi.mock('../../../src/logger', () => ({
   default: {
     debug: vi.fn(),
@@ -36,210 +42,38 @@ afterAll(() => {
   restoreEnv();
 });
 
-// Need to access the DatasetManager - since it's a private implementation detail,
-// we need to mock the relevant methods of UnsafeBenchPlugin
-vi.mock('../../../src/redteam/plugins/unsafebench', async () => {
-  // Use actual implementations of exports except for the class we want to modify
-  const originalModule = await vi.importActual<
-    typeof import('../../../src/redteam/plugins/unsafebench')
-  >('../../../src/redteam/plugins/unsafebench');
+describe('processImageToJpeg', () => {
+  it('preserves a JPEG that is already within the size limit', async () => {
+    const jpegBase64 =
+      '/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAIDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAABgj/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABykX//Z';
 
-  // Create a mock for the plugin class
-  const MockedUnsafeBenchPlugin = vi
-    .fn()
-    .mockImplementation(function (_provider, _purpose, injectVar, config) {
-      // Handle validation of categories in constructor to fix warning test
-      if (config?.categories) {
-        const invalidCategories = config.categories.filter(
-          (category: string) =>
-            !originalModule.VALID_CATEGORIES.includes(
-              category as (typeof originalModule.VALID_CATEGORIES)[number],
-            ),
-        );
-        if (invalidCategories.length > 0) {
-          logger.warn(
-            `[unsafebench] Invalid categories: ${invalidCategories.join(', ')}. 
-          Valid categories are: ${originalModule.VALID_CATEGORIES.join(', ')}`,
-          );
-        }
-      }
-
-      return {
-        id: 'promptfoo:redteam:unsafebench',
-        pluginConfig: config,
-        canGenerateRemote: false,
-        getTemplate: vi.fn().mockResolvedValue(injectVar),
-        getAssertions: vi.fn().mockImplementation(function (category) {
-          return [
-            {
-              type: 'promptfoo:redteam:unsafebench',
-              metric: 'UnsafeBench',
-              value: { category },
-            },
-          ];
-        }),
-        generateTests: vi.fn().mockImplementation(async function (n) {
-          // Mock dataset results based on config
-          const categories = config?.categories || [];
-          const includeSafe = config?.includeSafe ?? false;
-
-          // Create mock records - include safe records for includeSafe testing
-          const mockDataset = [
-            {
-              image: 'base64-encoded-image-1',
-              category: 'Violence',
-              safety_label: 'unsafe',
-            },
-            {
-              image: 'base64-encoded-image-2',
-              category: 'Hate',
-              safety_label: 'unsafe',
-            },
-            {
-              image: 'base64-encoded-image-3',
-              category: 'Sexual',
-              safety_label: 'unsafe',
-            },
-            {
-              image: 'base64-encoded-safe-image-1',
-              category: 'Violence',
-              safety_label: 'safe',
-            },
-            {
-              image: 'base64-encoded-safe-image-2',
-              category: 'Hate',
-              safety_label: 'safe',
-            },
-          ];
-
-          // Start with full dataset
-          let results: typeof mockDataset = [];
-
-          // Handle category filtering and n-per-category logic
-          if (categories.length > 0) {
-            // Filter by categories
-            const categorySet = new Set(categories.map((cat: string) => cat.toLowerCase()));
-            const filteredDataset = mockDataset.filter((record) =>
-              categorySet.has(record.category.toLowerCase()),
-            );
-
-            // Generate n records per category
-            for (const category of categories) {
-              const categoryLower = category.toLowerCase();
-              const matchingRecords = filteredDataset.filter(
-                (record) => record.category.toLowerCase() === categoryLower,
-              );
-
-              if (matchingRecords.length > 0) {
-                // Duplicate the first record n times for this category
-                const templateRecord = matchingRecords[0];
-                for (let i = 0; i < n; i++) {
-                  results.push({ ...templateRecord });
-                }
-              }
-            }
-          } else if (includeSafe) {
-            // Handle includeSafe mode with the same odd-limit bias toward unsafe records.
-            const safeRecords = mockDataset.filter((r) => r.safety_label === 'safe');
-            const unsafeRecords = mockDataset.filter((r) => r.safety_label === 'unsafe');
-            const unsafeTarget = Math.ceil(n / 2);
-            const safeTarget = n - unsafeTarget;
-            results = [
-              ...safeRecords.slice(0, safeTarget),
-              ...unsafeRecords.slice(0, unsafeTarget),
-            ];
-          } else {
-            // No categories specified - just take n random unsafe records
-            results = mockDataset.filter((r) => r.safety_label === 'unsafe').slice(0, n);
-          }
-
-          // Convert to test cases with proper metadata and assertions
-          return results.map((record) => {
-            const isSafe = record.safety_label === 'safe';
-            return {
-              vars: { [injectVar]: record.image },
-              assert: isSafe
-                ? [
-                    {
-                      type: 'llm-rubric',
-                      metric: 'UnsafeBench',
-                      value: expect.stringContaining('SAFE'),
-                    },
-                  ]
-                : [
-                    {
-                      type: 'promptfoo:redteam:unsafebench',
-                      metric: 'UnsafeBench',
-                      value: { category: record.category },
-                    },
-                  ],
-              metadata: {
-                unsafebenchCategory: record.category,
-                category: record.category,
-                isSafe,
-                label: isSafe ? 'safe' : 'unsafe',
-              },
-            };
-          });
-        }),
-      };
-    });
-  Object.defineProperty(MockedUnsafeBenchPlugin, 'canGenerateRemote', {
-    value: originalModule.UnsafeBenchPlugin.canGenerateRemote,
+    await expect(processImageToJpeg(Buffer.from(jpegBase64, 'base64'))).resolves.toBe(
+      `data:image/jpeg;base64,${jpegBase64}`,
+    );
   });
-
-  return {
-    ...originalModule,
-    UnsafeBenchPlugin: MockedUnsafeBenchPlugin,
-  };
 });
 
 describe('UnsafeBenchPlugin', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockFetchHuggingFaceDataset.mockReset();
-    mockMatchesLlmRubric.mockReset();
+  let Plugin: typeof UnsafeBenchPlugin;
 
-    // Default mock implementation for HF dataset API
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.resetAllMocks();
+    ({ UnsafeBenchPlugin: Plugin } = await import('../../../src/redteam/plugins/unsafebench'));
     mockFetchHuggingFaceDataset.mockResolvedValue([
-      {
-        vars: {
-          image: 'base64-encoded-image-1',
-          category: 'Violence',
-          safety_label: 'unsafe',
-        },
-      },
-      {
-        vars: {
-          image: 'base64-encoded-image-2',
-          category: 'Hate',
-          safety_label: 'unsafe',
-        },
-      },
-      {
-        vars: {
-          image: 'base64-encoded-image-3',
-          category: 'Sexual',
-          safety_label: 'unsafe',
-        },
-      },
-      {
-        vars: {
-          image: 'base64-encoded-image-4',
-          category: 'Violence',
-          safety_label: 'safe', // This should be filtered out
-        },
-      },
+      ...['Violence', 'Hate', 'Sexual'].flatMap((category) =>
+        [1, 2, 3].map((index) => ({
+          vars: { image: `${category}-${index}`, category, safety_label: 'unsafe' },
+        })),
+      ),
+      { vars: { image: 'safe-control', category: 'Violence', safety_label: 'safe' } },
     ]);
   });
 
-  afterEach(() => {
-    mockFetchHuggingFaceDataset.mockReset();
-    mockMatchesLlmRubric.mockReset();
-  });
+  afterEach(() => vi.restoreAllMocks());
 
   it('should generate tests with the appropriate number of images', async () => {
-    const plugin = new UnsafeBenchPlugin({ type: 'test' }, 'testing purposes', 'image');
+    const plugin = new Plugin({ type: 'test' }, 'testing purposes', 'image');
 
     const tests = await plugin.generateTests(2);
 
@@ -258,7 +92,7 @@ describe('UnsafeBenchPlugin', () => {
   });
 
   it('should filter by category when provided', async () => {
-    const plugin = new UnsafeBenchPlugin({ type: 'test' }, 'testing purposes', 'image', {
+    const plugin = new Plugin({ type: 'test' }, 'testing purposes', 'image', {
       categories: ['Violence'],
     });
 
@@ -272,7 +106,7 @@ describe('UnsafeBenchPlugin', () => {
   });
 
   it('should generate n tests per category when categories are specified', async () => {
-    const plugin = new UnsafeBenchPlugin({ type: 'test' }, 'testing purposes', 'image', {
+    const plugin = new Plugin({ type: 'test' }, 'testing purposes', 'image', {
       categories: ['Violence', 'Hate'],
     });
 
@@ -290,8 +124,8 @@ describe('UnsafeBenchPlugin', () => {
     const loggerWarnSpy = vi.spyOn(logger, 'warn');
 
     // Create plugin with an invalid category
-    new UnsafeBenchPlugin({ type: 'test' }, 'testing purposes', 'image', {
-      categories: ['InvalidCategory' as any],
+    new Plugin({ type: 'test' }, 'testing purposes', 'image', {
+      categories: ['InvalidCategory' as unknown as (typeof VALID_CATEGORIES)[number]],
     });
 
     expect(loggerWarnSpy).toHaveBeenCalledTimes(1);
@@ -313,109 +147,115 @@ describe('UnsafeBenchPlugin', () => {
     // etc.
   });
 
-  it('should set canGenerateRemote to false', () => {
-    expect(UnsafeBenchPlugin.canGenerateRemote).toBe(false);
-    const plugin = new UnsafeBenchPlugin({ type: 'test' }, 'testing purposes', 'image');
-    expect(plugin.canGenerateRemote).toBe(false);
+  it('declares local-only dataset generation', () => {
+    expect(Plugin.canGenerateRemote).toBe(false);
+  });
+  it('honors the dataset, excludes safe and invalid rows, and reuses its private cache', async () => {
+    mockFetchHuggingFaceDataset.mockResolvedValue([
+      { vars: { image: 'unsafe-only', category: 'Violence', safety_label: 'UNSAFE' } },
+      { vars: { image: 'safe-only', category: 'Violence', safety_label: 'safe' } },
+      { vars: { category: 'Hate', safety_label: 'unsafe' } },
+      { vars: { image: { invalid: 'shape' }, category: 'Hate', safety_label: 'unsafe' } },
+    ]);
+    const plugin = new Plugin({ type: 'test' }, 'testing purposes', 'picture', {
+      categories: ['Violence'],
+    });
+    const tests = await plugin.generateTests(3);
+    expect(tests).toEqual([
+      {
+        vars: { picture: 'unsafe-only' },
+        assert: [
+          {
+            type: 'promptfoo:redteam:unsafebench',
+            metric: 'UnsafeBench',
+            value: { category: 'Violence' },
+          },
+        ],
+        metadata: {
+          unsafebenchCategory: 'Violence',
+          category: 'Violence',
+          isSafe: false,
+          label: 'unsafe',
+        },
+      },
+    ]);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Requested 3 tests but only 1'),
+    );
+    expect(await new Plugin({ type: 'test' }, 'purpose', 'picture').generateTests(3)).toEqual(
+      tests,
+    );
+    expect(mockFetchHuggingFaceDataset).toHaveBeenCalledTimes(1);
+    expect(mockFetchHuggingFaceDataset).toHaveBeenCalledWith(
+      expect.stringContaining('UnsafeBench'),
+      1000,
+    );
   });
 
-  describe('includeSafe option', () => {
-    it('should generate tests with correct metadata when includeSafe is true', async () => {
-      const plugin = new UnsafeBenchPlugin({ type: 'test' }, 'testing purposes', 'image', {
-        includeSafe: true,
-      });
+  it('downloads URL and src images through real JPEG processing and skips failed downloads', async () => {
+    const sharp = (await import('sharp')).default;
+    const png = await sharp({ create: { width: 4, height: 2, channels: 3, background: 'red' } })
+      .png()
+      .toBuffer();
+    mockFetchHuggingFaceDataset.mockResolvedValue([
+      {
+        vars: {
+          image: 'https://images.invalid/string',
+          category: 'Violence',
+          safety_label: 'unsafe',
+        },
+      },
+      {
+        vars: {
+          image: { src: 'https://images.invalid/object' },
+          category: 'Hate',
+          safety_label: 'unsafe',
+        },
+      },
+      {
+        vars: {
+          image: 'https://images.invalid/missing',
+          category: 'Sexual',
+          safety_label: 'unsafe',
+        },
+      },
+    ]);
+    vi.mocked(fetchWithProxy).mockImplementation(async (url) =>
+      String(url).endsWith('/missing') ? new Response('', { status: 404 }) : new Response(png),
+    );
+    const tests = await new Plugin({ type: 'test' }, 'purpose', 'image', {
+      longest_edge: 2,
+    }).generateTests(3);
+    expect(tests).toHaveLength(2);
+    expect(tests.map((test) => test.metadata?.category).sort()).toEqual(['Hate', 'Violence']);
+    for (const test of tests) {
+      expect(test.vars?.image).toMatch(/^data:image\/jpeg;base64,/);
+      const bytes = Buffer.from(String(test.vars?.image).split(',')[1], 'base64');
+      expect(await sharp(bytes).metadata()).toMatchObject({ format: 'jpeg', width: 2, height: 1 });
+    }
+    expect(fetchWithProxy).toHaveBeenCalledTimes(3);
+  });
 
-      const tests = await plugin.generateTests(4);
+  it.each(['empty', 'rejected'])('returns no tests for a %s dataset', async (failure) => {
+    if (failure === 'empty') {
+      mockFetchHuggingFaceDataset.mockResolvedValue([]);
+    } else {
+      mockFetchHuggingFaceDataset.mockRejectedValue(new Error('synthetic unavailable dataset'));
+    }
+    expect(await new Plugin({ type: 'test' }, 'purpose', 'image').generateTests(2)).toEqual([]);
+    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Error generating tests'));
+  });
 
-      // Should have tests
-      expect(tests.length).toBeGreaterThan(0);
-
-      // Find safe and unsafe tests
-      const safeTests = tests.filter((test) => test.metadata?.isSafe);
-      const unsafeTests = tests.filter((test) => !test.metadata?.isSafe);
-
-      // Should have both types
-      expect(safeTests.length).toBeGreaterThan(0);
-      expect(unsafeTests.length).toBeGreaterThan(0);
-
-      // Verify safe test metadata
-      const safeTest = safeTests[0];
-      expect(safeTest.metadata).toMatchObject({
-        isSafe: true,
-        label: 'safe',
-      });
-
-      // Verify unsafe test metadata
-      const unsafeTest = unsafeTests[0];
-      expect(unsafeTest.metadata).toMatchObject({
-        isSafe: false,
-        label: 'unsafe',
-      });
-    });
-
-    it('should use inverted assertions for safe images', async () => {
-      const plugin = new UnsafeBenchPlugin({ type: 'test' }, 'testing purposes', 'image', {
-        includeSafe: true,
-      });
-
-      const tests = await plugin.generateTests(4);
-      const safeTests = tests.filter((test) => test.metadata?.isSafe);
-
-      expect(safeTests.length).toBeGreaterThan(0);
-
-      const safeAssertion = safeTests[0].assert?.[0];
-
-      // Safe images should use llm-rubric assertion
-      expect(safeAssertion?.type).toBe('llm-rubric');
-      expect(safeAssertion?.metric).toBe('UnsafeBench');
-    });
-
-    it('should use standard assertions for unsafe images', async () => {
-      const plugin = new UnsafeBenchPlugin({ type: 'test' }, 'testing purposes', 'image', {
-        includeSafe: true,
-      });
-
-      const tests = await plugin.generateTests(4);
-      const unsafeTests = tests.filter((test) => !test.metadata?.isSafe);
-
-      expect(unsafeTests.length).toBeGreaterThan(0);
-
-      const unsafeAssertion = unsafeTests[0].assert?.[0];
-
-      // Unsafe images should use standard assertion
-      expect(unsafeAssertion?.type).toBe('promptfoo:redteam:unsafebench');
-      expect(unsafeAssertion?.metric).toBe('UnsafeBench');
-    });
-
-    it('should balance safe and unsafe images 50/50', async () => {
-      const plugin = new UnsafeBenchPlugin({ type: 'test' }, 'testing purposes', 'image', {
-        includeSafe: true,
-      });
-
-      const tests = await plugin.generateTests(4);
-
-      const safeCount = tests.filter((test) => test.metadata?.isSafe).length;
-      const unsafeCount = tests.filter((test) => !test.metadata?.isSafe).length;
-
-      // Should have equal amounts (50/50 split)
-      expect(safeCount).toBe(2);
-      expect(unsafeCount).toBe(2);
-    });
-
-    it('should only include unsafe images when includeSafe is false', async () => {
-      const plugin = new UnsafeBenchPlugin({ type: 'test' }, 'testing purposes', 'image', {
-        includeSafe: false,
-      });
-
-      const tests = await plugin.generateTests(3);
-
-      // All tests should be unsafe
-      expect(tests.every((test) => !test.metadata?.isSafe)).toBe(true);
-    });
+  it.each([-1, 50001])('validates longest_edge %i in the real constructor', (longest_edge) => {
+    expect(() => new Plugin({ type: 'test' }, 'purpose', 'image', { longest_edge })).toThrow(
+      'Invalid longest_edge',
+    );
   });
 });
 
 describe('UnsafeBenchGrader', () => {
+  beforeEach(() => mockMatchesLlmRubric.mockReset());
+  afterEach(() => vi.restoreAllMocks());
   it('should include category in the rubric', () => {
     const grader = new UnsafeBenchGrader();
     expect(grader.rubric).toContain('{{category}}');

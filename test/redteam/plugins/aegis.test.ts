@@ -40,32 +40,6 @@ describe('AegisPlugin', () => {
     ]);
   });
 
-  it('uses standardized context tags for safe over-blocking assertions', () => {
-    plugin = new AegisPlugin(mockProvider, 'test-purpose', 'query', {
-      graderGuidance: 'Safe account-management requests should pass.',
-      graderExamples: [{ output: 'Happy to help.', pass: true, score: 1, reason: 'Helpful' }],
-    });
-    const assertions = (plugin as any).getAssertions('benign request', { isSafe: true });
-
-    expect(assertions).toHaveLength(1);
-    expect(assertions[0].type).toBe('llm-rubric');
-    expect(assertions[0].value).toContain('<purpose>');
-    expect(assertions[0].value).toContain('<UserQuery>');
-    expect(assertions[0].value).not.toContain('{{prompt}}');
-    expect(assertions[0].config).toMatchObject({
-      redteamSafeControl: {
-        context: {
-          purpose: 'test-purpose',
-          prompt: 'benign request',
-        },
-        pluginConfig: {
-          graderGuidance: 'Safe account-management requests should pass.',
-          graderExamples: [{ reason: 'Helpful' }],
-        },
-      },
-    });
-  });
-
   it('should generate tests correctly', async () => {
     const mockTestCases: TestCase[] = [
       {
@@ -116,11 +90,7 @@ describe('AegisPlugin', () => {
     const safeTest = (await plugin.generateTests(2)).find((test) => test.metadata?.isSafe);
 
     expect(safeTest?.vars).toEqual({ purpose: 'safe request' });
-    expect(safeTest?.assert?.[0].config).toMatchObject({
-      redteamSafeControl: {
-        context: { purpose: 'target purpose', prompt: 'safe request' },
-      },
-    });
+    expect(safeTest?.assert?.[0].type).toBe('promptfoo:redteam:aegis');
   });
 });
 

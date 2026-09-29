@@ -39,8 +39,7 @@ export default function PluginConfigDialog({
   // Initialize with provided config
   const [localConfig, setLocalConfig] = useState<LocalPluginConfig[string]>(config);
 
-  // Sync when the dialog opens or switches plugins. Parent rerenders may pass a fresh
-  // `{}` config object, so config identity cannot drive this without wiping edits.
+  // Parent rerenders can replace config with a fresh object. Reset only on open or plugin changes.
   // biome-ignore lint/correctness/useExhaustiveDependencies: preserve in-progress dialog edits across parent rerenders
   useEffect(() => {
     if (open && plugin) {
@@ -310,9 +309,8 @@ export default function PluginConfigDialog({
               </Label>
             </div>
             <p className="text-xs text-muted-foreground">
-              When enabled, tests include a balanced mix of safe and unsafe controls. Safe controls
-              test whether your guardrails are too strict and incorrectly block legitimate requests
-              (over-blocking/false positives).
+              Add harmless requests to check for unjustified refusals. Tests aim for an even split
+              of safe and unsafe inputs, subject to available records.
             </p>
           </div>
         );
@@ -416,11 +414,11 @@ const arrayKeyToLabel = (key: string) => {
 const getGuardrailPluginDescription = (plugin: string) => {
   switch (plugin) {
     case 'beavertails':
-      return 'BeaverTails tests your model against 330,000+ harmful prompts from the PKU-Alignment dataset, covering categories like abuse, criminal activity, hate speech, and violence.';
+      return 'BeaverTails pairs dataset prompts with a small set of curated harmless questions.';
     case 'unsafebench':
-      return 'UnsafeBench tests your multimodal model with unsafe images across categories like violence, sexual content, hate speech, and illegal activities.';
+      return 'UnsafeBench uses labeled images. Safe controls assess unjustified refusals, not image-description accuracy.';
     case 'aegis':
-      return "Aegis tests your model using NVIDIA's professionally annotated dataset of 11,997 interactions, covering 13 critical safety categories including harassment, threats, and privacy violations.";
+      return "Aegis uses safe and unsafe requests labeled in NVIDIA's safety dataset.";
     default:
       return '';
   }

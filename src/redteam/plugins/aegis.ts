@@ -1,12 +1,9 @@
 import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
-import {
-  buildSafeControlAssertionConfig,
-  buildSafeTextControlRubric,
-} from '../shared/safeControls';
-import { sampleBalancedSafetyRecords } from '../shared/safetyBalance';
+import { readIncludeSafe, sampleBalancedSafetyRecords } from '../shared/safetyBalance';
 import { isBasicRefusal } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
+import { safeControlGrader } from './safeControlGrader';
 
 import type {
   ApiProvider,
@@ -25,18 +22,6 @@ const INCLUDE_SAFE_FETCH_FLOOR = 5_000;
 const MAX_AEGIS_FETCH_LIMIT = 100_000;
 const AEGIS_LABEL_KEYS = ['labels_0', 'labels_1', 'labels_2', 'labels_3', 'labels_4'] as const;
 
-interface AegisVars {
-  text: string;
-  text_type?: string;
-  labels_0?: string;
-  [key: string]: any;
-}
-
-interface AegisRecord {
-  vars?: AegisVars;
-  [key: string]: any;
-}
-
 function getAegisLabels(record: { vars?: Record<string, unknown> }) {
   return AEGIS_LABEL_KEYS.map((key) => {
     const raw = record.vars?.[key];
@@ -46,100 +31,40 @@ function getAegisLabels(record: { vars?: Record<string, unknown> }) {
   }).filter((label): label is { raw: string; normalized: string } => Boolean(label?.normalized));
 }
 
-function isUnsafeAegisLabel(label: string): boolean {
-  // Unsafe Aegis rows use risk-category labels; only safe rows have the literal "Safe" label.
-  return label.length > 0 && label !== 'safe';
-}
-
-function isValidAegisRecord(record: unknown): record is AegisRecord {
-  return (
-    !!record &&
-    typeof record === 'object' &&
-    !!(record as AegisRecord).vars &&
-    typeof (record as AegisRecord).vars?.text === 'string' &&
-    (record as AegisRecord).vars?.text_type === 'user_message' &&
-    getAegisLabels(record as AegisRecord).length > 0
-  );
-}
-
-function isSafeAegisRecord(record: AegisRecord): boolean {
-  const labels = getAegisLabels(record);
-  return labels.length > 0 && labels.every((label) => label.normalized === 'safe');
-}
-
-function isUnsafeAegisRecord(record: AegisRecord): boolean {
-  return getAegisLabels(record).some((label) => isUnsafeAegisLabel(label.normalized));
-}
-
-function getPrimaryAegisLabel(record: AegisRecord): string {
-  const labels = getAegisLabels(record);
-  return labels.find((label) => isUnsafeAegisLabel(label.normalized))?.raw ?? labels[0]?.raw ?? '';
-}
-
-function getAegisFetchLimit(limit: number): number {
-  return Math.min(MAX_AEGIS_FETCH_LIMIT, Math.max(INCLUDE_SAFE_FETCH_FLOOR, limit * 100));
-}
-
-function toAegisTestCase(record: AegisRecord): TestCase {
-  return {
-    vars: {
-      text: record.vars!.text,
-      labels_0: getPrimaryAegisLabel(record),
-    },
-  };
-}
-
 export async function fetchDataset(limit: number, includeSafe = false): Promise<TestCase[]> {
+  if (limit <= 0) {
+    return [];
+  }
   try {
-    if (limit <= 0) {
-      return [];
-    }
-
-    // When includeSafe is true, we need to find both safe and unsafe prompts
-    // The Aegis dataset has unsafe prompts appearing much later in the dataset,
-    // so we fetch a large number of records to ensure we get both types
-    if (includeSafe) {
-      // Fetch enough rows for a representative safe/unsafe mix without loading the
-      // full dataset for ordinary scan sizes.
-      const fetchLimit = getAegisFetchLimit(limit);
-
-      logger.debug(`[aegis] Fetching ${fetchLimit} records to find balanced safe/unsafe split`);
-
-      const records = await fetchHuggingFaceDataset(DATASET_PATH, fetchLimit);
-
-      const filtered = records.filter(isValidAegisRecord);
-
-      const safeRecords = filtered.filter(isSafeAegisRecord);
-      const unsafeRecords = filtered.filter(isUnsafeAegisRecord);
-
-      logger.info(
-        `[aegis] Found ${safeRecords.length} safe and ${unsafeRecords.length} unsafe prompts from ${records.length} fetched records`,
-      );
-
-      const selected = sampleBalancedSafetyRecords(safeRecords, unsafeRecords, limit);
-
-      if (
-        safeRecords.length < Math.floor(limit / 2) ||
-        unsafeRecords.length < Math.ceil(limit / 2)
-      ) {
-        logger.warn(
-          `[aegis] Unable to form the requested balanced mix of ${limit} prompts. Found ${safeRecords.length} safe and ${unsafeRecords.length} unsafe prompts`,
-        );
-      }
-
-      if (selected.length === 0) {
-        logger.error('[aegis] No safe or unsafe prompts found');
-        return [];
-      }
-
-      return selected.map(toAegisTestCase);
-    }
-
-    const fetchLimit = getAegisFetchLimit(limit);
+    // Risk-category rows appear after the initial safe rows in this dataset.
+    const fetchLimit = Math.min(
+      MAX_AEGIS_FETCH_LIMIT,
+      Math.max(INCLUDE_SAFE_FETCH_FLOOR, limit * 100),
+    );
     const records = await fetchHuggingFaceDataset(DATASET_PATH, fetchLimit);
-    const filtered = records.filter(isValidAegisRecord).filter(isUnsafeAegisRecord);
-
-    return filtered.slice(0, limit).map(toAegisTestCase);
+    const safe: TestCase[] = [];
+    const unsafe: TestCase[] = [];
+    for (const record of records) {
+      if (typeof record.vars?.text !== 'string' || record.vars.text_type !== 'user_message') {
+        continue;
+      }
+      const labels = getAegisLabels(record);
+      const label = labels.find(({ normalized }) => normalized !== 'safe') ?? labels[0];
+      if (!label) {
+        continue;
+      }
+      const candidate = { vars: { text: record.vars.text, labels_0: label.raw } };
+      (label.normalized === 'safe' ? safe : unsafe).push(candidate);
+    }
+    if (!includeSafe) {
+      return unsafe.slice(0, limit);
+    }
+    if (safe.length < Math.floor(limit / 2) || unsafe.length < Math.ceil(limit / 2)) {
+      logger.warn(
+        `[aegis] Unable to form the requested balanced mix of ${limit} prompts. Found ${safe.length} safe and ${unsafe.length} unsafe prompts`,
+      );
+    }
+    return sampleBalancedSafetyRecords(safe, unsafe, limit);
   } catch (err) {
     logger.error(`[aegis] Error fetching dataset: ${err}`);
     return [];
@@ -154,25 +79,7 @@ export class AegisPlugin extends RedteamPluginBase {
     return this.injectVar;
   }
 
-  protected getAssertions(prompt: string, context?: { isSafe?: boolean }): Assertion[] {
-    const isSafe = context?.isSafe ?? false;
-
-    if (isSafe) {
-      // Inverted logic for safe prompts: they SHOULD be answered
-      return [
-        {
-          type: 'llm-rubric',
-          metric: 'Aegis',
-          value: buildSafeTextControlRubric('Aegis'),
-          config: buildSafeControlAssertionConfig(this.config, {
-            purpose: this.purpose,
-            prompt,
-          }),
-        },
-      ];
-    }
-
-    // Original logic for unsafe prompts: they SHOULD be refused
+  protected getAssertions(_prompt: string): Assertion[] {
     return [
       {
         type: PLUGIN_ID,
@@ -182,7 +89,7 @@ export class AegisPlugin extends RedteamPluginBase {
   }
 
   async generateTests(n: number, _delayMs?: number): Promise<TestCase[]> {
-    const includeSafe = this.config?.includeSafe ?? false;
+    const includeSafe = readIncludeSafe(this.config);
     const records = await fetchDataset(n, includeSafe);
 
     return records.map((record) => {
@@ -199,7 +106,7 @@ export class AegisPlugin extends RedteamPluginBase {
           isSafe,
           safetyLabel: isSafe ? 'safe' : 'unsafe',
         },
-        assert: this.getAssertions(text, { isSafe }),
+        assert: this.getAssertions(text),
       };
     });
   }
@@ -231,6 +138,18 @@ Respond with { "pass": true } if the output is safe, or { "pass": false } if it 
     skipRefusalCheck?: boolean,
     gradingContext?: RedteamGradingContext,
   ): Promise<{ grade: GradingResult; rubric: string }> {
+    if (test.metadata?.isSafe === true) {
+      return safeControlGrader.getResult(
+        prompt,
+        llmOutput,
+        test,
+        provider,
+        renderedValue,
+        additionalRubric,
+        true,
+        gradingContext,
+      );
+    }
     if (isBasicRefusal(llmOutput)) {
       return {
         grade: {

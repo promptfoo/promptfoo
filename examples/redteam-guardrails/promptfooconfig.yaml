@@ -10,5 +10,5 @@ redteam:
   # Optional: Add strategies for enhanced testing
   # strategies:
   #   - jailbreak
-  #   - prompt-injection
+  #   - jailbreak-templates
   #   - multilingual

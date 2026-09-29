@@ -1,122 +1,113 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDatasets';
-import { UnsafeBenchPlugin } from '../../../src/redteam/plugins/unsafebench';
+import { fetchWithProxy } from '../../../src/util/fetch/index';
+
+import type { UnsafeBenchPlugin } from '../../../src/redteam/plugins/unsafebench';
+import type { TestCase } from '../../../src/types/index';
 
 vi.mock('../../../src/integrations/huggingfaceDatasets');
+vi.mock('../../../src/util/fetch/index', async (importOriginal) => ({
+  ...(await importOriginal()),
+  fetchWithProxy: vi.fn(),
+}));
 
-const mockFetchHuggingFaceDataset = vi.mocked(fetchHuggingFaceDataset);
+let Plugin: typeof UnsafeBenchPlugin;
+const row = (image: string, safe = false, category = 'Violence'): TestCase => ({
+  vars: { image, category, safety_label: safe ? 'safe' : 'unsafe' },
+});
 
-describe('UnsafeBenchPlugin dataset cache', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockFetchHuggingFaceDataset.mockReset();
-  });
+beforeEach(async () => {
+  vi.resetModules();
+  vi.resetAllMocks();
+  ({ UnsafeBenchPlugin: Plugin } = await import('../../../src/redteam/plugins/unsafebench'));
+});
+afterEach(() => vi.restoreAllMocks());
 
-  afterEach(() => {
-    mockFetchHuggingFaceDataset.mockReset();
-  });
-
-  it('reloads the dataset when includeSafe changes', async () => {
-    mockFetchHuggingFaceDataset
-      .mockResolvedValueOnce([
-        {
-          vars: {
-            image: 'unsafe-image',
-            category: 'Violence',
-            safety_label: 'unsafe',
-          },
-        },
-        {
-          vars: {
-            image: 'safe-image-hidden-from-unsafe-cache',
-            category: 'Violence',
-            safety_label: 'safe',
-          },
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          vars: {
-            image: 'unsafe-image-reloaded',
-            category: 'Violence',
-            safety_label: 'unsafe',
-          },
-        },
-        {
-          vars: {
-            image: 'safe-image-reloaded',
-            category: 'Violence',
-            safety_label: 'safe',
-          },
-        },
-      ]);
-
-    const unsafeOnlyPlugin = new UnsafeBenchPlugin({ type: 'test' }, 'purpose', 'image');
-    const unsafeOnlyTests = await unsafeOnlyPlugin.generateTests(1);
-
-    const includeSafePlugin = new UnsafeBenchPlugin({ type: 'test' }, 'target purpose', 'purpose', {
+describe('UnsafeBench metadata caching', () => {
+  it('keeps concurrent safe and unsafe dataset loads independent', async () => {
+    let resolveUnsafe!: (rows: TestCase[]) => void;
+    vi.mocked(fetchHuggingFaceDataset).mockImplementation(async (_path, limit) =>
+      limit === 1000
+        ? new Promise((resolve) => {
+            resolveUnsafe = resolve;
+          })
+        : [row('mixed-unsafe'), row('mixed-safe', true)],
+    );
+    const unsafeRun = new Plugin({ type: 'test' }, 'purpose', 'image').generateTests(1);
+    const mixedRun = new Plugin({ type: 'test' }, 'purpose', 'image', {
       includeSafe: true,
-      graderGuidance: 'Safe screenshots should be described normally.',
-      graderExamples: [{ output: 'A normal scene.', pass: true, score: 1, reason: 'Helpful' }],
-    });
-    const mixedTests = await includeSafePlugin.generateTests(2);
+    }).generateTests(2);
+    const mixed = await mixedRun;
+    resolveUnsafe([row('unsafe-only')]);
+    const unsafe = await unsafeRun;
 
-    expect(mockFetchHuggingFaceDataset).toHaveBeenNthCalledWith(
-      1,
-      'huggingface://datasets/yiting/UnsafeBench',
-      1000,
+    expect(mixed.map((test) => test.vars?.image).sort()).toEqual(['mixed-safe', 'mixed-unsafe']);
+    expect(unsafe.map((test) => test.vars?.image)).toEqual(['unsafe-only']);
+    expect(mixed.every((test) => test.assert?.[0].type === 'promptfoo:redteam:unsafebench')).toBe(
+      true,
     );
-    expect(mockFetchHuggingFaceDataset).toHaveBeenNthCalledWith(
-      2,
-      'huggingface://datasets/yiting/UnsafeBench',
-      2000,
-    );
-    expect(unsafeOnlyTests).toHaveLength(1);
-    expect(unsafeOnlyTests[0].metadata).toMatchObject({ isSafe: false, label: 'unsafe' });
-    expect(mixedTests.map((test) => test.metadata?.label).sort()).toEqual(['safe', 'unsafe']);
-    const safeTest = mixedTests.find((test) => test.metadata?.isSafe);
-    expect(safeTest?.vars).toEqual({ purpose: 'safe-image-reloaded' });
-    const safeAssertion = safeTest?.assert?.[0];
-    expect(safeAssertion?.type).toBe('llm-rubric');
-    expect(safeAssertion).toHaveProperty('value');
-    if (safeAssertion && 'value' in safeAssertion && typeof safeAssertion.value === 'string') {
-      expect(safeAssertion.value).toContain('<UserQuery>');
-      expect(safeAssertion.value).not.toContain('{{prompt}}');
-      expect(safeAssertion.config).toMatchObject({
-        redteamSafeControl: {
-          context: { purpose: 'target purpose' },
-          pluginConfig: {
-            graderGuidance: 'Safe screenshots should be described normally.',
-            graderExamples: [{ reason: 'Helpful' }],
-          },
-        },
-      });
-    }
+    await new Plugin({ type: 'test' }, 'purpose', 'image', { includeSafe: true }).generateTests(2);
+    expect(fetchHuggingFaceDataset).toHaveBeenCalledTimes(2);
   });
 
-  it('balances safe and unsafe images within each selected category', async () => {
-    mockFetchHuggingFaceDataset.mockResolvedValue([
-      { vars: { image: 'violence-unsafe', category: 'Violence', safety_label: 'unsafe' } },
-      { vars: { image: 'violence-safe', category: 'Violence', safety_label: 'safe' } },
-      { vars: { image: 'hate-unsafe', category: 'Hate', safety_label: 'unsafe' } },
-      { vars: { image: 'hate-safe', category: 'Hate', safety_label: 'safe' } },
+  it('balances within each category', async () => {
+    vi.mocked(fetchHuggingFaceDataset).mockResolvedValue([
+      row('violence-unsafe'),
+      row('violence-safe', true),
+      row('hate-unsafe', false, 'Hate'),
+      row('hate-safe', true, 'Hate'),
     ]);
-
-    // Toggle modes first so this assertion does not depend on singleton cache state
-    // from another randomly ordered test.
-    await new UnsafeBenchPlugin({ type: 'test' }, 'purpose', 'image').generateTests(1);
-
-    const plugin = new UnsafeBenchPlugin({ type: 'test' }, 'purpose', 'image', {
+    const tests = await new Plugin({ type: 'test' }, 'purpose', 'image', {
       includeSafe: true,
       categories: ['Violence', 'Hate'],
-    });
-    const tests = await plugin.generateTests(2);
-
-    expect(tests).toHaveLength(4);
+    }).generateTests(2);
     for (const category of ['Violence', 'Hate']) {
-      const categoryTests = tests.filter((test) => test.metadata?.category === category);
-      expect(categoryTests).toHaveLength(2);
-      expect(categoryTests.map((test) => test.metadata?.label).sort()).toEqual(['safe', 'unsafe']);
+      expect(
+        tests
+          .filter((test) => test.metadata?.category === category)
+          .map((test) => test.metadata?.label)
+          .sort(),
+      ).toEqual(['safe', 'unsafe']);
     }
+  });
+
+  it('downloads only selected images and applies each request size limit', async () => {
+    const sharp = (await import('sharp')).default;
+    const png = await sharp({ create: { width: 4, height: 2, channels: 3, background: 'red' } })
+      .png()
+      .toBuffer();
+    vi.mocked(fetchHuggingFaceDataset).mockResolvedValue(
+      Array.from({ length: 20 }, (_, index) => row(`https://images.invalid/${index}`)),
+    );
+    vi.mocked(fetchWithProxy).mockImplementation(async () => new Response(png));
+    for (const longest_edge of [2, 4]) {
+      const tests = await new Plugin({ type: 'test' }, 'purpose', 'image', {
+        longest_edge,
+      }).generateTests(1);
+      expect(tests).toHaveLength(1);
+      const image = Buffer.from(String(tests[0].vars?.image).split(',')[1], 'base64');
+      expect((await sharp(image).metadata()).width).toBe(longest_edge);
+    }
+    expect(fetchHuggingFaceDataset).toHaveBeenCalledTimes(1);
+    expect(fetchWithProxy).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries a failed metadata load', async () => {
+    vi.mocked(fetchHuggingFaceDataset)
+      .mockRejectedValueOnce(new Error('temporary failure'))
+      .mockResolvedValueOnce([row('recovered')]);
+    const plugin = new Plugin({ type: 'test' }, 'purpose', 'image');
+    expect(await plugin.generateTests(1)).toEqual([]);
+    expect(await plugin.generateTests(1)).toHaveLength(1);
+    expect(fetchHuggingFaceDataset).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects nonboolean safe-control configuration', () => {
+    expect(
+      () =>
+        new Plugin({ type: 'test' }, 'purpose', 'image', {
+          includeSafe: 'false' as unknown as boolean,
+        }),
+    ).toThrow('includeSafe must be a boolean');
   });
 });

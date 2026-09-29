@@ -1,7 +1,6 @@
 ---
 title: UnsafeBench
-sidebar_position: 58
-description: Evaluate multimodal AI safety with UnsafeBench images, safe controls, category filters, and over-blocking checks for harmful visual content and responses
+description: Test responses to unsafe images and unjustified refusals of safe images with UnsafeBench
 keywords: [red team, multi-modal, image, safety, content moderation, unsafe content]
 ---
 
@@ -44,21 +43,19 @@ Unlike text-based plugins, the UnsafeBench plugin should not be used with any re
 
 ## Available Categories
 
-The UnsafeBench dataset contains 10,146 images: 6,098 safe and 4,048 unsafe, across the following categories:
+UnsafeBench labels images as safe or unsafe across these categories:
 
-| Category                   |
-| -------------------------- |
-| Sexual                     |
-| Shocking                   |
-| Political                  |
-| Illegal activity           |
-| Violence                   |
-| Spam                       |
-| Deception                  |
-| Public and personal health |
-| Harassment                 |
-| Self-harm                  |
-| Hate                       |
+- Sexual
+- Shocking
+- Political
+- Illegal activity
+- Violence
+- Spam
+- Deception
+- Public and personal health
+- Harassment
+- Self-harm
+- Hate
 
 ## Configuration
 
@@ -78,7 +75,7 @@ redteam:
 
 ### Testing for Over-Blocking
 
-By default, UnsafeBench tests only unsafe images to ensure your model appropriately refuses harmful content. You can also test for over-blocking (false positives) by including safe images:
+UnsafeBench tests unsafe images by default. Enable safe controls to check for unjustified refusals:
 
 ```yaml
 redteam:
@@ -90,14 +87,9 @@ redteam:
           - Violence
 ```
 
-When `includeSafe: true` is set:
+With `includeSafe: true`, the plugin aims for an even mix of safe and unsafe images within each selected category. If either group has too few records, it fills from available images and logs a warning. Records are sampled before images are downloaded, with at most four downloads at once.
 
-- Test cases use a balanced mix of safe and unsafe images
-- When `categories` are selected, each category receives its own balanced mix
-- If a category cannot supply both labels, available images are used and a warning is logged
-- Safe images use inverted grading logic: they SHOULD be described appropriately (not refused)
-- This helps identify if your guardrails are too strict and block legitimate image requests
-- Metadata includes `isSafe` and `label` fields for filtering and analysis
+Safe controls assess whether the response withholds help for an unjustified safety reason. The grader uses the dataset's safe label and the response text; it does not assess the accuracy of an image description. Justified redirects based on the assistant's purpose or capabilities can pass. Results retain the UnsafeBench metric; `isSafe` and `label` identify the controls.
 
 ### Image Processing
 
@@ -169,7 +161,7 @@ redteam:
    - Large images are resized to fit within the `longest_edge` limit
    - Processing only occurs when format conversion or resizing is needed
 4. It uses the base64-encoded image data as input for your model
-5. It evaluates whether responses appropriately handle each image, including refusal for unsafe content and normal assistance for safe controls
+5. It evaluates responses to unsafe content and checks safe controls for unjustified safety refusals
 
 ## Grading Criteria
 

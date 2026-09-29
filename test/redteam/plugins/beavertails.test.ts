@@ -87,7 +87,7 @@ describe('BeavertailsPlugin', () => {
       });
     });
 
-    it('should use inverted assertions for safe prompts', async () => {
+    it('keeps the plugin assertion ID for safe prompts', async () => {
       const mockTestCases: TestCase[] = [
         {
           vars: {
@@ -130,27 +130,8 @@ describe('BeavertailsPlugin', () => {
 
       const safeAssertion = safeTests[0].assert?.[0];
 
-      // Safe prompts should use llm-rubric assertion
-      expect(safeAssertion?.type).toBe('llm-rubric');
+      expect(safeAssertion?.type).toBe('promptfoo:redteam:beavertails');
       expect(safeAssertion?.metric).toBe('BeaverTails');
-      if (safeAssertion && 'value' in safeAssertion && typeof safeAssertion.value === 'string') {
-        expect(safeAssertion.value).toContain('SAFE request');
-        expect(safeAssertion.value).toContain('<purpose>');
-        expect(safeAssertion.value).toContain('<UserQuery>');
-        expect(safeAssertion.value).not.toContain('{{prompt}}');
-        expect(safeAssertion.config).toMatchObject({
-          redteamSafeControl: {
-            context: {
-              purpose: 'test',
-              prompt: expect.any(String),
-            },
-            pluginConfig: {
-              graderGuidance: 'Safe recipe requests should pass.',
-              graderExamples: [{ reason: 'Helpful' }],
-            },
-          },
-        });
-      }
     });
 
     it('keeps safe-control rubric context out of target variables', async () => {
@@ -167,11 +148,7 @@ describe('BeavertailsPlugin', () => {
 
       expect(safeTest?.vars).toEqual({ purpose: expect.any(String) });
       expect(safePrompt).not.toBe('target purpose');
-      expect(safeTest?.assert?.[0].config).toMatchObject({
-        redteamSafeControl: {
-          context: { purpose: 'target purpose', prompt: safePrompt },
-        },
-      });
+      expect(safeTest?.assert?.[0].type).toBe('promptfoo:redteam:beavertails');
     });
 
     it('should not treat safe-response rows with harmful prompts as safe controls', async () => {
@@ -850,7 +827,7 @@ describe('fetchAllDatasets', () => {
     it('caps includeSafe fetches for large unfiltered requests', async () => {
       vi.mocked(fetchHuggingFaceDataset).mockResolvedValue([]);
 
-      await fetchAllDatasets(10_000, { includeSafe: true });
+      await fetchAllDatasets(100_000, { includeSafe: true });
 
       expect(fetchHuggingFaceDataset).toHaveBeenCalledWith(
         'huggingface://datasets/PKU-Alignment/BeaverTails?split=330k_train',

@@ -1,4 +1,15 @@
 import { sampleArray } from '../../util/generation';
+import invariant from '../../util/invariant';
+
+import type { PluginConfig } from '../types';
+
+export function readIncludeSafe(config?: PluginConfig): boolean {
+  invariant(
+    config?.includeSafe === undefined || typeof config.includeSafe === 'boolean',
+    'includeSafe must be a boolean',
+  );
+  return config?.includeSafe ?? false;
+}
 
 export function sampleBalancedSafetyRecords<T>(
   safeRecords: T[],
