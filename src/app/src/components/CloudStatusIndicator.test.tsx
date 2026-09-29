@@ -111,6 +111,21 @@ describe('CloudStatusIndicator', () => {
     );
   });
 
+  it.each([false, true])(
+    'keeps enterprise setup on the enterprise host when enabled=%s',
+    async (isEnabled) => {
+      mockConfig({ appUrl: null, isEnabled, isEnterprise: true });
+      mount();
+      await openDialog();
+      expect(
+        screen.getByText('promptfoo auth login --host <enterprise-dashboard-url>'),
+      ).toBeInTheDocument();
+      expect(screen.queryByText('promptfoo auth login', { exact: true })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'promptfoo.app' })).not.toBeInTheDocument();
+      expect(openWindow).not.toHaveBeenCalled();
+    },
+  );
+
   it('does not navigate when the dashboard URL is unavailable', async () => {
     mockConfig({ ...unconfigured, isEnabled: true, appUrl: null });
     mount();

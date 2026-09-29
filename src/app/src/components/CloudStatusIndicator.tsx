@@ -33,7 +33,8 @@ interface IndicatorState {
   serviceName: string;
   teamName: 'team' | 'organization';
   safeAppUrl: string | null;
-  connectDestination: { href: string; label: string };
+  connectDestination: { href: string; label: string } | null;
+  loginCommand: string;
 }
 
 function deriveIndicatorState(
@@ -56,10 +57,11 @@ function deriveIndicatorState(
           ? 'configured'
           : 'unconfigured';
 
-  const connectDestination =
-    isEnterprise && safeAppUrl
+  const connectDestination = isEnterprise
+    ? safeAppUrl
       ? { href: safeAppUrl, label: new URL(safeAppUrl).hostname }
-      : { href: 'https://www.promptfoo.app/welcome', label: 'promptfoo.app' };
+      : null
+    : { href: 'https://www.promptfoo.app/welcome', label: 'promptfoo.app' };
 
   return {
     status,
@@ -67,6 +69,9 @@ function deriveIndicatorState(
     teamName: isEnterprise ? 'organization' : 'team',
     safeAppUrl,
     connectDestination,
+    loginCommand: isEnterprise
+      ? 'promptfoo auth login --host <enterprise-dashboard-url>'
+      : 'promptfoo auth login',
   };
 }
 
@@ -189,17 +194,22 @@ export default function CloudStatusIndicator() {
               <AlertCircle className="size-4" />
               <AlertContent>
                 <AlertDescription>
-                  Run <code className="rounded bg-muted px-1 py-0.5">promptfoo auth login</code> or
-                  visit{' '}
-                  <a
-                    href={state.connectDestination.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={handleConnectClick}
-                    className="font-medium underline text-primary hover:text-primary/80"
-                  >
-                    {state.connectDestination.label}
-                  </a>
+                  Run <code className="rounded bg-muted px-1 py-0.5">{state.loginCommand}</code>
+                  {state.connectDestination && (
+                    <>
+                      {' '}
+                      or visit{' '}
+                      <a
+                        href={state.connectDestination.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={handleConnectClick}
+                        className="font-medium underline text-primary hover:text-primary/80"
+                      >
+                        {state.connectDestination.label}
+                      </a>
+                    </>
+                  )}
                   .
                 </AlertDescription>
               </AlertContent>
