@@ -71,11 +71,17 @@ interface GradingResult {
   pass: boolean;
   score: number;
   reason: string;
-  componentResults?: GradingResult[];
+  namedScores?: Record<string, number> | null;
+  namedScoreWeights?: Record<string, number> | null;
+  componentResults?: GradingResult[] | null;
 }
 ```
 
 If `componentResults` is set, a table of assertion details will be shown in the test output modal in the Eval view.
+
+Numeric returns, `score`, and all values in `namedScores` and `namedScoreWeights` must be finite, including in nested `componentResults`. `NaN` or infinity fails the assertion; finite scores outside 0–1 are accepted. `pass: false` still fails when `reason` is empty.
+
+A `componentResults` array must contain a valid grading result at every index; sparse arrays are rejected.
 
 ## Multiline functions
 
@@ -90,6 +96,7 @@ assert:
         return {
           pass: true,
           score: 0.5,
+          reason: 'Output matches the expected value',
         };
       }
       return {
