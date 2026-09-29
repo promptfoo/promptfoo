@@ -2493,6 +2493,196 @@ describe('AnthropicMessagesProvider', () => {
       expect(result.cost).toBeGreaterThan(0);
     });
 
+    it('resumes a follow-up turn that pauses after an MCP tool call', async () => {
+      provider = createProvider('claude-sonnet-4-6', {
+        config: { mcp: { enabled: true, server: { command: 'npm', args: ['start'] } } },
+      });
+      mcpMocks.callTool.mockResolvedValueOnce({ content: 'Found Acme Solar.' });
+      const toolUseTurn = {
+        content: [
+          {
+            type: 'tool_use',
+            id: 'toolu_search',
+            name: 'search_companies',
+            input: { query: 'solar' },
+          },
+        ],
+        stop_reason: 'tool_use',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      } as Anthropic.Messages.Message;
+      const pausedFollowUp = {
+        content: [{ type: 'server_tool_use', id: 'srvtoolu_news', name: 'web_search', input: {} }],
+        stop_reason: 'pause_turn',
+        usage: { input_tokens: 20, output_tokens: 3 },
+      } as unknown as Anthropic.Messages.Message;
+      const create = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce(toolUseTurn)
+        .mockResolvedValueOnce(pausedFollowUp)
+        .mockResolvedValueOnce({
+          content: [
+            { type: 'web_search_tool_result', tool_use_id: 'srvtoolu_news', content: [] },
+            { type: 'text', text: 'Acme Solar is expanding.' },
+          ],
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 30, output_tokens: 6 },
+        } as unknown as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Find solar companies in the news');
+
+      expect(create).toHaveBeenCalledTimes(3);
+      const resume = create.mock.calls[2][0] as Anthropic.Messages.MessageCreateParams;
+      expect(resume.messages.slice(-3)).toEqual([
+        { role: 'assistant', content: toolUseTurn.content },
+        {
+          role: 'user',
+          content: [
+            { type: 'tool_result', tool_use_id: 'toolu_search', content: 'Found Acme Solar.' },
+          ],
+        },
+        { role: 'assistant', content: pausedFollowUp.content },
+      ]);
+      expect(result.output).toContain('Acme Solar is expanding.');
+      expect(result.metadata?.toolCalls).toHaveLength(1);
+      expect(result.tokenUsage).toMatchObject({ prompt: 60, completion: 14, total: 74 });
+    });
+
+    it.each([
+      { stream: false, structured: false },
+      { stream: true, structured: false },
+      { stream: false, structured: true },
+      { stream: true, structured: true },
+    ])(
+      'retains paused files across an MCP handoff (stream: $stream, structured: $structured)',
+      async ({ stream, structured }) => {
+        enableCache();
+        provider = createProvider('claude-sonnet-4-6', {
+          config: {
+            stream,
+            mcp: { enabled: true, server: { command: 'npm', args: ['start'] } },
+            ...(structured && {
+              output_format: {
+                type: 'json_schema',
+                schema: { type: 'object', properties: { answer: { type: 'string' } } },
+              },
+            }),
+          },
+        });
+        mcpMocks.callTool.mockResolvedValueOnce({ content: 'Found Acme Solar.' });
+        const fileReferences = [
+          { type: 'container_upload', file_id: 'file_paused' },
+          { type: 'bash_code_execution_output', file_id: 'file_resumed' },
+          { type: 'code_execution_output', file_id: 'file_final' },
+        ] as const;
+        const responses = [
+          {
+            content: [{ type: 'text', text: 'Preparing the report.' }, fileReferences[0]],
+            stop_reason: 'pause_turn',
+            usage: { input_tokens: 10, output_tokens: 5 },
+          },
+          {
+            content: [
+              {
+                type: 'bash_code_execution_tool_result',
+                tool_use_id: 'srvtoolu_report',
+                content: {
+                  type: 'bash_code_execution_result',
+                  stdout: '',
+                  stderr: '',
+                  return_code: 0,
+                  content: [fileReferences[1]],
+                },
+              },
+              {
+                type: 'tool_use',
+                id: 'toolu_search',
+                name: 'search_companies',
+                input: { query: 'solar' },
+              },
+            ],
+            stop_reason: 'tool_use',
+            usage: { input_tokens: 20, output_tokens: 5 },
+          },
+          {
+            content: [
+              {
+                type: 'code_execution_tool_result',
+                tool_use_id: 'srvtoolu_summary',
+                content: {
+                  type: 'code_execution_result',
+                  stdout: '',
+                  stderr: '',
+                  return_code: 0,
+                  content: [fileReferences[2]],
+                },
+              },
+              { type: 'text', text: structured ? '{"answer":"solar"}' : 'Solar report ready.' },
+            ],
+            stop_reason: 'end_turn',
+            usage: { input_tokens: 30, output_tokens: 5 },
+          },
+        ] as Anthropic.Messages.Message[];
+        const create = vi.spyOn(provider.anthropic.messages, 'create');
+        const streamed = vi.spyOn(provider.anthropic.messages, 'stream');
+        for (const response of responses) {
+          if (stream) {
+            streamed.mockReturnValueOnce({
+              finalMessage: vi.fn().mockResolvedValue(response),
+            } as unknown as ReturnType<typeof provider.anthropic.messages.stream>);
+          } else {
+            create.mockResolvedValueOnce(response);
+          }
+        }
+
+        const result = await provider.callApi('Create a solar report');
+
+        expect(result.output).toEqual(
+          structured
+            ? { answer: 'solar' }
+            : `${JSON.stringify(fileReferences[2])}\n\nSolar report ready.`,
+        );
+        expect(result.metadata?.fileReferences).toEqual(fileReferences);
+        expect(result.metadata?.toolCalls).toHaveLength(1);
+        expect(result.tokenUsage).toMatchObject({ prompt: 60, completion: 15, total: 75 });
+        expect(result.cost).toBeCloseTo(0.000405, 10);
+        expect(result.cached).not.toBe(true);
+        expect(result.error).toBeUndefined();
+        expect(stream ? streamed : create).toHaveBeenCalledTimes(3);
+      },
+    );
+
+    it('names the turn container in MCP follow-up requests', async () => {
+      provider = createProvider('claude-sonnet-4-6', {
+        config: { mcp: { enabled: true, server: { command: 'npm', args: ['start'] } } },
+      });
+      mcpMocks.callTool.mockResolvedValueOnce({ content: 'Found Acme Solar.' });
+      const create = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_search',
+              name: 'search_companies',
+              input: { query: 'solar' },
+            },
+          ],
+          container: { id: 'container_turn', expires_at: '2026-09-30T00:00:00Z', skills: null },
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 10, output_tokens: 5 },
+        } as Anthropic.Messages.Message)
+        .mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'Acme Solar is a match.' }],
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 7, output_tokens: 4 },
+        } as Anthropic.Messages.Message);
+
+      await provider.callApi('Find solar companies');
+
+      expect(create.mock.calls[0][0]).not.toHaveProperty('container');
+      expect(create.mock.calls[1][0].container).toBe('container_turn');
+    });
+
     it('continues MCP tool execution through the streaming path', async () => {
       provider = createProvider('claude-sonnet-4-6', {
         config: {
@@ -2613,6 +2803,411 @@ describe('AnthropicMessagesProvider', () => {
         total: 27,
       });
       expect(result.cost).toBeGreaterThan(0);
+    });
+  });
+
+  describe('pause_turn continuation', () => {
+    const pausedTurn: Anthropic.Messages.Message = {
+      id: 'msg_paused',
+      model: 'claude-sonnet-4-6',
+      type: 'message',
+      role: 'assistant',
+      container: null,
+      stop_details: null,
+      stop_sequence: null,
+      content: [
+        { type: 'text', text: 'Searching for sources.', citations: null },
+        {
+          type: 'server_tool_use',
+          id: 'srvtoolu_1',
+          name: 'web_search',
+          input: { query: 'solar' },
+          caller: { type: 'direct' },
+        },
+      ],
+      stop_reason: 'pause_turn',
+      usage: {
+        input_tokens: 1000,
+        output_tokens: 100,
+        cache_creation: null,
+        cache_creation_input_tokens: null,
+        cache_read_input_tokens: null,
+        inference_geo: null,
+        output_tokens_details: null,
+        server_tool_use: null,
+        service_tier: null,
+      },
+    };
+    const finishedTurn: Anthropic.Messages.Message = {
+      ...pausedTurn,
+      id: 'msg_finished',
+      content: [
+        {
+          type: 'web_search_tool_result',
+          tool_use_id: 'srvtoolu_1',
+          content: [],
+          caller: { type: 'direct' },
+        },
+        { type: 'text', text: 'Solar leads new capacity.', citations: null },
+      ],
+      stop_reason: 'end_turn',
+      usage: { ...pausedTurn.usage, input_tokens: 1500, output_tokens: 200 },
+    };
+
+    it('resumes a paused turn and reports the whole turn', async () => {
+      provider = createProvider('claude-sonnet-4-6', {
+        config: { tools: [{ type: 'web_search_20260209', name: 'web_search' }] },
+      });
+      const create = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce(pausedTurn)
+        .mockResolvedValueOnce(finishedTurn);
+
+      const result = await provider.callApi('What leads new power capacity?');
+
+      expect(create).toHaveBeenCalledTimes(2);
+      const [request, resume] = create.mock.calls.map(
+        ([params]) => params as Anthropic.Messages.MessageCreateParams,
+      );
+      expect(resume).toEqual({
+        ...request,
+        messages: [...request.messages, { role: 'assistant', content: pausedTurn.content }],
+      });
+      expect(result.output).toContain('Searching for sources.');
+      expect(result.output).toContain('Solar leads new capacity.');
+      expect(result.finishReason).toBe('stop');
+      expect(result.tokenUsage).toMatchObject({ prompt: 2500, completion: 300, total: 2800 });
+      // $3/$15 per MTok: 1000 in + 100 out, then 1500 in + 200 out.
+      expect(result.cost).toBeCloseTo(0.012, 10);
+    });
+
+    it.each([
+      ['names the paused container', undefined, 'container_paused'],
+      [
+        'keeps the requested skills in the paused container',
+        { skills: [{ type: 'anthropic', skill_id: 'xlsx', version: 'latest' }] },
+        {
+          id: 'container_paused',
+          skills: [{ type: 'anthropic', skill_id: 'xlsx', version: 'latest' }],
+        },
+      ],
+    ])('%s when resuming', async (_name, requested, expected) => {
+      provider = createProvider('claude-sonnet-4-6', {
+        config: { extra_body: requested ? { container: requested } : {} },
+      });
+      const create = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({
+          ...pausedTurn,
+          container: { id: 'container_paused', expires_at: '2026-09-30T00:00:00Z', skills: null },
+        })
+        .mockResolvedValueOnce(finishedTurn);
+
+      await provider.callApi('Build the spreadsheet');
+
+      expect(create.mock.calls[1][0].container).toEqual(expected);
+    });
+
+    it('stops resuming after five pauses and keeps the partial turn', async () => {
+      provider = createProvider('claude-sonnet-4-6');
+      const warnSpy = vi.spyOn(logger, 'warn');
+      const create = vi.spyOn(provider.anthropic.messages, 'create');
+      for (const n of [1, 2, 3, 4, 5, 6]) {
+        create.mockResolvedValueOnce({
+          content: [
+            { type: 'server_tool_use', id: `srvtoolu_${n}`, name: 'web_search', input: {} },
+          ],
+          stop_reason: 'pause_turn',
+          usage: { input_tokens: 10, output_tokens: 1 },
+        } as unknown as Anthropic.Messages.Message);
+      }
+
+      const result = await provider.callApi('Research everything');
+
+      expect(create).toHaveBeenCalledTimes(6);
+      const lastRequest = create.mock.calls[5][0] as Anthropic.Messages.MessageCreateParams;
+      expect(lastRequest.messages.at(-1)).toEqual({
+        role: 'assistant',
+        content: [1, 2, 3, 4, 5].map((n) => expect.objectContaining({ id: `srvtoolu_${n}` })),
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.finishReason).toBe('pause_turn');
+      expect(result.tokenUsage).toMatchObject({ prompt: 60, completion: 6, total: 66 });
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('still paused'));
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the paused output when the resume request fails', async () => {
+      provider = createProvider('claude-sonnet-4-6');
+      const warnSpy = vi.spyOn(logger, 'warn');
+      vi.spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce(pausedTurn)
+        .mockRejectedValueOnce(new Error('400 The conversation must end with a user message.'));
+
+      const result = await provider.callApi('What leads new power capacity?');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toContain('Searching for sources.');
+      expect(result.finishReason).toBe('pause_turn');
+      expect(result.tokenUsage).toMatchObject({ prompt: 1000, completion: 100, total: 1100 });
+      expect(result.cost).toBeCloseTo(0.0045, 10);
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Could not resume a paused Claude turn, so the output may be incomplete: 400 The conversation must end with a user message.',
+      );
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries an incomplete turn instead of serving its partial output from cache', async () => {
+      enableCache();
+      provider = createProvider('claude-sonnet-4-6');
+      const create = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce(pausedTurn)
+        .mockRejectedValueOnce(new Error('Connection lost'))
+        .mockResolvedValueOnce(finishedTurn);
+
+      const partial = await provider.callApi('Research solar capacity');
+      const retried = await provider.callApi('Research solar capacity');
+
+      expect(partial.finishReason).toBe('pause_turn');
+      expect(retried.cached).not.toBe(true);
+      expect(retried.output).toBe('Solar leads new capacity.');
+      expect(create).toHaveBeenCalledTimes(3);
+    });
+
+    it('does not start an already cancelled turn', async () => {
+      provider = createProvider('claude-sonnet-4-6');
+      const create = vi.spyOn(provider.anthropic.messages, 'create');
+      const controller = new AbortController();
+      controller.abort();
+
+      const result = await provider.callApi('Research solar capacity', undefined, {
+        abortSignal: controller.signal,
+      });
+
+      expect(result.error).toBe('Operation aborted');
+      expect(create).not.toHaveBeenCalled();
+    });
+
+    it('ignores incomplete turns cached before automatic resumption was supported', async () => {
+      enableCache();
+      provider = createProvider('claude-sonnet-4-6');
+      const prompt = 'Research solar capacity';
+      const cache = await getCache();
+      await cache.set(
+        anthropicMessagesCacheKey('claude-sonnet-4-6', {
+          model: 'claude-sonnet-4-6',
+          max_tokens: 1024,
+          messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
+          stream: false,
+          temperature: 0,
+        }),
+        JSON.stringify(pausedTurn),
+      );
+      const create = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce(finishedTurn);
+
+      const result = await provider.callApi(prompt);
+
+      expect(result.cached).not.toBe(true);
+      expect(result.output).toBe('Solar leads new capacity.');
+      expect(create).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not resume or cache a turn cancelled after its first response', async () => {
+      enableCache();
+      provider = createProvider('claude-sonnet-4-6');
+      const controller = new AbortController();
+      const create = vi.spyOn(provider.anthropic.messages, 'create');
+      create.mockImplementationOnce((_params, options) => {
+        expect(options?.signal).toBe(controller.signal);
+        controller.abort(new Error('Evaluation cancelled'));
+        return Promise.resolve(pausedTurn) as ReturnType<typeof provider.anthropic.messages.create>;
+      });
+      create.mockResolvedValueOnce(finishedTurn);
+
+      const cancelled = await provider.callApi('Research solar capacity', undefined, {
+        abortSignal: controller.signal,
+      });
+      expect(cancelled.error).toContain('Evaluation cancelled');
+      expect(cancelled.output).toBeUndefined();
+      expect(cancelled.tokenUsage).toMatchObject({ prompt: 1000, completion: 100, total: 1100 });
+      expect(cancelled.cost).toBeCloseTo(0.0045, 10);
+      expect(create).toHaveBeenCalledTimes(1);
+
+      const retried = await provider.callApi('Research solar capacity');
+      expect(retried.cached).not.toBe(true);
+      expect(retried.output).toBe('Solar leads new capacity.');
+      expect(create).toHaveBeenCalledTimes(2);
+    });
+
+    it('passes cancellation to an active resume instead of returning a partial success', async () => {
+      enableCache();
+      provider = createProvider('claude-sonnet-4-6');
+      const controller = new AbortController();
+      const warn = vi.spyOn(logger, 'warn');
+      const create = vi.spyOn(provider.anthropic.messages, 'create');
+      create
+        .mockResolvedValueOnce(pausedTurn)
+        .mockResolvedValueOnce({
+          ...pausedTurn,
+          usage: {
+            ...pausedTurn.usage,
+            input_tokens: 400,
+            output_tokens: 40,
+            cache_read_input_tokens: 300,
+            cache_creation_input_tokens: 200,
+          },
+        })
+        .mockImplementationOnce((_params, options) => {
+          expect(options?.signal).toBe(controller.signal);
+          controller.abort(new Error('Resume cancelled'));
+          return Promise.reject(controller.signal.reason) as ReturnType<
+            typeof provider.anthropic.messages.create
+          >;
+        })
+        .mockResolvedValueOnce(finishedTurn);
+
+      const result = await provider.callApi('Research solar capacity', undefined, {
+        abortSignal: controller.signal,
+      });
+
+      expect(result.error).toContain('Resume cancelled');
+      expect(result.output).toBeUndefined();
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 1900,
+        completion: 140,
+        total: 2040,
+        completionDetails: { cacheReadInputTokens: 300, cacheCreationInputTokens: 200 },
+      });
+      expect(result.cost).toBeCloseTo(0.00714, 10);
+      expect(create).toHaveBeenCalledTimes(3);
+      expect(warn).not.toHaveBeenCalled();
+
+      const retried = await provider.callApi('Research solar capacity');
+      expect(retried.cached).not.toBe(true);
+      expect(retried.output).toBe('Solar leads new capacity.');
+      expect(create).toHaveBeenCalledTimes(4);
+    });
+
+    it('retains completed request usage when a streamed resume is cancelled', async () => {
+      provider = createProvider('claude-sonnet-4-6', { config: { stream: true } });
+      const controller = new AbortController();
+      const stream = vi
+        .spyOn(provider.anthropic.messages, 'stream')
+        .mockReturnValueOnce({
+          finalMessage: vi.fn().mockResolvedValue(pausedTurn),
+        } as unknown as ReturnType<typeof provider.anthropic.messages.stream>)
+        .mockImplementationOnce((_params, options) => {
+          expect(options?.signal).toBe(controller.signal);
+          return {
+            finalMessage: async () => {
+              controller.abort(new Error('Stream cancelled'));
+              throw controller.signal.reason;
+            },
+          } as unknown as ReturnType<typeof provider.anthropic.messages.stream>;
+        });
+
+      const result = await provider.callApi('Research solar capacity', undefined, {
+        abortSignal: controller.signal,
+      });
+
+      expect(result.error).toContain('Stream cancelled');
+      expect(result.output).toBeUndefined();
+      expect(result.tokenUsage).toMatchObject({ prompt: 1000, completion: 100, total: 1100 });
+      expect(result.cost).toBeCloseTo(0.0045, 10);
+      expect(stream).toHaveBeenCalledTimes(2);
+    });
+
+    it('parses only the final JSON while retaining files from the whole resumed turn', async () => {
+      enableCache();
+      provider = createProvider('claude-sonnet-4-6', {
+        config: {
+          output_format: {
+            type: 'json_schema',
+            schema: { type: 'object', properties: { answer: { type: 'string' } } },
+          },
+        },
+      });
+      const fileReferences = [
+        { type: 'container_upload', file_id: 'file_paused' },
+        { type: 'code_execution_output', file_id: 'file_final' },
+      ] as const;
+      const create = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({
+          ...pausedTurn,
+          content: [...pausedTurn.content, fileReferences[0]],
+        })
+        .mockResolvedValueOnce({
+          ...finishedTurn,
+          content: [
+            {
+              type: 'code_execution_tool_result',
+              tool_use_id: 'srvtoolu_report',
+              content: {
+                type: 'code_execution_result',
+                stdout: 'Execution log',
+                stderr: '',
+                return_code: 0,
+                content: [fileReferences[1]],
+              },
+            },
+            { type: 'text', text: '{"answer":"solar"}', citations: null },
+          ],
+        });
+
+      const fresh = await provider.callApi('Create a solar report');
+      const cached = await provider.callApi('Create a solar report');
+
+      for (const result of [fresh, cached]) {
+        expect(result.output).toEqual({ answer: 'solar' });
+        expect(result.metadata?.fileReferences).toEqual(fileReferences);
+        expect(result.cost).toBeCloseTo(0.012, 10);
+      }
+      expect(cached.cached).toBe(true);
+      expect(create).toHaveBeenCalledTimes(2);
+    });
+
+    it('prices a cached resumed turn per request, like the fresh call', async () => {
+      provider = createProvider('claude-opus-5-5');
+      const create = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce(pausedTurn)
+        .mockResolvedValueOnce({
+          content: [],
+          model: 'claude-opus-5-5',
+          stop_reason: 'refusal',
+          stop_details: { type: 'refusal', category: 'cyber', explanation: null },
+          usage: { input_tokens: 2000, output_tokens: 0 },
+        } as unknown as Anthropic.Messages.Message);
+
+      const fresh = await provider.callApi('Research the exploit');
+      const cached = await provider.callApi('Research the exploit');
+
+      expect(create).toHaveBeenCalledTimes(2);
+      expect(cached.cached).toBe(true);
+      // Only the paused request is billed: the API doesn't charge a cyber refusal before output.
+      expect(fresh.cost).toBeCloseTo(0.006, 10);
+      expect(cached.cost).toBeCloseTo(0.006, 10);
+    });
+
+    it('resumes a paused turn through the streaming path', async () => {
+      provider = createProvider('claude-sonnet-4-6', { config: { stream: true } });
+      const stream = vi
+        .spyOn(provider.anthropic.messages, 'stream')
+        .mockResolvedValueOnce({ finalMessage: vi.fn().mockResolvedValue(pausedTurn) } as any)
+        .mockResolvedValueOnce({ finalMessage: vi.fn().mockResolvedValue(finishedTurn) } as any);
+
+      const result = await provider.callApi('What leads new power capacity?');
+
+      expect(stream).toHaveBeenCalledTimes(2);
+      const resume = stream.mock.calls[1][0] as Anthropic.Messages.MessageCreateParams;
+      expect(resume.messages.at(-1)).toEqual({ role: 'assistant', content: pausedTurn.content });
+      expect(result.output).toContain('Solar leads new capacity.');
+      expect(result.finishReason).toBe('stop');
+      expect(result.tokenUsage).toMatchObject({ prompt: 2500, completion: 300, total: 2800 });
     });
   });
 
@@ -2886,11 +3481,13 @@ describe('AnthropicMessagesProvider', () => {
           },
         });
         const text = '{"status":"pending"}';
-        vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
-          content: [{ type: 'text', text, citations: null }, block],
-          stop_reason: stopReason,
-          usage: { input_tokens: 10, output_tokens: 8 },
-        } as Anthropic.Messages.Message);
+        vi.spyOn(provider.anthropic.messages, 'create')
+          .mockResolvedValueOnce({
+            content: [{ type: 'text', text, citations: null }, block],
+            stop_reason: stopReason,
+            usage: { input_tokens: 10, output_tokens: 8 },
+          } as Anthropic.Messages.Message)
+          .mockRejectedValueOnce(new Error('Resume failed'));
 
         const result = await provider.callApi('Create a report');
 
