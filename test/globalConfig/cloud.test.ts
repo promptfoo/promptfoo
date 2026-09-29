@@ -286,71 +286,33 @@ describe('CloudConfig', () => {
       );
     });
 
-    it('should set sharing to false when hasActiveLicense is false and user created after cutoff (public cloud)', async () => {
-      const noLicenseResponse = {
-        ...mockResponse,
-        hasActiveLicense: false,
-        user: { ...mockResponse.user, createdAt: new Date('2026-03-10T00:00:00Z') },
-      };
-      mockTokenResponse(noLicenseResponse);
+    it.each([
+      { offsetMs: -1, sharing: true },
+      { offsetMs: 0, sharing: false },
+      { offsetMs: 1, sharing: false },
+    ])(
+      'sets public-cloud sharing to $sharing at cutoff + $offsetMs ms',
+      async ({ offsetMs, sharing }) => {
+        mockTokenResponse({
+          ...mockResponse,
+          hasActiveLicense: false,
+          user: {
+            ...mockResponse.user,
+            createdAt: new Date(SHARING_CUTOFF_DATE.getTime() + offsetMs),
+          },
+        });
 
-      const result = await cloudConfigInstance.validateAndSetApiToken('test-token', CLOUD_API_HOST);
+        const result = await cloudConfigInstance.validateAndSetApiToken(
+          'test-token',
+          CLOUD_API_HOST,
+        );
 
-      expect(result.hasActiveLicense).toBe(false);
-      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
-      expect(lastCall).toEqual(
-        expect.objectContaining({
-          cloud: expect.objectContaining({
-            sharing: false,
-          }),
-        }),
-      );
-    });
-
-    it('should set sharing to true when hasActiveLicense is false but user created before cutoff (public cloud, grandfathered)', async () => {
-      const grandfatheredResponse = {
-        ...mockResponse,
-        hasActiveLicense: false,
-        user: { ...mockResponse.user, createdAt: new Date('2026-03-01T00:00:00Z') },
-      };
-      mockTokenResponse(grandfatheredResponse);
-
-      const result = await cloudConfigInstance.validateAndSetApiToken('test-token', CLOUD_API_HOST);
-
-      expect(result.hasActiveLicense).toBe(false);
-      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
-      expect(lastCall).toEqual(
-        expect.objectContaining({
-          cloud: expect.objectContaining({
-            sharing: true,
-          }),
-        }),
-      );
-    });
-
-    it('should set sharing to false when user is created exactly on the cutoff date', async () => {
-      const cutoffResponse = {
-        ...mockResponse,
-        hasActiveLicense: false,
-        user: {
-          ...mockResponse.user,
-          createdAt: new Date(SHARING_CUTOFF_DATE.getTime()),
-        },
-      };
-      mockTokenResponse(cutoffResponse);
-
-      const result = await cloudConfigInstance.validateAndSetApiToken('test-token', CLOUD_API_HOST);
-
-      expect(result.hasActiveLicense).toBe(false);
-      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
-      expect(lastCall).toEqual(
-        expect.objectContaining({
-          cloud: expect.objectContaining({
-            sharing: false,
-          }),
-        }),
-      );
-    });
+        expect(result.hasActiveLicense).toBe(false);
+        expect(writeGlobalConfigPartial).toHaveBeenLastCalledWith(
+          expect.objectContaining({ cloud: expect.objectContaining({ sharing }) }),
+        );
+      },
+    );
 
     it('should preserve existing sharing value when public cloud omits hasActiveLicense', async () => {
       // Pre-set sharing to true to verify it is preserved
@@ -997,6 +959,11 @@ describe('CloudConfig', () => {
     });
 
     it('should not overwrite an existing authHeaderName when none is provided', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: { authHeaderName: 'X-Saved-Auth' },
+      });
+      cloudConfigInstance = new CloudConfig();
       cloudConfigInstance.saveValidatedApiToken(
         'token',
         'https://test.api',
@@ -1011,10 +978,10 @@ describe('CloudConfig', () => {
         true,
       );
 
-      const setAuthHeaderNameCalls = vi
-        .mocked(writeGlobalConfigPartial)
-        .mock.calls.filter((call) => call[0].cloud?.authHeaderName !== undefined);
-      expect(setAuthHeaderNameCalls).toHaveLength(0);
+      expect(cloudConfigInstance.getAuthHeaderName()).toBe('X-Saved-Auth');
+      expect(writeGlobalConfigPartial).toHaveBeenLastCalledWith({
+        cloud: expect.objectContaining({ authHeaderName: 'X-Saved-Auth' }),
+      });
     });
   });
 });

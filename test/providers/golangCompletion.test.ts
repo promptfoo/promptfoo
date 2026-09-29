@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { GolangProvider } from '../../src/providers/golangCompletion';
 
 // Hoisted mock functions
@@ -280,6 +281,17 @@ describe('GolangProvider', () => {
       });
       return {} as any;
     }) as any);
+  });
+
+  it('passes file defaults to Go tooling and the compiled provider', async () => {
+    const provider = new GolangProvider('script.go');
+    await cliState.withEnvFileOverrides({ PROMPTFOO_REVIEW_ENV_PROBE: 'file' }, () =>
+      provider.callApi('hello'),
+    );
+    expect(mockExecFile).toHaveBeenCalledTimes(3);
+    for (const call of mockExecFile.mock.calls) {
+      expect(call[2]).toMatchObject({ env: { PROMPTFOO_REVIEW_ENV_PROBE: 'file' } });
+    }
   });
 
   describe('constructor', () => {

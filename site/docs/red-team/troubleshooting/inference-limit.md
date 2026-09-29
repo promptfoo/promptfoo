@@ -60,11 +60,7 @@ These plugins contain a “🌐” icon within our [plugin documentation](https:
 - Medical Plugins
 - Financial Plugins
 
-It is possible to disable remote generation, which would prevent the use of these plugins. To achieve this, set the [following environment variable](https://www.promptfoo.dev/docs/usage/command-line/#ascii-only-outputs):
-
-`PROMPTFOO_DISABLE_REMOTE_GENERATION=1`
-
-Alternatively, you can run the following command:
+Set `PROMPTFOO_DISABLE_REMOTE_GENERATION=1` to disable remote generation. Plugins that require it will be unavailable. For example:
 
 ```bash
 PROMPTFOO_DISABLE_REMOTE_GENERATION=1 npx promptfoo@latest eval -c promptfooconfig.yaml

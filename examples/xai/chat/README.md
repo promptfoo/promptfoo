@@ -32,7 +32,7 @@ promptfoo view
 
 This example includes configurations to test different Grok capabilities:
 
-- **Text Generation** (`promptfooconfig.yaml`) - Mathematical reasoning with Grok 4.3 and Grok 4.20, plus an opt-in Grok 4.5 provider
+- **Text Generation** (`promptfooconfig.yaml`) - Grok 4.3 and Grok 4.20, with optional Grok 4.7 Chat and Responses, Grok 4.6, and Grok 4.5
 - **Image Generation** (`promptfooconfig.images.yaml`) - Artistic image creation using Grok's image models
 - **Search Tools** (`promptfooconfig.search.yaml`) - Real-time web and X search using the Responses API
 - **Agent Tools (Responses API)** (`promptfooconfig.responses.yaml`) - Autonomous web and X search using Agent Tools
@@ -59,25 +59,34 @@ promptfoo eval -c promptfooconfig.promptfoo-search.yaml
 
 ## Featured Models
 
+### Grok 4.7
+
+xAI's current flagship supports text and image input with a 500K context window:
+
+- `xai:grok-4.7` - Chat Completions; set `reasoning_effort` to `low`, `medium`, `high` (default), or `xhigh`
+- `xai:responses:grok-4.7` - Responses API; set `reasoning.effort` to the same values
+
+Uncomment the Grok 4.7 blocks in `promptfooconfig.yaml` to compare the two endpoints. Both read `effort` from the test case, so they use the same reasoning setting.
+
 ### Grok 4.6
 
-xAI's latest flagship model for coding, agentic tasks, and knowledge work (500K context):
+xAI's previous flagship model for coding, agentic tasks, and knowledge work (500K context):
 
-- `xai:grok-4.6` - Latest reasoning model recommended by xAI's catalog
-- `reasoning_effort` - Supports `low`, `medium`, and `high` in chat configs (defaults to `high`; `none` is not accepted)
+- `xai:grok-4.6` - Previous flagship reasoning model
+- `reasoning_effort` - Supports `low`, `medium`, `high`, and `xhigh` in chat configs (defaults to `high`; `none` is not accepted)
 - `xai:responses:grok-4.6` - Recommended form for server-side tools
 
 xAI publishes no aliases for this model, so use the exact `grok-4.6` id.
 
 ### Grok 4.5
 
-The previous flagship, still available (500K context):
+An earlier flagship, still available (500K context):
 
 - `xai:grok-4.5` - Flagship reasoning model
 - `reasoning_effort` - Supports `low`, `medium`, and `high` in chat configs (defaults to `high`; `none` is not accepted)
 - `xai:responses:grok-4.5` - Recommended form for server-side tools
 
-xAI currently excludes Grok 4.5 from the EU API Console and has not published EU availability for Grok 4.6, so both provider blocks are commented out by default. Non-EU users can opt in by uncommenting them in `promptfooconfig.yaml`; EU users can run the example unchanged with the included Grok 4.3 and Grok 4.20 providers.
+The main example keeps these flagship provider blocks optional. xAI has announced Grok 4.5 availability in the EU API Console; check your account for Grok 4.6 and 4.7 availability in other regions. The main config runs unchanged with Grok 4.3 and Grok 4.20.
 
 ### Grok 4.3
 
