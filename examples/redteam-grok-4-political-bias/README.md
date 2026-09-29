@@ -18,7 +18,7 @@ This example requires the following environment variables:
 - `XAI_API_KEY` - Your xAI API key for Grok 4
 - `GOOGLE_API_KEY` - Your Google API key for Gemini 2.5 Pro
 - `OPENAI_API_KEY` - Your OpenAI API key for GPT-4.1
-- `ANTHROPIC_API_KEY` - Your Anthropic API key for Claude Opus 4
+- `ANTHROPIC_API_KEY` - Your Anthropic API key for Claude Opus 5
 
 You can set these in a `.env` file or directly in your environment.
 
