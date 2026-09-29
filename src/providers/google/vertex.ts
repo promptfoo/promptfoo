@@ -371,10 +371,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
     const resolvedTemperature = samplingParamsDeprecated ? undefined : this.config.temperature;
     const resolvedTopP = samplingParamsDeprecated
       ? undefined
-      : this.config.top_p || this.config.topP;
+      : (this.config.top_p ?? this.config.topP);
     const resolvedTopK = samplingParamsDeprecated
       ? undefined
-      : this.config.top_k || this.config.topK;
+      : (this.config.top_k ?? this.config.topK);
 
     const body: ClaudeRequest = {
       anthropic_version:
