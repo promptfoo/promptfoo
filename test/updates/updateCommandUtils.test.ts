@@ -92,11 +92,11 @@ describe('update execution context', () => {
 });
 
 describe('npm update lifecycle', () => {
-  it('pins the requested version and keeps the launch cwd', async () => {
-    const result = runNpmUpdate('1.2.3', launchEnvironment, directory);
+  it('uses the npm latest tag and keeps the launch cwd', async () => {
+    const result = runNpmUpdate(launchEnvironment, directory);
     expect(spawn).toHaveBeenCalledWith(
       'npm',
-      ['install', '--global', 'promptfoo@1.2.3'],
+      ['install', '--global', 'promptfoo@latest'],
       expect.objectContaining({
         cwd: directory,
         shell: false,
@@ -113,7 +113,7 @@ describe('npm update lifecycle', () => {
     ['SIGTERM', 143],
   ] as const)('forwards %s and waits for the child before cleanup', async (signal, exitCode) => {
     const existing = process.listeners(signal);
-    const result = runNpmUpdate('latest', launchEnvironment, directory);
+    const result = runNpmUpdate(launchEnvironment, directory);
     const added = process.listeners(signal).find((listener) => !existing.includes(listener));
     expect(added).toBeDefined();
     process.emit(signal, signal);
@@ -130,7 +130,7 @@ describe('npm update lifecycle', () => {
 
   it('does not report success if the child exits cleanly after interruption', async () => {
     const existing = process.listeners('SIGINT');
-    const result = runNpmUpdate('latest', launchEnvironment, directory);
+    const result = runNpmUpdate(launchEnvironment, directory);
     process.listeners('SIGINT').find((listener) => !existing.includes(listener))!('SIGINT');
     const rejection = expect(result).rejects.toThrow('Update stopped by SIGINT');
     child.emit('close', 0, null);
@@ -142,7 +142,7 @@ describe('npm update lifecycle', () => {
     [null, 'SIGTERM'],
     [null, null],
   ])('rejects unsuccessful close (%s, %s)', async (code, signal) => {
-    const result = runNpmUpdate('latest', launchEnvironment, directory);
+    const result = runNpmUpdate(launchEnvironment, directory);
     const rejection = expect(result).rejects.toThrow('Update');
     child.emit('close', code, signal);
     await rejection;
@@ -150,7 +150,7 @@ describe('npm update lifecycle', () => {
 
   it('removes signal listeners when a spawn error is followed by close', async () => {
     const listeners = process.listeners('SIGTERM');
-    const result = runNpmUpdate('latest', launchEnvironment, directory);
+    const result = runNpmUpdate(launchEnvironment, directory);
     const rejection = expect(result).rejects.toThrow('spawn failed');
     child.emit('error', new Error('spawn failed'));
     child.emit('close', -2, null);
@@ -163,16 +163,7 @@ describe('npm update lifecycle', () => {
     vi.mocked(spawn).mockImplementation(() => {
       throw new Error('spawn failed');
     });
-    await expect(runNpmUpdate('latest', launchEnvironment, directory)).rejects.toThrow(
-      'spawn failed',
-    );
+    await expect(runNpmUpdate(launchEnvironment, directory)).rejects.toThrow('spawn failed');
     expect(process.listeners('SIGTERM')).toEqual(listeners);
-  });
-
-  it('rejects an invalid version before creating a process', async () => {
-    await expect(runNpmUpdate('invalid-version', launchEnvironment, directory)).rejects.toThrow(
-      'Invalid',
-    );
-    expect(spawn).not.toHaveBeenCalled();
   });
 });

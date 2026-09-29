@@ -254,10 +254,10 @@ Create a URL that can be shared online. If no ID is provided, promptfoo shares t
 
 Update a verified global npm installation on macOS or Linux. Other installation methods receive manual instructions. The command waits for npm to finish without accepting interactive input.
 
-| Option    | Description                                               |
-| --------- | --------------------------------------------------------- |
-| `--check` | Check for a newer release without installing              |
-| `--force` | Reinstall even when current or update checks are disabled |
+| Option    | Description                                  |
+| --------- | -------------------------------------------- |
+| `--check` | Check for a newer release without installing |
+| `--force` | Update even when update checks are disabled  |
 
 ```sh
 promptfoo update --check
@@ -265,7 +265,7 @@ promptfoo update
 promptfoo update --force
 ```
 
-`--check` takes precedence over `--force`: it never installs and respects `PROMPTFOO_DISABLE_UPDATE`. Without `--check`, an explicit `--force` can use the latest package tag if the version lookup is unavailable.
+`--check` takes precedence over `--force`: it never installs and respects `PROMPTFOO_DISABLE_UPDATE`. Without `--check`, npm selects and installs `promptfoo@latest` using your registry configuration; no separate version lookup is required.
 
 ## `promptfoo cache`
 

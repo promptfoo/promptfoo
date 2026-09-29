@@ -2,8 +2,6 @@ import { spawn } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 
-import semver from 'semver';
-
 /** npm global mode ignores project .npmrc; retain launch cwd and settings for user config. */
 export function createUpdateContext(sourceEnvironment: NodeJS.ProcessEnv, projectRoot: string) {
   const root = realpathSync(projectRoot);
@@ -38,15 +36,11 @@ export function createUpdateContext(sourceEnvironment: NodeJS.ProcessEnv, projec
 }
 
 export async function runNpmUpdate(
-  version: string,
   sourceEnvironment: NodeJS.ProcessEnv,
   projectRoot: string,
 ): Promise<void> {
-  if (version !== 'latest' && !semver.valid(version)) {
-    throw new Error('Invalid update version');
-  }
   const context = createUpdateContext(sourceEnvironment, projectRoot);
-  const child = spawn('npm', ['install', '--global', `promptfoo@${version}`], {
+  const child = spawn('npm', ['install', '--global', 'promptfoo@latest'], {
     ...context,
     // Own the process group so terminal Ctrl-C reaches npm only through forwarding.
     // Closed stdin also prevents background terminal reads from stopping the group.

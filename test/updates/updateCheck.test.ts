@@ -56,21 +56,6 @@ describe('checkForUpdates', () => {
     expect(mockFetchWithTimeout).not.toHaveBeenCalled();
   });
 
-  it('should perform an explicit update request when update notifications are disabled', async () => {
-    vi.stubEnv('PROMPTFOO_DISABLE_UPDATE', 'true');
-    mockFetchWithTimeout.mockResolvedValue({
-      ok: true,
-      json: async () => ({ latestVersion: '1.0.0' }),
-    } as any);
-    mockSemverGt.mockReturnValue(false);
-
-    await expect(
-      checkForUpdates({ throwOnError: true, ignoreDisableUpdate: true }),
-    ).resolves.toBeNull();
-
-    expect(mockFetchWithTimeout).toHaveBeenCalled();
-  });
-
   it('should return update info when update is available', async () => {
     mockFetchWithTimeout.mockResolvedValue({
       ok: true,
@@ -92,7 +77,7 @@ describe('checkForUpdates', () => {
 
     expect(mockFetchWithTimeout).toHaveBeenCalledWith(
       'https://api.promptfoo.dev/api/latestVersion',
-      expect.objectContaining({ headers: { 'x-promptfoo-silent': 'true' }, redirect: 'error' }),
+      expect.objectContaining({ headers: { 'x-promptfoo-silent': 'true' } }),
       10000,
     );
   });

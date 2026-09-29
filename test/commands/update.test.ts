@@ -50,16 +50,12 @@ describe('update command', () => {
     expect(getInstallationInfo).not.toHaveBeenCalled();
     expect(runNpmUpdate).not.toHaveBeenCalled();
   });
-  it('does not reinstall a current version without --force', async () => {
-    vi.mocked(checkForUpdates).mockResolvedValue(null);
-    await run([]);
-    expect(runNpmUpdate).not.toHaveBeenCalled();
-  });
-  it('installs the detected version through a verified npm installation', async () => {
+  it('delegates version selection to the verified npm installation', async () => {
     const env = { PATH: '/trusted/bin' };
     await run([], env);
+    expect(checkForUpdates).not.toHaveBeenCalled();
     expect(getInstallationInfo).toHaveBeenCalledWith(process.cwd(), env);
-    expect(runNpmUpdate).toHaveBeenCalledWith('1.2.3', env, process.cwd());
+    expect(runNpmUpdate).toHaveBeenCalledWith(env, process.cwd());
   });
   it('prints manual guidance for unsupported installations', async () => {
     vi.mocked(getInstallationInfo).mockReturnValue({
@@ -78,22 +74,17 @@ describe('update command', () => {
       expect(runNpmUpdate).not.toHaveBeenCalled();
     },
   );
-  it('lets explicit --force reinstall when checks are disabled', async () => {
-    vi.mocked(checkForUpdates).mockResolvedValue(null);
-    await run(['--force'], { PROMPTFOO_DISABLE_UPDATE: '1' });
-    expect(checkForUpdates).toHaveBeenCalledWith({ throwOnError: true, ignoreDisableUpdate: true });
-    expect(runNpmUpdate).toHaveBeenCalledWith('latest', expect.anything(), process.cwd());
+  it('lets --force update when checks are disabled without a metadata lookup', async () => {
+    const env = { PROMPTFOO_DISABLE_UPDATE: '1' };
+    await run(['--force'], env);
+    expect(checkForUpdates).not.toHaveBeenCalled();
+    expect(runNpmUpdate).toHaveBeenCalledWith(env, process.cwd());
   });
-  it('requires --force to continue after a lookup failure', async () => {
+  it('reports check-only lookup failures without starting an installer', async () => {
     vi.mocked(checkForUpdates).mockRejectedValue(new Error('offline'));
-    await run([]);
+    await run(['--check']);
     expect(runNpmUpdate).not.toHaveBeenCalled();
     expect(process.exitCode).toBe(1);
-  });
-  it('uses latest when a forced version lookup fails', async () => {
-    vi.mocked(checkForUpdates).mockRejectedValue(new Error('offline'));
-    await run(['--force']);
-    expect(runNpmUpdate).toHaveBeenCalledWith('latest', expect.anything(), process.cwd());
   });
   it('reports an installer failure once', async () => {
     vi.mocked(runNpmUpdate).mockRejectedValue(new Error('fixture failure'));
