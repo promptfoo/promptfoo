@@ -2,6 +2,12 @@ import WebSocket from 'ws';
 import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
 import {
+  formatRateLimitErrorMessage,
+  HARD_QUOTA_ERROR_CODES,
+  HttpRateLimitError,
+  TRANSIENT_RATE_LIMIT_ERROR_CODES,
+} from '../../../util/fetch/errors';
+import {
   audioDataToPcm16,
   base64ToBuffer,
   bufferToBase64,
@@ -19,6 +25,32 @@ const DEFAULT_SAMPLE_RATE = 24000;
 const G711_SAMPLE_RATE = 8000;
 const CONNECTION_TIMEOUT_MS = 15000;
 
+interface RealtimeError {
+  type?: string;
+  code?: string;
+  message?: string;
+  event_id?: string;
+}
+
+function formatRealtimeError(error?: RealtimeError): string | undefined {
+  if (!error) {
+    return undefined;
+  }
+  const details = [error.code, error.type, error.message].filter(Boolean).join(': ');
+  if (
+    [error.code, error.type].some(
+      (value) =>
+        value && (HARD_QUOTA_ERROR_CODES.has(value) || TRANSIENT_RATE_LIMIT_ERROR_CODES.has(value)),
+    )
+  ) {
+    return formatRateLimitErrorMessage(
+      new HttpRateLimitError({ status: 429, code: error.code, type: error.type }),
+      details,
+    );
+  }
+  return details || undefined;
+}
+
 function toRealtimeAudioFormat(format: AudioFormat) {
   switch (format) {
     case 'g711_ulaw':
@@ -35,6 +67,8 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
   // Audio position follows sample duration, independent of network delivery time.
   private cumulativeAudioPositionMs = 0;
   private cancelRequested = false;
+  private pendingCancelEventId: string | undefined;
+  private nextEventId = 0;
   private pendingTranscript: string | undefined;
 
   constructor(config: VoiceProviderConfig) {
@@ -195,13 +229,14 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
   }
 
   cancelResponse(): void {
-    this.cancelRequested = true;
     if (!this.isReady()) {
       return;
     }
-
+    this.cancelRequested = true;
+    this.pendingCancelEventId = `cancel-${++this.nextEventId}`;
     this.send({
       type: 'response.cancel',
+      event_id: this.pendingCancelEventId,
     });
   }
 
@@ -302,7 +337,7 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
         const response = msg.response as
           | {
               status?: string;
-              status_details?: { reason?: string; error?: { message?: string } };
+              status_details?: { reason?: string; error?: RealtimeError };
               usage?: {
                 input_tokens?: number;
                 output_tokens?: number;
@@ -324,7 +359,8 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
         const status = response?.status;
         if (status && status !== 'completed' && !(status === 'cancelled' && this.cancelRequested)) {
           const detail =
-            response?.status_details?.error?.message ?? response?.status_details?.reason;
+            formatRealtimeError(response?.status_details?.error) ??
+            response?.status_details?.reason;
           this.pendingTranscript = undefined;
           this.handleError(
             new Error(`OpenAI Realtime response ${status}${detail ? `: ${detail}` : ''}`),
@@ -333,6 +369,11 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
           const transcript = this.pendingTranscript;
           this.pendingTranscript = undefined;
           this.emit('transcript_done', transcript);
+        } else if (status === 'completed') {
+          this.handleError(new Error('OpenAI Realtime response completed without a transcript'));
+        }
+        if (status === 'cancelled') {
+          this.pendingCancelEventId = undefined;
         }
         this.cancelRequested = false;
         break;
@@ -365,11 +406,21 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
         break;
 
       // Error handling
-      case 'error':
-        const error = msg.error as { type?: string; code?: string; message?: string };
+      case 'error': {
+        const error = msg.error as RealtimeError | undefined;
+        if (
+          error?.code === 'response_cancel_not_active' &&
+          this.pendingCancelEventId &&
+          (!error.event_id || error.event_id === this.pendingCancelEventId)
+        ) {
+          this.pendingCancelEventId = undefined;
+          this.cancelRequested = false;
+          break;
+        }
         logger.error('[OpenAIRealtime] API error:', { error });
-        this.handleError(new Error(error?.message || 'Unknown OpenAI Realtime error'));
+        this.handleError(new Error(formatRealtimeError(error) || 'Unknown OpenAI Realtime error'));
         break;
+      }
 
       default:
         logger.debug('[OpenAIRealtime] Unhandled message type:', { type: msg.type });

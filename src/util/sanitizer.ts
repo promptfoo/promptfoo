@@ -163,6 +163,8 @@ export const SECRET_FIELD_NAMES = new Set([
   'clientsecret',
   'webhooksecret',
   'anthropicapikey',
+  'targetapikey',
+  'simulateduserapikey',
   'awsbearertokenbedrock',
 
   // AWS SigV4 credentials. Both spellings are needed: normalizeFieldName strips

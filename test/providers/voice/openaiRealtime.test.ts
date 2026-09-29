@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
 
 import type { VoiceProviderConfig } from '../../../src/providers/voice/types';
 
@@ -381,6 +382,82 @@ describe('OpenAIRealtimeConnection', () => {
     expect(error).not.toHaveBeenCalled();
   });
 
+  it('keeps the session ready when cancellation races with a completed response', () => {
+    const error = vi.fn();
+    connection.on('error', error);
+    (connection as any).setReady();
+    const send = vi.spyOn(connection as any, 'send').mockReturnValue(true);
+    connection.cancelResponse();
+    const eventId = (send.mock.calls[0][0] as { event_id: string }).event_id;
+    for (const message of [
+      { type: 'response.output_audio_transcript.done', transcript: 'Hello' },
+      { type: 'response.done', response: { status: 'completed' } },
+      { type: 'error', error: { code: 'response_cancel_not_active', event_id: eventId } },
+    ]) {
+      (connection as any).handleMessage(JSON.stringify(message));
+    }
+    expect(error).not.toHaveBeenCalled();
+    expect(connection.isReady()).toBe(true);
+  });
+
+  it.each([
+    { code: 'invalid_api_key' },
+    { code: 'response_cancel_not_active', event_id: 'unrelated-event' },
+  ])('reports cancellation errors that are not the expected race: %j', (apiError) => {
+    const error = vi.fn();
+    connection.on('error', error);
+    (connection as any).setReady();
+    vi.spyOn(connection as any, 'send').mockReturnValue(true);
+    connection.cancelResponse();
+    (connection as any).handleMessage(JSON.stringify({ type: 'error', error: apiError }));
+    expect(error).toHaveBeenCalledWith(expect.objectContaining({ message: apiError.code }));
+  });
+
+  it('reports a completed response with no transcript after an earlier successful turn', () => {
+    const error = vi.fn();
+    const completed = vi.fn();
+    connection.on('error', error);
+    connection.on('transcript_done', completed);
+    for (const message of [
+      { type: 'response.output_audio_transcript.done', transcript: 'Hello' },
+      { type: 'response.done', response: { status: 'completed' } },
+      { type: 'response.created' },
+      { type: 'response.done', response: { status: 'completed' } },
+    ]) {
+      (connection as any).handleMessage(JSON.stringify(message));
+    }
+    expect(completed).toHaveBeenCalledExactlyOnceWith('Hello');
+    expect(error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'OpenAI Realtime response completed without a transcript',
+      }),
+    );
+  });
+
+  it.each([
+    [{ code: 'rate_limit_exceeded' }, true],
+    [{ type: 'rate_limit_error' }, true],
+    [{ code: 'rate_limit_exceeded', type: 'billing_not_active' }, false],
+  ] as const)('preserves structured error classification for %j', (apiError, retryable) => {
+    for (const message of [
+      { type: 'error', error: apiError },
+      {
+        type: 'response.done',
+        response: { status: 'failed', status_details: { error: apiError } },
+      },
+    ]) {
+      const candidate = new OpenAIRealtimeConnection(config);
+      const error = vi.fn();
+      candidate.on('error', error);
+      (candidate as any).handleMessage(JSON.stringify(message));
+      expect(error).toHaveBeenCalledTimes(1);
+      const errorMessage = error.mock.calls[0][0].message;
+      expect(errorMessage).toContain(Object.values(apiError)[0]);
+      expect(isProviderResponseRateLimited({ error: errorMessage }, undefined)).toBe(retryable);
+      candidate.disconnect();
+    }
+  });
+
   describe('commitAudio', () => {
     it('should not commit if not ready', () => {
       const sendSpy = vi.spyOn(connection as any, 'send').mockReturnValue(true);
@@ -438,7 +515,7 @@ describe('OpenAIRealtimeConnection', () => {
         { type: 'input_audio_buffer.commit' },
         { type: 'response.create' },
         { type: 'input_audio_buffer.clear' },
-        { type: 'response.cancel' },
+        { type: 'response.cancel', event_id: 'cancel-1' },
       ]);
     });
   });

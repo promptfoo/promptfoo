@@ -131,6 +131,12 @@ Speak naturally and respond to the agent. Say "${STOP_MARKER}" when your goal is
     ) {
       return 'Simulated voice conversations support OpenAI Realtime endpoints only.';
     }
+    if (
+      this.config.audioFormat !== undefined &&
+      !['pcm16', 'g711_ulaw', 'g711_alaw'].includes(this.config.audioFormat)
+    ) {
+      return 'Voice audioFormat must be pcm16, g711_ulaw, or g711_alaw.';
+    }
     const sampleRate = this.config.sampleRate;
     if (
       sampleRate !== undefined &&

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvString } from '../../../src/envars';
 import { sanitizeProvider } from '../../../src/models/evalResult';
 import { providerRegistry } from '../../../src/providers/providerRegistry';
+import { sanitizeConfigForOutput } from '../../../src/util/sanitizer';
 import { mockProcessEnv } from '../../util/utils';
 
 const { mocks } = vi.hoisted(() => {
@@ -107,6 +108,28 @@ describe('SimulatedVoiceUser', () => {
     expect(Buffer.from(response.audio!.data!, 'base64').toString()).toBe('fixture audio');
   });
 
+  it('redacts both voice credentials in saved and exported provider config', () => {
+    const config = {
+      targetApiKey: 'ek_target_fixture',
+      simulatedUserApiKey: 'ek_caller_fixture',
+      targetVoice: 'alloy',
+    };
+    const saved = sanitizeProvider(new SimulatedVoiceUser({ config }));
+    const exported = sanitizeConfigForOutput({
+      providers: [{ id: 'promptfoo:simulated-voice-user', config }],
+    });
+    const redactedProvider = {
+      config: {
+        targetApiKey: '[REDACTED]',
+        simulatedUserApiKey: '[REDACTED]',
+        targetVoice: 'alloy',
+      },
+    };
+    expect(saved).toMatchObject(redactedProvider);
+    expect(exported).toMatchObject({ providers: [redactedProvider] });
+    expect(config.targetApiKey).toBe('ek_target_fixture');
+  });
+
   it('keeps provider-specific credentials isolated during concurrent calls', async () => {
     mockProcessEnv({ OPENAI_API_KEY: 'ambient-fixture' });
     const seen: string[] = [];
@@ -141,6 +164,17 @@ describe('SimulatedVoiceUser', () => {
     expect(mocks.MockOrchestrator.instances[0].config.targetConfig.sampleRate).toBe(8000);
     expect(response.audio).toBeUndefined();
   });
+
+  it.each(['wav', '', 'mp3'])(
+    'rejects unsupported audio format %j before connecting',
+    async (format) => {
+      const response = await new SimulatedVoiceUser({
+        config: { audioFormat: format as 'pcm16' },
+      }).callApi('Agent');
+      expect(response.error).toContain('audioFormat must be pcm16, g711_ulaw, or g711_alaw');
+      expect(mocks.MockOrchestrator.instances).toHaveLength(0);
+    },
+  );
 
   it('retains partial transcript and usage when a response fails', async () => {
     mocks.start.mockResolvedValue(
