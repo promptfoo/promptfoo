@@ -225,7 +225,7 @@ The `script` option runs JavaScript in the browser context and returns the resul
 
 #### 5. `wait` - Pause execution
 
-Wait for a specified duration (in milliseconds).
+Wait for `ms` milliseconds. When omitted, `ms` defaults to `1000`; `0` adds no delay.
 
 ```yaml
 - action: wait
@@ -264,7 +264,7 @@ Take a screenshot of the current page state.
 | click              | `selector`                     | `optional`         | CSS selector of element to click             |
 | type               | `selector`, `text`             | -                  | CSS selector and text to type                |
 | extract            | `selector` OR `script`, `name` | -                  | CSS selector or JS script, and variable name |
-| wait               | `ms`                           | -                  | Milliseconds to wait                         |
+| wait               | -                              | `ms`               | Milliseconds to wait (default: `1000`)       |
 | waitForNewChildren | `parentSelector`               | `delay`, `timeout` | Parent whose direct children are counted     |
 | screenshot         | `path`                         | `fullPage`         | File path to save screenshot                 |
 
@@ -357,7 +357,7 @@ The `steps` array in the configuration can include the following actions:
 | extract            | Extract text content from element or run JS script | (`selector` OR `script`): string, `name`: string |                                         |
 | screenshot         | Take a screenshot of the page                      | `path`: string                                   | `fullPage`: boolean                     |
 | type               | Type text into an input field                      | `selector`: string, `text`: string               | `runOnce`: boolean                      |
-| wait               | Wait for a specified amount of time                | `ms`: number                                     | `runOnce`: boolean                      |
+| wait               | Wait for a specified amount of time                | -                                                | `ms`: number, `runOnce`: boolean        |
 | waitForNewChildren | Wait for new direct child elements under a parent  | `parentSelector`: string                         | `delay`: number, `timeout`: number      |
 
 Each action in the `steps` array should be an object with the following structure:

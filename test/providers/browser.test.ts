@@ -198,13 +198,17 @@ describe('BrowserProvider', () => {
     });
   });
 
-  it('should handle wait action', async () => {
+  it.each([
+    [undefined, 1000],
+    [0, 0],
+    [1500, 1500],
+  ])('uses wait duration %s or the default when unset', async (ms, expectedMs) => {
     const provider = new BrowserProvider('test', {
       config: {
         steps: [
           {
             action: 'wait',
-            args: { ms: 1000 },
+            args: { ms },
           },
         ],
       },
@@ -212,7 +216,7 @@ describe('BrowserProvider', () => {
 
     await provider.callApi('test');
 
-    expect(mockPage.waitForTimeout).toHaveBeenCalledWith(1000);
+    expect(mockPage.waitForTimeout).toHaveBeenCalledWith(expectedMs);
   });
 
   it('should handle errors gracefully', async () => {

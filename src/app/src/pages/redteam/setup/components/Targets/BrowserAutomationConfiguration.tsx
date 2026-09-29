@@ -231,6 +231,7 @@ const BrowserAutomationConfiguration = ({
                     <NumberInput
                       id={`step-${index}-wait-time`}
                       value={step.args?.ms}
+                      placeholder="1000"
                       onChange={(ms) => {
                         const newSteps = [...(selectedTarget.config.steps || [])];
                         newSteps[index] = { ...step, args: { ...step.args, ms } };

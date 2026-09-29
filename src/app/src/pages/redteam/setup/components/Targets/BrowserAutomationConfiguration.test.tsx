@@ -51,6 +51,14 @@ describe('BrowserAutomationConfiguration', () => {
     ]);
   });
 
+  it('shows the default wait duration when unset', () => {
+    renderConfiguration({ steps: [{ action: 'wait', args: {} }] });
+
+    const waitTime = screen.getByLabelText('Wait Time (ms)');
+    expect(waitTime).toHaveValue(null);
+    expect(waitTime).toHaveAttribute('placeholder', '1000');
+  });
+
   it('shows saved zero values instead of the defaults', () => {
     renderConfiguration({
       timeoutMs: 0,
