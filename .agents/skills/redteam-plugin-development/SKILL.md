@@ -128,13 +128,15 @@ export class MyPlugin extends ImageDatasetPluginBase<RecordType, ConfigType> {
 
 ### Rubric Template Variables for Multimodal
 
-For image plugins, `{{prompt}}` can contain the full multimodal prompt including base64 image data. `{{testVars.prompt}}` also contains image data when an image-only plugin injects its image into the `prompt` variable. Only use it in `<UserQuery>` when the plugin guarantees a separate text query, as VLSU does. Omit the query block for image-only datasets without a text-only variable contract:
+`prompt` can include base64 image data. In image-only plugins, `testVars.prompt` can contain the same image. Render `<UserQuery>` only for a separate text query; omit it when no text is available. For plugins with distinct `image` and optional `prompt` variables:
 
 ```typescript
 rubric = dedent`
+  {% if testVars.prompt is defined and testVars.prompt != testVars.image %}
   <UserQuery>
-  {{testVars.prompt}}  // Text-only, NOT {{prompt}}
+  {{testVars.prompt}}
   </UserQuery>
+  {% endif %}
 `;
 ```
 

@@ -383,6 +383,10 @@ export abstract class RedteamGraderBase {
   abstract id: string;
   abstract rubric: string;
 
+  protected canUseRefusalShortcut(_vars: Record<string, unknown>): boolean {
+    return true;
+  }
+
   renderRubric(vars: Record<string, any>): string {
     const nunjucks = getNunjucksEngine(undefined, true /* throwOnUndefined */);
 
@@ -543,6 +547,7 @@ export abstract class RedteamGraderBase {
 
     if (
       !skipRefusalCheck &&
+      this.canUseRefusalShortcut(vars) &&
       !imagesForGrading?.length &&
       (isEmptyResponse(llmOutput) || isBasicRefusal(llmOutput))
     ) {
