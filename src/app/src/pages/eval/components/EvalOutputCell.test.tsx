@@ -181,6 +181,24 @@ describe('EvalOutputCell', () => {
     timers = undefined;
   });
 
+  it.each([
+    [true, 'Mark as safe', 'Mark as vulnerable', 'lucide-check', 'lucide-x'],
+    [false, 'Mark test passed', 'Mark test failed', 'lucide-thumbs-up', 'lucide-thumbs-down'],
+  ])(
+    'shows the correct grading actions when isRedteam is %s',
+    (isRedteam, passLabel, failLabel, passIcon, failIcon) => {
+      renderWithProviders(<EvalOutputCell {...defaultProps} isRedteam={isRedteam} />);
+
+      const passButton = screen.getByRole('button', { name: passLabel });
+      const failButton = screen.getByRole('button', { name: failLabel });
+
+      expect(passButton.querySelector('svg')).toHaveClass(passIcon);
+      expect(failButton.querySelector('svg')).toHaveClass(failIcon);
+      expect(passButton).not.toHaveTextContent(passLabel);
+      expect(failButton).not.toHaveTextContent(failLabel);
+    },
+  );
+
   it('handles outputs without text without throwing', () => {
     const propsWithoutText: MockEvalOutputCellProps = {
       ...defaultProps,
@@ -400,44 +418,6 @@ describe('EvalOutputCell', () => {
     expect(dialogContent).toHaveTextContent(
       'Assertion 1 (llm-rubric): Does output reference hello world?',
     );
-    expect(dialogContent).not.toHaveTextContent('{{myVar}}');
-  });
-
-  it('uses null rendered assertion values in comment dialog when present', async () => {
-    const user = userEvent.setup();
-    const propsWithRenderedAssertionValue: MockEvalOutputCellProps = {
-      ...defaultProps,
-      output: {
-        ...defaultProps.output,
-        gradingResult: {
-          ...defaultProps.output.gradingResult,
-          componentResults: [
-            {
-              assertion: {
-                type: 'llm-rubric' as AssertionType,
-                value: 'Does output reference {{myVar}}?',
-              },
-              metadata: {
-                renderedAssertionValue: null,
-              },
-              pass: false,
-              reason: 'Rendered rubric failed',
-              score: 0,
-            },
-          ],
-          pass: false,
-          reason: 'Test reason',
-          score: 0,
-        },
-      },
-    };
-
-    renderWithProviders(<EvalOutputCell {...propsWithRenderedAssertionValue} />);
-
-    await user.click(screen.getByRole('button', { name: /edit comment/i }));
-
-    const dialogContent = screen.getByTestId('context-text');
-    expect(dialogContent).toHaveTextContent('Assertion 1 (llm-rubric): null');
     expect(dialogContent).not.toHaveTextContent('{{myVar}}');
   });
 
@@ -971,10 +951,18 @@ describe('EvalOutputCell', () => {
       await clipboard.writeText.mock.results[0]?.value;
     });
 
+    // Flush query notifications without advancing the three-second link feedback timer.
+    await act(async () => {
+      await timers?.advanceByAsync(0);
+    });
     expect(timers.getTimerCount()).toBe(1);
 
     unmount();
 
+    // The shared cloud query removes unused entries on its zero-delay GC timer.
+    await act(async () => {
+      await timers?.advanceByAsync(0);
+    });
     expect(timers.getTimerCount()).toBe(0);
   });
 
@@ -1004,6 +992,10 @@ describe('EvalOutputCell', () => {
       await writeTextPromise;
     });
 
+    // The shared cloud query removes unused entries on its zero-delay GC timer.
+    await act(async () => {
+      await timers?.advanceByAsync(0);
+    });
     expect(timers.getTimerCount()).toBe(0);
   });
 
@@ -2397,6 +2389,10 @@ describe('isImageProvider helper function', () => {
     expect(isImageProvider('google:gemini-2.5-flash-image')).toBe(true);
   });
 
+  it('should return true for Gemini 3.1 Flash-Lite image provider (Nano Banana 2 Lite)', () => {
+    expect(isImageProvider('google:gemini-3.1-flash-lite-image')).toBe(true);
+  });
+
   it('should return false for text completion providers', () => {
     expect(isImageProvider('openai:gpt-4')).toBe(false);
   });
@@ -2431,8 +2427,8 @@ describe('isVideoProvider helper function', () => {
     expect(isVideoProvider('google:video:veo-3.1-generate-preview')).toBe(true);
   });
 
-  it('should return true for Google Veo 2 provider', () => {
-    expect(isVideoProvider('google:video:veo-2-generate')).toBe(true);
+  it('should return true for Google Veo 3.1 Fast provider', () => {
+    expect(isVideoProvider('google:video:veo-3.1-fast-generate-preview')).toBe(true);
   });
 
   it('should return true for any provider with :video: in the name', () => {

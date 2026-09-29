@@ -84,6 +84,6 @@ npm outdated
 # See why a package is installed
 npm explain <package-name>
 
-# Check for unused dependencies
-npm run depcheck
+# Check for missing and unused dependencies
+npm run knip -- --dependencies
 ```

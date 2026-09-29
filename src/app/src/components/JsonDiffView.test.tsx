@@ -2,7 +2,18 @@ import { mockClipboard } from '@app/tests/browserMocks';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { JsonDiffView } from './JsonDiffView';
+import { JsonDiffView as ComparisonView } from './JsonDiffView';
+
+function JsonDiffView({ expected, actual }: { expected: unknown; actual: unknown }) {
+  return (
+    <ComparisonView
+      comparison={{
+        expected: JSON.stringify(expected, null, 2),
+        actual: JSON.stringify(actual, null, 2),
+      }}
+    />
+  );
+}
 
 describe('JsonDiffView', () => {
   it('does not render when values are identical', () => {
@@ -90,12 +101,25 @@ describe('JsonDiffView', () => {
     expect(screen.getByText(/JSON values exceed the diff view size limit/)).toBeInTheDocument();
   });
 
-  it('shows a fallback when diff inputs cannot be stringified', () => {
-    const circular: Record<string, unknown> = {};
-    circular.self = circular;
+  it('shows a fallback for malformed or deeply nested saved metadata', () => {
+    const { rerender } = render(
+      <ComparisonView comparison={{ expected: 'invalid', actual: '{}' }} />,
+    );
+    expect(screen.getByText(/unavailable for these values/)).toBeInTheDocument();
+    rerender(
+      <ComparisonView
+        comparison={{
+          expected: '['.repeat(30) + '1' + ']'.repeat(30),
+          actual: '['.repeat(30) + '2' + ']'.repeat(30),
+        }}
+      />,
+    );
+    expect(screen.getByText(/unavailable for these values/)).toBeInTheDocument();
+  });
 
-    render(<JsonDiffView expected={circular} actual={{ value: 'small' }} />);
-
-    expect(screen.getByText(/values that cannot be serialized/)).toBeInTheDocument();
+  it('renders signed zero distinctly', () => {
+    render(<ComparisonView comparison={{ expected: '{"value":-0}', actual: '{"value":0}' }} />);
+    expect(screen.getByText('expected: -0')).toBeInTheDocument();
+    expect(screen.getByText('actual: 0')).toBeInTheDocument();
   });
 });

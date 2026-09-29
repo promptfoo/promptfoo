@@ -17,37 +17,32 @@ import {
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
 interface JsonDiffViewProps {
-  expected: unknown;
-  actual: unknown;
+  comparison: { expected: string; actual: string };
   className?: string;
 }
 
 const MAX_DIFFS_SHOWN = 10;
-const MAX_OBJECT_SIZE = 50_000; // 50KB limit for diff computation
+const MAX_OBJECT_SIZE = 20_000;
 
 type DiffResult =
   | { status: 'ready'; diffs: JsonDiff[]; expectedJson: string; actualJson: string }
   | { status: 'too-large' | 'unsupported' };
 
-/**
- * Renders a path-based summary of JSON differences with expandable full diff
- */
-export function JsonDiffView({ expected, actual, className }: JsonDiffViewProps) {
+export function JsonDiffView({ comparison, className }: JsonDiffViewProps) {
   const [showFullDiff, setShowFullDiff] = useState(false);
   const [showAllDiffs, setShowAllDiffs] = useState(false);
 
   const diffResult = useMemo<DiffResult>(() => {
     try {
-      const expectedJson = JSON.stringify(expected, null, 2);
-      const actualJson = JSON.stringify(actual, null, 2);
-
-      if (expectedJson === undefined || actualJson === undefined) {
+      const { expected: expectedJson, actual: actualJson } = comparison;
+      if (typeof expectedJson !== 'string' || typeof actualJson !== 'string') {
         return { status: 'unsupported' };
       }
-
       if (expectedJson.length > MAX_OBJECT_SIZE || actualJson.length > MAX_OBJECT_SIZE) {
         return { status: 'too-large' };
       }
+      const expected = JSON.parse(expectedJson);
+      const actual = JSON.parse(actualJson);
 
       return {
         status: 'ready',
@@ -58,7 +53,7 @@ export function JsonDiffView({ expected, actual, className }: JsonDiffViewProps)
     } catch {
       return { status: 'unsupported' };
     }
-  }, [expected, actual]);
+  }, [comparison]);
 
   if (diffResult.status === 'ready' && diffResult.diffs.length === 0) {
     return null;
@@ -77,7 +72,6 @@ export function JsonDiffView({ expected, actual, className }: JsonDiffViewProps)
     >
       {diffResult.status === 'ready' ? (
         <>
-          {/* Summary header */}
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
               {diffs.length} difference{diffs.length === 1 ? '' : 's'} found
@@ -100,14 +94,10 @@ export function JsonDiffView({ expected, actual, className }: JsonDiffViewProps)
               <span className="text-xs text-muted-foreground">actual</span>
             </div>
           </div>
-
-          {/* Path-based diff list */}
           <div className="space-y-1 font-mono text-xs">
             {displayedDiffs.map((diff, index) => (
               <DiffRow key={`${diff.path}-${index}`} diff={diff} />
             ))}
-
-            {/* Show more button */}
             {!showAllDiffs && hiddenCount > 0 && (
               <Button
                 variant="ghost"
@@ -119,8 +109,6 @@ export function JsonDiffView({ expected, actual, className }: JsonDiffViewProps)
               </Button>
             )}
           </div>
-
-          {/* Expandable full diff */}
           <Collapsible open={showFullDiff} onOpenChange={setShowFullDiff} className="mt-3">
             <CollapsibleTrigger asChild>
               <Button
@@ -160,16 +148,13 @@ export function JsonDiffView({ expected, actual, className }: JsonDiffViewProps)
         <div className="text-sm text-muted-foreground">
           {diffResult.status === 'too-large'
             ? 'JSON values exceed the diff view size limit. Compare the expected and actual values manually.'
-            : 'JSON diff view is unavailable for values that cannot be serialized.'}
+            : 'JSON diff view is unavailable for these values.'}
         </div>
       )}
     </div>
   );
 }
 
-/**
- * Renders a single diff row with path, expected, and actual values
- */
 function DiffRow({ diff }: { diff: JsonDiff }) {
   const { path, expected, actual, type } = diff;
 
@@ -194,9 +179,6 @@ function DiffRow({ diff }: { diff: JsonDiff }) {
   );
 }
 
-/**
- * Renders a unified diff view showing the full JSON with highlighted changes
- */
 const UnifiedDiff = memo(function UnifiedDiff({
   expectedJson,
   actualJson,
@@ -208,6 +190,10 @@ const UnifiedDiff = memo(function UnifiedDiff({
     () => buildUnifiedJsonTextDiff(expectedJson, actualJson),
     [expectedJson, actualJson],
   );
+
+  if (!unifiedLines) {
+    return <p>The full diff is too large to display. Use the summary or copy the JSON values.</p>;
+  }
 
   return (
     <>
