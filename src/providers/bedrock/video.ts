@@ -14,7 +14,7 @@ type VideoProvider = Pick<AwsBedrockGenericProvider, 'getCredentials' | 'getRegi
 export function loadVideoImageData(imagePath: string): { data?: string; error?: string } {
   if (imagePath.startsWith('file://')) {
     const filePath = imagePath.slice(7);
-    // Resolve to absolute path and validate no path traversal
+    // Preserve namespace-root validation before reading local files.
     const resolvedPath = path.resolve(filePath);
     if (filePath.includes('..') && resolvedPath !== path.resolve(path.normalize(filePath))) {
       return { error: `Invalid image path (path traversal detected): ${filePath}` };
@@ -24,7 +24,6 @@ export function loadVideoImageData(imagePath: string): { data?: string; error?: 
     }
     return { data: fs.readFileSync(resolvedPath).toString('base64') };
   }
-  // Assume it's already base64
   return { data: imagePath };
 }
 
@@ -46,7 +45,6 @@ export async function startVideoGeneration(
       ...(credentials ? { credentials } : {}),
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const command = new StartAsyncInvokeCommand({
       modelId: provider.modelName,
       modelInput: modelInput as any,
@@ -113,7 +111,6 @@ export async function pollForVideoCompletion(
         return { error: `Video generation failed: ${invocation.failureMessage}` };
       }
 
-      // Still in progress
       await sleep(pollIntervalMs);
     }
 
@@ -132,7 +129,6 @@ export async function downloadAndStoreVideo(
   context?: CallApiContextParams,
 ): Promise<{ blobRef?: BlobRef; error?: string }> {
   try {
-    // Parse S3 URI
     const match = s3Uri.match(/^s3:\/\/([^/]+)\/(.+)$/);
     if (!match) {
       return { error: `Invalid S3 URI: ${s3Uri}` };
@@ -140,7 +136,6 @@ export async function downloadAndStoreVideo(
 
     const [, bucket, keyPrefix] = match;
 
-    // Download from S3
     const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3');
     const credentials = await provider.getCredentials();
 
@@ -167,7 +162,6 @@ export async function downloadAndStoreVideo(
 
     const buffer = Buffer.from(await response.Body.transformToByteArray());
 
-    // Store to blob storage
     const { ref } = await storeBlob(buffer, 'video/mp4', {
       evalId: context?.evaluationId,
       kind: 'video',
@@ -182,7 +176,6 @@ export async function downloadAndStoreVideo(
     const error = err as { message?: string; name?: string };
     logger.error(`[${label}] S3 download error`, { error, s3Uri });
 
-    // Provide helpful error message for missing S3 dependency
     if (error.name === 'MODULE_NOT_FOUND' || String(err).includes('Cannot find module')) {
       return {
         error: `The @aws-sdk/client-s3 package is required for ${label} video downloads. Install it with: npm install @aws-sdk/client-s3`,
