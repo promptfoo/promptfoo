@@ -226,6 +226,149 @@ function detectMimeFromBase64(base64Data: string): string | null {
 }
 
 /**
+ * Recursively resolves file:// references in nested objects and arrays within vars.
+ * This handles cases where file:// appears inside nested structures like:
+ *   reporting_period:
+ *     previous:
+ *       report: file://data/file.txt
+ */
+async function resolveNestedFileRefs(
+  value: VarValue,
+  varName: string,
+  basePrompt: string,
+  vars: Record<string, VarValue>,
+  provider?: ApiProvider,
+): Promise<VarValue> {
+  if (typeof value === 'string' && value.startsWith('file://')) {
+    const basePath = cliState.basePath || '';
+    const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
+    const fileExtension = filePath.split('.').pop();
+
+    logger.debug(`Loading nested var ${varName} from file: ${filePath}`);
+    if (isJavascriptFile(filePath)) {
+      const javascriptOutput = (await (
+        await importModule(filePath)
+      )(varName, basePrompt, vars, provider)) as {
+        output?: string;
+        error?: string;
+      };
+      if (javascriptOutput.error) {
+        throw new Error(`Error running ${filePath}: ${javascriptOutput.error}`);
+      }
+      if (!javascriptOutput.output) {
+        throw new Error(
+          `Expected ${filePath} to return { output: string } but got ${javascriptOutput}`,
+        );
+      }
+      return javascriptOutput.output;
+    } else if (fileExtension === 'py') {
+      const pythonScriptOutput = (await runPython(filePath, 'get_var', [
+        varName,
+        basePrompt,
+        vars,
+      ])) as { output?: unknown; error?: string };
+      if (pythonScriptOutput.error) {
+        throw new Error(`Error running Python script ${filePath}: ${pythonScriptOutput.error}`);
+      }
+      if (!pythonScriptOutput.output) {
+        throw new Error(`Python script ${filePath} did not return any output`);
+      }
+      invariant(
+        typeof pythonScriptOutput.output === 'string',
+        `pythonScriptOutput.output must be a string. Received: ${typeof pythonScriptOutput.output}`,
+      );
+      return pythonScriptOutput.output.trim();
+    } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
+      return JSON.stringify(loadYaml(await fs.readFile(filePath, 'utf8')) as string | object);
+    } else if (fileExtension === 'pdf' && !getEnvBool('PROMPTFOO_DISABLE_PDF_AS_TEXT')) {
+      telemetry.record('feature_used', {
+        feature: 'extract_text_from_pdf',
+      });
+      return extractTextFromPDF(filePath);
+    } else if (
+      (isImageFile(filePath) || isVideoFile(filePath) || isAudioFile(filePath)) &&
+      !getEnvBool('PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64')
+    ) {
+      const fileType = isImageFile(filePath)
+        ? 'image'
+        : isVideoFile(filePath)
+          ? 'video'
+          : 'audio';
+
+      telemetry.record('feature_used', {
+        feature: `load_${fileType}_as_base64`,
+      });
+
+      logger.debug(`Loading ${fileType} as base64: ${filePath}`);
+      try {
+        const fileBuffer = await fs.readFile(filePath);
+        const base64Data = fileBuffer.toString('base64');
+
+        if (fileType === 'image') {
+          let mimeType = getMimeTypeFromExtension(path.extname(filePath));
+          const extension = path.extname(filePath);
+          const extensionWasUnknown = !extension || mimeType === 'image/jpeg';
+
+          const detectedType = detectMimeFromBase64(base64Data);
+          if (detectedType) {
+            if (detectedType !== mimeType) {
+              logger.debug(
+                `Magic number detection overriding extension-based MIME type: ${detectedType} (was ${mimeType}) for ${filePath}`,
+              );
+              mimeType = detectedType;
+            }
+          } else if (extensionWasUnknown) {
+            logger.warn(
+              `Could not detect image format for ${filePath}, defaulting to image/jpeg. Supported formats: JPEG, PNG, GIF, WebP, BMP, TIFF, ICO, AVIF, HEIC, SVG`,
+            );
+          }
+
+          return `data:${mimeType};base64,${base64Data}`;
+        } else if (fileType === 'audio' && fileExtension?.toLowerCase() === 'm4a' && provider) {
+          return provider.getAudioInputFormat?.() === 'google'
+            ? `data:audio/mp4;base64,${base64Data}`
+            : base64Data;
+        } else {
+          return base64Data;
+        }
+      } catch (error) {
+        throw new Error(
+          `Failed to load ${fileType} ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    } else {
+      return (await fs.readFile(filePath, 'utf8')).trim();
+    }
+  }
+
+  if (Array.isArray(value)) {
+    const result: VarValue[] = [];
+    for (let i = 0; i < value.length; i++) {
+      result.push(
+        await resolveNestedFileRefs(value[i], `${varName}[${i}]`, basePrompt, vars, provider),
+      );
+    }
+    return result;
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    const result: Record<string, VarValue> = {};
+    for (const [key, val] of Object.entries(value)) {
+      result[key] = await resolveNestedFileRefs(
+        val,
+        `${varName}.${key}`,
+        basePrompt,
+        vars,
+        provider,
+      );
+    }
+    return result;
+  }
+
+  return value;
+}
+
+/**
  * Renders a prompt template with variable substitution using Nunjucks.
  *
  * @param prompt - The prompt template to render
@@ -248,6 +391,14 @@ export async function renderPrompt(
   const nunjucks = getNunjucksEngine(nunjucksFilters);
 
   let basePrompt = prompt.raw;
+
+  // Recursively resolve file:// references in nested objects/arrays
+  for (const [varName, value] of Object.entries(vars)) {
+    if (skipRenderVars?.includes(varName)) {
+      continue;
+    }
+    vars[varName] = await resolveNestedFileRefs(value, varName, basePrompt, vars, provider);
+  }
 
   // Load files
   for (const [varName, value] of Object.entries(vars)) {

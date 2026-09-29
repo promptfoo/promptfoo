@@ -387,6 +387,85 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('Test prompt with {"key":"valueFromYaml"}');
     });
 
+    it('should load file:// references in nested objects', async () => {
+      const prompt = toPrompt('Test prompt with {{ reporting_period.previous.report }}');
+      const vars = {
+        reporting_period: {
+          current: { period: '2023-12-31' },
+          previous: { period: '2024-02-15', report: 'file://test.txt' },
+        },
+      };
+
+      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('nested file content');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(fs.readFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('test.txt'),
+        'utf8',
+      );
+      expect(renderedPrompt).toBe('Test prompt with nested file content');
+    });
+
+    it('should load file:// references in arrays', async () => {
+      const prompt = toPrompt('Test prompt with {{ items[0] }} and {{ items[1] }}');
+      const vars = {
+        items: ['file://test.txt', 'plain value'],
+      };
+
+      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('array file content');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(fs.readFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('test.txt'),
+        'utf8',
+      );
+      expect(renderedPrompt).toBe('Test prompt with array file content and plain value');
+    });
+
+    it('should load file:// references in deeply nested objects', async () => {
+      const prompt = toPrompt('Test prompt with {{ a.b.c.d }}');
+      const vars = {
+        a: {
+          b: {
+            c: {
+              d: 'file://test.txt',
+            },
+          },
+        },
+      };
+
+      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('deeply nested content');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(fs.readFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('test.txt'),
+        'utf8',
+      );
+      expect(renderedPrompt).toBe('Test prompt with deeply nested content');
+    });
+
+    it('should load file:// references in nested arrays within objects', async () => {
+      const prompt = toPrompt('Test prompt with {{ data.rows[1].name }}');
+      const vars = {
+        data: {
+          rows: [{ name: 'first' }, { name: 'file://test.txt' }],
+        },
+      };
+
+      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('nested array file content');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(fs.readFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('test.txt'),
+        'utf8',
+      );
+      expect(renderedPrompt).toBe('Test prompt with nested array file content');
+    });
+
     describe('with PROMPTFOO_DISABLE_TEMPLATING', () => {
       beforeEach(() => {
         mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
