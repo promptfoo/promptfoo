@@ -120,11 +120,18 @@ providers:
 
 ### Anthropic Models
 
+For Claude 5, set `omitDefaults: true` to omit Promptfoo's default `temperature: 0`.
+Leave sampling parameters unset in your config and environment; explicit values still apply.
+
 ```yaml
 providers:
-  - truefoundry:anthropic-main/claude-sonnet-4.5
-  - truefoundry:anthropic-main/claude-3-5-sonnet-20241022
-  - truefoundry:anthropic-main/claude-3-opus-20240229
+  - id: truefoundry:anthropic-main/claude-sonnet-5
+    config:
+      omitDefaults: true
+  - id: truefoundry:anthropic-main/claude-opus-5
+    config:
+      omitDefaults: true
+  - truefoundry:anthropic-main/claude-haiku-4-5
 ```
 
 ### Google Gemini Models
@@ -300,10 +307,10 @@ providers:
             - name: 'web_search'
       iteration_limit: 10
 
-  - id: truefoundry:anthropic-main/claude-sonnet-4.5
-    label: 'Claude Sonnet 4.5 via TrueFoundry'
+  - id: truefoundry:anthropic-main/claude-sonnet-5
+    label: 'Claude Sonnet 5 via TrueFoundry'
     config:
-      temperature: 0.7
+      omitDefaults: true
       max_tokens: 1000
       metadata:
         user_id: 'eval-user'
